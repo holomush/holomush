@@ -123,9 +123,9 @@ type CoreServer struct {
 type CoreServerOption func(*CoreServer)
 
 // WithAuthenticator sets the authenticator for the server.
-func WithAuthenticator(auth Authenticator) CoreServerOption {
+func WithAuthenticator(a Authenticator) CoreServerOption {
 	return func(s *CoreServer) {
-		s.authenticator = auth
+		s.authenticator = a
 	}
 }
 

@@ -3,7 +3,10 @@
 
 package web
 
-import "net/http"
+import (
+	"fmt"
+	"net/http"
+)
 
 const (
 	cookieName       = "holomush_session"
@@ -53,4 +56,64 @@ func GetSessionToken(r *http.Request) string {
 		return ""
 	}
 	return cookie.Value
+}
+
+// CookieMiddleware translates between internal signal headers and HTTP cookies.
+// On inbound requests, it copies the session cookie value into the
+// X-Session-Token header so handlers can read it. On outbound responses, it
+// converts X-Set-Session-Token and X-Clear-Session headers into Set-Cookie
+// headers, keeping cookie management out of the ConnectRPC handlers.
+func CookieMiddleware(secure bool, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if token := GetSessionToken(r); token != "" {
+			r.Header.Set(headerInjectSessionToken, token)
+		}
+		cw := &cookieWriter{ResponseWriter: w, secure: secure}
+		next.ServeHTTP(cw, r)
+	})
+}
+
+// cookieWriter wraps http.ResponseWriter to intercept signal headers and
+// convert them to Set-Cookie before writing the response status line.
+type cookieWriter struct {
+	http.ResponseWriter
+	secure      bool
+	wroteHeader bool
+}
+
+func (cw *cookieWriter) WriteHeader(code int) {
+	if !cw.wroteHeader {
+		cw.wroteHeader = true
+		cw.applyCookieHeaders()
+	}
+	cw.ResponseWriter.WriteHeader(code)
+}
+
+func (cw *cookieWriter) Write(b []byte) (int, error) {
+	if !cw.wroteHeader {
+		cw.wroteHeader = true
+		cw.applyCookieHeaders()
+	}
+	n, err := cw.ResponseWriter.Write(b)
+	if err != nil {
+		return n, fmt.Errorf("cookie writer: %w", err)
+	}
+	return n, nil
+}
+
+// applyCookieHeaders reads signal headers, sets cookies, then removes the signal headers.
+func (cw *cookieWriter) applyCookieHeaders() {
+	h := cw.Header()
+
+	if token := h.Get(headerSetSessionToken); token != "" {
+		rememberMe := h.Get(headerRememberMe) == "true"
+		SetSessionCookie(cw.ResponseWriter, token, rememberMe, cw.secure)
+		h.Del(headerSetSessionToken)
+		h.Del(headerRememberMe)
+	}
+
+	if h.Get(headerClearSession) == "true" {
+		ClearSessionCookie(cw.ResponseWriter)
+		h.Del(headerClearSession)
+	}
 }

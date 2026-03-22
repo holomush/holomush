@@ -20,6 +20,7 @@ type Config struct {
 	Handler     *Handler
 	WebDir      string
 	CORSOrigins []string
+	Secure      bool // controls cookie Secure flag and SameSite policy
 }
 
 // Server is the web HTTP server hosting ConnectRPC and static files.
@@ -40,10 +41,12 @@ func NewServer(cfg Config) *Server {
 	// Register static file server as fallback
 	mux.Handle("/", FileServer(cfg.WebDir))
 
+	// Wrap with cookie middleware (translates signal headers ↔ Set-Cookie)
+	handler := CookieMiddleware(cfg.Secure, mux)
+
 	// Wrap with CORS if origins configured
-	var handler http.Handler = mux
 	if len(cfg.CORSOrigins) > 0 {
-		handler = CORSMiddleware(cfg.CORSOrigins, mux)
+		handler = CORSMiddleware(cfg.CORSOrigins, handler)
 	}
 
 	return &Server{

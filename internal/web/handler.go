@@ -36,6 +36,15 @@ type CoreClient interface {
 	Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error)
 	Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error)
 	GetCommandHistory(ctx context.Context, req *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error)
+	// Auth RPCs (two-phase login)
+	AuthenticatePlayer(ctx context.Context, req *corev1.AuthenticatePlayerRequest) (*corev1.AuthenticatePlayerResponse, error)
+	SelectCharacter(ctx context.Context, req *corev1.SelectCharacterRequest) (*corev1.SelectCharacterResponse, error)
+	CreatePlayer(ctx context.Context, req *corev1.CreatePlayerRequest) (*corev1.CreatePlayerResponse, error)
+	CreateCharacter(ctx context.Context, req *corev1.CreateCharacterRequest) (*corev1.CreateCharacterResponse, error)
+	ListCharacters(ctx context.Context, req *corev1.ListCharactersRequest) (*corev1.ListCharactersResponse, error)
+	RequestPasswordReset(ctx context.Context, req *corev1.RequestPasswordResetRequest) (*corev1.RequestPasswordResetResponse, error)
+	ConfirmPasswordReset(ctx context.Context, req *corev1.ConfirmPasswordResetRequest) (*corev1.ConfirmPasswordResetResponse, error)
+	Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1.LogoutResponse, error)
 }
 
 // Handler implements WebServiceHandler by delegating to the core gRPC client.
@@ -246,46 +255,6 @@ func (h *Handler) Disconnect(ctx context.Context, req *connect.Request[webv1.Dis
 	}
 
 	return connect.NewResponse(&webv1.DisconnectResponse{}), nil
-}
-
-// WebAuthenticatePlayer validates player credentials and returns a player token with character list.
-func (h *Handler) WebAuthenticatePlayer(_ context.Context, _ *connect.Request[webv1.WebAuthenticatePlayerRequest]) (*connect.Response[webv1.WebAuthenticatePlayerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not yet implemented"))
-}
-
-// WebSelectCharacter selects a character and creates or reattaches a game session.
-func (h *Handler) WebSelectCharacter(_ context.Context, _ *connect.Request[webv1.WebSelectCharacterRequest]) (*connect.Response[webv1.WebSelectCharacterResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not yet implemented"))
-}
-
-// WebCreatePlayer creates a new player account.
-func (h *Handler) WebCreatePlayer(_ context.Context, _ *connect.Request[webv1.WebCreatePlayerRequest]) (*connect.Response[webv1.WebCreatePlayerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not yet implemented"))
-}
-
-// WebCreateCharacter creates a new character for the authenticated player.
-func (h *Handler) WebCreateCharacter(_ context.Context, _ *connect.Request[webv1.WebCreateCharacterRequest]) (*connect.Response[webv1.WebCreateCharacterResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not yet implemented"))
-}
-
-// WebListCharacters returns the characters available for the authenticated player.
-func (h *Handler) WebListCharacters(_ context.Context, _ *connect.Request[webv1.WebListCharactersRequest]) (*connect.Response[webv1.WebListCharactersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not yet implemented"))
-}
-
-// WebLogout ends the current session.
-func (h *Handler) WebLogout(_ context.Context, _ *connect.Request[webv1.WebLogoutRequest]) (*connect.Response[webv1.WebLogoutResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not yet implemented"))
-}
-
-// WebRequestPasswordReset initiates a password reset flow.
-func (h *Handler) WebRequestPasswordReset(_ context.Context, _ *connect.Request[webv1.WebRequestPasswordResetRequest]) (*connect.Response[webv1.WebRequestPasswordResetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not yet implemented"))
-}
-
-// WebConfirmPasswordReset completes a password reset using a token.
-func (h *Handler) WebConfirmPasswordReset(_ context.Context, _ *connect.Request[webv1.WebConfirmPasswordResetRequest]) (*connect.Response[webv1.WebConfirmPasswordResetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not yet implemented"))
 }
 
 // GetCommandHistory returns the command history for a session.

@@ -50,6 +50,24 @@ type mockCoreClient struct {
 	cmdHistory       []string
 	cmdHistoryErr    error // application-level failure (Success=false)
 	cmdHistoryRPCErr error // transport/RPC-level failure (nil response)
+
+	// Auth RPC fields
+	authPlayerResp      *corev1.AuthenticatePlayerResponse
+	authPlayerErr       error
+	selectCharResp      *corev1.SelectCharacterResponse
+	selectCharErr       error
+	createPlayerResp    *corev1.CreatePlayerResponse
+	createPlayerErr     error
+	createCharResp      *corev1.CreateCharacterResponse
+	createCharErr       error
+	listCharsResp       *corev1.ListCharactersResponse
+	listCharsErr        error
+	logoutResp          *corev1.LogoutResponse
+	logoutErr           error
+	reqPwResetResp      *corev1.RequestPasswordResetResponse
+	reqPwResetErr       error
+	confirmPwResetResp  *corev1.ConfirmPasswordResetResponse
+	confirmPwResetErr   error
 }
 
 func (m *mockCoreClient) Authenticate(_ context.Context, _ *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
@@ -85,6 +103,38 @@ func (m *mockCoreClient) GetCommandHistory(_ context.Context, _ *corev1.GetComma
 		Success:  true,
 		Commands: m.cmdHistory,
 	}, nil
+}
+
+func (m *mockCoreClient) AuthenticatePlayer(_ context.Context, _ *corev1.AuthenticatePlayerRequest) (*corev1.AuthenticatePlayerResponse, error) {
+	return m.authPlayerResp, m.authPlayerErr
+}
+
+func (m *mockCoreClient) SelectCharacter(_ context.Context, _ *corev1.SelectCharacterRequest) (*corev1.SelectCharacterResponse, error) {
+	return m.selectCharResp, m.selectCharErr
+}
+
+func (m *mockCoreClient) CreatePlayer(_ context.Context, _ *corev1.CreatePlayerRequest) (*corev1.CreatePlayerResponse, error) {
+	return m.createPlayerResp, m.createPlayerErr
+}
+
+func (m *mockCoreClient) CreateCharacter(_ context.Context, _ *corev1.CreateCharacterRequest) (*corev1.CreateCharacterResponse, error) {
+	return m.createCharResp, m.createCharErr
+}
+
+func (m *mockCoreClient) ListCharacters(_ context.Context, _ *corev1.ListCharactersRequest) (*corev1.ListCharactersResponse, error) {
+	return m.listCharsResp, m.listCharsErr
+}
+
+func (m *mockCoreClient) RequestPasswordReset(_ context.Context, _ *corev1.RequestPasswordResetRequest) (*corev1.RequestPasswordResetResponse, error) {
+	return m.reqPwResetResp, m.reqPwResetErr
+}
+
+func (m *mockCoreClient) ConfirmPasswordReset(_ context.Context, _ *corev1.ConfirmPasswordResetRequest) (*corev1.ConfirmPasswordResetResponse, error) {
+	return m.confirmPwResetResp, m.confirmPwResetErr
+}
+
+func (m *mockCoreClient) Logout(_ context.Context, _ *corev1.LogoutRequest) (*corev1.LogoutResponse, error) {
+	return m.logoutResp, m.logoutErr
 }
 
 func TestHandler_Login_Success(t *testing.T) {
@@ -182,44 +232,6 @@ func TestHandler_Disconnect_RPCError(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	assert.NotNil(t, resp.Msg)
-}
-
-func TestHandler_WebAuthenticatePlayer_Unimplemented(t *testing.T) {
-	h := NewHandler(&mockCoreClient{})
-	_, err := h.WebAuthenticatePlayer(context.Background(), connect.NewRequest(&webv1.WebAuthenticatePlayerRequest{
-		Username: "test",
-		Password: "pass",
-	}))
-	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
-}
-
-func TestHandler_WebListCharacters_Unimplemented(t *testing.T) {
-	h := NewHandler(&mockCoreClient{})
-	_, err := h.WebListCharacters(context.Background(), connect.NewRequest(&webv1.WebListCharactersRequest{
-		PlayerToken: "tok-123",
-	}))
-	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
-}
-
-func TestHandler_WebSelectCharacter_Unimplemented(t *testing.T) {
-	h := NewHandler(&mockCoreClient{})
-	_, err := h.WebSelectCharacter(context.Background(), connect.NewRequest(&webv1.WebSelectCharacterRequest{
-		PlayerToken: "tok-123",
-		CharacterId: "char-abc",
-	}))
-	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
-}
-
-func TestHandler_WebLogout_Unimplemented(t *testing.T) {
-	h := NewHandler(&mockCoreClient{})
-	_, err := h.WebLogout(context.Background(), connect.NewRequest(&webv1.WebLogoutRequest{
-		SessionId: "sess-123",
-	}))
-	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
 }
 
 func TestHandler_GetCommandHistory_Success(t *testing.T) {
