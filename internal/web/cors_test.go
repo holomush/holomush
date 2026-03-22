@@ -21,6 +21,7 @@ func TestCORS_AllowedOrigin(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	assert.Equal(t, "http://localhost:5173", rec.Header().Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "true", rec.Header().Get("Access-Control-Allow-Credentials"))
 }
 
 func TestCORS_BlockedOrigin(t *testing.T) {
@@ -48,6 +49,7 @@ func TestCORS_Preflight(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 	assert.Contains(t, rec.Header().Get("Access-Control-Allow-Headers"), "Content-Type")
 	assert.Contains(t, rec.Header().Get("Access-Control-Allow-Headers"), "Connect-Protocol-Version")
+	assert.Contains(t, rec.Header().Get("Access-Control-Allow-Headers"), "Cookie")
 }
 
 func TestCORS_NoOrigins_Passthrough(t *testing.T) {

@@ -14,6 +14,7 @@ var connectHeaders = []string{
 	"Connect-Protocol-Version",
 	"Connect-Timeout-Ms",
 	"Grpc-Timeout",
+	"Cookie",
 }
 
 // CORSMiddleware wraps next with CORS headers for the listed origins. If origins
@@ -34,6 +35,7 @@ func CORSMiddleware(origins []string, next http.Handler) http.Handler {
 		}
 
 		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", allowHeaders)
 		w.Header().Set("Access-Control-Max-Age", "3600")

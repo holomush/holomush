@@ -184,9 +184,9 @@ func TestHandler_Disconnect_RPCError(t *testing.T) {
 	assert.NotNil(t, resp.Msg)
 }
 
-func TestHandler_AuthenticatePlayer_Unimplemented(t *testing.T) {
+func TestHandler_WebAuthenticatePlayer_Unimplemented(t *testing.T) {
 	h := NewHandler(&mockCoreClient{})
-	_, err := h.AuthenticatePlayer(context.Background(), connect.NewRequest(&webv1.AuthenticatePlayerRequest{
+	_, err := h.WebAuthenticatePlayer(context.Background(), connect.NewRequest(&webv1.WebAuthenticatePlayerRequest{
 		Username: "test",
 		Password: "pass",
 	}))
@@ -194,18 +194,18 @@ func TestHandler_AuthenticatePlayer_Unimplemented(t *testing.T) {
 	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
 }
 
-func TestHandler_ListCharacters_Unimplemented(t *testing.T) {
+func TestHandler_WebListCharacters_Unimplemented(t *testing.T) {
 	h := NewHandler(&mockCoreClient{})
-	_, err := h.ListCharacters(context.Background(), connect.NewRequest(&webv1.ListCharactersRequest{
+	_, err := h.WebListCharacters(context.Background(), connect.NewRequest(&webv1.WebListCharactersRequest{
 		PlayerToken: "tok-123",
 	}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
 }
 
-func TestHandler_SelectCharacter_Unimplemented(t *testing.T) {
+func TestHandler_WebSelectCharacter_Unimplemented(t *testing.T) {
 	h := NewHandler(&mockCoreClient{})
-	_, err := h.SelectCharacter(context.Background(), connect.NewRequest(&webv1.SelectCharacterRequest{
+	_, err := h.WebSelectCharacter(context.Background(), connect.NewRequest(&webv1.WebSelectCharacterRequest{
 		PlayerToken: "tok-123",
 		CharacterId: "char-abc",
 	}))
@@ -213,10 +213,10 @@ func TestHandler_SelectCharacter_Unimplemented(t *testing.T) {
 	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
 }
 
-func TestHandler_ListSessions_Unimplemented(t *testing.T) {
+func TestHandler_WebLogout_Unimplemented(t *testing.T) {
 	h := NewHandler(&mockCoreClient{})
-	_, err := h.ListSessions(context.Background(), connect.NewRequest(&webv1.ListSessionsRequest{
-		PlayerToken: "tok-123",
+	_, err := h.WebLogout(context.Background(), connect.NewRequest(&webv1.WebLogoutRequest{
+		SessionId: "sess-123",
 	}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
