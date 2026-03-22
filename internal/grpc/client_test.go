@@ -453,7 +453,7 @@ func TestClient_Subscribe(t *testing.T) {
 	// Read one event from the stream
 	event, err := stream.Recv()
 	require.NoError(t, err, "stream.Recv() error")
-	assert.NotEmpty(t, event.GetId(), "Received event has empty ID")
+	assert.NotEmpty(t, event.GetEvent().GetId(), "Received event has empty ID")
 }
 
 // mockCoreServerWithSubscribe includes Subscribe implementation.
@@ -464,13 +464,17 @@ type mockCoreServerWithSubscribe struct {
 func (m *mockCoreServerWithSubscribe) Subscribe(_ *corev1.SubscribeRequest, stream grpc.ServerStreamingServer[corev1.SubscribeResponse]) error {
 	// Send one test event
 	if err := stream.Send(&corev1.SubscribeResponse{
-		Id:        "test-event-1",
-		Stream:    "location:test",
-		Type:      "say",
-		Timestamp: timestamppb.Now(),
-		ActorType: "character",
-		ActorId:   "char-123",
-		Payload:   []byte(`{"message":"hello"}`),
+		Frame: &corev1.SubscribeResponse_Event{
+			Event: &corev1.EventFrame{
+				Id:        "test-event-1",
+				Stream:    "location:test",
+				Type:      "say",
+				Timestamp: timestamppb.Now(),
+				ActorType: "character",
+				ActorId:   "char-123",
+				Payload:   []byte(`{"message":"hello"}`),
+			},
+		},
 	}); err != nil {
 		return fmt.Errorf("failed to send event: %w", err)
 	}

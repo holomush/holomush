@@ -2859,16 +2859,16 @@ func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
 	// Filter to say events only for verification.
 	var sayEvents []*corev1.SubscribeResponse
 	for _, ev := range stream.events {
-		if ev.Type == string(core.EventTypeSay) {
+		if ef := ev.GetEvent(); ef != nil && ef.GetType() == string(core.EventTypeSay) {
 			sayEvents = append(sayEvents, ev)
 		}
 	}
 	require.GreaterOrEqual(t, len(sayEvents), 2, "expected at least 2 replayed say events")
-	assert.Equal(t, historicalID1.String(), sayEvents[0].Id, "first say event should be historical")
-	assert.Equal(t, historicalID2.String(), sayEvents[1].Id, "second say event should be historical")
+	assert.Equal(t, historicalID1.String(), sayEvents[0].GetEvent().GetId(), "first say event should be historical")
+	assert.Equal(t, historicalID2.String(), sayEvents[1].GetEvent().GetId(), "second say event should be historical")
 
 	if len(sayEvents) >= 3 {
-		assert.Equal(t, liveID.String(), sayEvents[2].Id, "third say event should be the live one")
+		assert.Equal(t, liveID.String(), sayEvents[2].GetEvent().GetId(), "third say event should be the live one")
 	}
 }
 
@@ -2951,7 +2951,7 @@ func TestCoreServer_Subscribe_ReplayDeduplicatesLiveEvents(t *testing.T) {
 	// Count how many times the historical event appears (should be exactly once)
 	count := 0
 	for _, ev := range stream.events {
-		if ev.Id == historicalID.String() {
+		if ef := ev.GetEvent(); ef != nil && ef.GetId() == historicalID.String() {
 			count++
 		}
 	}
@@ -3094,14 +3094,16 @@ func TestEventToProto(t *testing.T) {
 	}
 
 	proto := eventToProto(ev)
+	ef := proto.GetEvent()
+	require.NotNil(t, ef)
 
-	assert.Equal(t, id.String(), proto.Id)
-	assert.Equal(t, "location:test", proto.Stream)
-	assert.Equal(t, "say", proto.Type)
-	assert.Equal(t, "character", proto.ActorType)
-	assert.Equal(t, "char-1", proto.ActorId)
-	assert.Equal(t, []byte(`{"msg":"hello"}`), proto.Payload)
-	assert.Equal(t, ts.UnixNano()/1e9, proto.Timestamp.AsTime().UnixNano()/1e9)
+	assert.Equal(t, id.String(), ef.GetId())
+	assert.Equal(t, "location:test", ef.GetStream())
+	assert.Equal(t, "say", ef.GetType())
+	assert.Equal(t, "character", ef.GetActorType())
+	assert.Equal(t, "char-1", ef.GetActorId())
+	assert.Equal(t, []byte(`{"msg":"hello"}`), ef.GetPayload())
+	assert.Equal(t, ts.UnixNano()/1e9, ef.GetTimestamp().AsTime().UnixNano()/1e9)
 }
 
 // =============================================================================

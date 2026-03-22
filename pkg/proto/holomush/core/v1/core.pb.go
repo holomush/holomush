@@ -25,6 +25,55 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ControlSignal int32
+
+const (
+	ControlSignal_CONTROL_SIGNAL_UNSPECIFIED     ControlSignal = 0
+	ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE ControlSignal = 1
+	ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED   ControlSignal = 2
+)
+
+// Enum value maps for ControlSignal.
+var (
+	ControlSignal_name = map[int32]string{
+		0: "CONTROL_SIGNAL_UNSPECIFIED",
+		1: "CONTROL_SIGNAL_REPLAY_COMPLETE",
+		2: "CONTROL_SIGNAL_STREAM_CLOSED",
+	}
+	ControlSignal_value = map[string]int32{
+		"CONTROL_SIGNAL_UNSPECIFIED":     0,
+		"CONTROL_SIGNAL_REPLAY_COMPLETE": 1,
+		"CONTROL_SIGNAL_STREAM_CLOSED":   2,
+	}
+)
+
+func (x ControlSignal) Enum() *ControlSignal {
+	p := new(ControlSignal)
+	*p = x
+	return p
+}
+
+func (x ControlSignal) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ControlSignal) Descriptor() protoreflect.EnumDescriptor {
+	return file_holomush_core_v1_core_proto_enumTypes[0].Descriptor()
+}
+
+func (ControlSignal) Type() protoreflect.EnumType {
+	return &file_holomush_core_v1_core_proto_enumTypes[0]
+}
+
+func (x ControlSignal) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ControlSignal.Descriptor instead.
+func (ControlSignal) EnumDescriptor() ([]byte, []int) {
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{0}
+}
+
 // RequestMeta contains metadata for request correlation and debugging.
 type RequestMeta struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -479,7 +528,7 @@ func (x *SubscribeRequest) GetReplayFromCursor() bool {
 	return false
 }
 
-type SubscribeResponse struct {
+type EventFrame struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Stream        string                 `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
@@ -492,9 +541,151 @@ type SubscribeResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *EventFrame) Reset() {
+	*x = EventFrame{}
+	mi := &file_holomush_core_v1_core_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EventFrame) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EventFrame) ProtoMessage() {}
+
+func (x *EventFrame) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_core_v1_core_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EventFrame.ProtoReflect.Descriptor instead.
+func (*EventFrame) Descriptor() ([]byte, []int) {
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *EventFrame) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *EventFrame) GetStream() string {
+	if x != nil {
+		return x.Stream
+	}
+	return ""
+}
+
+func (x *EventFrame) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *EventFrame) GetTimestamp() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Timestamp
+	}
+	return nil
+}
+
+func (x *EventFrame) GetActorType() string {
+	if x != nil {
+		return x.ActorType
+	}
+	return ""
+}
+
+func (x *EventFrame) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
+}
+
+func (x *EventFrame) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+type ControlFrame struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Signal        ControlSignal          `protobuf:"varint,1,opt,name=signal,proto3,enum=holomush.core.v1.ControlSignal" json:"signal,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ControlFrame) Reset() {
+	*x = ControlFrame{}
+	mi := &file_holomush_core_v1_core_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ControlFrame) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ControlFrame) ProtoMessage() {}
+
+func (x *ControlFrame) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_core_v1_core_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ControlFrame.ProtoReflect.Descriptor instead.
+func (*ControlFrame) Descriptor() ([]byte, []int) {
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ControlFrame) GetSignal() ControlSignal {
+	if x != nil {
+		return x.Signal
+	}
+	return ControlSignal_CONTROL_SIGNAL_UNSPECIFIED
+}
+
+func (x *ControlFrame) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+type SubscribeResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Frame:
+	//
+	//	*SubscribeResponse_Event
+	//	*SubscribeResponse_Control
+	Frame         isSubscribeResponse_Frame `protobuf_oneof:"frame"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
 func (x *SubscribeResponse) Reset() {
 	*x = SubscribeResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[7]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -506,7 +697,7 @@ func (x *SubscribeResponse) String() string {
 func (*SubscribeResponse) ProtoMessage() {}
 
 func (x *SubscribeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[7]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -519,57 +710,49 @@ func (x *SubscribeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeResponse.ProtoReflect.Descriptor instead.
 func (*SubscribeResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{7}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *SubscribeResponse) GetId() string {
+func (x *SubscribeResponse) GetFrame() isSubscribeResponse_Frame {
 	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *SubscribeResponse) GetStream() string {
-	if x != nil {
-		return x.Stream
-	}
-	return ""
-}
-
-func (x *SubscribeResponse) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *SubscribeResponse) GetTimestamp() *timestamppb.Timestamp {
-	if x != nil {
-		return x.Timestamp
+		return x.Frame
 	}
 	return nil
 }
 
-func (x *SubscribeResponse) GetActorType() string {
+func (x *SubscribeResponse) GetEvent() *EventFrame {
 	if x != nil {
-		return x.ActorType
-	}
-	return ""
-}
-
-func (x *SubscribeResponse) GetActorId() string {
-	if x != nil {
-		return x.ActorId
-	}
-	return ""
-}
-
-func (x *SubscribeResponse) GetPayload() []byte {
-	if x != nil {
-		return x.Payload
+		if x, ok := x.Frame.(*SubscribeResponse_Event); ok {
+			return x.Event
+		}
 	}
 	return nil
 }
+
+func (x *SubscribeResponse) GetControl() *ControlFrame {
+	if x != nil {
+		if x, ok := x.Frame.(*SubscribeResponse_Control); ok {
+			return x.Control
+		}
+	}
+	return nil
+}
+
+type isSubscribeResponse_Frame interface {
+	isSubscribeResponse_Frame()
+}
+
+type SubscribeResponse_Event struct {
+	Event *EventFrame `protobuf:"bytes,1,opt,name=event,proto3,oneof"`
+}
+
+type SubscribeResponse_Control struct {
+	Control *ControlFrame `protobuf:"bytes,2,opt,name=control,proto3,oneof"`
+}
+
+func (*SubscribeResponse_Event) isSubscribeResponse_Frame() {}
+
+func (*SubscribeResponse_Control) isSubscribeResponse_Frame() {}
 
 type DisconnectRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -582,7 +765,7 @@ type DisconnectRequest struct {
 
 func (x *DisconnectRequest) Reset() {
 	*x = DisconnectRequest{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[8]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -594,7 +777,7 @@ func (x *DisconnectRequest) String() string {
 func (*DisconnectRequest) ProtoMessage() {}
 
 func (x *DisconnectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[8]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -607,7 +790,7 @@ func (x *DisconnectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisconnectRequest.ProtoReflect.Descriptor instead.
 func (*DisconnectRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{8}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *DisconnectRequest) GetMeta() *RequestMeta {
@@ -641,7 +824,7 @@ type DisconnectResponse struct {
 
 func (x *DisconnectResponse) Reset() {
 	*x = DisconnectResponse{}
-	mi := &file_holomush_core_v1_core_proto_msgTypes[9]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -653,7 +836,7 @@ func (x *DisconnectResponse) String() string {
 func (*DisconnectResponse) ProtoMessage() {}
 
 func (x *DisconnectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_core_v1_core_proto_msgTypes[9]
+	mi := &file_holomush_core_v1_core_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -666,7 +849,7 @@ func (x *DisconnectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisconnectResponse.ProtoReflect.Descriptor instead.
 func (*DisconnectResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{9}
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DisconnectResponse) GetMeta() *ResponseMeta {
@@ -725,8 +908,9 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x18\n" +
 	"\astreams\x18\x03 \x03(\tR\astreams\x12,\n" +
-	"\x12replay_from_cursor\x18\x04 \x01(\bR\x10replayFromCursor\"\xdd\x01\n" +
-	"\x11SubscribeResponse\x12\x0e\n" +
+	"\x12replay_from_cursor\x18\x04 \x01(\bR\x10replayFromCursor\"\xd6\x01\n" +
+	"\n" +
+	"EventFrame\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06stream\x18\x02 \x01(\tR\x06stream\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x128\n" +
@@ -734,7 +918,14 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\n" +
 	"actor_type\x18\x05 \x01(\tR\tactorType\x12\x19\n" +
 	"\bactor_id\x18\x06 \x01(\tR\aactorId\x12\x18\n" +
-	"\apayload\x18\a \x01(\fR\apayload\"\x8a\x01\n" +
+	"\apayload\x18\a \x01(\fR\apayload\"a\n" +
+	"\fControlFrame\x127\n" +
+	"\x06signal\x18\x01 \x01(\x0e2\x1f.holomush.core.v1.ControlSignalR\x06signal\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x8e\x01\n" +
+	"\x11SubscribeResponse\x124\n" +
+	"\x05event\x18\x01 \x01(\v2\x1c.holomush.core.v1.EventFrameH\x00R\x05event\x12:\n" +
+	"\acontrol\x18\x02 \x01(\v2\x1e.holomush.core.v1.ControlFrameH\x00R\acontrolB\a\n" +
+	"\x05frame\"\x8a\x01\n" +
 	"\x11DisconnectRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
 	"\n" +
@@ -742,7 +933,11 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\rconnection_id\x18\x03 \x01(\tR\fconnectionId\"b\n" +
 	"\x12DisconnectResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x12\x18\n" +
-	"\asuccess\x18\x02 \x01(\bR\asuccess2\xff\x02\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess*u\n" +
+	"\rControlSignal\x12\x1e\n" +
+	"\x1aCONTROL_SIGNAL_UNSPECIFIED\x10\x00\x12\"\n" +
+	"\x1eCONTROL_SIGNAL_REPLAY_COMPLETE\x10\x01\x12 \n" +
+	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x022\xff\x02\n" +
 	"\vCoreService\x12]\n" +
 	"\fAuthenticate\x12%.holomush.core.v1.AuthenticateRequest\x1a&.holomush.core.v1.AuthenticateResponse\x12`\n" +
 	"\rHandleCommand\x12&.holomush.core.v1.HandleCommandRequest\x1a'.holomush.core.v1.HandleCommandResponse\x12V\n" +
@@ -763,44 +958,51 @@ func file_holomush_core_v1_core_proto_rawDescGZIP() []byte {
 	return file_holomush_core_v1_core_proto_rawDescData
 }
 
-var file_holomush_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_holomush_core_v1_core_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_holomush_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_holomush_core_v1_core_proto_goTypes = []any{
-	(*RequestMeta)(nil),           // 0: holomush.core.v1.RequestMeta
-	(*ResponseMeta)(nil),          // 1: holomush.core.v1.ResponseMeta
-	(*AuthenticateRequest)(nil),   // 2: holomush.core.v1.AuthenticateRequest
-	(*AuthenticateResponse)(nil),  // 3: holomush.core.v1.AuthenticateResponse
-	(*HandleCommandRequest)(nil),  // 4: holomush.core.v1.HandleCommandRequest
-	(*HandleCommandResponse)(nil), // 5: holomush.core.v1.HandleCommandResponse
-	(*SubscribeRequest)(nil),      // 6: holomush.core.v1.SubscribeRequest
-	(*SubscribeResponse)(nil),     // 7: holomush.core.v1.SubscribeResponse
-	(*DisconnectRequest)(nil),     // 8: holomush.core.v1.DisconnectRequest
-	(*DisconnectResponse)(nil),    // 9: holomush.core.v1.DisconnectResponse
-	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
+	(ControlSignal)(0),            // 0: holomush.core.v1.ControlSignal
+	(*RequestMeta)(nil),           // 1: holomush.core.v1.RequestMeta
+	(*ResponseMeta)(nil),          // 2: holomush.core.v1.ResponseMeta
+	(*AuthenticateRequest)(nil),   // 3: holomush.core.v1.AuthenticateRequest
+	(*AuthenticateResponse)(nil),  // 4: holomush.core.v1.AuthenticateResponse
+	(*HandleCommandRequest)(nil),  // 5: holomush.core.v1.HandleCommandRequest
+	(*HandleCommandResponse)(nil), // 6: holomush.core.v1.HandleCommandResponse
+	(*SubscribeRequest)(nil),      // 7: holomush.core.v1.SubscribeRequest
+	(*EventFrame)(nil),            // 8: holomush.core.v1.EventFrame
+	(*ControlFrame)(nil),          // 9: holomush.core.v1.ControlFrame
+	(*SubscribeResponse)(nil),     // 10: holomush.core.v1.SubscribeResponse
+	(*DisconnectRequest)(nil),     // 11: holomush.core.v1.DisconnectRequest
+	(*DisconnectResponse)(nil),    // 12: holomush.core.v1.DisconnectResponse
+	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
 }
 var file_holomush_core_v1_core_proto_depIdxs = []int32{
-	10, // 0: holomush.core.v1.RequestMeta.timestamp:type_name -> google.protobuf.Timestamp
-	10, // 1: holomush.core.v1.ResponseMeta.timestamp:type_name -> google.protobuf.Timestamp
-	0,  // 2: holomush.core.v1.AuthenticateRequest.meta:type_name -> holomush.core.v1.RequestMeta
-	1,  // 3: holomush.core.v1.AuthenticateResponse.meta:type_name -> holomush.core.v1.ResponseMeta
-	0,  // 4: holomush.core.v1.HandleCommandRequest.meta:type_name -> holomush.core.v1.RequestMeta
-	1,  // 5: holomush.core.v1.HandleCommandResponse.meta:type_name -> holomush.core.v1.ResponseMeta
-	0,  // 6: holomush.core.v1.SubscribeRequest.meta:type_name -> holomush.core.v1.RequestMeta
-	10, // 7: holomush.core.v1.SubscribeResponse.timestamp:type_name -> google.protobuf.Timestamp
-	0,  // 8: holomush.core.v1.DisconnectRequest.meta:type_name -> holomush.core.v1.RequestMeta
-	1,  // 9: holomush.core.v1.DisconnectResponse.meta:type_name -> holomush.core.v1.ResponseMeta
-	2,  // 10: holomush.core.v1.CoreService.Authenticate:input_type -> holomush.core.v1.AuthenticateRequest
-	4,  // 11: holomush.core.v1.CoreService.HandleCommand:input_type -> holomush.core.v1.HandleCommandRequest
-	6,  // 12: holomush.core.v1.CoreService.Subscribe:input_type -> holomush.core.v1.SubscribeRequest
-	8,  // 13: holomush.core.v1.CoreService.Disconnect:input_type -> holomush.core.v1.DisconnectRequest
-	3,  // 14: holomush.core.v1.CoreService.Authenticate:output_type -> holomush.core.v1.AuthenticateResponse
-	5,  // 15: holomush.core.v1.CoreService.HandleCommand:output_type -> holomush.core.v1.HandleCommandResponse
-	7,  // 16: holomush.core.v1.CoreService.Subscribe:output_type -> holomush.core.v1.SubscribeResponse
-	9,  // 17: holomush.core.v1.CoreService.Disconnect:output_type -> holomush.core.v1.DisconnectResponse
-	14, // [14:18] is the sub-list for method output_type
-	10, // [10:14] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	13, // 0: holomush.core.v1.RequestMeta.timestamp:type_name -> google.protobuf.Timestamp
+	13, // 1: holomush.core.v1.ResponseMeta.timestamp:type_name -> google.protobuf.Timestamp
+	1,  // 2: holomush.core.v1.AuthenticateRequest.meta:type_name -> holomush.core.v1.RequestMeta
+	2,  // 3: holomush.core.v1.AuthenticateResponse.meta:type_name -> holomush.core.v1.ResponseMeta
+	1,  // 4: holomush.core.v1.HandleCommandRequest.meta:type_name -> holomush.core.v1.RequestMeta
+	2,  // 5: holomush.core.v1.HandleCommandResponse.meta:type_name -> holomush.core.v1.ResponseMeta
+	1,  // 6: holomush.core.v1.SubscribeRequest.meta:type_name -> holomush.core.v1.RequestMeta
+	13, // 7: holomush.core.v1.EventFrame.timestamp:type_name -> google.protobuf.Timestamp
+	0,  // 8: holomush.core.v1.ControlFrame.signal:type_name -> holomush.core.v1.ControlSignal
+	8,  // 9: holomush.core.v1.SubscribeResponse.event:type_name -> holomush.core.v1.EventFrame
+	9,  // 10: holomush.core.v1.SubscribeResponse.control:type_name -> holomush.core.v1.ControlFrame
+	1,  // 11: holomush.core.v1.DisconnectRequest.meta:type_name -> holomush.core.v1.RequestMeta
+	2,  // 12: holomush.core.v1.DisconnectResponse.meta:type_name -> holomush.core.v1.ResponseMeta
+	3,  // 13: holomush.core.v1.CoreService.Authenticate:input_type -> holomush.core.v1.AuthenticateRequest
+	5,  // 14: holomush.core.v1.CoreService.HandleCommand:input_type -> holomush.core.v1.HandleCommandRequest
+	7,  // 15: holomush.core.v1.CoreService.Subscribe:input_type -> holomush.core.v1.SubscribeRequest
+	11, // 16: holomush.core.v1.CoreService.Disconnect:input_type -> holomush.core.v1.DisconnectRequest
+	4,  // 17: holomush.core.v1.CoreService.Authenticate:output_type -> holomush.core.v1.AuthenticateResponse
+	6,  // 18: holomush.core.v1.CoreService.HandleCommand:output_type -> holomush.core.v1.HandleCommandResponse
+	10, // 19: holomush.core.v1.CoreService.Subscribe:output_type -> holomush.core.v1.SubscribeResponse
+	12, // 20: holomush.core.v1.CoreService.Disconnect:output_type -> holomush.core.v1.DisconnectResponse
+	17, // [17:21] is the sub-list for method output_type
+	13, // [13:17] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_holomush_core_v1_core_proto_init() }
@@ -808,18 +1010,23 @@ func file_holomush_core_v1_core_proto_init() {
 	if File_holomush_core_v1_core_proto != nil {
 		return
 	}
+	file_holomush_core_v1_core_proto_msgTypes[9].OneofWrappers = []any{
+		(*SubscribeResponse_Event)(nil),
+		(*SubscribeResponse_Control)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_core_v1_core_proto_rawDesc), len(file_holomush_core_v1_core_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   10,
+			NumEnums:      1,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_holomush_core_v1_core_proto_goTypes,
 		DependencyIndexes: file_holomush_core_v1_core_proto_depIdxs,
+		EnumInfos:         file_holomush_core_v1_core_proto_enumTypes,
 		MessageInfos:      file_holomush_core_v1_core_proto_msgTypes,
 	}.Build()
 	File_holomush_core_v1_core_proto = out.File

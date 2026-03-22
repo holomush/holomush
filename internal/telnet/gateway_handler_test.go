@@ -229,7 +229,7 @@ func TestGatewayHandler_SendProtoEvent_CommandResponse(t *testing.T) {
 
 	eventStream := &mockSubscribeStream{
 		events: []*corev1.SubscribeResponse{
-			{Type: string(core.EventTypeCommandResponse), Payload: payload},
+			{Frame: &corev1.SubscribeResponse_Event{Event: &corev1.EventFrame{Type: string(core.EventTypeCommandResponse), Payload: payload}}},
 		},
 	}
 
@@ -291,7 +291,7 @@ func TestGatewayHandler_SendProtoEvent_CorruptCommandResponse(t *testing.T) {
 
 	eventStream := &mockSubscribeStream{
 		events: []*corev1.SubscribeResponse{
-			{Type: string(core.EventTypeCommandResponse), Payload: []byte("not-valid-json")},
+			{Frame: &corev1.SubscribeResponse_Event{Event: &corev1.EventFrame{Type: string(core.EventTypeCommandResponse), Payload: []byte("not-valid-json")}}},
 		},
 	}
 
@@ -352,8 +352,8 @@ func TestGatewayHandler_DrainEvents(t *testing.T) {
 	// Two events queued, plus EOF.
 	eventStream := &mockSubscribeStream{
 		events: []*corev1.SubscribeResponse{
-			{Type: string(core.EventTypeCommandResponse), Payload: payload},
-			{Type: string(core.EventTypeCommandResponse), Payload: payload},
+			{Frame: &corev1.SubscribeResponse_Event{Event: &corev1.EventFrame{Type: string(core.EventTypeCommandResponse), Payload: payload}}},
+			{Frame: &corev1.SubscribeResponse_Event{Event: &corev1.EventFrame{Type: string(core.EventTypeCommandResponse), Payload: payload}}},
 		},
 	}
 

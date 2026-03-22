@@ -182,7 +182,7 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 	}
 
 	for {
-		ev, recvErr := sub.Recv()
+		resp, recvErr := sub.Recv()
 		if recvErr != nil {
 			if errors.Is(recvErr, io.EOF) ||
 				errors.Is(recvErr, context.Canceled) ||
@@ -194,12 +194,19 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 				oops.With("session_id", sessionID).Wrap(recvErr))
 		}
 
-		gameEvent := translateEvent(ev)
+		eventFrame := resp.GetEvent()
+		if eventFrame == nil {
+			continue // Skip control frames for now (handled in later task)
+		}
+
+		gameEvent := translateEvent(eventFrame)
 		if gameEvent == nil {
 			continue
 		}
 
-		if sendErr := stream.Send(&webv1.StreamEventsResponse{Event: gameEvent}); sendErr != nil {
+		if sendErr := stream.Send(&webv1.StreamEventsResponse{
+			Frame: &webv1.StreamEventsResponse_Event{Event: gameEvent},
+		}); sendErr != nil {
 			if errors.Is(sendErr, context.Canceled) ||
 				errors.Is(sendErr, context.DeadlineExceeded) {
 				return nil

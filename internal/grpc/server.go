@@ -498,16 +498,20 @@ func (s *CoreServer) maxReplay() int {
 	return defaultMaxReplay
 }
 
-// eventToProto converts a core.Event to a proto Event.
+// eventToProto converts a core.Event to a proto Event wrapped in an EventFrame.
 func eventToProto(ev core.Event) *corev1.SubscribeResponse {
 	return &corev1.SubscribeResponse{
-		Id:        ev.ID.String(),
-		Stream:    ev.Stream,
-		Type:      string(ev.Type),
-		Timestamp: timestamppb.New(ev.Timestamp),
-		ActorType: ev.Actor.Kind.String(),
-		ActorId:   ev.Actor.ID,
-		Payload:   ev.Payload,
+		Frame: &corev1.SubscribeResponse_Event{
+			Event: &corev1.EventFrame{
+				Id:        ev.ID.String(),
+				Stream:    ev.Stream,
+				Type:      string(ev.Type),
+				Timestamp: timestamppb.New(ev.Timestamp),
+				ActorType: ev.Actor.Kind.String(),
+				ActorId:   ev.Actor.ID,
+				Payload:   ev.Payload,
+			},
+		},
 	}
 }
 

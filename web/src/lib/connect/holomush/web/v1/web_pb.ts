@@ -14,7 +14,29 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file holomush/web/v1/web.proto.
  */
 export const file_holomush_web_v1_web: GenFile = /*@__PURE__*/
-  fileDesc("Chlob2xvbXVzaC93ZWIvdjEvd2ViLnByb3RvEg9ob2xvbXVzaC53ZWIudjEiMgoMTG9naW5SZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJEhAKCHBhc3N3b3JkGAIgASgJImMKDUxvZ2luUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBISCgpzZXNzaW9uX2lkGAIgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAMgASgJEhUKDWVycm9yX21lc3NhZ2UYBCABKAkiNgoSU2VuZENvbW1hbmRSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSDAoEdGV4dBgCIAEoCSJNChNTZW5kQ29tbWFuZFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDgoGb3V0cHV0GAIgASgJEhUKDWVycm9yX21lc3NhZ2UYAyABKAkiRQoTU3RyZWFtRXZlbnRzUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhoKEnJlcGxheV9mcm9tX2N1cnNvchgCIAEoCCKtAQoJR2FtZUV2ZW50EgwKBHR5cGUYASABKAkSFgoOY2hhcmFjdGVyX25hbWUYAiABKAkSDAoEdGV4dBgDIAEoCRIRCgl0aW1lc3RhbXAYBCABKAMSLgoHY2hhbm5lbBgFIAEoDjIdLmhvbG9tdXNoLndlYi52MS5FdmVudENoYW5uZWwSKQoIbWV0YWRhdGEYBiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0ImwKFFN0cmVhbUV2ZW50c1Jlc3BvbnNlEikKBWV2ZW50GAEgASgLMhouaG9sb211c2gud2ViLnYxLkdhbWVFdmVudBIQCghyZXBsYXllZBgCIAEoCBIXCg9yZXBsYXlfY29tcGxldGUYAyABKAgiJwoRRGlzY29ubmVjdFJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCSIUChJEaXNjb25uZWN0UmVzcG9uc2UiPwoZQXV0aGVudGljYXRlUGxheWVyUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCSKRAQoaQXV0aGVudGljYXRlUGxheWVyUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIUCgxwbGF5ZXJfdG9rZW4YAiABKAkSFQoNZXJyb3JfbWVzc2FnZRgDIAEoCRI1CgpjaGFyYWN0ZXJzGAQgAygLMiEuaG9sb211c2gud2ViLnYxLkNoYXJhY3RlclN1bW1hcnkidAoQQ2hhcmFjdGVyU3VtbWFyeRIUCgxjaGFyYWN0ZXJfaWQYASABKAkSFgoOY2hhcmFjdGVyX25hbWUYAiABKAkSGgoSaGFzX2FjdGl2ZV9zZXNzaW9uGAMgASgIEhYKDnNlc3Npb25fc3RhdHVzGAQgASgJIi0KFUxpc3RDaGFyYWN0ZXJzUmVxdWVzdBIUCgxwbGF5ZXJfdG9rZW4YASABKAkiTwoWTGlzdENoYXJhY3RlcnNSZXNwb25zZRI1CgpjaGFyYWN0ZXJzGAEgAygLMiEuaG9sb211c2gud2ViLnYxLkNoYXJhY3RlclN1bW1hcnkiRAoWU2VsZWN0Q2hhcmFjdGVyUmVxdWVzdBIUCgxwbGF5ZXJfdG9rZW4YASABKAkSFAoMY2hhcmFjdGVyX2lkGAIgASgJIoEBChdTZWxlY3RDaGFyYWN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhIKCnNlc3Npb25faWQYAiABKAkSFgoOY2hhcmFjdGVyX25hbWUYAyABKAkSEgoKcmVhdHRhY2hlZBgEIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAUgASgJIisKE0xpc3RTZXNzaW9uc1JlcXVlc3QSFAoMcGxheWVyX3Rva2VuGAEgASgJIkkKFExpc3RTZXNzaW9uc1Jlc3BvbnNlEjEKCHNlc3Npb25zGAEgAygLMh8uaG9sb211c2gud2ViLnYxLlNlc3Npb25TdW1tYXJ5InUKDlNlc3Npb25TdW1tYXJ5EhIKCnNlc3Npb25faWQYASABKAkSFgoOY2hhcmFjdGVyX25hbWUYAiABKAkSDgoGc3RhdHVzGAMgASgJEhIKCmNyZWF0ZWRfYXQYBCABKAMSEwoLZGV0YWNoZWRfYXQYBSABKAMiLgoYR2V0Q29tbWFuZEhpc3RvcnlSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiLQoZR2V0Q29tbWFuZEhpc3RvcnlSZXNwb25zZRIQCghjb21tYW5kcxgBIAMoCSp6CgxFdmVudENoYW5uZWwSHQoZRVZFTlRfQ0hBTk5FTF9VTlNQRUNJRklFRBAAEhoKFkVWRU5UX0NIQU5ORUxfVEVSTUlOQUwQARIXChNFVkVOVF9DSEFOTkVMX1NUQVRFEAISFgoSRVZFTlRfQ0hBTk5FTF9CT1RIEAMy5QYKCldlYlNlcnZpY2USRgoFTG9naW4SHS5ob2xvbXVzaC53ZWIudjEuTG9naW5SZXF1ZXN0Gh4uaG9sb211c2gud2ViLnYxLkxvZ2luUmVzcG9uc2USWAoLU2VuZENvbW1hbmQSIy5ob2xvbXVzaC53ZWIudjEuU2VuZENvbW1hbmRSZXF1ZXN0GiQuaG9sb211c2gud2ViLnYxLlNlbmRDb21tYW5kUmVzcG9uc2USXQoMU3RyZWFtRXZlbnRzEiQuaG9sb211c2gud2ViLnYxLlN0cmVhbUV2ZW50c1JlcXVlc3QaJS5ob2xvbXVzaC53ZWIudjEuU3RyZWFtRXZlbnRzUmVzcG9uc2UwARJVCgpEaXNjb25uZWN0EiIuaG9sb211c2gud2ViLnYxLkRpc2Nvbm5lY3RSZXF1ZXN0GiMuaG9sb211c2gud2ViLnYxLkRpc2Nvbm5lY3RSZXNwb25zZRJtChJBdXRoZW50aWNhdGVQbGF5ZXISKi5ob2xvbXVzaC53ZWIudjEuQXV0aGVudGljYXRlUGxheWVyUmVxdWVzdBorLmhvbG9tdXNoLndlYi52MS5BdXRoZW50aWNhdGVQbGF5ZXJSZXNwb25zZRJhCg5MaXN0Q2hhcmFjdGVycxImLmhvbG9tdXNoLndlYi52MS5MaXN0Q2hhcmFjdGVyc1JlcXVlc3QaJy5ob2xvbXVzaC53ZWIudjEuTGlzdENoYXJhY3RlcnNSZXNwb25zZRJkCg9TZWxlY3RDaGFyYWN0ZXISJy5ob2xvbXVzaC53ZWIudjEuU2VsZWN0Q2hhcmFjdGVyUmVxdWVzdBooLmhvbG9tdXNoLndlYi52MS5TZWxlY3RDaGFyYWN0ZXJSZXNwb25zZRJbCgxMaXN0U2Vzc2lvbnMSJC5ob2xvbXVzaC53ZWIudjEuTGlzdFNlc3Npb25zUmVxdWVzdBolLmhvbG9tdXNoLndlYi52MS5MaXN0U2Vzc2lvbnNSZXNwb25zZRJqChFHZXRDb21tYW5kSGlzdG9yeRIpLmhvbG9tdXNoLndlYi52MS5HZXRDb21tYW5kSGlzdG9yeVJlcXVlc3QaKi5ob2xvbXVzaC53ZWIudjEuR2V0Q29tbWFuZEhpc3RvcnlSZXNwb25zZUI+WjxnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC93ZWIvdjE7d2VidjFiBnByb3RvMw", [file_google_protobuf_struct]);
+  fileDesc("Chlob2xvbXVzaC93ZWIvdjEvd2ViLnByb3RvEg9ob2xvbXVzaC53ZWIudjEiTwoMQ29udHJvbEZyYW1lEi4KBnNpZ25hbBgBIAEoDjIeLmhvbG9tdXNoLndlYi52MS5Db250cm9sU2lnbmFsEg8KB21lc3NhZ2UYAiABKAkiMgoMTG9naW5SZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJEhAKCHBhc3N3b3JkGAIgASgJImMKDUxvZ2luUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBISCgpzZXNzaW9uX2lkGAIgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAMgASgJEhUKDWVycm9yX21lc3NhZ2UYBCABKAkiNgoSU2VuZENvbW1hbmRSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSDAoEdGV4dBgCIAEoCSJNChNTZW5kQ29tbWFuZFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDgoGb3V0cHV0GAIgASgJEhUKDWVycm9yX21lc3NhZ2UYAyABKAkiRQoTU3RyZWFtRXZlbnRzUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhoKEnJlcGxheV9mcm9tX2N1cnNvchgCIAEoCCKtAQoJR2FtZUV2ZW50EgwKBHR5cGUYASABKAkSFgoOY2hhcmFjdGVyX25hbWUYAiABKAkSDAoEdGV4dBgDIAEoCRIRCgl0aW1lc3RhbXAYBCABKAMSLgoHY2hhbm5lbBgFIAEoDjIdLmhvbG9tdXNoLndlYi52MS5FdmVudENoYW5uZWwSKQoIbWV0YWRhdGEYBiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0In4KFFN0cmVhbUV2ZW50c1Jlc3BvbnNlEisKBWV2ZW50GAEgASgLMhouaG9sb211c2gud2ViLnYxLkdhbWVFdmVudEgAEjAKB2NvbnRyb2wYAiABKAsyHS5ob2xvbXVzaC53ZWIudjEuQ29udHJvbEZyYW1lSABCBwoFZnJhbWUiJwoRRGlzY29ubmVjdFJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCSIUChJEaXNjb25uZWN0UmVzcG9uc2UiPwoZQXV0aGVudGljYXRlUGxheWVyUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCSKRAQoaQXV0aGVudGljYXRlUGxheWVyUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIUCgxwbGF5ZXJfdG9rZW4YAiABKAkSFQoNZXJyb3JfbWVzc2FnZRgDIAEoCRI1CgpjaGFyYWN0ZXJzGAQgAygLMiEuaG9sb211c2gud2ViLnYxLkNoYXJhY3RlclN1bW1hcnkidAoQQ2hhcmFjdGVyU3VtbWFyeRIUCgxjaGFyYWN0ZXJfaWQYASABKAkSFgoOY2hhcmFjdGVyX25hbWUYAiABKAkSGgoSaGFzX2FjdGl2ZV9zZXNzaW9uGAMgASgIEhYKDnNlc3Npb25fc3RhdHVzGAQgASgJIi0KFUxpc3RDaGFyYWN0ZXJzUmVxdWVzdBIUCgxwbGF5ZXJfdG9rZW4YASABKAkiTwoWTGlzdENoYXJhY3RlcnNSZXNwb25zZRI1CgpjaGFyYWN0ZXJzGAEgAygLMiEuaG9sb211c2gud2ViLnYxLkNoYXJhY3RlclN1bW1hcnkiRAoWU2VsZWN0Q2hhcmFjdGVyUmVxdWVzdBIUCgxwbGF5ZXJfdG9rZW4YASABKAkSFAoMY2hhcmFjdGVyX2lkGAIgASgJIoEBChdTZWxlY3RDaGFyYWN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhIKCnNlc3Npb25faWQYAiABKAkSFgoOY2hhcmFjdGVyX25hbWUYAyABKAkSEgoKcmVhdHRhY2hlZBgEIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAUgASgJIisKE0xpc3RTZXNzaW9uc1JlcXVlc3QSFAoMcGxheWVyX3Rva2VuGAEgASgJIkkKFExpc3RTZXNzaW9uc1Jlc3BvbnNlEjEKCHNlc3Npb25zGAEgAygLMh8uaG9sb211c2gud2ViLnYxLlNlc3Npb25TdW1tYXJ5InUKDlNlc3Npb25TdW1tYXJ5EhIKCnNlc3Npb25faWQYASABKAkSFgoOY2hhcmFjdGVyX25hbWUYAiABKAkSDgoGc3RhdHVzGAMgASgJEhIKCmNyZWF0ZWRfYXQYBCABKAMSEwoLZGV0YWNoZWRfYXQYBSABKAMiLgoYR2V0Q29tbWFuZEhpc3RvcnlSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiLQoZR2V0Q29tbWFuZEhpc3RvcnlSZXNwb25zZRIQCghjb21tYW5kcxgBIAMoCSp6CgxFdmVudENoYW5uZWwSHQoZRVZFTlRfQ0hBTk5FTF9VTlNQRUNJRklFRBAAEhoKFkVWRU5UX0NIQU5ORUxfVEVSTUlOQUwQARIXChNFVkVOVF9DSEFOTkVMX1NUQVRFEAISFgoSRVZFTlRfQ0hBTk5FTF9CT1RIEAMqdQoNQ29udHJvbFNpZ25hbBIeChpDT05UUk9MX1NJR05BTF9VTlNQRUNJRklFRBAAEiIKHkNPTlRST0xfU0lHTkFMX1JFUExBWV9DT01QTEVURRABEiAKHENPTlRST0xfU0lHTkFMX1NUUkVBTV9DTE9TRUQQAjLlBgoKV2ViU2VydmljZRJGCgVMb2dpbhIdLmhvbG9tdXNoLndlYi52MS5Mb2dpblJlcXVlc3QaHi5ob2xvbXVzaC53ZWIudjEuTG9naW5SZXNwb25zZRJYCgtTZW5kQ29tbWFuZBIjLmhvbG9tdXNoLndlYi52MS5TZW5kQ29tbWFuZFJlcXVlc3QaJC5ob2xvbXVzaC53ZWIudjEuU2VuZENvbW1hbmRSZXNwb25zZRJdCgxTdHJlYW1FdmVudHMSJC5ob2xvbXVzaC53ZWIudjEuU3RyZWFtRXZlbnRzUmVxdWVzdBolLmhvbG9tdXNoLndlYi52MS5TdHJlYW1FdmVudHNSZXNwb25zZTABElUKCkRpc2Nvbm5lY3QSIi5ob2xvbXVzaC53ZWIudjEuRGlzY29ubmVjdFJlcXVlc3QaIy5ob2xvbXVzaC53ZWIudjEuRGlzY29ubmVjdFJlc3BvbnNlEm0KEkF1dGhlbnRpY2F0ZVBsYXllchIqLmhvbG9tdXNoLndlYi52MS5BdXRoZW50aWNhdGVQbGF5ZXJSZXF1ZXN0GisuaG9sb211c2gud2ViLnYxLkF1dGhlbnRpY2F0ZVBsYXllclJlc3BvbnNlEmEKDkxpc3RDaGFyYWN0ZXJzEiYuaG9sb211c2gud2ViLnYxLkxpc3RDaGFyYWN0ZXJzUmVxdWVzdBonLmhvbG9tdXNoLndlYi52MS5MaXN0Q2hhcmFjdGVyc1Jlc3BvbnNlEmQKD1NlbGVjdENoYXJhY3RlchInLmhvbG9tdXNoLndlYi52MS5TZWxlY3RDaGFyYWN0ZXJSZXF1ZXN0GiguaG9sb211c2gud2ViLnYxLlNlbGVjdENoYXJhY3RlclJlc3BvbnNlElsKDExpc3RTZXNzaW9ucxIkLmhvbG9tdXNoLndlYi52MS5MaXN0U2Vzc2lvbnNSZXF1ZXN0GiUuaG9sb211c2gud2ViLnYxLkxpc3RTZXNzaW9uc1Jlc3BvbnNlEmoKEUdldENvbW1hbmRIaXN0b3J5EikuaG9sb211c2gud2ViLnYxLkdldENvbW1hbmRIaXN0b3J5UmVxdWVzdBoqLmhvbG9tdXNoLndlYi52MS5HZXRDb21tYW5kSGlzdG9yeVJlc3BvbnNlQj5aPGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3dlYi92MTt3ZWJ2MWIGcHJvdG8z", [file_google_protobuf_struct]);
+
+/**
+ * @generated from message holomush.web.v1.ControlFrame
+ */
+export type ControlFrame = Message<"holomush.web.v1.ControlFrame"> & {
+  /**
+   * @generated from field: holomush.web.v1.ControlSignal signal = 1;
+   */
+  signal: ControlSignal;
+
+  /**
+   * @generated from field: string message = 2;
+   */
+  message: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.ControlFrame.
+ * Use `create(ControlFrameSchema)` to create a new message.
+ */
+export const ControlFrameSchema: GenMessage<ControlFrame> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 0);
 
 /**
  * @generated from message holomush.web.v1.LoginRequest
@@ -36,7 +58,7 @@ export type LoginRequest = Message<"holomush.web.v1.LoginRequest"> & {
  * Use `create(LoginRequestSchema)` to create a new message.
  */
 export const LoginRequestSchema: GenMessage<LoginRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 0);
+  messageDesc(file_holomush_web_v1_web, 1);
 
 /**
  * @generated from message holomush.web.v1.LoginResponse
@@ -68,7 +90,7 @@ export type LoginResponse = Message<"holomush.web.v1.LoginResponse"> & {
  * Use `create(LoginResponseSchema)` to create a new message.
  */
 export const LoginResponseSchema: GenMessage<LoginResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 1);
+  messageDesc(file_holomush_web_v1_web, 2);
 
 /**
  * @generated from message holomush.web.v1.SendCommandRequest
@@ -90,7 +112,7 @@ export type SendCommandRequest = Message<"holomush.web.v1.SendCommandRequest"> &
  * Use `create(SendCommandRequestSchema)` to create a new message.
  */
 export const SendCommandRequestSchema: GenMessage<SendCommandRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 2);
+  messageDesc(file_holomush_web_v1_web, 3);
 
 /**
  * @generated from message holomush.web.v1.SendCommandResponse
@@ -117,7 +139,7 @@ export type SendCommandResponse = Message<"holomush.web.v1.SendCommandResponse">
  * Use `create(SendCommandResponseSchema)` to create a new message.
  */
 export const SendCommandResponseSchema: GenMessage<SendCommandResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 3);
+  messageDesc(file_holomush_web_v1_web, 4);
 
 /**
  * @generated from message holomush.web.v1.StreamEventsRequest
@@ -139,7 +161,7 @@ export type StreamEventsRequest = Message<"holomush.web.v1.StreamEventsRequest">
  * Use `create(StreamEventsRequestSchema)` to create a new message.
  */
 export const StreamEventsRequestSchema: GenMessage<StreamEventsRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 4);
+  messageDesc(file_holomush_web_v1_web, 5);
 
 /**
  * @generated from message holomush.web.v1.GameEvent
@@ -181,26 +203,28 @@ export type GameEvent = Message<"holomush.web.v1.GameEvent"> & {
  * Use `create(GameEventSchema)` to create a new message.
  */
 export const GameEventSchema: GenMessage<GameEvent> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 5);
+  messageDesc(file_holomush_web_v1_web, 6);
 
 /**
  * @generated from message holomush.web.v1.StreamEventsResponse
  */
 export type StreamEventsResponse = Message<"holomush.web.v1.StreamEventsResponse"> & {
   /**
-   * @generated from field: holomush.web.v1.GameEvent event = 1;
+   * @generated from oneof holomush.web.v1.StreamEventsResponse.frame
    */
-  event?: GameEvent;
-
-  /**
-   * @generated from field: bool replayed = 2;
-   */
-  replayed: boolean;
-
-  /**
-   * @generated from field: bool replay_complete = 3;
-   */
-  replayComplete: boolean;
+  frame: {
+    /**
+     * @generated from field: holomush.web.v1.GameEvent event = 1;
+     */
+    value: GameEvent;
+    case: "event";
+  } | {
+    /**
+     * @generated from field: holomush.web.v1.ControlFrame control = 2;
+     */
+    value: ControlFrame;
+    case: "control";
+  } | { case: undefined; value?: undefined };
 };
 
 /**
@@ -208,7 +232,7 @@ export type StreamEventsResponse = Message<"holomush.web.v1.StreamEventsResponse
  * Use `create(StreamEventsResponseSchema)` to create a new message.
  */
 export const StreamEventsResponseSchema: GenMessage<StreamEventsResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 6);
+  messageDesc(file_holomush_web_v1_web, 7);
 
 /**
  * @generated from message holomush.web.v1.DisconnectRequest
@@ -225,7 +249,7 @@ export type DisconnectRequest = Message<"holomush.web.v1.DisconnectRequest"> & {
  * Use `create(DisconnectRequestSchema)` to create a new message.
  */
 export const DisconnectRequestSchema: GenMessage<DisconnectRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 7);
+  messageDesc(file_holomush_web_v1_web, 8);
 
 /**
  * @generated from message holomush.web.v1.DisconnectResponse
@@ -238,7 +262,7 @@ export type DisconnectResponse = Message<"holomush.web.v1.DisconnectResponse"> &
  * Use `create(DisconnectResponseSchema)` to create a new message.
  */
 export const DisconnectResponseSchema: GenMessage<DisconnectResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 8);
+  messageDesc(file_holomush_web_v1_web, 9);
 
 /**
  * @generated from message holomush.web.v1.AuthenticatePlayerRequest
@@ -260,7 +284,7 @@ export type AuthenticatePlayerRequest = Message<"holomush.web.v1.AuthenticatePla
  * Use `create(AuthenticatePlayerRequestSchema)` to create a new message.
  */
 export const AuthenticatePlayerRequestSchema: GenMessage<AuthenticatePlayerRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 9);
+  messageDesc(file_holomush_web_v1_web, 10);
 
 /**
  * @generated from message holomush.web.v1.AuthenticatePlayerResponse
@@ -292,7 +316,7 @@ export type AuthenticatePlayerResponse = Message<"holomush.web.v1.AuthenticatePl
  * Use `create(AuthenticatePlayerResponseSchema)` to create a new message.
  */
 export const AuthenticatePlayerResponseSchema: GenMessage<AuthenticatePlayerResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 10);
+  messageDesc(file_holomush_web_v1_web, 11);
 
 /**
  * @generated from message holomush.web.v1.CharacterSummary
@@ -326,7 +350,7 @@ export type CharacterSummary = Message<"holomush.web.v1.CharacterSummary"> & {
  * Use `create(CharacterSummarySchema)` to create a new message.
  */
 export const CharacterSummarySchema: GenMessage<CharacterSummary> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 11);
+  messageDesc(file_holomush_web_v1_web, 12);
 
 /**
  * @generated from message holomush.web.v1.ListCharactersRequest
@@ -343,7 +367,7 @@ export type ListCharactersRequest = Message<"holomush.web.v1.ListCharactersReque
  * Use `create(ListCharactersRequestSchema)` to create a new message.
  */
 export const ListCharactersRequestSchema: GenMessage<ListCharactersRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 12);
+  messageDesc(file_holomush_web_v1_web, 13);
 
 /**
  * @generated from message holomush.web.v1.ListCharactersResponse
@@ -360,7 +384,7 @@ export type ListCharactersResponse = Message<"holomush.web.v1.ListCharactersResp
  * Use `create(ListCharactersResponseSchema)` to create a new message.
  */
 export const ListCharactersResponseSchema: GenMessage<ListCharactersResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 13);
+  messageDesc(file_holomush_web_v1_web, 14);
 
 /**
  * @generated from message holomush.web.v1.SelectCharacterRequest
@@ -382,7 +406,7 @@ export type SelectCharacterRequest = Message<"holomush.web.v1.SelectCharacterReq
  * Use `create(SelectCharacterRequestSchema)` to create a new message.
  */
 export const SelectCharacterRequestSchema: GenMessage<SelectCharacterRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 14);
+  messageDesc(file_holomush_web_v1_web, 15);
 
 /**
  * @generated from message holomush.web.v1.SelectCharacterResponse
@@ -421,7 +445,7 @@ export type SelectCharacterResponse = Message<"holomush.web.v1.SelectCharacterRe
  * Use `create(SelectCharacterResponseSchema)` to create a new message.
  */
 export const SelectCharacterResponseSchema: GenMessage<SelectCharacterResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 15);
+  messageDesc(file_holomush_web_v1_web, 16);
 
 /**
  * @generated from message holomush.web.v1.ListSessionsRequest
@@ -438,7 +462,7 @@ export type ListSessionsRequest = Message<"holomush.web.v1.ListSessionsRequest">
  * Use `create(ListSessionsRequestSchema)` to create a new message.
  */
 export const ListSessionsRequestSchema: GenMessage<ListSessionsRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 16);
+  messageDesc(file_holomush_web_v1_web, 17);
 
 /**
  * @generated from message holomush.web.v1.ListSessionsResponse
@@ -455,7 +479,7 @@ export type ListSessionsResponse = Message<"holomush.web.v1.ListSessionsResponse
  * Use `create(ListSessionsResponseSchema)` to create a new message.
  */
 export const ListSessionsResponseSchema: GenMessage<ListSessionsResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 17);
+  messageDesc(file_holomush_web_v1_web, 18);
 
 /**
  * @generated from message holomush.web.v1.SessionSummary
@@ -492,7 +516,7 @@ export type SessionSummary = Message<"holomush.web.v1.SessionSummary"> & {
  * Use `create(SessionSummarySchema)` to create a new message.
  */
 export const SessionSummarySchema: GenMessage<SessionSummary> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 18);
+  messageDesc(file_holomush_web_v1_web, 19);
 
 /**
  * @generated from message holomush.web.v1.GetCommandHistoryRequest
@@ -509,7 +533,7 @@ export type GetCommandHistoryRequest = Message<"holomush.web.v1.GetCommandHistor
  * Use `create(GetCommandHistoryRequestSchema)` to create a new message.
  */
 export const GetCommandHistoryRequestSchema: GenMessage<GetCommandHistoryRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 19);
+  messageDesc(file_holomush_web_v1_web, 20);
 
 /**
  * @generated from message holomush.web.v1.GetCommandHistoryResponse
@@ -526,7 +550,7 @@ export type GetCommandHistoryResponse = Message<"holomush.web.v1.GetCommandHisto
  * Use `create(GetCommandHistoryResponseSchema)` to create a new message.
  */
 export const GetCommandHistoryResponseSchema: GenMessage<GetCommandHistoryResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 20);
+  messageDesc(file_holomush_web_v1_web, 21);
 
 /**
  * @generated from enum holomush.web.v1.EventChannel
@@ -558,6 +582,32 @@ export enum EventChannel {
  */
 export const EventChannelSchema: GenEnum<EventChannel> = /*@__PURE__*/
   enumDesc(file_holomush_web_v1_web, 0);
+
+/**
+ * @generated from enum holomush.web.v1.ControlSignal
+ */
+export enum ControlSignal {
+  /**
+   * @generated from enum value: CONTROL_SIGNAL_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: CONTROL_SIGNAL_REPLAY_COMPLETE = 1;
+   */
+  REPLAY_COMPLETE = 1,
+
+  /**
+   * @generated from enum value: CONTROL_SIGNAL_STREAM_CLOSED = 2;
+   */
+  STREAM_CLOSED = 2,
+}
+
+/**
+ * Describes the enum holomush.web.v1.ControlSignal.
+ */
+export const ControlSignalSchema: GenEnum<ControlSignal> = /*@__PURE__*/
+  enumDesc(file_holomush_web_v1_web, 1);
 
 /**
  * @generated from service holomush.web.v1.WebService

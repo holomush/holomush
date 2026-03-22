@@ -54,7 +54,7 @@ type GatewayHandler struct {
 	charName     string
 	authed       bool
 	quitting     bool
-	eventCh      chan *corev1.SubscribeResponse
+	eventCh      chan *corev1.EventFrame
 	drainTimeout time.Duration
 }
 
@@ -121,7 +121,7 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 	}()
 
 	// eventRecv is nil until subscription is established, blocking the select case.
-	var eventRecv <-chan *corev1.SubscribeResponse
+	var eventRecv <-chan *corev1.EventFrame
 
 	for {
 		select {
@@ -157,7 +157,7 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 	}
 }
 
-func (h *GatewayHandler) processLine(ctx context.Context, line string) <-chan *corev1.SubscribeResponse {
+func (h *GatewayHandler) processLine(ctx context.Context, line string) <-chan *corev1.EventFrame {
 	cmd, arg := core.ParseCommand(line)
 
 	switch cmd {
@@ -177,7 +177,7 @@ func (h *GatewayHandler) processLine(ctx context.Context, line string) <-chan *c
 	return nil
 }
 
-func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *corev1.SubscribeResponse {
+func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *corev1.EventFrame {
 	if h.authed {
 		h.send("Already connected.")
 		return nil
@@ -234,20 +234,24 @@ func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *
 		return nil
 	}
 
-	h.eventCh = make(chan *corev1.SubscribeResponse, 16)
+	h.eventCh = make(chan *corev1.EventFrame, 16)
 
 	go func() {
 		defer close(h.eventCh)
 		for {
-			ev, recvErr := stream.Recv()
+			resp, recvErr := stream.Recv()
 			if recvErr != nil {
 				if !errors.Is(recvErr, io.EOF) {
 					slog.Debug("gateway: event stream recv error", "session_id", h.sessionID, "error", recvErr)
 				}
 				return
 			}
+			eventFrame := resp.GetEvent()
+			if eventFrame == nil {
+				continue // Skip control frames for now
+			}
 			select {
-			case h.eventCh <- ev:
+			case h.eventCh <- eventFrame:
 			case <-ctx.Done():
 				return
 			}
@@ -363,7 +367,7 @@ func (h *GatewayHandler) handleQuit(ctx context.Context) {
 // drainEvents reads from the event channel for a short window, forwarding any
 // pending events (e.g. the "Goodbye!" command_response from quit) to the client
 // before the connection closes. At most drainMaxEvents are forwarded.
-func (h *GatewayHandler) drainEvents(eventRecv <-chan *corev1.SubscribeResponse) {
+func (h *GatewayHandler) drainEvents(eventRecv <-chan *corev1.EventFrame) {
 	if eventRecv == nil {
 		return
 	}
@@ -392,7 +396,7 @@ func (h *GatewayHandler) send(msg string) {
 	}
 }
 
-func (h *GatewayHandler) sendProtoEvent(ev *corev1.SubscribeResponse) {
+func (h *GatewayHandler) sendProtoEvent(ev *corev1.EventFrame) {
 	actorID := ev.GetActorId()
 	actorPrefix := actorID
 	if len(actorPrefix) > 8 {

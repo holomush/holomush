@@ -105,11 +105,11 @@ func TestLocationFollower_HandleEvent_DetectsCharacterMove(t *testing.T) {
 	assert.True(t, handled)
 	assert.Equal(t, newLocID, lf.currentLocID)
 	require.Len(t, stream.sent, 1)
-	assert.Equal(t, string(core.EventTypeLocationState), stream.sent[0].GetType())
+	assert.Equal(t, string(core.EventTypeLocationState), stream.sent[0].GetEvent().GetType())
 
 	// Verify location_state payload
 	var locState core.LocationStatePayload
-	require.NoError(t, json.Unmarshal(stream.sent[0].GetPayload(), &locState))
+	require.NoError(t, json.Unmarshal(stream.sent[0].GetEvent().GetPayload(), &locState))
 	assert.Equal(t, "New Location", locState.Location.Name)
 }
 
@@ -251,12 +251,13 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, ev)
 
-	assert.Equal(t, string(core.EventTypeLocationState), ev.GetType())
-	assert.Equal(t, "system", ev.GetActorType())
-	assert.Equal(t, world.LocationStream(locID), ev.GetStream())
+	ef := ev.GetEvent()
+	assert.Equal(t, string(core.EventTypeLocationState), ef.GetType())
+	assert.Equal(t, "system", ef.GetActorType())
+	assert.Equal(t, world.LocationStream(locID), ef.GetStream())
 
 	var payload core.LocationStatePayload
-	require.NoError(t, json.Unmarshal(ev.GetPayload(), &payload))
+	require.NoError(t, json.Unmarshal(ef.GetPayload(), &payload))
 	assert.Equal(t, "Hall", payload.Location.Name)
 	assert.Len(t, payload.Exits, 1)
 	assert.Len(t, payload.Present, 1)
