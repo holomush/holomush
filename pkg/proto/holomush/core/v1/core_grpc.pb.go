@@ -22,11 +22,19 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CoreService_Authenticate_FullMethodName      = "/holomush.core.v1.CoreService/Authenticate"
-	CoreService_HandleCommand_FullMethodName     = "/holomush.core.v1.CoreService/HandleCommand"
-	CoreService_Subscribe_FullMethodName         = "/holomush.core.v1.CoreService/Subscribe"
-	CoreService_Disconnect_FullMethodName        = "/holomush.core.v1.CoreService/Disconnect"
-	CoreService_GetCommandHistory_FullMethodName = "/holomush.core.v1.CoreService/GetCommandHistory"
+	CoreService_Authenticate_FullMethodName         = "/holomush.core.v1.CoreService/Authenticate"
+	CoreService_HandleCommand_FullMethodName        = "/holomush.core.v1.CoreService/HandleCommand"
+	CoreService_Subscribe_FullMethodName            = "/holomush.core.v1.CoreService/Subscribe"
+	CoreService_Disconnect_FullMethodName           = "/holomush.core.v1.CoreService/Disconnect"
+	CoreService_GetCommandHistory_FullMethodName    = "/holomush.core.v1.CoreService/GetCommandHistory"
+	CoreService_AuthenticatePlayer_FullMethodName   = "/holomush.core.v1.CoreService/AuthenticatePlayer"
+	CoreService_SelectCharacter_FullMethodName      = "/holomush.core.v1.CoreService/SelectCharacter"
+	CoreService_CreatePlayer_FullMethodName         = "/holomush.core.v1.CoreService/CreatePlayer"
+	CoreService_CreateCharacter_FullMethodName      = "/holomush.core.v1.CoreService/CreateCharacter"
+	CoreService_ListCharacters_FullMethodName       = "/holomush.core.v1.CoreService/ListCharacters"
+	CoreService_RequestPasswordReset_FullMethodName = "/holomush.core.v1.CoreService/RequestPasswordReset"
+	CoreService_ConfirmPasswordReset_FullMethodName = "/holomush.core.v1.CoreService/ConfirmPasswordReset"
+	CoreService_Logout_FullMethodName               = "/holomush.core.v1.CoreService/Logout"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -45,6 +53,22 @@ type CoreServiceClient interface {
 	Disconnect(ctx context.Context, in *DisconnectRequest, opts ...grpc.CallOption) (*DisconnectResponse, error)
 	// GetCommandHistory retrieves command history for a session.
 	GetCommandHistory(ctx context.Context, in *GetCommandHistoryRequest, opts ...grpc.CallOption) (*GetCommandHistoryResponse, error)
+	// Two-phase login: authenticate player credentials.
+	AuthenticatePlayer(ctx context.Context, in *AuthenticatePlayerRequest, opts ...grpc.CallOption) (*AuthenticatePlayerResponse, error)
+	// Two-phase login: select a character, creating or reattaching a game session.
+	SelectCharacter(ctx context.Context, in *SelectCharacterRequest, opts ...grpc.CallOption) (*SelectCharacterResponse, error)
+	// Create a new player account.
+	CreatePlayer(ctx context.Context, in *CreatePlayerRequest, opts ...grpc.CallOption) (*CreatePlayerResponse, error)
+	// Create a new character for an authenticated player.
+	CreateCharacter(ctx context.Context, in *CreateCharacterRequest, opts ...grpc.CallOption) (*CreateCharacterResponse, error)
+	// List characters for an authenticated player.
+	ListCharacters(ctx context.Context, in *ListCharactersRequest, opts ...grpc.CallOption) (*ListCharactersResponse, error)
+	// Request a password reset (email stubbed).
+	RequestPasswordReset(ctx context.Context, in *RequestPasswordResetRequest, opts ...grpc.CallOption) (*RequestPasswordResetResponse, error)
+	// Confirm a password reset with token.
+	ConfirmPasswordReset(ctx context.Context, in *ConfirmPasswordResetRequest, opts ...grpc.CallOption) (*ConfirmPasswordResetResponse, error)
+	// End a web session.
+	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error)
 }
 
 type coreServiceClient struct {
@@ -114,6 +138,86 @@ func (c *coreServiceClient) GetCommandHistory(ctx context.Context, in *GetComman
 	return out, nil
 }
 
+func (c *coreServiceClient) AuthenticatePlayer(ctx context.Context, in *AuthenticatePlayerRequest, opts ...grpc.CallOption) (*AuthenticatePlayerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AuthenticatePlayerResponse)
+	err := c.cc.Invoke(ctx, CoreService_AuthenticatePlayer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) SelectCharacter(ctx context.Context, in *SelectCharacterRequest, opts ...grpc.CallOption) (*SelectCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SelectCharacterResponse)
+	err := c.cc.Invoke(ctx, CoreService_SelectCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) CreatePlayer(ctx context.Context, in *CreatePlayerRequest, opts ...grpc.CallOption) (*CreatePlayerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreatePlayerResponse)
+	err := c.cc.Invoke(ctx, CoreService_CreatePlayer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) CreateCharacter(ctx context.Context, in *CreateCharacterRequest, opts ...grpc.CallOption) (*CreateCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateCharacterResponse)
+	err := c.cc.Invoke(ctx, CoreService_CreateCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) ListCharacters(ctx context.Context, in *ListCharactersRequest, opts ...grpc.CallOption) (*ListCharactersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListCharactersResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListCharacters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) RequestPasswordReset(ctx context.Context, in *RequestPasswordResetRequest, opts ...grpc.CallOption) (*RequestPasswordResetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RequestPasswordResetResponse)
+	err := c.cc.Invoke(ctx, CoreService_RequestPasswordReset_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) ConfirmPasswordReset(ctx context.Context, in *ConfirmPasswordResetRequest, opts ...grpc.CallOption) (*ConfirmPasswordResetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfirmPasswordResetResponse)
+	err := c.cc.Invoke(ctx, CoreService_ConfirmPasswordReset_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LogoutResponse)
+	err := c.cc.Invoke(ctx, CoreService_Logout_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -130,6 +234,22 @@ type CoreServiceServer interface {
 	Disconnect(context.Context, *DisconnectRequest) (*DisconnectResponse, error)
 	// GetCommandHistory retrieves command history for a session.
 	GetCommandHistory(context.Context, *GetCommandHistoryRequest) (*GetCommandHistoryResponse, error)
+	// Two-phase login: authenticate player credentials.
+	AuthenticatePlayer(context.Context, *AuthenticatePlayerRequest) (*AuthenticatePlayerResponse, error)
+	// Two-phase login: select a character, creating or reattaching a game session.
+	SelectCharacter(context.Context, *SelectCharacterRequest) (*SelectCharacterResponse, error)
+	// Create a new player account.
+	CreatePlayer(context.Context, *CreatePlayerRequest) (*CreatePlayerResponse, error)
+	// Create a new character for an authenticated player.
+	CreateCharacter(context.Context, *CreateCharacterRequest) (*CreateCharacterResponse, error)
+	// List characters for an authenticated player.
+	ListCharacters(context.Context, *ListCharactersRequest) (*ListCharactersResponse, error)
+	// Request a password reset (email stubbed).
+	RequestPasswordReset(context.Context, *RequestPasswordResetRequest) (*RequestPasswordResetResponse, error)
+	// Confirm a password reset with token.
+	ConfirmPasswordReset(context.Context, *ConfirmPasswordResetRequest) (*ConfirmPasswordResetResponse, error)
+	// End a web session.
+	Logout(context.Context, *LogoutRequest) (*LogoutResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -154,6 +274,30 @@ func (UnimplementedCoreServiceServer) Disconnect(context.Context, *DisconnectReq
 }
 func (UnimplementedCoreServiceServer) GetCommandHistory(context.Context, *GetCommandHistoryRequest) (*GetCommandHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCommandHistory not implemented")
+}
+func (UnimplementedCoreServiceServer) AuthenticatePlayer(context.Context, *AuthenticatePlayerRequest) (*AuthenticatePlayerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AuthenticatePlayer not implemented")
+}
+func (UnimplementedCoreServiceServer) SelectCharacter(context.Context, *SelectCharacterRequest) (*SelectCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SelectCharacter not implemented")
+}
+func (UnimplementedCoreServiceServer) CreatePlayer(context.Context, *CreatePlayerRequest) (*CreatePlayerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreatePlayer not implemented")
+}
+func (UnimplementedCoreServiceServer) CreateCharacter(context.Context, *CreateCharacterRequest) (*CreateCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateCharacter not implemented")
+}
+func (UnimplementedCoreServiceServer) ListCharacters(context.Context, *ListCharactersRequest) (*ListCharactersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListCharacters not implemented")
+}
+func (UnimplementedCoreServiceServer) RequestPasswordReset(context.Context, *RequestPasswordResetRequest) (*RequestPasswordResetResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RequestPasswordReset not implemented")
+}
+func (UnimplementedCoreServiceServer) ConfirmPasswordReset(context.Context, *ConfirmPasswordResetRequest) (*ConfirmPasswordResetResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfirmPasswordReset not implemented")
+}
+func (UnimplementedCoreServiceServer) Logout(context.Context, *LogoutRequest) (*LogoutResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Logout not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -259,6 +403,150 @@ func _CoreService_GetCommandHistory_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_AuthenticatePlayer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AuthenticatePlayerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).AuthenticatePlayer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_AuthenticatePlayer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).AuthenticatePlayer(ctx, req.(*AuthenticatePlayerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_SelectCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SelectCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).SelectCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_SelectCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).SelectCharacter(ctx, req.(*SelectCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_CreatePlayer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreatePlayerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).CreatePlayer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_CreatePlayer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).CreatePlayer(ctx, req.(*CreatePlayerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_CreateCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).CreateCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_CreateCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).CreateCharacter(ctx, req.(*CreateCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_ListCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListCharactersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListCharacters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListCharacters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListCharacters(ctx, req.(*ListCharactersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_RequestPasswordReset_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RequestPasswordResetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).RequestPasswordReset(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_RequestPasswordReset_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).RequestPasswordReset(ctx, req.(*RequestPasswordResetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_ConfirmPasswordReset_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfirmPasswordResetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ConfirmPasswordReset(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ConfirmPasswordReset_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ConfirmPasswordReset(ctx, req.(*ConfirmPasswordResetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_Logout_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LogoutRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).Logout(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_Logout_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).Logout(ctx, req.(*LogoutRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -281,6 +569,38 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetCommandHistory",
 			Handler:    _CoreService_GetCommandHistory_Handler,
+		},
+		{
+			MethodName: "AuthenticatePlayer",
+			Handler:    _CoreService_AuthenticatePlayer_Handler,
+		},
+		{
+			MethodName: "SelectCharacter",
+			Handler:    _CoreService_SelectCharacter_Handler,
+		},
+		{
+			MethodName: "CreatePlayer",
+			Handler:    _CoreService_CreatePlayer_Handler,
+		},
+		{
+			MethodName: "CreateCharacter",
+			Handler:    _CoreService_CreateCharacter_Handler,
+		},
+		{
+			MethodName: "ListCharacters",
+			Handler:    _CoreService_ListCharacters_Handler,
+		},
+		{
+			MethodName: "RequestPasswordReset",
+			Handler:    _CoreService_RequestPasswordReset_Handler,
+		},
+		{
+			MethodName: "ConfirmPasswordReset",
+			Handler:    _CoreService_ConfirmPasswordReset_Handler,
+		},
+		{
+			MethodName: "Logout",
+			Handler:    _CoreService_Logout_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

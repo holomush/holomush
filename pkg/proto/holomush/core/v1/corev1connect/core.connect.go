@@ -49,6 +49,29 @@ const (
 	// CoreServiceGetCommandHistoryProcedure is the fully-qualified name of the CoreService's
 	// GetCommandHistory RPC.
 	CoreServiceGetCommandHistoryProcedure = "/holomush.core.v1.CoreService/GetCommandHistory"
+	// CoreServiceAuthenticatePlayerProcedure is the fully-qualified name of the CoreService's
+	// AuthenticatePlayer RPC.
+	CoreServiceAuthenticatePlayerProcedure = "/holomush.core.v1.CoreService/AuthenticatePlayer"
+	// CoreServiceSelectCharacterProcedure is the fully-qualified name of the CoreService's
+	// SelectCharacter RPC.
+	CoreServiceSelectCharacterProcedure = "/holomush.core.v1.CoreService/SelectCharacter"
+	// CoreServiceCreatePlayerProcedure is the fully-qualified name of the CoreService's CreatePlayer
+	// RPC.
+	CoreServiceCreatePlayerProcedure = "/holomush.core.v1.CoreService/CreatePlayer"
+	// CoreServiceCreateCharacterProcedure is the fully-qualified name of the CoreService's
+	// CreateCharacter RPC.
+	CoreServiceCreateCharacterProcedure = "/holomush.core.v1.CoreService/CreateCharacter"
+	// CoreServiceListCharactersProcedure is the fully-qualified name of the CoreService's
+	// ListCharacters RPC.
+	CoreServiceListCharactersProcedure = "/holomush.core.v1.CoreService/ListCharacters"
+	// CoreServiceRequestPasswordResetProcedure is the fully-qualified name of the CoreService's
+	// RequestPasswordReset RPC.
+	CoreServiceRequestPasswordResetProcedure = "/holomush.core.v1.CoreService/RequestPasswordReset"
+	// CoreServiceConfirmPasswordResetProcedure is the fully-qualified name of the CoreService's
+	// ConfirmPasswordReset RPC.
+	CoreServiceConfirmPasswordResetProcedure = "/holomush.core.v1.CoreService/ConfirmPasswordReset"
+	// CoreServiceLogoutProcedure is the fully-qualified name of the CoreService's Logout RPC.
+	CoreServiceLogoutProcedure = "/holomush.core.v1.CoreService/Logout"
 )
 
 // CoreServiceClient is a client for the holomush.core.v1.CoreService service.
@@ -63,6 +86,22 @@ type CoreServiceClient interface {
 	Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error)
 	// GetCommandHistory retrieves command history for a session.
 	GetCommandHistory(context.Context, *connect.Request[v1.GetCommandHistoryRequest]) (*connect.Response[v1.GetCommandHistoryResponse], error)
+	// Two-phase login: authenticate player credentials.
+	AuthenticatePlayer(context.Context, *connect.Request[v1.AuthenticatePlayerRequest]) (*connect.Response[v1.AuthenticatePlayerResponse], error)
+	// Two-phase login: select a character, creating or reattaching a game session.
+	SelectCharacter(context.Context, *connect.Request[v1.SelectCharacterRequest]) (*connect.Response[v1.SelectCharacterResponse], error)
+	// Create a new player account.
+	CreatePlayer(context.Context, *connect.Request[v1.CreatePlayerRequest]) (*connect.Response[v1.CreatePlayerResponse], error)
+	// Create a new character for an authenticated player.
+	CreateCharacter(context.Context, *connect.Request[v1.CreateCharacterRequest]) (*connect.Response[v1.CreateCharacterResponse], error)
+	// List characters for an authenticated player.
+	ListCharacters(context.Context, *connect.Request[v1.ListCharactersRequest]) (*connect.Response[v1.ListCharactersResponse], error)
+	// Request a password reset (email stubbed).
+	RequestPasswordReset(context.Context, *connect.Request[v1.RequestPasswordResetRequest]) (*connect.Response[v1.RequestPasswordResetResponse], error)
+	// Confirm a password reset with token.
+	ConfirmPasswordReset(context.Context, *connect.Request[v1.ConfirmPasswordResetRequest]) (*connect.Response[v1.ConfirmPasswordResetResponse], error)
+	// End a web session.
+	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
 }
 
 // NewCoreServiceClient constructs a client for the holomush.core.v1.CoreService service. By
@@ -106,16 +145,72 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(coreServiceMethods.ByName("GetCommandHistory")),
 			connect.WithClientOptions(opts...),
 		),
+		authenticatePlayer: connect.NewClient[v1.AuthenticatePlayerRequest, v1.AuthenticatePlayerResponse](
+			httpClient,
+			baseURL+CoreServiceAuthenticatePlayerProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("AuthenticatePlayer")),
+			connect.WithClientOptions(opts...),
+		),
+		selectCharacter: connect.NewClient[v1.SelectCharacterRequest, v1.SelectCharacterResponse](
+			httpClient,
+			baseURL+CoreServiceSelectCharacterProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("SelectCharacter")),
+			connect.WithClientOptions(opts...),
+		),
+		createPlayer: connect.NewClient[v1.CreatePlayerRequest, v1.CreatePlayerResponse](
+			httpClient,
+			baseURL+CoreServiceCreatePlayerProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("CreatePlayer")),
+			connect.WithClientOptions(opts...),
+		),
+		createCharacter: connect.NewClient[v1.CreateCharacterRequest, v1.CreateCharacterResponse](
+			httpClient,
+			baseURL+CoreServiceCreateCharacterProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("CreateCharacter")),
+			connect.WithClientOptions(opts...),
+		),
+		listCharacters: connect.NewClient[v1.ListCharactersRequest, v1.ListCharactersResponse](
+			httpClient,
+			baseURL+CoreServiceListCharactersProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("ListCharacters")),
+			connect.WithClientOptions(opts...),
+		),
+		requestPasswordReset: connect.NewClient[v1.RequestPasswordResetRequest, v1.RequestPasswordResetResponse](
+			httpClient,
+			baseURL+CoreServiceRequestPasswordResetProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("RequestPasswordReset")),
+			connect.WithClientOptions(opts...),
+		),
+		confirmPasswordReset: connect.NewClient[v1.ConfirmPasswordResetRequest, v1.ConfirmPasswordResetResponse](
+			httpClient,
+			baseURL+CoreServiceConfirmPasswordResetProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("ConfirmPasswordReset")),
+			connect.WithClientOptions(opts...),
+		),
+		logout: connect.NewClient[v1.LogoutRequest, v1.LogoutResponse](
+			httpClient,
+			baseURL+CoreServiceLogoutProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("Logout")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // coreServiceClient implements CoreServiceClient.
 type coreServiceClient struct {
-	authenticate      *connect.Client[v1.AuthenticateRequest, v1.AuthenticateResponse]
-	handleCommand     *connect.Client[v1.HandleCommandRequest, v1.HandleCommandResponse]
-	subscribe         *connect.Client[v1.SubscribeRequest, v1.SubscribeResponse]
-	disconnect        *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
-	getCommandHistory *connect.Client[v1.GetCommandHistoryRequest, v1.GetCommandHistoryResponse]
+	authenticate         *connect.Client[v1.AuthenticateRequest, v1.AuthenticateResponse]
+	handleCommand        *connect.Client[v1.HandleCommandRequest, v1.HandleCommandResponse]
+	subscribe            *connect.Client[v1.SubscribeRequest, v1.SubscribeResponse]
+	disconnect           *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
+	getCommandHistory    *connect.Client[v1.GetCommandHistoryRequest, v1.GetCommandHistoryResponse]
+	authenticatePlayer   *connect.Client[v1.AuthenticatePlayerRequest, v1.AuthenticatePlayerResponse]
+	selectCharacter      *connect.Client[v1.SelectCharacterRequest, v1.SelectCharacterResponse]
+	createPlayer         *connect.Client[v1.CreatePlayerRequest, v1.CreatePlayerResponse]
+	createCharacter      *connect.Client[v1.CreateCharacterRequest, v1.CreateCharacterResponse]
+	listCharacters       *connect.Client[v1.ListCharactersRequest, v1.ListCharactersResponse]
+	requestPasswordReset *connect.Client[v1.RequestPasswordResetRequest, v1.RequestPasswordResetResponse]
+	confirmPasswordReset *connect.Client[v1.ConfirmPasswordResetRequest, v1.ConfirmPasswordResetResponse]
+	logout               *connect.Client[v1.LogoutRequest, v1.LogoutResponse]
 }
 
 // Authenticate calls holomush.core.v1.CoreService.Authenticate.
@@ -143,6 +238,46 @@ func (c *coreServiceClient) GetCommandHistory(ctx context.Context, req *connect.
 	return c.getCommandHistory.CallUnary(ctx, req)
 }
 
+// AuthenticatePlayer calls holomush.core.v1.CoreService.AuthenticatePlayer.
+func (c *coreServiceClient) AuthenticatePlayer(ctx context.Context, req *connect.Request[v1.AuthenticatePlayerRequest]) (*connect.Response[v1.AuthenticatePlayerResponse], error) {
+	return c.authenticatePlayer.CallUnary(ctx, req)
+}
+
+// SelectCharacter calls holomush.core.v1.CoreService.SelectCharacter.
+func (c *coreServiceClient) SelectCharacter(ctx context.Context, req *connect.Request[v1.SelectCharacterRequest]) (*connect.Response[v1.SelectCharacterResponse], error) {
+	return c.selectCharacter.CallUnary(ctx, req)
+}
+
+// CreatePlayer calls holomush.core.v1.CoreService.CreatePlayer.
+func (c *coreServiceClient) CreatePlayer(ctx context.Context, req *connect.Request[v1.CreatePlayerRequest]) (*connect.Response[v1.CreatePlayerResponse], error) {
+	return c.createPlayer.CallUnary(ctx, req)
+}
+
+// CreateCharacter calls holomush.core.v1.CoreService.CreateCharacter.
+func (c *coreServiceClient) CreateCharacter(ctx context.Context, req *connect.Request[v1.CreateCharacterRequest]) (*connect.Response[v1.CreateCharacterResponse], error) {
+	return c.createCharacter.CallUnary(ctx, req)
+}
+
+// ListCharacters calls holomush.core.v1.CoreService.ListCharacters.
+func (c *coreServiceClient) ListCharacters(ctx context.Context, req *connect.Request[v1.ListCharactersRequest]) (*connect.Response[v1.ListCharactersResponse], error) {
+	return c.listCharacters.CallUnary(ctx, req)
+}
+
+// RequestPasswordReset calls holomush.core.v1.CoreService.RequestPasswordReset.
+func (c *coreServiceClient) RequestPasswordReset(ctx context.Context, req *connect.Request[v1.RequestPasswordResetRequest]) (*connect.Response[v1.RequestPasswordResetResponse], error) {
+	return c.requestPasswordReset.CallUnary(ctx, req)
+}
+
+// ConfirmPasswordReset calls holomush.core.v1.CoreService.ConfirmPasswordReset.
+func (c *coreServiceClient) ConfirmPasswordReset(ctx context.Context, req *connect.Request[v1.ConfirmPasswordResetRequest]) (*connect.Response[v1.ConfirmPasswordResetResponse], error) {
+	return c.confirmPasswordReset.CallUnary(ctx, req)
+}
+
+// Logout calls holomush.core.v1.CoreService.Logout.
+func (c *coreServiceClient) Logout(ctx context.Context, req *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error) {
+	return c.logout.CallUnary(ctx, req)
+}
+
 // CoreServiceHandler is an implementation of the holomush.core.v1.CoreService service.
 type CoreServiceHandler interface {
 	// Authenticate validates credentials and creates a session.
@@ -155,6 +290,22 @@ type CoreServiceHandler interface {
 	Disconnect(context.Context, *connect.Request[v1.DisconnectRequest]) (*connect.Response[v1.DisconnectResponse], error)
 	// GetCommandHistory retrieves command history for a session.
 	GetCommandHistory(context.Context, *connect.Request[v1.GetCommandHistoryRequest]) (*connect.Response[v1.GetCommandHistoryResponse], error)
+	// Two-phase login: authenticate player credentials.
+	AuthenticatePlayer(context.Context, *connect.Request[v1.AuthenticatePlayerRequest]) (*connect.Response[v1.AuthenticatePlayerResponse], error)
+	// Two-phase login: select a character, creating or reattaching a game session.
+	SelectCharacter(context.Context, *connect.Request[v1.SelectCharacterRequest]) (*connect.Response[v1.SelectCharacterResponse], error)
+	// Create a new player account.
+	CreatePlayer(context.Context, *connect.Request[v1.CreatePlayerRequest]) (*connect.Response[v1.CreatePlayerResponse], error)
+	// Create a new character for an authenticated player.
+	CreateCharacter(context.Context, *connect.Request[v1.CreateCharacterRequest]) (*connect.Response[v1.CreateCharacterResponse], error)
+	// List characters for an authenticated player.
+	ListCharacters(context.Context, *connect.Request[v1.ListCharactersRequest]) (*connect.Response[v1.ListCharactersResponse], error)
+	// Request a password reset (email stubbed).
+	RequestPasswordReset(context.Context, *connect.Request[v1.RequestPasswordResetRequest]) (*connect.Response[v1.RequestPasswordResetResponse], error)
+	// Confirm a password reset with token.
+	ConfirmPasswordReset(context.Context, *connect.Request[v1.ConfirmPasswordResetRequest]) (*connect.Response[v1.ConfirmPasswordResetResponse], error)
+	// End a web session.
+	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
 }
 
 // NewCoreServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -194,6 +345,54 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(coreServiceMethods.ByName("GetCommandHistory")),
 		connect.WithHandlerOptions(opts...),
 	)
+	coreServiceAuthenticatePlayerHandler := connect.NewUnaryHandler(
+		CoreServiceAuthenticatePlayerProcedure,
+		svc.AuthenticatePlayer,
+		connect.WithSchema(coreServiceMethods.ByName("AuthenticatePlayer")),
+		connect.WithHandlerOptions(opts...),
+	)
+	coreServiceSelectCharacterHandler := connect.NewUnaryHandler(
+		CoreServiceSelectCharacterProcedure,
+		svc.SelectCharacter,
+		connect.WithSchema(coreServiceMethods.ByName("SelectCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	coreServiceCreatePlayerHandler := connect.NewUnaryHandler(
+		CoreServiceCreatePlayerProcedure,
+		svc.CreatePlayer,
+		connect.WithSchema(coreServiceMethods.ByName("CreatePlayer")),
+		connect.WithHandlerOptions(opts...),
+	)
+	coreServiceCreateCharacterHandler := connect.NewUnaryHandler(
+		CoreServiceCreateCharacterProcedure,
+		svc.CreateCharacter,
+		connect.WithSchema(coreServiceMethods.ByName("CreateCharacter")),
+		connect.WithHandlerOptions(opts...),
+	)
+	coreServiceListCharactersHandler := connect.NewUnaryHandler(
+		CoreServiceListCharactersProcedure,
+		svc.ListCharacters,
+		connect.WithSchema(coreServiceMethods.ByName("ListCharacters")),
+		connect.WithHandlerOptions(opts...),
+	)
+	coreServiceRequestPasswordResetHandler := connect.NewUnaryHandler(
+		CoreServiceRequestPasswordResetProcedure,
+		svc.RequestPasswordReset,
+		connect.WithSchema(coreServiceMethods.ByName("RequestPasswordReset")),
+		connect.WithHandlerOptions(opts...),
+	)
+	coreServiceConfirmPasswordResetHandler := connect.NewUnaryHandler(
+		CoreServiceConfirmPasswordResetProcedure,
+		svc.ConfirmPasswordReset,
+		connect.WithSchema(coreServiceMethods.ByName("ConfirmPasswordReset")),
+		connect.WithHandlerOptions(opts...),
+	)
+	coreServiceLogoutHandler := connect.NewUnaryHandler(
+		CoreServiceLogoutProcedure,
+		svc.Logout,
+		connect.WithSchema(coreServiceMethods.ByName("Logout")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.core.v1.CoreService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CoreServiceAuthenticateProcedure:
@@ -206,6 +405,22 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 			coreServiceDisconnectHandler.ServeHTTP(w, r)
 		case CoreServiceGetCommandHistoryProcedure:
 			coreServiceGetCommandHistoryHandler.ServeHTTP(w, r)
+		case CoreServiceAuthenticatePlayerProcedure:
+			coreServiceAuthenticatePlayerHandler.ServeHTTP(w, r)
+		case CoreServiceSelectCharacterProcedure:
+			coreServiceSelectCharacterHandler.ServeHTTP(w, r)
+		case CoreServiceCreatePlayerProcedure:
+			coreServiceCreatePlayerHandler.ServeHTTP(w, r)
+		case CoreServiceCreateCharacterProcedure:
+			coreServiceCreateCharacterHandler.ServeHTTP(w, r)
+		case CoreServiceListCharactersProcedure:
+			coreServiceListCharactersHandler.ServeHTTP(w, r)
+		case CoreServiceRequestPasswordResetProcedure:
+			coreServiceRequestPasswordResetHandler.ServeHTTP(w, r)
+		case CoreServiceConfirmPasswordResetProcedure:
+			coreServiceConfirmPasswordResetHandler.ServeHTTP(w, r)
+		case CoreServiceLogoutProcedure:
+			coreServiceLogoutHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -233,4 +448,36 @@ func (UnimplementedCoreServiceHandler) Disconnect(context.Context, *connect.Requ
 
 func (UnimplementedCoreServiceHandler) GetCommandHistory(context.Context, *connect.Request[v1.GetCommandHistoryRequest]) (*connect.Response[v1.GetCommandHistoryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.GetCommandHistory is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) AuthenticatePlayer(context.Context, *connect.Request[v1.AuthenticatePlayerRequest]) (*connect.Response[v1.AuthenticatePlayerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.AuthenticatePlayer is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) SelectCharacter(context.Context, *connect.Request[v1.SelectCharacterRequest]) (*connect.Response[v1.SelectCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.SelectCharacter is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) CreatePlayer(context.Context, *connect.Request[v1.CreatePlayerRequest]) (*connect.Response[v1.CreatePlayerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.CreatePlayer is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) CreateCharacter(context.Context, *connect.Request[v1.CreateCharacterRequest]) (*connect.Response[v1.CreateCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.CreateCharacter is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) ListCharacters(context.Context, *connect.Request[v1.ListCharactersRequest]) (*connect.Response[v1.ListCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.ListCharacters is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) RequestPasswordReset(context.Context, *connect.Request[v1.RequestPasswordResetRequest]) (*connect.Response[v1.RequestPasswordResetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.RequestPasswordReset is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) ConfirmPasswordReset(context.Context, *connect.Request[v1.ConfirmPasswordResetRequest]) (*connect.Response[v1.ConfirmPasswordResetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.ConfirmPasswordReset is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.Logout is not implemented"))
 }

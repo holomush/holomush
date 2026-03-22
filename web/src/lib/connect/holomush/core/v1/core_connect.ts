@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthenticateRequest, AuthenticateResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
+import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, AuthenticateRequest, AuthenticateResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListCharactersRequest, ListCharactersResponse, LogoutRequest, LogoutResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -70,6 +70,94 @@ export const CoreService = {
       name: "GetCommandHistory",
       I: GetCommandHistoryRequest,
       O: GetCommandHistoryResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Two-phase login: authenticate player credentials.
+     *
+     * @generated from rpc holomush.core.v1.CoreService.AuthenticatePlayer
+     */
+    authenticatePlayer: {
+      name: "AuthenticatePlayer",
+      I: AuthenticatePlayerRequest,
+      O: AuthenticatePlayerResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Two-phase login: select a character, creating or reattaching a game session.
+     *
+     * @generated from rpc holomush.core.v1.CoreService.SelectCharacter
+     */
+    selectCharacter: {
+      name: "SelectCharacter",
+      I: SelectCharacterRequest,
+      O: SelectCharacterResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Create a new player account.
+     *
+     * @generated from rpc holomush.core.v1.CoreService.CreatePlayer
+     */
+    createPlayer: {
+      name: "CreatePlayer",
+      I: CreatePlayerRequest,
+      O: CreatePlayerResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Create a new character for an authenticated player.
+     *
+     * @generated from rpc holomush.core.v1.CoreService.CreateCharacter
+     */
+    createCharacter: {
+      name: "CreateCharacter",
+      I: CreateCharacterRequest,
+      O: CreateCharacterResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * List characters for an authenticated player.
+     *
+     * @generated from rpc holomush.core.v1.CoreService.ListCharacters
+     */
+    listCharacters: {
+      name: "ListCharacters",
+      I: ListCharactersRequest,
+      O: ListCharactersResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Request a password reset (email stubbed).
+     *
+     * @generated from rpc holomush.core.v1.CoreService.RequestPasswordReset
+     */
+    requestPasswordReset: {
+      name: "RequestPasswordReset",
+      I: RequestPasswordResetRequest,
+      O: RequestPasswordResetResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Confirm a password reset with token.
+     *
+     * @generated from rpc holomush.core.v1.CoreService.ConfirmPasswordReset
+     */
+    confirmPasswordReset: {
+      name: "ConfirmPasswordReset",
+      I: ConfirmPasswordResetRequest,
+      O: ConfirmPasswordResetResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * End a web session.
+     *
+     * @generated from rpc holomush.core.v1.CoreService.Logout
+     */
+    logout: {
+      name: "Logout",
+      I: LogoutRequest,
+      O: LogoutResponse,
       kind: MethodKind.Unary,
     },
   }
