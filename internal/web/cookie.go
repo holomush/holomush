@@ -101,6 +101,20 @@ func (cw *cookieWriter) Write(b []byte) (int, error) {
 	return n, nil
 }
 
+// Flush implements http.Flusher by delegating to the underlying ResponseWriter.
+// This is required for ConnectRPC server-streaming, which calls Flush after
+// each frame.
+func (cw *cookieWriter) Flush() {
+	if f, ok := cw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Unwrap returns the underlying ResponseWriter for http.ResponseController.
+func (cw *cookieWriter) Unwrap() http.ResponseWriter {
+	return cw.ResponseWriter
+}
+
 // applyCookieHeaders reads signal headers, sets cookies, then removes the signal headers.
 func (cw *cookieWriter) applyCookieHeaders() {
 	h := cw.Header()
