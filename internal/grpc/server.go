@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
@@ -105,6 +106,14 @@ type CoreServer struct {
 	worldQuerier    WorldQuerier
 	sessionDefaults SessionDefaults
 	disconnectHooks []func(session.Info)
+
+	// Auth services for two-phase login and account management.
+	authService      AuthServiceProvider
+	resetService     ResetServiceProvider
+	characterService CharacterServiceProvider
+	playerTokenRepo  auth.PlayerTokenRepository
+	playerRepo       auth.PlayerRepository
+	charRepo         auth.CharacterRepository
 
 	// newSessionID is used for generating session IDs. Can be overridden for testing.
 	newSessionID func() ulid.ULID

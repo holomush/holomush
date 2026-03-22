@@ -137,6 +137,78 @@ func (c *Client) GetCommandHistory(ctx context.Context, req *corev1.GetCommandHi
 	return resp, nil
 }
 
+// AuthenticatePlayer validates credentials and returns a player token.
+func (c *Client) AuthenticatePlayer(ctx context.Context, req *corev1.AuthenticatePlayerRequest) (*corev1.AuthenticatePlayerResponse, error) {
+	resp, err := c.client.AuthenticatePlayer(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "AuthenticatePlayer").Wrap(err)
+	}
+	return resp, nil
+}
+
+// SelectCharacter selects a character and creates or reattaches a game session.
+func (c *Client) SelectCharacter(ctx context.Context, req *corev1.SelectCharacterRequest) (*corev1.SelectCharacterResponse, error) {
+	resp, err := c.client.SelectCharacter(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "SelectCharacter").Wrap(err)
+	}
+	return resp, nil
+}
+
+// CreatePlayer creates a new player account.
+func (c *Client) CreatePlayer(ctx context.Context, req *corev1.CreatePlayerRequest) (*corev1.CreatePlayerResponse, error) {
+	resp, err := c.client.CreatePlayer(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "CreatePlayer").Wrap(err)
+	}
+	return resp, nil
+}
+
+// CreateCharacter creates a new character for an authenticated player.
+func (c *Client) CreateCharacter(ctx context.Context, req *corev1.CreateCharacterRequest) (*corev1.CreateCharacterResponse, error) {
+	resp, err := c.client.CreateCharacter(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "CreateCharacter").Wrap(err)
+	}
+	return resp, nil
+}
+
+// ListCharacters lists characters for an authenticated player.
+func (c *Client) ListCharacters(ctx context.Context, req *corev1.ListCharactersRequest) (*corev1.ListCharactersResponse, error) {
+	resp, err := c.client.ListCharacters(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ListCharacters").Wrap(err)
+	}
+	return resp, nil
+}
+
+// RequestPasswordReset requests a password reset.
+func (c *Client) RequestPasswordReset(ctx context.Context, req *corev1.RequestPasswordResetRequest) (*corev1.RequestPasswordResetResponse, error) {
+	resp, err := c.client.RequestPasswordReset(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "RequestPasswordReset").Wrap(err)
+	}
+	return resp, nil
+}
+
+// ConfirmPasswordReset confirms a password reset with a token.
+func (c *Client) ConfirmPasswordReset(ctx context.Context, req *corev1.ConfirmPasswordResetRequest) (*corev1.ConfirmPasswordResetResponse, error) {
+	resp, err := c.client.ConfirmPasswordReset(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ConfirmPasswordReset").Wrap(err)
+	}
+	return resp, nil
+}
+
+// Logout ends a web session.
+func (c *Client) Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1.LogoutResponse, error) {
+	resp, err := c.client.Logout(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "Logout").Wrap(err)
+	}
+	return resp, nil
+}
+
 // CoreClient returns the underlying gRPC CoreClient interface for advanced usage.
 func (c *Client) CoreClient() corev1.CoreServiceClient {
 	return c.client
