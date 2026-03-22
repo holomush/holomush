@@ -91,3 +91,6 @@ site/.venv/
 .dolt/
 *.db
 web/test-results/
+
+# Beads / Dolt files (added by bd init)
+.beads-credential-key
