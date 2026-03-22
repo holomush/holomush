@@ -125,6 +125,11 @@ func (s *CoreServer) AuthenticatePlayer(ctx context.Context, req *corev1.Authent
 
 // SelectCharacter validates a player token, creates or reattaches a game session.
 func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectCharacterRequest) (*corev1.SelectCharacterResponse, error) {
+	if s.playerTokenRepo == nil {
+		return &corev1.SelectCharacterResponse{
+			Success: false, ErrorMessage: "player token service not configured",
+		}, nil
+	}
 	token, tokenErr := s.playerTokenRepo.GetByToken(ctx, req.PlayerToken)
 	if tokenErr != nil {
 		//nolint:nilerr // intentional: return user-facing error in response body
@@ -275,10 +280,12 @@ func (s *CoreServer) CreatePlayer(ctx context.Context, req *corev1.CreatePlayerR
 		}, nil
 	}
 
-	if err := s.playerTokenRepo.Create(ctx, playerToken); err != nil {
-		return nil, oops.Code("TOKEN_STORE_FAILED").
-			With("player_id", player.ID.String()).
-			Wrap(err)
+	if s.playerTokenRepo != nil {
+		if err := s.playerTokenRepo.Create(ctx, playerToken); err != nil {
+			return nil, oops.Code("TOKEN_STORE_FAILED").
+				With("player_id", player.ID.String()).
+				Wrap(err)
+		}
 	}
 
 	return &corev1.CreatePlayerResponse{
@@ -290,6 +297,11 @@ func (s *CoreServer) CreatePlayer(ctx context.Context, req *corev1.CreatePlayerR
 
 // CreateCharacter creates a new character for an authenticated player.
 func (s *CoreServer) CreateCharacter(ctx context.Context, req *corev1.CreateCharacterRequest) (*corev1.CreateCharacterResponse, error) {
+	if s.playerTokenRepo == nil {
+		return &corev1.CreateCharacterResponse{
+			Success: false, ErrorMessage: "character creation not configured",
+		}, nil
+	}
 	token, tokenErr := s.playerTokenRepo.GetByToken(ctx, req.PlayerToken)
 	if tokenErr != nil {
 		//nolint:nilerr // intentional: return user-facing error in response body
@@ -331,6 +343,9 @@ func (s *CoreServer) CreateCharacter(ctx context.Context, req *corev1.CreateChar
 
 // ListCharacters returns characters for an authenticated player.
 func (s *CoreServer) ListCharacters(ctx context.Context, req *corev1.ListCharactersRequest) (*corev1.ListCharactersResponse, error) {
+	if s.playerTokenRepo == nil {
+		return &corev1.ListCharactersResponse{}, nil
+	}
 	token, tokenErr := s.playerTokenRepo.GetByToken(ctx, req.PlayerToken)
 	if tokenErr != nil {
 		//nolint:nilerr // intentional: invalid token returns empty list

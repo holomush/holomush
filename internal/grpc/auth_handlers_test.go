@@ -260,14 +260,14 @@ func TestSelectCharacter_Reattach(t *testing.T) {
 	sessionStore := session.NewMemStore()
 	// Pre-populate a detached session for this character.
 	require.NoError(t, sessionStore.Set(ctx, existingSessionID, &session.Info{
-		ID:           existingSessionID,
-		CharacterID:  charID,
+		ID:            existingSessionID,
+		CharacterID:   charID,
 		CharacterName: "Alice",
-		LocationID:   locID,
-		Status:       session.StatusDetached,
-		EventCursors: map[string]ulid.ULID{},
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		LocationID:    locID,
+		Status:        session.StatusDetached,
+		EventCursors:  map[string]ulid.ULID{},
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}))
 
 	sessions := core.NewSessionManager()
@@ -415,7 +415,78 @@ func TestCreateCharacter_Success(t *testing.T) {
 	assert.Equal(t, "New Hero", resp.CharacterName)
 }
 
+func TestCreateCharacter_NotConfigured(t *testing.T) {
+	server := &CoreServer{
+		engine:   core.NewEngine(core.NewMemoryEventStore(), core.NewSessionManager()),
+		sessions: core.NewSessionManager(),
+	}
+	resp, err := server.CreateCharacter(context.Background(), &corev1.CreateCharacterRequest{
+		PlayerToken:   "some-token",
+		CharacterName: "Hero",
+	})
+	require.NoError(t, err)
+	assert.False(t, resp.Success)
+	assert.Contains(t, resp.ErrorMessage, "not configured")
+}
+
+func TestCreateCharacter_ExpiredToken(t *testing.T) {
+	tokenRepo := authmocks.NewMockPlayerTokenRepository(t)
+	tokenRepo.EXPECT().GetByToken(mock.Anything, "expired-token").
+		Return(&auth.PlayerToken{
+			Token:     "expired-token",
+			PlayerID:  ulid.Make(),
+			ExpiresAt: time.Now().Add(-1 * time.Minute),
+		}, nil)
+
+	server := &CoreServer{
+		engine:           core.NewEngine(core.NewMemoryEventStore(), core.NewSessionManager()),
+		sessions:         core.NewSessionManager(),
+		playerTokenRepo:  tokenRepo,
+		characterService: nil, // token expires before reaching service
+	}
+	resp, err := server.CreateCharacter(context.Background(), &corev1.CreateCharacterRequest{
+		PlayerToken:   "expired-token",
+		CharacterName: "Hero",
+	})
+	require.NoError(t, err)
+	assert.False(t, resp.Success)
+	assert.Contains(t, resp.ErrorMessage, "expired")
+}
+
 // --- ListCharacters ---
+
+func TestListCharacters_NotConfigured(t *testing.T) {
+	server := &CoreServer{
+		engine:   core.NewEngine(core.NewMemoryEventStore(), core.NewSessionManager()),
+		sessions: core.NewSessionManager(),
+	}
+	resp, err := server.ListCharacters(context.Background(), &corev1.ListCharactersRequest{
+		PlayerToken: "some-token",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, resp.Characters)
+}
+
+func TestListCharacters_ExpiredToken(t *testing.T) {
+	tokenRepo := authmocks.NewMockPlayerTokenRepository(t)
+	tokenRepo.EXPECT().GetByToken(mock.Anything, "expired-token").
+		Return(&auth.PlayerToken{
+			Token:     "expired-token",
+			PlayerID:  ulid.Make(),
+			ExpiresAt: time.Now().Add(-1 * time.Minute),
+		}, nil)
+
+	server := &CoreServer{
+		engine:          core.NewEngine(core.NewMemoryEventStore(), core.NewSessionManager()),
+		sessions:        core.NewSessionManager(),
+		playerTokenRepo: tokenRepo,
+	}
+	resp, err := server.ListCharacters(context.Background(), &corev1.ListCharactersRequest{
+		PlayerToken: "expired-token",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, resp.Characters)
+}
 
 func TestListCharacters_Success(t *testing.T) {
 	ctx := context.Background()
