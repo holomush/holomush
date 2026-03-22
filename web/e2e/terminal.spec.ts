@@ -149,11 +149,14 @@ test.describe('Terminal UI', () => {
     await page.reload();
     await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
 
-    // After reconnect, sending a command should produce a live event
+    // Send a command with a unique token so we can distinguish it from replayed events
+    const token = `live-${Date.now()}`;
     const input = page.locator('textarea');
-    await input.fill('say after reconnect');
+    await input.fill(`say ${token}`);
     await input.press('Enter');
-    await expect(page.locator('[data-testid="event"]').first()).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.locator('[data-testid="event"]').filter({ hasText: token })
+    ).toBeVisible({ timeout: 10000 });
   });
 
   // TODO: command history across reconnect requires a core RPC for
