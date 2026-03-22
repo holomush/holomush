@@ -27,6 +27,8 @@ import (
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
+	"github.com/holomush/holomush/internal/auth"
+	authpostgres "github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
@@ -251,6 +253,13 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// Build ABAC engine stack (requires PostgresEventStore for pool access).
 	// In test mode with mock stores, ABAC wiring is skipped.
 	var worldService *world.Service // hoisted so it's available to CoreServer constructor
+	// Auth service variables hoisted so they're available in the CoreServer constructor block.
+	var authService *auth.Service
+	var resetService *auth.PasswordResetService
+	var characterService *auth.CharacterService
+	var authPlayerRepo *authpostgres.PlayerRepository
+	var authPlayerTokenRepo *store.PostgresPlayerTokenStore
+	var authCharRepo *authCharRepoAdapter
 	realStoreForABAC, hasPool := eventStore.(*store.PostgresEventStore)
 	if !hasPool {
 		// In production, PostgresEventStore always has a pool. This branch
@@ -296,6 +305,40 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			Engine:        abacStack.Engine,
 			Transactor:    worldpostgres.NewTransactor(abacPool),
 		})
+
+		// Wire auth services for two-phase login
+		authPlayerRepo = authpostgres.NewPlayerRepository(abacPool)
+		authSessionRepo := authpostgres.NewWebSessionRepository(abacPool)
+		authResetRepo := authpostgres.NewPasswordResetRepository(abacPool)
+		authPlayerTokenRepo = store.NewPostgresPlayerTokenStore(abacPool)
+		authHasher := auth.NewArgon2idHasher()
+
+		var authErr error
+		authService, authErr = auth.NewAuthServiceWithLogger(authPlayerRepo, authSessionRepo, authHasher, slog.Default())
+		if authErr != nil {
+			return oops.Code("AUTH_SETUP_FAILED").Wrap(authErr)
+		}
+
+		var resetErr error
+		resetService, resetErr = auth.NewPasswordResetServiceWithLogger(authPlayerRepo, authResetRepo, authSessionRepo, authHasher, slog.Default())
+		if resetErr != nil {
+			return oops.Code("AUTH_SETUP_FAILED").Wrap(resetErr)
+		}
+
+		authCharRepo = &authCharRepoAdapter{
+			pool:     abacPool,
+			charRepo: worldpostgres.NewCharacterRepository(abacPool),
+		}
+		authLocRepo := &authLocRepoAdapter{
+			startLocationID: startLocationID,
+			locRepo:         worldpostgres.NewLocationRepository(abacPool),
+		}
+
+		var charErr error
+		characterService, charErr = auth.NewCharacterService(authCharRepo, authLocRepo)
+		if charErr != nil {
+			return oops.Code("AUTH_SETUP_FAILED").Wrap(charErr)
+		}
 
 		// Build plugin stack
 		var pluginsBaseDir string
@@ -399,6 +442,12 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			holoGRPC.WithAuthenticator(guestAuth),
 			holoGRPC.WithEventStore(realStore),
 			holoGRPC.WithWorldQuerier(worldService),
+			holoGRPC.WithAuthService(authService),
+			holoGRPC.WithResetService(resetService),
+			holoGRPC.WithCharacterService(characterService),
+			holoGRPC.WithPlayerTokenRepo(authPlayerTokenRepo),
+			holoGRPC.WithPlayerRepo(authPlayerRepo),
+			holoGRPC.WithCharacterRepo(authCharRepo),
 			holoGRPC.WithSessionDefaults(holoGRPC.SessionDefaults{
 				TTL:        sessionTTL,
 				MaxHistory: cfg.SessionMaxHistory,
