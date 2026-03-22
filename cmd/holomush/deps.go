@@ -7,6 +7,7 @@ import (
 	"context"
 	cryptotls "crypto/tls"
 	"net"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -72,6 +73,12 @@ type CoreDeps struct {
 // All fields with nil values will use their default implementations.
 type GatewayDeps struct {
 	CommonDeps
+
+	// CertPollTimeout is the maximum time to wait for TLS certificates to
+	// become available. The gateway polls for certs on startup, allowing it
+	// to start before the core process has generated them.
+	// Default: 30s (defaultCertPollTimeout)
+	CertPollTimeout time.Duration
 
 	// GameIDExtractor extracts game ID from CA certificate.
 	// Default: control.ExtractGameIDFromCA

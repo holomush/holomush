@@ -152,16 +152,14 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		return oops.Code("CERTS_DIR_FAILED").With("operation", "get certs directory").Wrap(err)
 	}
 
-	// Extract game_id from CA certificate for proper ServerName verification
-	gameID, err := deps.GameIDExtractor(certsDir)
-	if err != nil {
-		return oops.Code("GAME_ID_EXTRACT_FAILED").With("operation", "extract game_id from CA").With("certs_dir", certsDir).Wrap(err)
+	// Poll for TLS certificates — allows gateway to start before core generates certs.
+	certPollTimeout := deps.CertPollTimeout
+	if certPollTimeout <= 0 {
+		certPollTimeout = defaultCertPollTimeout
 	}
-
-	// Load TLS client certificates for mTLS connection to core
-	tlsConfig, err := deps.ClientTLSLoader(certsDir, "gateway", gameID)
+	tlsCfg, err := waitForTLSCerts(ctx, deps, certsDir, "gateway", certPollTimeout)
 	if err != nil {
-		return oops.Code("TLS_LOAD_FAILED").With("operation", "load TLS certificates").With("component", "gateway").Wrap(err)
+		return err
 	}
 
 	slog.Info("TLS certificates loaded", "certs_dir", certsDir)
@@ -169,7 +167,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	// Create gRPC client with mTLS
 	grpcClient, err := deps.GRPCClientFactory(ctx, holoGRPC.ClientConfig{
 		Address:   cfg.CoreAddr,
-		TLSConfig: tlsConfig,
+		TLSConfig: tlsCfg.clientTLS,
 	})
 	if err != nil {
 		return oops.Code("GRPC_CLIENT_CREATE_FAILED").With("operation", "create gRPC client").With("core_addr", cfg.CoreAddr).Wrap(err)
@@ -185,17 +183,11 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Start control gRPC server (always enabled)
-	controlTLSConfig, tlsErr := deps.ControlTLSLoader(certsDir, "gateway")
-	if tlsErr != nil {
-		return oops.Code("CONTROL_TLS_FAILED").With("operation", "load control TLS config").With("component", "gateway").Wrap(tlsErr)
-	}
-
 	controlGRPCServer, err := deps.ControlServerFactory("gateway", func() { cancel() })
 	if err != nil {
 		return oops.Code("CONTROL_SERVER_CREATE_FAILED").With("operation", "create control gRPC server").Wrap(err)
 	}
-	controlErrChan, err := controlGRPCServer.Start(cfg.ControlAddr, controlTLSConfig)
+	controlErrChan, err := controlGRPCServer.Start(cfg.ControlAddr, tlsCfg.controlTLS)
 	if err != nil {
 		return oops.Code("CONTROL_SERVER_START_FAILED").With("operation", "start control gRPC server").With("addr", cfg.ControlAddr).Wrap(err)
 	}

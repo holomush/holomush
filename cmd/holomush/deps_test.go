@@ -833,6 +833,9 @@ func TestRunGatewayWithDeps_GRPCClientFactoryError(t *testing.T) {
 			CertsDirGetter: func() (string, error) {
 				return "/tmp/certs", nil
 			},
+			ControlTLSLoader: func(_, _ string) (*cryptotls.Config, error) {
+				return testTLSConfig(), nil
+			},
 		},
 		GameIDExtractor: func(_ string) (string, error) {
 			return "test-game-id", nil
