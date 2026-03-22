@@ -257,10 +257,14 @@ func TestMemStore_WatchSession_ChannelClosedOnDelete(t *testing.T) {
 
 	require.NoError(t, store.Delete(ctx, "sess-1", "test"))
 
-	// Drain the event
-	<-ch
-	// Channel should be closed after event
-	_, ok := <-ch
+	// First receive should deliver the destroy event
+	e, ok := <-ch
+	require.True(t, ok, "expected destroy event on channel")
+	assert.Equal(t, Destroyed, e.Type)
+	assert.Equal(t, "test", e.Message)
+
+	// Channel should be closed after the event
+	_, ok = <-ch
 	assert.False(t, ok, "channel should be closed")
 }
 
