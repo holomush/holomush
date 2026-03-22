@@ -21,18 +21,21 @@ export function routeEvent(event: GameEvent, replayed: boolean) {
     appendLine(event, replayed);
   }
 
-  // Route to sidebar stores — skip replayed events to avoid applying stale
-  // arrive/leave/exit_update history to the live sidebar snapshot.
-  if (!replayed && (channel === CHANNEL_STATE || channel === CHANNEL_BOTH)) {
-    routeToSidebar(event);
+  // Route to sidebar stores. location_state is always applied (it's the
+  // authoritative snapshot, including the synthetic one at stream start).
+  // arrive/leave deltas are suppressed during replay to avoid applying
+  // stale history on top of the snapshot.
+  if (channel === CHANNEL_STATE || channel === CHANNEL_BOTH) {
+    routeToSidebar(event, replayed);
   }
 }
 
-function routeToSidebar(event: GameEvent) {
+function routeToSidebar(event: GameEvent, replayed: boolean) {
   const data = metadataToPlain(event.metadata);
 
   switch (event.type) {
     case 'location_state':
+      // Always apply — this is the authoritative snapshot (including synthetic at stream start).
       if (data) {
         applyLocationState(data);
       } else {
@@ -40,15 +43,15 @@ function routeToSidebar(event: GameEvent) {
       }
       break;
     case 'exit_update':
-      if (data?.exits) {
+      if (!replayed && data?.exits) {
         exits.set(data.exits as RoomExit[]);
       }
       break;
     case 'arrive':
-      if (event.characterName) addPresence(event.characterName);
+      if (!replayed && event.characterName) addPresence(event.characterName);
       break;
     case 'leave':
-      if (event.characterName) removePresence(event.characterName);
+      if (!replayed && event.characterName) removePresence(event.characterName);
       break;
   }
 }

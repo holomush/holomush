@@ -206,7 +206,7 @@ var _ = Describe("Session Persistence", func() {
 				var recvErr error
 				ev, recvErr = stream.Recv()
 				Expect(recvErr).NotTo(HaveOccurred())
-				return ev.Type
+				return ev.GetEvent().GetType()
 			}).Should(Equal("say"))
 
 			// Cancel the subscription (simulates disconnect)
@@ -256,7 +256,7 @@ var _ = Describe("Session Persistence", func() {
 			}
 			Expect(replayed).To(HaveLen(3))
 			for _, rev := range replayed {
-				Expect(rev.Type).To(Equal("say"))
+				Expect(rev.GetEvent().GetType()).To(Equal("say"))
 			}
 		})
 
