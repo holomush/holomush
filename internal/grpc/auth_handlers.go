@@ -86,6 +86,12 @@ func (s *CoreServer) AuthenticatePlayer(ctx context.Context, req *corev1.Authent
 			ErrorMessage: "authentication not configured",
 		}, nil
 	}
+	if s.playerTokenRepo == nil {
+		return &corev1.AuthenticatePlayerResponse{
+			Success:      false,
+			ErrorMessage: "player token service not configured",
+		}, nil
+	}
 
 	player, validateErr := s.authService.ValidateCredentials(ctx, req.Username, req.Password)
 	if validateErr != nil {
@@ -124,6 +130,7 @@ func (s *CoreServer) AuthenticatePlayer(ctx context.Context, req *corev1.Authent
 }
 
 // SelectCharacter validates a player token, creates or reattaches a game session.
+// TODO: Thread connID through SelectCharacterResponse proto once the field is added.
 func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectCharacterRequest) (*corev1.SelectCharacterResponse, error) {
 	if s.playerTokenRepo == nil {
 		return &corev1.SelectCharacterResponse{
@@ -177,6 +184,12 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 
 	// Check for existing session to reattach.
 	existingSession, findErr := s.sessionStore.FindByCharacter(ctx, charID)
+	if findErr != nil {
+		oopsErr, isOops := oops.AsOops(findErr)
+		if !isOops || oopsErr.Code() != "SESSION_NOT_FOUND" {
+			return nil, oops.Code("SESSION_LOOKUP_FAILED").Wrap(findErr)
+		}
+	}
 	if findErr == nil && existingSession != nil {
 		// Reattach: update session status back to active.
 		now := time.Now()
@@ -374,7 +387,8 @@ func (s *CoreServer) RequestPasswordReset(ctx context.Context, req *corev1.Reque
 		if err != nil {
 			slog.WarnContext(ctx, "password reset request failed", "error", err)
 		} else if token != "" {
-			slog.InfoContext(ctx, "password reset token generated", "token", token)
+			// SECURITY: Never log the token value — it grants password reset access.
+			slog.InfoContext(ctx, "password reset token generated", "email", req.Email)
 		}
 	}
 

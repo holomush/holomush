@@ -72,9 +72,9 @@ test.describe('Auth Flows — Full Registration Flow', () => {
   const testUser = `e2e_${Date.now()}`;
 
   test.skip('register → character select → create character → terminal', async ({ page }) => {
-    // Skip: requires CreatePlayer + CreateCharacter RPCs wired end-to-end.
-    // The gateway proxies these to core, but the core needs a real player
-    // database. Enable once two-phase auth is tested with integration tests.
+    // Skip: requires full dispatcher wiring (bead a3a7.7) before this can pass.
+    // The gateway proxies CreatePlayer + CreateCharacter RPCs to core, but the
+    // core needs a real player database with the dispatcher connected end-to-end.
     // Register
     await page.goto('/register');
     await page.fill('input[name="username"]', testUser);

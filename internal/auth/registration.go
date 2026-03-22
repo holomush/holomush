@@ -6,6 +6,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/samber/oops"
@@ -100,6 +101,8 @@ func (s *Service) ValidateCredentials(ctx context.Context, username, password st
 // Validates the username and password, checks for username availability,
 // hashes the password, and persists the new player.
 // Returns the created Player and a short-lived PlayerToken for character selection.
+// NOTE: The returned PlayerToken is not persisted here — the caller (gRPC handler)
+// is responsible for storing it via PlayerTokenRepository.Create.
 func (s *Service) CreatePlayer(ctx context.Context, username, password, email string) (*Player, *PlayerToken, error) {
 	if err := ValidateUsername(username); err != nil {
 		return nil, nil, oops.Code("REGISTER_INVALID_USERNAME").
@@ -146,6 +149,16 @@ func (s *Service) CreatePlayer(ctx context.Context, username, password, email st
 	}
 
 	if createErr := s.players.Create(ctx, player); createErr != nil {
+		// Handle TOCTOU race: another request may have created the same username
+		// between our GetByUsername check and this Create call.
+		errMsg := createErr.Error()
+		if strings.Contains(errMsg, "duplicate") ||
+			strings.Contains(errMsg, "unique_violation") ||
+			strings.Contains(errMsg, "23505") {
+			return nil, nil, oops.Code("REGISTER_USERNAME_TAKEN").
+				With("username", username).
+				Errorf("username %q is already taken", username)
+		}
 		return nil, nil, oops.Code("REGISTER_FAILED").
 			With("operation", "persist player").
 			Wrap(createErr)

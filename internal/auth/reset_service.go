@@ -182,6 +182,9 @@ func (s *PasswordResetService) ResetPassword(ctx context.Context, token, newPass
 
 	// Invalidate all active sessions for the player.
 	// This is best-effort — if it fails, the password was still updated successfully.
+	// TODO: Consider making session invalidation mandatory (return error on failure).
+	// Tradeoff: failing here would leave the password updated but old sessions valid,
+	// which is arguably better than rolling back a successful password change.
 	if err := s.sessions.DeleteByPlayer(ctx, playerID); err != nil {
 		s.logger.Warn("best-effort session invalidation failed",
 			"event", "session_invalidation_failed",

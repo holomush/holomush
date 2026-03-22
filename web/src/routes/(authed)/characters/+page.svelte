@@ -69,8 +69,17 @@
       });
       if (resp.success) {
         if (autoDefault) {
-          setCharacterSession(resp.characterId, resp.characterName);
-          goto('/terminal');
+          // Create a real game session via SelectCharacter before entering terminal.
+          const selectResp = await client.webSelectCharacter({
+            playerToken: $authState.playerToken ?? '',
+            characterId: resp.characterId,
+          });
+          if (selectResp.success) {
+            setCharacterSession(selectResp.sessionId, selectResp.characterName);
+            goto('/terminal');
+          } else {
+            createError = selectResp.errorMessage || 'Failed to enter game.';
+          }
         } else {
           // Refresh the character list
           const listResp = await client.webListCharacters({ playerToken: $authState.playerToken });

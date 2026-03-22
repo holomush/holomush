@@ -77,12 +77,15 @@ func (h *Handler) WebSelectCharacter(ctx context.Context, req *connect.Request[w
 		}), nil
 	}
 
-	return connect.NewResponse(&webv1.WebSelectCharacterResponse{
+	resp := connect.NewResponse(&webv1.WebSelectCharacterResponse{
 		Success:       true,
 		SessionId:     coreResp.GetSessionId(),
 		CharacterName: coreResp.GetCharacterName(),
 		Reattached:    coreResp.GetReattached(),
-	}), nil
+	})
+	// Rotate cookie from player token to session token.
+	resp.Header().Set(headerSetSessionToken, coreResp.GetSessionId())
+	return resp, nil
 }
 
 // WebCreatePlayer creates a new player account.

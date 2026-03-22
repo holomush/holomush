@@ -65,6 +65,8 @@ func GetSessionToken(r *http.Request) string {
 // headers, keeping cookie management out of the ConnectRPC handlers.
 func CookieMiddleware(secure bool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// SECURITY: Remove any client-supplied session header to prevent spoofing.
+		r.Header.Del(headerInjectSessionToken)
 		if token := GetSessionToken(r); token != "" {
 			r.Header.Set(headerInjectSessionToken, token)
 		}
@@ -103,8 +105,13 @@ func (cw *cookieWriter) Write(b []byte) (int, error) {
 
 // Flush implements http.Flusher by delegating to the underlying ResponseWriter.
 // This is required for ConnectRPC server-streaming, which calls Flush after
-// each frame.
+// each frame. Apply cookie headers before flushing in case they were set but
+// WriteHeader/Write weren't called yet.
 func (cw *cookieWriter) Flush() {
+	if !cw.wroteHeader {
+		cw.wroteHeader = true
+		cw.applyCookieHeaders()
+	}
 	if f, ok := cw.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}

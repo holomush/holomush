@@ -14,12 +14,10 @@
   const client = createClient(WebService, transport);
 
   async function handleLogout() {
-    if ($authState.sessionId) {
-      try {
-        await client.webLogout({ sessionId: $authState.sessionId });
-      } catch {
-        /* best effort */
-      }
+    try {
+      await client.webLogout({ sessionId: $authState.sessionId ?? '' });
+    } catch {
+      /* best effort — may fail if no server-side session exists */
     }
     clearAuth();
     goto('/');
@@ -43,15 +41,15 @@
       <a href="/register" class="nav-link accent">Register</a>
     {:else if $authState.sessionId && $authState.characterName}
       <span class="char-name">{$authState.characterName}</span>
-      <button class="icon-btn" onclick={handleSwitchCharacter} title="Switch character">
+      <button class="icon-btn" onclick={handleSwitchCharacter} title="Switch character" aria-label="Switch character">
         <ArrowLeftRight size={16} />
       </button>
-      <button class="icon-btn" onclick={handleLogout} title="Logout">
+      <button class="icon-btn" onclick={handleLogout} title="Logout" aria-label="Log out">
         <LogOut size={16} />
       </button>
     {:else if $authState.playerToken}
       <span class="player-name">{$authState.playerName}</span>
-      <button class="icon-btn" onclick={handleLogout} title="Logout">
+      <button class="icon-btn" onclick={handleLogout} title="Logout" aria-label="Log out">
         <LogOut size={16} />
       </button>
     {/if}

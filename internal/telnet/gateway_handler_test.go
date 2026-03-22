@@ -35,11 +35,13 @@ type mockCoreClient struct {
 	authResp *corev1.AuthenticateResponse
 	authErr  error
 
-	authPlayerResp *corev1.AuthenticatePlayerResponse
-	authPlayerErr  error
+	authPlayerResp  *corev1.AuthenticatePlayerResponse
+	authPlayerErr   error
+	lastAuthPlayerReq *corev1.AuthenticatePlayerRequest
 
-	selectCharResp *corev1.SelectCharacterResponse
-	selectCharErr  error
+	selectCharResp  *corev1.SelectCharacterResponse
+	selectCharErr   error
+	lastSelectCharReq *corev1.SelectCharacterRequest
 
 	createCharResp *corev1.CreateCharacterResponse
 	createCharErr  error
@@ -59,11 +61,13 @@ func (m *mockCoreClient) Authenticate(_ context.Context, _ *corev1.AuthenticateR
 	return m.authResp, m.authErr
 }
 
-func (m *mockCoreClient) AuthenticatePlayer(_ context.Context, _ *corev1.AuthenticatePlayerRequest) (*corev1.AuthenticatePlayerResponse, error) {
+func (m *mockCoreClient) AuthenticatePlayer(_ context.Context, req *corev1.AuthenticatePlayerRequest) (*corev1.AuthenticatePlayerResponse, error) {
+	m.lastAuthPlayerReq = req
 	return m.authPlayerResp, m.authPlayerErr
 }
 
-func (m *mockCoreClient) SelectCharacter(_ context.Context, _ *corev1.SelectCharacterRequest) (*corev1.SelectCharacterResponse, error) {
+func (m *mockCoreClient) SelectCharacter(_ context.Context, req *corev1.SelectCharacterRequest) (*corev1.SelectCharacterResponse, error) {
+	m.lastSelectCharReq = req
 	return m.selectCharResp, m.selectCharErr
 }
 
@@ -720,6 +724,11 @@ func TestGatewayHandler_TwoPhase_PlayByIndex(t *testing.T) {
 	line, err := r.ReadString('\n')
 	require.NoError(t, err)
 	assert.Contains(t, strings.TrimRight(line, "\r\n"), "Alaric")
+
+	// Verify the correct playerToken and characterId were sent to the server.
+	require.NotNil(t, client.lastSelectCharReq)
+	assert.Equal(t, "tok-idx", client.lastSelectCharReq.GetPlayerToken())
+	assert.Equal(t, "char-alaric", client.lastSelectCharReq.GetCharacterId())
 
 	cancel()
 	<-done
