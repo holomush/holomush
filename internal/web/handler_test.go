@@ -52,22 +52,22 @@ type mockCoreClient struct {
 	cmdHistoryRPCErr error // transport/RPC-level failure (nil response)
 
 	// Auth RPC fields
-	authPlayerResp      *corev1.AuthenticatePlayerResponse
-	authPlayerErr       error
-	selectCharResp      *corev1.SelectCharacterResponse
-	selectCharErr       error
-	createPlayerResp    *corev1.CreatePlayerResponse
-	createPlayerErr     error
-	createCharResp      *corev1.CreateCharacterResponse
-	createCharErr       error
-	listCharsResp       *corev1.ListCharactersResponse
-	listCharsErr        error
-	logoutResp          *corev1.LogoutResponse
-	logoutErr           error
-	reqPwResetResp      *corev1.RequestPasswordResetResponse
-	reqPwResetErr       error
-	confirmPwResetResp  *corev1.ConfirmPasswordResetResponse
-	confirmPwResetErr   error
+	authPlayerResp     *corev1.AuthenticatePlayerResponse
+	authPlayerErr      error
+	selectCharResp     *corev1.SelectCharacterResponse
+	selectCharErr      error
+	createPlayerResp   *corev1.CreatePlayerResponse
+	createPlayerErr    error
+	createCharResp     *corev1.CreateCharacterResponse
+	createCharErr      error
+	listCharsResp      *corev1.ListCharactersResponse
+	listCharsErr       error
+	logoutResp         *corev1.LogoutResponse
+	logoutErr          error
+	reqPwResetResp     *corev1.RequestPasswordResetResponse
+	reqPwResetErr      error
+	confirmPwResetResp *corev1.ConfirmPasswordResetResponse
+	confirmPwResetErr  error
 }
 
 func (m *mockCoreClient) Authenticate(_ context.Context, _ *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {

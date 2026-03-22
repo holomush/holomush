@@ -69,6 +69,7 @@
         <span class="label">New Password</span>
         <input
           type="password"
+          name="password"
           bind:value={newPassword}
           placeholder="min 8 characters"
           autocomplete="new-password"
@@ -80,6 +81,7 @@
         <span class="label">Confirm Password</span>
         <input
           type="password"
+          name="confirmPassword"
           bind:value={confirmPassword}
           placeholder="••••••••"
           autocomplete="new-password"

@@ -87,6 +87,7 @@
       <span class="label">Username</span>
       <input
         type="text"
+        name="username"
         bind:value={username}
         placeholder="username"
         autocomplete="username"
@@ -98,6 +99,7 @@
       <span class="label">Password</span>
       <input
         type="password"
+        name="password"
         bind:value={password}
         placeholder="••••••••"
         autocomplete="current-password"
@@ -113,7 +115,7 @@
       <a href="/reset" class="forgot">Forgot password?</a>
     </div>
 
-    <button class="btn-primary" onclick={handleLogin} disabled={loading}>
+    <button class="btn-primary" type="submit" onclick={handleLogin} disabled={loading}>
       {loading ? 'Signing in…' : 'Sign In'}
     </button>
 

@@ -60,18 +60,19 @@
 
     <label class="field">
       <span class="label">Username</span>
-      <input type="text" bind:value={username} placeholder="username" autocomplete="username" />
+      <input type="text" name="username" bind:value={username} placeholder="username" autocomplete="username" />
     </label>
 
     <label class="field">
       <span class="label">Email (optional)</span>
-      <input type="email" bind:value={email} placeholder="you@example.com" autocomplete="email" />
+      <input type="email" name="email" bind:value={email} placeholder="you@example.com" autocomplete="email" />
     </label>
 
     <label class="field">
       <span class="label">Password</span>
       <input
         type="password"
+        name="password"
         bind:value={password}
         placeholder="min 8 characters"
         autocomplete="new-password"
@@ -82,13 +83,14 @@
       <span class="label">Confirm Password</span>
       <input
         type="password"
+        name="confirmPassword"
         bind:value={confirmPassword}
         placeholder="••••••••"
         autocomplete="new-password"
       />
     </label>
 
-    <button class="btn-primary" onclick={handleRegister} disabled={loading}>
+    <button class="btn-primary" type="submit" onclick={handleRegister} disabled={loading}>
       {loading ? 'Creating account…' : 'Create Account'}
     </button>
 

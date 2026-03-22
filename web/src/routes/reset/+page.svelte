@@ -43,6 +43,7 @@
         <span class="label">Email</span>
         <input
           type="email"
+          name="email"
           bind:value={email}
           placeholder="you@example.com"
           autocomplete="email"

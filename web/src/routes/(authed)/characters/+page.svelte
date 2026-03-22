@@ -136,6 +136,7 @@
               {/if}
               <input
                 type="text"
+                name="characterName"
                 bind:value={newCharName}
                 placeholder="Character name"
                 onkeydown={(e) => e.key === 'Enter' && createCharacter()}
