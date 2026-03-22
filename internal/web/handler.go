@@ -194,26 +194,43 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 				oops.With("session_id", sessionID).Wrap(recvErr))
 		}
 
-		eventFrame := resp.GetEvent()
-		if eventFrame == nil {
-			continue // Skip control frames for now (handled in later task)
-		}
-
-		gameEvent := translateEvent(eventFrame)
-		if gameEvent == nil {
-			continue
-		}
-
-		if sendErr := stream.Send(&webv1.StreamEventsResponse{
-			Frame: &webv1.StreamEventsResponse_Event{Event: gameEvent},
-		}); sendErr != nil {
-			if errors.Is(sendErr, context.Canceled) ||
-				errors.Is(sendErr, context.DeadlineExceeded) {
+		switch frame := resp.GetFrame().(type) {
+		case *corev1.SubscribeResponse_Event:
+			gameEvent := translateEvent(frame.Event)
+			if gameEvent == nil {
+				continue
+			}
+			if sendErr := stream.Send(&webv1.StreamEventsResponse{
+				Frame: &webv1.StreamEventsResponse_Event{Event: gameEvent},
+			}); sendErr != nil {
+				if errors.Is(sendErr, context.Canceled) ||
+					errors.Is(sendErr, context.DeadlineExceeded) {
+					return nil
+				}
+				slog.WarnContext(ctx, "web: stream send error", "session_id", sessionID, "error", sendErr)
+				return connect.NewError(connect.CodeUnavailable,
+					oops.With("session_id", sessionID).Wrap(sendErr))
+			}
+		case *corev1.SubscribeResponse_Control:
+			if sendErr := stream.Send(&webv1.StreamEventsResponse{
+				Frame: &webv1.StreamEventsResponse_Control{
+					Control: &webv1.ControlFrame{
+						Signal:  webv1.ControlSignal(frame.Control.GetSignal()),
+						Message: frame.Control.GetMessage(),
+					},
+				},
+			}); sendErr != nil {
+				if errors.Is(sendErr, context.Canceled) ||
+					errors.Is(sendErr, context.DeadlineExceeded) {
+					return nil
+				}
+				slog.WarnContext(ctx, "web: stream send error", "session_id", sessionID, "error", sendErr)
+				return connect.NewError(connect.CodeUnavailable,
+					oops.With("session_id", sessionID).Wrap(sendErr))
+			}
+			if frame.Control.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED {
 				return nil
 			}
-			slog.WarnContext(ctx, "web: stream send error", "session_id", sessionID, "error", sendErr)
-			return connect.NewError(connect.CodeUnavailable,
-				oops.With("session_id", sessionID).Wrap(sendErr))
 		}
 	}
 }

@@ -7,6 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -14,11 +17,13 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/metadata"
 
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
+	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
 )
 
 // TestCoreClient_SatisfiedByGRPCClient verifies at compile time that
@@ -233,6 +238,108 @@ func TestNewHandler_WithOptions(t *testing.T) {
 	store := &mockSessionStore{}
 	h := NewHandler(&mockCoreClient{}, WithSessionStore(store))
 	assert.NotNil(t, h.sessionStore)
+}
+
+// mockSubscribeStream is a test double for corev1.CoreService_SubscribeClient.
+// It returns pre-configured responses from a channel, then io.EOF.
+type mockSubscribeStream struct {
+	responses []*corev1.SubscribeResponse
+	idx       int
+}
+
+func (m *mockSubscribeStream) Recv() (*corev1.SubscribeResponse, error) {
+	if m.idx >= len(m.responses) {
+		return nil, io.EOF
+	}
+	r := m.responses[m.idx]
+	m.idx++
+	return r, nil
+}
+
+func (m *mockSubscribeStream) Header() (metadata.MD, error) { return nil, nil }
+func (m *mockSubscribeStream) Trailer() metadata.MD         { return nil }
+func (m *mockSubscribeStream) CloseSend() error             { return nil }
+func (m *mockSubscribeStream) Context() context.Context     { return context.Background() }
+func (m *mockSubscribeStream) SendMsg(_ any) error          { return nil }
+func (m *mockSubscribeStream) RecvMsg(_ any) error          { return nil }
+
+// newStreamEventsServer starts an httptest server with the web handler and
+// returns a connect client pointing at it, plus a cleanup function.
+func newStreamEventsServer(t *testing.T, client CoreClient) (webv1connect.WebServiceClient, func()) {
+	t.Helper()
+	handler := NewHandler(client)
+	_, h := webv1connect.NewWebServiceHandler(handler)
+	srv := httptest.NewServer(h)
+	wsc := webv1connect.NewWebServiceClient(http.DefaultClient, srv.URL)
+	return wsc, srv.Close
+}
+
+func TestStreamEvents_ForwardsControlFrame(t *testing.T) {
+	sub := &mockSubscribeStream{
+		responses: []*corev1.SubscribeResponse{
+			{
+				Frame: &corev1.SubscribeResponse_Control{
+					Control: &corev1.ControlFrame{
+						Signal:  corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE,
+						Message: "replay done",
+					},
+				},
+			},
+		},
+	}
+	client := &mockCoreClient{subStream: sub}
+	wsc, cleanup := newStreamEventsServer(t, client)
+	defer cleanup()
+
+	stream, err := wsc.StreamEvents(context.Background(), connect.NewRequest(&webv1.StreamEventsRequest{
+		SessionId: "sess-test",
+	}))
+	require.NoError(t, err)
+	defer stream.Close()
+
+	ok := stream.Receive()
+	require.True(t, ok, "expected to receive a response")
+
+	msg := stream.Msg()
+	require.NotNil(t, msg)
+	ctrl := msg.GetControl()
+	require.NotNil(t, ctrl, "expected a ControlFrame, got: %v", msg)
+	assert.Equal(t, webv1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE, ctrl.GetSignal())
+	assert.Equal(t, "replay done", ctrl.GetMessage())
+}
+
+func TestStreamEvents_StreamClosedEndsStream(t *testing.T) {
+	sub := &mockSubscribeStream{
+		responses: []*corev1.SubscribeResponse{
+			{
+				Frame: &corev1.SubscribeResponse_Control{
+					Control: &corev1.ControlFrame{
+						Signal: corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED,
+					},
+				},
+			},
+		},
+	}
+	client := &mockCoreClient{subStream: sub}
+	wsc, cleanup := newStreamEventsServer(t, client)
+	defer cleanup()
+
+	stream, err := wsc.StreamEvents(context.Background(), connect.NewRequest(&webv1.StreamEventsRequest{
+		SessionId: "sess-test",
+	}))
+	require.NoError(t, err)
+	defer stream.Close()
+
+	// First receive: the STREAM_CLOSED control frame.
+	ok := stream.Receive()
+	require.True(t, ok, "expected to receive STREAM_CLOSED frame")
+	ctrl := stream.Msg().GetControl()
+	require.NotNil(t, ctrl)
+	assert.Equal(t, webv1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED, ctrl.GetSignal())
+
+	// Stream should now be done.
+	ok = stream.Receive()
+	assert.False(t, ok, "stream should be closed after STREAM_CLOSED")
 }
 
 // mockSessionStore is a minimal test double for session.Store.
