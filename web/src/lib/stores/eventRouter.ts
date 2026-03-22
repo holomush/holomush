@@ -1,7 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
 import { exits } from './sidebarStore';
 import type { RoomExit } from './sidebarStore';
-import { appendLine, replayActive, markReplayComplete } from './terminalStore';
+import { appendLine, replayActive } from './terminalStore';
 import { applyLocationState, addPresence, removePresence } from './sidebarStore';
+import type { GameEvent } from '$lib/connect/holomush/web/v1/web_pb';
 
 // EventChannel values from the generated proto
 const CHANNEL_UNSPECIFIED = 0;
@@ -9,45 +13,22 @@ const CHANNEL_TERMINAL = 1;
 const CHANNEL_STATE = 2;
 const CHANNEL_BOTH = 3;
 
-interface EventResponse {
-  event?: {
-    type: string;
-    characterName: string;
-    text: string;
-    channel?: number;
-    metadata?: unknown;
-  };
-  replayed: boolean;
-  replayComplete: boolean;
-}
-
-export function routeEvent(response: EventResponse) {
-  // Handle replay control frames before checking for event payload,
-  // since replayComplete frames may not carry an event.
-  if (response.replayComplete) {
-    markReplayComplete();
-  } else if (response.replayed) {
-    replayActive.set(true);
-  }
-
-  const event = response.event;
-  if (!event) return;
-
+export function routeEvent(event: GameEvent, replayed: boolean) {
   const channel = event.channel ?? CHANNEL_UNSPECIFIED;
 
   // Route to terminal (scrollback)
   if (channel === CHANNEL_TERMINAL || channel === CHANNEL_BOTH || channel === CHANNEL_UNSPECIFIED) {
-    appendLine(event, response.replayed);
+    appendLine(event, replayed);
   }
 
   // Route to sidebar stores — skip replayed events to avoid applying stale
   // arrive/leave/exit_update history to the live sidebar snapshot.
-  if (!response.replayed && (channel === CHANNEL_STATE || channel === CHANNEL_BOTH)) {
+  if (!replayed && (channel === CHANNEL_STATE || channel === CHANNEL_BOTH)) {
     routeToSidebar(event);
   }
 }
 
-function routeToSidebar(event: { type: string; characterName: string; metadata?: unknown }) {
+function routeToSidebar(event: GameEvent) {
   const data = metadataToPlain(event.metadata);
 
   switch (event.type) {
@@ -81,3 +62,6 @@ function metadataToPlain(metadata: unknown): Record<string, unknown> | null {
   // Fallback for plain objects (e.g., in tests)
   return metadata as Record<string, unknown>;
 }
+
+// Re-export replayActive so callers that previously imported it from here still work.
+export { replayActive };
