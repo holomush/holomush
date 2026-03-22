@@ -79,6 +79,20 @@ type Connection struct {
 	ConnectedAt time.Time
 }
 
+// EventType enumerates session lifecycle events.
+type EventType int
+
+const (
+	// Destroyed signals the session was destroyed (quit, kick, reap).
+	Destroyed EventType = iota
+)
+
+// Event signals a lifecycle change for a watched session.
+type Event struct {
+	Type    EventType
+	Message string
+}
+
 // Store manages persistent session state. Implementations MUST be
 // safe for concurrent use.
 type Store interface {
@@ -88,8 +102,14 @@ type Store interface {
 	// Set creates or updates a session.
 	Set(ctx context.Context, id string, info *Info) error
 
-	// Delete removes a session.
-	Delete(ctx context.Context, id string) error
+	// Delete removes a session. The reason string propagates to any
+	// active WatchSession watchers before the session is removed.
+	Delete(ctx context.Context, id string, reason string) error
+
+	// WatchSession returns a channel that receives an Event when
+	// the session is destroyed. The channel is closed after the event
+	// is delivered.
+	WatchSession(ctx context.Context, sessionID string) (<-chan Event, error)
 
 	// FindByCharacter returns the active or detached session for a character.
 	FindByCharacter(ctx context.Context, characterID ulid.ULID) (*Info, error)

@@ -72,10 +72,10 @@ func payloadToMetadata(payload []byte) *structpb.Struct {
 	return s
 }
 
-// translateEvent converts a core Event proto into a GameEvent proto suitable
+// translateEvent converts an EventFrame proto into a GameEvent proto suitable
 // for the web client. Unknown event types are silently dropped (returns nil).
 // Corrupt payloads are logged and also return nil.
-func translateEvent(ev *corev1.SubscribeResponse) *webv1.GameEvent {
+func translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 	var ts int64
 	if ev.GetTimestamp() != nil {
 		ts = ev.GetTimestamp().GetSeconds()

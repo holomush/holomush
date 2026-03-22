@@ -66,6 +66,7 @@ func (m *mockCoreClient) Disconnect(_ context.Context, _ *corev1.DisconnectReque
 }
 
 // readLines reads exactly n lines from r, stripping \r\n.
+//nolint:unparam // n varies in future tests
 func readLines(t *testing.T, r *bufio.Reader, n int) []string {
 	t.Helper()
 	lines := make([]string, 0, n)
@@ -229,7 +230,7 @@ func TestGatewayHandler_SendProtoEvent_CommandResponse(t *testing.T) {
 
 	eventStream := &mockSubscribeStream{
 		events: []*corev1.SubscribeResponse{
-			{Type: string(core.EventTypeCommandResponse), Payload: payload},
+			{Frame: &corev1.SubscribeResponse_Event{Event: &corev1.EventFrame{Type: string(core.EventTypeCommandResponse), Payload: payload}}},
 		},
 	}
 
@@ -291,7 +292,7 @@ func TestGatewayHandler_SendProtoEvent_CorruptCommandResponse(t *testing.T) {
 
 	eventStream := &mockSubscribeStream{
 		events: []*corev1.SubscribeResponse{
-			{Type: string(core.EventTypeCommandResponse), Payload: []byte("not-valid-json")},
+			{Frame: &corev1.SubscribeResponse_Event{Event: &corev1.EventFrame{Type: string(core.EventTypeCommandResponse), Payload: []byte("not-valid-json")}}},
 		},
 	}
 
@@ -340,29 +341,28 @@ func TestGatewayHandler_SendProtoEvent_CorruptCommandResponse(t *testing.T) {
 	<-done
 }
 
-// TestGatewayHandler_DrainEvents verifies that drainEvents forwards pending
-// events before returning and respects the configured timeout.
-func TestGatewayHandler_DrainEvents(t *testing.T) {
+// TestGatewayHandler_StreamClosed verifies that a STREAM_CLOSED control frame
+// causes the handler to write the frame's message to the client and exit cleanly.
+func TestGatewayHandler_StreamClosed(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer clientConn.Close()
 
-	payload, err := json.Marshal(core.CommandResponsePayload{Text: "Goodbye!"})
-	require.NoError(t, err)
-
-	// Two events queued, plus EOF.
+	// Stream delivers a STREAM_CLOSED control frame with a "Goodbye!" message.
 	eventStream := &mockSubscribeStream{
 		events: []*corev1.SubscribeResponse{
-			{Type: string(core.EventTypeCommandResponse), Payload: payload},
-			{Type: string(core.EventTypeCommandResponse), Payload: payload},
+			{Frame: &corev1.SubscribeResponse_Control{Control: &corev1.ControlFrame{
+				Signal:  corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED,
+				Message: "Goodbye!",
+			}}},
 		},
 	}
 
 	client := &mockCoreClient{
 		authResp: &corev1.AuthenticateResponse{
 			Success:       true,
-			SessionId:     "sess-drain",
-			ConnectionId:  "conn-drain",
-			CharacterName: "DrainUser",
+			SessionId:     "sess-sc",
+			ConnectionId:  "conn-sc",
+			CharacterName: "SCUser",
 		},
 		subStream: eventStream,
 		discResp:  &corev1.DisconnectResponse{Success: true},
@@ -372,8 +372,6 @@ func TestGatewayHandler_DrainEvents(t *testing.T) {
 	defer cancel()
 
 	handler := NewGatewayHandler(serverConn, client)
-	// Short drain timeout so the test doesn't block.
-	handler.drainTimeout = 200 * time.Millisecond
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -383,23 +381,23 @@ func TestGatewayHandler_DrainEvents(t *testing.T) {
 	r := bufio.NewReader(clientConn)
 	readLines(t, r, 2) // banner
 
-	_, err = clientConn.Write([]byte("connect guest\n"))
+	_, err := clientConn.Write([]byte("connect guest\n"))
 	require.NoError(t, err)
 	_, err = r.ReadString('\n') // welcome
 	require.NoError(t, err)
 
-	// Send quit to trigger drainEvents path.
-	_, err = clientConn.Write([]byte("quit\n"))
+	// The STREAM_CLOSED frame should deliver "Goodbye!" to the client.
+	line, err := r.ReadString('\n')
 	require.NoError(t, err)
+	assert.Equal(t, "Goodbye!", strings.TrimRight(line, "\r\n"))
 
-	// Both queued "Goodbye!" messages should arrive.
-	// Read each event individually to verify both are forwarded.
-	event1 := readLines(t, r, 1)
-	assert.Equal(t, "Goodbye!", event1[0])
-	event2 := readLines(t, r, 1)
-	assert.Equal(t, "Goodbye!", event2[0])
-
-	<-done
+	// Handler exits on STREAM_CLOSED — done channel should close without cancel.
+	select {
+	case <-done:
+		// expected
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not exit after STREAM_CLOSED")
+	}
 }
 
 // TestGatewayHandler_HandleGenericCommand_RPCError verifies that when

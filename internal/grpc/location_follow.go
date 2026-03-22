@@ -225,13 +225,17 @@ func (lf *locationFollower) buildLocationState(ctx context.Context, locationID u
 	}
 
 	return &corev1.SubscribeResponse{
-		Id:        core.NewULID().String(),
-		Stream:    world.LocationStream(locationID),
-		Type:      string(core.EventTypeLocationState),
-		Timestamp: timestamppb.New(time.Now()),
-		ActorType: core.ActorSystem.String(),
-		ActorId:   "system",
-		Payload:   payloadJSON,
+		Frame: &corev1.SubscribeResponse_Event{
+			Event: &corev1.EventFrame{
+				Id:        core.NewULID().String(),
+				Stream:    world.LocationStream(locationID),
+				Type:      string(core.EventTypeLocationState),
+				Timestamp: timestamppb.New(time.Now()),
+				ActorType: core.ActorSystem.String(),
+				ActorId:   "system",
+				Payload:   payloadJSON,
+			},
+		},
 	}, nil
 }
 

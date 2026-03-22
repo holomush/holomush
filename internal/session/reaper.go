@@ -79,7 +79,7 @@ func (r *Reaper) reapExpired(ctx context.Context) {
 			continue
 		}
 
-		if err := r.store.Delete(ctx, info.ID); err != nil {
+		if err := r.store.Delete(ctx, info.ID, "Session expired due to inactivity."); err != nil {
 			slog.WarnContext(ctx, "reaper: failed to delete expired session",
 				"session_id", info.ID,
 				"error", err,

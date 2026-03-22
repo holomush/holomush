@@ -28,10 +28,6 @@ const (
 	maxCommandSize = 4096
 	// rpcTimeout is the per-call timeout for unary gRPC RPCs.
 	rpcTimeout = 10 * time.Second
-	// defaultDrainTimeout is the default window used by drainEvents.
-	defaultDrainTimeout = 500 * time.Millisecond
-	// drainMaxEvents caps the number of events forwarded during drainEvents.
-	drainMaxEvents = 10
 )
 
 // CoreClient is the gRPC interface used by GatewayHandler to communicate with
@@ -55,16 +51,14 @@ type GatewayHandler struct {
 	authed       bool
 	quitting     bool
 	eventCh      chan *corev1.SubscribeResponse
-	drainTimeout time.Duration
 }
 
 // NewGatewayHandler creates a new GatewayHandler for the given connection.
 func NewGatewayHandler(conn net.Conn, client CoreClient) *GatewayHandler {
 	return &GatewayHandler{
-		conn:         conn,
-		reader:       bufio.NewReader(conn),
-		client:       client,
-		drainTimeout: defaultDrainTimeout,
+		conn:   conn,
+		reader: bufio.NewReader(conn),
+		client: client,
 	}
 }
 
@@ -139,20 +133,32 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 				eventRecv = ch
 			}
 			if h.quitting {
-				// Drain pending events briefly so the "Goodbye!" command_response
-				// (emitted by the quit RPC) reaches the client before we close.
-				h.drainEvents(eventRecv)
+				// Wait for the STREAM_CLOSED control frame with "Goodbye!" before
+				// closing. The server sends it after processing quit.
+				h.drainUntilClosed(eventRecv)
 				return
 			}
 
-		case ev, ok := <-eventRecv:
+		case resp, ok := <-eventRecv:
 			if !ok {
 				eventRecv = nil
 				slog.Debug("gateway: event stream closed", "session_id", h.sessionID)
 				h.send("Connection to server lost.")
 				continue
 			}
-			h.sendProtoEvent(ev)
+			switch frame := resp.GetFrame().(type) {
+			case *corev1.SubscribeResponse_Event:
+				h.sendProtoEvent(frame.Event)
+			case *corev1.SubscribeResponse_Control:
+				if frame.Control.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED {
+					if msg := frame.Control.GetMessage(); msg != "" {
+						h.send(msg)
+					}
+					return
+				}
+				// REPLAY_COMPLETE: no-op for telnet — replay renders the same as live.
+				slog.Debug("gateway: replay complete", "session_id", h.sessionID)
+			}
 		}
 	}
 }
@@ -239,7 +245,7 @@ func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *
 	go func() {
 		defer close(h.eventCh)
 		for {
-			ev, recvErr := stream.Recv()
+			resp, recvErr := stream.Recv()
 			if recvErr != nil {
 				if !errors.Is(recvErr, io.EOF) {
 					slog.Debug("gateway: event stream recv error", "session_id", h.sessionID, "error", recvErr)
@@ -247,7 +253,7 @@ func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *
 				return
 			}
 			select {
-			case h.eventCh <- ev:
+			case h.eventCh <- resp:
 			case <-ctx.Done():
 				return
 			}
@@ -360,26 +366,33 @@ func (h *GatewayHandler) handleQuit(ctx context.Context) {
 	h.quitting = true
 }
 
-// drainEvents reads from the event channel for a short window, forwarding any
-// pending events (e.g. the "Goodbye!" command_response from quit) to the client
-// before the connection closes. At most drainMaxEvents are forwarded.
-func (h *GatewayHandler) drainEvents(eventRecv <-chan *corev1.SubscribeResponse) {
+
+// drainUntilClosed reads from the event channel until a STREAM_CLOSED
+// control frame arrives or the channel closes or a timeout expires.
+// Any event frames received are forwarded to the client.
+func (h *GatewayHandler) drainUntilClosed(eventRecv <-chan *corev1.SubscribeResponse) {
 	if eventRecv == nil {
 		return
 	}
-	timeout := h.drainTimeout
-	if timeout <= 0 {
-		timeout = defaultDrainTimeout
-	}
-	timer := time.NewTimer(timeout)
+	timer := time.NewTimer(2 * time.Second)
 	defer timer.Stop()
-	for count := 0; count < drainMaxEvents; count++ {
+	for {
 		select {
-		case ev, ok := <-eventRecv:
+		case resp, ok := <-eventRecv:
 			if !ok {
 				return
 			}
-			h.sendProtoEvent(ev)
+			switch frame := resp.GetFrame().(type) {
+			case *corev1.SubscribeResponse_Event:
+				h.sendProtoEvent(frame.Event)
+			case *corev1.SubscribeResponse_Control:
+				if frame.Control.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED {
+					if msg := frame.Control.GetMessage(); msg != "" {
+						h.send(msg)
+					}
+					return
+				}
+			}
 		case <-timer.C:
 			return
 		}
@@ -392,7 +405,7 @@ func (h *GatewayHandler) send(msg string) {
 	}
 }
 
-func (h *GatewayHandler) sendProtoEvent(ev *corev1.SubscribeResponse) {
+func (h *GatewayHandler) sendProtoEvent(ev *corev1.EventFrame) {
 	actorID := ev.GetActorId()
 	actorPrefix := actorID
 	if len(actorPrefix) > 8 {

@@ -2859,16 +2859,16 @@ func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
 	// Filter to say events only for verification.
 	var sayEvents []*corev1.SubscribeResponse
 	for _, ev := range stream.events {
-		if ev.Type == string(core.EventTypeSay) {
+		if ef := ev.GetEvent(); ef != nil && ef.GetType() == string(core.EventTypeSay) {
 			sayEvents = append(sayEvents, ev)
 		}
 	}
 	require.GreaterOrEqual(t, len(sayEvents), 2, "expected at least 2 replayed say events")
-	assert.Equal(t, historicalID1.String(), sayEvents[0].Id, "first say event should be historical")
-	assert.Equal(t, historicalID2.String(), sayEvents[1].Id, "second say event should be historical")
+	assert.Equal(t, historicalID1.String(), sayEvents[0].GetEvent().GetId(), "first say event should be historical")
+	assert.Equal(t, historicalID2.String(), sayEvents[1].GetEvent().GetId(), "second say event should be historical")
 
 	if len(sayEvents) >= 3 {
-		assert.Equal(t, liveID.String(), sayEvents[2].Id, "third say event should be the live one")
+		assert.Equal(t, liveID.String(), sayEvents[2].GetEvent().GetId(), "third say event should be the live one")
 	}
 }
 
@@ -2951,7 +2951,7 @@ func TestCoreServer_Subscribe_ReplayDeduplicatesLiveEvents(t *testing.T) {
 	// Count how many times the historical event appears (should be exactly once)
 	count := 0
 	for _, ev := range stream.events {
-		if ev.Id == historicalID.String() {
+		if ef := ev.GetEvent(); ef != nil && ef.GetId() == historicalID.String() {
 			count++
 		}
 	}
@@ -3015,8 +3015,11 @@ func TestCoreServer_Subscribe_NoReplayWithoutCursors(t *testing.T) {
 	}
 
 	// Catch-up replay always runs (to close the LISTEN race window), but with
-	// no events in the store, nothing is sent to the client.
-	assert.Empty(t, stream.events, "no events should be sent when store is empty")
+	// no events in the store, no EventFrames are sent. A REPLAY_COMPLETE
+	// ControlFrame may be present.
+	for _, ev := range stream.events {
+		assert.Nil(t, ev.GetEvent(), "no event frames should be sent when store is empty")
+	}
 }
 
 func TestCoreServer_Subscribe_NoReplayWhenNotRequested(t *testing.T) {
@@ -3077,8 +3080,216 @@ func TestCoreServer_Subscribe_NoReplayWhenNotRequested(t *testing.T) {
 
 	// Catch-up replay always runs, but with ReplayFromCursor=false the cursor
 	// is zero ULID — effectively replaying from the beginning. With no events
-	// in the store, nothing is sent.
-	assert.Empty(t, stream.events, "no events should be sent when store is empty")
+	// in the store, no EventFrames are sent. A REPLAY_COMPLETE ControlFrame
+	// may be present.
+	for _, ev := range stream.events {
+		assert.Nil(t, ev.GetEvent(), "no event frames should be sent when store is empty")
+	}
+}
+
+func TestCoreServer_Subscribe_EmitsReplayCompleteControlFrame(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	streamName := "location:" + locationID.String()
+
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	eventStore := core.NewMemoryEventStore()
+	ctx := context.Background()
+
+	// Prepopulate store: cursor event + 1 historical event after it
+	cursorEvent := core.Event{
+		ID:        core.NewULID(),
+		Stream:    streamName,
+		Type:      core.EventTypeSay,
+		Timestamp: time.Now().Add(-2 * time.Second),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor0"},
+		Payload:   []byte(`{"message":"before-cursor"}`),
+	}
+	require.NoError(t, eventStore.Append(ctx, cursorEvent))
+
+	historicalEvent := core.Event{
+		ID:        core.NewULID(),
+		Stream:    streamName,
+		Type:      core.EventTypeSay,
+		Timestamp: time.Now().Add(-1 * time.Second),
+		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor1"},
+		Payload:   []byte(`{"message":"missed"}`),
+	}
+	require.NoError(t, eventStore.Append(ctx, historicalEvent))
+
+	server := &CoreServer{
+		engine:     core.NewEngine(eventStore, sessions),
+		sessions:   sessions,
+		eventStore: eventStore,
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID:  charID,
+				LocationID:   locationID,
+				Status:       session.StatusActive,
+				EventCursors: map[string]ulid.ULID{streamName: cursorEvent.ID},
+			},
+		}),
+		sessionDefaults: SessionDefaults{MaxReplay: 1000},
+	}
+
+	subCtx, cancel := context.WithCancel(ctx)
+	stream := &mockSubscribeStream{ctx: subCtx}
+
+	req := &corev1.SubscribeRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "replay-complete-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId:        sessionID.String(),
+		Streams:          []string{streamName},
+		ReplayFromCursor: true,
+	}
+
+	done := make(chan error)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	// Give time for replay to complete and REPLAY_COMPLETE frame to be sent
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Subscribe did not return after context cancellation")
+	}
+
+	// Find the REPLAY_COMPLETE control frame in the received events
+	var replayCompleteFrame *corev1.SubscribeResponse
+	for _, ev := range stream.events {
+		if cf := ev.GetControl(); cf != nil && cf.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE {
+			replayCompleteFrame = ev
+			break
+		}
+	}
+	require.NotNil(t, replayCompleteFrame, "expected REPLAY_COMPLETE control frame after replay")
+
+	// The REPLAY_COMPLETE frame must come after the replayed say event
+	var replayCompleteSeen bool
+	var sayAfterReplayComplete bool
+	for _, ev := range stream.events {
+		if cf := ev.GetControl(); cf != nil && cf.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE {
+			replayCompleteSeen = true
+		} else if ef := ev.GetEvent(); ef != nil && ef.GetType() == string(core.EventTypeSay) && replayCompleteSeen {
+			sayAfterReplayComplete = true
+		}
+	}
+	assert.False(t, sayAfterReplayComplete, "replayed say events should come before REPLAY_COMPLETE")
+}
+
+// mockSubscribeStreamCh is a channel-based subscribe stream for tests that
+// need to observe events one at a time (e.g., STREAM_CLOSED tests).
+type mockSubscribeStreamCh struct {
+	grpc.ServerStream
+	ctx    context.Context
+	sendCh chan *corev1.SubscribeResponse
+}
+
+func (m *mockSubscribeStreamCh) Context() context.Context {
+	return m.ctx
+}
+
+func (m *mockSubscribeStreamCh) Send(resp *corev1.SubscribeResponse) error {
+	select {
+	case m.sendCh <- resp:
+		return nil
+	case <-m.ctx.Done():
+		return m.ctx.Err()
+	}
+}
+
+func TestCoreServer_Subscribe_EmitsStreamClosedOnSessionDestroy(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	eventStore := core.NewMemoryEventStore()
+	sessStore := session.NewMemStore()
+
+	ctx := context.Background()
+	require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
+		ID:           sessionID.String(),
+		CharacterID:  charID,
+		LocationID:   locationID,
+		Status:       session.StatusActive,
+		EventCursors: map[string]ulid.ULID{},
+	}))
+
+	server := &CoreServer{
+		engine:          core.NewEngine(eventStore, sessions),
+		sessions:        sessions,
+		eventStore:      eventStore,
+		sessionStore:    sessStore,
+		sessionDefaults: SessionDefaults{MaxReplay: 1000},
+	}
+
+	subCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	streamName := "location:" + locationID.String()
+	sendCh := make(chan *corev1.SubscribeResponse, 20)
+	stream := &mockSubscribeStreamCh{ctx: subCtx, sendCh: sendCh}
+
+	req := &corev1.SubscribeRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "stream-closed-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+		Streams:   []string{streamName},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	// Drain events until we see REPLAY_COMPLETE.
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case resp := <-sendCh:
+			if cf := resp.GetControl(); cf != nil && cf.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE {
+				goto replayComplete
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for REPLAY_COMPLETE")
+		}
+	}
+replayComplete:
+
+	// Destroy the session — this should trigger STREAM_CLOSED.
+	require.NoError(t, sessStore.Delete(ctx, sessionID.String(), "Goodbye!"))
+
+	// Next frame must be STREAM_CLOSED.
+	select {
+	case resp := <-sendCh:
+		cf := resp.GetControl()
+		require.NotNil(t, cf, "expected ControlFrame, got: %v", resp)
+		assert.Equal(t, corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED, cf.GetSignal())
+		assert.Equal(t, "Goodbye!", cf.GetMessage())
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for STREAM_CLOSED frame")
+	}
+
+	// Subscribe should return nil after sending STREAM_CLOSED.
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Subscribe did not return after STREAM_CLOSED")
+	}
 }
 
 func TestEventToProto(t *testing.T) {
@@ -3094,14 +3305,16 @@ func TestEventToProto(t *testing.T) {
 	}
 
 	proto := eventToProto(ev)
+	ef := proto.GetEvent()
+	require.NotNil(t, ef)
 
-	assert.Equal(t, id.String(), proto.Id)
-	assert.Equal(t, "location:test", proto.Stream)
-	assert.Equal(t, "say", proto.Type)
-	assert.Equal(t, "character", proto.ActorType)
-	assert.Equal(t, "char-1", proto.ActorId)
-	assert.Equal(t, []byte(`{"msg":"hello"}`), proto.Payload)
-	assert.Equal(t, ts.UnixNano()/1e9, proto.Timestamp.AsTime().UnixNano()/1e9)
+	assert.Equal(t, id.String(), ef.GetId())
+	assert.Equal(t, "location:test", ef.GetStream())
+	assert.Equal(t, "say", ef.GetType())
+	assert.Equal(t, "character", ef.GetActorType())
+	assert.Equal(t, "char-1", ef.GetActorId())
+	assert.Equal(t, []byte(`{"msg":"hello"}`), ef.GetPayload())
+	assert.Equal(t, ts.UnixNano()/1e9, ef.GetTimestamp().AsTime().UnixNano()/1e9)
 }
 
 // =============================================================================

@@ -7,8 +7,9 @@
   import { createClient } from '@connectrpc/connect';
   import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
   import { transport } from '$lib/transport';
+  import { ControlSignal } from '$lib/connect/holomush/web/v1/web_pb';
   import { routeEvent } from '$lib/stores/eventRouter';
-  import { clearLines } from '$lib/stores/terminalStore';
+  import { appendLine, clearLines, replayActive } from '$lib/stores/terminalStore';
   import { toggleSidebar } from '$lib/stores/sidebarStore';
   import { activeTheme, themeToCssVars } from '$lib/stores/themeStore';
   import TerminalView from '$lib/components/terminal/TerminalView.svelte';
@@ -93,13 +94,34 @@
     abortController?.abort();
     abortController = new AbortController();
     clearLines();
+    replayActive.set(true);
+    let inReplay = true;
 
     try {
       for await (const response of client.streamEvents(
         { sessionId, replayFromCursor: true },
         { signal: abortController.signal }
       )) {
-        routeEvent(response);
+        if (response.frame.case === 'control') {
+          const ctrl = response.frame.value;
+          if (ctrl.signal === ControlSignal.REPLAY_COMPLETE) {
+            inReplay = false;
+            replayActive.set(false);
+          } else if (ctrl.signal === ControlSignal.STREAM_CLOSED) {
+            if (ctrl.message) {
+              appendLine(
+                { type: 'system', characterName: '', text: ctrl.message, channel: 0 },
+                false,
+              );
+            }
+            clearSession();
+            connected = false;
+            sessionId = '';
+            return;
+          }
+        } else if (response.frame.case === 'event') {
+          routeEvent(response.frame.value, inReplay);
+        }
       }
     } catch (e) {
       if (e instanceof Error && e.name !== 'AbortError') {

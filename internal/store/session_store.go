@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -18,12 +19,17 @@ import (
 
 // PostgresSessionStore implements session.Store using PostgreSQL.
 type PostgresSessionStore struct {
-	pool poolIface
+	pool     poolIface
+	mu       sync.Mutex
+	watchers map[string][]chan session.Event
 }
 
 // NewPostgresSessionStore creates a new Postgres-backed session store.
 func NewPostgresSessionStore(pool poolIface) *PostgresSessionStore {
-	return &PostgresSessionStore{pool: pool}
+	return &PostgresSessionStore{
+		pool:     pool,
+		watchers: make(map[string][]chan session.Event),
+	}
 }
 
 // compile-time check
@@ -214,13 +220,34 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 	return nil
 }
 
-// Delete removes a session.
-func (s *PostgresSessionStore) Delete(ctx context.Context, id string) error {
+// Delete removes a session and notifies any active WatchSession watchers.
+func (s *PostgresSessionStore) Delete(ctx context.Context, id, reason string) error {
+	s.mu.Lock()
+	for _, ch := range s.watchers[id] {
+		select {
+		case ch <- session.Event{Type: session.Destroyed, Message: reason}:
+		default:
+		}
+		close(ch)
+	}
+	delete(s.watchers, id)
+	s.mu.Unlock()
+
 	_, err := s.pool.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, id)
 	if err != nil {
 		return oops.With("operation", "delete session").With("session_id", id).Wrap(err)
 	}
 	return nil
+}
+
+// WatchSession returns a channel that receives an Event when
+// the session is destroyed.
+func (s *PostgresSessionStore) WatchSession(_ context.Context, sessionID string) (<-chan session.Event, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ch := make(chan session.Event, 1)
+	s.watchers[sessionID] = append(s.watchers[sessionID], ch)
+	return ch, nil
 }
 
 // FindByCharacter returns the active or detached session for a character.

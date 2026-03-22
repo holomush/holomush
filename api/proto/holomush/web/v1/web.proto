@@ -16,6 +16,17 @@ enum EventChannel {
   EVENT_CHANNEL_BOTH = 3;
 }
 
+enum ControlSignal {
+  CONTROL_SIGNAL_UNSPECIFIED = 0;
+  CONTROL_SIGNAL_REPLAY_COMPLETE = 1;
+  CONTROL_SIGNAL_STREAM_CLOSED = 2;
+}
+
+message ControlFrame {
+  ControlSignal signal = 1;
+  string message = 2;
+}
+
 service WebService {
   // Authenticate as guest or registered user.
   rpc Login(LoginRequest) returns (LoginResponse);
@@ -84,9 +95,10 @@ message GameEvent {
 }
 
 message StreamEventsResponse {
-  GameEvent event = 1;
-  bool replayed = 2;
-  bool replay_complete = 3;
+  oneof frame {
+    GameEvent event = 1;
+    ControlFrame control = 2;
+  }
 }
 
 message DisconnectRequest {

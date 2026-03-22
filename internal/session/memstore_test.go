@@ -48,7 +48,7 @@ func TestMemStore_Delete(t *testing.T) {
 
 	info := &Info{ID: "session-1", Status: StatusActive}
 	require.NoError(t, store.Set(ctx, "session-1", info))
-	require.NoError(t, store.Delete(ctx, "session-1"))
+	require.NoError(t, store.Delete(ctx, "session-1", "test"))
 
 	_, err := store.Get(ctx, "session-1")
 	assert.Error(t, err)
@@ -231,6 +231,43 @@ func TestMemStore_ListExpired(t *testing.T) {
 	assert.Len(t, expired, 1)
 }
 
+func TestMemStore_WatchSession_NotifiesOnDelete(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+	require.NoError(t, store.Set(ctx, "sess-1", &Info{ID: "sess-1"}))
+
+	ch, err := store.WatchSession(ctx, "sess-1")
+	require.NoError(t, err)
+
+	require.NoError(t, store.Delete(ctx, "sess-1", "Goodbye!"))
+
+	ev, ok := <-ch
+	require.True(t, ok, "expected event on channel")
+	assert.Equal(t, Destroyed, ev.Type)
+	assert.Equal(t, "Goodbye!", ev.Message)
+}
+
+func TestMemStore_WatchSession_ChannelClosedOnDelete(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+	require.NoError(t, store.Set(ctx, "sess-1", &Info{ID: "sess-1"}))
+
+	ch, err := store.WatchSession(ctx, "sess-1")
+	require.NoError(t, err)
+
+	require.NoError(t, store.Delete(ctx, "sess-1", "test"))
+
+	// First receive should deliver the destroy event
+	e, ok := <-ch
+	require.True(t, ok, "expected destroy event on channel")
+	assert.Equal(t, Destroyed, e.Type)
+	assert.Equal(t, "test", e.Message)
+
+	// Channel should be closed after the event
+	_, ok = <-ch
+	assert.False(t, ok, "channel should be closed")
+}
+
 func TestMemStore_ConcurrentAccess(t *testing.T) {
 	store := NewMemStore()
 	ctx := context.Background()
@@ -252,7 +289,7 @@ func TestMemStore_ConcurrentAccess(t *testing.T) {
 				// (sessions may not exist yet); the goal is to detect data races.
 				_ = store.Set(ctx, id, info)
 				_, _ = store.Get(ctx, id)
-				_ = store.Delete(ctx, id)
+				_ = store.Delete(ctx, id, "test")
 			}
 		}(i)
 	}

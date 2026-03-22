@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
 import { writable, get } from 'svelte/store';
 
 export interface TerminalLine {
@@ -38,10 +41,6 @@ export function clearLines() {
   replayActive.set(false);
   isAtBottom.set(true);
   newMessageCount.set(0);
-}
-
-export function markReplayComplete() {
-  replayActive.set(false);
 }
 
 export function scrolledToBottom() {

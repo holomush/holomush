@@ -409,7 +409,7 @@ func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, com
 		if err := s.engine.HandleDisconnect(ctx, char, "quit"); err != nil {
 			slog.WarnContext(ctx, "leave event failed", "error", err)
 		}
-		if err := s.sessionStore.Delete(ctx, info.ID); err != nil {
+		if err := s.sessionStore.Delete(ctx, info.ID, "Goodbye!"); err != nil {
 			slog.WarnContext(ctx, "session delete failed", "error", err)
 		}
 		s.sessions.Disconnect(info.CharacterID, ulid.ULID{})
@@ -498,16 +498,20 @@ func (s *CoreServer) maxReplay() int {
 	return defaultMaxReplay
 }
 
-// eventToProto converts a core.Event to a proto Event.
+// eventToProto converts a core.Event to a proto Event wrapped in an EventFrame.
 func eventToProto(ev core.Event) *corev1.SubscribeResponse {
 	return &corev1.SubscribeResponse{
-		Id:        ev.ID.String(),
-		Stream:    ev.Stream,
-		Type:      string(ev.Type),
-		Timestamp: timestamppb.New(ev.Timestamp),
-		ActorType: ev.Actor.Kind.String(),
-		ActorId:   ev.Actor.ID,
-		Payload:   ev.Payload,
+		Frame: &corev1.SubscribeResponse_Event{
+			Event: &corev1.EventFrame{
+				Id:        ev.ID.String(),
+				Stream:    ev.Stream,
+				Type:      string(ev.Type),
+				Timestamp: timestamppb.New(ev.Timestamp),
+				ActorType: ev.Actor.Kind.String(),
+				ActorId:   ev.Actor.ID,
+				Payload:   ev.Payload,
+			},
+		},
 	}
 }
 
@@ -683,6 +687,25 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		lastSentID[sn] = last
 	}
 
+	// Signal to the client that the replay phase is complete.
+	if err := stream.Send(&corev1.SubscribeResponse{
+		Frame: &corev1.SubscribeResponse_Control{
+			Control: &corev1.ControlFrame{
+				Signal: corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE,
+			},
+		},
+	}); err != nil {
+		return oops.With("session_id", req.SessionId).Wrap(err)
+	}
+
+	// Watch for session destruction so we can emit STREAM_CLOSED.
+	sessionCh, watchErr := s.sessionStore.WatchSession(ctx, req.SessionId)
+	if watchErr != nil {
+		slog.Warn("failed to watch session lifecycle",
+			"session_id", req.SessionId, "error", watchErr)
+		// sessionCh is nil — the case will never be selected (graceful degradation).
+	}
+
 	// Live event loop: select on notifications, replay from lastSentID.
 	for {
 		select {
@@ -701,6 +724,24 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 				return oops.Code("SEND_FAILED").With("session_id", req.SessionId).Wrap(sendErr)
 			}
 			lastSentID[notif.stream] = last
+
+		case ev, ok := <-sessionCh:
+			if !ok {
+				return nil // channel closed without event
+			}
+			if ev.Type == session.Destroyed {
+				// Best-effort: send STREAM_CLOSED, ignore send errors.
+//nolint:errcheck // best-effort: client may already be disconnected
+				_ = stream.Send(&corev1.SubscribeResponse{
+					Frame: &corev1.SubscribeResponse_Control{
+						Control: &corev1.ControlFrame{
+							Signal:  corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED,
+							Message: ev.Message,
+						},
+					},
+				})
+				return nil
+			}
 		}
 	}
 }
@@ -791,7 +832,7 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 				)
 			}
 
-			if err := s.sessionStore.Delete(ctx, req.SessionId); err != nil {
+			if err := s.sessionStore.Delete(ctx, req.SessionId, "Guest session ended"); err != nil {
 				slog.WarnContext(ctx, "failed to delete guest session",
 					"request_id", requestID,
 					"error", err,
