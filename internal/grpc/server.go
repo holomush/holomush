@@ -698,6 +698,14 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		return oops.With("session_id", req.SessionId).Wrap(err)
 	}
 
+	// Watch for session destruction so we can emit STREAM_CLOSED.
+	sessionCh, watchErr := s.sessionStore.WatchSession(ctx, req.SessionId)
+	if watchErr != nil {
+		slog.Warn("failed to watch session lifecycle",
+			"session_id", req.SessionId, "error", watchErr)
+		// sessionCh is nil — the case will never be selected (graceful degradation).
+	}
+
 	// Live event loop: select on notifications, replay from lastSentID.
 	for {
 		select {
@@ -716,6 +724,23 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 				return oops.Code("SEND_FAILED").With("session_id", req.SessionId).Wrap(sendErr)
 			}
 			lastSentID[notif.stream] = last
+
+		case ev, ok := <-sessionCh:
+			if !ok {
+				return nil // channel closed without event
+			}
+			if ev.Type == session.SessionDestroyed {
+				// Best-effort: send STREAM_CLOSED, ignore send errors.
+				_ = stream.Send(&corev1.SubscribeResponse{
+					Frame: &corev1.SubscribeResponse_Control{
+						Control: &corev1.ControlFrame{
+							Signal:  corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED,
+							Message: ev.Message,
+						},
+					},
+				})
+				return nil
+			}
 		}
 	}
 }

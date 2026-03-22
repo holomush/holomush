@@ -3186,6 +3186,112 @@ func TestCoreServer_Subscribe_EmitsReplayCompleteControlFrame(t *testing.T) {
 	assert.False(t, sayAfterReplayComplete, "replayed say events should come before REPLAY_COMPLETE")
 }
 
+// mockSubscribeStreamCh is a channel-based subscribe stream for tests that
+// need to observe events one at a time (e.g., STREAM_CLOSED tests).
+type mockSubscribeStreamCh struct {
+	grpc.ServerStream
+	ctx    context.Context
+	sendCh chan *corev1.SubscribeResponse
+}
+
+func (m *mockSubscribeStreamCh) Context() context.Context {
+	return m.ctx
+}
+
+func (m *mockSubscribeStreamCh) Send(resp *corev1.SubscribeResponse) error {
+	select {
+	case m.sendCh <- resp:
+		return nil
+	case <-m.ctx.Done():
+		return m.ctx.Err()
+	}
+}
+
+func TestCoreServer_Subscribe_EmitsStreamClosedOnSessionDestroy(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	sessions := core.NewSessionManager()
+	sessions.Connect(charID, core.NewULID())
+
+	eventStore := core.NewMemoryEventStore()
+	sessStore := session.NewMemStore()
+
+	ctx := context.Background()
+	require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
+		ID:           sessionID.String(),
+		CharacterID:  charID,
+		LocationID:   locationID,
+		Status:       session.StatusActive,
+		EventCursors: map[string]ulid.ULID{},
+	}))
+
+	server := &CoreServer{
+		engine:          core.NewEngine(eventStore, sessions),
+		sessions:        sessions,
+		eventStore:      eventStore,
+		sessionStore:    sessStore,
+		sessionDefaults: SessionDefaults{MaxReplay: 1000},
+	}
+
+	subCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	streamName := "location:" + locationID.String()
+	sendCh := make(chan *corev1.SubscribeResponse, 20)
+	stream := &mockSubscribeStreamCh{ctx: subCtx, sendCh: sendCh}
+
+	req := &corev1.SubscribeRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "stream-closed-test",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId: sessionID.String(),
+		Streams:   []string{streamName},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	// Drain events until we see REPLAY_COMPLETE.
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case resp := <-sendCh:
+			if cf := resp.GetControl(); cf != nil && cf.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE {
+				goto replayComplete
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for REPLAY_COMPLETE")
+		}
+	}
+replayComplete:
+
+	// Destroy the session — this should trigger STREAM_CLOSED.
+	require.NoError(t, sessStore.Delete(ctx, sessionID.String(), "Goodbye!"))
+
+	// Next frame must be STREAM_CLOSED.
+	select {
+	case resp := <-sendCh:
+		cf := resp.GetControl()
+		require.NotNil(t, cf, "expected ControlFrame, got: %v", resp)
+		assert.Equal(t, corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED, cf.GetSignal())
+		assert.Equal(t, "Goodbye!", cf.GetMessage())
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for STREAM_CLOSED frame")
+	}
+
+	// Subscribe should return nil after sending STREAM_CLOSED.
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Subscribe did not return after STREAM_CLOSED")
+	}
+}
+
 func TestEventToProto(t *testing.T) {
 	id := core.NewULID()
 	ts := time.Now()
