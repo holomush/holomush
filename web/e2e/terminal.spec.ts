@@ -215,4 +215,28 @@ test.describe('Terminal UI', () => {
     const inputAfter = page.locator('textarea');
     await expect(inputAfter).toHaveValue('say this is a long pose that I do not want to lose');
   });
+
+  test('draft does not leak across sessions', async ({ page }) => {
+    await page.goto('/terminal');
+    await page.click('text=Connect as Guest');
+    await expect(page.locator('.terminal-layout')).toBeVisible();
+
+    // Type a draft and wait for debounced save
+    const input = page.locator('textarea');
+    await input.fill('leaked draft from old session');
+    await page.waitForTimeout(700);
+
+    // Quit — clears session, returns to login
+    await input.fill('quit');
+    await input.press('Enter');
+    await expect(page.locator('text=Connect as Guest')).toBeVisible({ timeout: 5000 });
+
+    // Reconnect as a new guest (different session ID)
+    await page.click('text=Connect as Guest');
+    await expect(page.locator('.terminal-layout')).toBeVisible();
+
+    // The textarea should be empty — no draft from the old session
+    const inputAfter = page.locator('textarea');
+    await expect(inputAfter).toHaveValue('');
+  });
 });
