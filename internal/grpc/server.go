@@ -687,6 +687,17 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		lastSentID[sn] = last
 	}
 
+	// Signal to the client that the replay phase is complete.
+	if err := stream.Send(&corev1.SubscribeResponse{
+		Frame: &corev1.SubscribeResponse_Control{
+			Control: &corev1.ControlFrame{
+				Signal: corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE,
+			},
+		},
+	}); err != nil {
+		return oops.With("session_id", req.SessionId).Wrap(err)
+	}
+
 	// Live event loop: select on notifications, replay from lastSentID.
 	for {
 		select {
