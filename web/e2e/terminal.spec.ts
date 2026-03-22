@@ -139,4 +139,25 @@ test.describe('Terminal UI', () => {
     await input.press('ArrowUp');
     await expect(input).toHaveValue('look');
   });
+
+  test('reconnect receives live events after replay', async ({ page }) => {
+    await page.goto('/terminal');
+    await page.click('text=Connect as Guest');
+    await expect(page.locator('.terminal-layout')).toBeVisible();
+
+    // Reload — session persists, stream reconnects
+    await page.reload();
+    await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+
+    // After reconnect, sending a command should produce a live event
+    const input = page.locator('textarea');
+    await input.fill('say after reconnect');
+    await input.press('Enter');
+    await expect(page.locator('[data-testid="event"]').first()).toBeVisible({ timeout: 10000 });
+  });
+
+  // TODO: command history across reconnect requires a core RPC for
+  // GetCommandHistory — the gateway has no session store (gateway boundary
+  // invariant). Tracked by bead. The within-session history test above
+  // covers the client-side arrow key behavior.
 });
