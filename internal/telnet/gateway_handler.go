@@ -28,10 +28,6 @@ const (
 	maxCommandSize = 4096
 	// rpcTimeout is the per-call timeout for unary gRPC RPCs.
 	rpcTimeout = 10 * time.Second
-	// defaultDrainTimeout is the default window used by drainEvents.
-	defaultDrainTimeout = 500 * time.Millisecond
-	// drainMaxEvents caps the number of events forwarded during drainEvents.
-	drainMaxEvents = 10
 )
 
 // CoreClient is the gRPC interface used by GatewayHandler to communicate with
@@ -54,17 +50,15 @@ type GatewayHandler struct {
 	charName     string
 	authed       bool
 	quitting     bool
-	eventCh      chan *corev1.EventFrame
-	drainTimeout time.Duration
+	eventCh      chan *corev1.SubscribeResponse
 }
 
 // NewGatewayHandler creates a new GatewayHandler for the given connection.
 func NewGatewayHandler(conn net.Conn, client CoreClient) *GatewayHandler {
 	return &GatewayHandler{
-		conn:         conn,
-		reader:       bufio.NewReader(conn),
-		client:       client,
-		drainTimeout: defaultDrainTimeout,
+		conn:   conn,
+		reader: bufio.NewReader(conn),
+		client: client,
 	}
 }
 
@@ -121,7 +115,7 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 	}()
 
 	// eventRecv is nil until subscription is established, blocking the select case.
-	var eventRecv <-chan *corev1.EventFrame
+	var eventRecv <-chan *corev1.SubscribeResponse
 
 	for {
 		select {
@@ -139,25 +133,37 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 				eventRecv = ch
 			}
 			if h.quitting {
-				// Drain pending events briefly so the "Goodbye!" command_response
-				// (emitted by the quit RPC) reaches the client before we close.
-				h.drainEvents(eventRecv)
+				// The server sends "Goodbye!" via a STREAM_CLOSED control frame.
+				// The event recv goroutine will deliver it; just return and let
+				// the deferred disconnect/close handle teardown.
 				return
 			}
 
-		case ev, ok := <-eventRecv:
+		case resp, ok := <-eventRecv:
 			if !ok {
 				eventRecv = nil
 				slog.Debug("gateway: event stream closed", "session_id", h.sessionID)
 				h.send("Connection to server lost.")
 				continue
 			}
-			h.sendProtoEvent(ev)
+			switch frame := resp.GetFrame().(type) {
+			case *corev1.SubscribeResponse_Event:
+				h.sendProtoEvent(frame.Event)
+			case *corev1.SubscribeResponse_Control:
+				if frame.Control.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED {
+					if msg := frame.Control.GetMessage(); msg != "" {
+						h.send(msg)
+					}
+					return
+				}
+				// REPLAY_COMPLETE: no-op for telnet — replay renders the same as live.
+				slog.Debug("gateway: replay complete", "session_id", h.sessionID)
+			}
 		}
 	}
 }
 
-func (h *GatewayHandler) processLine(ctx context.Context, line string) <-chan *corev1.EventFrame {
+func (h *GatewayHandler) processLine(ctx context.Context, line string) <-chan *corev1.SubscribeResponse {
 	cmd, arg := core.ParseCommand(line)
 
 	switch cmd {
@@ -177,7 +183,7 @@ func (h *GatewayHandler) processLine(ctx context.Context, line string) <-chan *c
 	return nil
 }
 
-func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *corev1.EventFrame {
+func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *corev1.SubscribeResponse {
 	if h.authed {
 		h.send("Already connected.")
 		return nil
@@ -234,7 +240,7 @@ func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *
 		return nil
 	}
 
-	h.eventCh = make(chan *corev1.EventFrame, 16)
+	h.eventCh = make(chan *corev1.SubscribeResponse, 16)
 
 	go func() {
 		defer close(h.eventCh)
@@ -246,12 +252,8 @@ func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *
 				}
 				return
 			}
-			eventFrame := resp.GetEvent()
-			if eventFrame == nil {
-				continue // Skip control frames for now
-			}
 			select {
-			case h.eventCh <- eventFrame:
+			case h.eventCh <- resp:
 			case <-ctx.Done():
 				return
 			}
@@ -364,31 +366,6 @@ func (h *GatewayHandler) handleQuit(ctx context.Context) {
 	h.quitting = true
 }
 
-// drainEvents reads from the event channel for a short window, forwarding any
-// pending events (e.g. the "Goodbye!" command_response from quit) to the client
-// before the connection closes. At most drainMaxEvents are forwarded.
-func (h *GatewayHandler) drainEvents(eventRecv <-chan *corev1.EventFrame) {
-	if eventRecv == nil {
-		return
-	}
-	timeout := h.drainTimeout
-	if timeout <= 0 {
-		timeout = defaultDrainTimeout
-	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	for count := 0; count < drainMaxEvents; count++ {
-		select {
-		case ev, ok := <-eventRecv:
-			if !ok {
-				return
-			}
-			h.sendProtoEvent(ev)
-		case <-timer.C:
-			return
-		}
-	}
-}
 
 func (h *GatewayHandler) send(msg string) {
 	if _, err := fmt.Fprintln(h.conn, msg); err != nil {
