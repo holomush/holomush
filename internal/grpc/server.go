@@ -918,12 +918,14 @@ func (s *CoreServer) GetCommandHistory(ctx context.Context, req *corev1.GetComma
 	}
 
 	if _, err := s.sessionStore.Get(ctx, sessionID); err != nil {
-		//nolint:nilerr // intentional: return application-level error, not RPC error
-		return &corev1.GetCommandHistoryResponse{
-			Meta:    responseMeta(requestID),
-			Success: false,
-			Error:   "session not found",
-		}, nil
+		if oopsErr, ok := oops.AsOops(err); ok && oopsErr.Code() == "SESSION_NOT_FOUND" {
+			return &corev1.GetCommandHistoryResponse{
+				Meta:    responseMeta(requestID),
+				Success: false,
+				Error:   "session not found",
+			}, nil
+		}
+		return nil, oops.Code("COMMAND_HISTORY_FAILED").With("session_id", sessionID).Wrap(err)
 	}
 
 	history, err := s.sessionStore.GetCommandHistory(ctx, sessionID)

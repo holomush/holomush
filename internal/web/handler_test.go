@@ -69,7 +69,12 @@ func (m *mockCoreClient) Disconnect(_ context.Context, _ *corev1.DisconnectReque
 
 func (m *mockCoreClient) GetCommandHistory(_ context.Context, _ *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
 	if m.cmdHistoryErr != nil {
-		return nil, m.cmdHistoryErr
+		//nolint:nilerr // intentional: simulates application-level failure, not RPC error
+		return &corev1.GetCommandHistoryResponse{
+			Meta:    &corev1.ResponseMeta{},
+			Success: false,
+			Error:   m.cmdHistoryErr.Error(),
+		}, nil
 	}
 	return &corev1.GetCommandHistoryResponse{
 		Meta:     &corev1.ResponseMeta{},
@@ -240,16 +245,16 @@ func TestHandler_GetCommandHistory_RPCError(t *testing.T) {
 }
 
 func TestHandler_GetCommandHistory_NotSuccess(t *testing.T) {
-	client := &mockCoreClient{}
-	// Override the method to return a non-success response
+	client := &mockCoreClient{
+		cmdHistoryErr: errors.New("session not found"),
+	}
 	h := NewHandler(client)
 
-	// When the mock returns success=true but empty commands, we get empty commands back
 	resp, err := h.GetCommandHistory(context.Background(), connect.NewRequest(&webv1.GetCommandHistoryRequest{
 		SessionId: "sess-abc",
 	}))
 	require.NoError(t, err)
-	assert.Empty(t, resp.Msg.GetCommands())
+	assert.Empty(t, resp.Msg.GetCommands(), "non-success response should return empty commands")
 }
 
 func TestNewHandler_WithOptions(t *testing.T) {
