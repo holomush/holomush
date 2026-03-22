@@ -110,6 +110,10 @@
   }
 
   async function sendCommand(command: string) {
+    if (command.toLowerCase() === 'quit') {
+      await disconnect();
+      return;
+    }
     try {
       const resp = await client.sendCommand({ sessionId, text: command });
       if (!resp.success) {

@@ -21,7 +21,7 @@ services:
 
   core:
     image: holomush
-    command: ["core", "--log-format", "text"]
+    command: ["core", "--log-format", "text", "--grpc-addr", "0.0.0.0:9000"]
     environment:
       DATABASE_URL: postgres://holomush:holomush@postgres:5432/holomush?sslmode=disable
     volumes:
