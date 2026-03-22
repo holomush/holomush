@@ -102,12 +102,16 @@ test.describe('Terminal UI', () => {
     await input.fill('quit');
     await input.press('Enter');
 
-    // Should redirect to login page (auth guard kicks in after session cleared)
-    await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
+    // After quit, the terminal shows disconnect UI (Reconnect/New Session buttons)
+    await expect(page.getByRole('button', { name: 'New Session' })).toBeVisible({ timeout: 10000 });
 
-    // Verify sessionStorage was actually cleared
+    // Verify sessionStorage was cleared
     const session = await page.evaluate(() => sessionStorage.getItem('holomush-session'));
     expect(session).toBeNull();
+
+    // On reload, auth guard redirects to login since session is gone
+    await page.reload();
+    await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
   });
 
   test('command history with up/down arrows', async ({ page }) => {
@@ -201,12 +205,13 @@ test.describe('Terminal UI', () => {
     await input.fill('leaked draft from old session');
     await page.waitForTimeout(700);
 
-    // Quit — clears session, redirects to login
+    // Quit — clears session, shows disconnect UI
     await input.fill('quit');
     await input.press('Enter');
-    await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
+    await expect(page.getByRole('button', { name: 'New Session' })).toBeVisible({ timeout: 10000 });
 
-    // Reconnect as a new guest
+    // Click New Session to go back to landing, then reconnect as guest
+    await page.getByRole('button', { name: 'New Session' }).click();
     await connectAsGuest(page);
 
     // The textarea should be empty — no draft from the old session
