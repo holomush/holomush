@@ -11,6 +11,7 @@ pre-commit:
   parallel: true
   exclude:
     - ".worktrees/**"
+    - ".beads/**"
   commands:
     license-headers:
       glob: "*.{go,lua,sh,py,proto}"
