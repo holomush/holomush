@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, ListCharactersRequest, ListCharactersResponse, ListSessionsRequest, ListSessionsResponse, LoginRequest, LoginResponse, SelectCharacterRequest, SelectCharacterResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse } from "./web_pb.js";
+import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, LoginRequest, LoginResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebListCharactersRequest, WebListCharactersResponse, WebLogoutRequest, WebLogoutResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebSelectCharacterRequest, WebSelectCharacterResponse } from "./web_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -61,50 +61,6 @@ export const WebService = {
       kind: MethodKind.Unary,
     },
     /**
-     * Two-phase login: authenticate player credentials, get a token.
-     *
-     * @generated from rpc holomush.web.v1.WebService.AuthenticatePlayer
-     */
-    authenticatePlayer: {
-      name: "AuthenticatePlayer",
-      I: AuthenticatePlayerRequest,
-      O: AuthenticatePlayerResponse,
-      kind: MethodKind.Unary,
-    },
-    /**
-     * Two-phase login: list characters available for the authenticated player.
-     *
-     * @generated from rpc holomush.web.v1.WebService.ListCharacters
-     */
-    listCharacters: {
-      name: "ListCharacters",
-      I: ListCharactersRequest,
-      O: ListCharactersResponse,
-      kind: MethodKind.Unary,
-    },
-    /**
-     * Two-phase login: select a character, creating or reattaching a session.
-     *
-     * @generated from rpc holomush.web.v1.WebService.SelectCharacter
-     */
-    selectCharacter: {
-      name: "SelectCharacter",
-      I: SelectCharacterRequest,
-      O: SelectCharacterResponse,
-      kind: MethodKind.Unary,
-    },
-    /**
-     * List all sessions for the authenticated player.
-     *
-     * @generated from rpc holomush.web.v1.WebService.ListSessions
-     */
-    listSessions: {
-      name: "ListSessions",
-      I: ListSessionsRequest,
-      O: ListSessionsResponse,
-      kind: MethodKind.Unary,
-    },
-    /**
      * Retrieve command history for a session.
      *
      * @generated from rpc holomush.web.v1.WebService.GetCommandHistory
@@ -113,6 +69,80 @@ export const WebService = {
       name: "GetCommandHistory",
       I: GetCommandHistoryRequest,
       O: GetCommandHistoryResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Web auth RPCs.
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebAuthenticatePlayer
+     */
+    webAuthenticatePlayer: {
+      name: "WebAuthenticatePlayer",
+      I: WebAuthenticatePlayerRequest,
+      O: WebAuthenticatePlayerResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.web.v1.WebService.WebSelectCharacter
+     */
+    webSelectCharacter: {
+      name: "WebSelectCharacter",
+      I: WebSelectCharacterRequest,
+      O: WebSelectCharacterResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.web.v1.WebService.WebCreatePlayer
+     */
+    webCreatePlayer: {
+      name: "WebCreatePlayer",
+      I: WebCreatePlayerRequest,
+      O: WebCreatePlayerResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.web.v1.WebService.WebCreateCharacter
+     */
+    webCreateCharacter: {
+      name: "WebCreateCharacter",
+      I: WebCreateCharacterRequest,
+      O: WebCreateCharacterResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.web.v1.WebService.WebListCharacters
+     */
+    webListCharacters: {
+      name: "WebListCharacters",
+      I: WebListCharactersRequest,
+      O: WebListCharactersResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.web.v1.WebService.WebLogout
+     */
+    webLogout: {
+      name: "WebLogout",
+      I: WebLogoutRequest,
+      O: WebLogoutResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.web.v1.WebService.WebRequestPasswordReset
+     */
+    webRequestPasswordReset: {
+      name: "WebRequestPasswordReset",
+      I: WebRequestPasswordResetRequest,
+      O: WebRequestPasswordResetResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.web.v1.WebService.WebConfirmPasswordReset
+     */
+    webConfirmPasswordReset: {
+      name: "WebConfirmPasswordReset",
+      I: WebConfirmPasswordResetRequest,
+      O: WebConfirmPasswordResetResponse,
       kind: MethodKind.Unary,
     },
   }

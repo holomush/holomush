@@ -28,9 +28,6 @@ const (
 	rpcTimeout = 10 * time.Second
 )
 
-// errUnimplemented is returned by stub RPCs that are not yet implemented.
-var errUnimplemented = connect.NewError(connect.CodeUnimplemented, errors.New("two-phase login not yet implemented"))
-
 // CoreClient is the gRPC interface used by Handler to communicate with the
 // core service.
 type CoreClient interface {
@@ -251,28 +248,44 @@ func (h *Handler) Disconnect(ctx context.Context, req *connect.Request[webv1.Dis
 	return connect.NewResponse(&webv1.DisconnectResponse{}), nil
 }
 
-// AuthenticatePlayer validates player credentials and returns a player token.
-// Stub: returns CodeUnimplemented pending full player account system.
-func (h *Handler) AuthenticatePlayer(_ context.Context, _ *connect.Request[webv1.AuthenticatePlayerRequest]) (*connect.Response[webv1.AuthenticatePlayerResponse], error) {
-	return nil, errUnimplemented
+// WebAuthenticatePlayer validates player credentials and returns a player token with character list.
+func (h *Handler) WebAuthenticatePlayer(_ context.Context, _ *connect.Request[webv1.WebAuthenticatePlayerRequest]) (*connect.Response[webv1.WebAuthenticatePlayerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not yet implemented"))
 }
 
-// ListCharacters returns the characters available for an authenticated player.
-// Stub: returns CodeUnimplemented pending full player account system.
-func (h *Handler) ListCharacters(_ context.Context, _ *connect.Request[webv1.ListCharactersRequest]) (*connect.Response[webv1.ListCharactersResponse], error) {
-	return nil, errUnimplemented
+// WebSelectCharacter selects a character and creates or reattaches a game session.
+func (h *Handler) WebSelectCharacter(_ context.Context, _ *connect.Request[webv1.WebSelectCharacterRequest]) (*connect.Response[webv1.WebSelectCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not yet implemented"))
 }
 
-// SelectCharacter selects a character and creates or reattaches a game session.
-// Stub: returns CodeUnimplemented pending full player account system.
-func (h *Handler) SelectCharacter(_ context.Context, _ *connect.Request[webv1.SelectCharacterRequest]) (*connect.Response[webv1.SelectCharacterResponse], error) {
-	return nil, errUnimplemented
+// WebCreatePlayer creates a new player account.
+func (h *Handler) WebCreatePlayer(_ context.Context, _ *connect.Request[webv1.WebCreatePlayerRequest]) (*connect.Response[webv1.WebCreatePlayerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not yet implemented"))
 }
 
-// ListSessions returns all sessions for the authenticated player.
-// Stub: returns CodeUnimplemented pending full player account system.
-func (h *Handler) ListSessions(_ context.Context, _ *connect.Request[webv1.ListSessionsRequest]) (*connect.Response[webv1.ListSessionsResponse], error) {
-	return nil, errUnimplemented
+// WebCreateCharacter creates a new character for the authenticated player.
+func (h *Handler) WebCreateCharacter(_ context.Context, _ *connect.Request[webv1.WebCreateCharacterRequest]) (*connect.Response[webv1.WebCreateCharacterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not yet implemented"))
+}
+
+// WebListCharacters returns the characters available for the authenticated player.
+func (h *Handler) WebListCharacters(_ context.Context, _ *connect.Request[webv1.WebListCharactersRequest]) (*connect.Response[webv1.WebListCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not yet implemented"))
+}
+
+// WebLogout ends the current session.
+func (h *Handler) WebLogout(_ context.Context, _ *connect.Request[webv1.WebLogoutRequest]) (*connect.Response[webv1.WebLogoutResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not yet implemented"))
+}
+
+// WebRequestPasswordReset initiates a password reset flow.
+func (h *Handler) WebRequestPasswordReset(_ context.Context, _ *connect.Request[webv1.WebRequestPasswordResetRequest]) (*connect.Response[webv1.WebRequestPasswordResetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not yet implemented"))
+}
+
+// WebConfirmPasswordReset completes a password reset using a token.
+func (h *Handler) WebConfirmPasswordReset(_ context.Context, _ *connect.Request[webv1.WebConfirmPasswordResetRequest]) (*connect.Response[webv1.WebConfirmPasswordResetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not yet implemented"))
 }
 
 // GetCommandHistory returns the command history for a session.

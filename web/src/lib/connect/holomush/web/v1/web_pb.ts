@@ -14,7 +14,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file holomush/web/v1/web.proto.
  */
 export const file_holomush_web_v1_web: GenFile = /*@__PURE__*/
-  fileDesc("Chlob2xvbXVzaC93ZWIvdjEvd2ViLnByb3RvEg9ob2xvbXVzaC53ZWIudjEiTwoMQ29udHJvbEZyYW1lEi4KBnNpZ25hbBgBIAEoDjIeLmhvbG9tdXNoLndlYi52MS5Db250cm9sU2lnbmFsEg8KB21lc3NhZ2UYAiABKAkiMgoMTG9naW5SZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJEhAKCHBhc3N3b3JkGAIgASgJImMKDUxvZ2luUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBISCgpzZXNzaW9uX2lkGAIgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAMgASgJEhUKDWVycm9yX21lc3NhZ2UYBCABKAkiNgoSU2VuZENvbW1hbmRSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSDAoEdGV4dBgCIAEoCSJNChNTZW5kQ29tbWFuZFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDgoGb3V0cHV0GAIgASgJEhUKDWVycm9yX21lc3NhZ2UYAyABKAkiRQoTU3RyZWFtRXZlbnRzUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhoKEnJlcGxheV9mcm9tX2N1cnNvchgCIAEoCCKtAQoJR2FtZUV2ZW50EgwKBHR5cGUYASABKAkSFgoOY2hhcmFjdGVyX25hbWUYAiABKAkSDAoEdGV4dBgDIAEoCRIRCgl0aW1lc3RhbXAYBCABKAMSLgoHY2hhbm5lbBgFIAEoDjIdLmhvbG9tdXNoLndlYi52MS5FdmVudENoYW5uZWwSKQoIbWV0YWRhdGEYBiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0In4KFFN0cmVhbUV2ZW50c1Jlc3BvbnNlEisKBWV2ZW50GAEgASgLMhouaG9sb211c2gud2ViLnYxLkdhbWVFdmVudEgAEjAKB2NvbnRyb2wYAiABKAsyHS5ob2xvbXVzaC53ZWIudjEuQ29udHJvbEZyYW1lSABCBwoFZnJhbWUiJwoRRGlzY29ubmVjdFJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCSIUChJEaXNjb25uZWN0UmVzcG9uc2UiPwoZQXV0aGVudGljYXRlUGxheWVyUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCSKRAQoaQXV0aGVudGljYXRlUGxheWVyUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIUCgxwbGF5ZXJfdG9rZW4YAiABKAkSFQoNZXJyb3JfbWVzc2FnZRgDIAEoCRI1CgpjaGFyYWN0ZXJzGAQgAygLMiEuaG9sb211c2gud2ViLnYxLkNoYXJhY3RlclN1bW1hcnkidAoQQ2hhcmFjdGVyU3VtbWFyeRIUCgxjaGFyYWN0ZXJfaWQYASABKAkSFgoOY2hhcmFjdGVyX25hbWUYAiABKAkSGgoSaGFzX2FjdGl2ZV9zZXNzaW9uGAMgASgIEhYKDnNlc3Npb25fc3RhdHVzGAQgASgJIi0KFUxpc3RDaGFyYWN0ZXJzUmVxdWVzdBIUCgxwbGF5ZXJfdG9rZW4YASABKAkiTwoWTGlzdENoYXJhY3RlcnNSZXNwb25zZRI1CgpjaGFyYWN0ZXJzGAEgAygLMiEuaG9sb211c2gud2ViLnYxLkNoYXJhY3RlclN1bW1hcnkiRAoWU2VsZWN0Q2hhcmFjdGVyUmVxdWVzdBIUCgxwbGF5ZXJfdG9rZW4YASABKAkSFAoMY2hhcmFjdGVyX2lkGAIgASgJIoEBChdTZWxlY3RDaGFyYWN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhIKCnNlc3Npb25faWQYAiABKAkSFgoOY2hhcmFjdGVyX25hbWUYAyABKAkSEgoKcmVhdHRhY2hlZBgEIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAUgASgJIisKE0xpc3RTZXNzaW9uc1JlcXVlc3QSFAoMcGxheWVyX3Rva2VuGAEgASgJIkkKFExpc3RTZXNzaW9uc1Jlc3BvbnNlEjEKCHNlc3Npb25zGAEgAygLMh8uaG9sb211c2gud2ViLnYxLlNlc3Npb25TdW1tYXJ5InUKDlNlc3Npb25TdW1tYXJ5EhIKCnNlc3Npb25faWQYASABKAkSFgoOY2hhcmFjdGVyX25hbWUYAiABKAkSDgoGc3RhdHVzGAMgASgJEhIKCmNyZWF0ZWRfYXQYBCABKAMSEwoLZGV0YWNoZWRfYXQYBSABKAMiLgoYR2V0Q29tbWFuZEhpc3RvcnlSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiLQoZR2V0Q29tbWFuZEhpc3RvcnlSZXNwb25zZRIQCghjb21tYW5kcxgBIAMoCSp6CgxFdmVudENoYW5uZWwSHQoZRVZFTlRfQ0hBTk5FTF9VTlNQRUNJRklFRBAAEhoKFkVWRU5UX0NIQU5ORUxfVEVSTUlOQUwQARIXChNFVkVOVF9DSEFOTkVMX1NUQVRFEAISFgoSRVZFTlRfQ0hBTk5FTF9CT1RIEAMqdQoNQ29udHJvbFNpZ25hbBIeChpDT05UUk9MX1NJR05BTF9VTlNQRUNJRklFRBAAEiIKHkNPTlRST0xfU0lHTkFMX1JFUExBWV9DT01QTEVURRABEiAKHENPTlRST0xfU0lHTkFMX1NUUkVBTV9DTE9TRUQQAjLlBgoKV2ViU2VydmljZRJGCgVMb2dpbhIdLmhvbG9tdXNoLndlYi52MS5Mb2dpblJlcXVlc3QaHi5ob2xvbXVzaC53ZWIudjEuTG9naW5SZXNwb25zZRJYCgtTZW5kQ29tbWFuZBIjLmhvbG9tdXNoLndlYi52MS5TZW5kQ29tbWFuZFJlcXVlc3QaJC5ob2xvbXVzaC53ZWIudjEuU2VuZENvbW1hbmRSZXNwb25zZRJdCgxTdHJlYW1FdmVudHMSJC5ob2xvbXVzaC53ZWIudjEuU3RyZWFtRXZlbnRzUmVxdWVzdBolLmhvbG9tdXNoLndlYi52MS5TdHJlYW1FdmVudHNSZXNwb25zZTABElUKCkRpc2Nvbm5lY3QSIi5ob2xvbXVzaC53ZWIudjEuRGlzY29ubmVjdFJlcXVlc3QaIy5ob2xvbXVzaC53ZWIudjEuRGlzY29ubmVjdFJlc3BvbnNlEm0KEkF1dGhlbnRpY2F0ZVBsYXllchIqLmhvbG9tdXNoLndlYi52MS5BdXRoZW50aWNhdGVQbGF5ZXJSZXF1ZXN0GisuaG9sb211c2gud2ViLnYxLkF1dGhlbnRpY2F0ZVBsYXllclJlc3BvbnNlEmEKDkxpc3RDaGFyYWN0ZXJzEiYuaG9sb211c2gud2ViLnYxLkxpc3RDaGFyYWN0ZXJzUmVxdWVzdBonLmhvbG9tdXNoLndlYi52MS5MaXN0Q2hhcmFjdGVyc1Jlc3BvbnNlEmQKD1NlbGVjdENoYXJhY3RlchInLmhvbG9tdXNoLndlYi52MS5TZWxlY3RDaGFyYWN0ZXJSZXF1ZXN0GiguaG9sb211c2gud2ViLnYxLlNlbGVjdENoYXJhY3RlclJlc3BvbnNlElsKDExpc3RTZXNzaW9ucxIkLmhvbG9tdXNoLndlYi52MS5MaXN0U2Vzc2lvbnNSZXF1ZXN0GiUuaG9sb211c2gud2ViLnYxLkxpc3RTZXNzaW9uc1Jlc3BvbnNlEmoKEUdldENvbW1hbmRIaXN0b3J5EikuaG9sb211c2gud2ViLnYxLkdldENvbW1hbmRIaXN0b3J5UmVxdWVzdBoqLmhvbG9tdXNoLndlYi52MS5HZXRDb21tYW5kSGlzdG9yeVJlc3BvbnNlQj5aPGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3dlYi92MTt3ZWJ2MWIGcHJvdG8z", [file_google_protobuf_struct]);
+  fileDesc("Chlob2xvbXVzaC93ZWIvdjEvd2ViLnByb3RvEg9ob2xvbXVzaC53ZWIudjEiTwoMQ29udHJvbEZyYW1lEi4KBnNpZ25hbBgBIAEoDjIeLmhvbG9tdXNoLndlYi52MS5Db250cm9sU2lnbmFsEg8KB21lc3NhZ2UYAiABKAkiMgoMTG9naW5SZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJEhAKCHBhc3N3b3JkGAIgASgJImMKDUxvZ2luUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBISCgpzZXNzaW9uX2lkGAIgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAMgASgJEhUKDWVycm9yX21lc3NhZ2UYBCABKAkiNgoSU2VuZENvbW1hbmRSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSDAoEdGV4dBgCIAEoCSJNChNTZW5kQ29tbWFuZFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDgoGb3V0cHV0GAIgASgJEhUKDWVycm9yX21lc3NhZ2UYAyABKAkiRQoTU3RyZWFtRXZlbnRzUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhoKEnJlcGxheV9mcm9tX2N1cnNvchgCIAEoCCKtAQoJR2FtZUV2ZW50EgwKBHR5cGUYASABKAkSFgoOY2hhcmFjdGVyX25hbWUYAiABKAkSDAoEdGV4dBgDIAEoCRIRCgl0aW1lc3RhbXAYBCABKAMSLgoHY2hhbm5lbBgFIAEoDjIdLmhvbG9tdXNoLndlYi52MS5FdmVudENoYW5uZWwSKQoIbWV0YWRhdGEYBiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0In4KFFN0cmVhbUV2ZW50c1Jlc3BvbnNlEisKBWV2ZW50GAEgASgLMhouaG9sb211c2gud2ViLnYxLkdhbWVFdmVudEgAEjAKB2NvbnRyb2wYAiABKAsyHS5ob2xvbXVzaC53ZWIudjEuQ29udHJvbEZyYW1lSABCBwoFZnJhbWUiJwoRRGlzY29ubmVjdFJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCSIUChJEaXNjb25uZWN0UmVzcG9uc2UiLgoYR2V0Q29tbWFuZEhpc3RvcnlSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiLQoZR2V0Q29tbWFuZEhpc3RvcnlSZXNwb25zZRIQCghjb21tYW5kcxgBIAMoCSKjAQoQQ2hhcmFjdGVyU3VtbWFyeRIUCgxjaGFyYWN0ZXJfaWQYASABKAkSFgoOY2hhcmFjdGVyX25hbWUYAiABKAkSGgoSaGFzX2FjdGl2ZV9zZXNzaW9uGAMgASgIEhYKDnNlc3Npb25fc3RhdHVzGAQgASgJEhUKDWxhc3RfbG9jYXRpb24YBSABKAkSFgoObGFzdF9wbGF5ZWRfYXQYBiABKAMiVwocV2ViQXV0aGVudGljYXRlUGxheWVyUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRITCgtyZW1lbWJlcl9tZRgDIAEoCCKyAQodV2ViQXV0aGVudGljYXRlUGxheWVyUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIUCgxwbGF5ZXJfdG9rZW4YAiABKAkSFQoNZXJyb3JfbWVzc2FnZRgDIAEoCRI1CgpjaGFyYWN0ZXJzGAQgAygLMiEuaG9sb211c2gud2ViLnYxLkNoYXJhY3RlclN1bW1hcnkSHAoUZGVmYXVsdF9jaGFyYWN0ZXJfaWQYBSABKAkiRwoZV2ViU2VsZWN0Q2hhcmFjdGVyUmVxdWVzdBIUCgxwbGF5ZXJfdG9rZW4YASABKAkSFAoMY2hhcmFjdGVyX2lkGAIgASgJIoQBChpXZWJTZWxlY3RDaGFyYWN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhIKCnNlc3Npb25faWQYAiABKAkSFgoOY2hhcmFjdGVyX25hbWUYAyABKAkSEgoKcmVhdHRhY2hlZBgEIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAUgASgJIksKFldlYkNyZWF0ZVBsYXllclJlcXVlc3QSEAoIdXNlcm5hbWUYASABKAkSEAoIcGFzc3dvcmQYAiABKAkSDQoFZW1haWwYAyABKAkijgEKF1dlYkNyZWF0ZVBsYXllclJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFAoMcGxheWVyX3Rva2VuGAIgASgJEjUKCmNoYXJhY3RlcnMYAyADKAsyIS5ob2xvbXVzaC53ZWIudjEuQ2hhcmFjdGVyU3VtbWFyeRIVCg1lcnJvcl9tZXNzYWdlGAQgASgJIkkKGVdlYkNyZWF0ZUNoYXJhY3RlclJlcXVlc3QSFAoMcGxheWVyX3Rva2VuGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJInIKGldlYkNyZWF0ZUNoYXJhY3RlclJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFAoMY2hhcmFjdGVyX2lkGAIgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAMgASgJEhUKDWVycm9yX21lc3NhZ2UYBCABKAkiMAoYV2ViTGlzdENoYXJhY3RlcnNSZXF1ZXN0EhQKDHBsYXllcl90b2tlbhgBIAEoCSJSChlXZWJMaXN0Q2hhcmFjdGVyc1Jlc3BvbnNlEjUKCmNoYXJhY3RlcnMYASADKAsyIS5ob2xvbXVzaC53ZWIudjEuQ2hhcmFjdGVyU3VtbWFyeSImChBXZWJMb2dvdXRSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiEwoRV2ViTG9nb3V0UmVzcG9uc2UiLwoeV2ViUmVxdWVzdFBhc3N3b3JkUmVzZXRSZXF1ZXN0Eg0KBWVtYWlsGAEgASgJIjIKH1dlYlJlcXVlc3RQYXNzd29yZFJlc2V0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCJFCh5XZWJDb25maXJtUGFzc3dvcmRSZXNldFJlcXVlc3QSDQoFdG9rZW4YASABKAkSFAoMbmV3X3Bhc3N3b3JkGAIgASgJIkkKH1dlYkNvbmZpcm1QYXNzd29yZFJlc2V0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAIgASgJKnoKDEV2ZW50Q2hhbm5lbBIdChlFVkVOVF9DSEFOTkVMX1VOU1BFQ0lGSUVEEAASGgoWRVZFTlRfQ0hBTk5FTF9URVJNSU5BTBABEhcKE0VWRU5UX0NIQU5ORUxfU1RBVEUQAhIWChJFVkVOVF9DSEFOTkVMX0JPVEgQAyp1Cg1Db250cm9sU2lnbmFsEh4KGkNPTlRST0xfU0lHTkFMX1VOU1BFQ0lGSUVEEAASIgoeQ09OVFJPTF9TSUdOQUxfUkVQTEFZX0NPTVBMRVRFEAESIAocQ09OVFJPTF9TSUdOQUxfU1RSRUFNX0NMT1NFRBACMsgKCgpXZWJTZXJ2aWNlEkYKBUxvZ2luEh0uaG9sb211c2gud2ViLnYxLkxvZ2luUmVxdWVzdBoeLmhvbG9tdXNoLndlYi52MS5Mb2dpblJlc3BvbnNlElgKC1NlbmRDb21tYW5kEiMuaG9sb211c2gud2ViLnYxLlNlbmRDb21tYW5kUmVxdWVzdBokLmhvbG9tdXNoLndlYi52MS5TZW5kQ29tbWFuZFJlc3BvbnNlEl0KDFN0cmVhbUV2ZW50cxIkLmhvbG9tdXNoLndlYi52MS5TdHJlYW1FdmVudHNSZXF1ZXN0GiUuaG9sb211c2gud2ViLnYxLlN0cmVhbUV2ZW50c1Jlc3BvbnNlMAESVQoKRGlzY29ubmVjdBIiLmhvbG9tdXNoLndlYi52MS5EaXNjb25uZWN0UmVxdWVzdBojLmhvbG9tdXNoLndlYi52MS5EaXNjb25uZWN0UmVzcG9uc2USagoRR2V0Q29tbWFuZEhpc3RvcnkSKS5ob2xvbXVzaC53ZWIudjEuR2V0Q29tbWFuZEhpc3RvcnlSZXF1ZXN0GiouaG9sb211c2gud2ViLnYxLkdldENvbW1hbmRIaXN0b3J5UmVzcG9uc2USdgoVV2ViQXV0aGVudGljYXRlUGxheWVyEi0uaG9sb211c2gud2ViLnYxLldlYkF1dGhlbnRpY2F0ZVBsYXllclJlcXVlc3QaLi5ob2xvbXVzaC53ZWIudjEuV2ViQXV0aGVudGljYXRlUGxheWVyUmVzcG9uc2USbQoSV2ViU2VsZWN0Q2hhcmFjdGVyEiouaG9sb211c2gud2ViLnYxLldlYlNlbGVjdENoYXJhY3RlclJlcXVlc3QaKy5ob2xvbXVzaC53ZWIudjEuV2ViU2VsZWN0Q2hhcmFjdGVyUmVzcG9uc2USZAoPV2ViQ3JlYXRlUGxheWVyEicuaG9sb211c2gud2ViLnYxLldlYkNyZWF0ZVBsYXllclJlcXVlc3QaKC5ob2xvbXVzaC53ZWIudjEuV2ViQ3JlYXRlUGxheWVyUmVzcG9uc2USbQoSV2ViQ3JlYXRlQ2hhcmFjdGVyEiouaG9sb211c2gud2ViLnYxLldlYkNyZWF0ZUNoYXJhY3RlclJlcXVlc3QaKy5ob2xvbXVzaC53ZWIudjEuV2ViQ3JlYXRlQ2hhcmFjdGVyUmVzcG9uc2USagoRV2ViTGlzdENoYXJhY3RlcnMSKS5ob2xvbXVzaC53ZWIudjEuV2ViTGlzdENoYXJhY3RlcnNSZXF1ZXN0GiouaG9sb211c2gud2ViLnYxLldlYkxpc3RDaGFyYWN0ZXJzUmVzcG9uc2USUgoJV2ViTG9nb3V0EiEuaG9sb211c2gud2ViLnYxLldlYkxvZ291dFJlcXVlc3QaIi5ob2xvbXVzaC53ZWIudjEuV2ViTG9nb3V0UmVzcG9uc2USfAoXV2ViUmVxdWVzdFBhc3N3b3JkUmVzZXQSLy5ob2xvbXVzaC53ZWIudjEuV2ViUmVxdWVzdFBhc3N3b3JkUmVzZXRSZXF1ZXN0GjAuaG9sb211c2gud2ViLnYxLldlYlJlcXVlc3RQYXNzd29yZFJlc2V0UmVzcG9uc2USfAoXV2ViQ29uZmlybVBhc3N3b3JkUmVzZXQSLy5ob2xvbXVzaC53ZWIudjEuV2ViQ29uZmlybVBhc3N3b3JkUmVzZXRSZXF1ZXN0GjAuaG9sb211c2gud2ViLnYxLldlYkNvbmZpcm1QYXNzd29yZFJlc2V0UmVzcG9uc2VCPlo8Z2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvd2ViL3YxO3dlYnYxYgZwcm90bzM", [file_google_protobuf_struct]);
 
 /**
  * @generated from message holomush.web.v1.ControlFrame
@@ -265,57 +265,37 @@ export const DisconnectResponseSchema: GenMessage<DisconnectResponse> = /*@__PUR
   messageDesc(file_holomush_web_v1_web, 9);
 
 /**
- * @generated from message holomush.web.v1.AuthenticatePlayerRequest
+ * @generated from message holomush.web.v1.GetCommandHistoryRequest
  */
-export type AuthenticatePlayerRequest = Message<"holomush.web.v1.AuthenticatePlayerRequest"> & {
+export type GetCommandHistoryRequest = Message<"holomush.web.v1.GetCommandHistoryRequest"> & {
   /**
-   * @generated from field: string username = 1;
+   * @generated from field: string session_id = 1;
    */
-  username: string;
-
-  /**
-   * @generated from field: string password = 2;
-   */
-  password: string;
+  sessionId: string;
 };
 
 /**
- * Describes the message holomush.web.v1.AuthenticatePlayerRequest.
- * Use `create(AuthenticatePlayerRequestSchema)` to create a new message.
+ * Describes the message holomush.web.v1.GetCommandHistoryRequest.
+ * Use `create(GetCommandHistoryRequestSchema)` to create a new message.
  */
-export const AuthenticatePlayerRequestSchema: GenMessage<AuthenticatePlayerRequest> = /*@__PURE__*/
+export const GetCommandHistoryRequestSchema: GenMessage<GetCommandHistoryRequest> = /*@__PURE__*/
   messageDesc(file_holomush_web_v1_web, 10);
 
 /**
- * @generated from message holomush.web.v1.AuthenticatePlayerResponse
+ * @generated from message holomush.web.v1.GetCommandHistoryResponse
  */
-export type AuthenticatePlayerResponse = Message<"holomush.web.v1.AuthenticatePlayerResponse"> & {
+export type GetCommandHistoryResponse = Message<"holomush.web.v1.GetCommandHistoryResponse"> & {
   /**
-   * @generated from field: bool success = 1;
+   * @generated from field: repeated string commands = 1;
    */
-  success: boolean;
-
-  /**
-   * @generated from field: string player_token = 2;
-   */
-  playerToken: string;
-
-  /**
-   * @generated from field: string error_message = 3;
-   */
-  errorMessage: string;
-
-  /**
-   * @generated from field: repeated holomush.web.v1.CharacterSummary characters = 4;
-   */
-  characters: CharacterSummary[];
+  commands: string[];
 };
 
 /**
- * Describes the message holomush.web.v1.AuthenticatePlayerResponse.
- * Use `create(AuthenticatePlayerResponseSchema)` to create a new message.
+ * Describes the message holomush.web.v1.GetCommandHistoryResponse.
+ * Use `create(GetCommandHistoryResponseSchema)` to create a new message.
  */
-export const AuthenticatePlayerResponseSchema: GenMessage<AuthenticatePlayerResponse> = /*@__PURE__*/
+export const GetCommandHistoryResponseSchema: GenMessage<GetCommandHistoryResponse> = /*@__PURE__*/
   messageDesc(file_holomush_web_v1_web, 11);
 
 /**
@@ -338,11 +318,19 @@ export type CharacterSummary = Message<"holomush.web.v1.CharacterSummary"> & {
   hasActiveSession: boolean;
 
   /**
-   * "active", "detached", ""
-   *
    * @generated from field: string session_status = 4;
    */
   sessionStatus: string;
+
+  /**
+   * @generated from field: string last_location = 5;
+   */
+  lastLocation: string;
+
+  /**
+   * @generated from field: int64 last_played_at = 6;
+   */
+  lastPlayedAt: bigint;
 };
 
 /**
@@ -353,43 +341,73 @@ export const CharacterSummarySchema: GenMessage<CharacterSummary> = /*@__PURE__*
   messageDesc(file_holomush_web_v1_web, 12);
 
 /**
- * @generated from message holomush.web.v1.ListCharactersRequest
+ * @generated from message holomush.web.v1.WebAuthenticatePlayerRequest
  */
-export type ListCharactersRequest = Message<"holomush.web.v1.ListCharactersRequest"> & {
+export type WebAuthenticatePlayerRequest = Message<"holomush.web.v1.WebAuthenticatePlayerRequest"> & {
   /**
-   * @generated from field: string player_token = 1;
+   * @generated from field: string username = 1;
    */
-  playerToken: string;
+  username: string;
+
+  /**
+   * @generated from field: string password = 2;
+   */
+  password: string;
+
+  /**
+   * @generated from field: bool remember_me = 3;
+   */
+  rememberMe: boolean;
 };
 
 /**
- * Describes the message holomush.web.v1.ListCharactersRequest.
- * Use `create(ListCharactersRequestSchema)` to create a new message.
+ * Describes the message holomush.web.v1.WebAuthenticatePlayerRequest.
+ * Use `create(WebAuthenticatePlayerRequestSchema)` to create a new message.
  */
-export const ListCharactersRequestSchema: GenMessage<ListCharactersRequest> = /*@__PURE__*/
+export const WebAuthenticatePlayerRequestSchema: GenMessage<WebAuthenticatePlayerRequest> = /*@__PURE__*/
   messageDesc(file_holomush_web_v1_web, 13);
 
 /**
- * @generated from message holomush.web.v1.ListCharactersResponse
+ * @generated from message holomush.web.v1.WebAuthenticatePlayerResponse
  */
-export type ListCharactersResponse = Message<"holomush.web.v1.ListCharactersResponse"> & {
+export type WebAuthenticatePlayerResponse = Message<"holomush.web.v1.WebAuthenticatePlayerResponse"> & {
   /**
-   * @generated from field: repeated holomush.web.v1.CharacterSummary characters = 1;
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+
+  /**
+   * @generated from field: string player_token = 2;
+   */
+  playerToken: string;
+
+  /**
+   * @generated from field: string error_message = 3;
+   */
+  errorMessage: string;
+
+  /**
+   * @generated from field: repeated holomush.web.v1.CharacterSummary characters = 4;
    */
   characters: CharacterSummary[];
+
+  /**
+   * @generated from field: string default_character_id = 5;
+   */
+  defaultCharacterId: string;
 };
 
 /**
- * Describes the message holomush.web.v1.ListCharactersResponse.
- * Use `create(ListCharactersResponseSchema)` to create a new message.
+ * Describes the message holomush.web.v1.WebAuthenticatePlayerResponse.
+ * Use `create(WebAuthenticatePlayerResponseSchema)` to create a new message.
  */
-export const ListCharactersResponseSchema: GenMessage<ListCharactersResponse> = /*@__PURE__*/
+export const WebAuthenticatePlayerResponseSchema: GenMessage<WebAuthenticatePlayerResponse> = /*@__PURE__*/
   messageDesc(file_holomush_web_v1_web, 14);
 
 /**
- * @generated from message holomush.web.v1.SelectCharacterRequest
+ * @generated from message holomush.web.v1.WebSelectCharacterRequest
  */
-export type SelectCharacterRequest = Message<"holomush.web.v1.SelectCharacterRequest"> & {
+export type WebSelectCharacterRequest = Message<"holomush.web.v1.WebSelectCharacterRequest"> & {
   /**
    * @generated from field: string player_token = 1;
    */
@@ -402,16 +420,16 @@ export type SelectCharacterRequest = Message<"holomush.web.v1.SelectCharacterReq
 };
 
 /**
- * Describes the message holomush.web.v1.SelectCharacterRequest.
- * Use `create(SelectCharacterRequestSchema)` to create a new message.
+ * Describes the message holomush.web.v1.WebSelectCharacterRequest.
+ * Use `create(WebSelectCharacterRequestSchema)` to create a new message.
  */
-export const SelectCharacterRequestSchema: GenMessage<SelectCharacterRequest> = /*@__PURE__*/
+export const WebSelectCharacterRequestSchema: GenMessage<WebSelectCharacterRequest> = /*@__PURE__*/
   messageDesc(file_holomush_web_v1_web, 15);
 
 /**
- * @generated from message holomush.web.v1.SelectCharacterResponse
+ * @generated from message holomush.web.v1.WebSelectCharacterResponse
  */
-export type SelectCharacterResponse = Message<"holomush.web.v1.SelectCharacterResponse"> & {
+export type WebSelectCharacterResponse = Message<"holomush.web.v1.WebSelectCharacterResponse"> & {
   /**
    * @generated from field: bool success = 1;
    */
@@ -428,8 +446,6 @@ export type SelectCharacterResponse = Message<"holomush.web.v1.SelectCharacterRe
   characterName: string;
 
   /**
-   * true if this was an existing detached session
-   *
    * @generated from field: bool reattached = 4;
    */
   reattached: boolean;
@@ -441,16 +457,129 @@ export type SelectCharacterResponse = Message<"holomush.web.v1.SelectCharacterRe
 };
 
 /**
- * Describes the message holomush.web.v1.SelectCharacterResponse.
- * Use `create(SelectCharacterResponseSchema)` to create a new message.
+ * Describes the message holomush.web.v1.WebSelectCharacterResponse.
+ * Use `create(WebSelectCharacterResponseSchema)` to create a new message.
  */
-export const SelectCharacterResponseSchema: GenMessage<SelectCharacterResponse> = /*@__PURE__*/
+export const WebSelectCharacterResponseSchema: GenMessage<WebSelectCharacterResponse> = /*@__PURE__*/
   messageDesc(file_holomush_web_v1_web, 16);
 
 /**
- * @generated from message holomush.web.v1.ListSessionsRequest
+ * @generated from message holomush.web.v1.WebCreatePlayerRequest
  */
-export type ListSessionsRequest = Message<"holomush.web.v1.ListSessionsRequest"> & {
+export type WebCreatePlayerRequest = Message<"holomush.web.v1.WebCreatePlayerRequest"> & {
+  /**
+   * @generated from field: string username = 1;
+   */
+  username: string;
+
+  /**
+   * @generated from field: string password = 2;
+   */
+  password: string;
+
+  /**
+   * @generated from field: string email = 3;
+   */
+  email: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebCreatePlayerRequest.
+ * Use `create(WebCreatePlayerRequestSchema)` to create a new message.
+ */
+export const WebCreatePlayerRequestSchema: GenMessage<WebCreatePlayerRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 17);
+
+/**
+ * @generated from message holomush.web.v1.WebCreatePlayerResponse
+ */
+export type WebCreatePlayerResponse = Message<"holomush.web.v1.WebCreatePlayerResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+
+  /**
+   * @generated from field: string player_token = 2;
+   */
+  playerToken: string;
+
+  /**
+   * @generated from field: repeated holomush.web.v1.CharacterSummary characters = 3;
+   */
+  characters: CharacterSummary[];
+
+  /**
+   * @generated from field: string error_message = 4;
+   */
+  errorMessage: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebCreatePlayerResponse.
+ * Use `create(WebCreatePlayerResponseSchema)` to create a new message.
+ */
+export const WebCreatePlayerResponseSchema: GenMessage<WebCreatePlayerResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 18);
+
+/**
+ * @generated from message holomush.web.v1.WebCreateCharacterRequest
+ */
+export type WebCreateCharacterRequest = Message<"holomush.web.v1.WebCreateCharacterRequest"> & {
+  /**
+   * @generated from field: string player_token = 1;
+   */
+  playerToken: string;
+
+  /**
+   * @generated from field: string character_name = 2;
+   */
+  characterName: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebCreateCharacterRequest.
+ * Use `create(WebCreateCharacterRequestSchema)` to create a new message.
+ */
+export const WebCreateCharacterRequestSchema: GenMessage<WebCreateCharacterRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 19);
+
+/**
+ * @generated from message holomush.web.v1.WebCreateCharacterResponse
+ */
+export type WebCreateCharacterResponse = Message<"holomush.web.v1.WebCreateCharacterResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+
+  /**
+   * @generated from field: string character_id = 2;
+   */
+  characterId: string;
+
+  /**
+   * @generated from field: string character_name = 3;
+   */
+  characterName: string;
+
+  /**
+   * @generated from field: string error_message = 4;
+   */
+  errorMessage: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebCreateCharacterResponse.
+ * Use `create(WebCreateCharacterResponseSchema)` to create a new message.
+ */
+export const WebCreateCharacterResponseSchema: GenMessage<WebCreateCharacterResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 20);
+
+/**
+ * @generated from message holomush.web.v1.WebListCharactersRequest
+ */
+export type WebListCharactersRequest = Message<"holomush.web.v1.WebListCharactersRequest"> & {
   /**
    * @generated from field: string player_token = 1;
    */
@@ -458,99 +587,136 @@ export type ListSessionsRequest = Message<"holomush.web.v1.ListSessionsRequest">
 };
 
 /**
- * Describes the message holomush.web.v1.ListSessionsRequest.
- * Use `create(ListSessionsRequestSchema)` to create a new message.
+ * Describes the message holomush.web.v1.WebListCharactersRequest.
+ * Use `create(WebListCharactersRequestSchema)` to create a new message.
  */
-export const ListSessionsRequestSchema: GenMessage<ListSessionsRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 17);
-
-/**
- * @generated from message holomush.web.v1.ListSessionsResponse
- */
-export type ListSessionsResponse = Message<"holomush.web.v1.ListSessionsResponse"> & {
-  /**
-   * @generated from field: repeated holomush.web.v1.SessionSummary sessions = 1;
-   */
-  sessions: SessionSummary[];
-};
-
-/**
- * Describes the message holomush.web.v1.ListSessionsResponse.
- * Use `create(ListSessionsResponseSchema)` to create a new message.
- */
-export const ListSessionsResponseSchema: GenMessage<ListSessionsResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 18);
-
-/**
- * @generated from message holomush.web.v1.SessionSummary
- */
-export type SessionSummary = Message<"holomush.web.v1.SessionSummary"> & {
-  /**
-   * @generated from field: string session_id = 1;
-   */
-  sessionId: string;
-
-  /**
-   * @generated from field: string character_name = 2;
-   */
-  characterName: string;
-
-  /**
-   * @generated from field: string status = 3;
-   */
-  status: string;
-
-  /**
-   * @generated from field: int64 created_at = 4;
-   */
-  createdAt: bigint;
-
-  /**
-   * @generated from field: int64 detached_at = 5;
-   */
-  detachedAt: bigint;
-};
-
-/**
- * Describes the message holomush.web.v1.SessionSummary.
- * Use `create(SessionSummarySchema)` to create a new message.
- */
-export const SessionSummarySchema: GenMessage<SessionSummary> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 19);
-
-/**
- * @generated from message holomush.web.v1.GetCommandHistoryRequest
- */
-export type GetCommandHistoryRequest = Message<"holomush.web.v1.GetCommandHistoryRequest"> & {
-  /**
-   * @generated from field: string session_id = 1;
-   */
-  sessionId: string;
-};
-
-/**
- * Describes the message holomush.web.v1.GetCommandHistoryRequest.
- * Use `create(GetCommandHistoryRequestSchema)` to create a new message.
- */
-export const GetCommandHistoryRequestSchema: GenMessage<GetCommandHistoryRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_web_v1_web, 20);
-
-/**
- * @generated from message holomush.web.v1.GetCommandHistoryResponse
- */
-export type GetCommandHistoryResponse = Message<"holomush.web.v1.GetCommandHistoryResponse"> & {
-  /**
-   * @generated from field: repeated string commands = 1;
-   */
-  commands: string[];
-};
-
-/**
- * Describes the message holomush.web.v1.GetCommandHistoryResponse.
- * Use `create(GetCommandHistoryResponseSchema)` to create a new message.
- */
-export const GetCommandHistoryResponseSchema: GenMessage<GetCommandHistoryResponse> = /*@__PURE__*/
+export const WebListCharactersRequestSchema: GenMessage<WebListCharactersRequest> = /*@__PURE__*/
   messageDesc(file_holomush_web_v1_web, 21);
+
+/**
+ * @generated from message holomush.web.v1.WebListCharactersResponse
+ */
+export type WebListCharactersResponse = Message<"holomush.web.v1.WebListCharactersResponse"> & {
+  /**
+   * @generated from field: repeated holomush.web.v1.CharacterSummary characters = 1;
+   */
+  characters: CharacterSummary[];
+};
+
+/**
+ * Describes the message holomush.web.v1.WebListCharactersResponse.
+ * Use `create(WebListCharactersResponseSchema)` to create a new message.
+ */
+export const WebListCharactersResponseSchema: GenMessage<WebListCharactersResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 22);
+
+/**
+ * @generated from message holomush.web.v1.WebLogoutRequest
+ */
+export type WebLogoutRequest = Message<"holomush.web.v1.WebLogoutRequest"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebLogoutRequest.
+ * Use `create(WebLogoutRequestSchema)` to create a new message.
+ */
+export const WebLogoutRequestSchema: GenMessage<WebLogoutRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 23);
+
+/**
+ * @generated from message holomush.web.v1.WebLogoutResponse
+ */
+export type WebLogoutResponse = Message<"holomush.web.v1.WebLogoutResponse"> & {
+};
+
+/**
+ * Describes the message holomush.web.v1.WebLogoutResponse.
+ * Use `create(WebLogoutResponseSchema)` to create a new message.
+ */
+export const WebLogoutResponseSchema: GenMessage<WebLogoutResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 24);
+
+/**
+ * @generated from message holomush.web.v1.WebRequestPasswordResetRequest
+ */
+export type WebRequestPasswordResetRequest = Message<"holomush.web.v1.WebRequestPasswordResetRequest"> & {
+  /**
+   * @generated from field: string email = 1;
+   */
+  email: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebRequestPasswordResetRequest.
+ * Use `create(WebRequestPasswordResetRequestSchema)` to create a new message.
+ */
+export const WebRequestPasswordResetRequestSchema: GenMessage<WebRequestPasswordResetRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 25);
+
+/**
+ * @generated from message holomush.web.v1.WebRequestPasswordResetResponse
+ */
+export type WebRequestPasswordResetResponse = Message<"holomush.web.v1.WebRequestPasswordResetResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebRequestPasswordResetResponse.
+ * Use `create(WebRequestPasswordResetResponseSchema)` to create a new message.
+ */
+export const WebRequestPasswordResetResponseSchema: GenMessage<WebRequestPasswordResetResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 26);
+
+/**
+ * @generated from message holomush.web.v1.WebConfirmPasswordResetRequest
+ */
+export type WebConfirmPasswordResetRequest = Message<"holomush.web.v1.WebConfirmPasswordResetRequest"> & {
+  /**
+   * @generated from field: string token = 1;
+   */
+  token: string;
+
+  /**
+   * @generated from field: string new_password = 2;
+   */
+  newPassword: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebConfirmPasswordResetRequest.
+ * Use `create(WebConfirmPasswordResetRequestSchema)` to create a new message.
+ */
+export const WebConfirmPasswordResetRequestSchema: GenMessage<WebConfirmPasswordResetRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 27);
+
+/**
+ * @generated from message holomush.web.v1.WebConfirmPasswordResetResponse
+ */
+export type WebConfirmPasswordResetResponse = Message<"holomush.web.v1.WebConfirmPasswordResetResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+
+  /**
+   * @generated from field: string error_message = 2;
+   */
+  errorMessage: string;
+};
+
+/**
+ * Describes the message holomush.web.v1.WebConfirmPasswordResetResponse.
+ * Use `create(WebConfirmPasswordResetResponseSchema)` to create a new message.
+ */
+export const WebConfirmPasswordResetResponseSchema: GenMessage<WebConfirmPasswordResetResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_web_v1_web, 28);
 
 /**
  * @generated from enum holomush.web.v1.EventChannel
@@ -655,46 +821,6 @@ export const WebService: GenService<{
     output: typeof DisconnectResponseSchema;
   },
   /**
-   * Two-phase login: authenticate player credentials, get a token.
-   *
-   * @generated from rpc holomush.web.v1.WebService.AuthenticatePlayer
-   */
-  authenticatePlayer: {
-    methodKind: "unary";
-    input: typeof AuthenticatePlayerRequestSchema;
-    output: typeof AuthenticatePlayerResponseSchema;
-  },
-  /**
-   * Two-phase login: list characters available for the authenticated player.
-   *
-   * @generated from rpc holomush.web.v1.WebService.ListCharacters
-   */
-  listCharacters: {
-    methodKind: "unary";
-    input: typeof ListCharactersRequestSchema;
-    output: typeof ListCharactersResponseSchema;
-  },
-  /**
-   * Two-phase login: select a character, creating or reattaching a session.
-   *
-   * @generated from rpc holomush.web.v1.WebService.SelectCharacter
-   */
-  selectCharacter: {
-    methodKind: "unary";
-    input: typeof SelectCharacterRequestSchema;
-    output: typeof SelectCharacterResponseSchema;
-  },
-  /**
-   * List all sessions for the authenticated player.
-   *
-   * @generated from rpc holomush.web.v1.WebService.ListSessions
-   */
-  listSessions: {
-    methodKind: "unary";
-    input: typeof ListSessionsRequestSchema;
-    output: typeof ListSessionsResponseSchema;
-  },
-  /**
    * Retrieve command history for a session.
    *
    * @generated from rpc holomush.web.v1.WebService.GetCommandHistory
@@ -703,6 +829,72 @@ export const WebService: GenService<{
     methodKind: "unary";
     input: typeof GetCommandHistoryRequestSchema;
     output: typeof GetCommandHistoryResponseSchema;
+  },
+  /**
+   * Web auth RPCs.
+   *
+   * @generated from rpc holomush.web.v1.WebService.WebAuthenticatePlayer
+   */
+  webAuthenticatePlayer: {
+    methodKind: "unary";
+    input: typeof WebAuthenticatePlayerRequestSchema;
+    output: typeof WebAuthenticatePlayerResponseSchema;
+  },
+  /**
+   * @generated from rpc holomush.web.v1.WebService.WebSelectCharacter
+   */
+  webSelectCharacter: {
+    methodKind: "unary";
+    input: typeof WebSelectCharacterRequestSchema;
+    output: typeof WebSelectCharacterResponseSchema;
+  },
+  /**
+   * @generated from rpc holomush.web.v1.WebService.WebCreatePlayer
+   */
+  webCreatePlayer: {
+    methodKind: "unary";
+    input: typeof WebCreatePlayerRequestSchema;
+    output: typeof WebCreatePlayerResponseSchema;
+  },
+  /**
+   * @generated from rpc holomush.web.v1.WebService.WebCreateCharacter
+   */
+  webCreateCharacter: {
+    methodKind: "unary";
+    input: typeof WebCreateCharacterRequestSchema;
+    output: typeof WebCreateCharacterResponseSchema;
+  },
+  /**
+   * @generated from rpc holomush.web.v1.WebService.WebListCharacters
+   */
+  webListCharacters: {
+    methodKind: "unary";
+    input: typeof WebListCharactersRequestSchema;
+    output: typeof WebListCharactersResponseSchema;
+  },
+  /**
+   * @generated from rpc holomush.web.v1.WebService.WebLogout
+   */
+  webLogout: {
+    methodKind: "unary";
+    input: typeof WebLogoutRequestSchema;
+    output: typeof WebLogoutResponseSchema;
+  },
+  /**
+   * @generated from rpc holomush.web.v1.WebService.WebRequestPasswordReset
+   */
+  webRequestPasswordReset: {
+    methodKind: "unary";
+    input: typeof WebRequestPasswordResetRequestSchema;
+    output: typeof WebRequestPasswordResetResponseSchema;
+  },
+  /**
+   * @generated from rpc holomush.web.v1.WebService.WebConfirmPasswordReset
+   */
+  webConfirmPasswordReset: {
+    methodKind: "unary";
+    input: typeof WebConfirmPasswordResetRequestSchema;
+    output: typeof WebConfirmPasswordResetResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_holomush_web_v1_web, 0);

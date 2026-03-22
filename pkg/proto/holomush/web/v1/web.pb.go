@@ -708,28 +708,27 @@ func (*DisconnectResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{9}
 }
 
-type AuthenticatePlayerRequest struct {
+type GetCommandHistoryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
-	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AuthenticatePlayerRequest) Reset() {
-	*x = AuthenticatePlayerRequest{}
+func (x *GetCommandHistoryRequest) Reset() {
+	*x = GetCommandHistoryRequest{}
 	mi := &file_holomush_web_v1_web_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AuthenticatePlayerRequest) String() string {
+func (x *GetCommandHistoryRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AuthenticatePlayerRequest) ProtoMessage() {}
+func (*GetCommandHistoryRequest) ProtoMessage() {}
 
-func (x *AuthenticatePlayerRequest) ProtoReflect() protoreflect.Message {
+func (x *GetCommandHistoryRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_web_v1_web_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -741,49 +740,39 @@ func (x *AuthenticatePlayerRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AuthenticatePlayerRequest.ProtoReflect.Descriptor instead.
-func (*AuthenticatePlayerRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetCommandHistoryRequest.ProtoReflect.Descriptor instead.
+func (*GetCommandHistoryRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *AuthenticatePlayerRequest) GetUsername() string {
+func (x *GetCommandHistoryRequest) GetSessionId() string {
 	if x != nil {
-		return x.Username
+		return x.SessionId
 	}
 	return ""
 }
 
-func (x *AuthenticatePlayerRequest) GetPassword() string {
-	if x != nil {
-		return x.Password
-	}
-	return ""
-}
-
-type AuthenticatePlayerResponse struct {
+type GetCommandHistoryResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	PlayerToken   string                 `protobuf:"bytes,2,opt,name=player_token,json=playerToken,proto3" json:"player_token,omitempty"`
-	ErrorMessage  string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	Characters    []*CharacterSummary    `protobuf:"bytes,4,rep,name=characters,proto3" json:"characters,omitempty"`
+	Commands      []string               `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AuthenticatePlayerResponse) Reset() {
-	*x = AuthenticatePlayerResponse{}
+func (x *GetCommandHistoryResponse) Reset() {
+	*x = GetCommandHistoryResponse{}
 	mi := &file_holomush_web_v1_web_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AuthenticatePlayerResponse) String() string {
+func (x *GetCommandHistoryResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AuthenticatePlayerResponse) ProtoMessage() {}
+func (*GetCommandHistoryResponse) ProtoMessage() {}
 
-func (x *AuthenticatePlayerResponse) ProtoReflect() protoreflect.Message {
+func (x *GetCommandHistoryResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_web_v1_web_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -795,35 +784,14 @@ func (x *AuthenticatePlayerResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AuthenticatePlayerResponse.ProtoReflect.Descriptor instead.
-func (*AuthenticatePlayerResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetCommandHistoryResponse.ProtoReflect.Descriptor instead.
+func (*GetCommandHistoryResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *AuthenticatePlayerResponse) GetSuccess() bool {
+func (x *GetCommandHistoryResponse) GetCommands() []string {
 	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *AuthenticatePlayerResponse) GetPlayerToken() string {
-	if x != nil {
-		return x.PlayerToken
-	}
-	return ""
-}
-
-func (x *AuthenticatePlayerResponse) GetErrorMessage() string {
-	if x != nil {
-		return x.ErrorMessage
-	}
-	return ""
-}
-
-func (x *AuthenticatePlayerResponse) GetCharacters() []*CharacterSummary {
-	if x != nil {
-		return x.Characters
+		return x.Commands
 	}
 	return nil
 }
@@ -833,7 +801,9 @@ type CharacterSummary struct {
 	CharacterId      string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
 	CharacterName    string                 `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
 	HasActiveSession bool                   `protobuf:"varint,3,opt,name=has_active_session,json=hasActiveSession,proto3" json:"has_active_session,omitempty"`
-	SessionStatus    string                 `protobuf:"bytes,4,opt,name=session_status,json=sessionStatus,proto3" json:"session_status,omitempty"` // "active", "detached", ""
+	SessionStatus    string                 `protobuf:"bytes,4,opt,name=session_status,json=sessionStatus,proto3" json:"session_status,omitempty"`
+	LastLocation     string                 `protobuf:"bytes,5,opt,name=last_location,json=lastLocation,proto3" json:"last_location,omitempty"`
+	LastPlayedAt     int64                  `protobuf:"varint,6,opt,name=last_played_at,json=lastPlayedAt,proto3" json:"last_played_at,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -896,27 +866,43 @@ func (x *CharacterSummary) GetSessionStatus() string {
 	return ""
 }
 
-type ListCharactersRequest struct {
+func (x *CharacterSummary) GetLastLocation() string {
+	if x != nil {
+		return x.LastLocation
+	}
+	return ""
+}
+
+func (x *CharacterSummary) GetLastPlayedAt() int64 {
+	if x != nil {
+		return x.LastPlayedAt
+	}
+	return 0
+}
+
+type WebAuthenticatePlayerRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerToken   string                 `protobuf:"bytes,1,opt,name=player_token,json=playerToken,proto3" json:"player_token,omitempty"`
+	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	RememberMe    bool                   `protobuf:"varint,3,opt,name=remember_me,json=rememberMe,proto3" json:"remember_me,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListCharactersRequest) Reset() {
-	*x = ListCharactersRequest{}
+func (x *WebAuthenticatePlayerRequest) Reset() {
+	*x = WebAuthenticatePlayerRequest{}
 	mi := &file_holomush_web_v1_web_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListCharactersRequest) String() string {
+func (x *WebAuthenticatePlayerRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListCharactersRequest) ProtoMessage() {}
+func (*WebAuthenticatePlayerRequest) ProtoMessage() {}
 
-func (x *ListCharactersRequest) ProtoReflect() protoreflect.Message {
+func (x *WebAuthenticatePlayerRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_web_v1_web_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -928,63 +914,109 @@ func (x *ListCharactersRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListCharactersRequest.ProtoReflect.Descriptor instead.
-func (*ListCharactersRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use WebAuthenticatePlayerRequest.ProtoReflect.Descriptor instead.
+func (*WebAuthenticatePlayerRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{13}
 }
 
-func (x *ListCharactersRequest) GetPlayerToken() string {
+func (x *WebAuthenticatePlayerRequest) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *WebAuthenticatePlayerRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *WebAuthenticatePlayerRequest) GetRememberMe() bool {
+	if x != nil {
+		return x.RememberMe
+	}
+	return false
+}
+
+type WebAuthenticatePlayerResponse struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Success            bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	PlayerToken        string                 `protobuf:"bytes,2,opt,name=player_token,json=playerToken,proto3" json:"player_token,omitempty"`
+	ErrorMessage       string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	Characters         []*CharacterSummary    `protobuf:"bytes,4,rep,name=characters,proto3" json:"characters,omitempty"`
+	DefaultCharacterId string                 `protobuf:"bytes,5,opt,name=default_character_id,json=defaultCharacterId,proto3" json:"default_character_id,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *WebAuthenticatePlayerResponse) Reset() {
+	*x = WebAuthenticatePlayerResponse{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebAuthenticatePlayerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebAuthenticatePlayerResponse) ProtoMessage() {}
+
+func (x *WebAuthenticatePlayerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebAuthenticatePlayerResponse.ProtoReflect.Descriptor instead.
+func (*WebAuthenticatePlayerResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *WebAuthenticatePlayerResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *WebAuthenticatePlayerResponse) GetPlayerToken() string {
 	if x != nil {
 		return x.PlayerToken
 	}
 	return ""
 }
 
-type ListCharactersResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Characters    []*CharacterSummary    `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListCharactersResponse) Reset() {
-	*x = ListCharactersResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListCharactersResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListCharactersResponse) ProtoMessage() {}
-
-func (x *ListCharactersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[14]
+func (x *WebAuthenticatePlayerResponse) GetErrorMessage() string {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
+		return x.ErrorMessage
 	}
-	return mi.MessageOf(x)
+	return ""
 }
 
-// Deprecated: Use ListCharactersResponse.ProtoReflect.Descriptor instead.
-func (*ListCharactersResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *ListCharactersResponse) GetCharacters() []*CharacterSummary {
+func (x *WebAuthenticatePlayerResponse) GetCharacters() []*CharacterSummary {
 	if x != nil {
 		return x.Characters
 	}
 	return nil
 }
 
-type SelectCharacterRequest struct {
+func (x *WebAuthenticatePlayerResponse) GetDefaultCharacterId() string {
+	if x != nil {
+		return x.DefaultCharacterId
+	}
+	return ""
+}
+
+type WebSelectCharacterRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PlayerToken   string                 `protobuf:"bytes,1,opt,name=player_token,json=playerToken,proto3" json:"player_token,omitempty"`
 	CharacterId   string                 `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
@@ -992,20 +1024,20 @@ type SelectCharacterRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SelectCharacterRequest) Reset() {
-	*x = SelectCharacterRequest{}
+func (x *WebSelectCharacterRequest) Reset() {
+	*x = WebSelectCharacterRequest{}
 	mi := &file_holomush_web_v1_web_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SelectCharacterRequest) String() string {
+func (x *WebSelectCharacterRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SelectCharacterRequest) ProtoMessage() {}
+func (*WebSelectCharacterRequest) ProtoMessage() {}
 
-func (x *SelectCharacterRequest) ProtoReflect() protoreflect.Message {
+func (x *WebSelectCharacterRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_web_v1_web_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1017,50 +1049,50 @@ func (x *SelectCharacterRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SelectCharacterRequest.ProtoReflect.Descriptor instead.
-func (*SelectCharacterRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use WebSelectCharacterRequest.ProtoReflect.Descriptor instead.
+func (*WebSelectCharacterRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{15}
 }
 
-func (x *SelectCharacterRequest) GetPlayerToken() string {
+func (x *WebSelectCharacterRequest) GetPlayerToken() string {
 	if x != nil {
 		return x.PlayerToken
 	}
 	return ""
 }
 
-func (x *SelectCharacterRequest) GetCharacterId() string {
+func (x *WebSelectCharacterRequest) GetCharacterId() string {
 	if x != nil {
 		return x.CharacterId
 	}
 	return ""
 }
 
-type SelectCharacterResponse struct {
+type WebSelectCharacterResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	CharacterName string                 `protobuf:"bytes,3,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
-	Reattached    bool                   `protobuf:"varint,4,opt,name=reattached,proto3" json:"reattached,omitempty"` // true if this was an existing detached session
+	Reattached    bool                   `protobuf:"varint,4,opt,name=reattached,proto3" json:"reattached,omitempty"`
 	ErrorMessage  string                 `protobuf:"bytes,5,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SelectCharacterResponse) Reset() {
-	*x = SelectCharacterResponse{}
+func (x *WebSelectCharacterResponse) Reset() {
+	*x = WebSelectCharacterResponse{}
 	mi := &file_holomush_web_v1_web_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SelectCharacterResponse) String() string {
+func (x *WebSelectCharacterResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SelectCharacterResponse) ProtoMessage() {}
+func (*WebSelectCharacterResponse) ProtoMessage() {}
 
-func (x *SelectCharacterResponse) ProtoReflect() protoreflect.Message {
+func (x *WebSelectCharacterResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_web_v1_web_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1072,67 +1104,69 @@ func (x *SelectCharacterResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SelectCharacterResponse.ProtoReflect.Descriptor instead.
-func (*SelectCharacterResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use WebSelectCharacterResponse.ProtoReflect.Descriptor instead.
+func (*WebSelectCharacterResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{16}
 }
 
-func (x *SelectCharacterResponse) GetSuccess() bool {
+func (x *WebSelectCharacterResponse) GetSuccess() bool {
 	if x != nil {
 		return x.Success
 	}
 	return false
 }
 
-func (x *SelectCharacterResponse) GetSessionId() string {
+func (x *WebSelectCharacterResponse) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
 	}
 	return ""
 }
 
-func (x *SelectCharacterResponse) GetCharacterName() string {
+func (x *WebSelectCharacterResponse) GetCharacterName() string {
 	if x != nil {
 		return x.CharacterName
 	}
 	return ""
 }
 
-func (x *SelectCharacterResponse) GetReattached() bool {
+func (x *WebSelectCharacterResponse) GetReattached() bool {
 	if x != nil {
 		return x.Reattached
 	}
 	return false
 }
 
-func (x *SelectCharacterResponse) GetErrorMessage() string {
+func (x *WebSelectCharacterResponse) GetErrorMessage() string {
 	if x != nil {
 		return x.ErrorMessage
 	}
 	return ""
 }
 
-type ListSessionsRequest struct {
+type WebCreatePlayerRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerToken   string                 `protobuf:"bytes,1,opt,name=player_token,json=playerToken,proto3" json:"player_token,omitempty"`
+	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	Email         string                 `protobuf:"bytes,3,opt,name=email,proto3" json:"email,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListSessionsRequest) Reset() {
-	*x = ListSessionsRequest{}
+func (x *WebCreatePlayerRequest) Reset() {
+	*x = WebCreatePlayerRequest{}
 	mi := &file_holomush_web_v1_web_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListSessionsRequest) String() string {
+func (x *WebCreatePlayerRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListSessionsRequest) ProtoMessage() {}
+func (*WebCreatePlayerRequest) ProtoMessage() {}
 
-func (x *ListSessionsRequest) ProtoReflect() protoreflect.Message {
+func (x *WebCreatePlayerRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_web_v1_web_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1144,87 +1178,122 @@ func (x *ListSessionsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListSessionsRequest.ProtoReflect.Descriptor instead.
-func (*ListSessionsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use WebCreatePlayerRequest.ProtoReflect.Descriptor instead.
+func (*WebCreatePlayerRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{17}
 }
 
-func (x *ListSessionsRequest) GetPlayerToken() string {
+func (x *WebCreatePlayerRequest) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *WebCreatePlayerRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *WebCreatePlayerRequest) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+type WebCreatePlayerResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	PlayerToken   string                 `protobuf:"bytes,2,opt,name=player_token,json=playerToken,proto3" json:"player_token,omitempty"`
+	Characters    []*CharacterSummary    `protobuf:"bytes,3,rep,name=characters,proto3" json:"characters,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebCreatePlayerResponse) Reset() {
+	*x = WebCreatePlayerResponse{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebCreatePlayerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebCreatePlayerResponse) ProtoMessage() {}
+
+func (x *WebCreatePlayerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebCreatePlayerResponse.ProtoReflect.Descriptor instead.
+func (*WebCreatePlayerResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *WebCreatePlayerResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *WebCreatePlayerResponse) GetPlayerToken() string {
 	if x != nil {
 		return x.PlayerToken
 	}
 	return ""
 }
 
-type ListSessionsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Sessions      []*SessionSummary      `protobuf:"bytes,1,rep,name=sessions,proto3" json:"sessions,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListSessionsResponse) Reset() {
-	*x = ListSessionsResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[18]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListSessionsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListSessionsResponse) ProtoMessage() {}
-
-func (x *ListSessionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[18]
+func (x *WebCreatePlayerResponse) GetCharacters() []*CharacterSummary {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListSessionsResponse.ProtoReflect.Descriptor instead.
-func (*ListSessionsResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{18}
-}
-
-func (x *ListSessionsResponse) GetSessions() []*SessionSummary {
-	if x != nil {
-		return x.Sessions
+		return x.Characters
 	}
 	return nil
 }
 
-type SessionSummary struct {
+func (x *WebCreatePlayerResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+type WebCreateCharacterRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	PlayerToken   string                 `protobuf:"bytes,1,opt,name=player_token,json=playerToken,proto3" json:"player_token,omitempty"`
 	CharacterName string                 `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
-	Status        string                 `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
-	CreatedAt     int64                  `protobuf:"varint,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	DetachedAt    int64                  `protobuf:"varint,5,opt,name=detached_at,json=detachedAt,proto3" json:"detached_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SessionSummary) Reset() {
-	*x = SessionSummary{}
+func (x *WebCreateCharacterRequest) Reset() {
+	*x = WebCreateCharacterRequest{}
 	mi := &file_holomush_web_v1_web_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SessionSummary) String() string {
+func (x *WebCreateCharacterRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SessionSummary) ProtoMessage() {}
+func (*WebCreateCharacterRequest) ProtoMessage() {}
 
-func (x *SessionSummary) ProtoReflect() protoreflect.Message {
+func (x *WebCreateCharacterRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_web_v1_web_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1236,68 +1305,203 @@ func (x *SessionSummary) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SessionSummary.ProtoReflect.Descriptor instead.
-func (*SessionSummary) Descriptor() ([]byte, []int) {
+// Deprecated: Use WebCreateCharacterRequest.ProtoReflect.Descriptor instead.
+func (*WebCreateCharacterRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{19}
 }
 
-func (x *SessionSummary) GetSessionId() string {
+func (x *WebCreateCharacterRequest) GetPlayerToken() string {
 	if x != nil {
-		return x.SessionId
+		return x.PlayerToken
 	}
 	return ""
 }
 
-func (x *SessionSummary) GetCharacterName() string {
+func (x *WebCreateCharacterRequest) GetCharacterName() string {
 	if x != nil {
 		return x.CharacterName
 	}
 	return ""
 }
 
-func (x *SessionSummary) GetStatus() string {
+type WebCreateCharacterResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	CharacterId   string                 `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	CharacterName string                 `protobuf:"bytes,3,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebCreateCharacterResponse) Reset() {
+	*x = WebCreateCharacterResponse{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebCreateCharacterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebCreateCharacterResponse) ProtoMessage() {}
+
+func (x *WebCreateCharacterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[20]
 	if x != nil {
-		return x.Status
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebCreateCharacterResponse.ProtoReflect.Descriptor instead.
+func (*WebCreateCharacterResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *WebCreateCharacterResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *WebCreateCharacterResponse) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
 	}
 	return ""
 }
 
-func (x *SessionSummary) GetCreatedAt() int64 {
+func (x *WebCreateCharacterResponse) GetCharacterName() string {
 	if x != nil {
-		return x.CreatedAt
+		return x.CharacterName
 	}
-	return 0
+	return ""
 }
 
-func (x *SessionSummary) GetDetachedAt() int64 {
+func (x *WebCreateCharacterResponse) GetErrorMessage() string {
 	if x != nil {
-		return x.DetachedAt
+		return x.ErrorMessage
 	}
-	return 0
+	return ""
 }
 
-type GetCommandHistoryRequest struct {
+type WebListCharactersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerToken   string                 `protobuf:"bytes,1,opt,name=player_token,json=playerToken,proto3" json:"player_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebListCharactersRequest) Reset() {
+	*x = WebListCharactersRequest{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebListCharactersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebListCharactersRequest) ProtoMessage() {}
+
+func (x *WebListCharactersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebListCharactersRequest.ProtoReflect.Descriptor instead.
+func (*WebListCharactersRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *WebListCharactersRequest) GetPlayerToken() string {
+	if x != nil {
+		return x.PlayerToken
+	}
+	return ""
+}
+
+type WebListCharactersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Characters    []*CharacterSummary    `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebListCharactersResponse) Reset() {
+	*x = WebListCharactersResponse{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebListCharactersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebListCharactersResponse) ProtoMessage() {}
+
+func (x *WebListCharactersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebListCharactersResponse.ProtoReflect.Descriptor instead.
+func (*WebListCharactersResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *WebListCharactersResponse) GetCharacters() []*CharacterSummary {
+	if x != nil {
+		return x.Characters
+	}
+	return nil
+}
+
+type WebLogoutRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetCommandHistoryRequest) Reset() {
-	*x = GetCommandHistoryRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[20]
+func (x *WebLogoutRequest) Reset() {
+	*x = WebLogoutRequest{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetCommandHistoryRequest) String() string {
+func (x *WebLogoutRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetCommandHistoryRequest) ProtoMessage() {}
+func (*WebLogoutRequest) ProtoMessage() {}
 
-func (x *GetCommandHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[20]
+func (x *WebLogoutRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1308,40 +1512,39 @@ func (x *GetCommandHistoryRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetCommandHistoryRequest.ProtoReflect.Descriptor instead.
-func (*GetCommandHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{20}
+// Deprecated: Use WebLogoutRequest.ProtoReflect.Descriptor instead.
+func (*WebLogoutRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{23}
 }
 
-func (x *GetCommandHistoryRequest) GetSessionId() string {
+func (x *WebLogoutRequest) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
 	}
 	return ""
 }
 
-type GetCommandHistoryResponse struct {
+type WebLogoutResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Commands      []string               `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetCommandHistoryResponse) Reset() {
-	*x = GetCommandHistoryResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[21]
+func (x *WebLogoutResponse) Reset() {
+	*x = WebLogoutResponse{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetCommandHistoryResponse) String() string {
+func (x *WebLogoutResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetCommandHistoryResponse) ProtoMessage() {}
+func (*WebLogoutResponse) ProtoMessage() {}
 
-func (x *GetCommandHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[21]
+func (x *WebLogoutResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1352,16 +1555,201 @@ func (x *GetCommandHistoryResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetCommandHistoryResponse.ProtoReflect.Descriptor instead.
-func (*GetCommandHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{21}
+// Deprecated: Use WebLogoutResponse.ProtoReflect.Descriptor instead.
+func (*WebLogoutResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{24}
 }
 
-func (x *GetCommandHistoryResponse) GetCommands() []string {
+type WebRequestPasswordResetRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Email         string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebRequestPasswordResetRequest) Reset() {
+	*x = WebRequestPasswordResetRequest{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebRequestPasswordResetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebRequestPasswordResetRequest) ProtoMessage() {}
+
+func (x *WebRequestPasswordResetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[25]
 	if x != nil {
-		return x.Commands
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
 	}
-	return nil
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebRequestPasswordResetRequest.ProtoReflect.Descriptor instead.
+func (*WebRequestPasswordResetRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *WebRequestPasswordResetRequest) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+type WebRequestPasswordResetResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebRequestPasswordResetResponse) Reset() {
+	*x = WebRequestPasswordResetResponse{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebRequestPasswordResetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebRequestPasswordResetResponse) ProtoMessage() {}
+
+func (x *WebRequestPasswordResetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebRequestPasswordResetResponse.ProtoReflect.Descriptor instead.
+func (*WebRequestPasswordResetResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *WebRequestPasswordResetResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+type WebConfirmPasswordResetRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	NewPassword   string                 `protobuf:"bytes,2,opt,name=new_password,json=newPassword,proto3" json:"new_password,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebConfirmPasswordResetRequest) Reset() {
+	*x = WebConfirmPasswordResetRequest{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebConfirmPasswordResetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebConfirmPasswordResetRequest) ProtoMessage() {}
+
+func (x *WebConfirmPasswordResetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebConfirmPasswordResetRequest.ProtoReflect.Descriptor instead.
+func (*WebConfirmPasswordResetRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *WebConfirmPasswordResetRequest) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *WebConfirmPasswordResetRequest) GetNewPassword() string {
+	if x != nil {
+		return x.NewPassword
+	}
+	return ""
+}
+
+type WebConfirmPasswordResetResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebConfirmPasswordResetResponse) Reset() {
+	*x = WebConfirmPasswordResetResponse{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebConfirmPasswordResetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebConfirmPasswordResetResponse) ProtoMessage() {}
+
+func (x *WebConfirmPasswordResetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebConfirmPasswordResetResponse.ProtoReflect.Descriptor instead.
+func (*WebConfirmPasswordResetResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *WebConfirmPasswordResetResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *WebConfirmPasswordResetResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
 }
 
 var File_holomush_web_v1_web_proto protoreflect.FileDescriptor
@@ -1407,32 +1795,36 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x11DisconnectRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"\x14\n" +
-	"\x12DisconnectResponse\"S\n" +
-	"\x19AuthenticatePlayerRequest\x12\x1a\n" +
+	"\x12DisconnectResponse\"9\n" +
+	"\x18GetCommandHistoryRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"7\n" +
+	"\x19GetCommandHistoryResponse\x12\x1a\n" +
+	"\bcommands\x18\x01 \x03(\tR\bcommands\"\xfc\x01\n" +
+	"\x10CharacterSummary\x12!\n" +
+	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12%\n" +
+	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\x12,\n" +
+	"\x12has_active_session\x18\x03 \x01(\bR\x10hasActiveSession\x12%\n" +
+	"\x0esession_status\x18\x04 \x01(\tR\rsessionStatus\x12#\n" +
+	"\rlast_location\x18\x05 \x01(\tR\flastLocation\x12$\n" +
+	"\x0elast_played_at\x18\x06 \x01(\x03R\flastPlayedAt\"w\n" +
+	"\x1cWebAuthenticatePlayerRequest\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\"\xc1\x01\n" +
-	"\x1aAuthenticatePlayerResponse\x12\x18\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\x12\x1f\n" +
+	"\vremember_me\x18\x03 \x01(\bR\n" +
+	"rememberMe\"\xf6\x01\n" +
+	"\x1dWebAuthenticatePlayerResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12!\n" +
 	"\fplayer_token\x18\x02 \x01(\tR\vplayerToken\x12#\n" +
 	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\x12A\n" +
 	"\n" +
 	"characters\x18\x04 \x03(\v2!.holomush.web.v1.CharacterSummaryR\n" +
-	"characters\"\xb1\x01\n" +
-	"\x10CharacterSummary\x12!\n" +
-	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12%\n" +
-	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\x12,\n" +
-	"\x12has_active_session\x18\x03 \x01(\bR\x10hasActiveSession\x12%\n" +
-	"\x0esession_status\x18\x04 \x01(\tR\rsessionStatus\":\n" +
-	"\x15ListCharactersRequest\x12!\n" +
-	"\fplayer_token\x18\x01 \x01(\tR\vplayerToken\"[\n" +
-	"\x16ListCharactersResponse\x12A\n" +
-	"\n" +
-	"characters\x18\x01 \x03(\v2!.holomush.web.v1.CharacterSummaryR\n" +
-	"characters\"^\n" +
-	"\x16SelectCharacterRequest\x12!\n" +
+	"characters\x120\n" +
+	"\x14default_character_id\x18\x05 \x01(\tR\x12defaultCharacterId\"a\n" +
+	"\x19WebSelectCharacterRequest\x12!\n" +
 	"\fplayer_token\x18\x01 \x01(\tR\vplayerToken\x12!\n" +
-	"\fcharacter_id\x18\x02 \x01(\tR\vcharacterId\"\xbe\x01\n" +
-	"\x17SelectCharacterResponse\x12\x18\n" +
+	"\fcharacter_id\x18\x02 \x01(\tR\vcharacterId\"\xc1\x01\n" +
+	"\x1aWebSelectCharacterResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x12%\n" +
@@ -1440,25 +1832,46 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\n" +
 	"reattached\x18\x04 \x01(\bR\n" +
 	"reattached\x12#\n" +
-	"\rerror_message\x18\x05 \x01(\tR\ferrorMessage\"8\n" +
-	"\x13ListSessionsRequest\x12!\n" +
-	"\fplayer_token\x18\x01 \x01(\tR\vplayerToken\"S\n" +
-	"\x14ListSessionsResponse\x12;\n" +
-	"\bsessions\x18\x01 \x03(\v2\x1f.holomush.web.v1.SessionSummaryR\bsessions\"\xae\x01\n" +
-	"\x0eSessionSummary\x12\x1d\n" +
+	"\rerror_message\x18\x05 \x01(\tR\ferrorMessage\"f\n" +
+	"\x16WebCreatePlayerRequest\x12\x1a\n" +
+	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\x12\x14\n" +
+	"\x05email\x18\x03 \x01(\tR\x05email\"\xbe\x01\n" +
+	"\x17WebCreatePlayerResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12!\n" +
+	"\fplayer_token\x18\x02 \x01(\tR\vplayerToken\x12A\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12%\n" +
-	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\x12\x16\n" +
-	"\x06status\x18\x03 \x01(\tR\x06status\x12\x1d\n" +
+	"characters\x18\x03 \x03(\v2!.holomush.web.v1.CharacterSummaryR\n" +
+	"characters\x12#\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"e\n" +
+	"\x19WebCreateCharacterRequest\x12!\n" +
+	"\fplayer_token\x18\x01 \x01(\tR\vplayerToken\x12%\n" +
+	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\"\xa5\x01\n" +
+	"\x1aWebCreateCharacterResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12!\n" +
+	"\fcharacter_id\x18\x02 \x01(\tR\vcharacterId\x12%\n" +
+	"\x0echaracter_name\x18\x03 \x01(\tR\rcharacterName\x12#\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"=\n" +
+	"\x18WebListCharactersRequest\x12!\n" +
+	"\fplayer_token\x18\x01 \x01(\tR\vplayerToken\"^\n" +
+	"\x19WebListCharactersResponse\x12A\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\x03R\tcreatedAt\x12\x1f\n" +
-	"\vdetached_at\x18\x05 \x01(\x03R\n" +
-	"detachedAt\"9\n" +
-	"\x18GetCommandHistoryRequest\x12\x1d\n" +
+	"characters\x18\x01 \x03(\v2!.holomush.web.v1.CharacterSummaryR\n" +
+	"characters\"1\n" +
+	"\x10WebLogoutRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"7\n" +
-	"\x19GetCommandHistoryResponse\x12\x1a\n" +
-	"\bcommands\x18\x01 \x03(\tR\bcommands*z\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"\x13\n" +
+	"\x11WebLogoutResponse\"6\n" +
+	"\x1eWebRequestPasswordResetRequest\x12\x14\n" +
+	"\x05email\x18\x01 \x01(\tR\x05email\";\n" +
+	"\x1fWebRequestPasswordResetResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"Y\n" +
+	"\x1eWebConfirmPasswordResetRequest\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x12!\n" +
+	"\fnew_password\x18\x02 \x01(\tR\vnewPassword\"`\n" +
+	"\x1fWebConfirmPasswordResetResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage*z\n" +
 	"\fEventChannel\x12\x1d\n" +
 	"\x19EVENT_CHANNEL_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16EVENT_CHANNEL_TERMINAL\x10\x01\x12\x17\n" +
@@ -1467,19 +1880,24 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\rControlSignal\x12\x1e\n" +
 	"\x1aCONTROL_SIGNAL_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCONTROL_SIGNAL_REPLAY_COMPLETE\x10\x01\x12 \n" +
-	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x022\xe5\x06\n" +
+	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x022\xc8\n" +
+	"\n" +
 	"\n" +
 	"WebService\x12F\n" +
 	"\x05Login\x12\x1d.holomush.web.v1.LoginRequest\x1a\x1e.holomush.web.v1.LoginResponse\x12X\n" +
 	"\vSendCommand\x12#.holomush.web.v1.SendCommandRequest\x1a$.holomush.web.v1.SendCommandResponse\x12]\n" +
 	"\fStreamEvents\x12$.holomush.web.v1.StreamEventsRequest\x1a%.holomush.web.v1.StreamEventsResponse0\x01\x12U\n" +
 	"\n" +
-	"Disconnect\x12\".holomush.web.v1.DisconnectRequest\x1a#.holomush.web.v1.DisconnectResponse\x12m\n" +
-	"\x12AuthenticatePlayer\x12*.holomush.web.v1.AuthenticatePlayerRequest\x1a+.holomush.web.v1.AuthenticatePlayerResponse\x12a\n" +
-	"\x0eListCharacters\x12&.holomush.web.v1.ListCharactersRequest\x1a'.holomush.web.v1.ListCharactersResponse\x12d\n" +
-	"\x0fSelectCharacter\x12'.holomush.web.v1.SelectCharacterRequest\x1a(.holomush.web.v1.SelectCharacterResponse\x12[\n" +
-	"\fListSessions\x12$.holomush.web.v1.ListSessionsRequest\x1a%.holomush.web.v1.ListSessionsResponse\x12j\n" +
-	"\x11GetCommandHistory\x12).holomush.web.v1.GetCommandHistoryRequest\x1a*.holomush.web.v1.GetCommandHistoryResponseB\xbb\x01\n" +
+	"Disconnect\x12\".holomush.web.v1.DisconnectRequest\x1a#.holomush.web.v1.DisconnectResponse\x12j\n" +
+	"\x11GetCommandHistory\x12).holomush.web.v1.GetCommandHistoryRequest\x1a*.holomush.web.v1.GetCommandHistoryResponse\x12v\n" +
+	"\x15WebAuthenticatePlayer\x12-.holomush.web.v1.WebAuthenticatePlayerRequest\x1a..holomush.web.v1.WebAuthenticatePlayerResponse\x12m\n" +
+	"\x12WebSelectCharacter\x12*.holomush.web.v1.WebSelectCharacterRequest\x1a+.holomush.web.v1.WebSelectCharacterResponse\x12d\n" +
+	"\x0fWebCreatePlayer\x12'.holomush.web.v1.WebCreatePlayerRequest\x1a(.holomush.web.v1.WebCreatePlayerResponse\x12m\n" +
+	"\x12WebCreateCharacter\x12*.holomush.web.v1.WebCreateCharacterRequest\x1a+.holomush.web.v1.WebCreateCharacterResponse\x12j\n" +
+	"\x11WebListCharacters\x12).holomush.web.v1.WebListCharactersRequest\x1a*.holomush.web.v1.WebListCharactersResponse\x12R\n" +
+	"\tWebLogout\x12!.holomush.web.v1.WebLogoutRequest\x1a\".holomush.web.v1.WebLogoutResponse\x12|\n" +
+	"\x17WebRequestPasswordReset\x12/.holomush.web.v1.WebRequestPasswordResetRequest\x1a0.holomush.web.v1.WebRequestPasswordResetResponse\x12|\n" +
+	"\x17WebConfirmPasswordReset\x12/.holomush.web.v1.WebConfirmPasswordResetRequest\x1a0.holomush.web.v1.WebConfirmPasswordResetResponseB\xbb\x01\n" +
 	"\x13com.holomush.web.v1B\bWebProtoP\x01Z<github.com/holomush/holomush/pkg/proto/holomush/web/v1;webv1\xa2\x02\x03HWX\xaa\x02\x0fHolomush.Web.V1\xca\x02\x0fHolomush\\Web\\V1\xe2\x02\x1bHolomush\\Web\\V1\\GPBMetadata\xea\x02\x11Holomush::Web::V1b\x06proto3"
 
 var (
@@ -1495,63 +1913,78 @@ func file_holomush_web_v1_web_proto_rawDescGZIP() []byte {
 }
 
 var file_holomush_web_v1_web_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_holomush_web_v1_web_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_holomush_web_v1_web_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_holomush_web_v1_web_proto_goTypes = []any{
-	(EventChannel)(0),                  // 0: holomush.web.v1.EventChannel
-	(ControlSignal)(0),                 // 1: holomush.web.v1.ControlSignal
-	(*ControlFrame)(nil),               // 2: holomush.web.v1.ControlFrame
-	(*LoginRequest)(nil),               // 3: holomush.web.v1.LoginRequest
-	(*LoginResponse)(nil),              // 4: holomush.web.v1.LoginResponse
-	(*SendCommandRequest)(nil),         // 5: holomush.web.v1.SendCommandRequest
-	(*SendCommandResponse)(nil),        // 6: holomush.web.v1.SendCommandResponse
-	(*StreamEventsRequest)(nil),        // 7: holomush.web.v1.StreamEventsRequest
-	(*GameEvent)(nil),                  // 8: holomush.web.v1.GameEvent
-	(*StreamEventsResponse)(nil),       // 9: holomush.web.v1.StreamEventsResponse
-	(*DisconnectRequest)(nil),          // 10: holomush.web.v1.DisconnectRequest
-	(*DisconnectResponse)(nil),         // 11: holomush.web.v1.DisconnectResponse
-	(*AuthenticatePlayerRequest)(nil),  // 12: holomush.web.v1.AuthenticatePlayerRequest
-	(*AuthenticatePlayerResponse)(nil), // 13: holomush.web.v1.AuthenticatePlayerResponse
-	(*CharacterSummary)(nil),           // 14: holomush.web.v1.CharacterSummary
-	(*ListCharactersRequest)(nil),      // 15: holomush.web.v1.ListCharactersRequest
-	(*ListCharactersResponse)(nil),     // 16: holomush.web.v1.ListCharactersResponse
-	(*SelectCharacterRequest)(nil),     // 17: holomush.web.v1.SelectCharacterRequest
-	(*SelectCharacterResponse)(nil),    // 18: holomush.web.v1.SelectCharacterResponse
-	(*ListSessionsRequest)(nil),        // 19: holomush.web.v1.ListSessionsRequest
-	(*ListSessionsResponse)(nil),       // 20: holomush.web.v1.ListSessionsResponse
-	(*SessionSummary)(nil),             // 21: holomush.web.v1.SessionSummary
-	(*GetCommandHistoryRequest)(nil),   // 22: holomush.web.v1.GetCommandHistoryRequest
-	(*GetCommandHistoryResponse)(nil),  // 23: holomush.web.v1.GetCommandHistoryResponse
-	(*structpb.Struct)(nil),            // 24: google.protobuf.Struct
+	(EventChannel)(0),                       // 0: holomush.web.v1.EventChannel
+	(ControlSignal)(0),                      // 1: holomush.web.v1.ControlSignal
+	(*ControlFrame)(nil),                    // 2: holomush.web.v1.ControlFrame
+	(*LoginRequest)(nil),                    // 3: holomush.web.v1.LoginRequest
+	(*LoginResponse)(nil),                   // 4: holomush.web.v1.LoginResponse
+	(*SendCommandRequest)(nil),              // 5: holomush.web.v1.SendCommandRequest
+	(*SendCommandResponse)(nil),             // 6: holomush.web.v1.SendCommandResponse
+	(*StreamEventsRequest)(nil),             // 7: holomush.web.v1.StreamEventsRequest
+	(*GameEvent)(nil),                       // 8: holomush.web.v1.GameEvent
+	(*StreamEventsResponse)(nil),            // 9: holomush.web.v1.StreamEventsResponse
+	(*DisconnectRequest)(nil),               // 10: holomush.web.v1.DisconnectRequest
+	(*DisconnectResponse)(nil),              // 11: holomush.web.v1.DisconnectResponse
+	(*GetCommandHistoryRequest)(nil),        // 12: holomush.web.v1.GetCommandHistoryRequest
+	(*GetCommandHistoryResponse)(nil),       // 13: holomush.web.v1.GetCommandHistoryResponse
+	(*CharacterSummary)(nil),                // 14: holomush.web.v1.CharacterSummary
+	(*WebAuthenticatePlayerRequest)(nil),    // 15: holomush.web.v1.WebAuthenticatePlayerRequest
+	(*WebAuthenticatePlayerResponse)(nil),   // 16: holomush.web.v1.WebAuthenticatePlayerResponse
+	(*WebSelectCharacterRequest)(nil),       // 17: holomush.web.v1.WebSelectCharacterRequest
+	(*WebSelectCharacterResponse)(nil),      // 18: holomush.web.v1.WebSelectCharacterResponse
+	(*WebCreatePlayerRequest)(nil),          // 19: holomush.web.v1.WebCreatePlayerRequest
+	(*WebCreatePlayerResponse)(nil),         // 20: holomush.web.v1.WebCreatePlayerResponse
+	(*WebCreateCharacterRequest)(nil),       // 21: holomush.web.v1.WebCreateCharacterRequest
+	(*WebCreateCharacterResponse)(nil),      // 22: holomush.web.v1.WebCreateCharacterResponse
+	(*WebListCharactersRequest)(nil),        // 23: holomush.web.v1.WebListCharactersRequest
+	(*WebListCharactersResponse)(nil),       // 24: holomush.web.v1.WebListCharactersResponse
+	(*WebLogoutRequest)(nil),                // 25: holomush.web.v1.WebLogoutRequest
+	(*WebLogoutResponse)(nil),               // 26: holomush.web.v1.WebLogoutResponse
+	(*WebRequestPasswordResetRequest)(nil),  // 27: holomush.web.v1.WebRequestPasswordResetRequest
+	(*WebRequestPasswordResetResponse)(nil), // 28: holomush.web.v1.WebRequestPasswordResetResponse
+	(*WebConfirmPasswordResetRequest)(nil),  // 29: holomush.web.v1.WebConfirmPasswordResetRequest
+	(*WebConfirmPasswordResetResponse)(nil), // 30: holomush.web.v1.WebConfirmPasswordResetResponse
+	(*structpb.Struct)(nil),                 // 31: google.protobuf.Struct
 }
 var file_holomush_web_v1_web_proto_depIdxs = []int32{
 	1,  // 0: holomush.web.v1.ControlFrame.signal:type_name -> holomush.web.v1.ControlSignal
 	0,  // 1: holomush.web.v1.GameEvent.channel:type_name -> holomush.web.v1.EventChannel
-	24, // 2: holomush.web.v1.GameEvent.metadata:type_name -> google.protobuf.Struct
+	31, // 2: holomush.web.v1.GameEvent.metadata:type_name -> google.protobuf.Struct
 	8,  // 3: holomush.web.v1.StreamEventsResponse.event:type_name -> holomush.web.v1.GameEvent
 	2,  // 4: holomush.web.v1.StreamEventsResponse.control:type_name -> holomush.web.v1.ControlFrame
-	14, // 5: holomush.web.v1.AuthenticatePlayerResponse.characters:type_name -> holomush.web.v1.CharacterSummary
-	14, // 6: holomush.web.v1.ListCharactersResponse.characters:type_name -> holomush.web.v1.CharacterSummary
-	21, // 7: holomush.web.v1.ListSessionsResponse.sessions:type_name -> holomush.web.v1.SessionSummary
+	14, // 5: holomush.web.v1.WebAuthenticatePlayerResponse.characters:type_name -> holomush.web.v1.CharacterSummary
+	14, // 6: holomush.web.v1.WebCreatePlayerResponse.characters:type_name -> holomush.web.v1.CharacterSummary
+	14, // 7: holomush.web.v1.WebListCharactersResponse.characters:type_name -> holomush.web.v1.CharacterSummary
 	3,  // 8: holomush.web.v1.WebService.Login:input_type -> holomush.web.v1.LoginRequest
 	5,  // 9: holomush.web.v1.WebService.SendCommand:input_type -> holomush.web.v1.SendCommandRequest
 	7,  // 10: holomush.web.v1.WebService.StreamEvents:input_type -> holomush.web.v1.StreamEventsRequest
 	10, // 11: holomush.web.v1.WebService.Disconnect:input_type -> holomush.web.v1.DisconnectRequest
-	12, // 12: holomush.web.v1.WebService.AuthenticatePlayer:input_type -> holomush.web.v1.AuthenticatePlayerRequest
-	15, // 13: holomush.web.v1.WebService.ListCharacters:input_type -> holomush.web.v1.ListCharactersRequest
-	17, // 14: holomush.web.v1.WebService.SelectCharacter:input_type -> holomush.web.v1.SelectCharacterRequest
-	19, // 15: holomush.web.v1.WebService.ListSessions:input_type -> holomush.web.v1.ListSessionsRequest
-	22, // 16: holomush.web.v1.WebService.GetCommandHistory:input_type -> holomush.web.v1.GetCommandHistoryRequest
-	4,  // 17: holomush.web.v1.WebService.Login:output_type -> holomush.web.v1.LoginResponse
-	6,  // 18: holomush.web.v1.WebService.SendCommand:output_type -> holomush.web.v1.SendCommandResponse
-	9,  // 19: holomush.web.v1.WebService.StreamEvents:output_type -> holomush.web.v1.StreamEventsResponse
-	11, // 20: holomush.web.v1.WebService.Disconnect:output_type -> holomush.web.v1.DisconnectResponse
-	13, // 21: holomush.web.v1.WebService.AuthenticatePlayer:output_type -> holomush.web.v1.AuthenticatePlayerResponse
-	16, // 22: holomush.web.v1.WebService.ListCharacters:output_type -> holomush.web.v1.ListCharactersResponse
-	18, // 23: holomush.web.v1.WebService.SelectCharacter:output_type -> holomush.web.v1.SelectCharacterResponse
-	20, // 24: holomush.web.v1.WebService.ListSessions:output_type -> holomush.web.v1.ListSessionsResponse
-	23, // 25: holomush.web.v1.WebService.GetCommandHistory:output_type -> holomush.web.v1.GetCommandHistoryResponse
-	17, // [17:26] is the sub-list for method output_type
-	8,  // [8:17] is the sub-list for method input_type
+	12, // 12: holomush.web.v1.WebService.GetCommandHistory:input_type -> holomush.web.v1.GetCommandHistoryRequest
+	15, // 13: holomush.web.v1.WebService.WebAuthenticatePlayer:input_type -> holomush.web.v1.WebAuthenticatePlayerRequest
+	17, // 14: holomush.web.v1.WebService.WebSelectCharacter:input_type -> holomush.web.v1.WebSelectCharacterRequest
+	19, // 15: holomush.web.v1.WebService.WebCreatePlayer:input_type -> holomush.web.v1.WebCreatePlayerRequest
+	21, // 16: holomush.web.v1.WebService.WebCreateCharacter:input_type -> holomush.web.v1.WebCreateCharacterRequest
+	23, // 17: holomush.web.v1.WebService.WebListCharacters:input_type -> holomush.web.v1.WebListCharactersRequest
+	25, // 18: holomush.web.v1.WebService.WebLogout:input_type -> holomush.web.v1.WebLogoutRequest
+	27, // 19: holomush.web.v1.WebService.WebRequestPasswordReset:input_type -> holomush.web.v1.WebRequestPasswordResetRequest
+	29, // 20: holomush.web.v1.WebService.WebConfirmPasswordReset:input_type -> holomush.web.v1.WebConfirmPasswordResetRequest
+	4,  // 21: holomush.web.v1.WebService.Login:output_type -> holomush.web.v1.LoginResponse
+	6,  // 22: holomush.web.v1.WebService.SendCommand:output_type -> holomush.web.v1.SendCommandResponse
+	9,  // 23: holomush.web.v1.WebService.StreamEvents:output_type -> holomush.web.v1.StreamEventsResponse
+	11, // 24: holomush.web.v1.WebService.Disconnect:output_type -> holomush.web.v1.DisconnectResponse
+	13, // 25: holomush.web.v1.WebService.GetCommandHistory:output_type -> holomush.web.v1.GetCommandHistoryResponse
+	16, // 26: holomush.web.v1.WebService.WebAuthenticatePlayer:output_type -> holomush.web.v1.WebAuthenticatePlayerResponse
+	18, // 27: holomush.web.v1.WebService.WebSelectCharacter:output_type -> holomush.web.v1.WebSelectCharacterResponse
+	20, // 28: holomush.web.v1.WebService.WebCreatePlayer:output_type -> holomush.web.v1.WebCreatePlayerResponse
+	22, // 29: holomush.web.v1.WebService.WebCreateCharacter:output_type -> holomush.web.v1.WebCreateCharacterResponse
+	24, // 30: holomush.web.v1.WebService.WebListCharacters:output_type -> holomush.web.v1.WebListCharactersResponse
+	26, // 31: holomush.web.v1.WebService.WebLogout:output_type -> holomush.web.v1.WebLogoutResponse
+	28, // 32: holomush.web.v1.WebService.WebRequestPasswordReset:output_type -> holomush.web.v1.WebRequestPasswordResetResponse
+	30, // 33: holomush.web.v1.WebService.WebConfirmPasswordReset:output_type -> holomush.web.v1.WebConfirmPasswordResetResponse
+	21, // [21:34] is the sub-list for method output_type
+	8,  // [8:21] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name
 	8,  // [8:8] is the sub-list for extension extendee
 	0,  // [0:8] is the sub-list for field type_name
@@ -1572,7 +2005,7 @@ func file_holomush_web_v1_web_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_web_v1_web_proto_rawDesc), len(file_holomush_web_v1_web_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   22,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
