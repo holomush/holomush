@@ -47,8 +47,9 @@ type mockCoreClient struct {
 	discResp *corev1.DisconnectResponse
 	discErr  error
 
-	cmdHistory    []string
-	cmdHistoryErr error
+	cmdHistory       []string
+	cmdHistoryErr    error // application-level failure (Success=false)
+	cmdHistoryRPCErr error // transport/RPC-level failure (nil response)
 }
 
 func (m *mockCoreClient) Authenticate(_ context.Context, _ *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
@@ -68,6 +69,9 @@ func (m *mockCoreClient) Disconnect(_ context.Context, _ *corev1.DisconnectReque
 }
 
 func (m *mockCoreClient) GetCommandHistory(_ context.Context, _ *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
+	if m.cmdHistoryRPCErr != nil {
+		return nil, m.cmdHistoryRPCErr
+	}
 	if m.cmdHistoryErr != nil {
 		//nolint:nilerr // intentional: simulates application-level failure, not RPC error
 		return &corev1.GetCommandHistoryResponse{
@@ -233,7 +237,7 @@ func TestHandler_GetCommandHistory_Success(t *testing.T) {
 
 func TestHandler_GetCommandHistory_RPCError(t *testing.T) {
 	client := &mockCoreClient{
-		cmdHistoryErr: errors.New("rpc error"),
+		cmdHistoryRPCErr: errors.New("rpc error"),
 	}
 	h := NewHandler(client)
 
