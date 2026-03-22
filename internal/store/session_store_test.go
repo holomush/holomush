@@ -324,7 +324,7 @@ func TestPostgresSessionStore_Delete(t *testing.T) {
 			tt.setupMock(mock)
 
 			store := NewPostgresSessionStore(mock)
-			err = store.Delete(context.Background(), tt.id)
+			err = store.Delete(context.Background(), tt.id, "test reason")
 
 			if tt.wantErr {
 				require.Error(t, err)

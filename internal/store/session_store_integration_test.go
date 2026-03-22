@@ -99,7 +99,7 @@ var _ = Describe("PostgresSessionStore", func() {
 			err := sessionStore.Set(ctx, info.ID, info)
 			Expect(err).NotTo(HaveOccurred())
 
-			err = sessionStore.Delete(ctx, info.ID)
+			err = sessionStore.Delete(ctx, info.ID, "test")
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = sessionStore.Get(ctx, info.ID)
@@ -324,7 +324,7 @@ var _ = Describe("PostgresSessionStore", func() {
 			err := sessionStore.AddConnection(ctx, conn)
 			Expect(err).NotTo(HaveOccurred())
 
-			err = sessionStore.Delete(ctx, sessID)
+			err = sessionStore.Delete(ctx, sessID, "test")
 			Expect(err).NotTo(HaveOccurred())
 
 			count, err := sessionStore.CountConnections(ctx, sessID)

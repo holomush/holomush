@@ -254,8 +254,12 @@ func (m *mockSessionStore) Set(_ context.Context, id string, _ *session.Info) er
 	return fmt.Errorf("mockSessionStore.Set(%q): not implemented", id)
 }
 
-func (m *mockSessionStore) Delete(_ context.Context, id string) error {
+func (m *mockSessionStore) Delete(_ context.Context, id string, _ string) error {
 	return fmt.Errorf("mockSessionStore.Delete(%q): not implemented", id)
+}
+
+func (m *mockSessionStore) WatchSession(_ context.Context, sessionID string) (<-chan session.SessionEvent, error) {
+	return nil, fmt.Errorf("mockSessionStore.WatchSession(%q): not implemented", sessionID)
 }
 
 func (m *mockSessionStore) FindByCharacter(_ context.Context, id ulid.ULID) (*session.Info, error) {

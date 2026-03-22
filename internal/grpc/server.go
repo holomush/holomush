@@ -409,7 +409,7 @@ func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, com
 		if err := s.engine.HandleDisconnect(ctx, char, "quit"); err != nil {
 			slog.WarnContext(ctx, "leave event failed", "error", err)
 		}
-		if err := s.sessionStore.Delete(ctx, info.ID); err != nil {
+		if err := s.sessionStore.Delete(ctx, info.ID, "Goodbye!"); err != nil {
 			slog.WarnContext(ctx, "session delete failed", "error", err)
 		}
 		s.sessions.Disconnect(info.CharacterID, ulid.ULID{})
@@ -806,7 +806,7 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 				)
 			}
 
-			if err := s.sessionStore.Delete(ctx, req.SessionId); err != nil {
+			if err := s.sessionStore.Delete(ctx, req.SessionId, "Guest session ended"); err != nil {
 				slog.WarnContext(ctx, "failed to delete guest session",
 					"request_id", requestID,
 					"error", err,
