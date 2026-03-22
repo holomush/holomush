@@ -133,9 +133,9 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 				eventRecv = ch
 			}
 			if h.quitting {
-				// The server sends "Goodbye!" via a STREAM_CLOSED control frame.
-				// The event recv goroutine will deliver it; just return and let
-				// the deferred disconnect/close handle teardown.
+				// Wait for the STREAM_CLOSED control frame with "Goodbye!" before
+				// closing. The server sends it after processing quit.
+				h.drainUntilClosed(eventRecv)
 				return
 			}
 
@@ -366,6 +366,38 @@ func (h *GatewayHandler) handleQuit(ctx context.Context) {
 	h.quitting = true
 }
 
+
+// drainUntilClosed reads from the event channel until a STREAM_CLOSED
+// control frame arrives or the channel closes or a timeout expires.
+// Any event frames received are forwarded to the client.
+func (h *GatewayHandler) drainUntilClosed(eventRecv <-chan *corev1.SubscribeResponse) {
+	if eventRecv == nil {
+		return
+	}
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case resp, ok := <-eventRecv:
+			if !ok {
+				return
+			}
+			switch frame := resp.GetFrame().(type) {
+			case *corev1.SubscribeResponse_Event:
+				h.sendProtoEvent(frame.Event)
+			case *corev1.SubscribeResponse_Control:
+				if frame.Control.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED {
+					if msg := frame.Control.GetMessage(); msg != "" {
+						h.send(msg)
+					}
+					return
+				}
+			}
+		case <-timer.C:
+			return
+		}
+	}
+}
 
 func (h *GatewayHandler) send(msg string) {
 	if _, err := fmt.Fprintln(h.conn, msg); err != nil {
