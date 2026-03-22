@@ -64,9 +64,9 @@ type GatewayHandler struct {
 	eventCh      chan *corev1.SubscribeResponse
 
 	// Two-phase auth state.
-	playerToken string                   // set after AuthenticatePlayer, cleared after SelectCharacter
+	playerToken string                     // set after AuthenticatePlayer, cleared after SelectCharacter
 	characters  []*corev1.CharacterSummary // available characters while in selectMode
-	selectMode  bool                     // true when waiting for PLAY/CREATE
+	selectMode  bool                       // true when waiting for PLAY/CREATE
 }
 
 // NewGatewayHandler creates a new GatewayHandler for the given connection.

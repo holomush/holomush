@@ -16,8 +16,8 @@ import (
 // Cookie signal headers used to communicate between handlers and CookieMiddleware.
 const (
 	headerSetSessionToken    = "X-Set-Session-Token" //nolint:gosec // not a credential, just a header name
-	headerClearSession      = "X-Clear-Session"
-	headerRememberMe        = "X-Remember-Me"
+	headerClearSession       = "X-Clear-Session"
+	headerRememberMe         = "X-Remember-Me"
 	headerInjectSessionToken = "X-Session-Token"
 )
 

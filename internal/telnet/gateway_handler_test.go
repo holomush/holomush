@@ -18,8 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
 
-	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/core"
+	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -111,6 +111,7 @@ func (m *mockCoreClient) GetCommandHistory(_ context.Context, _ *corev1.GetComma
 }
 
 // readLines reads exactly n lines from r, stripping \r\n.
+//
 //nolint:unparam // n varies in future tests
 func readLines(t *testing.T, r *bufio.Reader, n int) []string {
 	t.Helper()
@@ -258,11 +259,11 @@ func (m *mockSubscribeStream) Recv() (*corev1.SubscribeResponse, error) {
 }
 
 func (m *mockSubscribeStream) Header() (metadata.MD, error) { return nil, nil }
-func (m *mockSubscribeStream) Trailer() metadata.MD          { return nil }
-func (m *mockSubscribeStream) CloseSend() error               { return nil }
-func (m *mockSubscribeStream) Context() context.Context       { return context.Background() }
-func (m *mockSubscribeStream) SendMsg(any) error              { return nil }
-func (m *mockSubscribeStream) RecvMsg(any) error              { return nil }
+func (m *mockSubscribeStream) Trailer() metadata.MD         { return nil }
+func (m *mockSubscribeStream) CloseSend() error             { return nil }
+func (m *mockSubscribeStream) Context() context.Context     { return context.Background() }
+func (m *mockSubscribeStream) SendMsg(any) error            { return nil }
+func (m *mockSubscribeStream) RecvMsg(any) error            { return nil }
 
 // TestGatewayHandler_SendProtoEvent_CommandResponse tests that a command_response
 // event is forwarded to the client as plain text.
