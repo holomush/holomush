@@ -128,6 +128,10 @@ func (m *mockGRPCClient) Disconnect(_ context.Context, _ *corev1.DisconnectReque
 	return nil, nil
 }
 
+func (m *mockGRPCClient) GetCommandHistory(_ context.Context, _ *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
+	return &corev1.GetCommandHistoryResponse{Success: true}, nil
+}
+
 // mockMigrator implements AutoMigrator for testing.
 type mockMigrator struct {
 	upFunc    func() error

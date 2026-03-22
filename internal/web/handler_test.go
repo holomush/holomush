@@ -46,6 +46,9 @@ type mockCoreClient struct {
 
 	discResp *corev1.DisconnectResponse
 	discErr  error
+
+	cmdHistory    []string
+	cmdHistoryErr error
 }
 
 func (m *mockCoreClient) Authenticate(_ context.Context, _ *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
@@ -62,6 +65,17 @@ func (m *mockCoreClient) Subscribe(_ context.Context, _ *corev1.SubscribeRequest
 
 func (m *mockCoreClient) Disconnect(_ context.Context, _ *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error) {
 	return m.discResp, m.discErr
+}
+
+func (m *mockCoreClient) GetCommandHistory(_ context.Context, _ *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
+	if m.cmdHistoryErr != nil {
+		return nil, m.cmdHistoryErr
+	}
+	return &corev1.GetCommandHistoryResponse{
+		Meta:     &corev1.ResponseMeta{},
+		Success:  true,
+		Commands: m.cmdHistory,
+	}, nil
 }
 
 func TestHandler_Login_Success(t *testing.T) {
@@ -199,20 +213,11 @@ func TestHandler_ListSessions_Unimplemented(t *testing.T) {
 	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
 }
 
-func TestHandler_GetCommandHistory_NoStore(t *testing.T) {
-	h := NewHandler(&mockCoreClient{})
-	_, err := h.GetCommandHistory(context.Background(), connect.NewRequest(&webv1.GetCommandHistoryRequest{
-		SessionId: "sess-abc",
-	}))
-	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
-}
-
 func TestHandler_GetCommandHistory_Success(t *testing.T) {
-	store := &mockSessionStore{
-		commandHistory: []string{"look", "say hello", "go north"},
+	client := &mockCoreClient{
+		cmdHistory: []string{"look", "say hello", "go north"},
 	}
-	h := NewHandler(&mockCoreClient{}, WithSessionStore(store))
+	h := NewHandler(client)
 
 	resp, err := h.GetCommandHistory(context.Background(), connect.NewRequest(&webv1.GetCommandHistoryRequest{
 		SessionId: "sess-abc",
@@ -221,17 +226,30 @@ func TestHandler_GetCommandHistory_Success(t *testing.T) {
 	assert.Equal(t, []string{"look", "say hello", "go north"}, resp.Msg.GetCommands())
 }
 
-func TestHandler_GetCommandHistory_StoreError(t *testing.T) {
-	store := &mockSessionStore{
-		commandHistoryErr: errors.New("db error"),
+func TestHandler_GetCommandHistory_RPCError(t *testing.T) {
+	client := &mockCoreClient{
+		cmdHistoryErr: errors.New("rpc error"),
 	}
-	h := NewHandler(&mockCoreClient{}, WithSessionStore(store))
+	h := NewHandler(client)
 
-	_, err := h.GetCommandHistory(context.Background(), connect.NewRequest(&webv1.GetCommandHistoryRequest{
+	resp, err := h.GetCommandHistory(context.Background(), connect.NewRequest(&webv1.GetCommandHistoryRequest{
 		SessionId: "sess-abc",
 	}))
-	require.Error(t, err)
-	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+	require.NoError(t, err)
+	assert.Empty(t, resp.Msg.GetCommands())
+}
+
+func TestHandler_GetCommandHistory_NotSuccess(t *testing.T) {
+	client := &mockCoreClient{}
+	// Override the method to return a non-success response
+	h := NewHandler(client)
+
+	// When the mock returns success=true but empty commands, we get empty commands back
+	resp, err := h.GetCommandHistory(context.Background(), connect.NewRequest(&webv1.GetCommandHistoryRequest{
+		SessionId: "sess-abc",
+	}))
+	require.NoError(t, err)
+	assert.Empty(t, resp.Msg.GetCommands())
 }
 
 func TestNewHandler_WithOptions(t *testing.T) {

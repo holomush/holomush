@@ -38,6 +38,7 @@ type CoreClient interface {
 	HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error)
 	Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error)
 	Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error)
+	GetCommandHistory(ctx context.Context, req *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error)
 }
 
 // Handler implements WebServiceHandler by delegating to the core gRPC client.
@@ -275,26 +276,26 @@ func (h *Handler) ListSessions(_ context.Context, _ *connect.Request[webv1.ListS
 }
 
 // GetCommandHistory returns the command history for a session.
+// Proxies through the core gRPC service (gateway boundary invariant).
 // TODO: Add full authorization when two-phase login is implemented —
 // verify the caller's player token owns the requested session.
 func (h *Handler) GetCommandHistory(ctx context.Context, req *connect.Request[webv1.GetCommandHistoryRequest]) (*connect.Response[webv1.GetCommandHistoryResponse], error) {
-	if h.sessionStore == nil {
-		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("session store not configured"))
-	}
+	cmdCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
 
-	sessionID := req.Msg.GetSessionId()
-	if sessionID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("session_id is required"))
-	}
-
-	// Verify session exists (basic guard until full auth is wired)
-	if _, err := h.sessionStore.Get(ctx, sessionID); err != nil {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("session not found or not authorized"))
-	}
-
-	history, err := h.sessionStore.GetCommandHistory(ctx, sessionID)
+	resp, err := h.client.GetCommandHistory(cmdCtx, &corev1.GetCommandHistoryRequest{
+		SessionId: req.Msg.GetSessionId(),
+	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		slog.Error("web: get command history RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
+		return connect.NewResponse(&webv1.GetCommandHistoryResponse{}), nil
 	}
-	return connect.NewResponse(&webv1.GetCommandHistoryResponse{Commands: history}), nil
+
+	if !resp.GetSuccess() {
+		return connect.NewResponse(&webv1.GetCommandHistoryResponse{}), nil
+	}
+
+	return connect.NewResponse(&webv1.GetCommandHistoryResponse{
+		Commands: resp.GetCommands(),
+	}), nil
 }

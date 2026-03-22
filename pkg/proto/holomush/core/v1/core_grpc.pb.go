@@ -22,10 +22,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CoreService_Authenticate_FullMethodName  = "/holomush.core.v1.CoreService/Authenticate"
-	CoreService_HandleCommand_FullMethodName = "/holomush.core.v1.CoreService/HandleCommand"
-	CoreService_Subscribe_FullMethodName     = "/holomush.core.v1.CoreService/Subscribe"
-	CoreService_Disconnect_FullMethodName    = "/holomush.core.v1.CoreService/Disconnect"
+	CoreService_Authenticate_FullMethodName      = "/holomush.core.v1.CoreService/Authenticate"
+	CoreService_HandleCommand_FullMethodName     = "/holomush.core.v1.CoreService/HandleCommand"
+	CoreService_Subscribe_FullMethodName         = "/holomush.core.v1.CoreService/Subscribe"
+	CoreService_Disconnect_FullMethodName        = "/holomush.core.v1.CoreService/Disconnect"
+	CoreService_GetCommandHistory_FullMethodName = "/holomush.core.v1.CoreService/GetCommandHistory"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -42,6 +43,8 @@ type CoreServiceClient interface {
 	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SubscribeResponse], error)
 	// Disconnect ends a session.
 	Disconnect(ctx context.Context, in *DisconnectRequest, opts ...grpc.CallOption) (*DisconnectResponse, error)
+	// GetCommandHistory retrieves command history for a session.
+	GetCommandHistory(ctx context.Context, in *GetCommandHistoryRequest, opts ...grpc.CallOption) (*GetCommandHistoryResponse, error)
 }
 
 type coreServiceClient struct {
@@ -101,6 +104,16 @@ func (c *coreServiceClient) Disconnect(ctx context.Context, in *DisconnectReques
 	return out, nil
 }
 
+func (c *coreServiceClient) GetCommandHistory(ctx context.Context, in *GetCommandHistoryRequest, opts ...grpc.CallOption) (*GetCommandHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCommandHistoryResponse)
+	err := c.cc.Invoke(ctx, CoreService_GetCommandHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -115,6 +128,8 @@ type CoreServiceServer interface {
 	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[SubscribeResponse]) error
 	// Disconnect ends a session.
 	Disconnect(context.Context, *DisconnectRequest) (*DisconnectResponse, error)
+	// GetCommandHistory retrieves command history for a session.
+	GetCommandHistory(context.Context, *GetCommandHistoryRequest) (*GetCommandHistoryResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -136,6 +151,9 @@ func (UnimplementedCoreServiceServer) Subscribe(*SubscribeRequest, grpc.ServerSt
 }
 func (UnimplementedCoreServiceServer) Disconnect(context.Context, *DisconnectRequest) (*DisconnectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Disconnect not implemented")
+}
+func (UnimplementedCoreServiceServer) GetCommandHistory(context.Context, *GetCommandHistoryRequest) (*GetCommandHistoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCommandHistory not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -223,6 +241,24 @@ func _CoreService_Disconnect_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_GetCommandHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCommandHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).GetCommandHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_GetCommandHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).GetCommandHistory(ctx, req.(*GetCommandHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -241,6 +277,10 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Disconnect",
 			Handler:    _CoreService_Disconnect_Handler,
+		},
+		{
+			MethodName: "GetCommandHistory",
+			Handler:    _CoreService_GetCommandHistory_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

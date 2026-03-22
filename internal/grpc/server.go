@@ -901,6 +901,43 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 	}, nil
 }
 
+// GetCommandHistory retrieves command history for a session.
+func (s *CoreServer) GetCommandHistory(ctx context.Context, req *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
+	requestID := ""
+	if req.Meta != nil {
+		requestID = req.Meta.RequestId
+	}
+
+	sessionID := req.GetSessionId()
+	if sessionID == "" {
+		return &corev1.GetCommandHistoryResponse{
+			Meta:    responseMeta(requestID),
+			Success: false,
+			Error:   "session_id is required",
+		}, nil
+	}
+
+	if _, err := s.sessionStore.Get(ctx, sessionID); err != nil {
+		//nolint:nilerr // intentional: return application-level error, not RPC error
+		return &corev1.GetCommandHistoryResponse{
+			Meta:    responseMeta(requestID),
+			Success: false,
+			Error:   "session not found",
+		}, nil
+	}
+
+	history, err := s.sessionStore.GetCommandHistory(ctx, sessionID)
+	if err != nil {
+		return nil, oops.Code("COMMAND_HISTORY_FAILED").With("session_id", sessionID).Wrap(err)
+	}
+
+	return &corev1.GetCommandHistoryResponse{
+		Meta:     responseMeta(requestID),
+		Success:  true,
+		Commands: history,
+	}, nil
+}
+
 // responseMeta creates a ResponseMeta with the request ID echoed.
 func responseMeta(requestID string) *corev1.ResponseMeta {
 	return &corev1.ResponseMeta{
