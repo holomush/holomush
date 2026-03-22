@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
+//go:build !integration
+
 package auth_test
 
 import (
@@ -23,6 +25,7 @@ func TestNewPasswordResetService_NilDependencies(t *testing.T) {
 		name        string
 		playerRepo  auth.PlayerRepository
 		resetRepo   auth.PasswordResetRepository
+		sessions    auth.WebSessionRepository
 		hasher      auth.PasswordHasher
 		expectError string
 	}{
@@ -30,6 +33,7 @@ func TestNewPasswordResetService_NilDependencies(t *testing.T) {
 			name:        "nil player repository",
 			playerRepo:  nil,
 			resetRepo:   mocks.NewMockPasswordResetRepository(t),
+			sessions:    mocks.NewMockWebSessionRepository(t),
 			hasher:      mocks.NewMockPasswordHasher(t),
 			expectError: "player repository is required",
 		},
@@ -37,13 +41,23 @@ func TestNewPasswordResetService_NilDependencies(t *testing.T) {
 			name:        "nil reset repository",
 			playerRepo:  mocks.NewMockPlayerRepository(t),
 			resetRepo:   nil,
+			sessions:    mocks.NewMockWebSessionRepository(t),
 			hasher:      mocks.NewMockPasswordHasher(t),
 			expectError: "reset repository is required",
+		},
+		{
+			name:        "nil sessions repository",
+			playerRepo:  mocks.NewMockPlayerRepository(t),
+			resetRepo:   mocks.NewMockPasswordResetRepository(t),
+			sessions:    nil,
+			hasher:      mocks.NewMockPasswordHasher(t),
+			expectError: "sessions repository is required",
 		},
 		{
 			name:        "nil password hasher",
 			playerRepo:  mocks.NewMockPlayerRepository(t),
 			resetRepo:   mocks.NewMockPasswordResetRepository(t),
+			sessions:    mocks.NewMockWebSessionRepository(t),
 			hasher:      nil,
 			expectError: "password hasher is required",
 		},
@@ -51,7 +65,7 @@ func TestNewPasswordResetService_NilDependencies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, err := auth.NewPasswordResetService(tt.playerRepo, tt.resetRepo, tt.hasher)
+			svc, err := auth.NewPasswordResetService(tt.playerRepo, tt.resetRepo, tt.sessions, tt.hasher)
 			require.Error(t, err)
 			assert.Nil(t, svc)
 			assert.Contains(t, err.Error(), tt.expectError)
@@ -65,8 +79,9 @@ func TestPasswordResetService_RequestReset(t *testing.T) {
 	t.Run("generates token for existing player", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		email := "test@example.com"
@@ -85,8 +100,9 @@ func TestPasswordResetService_RequestReset(t *testing.T) {
 	t.Run("returns success for non-existent player to prevent enumeration", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		email := "nonexistent@example.com"
@@ -103,8 +119,9 @@ func TestPasswordResetService_RequestReset(t *testing.T) {
 	t.Run("propagates repository errors", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		email := "test@example.com"
@@ -119,8 +136,9 @@ func TestPasswordResetService_RequestReset(t *testing.T) {
 	t.Run("propagates reset repo create errors", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		email := "test@example.com"
@@ -143,8 +161,9 @@ func TestPasswordResetService_ValidateToken(t *testing.T) {
 	t.Run("returns player ID for valid token", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		// Generate a real token
@@ -169,8 +188,9 @@ func TestPasswordResetService_ValidateToken(t *testing.T) {
 	t.Run("returns error for expired token", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		// Generate a real token
@@ -196,8 +216,9 @@ func TestPasswordResetService_ValidateToken(t *testing.T) {
 	t.Run("returns error for non-existent token", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		token := "nonexistent0123456789abcdef0123456789abcdef0123456789abcdef01"
@@ -213,8 +234,9 @@ func TestPasswordResetService_ValidateToken(t *testing.T) {
 	t.Run("returns error for empty token", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		resultPlayerID, err := svc.ValidateToken(ctx, "")
@@ -226,8 +248,9 @@ func TestPasswordResetService_ValidateToken(t *testing.T) {
 	t.Run("propagates repository errors", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		token := "sometoken0123456789abcdef0123456789abcdef0123456789abcdef01"
@@ -247,8 +270,9 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 	t.Run("resets password with valid token", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		// Generate a real token
@@ -268,17 +292,21 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil)
 		hasher.On("Hash", newPassword).Return(hashedPassword, nil)
 		playerRepo.On("UpdatePassword", ctx, playerID, hashedPassword).Return(nil)
+		sessionRepo.On("DeleteByPlayer", ctx, playerID).Return(nil)
 		resetRepo.On("DeleteByPlayer", ctx, playerID).Return(nil)
 
 		err = svc.ResetPassword(ctx, token, newPassword)
 		require.NoError(t, err)
+
+		sessionRepo.AssertExpectations(t)
 	})
 
 	t.Run("returns error for invalid token", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		token := "invalidtoken0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -294,8 +322,9 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 	t.Run("returns error for expired token", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		// Generate a real token
@@ -321,8 +350,9 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 	t.Run("returns error for empty password", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		// Empty password should fail before token validation
@@ -338,8 +368,9 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 	t.Run("propagates hasher errors", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		// Generate a real token
@@ -366,8 +397,9 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 	t.Run("propagates player update errors", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		// Generate a real token
@@ -397,8 +429,9 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		// Password was updated, so even if deletion fails, the reset is complete
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		// Generate a real token
@@ -418,10 +451,10 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil)
 		hasher.On("Hash", newPassword).Return(hashedPassword, nil)
 		playerRepo.On("UpdatePassword", ctx, playerID, hashedPassword).Return(nil)
+		sessionRepo.On("DeleteByPlayer", ctx, playerID).Return(nil)
 		resetRepo.On("DeleteByPlayer", ctx, playerID).Return(assert.AnError)
 
 		// Password was updated successfully, so we return success even if token cleanup fails
-		// This is a design choice - the main operation succeeded
 		err = svc.ResetPassword(ctx, token, newPassword)
 		require.NoError(t, err)
 	})
@@ -429,8 +462,9 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 	t.Run("token cannot be reused after successful reset", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
 		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, hasher)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
 		require.NoError(t, err)
 
 		// Generate a real token
@@ -452,6 +486,7 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil).Once()
 		hasher.On("Hash", newPassword1).Return(hashedPassword, nil)
 		playerRepo.On("UpdatePassword", ctx, playerID, hashedPassword).Return(nil)
+		sessionRepo.On("DeleteByPlayer", ctx, playerID).Return(nil)
 		resetRepo.On("DeleteByPlayer", ctx, playerID).Return(nil)
 
 		err = svc.ResetPassword(ctx, token, newPassword1)
@@ -463,5 +498,77 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		err = svc.ResetPassword(ctx, token, newPassword2)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "RESET_TOKEN_INVALID")
+	})
+}
+
+func TestPasswordResetService_ResetPassword_InvalidatesSessions(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("DeleteByPlayer called on sessions after password update", func(t *testing.T) {
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
+		require.NoError(t, err)
+
+		token, tokenHash, err := auth.GenerateResetToken()
+		require.NoError(t, err)
+
+		playerID := ulid.Make()
+		reset := &auth.PasswordReset{
+			ID:        ulid.Make(),
+			PlayerID:  playerID,
+			TokenHash: tokenHash,
+			ExpiresAt: time.Now().Add(time.Hour),
+		}
+		newPassword := "newSecurePassword123"
+		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash"
+
+		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil)
+		hasher.On("Hash", newPassword).Return(hashedPassword, nil)
+		playerRepo.On("UpdatePassword", ctx, playerID, hashedPassword).Return(nil)
+		// Expect session invalidation with the correct playerID
+		sessionRepo.On("DeleteByPlayer", ctx, playerID).Return(nil)
+		resetRepo.On("DeleteByPlayer", ctx, playerID).Return(nil)
+
+		err = svc.ResetPassword(ctx, token, newPassword)
+		require.NoError(t, err)
+
+		// Verify DeleteByPlayer was called on the session repo
+		sessionRepo.AssertCalled(t, "DeleteByPlayer", ctx, playerID)
+	})
+
+	t.Run("session invalidation failure is best-effort and does not fail reset", func(t *testing.T) {
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockWebSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
+		require.NoError(t, err)
+
+		token, tokenHash, err := auth.GenerateResetToken()
+		require.NoError(t, err)
+
+		playerID := ulid.Make()
+		reset := &auth.PasswordReset{
+			ID:        ulid.Make(),
+			PlayerID:  playerID,
+			TokenHash: tokenHash,
+			ExpiresAt: time.Now().Add(time.Hour),
+		}
+		newPassword := "newSecurePassword123"
+		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash"
+
+		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil)
+		hasher.On("Hash", newPassword).Return(hashedPassword, nil)
+		playerRepo.On("UpdatePassword", ctx, playerID, hashedPassword).Return(nil)
+		// Session invalidation fails
+		sessionRepo.On("DeleteByPlayer", ctx, playerID).Return(assert.AnError)
+		resetRepo.On("DeleteByPlayer", ctx, playerID).Return(nil)
+
+		// Reset should still succeed even though session invalidation failed
+		err = svc.ResetPassword(ctx, token, newPassword)
+		require.NoError(t, err)
 	})
 }

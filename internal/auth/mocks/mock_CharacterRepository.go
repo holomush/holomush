@@ -185,6 +185,65 @@ func (_c *MockCharacterRepository_ExistsByName_Call) RunAndReturn(run func(conte
 	return _c
 }
 
+// ListByPlayer provides a mock function with given fields: ctx, playerID
+func (_m *MockCharacterRepository) ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*world.Character, error) {
+	ret := _m.Called(ctx, playerID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListByPlayer")
+	}
+
+	var r0 []*world.Character
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) ([]*world.Character, error)); ok {
+		return rf(ctx, playerID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) []*world.Character); ok {
+		r0 = rf(ctx, playerID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*world.Character)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID) error); ok {
+		r1 = rf(ctx, playerID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockCharacterRepository_ListByPlayer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListByPlayer'
+type MockCharacterRepository_ListByPlayer_Call struct {
+	*mock.Call
+}
+
+// ListByPlayer is a helper method to define mock.On call
+//   - ctx context.Context
+//   - playerID ulid.ULID
+func (_e *MockCharacterRepository_Expecter) ListByPlayer(ctx interface{}, playerID interface{}) *MockCharacterRepository_ListByPlayer_Call {
+	return &MockCharacterRepository_ListByPlayer_Call{Call: _e.mock.On("ListByPlayer", ctx, playerID)}
+}
+
+func (_c *MockCharacterRepository_ListByPlayer_Call) Run(run func(ctx context.Context, playerID ulid.ULID)) *MockCharacterRepository_ListByPlayer_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(ulid.ULID))
+	})
+	return _c
+}
+
+func (_c *MockCharacterRepository_ListByPlayer_Call) Return(_a0 []*world.Character, _a1 error) *MockCharacterRepository_ListByPlayer_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockCharacterRepository_ListByPlayer_Call) RunAndReturn(run func(context.Context, ulid.ULID) ([]*world.Character, error)) *MockCharacterRepository_ListByPlayer_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewMockCharacterRepository creates a new instance of MockCharacterRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockCharacterRepository(t interface {
