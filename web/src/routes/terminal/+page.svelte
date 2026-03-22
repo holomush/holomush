@@ -179,6 +179,7 @@
     <StatusBar
       {characterName}
       {connected}
+      syncing={$replayActive}
       onToggleSidebar={toggleSidebar}
       showHamburger={isMobile}
     />

@@ -8,12 +8,13 @@
   interface Props {
     characterName: string;
     connected: boolean;
+    syncing?: boolean;
     onToggleSidebar: () => void;
     onOpenSettings?: () => void;
     showHamburger?: boolean;
   }
 
-  let { characterName, connected, onToggleSidebar, onOpenSettings, showHamburger = false }: Props = $props();
+  let { characterName, connected, onToggleSidebar, onOpenSettings, showHamburger = false, syncing = false }: Props = $props();
 </script>
 
 <div class="status-bar">
@@ -26,8 +27,8 @@
     {/if}
   </div>
   <div class="right">
-    <span class="connection" class:connected class:disconnected={!connected}>
-      {connected ? 'Connected' : 'Disconnected'}
+    <span class="connection" class:connected={connected && !syncing} class:syncing class:disconnected={!connected}>
+      {#if !connected}Disconnected{:else if syncing}Syncing…{:else}Connected{/if}
     </span>
     {#if showHamburger}
       <button class="icon-btn" onclick={onToggleSidebar} title="Toggle sidebar">&#9776;</button>
@@ -54,6 +55,7 @@
   .character { color: var(--color-pose-actor); }
   .loc { color: var(--color-status-text); font-size: 10px; }
   .connected { color: var(--color-status-text); }
+  .syncing { color: var(--color-pose-actor); }
   .disconnected { color: var(--color-system); }
   .icon-btn {
     background: none;
