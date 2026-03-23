@@ -117,6 +117,7 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 	sessions, err := exec.Services().Session().ListActive(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "boot: failed to list active sessions", "error", err)
+		//nolint:wrapcheck // WorldError creates a structured oops error
 		return ulid.ULID{}, "", command.WorldError("Unable to search for player due to a system error. Please try again shortly.", err)
 	}
 

@@ -290,7 +290,7 @@ const (
 // ServicesConfig holds the dependencies for constructing a Services instance.
 type ServicesConfig struct {
 	World            WorldService             // world model queries and mutations
-	Session          session.SessionAccess    // session management
+	Session          session.Access           // session management
 	Engine           types.AccessPolicyEngine // ABAC policy engine for authorization
 	Events           core.EventStore          // event persistence
 	AliasCache       *AliasCache              // alias management (optional)
@@ -309,7 +309,7 @@ type ServicesConfig struct {
 // across all command executions.
 type Services struct {
 	world            WorldService             // world model queries and mutations
-	session          session.SessionAccess    // session management
+	session          session.Access           // session management
 	engine           types.AccessPolicyEngine // ABAC policy engine for authorization
 	events           core.EventStore          // event persistence
 	aliasCache       *AliasCache              // alias management (optional, for alias commands)
@@ -322,7 +322,7 @@ type Services struct {
 func (s *Services) World() WorldService { return s.world }
 
 // Session returns the session service for session management.
-func (s *Services) Session() session.SessionAccess { return s.session }
+func (s *Services) Session() session.Access { return s.session }
 
 // Engine returns the ABAC policy engine for authorization checks.
 func (s *Services) Engine() types.AccessPolicyEngine { return s.engine }

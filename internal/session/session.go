@@ -93,9 +93,9 @@ type Event struct {
 	Message string
 }
 
-// SessionAccess provides session operations for command handlers.
+// Access provides session operations for command handlers.
 // This is a narrow subset of Store — only what handlers need.
-type SessionAccess interface {
+type Access interface {
 	// ListActive returns all sessions with status=active.
 	ListActive(ctx context.Context) ([]*Info, error)
 

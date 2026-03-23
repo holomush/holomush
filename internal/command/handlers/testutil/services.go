@@ -17,16 +17,18 @@ import (
 	"github.com/holomush/holomush/internal/world"
 )
 
-// defaultSessionAccess is a no-op implementation of session.SessionAccess for test defaults.
-type defaultSessionAccess struct{}
+// defaultAccess is a no-op implementation of session.Access for test defaults.
+type defaultAccess struct{}
 
-func (d *defaultSessionAccess) ListActive(_ context.Context) ([]*session.Info, error) {
+func (d *defaultAccess) ListActive(_ context.Context) ([]*session.Info, error) {
 	return nil, nil
 }
-func (d *defaultSessionAccess) FindByCharacter(_ context.Context, _ ulid.ULID) (*session.Info, error) {
+
+func (d *defaultAccess) FindByCharacter(_ context.Context, _ ulid.ULID) (*session.Info, error) {
 	return nil, nil
 }
-func (d *defaultSessionAccess) DeleteByCharacter(_ context.Context, _ ulid.ULID, _ string) (*session.Info, error) {
+
+func (d *defaultAccess) DeleteByCharacter(_ context.Context, _ ulid.ULID, _ string) (*session.Info, error) {
 	return nil, nil
 }
 
@@ -39,7 +41,7 @@ type ServicesBuilder struct {
 func NewServicesBuilder() *ServicesBuilder {
 	return &ServicesBuilder{
 		config: command.ServicesConfig{
-			Session: &defaultSessionAccess{},
+			Session: &defaultAccess{},
 			Engine:  policytest.AllowAllEngine(),
 			Events:  core.NewMemoryEventStore(),
 		},
@@ -61,8 +63,8 @@ func (b *ServicesBuilder) WithWorldFixture(fixture *WorldServiceFixture) *Servic
 }
 
 // WithSession sets the session access dependency.
-func (b *ServicesBuilder) WithSession(session session.SessionAccess) *ServicesBuilder {
-	b.config.Session = session
+func (b *ServicesBuilder) WithSession(sa session.Access) *ServicesBuilder {
+	b.config.Session = sa
 	return b
 }
 

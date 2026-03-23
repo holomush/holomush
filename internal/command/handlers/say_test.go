@@ -20,10 +20,10 @@ import (
 
 func TestSayHandler(t *testing.T) {
 	tests := []struct {
-		name         string
-		args         string
-		appendErr    error
-		wantErr      bool
+		name          string
+		args          string
+		appendErr     error
+		wantErr       bool
 		wantEventType core.EventType
 	}{
 		{

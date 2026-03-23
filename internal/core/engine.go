@@ -143,4 +143,3 @@ func (e *Engine) HandleDisconnect(ctx context.Context, char CharacterRef, reason
 
 	return nil
 }
-

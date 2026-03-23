@@ -726,6 +726,7 @@ if _, err := exec.Services().Session().DeleteByCharacter(ctx, targetCharID, form
 ```
 
 The current flow is:
+
 1. Notify target (system message, line 62)
 2. EndSession (line 65)
 3. Log admin boot (line 72)
@@ -864,6 +865,7 @@ jj new
 - [ ] **Step 1: Write test for quit sentinel detection**
 
 Add a test that:
+
 1. Creates a CoreServer with a dispatcher that has a quit handler returning `ErrSessionEnded`
 2. Calls `HandleCommand` with "quit"
 3. Verifies the command response event contains "Goodbye!"
@@ -922,6 +924,7 @@ There are 3 call sites (lines 205, 257, and server.go:285). Remove each `s.sessi
 - [ ] **Step 4: Remove `s.sessions.Disconnect()` calls in `server.go`**
 
 Remove from:
+
 - `executeViaSwitch` quit path (line 528): `s.sessions.Disconnect(info.CharacterID, ulid.ULID{})`
 - Disconnect RPC guest path (line 977): `s.sessions.Disconnect(info.CharacterID, ulid.ULID{})`
 - Disconnect RPC detach path (line 1004): `s.sessions.Disconnect(info.CharacterID, ulid.ULID{})`
@@ -1004,6 +1007,7 @@ Delete the entire `ReplayEvents` method (lines 150-162).
 - [ ] **Step 4: Update engine tests**
 
 In `engine_test.go`:
+
 - Remove `TestEngine_ReplayEvents`, `TestEngine_ReplayEvents_WithCursor`, `TestEngine_ReplayEvents_StoreError`
 - Update all `NewEngine(store, sessions)` calls to `NewEngine(store)` — remove the `sessions` argument
 
@@ -1031,6 +1035,7 @@ jj new
 - [ ] **Step 1: Delete `internal/core/session.go`**
 
 Remove the entire file. It contains:
+
 - `Session` struct
 - `SessionService` interface
 - `copySession` helper
@@ -1161,6 +1166,7 @@ rg "core\.NewSessionManager\(\)|core\.NewEngine\(.*sessions" test/ --type go -n
 - [ ] **Step 2: Update each file**
 
 For each file:
+
 - Remove `sessions := core.NewSessionManager()` (or equivalent)
 - Change `core.NewEngine(store, sessions)` to `core.NewEngine(store)`
 - Change `NewCoreServer(engine, sessions, sessionStore, ...)` to `NewCoreServer(engine, sessionStore, ...)`

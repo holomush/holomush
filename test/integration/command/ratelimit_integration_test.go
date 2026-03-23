@@ -41,9 +41,11 @@ type stubSessionService struct{}
 func (s *stubSessionService) ListActive(_ context.Context) ([]*session.Info, error) {
 	return nil, nil
 }
+
 func (s *stubSessionService) FindByCharacter(_ context.Context, _ ulid.ULID) (*session.Info, error) {
 	return nil, nil
 }
+
 func (s *stubSessionService) DeleteByCharacter(_ context.Context, _ ulid.ULID, _ string) (*session.Info, error) {
 	return nil, nil
 }

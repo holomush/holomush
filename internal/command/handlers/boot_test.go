@@ -764,7 +764,7 @@ func TestBootHandler_EndSessionError(t *testing.T) {
 	targetID := ulid.Make()
 	playerID := ulid.Make()
 
-	mockSession := &errorOnDeleteSessionAccess{
+	mockSession := &errorOnDeleteAccess{
 		MockSessionAccess: testutil.NewMockSessionAccess(
 			&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
 			&session.Info{ID: ulid.Make().String(), CharacterID: targetID, Status: session.StatusActive},
@@ -831,13 +831,13 @@ func TestBootHandler_EndSessionError(t *testing.T) {
 	assert.Contains(t, fmt.Sprint(oopsErr.Context()["message"]), "Unable to boot player")
 }
 
-// errorOnDeleteSessionAccess wraps a MockSessionAccess but fails DeleteByCharacter for a specific target.
-type errorOnDeleteSessionAccess struct {
+// errorOnDeleteAccess wraps a MockSessionAccess but fails DeleteByCharacter for a specific target.
+type errorOnDeleteAccess struct {
 	*testutil.MockSessionAccess
 	targetCharID ulid.ULID
 }
 
-func (m *errorOnDeleteSessionAccess) DeleteByCharacter(ctx context.Context, charID ulid.ULID, reason string) (*session.Info, error) {
+func (m *errorOnDeleteAccess) DeleteByCharacter(ctx context.Context, charID ulid.ULID, reason string) (*session.Info, error) {
 	if charID == m.targetCharID {
 		return nil, oops.Code("SESSION_NOT_FOUND").Errorf("session not found")
 	}

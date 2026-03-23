@@ -253,7 +253,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 	// Build ABAC engine stack (requires PostgresEventStore for pool access).
 	// In test mode with mock stores, ABAC wiring is skipped.
-	var worldService *world.Service            // hoisted so it's available to CoreServer constructor
+	var worldService *world.Service           // hoisted so it's available to CoreServer constructor
 	var policyEngine types.AccessPolicyEngine // hoisted for command dispatcher wiring
 	// Auth service variables hoisted so they're available in the CoreServer constructor block.
 	var authService *auth.Service

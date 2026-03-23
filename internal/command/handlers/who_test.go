@@ -892,7 +892,7 @@ func TestWhoHandler_TwoCumulativeEngineErrorsBelowThreshold(t *testing.T) {
 	// Create sessions: 3 will succeed, 2 will fail with engine errors.
 	successIDs := make([]ulid.ULID, 3)
 	failIDs := make([]ulid.ULID, 2)
-	var sessInfos []*session.Info
+	sessInfos := make([]*session.Info, 0, len(successIDs)+len(failIDs))
 	for i := range successIDs {
 		successIDs[i] = ulid.Make()
 		sessInfos = append(sessInfos, &session.Info{ID: ulid.Make().String(), CharacterID: successIDs[i], Status: session.StatusActive, UpdatedAt: time.Now()})
@@ -1106,7 +1106,7 @@ func TestWhoHandler_MixedErrorsStillTripCircuitBreaker(t *testing.T) {
 	// Create 6 sessions: 4 will fail with engine errors, 2 with DB errors.
 	engineFailIDs := make([]ulid.ULID, 4)
 	dbFailIDs := make([]ulid.ULID, 2)
-	var sessInfos []*session.Info
+	sessInfos := make([]*session.Info, 0, len(engineFailIDs)+len(dbFailIDs))
 	for i := range engineFailIDs {
 		engineFailIDs[i] = ulid.Make()
 		sessInfos = append(sessInfos, &session.Info{ID: ulid.Make().String(), CharacterID: engineFailIDs[i], Status: session.StatusActive, UpdatedAt: time.Now()})

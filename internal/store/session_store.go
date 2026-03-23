@@ -33,8 +33,10 @@ func NewPostgresSessionStore(pool poolIface) *PostgresSessionStore {
 }
 
 // compile-time checks
-var _ session.Store = (*PostgresSessionStore)(nil)
-var _ session.SessionAccess = (*PostgresSessionStore)(nil)
+var (
+	_ session.Store  = (*PostgresSessionStore)(nil)
+	_ session.Access = (*PostgresSessionStore)(nil)
+)
 
 const sessionSelectColumns = `id, character_id, character_name, location_id,
 	is_guest, status, grid_present, event_cursors,

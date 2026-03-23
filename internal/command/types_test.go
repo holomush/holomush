@@ -73,7 +73,7 @@ func TestServices_HasAllDependencies(t *testing.T) {
 func TestNewServices_NilWorld_ReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
 		World:   nil,
-		Session: &mockSessionAccess{},
+		Session: &mockAccess{},
 		Engine:  &mockEngine{},
 		Events:  &mockEventStore{},
 	})
@@ -95,7 +95,7 @@ func TestNewServices_NilSession_ReturnsError(t *testing.T) {
 func TestNewServices_NilEngine_ReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
 		World:   &world.Service{},
-		Session: &mockSessionAccess{},
+		Session: &mockAccess{},
 		Engine:  nil,
 		Events:  &mockEventStore{},
 	})
@@ -106,7 +106,7 @@ func TestNewServices_NilEngine_ReturnsError(t *testing.T) {
 func TestNewServices_NilEvents_ReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
 		World:   &world.Service{},
-		Session: &mockSessionAccess{},
+		Session: &mockAccess{},
 		Engine:  &mockEngine{},
 		Events:  nil,
 	})
@@ -116,7 +116,7 @@ func TestNewServices_NilEvents_ReturnsError(t *testing.T) {
 
 func TestNewServices_AllValid_ReturnsServices(t *testing.T) {
 	worldSvc := &world.Service{}
-	sessionSvc := &mockSessionAccess{}
+	sessionSvc := &mockAccess{}
 	engine := &mockEngine{}
 	eventStore := &mockEventStore{}
 
@@ -147,15 +147,17 @@ func TestNewServices_MultipleNil_ReturnsFirstError(t *testing.T) {
 }
 
 // Mock types for testing
-type mockSessionAccess struct{}
+type mockAccess struct{}
 
-func (m *mockSessionAccess) ListActive(_ context.Context) ([]*session.Info, error) {
+func (m *mockAccess) ListActive(_ context.Context) ([]*session.Info, error) {
 	return nil, nil
 }
-func (m *mockSessionAccess) FindByCharacter(_ context.Context, _ ulid.ULID) (*session.Info, error) {
+
+func (m *mockAccess) FindByCharacter(_ context.Context, _ ulid.ULID) (*session.Info, error) {
 	return nil, nil
 }
-func (m *mockSessionAccess) DeleteByCharacter(_ context.Context, _ ulid.ULID, _ string) (*session.Info, error) {
+
+func (m *mockAccess) DeleteByCharacter(_ context.Context, _ ulid.ULID, _ string) (*session.Info, error) {
 	return nil, nil
 }
 

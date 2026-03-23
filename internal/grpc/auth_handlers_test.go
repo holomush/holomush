@@ -53,7 +53,7 @@ func TestAuthenticatePlayer_Success(t *testing.T) {
 	sessionStore := session.NewMemStore()
 
 	server := &CoreServer{
-		engine:          core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		sessionStore:    sessionStore,
 		authService:     authSvc,
@@ -84,7 +84,7 @@ func TestAuthenticatePlayer_InvalidCredentials(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		sessionStore: session.NewMemStore(),
 		authService:  authSvc,
@@ -104,7 +104,7 @@ func TestAuthenticatePlayer_ServiceNotConfigured(t *testing.T) {
 	ctx := context.Background()
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		sessionStore: session.NewMemStore(),
 		// authService is nil
@@ -179,7 +179,7 @@ func TestSelectCharacter_ExpiredToken(t *testing.T) {
 		}, nil)
 
 	server := &CoreServer{
-		engine:          core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		sessionStore:    session.NewMemStore(),
 		playerTokenRepo: tokenRepo,
@@ -216,7 +216,7 @@ func TestSelectCharacter_InvalidCharacter(t *testing.T) {
 		}, nil)
 
 	server := &CoreServer{
-		engine:          core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		sessionStore:    session.NewMemStore(),
 		playerTokenRepo: tokenRepo,
@@ -307,7 +307,7 @@ func TestCreatePlayer_Success(t *testing.T) {
 	tokenRepo.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.PlayerToken")).Return(nil)
 
 	server := &CoreServer{
-		engine:          core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		sessionStore:    session.NewMemStore(),
 		authService:     authSvc,
@@ -335,7 +335,7 @@ func TestCreatePlayer_UsernameTaken(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		sessionStore: session.NewMemStore(),
 		authService:  authSvc,
@@ -355,7 +355,7 @@ func TestCreatePlayer_ServiceNotConfigured(t *testing.T) {
 	ctx := context.Background()
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		sessionStore: session.NewMemStore(),
 	}
@@ -433,8 +433,8 @@ func TestCreateCharacter_ExpiredToken(t *testing.T) {
 		}, nil)
 
 	server := &CoreServer{
-		engine:          core.NewEngine(core.NewMemoryEventStore()),
-		playerTokenRepo: tokenRepo,
+		engine:           core.NewEngine(core.NewMemoryEventStore()),
+		playerTokenRepo:  tokenRepo,
 		characterService: nil, // token expires before reaching service
 	}
 	resp, err := server.CreateCharacter(context.Background(), &corev1.CreateCharacterRequest{
@@ -469,7 +469,7 @@ func TestListCharacters_ExpiredToken(t *testing.T) {
 		}, nil)
 
 	server := &CoreServer{
-		engine:          core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		playerTokenRepo: tokenRepo,
 	}
@@ -501,7 +501,7 @@ func TestListCharacters_Success(t *testing.T) {
 		}, nil)
 
 	server := &CoreServer{
-		engine:          core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		sessionStore:    session.NewMemStore(),
 		playerTokenRepo: tokenRepo,
@@ -529,7 +529,7 @@ func TestRequestPasswordReset_AlwaysSuccess(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		sessionStore: session.NewMemStore(),
 		resetService: resetSvc,
@@ -547,7 +547,7 @@ func TestRequestPasswordReset_NotConfigured(t *testing.T) {
 	ctx := context.Background()
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		sessionStore: session.NewMemStore(),
 	}
@@ -574,7 +574,7 @@ func TestConfirmPasswordReset_Success(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		sessionStore: session.NewMemStore(),
 		resetService: resetSvc,
@@ -598,7 +598,7 @@ func TestConfirmPasswordReset_InvalidToken(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		sessionStore: session.NewMemStore(),
 		resetService: resetSvc,
@@ -627,7 +627,7 @@ func TestLogout_Success(t *testing.T) {
 	}
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		sessionStore: session.NewMemStore(),
 		authService:  authSvc,
@@ -644,7 +644,7 @@ func TestLogout_InvalidSessionID(t *testing.T) {
 	ctx := context.Background()
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		sessionStore: session.NewMemStore(),
 		authService:  newMockAuthService(t),
@@ -661,7 +661,7 @@ func TestLogout_NotConfigured(t *testing.T) {
 	ctx := context.Background()
 
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore()),
+		engine: core.NewEngine(core.NewMemoryEventStore()),
 
 		sessionStore: session.NewMemStore(),
 	}

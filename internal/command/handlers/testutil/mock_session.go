@@ -13,7 +13,7 @@ import (
 	"github.com/holomush/holomush/internal/session"
 )
 
-// MockSessionAccess implements session.SessionAccess for handler tests.
+// MockSessionAccess implements session.Access for handler tests.
 type MockSessionAccess struct {
 	mu       sync.Mutex
 	Sessions []*session.Info

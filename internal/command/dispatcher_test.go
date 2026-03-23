@@ -34,7 +34,7 @@ import (
 func stubServices() *Services {
 	svc, _ := NewServices(ServicesConfig{
 		World:   &world.Service{},
-		Session: &stubSessionAccess{},
+		Session: &stubAccess{},
 		Engine:  policytest.AllowAllEngine(),
 		Events:  &stubEventStore{},
 	})
@@ -42,15 +42,17 @@ func stubServices() *Services {
 }
 
 // Stub types for dispatcher tests - minimal implementations that satisfy interfaces
-type stubSessionAccess struct{}
+type stubAccess struct{}
 
-func (s *stubSessionAccess) ListActive(_ context.Context) ([]*session.Info, error) {
+func (s *stubAccess) ListActive(_ context.Context) ([]*session.Info, error) {
 	return nil, nil
 }
-func (s *stubSessionAccess) FindByCharacter(_ context.Context, _ ulid.ULID) (*session.Info, error) {
+
+func (s *stubAccess) FindByCharacter(_ context.Context, _ ulid.ULID) (*session.Info, error) {
 	return nil, nil
 }
-func (s *stubSessionAccess) DeleteByCharacter(_ context.Context, _ ulid.ULID, _ string) (*session.Info, error) {
+
+func (s *stubAccess) DeleteByCharacter(_ context.Context, _ ulid.ULID, _ string) (*session.Info, error) {
 	return nil, nil
 }
 

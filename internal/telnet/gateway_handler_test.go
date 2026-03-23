@@ -35,12 +35,12 @@ type mockCoreClient struct {
 	authResp *corev1.AuthenticateResponse
 	authErr  error
 
-	authPlayerResp  *corev1.AuthenticatePlayerResponse
-	authPlayerErr   error
+	authPlayerResp    *corev1.AuthenticatePlayerResponse
+	authPlayerErr     error
 	lastAuthPlayerReq *corev1.AuthenticatePlayerRequest
 
-	selectCharResp  *corev1.SelectCharacterResponse
-	selectCharErr   error
+	selectCharResp    *corev1.SelectCharacterResponse
+	selectCharErr     error
 	lastSelectCharReq *corev1.SelectCharacterRequest
 
 	createCharResp *corev1.CreateCharacterResponse

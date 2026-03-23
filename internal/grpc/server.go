@@ -101,8 +101,8 @@ type WorldQuerier interface {
 type CoreServer struct {
 	corev1.UnimplementedCoreServiceServer
 
-	engine        *core.Engine
-	authenticator Authenticator
+	engine          *core.Engine
+	authenticator   Authenticator
 	sessionStore    session.Store
 	eventStore      core.EventStore
 	worldQuerier    WorldQuerier
