@@ -12,15 +12,9 @@ import (
 )
 
 // QuitHandler ends the character's session gracefully.
+// It returns ErrSessionEnded so the gRPC layer can perform teardown
+// (leave event, PG delete, hooks).
 func QuitHandler(ctx context.Context, exec *command.CommandExecution) error {
-	// Output write errors are logged but don't fail the command - the session end will proceed
 	writeOutput(ctx, exec, "quit", "Goodbye!")
-
-	if err := exec.Services().Session().EndSession(exec.CharacterID()); err != nil {
-		return oops.Code(command.CodeWorldError).
-			With("message", "Unable to end session. Please try again.").
-			Wrap(err)
-	}
-
-	return nil
+	return oops.Code("SESSION_ENDED").Wrap(command.ErrSessionEnded)
 }

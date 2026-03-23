@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -18,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers/testutil"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/session"
 )
 
 func TestWallHandler_InvalidArgs(t *testing.T) {
@@ -59,10 +61,11 @@ func TestWallHandler_Success_BroadcastsToAllSessions(t *testing.T) {
 	targetID2 := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, ulid.Make())
-	sessionMgr.Connect(targetID1, ulid.Make())
-	sessionMgr.Connect(targetID2, ulid.Make())
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: targetID1, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: targetID2, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
@@ -77,7 +80,7 @@ func TestWallHandler_Success_BroadcastsToAllSessions(t *testing.T) {
 		Args:          "Server going down in 5 minutes",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSA,
 			Engine:  accessControl,
 			Events:  store,
 		}),
@@ -109,8 +112,9 @@ func TestWallHandler_Success_SingleSession(t *testing.T) {
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, ulid.Make())
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
@@ -125,7 +129,7 @@ func TestWallHandler_Success_SingleSession(t *testing.T) {
 		Args:          "Test message",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSA,
 			Engine:  accessControl,
 			Events:  store,
 		}),
@@ -153,8 +157,7 @@ func TestWallHandler_Success_NoActiveSessions(t *testing.T) {
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	// No sessions connected
+	mockSA := testutil.NewMockSessionAccess()
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
@@ -169,7 +172,7 @@ func TestWallHandler_Success_NoActiveSessions(t *testing.T) {
 		Args:          "Nobody will hear this",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSA,
 			Engine:  accessControl,
 			Events:  store,
 		}),
@@ -188,8 +191,9 @@ func TestWallHandler_MessageFormat(t *testing.T) {
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, ulid.Make())
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
@@ -204,7 +208,7 @@ func TestWallHandler_MessageFormat(t *testing.T) {
 		Args:          "Important announcement",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSA,
 			Engine:  accessControl,
 			Events:  store,
 		}),
@@ -226,8 +230,9 @@ func TestWallHandler_ActorIsSystem(t *testing.T) {
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, ulid.Make())
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
@@ -242,7 +247,7 @@ func TestWallHandler_ActorIsSystem(t *testing.T) {
 		Args:          "Test",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSA,
 			Engine:  accessControl,
 			Events:  store,
 		}),
@@ -268,8 +273,9 @@ func TestWallHandler_LogsAdminAction(t *testing.T) {
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, ulid.Make())
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
@@ -284,7 +290,7 @@ func TestWallHandler_LogsAdminAction(t *testing.T) {
 		Args:          "Logged message",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSA,
 			Engine:  accessControl,
 			Events:  store,
 		}),
@@ -302,8 +308,9 @@ func TestWallHandler_NilEvents_IsNoOp(t *testing.T) {
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, ulid.Make())
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
@@ -316,7 +323,7 @@ func TestWallHandler_NilEvents_IsNoOp(t *testing.T) {
 		Args:          "Test",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSA,
 			Engine:  accessControl,
 			// Events is nil
 		}),
@@ -336,8 +343,9 @@ func TestWallHandler_PreservesMessageWhitespace(t *testing.T) {
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, ulid.Make())
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
@@ -352,7 +360,7 @@ func TestWallHandler_PreservesMessageWhitespace(t *testing.T) {
 		Args:          "  Message with   extra   spaces  ",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSA,
 			Engine:  accessControl,
 			Events:  store,
 		}),
@@ -374,8 +382,9 @@ func TestWallHandler_UrgencyInfo(t *testing.T) {
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, ulid.Make())
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
@@ -390,7 +399,7 @@ func TestWallHandler_UrgencyInfo(t *testing.T) {
 		Args:          "info Test message",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSA,
 			Engine:  accessControl,
 			Events:  store,
 		}),
@@ -412,8 +421,9 @@ func TestWallHandler_UrgencyWarning(t *testing.T) {
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, ulid.Make())
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
@@ -428,7 +438,7 @@ func TestWallHandler_UrgencyWarning(t *testing.T) {
 		Args:          "warning Server maintenance soon",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSA,
 			Engine:  accessControl,
 			Events:  store,
 		}),
@@ -450,8 +460,9 @@ func TestWallHandler_UrgencyCritical(t *testing.T) {
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, ulid.Make())
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
@@ -466,7 +477,7 @@ func TestWallHandler_UrgencyCritical(t *testing.T) {
 		Args:          "critical EMERGENCY: Server going down NOW",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSA,
 			Engine:  accessControl,
 			Events:  store,
 		}),
@@ -488,8 +499,9 @@ func TestWallHandler_UrgencyShorthand(t *testing.T) {
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, ulid.Make())
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
@@ -504,7 +516,7 @@ func TestWallHandler_UrgencyShorthand(t *testing.T) {
 		Args:          "crit Database issue detected",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSA,
 			Engine:  accessControl,
 			Events:  store,
 		}),
@@ -526,8 +538,9 @@ func TestWallHandler_DefaultUrgency(t *testing.T) {
 	executorID := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, ulid.Make())
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	accessControl := policytest.NewGrantEngine()
 	accessControl.Grant(access.SubjectCharacter+executorID.String(), "execute", "admin.wall")
@@ -542,7 +555,7 @@ func TestWallHandler_DefaultUrgency(t *testing.T) {
 		Args:          "Hello everyone", // No urgency prefix, defaults to info
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSA,
 			Engine:  accessControl,
 			Events:  store,
 		}),

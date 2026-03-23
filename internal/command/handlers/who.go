@@ -33,7 +33,12 @@ type playerInfo struct {
 
 // WhoHandler displays a list of connected players with idle times.
 func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
-	sessions := exec.Services().Session().ListActiveSessions()
+	sessions, err := exec.Services().Session().ListActive(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "who: failed to list active sessions", "error", err)
+		writeOutput(ctx, exec, "who", "Unable to retrieve player list. Please try again.")
+		return nil
+	}
 
 	if len(sessions) == 0 {
 		if n, err := writeWhoOutput(exec.Output(), nil); err != nil {
@@ -51,7 +56,7 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	var engineErrorCount int
 	var permDeniedCount int
 	var skippedCount int
-	for i, session := range sessions {
+	for i, sess := range sessions {
 		// Circuit breaker: stop querying if the engine is consistently failing.
 		// Track skipped sessions separately from actual errors for accurate messaging.
 		if engineErrorCount >= maxEngineErrors {
@@ -66,7 +71,7 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 		}
 
 		// Try to get character info - skip if not accessible
-		char, err := exec.Services().World().GetCharacter(ctx, subjectID, session.CharacterID)
+		char, err := exec.Services().World().GetCharacter(ctx, subjectID, sess.CharacterID)
 		if err != nil {
 			// Skip expected errors (not found, permission denied)
 			// - permission denied and not found are expected, don't log or count
@@ -86,13 +91,13 @@ func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 			}
 			// Log unexpected errors (database failures, timeouts, etc.) but continue
 			slog.ErrorContext(ctx, "unexpected error looking up character in who list",
-				"session_char_id", session.CharacterID.String(),
+				"session_char_id", sess.CharacterID.String(),
 				"error", err,
 			)
 			errorCount++
 			continue
 		}
-		idleTime := now.Sub(session.LastActivity)
+		idleTime := now.Sub(sess.UpdatedAt)
 		players = append(players, playerInfo{
 			Name:     char.Name,
 			IdleTime: idleTime,

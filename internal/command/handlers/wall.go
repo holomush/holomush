@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/samber/oops"
+
 	"github.com/holomush/holomush/internal/command"
 )
 
@@ -48,7 +50,13 @@ func WallHandler(ctx context.Context, exec *command.CommandExecution) error {
 	}
 
 	// Get all active sessions
-	sessions := exec.Services().Session().ListActiveSessions()
+	sessions, err := exec.Services().Session().ListActive(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "wall: failed to list active sessions", "error", err)
+		return oops.Code(command.CodeWorldError).
+			With("message", "Unable to broadcast message. Please try again.").
+			Wrap(err)
+	}
 
 	// Format the announcement message
 	prefix := urgencyPrefixes[urgency]
@@ -64,8 +72,8 @@ func WallHandler(ctx context.Context, exec *command.CommandExecution) error {
 	)
 
 	// Broadcast to all sessions
-	for _, session := range sessions {
-		stream := "session:" + session.CharacterID.String()
+	for _, sess := range sessions {
+		stream := "session:" + sess.CharacterID.String()
 		exec.Services().BroadcastSystemMessage(ctx, stream, announcement)
 	}
 

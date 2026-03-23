@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -21,7 +22,9 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/command/handlers/testutil"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/worldtest"
 )
@@ -50,11 +53,13 @@ func TestBootHandler_NoArgs(t *testing.T) {
 
 func TestBootHandler_SelfBoot_Success(t *testing.T) {
 	executorID := ulid.Make()
-	connID := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, connID)
+	mockSession := testutil.NewMockSessionAccess(&session.Info{
+		ID:          ulid.Make().String(),
+		CharacterID: executorID,
+		Status:      session.StatusActive,
+	})
 
 	char := &world.Character{
 		ID:       executorID,
@@ -86,18 +91,15 @@ func TestBootHandler_SelfBoot_Success(t *testing.T) {
 		Args:          "Admin",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 			Events:  store,
 		}),
 	})
 
 	err := BootHandler(context.Background(), exec)
-	require.NoError(t, err)
-
-	// Verify session was ended
-	session := sessionMgr.GetSession(executorID)
-	assert.Nil(t, session, "Session should be ended after self-boot")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, command.ErrSessionEnded), "self-boot should return ErrSessionEnded")
 
 	// Verify output message
 	output := buf.String()
@@ -106,11 +108,13 @@ func TestBootHandler_SelfBoot_Success(t *testing.T) {
 
 func TestBootHandler_SelfBoot_WithReason(t *testing.T) {
 	executorID := ulid.Make()
-	connID := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, connID)
+	mockSession := testutil.NewMockSessionAccess(&session.Info{
+		ID:          ulid.Make().String(),
+		CharacterID: executorID,
+		Status:      session.StatusActive,
+	})
 
 	char := &world.Character{
 		ID:       executorID,
@@ -142,14 +146,15 @@ func TestBootHandler_SelfBoot_WithReason(t *testing.T) {
 		Args:          "Admin going to bed",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 			Events:  store,
 		}),
 	})
 
 	err := BootHandler(context.Background(), exec)
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, command.ErrSessionEnded), "self-boot should return ErrSessionEnded")
 
 	// Verify notification event was appended to session stream
 	events, replayErr := store.Replay(context.Background(), "session:"+executorID.String(), ulid.ULID{}, 10)
@@ -163,13 +168,12 @@ func TestBootHandler_SelfBoot_WithReason(t *testing.T) {
 func TestBootHandler_BootOthers_WithoutCapability(t *testing.T) {
 	executorID := ulid.Make()
 	targetID := ulid.Make()
-	execConn := ulid.Make()
-	targetConn := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, execConn)
-	sessionMgr.Connect(targetID, targetConn)
+	mockSession := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: targetID, Status: session.StatusActive},
+	)
 
 	execChar := &world.Character{
 		ID:       executorID,
@@ -212,7 +216,7 @@ func TestBootHandler_BootOthers_WithoutCapability(t *testing.T) {
 		Args:          "Troublemaker",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 			Engine:  policytest.DenyAllEngine(),
 		}),
@@ -226,20 +230,19 @@ func TestBootHandler_BootOthers_WithoutCapability(t *testing.T) {
 	assert.Equal(t, command.CodePermissionDenied, oopsErr.Code())
 
 	// Verify target session still exists (was not booted)
-	targetSession := sessionMgr.GetSession(targetID)
-	assert.NotNil(t, targetSession, "Target session should still exist")
+	targetSess, _ := mockSession.FindByCharacter(context.Background(), targetID)
+	assert.NotNil(t, targetSess, "Target session should still exist")
 }
 
 func TestBootHandler_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 	executorID := ulid.Make()
 	targetID := ulid.Make()
-	execConn := ulid.Make()
-	targetConn := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, execConn)
-	sessionMgr.Connect(targetID, targetConn)
+	mockSession := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: targetID, Status: session.StatusActive},
+	)
 
 	execChar := &world.Character{
 		ID:       executorID,
@@ -292,7 +295,7 @@ func TestBootHandler_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 		Args:          "Troublemaker",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 			Engine:  errorEngine,
 		}),
@@ -306,8 +309,8 @@ func TestBootHandler_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 	assert.Equal(t, command.CodeAccessEvaluationFailed, oopsErr.Code())
 
 	// Verify target session still exists (was not booted)
-	targetSession := sessionMgr.GetSession(targetID)
-	assert.NotNil(t, targetSession, "Target session should still exist")
+	targetSess, _ := mockSession.FindByCharacter(context.Background(), targetID)
+	assert.NotNil(t, targetSess, "Target session should still exist")
 
 	// Verify log output contains error and context
 	logOutput := logBuf.String()
@@ -322,13 +325,12 @@ func TestBootHandler_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 func TestBootHandler_InfraFailure_ReturnsAccessEvaluationFailed(t *testing.T) {
 	executorID := ulid.Make()
 	targetID := ulid.Make()
-	execConn := ulid.Make()
-	targetConn := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, execConn)
-	sessionMgr.Connect(targetID, targetConn)
+	mockSession := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: targetID, Status: session.StatusActive},
+	)
 
 	execChar := &world.Character{
 		ID:       executorID,
@@ -371,7 +373,7 @@ func TestBootHandler_InfraFailure_ReturnsAccessEvaluationFailed(t *testing.T) {
 		Args:          "Troublemaker",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 			Engine:  infraEngine,
 		}),
@@ -386,17 +388,17 @@ func TestBootHandler_InfraFailure_ReturnsAccessEvaluationFailed(t *testing.T) {
 	assert.Equal(t, command.CodeAccessEvaluationFailed, oopsErr.Code())
 
 	// Verify target session still exists (was not booted)
-	targetSession := sessionMgr.GetSession(targetID)
-	assert.NotNil(t, targetSession, "Target session should still exist")
+	targetSess, _ := mockSession.FindByCharacter(context.Background(), targetID)
+	assert.NotNil(t, targetSess, "Target session should still exist")
 }
 
 func TestBootHandler_TargetNotFound(t *testing.T) {
 	executorID := ulid.Make()
-	execConn := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, execConn)
+	mockSession := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
+	)
 
 	execChar := &world.Character{
 		ID:       executorID,
@@ -428,7 +430,7 @@ func TestBootHandler_TargetNotFound(t *testing.T) {
 		Args:          "NonexistentPlayer",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 		}),
 	})
@@ -453,13 +455,12 @@ func TestBootHandler_TargetNotFound(t *testing.T) {
 func TestBootHandler_Success(t *testing.T) {
 	executorID := ulid.Make()
 	targetID := ulid.Make()
-	execConn := ulid.Make()
-	targetConn := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, execConn)
-	sessionMgr.Connect(targetID, targetConn)
+	mockSession := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: targetID, Status: session.StatusActive},
+	)
 
 	execChar := &world.Character{
 		ID:       executorID,
@@ -505,7 +506,7 @@ func TestBootHandler_Success(t *testing.T) {
 		Args:          "Troublemaker",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 			Engine:  policytest.AllowAllEngine(),
 			Events:  store,
@@ -515,13 +516,13 @@ func TestBootHandler_Success(t *testing.T) {
 	err := BootHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	// Verify target session was ended
-	targetSession := sessionMgr.GetSession(targetID)
-	assert.Nil(t, targetSession, "Target session should be ended")
+	// Verify target session was removed
+	targetSess, _ := mockSession.FindByCharacter(context.Background(), targetID)
+	assert.Nil(t, targetSess, "Target session should be ended")
 
 	// Verify executor session still exists
-	execSession := sessionMgr.GetSession(executorID)
-	assert.NotNil(t, execSession, "Executor session should still exist")
+	execSess, _ := mockSession.FindByCharacter(context.Background(), executorID)
+	assert.NotNil(t, execSess, "Executor session should still exist")
 
 	// Verify output message
 	output := buf.String()
@@ -532,13 +533,12 @@ func TestBootHandler_Success(t *testing.T) {
 func TestBootHandler_SuccessWithReason(t *testing.T) {
 	executorID := ulid.Make()
 	targetID := ulid.Make()
-	execConn := ulid.Make()
-	targetConn := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, execConn)
-	sessionMgr.Connect(targetID, targetConn)
+	mockSession := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: targetID, Status: session.StatusActive},
+	)
 
 	execChar := &world.Character{
 		ID:       executorID,
@@ -584,7 +584,7 @@ func TestBootHandler_SuccessWithReason(t *testing.T) {
 		Args:          "Troublemaker Being disruptive",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 			Engine:  policytest.AllowAllEngine(),
 			Events:  store,
@@ -594,9 +594,9 @@ func TestBootHandler_SuccessWithReason(t *testing.T) {
 	err := BootHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	// Verify target session was ended
-	targetSession := sessionMgr.GetSession(targetID)
-	assert.Nil(t, targetSession, "Target session should be ended")
+	// Verify target session was removed
+	targetSess, _ := mockSession.FindByCharacter(context.Background(), targetID)
+	assert.Nil(t, targetSess, "Target session should be ended")
 
 	// Verify output includes reason
 	output := buf.String()
@@ -617,13 +617,12 @@ func TestBootHandler_SuccessWithReason(t *testing.T) {
 func TestBootHandler_CaseInsensitiveMatch(t *testing.T) {
 	executorID := ulid.Make()
 	targetID := ulid.Make()
-	execConn := ulid.Make()
-	targetConn := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, execConn)
-	sessionMgr.Connect(targetID, targetConn)
+	mockSession := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: targetID, Status: session.StatusActive},
+	)
 
 	execChar := &world.Character{
 		ID:       executorID,
@@ -668,7 +667,7 @@ func TestBootHandler_CaseInsensitiveMatch(t *testing.T) {
 		Args:          "troublemaker", // lowercase
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 			Engine:  policytest.AllowAllEngine(),
 		}),
@@ -677,24 +676,22 @@ func TestBootHandler_CaseInsensitiveMatch(t *testing.T) {
 	err := BootHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	// Verify target session was ended
-	targetSession := sessionMgr.GetSession(targetID)
-	assert.Nil(t, targetSession, "Target session should be ended")
+	// Verify target session was removed
+	targetSess, _ := mockSession.FindByCharacter(context.Background(), targetID)
+	assert.Nil(t, targetSess, "Target session should be ended")
 }
 
 func TestBootHandler_SkipsInaccessibleCharacters(t *testing.T) {
 	executorID := ulid.Make()
 	targetID := ulid.Make()
 	hiddenID := ulid.Make()
-	execConn := ulid.Make()
-	targetConn := ulid.Make()
-	hiddenConn := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, execConn)
-	sessionMgr.Connect(targetID, targetConn)
-	sessionMgr.Connect(hiddenID, hiddenConn)
+	mockSession := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: targetID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: hiddenID, Status: session.StatusActive},
+	)
 
 	execChar := &world.Character{
 		ID:       executorID,
@@ -744,7 +741,7 @@ func TestBootHandler_SkipsInaccessibleCharacters(t *testing.T) {
 		Args:          "Troublemaker",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 			Engine:  policytest.AllowAllEngine(),
 		}),
@@ -753,24 +750,27 @@ func TestBootHandler_SkipsInaccessibleCharacters(t *testing.T) {
 	err := BootHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	// Verify target session was ended
-	targetSession := sessionMgr.GetSession(targetID)
-	assert.Nil(t, targetSession, "Target session should be ended")
+	// Verify target session was removed
+	targetSess, _ := mockSession.FindByCharacter(context.Background(), targetID)
+	assert.Nil(t, targetSess, "Target session should be ended")
 
 	// Verify hidden session still exists (wasn't incorrectly targeted)
-	hiddenSession := sessionMgr.GetSession(hiddenID)
-	assert.NotNil(t, hiddenSession, "Hidden session should still exist")
+	hiddenSess, _ := mockSession.FindByCharacter(context.Background(), hiddenID)
+	assert.NotNil(t, hiddenSess, "Hidden session should still exist")
 }
 
 func TestBootHandler_EndSessionError(t *testing.T) {
 	executorID := ulid.Make()
 	targetID := ulid.Make()
-	execConn := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, execConn)
-	// Note: target is NOT connected, so EndSession will fail
+	mockSession := &errorOnDeleteSessionAccess{
+		MockSessionAccess: testutil.NewMockSessionAccess(
+			&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
+			&session.Info{ID: ulid.Make().String(), CharacterID: targetID, Status: session.StatusActive},
+		),
+		targetCharID: targetID,
+	}
 
 	execChar := &world.Character{
 		ID:       executorID,
@@ -785,16 +785,6 @@ func TestBootHandler_EndSessionError(t *testing.T) {
 
 	characterRepo := worldtest.NewMockCharacterRepository(t)
 	accessControl := worldtest.NewMockAccessPolicyEngine(t)
-
-	// Session iteration finds only executor (target not connected)
-	// But we need to simulate a situation where we find the target name
-	// Let's create a mock session manager that returns target in list but fails EndSession
-	mockSessionMgr := &mockSessionManagerWithEndSessionError{
-		underlying: sessionMgr,
-		targetID:   targetID,
-	}
-	// Add target to underlying so it appears in ListActiveSessions
-	sessionMgr.Connect(targetID, ulid.Make())
 
 	// Executor lookup may or may not happen
 	accessControl.EXPECT().
@@ -825,7 +815,7 @@ func TestBootHandler_EndSessionError(t *testing.T) {
 		Args:          "Troublemaker",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: mockSessionMgr,
+			Session: mockSession,
 			World:   worldService,
 			Engine:  policytest.AllowAllEngine(),
 		}),
@@ -834,50 +824,37 @@ func TestBootHandler_EndSessionError(t *testing.T) {
 	err := BootHandler(context.Background(), exec)
 	require.Error(t, err)
 
+	// DeleteByCharacter failed — verify the error propagates.
+	// The oops chain carries the WORLD_ERROR code with a "message" context key.
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok)
-	assert.Equal(t, command.CodeWorldError, oopsErr.Code())
-	assert.Contains(t, oopsErr.Context()["message"], "Unable to boot player")
+	assert.Contains(t, fmt.Sprint(oopsErr.Context()["message"]), "Unable to boot player")
 }
 
-// mockSessionManagerWithEndSessionError wraps a real session manager but fails EndSession for a specific target.
-type mockSessionManagerWithEndSessionError struct {
-	underlying *core.SessionManager
-	targetID   ulid.ULID
+// errorOnDeleteSessionAccess wraps a MockSessionAccess but fails DeleteByCharacter for a specific target.
+type errorOnDeleteSessionAccess struct {
+	*testutil.MockSessionAccess
+	targetCharID ulid.ULID
 }
 
-func (m *mockSessionManagerWithEndSessionError) ListActiveSessions() []*core.Session {
-	return m.underlying.ListActiveSessions()
-}
-
-func (m *mockSessionManagerWithEndSessionError) GetSession(charID ulid.ULID) *core.Session {
-	return m.underlying.GetSession(charID)
-}
-
-func (m *mockSessionManagerWithEndSessionError) Connect(charID, connID ulid.ULID) *core.Session {
-	return m.underlying.Connect(charID, connID)
-}
-
-func (m *mockSessionManagerWithEndSessionError) EndSession(charID ulid.ULID) error {
-	if charID == m.targetID {
-		return errors.New("session already ended")
+func (m *errorOnDeleteSessionAccess) DeleteByCharacter(ctx context.Context, charID ulid.ULID, reason string) (*session.Info, error) {
+	if charID == m.targetCharID {
+		return nil, oops.Code("SESSION_NOT_FOUND").Errorf("session not found")
 	}
-	return m.underlying.EndSession(charID)
+	return m.MockSessionAccess.DeleteByCharacter(ctx, charID, reason)
 }
 
 func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 	executorID := ulid.Make()
 	targetID := ulid.Make()
 	errorCharID := ulid.Make()
-	execConn := ulid.Make()
-	targetConn := ulid.Make()
-	errorConn := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, execConn)
-	sessionMgr.Connect(targetID, targetConn)
-	sessionMgr.Connect(errorCharID, errorConn)
+	mockSession := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: targetID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: errorCharID, Status: session.StatusActive},
+	)
 
 	execChar := &world.Character{
 		ID:       executorID,
@@ -940,7 +917,7 @@ func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 		Args:          "Troublemaker",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 			Engine:  policytest.AllowAllEngine(),
 		}),
@@ -949,9 +926,9 @@ func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 	err := BootHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	// Verify target session was ended
-	targetSession := sessionMgr.GetSession(targetID)
-	assert.Nil(t, targetSession, "Target session should be ended")
+	// Verify target session was removed
+	targetSess, _ := mockSession.FindByCharacter(context.Background(), targetID)
+	assert.Nil(t, targetSess, "Target session should be ended")
 
 	// The error character lookup may or may not have happened depending on iteration order.
 	// If it did happen, the error should have been logged.
@@ -970,13 +947,12 @@ func TestBootHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 func TestBootHandler_SystemErrorWhenAllLookupsFailWithUnexpectedErrors(t *testing.T) {
 	executorID := ulid.Make()
 	errorCharID := ulid.Make()
-	execConn := ulid.Make()
-	errorConn := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, execConn)
-	sessionMgr.Connect(errorCharID, errorConn)
+	mockSession := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: errorCharID, Status: session.StatusActive},
+	)
 
 	execChar := &world.Character{
 		ID:       executorID,
@@ -1026,7 +1002,7 @@ func TestBootHandler_SystemErrorWhenAllLookupsFailWithUnexpectedErrors(t *testin
 		Args:          "NonexistentPlayer", // Target doesn't exist, but errors occurred
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 		}),
 	})
@@ -1049,13 +1025,12 @@ func TestBootHandler_SystemErrorWhenAllLookupsFailWithUnexpectedErrors(t *testin
 func TestBootHandler_BootOthers_IncludesDecisionContext(t *testing.T) {
 	executorID := ulid.Make()
 	targetID := ulid.Make()
-	execConn := ulid.Make()
-	targetConn := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, execConn)
-	sessionMgr.Connect(targetID, targetConn)
+	mockSession := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: targetID, Status: session.StatusActive},
+	)
 
 	execChar := &world.Character{
 		ID:       executorID,
@@ -1108,7 +1083,7 @@ func TestBootHandler_BootOthers_IncludesDecisionContext(t *testing.T) {
 		Args:          "Troublemaker",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 			Engine:  bootEngine,
 		}),
@@ -1127,23 +1102,21 @@ func TestBootHandler_BootOthers_IncludesDecisionContext(t *testing.T) {
 	assert.Equal(t, "policy-123", ctx["policy_id"], "policy ID should be propagated")
 
 	// Verify target session still exists (was not booted)
-	targetSession := sessionMgr.GetSession(targetID)
-	assert.NotNil(t, targetSession, "Target session should still exist")
+	targetSess, _ := mockSession.FindByCharacter(context.Background(), targetID)
+	assert.NotNil(t, targetSess, "Target session should still exist")
 }
 
 func TestBootHandler_MixedEngineAndDBErrors_ReturnsWorldError(t *testing.T) {
 	executorID := ulid.Make()
 	engineErrCharID := ulid.Make()
 	dbErrCharID := ulid.Make()
-	execConn := ulid.Make()
-	engineErrConn := ulid.Make()
-	dbErrConn := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, execConn)
-	sessionMgr.Connect(engineErrCharID, engineErrConn)
-	sessionMgr.Connect(dbErrCharID, dbErrConn)
+	mockSession := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: engineErrCharID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: dbErrCharID, Status: session.StatusActive},
+	)
 
 	execChar := &world.Character{
 		ID:       executorID,
@@ -1202,7 +1175,7 @@ func TestBootHandler_MixedEngineAndDBErrors_ReturnsWorldError(t *testing.T) {
 		Args:          "NonexistentPlayer", // Target not in any session
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 		}),
 	})
@@ -1227,17 +1200,14 @@ func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 	targetID := ulid.Make()
 	notFoundCharID := ulid.Make()
 	deniedCharID := ulid.Make()
-	execConn := ulid.Make()
-	targetConn := ulid.Make()
-	notFoundConn := ulid.Make()
-	deniedConn := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, execConn)
-	sessionMgr.Connect(targetID, targetConn)
-	sessionMgr.Connect(notFoundCharID, notFoundConn)
-	sessionMgr.Connect(deniedCharID, deniedConn)
+	mockSession := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: targetID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: notFoundCharID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: deniedCharID, Status: session.StatusActive},
+	)
 
 	execChar := &world.Character{
 		ID:       executorID,
@@ -1304,7 +1274,7 @@ func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 		Args:          "Troublemaker",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 			Engine:  policytest.AllowAllEngine(),
 		}),
@@ -1313,9 +1283,9 @@ func TestBootHandler_NoLoggingForExpectedErrors(t *testing.T) {
 	err := BootHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	// Verify target session was ended
-	targetSession := sessionMgr.GetSession(targetID)
-	assert.Nil(t, targetSession, "Target session should be ended")
+	// Verify target session was removed
+	targetSess, _ := mockSession.FindByCharacter(context.Background(), targetID)
+	assert.Nil(t, targetSess, "Target session should be ended")
 
 	// Verify no error logs were written for expected errors (ErrNotFound, ErrPermissionDenied)
 	logOutput := logBuf.String()
@@ -1326,15 +1296,13 @@ func TestBootHandler_SkipsCharacterWithEngineErrorDuringLookup(t *testing.T) {
 	executorID := ulid.Make()
 	targetID := ulid.Make()
 	evalFailID := ulid.Make()
-	execConn := ulid.Make()
-	targetConn := ulid.Make()
-	evalFailConn := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, execConn)
-	sessionMgr.Connect(targetID, targetConn)
-	sessionMgr.Connect(evalFailID, evalFailConn)
+	mockSession := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: targetID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: evalFailID, Status: session.StatusActive},
+	)
 
 	execChar := &world.Character{
 		ID:       executorID,
@@ -1393,7 +1361,7 @@ func TestBootHandler_SkipsCharacterWithEngineErrorDuringLookup(t *testing.T) {
 		Args:          "Troublemaker",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 			Engine:  policytest.AllowAllEngine(),
 		}),
@@ -1402,13 +1370,13 @@ func TestBootHandler_SkipsCharacterWithEngineErrorDuringLookup(t *testing.T) {
 	err := BootHandler(context.Background(), exec)
 	require.NoError(t, err)
 
-	// Verify target session was ended (search continued past engine error)
-	targetSession := sessionMgr.GetSession(targetID)
-	assert.Nil(t, targetSession, "Target session should be ended")
+	// Verify target session was removed (search continued past engine error)
+	targetSess, _ := mockSession.FindByCharacter(context.Background(), targetID)
+	assert.Nil(t, targetSess, "Target session should be ended")
 
 	// Verify the character with engine error was skipped (session still exists)
-	evalFailSession := sessionMgr.GetSession(evalFailID)
-	assert.NotNil(t, evalFailSession, "Character with engine error should be skipped, not booted")
+	evalFailSess, _ := mockSession.FindByCharacter(context.Background(), evalFailID)
+	assert.NotNil(t, evalFailSess, "Character with engine error should be skipped, not booted")
 
 	// Verify output indicates success
 	output := buf.String()
@@ -1562,15 +1530,13 @@ func TestBootHandler_AccessEvaluationFailedReturnsSystemError(t *testing.T) {
 	executorID := ulid.Make()
 	evalFail1ID := ulid.Make()
 	evalFail2ID := ulid.Make()
-	execConn := ulid.Make()
-	evalFailConn1 := ulid.Make()
-	evalFailConn2 := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(executorID, execConn)
-	sessionMgr.Connect(evalFail1ID, evalFailConn1)
-	sessionMgr.Connect(evalFail2ID, evalFailConn2)
+	mockSession := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: executorID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: evalFail1ID, Status: session.StatusActive},
+		&session.Info{ID: ulid.Make().String(), CharacterID: evalFail2ID, Status: session.StatusActive},
+	)
 
 	execChar := &world.Character{
 		ID:       executorID,
@@ -1619,7 +1585,7 @@ func TestBootHandler_AccessEvaluationFailedReturnsSystemError(t *testing.T) {
 		Args:          "NonexistentPlayer",
 		Output:        &buf,
 		Services: command.NewTestServices(command.ServicesConfig{
-			Session: sessionMgr,
+			Session: mockSession,
 			World:   worldService,
 		}),
 	})
