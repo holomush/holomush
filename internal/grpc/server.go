@@ -438,7 +438,9 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 	// Emit any buffered output as a command_response event.
 	if buf.Len() > 0 {
 		isError := dispatchErr != nil
-		s.emitCommandResponse(ctx, char, strings.TrimRight(buf.String(), "\n"), isError)
+		if emitErr := s.emitCommandResponse(ctx, char, strings.TrimRight(buf.String(), "\n"), isError); emitErr != nil {
+			return oops.Wrap(emitErr)
+		}
 	}
 
 	if dispatchErr != nil {
@@ -447,7 +449,9 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 		// HandleCommand returns Success=true.
 		if isUserFacingError(dispatchErr) {
 			if buf.Len() == 0 {
-				s.emitCommandResponse(ctx, char, command.PlayerMessage(dispatchErr), true)
+				if emitErr := s.emitCommandResponse(ctx, char, command.PlayerMessage(dispatchErr), true); emitErr != nil {
+					return oops.Wrap(emitErr)
+				}
 			}
 			return nil
 		}
@@ -513,6 +517,7 @@ func (s *CoreServer) executeViaSwitch(ctx context.Context, info *session.Info, i
 		return nil
 
 	case "quit":
+		//nolint:errcheck // legacy path — removed in holomush-a3a7.8
 		s.emitCommandResponse(ctx, char, "Goodbye!", false)
 		if err := s.engine.HandleDisconnect(ctx, char, "quit"); err != nil {
 			slog.WarnContext(ctx, "leave event failed", "error", err)
@@ -525,6 +530,7 @@ func (s *CoreServer) executeViaSwitch(ctx context.Context, info *session.Info, i
 		return nil
 
 	default:
+		//nolint:errcheck // legacy path — removed in holomush-a3a7.8
 		s.emitCommandResponse(ctx, char, "Unknown command: "+cmd, true)
 		return nil
 	}
@@ -551,8 +557,8 @@ func expandMUSHPrefix(input string) string {
 }
 
 // emitCommandResponse emits a command_response event to the character's
-// personal stream. Best-effort: errors are logged but not propagated.
-func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.CharacterRef, text string, isError bool) {
+// personal stream. Returns an error if the event could not be emitted.
+func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.CharacterRef, text string, isError bool) error {
 	payload, err := json.Marshal(core.CommandResponsePayload{
 		Text:    text,
 		IsError: isError,
@@ -562,7 +568,7 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 			"character_id", char.ID.String(),
 			"error", err,
 		)
-		return
+		return oops.Code("COMMAND_RESPONSE_MARSHAL_FAILED").Wrap(err)
 	}
 
 	event := core.Event{
@@ -576,7 +582,7 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 
 	if s.eventStore == nil {
 		slog.Debug("emitCommandResponse: eventStore not configured, event not emitted")
-		return
+		return nil
 	}
 
 	if err := s.eventStore.Append(ctx, event); err != nil {
@@ -584,7 +590,9 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 			"character_id", char.ID.String(),
 			"error", err,
 		)
+		return oops.Code("COMMAND_RESPONSE_EMIT_FAILED").Wrap(err)
 	}
+	return nil
 }
 
 // runDisconnectHooks runs all registered disconnect hooks with panic recovery.

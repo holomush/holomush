@@ -448,13 +448,15 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		aliasRepo := store.NewPostgresAliasRepository(realStore.Pool())
 		aliasCache := command.NewAliasCache()
 
-		// Pre-populate alias cache from database
+		// Pre-populate alias cache from database — fail startup if aliases
+		// can't be loaded, otherwise the dispatcher silently breaks resolution.
 		sysAliases, sysAliasErr := aliasRepo.GetSystemAliases(ctx)
 		if sysAliasErr != nil {
-			slog.Warn("failed to load system aliases into cache", "error", sysAliasErr)
-		} else {
-			aliasCache.LoadSystemAliases(sysAliases)
+			return oops.Code("COMMAND_ALIAS_LOAD_FAILED").
+				With("operation", "load system aliases").
+				Wrap(sysAliasErr)
 		}
+		aliasCache.LoadSystemAliases(sysAliases)
 
 		cmdServices, cmdSvcErr := command.NewServices(command.ServicesConfig{
 			World:      worldService,
