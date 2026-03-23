@@ -200,15 +200,14 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// 7. Create core components
-		sessions := core.NewSessionManager()
-		engine := core.NewEngine(eventStore, sessions)
+		engine := core.NewEngine(eventStore)
 
 		// 8. Create GuestAuthenticator
 		startLocation = ulid.Make()
 		guestAuth = telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocation)
 
 		// 9. Create gRPC server
-		coreServer := grpcpkg.NewCoreServer(engine, sessions, session.NewMemStore(),
+		coreServer := grpcpkg.NewCoreServer(engine, session.NewMemStore(),
 			grpcpkg.WithAuthenticator(guestAuth),
 			grpcpkg.WithEventStore(eventStore),
 			grpcpkg.WithDisconnectHook(func(info session.Info) {

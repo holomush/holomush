@@ -299,11 +299,10 @@ var _ = Describe("Phase 1.5 Integration", func() {
 
 			// Create core components
 			eventStore := &noopEventStore{}
-			sessions := core.NewSessionManager()
-			engine := core.NewEngine(eventStore, sessions)
+			engine := core.NewEngine(eventStore)
 
 			// Create gRPC server with mTLS
-			coreServer := grpcpkg.NewCoreServer(engine, sessions, session.NewMemStore(),
+			coreServer := grpcpkg.NewCoreServer(engine, session.NewMemStore(),
 				grpcpkg.WithEventStore(eventStore))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
@@ -370,11 +369,10 @@ var _ = Describe("Phase 1.5 Integration", func() {
 
 			// Create core components
 			eventStore := &noopEventStore{}
-			sessions := core.NewSessionManager()
-			engine := core.NewEngine(eventStore, sessions)
+			engine := core.NewEngine(eventStore)
 
 			// Create gRPC server with mTLS
-			coreServer := grpcpkg.NewCoreServer(engine, sessions, session.NewMemStore(),
+			coreServer := grpcpkg.NewCoreServer(engine, session.NewMemStore(),
 				grpcpkg.WithEventStore(eventStore))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
@@ -534,10 +532,9 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			eventStore := &noopEventStore{}
-			sessions := core.NewSessionManager()
-			engine := core.NewEngine(eventStore, sessions)
+			engine := core.NewEngine(eventStore)
 
-			coreServer := grpcpkg.NewCoreServer(engine, sessions, session.NewMemStore(),
+			coreServer := grpcpkg.NewCoreServer(engine, session.NewMemStore(),
 				grpcpkg.WithEventStore(eventStore))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)

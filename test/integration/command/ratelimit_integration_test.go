@@ -19,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -37,9 +38,15 @@ func stubServices() *command.Services {
 // Stub implementations for integration tests
 type stubSessionService struct{}
 
-func (s *stubSessionService) ListActiveSessions() []*core.Session  { return nil }
-func (s *stubSessionService) GetSession(_ ulid.ULID) *core.Session { return nil }
-func (s *stubSessionService) EndSession(_ ulid.ULID) error         { return nil }
+func (s *stubSessionService) ListActive(_ context.Context) ([]*session.Info, error) {
+	return nil, nil
+}
+func (s *stubSessionService) FindByCharacter(_ context.Context, _ ulid.ULID) (*session.Info, error) {
+	return nil, nil
+}
+func (s *stubSessionService) DeleteByCharacter(_ context.Context, _ ulid.ULID, _ string) (*session.Info, error) {
+	return nil, nil
+}
 
 type stubEventStore struct{}
 

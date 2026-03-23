@@ -23,10 +23,10 @@ import (
 
 // newDispatcherTestServer creates a CoreServer wired with the unified
 // command dispatcher, using in-memory stores for testing.
-func newDispatcherTestServer(t *testing.T, store core.EventStore, opts ...CoreServerOption) (*CoreServer, *core.SessionManager) {
+func newDispatcherTestServer(t *testing.T, store core.EventStore, opts ...CoreServerOption) *CoreServer {
 	t.Helper()
-	sessions := core.NewSessionManager()
-	engine := core.NewEngine(store, sessions)
+	engine := core.NewEngine(store)
+	sessionStore := session.NewMemStore()
 
 	reg := command.NewRegistry()
 	handlers.RegisterAll(reg)
@@ -34,7 +34,7 @@ func newDispatcherTestServer(t *testing.T, store core.EventStore, opts ...CoreSe
 	policyEngine := policytest.AllowAllEngine()
 	svc := command.NewTestServices(command.ServicesConfig{
 		World:   nil,
-		Session: sessions,
+		Session: sessionStore,
 		Engine:  policyEngine,
 		Events:  store,
 	})
@@ -49,8 +49,8 @@ func newDispatcherTestServer(t *testing.T, store core.EventStore, opts ...CoreSe
 	)
 	allOpts = append(allOpts, opts...)
 
-	server := NewCoreServer(engine, sessions, session.NewMemStore(), allOpts...)
-	return server, sessions
+	server := NewCoreServer(engine, sessionStore, allOpts...)
+	return server
 }
 
 func TestDispatcher_HandleCommand_Say(t *testing.T) {
@@ -66,8 +66,7 @@ func TestDispatcher_HandleCommand_Say(t *testing.T) {
 		},
 	}
 
-	server, sessions := newDispatcherTestServer(t, store)
-	sessions.Connect(charID, core.NewULID())
+	server := newDispatcherTestServer(t, store)
 
 	ctx := context.Background()
 	require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
@@ -105,8 +104,7 @@ func TestDispatcher_HandleCommand_Pose(t *testing.T) {
 		},
 	}
 
-	server, sessions := newDispatcherTestServer(t, store)
-	sessions.Connect(charID, core.NewULID())
+	server := newDispatcherTestServer(t, store)
 
 	ctx := context.Background()
 	require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
@@ -142,8 +140,7 @@ func TestDispatcher_HandleCommand_ColonPrefix(t *testing.T) {
 		},
 	}
 
-	server, sessions := newDispatcherTestServer(t, store)
-	sessions.Connect(charID, core.NewULID())
+	server := newDispatcherTestServer(t, store)
 
 	ctx := context.Background()
 	require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
@@ -172,8 +169,7 @@ func TestDispatcher_HandleCommand_UnknownCommand(t *testing.T) {
 	locationID := core.NewULID()
 	store := core.NewMemoryEventStore()
 
-	server, sessions := newDispatcherTestServer(t, store)
-	sessions.Connect(charID, core.NewULID())
+	server := newDispatcherTestServer(t, store)
 
 	ctx := context.Background()
 	require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
@@ -210,12 +206,11 @@ func TestDispatcher_HandleCommand_Quit(t *testing.T) {
 	store := core.NewMemoryEventStore()
 
 	var hookCalled bool
-	server, sessions := newDispatcherTestServer(t, store,
+	server := newDispatcherTestServer(t, store,
 		WithDisconnectHook(func(_ session.Info) {
 			hookCalled = true
 		}),
 	)
-	sessions.Connect(charID, core.NewULID())
 
 	ctx := context.Background()
 	sessStore := server.sessionStore
