@@ -21,6 +21,49 @@ func RegisterAll(reg *command.Registry) {
 		}
 	}
 
+	// Communication commands
+	mustRegister(command.CommandEntryConfig{
+		Name:    "say",
+		Handler: SayHandler,
+		Help:    "Say something to the room",
+		Usage:   "say <message>",
+		HelpText: `## Say
+
+Say something aloud to everyone in your current location.
+
+### Usage
+
+- ` + "`say <message>`" + ` - Speak the message aloud
+
+### Examples
+
+- ` + "`say Hello, everyone!`" + `
+- ` + "`say How are you?`" + ``,
+		Source: "core",
+	})
+
+	mustRegister(command.CommandEntryConfig{
+		Name:    "pose",
+		Handler: PoseHandler,
+		Help:    "Perform an action",
+		Usage:   "pose <action>",
+		HelpText: `## Pose
+
+Describe an action your character performs, visible to everyone in your
+current location.
+
+### Usage
+
+- ` + "`pose <action>`" + ` - Perform the action
+- ` + "`:<action>`" + ` - Shorthand for pose
+
+### Examples
+
+- ` + "`pose waves hello`" + ` - Shows "CharName waves hello"
+- ` + "`:waves hello`" + ` - Same as above`,
+		Source: "core",
+	})
+
 	// Navigation commands
 	mustRegister(command.CommandEntryConfig{
 		Name:    "look",

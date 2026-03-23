@@ -5,6 +5,7 @@
 package grpc
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -21,6 +22,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/auth"
+	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
@@ -106,6 +108,8 @@ type CoreServer struct {
 	worldQuerier    WorldQuerier
 	sessionDefaults SessionDefaults
 	disconnectHooks []func(session.Info)
+	dispatcher      *command.Dispatcher
+	cmdServices     *command.Services
 
 	// Auth services for two-phase login and account management.
 	authService      AuthServiceProvider
@@ -162,6 +166,16 @@ func WithWorldQuerier(wq WorldQuerier) CoreServerOption {
 func WithDisconnectHook(hook func(session.Info)) CoreServerOption {
 	return func(s *CoreServer) {
 		s.disconnectHooks = append(s.disconnectHooks, hook)
+	}
+}
+
+// WithDispatcher sets the unified command dispatcher for command execution.
+// When set, executeCommand delegates to the dispatcher instead of the
+// hardcoded switch statement.
+func WithDispatcher(d *command.Dispatcher, svc *command.Services) CoreServerOption {
+	return func(s *CoreServer) {
+		s.dispatcher = d
+		s.cmdServices = svc
 	}
 }
 
@@ -381,8 +395,104 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleComman
 
 // executeCommand parses and executes a command. Output is delivered via
 // command_response events emitted to the character's personal stream.
-func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, command string) error {
-	parts := strings.SplitN(command, " ", 2)
+func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, input string) error {
+	if s.dispatcher != nil {
+		return s.executeViaDispatcher(ctx, info, input)
+	}
+	return s.executeViaSwitch(ctx, info, input)
+}
+
+// executeViaDispatcher uses the unified command.Dispatcher for command
+// execution. Handler output written to the CommandExecution's io.Writer is
+// captured in a buffer and emitted as a command_response event afterward.
+func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Info, input string) error {
+	// Expand MUSH single-character prefixes before dispatch.
+	// These will become proper system aliases when the alias cache is wired.
+	input = expandMUSHPrefix(input)
+
+	char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
+	hadSessionBefore := s.sessions.GetSession(info.CharacterID) != nil
+
+	sessionID, parseErr := ulid.Parse(info.ID)
+	if parseErr != nil {
+		return oops.Code("INVALID_SESSION_ID").
+			With("session_id", info.ID).
+			Wrap(parseErr)
+	}
+
+	var buf bytes.Buffer
+	exec, err := command.NewCommandExecution(command.CommandExecutionConfig{
+		CharacterID:   info.CharacterID,
+		LocationID:    info.LocationID,
+		CharacterName: info.CharacterName,
+		SessionID:     sessionID,
+		Output:        &buf,
+		Services:      s.cmdServices,
+	})
+	if err != nil {
+		return oops.Code("EXECUTION_SETUP_FAILED").Wrap(err)
+	}
+
+	dispatchErr := s.dispatcher.Dispatch(ctx, input, exec)
+
+	// Emit any buffered output as a command_response event.
+	if buf.Len() > 0 {
+		isError := dispatchErr != nil
+		if emitErr := s.emitCommandResponse(ctx, char, strings.TrimRight(buf.String(), "\n"), isError); emitErr != nil {
+			return oops.Wrap(emitErr)
+		}
+	}
+
+	if dispatchErr != nil {
+		// User-facing errors are delivered as command_response events, not
+		// RPC-level failures. Emit the player message and return nil so
+		// HandleCommand returns Success=true.
+		if isUserFacingError(dispatchErr) {
+			if buf.Len() == 0 {
+				if emitErr := s.emitCommandResponse(ctx, char, command.PlayerMessage(dispatchErr), true); emitErr != nil {
+					return oops.Wrap(emitErr)
+				}
+			}
+			return nil
+		}
+		// Infrastructure errors propagate as RPC failures (Success=false).
+		return oops.Wrap(dispatchErr)
+	}
+
+	// Post-quit cleanup: if the quit handler ended the in-memory session via
+	// SessionService.EndSession, perform server-side teardown that the
+	// handler doesn't own (leave event, persistent store, hooks).
+	// TODO(holomush-a3a7): replace in-memory session check with an explicit
+	// quit signal (e.g. sentinel error or CommandExecution flag) so this
+	// doesn't depend on SessionManager state.
+	if hadSessionBefore && s.sessions.GetSession(info.CharacterID) == nil {
+		if dcErr := s.engine.HandleDisconnect(ctx, char, "quit"); dcErr != nil {
+			slog.WarnContext(ctx, "leave event failed", "error", dcErr)
+		}
+		if delErr := s.sessionStore.Delete(ctx, info.ID, "Goodbye!"); delErr != nil {
+			slog.WarnContext(ctx, "session delete failed", "error", delErr)
+		}
+		s.runDisconnectHooks(ctx, *info)
+	}
+
+	return nil
+}
+
+// isUserFacingError returns true for errors that should be delivered to the
+// player via a command_response event rather than as an RPC-level failure.
+// Delegates to command.PlayerMessage to stay in sync with the command package's
+// error classification — if PlayerMessage returns a specific message (not the
+// generic fallback), the error is user-facing.
+func isUserFacingError(err error) bool {
+	msg := command.PlayerMessage(err)
+	return msg != "Something went wrong. Try again."
+}
+
+// executeViaSwitch is the legacy hardcoded switch for servers constructed
+// without a dispatcher (primarily tests). Remove once all callers provide
+// a dispatcher.
+func (s *CoreServer) executeViaSwitch(ctx context.Context, info *session.Info, input string) error {
+	parts := strings.SplitN(input, " ", 2)
 	cmd := strings.ToLower(parts[0])
 	if cmd == "" {
 		return oops.Code("EMPTY_COMMAND").Errorf("empty command")
@@ -395,26 +505,20 @@ func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, com
 	char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
 	switch cmd {
 	case "say":
-		// Sender sees the broadcast say event from the location stream — no
-		// command_response needed.
 		if err := s.engine.HandleSay(ctx, char, arg); err != nil {
 			return oops.Code("COMMAND_FAILED").With("command", "say").Wrap(err)
 		}
 		return nil
 
 	case "pose", ":":
-		// Sender sees the broadcast pose event from the location stream — no
-		// command_response needed.
 		if err := s.engine.HandlePose(ctx, char, arg); err != nil {
 			return oops.Code("COMMAND_FAILED").With("command", "pose").Wrap(err)
 		}
 		return nil
 
 	case "quit":
-		// Emit a command_response with "Goodbye!" before disconnect.
+		//nolint:errcheck // legacy path — removed in holomush-a3a7.8
 		s.emitCommandResponse(ctx, char, "Goodbye!", false)
-
-		// Explicit quit — terminate session immediately
 		if err := s.engine.HandleDisconnect(ctx, char, "quit"); err != nil {
 			slog.WarnContext(ctx, "leave event failed", "error", err)
 		}
@@ -426,15 +530,35 @@ func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, com
 		return nil
 
 	default:
-		// Emit an error command_response for unknown commands.
+		//nolint:errcheck // legacy path — removed in holomush-a3a7.8
 		s.emitCommandResponse(ctx, char, "Unknown command: "+cmd, true)
 		return nil
 	}
 }
 
+// expandMUSHPrefix rewrites MUSH single-character command prefixes to their
+// full command names. E.g., ": waves" → "pose waves". These will become
+// proper system aliases once the alias cache is wired.
+func expandMUSHPrefix(input string) string {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return input
+	}
+	switch trimmed[0] {
+	case ':':
+		remainder := strings.TrimSpace(trimmed[1:])
+		if remainder == "" {
+			return "pose"
+		}
+		return "pose " + remainder
+	default:
+		return input
+	}
+}
+
 // emitCommandResponse emits a command_response event to the character's
-// personal stream. Best-effort: errors are logged but not propagated.
-func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.CharacterRef, text string, isError bool) {
+// personal stream. Returns an error if the event could not be emitted.
+func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.CharacterRef, text string, isError bool) error {
 	payload, err := json.Marshal(core.CommandResponsePayload{
 		Text:    text,
 		IsError: isError,
@@ -444,7 +568,7 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 			"character_id", char.ID.String(),
 			"error", err,
 		)
-		return
+		return oops.Code("COMMAND_RESPONSE_MARSHAL_FAILED").Wrap(err)
 	}
 
 	event := core.Event{
@@ -458,7 +582,7 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 
 	if s.eventStore == nil {
 		slog.Debug("emitCommandResponse: eventStore not configured, event not emitted")
-		return
+		return nil
 	}
 
 	if err := s.eventStore.Append(ctx, event); err != nil {
@@ -466,7 +590,9 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 			"character_id", char.ID.String(),
 			"error", err,
 		)
+		return oops.Code("COMMAND_RESPONSE_EMIT_FAILED").Wrap(err)
 	}
+	return nil
 }
 
 // runDisconnectHooks runs all registered disconnect hooks with panic recovery.
