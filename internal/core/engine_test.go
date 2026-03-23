@@ -15,8 +15,7 @@ import (
 
 func TestEngine_HandleSay(t *testing.T) {
 	store := NewMemoryEventStore()
-	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions)
+	engine := NewEngine(store)
 
 	ctx := context.Background()
 	charID := NewULID()
@@ -43,8 +42,7 @@ func TestEngine_HandleSay(t *testing.T) {
 
 func TestEngine_HandlePose(t *testing.T) {
 	store := NewMemoryEventStore()
-	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions)
+	engine := NewEngine(store)
 
 	ctx := context.Background()
 	charID := NewULID()
@@ -71,8 +69,7 @@ func TestEngine_HandlePose(t *testing.T) {
 
 func TestEngine_HandleSay_AppendsToStore(t *testing.T) {
 	store := NewMemoryEventStore()
-	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions)
+	engine := NewEngine(store)
 
 	ctx := context.Background()
 	charID := NewULID()
@@ -94,8 +91,7 @@ func TestEngine_HandleSay_AppendsToStore(t *testing.T) {
 
 func TestEngine_HandlePose_AppendsToStore(t *testing.T) {
 	store := NewMemoryEventStore()
-	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions)
+	engine := NewEngine(store)
 
 	ctx := context.Background()
 	charID := NewULID()
@@ -113,60 +109,6 @@ func TestEngine_HandlePose_AppendsToStore(t *testing.T) {
 	require.Len(t, events, 1)
 	assert.Equal(t, EventTypePose, events[0].Type)
 	assert.Equal(t, stream, events[0].Stream)
-}
-
-func TestEngine_ReplayEvents(t *testing.T) {
-	store := NewMemoryEventStore()
-	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions)
-
-	ctx := context.Background()
-	charID := NewULID()
-	locationID := NewULID()
-	stream := "location:" + locationID.String()
-	char := CharacterRef{ID: charID, Name: "TestChar", LocationID: locationID}
-
-	// Create some events
-	for i := 0; i < 5; i++ {
-		err := engine.HandleSay(ctx, char, "message")
-		require.NoError(t, err)
-	}
-
-	// Replay without session (no cursor)
-	events, err := engine.ReplayEvents(ctx, charID, stream, 10)
-	require.NoError(t, err)
-	assert.Len(t, events, 5)
-}
-
-func TestEngine_ReplayEvents_WithCursor(t *testing.T) {
-	store := NewMemoryEventStore()
-	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions)
-
-	ctx := context.Background()
-	charID := NewULID()
-	connID := NewULID()
-	locationID := NewULID()
-	stream := "location:" + locationID.String()
-	char := CharacterRef{ID: charID, Name: "TestChar", LocationID: locationID}
-
-	// Connect to create session
-	sessions.Connect(charID, connID)
-
-	// Create some events
-	for i := 0; i < 5; i++ {
-		err := engine.HandleSay(ctx, char, "message")
-		require.NoError(t, err)
-	}
-
-	// Get events and set cursor to third event
-	allEvents, _ := store.Replay(ctx, stream, ulid.ULID{}, 10)
-	sessions.UpdateCursor(charID, stream, allEvents[2].ID)
-
-	// Replay should return only events after cursor
-	events, err := engine.ReplayEvents(ctx, charID, stream, 10)
-	require.NoError(t, err)
-	assert.Len(t, events, 2, "Expected 2 events after cursor")
 }
 
 // failingEventStore is a mock that returns errors for testing error paths.
@@ -200,8 +142,7 @@ func (e *storeError) Error() string {
 
 func TestEngine_HandleSay_StoreError(t *testing.T) {
 	store := &failingEventStore{}
-	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions)
+	engine := NewEngine(store)
 
 	ctx := context.Background()
 	charID := NewULID()
@@ -215,8 +156,7 @@ func TestEngine_HandleSay_StoreError(t *testing.T) {
 
 func TestEngine_HandlePose_StoreError(t *testing.T) {
 	store := &failingEventStore{}
-	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions)
+	engine := NewEngine(store)
 
 	ctx := context.Background()
 	charID := NewULID()
@@ -228,23 +168,9 @@ func TestEngine_HandlePose_StoreError(t *testing.T) {
 	assert.ErrorIs(t, err, errStoreFailure, "Should wrap store error")
 }
 
-func TestEngine_ReplayEvents_StoreError(t *testing.T) {
-	store := &failingEventStore{}
-	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions)
-
-	ctx := context.Background()
-	charID := NewULID()
-
-	_, err := engine.ReplayEvents(ctx, charID, "location:test", 10)
-	require.Error(t, err, "Expected error from failing store")
-	assert.ErrorIs(t, err, errStoreFailure, "Should wrap store error")
-}
-
 func TestEngine_HandleConnect(t *testing.T) {
 	store := NewMemoryEventStore()
-	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions)
+	engine := NewEngine(store)
 
 	ctx := context.Background()
 	charID := NewULID()
@@ -273,8 +199,7 @@ func TestEngine_HandleConnect(t *testing.T) {
 
 func TestEngine_HandleDisconnect(t *testing.T) {
 	store := NewMemoryEventStore()
-	sessions := NewSessionManager()
-	engine := NewEngine(store, sessions)
+	engine := NewEngine(store)
 
 	ctx := context.Background()
 	charID := NewULID()

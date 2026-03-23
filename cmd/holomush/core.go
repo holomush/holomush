@@ -424,8 +424,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 	// Only create gRPC server if we have a real event store
 	if realStore, ok := eventStore.(*store.PostgresEventStore); ok {
-		sessions := core.NewSessionManager()
-		engine := core.NewEngine(realStore, sessions)
+		engine := core.NewEngine(realStore)
 
 		// Create gRPC server
 		creds := credentials.NewTLS(tlsConfig)
@@ -460,7 +459,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 		cmdServices, cmdSvcErr := command.NewServices(command.ServicesConfig{
 			World:      worldService,
-			Session:    sessions,
+			Session:    sessionStore,
 			Engine:     policyEngine,
 			Events:     realStore,
 			AliasCache: aliasCache,
@@ -477,7 +476,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			return oops.Code("COMMAND_DISPATCHER_FAILED").Wrap(cmdDispErr)
 		}
 
-		coreServer := holoGRPC.NewCoreServer(engine, sessions, sessionStore,
+		coreServer := holoGRPC.NewCoreServer(engine, sessionStore,
 			holoGRPC.WithAuthenticator(guestAuth),
 			holoGRPC.WithEventStore(realStore),
 			holoGRPC.WithWorldQuerier(worldService),

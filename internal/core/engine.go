@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 )
 
@@ -43,15 +42,13 @@ type LeavePayload struct {
 
 // Engine is the core game engine.
 type Engine struct {
-	store    EventStore
-	sessions *SessionManager
+	store EventStore
 }
 
 // NewEngine creates a new game engine.
-func NewEngine(store EventStore, sessions *SessionManager) *Engine {
+func NewEngine(store EventStore) *Engine {
 	return &Engine{
-		store:    store,
-		sessions: sessions,
+		store: store,
 	}
 }
 
@@ -147,16 +144,3 @@ func (e *Engine) HandleDisconnect(ctx context.Context, char CharacterRef, reason
 	return nil
 }
 
-// ReplayEvents returns missed events for a character.
-func (e *Engine) ReplayEvents(ctx context.Context, charID ulid.ULID, stream string, limit int) ([]Event, error) {
-	session := e.sessions.GetSession(charID)
-	var afterID ulid.ULID
-	if session != nil {
-		afterID = session.EventCursors[stream]
-	}
-	events, err := e.store.Replay(ctx, stream, afterID, limit)
-	if err != nil {
-		return nil, oops.With("operation", "replay_events").With("stream", stream).Wrap(err)
-	}
-	return events, nil
-}
