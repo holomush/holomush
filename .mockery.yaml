@@ -18,6 +18,9 @@ packages:
       outpkg: mocks
     interfaces:
       Authenticator:
+      AuthServiceProvider:
+      ResetServiceProvider:
+      CharacterServiceProvider:
   github.com/holomush/holomush/internal/plugin:
     config:
       dir: "{{.InterfaceDir}}/mocks"
@@ -67,3 +70,4 @@ packages:
       PasswordResetRepository:
       CharacterRepository:
       LocationRepository:
+      PlayerTokenRepository:

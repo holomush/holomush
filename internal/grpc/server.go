@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
@@ -106,6 +107,14 @@ type CoreServer struct {
 	sessionDefaults SessionDefaults
 	disconnectHooks []func(session.Info)
 
+	// Auth services for two-phase login and account management.
+	authService      AuthServiceProvider
+	resetService     ResetServiceProvider
+	characterService CharacterServiceProvider
+	playerTokenRepo  auth.PlayerTokenRepository
+	playerRepo       auth.PlayerRepository
+	charRepo         auth.CharacterRepository
+
 	// newSessionID is used for generating session IDs. Can be overridden for testing.
 	newSessionID func() ulid.ULID
 }
@@ -114,9 +123,9 @@ type CoreServer struct {
 type CoreServerOption func(*CoreServer)
 
 // WithAuthenticator sets the authenticator for the server.
-func WithAuthenticator(auth Authenticator) CoreServerOption {
+func WithAuthenticator(a Authenticator) CoreServerOption {
 	return func(s *CoreServer) {
-		s.authenticator = auth
+		s.authenticator = a
 	}
 }
 
@@ -731,7 +740,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 			}
 			if ev.Type == session.Destroyed {
 				// Best-effort: send STREAM_CLOSED, ignore send errors.
-//nolint:errcheck // best-effort: client may already be disconnected
+				//nolint:errcheck // best-effort: client may already be disconnected
 				_ = stream.Send(&corev1.SubscribeResponse{
 					Frame: &corev1.SubscribeResponse_Control{
 						Control: &corev1.ControlFrame{

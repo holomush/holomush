@@ -1,20 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+/**
+ * Connect as guest via the landing page and wait for the terminal to load.
+ * All terminal tests must go through the auth flow since /terminal is
+ * behind an auth guard.
+ */
+async function connectAsGuest(page: Page) {
+  await page.goto('/');
+  await page.getByRole('main').getByRole('button', { name: 'Try as Guest' }).click();
+  await expect(page).toHaveURL(/\/terminal/, { timeout: 10000 });
+  await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+}
 
 test.describe('Terminal UI', () => {
   test('connects and displays events', async ({ page }) => {
-    await page.goto('/terminal');
-    await page.click('text=Connect as Guest');
-    await expect(page.locator('.terminal-layout')).toBeVisible();
+    await connectAsGuest(page);
     // Guest characters get random names like "Beryl_Helium"
     await expect(page.locator('.character')).toContainText(/\w+_\w+/);
   });
 
   test('sends commands and receives output', async ({ page }) => {
-    await page.goto('/terminal');
-    await page.click('text=Connect as Guest');
+    await connectAsGuest(page);
     const input = page.locator('textarea');
     // Use 'say' — it emits a say event to the stream (unlike 'look' which returns via RPC response)
     await input.fill('say hello world');
@@ -23,8 +32,7 @@ test.describe('Terminal UI', () => {
   });
 
   test('sidebar toggles with Ctrl+B', async ({ page }) => {
-    await page.goto('/terminal');
-    await page.click('text=Connect as Guest');
+    await connectAsGuest(page);
     await expect(page.locator('.sidebar:not(.expanded)')).toBeVisible();
     await page.keyboard.press('Control+b');
     await expect(page.locator('.sidebar.expanded')).toBeVisible();
@@ -34,8 +42,7 @@ test.describe('Terminal UI', () => {
 
   test('responsive layout hides sidebar on mobile', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    await page.goto('/terminal');
-    await page.click('text=Connect as Guest');
+    await connectAsGuest(page);
     await expect(page.locator('button[title="Toggle sidebar"]')).toBeVisible();
   });
 
@@ -46,20 +53,11 @@ test.describe('Terminal UI', () => {
     const page1 = await context1.newPage();
     const page2 = await context2.newPage();
 
-
     // Both connect as guests
-    await page1.goto('/terminal');
-    await page1.click('text=Connect as Guest');
-    await expect(page1.locator('.terminal-layout')).toBeVisible();
-
-    // Get first character's name
+    await connectAsGuest(page1);
     const name1 = await page1.locator('.character').textContent();
 
-    await page2.goto('/terminal');
-    await page2.click('text=Connect as Guest');
-    await expect(page2.locator('.terminal-layout')).toBeVisible();
-
-    // Get second character's name
+    await connectAsGuest(page2);
     const name2 = await page2.locator('.character').textContent();
 
     // Wait for arrive event to propagate
@@ -86,49 +84,38 @@ test.describe('Terminal UI', () => {
   });
 
   test('session survives page reload', async ({ page }) => {
-    await page.goto('/terminal');
-    await page.click('text=Connect as Guest');
-    await expect(page.locator('.terminal-layout')).toBeVisible();
-
-    // Capture the character name before reload
+    await connectAsGuest(page);
     const nameBefore = await page.locator('.character').textContent();
 
-    // Reload the page
+    // Reload — session persists, stream reconnects
     await page.reload();
-
-    // Should reconnect automatically (no login screen)
     await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
-
-    // Same character name
     const nameAfter = await page.locator('.character').textContent();
     expect(nameAfter).toBe(nameBefore);
   });
 
   test('disconnect clears session so reload shows login', async ({ page }) => {
-    await page.goto('/terminal');
-    await page.click('text=Connect as Guest');
-    await expect(page.locator('.terminal-layout')).toBeVisible();
+    await connectAsGuest(page);
 
     // Send quit command to disconnect
     const input = page.locator('textarea');
     await input.fill('quit');
     await input.press('Enter');
 
-    // Should return to login screen
-    await expect(page.locator('text=Connect as Guest')).toBeVisible({ timeout: 5000 });
+    // After quit, the terminal shows disconnect UI (Reconnect/New Session buttons)
+    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible({ timeout: 10000 });
 
-    // Verify sessionStorage was actually cleared
+    // Verify sessionStorage was cleared
     const session = await page.evaluate(() => sessionStorage.getItem('holomush-session'));
     expect(session).toBeNull();
 
-    // Reload — should still show login (session was cleared)
+    // On reload, auth guard redirects to login since session is gone
     await page.reload();
-    await expect(page.locator('text=Connect as Guest')).toBeVisible();
+    await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
   });
 
   test('command history with up/down arrows', async ({ page }) => {
-    await page.goto('/terminal');
-    await page.click('text=Connect as Guest');
+    await connectAsGuest(page);
     const input = page.locator('textarea');
     await input.fill('look');
     await input.press('Enter');
@@ -141,9 +128,7 @@ test.describe('Terminal UI', () => {
   });
 
   test('reconnect receives live events after replay', async ({ page }) => {
-    await page.goto('/terminal');
-    await page.click('text=Connect as Guest');
-    await expect(page.locator('.terminal-layout')).toBeVisible();
+    await connectAsGuest(page);
 
     // Reload — session persists, stream reconnects
     await page.reload();
@@ -160,9 +145,7 @@ test.describe('Terminal UI', () => {
   });
 
   test('command history persists across reconnect', async ({ page }) => {
-    await page.goto('/terminal');
-    await page.click('text=Connect as Guest');
-    await expect(page.locator('.terminal-layout')).toBeVisible();
+    await connectAsGuest(page);
 
     // Send commands with unique tokens to avoid collision with other tests
     const token = Date.now();
@@ -197,9 +180,7 @@ test.describe('Terminal UI', () => {
   });
 
   test('in-progress input persists across page reload', async ({ page }) => {
-    await page.goto('/terminal');
-    await page.click('text=Connect as Guest');
-    await expect(page.locator('.terminal-layout')).toBeVisible();
+    await connectAsGuest(page);
 
     // Type a partial command (don't press Enter)
     const input = page.locator('textarea');
@@ -217,23 +198,21 @@ test.describe('Terminal UI', () => {
   });
 
   test('draft does not leak across sessions', async ({ page }) => {
-    await page.goto('/terminal');
-    await page.click('text=Connect as Guest');
-    await expect(page.locator('.terminal-layout')).toBeVisible();
+    await connectAsGuest(page);
 
     // Type a draft and wait for debounced save
     const input = page.locator('textarea');
     await input.fill('leaked draft from old session');
     await page.waitForTimeout(700);
 
-    // Quit — clears session, returns to login
+    // Quit — clears session, shows disconnect UI
     await input.fill('quit');
     await input.press('Enter');
-    await expect(page.locator('text=Connect as Guest')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible({ timeout: 10000 });
 
-    // Reconnect as a new guest (different session ID)
-    await page.click('text=Connect as Guest');
-    await expect(page.locator('.terminal-layout')).toBeVisible();
+    // Click Sign In to go to login, then go to landing and reconnect as guest
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await connectAsGuest(page);
 
     // The textarea should be empty — no draft from the old session
     const inputAfter = page.locator('textarea');

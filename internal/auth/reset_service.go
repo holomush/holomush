@@ -17,6 +17,7 @@ import (
 type PasswordResetService struct {
 	playerRepo PlayerRepository
 	resetRepo  PasswordResetRepository
+	sessions   WebSessionRepository
 	hasher     PasswordHasher
 	logger     *slog.Logger
 }
@@ -26,6 +27,7 @@ type PasswordResetService struct {
 func NewPasswordResetService(
 	playerRepo PlayerRepository,
 	resetRepo PasswordResetRepository,
+	sessions WebSessionRepository,
 	hasher PasswordHasher,
 ) (*PasswordResetService, error) {
 	if playerRepo == nil {
@@ -34,12 +36,16 @@ func NewPasswordResetService(
 	if resetRepo == nil {
 		return nil, oops.Errorf("reset repository is required")
 	}
+	if sessions == nil {
+		return nil, oops.Errorf("sessions repository is required")
+	}
 	if hasher == nil {
 		return nil, oops.Errorf("password hasher is required")
 	}
 	return &PasswordResetService{
 		playerRepo: playerRepo,
 		resetRepo:  resetRepo,
+		sessions:   sessions,
 		hasher:     hasher,
 		logger:     slog.New(slog.DiscardHandler),
 	}, nil
@@ -50,6 +56,7 @@ func NewPasswordResetService(
 func NewPasswordResetServiceWithLogger(
 	playerRepo PlayerRepository,
 	resetRepo PasswordResetRepository,
+	sessions WebSessionRepository,
 	hasher PasswordHasher,
 	logger *slog.Logger,
 ) (*PasswordResetService, error) {
@@ -58,6 +65,9 @@ func NewPasswordResetServiceWithLogger(
 	}
 	if resetRepo == nil {
 		return nil, oops.Errorf("reset repository is required")
+	}
+	if sessions == nil {
+		return nil, oops.Errorf("sessions repository is required")
 	}
 	if hasher == nil {
 		return nil, oops.Errorf("password hasher is required")
@@ -68,6 +78,7 @@ func NewPasswordResetServiceWithLogger(
 	return &PasswordResetService{
 		playerRepo: playerRepo,
 		resetRepo:  resetRepo,
+		sessions:   sessions,
 		hasher:     hasher,
 		logger:     logger,
 	}, nil
@@ -167,6 +178,20 @@ func (s *PasswordResetService) ResetPassword(ctx context.Context, token, newPass
 		return oops.Code("RESET_PASSWORD_FAILED").
 			With("operation", "UpdatePassword").
 			Wrap(err)
+	}
+
+	// Invalidate all active sessions for the player.
+	// This is best-effort — if it fails, the password was still updated successfully.
+	// TODO: Consider making session invalidation mandatory (return error on failure).
+	// Tradeoff: failing here would leave the password updated but old sessions valid,
+	// which is arguably better than rolling back a successful password change.
+	if err := s.sessions.DeleteByPlayer(ctx, playerID); err != nil {
+		s.logger.Warn("best-effort session invalidation failed",
+			"event", "session_invalidation_failed",
+			"player_id", playerID.String(),
+			"operation", "invalidate_sessions",
+			"error", err.Error(),
+		)
 	}
 
 	// Delete all reset tokens for the player.

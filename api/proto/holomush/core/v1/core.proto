@@ -37,6 +37,30 @@ service CoreService {
 
   // GetCommandHistory retrieves command history for a session.
   rpc GetCommandHistory(GetCommandHistoryRequest) returns (GetCommandHistoryResponse);
+
+  // Two-phase login: authenticate player credentials.
+  rpc AuthenticatePlayer(AuthenticatePlayerRequest) returns (AuthenticatePlayerResponse);
+
+  // Two-phase login: select a character, creating or reattaching a game session.
+  rpc SelectCharacter(SelectCharacterRequest) returns (SelectCharacterResponse);
+
+  // Create a new player account.
+  rpc CreatePlayer(CreatePlayerRequest) returns (CreatePlayerResponse);
+
+  // Create a new character for an authenticated player.
+  rpc CreateCharacter(CreateCharacterRequest) returns (CreateCharacterResponse);
+
+  // List characters for an authenticated player.
+  rpc ListCharacters(ListCharactersRequest) returns (ListCharactersResponse);
+
+  // Request a password reset (email stubbed).
+  rpc RequestPasswordReset(RequestPasswordResetRequest) returns (RequestPasswordResetResponse);
+
+  // Confirm a password reset with token.
+  rpc ConfirmPasswordReset(ConfirmPasswordResetRequest) returns (ConfirmPasswordResetResponse);
+
+  // End a web session.
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
 }
 
 message AuthenticateRequest {
@@ -126,3 +150,100 @@ message GetCommandHistoryResponse {
   repeated string commands = 3;
   string error = 4;
 }
+
+// --- Auth messages ---
+
+message CharacterSummary {
+  string character_id = 1;
+  string character_name = 2;
+  bool has_active_session = 3;
+  string session_status = 4;
+  string last_location = 5;
+  int64 last_played_at = 6;
+}
+
+message AuthenticatePlayerRequest {
+  string username = 1;
+  string password = 2;
+  string captcha_token = 3;
+  bool remember_me = 4;
+}
+
+message AuthenticatePlayerResponse {
+  bool success = 1;
+  string player_token = 2;
+  string error_message = 3;
+  repeated CharacterSummary characters = 4;
+  string default_character_id = 5;
+}
+
+message SelectCharacterRequest {
+  string player_token = 1;
+  string character_id = 2;
+}
+
+message SelectCharacterResponse {
+  bool success = 1;
+  string session_id = 2;
+  string character_name = 3;
+  bool reattached = 4;
+  string error_message = 5;
+}
+
+message CreatePlayerRequest {
+  string username = 1;
+  string password = 2;
+  string email = 3;
+  string captcha_token = 4;
+}
+
+message CreatePlayerResponse {
+  bool success = 1;
+  string player_token = 2;
+  repeated CharacterSummary characters = 3;
+  string error_message = 4;
+}
+
+message CreateCharacterRequest {
+  string player_token = 1;
+  string character_name = 2;
+}
+
+message CreateCharacterResponse {
+  bool success = 1;
+  string character_id = 2;
+  string character_name = 3;
+  string error_message = 4;
+}
+
+message ListCharactersRequest {
+  string player_token = 1;
+}
+
+message ListCharactersResponse {
+  repeated CharacterSummary characters = 1;
+}
+
+message RequestPasswordResetRequest {
+  string email = 1;
+}
+
+message RequestPasswordResetResponse {
+  bool success = 1;
+}
+
+message ConfirmPasswordResetRequest {
+  string token = 1;
+  string new_password = 2;
+}
+
+message ConfirmPasswordResetResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message LogoutRequest {
+  string session_id = 1;
+}
+
+message LogoutResponse {}

@@ -401,6 +401,14 @@ task dev       # Run dev server
 | **MUST NOT** disable lint/format rules | Without explicit user confirmation                |
 | **SHOULD** run `task fmt`              | Before committing to ensure consistent formatting |
 
+**Pre-PR checklist** — E2E and integration tests MUST pass before creating a PR:
+
+```bash
+task test && task lint && task test:int && task test:e2e
+```
+
+Docker is always available — never skip E2E tests.
+
 ### Beads Commands
 
 ```bash
@@ -532,6 +540,23 @@ Default deny - explicit permission required for all operations.
 - All game actions produce events
 - Events are immutable and ordered
 - State is derived from event replay
+
+### HTTP Middleware
+
+When wrapping `http.ResponseWriter` (e.g., cookie middleware), the wrapper
+MUST implement `http.Flusher` and `Unwrap()` — ConnectRPC server-streaming
+calls `Flush()` after each frame and will error if the interface is missing.
+
+### SvelteKit Auth Guards
+
+SvelteKit `load()` runs BEFORE `onMount()`. Session restoration from
+`sessionStorage` must happen in `load()`, not `onMount()`, or auth guards
+will redirect on page reload.
+
+### Svelte Form Inputs
+
+All form inputs MUST have `name` attributes for Playwright E2E testability.
+Buttons that submit forms MUST have `type="submit"`.
 
 <!-- BEGIN BEADS INTEGRATION -->
 ## Issue Tracking with bd (beads)

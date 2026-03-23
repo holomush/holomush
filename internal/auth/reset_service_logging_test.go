@@ -19,6 +19,45 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 )
 
+// mockSessionRepoForReset is a no-op session repo stub for reset logging tests.
+type mockSessionRepoForReset struct{}
+
+func (m *mockSessionRepoForReset) Create(_ context.Context, _ *auth.WebSession) error {
+	return nil
+}
+
+func (m *mockSessionRepoForReset) GetByID(_ context.Context, _ ulid.ULID) (*auth.WebSession, error) {
+	return nil, auth.ErrNotFound
+}
+
+func (m *mockSessionRepoForReset) GetByTokenHash(_ context.Context, _ string) (*auth.WebSession, error) {
+	return nil, auth.ErrNotFound
+}
+
+func (m *mockSessionRepoForReset) GetByPlayer(_ context.Context, _ ulid.ULID) ([]*auth.WebSession, error) {
+	return nil, nil
+}
+
+func (m *mockSessionRepoForReset) UpdateLastSeen(_ context.Context, _ ulid.ULID, _ time.Time) error {
+	return nil
+}
+
+func (m *mockSessionRepoForReset) UpdateCharacter(_ context.Context, _, _ ulid.ULID) error {
+	return nil
+}
+
+func (m *mockSessionRepoForReset) Delete(_ context.Context, _ ulid.ULID) error {
+	return nil
+}
+
+func (m *mockSessionRepoForReset) DeleteByPlayer(_ context.Context, _ ulid.ULID) error {
+	return nil
+}
+
+func (m *mockSessionRepoForReset) DeleteExpired(_ context.Context) (int64, error) {
+	return 0, nil
+}
+
 // mockResetRepoLogging is a mock that can fail on DeleteByPlayer for testing logging.
 type mockResetRepoLogging struct {
 	reset          *auth.PasswordReset
@@ -101,13 +140,14 @@ func TestPasswordResetService_ResetPassword_LogsDeleteByPlayerFailure(t *testing
 		deleteByPlayer: deleteErr,
 	}
 	playerRepo := &mockPlayerRepoForReset{}
+	sessionRepo := &mockSessionRepoForReset{}
 	hasher := &mockHasherLogging{}
 
 	// Capture logs
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 
-	svc, err := auth.NewPasswordResetServiceWithLogger(playerRepo, resetRepo, hasher, logger)
+	svc, err := auth.NewPasswordResetServiceWithLogger(playerRepo, resetRepo, sessionRepo, hasher, logger)
 	require.NoError(t, err)
 
 	// Reset password - this succeeds but DeleteByPlayer fails

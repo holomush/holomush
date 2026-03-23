@@ -6,4 +6,5 @@ const baseUrl = import.meta.env.DEV
 
 export const transport = createConnectTransport({
   baseUrl,
+  credentials: "include",
 });

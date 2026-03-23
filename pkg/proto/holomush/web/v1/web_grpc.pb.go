@@ -22,15 +22,19 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	WebService_Login_FullMethodName              = "/holomush.web.v1.WebService/Login"
-	WebService_SendCommand_FullMethodName        = "/holomush.web.v1.WebService/SendCommand"
-	WebService_StreamEvents_FullMethodName       = "/holomush.web.v1.WebService/StreamEvents"
-	WebService_Disconnect_FullMethodName         = "/holomush.web.v1.WebService/Disconnect"
-	WebService_AuthenticatePlayer_FullMethodName = "/holomush.web.v1.WebService/AuthenticatePlayer"
-	WebService_ListCharacters_FullMethodName     = "/holomush.web.v1.WebService/ListCharacters"
-	WebService_SelectCharacter_FullMethodName    = "/holomush.web.v1.WebService/SelectCharacter"
-	WebService_ListSessions_FullMethodName       = "/holomush.web.v1.WebService/ListSessions"
-	WebService_GetCommandHistory_FullMethodName  = "/holomush.web.v1.WebService/GetCommandHistory"
+	WebService_Login_FullMethodName                   = "/holomush.web.v1.WebService/Login"
+	WebService_SendCommand_FullMethodName             = "/holomush.web.v1.WebService/SendCommand"
+	WebService_StreamEvents_FullMethodName            = "/holomush.web.v1.WebService/StreamEvents"
+	WebService_Disconnect_FullMethodName              = "/holomush.web.v1.WebService/Disconnect"
+	WebService_GetCommandHistory_FullMethodName       = "/holomush.web.v1.WebService/GetCommandHistory"
+	WebService_WebAuthenticatePlayer_FullMethodName   = "/holomush.web.v1.WebService/WebAuthenticatePlayer"
+	WebService_WebSelectCharacter_FullMethodName      = "/holomush.web.v1.WebService/WebSelectCharacter"
+	WebService_WebCreatePlayer_FullMethodName         = "/holomush.web.v1.WebService/WebCreatePlayer"
+	WebService_WebCreateCharacter_FullMethodName      = "/holomush.web.v1.WebService/WebCreateCharacter"
+	WebService_WebListCharacters_FullMethodName       = "/holomush.web.v1.WebService/WebListCharacters"
+	WebService_WebLogout_FullMethodName               = "/holomush.web.v1.WebService/WebLogout"
+	WebService_WebRequestPasswordReset_FullMethodName = "/holomush.web.v1.WebService/WebRequestPasswordReset"
+	WebService_WebConfirmPasswordReset_FullMethodName = "/holomush.web.v1.WebService/WebConfirmPasswordReset"
 )
 
 // WebServiceClient is the client API for WebService service.
@@ -46,16 +50,17 @@ type WebServiceClient interface {
 	StreamEvents(ctx context.Context, in *StreamEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamEventsResponse], error)
 	// Disconnect ends the session and triggers cleanup.
 	Disconnect(ctx context.Context, in *DisconnectRequest, opts ...grpc.CallOption) (*DisconnectResponse, error)
-	// Two-phase login: authenticate player credentials, get a token.
-	AuthenticatePlayer(ctx context.Context, in *AuthenticatePlayerRequest, opts ...grpc.CallOption) (*AuthenticatePlayerResponse, error)
-	// Two-phase login: list characters available for the authenticated player.
-	ListCharacters(ctx context.Context, in *ListCharactersRequest, opts ...grpc.CallOption) (*ListCharactersResponse, error)
-	// Two-phase login: select a character, creating or reattaching a session.
-	SelectCharacter(ctx context.Context, in *SelectCharacterRequest, opts ...grpc.CallOption) (*SelectCharacterResponse, error)
-	// List all sessions for the authenticated player.
-	ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error)
 	// Retrieve command history for a session.
 	GetCommandHistory(ctx context.Context, in *GetCommandHistoryRequest, opts ...grpc.CallOption) (*GetCommandHistoryResponse, error)
+	// Web auth RPCs.
+	WebAuthenticatePlayer(ctx context.Context, in *WebAuthenticatePlayerRequest, opts ...grpc.CallOption) (*WebAuthenticatePlayerResponse, error)
+	WebSelectCharacter(ctx context.Context, in *WebSelectCharacterRequest, opts ...grpc.CallOption) (*WebSelectCharacterResponse, error)
+	WebCreatePlayer(ctx context.Context, in *WebCreatePlayerRequest, opts ...grpc.CallOption) (*WebCreatePlayerResponse, error)
+	WebCreateCharacter(ctx context.Context, in *WebCreateCharacterRequest, opts ...grpc.CallOption) (*WebCreateCharacterResponse, error)
+	WebListCharacters(ctx context.Context, in *WebListCharactersRequest, opts ...grpc.CallOption) (*WebListCharactersResponse, error)
+	WebLogout(ctx context.Context, in *WebLogoutRequest, opts ...grpc.CallOption) (*WebLogoutResponse, error)
+	WebRequestPasswordReset(ctx context.Context, in *WebRequestPasswordResetRequest, opts ...grpc.CallOption) (*WebRequestPasswordResetResponse, error)
+	WebConfirmPasswordReset(ctx context.Context, in *WebConfirmPasswordResetRequest, opts ...grpc.CallOption) (*WebConfirmPasswordResetResponse, error)
 }
 
 type webServiceClient struct {
@@ -115,50 +120,90 @@ func (c *webServiceClient) Disconnect(ctx context.Context, in *DisconnectRequest
 	return out, nil
 }
 
-func (c *webServiceClient) AuthenticatePlayer(ctx context.Context, in *AuthenticatePlayerRequest, opts ...grpc.CallOption) (*AuthenticatePlayerResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AuthenticatePlayerResponse)
-	err := c.cc.Invoke(ctx, WebService_AuthenticatePlayer_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *webServiceClient) ListCharacters(ctx context.Context, in *ListCharactersRequest, opts ...grpc.CallOption) (*ListCharactersResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListCharactersResponse)
-	err := c.cc.Invoke(ctx, WebService_ListCharacters_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *webServiceClient) SelectCharacter(ctx context.Context, in *SelectCharacterRequest, opts ...grpc.CallOption) (*SelectCharacterResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SelectCharacterResponse)
-	err := c.cc.Invoke(ctx, WebService_SelectCharacter_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *webServiceClient) ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListSessionsResponse)
-	err := c.cc.Invoke(ctx, WebService_ListSessions_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *webServiceClient) GetCommandHistory(ctx context.Context, in *GetCommandHistoryRequest, opts ...grpc.CallOption) (*GetCommandHistoryResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetCommandHistoryResponse)
 	err := c.cc.Invoke(ctx, WebService_GetCommandHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebAuthenticatePlayer(ctx context.Context, in *WebAuthenticatePlayerRequest, opts ...grpc.CallOption) (*WebAuthenticatePlayerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebAuthenticatePlayerResponse)
+	err := c.cc.Invoke(ctx, WebService_WebAuthenticatePlayer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebSelectCharacter(ctx context.Context, in *WebSelectCharacterRequest, opts ...grpc.CallOption) (*WebSelectCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebSelectCharacterResponse)
+	err := c.cc.Invoke(ctx, WebService_WebSelectCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebCreatePlayer(ctx context.Context, in *WebCreatePlayerRequest, opts ...grpc.CallOption) (*WebCreatePlayerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebCreatePlayerResponse)
+	err := c.cc.Invoke(ctx, WebService_WebCreatePlayer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebCreateCharacter(ctx context.Context, in *WebCreateCharacterRequest, opts ...grpc.CallOption) (*WebCreateCharacterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebCreateCharacterResponse)
+	err := c.cc.Invoke(ctx, WebService_WebCreateCharacter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebListCharacters(ctx context.Context, in *WebListCharactersRequest, opts ...grpc.CallOption) (*WebListCharactersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebListCharactersResponse)
+	err := c.cc.Invoke(ctx, WebService_WebListCharacters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebLogout(ctx context.Context, in *WebLogoutRequest, opts ...grpc.CallOption) (*WebLogoutResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebLogoutResponse)
+	err := c.cc.Invoke(ctx, WebService_WebLogout_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebRequestPasswordReset(ctx context.Context, in *WebRequestPasswordResetRequest, opts ...grpc.CallOption) (*WebRequestPasswordResetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebRequestPasswordResetResponse)
+	err := c.cc.Invoke(ctx, WebService_WebRequestPasswordReset_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebConfirmPasswordReset(ctx context.Context, in *WebConfirmPasswordResetRequest, opts ...grpc.CallOption) (*WebConfirmPasswordResetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebConfirmPasswordResetResponse)
+	err := c.cc.Invoke(ctx, WebService_WebConfirmPasswordReset_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -178,16 +223,17 @@ type WebServiceServer interface {
 	StreamEvents(*StreamEventsRequest, grpc.ServerStreamingServer[StreamEventsResponse]) error
 	// Disconnect ends the session and triggers cleanup.
 	Disconnect(context.Context, *DisconnectRequest) (*DisconnectResponse, error)
-	// Two-phase login: authenticate player credentials, get a token.
-	AuthenticatePlayer(context.Context, *AuthenticatePlayerRequest) (*AuthenticatePlayerResponse, error)
-	// Two-phase login: list characters available for the authenticated player.
-	ListCharacters(context.Context, *ListCharactersRequest) (*ListCharactersResponse, error)
-	// Two-phase login: select a character, creating or reattaching a session.
-	SelectCharacter(context.Context, *SelectCharacterRequest) (*SelectCharacterResponse, error)
-	// List all sessions for the authenticated player.
-	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
 	// Retrieve command history for a session.
 	GetCommandHistory(context.Context, *GetCommandHistoryRequest) (*GetCommandHistoryResponse, error)
+	// Web auth RPCs.
+	WebAuthenticatePlayer(context.Context, *WebAuthenticatePlayerRequest) (*WebAuthenticatePlayerResponse, error)
+	WebSelectCharacter(context.Context, *WebSelectCharacterRequest) (*WebSelectCharacterResponse, error)
+	WebCreatePlayer(context.Context, *WebCreatePlayerRequest) (*WebCreatePlayerResponse, error)
+	WebCreateCharacter(context.Context, *WebCreateCharacterRequest) (*WebCreateCharacterResponse, error)
+	WebListCharacters(context.Context, *WebListCharactersRequest) (*WebListCharactersResponse, error)
+	WebLogout(context.Context, *WebLogoutRequest) (*WebLogoutResponse, error)
+	WebRequestPasswordReset(context.Context, *WebRequestPasswordResetRequest) (*WebRequestPasswordResetResponse, error)
+	WebConfirmPasswordReset(context.Context, *WebConfirmPasswordResetRequest) (*WebConfirmPasswordResetResponse, error)
 	mustEmbedUnimplementedWebServiceServer()
 }
 
@@ -210,20 +256,32 @@ func (UnimplementedWebServiceServer) StreamEvents(*StreamEventsRequest, grpc.Ser
 func (UnimplementedWebServiceServer) Disconnect(context.Context, *DisconnectRequest) (*DisconnectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Disconnect not implemented")
 }
-func (UnimplementedWebServiceServer) AuthenticatePlayer(context.Context, *AuthenticatePlayerRequest) (*AuthenticatePlayerResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method AuthenticatePlayer not implemented")
-}
-func (UnimplementedWebServiceServer) ListCharacters(context.Context, *ListCharactersRequest) (*ListCharactersResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListCharacters not implemented")
-}
-func (UnimplementedWebServiceServer) SelectCharacter(context.Context, *SelectCharacterRequest) (*SelectCharacterResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SelectCharacter not implemented")
-}
-func (UnimplementedWebServiceServer) ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListSessions not implemented")
-}
 func (UnimplementedWebServiceServer) GetCommandHistory(context.Context, *GetCommandHistoryRequest) (*GetCommandHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCommandHistory not implemented")
+}
+func (UnimplementedWebServiceServer) WebAuthenticatePlayer(context.Context, *WebAuthenticatePlayerRequest) (*WebAuthenticatePlayerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebAuthenticatePlayer not implemented")
+}
+func (UnimplementedWebServiceServer) WebSelectCharacter(context.Context, *WebSelectCharacterRequest) (*WebSelectCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebSelectCharacter not implemented")
+}
+func (UnimplementedWebServiceServer) WebCreatePlayer(context.Context, *WebCreatePlayerRequest) (*WebCreatePlayerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebCreatePlayer not implemented")
+}
+func (UnimplementedWebServiceServer) WebCreateCharacter(context.Context, *WebCreateCharacterRequest) (*WebCreateCharacterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebCreateCharacter not implemented")
+}
+func (UnimplementedWebServiceServer) WebListCharacters(context.Context, *WebListCharactersRequest) (*WebListCharactersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebListCharacters not implemented")
+}
+func (UnimplementedWebServiceServer) WebLogout(context.Context, *WebLogoutRequest) (*WebLogoutResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebLogout not implemented")
+}
+func (UnimplementedWebServiceServer) WebRequestPasswordReset(context.Context, *WebRequestPasswordResetRequest) (*WebRequestPasswordResetResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebRequestPasswordReset not implemented")
+}
+func (UnimplementedWebServiceServer) WebConfirmPasswordReset(context.Context, *WebConfirmPasswordResetRequest) (*WebConfirmPasswordResetResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebConfirmPasswordReset not implemented")
 }
 func (UnimplementedWebServiceServer) mustEmbedUnimplementedWebServiceServer() {}
 func (UnimplementedWebServiceServer) testEmbeddedByValue()                    {}
@@ -311,78 +369,6 @@ func _WebService_Disconnect_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
-func _WebService_AuthenticatePlayer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AuthenticatePlayerRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WebServiceServer).AuthenticatePlayer(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WebService_AuthenticatePlayer_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WebServiceServer).AuthenticatePlayer(ctx, req.(*AuthenticatePlayerRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WebService_ListCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListCharactersRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WebServiceServer).ListCharacters(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WebService_ListCharacters_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WebServiceServer).ListCharacters(ctx, req.(*ListCharactersRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WebService_SelectCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SelectCharacterRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WebServiceServer).SelectCharacter(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WebService_SelectCharacter_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WebServiceServer).SelectCharacter(ctx, req.(*SelectCharacterRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WebService_ListSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListSessionsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WebServiceServer).ListSessions(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WebService_ListSessions_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WebServiceServer).ListSessions(ctx, req.(*ListSessionsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _WebService_GetCommandHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetCommandHistoryRequest)
 	if err := dec(in); err != nil {
@@ -397,6 +383,150 @@ func _WebService_GetCommandHistory_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(WebServiceServer).GetCommandHistory(ctx, req.(*GetCommandHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebAuthenticatePlayer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebAuthenticatePlayerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebAuthenticatePlayer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebAuthenticatePlayer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebAuthenticatePlayer(ctx, req.(*WebAuthenticatePlayerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebSelectCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebSelectCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebSelectCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebSelectCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebSelectCharacter(ctx, req.(*WebSelectCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebCreatePlayer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebCreatePlayerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebCreatePlayer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebCreatePlayer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebCreatePlayer(ctx, req.(*WebCreatePlayerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebCreateCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebCreateCharacterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebCreateCharacter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebCreateCharacter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebCreateCharacter(ctx, req.(*WebCreateCharacterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebListCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebListCharactersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebListCharacters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebListCharacters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebListCharacters(ctx, req.(*WebListCharactersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebLogout_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebLogoutRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebLogout(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebLogout_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebLogout(ctx, req.(*WebLogoutRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebRequestPasswordReset_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebRequestPasswordResetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebRequestPasswordReset(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebRequestPasswordReset_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebRequestPasswordReset(ctx, req.(*WebRequestPasswordResetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebConfirmPasswordReset_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebConfirmPasswordResetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebConfirmPasswordReset(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebConfirmPasswordReset_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebConfirmPasswordReset(ctx, req.(*WebConfirmPasswordResetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -421,24 +551,40 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _WebService_Disconnect_Handler,
 		},
 		{
-			MethodName: "AuthenticatePlayer",
-			Handler:    _WebService_AuthenticatePlayer_Handler,
-		},
-		{
-			MethodName: "ListCharacters",
-			Handler:    _WebService_ListCharacters_Handler,
-		},
-		{
-			MethodName: "SelectCharacter",
-			Handler:    _WebService_SelectCharacter_Handler,
-		},
-		{
-			MethodName: "ListSessions",
-			Handler:    _WebService_ListSessions_Handler,
-		},
-		{
 			MethodName: "GetCommandHistory",
 			Handler:    _WebService_GetCommandHistory_Handler,
+		},
+		{
+			MethodName: "WebAuthenticatePlayer",
+			Handler:    _WebService_WebAuthenticatePlayer_Handler,
+		},
+		{
+			MethodName: "WebSelectCharacter",
+			Handler:    _WebService_WebSelectCharacter_Handler,
+		},
+		{
+			MethodName: "WebCreatePlayer",
+			Handler:    _WebService_WebCreatePlayer_Handler,
+		},
+		{
+			MethodName: "WebCreateCharacter",
+			Handler:    _WebService_WebCreateCharacter_Handler,
+		},
+		{
+			MethodName: "WebListCharacters",
+			Handler:    _WebService_WebListCharacters_Handler,
+		},
+		{
+			MethodName: "WebLogout",
+			Handler:    _WebService_WebLogout_Handler,
+		},
+		{
+			MethodName: "WebRequestPasswordReset",
+			Handler:    _WebService_WebRequestPasswordReset_Handler,
+		},
+		{
+			MethodName: "WebConfirmPasswordReset",
+			Handler:    _WebService_WebConfirmPasswordReset_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

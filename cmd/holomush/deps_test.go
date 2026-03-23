@@ -132,6 +132,38 @@ func (m *mockGRPCClient) GetCommandHistory(_ context.Context, _ *corev1.GetComma
 	return &corev1.GetCommandHistoryResponse{Success: true}, nil
 }
 
+func (m *mockGRPCClient) AuthenticatePlayer(_ context.Context, _ *corev1.AuthenticatePlayerRequest) (*corev1.AuthenticatePlayerResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) SelectCharacter(_ context.Context, _ *corev1.SelectCharacterRequest) (*corev1.SelectCharacterResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) CreatePlayer(_ context.Context, _ *corev1.CreatePlayerRequest) (*corev1.CreatePlayerResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) CreateCharacter(_ context.Context, _ *corev1.CreateCharacterRequest) (*corev1.CreateCharacterResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) ListCharacters(_ context.Context, _ *corev1.ListCharactersRequest) (*corev1.ListCharactersResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) RequestPasswordReset(_ context.Context, _ *corev1.RequestPasswordResetRequest) (*corev1.RequestPasswordResetResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) ConfirmPasswordReset(_ context.Context, _ *corev1.ConfirmPasswordResetRequest) (*corev1.ConfirmPasswordResetResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) Logout(_ context.Context, _ *corev1.LogoutRequest) (*corev1.LogoutResponse, error) {
+	return nil, nil
+}
+
 // mockMigrator implements AutoMigrator for testing.
 type mockMigrator struct {
 	upFunc    func() error

@@ -23,6 +23,9 @@ type CharacterRepository interface {
 
 	// CountByPlayer returns the number of characters owned by a player.
 	CountByPlayer(ctx context.Context, playerID ulid.ULID) (int, error)
+
+	// ListByPlayer returns all characters owned by a player.
+	ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*world.Character, error)
 }
 
 // LocationRepository defines the location operations needed by CharacterService.

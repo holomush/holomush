@@ -28,9 +28,6 @@ const (
 	rpcTimeout = 10 * time.Second
 )
 
-// errUnimplemented is returned by stub RPCs that are not yet implemented.
-var errUnimplemented = connect.NewError(connect.CodeUnimplemented, errors.New("two-phase login not yet implemented"))
-
 // CoreClient is the gRPC interface used by Handler to communicate with the
 // core service.
 type CoreClient interface {
@@ -39,6 +36,15 @@ type CoreClient interface {
 	Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error)
 	Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error)
 	GetCommandHistory(ctx context.Context, req *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error)
+	// Auth RPCs (two-phase login)
+	AuthenticatePlayer(ctx context.Context, req *corev1.AuthenticatePlayerRequest) (*corev1.AuthenticatePlayerResponse, error)
+	SelectCharacter(ctx context.Context, req *corev1.SelectCharacterRequest) (*corev1.SelectCharacterResponse, error)
+	CreatePlayer(ctx context.Context, req *corev1.CreatePlayerRequest) (*corev1.CreatePlayerResponse, error)
+	CreateCharacter(ctx context.Context, req *corev1.CreateCharacterRequest) (*corev1.CreateCharacterResponse, error)
+	ListCharacters(ctx context.Context, req *corev1.ListCharactersRequest) (*corev1.ListCharactersResponse, error)
+	RequestPasswordReset(ctx context.Context, req *corev1.RequestPasswordResetRequest) (*corev1.RequestPasswordResetResponse, error)
+	ConfirmPasswordReset(ctx context.Context, req *corev1.ConfirmPasswordResetRequest) (*corev1.ConfirmPasswordResetResponse, error)
+	Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1.LogoutResponse, error)
 }
 
 // Handler implements WebServiceHandler by delegating to the core gRPC client.
@@ -249,30 +255,6 @@ func (h *Handler) Disconnect(ctx context.Context, req *connect.Request[webv1.Dis
 	}
 
 	return connect.NewResponse(&webv1.DisconnectResponse{}), nil
-}
-
-// AuthenticatePlayer validates player credentials and returns a player token.
-// Stub: returns CodeUnimplemented pending full player account system.
-func (h *Handler) AuthenticatePlayer(_ context.Context, _ *connect.Request[webv1.AuthenticatePlayerRequest]) (*connect.Response[webv1.AuthenticatePlayerResponse], error) {
-	return nil, errUnimplemented
-}
-
-// ListCharacters returns the characters available for an authenticated player.
-// Stub: returns CodeUnimplemented pending full player account system.
-func (h *Handler) ListCharacters(_ context.Context, _ *connect.Request[webv1.ListCharactersRequest]) (*connect.Response[webv1.ListCharactersResponse], error) {
-	return nil, errUnimplemented
-}
-
-// SelectCharacter selects a character and creates or reattaches a game session.
-// Stub: returns CodeUnimplemented pending full player account system.
-func (h *Handler) SelectCharacter(_ context.Context, _ *connect.Request[webv1.SelectCharacterRequest]) (*connect.Response[webv1.SelectCharacterResponse], error) {
-	return nil, errUnimplemented
-}
-
-// ListSessions returns all sessions for the authenticated player.
-// Stub: returns CodeUnimplemented pending full player account system.
-func (h *Handler) ListSessions(_ context.Context, _ *connect.Request[webv1.ListSessionsRequest]) (*connect.Response[webv1.ListSessionsResponse], error) {
-	return nil, errUnimplemented
 }
 
 // GetCommandHistory returns the command history for a session.
