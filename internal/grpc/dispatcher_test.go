@@ -266,10 +266,11 @@ func TestExpandMUSHPrefix(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{": waves", "pose  waves"},
+		{": waves", "pose waves"},
 		{":waves", "pose waves"},
 		{"say hello", "say hello"},
 		{"look", "look"},
+		{":", "pose"},
 		{"", ""},
 		{"  ", "  "},
 	}

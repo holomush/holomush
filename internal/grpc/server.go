@@ -411,13 +411,21 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 	input = expandMUSHPrefix(input)
 
 	char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
+	hadSessionBefore := s.sessions.GetSession(info.CharacterID) != nil
+
+	sessionID, parseErr := ulid.Parse(info.ID)
+	if parseErr != nil {
+		return oops.Code("INVALID_SESSION_ID").
+			With("session_id", info.ID).
+			Wrap(parseErr)
+	}
 
 	var buf bytes.Buffer
 	exec, err := command.NewCommandExecution(command.CommandExecutionConfig{
 		CharacterID:   info.CharacterID,
 		LocationID:    info.LocationID,
 		CharacterName: info.CharacterName,
-		SessionID:     ulid.MustParse(info.ID),
+		SessionID:     sessionID,
 		Output:        &buf,
 		Services:      s.cmdServices,
 	})
@@ -447,10 +455,13 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 		return oops.Wrap(dispatchErr)
 	}
 
-	// Post-quit cleanup: if the quit handler ended the session via
+	// Post-quit cleanup: if the quit handler ended the in-memory session via
 	// SessionService.EndSession, perform server-side teardown that the
 	// handler doesn't own (leave event, persistent store, hooks).
-	if s.sessions.GetSession(info.CharacterID) == nil {
+	// TODO(holomush-a3a7): replace in-memory session check with an explicit
+	// quit signal (e.g. sentinel error or CommandExecution flag) so this
+	// doesn't depend on SessionManager state.
+	if hadSessionBefore && s.sessions.GetSession(info.CharacterID) == nil {
 		if dcErr := s.engine.HandleDisconnect(ctx, char, "quit"); dcErr != nil {
 			slog.WarnContext(ctx, "leave event failed", "error", dcErr)
 		}
@@ -465,29 +476,12 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 
 // isUserFacingError returns true for errors that should be delivered to the
 // player via a command_response event rather than as an RPC-level failure.
+// Delegates to command.PlayerMessage to stay in sync with the command package's
+// error classification — if PlayerMessage returns a specific message (not the
+// generic fallback), the error is user-facing.
 func isUserFacingError(err error) bool {
-	oopsErr, ok := oops.AsOops(err)
-	if !ok {
-		return false
-	}
-	code, ok := oopsErr.Code().(string)
-	if !ok {
-		return false
-	}
-	switch code {
-	case command.CodeUnknownCommand,
-		command.CodePermissionDenied,
-		command.CodeInvalidArgs,
-		command.CodeWorldError,
-		command.CodeRateLimited,
-		command.CodeCircularAlias,
-		command.CodeAliasConflict,
-		command.CodeTargetNotFound,
-		command.CodeNoAliasCache,
-		command.CodeInvalidName:
-		return true
-	}
-	return false
+	msg := command.PlayerMessage(err)
+	return msg != "Something went wrong. Try again."
 }
 
 // executeViaSwitch is the legacy hardcoded switch for servers constructed
@@ -546,7 +540,11 @@ func expandMUSHPrefix(input string) string {
 	}
 	switch trimmed[0] {
 	case ':':
-		return "pose " + trimmed[1:]
+		remainder := strings.TrimSpace(trimmed[1:])
+		if remainder == "" {
+			return "pose"
+		}
+		return "pose " + remainder
 	default:
 		return input
 	}

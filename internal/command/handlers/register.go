@@ -55,7 +55,7 @@ current location.
 ### Usage
 
 - ` + "`pose <action>`" + ` - Perform the action
-- ` + "`:` + `<action>`" + ` - Shorthand for pose
+- ` + "`:<action>`" + ` - Shorthand for pose
 
 ### Examples
 

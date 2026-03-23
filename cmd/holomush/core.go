@@ -442,19 +442,35 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		// Create and register Core service with guest authentication + cleanup hook
 		sessionStore := store.NewPostgresSessionStore(realStore.Pool())
 
-		// Build unified command dispatcher
+		// Build unified command dispatcher with alias dependencies
 		cmdRegistry := command.NewRegistry()
 		handlers.RegisterAll(cmdRegistry)
+		aliasRepo := store.NewPostgresAliasRepository(realStore.Pool())
+		aliasCache := command.NewAliasCache()
+
+		// Pre-populate alias cache from database
+		sysAliases, sysAliasErr := aliasRepo.GetSystemAliases(ctx)
+		if sysAliasErr != nil {
+			slog.Warn("failed to load system aliases into cache", "error", sysAliasErr)
+		} else {
+			aliasCache.LoadSystemAliases(sysAliases)
+		}
+
 		cmdServices, cmdSvcErr := command.NewServices(command.ServicesConfig{
-			World:   worldService,
-			Session: sessions,
-			Engine:  policyEngine,
-			Events:  realStore,
+			World:      worldService,
+			Session:    sessions,
+			Engine:     policyEngine,
+			Events:     realStore,
+			AliasCache: aliasCache,
+			AliasRepo:  aliasRepo,
+			Registry:   cmdRegistry,
 		})
 		if cmdSvcErr != nil {
 			return oops.Code("COMMAND_SERVICES_FAILED").Wrap(cmdSvcErr)
 		}
-		cmdDispatcher, cmdDispErr := command.NewDispatcher(cmdRegistry, policyEngine)
+		cmdDispatcher, cmdDispErr := command.NewDispatcher(cmdRegistry, policyEngine,
+			command.WithAliasCache(aliasCache),
+		)
 		if cmdDispErr != nil {
 			return oops.Code("COMMAND_DISPATCHER_FAILED").Wrap(cmdDispErr)
 		}
