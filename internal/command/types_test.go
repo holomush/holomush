@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -72,7 +73,7 @@ func TestServices_HasAllDependencies(t *testing.T) {
 func TestNewServices_NilWorld_ReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
 		World:   nil,
-		Session: &mockSessionService{},
+		Session: &mockSessionAccess{},
 		Engine:  &mockEngine{},
 		Events:  &mockEventStore{},
 	})
@@ -94,7 +95,7 @@ func TestNewServices_NilSession_ReturnsError(t *testing.T) {
 func TestNewServices_NilEngine_ReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
 		World:   &world.Service{},
-		Session: &mockSessionService{},
+		Session: &mockSessionAccess{},
 		Engine:  nil,
 		Events:  &mockEventStore{},
 	})
@@ -105,7 +106,7 @@ func TestNewServices_NilEngine_ReturnsError(t *testing.T) {
 func TestNewServices_NilEvents_ReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
 		World:   &world.Service{},
-		Session: &mockSessionService{},
+		Session: &mockSessionAccess{},
 		Engine:  &mockEngine{},
 		Events:  nil,
 	})
@@ -115,7 +116,7 @@ func TestNewServices_NilEvents_ReturnsError(t *testing.T) {
 
 func TestNewServices_AllValid_ReturnsServices(t *testing.T) {
 	worldSvc := &world.Service{}
-	sessionSvc := &mockSessionService{}
+	sessionSvc := &mockSessionAccess{}
 	engine := &mockEngine{}
 	eventStore := &mockEventStore{}
 
@@ -146,11 +147,17 @@ func TestNewServices_MultipleNil_ReturnsFirstError(t *testing.T) {
 }
 
 // Mock types for testing
-type mockSessionService struct{}
+type mockSessionAccess struct{}
 
-func (m *mockSessionService) ListActiveSessions() []*core.Session  { return nil }
-func (m *mockSessionService) GetSession(_ ulid.ULID) *core.Session { return nil }
-func (m *mockSessionService) EndSession(_ ulid.ULID) error         { return nil }
+func (m *mockSessionAccess) ListActive(_ context.Context) ([]*session.Info, error) {
+	return nil, nil
+}
+func (m *mockSessionAccess) FindByCharacter(_ context.Context, _ ulid.ULID) (*session.Info, error) {
+	return nil, nil
+}
+func (m *mockSessionAccess) DeleteByCharacter(_ context.Context, _ ulid.ULID, _ string) (*session.Info, error) {
+	return nil, nil
+}
 
 type mockEngine struct{}
 

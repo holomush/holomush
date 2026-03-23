@@ -4,13 +4,31 @@
 package testutil
 
 import (
+	"context"
+
+	"github.com/oklog/ulid/v2"
+
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/property"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 )
+
+// defaultSessionAccess is a no-op implementation of session.SessionAccess for test defaults.
+type defaultSessionAccess struct{}
+
+func (d *defaultSessionAccess) ListActive(_ context.Context) ([]*session.Info, error) {
+	return nil, nil
+}
+func (d *defaultSessionAccess) FindByCharacter(_ context.Context, _ ulid.ULID) (*session.Info, error) {
+	return nil, nil
+}
+func (d *defaultSessionAccess) DeleteByCharacter(_ context.Context, _ ulid.ULID, _ string) (*session.Info, error) {
+	return nil, nil
+}
 
 // ServicesBuilder builds command.Services with reasonable defaults for tests.
 type ServicesBuilder struct {
@@ -21,7 +39,7 @@ type ServicesBuilder struct {
 func NewServicesBuilder() *ServicesBuilder {
 	return &ServicesBuilder{
 		config: command.ServicesConfig{
-			Session: core.NewSessionManager(),
+			Session: &defaultSessionAccess{},
 			Engine:  policytest.AllowAllEngine(),
 			Events:  core.NewMemoryEventStore(),
 		},
@@ -42,8 +60,8 @@ func (b *ServicesBuilder) WithWorldFixture(fixture *WorldServiceFixture) *Servic
 	return b
 }
 
-// WithSession sets the session service.
-func (b *ServicesBuilder) WithSession(session core.SessionService) *ServicesBuilder {
+// WithSession sets the session access dependency.
+func (b *ServicesBuilder) WithSession(session session.SessionAccess) *ServicesBuilder {
 	b.config.Session = session
 	return b
 }

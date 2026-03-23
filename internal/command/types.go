@@ -17,6 +17,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/property"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -289,7 +290,7 @@ const (
 // ServicesConfig holds the dependencies for constructing a Services instance.
 type ServicesConfig struct {
 	World            WorldService             // world model queries and mutations
-	Session          core.SessionService      // session management
+	Session          session.SessionAccess    // session management
 	Engine           types.AccessPolicyEngine // ABAC policy engine for authorization
 	Events           core.EventStore          // event persistence
 	AliasCache       *AliasCache              // alias management (optional)
@@ -308,7 +309,7 @@ type ServicesConfig struct {
 // across all command executions.
 type Services struct {
 	world            WorldService             // world model queries and mutations
-	session          core.SessionService      // session management
+	session          session.SessionAccess    // session management
 	engine           types.AccessPolicyEngine // ABAC policy engine for authorization
 	events           core.EventStore          // event persistence
 	aliasCache       *AliasCache              // alias management (optional, for alias commands)
@@ -321,7 +322,7 @@ type Services struct {
 func (s *Services) World() WorldService { return s.world }
 
 // Session returns the session service for session management.
-func (s *Services) Session() core.SessionService { return s.session }
+func (s *Services) Session() session.SessionAccess { return s.session }
 
 // Engine returns the ABAC policy engine for authorization checks.
 func (s *Services) Engine() types.AccessPolicyEngine { return s.engine }
