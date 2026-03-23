@@ -30,6 +30,7 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	authpostgres "github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
@@ -252,7 +253,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 	// Build ABAC engine stack (requires PostgresEventStore for pool access).
 	// In test mode with mock stores, ABAC wiring is skipped.
-	var worldService *world.Service // hoisted so it's available to CoreServer constructor
+	var worldService *world.Service            // hoisted so it's available to CoreServer constructor
+	var policyEngine types.AccessPolicyEngine // hoisted for command dispatcher wiring
 	// Auth service variables hoisted so they're available in the CoreServer constructor block.
 	var authService *auth.Service
 	var resetService *auth.PasswordResetService
@@ -282,6 +284,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 				slog.Warn("error closing ABAC stack", "error", closeErr)
 			}
 		}()
+		policyEngine = abacStack.Engine
 		slog.Info("ABAC engine stack initialized")
 
 		// Start live policy cache invalidation (dedicated context to avoid race with later ctx reassignment)
@@ -438,6 +441,24 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 		// Create and register Core service with guest authentication + cleanup hook
 		sessionStore := store.NewPostgresSessionStore(realStore.Pool())
+
+		// Build unified command dispatcher
+		cmdRegistry := command.NewRegistry()
+		handlers.RegisterAll(cmdRegistry)
+		cmdServices, cmdSvcErr := command.NewServices(command.ServicesConfig{
+			World:   worldService,
+			Session: sessions,
+			Engine:  policyEngine,
+			Events:  realStore,
+		})
+		if cmdSvcErr != nil {
+			return oops.Code("COMMAND_SERVICES_FAILED").Wrap(cmdSvcErr)
+		}
+		cmdDispatcher, cmdDispErr := command.NewDispatcher(cmdRegistry, policyEngine)
+		if cmdDispErr != nil {
+			return oops.Code("COMMAND_DISPATCHER_FAILED").Wrap(cmdDispErr)
+		}
+
 		coreServer := holoGRPC.NewCoreServer(engine, sessions, sessionStore,
 			holoGRPC.WithAuthenticator(guestAuth),
 			holoGRPC.WithEventStore(realStore),
@@ -448,6 +469,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			holoGRPC.WithPlayerTokenRepo(authPlayerTokenRepo),
 			holoGRPC.WithPlayerRepo(authPlayerRepo),
 			holoGRPC.WithCharacterRepo(authCharRepo),
+			holoGRPC.WithDispatcher(cmdDispatcher, cmdServices),
 			holoGRPC.WithSessionDefaults(holoGRPC.SessionDefaults{
 				TTL:        sessionTTL,
 				MaxHistory: cfg.SessionMaxHistory,
