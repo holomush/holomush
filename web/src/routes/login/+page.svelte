@@ -76,7 +76,7 @@
 </script>
 
 <div class="page" style={themeToCssVars($activeTheme.colors)}>
-  <div class="card">
+  <form class="card" onsubmit={(e) => { e.preventDefault(); handleLogin(); }}>
     <h1 class="title">Sign In</h1>
 
     {#if error}
@@ -115,7 +115,7 @@
       <a href="/reset" class="forgot">Forgot password?</a>
     </div>
 
-    <button class="btn-primary" type="submit" onclick={handleLogin} disabled={loading}>
+    <button class="btn-primary" type="submit" disabled={loading}>
       {loading ? 'Signing in…' : 'Sign In'}
     </button>
 
@@ -125,10 +125,10 @@
 
     <div class="separator"><span>or</span></div>
 
-    <button class="btn-ghost" onclick={handleGuest} disabled={loading}>
+    <button class="btn-ghost" type="button" onclick={handleGuest} disabled={loading}>
       Try as Guest →
     </button>
-  </div>
+  </form>
 </div>
 
 <style>

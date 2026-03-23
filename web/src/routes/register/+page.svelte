@@ -53,7 +53,7 @@
 </script>
 
 <div class="page" style={themeToCssVars($activeTheme.colors)}>
-  <div class="card">
+  <form class="card" onsubmit={(e) => { e.preventDefault(); handleRegister(); }}>
     <h1 class="title">Create Account</h1>
 
     {#if error}
@@ -92,14 +92,14 @@
       />
     </label>
 
-    <button class="btn-primary" type="submit" onclick={handleRegister} disabled={loading}>
+    <button class="btn-primary" type="submit" disabled={loading}>
       {loading ? 'Creating account…' : 'Create Account'}
     </button>
 
     <p class="login-link">
       Already have an account? <a href="/login">Sign in</a>
     </p>
-  </div>
+  </form>
 </div>
 
 <style>
