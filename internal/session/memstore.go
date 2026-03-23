@@ -326,6 +326,54 @@ func (m *MemStore) ListActiveByLocation(_ context.Context, locationID ulid.ULID)
 	return result, nil
 }
 
+// ListActive returns all sessions with status=active.
+func (m *MemStore) ListActive(_ context.Context) ([]*Info, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var result []*Info
+	for _, info := range m.sessions {
+		if info.Status == StatusActive {
+			result = append(result, copyInfo(info))
+		}
+	}
+	return result, nil
+}
+
+// DeleteByCharacter finds and deletes a character's session.
+// Returns the deleted Info, or nil if no session exists.
+func (m *MemStore) DeleteByCharacter(ctx context.Context, characterID ulid.ULID, reason string) (*Info, error) {
+	// FindByCharacter uses RLock, so call it before taking the write lock.
+	info, err := m.FindByCharacter(ctx, characterID)
+	if err != nil {
+		if oopsErr, ok := oops.AsOops(err); ok && oopsErr.Code() == "SESSION_NOT_FOUND" {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// Delete uses its own Lock internally.
+	if err := m.Delete(ctx, info.ID, reason); err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
+// UpdateActivity bumps the updated_at timestamp for a session.
+func (m *MemStore) UpdateActivity(_ context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	info, ok := m.sessions[id]
+	if !ok {
+		return oops.Code("SESSION_NOT_FOUND").
+			With("session_id", id).
+			Errorf("session not found")
+	}
+	info.UpdatedAt = time.Now()
+	return nil
+}
+
 // copyInfo returns a defensive copy of an Info to prevent external modification.
 func copyInfo(info *Info) *Info {
 	cursors := make(map[string]ulid.ULID, len(info.EventCursors))

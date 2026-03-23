@@ -93,6 +93,21 @@ type Event struct {
 	Message string
 }
 
+// SessionAccess provides session operations for command handlers.
+// This is a narrow subset of Store — only what handlers need.
+type SessionAccess interface {
+	// ListActive returns all sessions with status=active.
+	ListActive(ctx context.Context) ([]*Info, error)
+
+	// FindByCharacter returns the active or detached session for a character.
+	FindByCharacter(ctx context.Context, characterID ulid.ULID) (*Info, error)
+
+	// DeleteByCharacter finds and deletes a character's session.
+	// Returns the deleted Info for caller use (disconnect hooks, leave events).
+	// Returns nil, nil if no session exists.
+	DeleteByCharacter(ctx context.Context, characterID ulid.ULID, reason string) (*Info, error)
+}
+
 // Store manages persistent session state. Implementations MUST be
 // safe for concurrent use.
 type Store interface {
@@ -157,4 +172,14 @@ type Store interface {
 	// ListActiveByLocation returns active sessions whose LocationID matches.
 	// Used for presence lists — "who is connected at this location?"
 	ListActiveByLocation(ctx context.Context, locationID ulid.ULID) ([]*Info, error)
+
+	// ListActive returns all sessions with status=active.
+	ListActive(ctx context.Context) ([]*Info, error)
+
+	// DeleteByCharacter finds and deletes a character's session.
+	// Returns the deleted Info, or nil if no session exists.
+	DeleteByCharacter(ctx context.Context, characterID ulid.ULID, reason string) (*Info, error)
+
+	// UpdateActivity bumps the updated_at timestamp for a session.
+	UpdateActivity(ctx context.Context, id string) error
 }

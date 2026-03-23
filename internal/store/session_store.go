@@ -32,8 +32,9 @@ func NewPostgresSessionStore(pool poolIface) *PostgresSessionStore {
 	}
 }
 
-// compile-time check
+// compile-time checks
 var _ session.Store = (*PostgresSessionStore)(nil)
+var _ session.SessionAccess = (*PostgresSessionStore)(nil)
 
 const sessionSelectColumns = `id, character_id, character_name, location_id,
 	is_guest, status, grid_present, event_cursors,
@@ -442,4 +443,46 @@ func (s *PostgresSessionStore) ListActiveByLocation(ctx context.Context, locatio
 			With("location_id", locationID.String()).Wrap(err)
 	}
 	return scanSessions(rows)
+}
+
+// ListActive returns all sessions with status=active.
+func (s *PostgresSessionStore) ListActive(ctx context.Context) ([]*session.Info, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+sessionSelectColumns+` FROM sessions WHERE status = 'active'`)
+	if err != nil {
+		return nil, oops.With("operation", "list active sessions").Wrap(err)
+	}
+	return scanSessions(rows)
+}
+
+// DeleteByCharacter finds and deletes a character's session.
+// Returns the deleted Info, or nil if no session exists.
+func (s *PostgresSessionStore) DeleteByCharacter(ctx context.Context, characterID ulid.ULID, reason string) (*session.Info, error) {
+	// First find the session.
+	info, err := s.FindByCharacter(ctx, characterID)
+	if err != nil {
+		if oopsErr, ok := oops.AsOops(err); ok && oopsErr.Code() == "SESSION_NOT_FOUND" {
+			return nil, nil
+		}
+		return nil, oops.With("operation", "delete by character").
+			With("character_id", characterID.String()).Wrap(err)
+	}
+
+	// Delete it (also notifies watchers).
+	if err := s.Delete(ctx, info.ID, reason); err != nil {
+		return nil, oops.With("operation", "delete by character").
+			With("character_id", characterID.String()).
+			With("session_id", info.ID).Wrap(err)
+	}
+	return info, nil
+}
+
+// UpdateActivity bumps the updated_at timestamp for a session.
+func (s *PostgresSessionStore) UpdateActivity(ctx context.Context, id string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE sessions SET updated_at = now() WHERE id = $1`, id)
+	if err != nil {
+		return oops.With("operation", "update activity").With("session_id", id).Wrap(err)
+	}
+	return nil
 }
