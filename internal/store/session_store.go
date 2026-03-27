@@ -450,32 +450,43 @@ func (s *PostgresSessionStore) ListActiveByLocation(ctx context.Context, locatio
 // ListActive returns all sessions with status=active.
 func (s *PostgresSessionStore) ListActive(ctx context.Context) ([]*session.Info, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT `+sessionSelectColumns+` FROM sessions WHERE status = 'active'`)
+		`SELECT `+sessionSelectColumns+` FROM sessions WHERE status = 'active' ORDER BY created_at`)
 	if err != nil {
 		return nil, oops.With("operation", "list active sessions").Wrap(err)
 	}
 	return scanSessions(rows)
 }
 
-// DeleteByCharacter finds and deletes a character's session.
-// Returns the deleted Info, or nil if no session exists.
+// DeleteByCharacter atomically deletes the active or detached session for a
+// character using a single DELETE ... RETURNING query, eliminating the TOCTOU
+// race of FindByCharacter + Delete. Returns (nil, nil) when no matching
+// session exists.
 func (s *PostgresSessionStore) DeleteByCharacter(ctx context.Context, characterID ulid.ULID, reason string) (*session.Info, error) {
-	// First find the session.
-	info, err := s.FindByCharacter(ctx, characterID)
+	query := `DELETE FROM sessions WHERE character_id = $1 AND status IN ('active', 'detached')
+		RETURNING ` + sessionSelectColumns
+	row := s.pool.QueryRow(ctx, query, characterID.String())
+	info, err := scanSession(row)
 	if err != nil {
-		if oopsErr, ok := oops.AsOops(err); ok && oopsErr.Code() == "SESSION_NOT_FOUND" {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, oops.With("operation", "delete by character").
+		return nil, oops.With("operation", "delete_by_character").
 			With("character_id", characterID.String()).Wrap(err)
 	}
 
-	// Delete it (also notifies watchers).
-	if err := s.Delete(ctx, info.ID, reason); err != nil {
-		return nil, oops.With("operation", "delete by character").
-			With("character_id", characterID.String()).
-			With("session_id", info.ID).Wrap(err)
+	// Notify watchers (same as Delete).
+	s.mu.Lock()
+	watchers := s.watchers[info.ID]
+	delete(s.watchers, info.ID)
+	s.mu.Unlock()
+	for _, ch := range watchers {
+		select {
+		case ch <- session.Event{Type: session.Destroyed, Message: reason}:
+		default:
+		}
+		close(ch)
 	}
+
 	return info, nil
 }
 

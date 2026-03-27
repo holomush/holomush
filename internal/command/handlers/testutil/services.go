@@ -32,6 +32,10 @@ func (d *defaultAccess) DeleteByCharacter(_ context.Context, _ ulid.ULID, _ stri
 	return nil, nil
 }
 
+func (d *defaultAccess) UpdateActivity(_ context.Context, _ string) error {
+	return nil
+}
+
 // ServicesBuilder builds command.Services with reasonable defaults for tests.
 type ServicesBuilder struct {
 	config command.ServicesConfig

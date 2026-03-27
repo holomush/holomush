@@ -161,6 +161,10 @@ func (m *mockAccess) DeleteByCharacter(_ context.Context, _ ulid.ULID, _ string)
 	return nil, nil
 }
 
+func (m *mockAccess) UpdateActivity(_ context.Context, _ string) error {
+	return nil
+}
+
 type mockEngine struct{}
 
 func (m *mockEngine) Evaluate(_ context.Context, _ types.AccessRequest) (types.Decision, error) {

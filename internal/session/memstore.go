@@ -351,6 +351,9 @@ func (m *MemStore) DeleteByCharacter(ctx context.Context, characterID ulid.ULID,
 		}
 		return nil, err
 	}
+	if info == nil {
+		return nil, nil
+	}
 
 	// Delete uses its own Lock internally.
 	if err := m.Delete(ctx, info.ID, reason); err != nil {

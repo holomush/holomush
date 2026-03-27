@@ -12,6 +12,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/samber/oops"
+
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/observability"
@@ -35,9 +37,9 @@ type playerInfo struct {
 func WhoHandler(ctx context.Context, exec *command.CommandExecution) error {
 	sessions, err := exec.Services().Session().ListActive(ctx)
 	if err != nil {
-		slog.ErrorContext(ctx, "who: failed to list active sessions", "error", err)
-		writeOutput(ctx, exec, "who", "Unable to retrieve player list. Please try again.")
-		return nil
+		return oops.Code(command.CodeWorldError).
+			With("message", "Unable to retrieve player list. Please try again.").
+			Wrap(err)
 	}
 
 	if len(sessions) == 0 {

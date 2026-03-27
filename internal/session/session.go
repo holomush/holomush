@@ -106,6 +106,9 @@ type Access interface {
 	// Returns the deleted Info for caller use (disconnect hooks, leave events).
 	// Returns nil, nil if no session exists.
 	DeleteByCharacter(ctx context.Context, characterID ulid.ULID, reason string) (*Info, error)
+
+	// UpdateActivity bumps the updated_at timestamp for a session.
+	UpdateActivity(ctx context.Context, id string) error
 }
 
 // Store manages persistent session state. Implementations MUST be

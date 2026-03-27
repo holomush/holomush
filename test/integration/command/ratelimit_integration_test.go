@@ -50,6 +50,10 @@ func (s *stubSessionService) DeleteByCharacter(_ context.Context, _ ulid.ULID, _
 	return nil, nil
 }
 
+func (s *stubSessionService) UpdateActivity(_ context.Context, _ string) error {
+	return nil
+}
+
 type stubEventStore struct{}
 
 func (s *stubEventStore) Append(_ context.Context, _ core.Event) error { return nil }

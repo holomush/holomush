@@ -48,14 +48,14 @@ as follow-up work, not addressed in this consolidation.
 to in-memory state inspection. A sentinel error is explicit, testable, and
 independent of storage backend.
 
-### Two interfaces: `session.Store` and `session.SessionAccess`
+### Two interfaces: `session.Store` and `session.Access`
 
-Command handlers use a narrow `session.SessionAccess` interface (3 methods).
+Command handlers use a narrow `session.Access` interface (3 methods).
 The gRPC server and reaper use the full `session.Store`.
 
 **Why:** Command handler tests mock 3 methods instead of 20+. Follows
 "accept interfaces, return structs" and keeps handler tests focused.
-Named `SessionAccess` (not `Querier`) because it includes the mutating
+Named `Access` (not `Querier`) because it includes the mutating
 `DeleteByCharacter` method.
 
 ### Engine loses session dependency
@@ -79,13 +79,13 @@ eliminates.
 
 ## Unified Interface
 
-### session.SessionAccess (new)
+### session.Access (new)
 
 Narrow interface for command handlers. Three methods covering what
 `core.SessionService` provided:
 
 ```go
-type SessionAccess interface {
+type Access interface {
     // ListActive returns all sessions with status=active.
     ListActive(ctx context.Context) ([]*Info, error)
 
@@ -100,7 +100,7 @@ type SessionAccess interface {
 }
 ```
 
-`PostgresSessionStore` implements `SessionAccess` as a subset of `Store`.
+`PostgresSessionStore` implements `Access` as a subset of `Store`.
 `FindByCharacter` is already implemented — only `ListActive` and
 `DeleteByCharacter` are new methods.
 
@@ -142,7 +142,7 @@ The quit handler returns `oops.Code("SESSION_ENDED").Wrap(ErrSessionEnded)`.
 |-----------|--------|
 | `core.SessionManager` | Replaced by `session.Store` (Postgres) |
 | `core.Session` struct | Replaced by `session.Info` |
-| `core.SessionService` interface | Replaced by `session.SessionAccess` |
+| `core.SessionService` interface | Replaced by `session.Access` |
 | `core.copySession()` helper | No longer needed (PG returns fresh structs) |
 | `Engine.sessions` field | Dead dependency (ReplayEvents has no callers) |
 | `Engine.ReplayEvents` method | Dead code; Subscribe handler reads cursors directly |
@@ -192,9 +192,9 @@ Callers of in-memory `SessionManager`, mapped to their replacements:
 
 | Current | New |
 |---|---|
-| `Session core.SessionService` in ServicesConfig | `Session session.SessionAccess` |
-| `session core.SessionService` in Services struct | `session session.SessionAccess` |
-| `Session() core.SessionService` getter | `Session() session.SessionAccess` |
+| `Session core.SessionService` in ServicesConfig | `Session session.Access` |
+| `session core.SessionService` in Services struct | `session session.Access` |
+| `Session() core.SessionService` getter | `Session() session.Access` |
 
 ### cmd/holomush/core.go
 
@@ -203,24 +203,24 @@ Callers of in-memory `SessionManager`, mapped to their replacements:
 | `sessions := core.NewSessionManager()` | Remove. |
 | `engine := core.NewEngine(realStore, sessions)` | `engine := core.NewEngine(realStore)` |
 | `holoGRPC.NewCoreServer(engine, sessions, sessionStore, ...)` | `holoGRPC.NewCoreServer(engine, sessionStore, ...)` |
-| `Session: sessions` in ServicesConfig | `Session: sessionStore` (Store implements SessionAccess) |
+| `Session: sessions` in ServicesConfig | `Session: sessionStore` (Store implements Access) |
 
 ## Handler Test Changes
 
 All handler tests currently create `core.NewSessionManager()` and call
 `Connect` to populate sessions. After consolidation, tests use a shared
-`mockSessionAccess` that implements `session.SessionAccess`:
+`mockAccess` that implements `session.Access`:
 
 ```go
-type mockSessionAccess struct {
+type mockAccess struct {
     sessions []*session.Info
 }
 
-func (m *mockSessionAccess) ListActive(_ context.Context) ([]*session.Info, error) {
+func (m *mockAccess) ListActive(_ context.Context) ([]*session.Info, error) {
     return m.sessions, nil
 }
 
-func (m *mockSessionAccess) FindByCharacter(_ context.Context, charID ulid.ULID) (*session.Info, error) {
+func (m *mockAccess) FindByCharacter(_ context.Context, charID ulid.ULID) (*session.Info, error) {
     for _, s := range m.sessions {
         if s.CharacterID == charID {
             return s, nil
@@ -229,7 +229,7 @@ func (m *mockSessionAccess) FindByCharacter(_ context.Context, charID ulid.ULID)
     return nil, nil
 }
 
-func (m *mockSessionAccess) DeleteByCharacter(_ context.Context, charID ulid.ULID, _ string) (*session.Info, error) {
+func (m *mockAccess) DeleteByCharacter(_ context.Context, charID ulid.ULID, _ string) (*session.Info, error) {
     for i, s := range m.sessions {
         if s.CharacterID == charID {
             m.sessions = append(m.sessions[:i], m.sessions[i+1:]...)
@@ -242,7 +242,7 @@ func (m *mockSessionAccess) DeleteByCharacter(_ context.Context, charID ulid.ULI
 
 Place in `internal/command/handlers/testutil/` alongside `ServicesBuilder`.
 The `ServicesBuilder.WithSession` method changes from accepting
-`core.SessionService` to `session.SessionAccess`.
+`core.SessionService` to `session.Access`.
 
 ## executeViaDispatcher After Consolidation
 
@@ -318,7 +318,7 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 
 - **All `ListActiveSessions` callers gain error handling.** The current
   `core.SessionService.ListActiveSessions()` returns `[]*Session` (no
-  error). The replacement `SessionAccess.ListActive(ctx)` returns
+  error). The replacement `Access.ListActive(ctx)` returns
   `([]*Info, error)`. Every call site (who, boot, wall, findCharacterByName)
   MUST add `if err != nil` handling.
 
