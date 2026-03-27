@@ -20,17 +20,16 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command/handlers/testutil"
-	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 )
 
 func TestWhoHandler_NoConnectedPlayers(t *testing.T) {
 	player := testutil.RegularPlayer()
 
-	sessionMgr := core.NewSessionManager()
-	// No sessions connected
+	mockSA := testutil.NewMockSessionAccess()
 
-	services := testutil.NewServicesBuilder().WithSession(sessionMgr).Build()
+	services := testutil.NewServicesBuilder().WithSession(mockSA).Build()
 	exec, buf := testutil.NewExecutionBuilder().
 		WithCharacter(player).
 		WithServices(services).
@@ -44,10 +43,13 @@ func TestWhoHandler_NoConnectedPlayers(t *testing.T) {
 
 func TestWhoHandler_SinglePlayer(t *testing.T) {
 	player := testutil.RegularPlayer()
-	connID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(player.CharacterID, connID)
+	mockSA := testutil.NewMockSessionAccess(&session.Info{
+		ID:          ulid.Make().String(),
+		CharacterID: player.CharacterID,
+		Status:      session.StatusActive,
+		UpdatedAt:   time.Now(),
+	})
 
 	char := &world.Character{
 		ID:       player.CharacterID,
@@ -63,7 +65,7 @@ func TestWhoHandler_SinglePlayer(t *testing.T) {
 		Return(char, nil)
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -82,16 +84,14 @@ func TestWhoHandler_MultiplePlayers(t *testing.T) {
 	char1ID := ulid.Make()
 	char2ID := ulid.Make()
 	char3ID := ulid.Make()
-	conn1 := ulid.Make()
-	conn2 := ulid.Make()
-	conn3 := ulid.Make()
 	playerID := ulid.Make()
 	executor := testutil.RegularPlayer()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(char1ID, conn1)
-	sessionMgr.Connect(char2ID, conn2)
-	sessionMgr.Connect(char3ID, conn3)
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: char1ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: char2ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: char3ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	chars := map[ulid.ULID]*world.Character{
 		char1ID: {ID: char1ID, PlayerID: playerID, Name: "Alice"},
@@ -110,7 +110,7 @@ func TestWhoHandler_MultiplePlayers(t *testing.T) {
 	}
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -129,13 +129,13 @@ func TestWhoHandler_MultiplePlayers(t *testing.T) {
 
 func TestWhoHandler_ShowsIdleTime(t *testing.T) {
 	player := testutil.RegularPlayer()
-	connID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(player.CharacterID, connID)
-
-	// Simulate a small amount of idle time by waiting briefly.
-	time.Sleep(10 * time.Millisecond)
+	mockSA := testutil.NewMockSessionAccess(&session.Info{
+		ID:          ulid.Make().String(),
+		CharacterID: player.CharacterID,
+		Status:      session.StatusActive,
+		UpdatedAt:   time.Now().Add(-5 * time.Minute),
+	})
 
 	char := &world.Character{
 		ID:       player.CharacterID,
@@ -151,7 +151,7 @@ func TestWhoHandler_ShowsIdleTime(t *testing.T) {
 		Return(char, nil)
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -170,14 +170,13 @@ func TestWhoHandler_ShowsIdleTime(t *testing.T) {
 func TestWhoHandler_SkipsInaccessibleCharacters(t *testing.T) {
 	char1ID := ulid.Make()
 	char2ID := ulid.Make()
-	conn1 := ulid.Make()
-	conn2 := ulid.Make()
 	playerID := ulid.Make()
 	executor := testutil.RegularPlayer()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(char1ID, conn1)
-	sessionMgr.Connect(char2ID, conn2)
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: char1ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: char2ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	char1 := &world.Character{ID: char1ID, PlayerID: playerID, Name: "Visible"}
 	// char2 is not accessible due to access control, so we don't need a Character object
@@ -197,7 +196,7 @@ func TestWhoHandler_SkipsInaccessibleCharacters(t *testing.T) {
 		Return(types.NewDecision(types.EffectDeny, "", ""), nil)
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -220,15 +219,13 @@ func TestWhoHandler_AllSessionsDenied_AnomalyDetection(t *testing.T) {
 	char1ID := ulid.Make()
 	char2ID := ulid.Make()
 	char3ID := ulid.Make()
-	conn1 := ulid.Make()
-	conn2 := ulid.Make()
-	conn3 := ulid.Make()
 	executor := testutil.RegularPlayer()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(char1ID, conn1)
-	sessionMgr.Connect(char2ID, conn2)
-	sessionMgr.Connect(char3ID, conn3)
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: char1ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: char2ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: char3ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
 	for _, charID := range []ulid.ULID{char1ID, char2ID, char3ID} {
@@ -242,7 +239,7 @@ func TestWhoHandler_AllSessionsDenied_AnomalyDetection(t *testing.T) {
 	}
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -295,14 +292,13 @@ func TestFormatIdleTime(t *testing.T) {
 func TestWhoHandler_SkipsCharacterNotFound(t *testing.T) {
 	char1ID := ulid.Make()
 	char2ID := ulid.Make()
-	conn1 := ulid.Make()
-	conn2 := ulid.Make()
 	playerID := ulid.Make()
 	executor := testutil.RegularPlayer()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(char1ID, conn1)
-	sessionMgr.Connect(char2ID, conn2)
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: char1ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: char2ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	char1 := &world.Character{ID: char1ID, PlayerID: playerID, Name: "Existing"}
 
@@ -324,7 +320,7 @@ func TestWhoHandler_SkipsCharacterNotFound(t *testing.T) {
 		Return(nil, world.ErrNotFound)
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -342,14 +338,13 @@ func TestWhoHandler_SkipsCharacterNotFound(t *testing.T) {
 func TestWhoHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 	char1ID := ulid.Make()
 	errorCharID := ulid.Make()
-	conn1 := ulid.Make()
-	errorConn := ulid.Make()
 	playerID := ulid.Make()
 	executor := testutil.RegularPlayer()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(char1ID, conn1)
-	sessionMgr.Connect(errorCharID, errorConn)
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: char1ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: errorCharID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	char1 := &world.Character{ID: char1ID, PlayerID: playerID, Name: "Normal"}
 
@@ -382,7 +377,7 @@ func TestWhoHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 		Return(nil, unexpectedErr).Maybe()
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, _ := testutil.NewExecutionBuilder().
@@ -409,11 +404,11 @@ func TestWhoHandler_LogsUnexpectedGetCharacterErrors(t *testing.T) {
 func TestWhoHandler_WarnsUserOnUnexpectedErrors(t *testing.T) {
 	// Force deterministic test by having only the error case
 	errorCharID := ulid.Make()
-	errorConn := ulid.Make()
 	executor := testutil.RegularPlayer()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(errorCharID, errorConn)
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: errorCharID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	// errorChar - access allowed but repo returns unexpected error
 	unexpectedErr := errors.New("database connection timeout")
@@ -426,7 +421,7 @@ func TestWhoHandler_WarnsUserOnUnexpectedErrors(t *testing.T) {
 		Return(nil, unexpectedErr)
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -445,13 +440,12 @@ func TestWhoHandler_WarnsUserOnMultipleUnexpectedErrors(t *testing.T) {
 	// Test plural form of warning message
 	errorChar1ID := ulid.Make()
 	errorChar2ID := ulid.Make()
-	errorConn1 := ulid.Make()
-	errorConn2 := ulid.Make()
 	executor := testutil.RegularPlayer()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(errorChar1ID, errorConn1)
-	sessionMgr.Connect(errorChar2ID, errorConn2)
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: errorChar1ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: errorChar2ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	// Both characters return unexpected errors
 	unexpectedErr := errors.New("database connection timeout")
@@ -472,7 +466,7 @@ func TestWhoHandler_WarnsUserOnMultipleUnexpectedErrors(t *testing.T) {
 		Return(nil, unexpectedErr)
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -491,13 +485,12 @@ func TestWhoHandler_NoWarningForExpectedErrors(t *testing.T) {
 	// Verify that expected errors (NotFound, PermissionDenied) don't trigger warning
 	notFoundCharID := ulid.Make()
 	deniedCharID := ulid.Make()
-	notFoundConn := ulid.Make()
-	deniedConn := ulid.Make()
 	executor := testutil.RegularPlayer()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(notFoundCharID, notFoundConn)
-	sessionMgr.Connect(deniedCharID, deniedConn)
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: notFoundCharID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: deniedCharID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	// notFoundChar - access allowed but returns ErrNotFound
 	fixture := testutil.NewWorldServiceBuilder(t).Build()
@@ -514,7 +507,7 @@ func TestWhoHandler_NoWarningForExpectedErrors(t *testing.T) {
 		Return(types.NewDecision(types.EffectDeny, "", ""), nil)
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -535,15 +528,13 @@ func TestWhoHandler_NoLoggingForExpectedErrors(t *testing.T) {
 	char1ID := ulid.Make()
 	notFoundCharID := ulid.Make()
 	deniedCharID := ulid.Make()
-	conn1 := ulid.Make()
-	notFoundConn := ulid.Make()
-	deniedConn := ulid.Make()
 	playerID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(char1ID, conn1)
-	sessionMgr.Connect(notFoundCharID, notFoundConn)
-	sessionMgr.Connect(deniedCharID, deniedConn)
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: char1ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: notFoundCharID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: deniedCharID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	char1 := &world.Character{ID: char1ID, PlayerID: playerID, Name: "Visible"}
 
@@ -579,7 +570,7 @@ func TestWhoHandler_NoLoggingForExpectedErrors(t *testing.T) {
 		Return(types.NewDecision(types.EffectDeny, "", ""), nil).Maybe()
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, _ := testutil.NewExecutionBuilder().
@@ -598,14 +589,13 @@ func TestWhoHandler_NoLoggingForExpectedErrors(t *testing.T) {
 func TestWhoHandler_AccessEvaluationFailedCountsAsError(t *testing.T) {
 	char1ID := ulid.Make()
 	evalFailCharID := ulid.Make()
-	conn1 := ulid.Make()
-	evalFailConn := ulid.Make()
 	playerID := ulid.Make()
 	executor := testutil.RegularPlayer()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(char1ID, conn1)
-	sessionMgr.Connect(evalFailCharID, evalFailConn)
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: char1ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: evalFailCharID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	char1 := &world.Character{ID: char1ID, PlayerID: playerID, Name: "Visible"}
 
@@ -633,7 +623,7 @@ func TestWhoHandler_AccessEvaluationFailedCountsAsError(t *testing.T) {
 		Return(types.Decision{}, errors.New("policy store unavailable")).Maybe()
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -664,13 +654,12 @@ func TestWhoHandler_AccessEvaluationFailedCountsAsError(t *testing.T) {
 func TestWhoHandler_AllAccessEvaluationFailedShowsNoPlayersWithError(t *testing.T) {
 	evalFail1ID := ulid.Make()
 	evalFail2ID := ulid.Make()
-	evalFailConn1 := ulid.Make()
-	evalFailConn2 := ulid.Make()
 	executor := testutil.RegularPlayer()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(evalFail1ID, evalFailConn1)
-	sessionMgr.Connect(evalFail2ID, evalFailConn2)
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: evalFail1ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: evalFail2ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	// Capture log output
 	var logBuf bytes.Buffer
@@ -691,7 +680,7 @@ func TestWhoHandler_AllAccessEvaluationFailedShowsNoPlayersWithError(t *testing.
 		Return(types.Decision{}, errors.New("policy store unavailable")).Maybe()
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -729,11 +718,12 @@ func TestWhoHandler_CircuitBreakerTripsOnConsecutiveEngineErrors(t *testing.T) {
 
 	// Create 5 sessions that will all fail with engine errors.
 	charIDs := make([]ulid.ULID, 5)
-	sessionMgr := core.NewSessionManager()
+	sessInfos := make([]*session.Info, 5)
 	for i := range charIDs {
 		charIDs[i] = ulid.Make()
-		sessionMgr.Connect(charIDs[i], ulid.Make())
+		sessInfos[i] = &session.Info{ID: ulid.Make().String(), CharacterID: charIDs[i], Status: session.StatusActive, UpdatedAt: time.Now()}
 	}
+	mockSA := testutil.NewMockSessionAccess(sessInfos...)
 
 	// Capture log output to verify circuit breaker warning.
 	var logBuf bytes.Buffer
@@ -757,7 +747,7 @@ func TestWhoHandler_CircuitBreakerTripsOnConsecutiveEngineErrors(t *testing.T) {
 	}
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -787,11 +777,12 @@ func TestWhoHandler_CircuitBreakerTripsAtExactlyThreeErrors(t *testing.T) {
 	executor := testutil.RegularPlayer()
 
 	charIDs := make([]ulid.ULID, 6)
-	sessionMgr := core.NewSessionManager()
+	sessInfos := make([]*session.Info, 6)
 	for i := range charIDs {
 		charIDs[i] = ulid.Make()
-		sessionMgr.Connect(charIDs[i], ulid.Make())
+		sessInfos[i] = &session.Info{ID: ulid.Make().String(), CharacterID: charIDs[i], Status: session.StatusActive, UpdatedAt: time.Now()}
 	}
+	mockSA := testutil.NewMockSessionAccess(sessInfos...)
 
 	var logBuf bytes.Buffer
 	originalLogger := slog.Default()
@@ -810,7 +801,7 @@ func TestWhoHandler_CircuitBreakerTripsAtExactlyThreeErrors(t *testing.T) {
 		Times(3)
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -839,11 +830,12 @@ func TestWhoHandler_NonEngineErrorsDoNotTripCircuitBreaker(t *testing.T) {
 	executor := testutil.RegularPlayer()
 
 	charIDs := make([]ulid.ULID, 4)
-	sessionMgr := core.NewSessionManager()
+	sessInfos := make([]*session.Info, 4)
 	for i := range charIDs {
 		charIDs[i] = ulid.Make()
-		sessionMgr.Connect(charIDs[i], ulid.Make())
+		sessInfos[i] = &session.Info{ID: ulid.Make().String(), CharacterID: charIDs[i], Status: session.StatusActive, UpdatedAt: time.Now()}
 	}
+	mockSA := testutil.NewMockSessionAccess(sessInfos...)
 
 	// Capture log output to verify NO circuit breaker warning.
 	var logBuf bytes.Buffer
@@ -871,7 +863,7 @@ func TestWhoHandler_NonEngineErrorsDoNotTripCircuitBreaker(t *testing.T) {
 	}
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -900,15 +892,16 @@ func TestWhoHandler_TwoCumulativeEngineErrorsBelowThreshold(t *testing.T) {
 	// Create sessions: 3 will succeed, 2 will fail with engine errors.
 	successIDs := make([]ulid.ULID, 3)
 	failIDs := make([]ulid.ULID, 2)
-	sessionMgr := core.NewSessionManager()
+	sessInfos := make([]*session.Info, 0, len(successIDs)+len(failIDs))
 	for i := range successIDs {
 		successIDs[i] = ulid.Make()
-		sessionMgr.Connect(successIDs[i], ulid.Make())
+		sessInfos = append(sessInfos, &session.Info{ID: ulid.Make().String(), CharacterID: successIDs[i], Status: session.StatusActive, UpdatedAt: time.Now()})
 	}
 	for i := range failIDs {
 		failIDs[i] = ulid.Make()
-		sessionMgr.Connect(failIDs[i], ulid.Make())
+		sessInfos = append(sessInfos, &session.Info{ID: ulid.Make().String(), CharacterID: failIDs[i], Status: session.StatusActive, UpdatedAt: time.Now()})
 	}
+	mockSA := testutil.NewMockSessionAccess(sessInfos...)
 
 	// Capture log output to verify NO circuit breaker warning.
 	var logBuf bytes.Buffer
@@ -955,7 +948,7 @@ func TestWhoHandler_TwoCumulativeEngineErrorsBelowThreshold(t *testing.T) {
 	}
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -986,9 +979,10 @@ func TestWhoHandler_AllDenied_LogsMisconfigurationWarning(t *testing.T) {
 	char1ID := ulid.Make()
 	char2ID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(char1ID, ulid.Make())
-	sessionMgr.Connect(char2ID, ulid.Make())
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: char1ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: char2ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	// Capture warn-level logs.
 	var logBuf bytes.Buffer
@@ -1019,7 +1013,7 @@ func TestWhoHandler_AllDenied_LogsMisconfigurationWarning(t *testing.T) {
 		Maybe()
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -1050,9 +1044,10 @@ func TestWhoHandler_AllEngineFailures_LogsOutageWarning(t *testing.T) {
 	char1ID := ulid.Make()
 	char2ID := ulid.Make()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(char1ID, ulid.Make())
-	sessionMgr.Connect(char2ID, ulid.Make())
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: char1ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: char2ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	// Capture warn-level logs.
 	var logBuf bytes.Buffer
@@ -1083,7 +1078,7 @@ func TestWhoHandler_AllEngineFailures_LogsOutageWarning(t *testing.T) {
 		Maybe()
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -1111,15 +1106,16 @@ func TestWhoHandler_MixedErrorsStillTripCircuitBreaker(t *testing.T) {
 	// Create 6 sessions: 4 will fail with engine errors, 2 with DB errors.
 	engineFailIDs := make([]ulid.ULID, 4)
 	dbFailIDs := make([]ulid.ULID, 2)
-	sessionMgr := core.NewSessionManager()
+	sessInfos := make([]*session.Info, 0, len(engineFailIDs)+len(dbFailIDs))
 	for i := range engineFailIDs {
 		engineFailIDs[i] = ulid.Make()
-		sessionMgr.Connect(engineFailIDs[i], ulid.Make())
+		sessInfos = append(sessInfos, &session.Info{ID: ulid.Make().String(), CharacterID: engineFailIDs[i], Status: session.StatusActive, UpdatedAt: time.Now()})
 	}
 	for i := range dbFailIDs {
 		dbFailIDs[i] = ulid.Make()
-		sessionMgr.Connect(dbFailIDs[i], ulid.Make())
+		sessInfos = append(sessInfos, &session.Info{ID: ulid.Make().String(), CharacterID: dbFailIDs[i], Status: session.StatusActive, UpdatedAt: time.Now()})
 	}
+	mockSA := testutil.NewMockSessionAccess(sessInfos...)
 
 	// Capture log output to verify circuit breaker warning.
 	var logBuf bytes.Buffer
@@ -1162,7 +1158,7 @@ func TestWhoHandler_MixedErrorsStillTripCircuitBreaker(t *testing.T) {
 	}
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -1195,9 +1191,10 @@ func TestWhoHandler_InfraFailureDecisionCountsAsEngineError(t *testing.T) {
 	playerID := ulid.Make()
 	executor := testutil.RegularPlayer()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(char1ID, ulid.Make())
-	sessionMgr.Connect(infraFailCharID, ulid.Make())
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: char1ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: infraFailCharID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	char1 := &world.Character{ID: char1ID, PlayerID: playerID, Name: "Visible"}
 
@@ -1216,7 +1213,7 @@ func TestWhoHandler_InfraFailureDecisionCountsAsEngineError(t *testing.T) {
 		Return(types.NewDecision(types.EffectDefaultDeny, "session store error", "infra:session-store-error"), nil).Maybe()
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().
@@ -1243,9 +1240,10 @@ func TestWhoHandler_SessionInvalidIsInfraFailure(t *testing.T) {
 	playerID := ulid.Make()
 	executor := testutil.RegularPlayer()
 
-	sessionMgr := core.NewSessionManager()
-	sessionMgr.Connect(char1ID, ulid.Make())
-	sessionMgr.Connect(sessionInvalidCharID, ulid.Make())
+	mockSA := testutil.NewMockSessionAccess(
+		&session.Info{ID: ulid.Make().String(), CharacterID: char1ID, Status: session.StatusActive, UpdatedAt: time.Now()},
+		&session.Info{ID: ulid.Make().String(), CharacterID: sessionInvalidCharID, Status: session.StatusActive, UpdatedAt: time.Now()},
+	)
 
 	char1 := &world.Character{ID: char1ID, PlayerID: playerID, Name: "Visible"}
 
@@ -1264,7 +1262,7 @@ func TestWhoHandler_SessionInvalidIsInfraFailure(t *testing.T) {
 		Return(types.NewDecision(types.EffectDefaultDeny, "session invalid", "infra:session-invalid"), nil).Maybe()
 
 	services := testutil.NewServicesBuilder().
-		WithSession(sessionMgr).
+		WithSession(mockSA).
 		WithWorldFixture(fixture).
 		Build()
 	exec, buf := testutil.NewExecutionBuilder().

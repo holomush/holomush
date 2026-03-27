@@ -32,8 +32,11 @@ func NewPostgresSessionStore(pool poolIface) *PostgresSessionStore {
 	}
 }
 
-// compile-time check
-var _ session.Store = (*PostgresSessionStore)(nil)
+// compile-time checks
+var (
+	_ session.Store  = (*PostgresSessionStore)(nil)
+	_ session.Access = (*PostgresSessionStore)(nil)
+)
 
 const sessionSelectColumns = `id, character_id, character_name, location_id,
 	is_guest, status, grid_present, event_cursors,
@@ -442,4 +445,57 @@ func (s *PostgresSessionStore) ListActiveByLocation(ctx context.Context, locatio
 			With("location_id", locationID.String()).Wrap(err)
 	}
 	return scanSessions(rows)
+}
+
+// ListActive returns all sessions with status=active.
+func (s *PostgresSessionStore) ListActive(ctx context.Context) ([]*session.Info, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+sessionSelectColumns+` FROM sessions WHERE status = 'active' ORDER BY created_at`)
+	if err != nil {
+		return nil, oops.With("operation", "list active sessions").Wrap(err)
+	}
+	return scanSessions(rows)
+}
+
+// DeleteByCharacter atomically deletes the active or detached session for a
+// character using a single DELETE ... RETURNING query, eliminating the TOCTOU
+// race of FindByCharacter + Delete. Returns (nil, nil) when no matching
+// session exists.
+func (s *PostgresSessionStore) DeleteByCharacter(ctx context.Context, characterID ulid.ULID, reason string) (*session.Info, error) {
+	query := `DELETE FROM sessions WHERE character_id = $1 AND status IN ('active', 'detached')
+		RETURNING ` + sessionSelectColumns
+	row := s.pool.QueryRow(ctx, query, characterID.String())
+	info, err := scanSession(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, oops.With("operation", "delete_by_character").
+			With("character_id", characterID.String()).Wrap(err)
+	}
+
+	// Notify watchers (same as Delete).
+	s.mu.Lock()
+	watchers := s.watchers[info.ID]
+	delete(s.watchers, info.ID)
+	s.mu.Unlock()
+	for _, ch := range watchers {
+		select {
+		case ch <- session.Event{Type: session.Destroyed, Message: reason}:
+		default:
+		}
+		close(ch)
+	}
+
+	return info, nil
+}
+
+// UpdateActivity bumps the updated_at timestamp for a session.
+func (s *PostgresSessionStore) UpdateActivity(ctx context.Context, id string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE sessions SET updated_at = now() WHERE id = $1`, id)
+	if err != nil {
+		return oops.With("operation", "update activity").With("session_id", id).Wrap(err)
+	}
+	return nil
 }

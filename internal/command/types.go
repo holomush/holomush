@@ -17,6 +17,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/property"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -193,6 +194,14 @@ type CommandExecutionConfig struct {
 	InvokedAs     string    // optional
 }
 
+// BootedSession records a session that was forcibly terminated by a boot command.
+// The gRPC layer uses this to perform leave-event and disconnect-hook teardown
+// for the target, which the boot handler itself cannot do.
+type BootedSession struct {
+	CharacterRef core.CharacterRef
+	SessionInfo  session.Info
+}
+
 // CommandExecution provides context for command execution.
 //
 // Immutability Contract:
@@ -218,6 +227,10 @@ type CommandExecution struct {
 	sessionID     ulid.ULID
 	output        io.Writer
 	services      *Services
+
+	// bootedSessions tracks sessions forcibly ended by admin boot.
+	// After dispatch, the server layer processes these for leave events and hooks.
+	bootedSessions []BootedSession
 
 	// Public fields - dispatcher sets these after construction
 	Args string
@@ -248,6 +261,16 @@ func (e *CommandExecution) Output() io.Writer { return e.output }
 
 // Services returns the service dependencies for command handlers.
 func (e *CommandExecution) Services() *Services { return e.services }
+
+// RecordBootedSession records a session that was forcibly terminated by a boot
+// command so the server layer can emit leave events and run disconnect hooks.
+func (e *CommandExecution) RecordBootedSession(bs BootedSession) {
+	e.bootedSessions = append(e.bootedSessions, bs)
+}
+
+// BootedSessions returns sessions that were forcibly terminated during this
+// command execution. Returns nil when no sessions were booted.
+func (e *CommandExecution) BootedSessions() []BootedSession { return e.bootedSessions }
 
 // NewCommandExecution creates a validated CommandExecution.
 // Returns an error if CharacterID is zero, Services is nil, or Output is nil.
@@ -289,7 +312,7 @@ const (
 // ServicesConfig holds the dependencies for constructing a Services instance.
 type ServicesConfig struct {
 	World            WorldService             // world model queries and mutations
-	Session          core.SessionService      // session management
+	Session          session.Access           // session management
 	Engine           types.AccessPolicyEngine // ABAC policy engine for authorization
 	Events           core.EventStore          // event persistence
 	AliasCache       *AliasCache              // alias management (optional)
@@ -308,7 +331,7 @@ type ServicesConfig struct {
 // across all command executions.
 type Services struct {
 	world            WorldService             // world model queries and mutations
-	session          core.SessionService      // session management
+	session          session.Access           // session management
 	engine           types.AccessPolicyEngine // ABAC policy engine for authorization
 	events           core.EventStore          // event persistence
 	aliasCache       *AliasCache              // alias management (optional, for alias commands)
@@ -321,7 +344,7 @@ type Services struct {
 func (s *Services) World() WorldService { return s.world }
 
 // Session returns the session service for session management.
-func (s *Services) Session() core.SessionService { return s.session }
+func (s *Services) Session() session.Access { return s.session }
 
 // Engine returns the ABAC policy engine for authorization checks.
 func (s *Services) Engine() types.AccessPolicyEngine { return s.engine }

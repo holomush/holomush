@@ -200,10 +200,6 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 		existingSession.Status = session.StatusActive
 		existingSession.UpdatedAt = now
 
-		// Connect to session manager.
-		connID := core.NewULID()
-		s.sessions.Connect(charID, connID)
-
 		// Delete the player token (one-time use).
 		if delErr := s.playerTokenRepo.DeleteByToken(ctx, req.PlayerToken); delErr != nil {
 			slog.WarnContext(ctx, "failed to delete player token", "error", delErr)
@@ -219,7 +215,6 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 
 	// Create new session.
 	sessionID := s.newSessionID()
-	connID := core.NewULID()
 
 	now := time.Now()
 	ttlSeconds := int(s.sessionDefaults.TTL.Seconds())
@@ -253,8 +248,6 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 	if err := s.sessionStore.Set(ctx, sessionID.String(), sessionInfo); err != nil {
 		return nil, oops.Code("SESSION_CREATE_FAILED").Wrap(err)
 	}
-
-	s.sessions.Connect(charID, connID)
 
 	// Emit arrive event (best-effort).
 	char := core.CharacterRef{ID: charID, Name: selectedChar.Name, LocationID: locationID}

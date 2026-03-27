@@ -463,3 +463,15 @@ func (m *mockSessionStore) UpdateGridPresent(_ context.Context, id string, _ boo
 func (m *mockSessionStore) ListActiveByLocation(_ context.Context, _ ulid.ULID) ([]*session.Info, error) {
 	return nil, fmt.Errorf("mockSessionStore.ListActiveByLocation: not implemented")
 }
+
+func (m *mockSessionStore) ListActive(_ context.Context) ([]*session.Info, error) {
+	return nil, fmt.Errorf("mockSessionStore.ListActive: not implemented")
+}
+
+func (m *mockSessionStore) DeleteByCharacter(_ context.Context, id ulid.ULID, _ string) (*session.Info, error) {
+	return nil, fmt.Errorf("mockSessionStore.DeleteByCharacter(%q): not implemented", id)
+}
+
+func (m *mockSessionStore) UpdateActivity(_ context.Context, id string) error {
+	return fmt.Errorf("mockSessionStore.UpdateActivity(%q): not implemented", id)
+}

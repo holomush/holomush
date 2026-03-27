@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"runtime/debug"
 	"strings"
@@ -101,7 +102,6 @@ type CoreServer struct {
 	corev1.UnimplementedCoreServiceServer
 
 	engine          *core.Engine
-	sessions        *core.SessionManager
 	authenticator   Authenticator
 	sessionStore    session.Store
 	eventStore      core.EventStore
@@ -180,10 +180,9 @@ func WithDispatcher(d *command.Dispatcher, svc *command.Services) CoreServerOpti
 }
 
 // NewCoreServer creates a new Core gRPC server.
-func NewCoreServer(engine *core.Engine, sessions *core.SessionManager, sessionStore session.Store, opts ...CoreServerOption) *CoreServer {
+func NewCoreServer(engine *core.Engine, sessionStore session.Store, opts ...CoreServerOption) *CoreServer {
 	s := &CoreServer{
 		engine:       engine,
-		sessions:     sessions,
 		sessionStore: sessionStore,
 		newSessionID: core.NewULID,
 	}
@@ -280,9 +279,6 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthenticateR
 			Error:   "session creation failed",
 		}, nil
 	}
-
-	// Connect to session manager (after successful persistence to avoid orphaned state)
-	s.sessions.Connect(result.CharacterID, connID)
 
 	// Register connection with client type.
 	// For the web path, StreamEvents will re-register with the correct stream list;
@@ -411,7 +407,6 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 	input = expandMUSHPrefix(input)
 
 	char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
-	hadSessionBefore := s.sessions.GetSession(info.CharacterID) != nil
 
 	sessionID, parseErr := ulid.Parse(info.ID)
 	if parseErr != nil {
@@ -437,10 +432,22 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 
 	// Emit any buffered output as a command_response event.
 	if buf.Len() > 0 {
-		isError := dispatchErr != nil
+		isError := dispatchErr != nil && !errors.Is(dispatchErr, command.ErrSessionEnded)
 		if emitErr := s.emitCommandResponse(ctx, char, strings.TrimRight(buf.String(), "\n"), isError); emitErr != nil {
 			return oops.Wrap(emitErr)
 		}
+	}
+
+	// Quit/self-boot detection: handler signals intent, server does teardown.
+	if errors.Is(dispatchErr, command.ErrSessionEnded) {
+		if dcErr := s.engine.HandleDisconnect(ctx, char, "quit"); dcErr != nil {
+			slog.WarnContext(ctx, "leave event failed", "error", dcErr)
+		}
+		if delErr := s.sessionStore.Delete(ctx, info.ID, "Goodbye!"); delErr != nil {
+			slog.WarnContext(ctx, "session delete failed", "error", delErr)
+		}
+		s.runDisconnectHooks(ctx, *info)
+		return nil
 	}
 
 	if dispatchErr != nil {
@@ -459,20 +466,17 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 		return oops.Wrap(dispatchErr)
 	}
 
-	// Post-quit cleanup: if the quit handler ended the in-memory session via
-	// SessionService.EndSession, perform server-side teardown that the
-	// handler doesn't own (leave event, persistent store, hooks).
-	// TODO(holomush-a3a7): replace in-memory session check with an explicit
-	// quit signal (e.g. sentinel error or CommandExecution flag) so this
-	// doesn't depend on SessionManager state.
-	if hadSessionBefore && s.sessions.GetSession(info.CharacterID) == nil {
-		if dcErr := s.engine.HandleDisconnect(ctx, char, "quit"); dcErr != nil {
-			slog.WarnContext(ctx, "leave event failed", "error", dcErr)
+	// Process booted sessions: emit leave events and run disconnect hooks
+	// for targets that were forcibly removed by admin boot.
+	bootedSessions := exec.BootedSessions()
+	for i := range bootedSessions {
+		booted := &bootedSessions[i]
+		if dcErr := s.engine.HandleDisconnect(ctx, booted.CharacterRef, "booted"); dcErr != nil {
+			slog.WarnContext(ctx, "boot leave event failed",
+				"target_id", booted.CharacterRef.ID.String(),
+				"error", dcErr)
 		}
-		if delErr := s.sessionStore.Delete(ctx, info.ID, "Goodbye!"); delErr != nil {
-			slog.WarnContext(ctx, "session delete failed", "error", delErr)
-		}
-		s.runDisconnectHooks(ctx, *info)
+		s.runDisconnectHooks(ctx, booted.SessionInfo)
 	}
 
 	return nil
@@ -525,7 +529,6 @@ func (s *CoreServer) executeViaSwitch(ctx context.Context, info *session.Info, i
 		if err := s.sessionStore.Delete(ctx, info.ID, "Goodbye!"); err != nil {
 			slog.WarnContext(ctx, "session delete failed", "error", err)
 		}
-		s.sessions.Disconnect(info.CharacterID, ulid.ULID{})
 		s.runDisconnectHooks(ctx, *info)
 		return nil
 
@@ -699,7 +702,6 @@ func (s *CoreServer) replayAndSend(
 			return last, oops.With("event_id", ev.ID.String()).Wrap(sendErr)
 		}
 		last = ev.ID
-		s.sessions.UpdateCursor(info.CharacterID, ev.Stream, ev.ID)
 	}
 	if last != afterID {
 		s.persistCursorAsync(info.ID, streamName, last)
@@ -974,15 +976,6 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 				)
 			}
 
-			s.sessions.Disconnect(info.CharacterID, ulid.ULID{})
-			if err := s.sessions.EndSession(info.CharacterID); err != nil {
-				slog.WarnContext(ctx, "end guest session failed",
-					"request_id", requestID,
-					"character_id", info.CharacterID.String(),
-					"error", err,
-				)
-			}
-
 			// Run disconnect hooks for guests
 			s.runDisconnectHooks(ctx, *info)
 		} else {
@@ -1001,7 +994,6 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 				)
 			}
 
-			s.sessions.Disconnect(info.CharacterID, ulid.ULID{})
 			// Do NOT emit leave event — player may reconnect.
 			// Reaper handles leave events when TTL expires.
 		}

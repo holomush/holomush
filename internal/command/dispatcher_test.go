@@ -23,6 +23,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
 )
@@ -33,7 +34,7 @@ import (
 func stubServices() *Services {
 	svc, _ := NewServices(ServicesConfig{
 		World:   &world.Service{},
-		Session: &stubSessionService{},
+		Session: &stubAccess{},
 		Engine:  policytest.AllowAllEngine(),
 		Events:  &stubEventStore{},
 	})
@@ -41,11 +42,23 @@ func stubServices() *Services {
 }
 
 // Stub types for dispatcher tests - minimal implementations that satisfy interfaces
-type stubSessionService struct{}
+type stubAccess struct{}
 
-func (s *stubSessionService) ListActiveSessions() []*core.Session  { return nil }
-func (s *stubSessionService) GetSession(_ ulid.ULID) *core.Session { return nil }
-func (s *stubSessionService) EndSession(_ ulid.ULID) error         { return nil }
+func (s *stubAccess) ListActive(_ context.Context) ([]*session.Info, error) {
+	return nil, nil
+}
+
+func (s *stubAccess) FindByCharacter(_ context.Context, _ ulid.ULID) (*session.Info, error) {
+	return nil, nil
+}
+
+func (s *stubAccess) DeleteByCharacter(_ context.Context, _ ulid.ULID, _ string) (*session.Info, error) {
+	return nil, nil
+}
+
+func (s *stubAccess) UpdateActivity(_ context.Context, _ string) error {
+	return nil
+}
 
 type stubEventStore struct{}
 

@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -61,28 +62,45 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 	stream := "session:" + targetCharID.String()
 	exec.Services().BroadcastSystemMessage(ctx, stream, message)
 
-	// End the target's session
-	if err := exec.Services().Session().EndSession(targetCharID); err != nil {
-		return oops.Code(command.CodeWorldError).
-			With("message", "Unable to boot player. Session may have already ended.").
-			Wrap(err)
+	// End session or signal quit
+	if isSelfBoot {
+		writeOutput(ctx, exec, "boot", "Disconnecting...")
+		return oops.Code("SESSION_ENDED").Wrap(command.ErrSessionEnded)
 	}
 
-	// Log admin boots (but not self-boots)
-	if !isSelfBoot {
-		slog.Info("admin boot",
-			"admin_id", exec.CharacterID().String(),
-			"admin_name", exec.CharacterName(),
-			"target_id", targetCharID.String(),
-			"target_name", targetCharName,
-			"reason", reason,
-		)
+	// Admin boot: delete target session directly
+	deletedInfo, deleteErr := exec.Services().Session().DeleteByCharacter(ctx, targetCharID,
+		formatBootMessage(exec.CharacterName(), reason, false))
+	if deleteErr != nil {
+		return oops.Code(command.CodeWorldError).
+			With("message", "Unable to boot player. Session may have already ended.").
+			Wrap(deleteErr)
 	}
+
+	// Record the booted session so the server layer can emit leave events
+	// and run disconnect hooks for the target.
+	if deletedInfo != nil {
+		exec.RecordBootedSession(command.BootedSession{
+			CharacterRef: core.CharacterRef{
+				ID:         deletedInfo.CharacterID,
+				Name:       deletedInfo.CharacterName,
+				LocationID: deletedInfo.LocationID,
+			},
+			SessionInfo: *deletedInfo,
+		})
+	}
+
+	// Log admin boots
+	slog.Info("admin boot",
+		"admin_id", exec.CharacterID().String(),
+		"admin_name", exec.CharacterName(),
+		"target_id", targetCharID.String(),
+		"target_name", targetCharName,
+		"reason", reason,
+	)
 
 	// Notify the executor - output write errors are logged but don't fail the boot
 	switch {
-	case isSelfBoot:
-		writeOutput(ctx, exec, "boot", "Disconnecting...")
 	case reason != "":
 		writeOutputf(ctx, exec, "boot", "%s has been booted. Reason: %s\n", targetCharName, reason)
 	default:
@@ -111,14 +129,19 @@ func formatBootMessage(adminName, reason string, isSelfBoot bool) string {
 // If unexpected errors occur during search (database failures, timeouts), returns a
 // system error instead of "not found" to avoid misleading the user.
 func findCharacterByName(ctx context.Context, exec *command.CommandExecution, subjectID, targetName string) (ulid.ULID, string, error) {
-	sessions := exec.Services().Session().ListActiveSessions()
+	sessions, err := exec.Services().Session().ListActive(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "boot: failed to list active sessions", "error", err)
+		//nolint:wrapcheck // WorldError creates a structured oops error
+		return ulid.ULID{}, "", command.WorldError("Unable to search for player due to a system error. Please try again shortly.", err)
+	}
 
 	var errorCount int
 	var accessEvalFailedCount int
 
-	for _, session := range sessions {
+	for _, sess := range sessions {
 		// Get character info for this session
-		char, err := exec.Services().World().GetCharacter(ctx, subjectID, session.CharacterID)
+		char, err := exec.Services().World().GetCharacter(ctx, subjectID, sess.CharacterID)
 		if err != nil {
 			// Skip expected errors (not found, permission denied)
 			// - permission denied and not found are expected, don't log or count
@@ -138,7 +161,7 @@ func findCharacterByName(ctx context.Context, exec *command.CommandExecution, su
 			errorCount++
 			slog.ErrorContext(ctx, "unexpected error looking up character",
 				"target_name", targetName,
-				"session_char_id", session.CharacterID.String(),
+				"session_char_id", sess.CharacterID.String(),
 				"error", err,
 			)
 			continue

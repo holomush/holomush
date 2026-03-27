@@ -4,6 +4,7 @@
 package command
 
 import (
+	"errors"
 	"log/slog"
 
 	"github.com/samber/oops"
@@ -50,6 +51,11 @@ var (
 
 	// ErrNilRateLimiter is returned when creating a rate limit middleware with a nil rate limiter.
 	ErrNilRateLimiter = oops.Errorf("rate limiter cannot be nil")
+
+	// ErrSessionEnded signals that the handler ended the session gracefully.
+	// Server-side teardown (leave event, PG delete, hooks) happens in the
+	// gRPC server, not the handler.
+	ErrSessionEnded = errors.New("session ended")
 )
 
 // ErrUnknownCommand creates an error for an unknown command.

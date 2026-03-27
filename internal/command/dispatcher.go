@@ -199,6 +199,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		)
 	} else {
 		metrics.SetStatus(StatusSuccess)
+		// Bump session activity timestamp so "who" idle time is accurate.
+		if sid := exec.SessionID(); sid.Compare(ulid.ULID{}) != 0 {
+			if actErr := exec.Services().Session().UpdateActivity(ctx, sid.String()); actErr != nil {
+				slog.WarnContext(ctx, "session activity update failed",
+					"session_id", sid.String(), "error", actErr)
+			}
+		}
 	}
 	return err
 }
