@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -68,11 +69,25 @@ func BootHandler(ctx context.Context, exec *command.CommandExecution) error {
 	}
 
 	// Admin boot: delete target session directly
-	if _, err := exec.Services().Session().DeleteByCharacter(ctx, targetCharID,
-		formatBootMessage(exec.CharacterName(), reason, false)); err != nil {
+	deletedInfo, deleteErr := exec.Services().Session().DeleteByCharacter(ctx, targetCharID,
+		formatBootMessage(exec.CharacterName(), reason, false))
+	if deleteErr != nil {
 		return oops.Code(command.CodeWorldError).
 			With("message", "Unable to boot player. Session may have already ended.").
-			Wrap(err)
+			Wrap(deleteErr)
+	}
+
+	// Record the booted session so the server layer can emit leave events
+	// and run disconnect hooks for the target.
+	if deletedInfo != nil {
+		exec.RecordBootedSession(command.BootedSession{
+			CharacterRef: core.CharacterRef{
+				ID:         deletedInfo.CharacterID,
+				Name:       deletedInfo.CharacterName,
+				LocationID: deletedInfo.LocationID,
+			},
+			SessionInfo: *deletedInfo,
+		})
 	}
 
 	// Log admin boots

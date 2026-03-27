@@ -466,6 +466,19 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 		return oops.Wrap(dispatchErr)
 	}
 
+	// Process booted sessions: emit leave events and run disconnect hooks
+	// for targets that were forcibly removed by admin boot.
+	bootedSessions := exec.BootedSessions()
+	for i := range bootedSessions {
+		booted := &bootedSessions[i]
+		if dcErr := s.engine.HandleDisconnect(ctx, booted.CharacterRef, "booted"); dcErr != nil {
+			slog.WarnContext(ctx, "boot leave event failed",
+				"target_id", booted.CharacterRef.ID.String(),
+				"error", dcErr)
+		}
+		s.runDisconnectHooks(ctx, booted.SessionInfo)
+	}
+
 	return nil
 }
 

@@ -194,6 +194,14 @@ type CommandExecutionConfig struct {
 	InvokedAs     string    // optional
 }
 
+// BootedSession records a session that was forcibly terminated by a boot command.
+// The gRPC layer uses this to perform leave-event and disconnect-hook teardown
+// for the target, which the boot handler itself cannot do.
+type BootedSession struct {
+	CharacterRef core.CharacterRef
+	SessionInfo  session.Info
+}
+
 // CommandExecution provides context for command execution.
 //
 // Immutability Contract:
@@ -219,6 +227,10 @@ type CommandExecution struct {
 	sessionID     ulid.ULID
 	output        io.Writer
 	services      *Services
+
+	// bootedSessions tracks sessions forcibly ended by admin boot.
+	// After dispatch, the server layer processes these for leave events and hooks.
+	bootedSessions []BootedSession
 
 	// Public fields - dispatcher sets these after construction
 	Args string
@@ -249,6 +261,16 @@ func (e *CommandExecution) Output() io.Writer { return e.output }
 
 // Services returns the service dependencies for command handlers.
 func (e *CommandExecution) Services() *Services { return e.services }
+
+// RecordBootedSession records a session that was forcibly terminated by a boot
+// command so the server layer can emit leave events and run disconnect hooks.
+func (e *CommandExecution) RecordBootedSession(bs BootedSession) {
+	e.bootedSessions = append(e.bootedSessions, bs)
+}
+
+// BootedSessions returns sessions that were forcibly terminated during this
+// command execution. Returns nil when no sessions were booted.
+func (e *CommandExecution) BootedSessions() []BootedSession { return e.bootedSessions }
 
 // NewCommandExecution creates a validated CommandExecution.
 // Returns an error if CharacterID is zero, Services is nil, or Output is nil.
