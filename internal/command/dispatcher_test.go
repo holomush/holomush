@@ -60,6 +60,18 @@ func (s *stubAccess) UpdateActivity(_ context.Context, _ string) error {
 	return nil
 }
 
+func (s *stubAccess) FindByCharacterName(_ context.Context, _ string) (*session.Info, error) {
+	return nil, nil
+}
+
+func (s *stubAccess) UpdateLastPaged(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
+func (s *stubAccess) UpdateLastWhispered(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
 type stubEventStore struct{}
 
 func (s *stubEventStore) Append(_ context.Context, _ core.Event) error { return nil }

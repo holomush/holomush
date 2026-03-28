@@ -526,7 +526,7 @@ func (s *PostgresSessionStore) FindByCharacterName(ctx context.Context, name str
 }
 
 // UpdateLastPaged records the name of the character most recently paged.
-func (s *PostgresSessionStore) UpdateLastPaged(ctx context.Context, sessionID string, name string) error {
+func (s *PostgresSessionStore) UpdateLastPaged(ctx context.Context, sessionID, name string) error {
 	_, err := s.pool.Exec(ctx,
 		`UPDATE sessions SET last_paged = $1, updated_at = now() WHERE id = $2`, name, sessionID)
 	if err != nil {
@@ -536,7 +536,7 @@ func (s *PostgresSessionStore) UpdateLastPaged(ctx context.Context, sessionID st
 }
 
 // UpdateLastWhispered records the name of the character most recently whispered to.
-func (s *PostgresSessionStore) UpdateLastWhispered(ctx context.Context, sessionID string, name string) error {
+func (s *PostgresSessionStore) UpdateLastWhispered(ctx context.Context, sessionID, name string) error {
 	_, err := s.pool.Exec(ctx,
 		`UPDATE sessions SET last_whispered = $1, updated_at = now() WHERE id = $2`, name, sessionID)
 	if err != nil {

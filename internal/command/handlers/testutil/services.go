@@ -36,6 +36,18 @@ func (d *defaultAccess) UpdateActivity(_ context.Context, _ string) error {
 	return nil
 }
 
+func (d *defaultAccess) FindByCharacterName(_ context.Context, _ string) (*session.Info, error) {
+	return nil, nil
+}
+
+func (d *defaultAccess) UpdateLastPaged(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (d *defaultAccess) UpdateLastWhispered(_ context.Context, _, _ string) error {
+	return nil
+}
+
 // ServicesBuilder builds command.Services with reasonable defaults for tests.
 type ServicesBuilder struct {
 	config command.ServicesConfig

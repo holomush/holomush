@@ -475,3 +475,15 @@ func (m *mockSessionStore) DeleteByCharacter(_ context.Context, id ulid.ULID, _ 
 func (m *mockSessionStore) UpdateActivity(_ context.Context, id string) error {
 	return fmt.Errorf("mockSessionStore.UpdateActivity(%q): not implemented", id)
 }
+
+func (m *mockSessionStore) FindByCharacterName(_ context.Context, name string) (*session.Info, error) {
+	return nil, fmt.Errorf("mockSessionStore.FindByCharacterName(%q): not implemented", name)
+}
+
+func (m *mockSessionStore) UpdateLastPaged(_ context.Context, id string, _ string) error {
+	return fmt.Errorf("mockSessionStore.UpdateLastPaged(%q): not implemented", id)
+}
+
+func (m *mockSessionStore) UpdateLastWhispered(_ context.Context, id string, _ string) error {
+	return fmt.Errorf("mockSessionStore.UpdateLastWhispered(%q): not implemented", id)
+}

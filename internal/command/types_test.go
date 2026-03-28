@@ -165,6 +165,18 @@ func (m *mockAccess) UpdateActivity(_ context.Context, _ string) error {
 	return nil
 }
 
+func (m *mockAccess) FindByCharacterName(_ context.Context, _ string) (*session.Info, error) {
+	return nil, nil
+}
+
+func (m *mockAccess) UpdateLastPaged(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
+func (m *mockAccess) UpdateLastWhispered(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
 type mockEngine struct{}
 
 func (m *mockEngine) Evaluate(_ context.Context, _ types.AccessRequest) (types.Decision, error) {

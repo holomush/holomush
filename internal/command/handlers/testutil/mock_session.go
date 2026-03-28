@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/session"
 )
@@ -64,6 +65,21 @@ func (m *MockSessionAccess) DeleteByCharacter(_ context.Context, charID ulid.ULI
 
 // UpdateActivity is a no-op for the mock.
 func (m *MockSessionAccess) UpdateActivity(_ context.Context, _ string) error {
+	return nil
+}
+
+// FindByCharacterName is a stub that always returns SESSION_NOT_FOUND.
+func (m *MockSessionAccess) FindByCharacterName(_ context.Context, _ string) (*session.Info, error) {
+	return nil, oops.Code("SESSION_NOT_FOUND").Errorf("session not found")
+}
+
+// UpdateLastPaged is a no-op for the mock.
+func (m *MockSessionAccess) UpdateLastPaged(_ context.Context, _, _ string) error {
+	return nil
+}
+
+// UpdateLastWhispered is a no-op for the mock.
+func (m *MockSessionAccess) UpdateLastWhispered(_ context.Context, _, _ string) error {
 	return nil
 }
 
