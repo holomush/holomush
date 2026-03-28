@@ -3,7 +3,6 @@
 
 package naming
 
-
 var stars = []string{
 	"Sirius", "Vega", "Rigel", "Altair", "Deneb",
 	"Polaris", "Antares", "Betelgeuse", "Capella", "Arcturus",

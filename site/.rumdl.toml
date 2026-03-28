@@ -27,6 +27,9 @@ exclude = [
 
 respect-gitignore = true
 
+[MD029]
+style = "ordered"
+
 [MD026]
 punctuation = ".,;:!。，；：！"
 

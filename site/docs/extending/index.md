@@ -1,0 +1,54 @@
+# Extending HoloMUSH
+
+HoloMUSH is designed to be extended through plugins. Whether you want to add a
+dice roller, build a crafting system, or connect to external services, the plugin
+system gives you the tools to do it.
+
+## Plugin Types
+
+HoloMUSH supports two plugin systems, both built on the same event-driven model:
+
+| Type   | Language | Best For                        | Compilation |
+| ------ | -------- | ------------------------------- | ----------- |
+| Lua    | Lua 5.1  | Simple scripts, rapid iteration | None        |
+| Binary | Go       | Complex logic, external APIs    | Required    |
+
+Both types work the same way: your plugin subscribes to events (like a character
+speaking or moving) and can emit new events in response. The server handles
+delivery, ordering, and access control.
+
+## Documentation
+
+### [Getting Started](getting-started.md)
+
+Set up your first plugin in minutes. Walks through creating a plugin directory,
+writing a manifest, and implementing a basic event handler.
+
+### [Plugin Guide](plugin-guide.md)
+
+The complete guide to building plugins. Covers Lua and binary plugin structure,
+manifests, host functions, world queries, ABAC policies, error handling, and
+best practices.
+
+### [Access Control](access-control.md)
+
+How the ABAC policy engine works and how to write policies for your plugin.
+Every host function call is checked against your declared policies — this
+page explains how to get them right.
+
+### [Event Reference](events.md)
+
+Event types, payload schemas, and stream patterns. Everything you need to know
+about the data flowing through the system.
+
+### [API Guide](api-guide.md)
+
+How the Core gRPC service works, from authentication through event streaming.
+Useful if you are building a custom client or need to understand the protocol
+layer beneath the plugin system.
+
+## Example Plugins
+
+The [`plugins/`](https://github.com/holomush/holomush/tree/main/plugins)
+directory in the repository contains working examples you can use as starting
+points.

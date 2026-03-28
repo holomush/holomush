@@ -11,9 +11,9 @@ import (
 
 func TestTheme_Name(t *testing.T) {
 	tests := []struct {
-		name      string
-		theme     Theme
-		wantName  string
+		name     string
+		theme    Theme
+		wantName string
 	}{
 		{"star theme", NewStarTheme(), "star"},
 		{"gemstone element theme", NewGemstoneElementTheme(), "gemstone_element"},

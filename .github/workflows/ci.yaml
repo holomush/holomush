@@ -43,10 +43,10 @@ jobs:
         run: |
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.10
           go install github.com/google/yamlfmt/cmd/yamlfmt@v0.21.0
-          RUMDL_VERSION="v0.1.15"
+          RUMDL_VERSION="v0.1.62"
           RUMDL_TARBALL="rumdl-${RUMDL_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
           RUMDL_URL="https://github.com/rvben/rumdl/releases/download/${RUMDL_VERSION}/${RUMDL_TARBALL}"
-          RUMDL_SHA256="b1c9fc9174f1b27bbd33de17c6e84105d8393598f7f24f564cc109ecb4ac23d8"
+          RUMDL_SHA256="a25d9bab27ac9f17589e25cde32ce580c81dfd7bcc4a21e6dbfcd65bc7c1353c"
           curl -LsSfO "${RUMDL_URL}"
           echo "${RUMDL_SHA256}  ${RUMDL_TARBALL}" | sha256sum -c -
           sudo tar xzf "${RUMDL_TARBALL}" --overwrite -C /usr/local/bin

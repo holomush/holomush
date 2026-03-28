@@ -48,7 +48,7 @@ This pattern provides:
 The Subscribe handler sets up LISTEN (via `eventStore.Subscribe()`) before
 replaying historical events. This ordering guarantees no events are missed:
 
-1. `eventStore.Subscribe()` sets up LISTEN — captures all future notifications.
+1. `eventStore.Subscribe()` sets up LISTEN -- captures all future notifications.
 2. `Replay(stream, cursor, batch)` fetches historical events.
 3. The live loop reads notifications and replays from `lastSentID`.
 

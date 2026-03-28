@@ -39,10 +39,10 @@ func (f *fakeAliasRepo) SetSystemAlias(_ context.Context, alias, cmd, _ string) 
 
 func TestSeedSystemAliases(t *testing.T) {
 	tests := []struct {
-		name          string
-		preExisting   map[string]string
-		wantSetCalls  int
-		wantAliases   map[string]string
+		name         string
+		preExisting  map[string]string
+		wantSetCalls int
+		wantAliases  map[string]string
 	}{
 		{
 			name:         "seeds all three on empty repo",

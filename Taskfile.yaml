@@ -147,8 +147,8 @@ tasks:
       - internal/access/policy/dsl/gen-ebnf/main.go
       - internal/access/policy/dsl/ast.go
     generates:
-      - site/docs/developers/policy-dsl.ebnf
-      - site/docs/developers/policy-dsl-railroad.html
+      - site/docs/reference/policy-dsl.ebnf
+      - site/docs/reference/policy-dsl-railroad.html
 
   mocks:generate:
     desc: Generate mocks with mockery
@@ -229,7 +229,7 @@ tasks:
   lint:actions:
     desc: Lint GitHub Actions workflows
     cmds:
-      - actionlint
+      - actionlint -config-file .github/actionlint.yaml .github/workflows/*
 
   lint:access-migration:
     desc: Verify no legacy AccessControl.Check() calls remain
@@ -327,6 +327,39 @@ tasks:
           $EXISTING_DIRS
 
   # ──────────────────────────────────────────
+  # PR preparation (mirrors CI Lint job)
+  # ──────────────────────────────────────────
+
+  pr-prep:
+    desc: Run all CI checks locally before pushing (mirrors the Lint CI job)
+    cmds:
+      - echo "▸ Verifying schema is current..."
+      - task: generate:schema
+      - cmd: |
+          if git rev-parse --git-dir >/dev/null 2>&1; then
+            DIFF_CMD="git diff --exit-code"
+          elif jj root >/dev/null 2>&1; then
+            DIFF_CMD="jj diff --no-pager"
+          else
+            echo "WARN: Cannot verify schema diff (no VCS found)"
+            exit 0
+          fi
+          $DIFF_CMD schemas/plugin.schema.json >/dev/null 2>&1
+          if [ $? -ne 0 ]; then
+            echo "ERROR: Schema out of sync. Run 'task generate:schema' and commit."
+            exit 1
+          fi
+      - echo "▸ Checking license headers..."
+      - task: license:check
+      - echo "▸ Running linters..."
+      - task: lint
+      - echo "▸ Checking formatting..."
+      - task: fmt:check
+      - echo "▸ Running tests..."
+      - task: test
+      - echo "✓ All PR checks passed."
+
+  # ──────────────────────────────────────────
   # Setup (run once)
   # ──────────────────────────────────────────
 
@@ -335,6 +368,7 @@ tasks:
     cmds:
       - brew install golangci-lint gofumpt lefthook actionlint goreleaser dprint cocogitto rumdl yamlfmt binaryen
       - brew install steveyegge/beads/bd
+      - go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@latest
       - lefthook install
       - bd hooks install --chain
       - echo "✓ Dev environment ready. Run 'task dev' to start."
@@ -412,6 +446,25 @@ tasks:
     dir: site
     cmds:
       - uv run zensical serve
+
+  docs:proto:
+    desc: Generate gRPC API reference from proto files
+    vars:
+      PROTOC_INCLUDE:
+        sh: echo "$(dirname $(which protoc) 2>/dev/null)/../include" 2>/dev/null || echo "/usr/local/include"
+    cmds:
+      - >-
+        protoc --doc_out=site/docs/reference --doc_opt=markdown,grpc-api.md --proto_path=api/proto --proto_path={{.PROTOC_INCLUDE}}
+        api/proto/holomush/core/v1/core.proto api/proto/holomush/web/v1/web.proto api/proto/holomush/control/v1/control.proto
+        api/proto/holomush/plugin/v1/plugin.proto api/proto/holomush/plugin/v1/hostfunc.proto
+      # Fix well-known type links to point to official protobuf docs (handles any google.protobuf.* type)
+      - >-
+        perl -pi -e 's|\[google\.protobuf\.([A-Za-z]+)\]\(#google-protobuf-[A-Za-z]+\)|"[google.protobuf.$1](https://protobuf.dev/reference/protobuf/google.protobuf/#"
+        . lc($1) . ")"|ge' site/docs/reference/grpc-api.md
+    sources:
+      - api/proto/holomush/*/v1/*.proto
+    generates:
+      - site/docs/reference/grpc-api.md
 
   # ──────────────────────────────────────────
   # Cleanup

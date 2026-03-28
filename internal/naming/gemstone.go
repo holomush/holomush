@@ -3,7 +3,6 @@
 
 package naming
 
-
 var gemstones = []string{
 	"Amber", "Amethyst", "Beryl", "Coral", "Diamond",
 	"Emerald", "Garnet", "Jade", "Jasper", "Lapis",

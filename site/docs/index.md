@@ -1,11 +1,11 @@
 # HoloMUSH
 
-**A modern platform for text-based virtual worlds**
+**Modern infrastructure for text-based virtual worlds.**
 
-Build immersive MUSHes with a high-performance Go server, flexible plugin system,
-and modern connectivity.
+Build immersive games with a high-performance server, flexible plugin system, and connectivity that works the way people actually use the internet today.
 
-[Get Started →](operators/installation.md){ .md-button .md-button--primary }
+[Get Started](guide/index.md){ .md-button .md-button--primary }
+[View on GitHub](https://github.com/holomush/holomush){ .md-button }
 
 ---
 
@@ -13,40 +13,51 @@ and modern connectivity.
 
 <div class="grid cards" markdown>
 
-- :material-language-go: **Go Core**
+- :material-cellphone-link: **Play from anywhere**
 
-  ---
+    ---
 
-  High-performance server with event-driven architecture
+    Web browser, telnet client, phone — your choice. Sessions survive disconnects and network hiccups. Pick up where you left off.
 
-- :material-puzzle: **Lua & Go Plugins**
+- :material-shield-lock: **Secure by design**
 
-  ---
+    ---
 
-  Lightweight Lua scripts or powerful Go extensions
+    Your password is stored safely. Connections between server components are encrypted. Plugins run in a sandbox and can only access what they're allowed to. Security was part of the design from day one.
 
-- :material-transit-connection-variant: **Dual Protocol**
+- :material-puzzle: **Extend with Lua or Go**
 
-  ---
+    ---
 
-  Classic telnet + modern web client
+    Write a quick Lua script to add a dice roller. Build a full Go plugin for a combat system. Plugins run safely in their own sandbox — they can only touch what you allow.
 
-- :material-database: **PostgreSQL Backend**
+- :material-server: **Deploy on your terms**
 
-  ---
+    ---
 
-  Reliable, scalable data storage
+    Single binary plus PostgreSQL. Run it on a Raspberry Pi, a VPS, or a Kubernetes cluster. Docker Compose gets you running in minutes.
+
+- :material-database-clock: **Events all the way down**
+
+    ---
+
+    Every game action is recorded as an event. Replay what happened, audit the history, debug problems. Nothing gets lost, and everything stays in order.
+
+- :material-open-source-initiative: **Open source, Apache-2.0**
+
+    ---
+
+    Built in the open. Read the code, contribute improvements, fork it for your own purposes. No lock-in, no surprises.
 
 </div>
 
 ---
 
-## Project Status
+!!! tip "Coming Soon"
 
-!!! warning "Active Development"
-
-    HoloMUSH is being built in the open. Star us on
-    [GitHub](https://github.com/holomush/holomush) to follow progress.
+    - Native iOS and desktop apps (Tauri)
+    - Discord and Slack integration
+    - Plugin packages for popular RP systems
 
 ---
 
@@ -54,34 +65,44 @@ and modern connectivity.
 
 <div class="grid cards" markdown>
 
-- :material-code-braces: **Developers**
+- :material-gamepad-variant: **Playing**
 
-  ---
+    ---
 
-  Build plugins and extend HoloMUSH with Lua scripts or Go extensions.
+    Learn the basics — connecting, commands, and getting around the world.
 
-  [:octicons-arrow-right-24: Plugin Development](developers/index.md)
+    [:octicons-arrow-right-24: Player Guide](guide/index.md)
 
-- :material-server: **Operators**
+- :material-server: **Running a Server**
 
-  ---
+    ---
 
-  Deploy, configure, and run your own HoloMUSH server.
+    Deploy, configure, and run your own HoloMUSH game.
 
-  [:octicons-arrow-right-24: Operations Guide](operators/index.md)
+    [:octicons-arrow-right-24: Operations Guide](operating/index.md)
 
-- :material-account-group: **Contributors**
+- :material-puzzle: **Building Plugins**
 
-  ---
+    ---
 
-  Join the community and help build HoloMUSH.
+    Extend HoloMUSH with Lua scripts or Go extensions.
 
-  [:octicons-arrow-right-24: Contributing](contributors/index.md)
+    [:octicons-arrow-right-24: Plugin Development](extending/index.md)
+
+- :material-account-group: **Contributing**
+
+    ---
+
+    Help build HoloMUSH — code, docs, testing, and ideas.
+
+    [:octicons-arrow-right-24: Contributing Guide](contributing/index.md)
 
 </div>
 
 ---
 
 ## Community
+
+HoloMUSH is built in the open. Follow development, report issues, or contribute on GitHub.
 
 - [:fontawesome-brands-github: GitHub](https://github.com/holomush/holomush)

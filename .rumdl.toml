@@ -11,6 +11,7 @@ disable = [
   "MD044", # Proper names capitalization (too noisy)
   "MD057", # Relative link validation (TODO: re-enable after fixing broken links)
   "MD060", # Table column alignment (too strict for complex tables)
+  "MD076", # List item blank line consistency (conflicts with checkbox-style plans)
 ]
 
 exclude = [
@@ -28,6 +29,9 @@ exclude = [
 respect-gitignore = true
 
 # MD024: siblings_only=true is rumdl's default — matches our needs
+
+[MD029]
+style = "ordered"
 
 [MD026]
 punctuation = ".,;:!。，；：！"

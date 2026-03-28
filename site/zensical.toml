@@ -28,3 +28,52 @@ content.code.copy = true
 [project.repo]
 url = "https://github.com/holomush/holomush"
 name = "GitHub"
+
+# Explicit navigation ordering (zensical supports MkDocs-style nav config).
+# Sections are ordered by audience priority: players first, contributors last.
+[[project.nav]]
+Guide = [
+  "guide/index.md",
+  "guide/connecting.md",
+  "guide/commands.md",
+  "guide/building.md",
+]
+
+[[project.nav]]
+Operating = [
+  "operating/index.md",
+  "operating/installation.md",
+  "operating/configuration.md",
+  "operating/database.md",
+  "operating/authentication.md",
+  "operating/operations.md",
+  "operating/verifying-releases.md",
+]
+
+[[project.nav]]
+Extending = [
+  "extending/index.md",
+  "extending/getting-started.md",
+  "extending/plugin-guide.md",
+  "extending/access-control.md",
+  "extending/api-guide.md",
+  "extending/events.md",
+]
+
+[[project.nav]]
+Contributing = [
+  "contributing/index.md",
+  "contributing/architecture.md",
+  "contributing/coding-standards.md",
+  "contributing/authentication.md",
+  "contributing/event-delivery.md",
+  "contributing/pr-guide.md",
+]
+
+[[project.nav]]
+Reference = [
+  "reference/index.md",
+  "reference/access-control.md",
+  "reference/grpc-api.md",
+  "reference/events.md",
+]
