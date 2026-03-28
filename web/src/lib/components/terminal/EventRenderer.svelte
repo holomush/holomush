@@ -8,7 +8,7 @@
   import AnsiRenderer from './AnsiRenderer.svelte';
 
   interface Props {
-    event: { type: string; characterName: string; text: string };
+    event: { type: string; characterName: string; text: string; metadata?: Record<string, unknown> };
     dimmed?: boolean;
   }
 
@@ -20,8 +20,7 @@
     <span class="speaker">{event.characterName}</span> says,
     <span class="speech">"{@html linkUrls(event.text)}"</span>
   {:else if event.type === 'pose'}
-    <span class="actor">{event.characterName}</span>
-    <span class="action">{@html linkUrls(event.text)}</span>
+    <span class="actor">{event.characterName}</span>{#if !event.metadata?.no_space}{' '}{/if}<span class="action">{@html linkUrls(event.text)}</span>
   {:else if event.type === 'arrive'}
     <span class="arrival">{event.characterName} has arrived.</span>
   {:else if event.type === 'leave'}

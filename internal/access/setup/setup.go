@@ -19,6 +19,7 @@ import (
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -54,6 +55,7 @@ func (s *ABACStack) Close() error {
 type ABACConfig struct {
 	Pool          *pgxpool.Pool
 	CharacterRepo world.CharacterRepository
+	RoleStore     store.RoleStore
 	AuditMode     audit.Mode
 }
 
@@ -84,7 +86,11 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 
 	// 8. Character provider (optional)
 	if cfg.CharacterRepo != nil {
-		charProvider := attribute.NewCharacterProvider(cfg.CharacterRepo, nil)
+		var roleResolver attribute.RoleResolver
+		if cfg.RoleStore != nil {
+			roleResolver = store.NewPostgresRoleResolver(cfg.RoleStore)
+		}
+		charProvider := attribute.NewCharacterProvider(cfg.CharacterRepo, roleResolver)
 		if err := resolver.RegisterProvider(charProvider); err != nil {
 			return nil, eb.Wrapf(err, "register character provider")
 		}

@@ -238,9 +238,12 @@ type CommandExecution struct {
 	// Public fields - dispatcher sets these after construction
 	Args string
 	// InvokedAs is the original command name as typed by the user, before alias
-	// resolution. For example, if "say'" is an alias for "say", InvokedAs will
-	// be "say'" while the handler is for "say". Plugins can use this to detect
-	// which variant was invoked.
+	// resolution. Handlers can use this to alter behavior based on which alias
+	// invoked them. For example, the pose handler checks InvokedAs == ";" to
+	// distinguish no-space pose (;'s eyes glow → "Alaric's eyes glow") from
+	// standard pose (: waves → "Alaric waves"). This pattern allows a single
+	// registered command to serve multiple alias variants without separate
+	// command registrations.
 	InvokedAs string
 }
 

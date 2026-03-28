@@ -6,6 +6,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -22,14 +23,25 @@ func TestPoseHandler(t *testing.T) {
 	tests := []struct {
 		name          string
 		args          string
+		invokedAs     string
 		appendErr     error
 		wantErr       bool
 		wantEventType core.EventType
+		wantNoSpace   bool
 	}{
 		{
 			name:          "emits pose event",
 			args:          "waves hello",
+			invokedAs:     ":",
 			wantEventType: core.EventTypePose,
+			wantNoSpace:   false,
+		},
+		{
+			name:          "no-space pose via semicolon",
+			args:          "'s eyes widen",
+			invokedAs:     ";",
+			wantEventType: core.EventTypePose,
+			wantNoSpace:   true,
 		},
 		{
 			name:      "event store failure",
@@ -67,6 +79,7 @@ func TestPoseHandler(t *testing.T) {
 				Services:      svc,
 			})
 			exec.Args = tt.args
+			exec.InvokedAs = tt.invokedAs
 
 			err := PoseHandler(context.Background(), exec)
 
@@ -78,6 +91,10 @@ func TestPoseHandler(t *testing.T) {
 			assert.Equal(t, tt.wantEventType, appended.Type)
 			assert.Equal(t, "location:"+locationID.String(), appended.Stream)
 			assert.Contains(t, string(appended.Payload), tt.args)
+
+			var payload core.PosePayload
+			require.NoError(t, json.Unmarshal(appended.Payload, &payload))
+			assert.Equal(t, tt.wantNoSpace, payload.NoSpace)
 		})
 	}
 }

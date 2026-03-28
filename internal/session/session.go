@@ -51,12 +51,12 @@ type Info struct {
 	CommandHistory []string
 	TTLSeconds     int
 	MaxHistory     int
-	DetachedAt      *time.Time
-	ExpiresAt       *time.Time
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	LastPaged       string
-	LastWhispered   string
+	DetachedAt     *time.Time
+	ExpiresAt      *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	LastPaged      string
+	LastWhispered  string
 }
 
 // IsActive returns true if the session is in active status.

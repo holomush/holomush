@@ -186,7 +186,6 @@ func TestSessionFindByName_CaseInsensitive(t *testing.T) {
 	assert.Equal(t, "Bob", tbl.RawGetString("character_name").String())
 }
 
-
 func TestSessionFindByName_NotFound(t *testing.T) {
 	sa := newMockSessionAccess()
 	L := newLuaStateWithSession(t, sa)
@@ -277,7 +276,7 @@ func (e *errorSessionAccess) DeleteByCharacter(_ context.Context, _ ulid.ULID, _
 	return nil, nil
 }
 
-func (e *errorSessionAccess) UpdateActivity(_ context.Context, _ string) error  { return nil }
+func (e *errorSessionAccess) UpdateActivity(_ context.Context, _ string) error     { return nil }
 func (e *errorSessionAccess) UpdateLastPaged(_ context.Context, _, _ string) error { return nil }
 func (e *errorSessionAccess) UpdateLastWhispered(_ context.Context, _, _ string) error {
 	return nil

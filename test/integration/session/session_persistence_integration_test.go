@@ -27,6 +27,7 @@ import (
 	grpcpkg "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/telnet"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
@@ -100,7 +101,7 @@ var _ = Describe("Session Persistence", func() {
 		engine := core.NewEngine(eventStore)
 
 		// 6. Create GuestAuthenticator
-		guestAuth = telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocation)
+		guestAuth = telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocation)
 
 		// 7. Create CoreServer with PostgresSessionStore and session defaults
 		pe := policytest.AllowAllEngine()

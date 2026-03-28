@@ -624,7 +624,11 @@ func (h *GatewayHandler) sendProtoEvent(ev *corev1.EventFrame) {
 			h.send(fmt.Sprintf("%s <corrupted action>", actorPrefix))
 			return
 		}
-		h.send(fmt.Sprintf("%s %s", p.CharacterName, p.Action))
+		if p.NoSpace {
+			h.send(fmt.Sprintf("%s%s", p.CharacterName, p.Action))
+		} else {
+			h.send(fmt.Sprintf("%s %s", p.CharacterName, p.Action))
+		}
 
 	case string(core.EventTypeCommandResponse):
 		var p core.CommandResponsePayload

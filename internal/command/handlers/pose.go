@@ -22,6 +22,7 @@ func PoseHandler(ctx context.Context, exec *command.CommandExecution) error {
 	payload, err := json.Marshal(core.PosePayload{
 		CharacterName: exec.CharacterName(),
 		Action:        exec.Args,
+		NoSpace:       exec.InvokedAs == ";",
 	})
 	if err != nil {
 		return oops.With("operation", "marshal_pose_payload").Wrap(err)

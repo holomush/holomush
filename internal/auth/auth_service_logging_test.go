@@ -62,6 +62,10 @@ func (m *mockPlayerRepoLogging) Delete(_ context.Context, _ ulid.ULID) error {
 	return nil
 }
 
+func (m *mockPlayerRepoLogging) Count(_ context.Context) (int, error) {
+	return 0, nil
+}
+
 // mockSessionRepoLogging is a mock that can fail on operations for testing logging.
 type mockSessionRepoLogging struct {
 	session       *auth.WebSession

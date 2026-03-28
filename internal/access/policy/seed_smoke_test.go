@@ -41,7 +41,7 @@ func characterProvider(subjectAttrs, resourceAttrs map[string]any) *mockAttribut
 				"id":           types.AttrTypeString,
 				"player_id":    types.AttrTypeString,
 				"name":         types.AttrTypeString,
-				"role":         types.AttrTypeString,
+				"roles":        types.AttrTypeStringList,
 				"location":     types.AttrTypeString,
 				"location_id":  types.AttrTypeString,
 				"has_location": types.AttrTypeBool,
@@ -124,8 +124,8 @@ func TestSeedSmoke_PlayerSelfAccess(t *testing.T) {
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": charID, "role": "player", "location": "01LOC000"},
-			map[string]any{"id": charID, "role": "player", "location": "01LOC000"},
+			map[string]any{"id": charID, "roles": []string{"player"}, "location": "01LOC000"},
+			map[string]any{"id": charID, "roles": []string{"player"}, "location": "01LOC000"},
 		),
 	})
 
@@ -144,7 +144,7 @@ func TestSeedSmoke_PlayerLocationRead(t *testing.T) {
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01CHAR01", "role": "player", "location": locID},
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": locID},
 			nil,
 		),
 		locationProvider(map[string]any{"id": locID, "name": "Town Square"}),
@@ -165,8 +165,8 @@ func TestSeedSmoke_PlayerColocatedCharacter(t *testing.T) {
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01CHAR_A", "role": "player", "location": locID},
-			map[string]any{"id": "01CHAR_B", "role": "player", "location": locID},
+			map[string]any{"id": "01CHAR_A", "roles": []string{"player"}, "location": locID},
+			map[string]any{"id": "01CHAR_B", "roles": []string{"player"}, "location": locID},
 		),
 	})
 
@@ -185,7 +185,7 @@ func TestSeedSmoke_PlayerColocatedObject(t *testing.T) {
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01CHAR01", "role": "player", "location": locID},
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": locID},
 			nil,
 		),
 		objectProvider(map[string]any{"id": "01OBJ001", "location": locID}),
@@ -206,7 +206,7 @@ func TestSeedSmoke_PlayerStreamEmit(t *testing.T) {
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01CHAR01", "role": "player", "location": locID},
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": locID},
 			nil,
 		),
 		streamProvider(map[string]any{"name": "location:01LOC000", "location": locID}),
@@ -225,7 +225,7 @@ func TestSeedSmoke_PlayerStreamEmit(t *testing.T) {
 func TestSeedSmoke_PlayerMovement(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01CHAR01", "role": "player", "location": "01LOC_A"},
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC_A"},
 			nil,
 		),
 		locationProvider(map[string]any{"id": "01LOC_B", "name": "Market"}),
@@ -244,7 +244,7 @@ func TestSeedSmoke_PlayerMovement(t *testing.T) {
 func TestSeedSmoke_PlayerExitUse(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01CHAR01", "role": "player", "location": "01LOC000"},
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
 			nil,
 		),
 	})
@@ -265,7 +265,7 @@ func TestSeedSmoke_PlayerBasicCommands(t *testing.T) {
 		t.Run(cmd, func(t *testing.T) {
 			engine := createSeedEngine(t, []attribute.AttributeProvider{
 				characterProvider(
-					map[string]any{"id": "01CHAR01", "role": "player", "location": "01LOC000"},
+					map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
 					nil,
 				),
 				commandProvider(map[string]any{"name": cmd}),
@@ -288,7 +288,7 @@ func TestSeedSmoke_PlayerDeniedBuilderCommands(t *testing.T) {
 		t.Run(cmd, func(t *testing.T) {
 			engine := createSeedEngine(t, []attribute.AttributeProvider{
 				characterProvider(
-					map[string]any{"id": "01CHAR01", "role": "player", "location": "01LOC000"},
+					map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
 					nil,
 				),
 				commandProvider(map[string]any{"name": cmd}),
@@ -308,7 +308,7 @@ func TestSeedSmoke_PlayerDeniedBuilderCommands(t *testing.T) {
 func TestSeedSmoke_BuilderLocationWrite(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01CHAR01", "role": "builder", "location": "01LOC000"},
+			map[string]any{"id": "01CHAR01", "roles": []string{"builder"}, "location": "01LOC000"},
 			nil,
 		),
 		locationProvider(map[string]any{"id": "01LOC001", "name": "Forest"}),
@@ -329,7 +329,7 @@ func TestSeedSmoke_BuilderCommands(t *testing.T) {
 		t.Run(cmd, func(t *testing.T) {
 			engine := createSeedEngine(t, []attribute.AttributeProvider{
 				characterProvider(
-					map[string]any{"id": "01CHAR01", "role": "builder", "location": "01LOC000"},
+					map[string]any{"id": "01CHAR01", "roles": []string{"builder"}, "location": "01LOC000"},
 					nil,
 				),
 				commandProvider(map[string]any{"name": cmd}),
@@ -364,7 +364,7 @@ func TestSeedSmoke_AdminFullAccess(t *testing.T) {
 			// Admin needs providers registered for target matching
 			engine := createSeedEngine(t, []attribute.AttributeProvider{
 				characterProvider(
-					map[string]any{"id": "01ADMIN1", "role": "admin", "location": "01LOC000"},
+					map[string]any{"id": "01ADMIN1", "roles": []string{"admin"}, "location": "01LOC000"},
 					nil,
 				),
 				locationProvider(map[string]any{"id": "01LOC001"}),
@@ -386,7 +386,7 @@ func TestSeedSmoke_AdminFullAccess(t *testing.T) {
 func TestSeedSmoke_DefaultDenyNoMatchingPolicy(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01CHAR01", "role": "player", "location": "01LOC000"},
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
 			nil,
 		),
 	})
@@ -407,7 +407,7 @@ func TestSeedSmoke_PropertyPublicRead(t *testing.T) {
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01CHAR01", "role": "player", "location": locID},
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": locID},
 			nil,
 		),
 		propertyProvider(map[string]any{
@@ -431,7 +431,7 @@ func TestSeedSmoke_PropertyPrivateReadOwner(t *testing.T) {
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": charID, "role": "player", "location": "01LOC000"},
+			map[string]any{"id": charID, "roles": []string{"player"}, "location": "01LOC000"},
 			nil,
 		),
 		propertyProvider(map[string]any{
@@ -452,7 +452,7 @@ func TestSeedSmoke_PropertyPrivateReadOwner(t *testing.T) {
 func TestSeedSmoke_PropertyPrivateReadDeniedNonOwner(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01CHAR01", "role": "player", "location": "01LOC000"},
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
 			nil,
 		),
 		propertyProvider(map[string]any{
@@ -475,7 +475,7 @@ func TestSeedSmoke_PropertyRestrictedForbid(t *testing.T) {
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": charID, "role": "player", "location": "01LOC000"},
+			map[string]any{"id": charID, "roles": []string{"player"}, "location": "01LOC000"},
 			nil,
 		),
 		propertyProvider(map[string]any{
@@ -501,7 +501,7 @@ func TestSeedSmoke_PropertyOwnerWrite(t *testing.T) {
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": charID, "role": "player", "location": "01LOC000"},
+			map[string]any{"id": charID, "roles": []string{"player"}, "location": "01LOC000"},
 			nil,
 		),
 		propertyProvider(map[string]any{
@@ -521,7 +521,7 @@ func TestSeedSmoke_PropertyOwnerWrite(t *testing.T) {
 func TestSeedSmoke_PlayerExitRead(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01CHAR01", "role": "player", "location": "01LOC000"},
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
 			nil,
 		),
 	})
@@ -539,7 +539,7 @@ func TestSeedSmoke_PlayerExitRead(t *testing.T) {
 func TestSeedSmoke_BuilderExitWrite(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01BUILD1", "role": "builder", "location": "01LOC000"},
+			map[string]any{"id": "01BUILD1", "roles": []string{"builder"}, "location": "01LOC000"},
 			nil,
 		),
 	})
@@ -562,7 +562,7 @@ func TestSeedSmoke_PlayerLocationListCharacters(t *testing.T) {
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01CHAR01", "role": "player", "location": locID},
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": locID},
 			nil,
 		),
 		locationProvider(map[string]any{"id": locID, "name": "Plaza"}),
@@ -584,7 +584,7 @@ func TestSeedSmoke_PlayerDeniedListCharacters_NonCurrentLocation(t *testing.T) {
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01CHAR01", "role": "player", "location": currentLocID},
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": currentLocID},
 			nil,
 		),
 		locationProvider(map[string]any{"id": otherLocID, "name": "Other Room"}),
@@ -605,7 +605,7 @@ func TestSeedSmoke_AdminLocationListCharacters(t *testing.T) {
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01ADMIN1", "role": "admin", "location": locID},
+			map[string]any{"id": "01ADMIN1", "roles": []string{"admin"}, "location": locID},
 			nil,
 		),
 		locationProvider(map[string]any{"id": locID, "name": "Plaza"}),
@@ -625,7 +625,7 @@ func TestSeedSmoke_BuilderLocationListCharacters(t *testing.T) {
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01BUILD1", "role": "builder", "location": locID},
+			map[string]any{"id": "01BUILD1", "roles": []string{"builder"}, "location": locID},
 			nil,
 		),
 		locationProvider(map[string]any{"id": locID, "name": "Plaza"}),
@@ -643,7 +643,7 @@ func TestSeedSmoke_BuilderLocationListCharacters(t *testing.T) {
 func TestSeedSmoke_PlayerSceneAccess(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01CHAR01", "role": "player", "location": "01LOC000"},
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
 			nil,
 		),
 	})
@@ -665,7 +665,7 @@ func TestSeedSmoke_PlayerSceneAccess(t *testing.T) {
 func TestSeedSmoke_PlayerDeniedLocationWrite(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01CHAR01", "role": "player", "location": "01LOC000"},
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
 			nil,
 		),
 		locationProvider(map[string]any{"id": "01LOC001", "name": "Forest"}),
@@ -684,7 +684,7 @@ func TestSeedSmoke_PlayerDeniedLocationWrite(t *testing.T) {
 func TestSeedSmoke_PlayerDeniedOtherLocationRead(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
-			map[string]any{"id": "01CHAR01", "role": "player", "location": "01LOC_A0"},
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC_A0"},
 			nil,
 		),
 		locationProvider(map[string]any{"id": "01LOC_B0", "name": "Elsewhere"}),

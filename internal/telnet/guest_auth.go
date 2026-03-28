@@ -6,56 +6,18 @@ package telnet
 import (
 	"context"
 	"fmt"
-	"math/rand/v2"
 	"sync"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
 	grpcserver "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/naming"
 )
-
-// NameTheme generates two-part themed names.
-type NameTheme interface {
-	Name() string
-	Generate() (firstName, secondName string)
-}
-
-var gemstones = []string{
-	"Amber", "Amethyst", "Beryl", "Coral", "Diamond",
-	"Emerald", "Garnet", "Jade", "Jasper", "Lapis",
-	"Moonstone", "Obsidian", "Onyx", "Opal", "Pearl",
-	"Quartz", "Ruby", "Sapphire", "Topaz", "Turquoise",
-}
-
-var elements = []string{
-	"Argon", "Boron", "Carbon", "Cobalt", "Copper",
-	"Gold", "Helium", "Iodine", "Iron", "Krypton",
-	"Neon", "Nickel", "Osmium", "Radium", "Radon",
-	"Silver", "Titanium", "Xenon", "Zinc", "Zircon",
-}
-
-// GemstoneElementTheme generates names like "Amber_Argon".
-type GemstoneElementTheme struct{}
-
-// NewGemstoneElementTheme creates a new GemstoneElementTheme.
-func NewGemstoneElementTheme() *GemstoneElementTheme {
-	return &GemstoneElementTheme{}
-}
-
-// Name returns the theme identifier.
-func (t *GemstoneElementTheme) Name() string {
-	return "gemstone_element"
-}
-
-// Generate returns a random (gemstone, element) pair.
-func (t *GemstoneElementTheme) Generate() (firstName, secondName string) {
-	return gemstones[rand.IntN(len(gemstones))], elements[rand.IntN(len(elements))] //nolint:gosec // non-security name generation
-}
 
 // GuestAuthenticator implements grpc.Authenticator for guest logins.
 type GuestAuthenticator struct {
-	theme         NameTheme
+	theme         naming.Theme
 	startLocation ulid.ULID
 	mu            sync.Mutex
 	active        map[string]struct{}
@@ -65,7 +27,7 @@ type GuestAuthenticator struct {
 var _ grpcserver.Authenticator = (*GuestAuthenticator)(nil)
 
 // NewGuestAuthenticator creates a GuestAuthenticator with the given theme and start location.
-func NewGuestAuthenticator(theme NameTheme, startLocation ulid.ULID) *GuestAuthenticator {
+func NewGuestAuthenticator(theme naming.Theme, startLocation ulid.ULID) *GuestAuthenticator {
 	return &GuestAuthenticator{
 		theme:         theme,
 		startLocation: startLocation,
