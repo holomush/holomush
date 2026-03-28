@@ -23,6 +23,31 @@ func RegisterAll(reg *command.Registry) {
 
 	// Communication commands
 	mustRegister(command.CommandEntryConfig{
+		Name:         "page",
+		Handler:      PageHandler,
+		Capabilities: []string{"comms.page"},
+		Help:         "Send a private message",
+		Usage:        "page <name>=<message>",
+		HelpText: `## Page
+
+Send an OOC private message to another connected character.
+
+### Usage
+
+- ` + "`page <name>=<message>`" + ` - Send a private message
+- ` + "`page <message>`" + ` - Page your last-paged character
+- ` + "`page <name>=:<action>`" + ` - Pose-page (shows "From afar, ...")
+- ` + "`page <name>=;<action>`" + ` - No-space pose-page
+
+### Examples
+
+- ` + "`page Alex=Hey, are you around?`" + `
+- ` + "`page How's it going?`" + ` - Pages last-paged character
+- ` + "`page Alex=:waves hello.`" + ` - Pose-page`,
+		Source: "core",
+	})
+
+	mustRegister(command.CommandEntryConfig{
 		Name:    "say",
 		Handler: SayHandler,
 		Help:    "Say something to the room",
@@ -226,6 +251,30 @@ Send a broadcast message to all connected players.
 ### Permissions
 
 Requires the ` + "`admin.wall`" + ` capability.`,
+		Source: "core",
+	})
+
+	// Description commands
+	mustRegister(command.CommandEntryConfig{
+		Name:    "describe",
+		Handler: DescribeHandler,
+		Help:    "Set a description",
+		Usage:   "describe me <text>",
+		HelpText: `## Describe
+
+Set the description of yourself, your current location, or a named object.
+
+### Usage
+
+- ` + "`describe me <text>`" + ` - Set your character's description
+- ` + "`describe here <text>`" + ` - Set the current location's description
+- ` + "`describe <target>=<text>`" + ` - Set a named target's description
+
+### Examples
+
+- ` + "`describe me A tall figure in a dark cloak.`" + `
+- ` + "`describe here A dusty chamber lit by a single torch.`" + `
+- ` + "`describe #01ABCDEF=A gleaming blade.`" + ``,
 		Source: "core",
 	})
 

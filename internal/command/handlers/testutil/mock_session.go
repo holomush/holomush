@@ -5,19 +5,20 @@ package testutil
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/oklog/ulid/v2"
-	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/session"
 )
 
 // MockSessionAccess implements session.Access for handler tests.
 type MockSessionAccess struct {
-	mu       sync.Mutex
-	sessions []*session.Info
+	mu                      sync.Mutex
+	sessions                []*session.Info
+	findByCharacterNameFunc func(ctx context.Context, name string) (*session.Info, error)
 }
 
 // NewMockSessionAccess creates a MockSessionAccess with the given sessions.
@@ -68,9 +69,32 @@ func (m *MockSessionAccess) UpdateActivity(_ context.Context, _ string) error {
 	return nil
 }
 
-// FindByCharacterName is a stub that always returns SESSION_NOT_FOUND.
-func (m *MockSessionAccess) FindByCharacterName(_ context.Context, _ string) (*session.Info, error) {
-	return nil, oops.Code("SESSION_NOT_FOUND").Errorf("session not found")
+// FindByCharacterName returns the session for a character by name (case-insensitive).
+// If a custom func is set via WithFindByCharacterName, it delegates to that.
+// Otherwise it searches the in-memory sessions slice (case-insensitive).
+// Returns nil, nil if not found.
+func (m *MockSessionAccess) FindByCharacterName(ctx context.Context, name string) (*session.Info, error) {
+	m.mu.Lock()
+	fn := m.findByCharacterNameFunc
+	m.mu.Unlock()
+	if fn != nil {
+		return fn(ctx, name)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, s := range m.sessions {
+		if strings.EqualFold(s.CharacterName, name) {
+			return s, nil
+		}
+	}
+	return nil, nil
+}
+
+// WithFindByCharacterName sets a custom func for FindByCharacterName.
+func (m *MockSessionAccess) WithFindByCharacterName(fn func(ctx context.Context, name string) (*session.Info, error)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.findByCharacterNameFunc = fn
 }
 
 // UpdateLastPaged is a no-op for the mock.
