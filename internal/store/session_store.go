@@ -41,7 +41,8 @@ var (
 const sessionSelectColumns = `id, character_id, character_name, location_id,
 	is_guest, status, grid_present, event_cursors,
 	command_history, ttl_seconds, max_history,
-	detached_at, expires_at, created_at, updated_at`
+	detached_at, expires_at, created_at, updated_at,
+	last_paged, last_whispered`
 
 // parseSessionRow parses the scalar fields scanned from a session row into a
 // session.Info. Both scanSession and scanSessions call Scan with the same
@@ -99,6 +100,8 @@ func scanSession(row pgx.Row) (*session.Info, error) {
 		&info.ExpiresAt,
 		&info.CreatedAt,
 		&info.UpdatedAt,
+		&info.LastPaged,
+		&info.LastWhispered,
 	)
 	if err != nil {
 		return nil, oops.With("operation", "scan session row").Wrap(err)
@@ -136,6 +139,8 @@ func scanSessions(rows pgx.Rows) ([]*session.Info, error) {
 			&info.ExpiresAt,
 			&info.CreatedAt,
 			&info.UpdatedAt,
+			&info.LastPaged,
+			&info.LastWhispered,
 		)
 		if err != nil {
 			return nil, oops.With("operation", "scan session row").Wrap(err)
@@ -186,8 +191,9 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 		`INSERT INTO sessions (id, character_id, character_name, location_id,
 			is_guest, status, grid_present, event_cursors,
 			command_history, ttl_seconds, max_history,
-			detached_at, expires_at, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14)
+			detached_at, expires_at, created_at,
+			last_paged, last_whispered)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16)
 		 ON CONFLICT (id) DO UPDATE SET
 			character_id = EXCLUDED.character_id,
 			character_name = EXCLUDED.character_name,
@@ -201,6 +207,8 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 			max_history = EXCLUDED.max_history,
 			detached_at = EXCLUDED.detached_at,
 			expires_at = EXCLUDED.expires_at,
+			last_paged = EXCLUDED.last_paged,
+			last_whispered = EXCLUDED.last_whispered,
 			updated_at = now()`,
 		id,
 		info.CharacterID.String(),
@@ -216,6 +224,8 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 		info.DetachedAt,
 		info.ExpiresAt,
 		info.CreatedAt,
+		info.LastPaged,
+		info.LastWhispered,
 	)
 	if err != nil {
 		return oops.With("operation", "set session").With("session_id", id).Wrap(err)
@@ -496,6 +506,41 @@ func (s *PostgresSessionStore) UpdateActivity(ctx context.Context, id string) er
 		`UPDATE sessions SET updated_at = now() WHERE id = $1`, id)
 	if err != nil {
 		return oops.With("operation", "update activity").With("session_id", id).Wrap(err)
+	}
+	return nil
+}
+
+// FindByCharacterName returns the active session for a character by name.
+// The lookup is case-insensitive.
+func (s *PostgresSessionStore) FindByCharacterName(ctx context.Context, name string) (*session.Info, error) {
+	query := `SELECT ` + sessionSelectColumns + ` FROM sessions WHERE LOWER(character_name) = LOWER($1) AND status = 'active'`
+	row := s.pool.QueryRow(ctx, query, name)
+	info, err := scanSession(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.Code("SESSION_NOT_FOUND").With("character_name", name).Wrap(err)
+	}
+	if err != nil {
+		return nil, oops.With("operation", "find session by character name").With("character_name", name).Wrap(err)
+	}
+	return info, nil
+}
+
+// UpdateLastPaged records the name of the character most recently paged.
+func (s *PostgresSessionStore) UpdateLastPaged(ctx context.Context, sessionID string, name string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE sessions SET last_paged = $1, updated_at = now() WHERE id = $2`, name, sessionID)
+	if err != nil {
+		return oops.With("operation", "update last paged").With("session_id", sessionID).Wrap(err)
+	}
+	return nil
+}
+
+// UpdateLastWhispered records the name of the character most recently whispered to.
+func (s *PostgresSessionStore) UpdateLastWhispered(ctx context.Context, sessionID string, name string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE sessions SET last_whispered = $1, updated_at = now() WHERE id = $2`, name, sessionID)
+	if err != nil {
+		return oops.With("operation", "update last whispered").With("session_id", sessionID).Wrap(err)
 	}
 	return nil
 }
