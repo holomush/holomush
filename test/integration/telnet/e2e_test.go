@@ -25,6 +25,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
 	grpcpkg "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/session"
@@ -206,10 +209,23 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		startLocation = ulid.Make()
 		guestAuth = telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocation)
 
-		// 9. Create gRPC server
-		coreServer := grpcpkg.NewCoreServer(engine, session.NewMemStore(),
+		// 9. Create gRPC server with command dispatcher
+		sessStore := session.NewMemStore()
+		reg := command.NewRegistry()
+		handlers.RegisterAll(reg)
+		pe := policytest.AllowAllEngine()
+		cmdSvc := command.NewTestServices(command.ServicesConfig{
+			Session: sessStore,
+			Engine:  pe,
+			Events:  eventStore,
+		})
+		dispatcher, dispErr := command.NewDispatcher(reg, pe)
+		Expect(dispErr).NotTo(HaveOccurred())
+
+		coreServer := grpcpkg.NewCoreServer(engine, sessStore,
 			grpcpkg.WithAuthenticator(guestAuth),
 			grpcpkg.WithEventStore(eventStore),
+			grpcpkg.WithDispatcher(dispatcher, cmdSvc),
 			grpcpkg.WithDisconnectHook(func(info session.Info) {
 				if info.IsGuest {
 					guestAuth.ReleaseGuest(info.CharacterName)
