@@ -29,6 +29,10 @@ const (
 	EventTypeObjectExamine EventType = "object_examine"
 	EventTypeObjectGive    EventType = "object_give"
 
+	// Private communication event types
+	EventTypePage    EventType = "page"
+	EventTypeWhisper EventType = "whisper"
+
 	// Command response event type
 	EventTypeCommandResponse EventType = "command_response"
 
@@ -69,6 +73,30 @@ type LocationStateChar struct {
 // delta update to the exits in the current location.
 type ExitUpdatePayload struct {
 	Exits []LocationStateExit `json:"exits"`
+}
+
+// PagePayload is the JSON payload for page events (private messages between characters).
+type PagePayload struct {
+	SenderID   string `json:"sender_id"`
+	SenderName string `json:"sender_name"`
+	Message    string `json:"message"`
+	IsPose     bool   `json:"is_pose"`
+}
+
+// WhisperPayload is the JSON payload for whisper events (location-scoped private messages).
+type WhisperPayload struct {
+	SenderID   string `json:"sender_id"`
+	SenderName string `json:"sender_name"`
+	Message    string `json:"message"`
+	IsPose     bool   `json:"is_pose"`
+}
+
+// WhisperNoticePayload is the JSON payload for whisper notice events, informing
+// bystanders that a whisper occurred without revealing its content.
+type WhisperNoticePayload struct {
+	SenderName string `json:"sender_name"`
+	TargetName string `json:"target_name"`
+	Notice     string `json:"notice"`
 }
 
 // ActorKind identifies what type of entity caused an event.
