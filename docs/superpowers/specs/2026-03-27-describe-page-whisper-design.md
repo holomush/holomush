@@ -275,12 +275,12 @@ Migration: same migration as `last_paged` — add both columns together.
 The Lua handler updates this via a new host function:
 
 ```text
-holo.session.set_last_whispered(name)
+holo.session.set_last_whispered(session_id, name)
 ```
 
-Scoped to the caller's session (session ID from command context).
-Implemented in `internal/plugin/hostfunc/stdlib.go`, calls a new
-`UpdateLastWhispered(ctx, sessionID, name)` method on `session.Access`.
+Takes an explicit session ID and target character name.
+Implemented in `internal/plugin/hostfunc/stdlib_session.go`, calls
+`UpdateLastWhispered(ctx, sessionID, name)` on `session.Access`.
 
 ### Plugin Registration
 

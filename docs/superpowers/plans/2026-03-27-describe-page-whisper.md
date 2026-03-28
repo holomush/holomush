@@ -733,9 +733,8 @@ Add to the session table in `registerSession`:
 
 ```go
 sessionTable.RawSetString("set_last_whispered", ls.NewFunction(func(ls *lua.LState) int {
-	name := ls.CheckString(1)
-	// Need session ID from command context — stored in Lua registry
-	sessionID := getSessionIDFromContext(ls)
+	sessionID := ls.CheckString(1)
+	name := ls.CheckString(2)
 	ctx := context.Background()
 	_ = sessAccess.UpdateLastWhispered(ctx, sessionID, name)
 	return 0
@@ -908,7 +907,7 @@ function handle_whisper(ctx)
     end
 
     -- Update last-whispered
-    holo.session.set_last_whispered(target.character_name)
+    holo.session.set_last_whispered(ctx.session_id, target.character_name)
 
     return holo.emit.flush()
 end

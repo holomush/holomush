@@ -642,6 +642,37 @@ func (h *GatewayHandler) sendProtoEvent(ev *corev1.EventFrame) {
 		// Leave notifications are persisted but not yet displayed to clients.
 		slog.Debug("gateway: leave event received", "session_id", h.sessionID)
 
+	case string(core.EventTypePage):
+		var p core.PagePayload
+		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
+			slog.Error("gateway: failed to unmarshal page event payload", "error", err)
+			return
+		}
+		h.send(p.Message)
+
+	case string(core.EventTypeWhisper):
+		// Whisper events have two payload shapes:
+		// - Character stream: WhisperPayload with Message field
+		// - Location stream: WhisperNoticePayload with Notice field
+		// JSON unmarshal succeeds for both; distinguish by checking which field is populated.
+		var wp core.WhisperPayload
+		if err := json.Unmarshal(ev.GetPayload(), &wp); err != nil {
+			slog.Error("gateway: failed to unmarshal whisper event payload", "error", err)
+			return
+		}
+		if wp.Message != "" {
+			h.send(wp.Message)
+			return
+		}
+		var notice core.WhisperNoticePayload
+		if err := json.Unmarshal(ev.GetPayload(), &notice); err != nil {
+			slog.Error("gateway: failed to unmarshal whisper notice payload", "error", err)
+			return
+		}
+		if notice.Notice != "" {
+			h.send(notice.Notice)
+		}
+
 	default:
 		slog.Warn("gateway: unknown event type", "type", ev.GetType())
 		h.send(fmt.Sprintf("<event: %s>", ev.GetType()))

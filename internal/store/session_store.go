@@ -517,7 +517,7 @@ func (s *PostgresSessionStore) FindByCharacterName(ctx context.Context, name str
 	row := s.pool.QueryRow(ctx, query, name)
 	info, err := scanSession(row)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.Code("SESSION_NOT_FOUND").With("character_name", name).Wrap(err)
+		return nil, nil
 	}
 	if err != nil {
 		return nil, oops.With("operation", "find session by character name").With("character_name", name).Wrap(err)

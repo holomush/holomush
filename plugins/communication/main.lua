@@ -156,6 +156,8 @@ function handle_whisper(ctx)
 
     -- Emit location notice (no content revealed).
     holo.emit.location(ctx.location_id, "whisper", {
+        sender_name = ctx.character_name,
+        target_name = target.character_name,
         notice = ctx.character_name .. " whispers to " .. target.character_name .. "."
     })
 
@@ -167,8 +169,10 @@ function handle_whisper(ctx)
         target_msg = ctx.character_name .. ' whispers, "' .. message .. '"'
     end
     holo.emit.character(target.character_id, "whisper", {
+        sender_id = ctx.character_id,
+        sender_name = ctx.character_name,
         message = target_msg,
-        speaker = ctx.character_name
+        is_pose = is_pose
     })
 
     -- Emit confirmation to sender.
