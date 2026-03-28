@@ -251,6 +251,8 @@ func (h *Host) buildContextTable(state *lua.LState, ctx holo.CommandContext) *lu
 	state.SetField(t, "character_id", lua.LString(ctx.CharacterID))
 	state.SetField(t, "location_id", lua.LString(ctx.LocationID))
 	state.SetField(t, "player_id", lua.LString(ctx.PlayerID))
+	state.SetField(t, "session_id", lua.LString(ctx.SessionID))
+	state.SetField(t, "last_whispered", lua.LString(ctx.LastWhispered))
 	return t
 }
 

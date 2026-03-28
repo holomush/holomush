@@ -15,13 +15,15 @@ import (
 //
 // Lua plugins receive this as a table with fields:
 //
-//	ctx.name           -- "say"
-//	ctx.args           -- "Hello everyone!"
-//	ctx.invoked_as     -- ";" or original command
-//	ctx.character_name -- "Alice"
-//	ctx.character_id   -- "01ABC..."
-//	ctx.location_id    -- "01DEF..."
-//	ctx.player_id      -- "01GHI..."
+//	ctx.name            -- "say"
+//	ctx.args            -- "Hello everyone!"
+//	ctx.invoked_as      -- ";" or original command
+//	ctx.character_name  -- "Alice"
+//	ctx.character_id    -- "01ABC..."
+//	ctx.location_id     -- "01DEF..."
+//	ctx.player_id       -- "01GHI..."
+//	ctx.session_id      -- "01JKL..." (session executing the command)
+//	ctx.last_whispered  -- "Bob" (last character whispered to, may be empty)
 type CommandContext struct {
 	// Name is the canonical command name (e.g., "say", "pose", "emit").
 	Name string
@@ -46,6 +48,13 @@ type CommandContext struct {
 
 	// PlayerID is the ULID of the player who owns the character.
 	PlayerID string
+
+	// SessionID is the ULID of the session executing the command.
+	SessionID string
+
+	// LastWhispered is the name of the character most recently whispered to
+	// by this session. May be empty if no whisper has been sent.
+	LastWhispered string
 }
 
 // commandPayload mirrors the JSON structure of command event payloads.
@@ -58,6 +67,8 @@ type commandPayload struct {
 	CharacterID   string `json:"character_id"`
 	LocationID    string `json:"location_id"`
 	PlayerID      string `json:"player_id"`
+	SessionID     string `json:"session_id"`
+	LastWhispered string `json:"last_whispered"`
 }
 
 // ValidateULIDs checks that CharacterID, LocationID, and PlayerID are valid ULID strings.
