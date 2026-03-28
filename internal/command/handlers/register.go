@@ -48,6 +48,15 @@ Send an OOC private message to another connected character.
 	})
 
 	mustRegister(command.CommandEntryConfig{
+		Name:         "p",
+		Handler:      PageHandler,
+		Capabilities: []string{"comms.page"},
+		Help:         "Send a private message (alias for page)",
+		Usage:        "p <name>=<message>",
+		Source:       "core",
+	})
+
+	mustRegister(command.CommandEntryConfig{
 		Name:    "say",
 		Handler: SayHandler,
 		Help:    "Say something to the room",
@@ -276,6 +285,14 @@ Set the description of yourself, your current location, or a named object.
 - ` + "`describe here A dusty chamber lit by a single torch.`" + `
 - ` + "`describe #01ABCDEF=A gleaming blade.`" + ``,
 		Source: "core",
+	})
+
+	mustRegister(command.CommandEntryConfig{
+		Name:    "desc",
+		Handler: DescribeHandler,
+		Help:    "Set a description (alias for describe)",
+		Usage:   "desc me <text>",
+		Source:  "core",
 	})
 
 	// Object commands
