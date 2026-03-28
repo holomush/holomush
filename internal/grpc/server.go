@@ -169,19 +169,13 @@ func WithDisconnectHook(hook func(session.Info)) CoreServerOption {
 	}
 }
 
-// WithDispatcher sets the unified command dispatcher for command execution.
-func WithDispatcher(d *command.Dispatcher, svc *command.Services) CoreServerOption {
-	return func(s *CoreServer) {
-		s.dispatcher = d
-		s.cmdServices = svc
-	}
-}
-
 // NewCoreServer creates a new Core gRPC server.
-func NewCoreServer(engine *core.Engine, sessionStore session.Store, opts ...CoreServerOption) *CoreServer {
+func NewCoreServer(engine *core.Engine, sessionStore session.Store, dispatcher *command.Dispatcher, cmdServices *command.Services, opts ...CoreServerOption) *CoreServer {
 	s := &CoreServer{
 		engine:       engine,
 		sessionStore: sessionStore,
+		dispatcher:   dispatcher,
+		cmdServices:  cmdServices,
 		newSessionID: core.NewULID,
 	}
 
@@ -189,8 +183,8 @@ func NewCoreServer(engine *core.Engine, sessionStore session.Store, opts ...Core
 		opt(s)
 	}
 
-	if s.dispatcher == nil || s.cmdServices == nil {
-		panic("grpc.NewCoreServer: WithDispatcher is required")
+	if dispatcher == nil || cmdServices == nil {
+		panic("grpc.NewCoreServer: dispatcher and cmdServices must not be nil")
 	}
 
 	return s

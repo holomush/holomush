@@ -208,12 +208,16 @@ func TestSessionFindByName_StoreError(t *testing.T) {
 	L := newLuaStateWithSession(t, errSA)
 	defer L.Close()
 
-	// Should return nil on error (no panic), not raise an error.
-	err := L.DoString(`result = holo.session.find_by_name("Alex")`)
+	// Should return nil + error string on error (no panic).
+	err := L.DoString(`result, find_err = holo.session.find_by_name("Alex")`)
 	require.NoError(t, err)
 
 	result := L.GetGlobal("result")
 	assert.Equal(t, lua.LTNil, result.Type(), "find_by_name should return nil on store error")
+
+	findErr := L.GetGlobal("find_err")
+	require.Equal(t, lua.LTString, findErr.Type(), "find_by_name should return error string as second value")
+	assert.Contains(t, findErr.String(), "db unavailable")
 }
 
 // =============================================================================

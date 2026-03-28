@@ -90,8 +90,8 @@ function handle_whisper(ctx)
     if eq_pos then
         target_name = ctx.args:sub(1, eq_pos - 1)
         message = ctx.args:sub(eq_pos + 1)
-    else
-        -- No =: use last whispered target.
+    elseif ctx.invoked_as == "w" then
+        -- Short form: use last whispered target.
         if not ctx.last_whispered or ctx.last_whispered == "" then
             holo.emit.character(ctx.character_id, "error", {
                 message = "Whisper to whom? Use: whisper <name>=<message>"
@@ -100,6 +100,11 @@ function handle_whisper(ctx)
         end
         target_name = ctx.last_whispered
         message = ctx.args
+    else
+        holo.emit.character(ctx.character_id, "error", {
+            message = "Usage: whisper <name>=<message> or w <message>"
+        })
+        return holo.emit.flush()
     end
 
     if target_name == "" then
@@ -117,7 +122,13 @@ function handle_whisper(ctx)
     end
 
     -- Find target session.
-    local target = holo.session.find_by_name(target_name)
+    local target, find_err = holo.session.find_by_name(target_name)
+    if find_err then
+        holo.emit.character(ctx.character_id, "error", {
+            message = "An internal error occurred. Please try again."
+        })
+        return holo.emit.flush()
+    end
     if target == nil then
         holo.emit.character(ctx.character_id, "error", {
             message = 'No one named "' .. target_name .. '" is connected.'
@@ -183,7 +194,7 @@ function handle_whisper(ctx)
         sender_msg = "You whisper to " .. target.character_name .. ": " .. message
     end
     holo.emit.character(ctx.character_id, "command_response", {
-        message = sender_msg
+        text = sender_msg
     })
 
     -- Record last whispered target.

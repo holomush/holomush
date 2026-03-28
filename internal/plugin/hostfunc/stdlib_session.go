@@ -67,7 +67,12 @@ func sessionFindByName(ls *lua.LState) int {
 	}
 
 	info, err := sa.FindByCharacterName(ctx, name)
-	if err != nil || info == nil {
+	if err != nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString(err.Error()))
+		return 2
+	}
+	if info == nil {
 		ls.Push(lua.LNil)
 		return 1
 	}

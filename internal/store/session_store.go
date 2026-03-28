@@ -527,20 +527,26 @@ func (s *PostgresSessionStore) FindByCharacterName(ctx context.Context, name str
 
 // UpdateLastPaged records the name of the character most recently paged.
 func (s *PostgresSessionStore) UpdateLastPaged(ctx context.Context, sessionID, name string) error {
-	_, err := s.pool.Exec(ctx,
+	tag, err := s.pool.Exec(ctx,
 		`UPDATE sessions SET last_paged = $1, updated_at = now() WHERE id = $2`, name, sessionID)
 	if err != nil {
 		return oops.With("operation", "update last paged").With("session_id", sessionID).Wrap(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return oops.Code("SESSION_NOT_FOUND").With("session_id", sessionID).Errorf("session not found")
 	}
 	return nil
 }
 
 // UpdateLastWhispered records the name of the character most recently whispered to.
 func (s *PostgresSessionStore) UpdateLastWhispered(ctx context.Context, sessionID, name string) error {
-	_, err := s.pool.Exec(ctx,
+	tag, err := s.pool.Exec(ctx,
 		`UPDATE sessions SET last_whispered = $1, updated_at = now() WHERE id = $2`, name, sessionID)
 	if err != nil {
 		return oops.With("operation", "update last whispered").With("session_id", sessionID).Wrap(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return oops.Code("SESSION_NOT_FOUND").With("session_id", sessionID).Errorf("session not found")
 	}
 	return nil
 }
