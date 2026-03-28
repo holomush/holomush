@@ -19,6 +19,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	tlscerts "github.com/holomush/holomush/internal/tls"
@@ -31,9 +34,49 @@ func newTestSessionStore(t *testing.T, sessions map[string]*session.Info) sessio
 	store := session.NewMemStore()
 	ctx := context.Background()
 	for id, info := range sessions {
+		if info.ID == "" {
+			info.ID = id
+		}
 		require.NoError(t, store.Set(ctx, id, info))
 	}
 	return store
+}
+
+// newHandleCommandServer creates a CoreServer wired with the unified command
+// dispatcher. Tests that call HandleCommand MUST use this helper (or
+// newDispatcherTestServer) because executeViaSwitch has been removed.
+//
+// The store is used for both Engine and dispatcher Services.Events.
+// Pass a custom sessStore to pre-populate sessions; nil uses a fresh MemStore.
+func newHandleCommandServer(t *testing.T, store core.EventStore, sessStore session.Store, opts ...CoreServerOption) *CoreServer {
+	t.Helper()
+	engine := core.NewEngine(store)
+	if sessStore == nil {
+		sessStore = session.NewMemStore()
+	}
+
+	reg := command.NewRegistry()
+	handlers.RegisterAll(reg)
+
+	policyEngine := policytest.AllowAllEngine()
+	svc := command.NewTestServices(command.ServicesConfig{
+		World:   nil,
+		Session: sessStore,
+		Engine:  policyEngine,
+		Events:  store,
+	})
+
+	dispatcher, err := command.NewDispatcher(reg, policyEngine)
+	require.NoError(t, err)
+
+	allOpts := make([]CoreServerOption, 0, 2+len(opts))
+	allOpts = append(allOpts,
+		WithEventStore(store),
+		WithDispatcher(dispatcher, svc),
+	)
+	allOpts = append(allOpts, opts...)
+
+	return NewCoreServer(engine, sessStore, allOpts...)
 }
 
 // mockEventStore implements core.EventStore for testing.
@@ -195,19 +238,13 @@ func TestCoreServer_HandleCommand_Say(t *testing.T) {
 		},
 	}
 
-	engine := core.NewEngine(store)
-
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			sessionID.String(): {
-				CharacterID: charID,
-				LocationID:  locationID,
-				Status:      session.StatusActive,
-			},
-		}),
-	}
+	server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	}))
 
 	ctx := context.Background()
 	req := &corev1.HandleCommandRequest{
@@ -227,11 +264,7 @@ func TestCoreServer_HandleCommand_Say(t *testing.T) {
 }
 
 func TestCoreServer_HandleCommand_InvalidSession(t *testing.T) {
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
-
-		sessionStore: session.NewMemStore(),
-	}
+	server := newHandleCommandServer(t, core.NewMemoryEventStore(), nil)
 
 	ctx := context.Background()
 	req := &corev1.HandleCommandRequest{
@@ -465,19 +498,13 @@ func TestCoreServer_HandleCommand_NilMeta(t *testing.T) {
 		},
 	}
 
-	engine := core.NewEngine(store)
-
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			sessionID.String(): {
-				CharacterID: charID,
-				LocationID:  locationID,
-				Status:      session.StatusActive,
-			},
-		}),
-	}
+	server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	}))
 
 	ctx := context.Background()
 	req := &corev1.HandleCommandRequest{
@@ -505,19 +532,13 @@ func TestCoreServer_HandleCommand_Pose(t *testing.T) {
 		},
 	}
 
-	engine := core.NewEngine(store)
-
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			sessionID.String(): {
-				CharacterID: charID,
-				LocationID:  locationID,
-				Status:      session.StatusActive,
-			},
-		}),
-	}
+	server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	}))
 
 	ctx := context.Background()
 
@@ -559,21 +580,15 @@ func TestCoreServer_HandleCommand_UnknownCommand(t *testing.T) {
 	locationID := core.NewULID()
 
 	store := core.NewMemoryEventStore()
-	engine := core.NewEngine(store)
 
-	server := &CoreServer{
-		engine: engine,
-
-		eventStore: store,
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			sessionID.String(): {
-				CharacterID:   charID,
-				CharacterName: "Tester",
-				LocationID:    locationID,
-				Status:        session.StatusActive,
-			},
-		}),
-	}
+	server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID:   charID,
+			CharacterName: "Tester",
+			LocationID:    locationID,
+			Status:        session.StatusActive,
+		},
+	}))
 
 	ctx := context.Background()
 	req := &corev1.HandleCommandRequest{
@@ -615,19 +630,13 @@ func TestCoreServer_HandleCommand_SayFails(t *testing.T) {
 		},
 	}
 
-	engine := core.NewEngine(store)
-
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			sessionID.String(): {
-				CharacterID: charID,
-				LocationID:  locationID,
-				Status:      session.StatusActive,
-			},
-		}),
-	}
+	server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	}))
 
 	ctx := context.Background()
 	req := &corev1.HandleCommandRequest{
@@ -657,19 +666,13 @@ func TestCoreServer_HandleCommand_PoseFails(t *testing.T) {
 		},
 	}
 
-	engine := core.NewEngine(store)
-
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			sessionID.String(): {
-				CharacterID: charID,
-				LocationID:  locationID,
-				Status:      session.StatusActive,
-			},
-		}),
-	}
+	server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	}))
 
 	ctx := context.Background()
 	req := &corev1.HandleCommandRequest{
@@ -694,7 +697,6 @@ func TestCoreServer_HandleCommand_Quit(t *testing.T) {
 	locationID := core.NewULID()
 
 	store := core.NewMemoryEventStore()
-	engine := core.NewEngine(store)
 
 	sessStore := session.NewMemStore()
 	ctx := context.Background()
@@ -709,8 +711,7 @@ func TestCoreServer_HandleCommand_Quit(t *testing.T) {
 	}))
 
 	var hookCalled bool
-	server := NewCoreServer(engine, sessStore,
-		WithEventStore(store),
+	server := newHandleCommandServer(t, store, sessStore,
 		WithDisconnectHook(func(_ session.Info) {
 			hookCalled = true
 		}),
@@ -1172,8 +1173,6 @@ func TestCoreServer_SessionRefreshOnActivity(t *testing.T) {
 		},
 	}
 
-	engine := core.NewEngine(store)
-
 	sessionStore := newTestSessionStore(t, map[string]*session.Info{
 		sessionID.String(): {
 			CharacterID: charID,
@@ -1182,11 +1181,7 @@ func TestCoreServer_SessionRefreshOnActivity(t *testing.T) {
 		},
 	})
 
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: sessionStore,
-	}
+	server := newHandleCommandServer(t, store, sessionStore)
 
 	ctx := context.Background()
 
@@ -1290,19 +1285,13 @@ func TestCoreServer_HandleCommand_ContextTimeout(t *testing.T) {
 		},
 	}
 
-	engine := core.NewEngine(store)
-
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			sessionID.String(): {
-				CharacterID: charID,
-				LocationID:  locationID,
-				Status:      session.StatusActive,
-			},
-		}),
-	}
+	server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	}))
 
 	// Create a context with a short timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -1342,19 +1331,13 @@ func TestCoreServer_HandleCommand_ContextCancellation(t *testing.T) {
 		},
 	}
 
-	engine := core.NewEngine(store)
-
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			sessionID.String(): {
-				CharacterID: charID,
-				LocationID:  locationID,
-				Status:      session.StatusActive,
-			},
-		}),
-	}
+	server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	}))
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -1499,19 +1482,13 @@ func TestCoreServer_HandleCommand_TimeoutErrorMessage(t *testing.T) {
 				},
 			}
 
-			engine := core.NewEngine(store)
-
-			server := &CoreServer{
-				engine: engine,
-
-				sessionStore: newTestSessionStore(t, map[string]*session.Info{
-					sessionID.String(): {
-						CharacterID: charID,
-						LocationID:  locationID,
-						Status:      session.StatusActive,
-					},
-				}),
-			}
+			server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+				sessionID.String(): {
+					CharacterID: charID,
+					LocationID:  locationID,
+					Status:      session.StatusActive,
+				},
+			}))
 
 			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
 			defer cancel()
@@ -1628,19 +1605,14 @@ func TestCoreServer_HandleCommand_EmptyCommandWithTimeout(t *testing.T) {
 	locationID := core.NewULID()
 
 	store := &mockEventStore{}
-	engine := core.NewEngine(store)
 
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			sessionID.String(): {
-				CharacterID: charID,
-				LocationID:  locationID,
-				Status:      session.StatusActive,
-			},
-		}),
-	}
+	server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	}))
 
 	// Even with a short timeout, an empty command should fail fast
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
@@ -1728,11 +1700,7 @@ func TestCoreServer_MalformedRequest_EmptyUsername(t *testing.T) {
 }
 
 func TestCoreServer_MalformedRequest_InvalidSessionID(t *testing.T) {
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
-
-		sessionStore: session.NewMemStore(),
-	}
+	server := newHandleCommandServer(t, core.NewMemoryEventStore(), nil)
 
 	ctx := context.Background()
 
@@ -1783,19 +1751,14 @@ func TestCoreServer_MalformedRequest_InvalidCommand(t *testing.T) {
 	locationID := core.NewULID()
 
 	store := &mockEventStore{}
-	engine := core.NewEngine(store)
 
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			sessionID.String(): {
-				CharacterID: charID,
-				LocationID:  locationID,
-				Status:      session.StatusActive,
-			},
-		}),
-	}
+	server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	}))
 
 	ctx := context.Background()
 
@@ -1925,19 +1888,13 @@ func TestCoreServer_MalformedRequest_NilMeta(t *testing.T) {
 		},
 	}
 
-	engine := core.NewEngine(store)
-
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			sessionID.String(): {
-				CharacterID: charID,
-				LocationID:  locationID,
-				Status:      session.StatusActive,
-			},
-		}),
-	}
+	server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	}))
 
 	ctx := context.Background()
 
@@ -2032,19 +1989,13 @@ func TestCoreServer_MalformedRequest_ConcurrentMalformedRequests(t *testing.T) {
 		},
 	}
 
-	engine := core.NewEngine(store)
-
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			sessionID.String(): {
-				CharacterID: charID,
-				LocationID:  locationID,
-				Status:      session.StatusActive,
-			},
-		}),
-	}
+	server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	}))
 
 	ctx := context.Background()
 
@@ -2115,19 +2066,13 @@ func TestCoreServer_MalformedRequest_VeryLargePayload(t *testing.T) {
 		},
 	}
 
-	engine := core.NewEngine(store)
-
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			sessionID.String(): {
-				CharacterID: charID,
-				LocationID:  locationID,
-				Status:      session.StatusActive,
-			},
-		}),
-	}
+	server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	}))
 
 	ctx := context.Background()
 
@@ -2166,19 +2111,13 @@ func TestCoreServer_MalformedRequest_SpecialCharacters(t *testing.T) {
 		},
 	}
 
-	engine := core.NewEngine(store)
-
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{
-			sessionID.String(): {
-				CharacterID: charID,
-				LocationID:  locationID,
-				Status:      session.StatusActive,
-			},
-		}),
-	}
+	server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	}))
 
 	ctx := context.Background()
 
@@ -2373,7 +2312,6 @@ func TestCoreServer_HandleCommand_RecordsHistory(t *testing.T) {
 	store := &mockEventStore{
 		appendFunc: func(_ context.Context, _ core.Event) error { return nil },
 	}
-	engine := core.NewEngine(store)
 
 	sessStore := session.NewMemStore()
 	ctx := context.Background()
@@ -2385,11 +2323,7 @@ func TestCoreServer_HandleCommand_RecordsHistory(t *testing.T) {
 		MaxHistory:  100,
 	}))
 
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: sessStore,
-	}
+	server := newHandleCommandServer(t, store, sessStore)
 
 	commands := []string{"say hello", "pose waves", "say goodbye"}
 	for _, cmd := range commands {
@@ -2416,7 +2350,6 @@ func TestCoreServer_HandleCommand_HistoryEnforcedCap(t *testing.T) {
 	store := &mockEventStore{
 		appendFunc: func(_ context.Context, _ core.Event) error { return nil },
 	}
-	engine := core.NewEngine(store)
 
 	const maxHistory = 3
 	sessStore := session.NewMemStore()
@@ -2429,11 +2362,7 @@ func TestCoreServer_HandleCommand_HistoryEnforcedCap(t *testing.T) {
 		MaxHistory:  maxHistory,
 	}))
 
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: sessStore,
-	}
+	server := newHandleCommandServer(t, store, sessStore)
 
 	// Send more commands than maxHistory
 	for i := 0; i < 5; i++ {
@@ -2463,7 +2392,6 @@ func TestCoreServer_HandleCommand_HistoryBestEffort(t *testing.T) {
 	store := &mockEventStore{
 		appendFunc: func(_ context.Context, _ core.Event) error { return nil },
 	}
-	engine := core.NewEngine(store)
 
 	ctx := context.Background()
 	realStore := session.NewMemStore()
@@ -2475,11 +2403,7 @@ func TestCoreServer_HandleCommand_HistoryBestEffort(t *testing.T) {
 		MaxHistory:  100,
 	}))
 
-	server := &CoreServer{
-		engine: engine,
-
-		sessionStore: realStore,
-	}
+	server := newHandleCommandServer(t, store, realStore)
 
 	req := &corev1.HandleCommandRequest{
 		Meta:      &corev1.RequestMeta{RequestId: "best-effort-test", Timestamp: timestamppb.Now()},

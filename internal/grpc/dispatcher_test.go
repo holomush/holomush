@@ -13,9 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/holomush/holomush/internal/access/policy/policytest"
-	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -25,32 +22,7 @@ import (
 // command dispatcher, using in-memory stores for testing.
 func newDispatcherTestServer(t *testing.T, store core.EventStore, opts ...CoreServerOption) *CoreServer {
 	t.Helper()
-	engine := core.NewEngine(store)
-	sessionStore := session.NewMemStore()
-
-	reg := command.NewRegistry()
-	handlers.RegisterAll(reg)
-
-	policyEngine := policytest.AllowAllEngine()
-	svc := command.NewTestServices(command.ServicesConfig{
-		World:   nil,
-		Session: sessionStore,
-		Engine:  policyEngine,
-		Events:  store,
-	})
-
-	dispatcher, err := command.NewDispatcher(reg, policyEngine)
-	require.NoError(t, err)
-
-	allOpts := make([]CoreServerOption, 0, 2+len(opts))
-	allOpts = append(allOpts,
-		WithEventStore(store),
-		WithDispatcher(dispatcher, svc),
-	)
-	allOpts = append(allOpts, opts...)
-
-	server := NewCoreServer(engine, sessionStore, allOpts...)
-	return server
+	return newHandleCommandServer(t, store, nil, opts...)
 }
 
 func TestDispatcher_HandleCommand_Say(t *testing.T) {

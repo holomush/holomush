@@ -170,8 +170,6 @@ func WithDisconnectHook(hook func(session.Info)) CoreServerOption {
 }
 
 // WithDispatcher sets the unified command dispatcher for command execution.
-// When set, executeCommand delegates to the dispatcher instead of the
-// hardcoded switch statement.
 func WithDispatcher(d *command.Dispatcher, svc *command.Services) CoreServerOption {
 	return func(s *CoreServer) {
 		s.dispatcher = d
@@ -389,13 +387,11 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleComman
 	}, nil
 }
 
-// executeCommand parses and executes a command. Output is delivered via
-// command_response events emitted to the character's personal stream.
+// executeCommand parses and executes a command via the unified dispatcher.
+// Output is delivered via command_response events emitted to the character's
+// personal stream.
 func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, input string) error {
-	if s.dispatcher != nil {
-		return s.executeViaDispatcher(ctx, info, input)
-	}
-	return s.executeViaSwitch(ctx, info, input)
+	return s.executeViaDispatcher(ctx, info, input)
 }
 
 // executeViaDispatcher uses the unified command.Dispatcher for command
@@ -490,53 +486,6 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 func isUserFacingError(err error) bool {
 	msg := command.PlayerMessage(err)
 	return msg != "Something went wrong. Try again."
-}
-
-// executeViaSwitch is the legacy hardcoded switch for servers constructed
-// without a dispatcher (primarily tests). Remove once all callers provide
-// a dispatcher.
-func (s *CoreServer) executeViaSwitch(ctx context.Context, info *session.Info, input string) error {
-	parts := strings.SplitN(input, " ", 2)
-	cmd := strings.ToLower(parts[0])
-	if cmd == "" {
-		return oops.Code("EMPTY_COMMAND").Errorf("empty command")
-	}
-	var arg string
-	if len(parts) > 1 {
-		arg = parts[1]
-	}
-
-	char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
-	switch cmd {
-	case "say":
-		if err := s.engine.HandleSay(ctx, char, arg); err != nil {
-			return oops.Code("COMMAND_FAILED").With("command", "say").Wrap(err)
-		}
-		return nil
-
-	case "pose", ":":
-		if err := s.engine.HandlePose(ctx, char, arg); err != nil {
-			return oops.Code("COMMAND_FAILED").With("command", "pose").Wrap(err)
-		}
-		return nil
-
-	case "quit":
-		//nolint:errcheck // legacy path — removed in holomush-a3a7.8
-		s.emitCommandResponse(ctx, char, "Goodbye!", false)
-		if err := s.engine.HandleDisconnect(ctx, char, "quit"); err != nil {
-			slog.WarnContext(ctx, "leave event failed", "error", err)
-		}
-		if err := s.sessionStore.Delete(ctx, info.ID, "Goodbye!"); err != nil {
-			slog.WarnContext(ctx, "session delete failed", "error", err)
-		}
-		s.runDisconnectHooks(ctx, *info)
-		return nil
-
-	default:
-		//nolint:errcheck // legacy path — removed in holomush-a3a7.8
-		s.emitCommandResponse(ctx, char, "Unknown command: "+cmd, true)
-		return nil
-	}
 }
 
 // expandMUSHPrefix rewrites MUSH single-character command prefixes to their
