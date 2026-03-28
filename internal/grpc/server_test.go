@@ -421,14 +421,10 @@ func TestNewCoreServer_WithOptions(t *testing.T) {
 	assert.Equal(t, customStore, server.sessionStore, "WithSessionStore option not applied")
 }
 
-func TestCoreServer_HandleCommand_NoDispatcher(t *testing.T) {
-	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore()),
-		sessionStore: session.NewMemStore(),
-	}
-	err := server.executeCommand(context.Background(), &session.Info{}, "say hello")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "command dispatcher not configured")
+func TestNewCoreServer_PanicsWithoutDispatcher(t *testing.T) {
+	assert.Panics(t, func() {
+		NewCoreServer(core.NewEngine(&mockEventStore{}), session.NewMemStore())
+	}, "NewCoreServer should panic without WithDispatcher")
 }
 
 func TestCoreServer_Authenticate_NoAuthenticator(t *testing.T) {

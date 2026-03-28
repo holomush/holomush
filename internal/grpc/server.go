@@ -189,6 +189,10 @@ func NewCoreServer(engine *core.Engine, sessionStore session.Store, opts ...Core
 		opt(s)
 	}
 
+	if s.dispatcher == nil || s.cmdServices == nil {
+		panic("grpc.NewCoreServer: WithDispatcher is required")
+	}
+
 	return s
 }
 
