@@ -75,5 +75,33 @@ commands:
       - `emit The room shakes violently!` - Shows "The room shakes violently!"
       - `emit A cold wind blows through.` - Shows "A cold wind blows through."
 
+  - name: whisper
+    capabilities:
+      - comms.whisper
+    help: "Whisper to someone in the room"
+    usage: "whisper <character>=<message>"
+    helpText: |
+      ## Whisper
+
+      Whisper a private in-character message to someone in your location.
+      Others see that you whispered, but not what you said.
+
+      ### Usage
+
+      - `whisper <name>=<message>` - Whisper to someone
+      - `whisper <message>` - Whisper to the last person you whispered to
+      - `whisper <name>=:<action>` - Pose-whisper
+
+      ### Examples
+
+      - `whisper Alex=Meet me at the tavern`
+      - `whisper Alex=:nods knowingly.`
+
+  - name: w
+    capabilities:
+      - comms.whisper
+    help: "Whisper (alias)"
+    usage: "w <character>=<message>"
+
 lua-plugin:
   entry: main.lua
