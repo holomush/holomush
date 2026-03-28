@@ -22,6 +22,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
 	grpcpkg "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/session"
@@ -103,8 +104,14 @@ var _ = Describe("Session Persistence", func() {
 
 		// 7. Create CoreServer with PostgresSessionStore and session defaults
 		pe := policytest.AllowAllEngine()
-		cmdSvc := command.NewTestServices(command.ServicesConfig{Engine: pe})
-		disp, dispErr := command.NewDispatcher(command.NewRegistry(), pe)
+		reg := command.NewRegistry()
+		handlers.RegisterAll(reg)
+		cmdSvc := command.NewTestServices(command.ServicesConfig{
+			Engine:  pe,
+			Session: sessionStore,
+			Events:  eventStore,
+		})
+		disp, dispErr := command.NewDispatcher(reg, pe)
 		Expect(dispErr).NotTo(HaveOccurred())
 		coreServer := grpcpkg.NewCoreServer(engine, sessionStore, disp, cmdSvc,
 			grpcpkg.WithAuthenticator(guestAuth),
