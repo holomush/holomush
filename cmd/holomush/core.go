@@ -480,7 +480,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			return oops.Code("COMMAND_DISPATCHER_FAILED").Wrap(cmdDispErr)
 		}
 
-		coreServer := holoGRPC.NewCoreServer(engine, sessionStore,
+		coreServer := holoGRPC.NewCoreServer(engine, sessionStore, cmdDispatcher, cmdServices,
 			holoGRPC.WithAuthenticator(guestAuth),
 			holoGRPC.WithEventStore(realStore),
 			holoGRPC.WithWorldQuerier(worldService),
@@ -490,7 +490,6 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			holoGRPC.WithPlayerTokenRepo(authPlayerTokenRepo),
 			holoGRPC.WithPlayerRepo(authPlayerRepo),
 			holoGRPC.WithCharacterRepo(authCharRepo),
-			holoGRPC.WithDispatcher(cmdDispatcher, cmdServices),
 			holoGRPC.WithSessionDefaults(holoGRPC.SessionDefaults{
 				TTL:        sessionTTL,
 				MaxHistory: cfg.SessionMaxHistory,

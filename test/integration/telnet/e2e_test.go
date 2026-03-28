@@ -222,10 +222,9 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		dispatcher, dispErr := command.NewDispatcher(reg, pe)
 		Expect(dispErr).NotTo(HaveOccurred())
 
-		coreServer := grpcpkg.NewCoreServer(engine, sessStore,
+		coreServer := grpcpkg.NewCoreServer(engine, sessStore, dispatcher, cmdSvc,
 			grpcpkg.WithAuthenticator(guestAuth),
 			grpcpkg.WithEventStore(eventStore),
-			grpcpkg.WithDispatcher(dispatcher, cmdSvc),
 			grpcpkg.WithDisconnectHook(func(info session.Info) {
 				if info.IsGuest {
 					guestAuth.ReleaseGuest(info.CharacterName)

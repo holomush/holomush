@@ -69,14 +69,11 @@ func newHandleCommandServer(t *testing.T, store core.EventStore, sessStore sessi
 	dispatcher, err := command.NewDispatcher(reg, policyEngine)
 	require.NoError(t, err)
 
-	allOpts := make([]CoreServerOption, 0, 2+len(opts))
-	allOpts = append(allOpts,
-		WithEventStore(store),
-		WithDispatcher(dispatcher, svc),
-	)
+	allOpts := make([]CoreServerOption, 0, 1+len(opts))
+	allOpts = append(allOpts, WithEventStore(store))
 	allOpts = append(allOpts, opts...)
 
-	return NewCoreServer(engine, sessStore, allOpts...)
+	return NewCoreServer(engine, sessStore, dispatcher, svc, allOpts...)
 }
 
 // mockEventStore implements core.EventStore for testing.
@@ -423,8 +420,8 @@ func TestNewCoreServer_WithOptions(t *testing.T) {
 
 func TestNewCoreServer_PanicsWithoutDispatcher(t *testing.T) {
 	assert.Panics(t, func() {
-		NewCoreServer(core.NewEngine(&mockEventStore{}), session.NewMemStore())
-	}, "NewCoreServer should panic without WithDispatcher")
+		NewCoreServer(core.NewEngine(&mockEventStore{}), session.NewMemStore(), nil, nil)
+	}, "NewCoreServer should panic without dispatcher")
 }
 
 func TestCoreServer_Authenticate_NoAuthenticator(t *testing.T) {
