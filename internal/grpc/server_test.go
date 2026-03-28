@@ -69,14 +69,11 @@ func newHandleCommandServer(t *testing.T, store core.EventStore, sessStore sessi
 	dispatcher, err := command.NewDispatcher(reg, policyEngine)
 	require.NoError(t, err)
 
-	allOpts := make([]CoreServerOption, 0, 2+len(opts))
-	allOpts = append(allOpts,
-		WithEventStore(store),
-		WithDispatcher(dispatcher, svc),
-	)
+	allOpts := make([]CoreServerOption, 0, 1+len(opts))
+	allOpts = append(allOpts, WithEventStore(store))
 	allOpts = append(allOpts, opts...)
 
-	return NewCoreServer(engine, sessStore, allOpts...)
+	return NewCoreServer(engine, sessStore, dispatcher, svc, allOpts...)
 }
 
 // mockEventStore implements core.EventStore for testing.
@@ -399,12 +396,7 @@ func TestCoreServer_Disconnect(t *testing.T) {
 
 func TestNewCoreServer(t *testing.T) {
 	store := &mockEventStore{}
-	sessStore := session.NewMemStore()
-
-	server := NewCoreServer(
-		core.NewEngine(store),
-		sessStore,
-	)
+	server := newHandleCommandServer(t, store, nil)
 
 	require.NotNil(t, server, "NewCoreServer returned nil")
 	assert.NotNil(t, server.sessionStore, "sessionStore should be initialized")
@@ -416,9 +408,7 @@ func TestNewCoreServer_WithOptions(t *testing.T) {
 	customAuth := &mockAuthenticator{}
 	customStore := session.NewMemStore()
 
-	server := NewCoreServer(
-		core.NewEngine(store),
-		session.NewMemStore(),
+	server := newHandleCommandServer(t, store, nil,
 		WithAuthenticator(customAuth),
 		WithSessionStore(customStore),
 	)
@@ -426,6 +416,12 @@ func TestNewCoreServer_WithOptions(t *testing.T) {
 	require.NotNil(t, server, "NewCoreServer returned nil")
 	assert.Equal(t, customAuth, server.authenticator, "WithAuthenticator option not applied")
 	assert.Equal(t, customStore, server.sessionStore, "WithSessionStore option not applied")
+}
+
+func TestNewCoreServer_PanicsWithoutDispatcher(t *testing.T) {
+	assert.Panics(t, func() {
+		NewCoreServer(core.NewEngine(&mockEventStore{}), session.NewMemStore(), nil, nil)
+	}, "NewCoreServer should panic without dispatcher")
 }
 
 func TestCoreServer_Authenticate_NoAuthenticator(t *testing.T) {
@@ -2176,12 +2172,11 @@ func TestCoreServer_DisconnectHook(t *testing.T) {
 	sessionID := core.NewULID()
 
 	store := core.NewMemoryEventStore()
-	engine := core.NewEngine(store)
 
 	var hookCalled bool
 	var hookInfo session.Info
 	sessStore := session.NewMemStore()
-	server := NewCoreServer(engine, sessStore,
+	server := newHandleCommandServer(t, store, sessStore,
 		WithDisconnectHook(func(info session.Info) {
 			hookCalled = true
 			hookInfo = info
@@ -2269,10 +2264,9 @@ func TestCoreServer_Disconnect_NonGuest_NoEndSession(t *testing.T) {
 	sessionID := core.NewULID()
 
 	store := core.NewMemoryEventStore()
-	engine := core.NewEngine(store)
 
 	sessStore := session.NewMemStore()
-	server := NewCoreServer(engine, sessStore)
+	server := newHandleCommandServer(t, store, sessStore)
 	ctx := context.Background()
 	require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
 		CharacterID:   charID,
@@ -2422,7 +2416,6 @@ func TestCoreServer_Authenticate_EmitsArriveEvent(t *testing.T) {
 	sessionID := core.NewULID()
 
 	store := core.NewMemoryEventStore()
-	engine := core.NewEngine(store)
 
 	auth := &mockAuthenticator{
 		authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
@@ -2434,7 +2427,7 @@ func TestCoreServer_Authenticate_EmitsArriveEvent(t *testing.T) {
 		},
 	}
 
-	server := NewCoreServer(engine, session.NewMemStore(),
+	server := newHandleCommandServer(t, store, nil,
 		WithAuthenticator(auth),
 	)
 	server.newSessionID = func() ulid.ULID { return sessionID }
@@ -2463,9 +2456,8 @@ func TestCoreServer_Disconnect_EmitsLeaveEvent(t *testing.T) {
 		sessionID := core.NewULID()
 
 		store := core.NewMemoryEventStore()
-		engine := core.NewEngine(store)
 
-		server := NewCoreServer(engine, session.NewMemStore())
+		server := newHandleCommandServer(t, store, nil)
 		ctx := context.Background()
 		require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
 			CharacterID:   charID,
@@ -2496,9 +2488,8 @@ func TestCoreServer_Disconnect_EmitsLeaveEvent(t *testing.T) {
 		sessionID := core.NewULID()
 
 		store := core.NewMemoryEventStore()
-		engine := core.NewEngine(store)
 
-		server := NewCoreServer(engine, session.NewMemStore())
+		server := newHandleCommandServer(t, store, nil)
 		ctx := context.Background()
 		require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
 			CharacterID:   charID,
@@ -3128,7 +3119,6 @@ func TestCoreServer_Authenticate_RegistersConnection(t *testing.T) {
 	sessionID := core.NewULID()
 
 	store := core.NewMemoryEventStore()
-	engine := core.NewEngine(store)
 
 	auth := &mockAuthenticator{
 		authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
@@ -3141,7 +3131,7 @@ func TestCoreServer_Authenticate_RegistersConnection(t *testing.T) {
 	}
 
 	sessStore := session.NewMemStore()
-	server := NewCoreServer(engine, sessStore,
+	server := newHandleCommandServer(t, store, sessStore,
 		WithAuthenticator(auth),
 	)
 	server.newSessionID = func() ulid.ULID { return sessionID }
@@ -3194,10 +3184,9 @@ func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 		sessionID := core.NewULID()
 
 		eventStore := core.NewMemoryEventStore()
-		engine := core.NewEngine(eventStore)
 
 		sessStore := session.NewMemStore()
-		server := NewCoreServer(engine, sessStore)
+		server := newHandleCommandServer(t, eventStore, sessStore)
 		ctx := context.Background()
 
 		// Create session
@@ -3250,10 +3239,9 @@ func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 		sessionID := core.NewULID()
 
 		eventStore := core.NewMemoryEventStore()
-		engine := core.NewEngine(eventStore)
 
 		sessStore := session.NewMemStore()
-		server := NewCoreServer(engine, sessStore)
+		server := newHandleCommandServer(t, eventStore, sessStore)
 		ctx := context.Background()
 
 		require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
@@ -3301,10 +3289,9 @@ func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 		sessionID := core.NewULID()
 
 		eventStore := core.NewMemoryEventStore()
-		engine := core.NewEngine(eventStore)
 
 		sessStore := session.NewMemStore()
-		server := NewCoreServer(engine, sessStore)
+		server := newHandleCommandServer(t, eventStore, sessStore)
 		ctx := context.Background()
 
 		require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{

@@ -49,6 +49,7 @@ func sessionColumns() []string {
 		"is_guest", "status", "grid_present", "event_cursors",
 		"command_history", "ttl_seconds", "max_history",
 		"detached_at", "expires_at", "created_at", "updated_at",
+		"last_paged", "last_whispered",
 	}
 }
 
@@ -71,6 +72,8 @@ func sessionRow(info *session.Info) []any {
 		info.ExpiresAt,
 		info.CreatedAt,
 		info.UpdatedAt,
+		info.LastPaged,
+		info.LastWhispered,
 	}
 }
 
@@ -193,6 +196,8 @@ func TestPostgresSessionStore_Set(t *testing.T) {
 						pgxmock.AnyArg(), // detached_at
 						pgxmock.AnyArg(), // expires_at
 						pgxmock.AnyArg(), // created_at
+						pgxmock.AnyArg(), // last_paged
+						pgxmock.AnyArg(), // last_whispered
 					).
 					WillReturnResult(pgxmock.NewResult("INSERT", 1))
 			},
@@ -208,7 +213,8 @@ func TestPostgresSessionStore_Set(t *testing.T) {
 						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
-						pgxmock.AnyArg(), pgxmock.AnyArg(),
+						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
+						pgxmock.AnyArg(),
 					).
 					WillReturnError(errors.New("disk full"))
 			},
@@ -276,6 +282,8 @@ func TestPostgresSessionStore_Set_NilCommandHistory(t *testing.T) {
 			pgxmock.AnyArg(),     // detached_at
 			pgxmock.AnyArg(),     // expires_at
 			pgxmock.AnyArg(),     // created_at
+			pgxmock.AnyArg(),     // last_paged
+			pgxmock.AnyArg(),     // last_whispered
 		).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
 

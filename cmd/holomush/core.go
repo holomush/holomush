@@ -262,6 +262,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	var authPlayerRepo *authpostgres.PlayerRepository
 	var authPlayerTokenRepo *store.PostgresPlayerTokenStore
 	var authCharRepo *authCharRepoAdapter
+	var sessionStore *store.PostgresSessionStore // hoisted for hostfunc + gRPC wiring
 	realStoreForABAC, hasPool := eventStore.(*store.PostgresEventStore)
 	if !hasPool {
 		// In production, PostgresEventStore always has a pool. This branch
@@ -343,6 +344,9 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			return oops.Code("AUTH_SETUP_FAILED").Wrap(charErr)
 		}
 
+		// Create session store early so plugins can access session functions
+		sessionStore = store.NewPostgresSessionStore(abacPool)
+
 		// Build plugin stack
 		var pluginsBaseDir string
 		if cfg.DataDir != "" {
@@ -359,6 +363,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		hostFuncs := hostfunc.New(nil, // KV store not yet available
 			hostfunc.WithEngine(abacStack.Engine),
 			hostfunc.WithWorldService(worldService),
+			hostfunc.WithSessionAccess(sessionStore),
 		)
 		luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
 		pluginManager := plugins.NewManager(pluginsDir,
@@ -438,8 +443,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 		guestAuth := telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocationID)
 
-		// Create and register Core service with guest authentication + cleanup hook
-		sessionStore := store.NewPostgresSessionStore(realStore.Pool())
+		// Session store was created earlier (in the ABAC stack block) — reuse it here.
 
 		// Build unified command dispatcher with alias dependencies
 		cmdRegistry := command.NewRegistry()
@@ -476,7 +480,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			return oops.Code("COMMAND_DISPATCHER_FAILED").Wrap(cmdDispErr)
 		}
 
-		coreServer := holoGRPC.NewCoreServer(engine, sessionStore,
+		coreServer := holoGRPC.NewCoreServer(engine, sessionStore, cmdDispatcher, cmdServices,
 			holoGRPC.WithAuthenticator(guestAuth),
 			holoGRPC.WithEventStore(realStore),
 			holoGRPC.WithWorldQuerier(worldService),
@@ -486,7 +490,6 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			holoGRPC.WithPlayerTokenRepo(authPlayerTokenRepo),
 			holoGRPC.WithPlayerRepo(authPlayerRepo),
 			holoGRPC.WithCharacterRepo(authCharRepo),
-			holoGRPC.WithDispatcher(cmdDispatcher, cmdServices),
 			holoGRPC.WithSessionDefaults(holoGRPC.SessionDefaults{
 				TTL:        sessionTTL,
 				MaxHistory: cfg.SessionMaxHistory,

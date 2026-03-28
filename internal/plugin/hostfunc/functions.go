@@ -22,6 +22,7 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/property"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -44,6 +45,7 @@ type Functions struct {
 	commandRegistry  CommandRegistry
 	engine           types.AccessPolicyEngine
 	propertyRegistry *property.Registry
+	sessionAccess    session.Access
 }
 
 // Option configures Functions.
@@ -62,6 +64,14 @@ func WithWorldService(svc WorldMutator) Option {
 func WithPropertyRegistry(registry *property.Registry) Option {
 	return func(f *Functions) {
 		f.propertyRegistry = registry
+	}
+}
+
+// WithSessionAccess sets the session access dependency for holo.session.* host functions.
+// When set, plugins can call holo.session.find_by_name and holo.session.set_last_whispered.
+func WithSessionAccess(sa session.Access) Option {
+	return func(f *Functions) {
+		f.sessionAccess = sa
 	}
 }
 
@@ -104,6 +114,14 @@ func New(kv KVStore, opts ...Option) *Functions {
 func (f *Functions) Register(ls *lua.LState, pluginName string) {
 	// Register the holo.* stdlib (fmt, emit namespaces)
 	RegisterStdlib(ls)
+
+	// Register holo.session namespace if session access is configured.
+	if f.sessionAccess != nil {
+		holoTable, ok := ls.GetGlobal("holo").(*lua.LTable)
+		if ok {
+			RegisterSessionFuncs(ls, holoTable, f.sessionAccess)
+		}
+	}
 
 	mod := ls.NewTable()
 

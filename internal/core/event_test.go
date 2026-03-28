@@ -67,6 +67,8 @@ func TestDocumentedEventTypes(t *testing.T) {
 		string(EventTypeObjectGive):    true,
 		string(EventTypeLocationState): true,
 		string(EventTypeExitUpdate):    true,
+		string(EventTypePage):          true,
+		string(EventTypeWhisper):       true,
 	}
 
 	for _, docType := range documentedTypes {

@@ -5,6 +5,7 @@ package session
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -373,6 +374,54 @@ func (m *MemStore) UpdateActivity(_ context.Context, id string) error {
 			With("session_id", id).
 			Errorf("session not found")
 	}
+	info.UpdatedAt = time.Now()
+	return nil
+}
+
+// FindByCharacterName returns the active session for a character by name.
+// The lookup is case-insensitive.
+func (m *MemStore) FindByCharacterName(_ context.Context, name string) (*Info, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, info := range m.sessions {
+		if info.Status == StatusActive && strings.EqualFold(info.CharacterName, name) {
+			return copyInfo(info), nil
+		}
+	}
+	return nil, oops.Code("SESSION_NOT_FOUND").
+		With("character_name", name).
+		Errorf("no active session for character name")
+}
+
+// UpdateLastPaged records the name of the character most recently paged.
+func (m *MemStore) UpdateLastPaged(_ context.Context, id, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	info, ok := m.sessions[id]
+	if !ok {
+		return oops.Code("SESSION_NOT_FOUND").
+			With("session_id", id).
+			Errorf("session not found")
+	}
+	info.LastPaged = name
+	info.UpdatedAt = time.Now()
+	return nil
+}
+
+// UpdateLastWhispered records the name of the character most recently whispered to.
+func (m *MemStore) UpdateLastWhispered(_ context.Context, id, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	info, ok := m.sessions[id]
+	if !ok {
+		return oops.Code("SESSION_NOT_FOUND").
+			With("session_id", id).
+			Errorf("session not found")
+	}
+	info.LastWhispered = name
 	info.UpdatedAt = time.Now()
 	return nil
 }

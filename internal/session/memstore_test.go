@@ -298,3 +298,112 @@ func TestMemStore_ConcurrentAccess(t *testing.T) {
 	// No assertion needed — the test passes if the race detector finds no issues.
 	assert.True(t, true)
 }
+
+func TestMemStore_FindByCharacterName(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name      string
+		lookup    string
+		wantName  string
+		wantFound bool
+	}{
+		{
+			name:      "exact match succeeds",
+			lookup:    "Artanis",
+			wantName:  "Artanis",
+			wantFound: true,
+		},
+		{
+			name:      "case-insensitive match succeeds",
+			lookup:    "artanis",
+			wantName:  "Artanis",
+			wantFound: true,
+		},
+		{
+			name:      "upper-case lookup succeeds",
+			lookup:    "ARTANIS",
+			wantName:  "Artanis",
+			wantFound: true,
+		},
+		{
+			name:      "no match returns SESSION_NOT_FOUND",
+			lookup:    "Zeratul",
+			wantFound: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := NewMemStore()
+			charID := ulid.Make()
+			err := store.Set(ctx, "session-1", &Info{
+				ID:            "session-1",
+				CharacterID:   charID,
+				CharacterName: "Artanis",
+				Status:        StatusActive,
+			})
+			require.NoError(t, err)
+
+			got, err := store.FindByCharacterName(ctx, tt.lookup)
+			if tt.wantFound {
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantName, got.CharacterName)
+			} else {
+				require.Error(t, err)
+				assert.Nil(t, got)
+			}
+		})
+	}
+}
+
+func TestMemStore_FindByCharacterName_OnlyActiveSession(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemStore()
+
+	err := store.Set(ctx, "session-detached", &Info{
+		ID:            "session-detached",
+		CharacterID:   ulid.Make(),
+		CharacterName: "Zeratul",
+		Status:        StatusDetached,
+	})
+	require.NoError(t, err)
+
+	got, err := store.FindByCharacterName(ctx, "Zeratul")
+	require.Error(t, err)
+	assert.Nil(t, got)
+}
+
+func TestMemStore_UpdateLastPaged(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemStore()
+
+	err := store.Set(ctx, "session-1", &Info{
+		ID:     "session-1",
+		Status: StatusActive,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, store.UpdateLastPaged(ctx, "session-1", "Zeratul"))
+
+	got, err := store.Get(ctx, "session-1")
+	require.NoError(t, err)
+	assert.Equal(t, "Zeratul", got.LastPaged)
+}
+
+func TestMemStore_UpdateLastWhispered(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemStore()
+
+	err := store.Set(ctx, "session-1", &Info{
+		ID:     "session-1",
+		Status: StatusActive,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, store.UpdateLastWhispered(ctx, "session-1", "Artanis"))
+
+	got, err := store.Get(ctx, "session-1")
+	require.NoError(t, err)
+	assert.Equal(t, "Artanis", got.LastWhispered)
+}

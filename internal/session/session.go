@@ -51,10 +51,12 @@ type Info struct {
 	CommandHistory []string
 	TTLSeconds     int
 	MaxHistory     int
-	DetachedAt     *time.Time
-	ExpiresAt      *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	DetachedAt      *time.Time
+	ExpiresAt       *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	LastPaged       string
+	LastWhispered   string
 }
 
 // IsActive returns true if the session is in active status.
@@ -102,6 +104,10 @@ type Access interface {
 	// FindByCharacter returns the active or detached session for a character.
 	FindByCharacter(ctx context.Context, characterID ulid.ULID) (*Info, error)
 
+	// FindByCharacterName returns the active session for a character by name.
+	// The lookup is case-insensitive.
+	FindByCharacterName(ctx context.Context, name string) (*Info, error)
+
 	// DeleteByCharacter finds and deletes a character's session.
 	// Returns the deleted Info for caller use (disconnect hooks, leave events).
 	// Returns nil, nil if no session exists.
@@ -109,6 +115,12 @@ type Access interface {
 
 	// UpdateActivity bumps the updated_at timestamp for a session.
 	UpdateActivity(ctx context.Context, id string) error
+
+	// UpdateLastPaged records the name of the character most recently paged.
+	UpdateLastPaged(ctx context.Context, sessionID string, name string) error
+
+	// UpdateLastWhispered records the name of the character most recently whispered to.
+	UpdateLastWhispered(ctx context.Context, sessionID string, name string) error
 }
 
 // Store manages persistent session state. Implementations MUST be
@@ -185,4 +197,14 @@ type Store interface {
 
 	// UpdateActivity bumps the updated_at timestamp for a session.
 	UpdateActivity(ctx context.Context, id string) error
+
+	// FindByCharacterName returns the active session for a character by name.
+	// The lookup is case-insensitive.
+	FindByCharacterName(ctx context.Context, name string) (*Info, error)
+
+	// UpdateLastPaged records the name of the character most recently paged.
+	UpdateLastPaged(ctx context.Context, sessionID string, name string) error
+
+	// UpdateLastWhispered records the name of the character most recently whispered to.
+	UpdateLastWhispered(ctx context.Context, sessionID string, name string) error
 }

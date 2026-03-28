@@ -54,6 +54,18 @@ func (s *stubSessionService) UpdateActivity(_ context.Context, _ string) error {
 	return nil
 }
 
+func (s *stubSessionService) FindByCharacterName(_ context.Context, _ string) (*session.Info, error) {
+	return nil, nil
+}
+
+func (s *stubSessionService) UpdateLastPaged(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
+func (s *stubSessionService) UpdateLastWhispered(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
 type stubEventStore struct{}
 
 func (s *stubEventStore) Append(_ context.Context, _ core.Event) error { return nil }

@@ -24,6 +24,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
 	grpcpkg "github.com/holomush/holomush/internal/grpc"
@@ -55,6 +57,18 @@ func (n *noopEventStore) Subscribe(ctx context.Context, _ string) (<-chan ulid.U
 		close(errs)
 	}()
 	return events, errs, nil
+}
+
+// newMinimalDispatcher creates a dispatcher with no registered commands for tests
+// that don't exercise command functionality.
+func newMinimalDispatcher() (*command.Dispatcher, *command.Services) {
+	pe := policytest.AllowAllEngine()
+	svc := command.NewTestServices(command.ServicesConfig{Engine: pe})
+	d, err := command.NewDispatcher(command.NewRegistry(), pe)
+	if err != nil {
+		panic("newMinimalDispatcher: " + err.Error())
+	}
+	return d, svc
 }
 
 // testEnv holds all the resources needed for integration tests.
@@ -302,7 +316,8 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			engine := core.NewEngine(eventStore)
 
 			// Create gRPC server with mTLS
-			coreServer := grpcpkg.NewCoreServer(engine, session.NewMemStore(),
+			disp, cmdSvc := newMinimalDispatcher()
+			coreServer := grpcpkg.NewCoreServer(engine, session.NewMemStore(), disp, cmdSvc,
 				grpcpkg.WithEventStore(eventStore))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
@@ -372,7 +387,8 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			engine := core.NewEngine(eventStore)
 
 			// Create gRPC server with mTLS
-			coreServer := grpcpkg.NewCoreServer(engine, session.NewMemStore(),
+			disp, cmdSvc := newMinimalDispatcher()
+			coreServer := grpcpkg.NewCoreServer(engine, session.NewMemStore(), disp, cmdSvc,
 				grpcpkg.WithEventStore(eventStore))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
@@ -534,7 +550,8 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			eventStore := &noopEventStore{}
 			engine := core.NewEngine(eventStore)
 
-			coreServer := grpcpkg.NewCoreServer(engine, session.NewMemStore(),
+			disp, cmdSvc := newMinimalDispatcher()
+			coreServer := grpcpkg.NewCoreServer(engine, session.NewMemStore(), disp, cmdSvc,
 				grpcpkg.WithEventStore(eventStore))
 			env.grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
 			corev1.RegisterCoreServiceServer(env.grpcServer, coreServer)
