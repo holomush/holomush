@@ -54,6 +54,9 @@ type WorldService interface {
 
 	// UpdateObject updates an existing object after checking write authorization.
 	UpdateObject(ctx context.Context, subjectID string, obj *world.Object) error
+
+	// UpdateCharacterDescription sets a character's description after checking authorization.
+	UpdateCharacterDescription(ctx context.Context, subjectID string, characterID ulid.ULID, description string) error
 }
 
 // AliasWriter defines write-only persistence operations for alias management.

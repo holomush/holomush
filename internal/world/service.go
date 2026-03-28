@@ -635,6 +635,32 @@ func (s *Service) GetCharacter(ctx context.Context, subjectID string, id ulid.UL
 	return char, nil
 }
 
+// UpdateCharacterDescription sets a character's description after checking write authorization.
+func (s *Service) UpdateCharacterDescription(ctx context.Context, subjectID string, characterID ulid.ULID, description string) error {
+	if s.characterRepo == nil {
+		return oops.Code("CHARACTER_UPDATE_FAILED").Errorf("character repository not configured")
+	}
+	resource := access.CharacterResource(characterID.String())
+	if err := s.checkAccess(ctx, subjectID, "write", resource, prefixCharacter); err != nil {
+		return err
+	}
+	char, err := s.characterRepo.Get(ctx, characterID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "get character %s", characterID)
+		}
+		return oops.Code("CHARACTER_GET_FAILED").Wrapf(err, "get character %s", characterID)
+	}
+	char.Description = description
+	if err := s.characterRepo.Update(ctx, char); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("CHARACTER_NOT_FOUND").Wrapf(err, "update character %s", characterID)
+		}
+		return oops.Code("CHARACTER_UPDATE_FAILED").Wrapf(err, "update character %s", characterID)
+	}
+	return nil
+}
+
 // GetCharactersByLocation retrieves characters at a location with pagination after checking list_characters authorization.
 // Note: This decomposes the legacy compound resource "location:<id>:characters" into
 // resource="location:<id>" with action="list_characters" per ADR #76 (Compound Resource Decomposition,
