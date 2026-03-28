@@ -153,6 +153,12 @@ All tasks MUST be reviewed before completion. See
 - Prefer composition over inheritance
 - When using accessor methods (e.g., `decision.Reason()`), always include `()` — without parens, Go creates a method value (func pointer) that compiles silently when passed to `...any` parameters (`oops.With`, `slog`)
 
+### Random Number Generation
+
+Always use `crypto/rand`, never `math/rand`. For picking from slices, use a
+`crypto/rand` + `math/big` helper. The `internal/naming` package has `cryptoIntN(n)`
+as an example.
+
 ### Error Handling
 
 Use oops for structured errors with context:
@@ -257,6 +263,12 @@ task license:add     # Add missing headers
 | **MUST** maintain >80% coverage  | Per-package coverage must exceed 80%                  |
 | **MUST** run `task test:cover`   | To verify coverage before completing work             |
 | **SHOULD** target 90%+ coverage  | For core packages (`internal/core`, `internal/world`) |
+
+### Integration Tests and Refactoring
+
+`task test` does NOT compile `//go:build integration` files. When refactoring
+shared types, interfaces, or packages, always run `task test:int` to catch
+breakage that unit tests miss.
 
 ### Test Files
 

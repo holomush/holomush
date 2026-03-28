@@ -24,6 +24,7 @@ type sayPayload struct {
 type posePayload struct {
 	CharacterName string `json:"character_name"`
 	Action        string `json:"action"`
+	NoSpace       bool   `json:"no_space,omitempty"`
 }
 
 // arriveLeavePayload is the JSON payload for arrive and leave events.
@@ -104,13 +105,22 @@ func translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 			slog.Error("web: failed to unmarshal pose payload", "error", err)
 			return nil
 		}
-		return &webv1.GameEvent{
+		ge := &webv1.GameEvent{
 			Type:          "pose",
 			CharacterName: p.CharacterName,
 			Text:          p.Action,
 			Timestamp:     ts,
 			Channel:       ch,
 		}
+		if p.NoSpace {
+			meta, metaErr := structpb.NewStruct(map[string]any{"no_space": true})
+			if metaErr != nil {
+				slog.Error("web: failed to create pose no_space metadata", "error", metaErr)
+			} else {
+				ge.Metadata = meta
+			}
+		}
+		return ge
 
 	case "arrive":
 		var p arriveLeavePayload

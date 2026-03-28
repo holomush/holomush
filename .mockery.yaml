@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 HoloMUSH Contributors
 
+boilerplate-file: .mockery-boilerplate.txt
 with-expecter: true
 resolve-type-alias: false
 disable-version-string: true
@@ -34,7 +35,6 @@ packages:
       outpkg: mocks
     interfaces:
       KVStore:
-      CapabilityChecker:
   github.com/holomush/holomush/internal/world:
     config:
       dir: internal/world/worldtest

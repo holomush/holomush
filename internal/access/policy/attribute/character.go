@@ -18,15 +18,14 @@ import (
 // This interface allows CharacterProvider to resolve roles without
 // coupling to a specific access control implementation.
 //
-// When GetRole returns an empty string, CharacterProvider treats it the same
-// as a nil resolver: the character falls back to the default "player" role.
-// Implementors should return a non-empty role string only when the subject
-// has an explicit role assignment.
+// When GetRoles returns nil or empty, CharacterProvider falls back to
+// the default ["player"] role set. Implementors should return a non-empty
+// slice only when the subject has explicit role assignments.
 type RoleResolver interface {
-	// GetRole returns the role assigned to a subject, or empty string if none.
-	// Returning "" is equivalent to no role assignment; CharacterProvider will
-	// fall back to the default role ("player").
-	GetRole(subject string) string
+	// GetRoles returns the roles assigned to a subject, or nil if none.
+	// Returning nil/empty is equivalent to no role assignment; CharacterProvider
+	// will fall back to the default role set (["player"]).
+	GetRoles(ctx context.Context, subject string) []string
 }
 
 // CharacterProvider resolves attributes for character entities.
@@ -101,14 +100,14 @@ func (p *CharacterProvider) resolve(ctx context.Context, entityID string) (map[s
 			Wrapf(err, "failed to fetch character")
 	}
 
-	// Resolve role from role resolver
-	role := "player" // default fallback
+	// Resolve roles from role resolver
+	var roles []string
 	if p.roleResolver != nil {
-		// Build subject ID for role lookup: "character:ULID"
 		subjectID := access.CharacterSubject(char.ID.String())
-		if resolvedRole := p.roleResolver.GetRole(subjectID); resolvedRole != "" {
-			role = resolvedRole
-		}
+		roles = p.roleResolver.GetRoles(ctx, subjectID)
+	}
+	if len(roles) == 0 {
+		roles = []string{access.RolePlayer}
 	}
 
 	// Map character fields to attributes
@@ -117,7 +116,7 @@ func (p *CharacterProvider) resolve(ctx context.Context, entityID string) (map[s
 		"player_id":   char.PlayerID.String(),
 		"name":        char.Name,
 		"description": char.Description,
-		"role":        role,
+		"roles":       roles,
 	}
 
 	// Handle optional location — expose as both "location_id" (raw) and "location" (for seed policies)
@@ -143,7 +142,7 @@ func (p *CharacterProvider) Schema() *types.NamespaceSchema {
 			"player_id":    types.AttrTypeString,
 			"name":         types.AttrTypeString,
 			"description":  types.AttrTypeString,
-			"role":         types.AttrTypeString,
+			"roles":        types.AttrTypeStringList,
 			"location_id":  types.AttrTypeString,
 			"location":     types.AttrTypeString,
 			"has_location": types.AttrTypeBool,

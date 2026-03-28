@@ -396,10 +396,6 @@ func (s *CoreServer) executeCommand(ctx context.Context, info *session.Info, inp
 // execution. Handler output written to the CommandExecution's io.Writer is
 // captured in a buffer and emitted as a command_response event afterward.
 func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Info, input string) error {
-	// Expand MUSH single-character prefixes before dispatch.
-	// These will become proper system aliases when the alias cache is wired.
-	input = expandMUSHPrefix(input)
-
 	char := core.CharacterRef{ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID}
 
 	sessionID, parseErr := ulid.Parse(info.ID)
@@ -484,26 +480,6 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 func isUserFacingError(err error) bool {
 	msg := command.PlayerMessage(err)
 	return msg != "Something went wrong. Try again."
-}
-
-// expandMUSHPrefix rewrites MUSH single-character command prefixes to their
-// full command names. E.g., ": waves" → "pose waves". These will become
-// proper system aliases once the alias cache is wired.
-func expandMUSHPrefix(input string) string {
-	trimmed := strings.TrimSpace(input)
-	if trimmed == "" {
-		return input
-	}
-	switch trimmed[0] {
-	case ':':
-		remainder := strings.TrimSpace(trimmed[1:])
-		if remainder == "" {
-			return "pose"
-		}
-		return "pose " + remainder
-	default:
-		return input
-	}
 }
 
 // emitCommandResponse emits a command_response event to the character's

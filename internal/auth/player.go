@@ -140,6 +140,9 @@ type PlayerRepository interface {
 	// Returns ErrNotFound if no player has the given email.
 	GetByEmail(ctx context.Context, email string) (*Player, error)
 
+	// Count returns the total number of players.
+	Count(ctx context.Context) (int, error)
+
 	// Update updates an existing player.
 	Update(ctx context.Context, player *Player) error
 

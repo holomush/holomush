@@ -97,10 +97,10 @@ type noopPartitionCreator struct{}
 func (n *noopPartitionCreator) EnsurePartitions(_ context.Context, _ int) error { return nil }
 
 type staticRoleResolver struct {
-	roles map[string]string
+	roles map[string][]string
 }
 
-func (s *staticRoleResolver) GetRole(subject string) string {
+func (s *staticRoleResolver) GetRoles(_ context.Context, subject string) []string {
 	return s.roles[subject]
 }
 
@@ -167,7 +167,7 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 	charRepo := worldpg.NewCharacterRepository(pool)
 	locRepo := worldpg.NewLocationRepository(pool)
 
-	roleResolver := &staticRoleResolver{roles: make(map[string]string)}
+	roleResolver := &staticRoleResolver{roles: make(map[string][]string)}
 
 	charProvider := attribute.NewCharacterProvider(charRepo, roleResolver)
 	if err := resolver.RegisterProvider(charProvider); err != nil {

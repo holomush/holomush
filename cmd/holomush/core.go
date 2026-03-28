@@ -29,12 +29,14 @@ import (
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/auth"
 	authpostgres "github.com/holomush/holomush/internal/auth/postgres"
+	"github.com/holomush/holomush/internal/bootstrap"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/observability"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
@@ -48,6 +50,16 @@ import (
 	"github.com/holomush/holomush/internal/xdg"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
+
+// bootstrapTransactor adapts world.Transactor (InTransaction) to the
+// bootstrap.Transactor interface (WithTx).
+type bootstrapTransactor struct {
+	inner world.Transactor
+}
+
+func (b *bootstrapTransactor) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	return b.inner.InTransaction(ctx, fn)
+}
 
 // coreConfig holds configuration for the core command.
 type coreConfig struct {
@@ -272,9 +284,11 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	} else {
 		abacPool := realStoreForABAC.Pool()
 
+		roleStore := store.NewPostgresRoleStore(abacPool)
 		abacStack, abacErr := abacsetup.BuildABACStack(ctx, abacsetup.ABACConfig{
 			Pool:          abacPool,
 			CharacterRepo: worldpostgres.NewCharacterRepository(abacPool),
+			RoleStore:     roleStore,
 			AuditMode:     audit.ModeDenialsOnly,
 		})
 		if abacErr != nil {
@@ -342,6 +356,19 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		characterService, charErr = auth.NewCharacterService(authCharRepo, authLocRepo)
 		if charErr != nil {
 			return oops.Code("AUTH_SETUP_FAILED").Wrap(charErr)
+		}
+
+		// Admin bootstrap — create admin account on first boot
+		adminBootErr := bootstrap.SeedAdmin(ctx, bootstrap.SeedAdminDeps{
+			PlayerRepo:  authPlayerRepo,
+			CharService: characterService,
+			RoleStore:   roleStore,
+			Hasher:      authHasher,
+			NameTheme:   naming.NewStarTheme(),
+			Transactor:  &bootstrapTransactor{inner: worldpostgres.NewTransactor(abacPool)},
+		})
+		if adminBootErr != nil {
+			return oops.Code("ADMIN_BOOTSTRAP_FAILED").Wrap(adminBootErr)
 		}
 
 		// Create session store early so plugins can access session functions
@@ -441,7 +468,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			}),
 		)
 
-		guestAuth := telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocationID)
+		guestAuth := telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocationID)
 
 		// Session store was created earlier (in the ABAC stack block) — reuse it here.
 
@@ -451,15 +478,10 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		aliasRepo := store.NewPostgresAliasRepository(realStore.Pool())
 		aliasCache := command.NewAliasCache()
 
-		// Pre-populate alias cache from database — fail startup if aliases
-		// can't be loaded, otherwise the dispatcher silently breaks resolution.
-		sysAliases, sysAliasErr := aliasRepo.GetSystemAliases(ctx)
-		if sysAliasErr != nil {
-			return oops.Code("COMMAND_ALIAS_LOAD_FAILED").
-				With("operation", "load system aliases").
-				Wrap(sysAliasErr)
+		// Seed standard MUSH aliases and load all into cache (idempotent)
+		if seedErr := bootstrap.SeedSystemAliases(ctx, aliasRepo, aliasCache); seedErr != nil {
+			return oops.Code("ALIAS_SEED_FAILED").Wrap(seedErr)
 		}
-		aliasCache.LoadSystemAliases(sysAliases)
 
 		cmdServices, cmdSvcErr := command.NewServices(command.ServicesConfig{
 			World:      worldService,

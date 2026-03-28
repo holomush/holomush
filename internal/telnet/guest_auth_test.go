@@ -12,18 +12,19 @@ import (
 	"github.com/stretchr/testify/require"
 
 	grpcserver "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/naming"
 	"github.com/oklog/ulid/v2"
 )
 
 // TestGemstoneElementTheme_Name verifies the theme name.
 func TestGemstoneElementTheme_Name(t *testing.T) {
-	theme := NewGemstoneElementTheme()
+	theme := naming.NewGemstoneElementTheme()
 	assert.Equal(t, "gemstone_element", theme.Name())
 }
 
 // TestGemstoneElementTheme_Generate verifies generated names are non-empty and distinct.
 func TestGemstoneElementTheme_Generate(t *testing.T) {
-	theme := NewGemstoneElementTheme()
+	theme := naming.NewGemstoneElementTheme()
 	first, second := theme.Generate()
 	assert.NotEmpty(t, first)
 	assert.NotEmpty(t, second)
@@ -32,7 +33,7 @@ func TestGemstoneElementTheme_Generate(t *testing.T) {
 
 // TestGemstoneElementTheme_UniqueNames generates names and verifies there is varied output.
 func TestGemstoneElementTheme_UniqueNames(t *testing.T) {
-	theme := NewGemstoneElementTheme()
+	theme := naming.NewGemstoneElementTheme()
 	seen := make(map[string]struct{})
 	for i := 0; i < 50; i++ {
 		first, second := theme.Generate()
@@ -45,7 +46,7 @@ func TestGemstoneElementTheme_UniqueNames(t *testing.T) {
 
 // TestGemstoneElementTheme_TitleCase verifies each name part matches ^[A-Z][a-z]+$.
 func TestGemstoneElementTheme_TitleCase(t *testing.T) {
-	theme := NewGemstoneElementTheme()
+	theme := naming.NewGemstoneElementTheme()
 	re := regexp.MustCompile(`^[A-Z][a-z]+$`)
 	for i := 0; i < 30; i++ {
 		first, second := theme.Generate()
@@ -57,7 +58,7 @@ func TestGemstoneElementTheme_TitleCase(t *testing.T) {
 // TestGuestAuthenticator_GuestLogin verifies that "guest" username produces a valid AuthResult.
 func TestGuestAuthenticator_GuestLogin(t *testing.T) {
 	startLocation := ulid.Make()
-	auth := NewGuestAuthenticator(NewGemstoneElementTheme(), startLocation)
+	auth := NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocation)
 
 	result, err := auth.Authenticate(context.Background(), "guest", "")
 	require.NoError(t, err)
@@ -70,7 +71,7 @@ func TestGuestAuthenticator_GuestLogin(t *testing.T) {
 // TestGuestAuthenticator_RegisteredLoginRejected verifies non-guest usernames are rejected.
 func TestGuestAuthenticator_RegisteredLoginRejected(t *testing.T) {
 	startLocation := ulid.Make()
-	auth := NewGuestAuthenticator(NewGemstoneElementTheme(), startLocation)
+	auth := NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocation)
 
 	result, err := auth.Authenticate(context.Background(), "alice", "secret")
 	assert.Error(t, err)
@@ -81,7 +82,7 @@ func TestGuestAuthenticator_RegisteredLoginRejected(t *testing.T) {
 // TestGuestAuthenticator_UniqueNames verifies guest logins all receive unique names within pool capacity.
 func TestGuestAuthenticator_UniqueNames(t *testing.T) {
 	startLocation := ulid.Make()
-	auth := NewGuestAuthenticator(NewGemstoneElementTheme(), startLocation)
+	auth := NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocation)
 
 	// Connect 20 guests — all should get unique names from the 400-name pool.
 	seen := make(map[string]struct{})

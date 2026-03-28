@@ -68,7 +68,7 @@ func (p *benchAttributeProvider) ResolveResource(_ context.Context, _ string) (m
 func (p *benchAttributeProvider) Schema() *types.NamespaceSchema {
 	return &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{
-			"role":    types.AttrTypeString,
+			"roles":   types.AttrTypeStringList,
 			"level":   types.AttrTypeFloat,
 			"banned":  types.AttrTypeBool,
 			"faction": types.AttrTypeString,
@@ -171,8 +171,8 @@ func generateNestedIfPolicy(depth int) string {
 // BenchmarkSinglePolicyEvaluation benchmarks a single policy evaluation.
 // Target: <10μs
 func BenchmarkSinglePolicyEvaluation(b *testing.B) {
-	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`
-	attrs := map[string]any{"role": "admin", "level": float64(10)}
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { "admin" in principal.character.roles };`
+	attrs := map[string]any{"roles": []string{"admin"}, "level": float64(10)}
 
 	engine := createBenchEngine(b, []string{dslText}, attrs)
 
@@ -198,12 +198,12 @@ func BenchmarkSinglePolicyEvaluation(b *testing.B) {
 // Target: <1ms per policy
 func BenchmarkConditionEvaluation(b *testing.B) {
 	dslText := `permit(principal is character, action in ["say"], resource is location) when {
-		principal.character.role == "admin" &&
+		"admin" in principal.character.roles &&
 		principal.character.level > 5 &&
 		principal.character.banned == false
 	};`
 	attrs := map[string]any{
-		"role":   "admin",
+		"roles":  []string{"admin"},
 		"level":  float64(10),
 		"banned": false,
 	}
@@ -232,7 +232,7 @@ func BenchmarkConditionEvaluation(b *testing.B) {
 // Target: <100μs
 func BenchmarkFiftyPolicyEvaluation(b *testing.B) {
 	policies := generateBenchPolicies(50)
-	attrs := map[string]any{"role": "admin", "level": float64(25)}
+	attrs := map[string]any{"roles": []string{"admin"}, "level": float64(25)}
 
 	engine := createBenchEngine(b, policies, attrs)
 
@@ -258,7 +258,7 @@ func BenchmarkFiftyPolicyEvaluation(b *testing.B) {
 // Target: <50μs
 func BenchmarkAttributeResolution(b *testing.B) {
 	attrs := map[string]any{
-		"role":    "admin",
+		"roles":   []string{"admin"},
 		"level":   float64(10),
 		"banned":  false,
 		"faction": "rebels",
@@ -355,12 +355,12 @@ func BenchmarkWorstCase_AllPoliciesMatch(b *testing.B) {
 // BenchmarkEvaluateEndToEnd benchmarks full Evaluate() with in-memory deps.
 func BenchmarkEvaluateEndToEnd(b *testing.B) {
 	policies := []string{
-		`permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`,
+		`permit(principal is character, action in ["say"], resource is location) when { "admin" in principal.character.roles };`,
 		`permit(principal is character, action in ["say"], resource is location) when { principal.character.level > 5 };`,
 		`forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`,
 	}
 	attrs := map[string]any{
-		"role":   "admin",
+		"roles":  []string{"admin"},
 		"level":  float64(10),
 		"banned": false,
 	}

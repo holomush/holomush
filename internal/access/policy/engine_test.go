@@ -837,7 +837,7 @@ func (f *failingAttributeProvider) ResolveResource(_ context.Context, _ string) 
 
 func (f *failingAttributeProvider) Schema() *types.NamespaceSchema {
 	return &types.NamespaceSchema{
-		Attributes: map[string]types.AttrType{"role": types.AttrTypeString},
+		Attributes: map[string]types.AttrType{"roles": types.AttrTypeStringList},
 	}
 }
 
@@ -905,7 +905,7 @@ func (m *mockAttributeProvider) Schema() *types.NamespaceSchema {
 	// Return a minimal valid schema with at least one attribute
 	return &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{
-			"role":    types.AttrTypeString,
+			"roles":   types.AttrTypeStringList,
 			"level":   types.AttrTypeFloat,
 			"banned":  types.AttrTypeBool,
 			"faction": types.AttrTypeString,
@@ -963,11 +963,11 @@ func createTestEngineWithPolicies(t *testing.T, dslTexts []string, providers []a
 }
 
 func TestEngine_EvaluateConditions_SimpleConditionSatisfied(t *testing.T) {
-	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { "admin" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
 		namespace:  "character",
-		subjectMap: map[string]any{"role": "admin"},
+		subjectMap: map[string]any{"roles": []string{"admin"}},
 	}
 
 	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
@@ -988,11 +988,11 @@ func TestEngine_EvaluateConditions_SimpleConditionSatisfied(t *testing.T) {
 }
 
 func TestEngine_EvaluateConditions_SimpleConditionUnsatisfied(t *testing.T) {
-	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { "admin" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
 		namespace:  "character",
-		subjectMap: map[string]any{"role": "player"},
+		subjectMap: map[string]any{"roles": []string{"player"}},
 	}
 
 	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
@@ -1016,7 +1016,7 @@ func TestEngine_EvaluateConditions_MissingAttribute(t *testing.T) {
 
 	provider := &mockAttributeProvider{
 		namespace:  "character",
-		subjectMap: map[string]any{"role": "player"}, // no faction attribute
+		subjectMap: map[string]any{"roles": []string{"player"}}, // no faction attribute
 	}
 
 	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
@@ -1077,7 +1077,7 @@ func TestEngine_EvaluateConditions_Unconditional(t *testing.T) {
 
 func TestEngine_EvaluateConditions_MultiplePoliciesMixed(t *testing.T) {
 	dslTexts := []string{
-		`permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`,
+		`permit(principal is character, action in ["say"], resource is location) when { "admin" in principal.character.roles };`,
 		`permit(principal is character, action in ["say"], resource is location) when { principal.character.level > 10 };`,
 		`forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`,
 	}
@@ -1085,7 +1085,7 @@ func TestEngine_EvaluateConditions_MultiplePoliciesMixed(t *testing.T) {
 	provider := &mockAttributeProvider{
 		namespace: "character",
 		subjectMap: map[string]any{
-			"role":   "admin",
+			"roles":  []string{"admin"},
 			"level":  float64(5),
 			"banned": false,
 		},
@@ -1104,7 +1104,7 @@ func TestEngine_EvaluateConditions_MultiplePoliciesMixed(t *testing.T) {
 
 	require.Len(t, decision.Policies(), 3)
 
-	// Policy 1: role == "admin" → true
+	// Policy 1: "admin" in roles → true
 	assert.Equal(t, "policy-1", decision.Policies()[0].PolicyID)
 	assert.True(t, decision.Policies()[0].ConditionsMet)
 	assert.Equal(t, types.EffectAllow, decision.Policies()[0].Effect)
@@ -1122,14 +1122,14 @@ func TestEngine_EvaluateConditions_MultiplePoliciesMixed(t *testing.T) {
 
 func TestEngine_EvaluateConditions_AllSatisfied(t *testing.T) {
 	dslTexts := []string{
-		`permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`,
+		`permit(principal is character, action in ["say"], resource is location) when { "admin" in principal.character.roles };`,
 		`permit(principal is character, action in ["say"], resource is location) when { principal.character.level > 5 };`,
 	}
 
 	provider := &mockAttributeProvider{
 		namespace: "character",
 		subjectMap: map[string]any{
-			"role":  "admin",
+			"roles": []string{"admin"},
 			"level": float64(10),
 		},
 	}
@@ -1151,11 +1151,11 @@ func TestEngine_EvaluateConditions_AllSatisfied(t *testing.T) {
 }
 
 func TestEngine_EvaluateConditions_PopulatesPolicyMatches(t *testing.T) {
-	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { "admin" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
 		namespace:  "character",
-		subjectMap: map[string]any{"role": "admin"},
+		subjectMap: map[string]any{"roles": []string{"admin"}},
 	}
 
 	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
@@ -1181,14 +1181,14 @@ func TestEngine_EvaluateConditions_PopulatesPolicyMatches(t *testing.T) {
 
 func TestEngine_DenyOverrides_ForbidWins(t *testing.T) {
 	dslTexts := []string{
-		`permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "player" };`,
+		`permit(principal is character, action in ["say"], resource is location) when { "player" in principal.character.roles };`,
 		`forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`,
 	}
 
 	provider := &mockAttributeProvider{
 		namespace: "character",
 		subjectMap: map[string]any{
-			"role":   "player",
+			"roles":  []string{"player"},
 			"banned": true,
 		},
 	}
@@ -1211,11 +1211,11 @@ func TestEngine_DenyOverrides_ForbidWins(t *testing.T) {
 }
 
 func TestEngine_DenyOverrides_PermitOnly(t *testing.T) {
-	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "player" };`
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { "player" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
 		namespace:  "character",
-		subjectMap: map[string]any{"role": "player"},
+		subjectMap: map[string]any{"roles": []string{"player"}},
 	}
 
 	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
@@ -1236,11 +1236,11 @@ func TestEngine_DenyOverrides_PermitOnly(t *testing.T) {
 }
 
 func TestEngine_DenyOverrides_DefaultDeny_NoPoliciesSatisfied(t *testing.T) {
-	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { "admin" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
 		namespace:  "character",
-		subjectMap: map[string]any{"role": "player"}, // condition not met
+		subjectMap: map[string]any{"roles": []string{"player"}}, // condition not met
 	}
 
 	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
@@ -1293,14 +1293,14 @@ func TestEngine_DenyOverrides_MultipleForbid(t *testing.T) {
 
 func TestEngine_DenyOverrides_MultiplePermit(t *testing.T) {
 	dslTexts := []string{
-		`permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "player" };`,
+		`permit(principal is character, action in ["say"], resource is location) when { "player" in principal.character.roles };`,
 		`permit(principal is character, action in ["say"], resource is location) when { principal.character.level > 5 };`,
 	}
 
 	provider := &mockAttributeProvider{
 		namespace: "character",
 		subjectMap: map[string]any{
-			"role":  "player",
+			"roles": []string{"player"},
 			"level": float64(10),
 		},
 	}
@@ -1325,14 +1325,14 @@ func TestEngine_DenyOverrides_MultiplePermit(t *testing.T) {
 func TestEngine_DenyOverrides_ForbidUnsatisfied_PermitSatisfied(t *testing.T) {
 	dslTexts := []string{
 		`forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`,
-		`permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "player" };`,
+		`permit(principal is character, action in ["say"], resource is location) when { "player" in principal.character.roles };`,
 	}
 
 	provider := &mockAttributeProvider{
 		namespace: "character",
 		subjectMap: map[string]any{
 			"banned": false, // forbid condition not met
-			"role":   "player",
+			"roles":  []string{"player"},
 		},
 	}
 
@@ -1403,11 +1403,11 @@ func createTestEngineWithMode(t *testing.T, dslTexts []string, providers []attri
 }
 
 func TestEngine_Audit_ModeAll_AllowAudited(t *testing.T) {
-	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "player" };`
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { "player" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
 		namespace:  "character",
-		subjectMap: map[string]any{"role": "player"},
+		subjectMap: map[string]any{"roles": []string{"player"}},
 	}
 
 	engine, mockWriter := createTestEngineWithMode(t, []string{dslText}, []attribute.AttributeProvider{provider}, audit.ModeAll)
@@ -1464,11 +1464,11 @@ func TestEngine_Audit_ModeAll_DenyAudited(t *testing.T) {
 }
 
 func TestEngine_Audit_ModeMinimal_AllowNotAudited(t *testing.T) {
-	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "player" };`
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { "player" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
 		namespace:  "character",
-		subjectMap: map[string]any{"role": "player"},
+		subjectMap: map[string]any{"roles": []string{"player"}},
 	}
 
 	engine, mockWriter := createTestEngineWithMode(t, []string{dslText}, []attribute.AttributeProvider{provider}, audit.ModeMinimal)
@@ -1518,11 +1518,11 @@ func TestEngine_Audit_ModeMinimal_DenyAudited(t *testing.T) {
 // End-to-end integration tests
 
 func TestEngine_EndToEnd_FullFlow_AdminPermit(t *testing.T) {
-	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "admin" };`
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { "admin" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
 		namespace:  "character",
-		subjectMap: map[string]any{"role": "admin"},
+		subjectMap: map[string]any{"roles": []string{"admin"}},
 	}
 
 	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
@@ -1547,14 +1547,14 @@ func TestEngine_EndToEnd_FullFlow_AdminPermit(t *testing.T) {
 
 func TestEngine_EndToEnd_FullFlow_DenyOverrides(t *testing.T) {
 	dslTexts := []string{
-		`permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "player" };`,
+		`permit(principal is character, action in ["say"], resource is location) when { "player" in principal.character.roles };`,
 		`forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`,
 	}
 
 	provider := &mockAttributeProvider{
 		namespace: "character",
 		subjectMap: map[string]any{
-			"role":   "player",
+			"roles":  []string{"player"},
 			"banned": true,
 		},
 	}
@@ -1581,11 +1581,11 @@ func TestEngine_EndToEnd_FullFlow_DenyOverrides(t *testing.T) {
 }
 
 func TestEngine_EndToEnd_FullFlow_SessionResolution(t *testing.T) {
-	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.role == "player" };`
+	dslText := `permit(principal is character, action in ["say"], resource is location) when { "player" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
 		namespace:  "character",
-		subjectMap: map[string]any{"role": "player"},
+		subjectMap: map[string]any{"roles": []string{"player"}},
 	}
 
 	registry := attribute.NewSchemaRegistry()
@@ -1714,7 +1714,7 @@ type partialFailingProvider struct {
 func (p *partialFailingProvider) Namespace() string { return p.namespace }
 func (p *partialFailingProvider) ResolveSubject(_ context.Context, _ string) (map[string]any, error) {
 	// Return partial data AND an error — engine must discard the partial data.
-	return map[string]any{"role": "admin"}, p.err
+	return map[string]any{"roles": []string{"admin"}}, p.err
 }
 
 func (p *partialFailingProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {

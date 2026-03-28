@@ -145,6 +145,16 @@ func (r *PlayerRepository) GetByEmail(ctx context.Context, email string) (*auth.
 	return player, nil
 }
 
+// Count returns the total number of players.
+func (r *PlayerRepository) Count(ctx context.Context) (int, error) {
+	var count int
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM players`).Scan(&count)
+	if err != nil {
+		return 0, oops.With("operation", "count players").Wrap(err)
+	}
+	return count, nil
+}
+
 // Update updates an existing player.
 func (r *PlayerRepository) Update(ctx context.Context, player *auth.Player) error {
 	prefsJSON, err := json.Marshal(player.Preferences)

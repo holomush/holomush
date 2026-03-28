@@ -32,6 +32,7 @@ import (
 	grpcpkg "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/telnet"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -207,7 +208,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 
 		// 8. Create GuestAuthenticator
 		startLocation = ulid.Make()
-		guestAuth = telnet.NewGuestAuthenticator(telnet.NewGemstoneElementTheme(), startLocation)
+		guestAuth = telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocation)
 
 		// 9. Create gRPC server with command dispatcher
 		sessStore := session.NewMemStore()

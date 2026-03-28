@@ -17,7 +17,7 @@ type SeedPolicy struct {
 // See ADR 087 for rationale on default-deny instead of explicit forbid for system properties.
 //
 // Attribute paths use fully-qualified namespace.key syntax matching the resolver's
-// storage format (e.g., principal.character.role, resource.location.id).
+// storage format (e.g., principal.character.roles, resource.location.id).
 //
 // Gap decisions (T22b):
 //   - G5 (plugin commands): intentional default-deny; plugins define own policies at install time.
@@ -75,26 +75,26 @@ func SeedPolicies() []SeedPolicy {
 		{
 			Name:        "seed:builder-location-write",
 			Description: "Builders and admins can create/modify/delete locations",
-			DSLText:     `permit(principal is character, action in ["write", "delete"], resource is location) when { principal.character.role in ["builder", "admin"] };`,
-			SeedVersion: 2,
+			DSLText:     `permit(principal is character, action in ["write", "delete"], resource is location) when { "builder" in principal.character.roles };`,
+			SeedVersion: 3,
 		},
 		{
 			Name:        "seed:builder-object-write",
 			Description: "Builders and admins can create/modify/delete objects",
-			DSLText:     `permit(principal is character, action in ["write", "delete"], resource is object) when { principal.character.role in ["builder", "admin"] };`,
-			SeedVersion: 2,
+			DSLText:     `permit(principal is character, action in ["write", "delete"], resource is object) when { "builder" in principal.character.roles };`,
+			SeedVersion: 3,
 		},
 		{
 			Name:        "seed:builder-commands",
 			Description: "Builders and admins can execute builder commands",
-			DSLText:     `permit(principal is character, action in ["execute"], resource is command) when { principal.character.role in ["builder", "admin"] && resource.command.name in ["dig", "create", "describe", "link"] };`,
-			SeedVersion: 2,
+			DSLText:     `permit(principal is character, action in ["execute"], resource is command) when { "builder" in principal.character.roles && resource.command.name in ["dig", "create", "describe", "link"] };`,
+			SeedVersion: 3,
 		},
 		{
 			Name:        "seed:admin-full-access",
 			Description: "Admins have full access to everything",
-			DSLText:     `permit(principal is character, action, resource) when { principal.character.role == "admin" };`,
-			SeedVersion: 2,
+			DSLText:     `permit(principal is character, action, resource) when { "admin" in principal.character.roles };`,
+			SeedVersion: 3,
 		},
 		{
 			Name:        "seed:property-public-read",
@@ -111,8 +111,8 @@ func SeedPolicies() []SeedPolicy {
 		{
 			Name:        "seed:property-admin-read",
 			Description: "Admin properties readable only by admins",
-			DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource.property.visibility == "admin" && principal.character.role == "admin" };`,
-			SeedVersion: 2,
+			DSLText:     `permit(principal is character, action in ["read"], resource is property) when { resource.property.visibility == "admin" && "admin" in principal.character.roles };`,
+			SeedVersion: 3,
 		},
 		{
 			Name:        "seed:property-owner-write",
@@ -146,8 +146,8 @@ func SeedPolicies() []SeedPolicy {
 		{
 			Name:        "seed:builder-exit-write",
 			Description: "Builders and admins can create/modify/delete exits",
-			DSLText:     `permit(principal is character, action in ["write", "delete"], resource is exit) when { principal.character.role in ["builder", "admin"] };`,
-			SeedVersion: 2,
+			DSLText:     `permit(principal is character, action in ["write", "delete"], resource is exit) when { "builder" in principal.character.roles };`,
+			SeedVersion: 3,
 		},
 		// G3: Players can list characters in their current location (ADR #109).
 		{

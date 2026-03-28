@@ -24,12 +24,12 @@ type mockCharacterRepository struct {
 
 // mockRoleResolver is a simple mock for testing role resolution.
 type mockRoleResolver struct {
-	roles map[string]string
+	roles map[string][]string
 }
 
-func (m *mockRoleResolver) GetRole(subject string) string {
+func (m *mockRoleResolver) GetRoles(_ context.Context, subject string) []string {
 	if m.roles == nil {
-		return ""
+		return nil
 	}
 	return m.roles[subject]
 }
@@ -85,7 +85,7 @@ func TestCharacterProvider_Schema(t *testing.T) {
 	assert.Equal(t, types.AttrTypeString, schema.Attributes["player_id"])
 	assert.Equal(t, types.AttrTypeString, schema.Attributes["name"])
 	assert.Equal(t, types.AttrTypeString, schema.Attributes["description"])
-	assert.Equal(t, types.AttrTypeString, schema.Attributes["role"])
+	assert.Equal(t, types.AttrTypeStringList, schema.Attributes["roles"])
 	assert.Equal(t, types.AttrTypeString, schema.Attributes["location_id"])
 	assert.Equal(t, types.AttrTypeString, schema.Attributes["location"])
 	assert.Equal(t, types.AttrTypeBool, schema.Attributes["has_location"])
@@ -127,7 +127,7 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 				"player_id":    playerID.String(),
 				"name":         "TestChar",
 				"description":  "A test character",
-				"role":         "player",
+				"roles":        []string{"player"},
 				"location_id":  locationID.String(),
 				"location":     locationID.String(),
 				"has_location": true,
@@ -153,7 +153,7 @@ func TestCharacterProvider_ResolveSubject(t *testing.T) {
 				"player_id":    playerID.String(),
 				"name":         "NoLocChar",
 				"description":  "",
-				"role":         "player",
+				"roles":        []string{"player"},
 				"location_id":  "",
 				"location":     "",
 				"has_location": false,
@@ -236,57 +236,57 @@ func TestCharacterProvider_RoleResolution(t *testing.T) {
 	createdAt := time.Now().UTC()
 
 	tests := []struct {
-		name         string
-		roleResolver RoleResolver
-		expectedRole string
+		name          string
+		roleResolver  RoleResolver
+		expectedRoles []string
 	}{
 		{
-			name:         "nil role resolver defaults to player",
-			roleResolver: nil,
-			expectedRole: "player",
+			name:          "nil role resolver defaults to player",
+			roleResolver:  nil,
+			expectedRoles: []string{"player"},
 		},
 		{
-			name: "empty role from resolver defaults to player",
+			name: "empty roles from resolver defaults to player",
 			roleResolver: &mockRoleResolver{
-				roles: map[string]string{},
+				roles: map[string][]string{},
 			},
-			expectedRole: "player",
+			expectedRoles: []string{"player"},
 		},
 		{
-			name: "explicit empty-string role from resolver defaults to player",
+			name: "nil roles from resolver defaults to player",
 			roleResolver: &mockRoleResolver{
-				roles: map[string]string{
-					"character:" + charID.String(): "",
+				roles: map[string][]string{
+					"character:" + charID.String(): nil,
 				},
 			},
-			expectedRole: "player",
+			expectedRoles: []string{"player"},
 		},
 		{
 			name: "admin role from resolver",
 			roleResolver: &mockRoleResolver{
-				roles: map[string]string{
-					"character:" + charID.String(): "admin",
+				roles: map[string][]string{
+					"character:" + charID.String(): {"admin"},
 				},
 			},
-			expectedRole: "admin",
+			expectedRoles: []string{"admin"},
 		},
 		{
 			name: "builder role from resolver",
 			roleResolver: &mockRoleResolver{
-				roles: map[string]string{
-					"character:" + charID.String(): "builder",
+				roles: map[string][]string{
+					"character:" + charID.String(): {"builder"},
 				},
 			},
-			expectedRole: "builder",
+			expectedRoles: []string{"builder"},
 		},
 		{
-			name: "storyteller role from resolver",
+			name: "multiple roles from resolver",
 			roleResolver: &mockRoleResolver{
-				roles: map[string]string{
-					"character:" + charID.String(): "storyteller",
+				roles: map[string][]string{
+					"character:" + charID.String(): {"builder", "admin"},
 				},
 			},
-			expectedRole: "storyteller",
+			expectedRoles: []string{"builder", "admin"},
 		},
 	}
 
@@ -311,7 +311,7 @@ func TestCharacterProvider_RoleResolution(t *testing.T) {
 			attrs, err := provider.ResolveSubject(context.Background(), access.CharacterSubject(charID.String()))
 			require.NoError(t, err)
 			require.NotNil(t, attrs)
-			assert.Equal(t, tt.expectedRole, attrs["role"])
+			assert.Equal(t, tt.expectedRoles, attrs["roles"])
 		})
 	}
 }
@@ -351,7 +351,7 @@ func TestCharacterProvider_ResolveResource(t *testing.T) {
 				"player_id":    playerID.String(),
 				"name":         "ResourceChar",
 				"description":  "Character as resource",
-				"role":         "player",
+				"roles":        []string{"player"},
 				"location_id":  locationID.String(),
 				"location":     locationID.String(),
 				"has_location": true,

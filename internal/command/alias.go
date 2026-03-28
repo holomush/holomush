@@ -45,6 +45,8 @@ func (c *AliasCache) LoadSystemAliases(aliases map[string]string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Replace (not merge) to ensure deleted aliases don't persist in cache.
+	c.systemAliases = make(map[string]string, len(aliases))
 	maps.Copy(c.systemAliases, aliases)
 }
 

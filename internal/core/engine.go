@@ -21,6 +21,7 @@ type SayPayload struct {
 type PosePayload struct {
 	CharacterName string `json:"character_name"`
 	Action        string `json:"action"`
+	NoSpace       bool   `json:"no_space,omitempty"`
 }
 
 // CommandResponsePayload is the JSON payload for command_response events.

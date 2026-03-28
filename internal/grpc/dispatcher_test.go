@@ -13,6 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -23,6 +26,43 @@ import (
 func newDispatcherTestServer(t *testing.T, store core.EventStore, opts ...CoreServerOption) *CoreServer {
 	t.Helper()
 	return newHandleCommandServer(t, store, nil, opts...)
+}
+
+// newDispatcherTestServerWithAliases creates a CoreServer with MUSH aliases
+// (`:`, `;`, `"`) loaded into the alias cache, matching production bootstrap.
+func newDispatcherTestServerWithAliases(t *testing.T, store core.EventStore, opts ...CoreServerOption) *CoreServer {
+	t.Helper()
+	engine := core.NewEngine(store)
+	sessStore := session.NewMemStore()
+
+	reg := command.NewRegistry()
+	handlers.RegisterAll(reg)
+
+	policyEngine := policytest.AllowAllEngine()
+	aliasCache := command.NewAliasCache()
+	aliasCache.LoadSystemAliases(map[string]string{
+		":": "pose",
+		";": "pose",
+		`"`: "say",
+	})
+
+	svc := command.NewTestServices(command.ServicesConfig{
+		World:   nil,
+		Session: sessStore,
+		Engine:  policyEngine,
+		Events:  store,
+	})
+
+	dispatcher, err := command.NewDispatcher(reg, policyEngine,
+		command.WithAliasCache(aliasCache),
+	)
+	require.NoError(t, err)
+
+	allOpts := make([]CoreServerOption, 0, 1+len(opts))
+	allOpts = append(allOpts, WithEventStore(store))
+	allOpts = append(allOpts, opts...)
+
+	return NewCoreServer(engine, sessStore, dispatcher, svc, allOpts...)
 }
 
 func TestDispatcher_HandleCommand_Say(t *testing.T) {
@@ -112,7 +152,7 @@ func TestDispatcher_HandleCommand_ColonPrefix(t *testing.T) {
 		},
 	}
 
-	server := newDispatcherTestServer(t, store)
+	server := newDispatcherTestServerWithAliases(t, store)
 
 	ctx := context.Background()
 	require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
@@ -129,7 +169,7 @@ func TestDispatcher_HandleCommand_ColonPrefix(t *testing.T) {
 		Command:   ": nods",
 	})
 	require.NoError(t, err)
-	assert.True(t, resp.Success, ": should expand to pose: %s", resp.Error)
+	assert.True(t, resp.Success, ": should expand to pose via alias: %s", resp.Error)
 
 	require.NotEmpty(t, appended)
 	assert.Equal(t, core.EventTypePose, appended[0].Type)
@@ -226,25 +266,4 @@ func TestDispatcher_HandleCommand_Quit(t *testing.T) {
 
 	// Disconnect hook should fire
 	assert.True(t, hookCalled)
-}
-
-func TestExpandMUSHPrefix(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{": waves", "pose waves"},
-		{":waves", "pose waves"},
-		{"say hello", "say hello"},
-		{"look", "look"},
-		{":", "pose"},
-		{"", ""},
-		{"  ", "  "},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			assert.Equal(t, tt.expected, expandMUSHPrefix(tt.input))
-		})
-	}
 }
