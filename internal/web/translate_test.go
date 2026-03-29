@@ -23,130 +23,161 @@ func mustMarshal(t *testing.T, v any) []byte {
 	return b
 }
 
+// newTestHandler creates a Handler with a fully populated VerbRegistry.
+func newTestHandler(t *testing.T) *Handler {
+	t.Helper()
+	reg := core.NewVerbRegistry()
+	require.NoError(t, core.RegisterBuiltinTypes(reg))
+	return &Handler{verbRegistry: reg}
+}
+
 func TestTranslateEvent_Say(t *testing.T) {
+	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:      "say",
 		Timestamp: timestamppb.New(timestamppb.Now().AsTime()),
-		Payload:   mustMarshal(t, sayPayload{CharacterName: "Alice", Message: "Hello!"}),
+		Payload:   mustMarshal(t, map[string]string{"character_name": "Alice", "message": "Hello!"}),
 	}
 
-	got := translateEvent(ev)
+	got := h.translateEvent(ev)
 	require.NotNil(t, got)
 	assert.Equal(t, "say", got.GetType())
-	assert.Equal(t, "Alice", got.GetCharacterName())
+	assert.Equal(t, "communication", got.GetCategory())
+	assert.Equal(t, "speech", got.GetFormat())
+	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetDisplayTarget())
+	assert.Equal(t, "Alice", got.GetActor())
 	assert.Equal(t, "Hello!", got.GetText())
+	require.NotNil(t, got.GetMetadata())
+	assert.Equal(t, "says", got.GetMetadata().AsMap()["label"])
 }
 
 func TestTranslateEvent_Pose(t *testing.T) {
+	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "pose",
-		Payload: mustMarshal(t, posePayload{CharacterName: "Bob", Action: "waves hello."}),
+		Payload: mustMarshal(t, map[string]any{"character_name": "Bob", "action": "waves hello."}),
 	}
 
-	got := translateEvent(ev)
+	got := h.translateEvent(ev)
 	require.NotNil(t, got)
 	assert.Equal(t, "pose", got.GetType())
-	assert.Equal(t, "Bob", got.GetCharacterName())
+	assert.Equal(t, "communication", got.GetCategory())
+	assert.Equal(t, "action", got.GetFormat())
+	assert.Equal(t, "Bob", got.GetActor())
 	assert.Equal(t, "waves hello.", got.GetText())
 }
 
-func TestTranslateEvent_Arrive(t *testing.T) {
+func TestTranslateEvent_PoseNoSpace(t *testing.T) {
+	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
-		Type:    "arrive",
-		Payload: mustMarshal(t, arriveLeavePayload{CharacterName: "Carol"}),
+		Type:    "pose",
+		Payload: mustMarshal(t, map[string]any{"character_name": "Bob", "action": "'s face turns red.", "no_space": true}),
 	}
 
-	got := translateEvent(ev)
+	got := h.translateEvent(ev)
+	require.NotNil(t, got)
+	assert.Equal(t, "communication", got.GetCategory())
+	assert.Equal(t, "action", got.GetFormat())
+	require.NotNil(t, got.GetMetadata())
+	assert.Equal(t, true, got.GetMetadata().AsMap()["no_space"])
+}
+
+func TestTranslateEvent_Arrive(t *testing.T) {
+	h := newTestHandler(t)
+	ev := &corev1.EventFrame{
+		Type:    "arrive",
+		Payload: mustMarshal(t, map[string]string{"character_name": "Carol"}),
+	}
+
+	got := h.translateEvent(ev)
 	require.NotNil(t, got)
 	assert.Equal(t, "arrive", got.GetType())
-	assert.Equal(t, "Carol", got.GetCharacterName())
-	assert.Equal(t, "has arrived.", got.GetText())
+	assert.Equal(t, "movement", got.GetCategory())
+	assert.Equal(t, "notification", got.GetFormat())
+	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_BOTH, got.GetDisplayTarget())
+	assert.Equal(t, "Carol", got.GetActor())
 }
 
 func TestTranslateEvent_Leave(t *testing.T) {
+	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "leave",
-		Payload: mustMarshal(t, arriveLeavePayload{CharacterName: "Dave"}),
+		Payload: mustMarshal(t, map[string]string{"character_name": "Dave"}),
 	}
 
-	got := translateEvent(ev)
+	got := h.translateEvent(ev)
 	require.NotNil(t, got)
 	assert.Equal(t, "leave", got.GetType())
-	assert.Equal(t, "Dave", got.GetCharacterName())
-	assert.Equal(t, "has left.", got.GetText())
-}
-
-func TestTranslateEvent_SayChannel(t *testing.T) {
-	ev := &corev1.EventFrame{
-		Type:    "say",
-		Payload: mustMarshal(t, sayPayload{CharacterName: "Alice", Message: "Hello!"}),
-	}
-
-	got := translateEvent(ev)
-	require.NotNil(t, got)
-	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetChannel())
-}
-
-func TestTranslateEvent_PoseChannel(t *testing.T) {
-	ev := &corev1.EventFrame{
-		Type:    "pose",
-		Payload: mustMarshal(t, posePayload{CharacterName: "Bob", Action: "waves."}),
-	}
-
-	got := translateEvent(ev)
-	require.NotNil(t, got)
-	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetChannel())
-}
-
-func TestTranslateEvent_ArriveChannel(t *testing.T) {
-	ev := &corev1.EventFrame{
-		Type:    "arrive",
-		Payload: mustMarshal(t, arriveLeavePayload{CharacterName: "Carol"}),
-	}
-
-	got := translateEvent(ev)
-	require.NotNil(t, got)
-	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_BOTH, got.GetChannel())
-}
-
-func TestTranslateEvent_LeaveChannel(t *testing.T) {
-	ev := &corev1.EventFrame{
-		Type:    "leave",
-		Payload: mustMarshal(t, arriveLeavePayload{CharacterName: "Dave"}),
-	}
-
-	got := translateEvent(ev)
-	require.NotNil(t, got)
-	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_BOTH, got.GetChannel())
+	assert.Equal(t, "movement", got.GetCategory())
+	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_BOTH, got.GetDisplayTarget())
+	assert.Equal(t, "Dave", got.GetActor())
 }
 
 func TestTranslateEvent_System(t *testing.T) {
+	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "system",
 		Payload: mustMarshal(t, map[string]string{"message": "Server restarting."}),
 	}
 
-	got := translateEvent(ev)
+	got := h.translateEvent(ev)
 	require.NotNil(t, got)
 	assert.Equal(t, "system", got.GetType())
+	assert.Equal(t, "system", got.GetCategory())
+	assert.Equal(t, "notification", got.GetFormat())
 	assert.Equal(t, "Server restarting.", got.GetText())
-	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetChannel())
+	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetDisplayTarget())
 }
 
 func TestTranslateEvent_Move(t *testing.T) {
+	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "move",
 		Payload: mustMarshal(t, map[string]string{"character_name": "Eve", "message": "Eve goes north."}),
 	}
 
-	got := translateEvent(ev)
+	got := h.translateEvent(ev)
 	require.NotNil(t, got)
 	assert.Equal(t, "move", got.GetType())
+	assert.Equal(t, "movement", got.GetCategory())
 	assert.Equal(t, "Eve goes north.", got.GetText())
-	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_BOTH, got.GetChannel())
+	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_BOTH, got.GetDisplayTarget())
+}
+
+func TestTranslateEvent_CommandResponse(t *testing.T) {
+	h := newTestHandler(t)
+	ev := &corev1.EventFrame{
+		Type:    "command_response",
+		Payload: mustMarshal(t, map[string]string{"text": "Goodbye!"}),
+	}
+
+	got := h.translateEvent(ev)
+	require.NotNil(t, got)
+	assert.Equal(t, "command_response", got.GetType())
+	assert.Equal(t, "command", got.GetCategory())
+	assert.Equal(t, "narrative", got.GetFormat())
+	assert.Equal(t, "Goodbye!", got.GetText())
+	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetDisplayTarget())
+}
+
+func TestTranslateEvent_CommandError(t *testing.T) {
+	h := newTestHandler(t)
+	ev := &corev1.EventFrame{
+		Type:    "command_error",
+		Payload: mustMarshal(t, map[string]string{"text": "Unknown command: foo"}),
+	}
+
+	got := h.translateEvent(ev)
+	require.NotNil(t, got)
+	assert.Equal(t, "command_error", got.GetType())
+	assert.Equal(t, "command", got.GetCategory())
+	assert.Equal(t, "error", got.GetFormat())
+	assert.Equal(t, "Unknown command: foo", got.GetText())
+	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetDisplayTarget())
 }
 
 func TestTranslateEvent_LocationState(t *testing.T) {
+	h := newTestHandler(t)
 	payload := core.LocationStatePayload{
 		Location: core.LocationStateInfo{
 			ID:          "loc-123",
@@ -168,10 +199,12 @@ func TestTranslateEvent_LocationState(t *testing.T) {
 		Payload: mustMarshal(t, payload),
 	}
 
-	got := translateEvent(ev)
+	got := h.translateEvent(ev)
 	require.NotNil(t, got)
 	assert.Equal(t, "location_state", got.GetType())
-	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_STATE, got.GetChannel())
+	assert.Equal(t, "state", got.GetCategory())
+	assert.Equal(t, "snapshot", got.GetFormat())
+	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_STATE, got.GetDisplayTarget())
 	require.NotNil(t, got.GetMetadata())
 
 	meta := got.GetMetadata().AsMap()
@@ -190,6 +223,7 @@ func TestTranslateEvent_LocationState(t *testing.T) {
 }
 
 func TestTranslateEvent_ExitUpdate(t *testing.T) {
+	h := newTestHandler(t)
 	payload := core.ExitUpdatePayload{
 		Exits: []core.LocationStateExit{
 			{Direction: "south", Name: "Garden", Locked: false},
@@ -201,10 +235,12 @@ func TestTranslateEvent_ExitUpdate(t *testing.T) {
 		Payload: mustMarshal(t, payload),
 	}
 
-	got := translateEvent(ev)
+	got := h.translateEvent(ev)
 	require.NotNil(t, got)
 	assert.Equal(t, "exit_update", got.GetType())
-	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_STATE, got.GetChannel())
+	assert.Equal(t, "state", got.GetCategory())
+	assert.Equal(t, "delta", got.GetFormat())
+	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_STATE, got.GetDisplayTarget())
 	require.NotNil(t, got.GetMetadata())
 
 	meta := got.GetMetadata().AsMap()
@@ -213,53 +249,32 @@ func TestTranslateEvent_ExitUpdate(t *testing.T) {
 	assert.Len(t, exits, 1)
 }
 
-func TestTranslateEvent_CommandResponse(t *testing.T) {
-	ev := &corev1.EventFrame{
-		Type:    "command_response",
-		Payload: mustMarshal(t, map[string]interface{}{"text": "Goodbye!", "is_error": false}),
-	}
-
-	got := translateEvent(ev)
-	require.NotNil(t, got)
-	assert.Equal(t, "command_response", got.GetType())
-	assert.Equal(t, "Goodbye!", got.GetText())
-	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetChannel())
-}
-
-func TestTranslateEvent_CommandResponseError(t *testing.T) {
-	ev := &corev1.EventFrame{
-		Type:    "command_response",
-		Payload: mustMarshal(t, map[string]interface{}{"text": "Unknown command: foo", "is_error": true}),
-	}
-
-	got := translateEvent(ev)
-	require.NotNil(t, got)
-	assert.Equal(t, "command_error", got.GetType())
-	assert.Equal(t, "Unknown command: foo", got.GetText())
-	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetChannel())
-}
-
 func TestTranslateEvent_OOC(t *testing.T) {
+	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "ooc",
 		Payload: mustMarshal(t, core.OOCPayload{CharacterName: "Alice", Message: "brb", Style: "say"}),
 	}
 
-	got := translateEvent(ev)
+	got := h.translateEvent(ev)
 	require.NotNil(t, got)
 	assert.Equal(t, "ooc", got.GetType())
-	assert.Equal(t, "Alice", got.GetCharacterName())
+	assert.Equal(t, "communication", got.GetCategory())
+	assert.Equal(t, "action", got.GetFormat())
+	assert.Equal(t, "Alice", got.GetActor())
 	assert.Equal(t, "brb", got.GetText())
-	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetChannel())
+	require.NotNil(t, got.GetMetadata())
+	assert.Equal(t, "say", got.GetMetadata().AsMap()["style"])
 }
 
 func TestTranslateEvent_OOC_PoseStyle(t *testing.T) {
+	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "ooc",
 		Payload: mustMarshal(t, core.OOCPayload{CharacterName: "Bob", Message: "waves.", Style: "pose"}),
 	}
 
-	got := translateEvent(ev)
+	got := h.translateEvent(ev)
 	require.NotNil(t, got)
 	assert.Equal(t, "ooc", got.GetType())
 	require.NotNil(t, got.GetMetadata())
@@ -267,6 +282,7 @@ func TestTranslateEvent_OOC_PoseStyle(t *testing.T) {
 }
 
 func TestTranslateEvent_Pemit(t *testing.T) {
+	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type: "pemit",
 		Payload: mustMarshal(t, core.PemitPayload{
@@ -275,40 +291,83 @@ func TestTranslateEvent_Pemit(t *testing.T) {
 		}),
 	}
 
-	got := translateEvent(ev)
+	got := h.translateEvent(ev)
 	require.NotNil(t, got)
 	assert.Equal(t, "pemit", got.GetType())
+	assert.Equal(t, "command", got.GetCategory())
+	assert.Equal(t, "narrative", got.GetFormat())
 	assert.Equal(t, "Secret message.", got.GetText())
-	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetChannel())
+	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetDisplayTarget())
+}
+
+func TestTranslateEvent_Page(t *testing.T) {
+	h := newTestHandler(t)
+	ev := &corev1.EventFrame{
+		Type: "page",
+		Payload: mustMarshal(t, core.PagePayload{
+			SenderName: "Alice",
+			Message:    "Hey there!",
+		}),
+	}
+
+	got := h.translateEvent(ev)
+	require.NotNil(t, got, "page events should now be translated (previously dropped)")
+	assert.Equal(t, "page", got.GetType())
+	assert.Equal(t, "communication", got.GetCategory())
+	assert.Equal(t, "speech", got.GetFormat())
+	assert.Equal(t, "Alice", got.GetActor())
+	assert.Equal(t, "Hey there!", got.GetText())
+	require.NotNil(t, got.GetMetadata())
+	assert.Equal(t, "pages", got.GetMetadata().AsMap()["label"])
 }
 
 func TestTranslateEvent_Unknown(t *testing.T) {
+	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "teleport",
-		Payload: []byte(`{}`),
+		Payload: mustMarshal(t, map[string]string{"message": "You teleport away."}),
 	}
 
-	got := translateEvent(ev)
-	assert.Nil(t, got)
+	got := h.translateEvent(ev)
+	require.NotNil(t, got, "unknown types should fall back, not return nil")
+	assert.Equal(t, "teleport", got.GetType())
+	assert.Equal(t, "system", got.GetCategory())
+	assert.Equal(t, "narrative", got.GetFormat())
+	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetDisplayTarget())
+	assert.Equal(t, "You teleport away.", got.GetText())
 }
 
 func TestTranslateEvent_CorruptPayload(t *testing.T) {
+	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "say",
 		Payload: []byte(`not-valid-json`),
 	}
 
-	got := translateEvent(ev)
+	got := h.translateEvent(ev)
 	assert.Nil(t, got)
 }
 
-func TestTranslateEvent_CommandResponse_CorruptPayload(t *testing.T) {
+func TestTranslateEvent_NilRegistry(t *testing.T) {
+	h := &Handler{}
 	ev := &corev1.EventFrame{
-		Type:    "command_response",
+		Type:    "say",
+		Payload: mustMarshal(t, map[string]string{"character_name": "Alice", "message": "Hello!"}),
+	}
+
+	got := h.translateEvent(ev)
+	require.NotNil(t, got, "should fall back when registry is nil")
+	assert.Equal(t, "system", got.GetCategory())
+	assert.Equal(t, "narrative", got.GetFormat())
+}
+
+func TestTranslateEvent_StateCorruptPayload(t *testing.T) {
+	h := newTestHandler(t)
+	ev := &corev1.EventFrame{
+		Type:    "location_state",
 		Payload: []byte(`not-valid-json`),
 	}
 
-	// Must not panic; corrupt payload is silently dropped (returns nil).
-	got := translateEvent(ev)
+	got := h.translateEvent(ev)
 	assert.Nil(t, got)
 }

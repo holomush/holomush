@@ -11,7 +11,8 @@ package pluginsdk
 // EventType identifies the kind of event.
 type EventType string
 
-// Event types that plugins can receive and emit.
+// These constants are provided for convenience. Plugins may emit any event
+// type registered in the VerbRegistry.
 const (
 	EventTypeSay    EventType = "say"
 	EventTypePose   EventType = "pose"

@@ -9,257 +9,155 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/holomush/holomush/internal/core"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
 
-// sayPayload is the JSON payload for say events.
-type sayPayload struct {
+// genericPayload captures the common fields from any event payload.
+type genericPayload struct {
 	CharacterName string `json:"character_name"`
+	SenderName    string `json:"sender_name"`
+	TargetName    string `json:"target_name"`
 	Message       string `json:"message"`
-}
-
-// oocPayload is the JSON payload for OOC events.
-type oocPayload struct {
-	CharacterName string `json:"character_name"`
-	Message       string `json:"message"`
-	Style         string `json:"style"` // "say", "pose", "semipose"
-}
-
-// pemitPayload is the JSON payload for pemit events.
-type pemitPayload struct {
-	SenderName string `json:"sender_name"`
-	Message    string `json:"message"`
-}
-
-// posePayload is the JSON payload for pose events.
-type posePayload struct {
-	CharacterName string `json:"character_name"`
+	Text          string `json:"text"`
 	Action        string `json:"action"`
+	Notice        string `json:"notice"`
 	NoSpace       bool   `json:"no_space,omitempty"`
-}
-
-// arriveLeavePayload is the JSON payload for arrive and leave events.
-type arriveLeavePayload struct {
-	CharacterName string `json:"character_name"`
-}
-
-// systemPayload is the JSON payload for system events.
-type systemPayload struct {
-	Message string `json:"message"`
-}
-
-// movePayload is the JSON payload for move events.
-type movePayload struct {
-	CharacterName string `json:"character_name"`
-	Message       string `json:"message"`
-}
-
-// channelForType returns the EventChannel for the given event type string.
-func channelForType(eventType string) webv1.EventChannel {
-	switch eventType {
-	case "say", "pose", "system", "command_response", "ooc", "pemit":
-		return webv1.EventChannel_EVENT_CHANNEL_TERMINAL
-	case "location_state", "exit_update":
-		return webv1.EventChannel_EVENT_CHANNEL_STATE
-	case "arrive", "leave", "move":
-		return webv1.EventChannel_EVENT_CHANNEL_BOTH
-	default:
-		return webv1.EventChannel_EVENT_CHANNEL_TERMINAL
-	}
-}
-
-// payloadToMetadata unmarshals a JSON payload into a structpb.Struct for use
-// as GameEvent metadata. Returns nil and logs on error.
-func payloadToMetadata(payload []byte) *structpb.Struct {
-	var m map[string]interface{}
-	if err := json.Unmarshal(payload, &m); err != nil {
-		slog.Error("web: failed to unmarshal payload to metadata", "error", err)
-		return nil
-	}
-	s, err := structpb.NewStruct(m)
-	if err != nil {
-		slog.Error("web: failed to create structpb from payload", "error", err)
-		return nil
-	}
-	return s
+	Style         string `json:"style,omitempty"`
+	Channel       string `json:"channel,omitempty"`
+	IsPose        bool   `json:"is_pose,omitempty"`
 }
 
 // translateEvent converts an EventFrame proto into a GameEvent proto suitable
-// for the web client. Unknown event types are silently dropped (returns nil).
-// Corrupt payloads are logged and also return nil.
-func translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
+// for the web client. Uses the VerbRegistry to populate category, format,
+// display_target, and label. Unknown types fall back to system/narrative/TERMINAL.
+// Corrupt payloads are logged and return nil.
+func (h *Handler) translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 	var ts int64
 	if ev.GetTimestamp() != nil {
 		ts = ev.GetTimestamp().GetSeconds()
 	}
 
-	ch := channelForType(ev.GetType())
+	eventType := ev.GetType()
 
-	switch ev.GetType() {
-	case "say":
-		var p sayPayload
-		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
-			slog.Error("web: failed to unmarshal say payload", "error", err)
-			return nil
-		}
-		return &webv1.GameEvent{
-			Type:          "say",
-			CharacterName: p.CharacterName,
-			Text:          p.Message,
-			Timestamp:     ts,
-			Channel:       ch,
-		}
+	// Look up type in registry.
+	var category, format, label string
+	var displayTarget webv1.EventChannel
 
-	case "pose":
-		var p posePayload
-		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
-			slog.Error("web: failed to unmarshal pose payload", "error", err)
-			return nil
+	if h.verbRegistry != nil {
+		if reg, found := h.verbRegistry.Lookup(eventType); found {
+			category = reg.Category
+			format = reg.Format
+			label = reg.Label
+			displayTarget = reg.DisplayTarget
 		}
-		ge := &webv1.GameEvent{
-			Type:          "pose",
-			CharacterName: p.CharacterName,
-			Text:          p.Action,
-			Timestamp:     ts,
-			Channel:       ch,
-		}
-		if p.NoSpace {
-			meta, metaErr := structpb.NewStruct(map[string]any{"no_space": true})
-			if metaErr != nil {
-				slog.Error("web: failed to create pose no_space metadata", "error", metaErr)
-			} else {
-				ge.Metadata = meta
-			}
-		}
-		return ge
+	}
 
-	case "arrive":
-		var p arriveLeavePayload
-		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
-			slog.Error("web: failed to unmarshal arrive payload", "error", err)
-			return nil
-		}
-		return &webv1.GameEvent{
-			Type:          "arrive",
-			CharacterName: p.CharacterName,
-			Text:          "has arrived.",
-			Timestamp:     ts,
-			Channel:       ch,
-		}
+	// Fallback for unknown types.
+	if category == "" {
+		category = "system"
+		format = "narrative"
+		displayTarget = webv1.EventChannel_EVENT_CHANNEL_TERMINAL
+	}
 
-	case "leave":
-		var p arriveLeavePayload
-		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
-			slog.Error("web: failed to unmarshal leave payload", "error", err)
-			return nil
-		}
-		return &webv1.GameEvent{
-			Type:          "leave",
-			CharacterName: p.CharacterName,
-			Text:          "has left.",
-			Timestamp:     ts,
-			Channel:       ch,
-		}
+	// State events (location_state, exit_update): payload is the metadata.
+	if category == "state" {
+		return h.translateStateEvent(ev, eventType, category, format, displayTarget, ts)
+	}
 
-	case "system":
-		var p systemPayload
-		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
-			slog.Error("web: failed to unmarshal system payload", "error", err)
-			return nil
-		}
-		return &webv1.GameEvent{
-			Type:      "system",
-			Text:      p.Message,
-			Timestamp: ts,
-			Channel:   ch,
-		}
-
-	case "move":
-		var p movePayload
-		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
-			slog.Error("web: failed to unmarshal move payload", "error", err)
-			return nil
-		}
-		return &webv1.GameEvent{
-			Type:          "move",
-			CharacterName: p.CharacterName,
-			Text:          p.Message,
-			Timestamp:     ts,
-			Channel:       ch,
-		}
-
-	case "command_response":
-		var p core.CommandResponsePayload
-		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
-			slog.Error("web: failed to unmarshal command_response payload", "error", err)
-			return nil
-		}
-		eventType := "command_response"
-		if p.IsError {
-			eventType = "command_error"
-		}
-		return &webv1.GameEvent{
-			Type:      eventType,
-			Text:      p.Text,
-			Timestamp: ts,
-			Channel:   ch,
-		}
-
-	case "ooc":
-		var p oocPayload
-		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
-			slog.Error("web: failed to unmarshal ooc payload", "error", err)
-			return nil
-		}
-		ge := &webv1.GameEvent{
-			Type:          "ooc",
-			CharacterName: p.CharacterName,
-			Text:          p.Message,
-			Timestamp:     ts,
-			Channel:       ch,
-		}
-		if p.Style != "" && p.Style != "say" {
-			meta, metaErr := structpb.NewStruct(map[string]any{"style": p.Style})
-			if metaErr != nil {
-				slog.Error("web: failed to create ooc style metadata", "error", metaErr)
-			} else {
-				ge.Metadata = meta
-			}
-		}
-		return ge
-
-	case "pemit":
-		var p pemitPayload
-		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
-			slog.Error("web: failed to unmarshal pemit payload", "error", err)
-			return nil
-		}
-		return &webv1.GameEvent{
-			Type:      "pemit",
-			Text:      p.Message,
-			Timestamp: ts,
-			Channel:   ch,
-		}
-
-	case "location_state", "exit_update":
-		meta := payloadToMetadata(ev.GetPayload())
-		if meta == nil {
-			slog.Warn("translateEvent: failed to parse metadata for state event",
-				"type", ev.GetType(),
-				"event_id", ev.GetId(),
-			)
-			return nil
-		}
-		return &webv1.GameEvent{
-			Type:      ev.GetType(),
-			Timestamp: ts,
-			Channel:   ch,
-			Metadata:  meta,
-		}
-
-	default:
+	// All other events: unmarshal into generic payload.
+	var p genericPayload
+	if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
+		slog.Error("web: failed to unmarshal event payload",
+			"type", eventType, "error", err)
 		return nil
+	}
+
+	// Extract actor: prefer character_name, then sender_name.
+	actor := p.CharacterName
+	if actor == "" {
+		actor = p.SenderName
+	}
+
+	// Extract text: prefer message, then text, then action, then notice.
+	text := p.Message
+	if text == "" {
+		text = p.Text
+	}
+	if text == "" {
+		text = p.Action
+	}
+	if text == "" {
+		text = p.Notice
+	}
+
+	// Build metadata with type-specific fields.
+	meta := make(map[string]any)
+	if label != "" {
+		meta["label"] = label
+	}
+	if p.NoSpace {
+		meta["no_space"] = true
+	}
+	if p.Style != "" {
+		meta["style"] = p.Style
+	}
+	if p.Channel != "" {
+		meta["channel"] = p.Channel
+	}
+	if p.TargetName != "" {
+		meta["target_name"] = p.TargetName
+	}
+
+	var metadata *structpb.Struct
+	if len(meta) > 0 {
+		s, err := structpb.NewStruct(meta)
+		if err != nil {
+			slog.Error("web: failed to create metadata struct",
+				"type", eventType, "error", err)
+		} else {
+			metadata = s
+		}
+	}
+
+	return &webv1.GameEvent{
+		Type:          eventType,
+		Category:      category,
+		Format:        format,
+		DisplayTarget: displayTarget,
+		Timestamp:     ts,
+		Actor:         actor,
+		Text:          text,
+		Metadata:      metadata,
+	}
+}
+
+// translateStateEvent handles state-category events where the entire payload
+// becomes the metadata struct.
+func (h *Handler) translateStateEvent(
+	ev *corev1.EventFrame,
+	eventType, category, format string,
+	displayTarget webv1.EventChannel,
+	ts int64,
+) *webv1.GameEvent {
+	var m map[string]interface{}
+	if err := json.Unmarshal(ev.GetPayload(), &m); err != nil {
+		slog.Error("web: failed to unmarshal state event payload",
+			"type", eventType, "error", err)
+		return nil
+	}
+	s, err := structpb.NewStruct(m)
+	if err != nil {
+		slog.Error("web: failed to create structpb from state payload",
+			"type", eventType, "error", err)
+		return nil
+	}
+	return &webv1.GameEvent{
+		Type:          eventType,
+		Category:      category,
+		Format:        format,
+		DisplayTarget: displayTarget,
+		Timestamp:     ts,
+		Metadata:      s,
 	}
 }

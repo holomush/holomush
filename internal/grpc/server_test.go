@@ -607,12 +607,11 @@ func TestCoreServer_HandleCommand_UnknownCommand(t *testing.T) {
 	charEvents, err := store.Replay(ctx, "character:"+charID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 	require.NotEmpty(t, charEvents, "expected command_response event")
-	assert.Equal(t, core.EventTypeCommandResponse, charEvents[0].Type)
+	assert.Equal(t, core.EventTypeCommandError, charEvents[0].Type)
 
 	var crp core.CommandResponsePayload
-	require.NoError(t, json.Unmarshal(charEvents[0].Payload, &crp), "command_response payload should be valid JSON")
-	assert.True(t, crp.IsError, "unknown command response should be an error")
-	assert.NotEmpty(t, crp.Text, "command_response text should not be empty")
+	require.NoError(t, json.Unmarshal(charEvents[0].Payload, &crp), "command_error payload should be valid JSON")
+	assert.NotEmpty(t, crp.Text, "command_error text should not be empty")
 }
 
 func TestCoreServer_HandleCommand_SayFails(t *testing.T) {
@@ -744,7 +743,6 @@ func TestCoreServer_HandleCommand_Quit(t *testing.T) {
 
 	var crp core.CommandResponsePayload
 	require.NoError(t, json.Unmarshal(charEvents[0].Payload, &crp), "quit command_response payload should be valid JSON")
-	assert.False(t, crp.IsError, "quit response should not be an error")
 	assert.Contains(t, crp.Text, "Goodbye", "quit response should contain Goodbye")
 
 	// Disconnect hooks should fire

@@ -121,6 +121,7 @@ type CoreServer struct {
 
 	// newSessionID is used for generating session IDs. Can be overridden for testing.
 	newSessionID func() ulid.ULID
+	verbRegistry *core.VerbRegistry
 }
 
 // CoreServerOption configures a CoreServer.
@@ -151,6 +152,13 @@ func WithSessionDefaults(defaults SessionDefaults) CoreServerOption {
 func WithEventStore(store core.EventStore) CoreServerOption {
 	return func(s *CoreServer) {
 		s.eventStore = store
+	}
+}
+
+// WithVerbRegistry sets the verb registry for event type validation.
+func WithVerbRegistry(r *core.VerbRegistry) CoreServerOption {
+	return func(s *CoreServer) {
+		s.verbRegistry = r
 	}
 }
 
@@ -482,12 +490,11 @@ func isUserFacingError(err error) bool {
 	return msg != "Something went wrong. Try again."
 }
 
-// emitCommandResponse emits a command_response event to the character's
-// personal stream. Returns an error if the event could not be emitted.
+// emitCommandResponse emits a command_response or command_error event to the
+// character's personal stream. Returns an error if the event could not be emitted.
 func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.CharacterRef, text string, isError bool) error {
 	payload, err := json.Marshal(core.CommandResponsePayload{
-		Text:    text,
-		IsError: isError,
+		Text: text,
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to marshal command_response payload",
@@ -497,10 +504,14 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 		return oops.Code("COMMAND_RESPONSE_MARSHAL_FAILED").Wrap(err)
 	}
 
+	eventType := core.EventTypeCommandResponse
+	if isError {
+		eventType = core.EventTypeCommandError
+	}
 	event := core.Event{
 		ID:        core.NewULID(),
 		Stream:    world.CharacterStream(char.ID),
-		Type:      core.EventTypeCommandResponse,
+		Type:      eventType,
 		Timestamp: time.Now(),
 		Actor:     core.Actor{Kind: core.ActorSystem, ID: "system"},
 		Payload:   payload,
