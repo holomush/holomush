@@ -154,6 +154,7 @@ var entityAccessEvalFailedCodes = map[string]struct{}{
 	"OBJECT_ACCESS_EVALUATION_FAILED":    {},
 	"CHARACTER_ACCESS_EVALUATION_FAILED": {},
 	"SCENE_ACCESS_EVALUATION_FAILED":     {},
+	"PROPERTY_ACCESS_EVALUATION_FAILED":  {},
 }
 
 // entityAccessDeniedCodes is the explicit set of entity-scoped access denied codes.
@@ -163,6 +164,7 @@ var entityAccessDeniedCodes = map[string]struct{}{
 	"OBJECT_ACCESS_DENIED":    {},
 	"CHARACTER_ACCESS_DENIED": {},
 	"SCENE_ACCESS_DENIED":     {},
+	"PROPERTY_ACCESS_DENIED":  {},
 }
 
 // PlayerMessage extracts a player-facing message from an error.

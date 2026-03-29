@@ -98,7 +98,84 @@ current location.
 		Source: "core",
 	})
 
+	mustRegister(command.CommandEntryConfig{
+		Name:    "ooc",
+		Handler: OOCHandler,
+		Help:    "Say or pose something out of character",
+		Usage:   "ooc <message>",
+		HelpText: `## OOC
+
+Speak out of character to everyone in your current location.
+
+### Usage
+
+- ` + "`ooc <message>`" + ` - Say something OOC
+- ` + "`ooc :<action>`" + ` - Pose something OOC
+- ` + "`ooc ;<action>`" + ` - Semipose something OOC
+
+### Examples
+
+- ` + "`ooc brb`" + ` → [OOC] Sean says, "brb"
+- ` + "`ooc :laughs`" + ` → [OOC] Sean laughs
+- ` + "`ooc ;'s phone rings`" + ` → [OOC] Sean's phone rings`,
+		Source: "core",
+	})
+
+	mustRegister(command.CommandEntryConfig{
+		Name:         "pemit",
+		Handler:      PemitHandler,
+		Capabilities: []string{"comms.pemit"},
+		Help:         "Send a private narration to a specific character",
+		Usage:        "pemit <character>=<message>",
+		HelpText: `## Pemit
+
+Send a private narration to a specific character. Used by GMs and storytellers
+to describe what only one character sees or experiences.
+
+### Usage
+
+- ` + "`pemit <character>=<message>`" + ` - Send private narration to character
+
+### Examples
+
+- ` + "`pemit Sean=You feel a chill run down your spine.`" + `
+- ` + "`pemit Alex=A figure in the shadows beckons to you.`" + `
+
+### Notes
+
+- Does not require sender and target to be in the same location
+- Target sees the raw message with no prefix
+- Sender receives a confirmation message
+
+### Permissions
+
+Requires the ` + "`comms.pemit`" + ` capability.`,
+		Source: "core",
+	})
+
 	// Navigation commands
+	mustRegister(command.CommandEntryConfig{
+		Name:    "home",
+		Handler: HomeHandler,
+		Help:    "Return to your home location",
+		Usage:   "home",
+		HelpText: `## Home
+
+Return to your home location. If no home is set, returns to the default
+starting location.
+
+### Usage
+
+- ` + "`home`" + ` - Teleport to your home location
+
+### Notes
+
+- If you have set a home location (via ` + "`set home`" + `), you will be sent there.
+- Otherwise, you are sent to the default starting location.
+- If you are already home, nothing happens.`,
+		Source: "core",
+	})
+
 	mustRegister(command.CommandEntryConfig{
 		Name:    "look",
 		Handler: LookHandler,
@@ -173,6 +250,24 @@ Shows character names and their idle times (time since last activity).
 ### Usage
 
 - ` + "`who`" + ` - List all online players`,
+		Source: "core",
+	})
+
+	mustRegister(command.CommandEntryConfig{
+		Name:    "where",
+		Handler: WhereHandler,
+		Help:    "See where connected characters are",
+		Usage:   "where",
+		HelpText: `## Where
+
+Display a list of all connected characters and their current locations.
+
+Useful for social discovery and finding roleplay partners. Characters or
+locations you cannot see are filtered by access control.
+
+### Usage
+
+- ` + "`where`" + ` - List all online characters and their locations`,
 		Source: "core",
 	})
 
@@ -505,6 +600,66 @@ Display all system-wide command aliases.
 ### Permissions
 
 Requires the ` + "`admin.alias`" + ` capability.`,
+		Source: "core",
+	})
+
+	// Inspection commands
+	mustRegister(command.CommandEntryConfig{
+		Name:    "examine",
+		Handler: ExamineHandler,
+		Help:    "Inspect an object, location, or character",
+		Usage:   "examine [target]",
+		HelpText: `## Examine
+
+Inspect an object, location, or character in detail. Shows more information
+than look, filtered by your access level.
+
+### Usage
+
+- ` + "`examine`" + ` - Examine current location
+- ` + "`examine here`" + ` - Examine current location (explicit)
+- ` + "`examine <target>`" + ` - Examine a named target
+
+### Access Tiers
+
+- **Player:** Name, description, public properties
+- **Owner:** Above plus private properties, exit destinations
+- **Builder:** Above plus owner, type, creation date, restricted properties
+- **Admin:** Above plus ULID, all property visibility levels
+
+### Examples
+
+- ` + "`examine`" + ` - Inspect the current location
+- ` + "`examine sword`" + ` - Inspect an object named "sword"
+- ` + "`examine Gandalf`" + ` - Inspect a character`,
+		Source: "core",
+	})
+
+	// Teleport command
+	mustRegister(command.CommandEntryConfig{
+		Name:    "teleport",
+		Handler: TeleportHandler,
+		Help:    "Teleport to a location or teleport another character",
+		Usage:   "teleport <location> | teleport <character>=<location>",
+		HelpText: `## Teleport
+
+Instantly move to a named location, or move another character.
+
+### Usage
+
+- ` + "`teleport <location>`" + ` - Teleport yourself to the named location
+- ` + "`teleport <character>=<location>`" + ` - Teleport another character (admin only)
+
+### Examples
+
+- ` + "`teleport The Library`" + ` - Move to The Library
+- ` + "`teleport Sean=The Library`" + ` - Move Sean to The Library
+
+### Scope
+
+- **Default role:** Can only teleport to home location
+- **Builder role:** Can teleport self to any location
+- **Admin role:** Can teleport anyone to any location`,
 		Source: "core",
 	})
 }

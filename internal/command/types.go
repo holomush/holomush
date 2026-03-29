@@ -57,6 +57,19 @@ type WorldService interface {
 
 	// UpdateCharacterDescription sets a character's description after checking authorization.
 	UpdateCharacterDescription(ctx context.Context, subjectID string, characterID ulid.ULID, description string) error
+
+	// FindLocationByName searches for a location by name after checking read authorization.
+	FindLocationByName(ctx context.Context, subjectID, name string) (*world.Location, error)
+
+	// GetCharactersByLocation returns characters at a location after checking authorization.
+	GetCharactersByLocation(ctx context.Context, subjectID string, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error)
+
+	// GetObjectsByLocation returns objects at a location after checking authorization.
+	GetObjectsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Object, error)
+
+	// ListPropertiesByParent returns all properties for the given parent entity
+	// after checking read authorization on the parent.
+	ListPropertiesByParent(ctx context.Context, subjectID string, parentType string, parentID ulid.ULID) ([]*world.EntityProperty, error)
 }
 
 // AliasWriter defines write-only persistence operations for alias management.
@@ -317,14 +330,15 @@ const (
 
 // ServicesConfig holds the dependencies for constructing a Services instance.
 type ServicesConfig struct {
-	World            WorldService             // world model queries and mutations
-	Session          session.Access           // session management
-	Engine           types.AccessPolicyEngine // ABAC policy engine for authorization
-	Events           core.EventStore          // event persistence
-	AliasCache       *AliasCache              // alias management (optional)
-	AliasRepo        AliasWriter              // alias persistence (optional, for alias handlers)
-	Registry         *Registry                // command registry (optional)
-	PropertyRegistry *property.Registry       // property registry (optional)
+	World              WorldService             // world model queries and mutations
+	Session            session.Access           // session management
+	Engine             types.AccessPolicyEngine // ABAC policy engine for authorization
+	Events             core.EventStore          // event persistence
+	AliasCache         *AliasCache              // alias management (optional)
+	AliasRepo          AliasWriter              // alias persistence (optional, for alias handlers)
+	Registry           *Registry                // command registry (optional)
+	PropertyRegistry   *property.Registry       // property registry (optional)
+	StartingLocationID ulid.ULID                // default starting location for home fallback (optional)
 }
 
 // Services provides access to core services for command handlers.
@@ -336,14 +350,15 @@ type ServicesConfig struct {
 // the command handler's execution context. The Services struct is shared
 // across all command executions.
 type Services struct {
-	world            WorldService             // world model queries and mutations
-	session          session.Access           // session management
-	engine           types.AccessPolicyEngine // ABAC policy engine for authorization
-	events           core.EventStore          // event persistence
-	aliasCache       *AliasCache              // alias management (optional, for alias commands)
-	aliasRepo        AliasWriter              // alias persistence (optional, for alias handlers)
-	registry         *Registry                // command registry (optional, for alias shadow detection)
-	propertyRegistry *property.Registry       // property registry (optional, for property handlers)
+	world              WorldService             // world model queries and mutations
+	session            session.Access           // session management
+	engine             types.AccessPolicyEngine // ABAC policy engine for authorization
+	events             core.EventStore          // event persistence
+	aliasCache         *AliasCache              // alias management (optional, for alias commands)
+	aliasRepo          AliasWriter              // alias persistence (optional, for alias handlers)
+	registry           *Registry                // command registry (optional, for alias shadow detection)
+	propertyRegistry   *property.Registry       // property registry (optional, for property handlers)
+	startingLocationID ulid.ULID                // default starting location for home fallback
 }
 
 // World returns the world service for model queries and mutations.
@@ -369,6 +384,10 @@ func (s *Services) AliasRepo() AliasWriter { return s.aliasRepo }
 
 // PropertyRegistry returns the property registry (may be nil).
 func (s *Services) PropertyRegistry() *property.Registry { return s.propertyRegistry }
+
+// StartingLocationID returns the default starting location ID used as a fallback
+// when a character has no home property set. Returns zero value if not configured.
+func (s *Services) StartingLocationID() ulid.ULID { return s.startingLocationID }
 
 // NewServices creates a validated Services instance.
 // Returns an error if any required service is nil.
@@ -398,14 +417,15 @@ func NewServices(cfg ServicesConfig) (*Services, error) {
 	}
 
 	return &Services{
-		world:            cfg.World,
-		session:          cfg.Session,
-		engine:           cfg.Engine,
-		events:           cfg.Events,
-		aliasCache:       cfg.AliasCache,
-		aliasRepo:        cfg.AliasRepo,
-		registry:         cfg.Registry,
-		propertyRegistry: cfg.PropertyRegistry,
+		world:              cfg.World,
+		session:            cfg.Session,
+		engine:             cfg.Engine,
+		events:             cfg.Events,
+		aliasCache:         cfg.AliasCache,
+		aliasRepo:          cfg.AliasRepo,
+		registry:           cfg.Registry,
+		propertyRegistry:   cfg.PropertyRegistry,
+		startingLocationID: cfg.StartingLocationID,
 	}, nil
 }
 
@@ -450,14 +470,15 @@ func NewTestServices(cfg ServicesConfig) *Services {
 		cfg.PropertyRegistry = property.SharedRegistry()
 	}
 	return &Services{
-		world:            cfg.World,
-		session:          cfg.Session,
-		engine:           cfg.Engine,
-		events:           cfg.Events,
-		aliasCache:       cfg.AliasCache,
-		aliasRepo:        cfg.AliasRepo,
-		registry:         cfg.Registry,
-		propertyRegistry: cfg.PropertyRegistry,
+		world:              cfg.World,
+		session:            cfg.Session,
+		engine:             cfg.Engine,
+		events:             cfg.Events,
+		aliasCache:         cfg.AliasCache,
+		aliasRepo:          cfg.AliasRepo,
+		registry:           cfg.Registry,
+		propertyRegistry:   cfg.PropertyRegistry,
+		startingLocationID: cfg.StartingLocationID,
 	}
 }
 

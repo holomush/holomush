@@ -88,6 +88,7 @@ const (
 	prefixObject    entityPrefix = "OBJECT"
 	prefixCharacter entityPrefix = "CHARACTER"
 	prefixScene     entityPrefix = "SCENE"
+	prefixProperty  entityPrefix = "PROPERTY"
 )
 
 // KnownEntityPrefixes returns all entity prefix strings.
@@ -99,6 +100,7 @@ func KnownEntityPrefixes() []string {
 		string(prefixObject),
 		string(prefixCharacter),
 		string(prefixScene),
+		string(prefixProperty),
 	}
 }
 
@@ -1009,4 +1011,37 @@ func (s *Service) FindLocationByName(ctx context.Context, subjectID, name string
 		return nil, oops.Code("LOCATION_FIND_FAILED").With("name", name).Wrap(err)
 	}
 	return loc, nil
+}
+
+// GetObjectsByLocation returns objects at a location after checking read authorization.
+func (s *Service) GetObjectsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*Object, error) {
+	if s.objectRepo == nil {
+		return nil, oops.Code("OBJECT_QUERY_FAILED").Errorf("object repository not configured")
+	}
+	resource := access.LocationResource(locationID.String())
+	if err := s.checkAccess(ctx, subjectID, "list_objects", resource, prefixLocation); err != nil {
+		return nil, err
+	}
+	objs, err := s.objectRepo.ListAtLocation(ctx, locationID)
+	if err != nil {
+		return nil, oops.Code("OBJECT_QUERY_FAILED").Wrapf(err, "get objects by location %s", locationID)
+	}
+	return objs, nil
+}
+
+// ListPropertiesByParent returns all properties for the given parent entity
+// after checking read authorization on the parent.
+func (s *Service) ListPropertiesByParent(ctx context.Context, subjectID, parentType string, parentID ulid.ULID) ([]*EntityProperty, error) {
+	if s.propertyRepo == nil {
+		return nil, oops.Code("PROPERTY_QUERY_FAILED").Errorf("property repository not configured")
+	}
+	resource := access.PropertyResource(parentType + ":" + parentID.String())
+	if err := s.checkAccess(ctx, subjectID, "read", resource, prefixProperty); err != nil {
+		return nil, err
+	}
+	props, err := s.propertyRepo.ListByParent(ctx, parentType, parentID)
+	if err != nil {
+		return nil, oops.Code("PROPERTY_QUERY_FAILED").Wrapf(err, "list properties for %s %s", parentType, parentID)
+	}
+	return props, nil
 }

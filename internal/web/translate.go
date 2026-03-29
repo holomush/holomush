@@ -20,6 +20,19 @@ type sayPayload struct {
 	Message       string `json:"message"`
 }
 
+// oocPayload is the JSON payload for OOC events.
+type oocPayload struct {
+	CharacterName string `json:"character_name"`
+	Message       string `json:"message"`
+	Style         string `json:"style"` // "say", "pose", "semipose"
+}
+
+// pemitPayload is the JSON payload for pemit events.
+type pemitPayload struct {
+	SenderName string `json:"sender_name"`
+	Message    string `json:"message"`
+}
+
 // posePayload is the JSON payload for pose events.
 type posePayload struct {
 	CharacterName string `json:"character_name"`
@@ -46,7 +59,7 @@ type movePayload struct {
 // channelForType returns the EventChannel for the given event type string.
 func channelForType(eventType string) webv1.EventChannel {
 	switch eventType {
-	case "say", "pose", "system", "command_response":
+	case "say", "pose", "system", "command_response", "ooc", "pemit":
 		return webv1.EventChannel_EVENT_CHANNEL_TERMINAL
 	case "location_state", "exit_update":
 		return webv1.EventChannel_EVENT_CHANNEL_STATE
@@ -190,6 +203,42 @@ func translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 		return &webv1.GameEvent{
 			Type:      eventType,
 			Text:      p.Text,
+			Timestamp: ts,
+			Channel:   ch,
+		}
+
+	case "ooc":
+		var p oocPayload
+		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
+			slog.Error("web: failed to unmarshal ooc payload", "error", err)
+			return nil
+		}
+		ge := &webv1.GameEvent{
+			Type:          "ooc",
+			CharacterName: p.CharacterName,
+			Text:          p.Message,
+			Timestamp:     ts,
+			Channel:       ch,
+		}
+		if p.Style != "" && p.Style != "say" {
+			meta, metaErr := structpb.NewStruct(map[string]any{"style": p.Style})
+			if metaErr != nil {
+				slog.Error("web: failed to create ooc style metadata", "error", metaErr)
+			} else {
+				ge.Metadata = meta
+			}
+		}
+		return ge
+
+	case "pemit":
+		var p pemitPayload
+		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
+			slog.Error("web: failed to unmarshal pemit payload", "error", err)
+			return nil
+		}
+		return &webv1.GameEvent{
+			Type:      "pemit",
+			Text:      p.Message,
 			Timestamp: ts,
 			Channel:   ch,
 		}

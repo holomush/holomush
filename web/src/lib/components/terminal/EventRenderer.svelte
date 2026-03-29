@@ -33,6 +33,16 @@
     <span class="command-output">{event.text}</span>
   {:else if event.type === 'command_error'}
     <span class="command-error">{event.text}</span>
+  {:else if event.type === 'ooc'}
+    {#if event.metadata?.style === 'pose'}
+      <span class="ooc-prefix">[OOC]</span> <span class="ooc-actor">{event.characterName}</span>{' '}<span class="ooc-message">{@html linkUrls(event.text)}</span>
+    {:else if event.metadata?.style === 'semipose'}
+      <span class="ooc-prefix">[OOC]</span> <span class="ooc-actor">{event.characterName}</span><span class="ooc-message">{@html linkUrls(event.text)}</span>
+    {:else}
+      <span class="ooc-prefix">[OOC]</span> <span class="ooc-speaker">{event.characterName}</span> says, <span class="ooc-message">"{@html linkUrls(event.text)}"</span>
+    {/if}
+  {:else if event.type === 'pemit'}
+    <span class="pemit-message">{@html linkUrls(event.text)}</span>
   {:else if hasAnsiCodes(event.text)}
     <AnsiRenderer text={event.text} />
   {:else}
@@ -52,4 +62,9 @@
   .move-text { color: var(--color-system); }
   .command-output { color: var(--color-command-output); }
   .command-error { color: var(--color-command-error); }
+  .ooc-prefix { color: var(--color-ooc); font-weight: bold; }
+  .ooc-speaker { color: var(--color-ooc); }
+  .ooc-actor { color: var(--color-ooc); }
+  .ooc-message { color: var(--color-ooc); opacity: 0.85; }
+  .pemit-message { color: var(--color-pemit); font-style: italic; }
 </style>

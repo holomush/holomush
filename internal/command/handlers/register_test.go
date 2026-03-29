@@ -20,7 +20,7 @@ func TestRegisterAll_RegistersCoreCommands(t *testing.T) {
 	// Verify all core commands are registered
 	expectedCommands := []string{
 		"say", "pose",
-		"look", "move", "quit", "who",
+		"home", "look", "move", "quit", "who",
 		"boot", "shutdown", "wall",
 		"create", "set",
 	}

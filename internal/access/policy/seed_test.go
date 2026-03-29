@@ -13,8 +13,8 @@ import (
 
 func TestSeedPolicies_Count(t *testing.T) {
 	seeds := SeedPolicies()
-	// 22 permit + 1 forbid = 23 total (18 base + 5 gap-fill from T22b)
-	assert.Len(t, seeds, 23, "expected 23 seed policies (22 permit, 1 forbid)")
+	// 24 permit + 1 forbid = 25 total (18 base + 5 gap-fill from T22b + 2 phase-2 commands)
+	assert.Len(t, seeds, 25, "expected 25 seed policies (24 permit, 1 forbid)")
 }
 
 func TestSeedPolicies_AllNamesHaveSeedPrefix(t *testing.T) {
@@ -71,7 +71,7 @@ func TestSeedPolicies_EffectDistribution(t *testing.T) {
 			forbidCount++
 		}
 	}
-	assert.Equal(t, 22, permitCount, "expected 22 permit policies")
+	assert.Equal(t, 24, permitCount, "expected 24 permit policies")
 	assert.Equal(t, 1, forbidCount, "expected 1 forbid policy")
 }
 
@@ -102,6 +102,9 @@ func TestSeedPolicies_ExpectedNames(t *testing.T) {
 		"seed:player-location-list-characters", // G3
 		"seed:player-scene-participant",        // G4
 		"seed:player-scene-read",               // G4
+		// Phase-2 command policies
+		"seed:player-teleport",    // all players can execute home and teleport
+		"seed:pemit-storyteller",  // storyteller/admin can execute pemit
 	}
 
 	seeds := SeedPolicies()
@@ -207,4 +210,48 @@ func TestSeedPolicies_G4_ScenePolicies(t *testing.T) {
 	}
 	assert.True(t, participantFound, "seed:player-scene-participant policy must exist (G4)")
 	assert.True(t, readFound, "seed:player-scene-read policy must exist (G4)")
+}
+
+// Phase-2 command policy tests
+
+func TestSeedPolicies_PlayerTeleport(t *testing.T) {
+	seeds := SeedPolicies()
+	var found bool
+	for _, s := range seeds {
+		if s.Name == "seed:player-teleport" {
+			found = true
+			compiler := NewCompiler(emptySchema())
+			compiled, _, err := compiler.Compile(s.DSLText)
+			require.NoError(t, err)
+			assert.Equal(t, "permit", string(compiled.Effect),
+				"seed:player-teleport must be a permit policy")
+			assert.Contains(t, compiled.Target.ActionList, "execute",
+				"seed:player-teleport must include execute action")
+			rType := "command"
+			assert.Equal(t, &rType, compiled.Target.ResourceType,
+				"seed:player-teleport must target command resources")
+		}
+	}
+	assert.True(t, found, "seed:player-teleport policy must exist")
+}
+
+func TestSeedPolicies_PemitStoryteller(t *testing.T) {
+	seeds := SeedPolicies()
+	var found bool
+	for _, s := range seeds {
+		if s.Name == "seed:pemit-storyteller" {
+			found = true
+			compiler := NewCompiler(emptySchema())
+			compiled, _, err := compiler.Compile(s.DSLText)
+			require.NoError(t, err)
+			assert.Equal(t, "permit", string(compiled.Effect),
+				"seed:pemit-storyteller must be a permit policy")
+			assert.Contains(t, compiled.Target.ActionList, "execute",
+				"seed:pemit-storyteller must include execute action")
+			rType := "command"
+			assert.Equal(t, &rType, compiled.Target.ResourceType,
+				"seed:pemit-storyteller must target command resources")
+		}
+	}
+	assert.True(t, found, "seed:pemit-storyteller policy must exist")
 }

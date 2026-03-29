@@ -32,6 +32,8 @@ const (
 	// Private communication event types
 	EventTypePage    EventType = "page"
 	EventTypeWhisper EventType = "whisper"
+	EventTypeOOC     EventType = "ooc"
+	EventTypePemit   EventType = "pemit"
 
 	// Command response event type
 	EventTypeCommandResponse EventType = "command_response"
@@ -97,6 +99,21 @@ type WhisperNoticePayload struct {
 	SenderName string `json:"sender_name"`
 	TargetName string `json:"target_name"`
 	Notice     string `json:"notice"`
+}
+
+// OOCPayload carries an OOC communication event.
+type OOCPayload struct {
+	CharacterName string `json:"character_name"`
+	Message       string `json:"message"`
+	Style         string `json:"style"` // "say", "pose", "semipose"
+}
+
+// PemitPayload carries a private emit event.
+type PemitPayload struct {
+	SenderID   string `json:"sender_id"`
+	SenderName string `json:"sender_name"`
+	TargetID   string `json:"target_id"`
+	Message    string `json:"message"`
 }
 
 // ActorKind identifies what type of entity caused an event.
