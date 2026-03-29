@@ -245,9 +245,12 @@ func (p *ServiceProxyImpl) GetObjectsByLocation(ctx context.Context, subjectID, 
 		return nil, oops.With("operation", "GetObjectsByLocation").Wrap(err)
 	}
 
-	results := make([]ObjectResult, len(objs))
-	for i, obj := range objs {
-		results[i] = *objectToResult(obj)
+	results := make([]ObjectResult, 0, len(objs))
+	for _, obj := range objs {
+		if obj == nil {
+			continue
+		}
+		results = append(results, *objectToResult(obj))
 	}
 	return results, nil
 }
@@ -257,7 +260,7 @@ func (p *ServiceProxyImpl) GetObjectsByLocation(ctx context.Context, subjectID, 
 //nolint:revive // implements ServiceProxy
 func (p *ServiceProxyImpl) CreateLocation(ctx context.Context, subjectID, name, description, locationType string) (*LocationResult, error) {
 	loc := &world.Location{
-		ID:          ulid.Make(),
+		ID:          core.NewULID(),
 		Name:        name,
 		Description: description,
 		Type:        world.LocationType(locationType),
@@ -282,7 +285,7 @@ func (p *ServiceProxyImpl) CreateExit(ctx context.Context, subjectID, fromID, to
 	}
 
 	exit := &world.Exit{
-		ID:             ulid.Make(),
+		ID:             core.NewULID(),
 		FromLocationID: from,
 		ToLocationID:   to,
 		Name:           name,
@@ -297,7 +300,7 @@ func (p *ServiceProxyImpl) CreateExit(ctx context.Context, subjectID, fromID, to
 //nolint:revive // implements ServiceProxy
 func (p *ServiceProxyImpl) CreateObject(ctx context.Context, subjectID, name, description string) (*ObjectResult, error) {
 	obj := &world.Object{
-		ID:          ulid.Make(),
+		ID:          core.NewULID(),
 		Name:        name,
 		Description: description,
 	}
@@ -498,9 +501,12 @@ func (p *ServiceProxyImpl) ListActiveSessions(ctx context.Context) ([]SessionRes
 		return nil, oops.With("operation", "ListActiveSessions").Wrap(err)
 	}
 
-	results := make([]SessionResult, len(sessions))
-	for i, s := range sessions {
-		results[i] = *sessionInfoToResult(s)
+	results := make([]SessionResult, 0, len(sessions))
+	for _, s := range sessions {
+		if s == nil {
+			continue
+		}
+		results = append(results, *sessionInfoToResult(s))
 	}
 	return results, nil
 }
@@ -513,7 +519,7 @@ func (p *ServiceProxyImpl) BroadcastSystemMessage(ctx context.Context, message s
 	})
 
 	event := core.Event{
-		ID:        ulid.Make(),
+		ID:        core.NewULID(),
 		Stream:    "system",
 		Type:      core.EventTypeSystem,
 		Timestamp: time.Now(),
@@ -723,7 +729,7 @@ func (p *ServiceProxyImpl) EmitEvent(ctx context.Context, stream, eventType stri
 // EmitEventAs emits an event using a specific actor identity (typically a plugin name).
 func (p *ServiceProxyImpl) EmitEventAs(ctx context.Context, actorID, stream, eventType string, payload []byte) error {
 	event := core.Event{
-		ID:        ulid.Make(),
+		ID:        core.NewULID(),
 		Stream:    stream,
 		Type:      core.EventType(eventType),
 		Timestamp: time.Now(),
@@ -794,9 +800,12 @@ func characterToResult(ch *world.Character) *CharacterResult {
 }
 
 func charactersToResults(chars []*world.Character) []CharacterResult {
-	results := make([]CharacterResult, len(chars))
-	for i, ch := range chars {
-		results[i] = *characterToResult(ch)
+	results := make([]CharacterResult, 0, len(chars))
+	for _, ch := range chars {
+		if ch == nil {
+			continue
+		}
+		results = append(results, *characterToResult(ch))
 	}
 	return results
 }

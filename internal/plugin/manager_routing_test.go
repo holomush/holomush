@@ -161,17 +161,17 @@ func TestManager_DeliverCommand_ConcurrentSafety(t *testing.T) {
 	mockCore.EXPECT().Close(mock.Anything).Return(nil)
 	mockLua.EXPECT().Close(mock.Anything).Return(nil)
 
+	const goroutines = 10
+
 	resp := &pluginsdk.CommandResponse{Output: "ok"}
-	mockCore.EXPECT().DeliverCommand(mock.Anything, "core-say", mock.Anything).Return(resp, nil)
-	mockLua.EXPECT().DeliverEvent(mock.Anything, "echo-bot", mock.Anything).Return(nil, nil)
+	mockCore.EXPECT().DeliverCommand(mock.Anything, "core-say", mock.Anything).Return(resp, nil).Times(goroutines)
+	mockLua.EXPECT().DeliverEvent(mock.Anything, "echo-bot", mock.Anything).Return(nil, nil).Times(goroutines)
 
 	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua))
 	mgr.RegisterHost(plugins.TypeCore, mockCore)
 	t.Cleanup(func() { _ = mgr.Close(context.Background()) })
 
 	require.NoError(t, mgr.LoadAll(context.Background()))
-
-	const goroutines = 10
 	var wg sync.WaitGroup
 	wg.Add(goroutines * 2)
 

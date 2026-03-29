@@ -272,7 +272,7 @@ func (d *Dispatcher) dispatchToPlugin(ctx context.Context, entry *CommandEntry, 
 	if exec.Services() != nil && exec.Services().Events() != nil {
 		for _, evt := range resp.Events {
 			emitEvent := core.Event{
-				ID:        ulid.Make(),
+				ID:        core.NewULID(),
 				Stream:    evt.Stream,
 				Type:      core.EventType(evt.Type),
 				Timestamp: time.Now(),
@@ -319,6 +319,7 @@ func (d *Dispatcher) dispatchToPlugin(ctx context.Context, entry *CommandEntry, 
 	// Process EndSession: signal that the invoking session should end.
 	if resp.EndSession {
 		exec.SetEndSession(true)
+		return oops.Code("SESSION_ENDED").Wrap(ErrSessionEnded)
 	}
 
 	// Suppress unused variable warnings for metrics/span in future instrumentation.
