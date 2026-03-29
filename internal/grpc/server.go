@@ -469,6 +469,24 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 	bootedSessions := exec.BootedSessions()
 	for i := range bootedSessions {
 		booted := &bootedSessions[i]
+
+		// If CharacterRef is empty (e.g. plugin-originated boot that only
+		// provided a session ID), look up the session to populate it.
+		if booted.CharacterRef.ID.IsZero() && booted.SessionInfo.ID != "" {
+			info, lookupErr := s.sessionStore.Get(ctx, booted.SessionInfo.ID)
+			if lookupErr != nil {
+				slog.WarnContext(ctx, "failed to look up booted session",
+					"session_id", booted.SessionInfo.ID, "error", lookupErr)
+				continue
+			}
+			booted.CharacterRef = core.CharacterRef{
+				ID:         info.CharacterID,
+				Name:       info.CharacterName,
+				LocationID: info.LocationID,
+			}
+			booted.SessionInfo = *info
+		}
+
 		if dcErr := s.engine.HandleDisconnect(ctx, booted.CharacterRef, "booted"); dcErr != nil {
 			slog.WarnContext(ctx, "boot leave event failed",
 				"target_id", booted.CharacterRef.ID.String(),

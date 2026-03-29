@@ -189,6 +189,12 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	return emits, nil
 }
 
+// DeliverCommand is not yet implemented for Lua plugins.
+// This stub satisfies the Host interface. Phase 4 implements the real version.
+func (h *Host) DeliverCommand(_ context.Context, name string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+	return nil, oops.In("lua").With("plugin", name).New("DeliverCommand not yet implemented for Lua plugins")
+}
+
 // Plugins returns names of loaded plugins.
 func (h *Host) Plugins() []string {
 	h.mu.RLock()
