@@ -21,6 +21,9 @@ type Host interface {
 	// DeliverEvent sends an event to a plugin and returns response events.
 	DeliverEvent(ctx context.Context, name string, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error)
 
+	// DeliverCommand sends a command to a plugin and returns the response.
+	DeliverCommand(ctx context.Context, name string, cmd pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error)
+
 	// Plugins returns names of all loaded plugins.
 	Plugins() []string
 

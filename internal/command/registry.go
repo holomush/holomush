@@ -28,7 +28,8 @@ func NewRegistry() *Registry {
 // If a command with the same name exists, it is overwritten and a warning is logged.
 // This follows ADR 0006 and ADR 0008: last-loaded wins with warning.
 //
-// Returns an error if the command entry is invalid (empty name, invalid name format, or nil handler).
+// Returns an error if the command entry is invalid (empty name, invalid name format,
+// or neither handler nor plugin name set).
 func (r *Registry) Register(entry CommandEntry) error {
 	if entry.Name == "" {
 		return ErrEmptyCommandName
@@ -36,7 +37,7 @@ func (r *Registry) Register(entry CommandEntry) error {
 	if err := ValidateCommandName(entry.Name); err != nil {
 		return err
 	}
-	if entry.Handler() == nil {
+	if entry.Handler() == nil && entry.PluginName() == "" {
 		return ErrNilHandler
 	}
 
@@ -72,7 +73,7 @@ func (r *Registry) All() []CommandEntry {
 	defer r.mu.RUnlock()
 
 	entries := make([]CommandEntry, 0, len(r.commands))
-	for _, e := range r.commands {
+	for _, e := range r.commands { //nolint:gocritic // rangeValCopy: defensive copy is intentional for this method
 		entries = append(entries, e)
 	}
 	return entries

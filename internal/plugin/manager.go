@@ -12,12 +12,17 @@ import (
 	"sync"
 
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/command"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 // Manager discovers and manages plugin lifecycle.
 type Manager struct {
 	pluginsDir      string
 	luaHost         Host
+	hosts           map[Type]Host         // host registry keyed by plugin type
+	pluginHosts     map[string]Host       // maps plugin name → owning host
 	policyInstaller PluginPolicyInstaller
 	loaded          map[string]*DiscoveredPlugin
 	mu              sync.RWMutex
@@ -43,13 +48,58 @@ func WithPolicyInstaller(pi PluginPolicyInstaller) ManagerOption {
 // NewManager creates a plugin manager.
 func NewManager(pluginsDir string, opts ...ManagerOption) *Manager {
 	m := &Manager{
-		pluginsDir: pluginsDir,
-		loaded:     make(map[string]*DiscoveredPlugin),
+		pluginsDir:  pluginsDir,
+		loaded:      make(map[string]*DiscoveredPlugin),
+		hosts:       make(map[Type]Host),
+		pluginHosts: make(map[string]Host),
 	}
 	for _, opt := range opts {
 		opt(m)
 	}
 	return m
+}
+
+// RegisterHost registers a host implementation for a plugin type.
+// Must be called before LoadAll. Panics if host is nil.
+func (m *Manager) RegisterHost(hostType Type, host Host) {
+	if host == nil {
+		panic("RegisterHost: host must not be nil")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.hosts[hostType] = host
+}
+
+// DeliverCommand routes a command to the correct host for the named plugin.
+func (m *Manager) DeliverCommand(ctx context.Context, pluginName string, cmd pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+	m.mu.RLock()
+	host, ok := m.pluginHosts[pluginName]
+	m.mu.RUnlock()
+
+	if !ok {
+		return nil, oops.In("manager").With("plugin", pluginName).New("plugin not loaded or unknown")
+	}
+	resp, err := host.DeliverCommand(ctx, pluginName, cmd)
+	if err != nil {
+		return nil, oops.In("manager").With("plugin", pluginName).With("operation", "deliver_command").Wrap(err)
+	}
+	return resp, nil
+}
+
+// DeliverEvent routes an event to the correct host for the named plugin.
+func (m *Manager) DeliverEvent(ctx context.Context, pluginName string, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
+	m.mu.RLock()
+	host, ok := m.pluginHosts[pluginName]
+	m.mu.RUnlock()
+
+	if !ok {
+		return nil, oops.In("manager").With("plugin", pluginName).New("plugin not loaded or unknown")
+	}
+	emits, err := host.DeliverEvent(ctx, pluginName, event)
+	if err != nil {
+		return nil, oops.In("manager").With("plugin", pluginName).With("operation", "deliver_event").Wrap(err)
+	}
+	return emits, nil
 }
 
 // DiscoveredPlugin contains a manifest and its directory.
@@ -116,10 +166,16 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 		return err
 	}
 
+	// Sort by load priority (lower values load first).
+	sort.Slice(discovered, func(i, j int) bool {
+		return discovered[i].Manifest.EffectivePriority() < discovered[j].Manifest.EffectivePriority()
+	})
+
 	for _, dp := range discovered {
 		if err := m.loadPlugin(ctx, dp); err != nil {
 			slog.Error("failed to load plugin",
 				"plugin", dp.Manifest.Name,
+				"priority", dp.Manifest.EffectivePriority(),
 				"error", err)
 			continue
 		}
@@ -134,42 +190,70 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 // graceful degradation. This allows running without Lua support or before
 // binary plugin support is implemented. The warning logs provide visibility.
 func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin) error {
+	// Resolve the host for this plugin type.
+	// For backward compatibility, TypeLua falls back to the dedicated luaHost field.
+	var host Host
 	switch dp.Manifest.Type {
+	case TypeCore:
+		host = m.hosts[TypeCore]
+		if host == nil {
+			slog.Warn("no core host registered, skipping core plugin",
+				"plugin", dp.Manifest.Name)
+			return nil
+		}
 	case TypeLua:
-		if m.luaHost == nil {
-			// Design: Allow running without Lua host configured (graceful degradation).
+		host = m.hosts[TypeLua]
+		if host == nil {
+			host = m.luaHost // backward compatibility
+		}
+		if host == nil {
 			slog.Warn("no Lua host configured, skipping Lua plugin",
 				"plugin", dp.Manifest.Name)
 			return nil
 		}
-		if err := m.luaHost.Load(ctx, dp.Manifest, dp.Dir); err != nil {
-			return oops.In("manager").With("plugin", dp.Manifest.Name).With("operation", "load").Wrap(err)
-		}
-		if m.policyInstaller != nil && len(dp.Manifest.Policies) > 0 {
-			if err := m.policyInstaller.InstallPluginPolicies(ctx, dp.Manifest.Name, dp.Manifest.Policies); err != nil {
-				// Roll back the plugin load on policy failure
-				if unloadErr := m.luaHost.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
-					slog.Error("failed to rollback plugin load after policy install failure",
-						"plugin", dp.Manifest.Name, "error", unloadErr)
-				}
-				return oops.In("manager").With("plugin", dp.Manifest.Name).Wrapf(err, "install plugin policies")
-			}
-		}
 	case TypeBinary:
-		// Binary plugins require go-plugin host (not yet implemented)
-		slog.Warn("binary plugins not yet supported, skipping",
-			"plugin", dp.Manifest.Name)
-		return nil
+		host = m.hosts[TypeBinary]
+		if host == nil {
+			slog.Warn("binary plugins not yet supported, skipping",
+				"plugin", dp.Manifest.Name)
+			return nil
+		}
 	default:
-		// Unknown types should be rejected by Manifest.Validate, but handle defensively.
 		slog.Warn("unknown plugin type, skipping",
 			"plugin", dp.Manifest.Name,
 			"type", dp.Manifest.Type)
 		return nil
 	}
 
+	// Reject duplicate plugin names before loading to prevent the second plugin
+	// from overwriting the first in the manager maps while leaving the original
+	// loaded inside its host but unreachable.
+	m.mu.RLock()
+	_, duplicate := m.loaded[dp.Manifest.Name]
+	m.mu.RUnlock()
+	if duplicate {
+		return oops.In("manager").With("plugin", dp.Manifest.Name).With("operation", "load").
+			Errorf("plugin %q is already loaded", dp.Manifest.Name)
+	}
+
+	if err := host.Load(ctx, dp.Manifest, dp.Dir); err != nil {
+		return oops.In("manager").With("plugin", dp.Manifest.Name).With("operation", "load").Wrap(err)
+	}
+
+	// Install ABAC policies if present.
+	if m.policyInstaller != nil && len(dp.Manifest.Policies) > 0 {
+		if err := m.policyInstaller.InstallPluginPolicies(ctx, dp.Manifest.Name, dp.Manifest.Policies); err != nil {
+			if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
+				slog.Error("failed to rollback plugin load after policy install failure",
+					"plugin", dp.Manifest.Name, "error", unloadErr)
+			}
+			return oops.In("manager").With("plugin", dp.Manifest.Name).Wrapf(err, "install plugin policies")
+		}
+	}
+
 	m.mu.Lock()
 	m.loaded[dp.Manifest.Name] = dp
+	m.pluginHosts[dp.Manifest.Name] = host
 	m.mu.Unlock()
 
 	slog.Info("loaded plugin",
@@ -208,12 +292,23 @@ func (m *Manager) Close(ctx context.Context) error {
 		}
 	}
 
-	// Clear loaded map first to ensure consistent state even if close fails.
+	// Clear loaded maps first to ensure consistent state even if close fails.
 	m.loaded = make(map[string]*DiscoveredPlugin)
+	m.pluginHosts = make(map[string]Host)
 
+	// Close all registered hosts.
+	for hostType, host := range m.hosts {
+		if err := host.Close(ctx); err != nil {
+			slog.Error("failed to close host", "type", hostType, "error", err)
+		}
+	}
+
+	// Close legacy luaHost if not already in the hosts map.
 	if m.luaHost != nil {
-		if err := m.luaHost.Close(ctx); err != nil {
-			return oops.In("manager").With("operation", "close").Hint("failed to close lua host").Wrap(err)
+		if _, inMap := m.hosts[TypeLua]; !inMap {
+			if err := m.luaHost.Close(ctx); err != nil {
+				return oops.In("manager").With("operation", "close").Hint("failed to close lua host").Wrap(err)
+			}
 		}
 	}
 
@@ -227,4 +322,39 @@ func (m *Manager) IsPluginLoaded(name string) bool {
 	defer m.mu.RUnlock()
 	_, ok := m.loaded[name]
 	return ok
+}
+
+// RegisterPluginCommands iterates all loaded plugins and registers their
+// manifest-declared commands into the given command registry. This ensures
+// the dispatcher can route plugin-backed commands via registry.Get().
+func (m *Manager) RegisterPluginCommands(registry *command.Registry) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, dp := range m.loaded {
+		for _, cmdSpec := range dp.Manifest.Commands {
+			entry, err := command.NewCommandEntry(command.CommandEntryConfig{
+				Name:         cmdSpec.Name,
+				PluginName:   dp.Manifest.Name,
+				Capabilities: cmdSpec.Capabilities,
+				Help:         cmdSpec.Help,
+				Usage:        cmdSpec.Usage,
+				HelpText:     cmdSpec.HelpText,
+				Source:       dp.Manifest.Name,
+			})
+			if err != nil {
+				slog.Warn("failed to create command entry for plugin command",
+					"plugin", dp.Manifest.Name,
+					"command", cmdSpec.Name,
+					"error", err)
+				continue
+			}
+			if regErr := registry.Register(*entry); regErr != nil {
+				slog.Warn("failed to register plugin command",
+					"plugin", dp.Manifest.Name,
+					"command", cmdSpec.Name,
+					"error", regErr)
+			}
+		}
+	}
 }

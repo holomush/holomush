@@ -73,6 +73,66 @@ func (_c *MockHost_Close_Call) RunAndReturn(run func(context.Context) error) *Mo
 	return _c
 }
 
+// DeliverCommand provides a mock function with given fields: ctx, name, cmd
+func (_m *MockHost) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+	ret := _m.Called(ctx, name, cmd)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeliverCommand")
+	}
+
+	var r0 *pluginsdk.CommandResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error)); ok {
+		return rf(ctx, name, cmd)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, pluginsdk.CommandRequest) *pluginsdk.CommandResponse); ok {
+		r0 = rf(ctx, name, cmd)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*pluginsdk.CommandResponse)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, pluginsdk.CommandRequest) error); ok {
+		r1 = rf(ctx, name, cmd)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockHost_DeliverCommand_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeliverCommand'
+type MockHost_DeliverCommand_Call struct {
+	*mock.Call
+}
+
+// DeliverCommand is a helper method to define mock.On call
+//   - ctx context.Context
+//   - name string
+//   - cmd pluginsdk.CommandRequest
+func (_e *MockHost_Expecter) DeliverCommand(ctx interface{}, name interface{}, cmd interface{}) *MockHost_DeliverCommand_Call {
+	return &MockHost_DeliverCommand_Call{Call: _e.mock.On("DeliverCommand", ctx, name, cmd)}
+}
+
+func (_c *MockHost_DeliverCommand_Call) Run(run func(ctx context.Context, name string, cmd pluginsdk.CommandRequest)) *MockHost_DeliverCommand_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(pluginsdk.CommandRequest))
+	})
+	return _c
+}
+
+func (_c *MockHost_DeliverCommand_Call) Return(_a0 *pluginsdk.CommandResponse, _a1 error) *MockHost_DeliverCommand_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockHost_DeliverCommand_Call) RunAndReturn(run func(context.Context, string, pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error)) *MockHost_DeliverCommand_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // DeliverEvent provides a mock function with given fields: ctx, name, event
 func (_m *MockHost) DeliverEvent(ctx context.Context, name string, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
 	ret := _m.Called(ctx, name, event)

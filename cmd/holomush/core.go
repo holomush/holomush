@@ -274,7 +274,9 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	var authPlayerRepo *authpostgres.PlayerRepository
 	var authPlayerTokenRepo *store.PostgresPlayerTokenStore
 	var authCharRepo *authCharRepoAdapter
-	var sessionStore *store.PostgresSessionStore // hoisted for hostfunc + gRPC wiring
+	var sessionStore *store.PostgresSessionStore  // hoisted for hostfunc + gRPC wiring
+	var pluginManager *plugins.Manager              // hoisted for dispatcher wiring
+	var serviceProxy  *plugins.ServiceProxyImpl     // hoisted for late-binding after command stack init
 	realStoreForABAC, hasPool := eventStore.(*store.PostgresEventStore)
 	if !hasPool {
 		// In production, PostgresEventStore always has a pool. This branch
@@ -393,10 +395,24 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			hostfunc.WithSessionAccess(sessionStore),
 		)
 		luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
-		pluginManager := plugins.NewManager(pluginsDir,
+
+		// Create ServiceProxy and LocalPluginHost for in-process core plugins
+		var proxyErr error
+		serviceProxy, proxyErr = plugins.NewServiceProxy(plugins.ServiceProxyConfig{
+			World:    worldService,
+			Sessions: sessionStore,
+			Events:   realStoreForABAC,
+		})
+		if proxyErr != nil {
+			return oops.Code("SERVICE_PROXY_FAILED").Wrap(proxyErr)
+		}
+		localHost := plugins.NewLocalPluginHost(serviceProxy)
+
+		pluginManager = plugins.NewManager(pluginsDir,
 			plugins.WithLuaHost(luaHost),
 			plugins.WithPolicyInstaller(abacStack.PolicyInstaller),
 		)
+		pluginManager.RegisterHost(plugins.TypeCore, localHost)
 
 		// Complete circular dependency: set plugin registry
 		abacStack.PluginProvider.SetRegistry(pluginManager)
@@ -483,6 +499,23 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			return oops.Code("ALIAS_SEED_FAILED").Wrap(seedErr)
 		}
 
+		// Complete the ServiceProxy with late-bound dependencies so core plugins
+		// can access aliases, the command registry, and the starting location.
+		if serviceProxy != nil {
+			serviceProxy.SetLateBindings(plugins.LateBindingsConfig{
+				AliasWriter:     aliasRepo,
+				AliasCache:      aliasCache,
+				CommandRegistry: cmdRegistry,
+				StartingLocID:   startLocationID.String(),
+			})
+		}
+
+		// Register plugin-provided commands into the command registry so the
+		// dispatcher can route them to the plugin deliverer.
+		if pluginManager != nil {
+			pluginManager.RegisterPluginCommands(cmdRegistry)
+		}
+
 		cmdServices, cmdSvcErr := command.NewServices(command.ServicesConfig{
 			World:              worldService,
 			Session:            sessionStore,
@@ -498,6 +531,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		}
 		cmdDispatcher, cmdDispErr := command.NewDispatcher(cmdRegistry, policyEngine,
 			command.WithAliasCache(aliasCache),
+			command.WithPluginDeliverer(pluginManager),
 		)
 		if cmdDispErr != nil {
 			return oops.Code("COMMAND_DISPATCHER_FAILED").Wrap(cmdDispErr)

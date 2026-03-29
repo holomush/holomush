@@ -29,6 +29,10 @@ func (h *subscriberHost) Unload(context.Context, string) error                  
 func (h *subscriberHost) Plugins() []string                                     { return []string{"test"} }
 func (h *subscriberHost) Close(context.Context) error                           { return nil }
 
+func (h *subscriberHost) DeliverCommand(_ context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+	return nil, nil
+}
+
 func (h *subscriberHost) DeliverEvent(_ context.Context, _ string, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -455,6 +459,10 @@ func (h *slowSubscriberHost) Load(context.Context, *plugins.Manifest, string) er
 func (h *slowSubscriberHost) Unload(context.Context, string) error                  { return nil }
 func (h *slowSubscriberHost) Plugins() []string                                     { return []string{"test"} }
 func (h *slowSubscriberHost) Close(context.Context) error                           { return nil }
+
+func (h *slowSubscriberHost) DeliverCommand(_ context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+	return nil, nil
+}
 
 func (h *slowSubscriberHost) DeliverEvent(_ context.Context, _ string, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
 	<-h.blockCh // Block until closed

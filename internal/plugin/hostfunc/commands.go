@@ -109,10 +109,10 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 		var hadEngineError bool
 		var engineErrorCount int
 		circuitTripped := false
-		for _, cmd := range commands {
+		for i := range commands {
 			// No-capability commands are always visible — skip engine entirely.
-			if len(cmd.GetCapabilities()) == 0 {
-				filtered = append(filtered, cmd)
+			if len(commands[i].GetCapabilities()) == 0 {
+				filtered = append(filtered, commands[i])
 				continue
 			}
 
@@ -122,7 +122,7 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 				continue
 			}
 
-			allowed, hadError := f.canExecuteCommand(ctx, subject, cmd)
+			allowed, hadError := f.canExecuteCommand(ctx, subject, commands[i])
 			if hadError {
 				hadEngineError = true
 				engineErrorCount++
@@ -135,18 +135,18 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 				}
 			}
 			if allowed {
-				filtered = append(filtered, cmd)
+				filtered = append(filtered, commands[i])
 			}
 		}
 
 		// Create commands array
 		commandsTbl := L.NewTable()
-		for i, cmd := range filtered {
+		for i := range filtered {
 			cmdTbl := L.NewTable()
-			L.SetField(cmdTbl, "name", lua.LString(cmd.Name))
-			L.SetField(cmdTbl, "help", lua.LString(cmd.Help))
-			L.SetField(cmdTbl, "usage", lua.LString(cmd.Usage))
-			L.SetField(cmdTbl, "source", lua.LString(cmd.Source))
+			L.SetField(cmdTbl, "name", lua.LString(filtered[i].Name))
+			L.SetField(cmdTbl, "help", lua.LString(filtered[i].Help))
+			L.SetField(cmdTbl, "usage", lua.LString(filtered[i].Usage))
+			L.SetField(cmdTbl, "source", lua.LString(filtered[i].Source))
 
 			// Add to array (1-indexed for Lua)
 			L.SetTable(commandsTbl, lua.LNumber(i+1), cmdTbl)

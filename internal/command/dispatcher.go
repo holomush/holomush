@@ -6,6 +6,7 @@ package command
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -16,17 +17,27 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/session"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 var tracer = otel.Tracer("holomush/command")
 
+// PluginCommandDeliverer routes commands to the correct plugin host.
+// PluginManager implements this interface.
+type PluginCommandDeliverer interface {
+	DeliverCommand(ctx context.Context, pluginName string, cmd pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error)
+}
+
 // Dispatcher handles command parsing, capability checks, and execution.
 type Dispatcher struct {
-	registry    *Registry
-	engine      types.AccessPolicyEngine
-	aliasCache  *AliasCache          // optional, can be nil
-	rateLimiter *RateLimitMiddleware // optional, can be nil
-	optErr      error                // error from applying options
+	registry        *Registry
+	engine          types.AccessPolicyEngine
+	aliasCache      *AliasCache              // optional, can be nil
+	rateLimiter     *RateLimitMiddleware      // optional, can be nil
+	pluginDeliverer PluginCommandDeliverer   // optional, can be nil
+	optErr          error                    // error from applying options
 }
 
 // DispatcherOption configures a Dispatcher during construction.
@@ -37,6 +48,14 @@ type DispatcherOption func(*Dispatcher)
 func WithAliasCache(cache *AliasCache) DispatcherOption {
 	return func(d *Dispatcher) {
 		d.aliasCache = cache
+	}
+}
+
+// WithPluginDeliverer configures the dispatcher to route plugin-backed commands
+// through the given deliverer (typically the PluginManager).
+func WithPluginDeliverer(pd PluginCommandDeliverer) DispatcherOption {
+	return func(d *Dispatcher) {
+		d.pluginDeliverer = pd
 	}
 }
 
@@ -189,7 +208,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	// Execute
 	exec.Args = parsed.Args
 	exec.InvokedAs = invokedAs
-	err = entry.Handler()(ctx, exec)
+
+	// Route: plugin-backed commands go through PluginManager, compiled-in commands call handler directly.
+	if entry.PluginName() != "" {
+		err = d.dispatchToPlugin(ctx, &entry, exec, invokedAs, metrics, span)
+	} else {
+		err = entry.Handler()(ctx, exec)
+	}
+
 	if err != nil {
 		metrics.SetStatus(StatusError)
 		slog.WarnContext(ctx, "command execution failed",
@@ -208,4 +234,95 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 		}
 	}
 	return err
+}
+
+// dispatchToPlugin routes a command through the PluginManager and processes the response.
+func (d *Dispatcher) dispatchToPlugin(ctx context.Context, entry *CommandEntry, exec *CommandExecution, invokedAs string, metrics *MetricsRecorder, span trace.Span) error {
+	if d.pluginDeliverer == nil {
+		return oops.Code("NO_PLUGIN_DELIVERER").
+			With("command", entry.Name).
+			With("plugin", entry.PluginName()).
+			Errorf("command is plugin-backed but no PluginCommandDeliverer configured")
+	}
+
+	cmd := pluginsdk.CommandRequest{
+		Command:       entry.Name,
+		Args:          exec.Args,
+		CharacterID:   exec.CharacterID().String(),
+		CharacterName: exec.CharacterName(),
+		LocationID:    exec.LocationID().String(),
+		SessionID:     exec.SessionID().String(),
+		InvokedAs:     invokedAs,
+	}
+
+	span.SetAttributes(
+		attribute.String("command.plugin", entry.PluginName()),
+		attribute.Bool("command.plugin_routed", true),
+	)
+
+	resp, err := d.pluginDeliverer.DeliverCommand(ctx, entry.PluginName(), cmd)
+	if err != nil {
+		return oops.In("dispatcher").With("command", entry.Name).With("plugin", entry.PluginName()).Wrap(err)
+	}
+	if resp == nil {
+		return nil
+	}
+
+	// Process response events: emit each to the event store.
+	if exec.Services() != nil && exec.Services().Events() != nil {
+		for _, evt := range resp.Events {
+			emitEvent := core.Event{
+				ID:        ulid.Make(),
+				Stream:    evt.Stream,
+				Type:      core.EventType(evt.Type),
+				Timestamp: time.Now(),
+				Actor: core.Actor{
+					Kind: core.ActorCharacter,
+					ID:   exec.CharacterID().String(),
+				},
+				Payload: []byte(evt.Payload),
+			}
+			if appendErr := exec.Services().Events().Append(ctx, emitEvent); appendErr != nil {
+				return oops.In("dispatcher").
+					With("command", entry.Name).
+					With("stream", evt.Stream).
+					Wrap(appendErr)
+			}
+		}
+	}
+
+	// Process synchronous output: write to exec.Output().
+	if resp.Output != "" && exec.Output() != nil {
+		if _, writeErr := exec.Output().Write([]byte(resp.Output)); writeErr != nil {
+			slog.WarnContext(ctx, "failed to write plugin command output",
+				"command", entry.Name,
+				"error", writeErr,
+			)
+		}
+	}
+
+	// Process booted sessions: record each so the server layer can emit leave
+	// events and run disconnect hooks.
+	for _, sid := range resp.BootedSessions {
+		sessID, parseErr := ulid.Parse(sid)
+		if parseErr != nil {
+			slog.WarnContext(ctx, "invalid booted session ID from plugin",
+				"command", entry.Name, "session_id", sid, "error", parseErr)
+			continue
+		}
+		exec.RecordBootedSession(BootedSession{
+			CharacterRef: core.CharacterRef{},
+			SessionInfo:  session.Info{ID: sessID.String()},
+		})
+	}
+
+	// Process EndSession: signal that the invoking session should end.
+	if resp.EndSession {
+		exec.SetEndSession(true)
+	}
+
+	// Suppress unused variable warnings for metrics/span in future instrumentation.
+	_ = metrics
+
+	return nil
 }

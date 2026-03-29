@@ -109,7 +109,8 @@ type CommandHandler func(ctx context.Context, exec *CommandExecution) error
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
 type CommandEntryConfig struct {
 	Name         string         // canonical name (e.g. "say") - REQUIRED
-	Handler      CommandHandler // Go handler or Lua dispatcher - REQUIRED
+	Handler      CommandHandler // Go handler — nil for plugin-backed commands
+	PluginName   string         // non-empty for plugin-backed commands
 	Capabilities []string       // ALL required capabilities (AND logic)
 	Help         string         // short description (one line)
 	Usage        string         // usage pattern (e.g. "say <message>")
@@ -134,7 +135,8 @@ type CommandEntryConfig struct {
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance
 type CommandEntry struct {
 	Name         string         // canonical name (e.g., "say")
-	handler      CommandHandler // Go handler or Lua dispatcher - use Handler() getter
+	handler      CommandHandler // Go handler — nil for plugin-backed commands; use Handler() getter
+	pluginName   string         // non-empty for plugin-backed commands; use PluginName() getter
 	capabilities []string       // ALL required capabilities (AND logic) - use GetCapabilities() for safe access
 	Help         string         // short description (one line)
 	Usage        string         // usage pattern (e.g., "say <message>")
@@ -144,8 +146,15 @@ type CommandEntry struct {
 
 // Handler returns the command's handler function.
 // This provides read-only access to the handler after construction.
+// Returns nil for plugin-backed commands.
 func (e *CommandEntry) Handler() CommandHandler {
 	return e.handler
+}
+
+// PluginName returns the plugin name for plugin-backed commands.
+// Returns "" for compiled-in commands that use a handler function directly.
+func (e *CommandEntry) PluginName() string {
+	return e.pluginName
 }
 
 // Error codes for constructor validation failures.
@@ -171,22 +180,29 @@ func (e *CommandEntry) GetCapabilities() []string {
 }
 
 // NewCommandEntry creates a validated CommandEntry.
-// Returns an error if Name is empty or Handler is nil.
+// Returns an error if Name is empty or if neither Handler nor PluginName is set.
+// Handler and PluginName are mutually exclusive — setting both is an error.
 func NewCommandEntry(cfg CommandEntryConfig) (*CommandEntry, error) {
 	if cfg.Name == "" {
 		return nil, oops.Code(CodeEmptyName).
 			With("field", "Name").
 			Errorf("Name is required")
 	}
-	if cfg.Handler == nil {
+	if cfg.Handler == nil && cfg.PluginName == "" {
 		return nil, oops.Code(CodeNilHandler).
 			With("field", "Handler").
-			Errorf("Handler is required")
+			Errorf("Handler or PluginName is required")
+	}
+	if cfg.Handler != nil && cfg.PluginName != "" {
+		return nil, oops.Code("AMBIGUOUS_HANDLER").
+			With("field", "Handler/PluginName").
+			Errorf("cannot set both Handler and PluginName")
 	}
 
 	return &CommandEntry{
 		Name:         cfg.Name,
 		handler:      cfg.Handler,
+		pluginName:   cfg.PluginName,
 		capabilities: cfg.Capabilities,
 		Help:         cfg.Help,
 		Usage:        cfg.Usage,
@@ -248,6 +264,9 @@ type CommandExecution struct {
 	// After dispatch, the server layer processes these for leave events and hooks.
 	bootedSessions []BootedSession
 
+	// endSession signals that the invoking session should end (e.g. quit command).
+	endSession bool
+
 	// Public fields - dispatcher sets these after construction
 	Args string
 	// InvokedAs is the original command name as typed by the user, before alias
@@ -290,6 +309,12 @@ func (e *CommandExecution) RecordBootedSession(bs BootedSession) {
 // BootedSessions returns sessions that were forcibly terminated during this
 // command execution. Returns nil when no sessions were booted.
 func (e *CommandExecution) BootedSessions() []BootedSession { return e.bootedSessions }
+
+// SetEndSession signals that the invoking session should end.
+func (e *CommandExecution) SetEndSession(v bool) { e.endSession = v }
+
+// EndSession returns true if the invoking session should end.
+func (e *CommandExecution) EndSession() bool { return e.endSession }
 
 // NewCommandExecution creates a validated CommandExecution.
 // Returns an error if CharacterID is zero, Services is nil, or Output is nil.
@@ -491,6 +516,7 @@ func NewTestEntry(cfg CommandEntryConfig) CommandEntry {
 	return CommandEntry{
 		Name:         cfg.Name,
 		handler:      cfg.Handler,
+		pluginName:   cfg.PluginName,
 		capabilities: cfg.Capabilities,
 		Help:         cfg.Help,
 		Usage:        cfg.Usage,

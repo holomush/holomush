@@ -15,6 +15,7 @@
     "type": {
       "type": "string",
       "enum": [
+        "core",
         "lua",
         "binary"
       ]
@@ -89,6 +90,10 @@
       },
       "type": "array",
       "description": "Commands provided by this plugin"
+    },
+    "priority": {
+      "type": "integer",
+      "description": "Load priority (lower loads first)"
     },
     "lua-plugin": {
       "properties": {
