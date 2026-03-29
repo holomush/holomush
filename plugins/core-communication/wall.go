@@ -76,6 +76,14 @@ func (h *WallHandler) HandleCommand(ctx context.Context, cmd pluginsdk.CommandRe
 func parseWallArgs(args string) (wallUrgency, string) {
 	parts := strings.SplitN(args, " ", 2)
 	if len(parts) == 1 {
+		switch strings.ToLower(parts[0]) {
+		case "info":
+			return wallUrgencyInfo, ""
+		case "warning", "warn":
+			return wallUrgencyWarning, ""
+		case "critical", "crit":
+			return wallUrgencyCritical, ""
+		}
 		return wallUrgencyInfo, parts[0]
 	}
 

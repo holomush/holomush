@@ -16,6 +16,7 @@ type EventType string
 const (
 	EventTypeSay    EventType = "say"
 	EventTypePose   EventType = "pose"
+	EventTypeEmit   EventType = "emit"
 	EventTypeArrive EventType = "arrive"
 	EventTypeLeave  EventType = "leave"
 	EventTypeSystem EventType = "system"

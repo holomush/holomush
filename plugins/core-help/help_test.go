@@ -238,9 +238,7 @@ func TestShowCommandHelp_Success(t *testing.T) {
 }
 
 func TestShowCommandHelp_NotFound(t *testing.T) {
-	proxy := &stubProxy{
-		helpErr: errors.New("command not found: bogus"),
-	}
+	proxy := &stubProxy{}
 
 	h := &Handler{}
 	cmd := baseCmd()

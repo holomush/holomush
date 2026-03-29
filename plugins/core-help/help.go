@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/holomush/holomush/pkg/holo"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -54,6 +55,9 @@ func listCommands(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugi
 
 	for _, src := range sources {
 		cmds := bySource[src]
+		sort.SliceStable(cmds, func(i, j int) bool {
+			return cmds[i].Name < cmds[j].Name
+		})
 		out.WriteString(holo.Fmt.Bold(capitalize(src)).RenderANSI())
 		out.WriteString("\n")
 
@@ -77,13 +81,13 @@ func listCommands(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugi
 func showCommandHelp(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy, name string) (*pluginsdk.CommandResponse, error) {
 	info, err := proxy.GetCommandHelp(ctx, name, cmd.CharacterID)
 	if err != nil {
-		if strings.Contains(err.Error(), "command not found") {
-			return &pluginsdk.CommandResponse{
-				Output: fmt.Sprintf("Unknown command: %s\nType 'help' to see available commands.", name),
-			}, nil
-		}
 		return &pluginsdk.CommandResponse{
 			Output: "Error getting help: " + err.Error(),
+		}, nil
+	}
+	if info == nil {
+		return &pluginsdk.CommandResponse{
+			Output: fmt.Sprintf("Unknown command: %s\nType 'help' to see available commands.", name),
 		}, nil
 	}
 
@@ -132,6 +136,10 @@ func searchCommands(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plu
 		}
 	}
 
+	sort.SliceStable(matches, func(i, j int) bool {
+		return matches[i].Name < matches[j].Name
+	})
+
 	if len(matches) == 0 {
 		return &pluginsdk.CommandResponse{
 			Output: fmt.Sprintf("No commands found matching '%s'.", term),
@@ -174,10 +182,12 @@ func parseSearchTerm(args string) (string, bool) {
 	return term, true
 }
 
-// capitalize upper-cases the first letter of a string.
+// capitalize upper-cases the first letter of a string (rune-safe).
 func capitalize(s string) string {
 	if s == "" {
 		return s
 	}
-	return strings.ToUpper(s[:1]) + s[1:]
+	runes := []rune(s)
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
 }

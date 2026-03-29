@@ -39,11 +39,17 @@ func (h *EmitHandler) HandleCommand(_ context.Context, cmd pluginsdk.CommandRequ
 		return nil, oops.With("operation", "marshal_emit_payload").Wrap(err)
 	}
 
+	if cmd.LocationID == "" || cmd.LocationID == "00000000000000000000000000" {
+		return &pluginsdk.CommandResponse{
+			Output: "You must be in a location to emit.",
+		}, nil
+	}
+
 	return &pluginsdk.CommandResponse{
 		Events: []pluginsdk.EmitEvent{
 			{
 				Stream:  "location:" + cmd.LocationID,
-				Type:    "emit",
+				Type:    pluginsdk.EventTypeEmit,
 				Payload: string(payload),
 			},
 		},
