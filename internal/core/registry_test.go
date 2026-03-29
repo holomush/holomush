@@ -72,20 +72,23 @@ func TestVerbRegistry_Register_ValidationErrors(t *testing.T) {
 	}
 }
 
-func TestVerbRegistry_ConcurrentAccess(_ *testing.T) {
+func TestVerbRegistry_ConcurrentAccess(t *testing.T) {
 	r := NewVerbRegistry()
 	var wg sync.WaitGroup
+	errs := make(chan error, 50)
 
 	// Concurrent writes (different types)
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			_ = r.Register(VerbRegistration{
+			if err := r.Register(VerbRegistration{
 				Type:     fmt.Sprintf("type_%d", n),
 				Category: "communication",
 				Format:   "action",
-			})
+			}); err != nil {
+				errs <- err
+			}
 		}(i)
 	}
 
@@ -99,6 +102,11 @@ func TestVerbRegistry_ConcurrentAccess(_ *testing.T) {
 	}
 
 	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		t.Errorf("unexpected Register error: %v", err)
+	}
 }
 
 func TestRegisterBuiltinTypes(t *testing.T) {

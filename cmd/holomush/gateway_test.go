@@ -615,7 +615,9 @@ func TestTelnetAcceptLoop_BackoffOnErrors(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		registry := core.NewVerbRegistry()
-			_ = core.RegisterBuiltinTypes(registry)
+			if err := core.RegisterBuiltinTypes(registry); err != nil {
+				panic("RegisterBuiltinTypes failed: " + err.Error())
+			}
 			runTelnetAcceptLoop(ctx, mock, &mockGRPCClient{}, registry, cancel)
 		close(done)
 	}()

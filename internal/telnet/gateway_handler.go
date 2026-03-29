@@ -612,6 +612,9 @@ func (h *GatewayHandler) sendProtoEvent(ev *corev1.EventFrame) {
 // formatEvent uses the VerbRegistry to dispatch formatting by category+format.
 // Returns empty string for events that should not be displayed in telnet.
 func (h *GatewayHandler) formatEvent(ev *corev1.EventFrame) string {
+	if h.verbRegistry == nil {
+		return h.formatFallback(ev)
+	}
 	reg, found := h.verbRegistry.Lookup(ev.GetType())
 	if !found {
 		return h.formatFallback(ev)

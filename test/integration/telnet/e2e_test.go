@@ -263,6 +263,10 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		telnetAddr = telnetLis.Addr().String()
 
 		// 13. Accept loop
+		sharedRegistry := core.NewVerbRegistry()
+		err = core.RegisterBuiltinTypes(sharedRegistry)
+		Expect(err).NotTo(HaveOccurred())
+
 		var acceptCtx context.Context
 		acceptCtx, acceptCancel = context.WithCancel(testCtx)
 		go func() {
@@ -271,9 +275,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 				if err != nil {
 					return
 				}
-				intRegistry := core.NewVerbRegistry()
-					_ = core.RegisterBuiltinTypes(intRegistry)
-					handler := telnet.NewGatewayHandler(conn, grpcCli, intRegistry)
+				handler := telnet.NewGatewayHandler(conn, grpcCli, sharedRegistry)
 				go handler.Handle(acceptCtx)
 			}
 		}()
