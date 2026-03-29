@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
+	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/internal/telnet"
@@ -272,8 +273,14 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigChan)
 
+	// Build the verb registry for telnet event formatting.
+	verbRegistry := core.NewVerbRegistry()
+	if err := core.RegisterBuiltinTypes(verbRegistry); err != nil {
+		return oops.Code("VERB_REGISTRY_INIT_FAILED").Wrap(err)
+	}
+
 	// Start accepting telnet connections in goroutine with backoff on errors
-	go runTelnetAcceptLoop(ctx, telnetListener, grpcClient, cancel)
+	go runTelnetAcceptLoop(ctx, telnetListener, grpcClient, verbRegistry, cancel)
 
 	cmd.Println("Gateway process started")
 	slog.Info("gateway process ready",
@@ -364,7 +371,7 @@ func (b *acceptBackoff) wait() time.Duration {
 
 // runTelnetAcceptLoop accepts telnet connections with exponential backoff on errors.
 // The cancel function is called on panic to trigger graceful shutdown.
-func runTelnetAcceptLoop(ctx context.Context, listener net.Listener, client GRPCClient, cancel func()) {
+func runTelnetAcceptLoop(ctx context.Context, listener net.Listener, client GRPCClient, registry *core.VerbRegistry, cancel func()) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("panic in telnet accept loop, triggering shutdown",
@@ -399,7 +406,7 @@ func runTelnetAcceptLoop(ctx context.Context, listener net.Listener, client GRPC
 			}
 		}
 		backoff.success()
-		handler := telnet.NewGatewayHandler(conn, client)
+		handler := telnet.NewGatewayHandler(conn, client, registry)
 		go handler.Handle(ctx)
 	}
 }

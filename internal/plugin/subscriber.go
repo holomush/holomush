@@ -133,7 +133,9 @@ func (s *Subscriber) deliverAsync(ctx context.Context, pluginName string, event 
 			return
 		}
 
-		// Emit response events
+		// Emit response events. Event type validation is the responsibility
+		// of the VerbRegistry, not the subscriber. The subscriber passes
+		// through any event type the plugin emits.
 		for _, emit := range emits {
 			if err := s.emitter.EmitPluginEvent(tctx, pluginName, emit); err != nil {
 				slog.ErrorContext(tctx, "failed to emit plugin event",

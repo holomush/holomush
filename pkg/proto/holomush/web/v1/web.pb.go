@@ -465,11 +465,13 @@ func (x *StreamEventsRequest) GetReplayFromCursor() bool {
 type GameEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	CharacterName string                 `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
-	Text          string                 `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"`
-	Timestamp     int64                  `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Channel       EventChannel           `protobuf:"varint,5,opt,name=channel,proto3,enum=holomush.web.v1.EventChannel" json:"channel,omitempty"`
-	Metadata      *structpb.Struct       `protobuf:"bytes,6,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	Category      string                 `protobuf:"bytes,2,opt,name=category,proto3" json:"category,omitempty"`
+	Format        string                 `protobuf:"bytes,3,opt,name=format,proto3" json:"format,omitempty"`
+	DisplayTarget EventChannel           `protobuf:"varint,4,opt,name=display_target,json=displayTarget,proto3,enum=holomush.web.v1.EventChannel" json:"display_target,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Actor         string                 `protobuf:"bytes,6,opt,name=actor,proto3" json:"actor,omitempty"`
+	Text          string                 `protobuf:"bytes,7,opt,name=text,proto3" json:"text,omitempty"`
+	Metadata      *structpb.Struct       `protobuf:"bytes,8,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -511,18 +513,25 @@ func (x *GameEvent) GetType() string {
 	return ""
 }
 
-func (x *GameEvent) GetCharacterName() string {
+func (x *GameEvent) GetCategory() string {
 	if x != nil {
-		return x.CharacterName
+		return x.Category
 	}
 	return ""
 }
 
-func (x *GameEvent) GetText() string {
+func (x *GameEvent) GetFormat() string {
 	if x != nil {
-		return x.Text
+		return x.Format
 	}
 	return ""
+}
+
+func (x *GameEvent) GetDisplayTarget() EventChannel {
+	if x != nil {
+		return x.DisplayTarget
+	}
+	return EventChannel_EVENT_CHANNEL_UNSPECIFIED
 }
 
 func (x *GameEvent) GetTimestamp() int64 {
@@ -532,11 +541,18 @@ func (x *GameEvent) GetTimestamp() int64 {
 	return 0
 }
 
-func (x *GameEvent) GetChannel() EventChannel {
+func (x *GameEvent) GetActor() string {
 	if x != nil {
-		return x.Channel
+		return x.Actor
 	}
-	return EventChannel_EVENT_CHANNEL_UNSPECIFIED
+	return ""
+}
+
+func (x *GameEvent) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
 }
 
 func (x *GameEvent) GetMetadata() *structpb.Struct {
@@ -1780,14 +1796,16 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x13StreamEventsRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12,\n" +
-	"\x12replay_from_cursor\x18\x02 \x01(\bR\x10replayFromCursor\"\xe6\x01\n" +
+	"\x12replay_from_cursor\x18\x02 \x01(\bR\x10replayFromCursor\"\x96\x02\n" +
 	"\tGameEvent\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\x12%\n" +
-	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\x12\x12\n" +
-	"\x04text\x18\x03 \x01(\tR\x04text\x12\x1c\n" +
-	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp\x127\n" +
-	"\achannel\x18\x05 \x01(\x0e2\x1d.holomush.web.v1.EventChannelR\achannel\x123\n" +
-	"\bmetadata\x18\x06 \x01(\v2\x17.google.protobuf.StructR\bmetadata\"\x8e\x01\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1a\n" +
+	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x16\n" +
+	"\x06format\x18\x03 \x01(\tR\x06format\x12D\n" +
+	"\x0edisplay_target\x18\x04 \x01(\x0e2\x1d.holomush.web.v1.EventChannelR\rdisplayTarget\x12\x1c\n" +
+	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\x12\x14\n" +
+	"\x05actor\x18\x06 \x01(\tR\x05actor\x12\x12\n" +
+	"\x04text\x18\a \x01(\tR\x04text\x123\n" +
+	"\bmetadata\x18\b \x01(\v2\x17.google.protobuf.StructR\bmetadata\"\x8e\x01\n" +
 	"\x14StreamEventsResponse\x122\n" +
 	"\x05event\x18\x01 \x01(\v2\x1a.holomush.web.v1.GameEventH\x00R\x05event\x129\n" +
 	"\acontrol\x18\x02 \x01(\v2\x1d.holomush.web.v1.ControlFrameH\x00R\acontrolB\a\n" +
@@ -1950,7 +1968,7 @@ var file_holomush_web_v1_web_proto_goTypes = []any{
 }
 var file_holomush_web_v1_web_proto_depIdxs = []int32{
 	1,  // 0: holomush.web.v1.ControlFrame.signal:type_name -> holomush.web.v1.ControlSignal
-	0,  // 1: holomush.web.v1.GameEvent.channel:type_name -> holomush.web.v1.EventChannel
+	0,  // 1: holomush.web.v1.GameEvent.display_target:type_name -> holomush.web.v1.EventChannel
 	31, // 2: holomush.web.v1.GameEvent.metadata:type_name -> google.protobuf.Struct
 	8,  // 3: holomush.web.v1.StreamEventsResponse.event:type_name -> holomush.web.v1.GameEvent
 	2,  // 4: holomush.web.v1.StreamEventsResponse.control:type_name -> holomush.web.v1.ControlFrame

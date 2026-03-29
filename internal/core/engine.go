@@ -24,10 +24,10 @@ type PosePayload struct {
 	NoSpace       bool   `json:"no_space,omitempty"`
 }
 
-// CommandResponsePayload is the JSON payload for command_response events.
+// CommandResponsePayload is the JSON payload for command_response and
+// command_error events. The event type itself carries the error distinction.
 type CommandResponsePayload struct {
-	Text    string `json:"text"`
-	IsError bool   `json:"is_error,omitempty"`
+	Text string `json:"text"`
 }
 
 // ArrivePayload is the JSON payload for arrive events.

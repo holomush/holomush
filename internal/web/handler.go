@@ -52,9 +52,10 @@ type CoreClient interface {
 // WorldService or other internal services directly. All game state flows
 // through core server RPCs.
 type Handler struct {
-	client       CoreClient
-	sessionStore session.Store
-	tokenRepo    auth.PlayerTokenRepository
+	client        CoreClient
+	sessionStore  session.Store
+	tokenRepo     auth.PlayerTokenRepository
+	verbRegistry  *core.VerbRegistry
 }
 
 // compile-time check that Handler satisfies the generated interface.
@@ -71,6 +72,11 @@ func WithSessionStore(store session.Store) HandlerOption {
 // WithPlayerTokenRepo sets the player token repository for two-phase login RPCs.
 func WithPlayerTokenRepo(repo auth.PlayerTokenRepository) HandlerOption {
 	return func(h *Handler) { h.tokenRepo = repo }
+}
+
+// WithVerbRegistry sets the verb registry for event type translation.
+func WithVerbRegistry(r *core.VerbRegistry) HandlerOption {
+	return func(h *Handler) { h.verbRegistry = r }
 }
 
 // NewHandler creates a new Handler with the given core client and options.
@@ -203,7 +209,7 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 
 		switch frame := resp.GetFrame().(type) {
 		case *corev1.SubscribeResponse_Event:
-			gameEvent := translateEvent(frame.Event)
+			gameEvent := h.translateEvent(frame.Event)
 			if gameEvent == nil {
 				continue
 			}

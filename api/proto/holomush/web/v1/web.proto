@@ -85,11 +85,13 @@ message StreamEventsRequest {
 
 message GameEvent {
   string type = 1;
-  string character_name = 2;
-  string text = 3;
-  int64 timestamp = 4;
-  EventChannel channel = 5;
-  google.protobuf.Struct metadata = 6;
+  string category = 2;
+  string format = 3;
+  EventChannel display_target = 4;
+  int64 timestamp = 5;
+  string actor = 6;
+  string text = 7;
+  google.protobuf.Struct metadata = 8;
 }
 
 message StreamEventsResponse {

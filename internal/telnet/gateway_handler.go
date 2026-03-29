@@ -20,6 +20,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
 
 const (
@@ -56,6 +57,7 @@ type GatewayHandler struct {
 	conn         net.Conn
 	reader       *bufio.Reader
 	client       CoreClient
+	verbRegistry *core.VerbRegistry
 	sessionID    string
 	connectionID string
 	charName     string
@@ -70,11 +72,12 @@ type GatewayHandler struct {
 }
 
 // NewGatewayHandler creates a new GatewayHandler for the given connection.
-func NewGatewayHandler(conn net.Conn, client CoreClient) *GatewayHandler {
+func NewGatewayHandler(conn net.Conn, client CoreClient, registry *core.VerbRegistry) *GatewayHandler {
 	return &GatewayHandler{
-		conn:   conn,
-		reader: bufio.NewReader(conn),
-		client: client,
+		conn:         conn,
+		reader:       bufio.NewReader(conn),
+		client:       client,
+		verbRegistry: registry,
 	}
 }
 
@@ -601,84 +604,163 @@ func (h *GatewayHandler) send(msg string) {
 }
 
 func (h *GatewayHandler) sendProtoEvent(ev *corev1.EventFrame) {
-	actorID := ev.GetActorId()
-	actorPrefix := actorID
-	if len(actorPrefix) > 8 {
-		actorPrefix = actorPrefix[:8]
+	msg := h.formatEvent(ev)
+	if msg != "" {
+		h.send(msg)
+	}
+}
+
+// formatEvent uses the VerbRegistry to dispatch formatting by category+format.
+// Returns empty string for events that should not be displayed in telnet.
+func (h *GatewayHandler) formatEvent(ev *corev1.EventFrame) string {
+	if h.verbRegistry == nil {
+		return h.formatFallback(ev)
+	}
+	reg, found := h.verbRegistry.Lookup(ev.GetType())
+	if !found {
+		return h.formatFallback(ev)
+	}
+
+	// Only format events targeted at TERMINAL or BOTH.
+	// STATE-only and other non-terminal events have no telnet representation.
+	if reg.DisplayTarget != webv1.EventChannel_EVENT_CHANNEL_TERMINAL &&
+		reg.DisplayTarget != webv1.EventChannel_EVENT_CHANNEL_BOTH {
+		return ""
+	}
+
+	switch reg.Category {
+	case "communication":
+		return h.formatCommunication(ev, reg)
+	case "movement":
+		return h.formatMovement(ev, reg)
+	case "command":
+		return h.formatCommand(ev, reg)
+	case "system":
+		return h.formatSystem(ev)
+	case "state":
+		return "" // telnet has no sidebar
+	default:
+		return h.formatFallback(ev)
+	}
+}
+
+// formatCommunication formats speech and action events.
+// Speech: `<actor> <label>, "<text>"`
+// Action: `<actor><space?><text>`
+func (h *GatewayHandler) formatCommunication(ev *corev1.EventFrame, reg core.VerbRegistration) string {
+	payload := make(map[string]any)
+	if err := json.Unmarshal(ev.GetPayload(), &payload); err != nil {
+		slog.Error("gateway: failed to unmarshal communication payload", "type", ev.GetType(), "error", err)
+		return ""
+	}
+
+	actor := stringFromPayload(payload, "character_name", "sender_name")
+	if actor == "" {
+		actor = truncateActorID(ev.GetActorId())
+	}
+
+	switch reg.Format {
+	case "speech":
+		text := stringFromPayload(payload, "message")
+		return fmt.Sprintf("%s %s, %q", actor, reg.Label, text)
+	case "action":
+		text := stringFromPayload(payload, "action", "notice", "message")
+		noSpace, ok := payload["no_space"].(bool)
+		if ok && noSpace {
+			return fmt.Sprintf("%s%s", actor, text)
+		}
+		return fmt.Sprintf("%s %s", actor, text)
+	default:
+		text := stringFromPayload(payload, "message", "action", "notice")
+		return fmt.Sprintf("%s %s", actor, text)
+	}
+}
+
+// formatMovement formats arrive/leave/move notifications.
+func (h *GatewayHandler) formatMovement(ev *corev1.EventFrame, reg core.VerbRegistration) string {
+	_ = reg // reserved for future format differentiation
+
+	payload := make(map[string]any)
+	if err := json.Unmarshal(ev.GetPayload(), &payload); err != nil {
+		slog.Error("gateway: failed to unmarshal movement payload", "type", ev.GetType(), "error", err)
+		return ""
+	}
+
+	actor := stringFromPayload(payload, "character_name")
+	if actor == "" {
+		actor = truncateActorID(ev.GetActorId())
 	}
 
 	switch ev.GetType() {
-	case string(core.EventTypeSay):
-		var p core.SayPayload
-		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
-			slog.Error("gateway: failed to unmarshal say event payload", "error", err)
-			h.send(fmt.Sprintf("%s <corrupted message>", actorPrefix))
-			return
-		}
-		h.send(fmt.Sprintf("%s says, %q", p.CharacterName, p.Message))
-
-	case string(core.EventTypePose):
-		var p core.PosePayload
-		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
-			slog.Error("gateway: failed to unmarshal pose event payload", "error", err)
-			h.send(fmt.Sprintf("%s <corrupted action>", actorPrefix))
-			return
-		}
-		if p.NoSpace {
-			h.send(fmt.Sprintf("%s%s", p.CharacterName, p.Action))
-		} else {
-			h.send(fmt.Sprintf("%s %s", p.CharacterName, p.Action))
-		}
-
-	case string(core.EventTypeCommandResponse):
-		var p core.CommandResponsePayload
-		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
-			slog.Error("gateway: failed to unmarshal command_response payload", "error", err)
-			return
-		}
-		h.send(p.Text)
-
 	case string(core.EventTypeArrive):
-		// Arrival notifications are persisted but not yet displayed to clients.
-		slog.Debug("gateway: arrive event received", "session_id", h.sessionID)
-
+		return fmt.Sprintf("%s has arrived.", actor)
 	case string(core.EventTypeLeave):
-		// Leave notifications are persisted but not yet displayed to clients.
-		slog.Debug("gateway: leave event received", "session_id", h.sessionID)
-
-	case string(core.EventTypePage):
-		var p core.PagePayload
-		if err := json.Unmarshal(ev.GetPayload(), &p); err != nil {
-			slog.Error("gateway: failed to unmarshal page event payload", "error", err)
-			return
+		reason := stringFromPayload(payload, "reason")
+		if reason != "" {
+			return fmt.Sprintf("%s has left (%s).", actor, reason)
 		}
-		h.send(p.Message)
-
-	case string(core.EventTypeWhisper):
-		// Whisper events have two payload shapes:
-		// - Character stream: WhisperPayload with Message field
-		// - Location stream: WhisperNoticePayload with Notice field
-		// JSON unmarshal succeeds for both; distinguish by checking which field is populated.
-		var wp core.WhisperPayload
-		if err := json.Unmarshal(ev.GetPayload(), &wp); err != nil {
-			slog.Error("gateway: failed to unmarshal whisper event payload", "error", err)
-			return
-		}
-		if wp.Message != "" {
-			h.send(wp.Message)
-			return
-		}
-		var notice core.WhisperNoticePayload
-		if err := json.Unmarshal(ev.GetPayload(), &notice); err != nil {
-			slog.Error("gateway: failed to unmarshal whisper notice payload", "error", err)
-			return
-		}
-		if notice.Notice != "" {
-			h.send(notice.Notice)
-		}
-
+		return fmt.Sprintf("%s has left.", actor)
 	default:
-		slog.Warn("gateway: unknown event type", "type", ev.GetType())
-		h.send(fmt.Sprintf("<event: %s>", ev.GetType()))
+		return fmt.Sprintf("%s moves.", actor)
 	}
+}
+
+// formatCommand formats narrative text and error messages.
+func (h *GatewayHandler) formatCommand(ev *corev1.EventFrame, reg core.VerbRegistration) string {
+	payload := make(map[string]any)
+	if err := json.Unmarshal(ev.GetPayload(), &payload); err != nil {
+		slog.Error("gateway: failed to unmarshal command payload", "type", ev.GetType(), "error", err)
+		return ""
+	}
+
+	text := stringFromPayload(payload, "text", "message")
+	if reg.Format == "error" {
+		return fmt.Sprintf("[ERROR] %s", text)
+	}
+	return text
+}
+
+// formatSystem formats system notification text.
+func (h *GatewayHandler) formatSystem(ev *corev1.EventFrame) string {
+	payload := make(map[string]any)
+	if err := json.Unmarshal(ev.GetPayload(), &payload); err != nil {
+		slog.Error("gateway: failed to unmarshal system payload", "type", ev.GetType(), "error", err)
+		return ""
+	}
+	return stringFromPayload(payload, "text", "message")
+}
+
+// formatFallback handles unregistered event types.
+func (h *GatewayHandler) formatFallback(ev *corev1.EventFrame) string {
+	payload := make(map[string]any)
+	if err := json.Unmarshal(ev.GetPayload(), &payload); err != nil {
+		slog.Warn("gateway: unknown event type", "type", ev.GetType())
+		return fmt.Sprintf("<event: %s>", ev.GetType())
+	}
+	text := stringFromPayload(payload, "text", "message")
+	if text != "" {
+		return text
+	}
+	slog.Warn("gateway: unknown event type with no text", "type", ev.GetType())
+	return fmt.Sprintf("<event: %s>", ev.GetType())
+}
+
+// stringFromPayload returns the first non-empty string value found among the
+// given keys in the payload map.
+func stringFromPayload(payload map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := payload[k].(string); ok && v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// truncateActorID returns a truncated actor ID for display when no character
+// name is available.
+func truncateActorID(actorID string) string {
+	if len(actorID) > 8 {
+		return actorID[:8]
+	}
+	return actorID
 }

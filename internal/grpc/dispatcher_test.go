@@ -204,11 +204,10 @@ func TestDispatcher_HandleCommand_UnknownCommand(t *testing.T) {
 	charEvents, err := store.Replay(ctx, "character:"+charID.String(), ulid.ULID{}, 100)
 	require.NoError(t, err)
 	require.NotEmpty(t, charEvents, "expected command_response event")
-	assert.Equal(t, core.EventTypeCommandResponse, charEvents[0].Type)
+	assert.Equal(t, core.EventTypeCommandError, charEvents[0].Type)
 
 	var crp core.CommandResponsePayload
 	require.NoError(t, json.Unmarshal(charEvents[0].Payload, &crp))
-	assert.True(t, crp.IsError)
 }
 
 func TestDispatcher_HandleCommand_Quit(t *testing.T) {
@@ -261,7 +260,6 @@ func TestDispatcher_HandleCommand_Quit(t *testing.T) {
 
 	var crp core.CommandResponsePayload
 	require.NoError(t, json.Unmarshal(charEvents[0].Payload, &crp))
-	assert.False(t, crp.IsError)
 	assert.Contains(t, crp.Text, "Goodbye")
 
 	// Disconnect hook should fire

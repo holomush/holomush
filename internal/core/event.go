@@ -35,8 +35,12 @@ const (
 	EventTypeOOC     EventType = "ooc"
 	EventTypePemit   EventType = "pemit"
 
-	// Command response event type
+	// Whisper notice (location-broadcast when someone whispers)
+	EventTypeWhisperNotice EventType = "whisper_notice"
+
+	// Command response event types
 	EventTypeCommandResponse EventType = "command_response"
+	EventTypeCommandError    EventType = "command_error"
 
 	// UI state event types
 	EventTypeLocationState EventType = "location_state"

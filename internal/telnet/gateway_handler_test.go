@@ -23,6 +23,13 @@ import (
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
+// testRegistry returns a VerbRegistry populated with built-in types for testing.
+func testRegistry() *core.VerbRegistry {
+	r := core.NewVerbRegistry()
+	_ = core.RegisterBuiltinTypes(r)
+	return r
+}
+
 // TestCoreClient_SatisfiedByGRPCClient verifies at compile time that
 // *holoGRPC.Client implements the CoreClient interface.
 func TestCoreClient_SatisfiedByGRPCClient(t *testing.T) {
@@ -149,7 +156,7 @@ func TestGatewayHandler_GuestConnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client)
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -210,7 +217,7 @@ func TestGatewayHandler_SayCommand(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client)
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -298,7 +305,7 @@ func TestGatewayHandler_SendProtoEvent_CommandResponse(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client)
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -360,7 +367,7 @@ func TestGatewayHandler_SendProtoEvent_CorruptCommandResponse(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client)
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -421,7 +428,7 @@ func TestGatewayHandler_StreamClosed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client)
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -473,7 +480,7 @@ func TestGatewayHandler_HandleGenericCommand_RPCError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client)
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -516,7 +523,7 @@ func TestGatewayHandler_RejectsCommandsBeforeAuth(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client)
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -606,7 +613,7 @@ func TestGatewayHandler_TwoPhase_SingleCharAutoSelect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client)
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -650,7 +657,7 @@ func TestGatewayHandler_TwoPhase_MultiChar_ShowsListEntersSelectMode(t *testing.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client)
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -700,7 +707,7 @@ func TestGatewayHandler_TwoPhase_PlayByIndex(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client)
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -757,7 +764,7 @@ func TestGatewayHandler_TwoPhase_PlayByName(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client)
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -811,7 +818,7 @@ func TestGatewayHandler_TwoPhase_PlayReattach(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client)
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -870,7 +877,7 @@ func TestGatewayHandler_TwoPhase_CreateCharacter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client)
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -917,7 +924,7 @@ func TestGatewayHandler_TwoPhase_InvalidCommandInSelectMode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client)
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -965,7 +972,7 @@ func TestGatewayHandler_TwoPhase_AuthFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client)
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -988,4 +995,212 @@ func TestGatewayHandler_TwoPhase_AuthFailure(t *testing.T) {
 
 	cancel()
 	<-done
+}
+
+func TestFormatEvent_Communication_Speech(t *testing.T) {
+	registry := testRegistry()
+	h := &GatewayHandler{verbRegistry: registry}
+
+	tests := []struct {
+		name     string
+		evType   string
+		payload  string
+		expected string
+	}{
+		{
+			"say",
+			"say",
+			`{"character_name":"Alice","message":"Hello"}`,
+			`Alice says, "Hello"`,
+		},
+		{
+			"page",
+			"page",
+			`{"sender_name":"Bob","message":"Hey there"}`,
+			`Bob pages, "Hey there"`,
+		},
+		{
+			"whisper",
+			"whisper",
+			`{"sender_name":"Carol","message":"psst"}`,
+			`Carol whispers, "psst"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := &corev1.EventFrame{
+				Type:    tt.evType,
+				Payload: []byte(tt.payload),
+			}
+			got := h.formatEvent(ev)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestFormatEvent_Communication_Action(t *testing.T) {
+	registry := testRegistry()
+	h := &GatewayHandler{verbRegistry: registry}
+
+	tests := []struct {
+		name     string
+		evType   string
+		payload  string
+		expected string
+	}{
+		{
+			"pose with space",
+			"pose",
+			`{"character_name":"Alice","action":"waves happily."}`,
+			"Alice waves happily.",
+		},
+		{
+			"pose no_space",
+			"pose",
+			`{"character_name":"Alice","action":"'s eyes widen.","no_space":true}`,
+			"Alice's eyes widen.",
+		},
+		{
+			"whisper_notice",
+			"whisper_notice",
+			`{"sender_name":"Bob","target_name":"Carol","notice":"whispers something to Carol."}`,
+			"Bob whispers something to Carol.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := &corev1.EventFrame{
+				Type:    tt.evType,
+				Payload: []byte(tt.payload),
+			}
+			got := h.formatEvent(ev)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestFormatEvent_Movement(t *testing.T) {
+	registry := testRegistry()
+	h := &GatewayHandler{verbRegistry: registry}
+
+	tests := []struct {
+		name     string
+		evType   string
+		payload  string
+		expected string
+	}{
+		{
+			"arrive",
+			"arrive",
+			`{"character_name":"Alice"}`,
+			"Alice has arrived.",
+		},
+		{
+			"leave with reason",
+			"leave",
+			`{"character_name":"Bob","reason":"north"}`,
+			"Bob has left (north).",
+		},
+		{
+			"leave without reason",
+			"leave",
+			`{"character_name":"Bob"}`,
+			"Bob has left.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := &corev1.EventFrame{
+				Type:    tt.evType,
+				Payload: []byte(tt.payload),
+			}
+			got := h.formatEvent(ev)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestFormatEvent_Command(t *testing.T) {
+	registry := testRegistry()
+	h := &GatewayHandler{verbRegistry: registry}
+
+	tests := []struct {
+		name     string
+		evType   string
+		payload  string
+		expected string
+	}{
+		{
+			"command_response narrative",
+			"command_response",
+			`{"text":"You see a large room."}`,
+			"You see a large room.",
+		},
+		{
+			"command_error",
+			"command_error",
+			`{"text":"Permission denied."}`,
+			"[ERROR] Permission denied.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := &corev1.EventFrame{
+				Type:    tt.evType,
+				Payload: []byte(tt.payload),
+			}
+			got := h.formatEvent(ev)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestFormatEvent_State_Suppressed(t *testing.T) {
+	registry := testRegistry()
+	h := &GatewayHandler{verbRegistry: registry}
+
+	ev := &corev1.EventFrame{
+		Type:    "location_state",
+		Payload: []byte(`{"location":{"id":"loc-1","name":"Town Square"}}`),
+	}
+	got := h.formatEvent(ev)
+	assert.Equal(t, "", got, "state events should produce empty string for telnet")
+}
+
+func TestFormatEvent_System(t *testing.T) {
+	registry := testRegistry()
+	h := &GatewayHandler{verbRegistry: registry}
+
+	ev := &corev1.EventFrame{
+		Type:    "system",
+		Payload: []byte(`{"message":"Server restarting in 5 minutes."}`),
+	}
+	got := h.formatEvent(ev)
+	assert.Equal(t, "Server restarting in 5 minutes.", got)
+}
+
+func TestFormatEvent_Unknown_WithText(t *testing.T) {
+	h := &GatewayHandler{verbRegistry: core.NewVerbRegistry()} // empty registry
+
+	ev := &corev1.EventFrame{
+		Type:    "custom_plugin_event",
+		Payload: []byte(`{"text":"Something happened."}`),
+	}
+	got := h.formatEvent(ev)
+	assert.Equal(t, "Something happened.", got)
+}
+
+func TestFormatEvent_Unknown_NoText(t *testing.T) {
+	h := &GatewayHandler{verbRegistry: core.NewVerbRegistry()} // empty registry
+
+	ev := &corev1.EventFrame{
+		Type:    "mystery",
+		Payload: []byte(`{"data":123}`),
+	}
+	got := h.formatEvent(ev)
+	assert.Equal(t, "<event: mystery>", got)
 }

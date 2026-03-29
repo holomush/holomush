@@ -7,17 +7,17 @@ import { appendLine, replayActive } from './terminalStore';
 import { applyLocationState, addPresence, removePresence } from './sidebarStore';
 import type { GameEvent } from '$lib/connect/holomush/web/v1/web_pb';
 
-// EventChannel values from the generated proto
-const CHANNEL_UNSPECIFIED = 0;
-const CHANNEL_TERMINAL = 1;
-const CHANNEL_STATE = 2;
-const CHANNEL_BOTH = 3;
+// DisplayTarget values from the GameEvent proto (renamed from EventChannel).
+const DISPLAY_UNSPECIFIED = 0;
+const DISPLAY_TERMINAL = 1;
+const DISPLAY_STATE = 2;
+const DISPLAY_BOTH = 3;
 
 export function routeEvent(event: GameEvent, replayed: boolean) {
-  const channel = event.channel ?? CHANNEL_UNSPECIFIED;
+  const target = (event as Record<string, unknown>).displayTarget as number ?? DISPLAY_UNSPECIFIED;
 
   // Route to terminal (scrollback)
-  if (channel === CHANNEL_TERMINAL || channel === CHANNEL_BOTH || channel === CHANNEL_UNSPECIFIED) {
+  if (target === DISPLAY_TERMINAL || target === DISPLAY_BOTH || target === DISPLAY_UNSPECIFIED) {
     appendLine(event, replayed);
   }
 
@@ -25,15 +25,28 @@ export function routeEvent(event: GameEvent, replayed: boolean) {
   // authoritative snapshot, including the synthetic one at stream start).
   // arrive/leave deltas are suppressed during replay to avoid applying
   // stale history on top of the snapshot.
-  if (channel === CHANNEL_STATE || channel === CHANNEL_BOTH) {
+  if (target === DISPLAY_STATE || target === DISPLAY_BOTH) {
     routeToSidebar(event, replayed);
   }
 }
 
 function routeToSidebar(event: GameEvent, replayed: boolean) {
   const data = metadataToPlain(event.metadata);
+  const category = (event as Record<string, unknown>).category as string | undefined;
+  const actor = (event as Record<string, unknown>).actor as string | undefined;
 
-  switch (event.type) {
+  switch (category) {
+    case 'state':
+      routeStateEvent(event.type, data, replayed);
+      break;
+    case 'movement':
+      routeMovementEvent(event.type, actor, replayed);
+      break;
+  }
+}
+
+function routeStateEvent(type: string, data: Record<string, unknown> | null, replayed: boolean) {
+  switch (type) {
     case 'location_state':
       // Always apply — this is the authoritative snapshot (including synthetic at stream start).
       if (data) {
@@ -47,11 +60,17 @@ function routeToSidebar(event: GameEvent, replayed: boolean) {
         exits.set(data.exits as RoomExit[]);
       }
       break;
+  }
+}
+
+function routeMovementEvent(type: string, actor: string | undefined, replayed: boolean) {
+  if (replayed || !actor) return;
+  switch (type) {
     case 'arrive':
-      if (!replayed && event.characterName) addPresence(event.characterName);
+      addPresence(actor);
       break;
     case 'leave':
-      if (!replayed && event.characterName) removePresence(event.characterName);
+      removePresence(actor);
       break;
   }
 }

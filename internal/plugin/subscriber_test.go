@@ -388,6 +388,62 @@ func TestSubscriber_StopWaitsForInFlightDeliveries(t *testing.T) {
 	assert.Equal(t, 1, host.deliveredCount(), "delivered count")
 }
 
+func TestSubscriber_CustomEventTypePassesThrough(t *testing.T) {
+	host := &subscriberHost{
+		response: []pluginsdk.EmitEvent{
+			{Stream: "location:123", Type: "telepathy", Payload: `{"text":"you hear a voice"}`},
+		},
+	}
+	emitter := &subscriberEmitter{}
+
+	sub := plugins.NewSubscriber(host, emitter)
+	sub.Subscribe("test-plugin", "location:123", nil) // all types
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	events := make(chan pluginsdk.Event, 1)
+	sub.Start(ctx, events)
+
+	// Deliver an event with a custom type not in the SDK constants
+	events <- pluginsdk.Event{
+		ID:     "1",
+		Stream: "location:123",
+		Type:   "custom_event",
+	}
+
+	time.Sleep(50 * time.Millisecond)
+
+	assert.Equal(t, 1, host.deliveredCount(), "custom event type should be delivered to plugin")
+	assert.Equal(t, 1, emitter.emittedCount(), "custom event type response should be emitted")
+
+	emitter.mu.Lock()
+	defer emitter.mu.Unlock()
+	assert.Equal(t, pluginsdk.EventType("telepathy"), emitter.emitted[0].Type,
+		"emitted event should preserve custom type from plugin response")
+}
+
+func TestSubscriber_CustomEventTypeFilteredBySubscription(t *testing.T) {
+	host := &subscriberHost{}
+	emitter := &subscriberEmitter{}
+
+	sub := plugins.NewSubscriber(host, emitter)
+	sub.Subscribe("test-plugin", "location:123", []string{"telepathy"}) // subscribe to custom type
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	events := make(chan pluginsdk.Event, 2)
+	sub.Start(ctx, events)
+
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: "telepathy"}
+	events <- pluginsdk.Event{ID: "2", Stream: "location:123", Type: pluginsdk.EventTypeSay} // should be filtered
+
+	time.Sleep(50 * time.Millisecond)
+
+	assert.Equal(t, 1, host.deliveredCount(), "only telepathy event should be delivered")
+}
+
 // slowSubscriberHost blocks DeliverEvent until blockCh is closed.
 type slowSubscriberHost struct {
 	delivered []pluginsdk.Event

@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/config"
+	"github.com/holomush/holomush/internal/core"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 )
 
@@ -610,10 +611,14 @@ func TestTelnetAcceptLoop_BackoffOnErrors(t *testing.T) {
 		closeCh:      make(chan struct{}),
 	}
 
+	// Bootstrap registry on the test goroutine so failures are reported cleanly
+	registry := core.NewVerbRegistry()
+	require.NoError(t, core.RegisterBuiltinTypes(registry))
+
 	// Run the accept loop in a goroutine
 	done := make(chan struct{})
 	go func() {
-		runTelnetAcceptLoop(ctx, mock, &mockGRPCClient{}, cancel)
+		runTelnetAcceptLoop(ctx, mock, &mockGRPCClient{}, registry, cancel)
 		close(done)
 	}()
 
