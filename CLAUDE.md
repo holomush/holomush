@@ -18,17 +18,21 @@ HoloMUSH is a modern MUSH platform with:
 
 ## Documentation Structure
 
-| Directory     | Purpose                                      | Audience                |
-| ------------- | -------------------------------------------- | ----------------------- |
-| `site/docs/`  | Public documentation website (zensical)      | All users               |
-| `docs/plans/` | Implementation plans, in-progress work       | Contributors (internal) |
-| `docs/specs/` | Design specifications, architectural designs | Contributors (internal) |
+| Directory                | Purpose                                      | Audience                |
+| ------------------------ | -------------------------------------------- | ----------------------- |
+| `site/docs/`             | Public documentation website (zensical)      | All users               |
+| `docs/plans/`            | Implementation plans, in-progress work       | Contributors (internal) |
+| `docs/specs/`            | Design specifications, architectural designs | Contributors (internal) |
+| `docs/superpowers/plans/`| AI-generated implementation plans (superpowers skill) | Contributors (internal) |
+| `docs/superpowers/specs/`| AI-generated design specifications (superpowers skill) | Contributors (internal) |
 
 **Site documentation** (`site/docs/`) is organized by audience:
 
-- `contributors/` — For people contributing to the HoloMUSH codebase
-- `developers/` — For plugin developers building on HoloMUSH
-- `operators/` — For people running HoloMUSH servers
+- `guide/` — For players and game designers
+- `operating/` — For people running HoloMUSH servers
+- `extending/` — For plugin developers building on HoloMUSH
+- `contributing/` — For people contributing to the HoloMUSH codebase
+- `reference/` — Auto-generated API and event references
 
 **Build commands:**
 
@@ -52,7 +56,7 @@ task docs:build   # Build static site
 | **MUST** use squash merge          | All PRs are squash merged to maintain clean history |
 | **MUST NOT** push directly to main | Branch protection enforces this                     |
 
-**See:** [Pull Request Guide](site/docs/contributors/pr-guide.md) for the complete workflow.
+**See:** [Pull Request Guide](site/docs/contributing/pr-guide.md) for the complete workflow.
 
 ---
 
@@ -68,8 +72,9 @@ task docs:build   # Build static site
 ### Spec-Driven Development
 
 - Work MUST NOT start without a spec/design/plan
-- Specs live in `docs/specs/`
-- Plans live in `docs/plans/`
+- Specs live in `docs/specs/` or `docs/superpowers/specs/`
+- Plans live in `docs/plans/` or `docs/superpowers/plans/`
+- The `docs/superpowers/` subdirectories are used by AI tooling (superpowers skills) and are equally valid
 - All specs and plans MUST use RFC2119 keywords
 
 ### RFC2119 Keywords
@@ -127,7 +132,7 @@ bd close <task-id>
 ### Code Review Requirement
 
 All tasks MUST be reviewed before completion. See
-[Pull Request Guide](site/docs/contributors/pr-guide.md) for the complete workflow.
+[Pull Request Guide](site/docs/contributing/pr-guide.md) for the complete workflow.
 
 | Requirement                                | Description                                          |
 | ------------------------------------------ | ---------------------------------------------------- |
@@ -442,9 +447,11 @@ docs/
   specs/             # Design specifications (internal)
 site/                # Documentation website (zensical)
   docs/
-    contributors/    # For codebase contributors
-    developers/      # For plugin developers
-    operators/       # For server operators
+    guide/           # For players and game designers
+    operating/       # For server operators
+    extending/       # For plugin developers
+    contributing/    # For codebase contributors
+    reference/       # Auto-generated references
 internal/            # Private implementation
   access/            # ABAC access control system
   control/           # Control plane (admin API)

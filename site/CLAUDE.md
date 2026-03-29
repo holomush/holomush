@@ -14,11 +14,13 @@ Instructions for working with the HoloMUSH documentation site (zensical).
 
 Documentation is organized by audience in `site/docs/`:
 
-| Directory       | Audience              |
-| --------------- | --------------------- |
-| `contributors/` | Codebase contributors |
-| `developers/`   | Plugin developers     |
-| `operators/`    | Server operators      |
+| Directory        | Audience                   |
+| ---------------- | -------------------------- |
+| `guide/`         | Players and game designers |
+| `operating/`     | Server operators           |
+| `extending/`     | Plugin developers          |
+| `contributing/`  | Codebase contributors      |
+| `reference/`     | Auto-generated references  |
 
 ## Commands
 
@@ -50,3 +52,4 @@ Site uses same markdown standards as `docs/CLAUDE.md`:
 - All code fences MUST specify language
 - Tables MUST have aligned columns (run `task fmt`)
 - Headings MUST NOT skip levels
+- Ordered lists MUST use ascending numbers (1, 2, 3), not repeated `1.` markers

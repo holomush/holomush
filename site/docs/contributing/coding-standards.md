@@ -237,7 +237,7 @@ var _ = Describe("Feature Name", func() {
 Run integration tests:
 
 ```bash
-go test -race -v -tags=integration ./test/integration/...
+task test:int
 ```
 
 ## Build Commands
@@ -296,7 +296,7 @@ internal/            # Private implementation
   telnet/            # Telnet protocol adapter
   tls/               # TLS certificate management
   web/               # WebSocket adapter
-  world/             # World engine, characters, rooms
+  world/             # World engine, characters, locations
   xdg/               # XDG base directory support
 pkg/                 # Public plugin API
 plugins/             # Core plugins (Lua for customization, Go for performance)
@@ -313,9 +313,9 @@ Core interfaces that implementations must satisfy:
 ```go
 type EventStore interface {
     Append(ctx context.Context, event Event) error
-    Subscribe(ctx context.Context, stream string, afterID ulid.ULID) (<-chan Event, error)
     Replay(ctx context.Context, stream string, afterID ulid.ULID, limit int) ([]Event, error)
     LastEventID(ctx context.Context, stream string) (ulid.ULID, error)
+    Subscribe(ctx context.Context, stream string) (eventCh <-chan ulid.ULID, errCh <-chan error, err error)
 }
 ```
 

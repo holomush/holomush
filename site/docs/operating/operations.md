@@ -41,13 +41,34 @@ HoloMUSH exposes Prometheus metrics at `/metrics`.
 
 ### Available Metrics
 
-| Metric                                   | Type      | Description                                   |
-| ---------------------------------------- | --------- | --------------------------------------------- |
-| `holomush_events_total`                  | Counter   | Total events processed                        |
-| `holomush_sessions_active`               | Gauge     | Current active sessions                       |
-| `holomush_grpc_requests_total`           | Counter   | gRPC requests by method                       |
-| `holomush_grpc_latency_seconds`          | Histogram | gRPC request latency                          |
-| `holomush_alias_rollback_failures_total` | Counter   | Alias rollback failures (requires manual fix) |
+**Connections and requests:**
+
+| Metric                                    | Type      | Labels            | Description                                        |
+| ----------------------------------------- | --------- | ----------------- | -------------------------------------------------- |
+| `holomush_connections_total`              | Counter   | `type`            | Total connections (telnet, web)                    |
+| `holomush_requests_total`                | Counter   | `type`, `status`  | Total requests by type and outcome                 |
+
+**Commands:**
+
+| Metric                                    | Type      | Labels                | Description                                        |
+| ----------------------------------------- | --------- | --------------------- | -------------------------------------------------- |
+| `holomush_command_executions_total`       | Counter   | `command`, `source`, `status` | Command executions by name, source, and status (success, error, not_found, permission_denied, rate_limited) |
+| `holomush_command_duration_seconds`       | Histogram | `command`, `source`   | Command execution latency                          |
+| `holomush_command_output_failures_total`  | Counter   | `command`             | Failed to deliver command output to session        |
+| `holomush_command_rate_limited_total`     | Counter   | `command`             | Commands rejected by rate limiter                  |
+| `holomush_alias_expansions_total`        | Counter   | `alias`               | Alias expansion count by alias name                |
+| `holomush_alias_rollback_failures_total` | Counter   |                       | Alias rollback failures (requires manual fix)      |
+
+**Engine and resilience:**
+
+| Metric                                    | Type      | Labels            | Description                                        |
+| ----------------------------------------- | --------- | ----------------- | -------------------------------------------------- |
+| `holomush_engine_failures_total`         | Counter   | `operation`       | Engine operation failures (access checks, capabilities) |
+| `holomush_circuit_breaker_trips_total`   | Counter   | `handler`         | Circuit breaker activations per command handler     |
+| `holomush_circuit_breaker_skipped_total` | Counter   | `handler`         | Sessions skipped due to open circuit breaker        |
+| `holomush_ratelimiter_sessions`          | Gauge     |                   | Current number of tracked rate-limit sessions       |
+
+Go runtime and process metrics (`go_*`, `process_*`) are also exported automatically.
 
 ### Scrape Configuration
 
@@ -359,7 +380,8 @@ psql -c "SELECT count(*) FROM pg_stat_activity WHERE datname='holomush';"
 3. Analyze query plans with `EXPLAIN ANALYZE`
 
 ```sql
-EXPLAIN ANALYZE SELECT * FROM events WHERE stream = 'room:123' ORDER BY id DESC LIMIT 100;
+-- Replace <ulid> with an actual location ULID from your database
+EXPLAIN ANALYZE SELECT * FROM events WHERE stream = 'location:<ulid>' ORDER BY id DESC LIMIT 100;
 ```
 
 ### Alias Database-Cache Inconsistency

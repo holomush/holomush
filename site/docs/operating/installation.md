@@ -29,7 +29,7 @@ This starts three services:
 | ---------- | ------------------------------ | ---- |
 | `postgres` | PostgreSQL database            | 5432 |
 | `core`     | Game engine and plugin runtime | 9000 |
-| `gateway`  | Telnet and WebSocket servers   | 4201 |
+| `gateway`  | Telnet and web client servers  | 4201, 8080 |
 
 Verify the services are running:
 

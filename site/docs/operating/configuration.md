@@ -66,13 +66,17 @@ The gateway process handles telnet and web client connections.
 holomush gateway [flags]
 ```
 
-| Flag             | Default          | Description                       |
-| ---------------- | ---------------- | --------------------------------- |
-| `--telnet-addr`  | `:4201`          | Telnet server listen address      |
-| `--core-addr`    | `localhost:9000` | Core gRPC server address          |
-| `--control-addr` | `127.0.0.1:9002` | Control plane gRPC address (mTLS) |
-| `--metrics-addr` | `127.0.0.1:9101` | Metrics and health HTTP endpoint  |
-| `--log-format`   | `json`           | Log format: `json` or `text`      |
+| Flag             | Default          | Description                                    |
+| ---------------- | ---------------- | ---------------------------------------------- |
+| `--telnet-addr`  | `:4201`          | Telnet server listen address                   |
+| `--web-addr`     | `:8080`          | Web client HTTP server listen address          |
+| `--web-dir`      | (embedded)       | Override embedded static files with a directory |
+| `--cors-origins` | (none)           | Allowed CORS origins for cross-origin requests |
+| `--core-addr`    | `localhost:9000` | Core gRPC server address                       |
+| `--control-addr` | `127.0.0.1:9002` | Control plane gRPC address (mTLS)              |
+| `--metrics-addr` | `127.0.0.1:9101` | Metrics and health HTTP endpoint               |
+| `--log-format`   | `json`           | Log format: `json` or `text`                   |
+| `--config`       | XDG default      | Path to YAML config file                       |
 
 **Example:**
 
@@ -117,7 +121,7 @@ All migrate commands require `DATABASE_URL` environment variable.
 
 | Variable          | Required | Description                                    |
 | ----------------- | -------- | ---------------------------------------------- |
-| `DATABASE_URL`    | Core     | PostgreSQL connection string                   |
+| `DATABASE_URL`    | Core, Migrate | PostgreSQL connection string              |
 | `XDG_CONFIG_HOME` | No       | Configuration directory (default: `~/.config`) |
 | `XDG_DATA_HOME`   | No       | Data directory (default: `~/.local/share`)     |
 | `XDG_STATE_HOME`  | No       | State directory (default: `~/.local/state`)    |
@@ -159,6 +163,14 @@ HoloMUSH follows the XDG Base Directory Specification.
 | `~/.local/share/holomush/` | Persistent data                |
 | `~/.local/state/holomush/` | Runtime state, logs, PID files |
 
+!!! note "Docker and Kubernetes"
+
+    These paths are relative to the container's `HOME` directory. In the default
+    container image, `HOME=/home/holomush`, so config lives at
+    `/home/holomush/.config/holomush/`. To persist data across container restarts,
+    mount a volume to `/home/holomush/.config/holomush` (see [Installation](installation.md)
+    for compose examples). In Kubernetes, use a PersistentVolumeClaim for the same path.
+
 ### Generated Files
 
 On first startup, core automatically creates:
@@ -169,6 +181,22 @@ On first startup, core automatically creates:
 | `~/.config/holomush/certs/core.pem`     | Core server certificate |
 | `~/.config/holomush/certs/core-key.pem` | Core server private key |
 | `~/.config/holomush/config.yaml`        | Server configuration    |
+
+### Using Your Own Certificate Authority
+
+HoloMUSH generates a self-signed CA on first startup for mTLS between core and
+gateway. If you'd prefer to use your own CA (for example, an internal PKI or a
+CA managed by your infrastructure tooling), replace the generated files before
+starting the server:
+
+1. Place your CA certificate at `~/.config/holomush/certs/ca.pem`
+2. Issue a server certificate signed by your CA and place it at
+   `~/.config/holomush/certs/core.pem` with its key at `core-key.pem`
+3. The certificate's Subject Alternative Name (SAN) must include the `game_id`
+   value — gateway validates this on connection
+
+If the cert files already exist at startup, core will use them instead of
+generating new ones.
 
 ## Docker Configuration
 

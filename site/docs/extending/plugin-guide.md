@@ -90,15 +90,15 @@ end
 
 The `event` table passed to `on_event` contains:
 
-| Field        | Type   | Description                          |
-| ------------ | ------ | ------------------------------------ |
-| `id`         | string | Unique event ID (ULID)               |
-| `stream`     | string | Event stream (e.g., location:room1)  |
-| `type`       | string | Event type (say, pose, arrive, etc.) |
-| `timestamp`  | number | Unix milliseconds                    |
-| `actor_kind` | string | "character", "system", or "plugin"   |
-| `actor_id`   | string | Actor identifier                     |
-| `payload`    | string | JSON-encoded event data              |
+| Field        | Type   | Description                              |
+| ------------ | ------ | ---------------------------------------- |
+| `id`         | string | Unique event ID (ULID)                   |
+| `stream`     | string | Event stream (e.g., `location:<id>`)     |
+| `type`       | string | Event type (say, pose, arrive, etc.)     |
+| `timestamp`  | number | Unix milliseconds                        |
+| `actor_kind` | string | "character", "system", or "plugin"       |
+| `actor_id`   | string | Actor identifier                         |
+| `payload`    | string | JSON-encoded event data                  |
 
 ### Host Functions
 
@@ -116,8 +116,8 @@ local id = holomush.new_request_id()
 
 -- Key-value storage (enforced via ABAC)
 local value, err = holomush.kv_get("my-key")
-local _, err = holomush.kv_set("my-key", "my-value")
-local _, err = holomush.kv_delete("my-key")
+holomush.kv_set("my-key", "my-value")
+holomush.kv_delete("my-key")
 ```
 
 ### World Query Functions
@@ -126,8 +126,8 @@ Lua plugins can query the game world using these host functions. Access is
 enforced via ABAC policies declared in `plugin.yaml`.
 
 ```lua
--- Query room/location information (enforced via ABAC)
-local room, err = holomush.query_room(room_id)
+-- Query location information (enforced via ABAC)
+local location, err = holomush.query_location(location_id)
 -- Returns: table with id, name, description, type on success
 -- Returns: nil, error_message on failure
 
@@ -136,8 +136,8 @@ local char, err = holomush.query_character(character_id)
 -- Returns: table with id, name, player_id, location_id on success
 -- Returns: nil, error_message on failure
 
--- Query characters in a room (enforced via ABAC)
-local chars, err = holomush.query_room_characters(room_id)
+-- Query characters in a location (enforced via ABAC)
+local chars, err = holomush.query_location_characters(location_id)
 -- Returns: array of character tables on success
 -- Returns: nil, error_message on failure
 
@@ -308,33 +308,13 @@ const (
 
 ## Event Types
 
-Both plugin types handle the same event types:
-
-### Communication Events
-
-| Type     | Description              | Payload               |
-| -------- | ------------------------ | --------------------- |
-| `say`    | Character speech         | `{"message": "text"}` |
-| `pose`   | Character action/emote   | `{"message": "text"}` |
-| `system` | System-generated message | `{"message": "text"}` |
-
-### World Events
-
-| Type             | Description                      | Payload Fields                                                                                   |
-| ---------------- | -------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `move`           | Character or object moved        | `entity_type`, `entity_id`, `from_type`, `from_id`, `to_type`, `to_id`, `exit_id?`, `exit_name?` |
-| `object_create`  | Object created                   | `object_id`, `object_name`, `location_id`                                                        |
-| `object_destroy` | Object destroyed                 | `object_id`, `object_name`                                                                       |
-| `object_use`     | Object used                      | `object_id`, `object_name`, `character_id`                                                       |
-| `object_examine` | Object examined                  | `object_id`, `object_name`, `character_id`                                                       |
-| `object_give`    | Object transferred between chars | `object_id`, `object_name`, `from_character_id`, `to_character_id`                               |
-
-See the [World Model Design](https://github.com/holomush/holomush/blob/main/docs/specs/2026-01-22-world-model-design.md) for complete payload specifications.
+See [Event Reference](events.md) for event types, payload schemas, and stream
+patterns.
 
 ## ABAC Policies
 
 Plugins declare access policies in their manifest using Cedar-style DSL. The ABAC
-engine is default-deny — plugins can only perform actions explicitly permitted by
+engine is default-deny -- plugins can only perform actions explicitly permitted by
 their policies.
 
 Policies are installed to the PolicyStore when a plugin is loaded and removed when
@@ -381,7 +361,7 @@ helps plugins respond appropriately.
 
 | Error Message                    | Cause                            | Recovery                          |
 | -------------------------------- | -------------------------------- | --------------------------------- |
-| `"room not found"`               | Room ID doesn't exist            | Check ID validity, handle missing |
+| `"location not found"`           | Location ID doesn't exist        | Check ID validity, handle missing |
 | `"character not found"`          | Character ID doesn't exist       | Check ID validity, handle missing |
 | `"object not found"`             | Object ID doesn't exist          | Check ID validity, handle missing |
 | `"access denied"`                | Plugin lacks required ABAC policy | Add policy to manifest           |
@@ -402,15 +382,15 @@ internal details to end users.
 ### Example Error Handling
 
 ```lua
-local room, err = holomush.query_room(room_id)
+local location, err = holomush.query_location(location_id)
 if err then
     if err:match("not found") then
         -- Handle missing entity gracefully
-        holomush.log("debug", "Room not found: " .. room_id)
+        holomush.log("debug", "Location not found: " .. location_id)
         return nil
     elseif err:match("access denied") then
         -- Permission error - likely missing ABAC policy
-        holomush.log("warn", "Permission denied for room query")
+        holomush.log("warn", "Permission denied for location query")
         return nil
     elseif err:match("internal error") then
         -- Surface correlation ID to user for debugging
@@ -427,8 +407,8 @@ if err then
     end
     return nil
 end
--- Use room data safely
-holomush.log("debug", "Found room: " .. room.name)
+-- Use location data safely
+holomush.log("debug", "Found location: " .. location.name)
 ```
 
 ### For Operators
@@ -528,18 +508,6 @@ Plugin handlers have a 5-second timeout. If exceeded:
 
 For slow operations, consider caching results or offloading work to external
 systems.
-
-## Stream Patterns
-
-Events are organized into streams. Subscribe to streams using patterns:
-
-| Pattern          | Matches                       |
-| ---------------- | ----------------------------- |
-| `location:*`     | All location events           |
-| `location:room1` | Specific location only        |
-| `global:*`       | All global events             |
-| `character:*`    | All character-specific events |
-| `*`              | Everything                    |
 
 ## Example: Dice Roller
 
@@ -676,6 +644,11 @@ A complete example showing both plugin types:
 
 ## Migration Guide
 
+!!! note "Scope"
+
+    This section is for contributors working on the host function layer, not for
+    plugin authors using the Lua or Go SDK.
+
 ### WithWorldQuerier to WithWorldService
 
 !!! warning "Deprecation Notice"
@@ -745,5 +718,5 @@ not need changes.
 ## Next Steps
 
 - Review the [echo-bot example](https://github.com/holomush/holomush/tree/main/plugins/echo-bot)
-- Learn about the [Event System](events.md)
-- Explore [Host Functions](plugins/host-functions.md) for advanced capabilities
+- See the [Event Reference](events.md) for all event types and stream patterns
+- Read the [API Guide](api-guide.md) to understand the gRPC protocol layer

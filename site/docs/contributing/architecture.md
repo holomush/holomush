@@ -88,9 +88,9 @@ architectural choice:
 - Events across different streams have no ordering guarantee
 - Clients reconnecting MUST receive missed events in order
 
-**Why this works for MUSHes:** Players in the same room need to see "Alice says hi"
-before "Bob says yo" if Alice spoke first. Players in different rooms don't care
-about each other's event ordering—and shouldn't be blocked by it.
+**Why this works for MUSHes:** Players in the same location need to see "Alice says hi"
+before "Bob says yo" if Alice spoke first. Players in different locations don't care
+about each other's event ordering -- and shouldn't be blocked by it.
 
 #### Stream Types
 
@@ -101,10 +101,10 @@ about each other's event ordering—and shouldn't be blocked by it.
 | `channel:<name>` | Channel messages (future)              | Channel members        |
 | `location:*`     | Broadcast events (system-wide)         | All locations          |
 
-#### Cross-Room Events
+#### Cross-Location Events
 
-Movement between rooms produces events in the destination stream. If departure
-visibility is needed in the origin room, that requires a separate event to the
+Movement between locations produces events in the destination stream. If departure
+visibility is needed in the origin location, that requires a separate event to the
 origin stream. Each stream maintains independent ordering.
 
 ### Session Manager
@@ -137,7 +137,7 @@ erDiagram
 
 | Entity        | Description                                   |
 | ------------- | --------------------------------------------- |
-| **Location**  | A place in the world (room, area)             |
+| **Location**  | A place in the world                          |
 | **Exit**      | Connection between locations (bidirectional)  |
 | **Character** | Player-controlled entity with location        |
 | **Object**    | Items that can be in locations or inventories |
@@ -263,10 +263,10 @@ that the full ABAC implementation extends.
 
 - Plugins declare ABAC policies in their manifest
 - Access Policy Engine enforces policy boundaries
-- Default deny — no seed policies for plugins
+- Default deny -- no seed policies for plugins
 
 ## Further Reading
 
 - [Pull Request Guide](pr-guide.md) - Contribution workflow
 - [Coding Standards](coding-standards.md) - Code conventions
-- [Plugin Development](/developers/plugins/) - Building extensions
+- [Plugin Development](../extending/index.md) - Building extensions

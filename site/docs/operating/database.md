@@ -19,19 +19,19 @@ on startup, or can be managed manually.
 
 ```bash
 # Apply all pending migrations
-task migrate
+holomush migrate up
 
 # Preview migrations without executing
-task migrate -- --dry-run
+holomush migrate up --dry-run
 
 # Check current migration status
-task migrate:status
+holomush migrate status
 
 # Rollback one migration
-task migrate:down
+holomush migrate down
 
 # Force version (for dirty state recovery)
-task migrate:force -- 7
+holomush migrate force 7
 ```
 
 ### Automatic Migrations
@@ -44,28 +44,12 @@ controlled with environment variables:
 HOLOMUSH_DB_AUTO_MIGRATE=false
 
 # Run migrations manually
-task migrate
+holomush migrate up
 ```
 
 ### Creating New Migrations
 
-For development, create new migration files:
-
-```bash
-# Install migrate CLI (one-time)
-go install -tags 'pgx5' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
-
-# Create migration files
-task migrate:create -- descriptive_name
-# Creates: NNNNNN_descriptive_name.up.sql and NNNNNN_descriptive_name.down.sql
-```
-
-**Migration file conventions:**
-
-- Up migrations apply changes (`.up.sql`)
-- Down migrations revert changes (`.down.sql`)
-- Files are numbered sequentially
-- Each migration should be atomic and reversible
+For creating new migration files, see the [Contributing Guide](../contributing/coding-standards.md).
 
 ### Bootstrapping Existing Databases
 
@@ -125,10 +109,10 @@ If a migration fails partway through, the database may be in a "dirty" state:
 
 ```bash
 # Check current state
-task migrate:status
+holomush migrate status
 
 # If dirty, fix manually then force version
-task migrate:force -- 6  # Force to version 6
+holomush migrate force 6
 ```
 
 ### Connection Issues

@@ -6,27 +6,38 @@ This document describes the HoloMUSH authentication architecture for contributor
 
 HoloMUSH uses a three-layer authentication architecture:
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│  Protocol Layer                                             │
-│  ┌─────────────────────┐  ┌─────────────────────┐          │
-│  │  TelnetAuthHandler  │  │  WebAuthHandler     │  (future)│
-│  └──────────┬──────────┘  └──────────┬──────────┘          │
-└─────────────┼────────────────────────┼──────────────────────┘
-              │                        │
-┌─────────────▼────────────────────────▼──────────────────────┐
-│  Service Layer                                              │
-│  ┌───────────────┐ ┌─────────────────┐ ┌─────────────────┐ │
-│  │  AuthService  │ │ CharacterService│ │ PasswordResetSvc│ │
-│  └───────┬───────┘ └────────┬────────┘ └────────┬────────┘ │
-└──────────┼──────────────────┼───────────────────┼───────────┘
-           │                  │                   │
-┌──────────▼──────────────────▼───────────────────▼───────────┐
-│  Repository Layer                                           │
-│  ┌────────────────┐ ┌───────────────┐ ┌───────────────────┐│
-│  │PlayerRepository│ │WebSessionRepo │ │PasswordResetRepo ││
-│  └────────────────┘ └───────────────┘ └───────────────────┘│
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Protocol["Protocol Layer"]
+        GH[GatewayHandler]
+        WH["WebHandler (future)"]
+    end
+
+    subgraph gRPC["gRPC Boundary"]
+        CC[CoreClient]
+    end
+
+    subgraph Core["Core Server"]
+        AS[AuthService]
+        CS[CharacterService]
+        PRS[PasswordResetService]
+    end
+
+    subgraph Repo["Repository Layer"]
+        PR[PlayerRepository]
+        WSR[WebSessionRepository]
+        PRR[PasswordResetRepository]
+    end
+
+    GH --> CC
+    WH --> CC
+    CC --> AS
+    CC --> CS
+    AS --> PR
+    AS --> WSR
+    CS --> PR
+    PRS --> PR
+    PRS --> PRR
 ```
 
 ## Service Responsibilities
@@ -68,7 +79,7 @@ Handles password reset flow.
 | `ValidateToken` | Verify token validity and expiration | `internal/auth/reset_service.go:118` |
 | `ResetPassword` | Update password, invalidate tokens   | `internal/auth/reset_service.go:148` |
 
-## Security Features
+## Security Implementation
 
 ### Timing Attack Prevention
 
@@ -77,7 +88,7 @@ The auth service uses a dummy hash for non-existent users to prevent username en
 ```text
 Login(username, password):
   1. Look up user by username
-  2. If not found → use dummy hash (still verify to maintain constant time)
+  2. If not found -> use dummy hash (still verify to maintain constant time)
   3. Verify password against hash (real or dummy)
   4. Return same error for "user not found" and "wrong password"
 ```
@@ -99,22 +110,6 @@ Passwords are hashed using argon2id with OWASP-recommended parameters:
 
 Implementation: `internal/auth/hasher.go:30-36`
 
-### Rate Limiting
-
-Progressive rate limiting protects against brute-force attacks:
-
-| Failures | Delay | CAPTCHA (web only) |
-| -------- | ----- | ------------------ |
-| 1        | 1s    | No                 |
-| 2        | 2s    | No                 |
-| 3        | 4s    | No                 |
-| 4        | 8s    | Yes                |
-| 5        | 16s   | Yes                |
-| 6        | 32s   | Yes                |
-| 7+       | N/A   | 15-minute lockout  |
-
-Implementation: `internal/auth/ratelimit.go`
-
 ### Constant-Time Token Comparison
 
 Session token verification uses `crypto/subtle.ConstantTimeCompare` to prevent
@@ -130,7 +125,7 @@ Sessions use opaque random tokens rather than signed JWTs. Key design choices:
 | -------------- | ------------------------------ |
 | Token size     | 32 bytes (256 bits of entropy) |
 | Storage        | SHA256 hash in database        |
-| Expiry         | 24 hours                       |
+| Expiry         | TTL after detach (per-role, default 24h) |
 | Revocation     | Instant (delete database row)  |
 | Character bind | Mutable (update session row)   |
 
@@ -144,40 +139,43 @@ choosing opaque tokens over signed JWTs.
 ```mermaid
 sequenceDiagram
     participant C as Client
-    participant T as TelnetAuthHandler
+    participant GH as GatewayHandler
+    participant CC as CoreClient (gRPC)
     participant A as AuthService
-    participant CS as CharacterService
 
-    C->>T: TCP connect
-    T->>C: Welcome banner
+    C->>GH: TCP connect
+    GH->>C: Welcome banner
 
-    C->>T: connect <user> <pass>
-    T->>A: Login(username, password, "telnet", ip)
-    A->>T: Session + Characters
-    T->>C: Character list
+    C->>GH: connect <user> <pass>
+    GH->>CC: AuthenticatePlayer(username, password)
+    CC->>A: AuthenticatePlayer
+    A->>CC: Session + Characters
+    CC->>GH: Session + Characters
+    GH->>C: Character list
 
     alt Has characters
-        C->>T: play <charname>
-        T->>A: SelectCharacter(sessionID, charID)
-        T->>C: Enter world
+        C->>GH: play <charname>
+        GH->>CC: SelectCharacter(sessionID, charID)
+        CC->>A: SelectCharacter
+        GH->>C: Enter world
     else No characters
-        C->>T: create <name>
-        T->>CS: Create(playerID, name)
-        CS->>T: Character created
-        T->>C: Enter world
+        C->>GH: create <name>
+        GH->>CC: CreateCharacter(playerID, name)
+        CC->>A: CreateCharacter
+        GH->>C: Enter world
     end
 ```
 
 ### Key Protocol Handler Methods
 
-The telnet auth handler translates protocol commands to service calls:
+The telnet handler calls through the gRPC `CoreClient` interface, not service methods directly:
 
-| Command   | Handler Method  | Service Method                 | Source                                |
-| --------- | --------------- | ------------------------------ | ------------------------------------- |
-| `connect` | `HandleConnect` | `AuthService.Login`            | `internal/telnet/auth_handler.go:113` |
-| `create`  | `HandleCreate`  | `RegistrationService.Register` | `internal/telnet/auth_handler.go:183` |
-| `play`    | `HandleEmbody`  | `AuthService.SelectCharacter`  | `internal/telnet/auth_handler.go:229` |
-| `quit`    | `HandleQuit`    | `AuthService.Logout`           | `internal/telnet/auth_handler.go:284` |
+| Command   | Handler Method  | gRPC RPC             | Source                               |
+| --------- | --------------- | -------------------- | ------------------------------------ |
+| `connect` | `handleConnect` | `AuthenticatePlayer` | `internal/telnet/gateway_handler.go` |
+| `create`  | `handleCreate`  | `CreateCharacter`    | `internal/telnet/gateway_handler.go` |
+| `play`    | `handlePlay`    | `SelectCharacter`    | `internal/telnet/gateway_handler.go` |
+| `quit`    | `handleQuit`    | `Logout`             | `internal/telnet/gateway_handler.go` |
 
 ## Repository Interfaces
 
@@ -211,4 +209,4 @@ Manages reset token persistence with token hash lookups and player-based cleanup
 
 - [Design Spec](../../../docs/specs/2026-01-25-auth-identity-design.md) - Full authentication design
 - [ADR 0001](../../../docs/adr/0001-opaque-session-tokens.md) - Token design decision
-- [Operator Guide](../operators/authentication.md) - Deployment and configuration
+- [Operator Guide](../operating/authentication.md) - Deployment and configuration

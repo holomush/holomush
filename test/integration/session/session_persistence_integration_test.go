@@ -25,9 +25,9 @@ import (
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
 	grpcpkg "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
-	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/telnet"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
