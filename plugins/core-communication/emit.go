@@ -27,9 +27,7 @@ type EmitHandler struct{}
 func (h *EmitHandler) HandleCommand(_ context.Context, cmd pluginsdk.CommandRequest, _ plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	msg := strings.TrimSpace(cmd.Args)
 	if msg == "" {
-		return &pluginsdk.CommandResponse{
-			Output: "What do you want to emit?",
-		}, nil
+		return pluginsdk.Errorf("What do you want to emit?"), nil
 	}
 
 	payload, err := json.Marshal(emitPayload{
@@ -40,12 +38,11 @@ func (h *EmitHandler) HandleCommand(_ context.Context, cmd pluginsdk.CommandRequ
 	}
 
 	if cmd.LocationID == "" || cmd.LocationID == "00000000000000000000000000" {
-		return &pluginsdk.CommandResponse{
-			Output: "You must be in a location to emit.",
-		}, nil
+		return pluginsdk.Errorf("You must be in a location to emit."), nil
 	}
 
 	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
 		Events: []pluginsdk.EmitEvent{
 			{
 				Stream:  "location:" + cmd.LocationID,

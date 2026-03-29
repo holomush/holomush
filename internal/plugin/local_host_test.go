@@ -13,92 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	plugins "github.com/holomush/holomush/internal/plugin"
+	pluginmocks "github.com/holomush/holomush/internal/plugin/mocks"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 // --- Test doubles ---
-
-type stubProxy struct{}
-
-func (s *stubProxy) QueryLocation(_ context.Context, _, _ string) (*plugins.LocationResult, error) {
-	return nil, nil
-}
-func (s *stubProxy) QueryCharacter(_ context.Context, _, _ string) (*plugins.CharacterResult, error) {
-	return nil, nil
-}
-func (s *stubProxy) QueryLocationCharacters(_ context.Context, _, _ string) ([]plugins.CharacterResult, error) {
-	return nil, nil
-}
-func (s *stubProxy) QueryObject(_ context.Context, _, _ string) (*plugins.ObjectResult, error) {
-	return nil, nil
-}
-func (s *stubProxy) FindLocation(_ context.Context, _, _ string) (*plugins.LocationResult, error) {
-	return nil, nil
-}
-func (s *stubProxy) GetCharactersByLocation(_ context.Context, _, _ string) ([]plugins.CharacterResult, error) {
-	return nil, nil
-}
-func (s *stubProxy) GetObjectsByLocation(_ context.Context, _, _ string) ([]plugins.ObjectResult, error) {
-	return nil, nil
-}
-func (s *stubProxy) CreateLocation(_ context.Context, _, _, _, _ string) (*plugins.LocationResult, error) {
-	return nil, nil
-}
-func (s *stubProxy) CreateExit(_ context.Context, _, _, _, _ string, _ plugins.CreateExitOpts) error {
-	return nil
-}
-func (s *stubProxy) CreateObject(_ context.Context, _, _, _ string) (*plugins.ObjectResult, error) {
-	return nil, nil
-}
-func (s *stubProxy) UpdateLocation(_ context.Context, _, _, _, _ string) error { return nil }
-func (s *stubProxy) UpdateCharacterDescription(_ context.Context, _, _, _ string) error {
-	return nil
-}
-func (s *stubProxy) SetProperty(_ context.Context, _, _, _, _, _ string) error { return nil }
-func (s *stubProxy) GetProperty(_ context.Context, _, _, _, _ string) (string, error) {
-	return "", nil
-}
-func (s *stubProxy) FindPropertyByPrefix(_ context.Context, _ string) ([]plugins.PropertyInfo, error) {
-	return nil, nil
-}
-func (s *stubProxy) ListPropertiesByParent(_ context.Context, _, _, _ string) ([]plugins.PropertyInfo, error) {
-	return nil, nil
-}
-func (s *stubProxy) KVGet(_ context.Context, _, _ string) (string, bool, error) { return "", false, nil }
-func (s *stubProxy) KVSet(_ context.Context, _, _, _ string) error              { return nil }
-func (s *stubProxy) KVDelete(_ context.Context, _, _ string) error              { return nil }
-func (s *stubProxy) FindSessionByName(_ context.Context, _ string) (*plugins.SessionResult, error) {
-	return nil, nil
-}
-func (s *stubProxy) SetLastWhispered(_ context.Context, _, _ string) error { return nil }
-func (s *stubProxy) DisconnectSession(_ context.Context, _, _ string) error { return nil }
-func (s *stubProxy) ListActiveSessions(_ context.Context) ([]plugins.SessionResult, error) {
-	return nil, nil
-}
-func (s *stubProxy) BroadcastSystemMessage(_ context.Context, _ string) error { return nil }
-func (s *stubProxy) UpdateActivity(_ context.Context, _ string) error         { return nil }
-func (s *stubProxy) SetPlayerAlias(_ context.Context, _, _, _ string) error   { return nil }
-func (s *stubProxy) DeletePlayerAlias(_ context.Context, _, _ string) error   { return nil }
-func (s *stubProxy) ListPlayerAliases(_ context.Context, _ string) ([]plugins.AliasEntry, error) {
-	return nil, nil
-}
-func (s *stubProxy) SetSystemAlias(_ context.Context, _, _, _ string) error { return nil }
-func (s *stubProxy) DeleteSystemAlias(_ context.Context, _ string) error    { return nil }
-func (s *stubProxy) ListSystemAliases(_ context.Context) ([]plugins.AliasEntry, error) {
-	return nil, nil
-}
-func (s *stubProxy) CheckAliasShadow(_ context.Context, _ string) (bool, string, error) {
-	return false, "", nil
-}
-func (s *stubProxy) ListCommands(_ context.Context, _ string) ([]plugins.CommandInfo, error) {
-	return nil, nil
-}
-func (s *stubProxy) GetCommandHelp(_ context.Context, _, _ string) (*plugins.CommandHelpInfo, error) {
-	return nil, nil
-}
-func (s *stubProxy) EmitEvent(_ context.Context, _, _ string, _ []byte) error { return nil }
-func (s *stubProxy) GetStartingLocationID(_ context.Context) (string, error)  { return "", nil }
-func (s *stubProxy) Log(_ context.Context, _, _ string)                       {}
 
 type echoCommandHandler struct{}
 
@@ -135,7 +54,7 @@ func coreManifest(name string) *plugins.Manifest {
 // --- Tests ---
 
 func TestLocalPluginHost_DeliverCommand(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-say", &echoCommandHandler{}, nil)
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-say"), ""))
 
@@ -148,7 +67,7 @@ func TestLocalPluginHost_DeliverCommand(t *testing.T) {
 }
 
 func TestLocalPluginHost_DeliverEvent(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-notify", nil, &echoEventHandler{})
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-notify"), ""))
 
@@ -164,7 +83,7 @@ func TestLocalPluginHost_DeliverEvent(t *testing.T) {
 }
 
 func TestLocalPluginHost_DeliverCommand_NoHandler(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-notify", nil, &echoEventHandler{})
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-notify"), ""))
 
@@ -174,7 +93,7 @@ func TestLocalPluginHost_DeliverCommand_NoHandler(t *testing.T) {
 }
 
 func TestLocalPluginHost_DeliverEvent_NoHandler(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-say", &echoCommandHandler{}, nil)
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-say"), ""))
 
@@ -184,7 +103,7 @@ func TestLocalPluginHost_DeliverEvent_NoHandler(t *testing.T) {
 }
 
 func TestLocalPluginHost_Load_NonCoreManifest(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 
 	m := &plugins.Manifest{
 		Name:    "lua-plugin",
@@ -200,7 +119,7 @@ func TestLocalPluginHost_Load_NonCoreManifest(t *testing.T) {
 }
 
 func TestLocalPluginHost_Load_NoRegisteredHandler(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 
 	err := host.Load(context.Background(), coreManifest("unknown-plugin"), "")
 	require.Error(t, err)
@@ -208,14 +127,14 @@ func TestLocalPluginHost_Load_NoRegisteredHandler(t *testing.T) {
 }
 
 func TestLocalPluginHost_Load_NilManifest(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	err := host.Load(context.Background(), nil, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "manifest cannot be nil")
 }
 
 func TestLocalPluginHost_Load_Duplicate(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-say", &echoCommandHandler{}, nil)
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-say"), ""))
 
@@ -225,7 +144,7 @@ func TestLocalPluginHost_Load_Duplicate(t *testing.T) {
 }
 
 func TestLocalPluginHost_Unload(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-say", &echoCommandHandler{}, nil)
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-say"), ""))
 
@@ -239,14 +158,14 @@ func TestLocalPluginHost_Unload(t *testing.T) {
 }
 
 func TestLocalPluginHost_Unload_NotLoaded(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	err := host.Unload(context.Background(), "nonexistent")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, plugins.ErrPluginNotLoaded)
 }
 
 func TestLocalPluginHost_Plugins(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-a", &echoCommandHandler{}, nil)
 	host.RegisterHandler("core-b", nil, &echoEventHandler{})
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-a"), ""))
@@ -259,7 +178,7 @@ func TestLocalPluginHost_Plugins(t *testing.T) {
 }
 
 func TestLocalPluginHost_Close(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-say", &echoCommandHandler{}, nil)
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-say"), ""))
 
@@ -286,27 +205,27 @@ func TestLocalPluginHost_Close(t *testing.T) {
 }
 
 func TestLocalPluginHost_Close_Idempotent(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	require.NoError(t, host.Close(context.Background()))
 	require.NoError(t, host.Close(context.Background()))
 }
 
 func TestLocalPluginHost_DeliverCommand_NotLoaded(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	_, err := host.DeliverCommand(context.Background(), "missing", pluginsdk.CommandRequest{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, plugins.ErrPluginNotLoaded)
 }
 
 func TestLocalPluginHost_DeliverEvent_NotLoaded(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	_, err := host.DeliverEvent(context.Background(), "missing", pluginsdk.Event{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, plugins.ErrPluginNotLoaded)
 }
 
 func TestLocalPluginHost_HandlerError_Propagated(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-fail", &failingCommandHandler{}, nil)
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-fail"), ""))
 
@@ -316,7 +235,7 @@ func TestLocalPluginHost_HandlerError_Propagated(t *testing.T) {
 }
 
 func TestLocalPluginHost_ConcurrentAccess(t *testing.T) {
-	host := plugins.NewLocalPluginHost(&stubProxy{})
+	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-say", &echoCommandHandler{}, &echoEventHandler{})
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-say"), ""))
 

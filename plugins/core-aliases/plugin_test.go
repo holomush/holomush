@@ -9,124 +9,69 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	plugins "github.com/holomush/holomush/internal/plugin"
+	pluginmocks "github.com/holomush/holomush/internal/plugin/mocks"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
-// --- Mock ServiceProxy ---
-
-type mockProxy struct {
-	plugins.ServiceProxy // embed to satisfy interface; panics on unimplemented calls
-
-	playerAliases map[string][]plugins.AliasEntry // keyed by playerID
-	systemAliases []plugins.AliasEntry
-	shadowCmd     string // if non-empty, CheckAliasShadow returns (true, shadowCmd)
-
-	// Track calls for verification.
-	setPlayerAliasCalls    []setPlayerAliasCall
-	deletePlayerAliasCalls []deletePlayerAliasCall
-	setSystemAliasCalls    []setSystemAliasCall
-	deleteSystemAliasCalls []string
-
-	// Error injection.
-	setPlayerAliasErr  error
-	setSystemAliasErr  error
-	checkShadowErr     error
-	listPlayerErr      error
-	listSystemErr      error
-	deletePlayerErr    error
-	deleteSystemErr    error
-}
-
-type setPlayerAliasCall struct {
-	PlayerID, Alias, Command string
-}
-
-type deletePlayerAliasCall struct {
-	PlayerID, Alias string
-}
-
-type setSystemAliasCall struct {
-	Alias, Command, CreatedBy string
-}
-
-func newMockProxy() *mockProxy {
-	return &mockProxy{
-		playerAliases: make(map[string][]plugins.AliasEntry),
-	}
-}
-
-func (m *mockProxy) CheckAliasShadow(_ context.Context, alias string) (bool, string, error) {
-	if m.checkShadowErr != nil {
-		return false, "", m.checkShadowErr
-	}
-	if m.shadowCmd != "" {
-		return true, m.shadowCmd, nil
-	}
-	return false, "", nil
-}
-
-func (m *mockProxy) ListPlayerAliases(_ context.Context, playerID string) ([]plugins.AliasEntry, error) {
-	if m.listPlayerErr != nil {
-		return nil, m.listPlayerErr
-	}
-	return m.playerAliases[playerID], nil
-}
-
-func (m *mockProxy) ListSystemAliases(_ context.Context) ([]plugins.AliasEntry, error) {
-	if m.listSystemErr != nil {
-		return nil, m.listSystemErr
-	}
-	return m.systemAliases, nil
-}
-
-func (m *mockProxy) SetPlayerAlias(_ context.Context, playerID, alias, command string) error {
-	m.setPlayerAliasCalls = append(m.setPlayerAliasCalls, setPlayerAliasCall{playerID, alias, command})
-	return m.setPlayerAliasErr
-}
-
-func (m *mockProxy) DeletePlayerAlias(_ context.Context, playerID, alias string) error {
-	m.deletePlayerAliasCalls = append(m.deletePlayerAliasCalls, deletePlayerAliasCall{playerID, alias})
-	return m.deletePlayerErr
-}
-
-func (m *mockProxy) SetSystemAlias(_ context.Context, alias, command, createdBy string) error {
-	m.setSystemAliasCalls = append(m.setSystemAliasCalls, setSystemAliasCall{alias, command, createdBy})
-	return m.setSystemAliasErr
-}
-
-func (m *mockProxy) DeleteSystemAlias(_ context.Context, alias string) error {
-	m.deleteSystemAliasCalls = append(m.deleteSystemAliasCalls, alias)
-	return m.deleteSystemErr
+// newAliasProxy creates a MockServiceProxy with default stubs for alias commands.
+// Methods that aren't expected to be called in a test don't need setup — the
+// mock will simply report them as unexpected if they fire.
+func newAliasProxy(t *testing.T) *pluginmocks.MockServiceProxy {
+	t.Helper()
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	// Default: no command shadow.
+	proxy.On("CheckAliasShadow", mock.Anything, mock.Anything).Return(false, "", nil).Maybe()
+	// Default: empty player and system aliases.
+	proxy.On("ListPlayerAliases", mock.Anything, mock.Anything).Return([]plugins.AliasEntry(nil), nil).Maybe()
+	proxy.On("ListSystemAliases", mock.Anything).Return([]plugins.AliasEntry(nil), nil).Maybe()
+	// Default: log calls are allowed.
+	proxy.On("Log", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+	return proxy
 }
 
 // --- Handler dispatch test ---
 
 func TestHandler_HandleCommand_Dispatch(t *testing.T) {
 	h := &Handler{}
-	proxy := newMockProxy()
 	ctx := context.Background()
 
 	tests := []struct {
-		name    string
-		command string
-		args    string
-		wantErr bool
+		name       string
+		command    string
+		args       string
+		setup      func(*pluginmocks.MockServiceProxy)
+		wantErr    bool
+		wantStatus pluginsdk.CommandStatus
 	}{
-		{"alias with valid args", "alias", "l=look", false},
-		{"unalias with valid args", "unalias", "l", false},
-		{"aliases", "aliases", "", false},
-		{"sysalias with valid args", "sysalias", "l=look", false},
-		{"sysunsalias with valid args", "sysunsalias", "l", false},
-		{"sysaliases", "sysaliases", "", false},
-		{"unknown command", "badcmd", "", true},
+		{"alias with valid args", "alias", "l=look",
+			func(p *pluginmocks.MockServiceProxy) {
+				p.On("SetPlayerAlias", mock.Anything, mock.Anything, "l", "look").Return(nil)
+			},
+			false, pluginsdk.CommandOK},
+		{"unalias with valid args", "unalias", "l", nil, false, pluginsdk.CommandError},
+		{"aliases", "aliases", "", nil, false, pluginsdk.CommandOK},
+		{"sysalias with valid args", "sysalias", "l=look",
+			func(p *pluginmocks.MockServiceProxy) {
+				p.On("SetSystemAlias", mock.Anything, "l", "look", mock.Anything).Return(nil)
+			},
+			false, pluginsdk.CommandOK},
+		{"sysunsalias with valid args", "sysunsalias", "l", nil, false, pluginsdk.CommandError},
+		{"sysaliases", "sysaliases", "", nil, false, pluginsdk.CommandOK},
+		{"unknown command", "badcmd", "", nil, false, pluginsdk.CommandFailure},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := h.HandleCommand(ctx, pluginsdk.CommandRequest{
+			proxy := newAliasProxy(t)
+			if tt.setup != nil {
+				tt.setup(proxy)
+			}
+
+			resp, err := h.HandleCommand(ctx, pluginsdk.CommandRequest{
 				Command:     tt.command,
 				Args:        tt.args,
 				CharacterID: "01EXAMPLE00000000000000001",
@@ -136,6 +81,7 @@ func TestHandler_HandleCommand_Dispatch(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+				assert.Equal(t, tt.wantStatus, resp.Status)
 			}
 		})
 	}
@@ -144,7 +90,9 @@ func TestHandler_HandleCommand_Dispatch(t *testing.T) {
 // --- Player alias tests ---
 
 func TestAliasAdd_Success(t *testing.T) {
-	proxy := newMockProxy()
+	proxy := newAliasProxy(t)
+	proxy.On("SetPlayerAlias", mock.Anything, "player-1", "l", "look").Return(nil)
+
 	cmd := pluginsdk.CommandRequest{
 		Command:     "alias",
 		Args:        "l=look",
@@ -154,15 +102,19 @@ func TestAliasAdd_Success(t *testing.T) {
 	resp, err := handleAliasAdd(context.Background(), cmd, proxy)
 	require.NoError(t, err)
 	assert.Contains(t, resp.Output, "Alias 'l' added: look")
-	require.Len(t, proxy.setPlayerAliasCalls, 1)
-	assert.Equal(t, "player-1", proxy.setPlayerAliasCalls[0].PlayerID)
-	assert.Equal(t, "l", proxy.setPlayerAliasCalls[0].Alias)
-	assert.Equal(t, "look", proxy.setPlayerAliasCalls[0].Command)
+	proxy.AssertCalled(t, "SetPlayerAlias", mock.Anything, "player-1", "l", "look")
 }
 
 func TestAliasAdd_WarnsOnCommandShadow(t *testing.T) {
-	proxy := newMockProxy()
-	proxy.shadowCmd = "look"
+	proxy := newAliasProxy(t)
+	// Override default: shadow the "look" command.
+	proxy.ExpectedCalls = nil
+	proxy.On("CheckAliasShadow", mock.Anything, "look").Return(true, "look", nil)
+	proxy.On("ListSystemAliases", mock.Anything).Return([]plugins.AliasEntry(nil), nil).Maybe()
+	proxy.On("ListPlayerAliases", mock.Anything, mock.Anything).Return([]plugins.AliasEntry(nil), nil).Maybe()
+	proxy.On("SetPlayerAlias", mock.Anything, "player-1", "look", "l").Return(nil)
+	proxy.On("Log", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+
 	cmd := pluginsdk.CommandRequest{
 		Command:     "alias",
 		Args:        "look=l",
@@ -176,8 +128,15 @@ func TestAliasAdd_WarnsOnCommandShadow(t *testing.T) {
 }
 
 func TestAliasAdd_WarnsOnSystemAliasShadow(t *testing.T) {
-	proxy := newMockProxy()
-	proxy.systemAliases = []plugins.AliasEntry{{Alias: "l", Command: "look"}}
+	proxy := newAliasProxy(t)
+	// Override default: system aliases include "l".
+	proxy.ExpectedCalls = nil
+	proxy.On("CheckAliasShadow", mock.Anything, mock.Anything).Return(false, "", nil).Maybe()
+	proxy.On("ListSystemAliases", mock.Anything).Return([]plugins.AliasEntry{{Alias: "l", Command: "look"}}, nil)
+	proxy.On("ListPlayerAliases", mock.Anything, mock.Anything).Return([]plugins.AliasEntry(nil), nil).Maybe()
+	proxy.On("SetPlayerAlias", mock.Anything, "player-1", "l", "examine").Return(nil)
+	proxy.On("Log", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+
 	cmd := pluginsdk.CommandRequest{
 		Command:     "alias",
 		Args:        "l=examine",
@@ -190,8 +149,16 @@ func TestAliasAdd_WarnsOnSystemAliasShadow(t *testing.T) {
 }
 
 func TestAliasAdd_WarnsOnReplace(t *testing.T) {
-	proxy := newMockProxy()
-	proxy.playerAliases["player-1"] = []plugins.AliasEntry{{Alias: "l", Command: "look"}}
+	proxy := newAliasProxy(t)
+	// Override default: player already has alias "l".
+	proxy.ExpectedCalls = nil
+	proxy.On("CheckAliasShadow", mock.Anything, mock.Anything).Return(false, "", nil).Maybe()
+	proxy.On("ListSystemAliases", mock.Anything).Return([]plugins.AliasEntry(nil), nil).Maybe()
+	proxy.On("ListPlayerAliases", mock.Anything, "player-1").
+		Return([]plugins.AliasEntry{{Alias: "l", Command: "look"}}, nil)
+	proxy.On("SetPlayerAlias", mock.Anything, "player-1", "l", "examine").Return(nil)
+	proxy.On("Log", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+
 	cmd := pluginsdk.CommandRequest{
 		Command:     "alias",
 		Args:        "l=examine",
@@ -204,71 +171,86 @@ func TestAliasAdd_WarnsOnReplace(t *testing.T) {
 }
 
 func TestAliasAdd_InvalidFormat(t *testing.T) {
-	proxy := newMockProxy()
+	proxy := newAliasProxy(t)
 	cmd := pluginsdk.CommandRequest{
 		Command:     "alias",
 		Args:        "no-equals-sign",
 		CharacterID: "player-1",
 	}
 
-	_, err := handleAliasAdd(context.Background(), cmd, proxy)
-	assert.Error(t, err)
+	resp, err := handleAliasAdd(context.Background(), cmd, proxy)
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
 }
 
 func TestAliasAdd_EmptyAlias(t *testing.T) {
-	proxy := newMockProxy()
+	proxy := newAliasProxy(t)
 	cmd := pluginsdk.CommandRequest{
 		Command:     "alias",
 		Args:        "=look",
 		CharacterID: "player-1",
 	}
 
-	_, err := handleAliasAdd(context.Background(), cmd, proxy)
-	assert.Error(t, err)
+	resp, err := handleAliasAdd(context.Background(), cmd, proxy)
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
 }
 
 func TestAliasAdd_EmptyCommand(t *testing.T) {
-	proxy := newMockProxy()
+	proxy := newAliasProxy(t)
 	cmd := pluginsdk.CommandRequest{
 		Command:     "alias",
 		Args:        "l=",
 		CharacterID: "player-1",
 	}
 
-	_, err := handleAliasAdd(context.Background(), cmd, proxy)
-	assert.Error(t, err)
+	resp, err := handleAliasAdd(context.Background(), cmd, proxy)
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
 }
 
 func TestAliasAdd_InvalidName(t *testing.T) {
-	proxy := newMockProxy()
+	proxy := newAliasProxy(t)
 	cmd := pluginsdk.CommandRequest{
 		Command:     "alias",
 		Args:        "bad name=look",
 		CharacterID: "player-1",
 	}
 
-	_, err := handleAliasAdd(context.Background(), cmd, proxy)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid alias name")
+	resp, err := handleAliasAdd(context.Background(), cmd, proxy)
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "invalid alias name")
 }
 
 func TestAliasAdd_ProxyError(t *testing.T) {
-	proxy := newMockProxy()
-	proxy.setPlayerAliasErr = fmt.Errorf("circular reference")
+	proxy := newAliasProxy(t)
+	proxy.On("SetPlayerAlias", mock.Anything, "player-1", "l", "look").
+		Return(fmt.Errorf("circular reference"))
+
 	cmd := pluginsdk.CommandRequest{
 		Command:     "alias",
 		Args:        "l=look",
 		CharacterID: "player-1",
 	}
 
-	_, err := handleAliasAdd(context.Background(), cmd, proxy)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "circular reference")
+	resp, err := handleAliasAdd(context.Background(), cmd, proxy)
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandFailure, resp.Status)
+	assert.Contains(t, resp.Output, "Unable to create alias")
 }
 
 func TestAliasRemove_Success(t *testing.T) {
-	proxy := newMockProxy()
-	proxy.playerAliases["player-1"] = []plugins.AliasEntry{{Alias: "l", Command: "look"}}
+	proxy := newAliasProxy(t)
+	// Override: player has alias "l".
+	proxy.ExpectedCalls = nil
+	proxy.On("CheckAliasShadow", mock.Anything, mock.Anything).Return(false, "", nil).Maybe()
+	proxy.On("ListSystemAliases", mock.Anything).Return([]plugins.AliasEntry(nil), nil).Maybe()
+	proxy.On("ListPlayerAliases", mock.Anything, "player-1").
+		Return([]plugins.AliasEntry{{Alias: "l", Command: "look"}}, nil)
+	proxy.On("DeletePlayerAlias", mock.Anything, "player-1", "l").Return(nil)
+	proxy.On("Log", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+
 	cmd := pluginsdk.CommandRequest{
 		Command:     "unalias",
 		Args:        "l",
@@ -278,12 +260,11 @@ func TestAliasRemove_Success(t *testing.T) {
 	resp, err := handleAliasRemove(context.Background(), cmd, proxy)
 	require.NoError(t, err)
 	assert.Contains(t, resp.Output, "Alias 'l' removed.")
-	require.Len(t, proxy.deletePlayerAliasCalls, 1)
-	assert.Equal(t, "l", proxy.deletePlayerAliasCalls[0].Alias)
+	proxy.AssertCalled(t, "DeletePlayerAlias", mock.Anything, "player-1", "l")
 }
 
 func TestAliasRemove_NotFound(t *testing.T) {
-	proxy := newMockProxy()
+	proxy := newAliasProxy(t)
 	cmd := pluginsdk.CommandRequest{
 		Command:     "unalias",
 		Args:        "nonexistent",
@@ -293,27 +274,34 @@ func TestAliasRemove_NotFound(t *testing.T) {
 	resp, err := handleAliasRemove(context.Background(), cmd, proxy)
 	require.NoError(t, err)
 	assert.Contains(t, resp.Output, "No alias 'nonexistent' found.")
-	assert.Empty(t, proxy.deletePlayerAliasCalls)
+	proxy.AssertNotCalled(t, "DeletePlayerAlias", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestAliasRemove_EmptyArgs(t *testing.T) {
-	proxy := newMockProxy()
+	proxy := newAliasProxy(t)
 	cmd := pluginsdk.CommandRequest{
 		Command:     "unalias",
 		Args:        "",
 		CharacterID: "player-1",
 	}
 
-	_, err := handleAliasRemove(context.Background(), cmd, proxy)
-	assert.Error(t, err)
+	resp, err := handleAliasRemove(context.Background(), cmd, proxy)
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
 }
 
 func TestAliasList_Success(t *testing.T) {
-	proxy := newMockProxy()
-	proxy.playerAliases["player-1"] = []plugins.AliasEntry{
+	proxy := newAliasProxy(t)
+	// Override: player has aliases.
+	proxy.ExpectedCalls = nil
+	proxy.On("CheckAliasShadow", mock.Anything, mock.Anything).Return(false, "", nil).Maybe()
+	proxy.On("ListSystemAliases", mock.Anything).Return([]plugins.AliasEntry(nil), nil).Maybe()
+	proxy.On("ListPlayerAliases", mock.Anything, "player-1").Return([]plugins.AliasEntry{
 		{Alias: "n", Command: "north"},
 		{Alias: "l", Command: "look"},
-	}
+	}, nil)
+	proxy.On("Log", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+
 	cmd := pluginsdk.CommandRequest{
 		Command:     "aliases",
 		Args:        "",
@@ -328,7 +316,7 @@ func TestAliasList_Success(t *testing.T) {
 }
 
 func TestAliasList_Empty(t *testing.T) {
-	proxy := newMockProxy()
+	proxy := newAliasProxy(t)
 	cmd := pluginsdk.CommandRequest{
 		Command:     "aliases",
 		Args:        "",
@@ -343,7 +331,9 @@ func TestAliasList_Empty(t *testing.T) {
 // --- System alias tests ---
 
 func TestSysaliasAdd_Success(t *testing.T) {
-	proxy := newMockProxy()
+	proxy := newAliasProxy(t)
+	proxy.On("SetSystemAlias", mock.Anything, "l", "look", "admin-1").Return(nil)
+
 	cmd := pluginsdk.CommandRequest{
 		Command:     "sysalias",
 		Args:        "l=look",
@@ -353,30 +343,41 @@ func TestSysaliasAdd_Success(t *testing.T) {
 	resp, err := handleSysaliasAdd(context.Background(), cmd, proxy)
 	require.NoError(t, err)
 	assert.Contains(t, resp.Output, "System alias 'l' added: look")
-	require.Len(t, proxy.setSystemAliasCalls, 1)
-	assert.Equal(t, "l", proxy.setSystemAliasCalls[0].Alias)
-	assert.Equal(t, "look", proxy.setSystemAliasCalls[0].Command)
-	assert.Equal(t, "admin-1", proxy.setSystemAliasCalls[0].CreatedBy)
+	proxy.AssertCalled(t, "SetSystemAlias", mock.Anything, "l", "look", "admin-1")
 }
 
 func TestSysaliasAdd_BlocksOnExistingSystemAlias(t *testing.T) {
-	proxy := newMockProxy()
-	proxy.systemAliases = []plugins.AliasEntry{{Alias: "l", Command: "look"}}
+	proxy := newAliasProxy(t)
+	// Override: system alias "l" already exists.
+	proxy.ExpectedCalls = nil
+	proxy.On("CheckAliasShadow", mock.Anything, mock.Anything).Return(false, "", nil).Maybe()
+	proxy.On("ListSystemAliases", mock.Anything).Return([]plugins.AliasEntry{{Alias: "l", Command: "look"}}, nil)
+	proxy.On("ListPlayerAliases", mock.Anything, mock.Anything).Return([]plugins.AliasEntry(nil), nil).Maybe()
+	proxy.On("Log", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+
 	cmd := pluginsdk.CommandRequest{
 		Command:     "sysalias",
 		Args:        "l=examine",
 		CharacterID: "admin-1",
 	}
 
-	_, err := handleSysaliasAdd(context.Background(), cmd, proxy)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "shadows existing system alias")
-	assert.Empty(t, proxy.setSystemAliasCalls)
+	resp, err := handleSysaliasAdd(context.Background(), cmd, proxy)
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "shadows existing system alias")
+	proxy.AssertNotCalled(t, "SetSystemAlias", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestSysaliasAdd_WarnsOnCommandShadow(t *testing.T) {
-	proxy := newMockProxy()
-	proxy.shadowCmd = "look"
+	proxy := newAliasProxy(t)
+	// Override: "look" shadows a command.
+	proxy.ExpectedCalls = nil
+	proxy.On("CheckAliasShadow", mock.Anything, "look").Return(true, "look", nil)
+	proxy.On("ListSystemAliases", mock.Anything).Return([]plugins.AliasEntry(nil), nil).Maybe()
+	proxy.On("ListPlayerAliases", mock.Anything, mock.Anything).Return([]plugins.AliasEntry(nil), nil).Maybe()
+	proxy.On("SetSystemAlias", mock.Anything, "look", "examine", "admin-1").Return(nil)
+	proxy.On("Log", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+
 	cmd := pluginsdk.CommandRequest{
 		Command:     "sysalias",
 		Args:        "look=examine",
@@ -390,33 +391,45 @@ func TestSysaliasAdd_WarnsOnCommandShadow(t *testing.T) {
 }
 
 func TestSysaliasAdd_InvalidFormat(t *testing.T) {
-	proxy := newMockProxy()
+	proxy := newAliasProxy(t)
 	cmd := pluginsdk.CommandRequest{
 		Command:     "sysalias",
 		Args:        "no-equals",
 		CharacterID: "admin-1",
 	}
 
-	_, err := handleSysaliasAdd(context.Background(), cmd, proxy)
-	assert.Error(t, err)
+	resp, err := handleSysaliasAdd(context.Background(), cmd, proxy)
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
 }
 
 func TestSysaliasAdd_ProxyError(t *testing.T) {
-	proxy := newMockProxy()
-	proxy.setSystemAliasErr = fmt.Errorf("circular reference")
+	proxy := newAliasProxy(t)
+	proxy.On("SetSystemAlias", mock.Anything, "l", "look", "admin-1").
+		Return(fmt.Errorf("circular reference"))
+
 	cmd := pluginsdk.CommandRequest{
 		Command:     "sysalias",
 		Args:        "l=look",
 		CharacterID: "admin-1",
 	}
 
-	_, err := handleSysaliasAdd(context.Background(), cmd, proxy)
-	assert.Error(t, err)
+	resp, err := handleSysaliasAdd(context.Background(), cmd, proxy)
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandFailure, resp.Status)
+	assert.Contains(t, resp.Output, "Unable to create system alias")
 }
 
 func TestSysaliasRemove_Success(t *testing.T) {
-	proxy := newMockProxy()
-	proxy.systemAliases = []plugins.AliasEntry{{Alias: "l", Command: "look"}}
+	proxy := newAliasProxy(t)
+	// Override: system alias "l" exists.
+	proxy.ExpectedCalls = nil
+	proxy.On("CheckAliasShadow", mock.Anything, mock.Anything).Return(false, "", nil).Maybe()
+	proxy.On("ListSystemAliases", mock.Anything).Return([]plugins.AliasEntry{{Alias: "l", Command: "look"}}, nil)
+	proxy.On("ListPlayerAliases", mock.Anything, mock.Anything).Return([]plugins.AliasEntry(nil), nil).Maybe()
+	proxy.On("DeleteSystemAlias", mock.Anything, "l").Return(nil)
+	proxy.On("Log", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+
 	cmd := pluginsdk.CommandRequest{
 		Command:     "sysunsalias",
 		Args:        "l",
@@ -426,12 +439,11 @@ func TestSysaliasRemove_Success(t *testing.T) {
 	resp, err := handleSysaliasRemove(context.Background(), cmd, proxy)
 	require.NoError(t, err)
 	assert.Contains(t, resp.Output, "System alias 'l' removed.")
-	require.Len(t, proxy.deleteSystemAliasCalls, 1)
-	assert.Equal(t, "l", proxy.deleteSystemAliasCalls[0])
+	proxy.AssertCalled(t, "DeleteSystemAlias", mock.Anything, "l")
 }
 
 func TestSysaliasRemove_NotFound(t *testing.T) {
-	proxy := newMockProxy()
+	proxy := newAliasProxy(t)
 	cmd := pluginsdk.CommandRequest{
 		Command:     "sysunsalias",
 		Args:        "nonexistent",
@@ -441,27 +453,33 @@ func TestSysaliasRemove_NotFound(t *testing.T) {
 	resp, err := handleSysaliasRemove(context.Background(), cmd, proxy)
 	require.NoError(t, err)
 	assert.Contains(t, resp.Output, "No system alias 'nonexistent' found.")
-	assert.Empty(t, proxy.deleteSystemAliasCalls)
+	proxy.AssertNotCalled(t, "DeleteSystemAlias", mock.Anything, mock.Anything)
 }
 
 func TestSysaliasRemove_EmptyArgs(t *testing.T) {
-	proxy := newMockProxy()
+	proxy := newAliasProxy(t)
 	cmd := pluginsdk.CommandRequest{
 		Command:     "sysunsalias",
 		Args:        "",
 		CharacterID: "admin-1",
 	}
 
-	_, err := handleSysaliasRemove(context.Background(), cmd, proxy)
-	assert.Error(t, err)
+	resp, err := handleSysaliasRemove(context.Background(), cmd, proxy)
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
 }
 
 func TestSysaliasList_Success(t *testing.T) {
-	proxy := newMockProxy()
-	proxy.systemAliases = []plugins.AliasEntry{
+	proxy := newAliasProxy(t)
+	// Override: system aliases exist.
+	proxy.ExpectedCalls = nil
+	proxy.On("CheckAliasShadow", mock.Anything, mock.Anything).Return(false, "", nil).Maybe()
+	proxy.On("ListSystemAliases", mock.Anything).Return([]plugins.AliasEntry{
 		{Alias: "n", Command: "north"},
 		{Alias: "l", Command: "look"},
-	}
+	}, nil)
+	proxy.On("ListPlayerAliases", mock.Anything, mock.Anything).Return([]plugins.AliasEntry(nil), nil).Maybe()
+	proxy.On("Log", mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 
 	resp, err := handleSysaliasList(context.Background(), proxy)
 	require.NoError(t, err)
@@ -471,7 +489,7 @@ func TestSysaliasList_Success(t *testing.T) {
 }
 
 func TestSysaliasList_Empty(t *testing.T) {
-	proxy := newMockProxy()
+	proxy := newAliasProxy(t)
 
 	resp, err := handleSysaliasList(context.Background(), proxy)
 	require.NoError(t, err)

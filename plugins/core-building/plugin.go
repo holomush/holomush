@@ -24,8 +24,6 @@ func (h *Handler) HandleCommand(ctx context.Context, cmd pluginsdk.CommandReques
 	case "link":
 		return handleLink(ctx, cmd, proxy)
 	default:
-		return &pluginsdk.CommandResponse{
-			Output: "Unknown building command: " + cmd.Command,
-		}, nil
+		return pluginsdk.Errorf("Unknown building command: %s", cmd.Command), nil
 	}
 }

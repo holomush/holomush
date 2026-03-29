@@ -20,15 +20,12 @@ import (
 func listCommands(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	commands, err := proxy.ListCommands(ctx, cmd.CharacterID)
 	if err != nil {
-		return &pluginsdk.CommandResponse{
-			Output: "Error listing commands: " + err.Error(),
-		}, nil
+		proxy.Log(ctx, "error", fmt.Sprintf("help: failed to list commands for %s: %v", cmd.CharacterID, err))
+		return pluginsdk.Failuref("Help is temporarily unavailable. Please try again later."), nil
 	}
 
 	if len(commands) == 0 {
-		return &pluginsdk.CommandResponse{
-			Output: "No commands available.",
-		}, nil
+		return pluginsdk.OK("No commands available."), nil
 	}
 
 	// Group by source.
@@ -74,21 +71,18 @@ func listCommands(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugi
 
 	out.WriteString(holo.Fmt.Dim("Type 'help <command>' for detailed help.").RenderANSI())
 
-	return &pluginsdk.CommandResponse{Output: out.String()}, nil
+	return pluginsdk.OK(out.String()), nil
 }
 
 // showCommandHelp returns detailed help for a single command.
 func showCommandHelp(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy, name string) (*pluginsdk.CommandResponse, error) {
 	info, err := proxy.GetCommandHelp(ctx, name, cmd.CharacterID)
 	if err != nil {
-		return &pluginsdk.CommandResponse{
-			Output: "Error getting help: " + err.Error(),
-		}, nil
+		proxy.Log(ctx, "error", fmt.Sprintf("help: failed to get help for %q: %v", name, err))
+		return pluginsdk.Failuref("Help is temporarily unavailable. Please try again later."), nil
 	}
 	if info == nil {
-		return &pluginsdk.CommandResponse{
-			Output: fmt.Sprintf("Unknown command: %s\nType 'help' to see available commands.", name),
-		}, nil
+		return pluginsdk.Errorf("Unknown command: %s\nType 'help' to see available commands.", name), nil
 	}
 
 	var out strings.Builder
@@ -115,16 +109,15 @@ func showCommandHelp(ctx context.Context, cmd pluginsdk.CommandRequest, proxy pl
 		out.WriteString(holo.Fmt.Dim("Source: " + info.Source).RenderANSI())
 	}
 
-	return &pluginsdk.CommandResponse{Output: out.String()}, nil
+	return pluginsdk.OK(out.String()), nil
 }
 
 // searchCommands filters all commands by a search term.
 func searchCommands(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy, term string) (*pluginsdk.CommandResponse, error) {
 	commands, err := proxy.ListCommands(ctx, cmd.CharacterID)
 	if err != nil {
-		return &pluginsdk.CommandResponse{
-			Output: "Error searching commands: " + err.Error(),
-		}, nil
+		proxy.Log(ctx, "error", fmt.Sprintf("help: failed to search commands for %q: %v", term, err))
+		return pluginsdk.Failuref("Search is temporarily unavailable. Please try again later."), nil
 	}
 
 	lower := strings.ToLower(term)
@@ -141,9 +134,7 @@ func searchCommands(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plu
 	})
 
 	if len(matches) == 0 {
-		return &pluginsdk.CommandResponse{
-			Output: fmt.Sprintf("No commands found matching '%s'.", term),
-		}, nil
+		return pluginsdk.Errorf("No commands found matching '%s'.", term), nil
 	}
 
 	var out strings.Builder
@@ -162,7 +153,7 @@ func searchCommands(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plu
 
 	out.WriteString(holo.Fmt.Dim(fmt.Sprintf("Found %d command(s).", len(matches))).RenderANSI())
 
-	return &pluginsdk.CommandResponse{Output: out.String()}, nil
+	return pluginsdk.OK(out.String()), nil
 }
 
 // trimSpace trims leading/trailing whitespace.

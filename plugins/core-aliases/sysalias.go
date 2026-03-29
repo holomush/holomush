@@ -19,20 +19,21 @@ import (
 func handleSysaliasAdd(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	alias, command, err := parseAliasDefinition(cmd.Args)
 	if err != nil {
-		return nil, err
+		return pluginsdk.Errorf("%s", err.Error()), nil
 	}
 
 	if err := validateAliasName(alias); err != nil {
-		return nil, err
+		return pluginsdk.Errorf("%s", err.Error()), nil
 	}
 
 	// Block if shadowing an existing system alias.
 	sysAliases, err := proxy.ListSystemAliases(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("checking system aliases: %w", err)
+		proxy.Log(ctx, "error", fmt.Sprintf("sysalias: failed to list system aliases: %v", err))
+		return pluginsdk.Failuref("Unable to create system alias right now. Please try again."), nil
 	}
 	if existingCmd, ok := findAlias(sysAliases, alias); ok {
-		return nil, fmt.Errorf("'%s' shadows existing system alias for '%s'. Use 'sysunsalias %s' first", alias, existingCmd, alias)
+		return pluginsdk.Errorf("'%s' shadows existing system alias for '%s'. Use 'sysunsalias %s' first.", alias, existingCmd, alias), nil
 	}
 
 	var warnings []string
@@ -40,15 +41,29 @@ func handleSysaliasAdd(ctx context.Context, cmd pluginsdk.CommandRequest, proxy 
 	// Check if alias shadows a registered command.
 	shadows, _, err := proxy.CheckAliasShadow(ctx, alias)
 	if err != nil {
-		return nil, fmt.Errorf("checking alias shadow: %w", err)
+		proxy.Log(ctx, "error", fmt.Sprintf("sysalias: failed to check shadow for %q: %v", alias, err))
+		return pluginsdk.Failuref("Unable to create system alias right now. Please try again."), nil
 	}
 	if shadows {
 		warnings = append(warnings, fmt.Sprintf("Warning: '%s' is an existing command. System alias will override it.", alias))
 	}
 
+	// Re-check inside the write path to prevent TOCTOU races: if another admin
+	// created the alias between our preflight and this point, SetSystemAlias
+	// still succeeds (it upserts). Re-fetch and reject if the alias now exists.
+	sysAliases2, err := proxy.ListSystemAliases(ctx)
+	if err != nil {
+		proxy.Log(ctx, "error", fmt.Sprintf("sysalias: failed to re-check system aliases: %v", err))
+		return pluginsdk.Failuref("Unable to create system alias right now. Please try again."), nil
+	}
+	if existingCmd, ok := findAlias(sysAliases2, alias); ok {
+		return pluginsdk.Errorf("'%s' shadows existing system alias for '%s'. Use 'sysunsalias %s' first.", alias, existingCmd, alias), nil
+	}
+
 	// Set the system alias (proxy handles DB + cache).
 	if err := proxy.SetSystemAlias(ctx, alias, command, cmd.CharacterID); err != nil {
-		return nil, err //nolint:wrapcheck // proxy returns structured errors
+		proxy.Log(ctx, "error", fmt.Sprintf("sysalias: failed to set system alias %q: %v", alias, err))
+		return pluginsdk.Failuref("Unable to create system alias right now. Please try again."), nil
 	}
 
 	var out strings.Builder
@@ -57,7 +72,7 @@ func handleSysaliasAdd(ctx context.Context, cmd pluginsdk.CommandRequest, proxy 
 	}
 	fmt.Fprintf(&out, "System alias '%s' added: %s\n", alias, command)
 
-	return &pluginsdk.CommandResponse{Output: out.String()}, nil
+	return pluginsdk.OK(out.String()), nil
 }
 
 // handleSysaliasRemove removes a system alias.
@@ -65,27 +80,25 @@ func handleSysaliasAdd(ctx context.Context, cmd pluginsdk.CommandRequest, proxy 
 func handleSysaliasRemove(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	alias := strings.TrimSpace(cmd.Args)
 	if alias == "" {
-		return nil, fmt.Errorf("usage: sysunsalias <alias>")
+		return pluginsdk.Errorf("Usage: sysunsalias <alias>"), nil
 	}
 
 	// Check if alias exists before removing.
 	sysAliases, err := proxy.ListSystemAliases(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("listing system aliases: %w", err)
+		proxy.Log(ctx, "error", fmt.Sprintf("sysunsalias: failed to list system aliases: %v", err))
+		return pluginsdk.Failuref("Unable to remove system alias right now. Please try again."), nil
 	}
 	if _, ok := findAlias(sysAliases, alias); !ok {
-		return &pluginsdk.CommandResponse{
-			Output: fmt.Sprintf("No system alias '%s' found.\n", alias),
-		}, nil
+		return pluginsdk.Errorf("No system alias '%s' found.", alias), nil
 	}
 
 	if err := proxy.DeleteSystemAlias(ctx, alias); err != nil {
-		return nil, err //nolint:wrapcheck // proxy returns structured errors
+		proxy.Log(ctx, "error", fmt.Sprintf("sysunsalias: failed to delete system alias %q: %v", alias, err))
+		return pluginsdk.Failuref("Unable to remove system alias right now. Please try again."), nil
 	}
 
-	return &pluginsdk.CommandResponse{
-		Output: fmt.Sprintf("System alias '%s' removed.\n", alias),
-	}, nil
+	return pluginsdk.OK(fmt.Sprintf("System alias '%s' removed.\n", alias)), nil
 }
 
 // handleSysaliasList lists all system aliases.
@@ -93,11 +106,12 @@ func handleSysaliasRemove(ctx context.Context, cmd pluginsdk.CommandRequest, pro
 func handleSysaliasList(ctx context.Context, proxy plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	aliases, err := proxy.ListSystemAliases(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("listing system aliases: %w", err)
+		proxy.Log(ctx, "error", fmt.Sprintf("sysaliases: failed to list system aliases: %v", err))
+		return pluginsdk.Failuref("Unable to list system aliases right now. Please try again."), nil
 	}
 
 	if len(aliases) == 0 {
-		return &pluginsdk.CommandResponse{Output: "No system aliases defined."}, nil
+		return pluginsdk.OK("No system aliases defined."), nil
 	}
 
 	sort.Slice(aliases, func(i, j int) bool {
@@ -110,5 +124,5 @@ func handleSysaliasList(ctx context.Context, proxy plugins.ServiceProxy) (*plugi
 		fmt.Fprintf(&out, "  %s = %s\n", a.Alias, a.Command)
 	}
 
-	return &pluginsdk.CommandResponse{Output: out.String()}, nil
+	return pluginsdk.OK(out.String()), nil
 }

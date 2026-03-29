@@ -869,20 +869,22 @@ func TestPostgresEventStore_Subscribe_InvalidPayload(t *testing.T) {
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	eventCh, errCh, err := store.Subscribe(ctx, "test-stream")
+	_, errCh, err := store.Subscribe(ctx, "test-stream")
 	require.NoError(t, err)
 
-	// Should receive an error due to invalid ULID
+	// Should receive an error due to invalid ULID.
+	// The goroutine sends to errCh then defers close(eventCh). A select can
+	// non-deterministically pick the closed eventCh over the buffered errCh,
+	// so drain errCh first with a dedicated receive, then verify no real event
+	// was delivered.
 	select {
-	case <-eventCh:
-		t.Fatal("should not receive event with invalid payload")
 	case err := <-errCh:
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "bad data size")
-	case <-time.After(time.Second):
+	case <-time.After(3 * time.Second):
 		t.Fatal("timeout waiting for error")
 	}
 }

@@ -53,9 +53,8 @@ func NewHandler() plugins.LocalCommandHandler {
 func (h *handler) HandleCommand(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	sub, ok := h.handlers[cmd.Command]
 	if !ok {
-		return &pluginsdk.CommandResponse{
-			Output: "Unknown communication command: " + cmd.Command,
-		}, nil
+		proxy.Log(ctx, "error", "communication: unsupported routed command: "+cmd.Command)
+		return pluginsdk.Failuref("That command is temporarily unavailable. Please try again later."), nil
 	}
 	return sub.HandleCommand(ctx, cmd, proxy)
 }

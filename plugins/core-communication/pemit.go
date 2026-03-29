@@ -36,29 +36,24 @@ func (h *PemitHandler) HandleCommand(ctx context.Context, cmd pluginsdk.CommandR
 
 	idx := strings.IndexByte(args, '=')
 	if idx <= 0 {
-		return &pluginsdk.CommandResponse{
-			Output: "Usage: pemit <character>=<message>",
-		}, nil
+		return pluginsdk.Errorf("Usage: pemit <character>=<message>"), nil
 	}
 
 	targetName := strings.TrimSpace(args[:idx])
 	message := args[idx+1:]
 
-	if message == "" {
-		return &pluginsdk.CommandResponse{
-			Output: "Usage: pemit <character>=<message>",
-		}, nil
+	if strings.TrimSpace(message) == "" {
+		return pluginsdk.Errorf("Usage: pemit <character>=<message>"), nil
 	}
 
 	// Resolve target session by character name.
 	targetSession, err := proxy.FindSessionByName(ctx, targetName)
 	if err != nil {
-		return nil, oops.With("operation", "find_target_session").Wrap(err)
+		proxy.Log(ctx, "error", fmt.Sprintf("pemit: failed to find session for %q: %v", targetName, err))
+		return pluginsdk.Failuref("Unable to reach %q right now. Please try again.", targetName), nil
 	}
 	if targetSession == nil {
-		return &pluginsdk.CommandResponse{
-			Output: fmt.Sprintf("No character found named %q.", targetName),
-		}, nil
+		return pluginsdk.Errorf("No character found named %q.", targetName), nil
 	}
 
 	payload, err := json.Marshal(pemitPayload{
@@ -72,6 +67,7 @@ func (h *PemitHandler) HandleCommand(ctx context.Context, cmd pluginsdk.CommandR
 	}
 
 	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
 		Events: []pluginsdk.EmitEvent{
 			{
 				Stream:  "character:" + targetSession.CharacterID,

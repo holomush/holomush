@@ -33,6 +33,7 @@ func (h *Handler) HandleCommand(ctx context.Context, cmd pluginsdk.CommandReques
 	case "sysaliases":
 		return handleSysaliasList(ctx, proxy)
 	default:
-		return nil, fmt.Errorf("unknown command: %s", cmd.Command)
+		proxy.Log(ctx, "error", fmt.Sprintf("core-aliases: unknown routed command %q", cmd.Command))
+		return pluginsdk.Failuref("An internal error occurred processing your request."), nil
 	}
 }

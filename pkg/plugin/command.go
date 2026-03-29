@@ -3,6 +3,25 @@
 
 package pluginsdk
 
+import "fmt"
+
+// CommandStatus indicates the outcome category of a command execution.
+type CommandStatus int
+
+const (
+	// CommandOK indicates successful execution. Output is normal text.
+	CommandOK CommandStatus = iota
+	// CommandError indicates a user-facing error (bad input, not found, no permission).
+	// This is expected behavior — does not count as service degradation.
+	CommandError
+	// CommandFailure indicates a service failure (DB down, proxy error).
+	// Player sees a specific message. Handler should have logged the underlying error.
+	CommandFailure
+	// CommandFatal indicates an unrecoverable error. The dispatcher surfaces
+	// a generic message. Handler returns this when it cannot proceed at all.
+	CommandFatal
+)
+
 // CommandRequest carries context for a plugin command invocation.
 // Service access comes through the ServiceProxy, not this struct.
 type CommandRequest struct {
@@ -17,6 +36,9 @@ type CommandRequest struct {
 
 // CommandResponse carries the result of a plugin command execution.
 type CommandResponse struct {
+	// Status indicates the outcome category (OK, Error, Failure, Fatal).
+	Status CommandStatus
+
 	// Events to append to the event store.
 	Events []EmitEvent
 
@@ -30,4 +52,20 @@ type CommandResponse struct {
 
 	// EndSession signals that the invoking session should end.
 	EndSession bool
+}
+
+// OK returns a successful command response with output text.
+func OK(output string) *CommandResponse {
+	return &CommandResponse{Status: CommandOK, Output: output}
+}
+
+// Errorf returns a user-facing error response (bad input, not found, no permission).
+func Errorf(format string, args ...any) *CommandResponse {
+	return &CommandResponse{Status: CommandError, Output: fmt.Sprintf(format, args...)}
+}
+
+// Failuref returns a service failure response. The handler should log the
+// underlying error via proxy.Log before calling this.
+func Failuref(format string, args ...any) *CommandResponse {
+	return &CommandResponse{Status: CommandFailure, Output: fmt.Sprintf(format, args...)}
 }

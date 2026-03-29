@@ -9,180 +9,18 @@ import (
 	"testing"
 
 	plugins "github.com/holomush/holomush/internal/plugin"
+	pluginmocks "github.com/holomush/holomush/internal/plugin/mocks"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
-
-// testProxy is a configurable mock ServiceProxy for testing handlers.
-type testProxy struct {
-	sessions        map[string]*plugins.SessionResult // keyed by lowercase name
-	lastWhispered   map[string]string                 // session ID -> name
-	activeSessions  []plugins.SessionResult
-	broadcastedMsgs []string
-	logs            []string
-	broadcastErr    error
-	findSessionErr  error
-	listSessionsErr error
-	setWhisperedErr error
-}
-
-func newTestProxy() *testProxy {
-	return &testProxy{
-		sessions:      make(map[string]*plugins.SessionResult),
-		lastWhispered: make(map[string]string),
-	}
-}
-
-func (p *testProxy) addSession(name string, s *plugins.SessionResult) {
-	p.sessions[name] = s
-}
-
-// --- ServiceProxy implementation (only methods used by communication handlers) ---
-
-func (p *testProxy) FindSessionByName(_ context.Context, name string) (*plugins.SessionResult, error) {
-	if p.findSessionErr != nil {
-		return nil, p.findSessionErr
-	}
-	return p.sessions[name], nil
-}
-
-func (p *testProxy) SetLastWhispered(_ context.Context, sessionID, name string) error {
-	if p.setWhisperedErr != nil {
-		return p.setWhisperedErr
-	}
-	p.lastWhispered[sessionID] = name
-	return nil
-}
-
-func (p *testProxy) ListActiveSessions(_ context.Context) ([]plugins.SessionResult, error) {
-	if p.listSessionsErr != nil {
-		return nil, p.listSessionsErr
-	}
-	return p.activeSessions, nil
-}
-
-func (p *testProxy) BroadcastSystemMessage(_ context.Context, msg string) error {
-	if p.broadcastErr != nil {
-		return p.broadcastErr
-	}
-	p.broadcastedMsgs = append(p.broadcastedMsgs, msg)
-	return nil
-}
-
-func (p *testProxy) Log(_ context.Context, _, msg string) {
-	p.logs = append(p.logs, msg)
-}
-
-// Unused stubs.
-func (p *testProxy) QueryLocation(context.Context, string, string) (*plugins.LocationResult, error) {
-	return nil, nil
-}
-
-func (p *testProxy) QueryCharacter(context.Context, string, string) (*plugins.CharacterResult, error) {
-	return nil, nil
-}
-
-func (p *testProxy) QueryLocationCharacters(context.Context, string, string) ([]plugins.CharacterResult, error) {
-	return nil, nil
-}
-
-func (p *testProxy) QueryObject(context.Context, string, string) (*plugins.ObjectResult, error) {
-	return nil, nil
-}
-
-func (p *testProxy) FindLocation(context.Context, string, string) (*plugins.LocationResult, error) {
-	return nil, nil
-}
-
-func (p *testProxy) GetCharactersByLocation(context.Context, string, string) ([]plugins.CharacterResult, error) {
-	return nil, nil
-}
-
-func (p *testProxy) GetObjectsByLocation(context.Context, string, string) ([]plugins.ObjectResult, error) {
-	return nil, nil
-}
-
-func (p *testProxy) CreateLocation(context.Context, string, string, string, string) (*plugins.LocationResult, error) {
-	return nil, nil
-}
-
-func (p *testProxy) CreateExit(context.Context, string, string, string, string, plugins.CreateExitOpts) error {
-	return nil
-}
-
-func (p *testProxy) CreateObject(context.Context, string, string, string) (*plugins.ObjectResult, error) {
-	return nil, nil
-}
-
-func (p *testProxy) UpdateLocation(context.Context, string, string, string, string) error {
-	return nil
-}
-
-func (p *testProxy) UpdateCharacterDescription(context.Context, string, string, string) error {
-	return nil
-}
-
-func (p *testProxy) SetProperty(context.Context, string, string, string, string, string) error {
-	return nil
-}
-
-func (p *testProxy) GetProperty(context.Context, string, string, string, string) (string, error) {
-	return "", nil
-}
-
-func (p *testProxy) FindPropertyByPrefix(context.Context, string) ([]plugins.PropertyInfo, error) {
-	return nil, nil
-}
-
-func (p *testProxy) ListPropertiesByParent(context.Context, string, string, string) ([]plugins.PropertyInfo, error) {
-	return nil, nil
-}
-
-func (p *testProxy) KVGet(context.Context, string, string) (string, bool, error) {
-	return "", false, nil
-}
-func (p *testProxy) KVSet(context.Context, string, string, string) error     { return nil }
-func (p *testProxy) KVDelete(context.Context, string, string) error          { return nil }
-func (p *testProxy) DisconnectSession(context.Context, string, string) error { return nil }
-func (p *testProxy) UpdateActivity(context.Context, string) error            { return nil }
-func (p *testProxy) SetPlayerAlias(context.Context, string, string, string) error {
-	return nil
-}
-func (p *testProxy) DeletePlayerAlias(context.Context, string, string) error { return nil }
-func (p *testProxy) ListPlayerAliases(context.Context, string) ([]plugins.AliasEntry, error) {
-	return nil, nil
-}
-
-func (p *testProxy) SetSystemAlias(context.Context, string, string, string) error {
-	return nil
-}
-func (p *testProxy) DeleteSystemAlias(context.Context, string) error { return nil }
-func (p *testProxy) ListSystemAliases(context.Context) ([]plugins.AliasEntry, error) {
-	return nil, nil
-}
-
-func (p *testProxy) CheckAliasShadow(context.Context, string) (bool, string, error) {
-	return false, "", nil
-}
-
-func (p *testProxy) ListCommands(context.Context, string) ([]plugins.CommandInfo, error) {
-	return nil, nil
-}
-
-func (p *testProxy) GetCommandHelp(context.Context, string, string) (*plugins.CommandHelpInfo, error) {
-	return nil, nil
-}
-func (p *testProxy) EmitEvent(context.Context, string, string, []byte) error { return nil }
-func (p *testProxy) GetStartingLocationID(context.Context) (string, error)   { return "", nil }
-
-var _ plugins.ServiceProxy = (*testProxy)(nil)
 
 // --- Tests ---
 
 func TestSayHandler(t *testing.T) {
 	h := &SayHandler{}
-	proxy := newTestProxy()
+	proxy := pluginmocks.NewMockServiceProxy(t)
 	ctx := context.Background()
 
 	resp, err := h.HandleCommand(ctx, pluginsdk.CommandRequest{
@@ -218,7 +56,7 @@ func TestPoseHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := &PoseHandler{}
-			proxy := newTestProxy()
+			proxy := pluginmocks.NewMockServiceProxy(t)
 
 			resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 				Command:       "pose",
@@ -255,7 +93,7 @@ func TestOOCHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := &OOCHandler{}
-			proxy := newTestProxy()
+			proxy := pluginmocks.NewMockServiceProxy(t)
 
 			resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 				Command:       "ooc",
@@ -277,10 +115,11 @@ func TestOOCHandler(t *testing.T) {
 
 func TestOOCHandler_EmptyArgs(t *testing.T) {
 	h := &OOCHandler{}
+	proxy := pluginmocks.NewMockServiceProxy(t)
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "ooc",
 		Args:    "",
-	}, newTestProxy())
+	}, proxy)
 
 	require.NoError(t, err)
 	assert.Contains(t, resp.Output, "Usage")
@@ -289,13 +128,14 @@ func TestOOCHandler_EmptyArgs(t *testing.T) {
 
 func TestPageHandler_NormalPage(t *testing.T) {
 	h := &PageHandler{}
-	proxy := newTestProxy()
-	proxy.addSession("Alex", &plugins.SessionResult{
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("FindSessionByName", mock.Anything, "Alex").Return(&plugins.SessionResult{
 		ID:            "sess-2",
 		CharacterID:   "char-2",
 		CharacterName: "Alex",
 		LocationID:    "loc-1",
-	})
+	}, nil)
+	proxy.On("SetLastWhispered", mock.Anything, "sess-1", "Alex").Return(nil)
 
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:       "page",
@@ -310,7 +150,6 @@ func TestPageHandler_NormalPage(t *testing.T) {
 	require.Len(t, resp.Events, 1)
 	assert.Equal(t, "character:char-2", resp.Events[0].Stream)
 	assert.Contains(t, resp.Output, "You paged Alex")
-	assert.Equal(t, "Alex", proxy.lastWhispered["sess-1"])
 
 	var p pagePayload
 	require.NoError(t, json.Unmarshal([]byte(resp.Events[0].Payload), &p))
@@ -320,12 +159,13 @@ func TestPageHandler_NormalPage(t *testing.T) {
 
 func TestPageHandler_PosePage(t *testing.T) {
 	h := &PageHandler{}
-	proxy := newTestProxy()
-	proxy.addSession("Alex", &plugins.SessionResult{
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("FindSessionByName", mock.Anything, "Alex").Return(&plugins.SessionResult{
 		ID:            "sess-2",
 		CharacterID:   "char-2",
 		CharacterName: "Alex",
-	})
+	}, nil)
+	proxy.On("SetLastWhispered", mock.Anything, "sess-1", "Alex").Return(nil)
 
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:       "page",
@@ -345,17 +185,18 @@ func TestPageHandler_PosePage(t *testing.T) {
 
 func TestPageHandler_LastPaged(t *testing.T) {
 	h := &PageHandler{}
-	proxy := newTestProxy()
-	proxy.addSession("Sean", &plugins.SessionResult{
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("FindSessionByName", mock.Anything, "Sean").Return(&plugins.SessionResult{
 		ID:            "sess-1",
 		CharacterName: "Sean",
 		LastWhispered: "Alex",
-	})
-	proxy.addSession("Alex", &plugins.SessionResult{
+	}, nil)
+	proxy.On("FindSessionByName", mock.Anything, "Alex").Return(&plugins.SessionResult{
 		ID:            "sess-2",
 		CharacterID:   "char-2",
 		CharacterName: "Alex",
-	})
+	}, nil)
+	proxy.On("SetLastWhispered", mock.Anything, "sess-1", "Alex").Return(nil)
 
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:       "page",
@@ -372,7 +213,8 @@ func TestPageHandler_LastPaged(t *testing.T) {
 
 func TestPageHandler_NotFound(t *testing.T) {
 	h := &PageHandler{}
-	proxy := newTestProxy()
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("FindSessionByName", mock.Anything, "Nobody").Return(nil, nil)
 
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "page",
@@ -386,10 +228,11 @@ func TestPageHandler_NotFound(t *testing.T) {
 
 func TestPageHandler_EmptyArgs(t *testing.T) {
 	h := &PageHandler{}
+	proxy := pluginmocks.NewMockServiceProxy(t)
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "page",
 		Args:    "",
-	}, newTestProxy())
+	}, proxy)
 
 	require.NoError(t, err)
 	assert.Contains(t, resp.Output, "Usage")
@@ -397,13 +240,14 @@ func TestPageHandler_EmptyArgs(t *testing.T) {
 
 func TestWhisperHandler_NormalWhisper(t *testing.T) {
 	h := &WhisperHandler{}
-	proxy := newTestProxy()
-	proxy.addSession("Alex", &plugins.SessionResult{
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("FindSessionByName", mock.Anything, "Alex").Return(&plugins.SessionResult{
 		ID:            "sess-2",
 		CharacterID:   "char-2",
 		CharacterName: "Alex",
 		LocationID:    "loc-1",
-	})
+	}, nil)
+	proxy.On("SetLastWhispered", mock.Anything, "sess-1", "Alex").Return(nil)
 
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:       "whisper",
@@ -430,18 +274,18 @@ func TestWhisperHandler_NormalWhisper(t *testing.T) {
 	assert.Contains(t, wp.Message, `Sean whispers, "Let's go"`)
 
 	assert.Contains(t, resp.Output, "You whisper to Alex")
-	assert.Equal(t, "Alex", proxy.lastWhispered["sess-1"])
 }
 
 func TestWhisperHandler_PoseWhisper(t *testing.T) {
 	h := &WhisperHandler{}
-	proxy := newTestProxy()
-	proxy.addSession("Alex", &plugins.SessionResult{
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("FindSessionByName", mock.Anything, "Alex").Return(&plugins.SessionResult{
 		ID:            "sess-2",
 		CharacterID:   "char-2",
 		CharacterName: "Alex",
 		LocationID:    "loc-1",
-	})
+	}, nil)
+	proxy.On("SetLastWhispered", mock.Anything, "sess-1", "Alex").Return(nil)
 
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:       "whisper",
@@ -461,11 +305,11 @@ func TestWhisperHandler_PoseWhisper(t *testing.T) {
 
 func TestWhisperHandler_DifferentLocation(t *testing.T) {
 	h := &WhisperHandler{}
-	proxy := newTestProxy()
-	proxy.addSession("Alex", &plugins.SessionResult{
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("FindSessionByName", mock.Anything, "Alex").Return(&plugins.SessionResult{
 		CharacterName: "Alex",
 		LocationID:    "loc-2", // different location
-	})
+	}, nil)
 
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:       "whisper",
@@ -481,17 +325,18 @@ func TestWhisperHandler_DifferentLocation(t *testing.T) {
 
 func TestWhisperHandler_ShortForm(t *testing.T) {
 	h := &WhisperHandler{}
-	proxy := newTestProxy()
-	proxy.addSession("Sean", &plugins.SessionResult{
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("FindSessionByName", mock.Anything, "Sean").Return(&plugins.SessionResult{
 		CharacterName: "Sean",
 		LastWhispered: "Alex",
-	})
-	proxy.addSession("Alex", &plugins.SessionResult{
+	}, nil)
+	proxy.On("FindSessionByName", mock.Anything, "Alex").Return(&plugins.SessionResult{
 		ID:            "sess-2",
 		CharacterID:   "char-2",
 		CharacterName: "Alex",
 		LocationID:    "loc-1",
-	})
+	}, nil)
+	proxy.On("SetLastWhispered", mock.Anything, "sess-1", "Alex").Return(nil)
 
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:       "w",
@@ -509,12 +354,12 @@ func TestWhisperHandler_ShortForm(t *testing.T) {
 
 func TestPemitHandler_Normal(t *testing.T) {
 	h := &PemitHandler{}
-	proxy := newTestProxy()
-	proxy.addSession("Alex", &plugins.SessionResult{
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("FindSessionByName", mock.Anything, "Alex").Return(&plugins.SessionResult{
 		ID:            "sess-2",
 		CharacterID:   "char-2",
 		CharacterName: "Alex",
-	})
+	}, nil)
 
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:       "pemit",
@@ -536,10 +381,13 @@ func TestPemitHandler_Normal(t *testing.T) {
 
 func TestPemitHandler_NotFound(t *testing.T) {
 	h := &PemitHandler{}
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("FindSessionByName", mock.Anything, "Nobody").Return(nil, nil)
+
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "pemit",
 		Args:    "Nobody=hello",
-	}, newTestProxy())
+	}, proxy)
 
 	require.NoError(t, err)
 	assert.Contains(t, resp.Output, "No character found")
@@ -560,10 +408,11 @@ func TestPemitHandler_BadSyntax(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			proxy := pluginmocks.NewMockServiceProxy(t)
 			resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 				Command: "pemit",
 				Args:    tt.args,
-			}, newTestProxy())
+			}, proxy)
 
 			require.NoError(t, err)
 			assert.Contains(t, resp.Output, "Usage")
@@ -573,7 +422,7 @@ func TestPemitHandler_BadSyntax(t *testing.T) {
 
 func TestEmitHandler_Normal(t *testing.T) {
 	h := &EmitHandler{}
-	proxy := newTestProxy()
+	proxy := pluginmocks.NewMockServiceProxy(t)
 
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:    "emit",
@@ -593,10 +442,11 @@ func TestEmitHandler_Normal(t *testing.T) {
 
 func TestEmitHandler_Empty(t *testing.T) {
 	h := &EmitHandler{}
+	proxy := pluginmocks.NewMockServiceProxy(t)
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "emit",
 		Args:    "",
-	}, newTestProxy())
+	}, proxy)
 
 	require.NoError(t, err)
 	assert.Contains(t, resp.Output, "What do you want to emit?")
@@ -605,11 +455,17 @@ func TestEmitHandler_Empty(t *testing.T) {
 
 func TestWallHandler_Normal(t *testing.T) {
 	h := &WallHandler{}
-	proxy := newTestProxy()
-	proxy.activeSessions = []plugins.SessionResult{
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("ListActiveSessions", mock.Anything).Return([]plugins.SessionResult{
 		{ID: "sess-1", CharacterID: "char-1"},
 		{ID: "sess-2", CharacterID: "char-2"},
-	}
+	}, nil)
+	proxy.On("Log", mock.Anything, mock.Anything, mock.Anything).Return()
+
+	var capturedMsg string
+	proxy.On("BroadcastSystemMessage", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) { capturedMsg = args.String(1) }).
+		Return(nil)
 
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:       "wall",
@@ -619,9 +475,8 @@ func TestWallHandler_Normal(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Contains(t, resp.Output, "2 sessions")
-	require.Len(t, proxy.broadcastedMsgs, 1)
-	assert.Contains(t, proxy.broadcastedMsgs[0], "[ADMIN ANNOUNCEMENT]")
-	assert.Contains(t, proxy.broadcastedMsgs[0], "Server restart in 10 minutes")
+	assert.Contains(t, capturedMsg, "[ADMIN ANNOUNCEMENT]")
+	assert.Contains(t, capturedMsg, "Server restart in 10 minutes")
 }
 
 func TestWallHandler_WithUrgency(t *testing.T) {
@@ -638,8 +493,14 @@ func TestWallHandler_WithUrgency(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := &WallHandler{}
-			proxy := newTestProxy()
-			proxy.activeSessions = []plugins.SessionResult{{ID: "sess-1"}}
+			proxy := pluginmocks.NewMockServiceProxy(t)
+			proxy.On("ListActiveSessions", mock.Anything).Return([]plugins.SessionResult{{ID: "sess-1"}}, nil)
+			proxy.On("Log", mock.Anything, mock.Anything, mock.Anything).Return()
+
+			var capturedMsg string
+			proxy.On("BroadcastSystemMessage", mock.Anything, mock.Anything).
+				Run(func(args mock.Arguments) { capturedMsg = args.String(1) }).
+				Return(nil)
 
 			resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 				Command:       "wall",
@@ -649,18 +510,18 @@ func TestWallHandler_WithUrgency(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Contains(t, resp.Output, "1 session")
-			require.Len(t, proxy.broadcastedMsgs, 1)
-			assert.Contains(t, proxy.broadcastedMsgs[0], tt.wantPrefix)
+			assert.Contains(t, capturedMsg, tt.wantPrefix)
 		})
 	}
 }
 
 func TestWallHandler_EmptyArgs(t *testing.T) {
 	h := &WallHandler{}
+	proxy := pluginmocks.NewMockServiceProxy(t)
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "wall",
 		Args:    "",
-	}, newTestProxy())
+	}, proxy)
 
 	require.NoError(t, err)
 	assert.Contains(t, resp.Output, "Usage")
@@ -668,7 +529,7 @@ func TestWallHandler_EmptyArgs(t *testing.T) {
 
 func TestNewHandler_Routes(t *testing.T) {
 	h := NewHandler()
-	proxy := newTestProxy()
+	proxy := pluginmocks.NewMockServiceProxy(t)
 
 	// Verify say routes correctly.
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -685,10 +546,14 @@ func TestNewHandler_Routes(t *testing.T) {
 
 func TestNewHandler_UnknownCommand(t *testing.T) {
 	h := NewHandler()
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("Log", mock.Anything, "error", mock.Anything).Return()
+
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "nonexistent",
-	}, newTestProxy())
+	}, proxy)
 
 	require.NoError(t, err)
-	assert.Contains(t, resp.Output, "Unknown communication command")
+	assert.Equal(t, pluginsdk.CommandFailure, resp.Status)
+	assert.Contains(t, resp.Output, "temporarily unavailable")
 }

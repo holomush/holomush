@@ -6,6 +6,7 @@ package communication
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/samber/oops"
 
@@ -25,9 +26,14 @@ type posePayload struct {
 type PoseHandler struct{}
 
 func (h *PoseHandler) HandleCommand(_ context.Context, cmd pluginsdk.CommandRequest, _ plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
+	action := strings.TrimSpace(cmd.Args)
+	if action == "" {
+		return pluginsdk.Errorf("What do you want to pose?"), nil
+	}
+
 	payload, err := json.Marshal(posePayload{
 		CharacterName: cmd.CharacterName,
-		Action:        cmd.Args,
+		Action:        action,
 		NoSpace:       cmd.InvokedAs == ";",
 	})
 	if err != nil {
@@ -35,6 +41,7 @@ func (h *PoseHandler) HandleCommand(_ context.Context, cmd pluginsdk.CommandRequ
 	}
 
 	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
 		Events: []pluginsdk.EmitEvent{
 			{
 				Stream:  "location:" + cmd.LocationID,

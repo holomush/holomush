@@ -28,8 +28,6 @@ func (h *Handler) HandleCommand(ctx context.Context, cmd pluginsdk.CommandReques
 	case "set":
 		return handleSet(ctx, cmd, proxy)
 	default:
-		return &pluginsdk.CommandResponse{
-			Output: "Unknown command.\n",
-		}, nil
+		return pluginsdk.Errorf("Unknown command: %s", cmd.Command), nil
 	}
 }

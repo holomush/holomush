@@ -9,136 +9,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	plugins "github.com/holomush/holomush/internal/plugin"
+	pluginmocks "github.com/holomush/holomush/internal/plugin/mocks"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
-
-// --- test stub proxy ---
-
-type stubProxy struct {
-	commands    []plugins.CommandInfo
-	commandsErr error
-	helpInfo    *plugins.CommandHelpInfo
-	helpErr     error
-}
-
-func (s *stubProxy) ListCommands(_ context.Context, _ string) ([]plugins.CommandInfo, error) {
-	return s.commands, s.commandsErr
-}
-
-func (s *stubProxy) GetCommandHelp(_ context.Context, _, _ string) (*plugins.CommandHelpInfo, error) {
-	return s.helpInfo, s.helpErr
-}
-
-// Unused ServiceProxy methods — stubs required by the interface.
-
-func (s *stubProxy) QueryLocation(context.Context, string, string) (*plugins.LocationResult, error) {
-	return nil, nil
-}
-
-func (s *stubProxy) QueryCharacter(context.Context, string, string) (*plugins.CharacterResult, error) {
-	return nil, nil
-}
-
-func (s *stubProxy) QueryLocationCharacters(context.Context, string, string) ([]plugins.CharacterResult, error) {
-	return nil, nil
-}
-
-func (s *stubProxy) QueryObject(context.Context, string, string) (*plugins.ObjectResult, error) {
-	return nil, nil
-}
-
-func (s *stubProxy) FindLocation(context.Context, string, string) (*plugins.LocationResult, error) {
-	return nil, nil
-}
-
-func (s *stubProxy) GetCharactersByLocation(context.Context, string, string) ([]plugins.CharacterResult, error) {
-	return nil, nil
-}
-
-func (s *stubProxy) GetObjectsByLocation(context.Context, string, string) ([]plugins.ObjectResult, error) {
-	return nil, nil
-}
-
-func (s *stubProxy) CreateLocation(context.Context, string, string, string, string) (*plugins.LocationResult, error) {
-	return nil, nil
-}
-
-func (s *stubProxy) CreateExit(context.Context, string, string, string, string, plugins.CreateExitOpts) error {
-	return nil
-}
-
-func (s *stubProxy) CreateObject(context.Context, string, string, string) (*plugins.ObjectResult, error) {
-	return nil, nil
-}
-
-func (s *stubProxy) UpdateLocation(context.Context, string, string, string, string) error {
-	return nil
-}
-
-func (s *stubProxy) UpdateCharacterDescription(context.Context, string, string, string) error {
-	return nil
-}
-
-func (s *stubProxy) SetProperty(context.Context, string, string, string, string, string) error {
-	return nil
-}
-
-func (s *stubProxy) GetProperty(context.Context, string, string, string, string) (string, error) {
-	return "", nil
-}
-
-func (s *stubProxy) FindPropertyByPrefix(context.Context, string) ([]plugins.PropertyInfo, error) {
-	return nil, nil
-}
-
-func (s *stubProxy) ListPropertiesByParent(context.Context, string, string, string) ([]plugins.PropertyInfo, error) {
-	return nil, nil
-}
-
-func (s *stubProxy) KVGet(context.Context, string, string) (string, bool, error) {
-	return "", false, nil
-}
-
-func (s *stubProxy) KVSet(context.Context, string, string, string) error { return nil }
-func (s *stubProxy) KVDelete(context.Context, string, string) error      { return nil }
-
-func (s *stubProxy) FindSessionByName(context.Context, string) (*plugins.SessionResult, error) {
-	return nil, nil
-}
-
-func (s *stubProxy) SetLastWhispered(context.Context, string, string) error { return nil }
-func (s *stubProxy) DisconnectSession(context.Context, string, string) error { return nil }
-
-func (s *stubProxy) ListActiveSessions(context.Context) ([]plugins.SessionResult, error) {
-	return nil, nil
-}
-
-func (s *stubProxy) BroadcastSystemMessage(context.Context, string) error { return nil }
-func (s *stubProxy) UpdateActivity(context.Context, string) error         { return nil }
-func (s *stubProxy) SetPlayerAlias(context.Context, string, string, string) error { return nil }
-func (s *stubProxy) DeletePlayerAlias(context.Context, string, string) error      { return nil }
-
-func (s *stubProxy) ListPlayerAliases(context.Context, string) ([]plugins.AliasEntry, error) {
-	return nil, nil
-}
-
-func (s *stubProxy) SetSystemAlias(context.Context, string, string, string) error { return nil }
-func (s *stubProxy) DeleteSystemAlias(context.Context, string) error              { return nil }
-
-func (s *stubProxy) ListSystemAliases(context.Context) ([]plugins.AliasEntry, error) {
-	return nil, nil
-}
-
-func (s *stubProxy) CheckAliasShadow(context.Context, string) (bool, string, error) {
-	return false, "", nil
-}
-
-func (s *stubProxy) EmitEvent(context.Context, string, string, []byte) error { return nil }
-func (s *stubProxy) GetStartingLocationID(context.Context) (string, error)   { return "", nil }
-func (s *stubProxy) Log(context.Context, string, string)                     {}
 
 // --- tests ---
 
@@ -152,13 +29,12 @@ func baseCmd() pluginsdk.CommandRequest {
 }
 
 func TestListCommands_GroupedBySource(t *testing.T) {
-	proxy := &stubProxy{
-		commands: []plugins.CommandInfo{
-			{Name: "say", Help: "Say something", Source: "core"},
-			{Name: "look", Help: "Look around", Source: "core"},
-			{Name: "dig", Help: "Create a location", Source: "building"},
-		},
-	}
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("ListCommands", mock.Anything, "char-01").Return([]plugins.CommandInfo{
+		{Name: "say", Help: "Say something", Source: "core"},
+		{Name: "look", Help: "Look around", Source: "core"},
+		{Name: "dig", Help: "Create a location", Source: "building"},
+	}, nil)
 
 	h := &Handler{}
 	cmd := baseCmd()
@@ -175,7 +51,8 @@ func TestListCommands_GroupedBySource(t *testing.T) {
 }
 
 func TestListCommands_Empty(t *testing.T) {
-	proxy := &stubProxy{commands: []plugins.CommandInfo{}}
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("ListCommands", mock.Anything, "char-01").Return([]plugins.CommandInfo{}, nil)
 
 	h := &Handler{}
 	cmd := baseCmd()
@@ -186,23 +63,23 @@ func TestListCommands_Empty(t *testing.T) {
 }
 
 func TestListCommands_Error(t *testing.T) {
-	proxy := &stubProxy{commandsErr: errors.New("db down")}
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("ListCommands", mock.Anything, "char-01").Return(nil, errors.New("db down"))
+	proxy.On("Log", mock.Anything, "error", mock.Anything).Return()
 
 	h := &Handler{}
 	cmd := baseCmd()
 
 	resp, err := h.HandleCommand(context.Background(), cmd, proxy)
 	require.NoError(t, err)
-	assert.Contains(t, resp.Output, "Error listing commands")
-	assert.Contains(t, resp.Output, "db down")
+	assert.Contains(t, resp.Output, "temporarily unavailable")
 }
 
 func TestListCommands_EmptySourceDefaultsToOther(t *testing.T) {
-	proxy := &stubProxy{
-		commands: []plugins.CommandInfo{
-			{Name: "mystery", Help: "Unknown origin", Source: ""},
-		},
-	}
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("ListCommands", mock.Anything, "char-01").Return([]plugins.CommandInfo{
+		{Name: "mystery", Help: "Unknown origin", Source: ""},
+	}, nil)
 
 	h := &Handler{}
 	cmd := baseCmd()
@@ -213,15 +90,14 @@ func TestListCommands_EmptySourceDefaultsToOther(t *testing.T) {
 }
 
 func TestShowCommandHelp_Success(t *testing.T) {
-	proxy := &stubProxy{
-		helpInfo: &plugins.CommandHelpInfo{
-			Name:     "say",
-			Help:     "Say something to the location",
-			Usage:    "say <message>",
-			HelpText: "Sends a message to everyone in the location.",
-			Source:   "core",
-		},
-	}
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("GetCommandHelp", mock.Anything, "say", "char-01").Return(&plugins.CommandHelpInfo{
+		Name:     "say",
+		Help:     "Say something to the location",
+		Usage:    "say <message>",
+		HelpText: "Sends a message to everyone in the location.",
+		Source:   "core",
+	}, nil)
 
 	h := &Handler{}
 	cmd := baseCmd()
@@ -238,7 +114,9 @@ func TestShowCommandHelp_Success(t *testing.T) {
 }
 
 func TestShowCommandHelp_NotFound(t *testing.T) {
-	proxy := &stubProxy{}
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("GetCommandHelp", mock.Anything, "bogus", "char-01").
+		Return(nil, nil)
 
 	h := &Handler{}
 	cmd := baseCmd()
@@ -251,9 +129,10 @@ func TestShowCommandHelp_NotFound(t *testing.T) {
 }
 
 func TestShowCommandHelp_OtherError(t *testing.T) {
-	proxy := &stubProxy{
-		helpErr: errors.New("internal failure"),
-	}
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("GetCommandHelp", mock.Anything, "say", "char-01").
+		Return(nil, errors.New("internal failure"))
+	proxy.On("Log", mock.Anything, "error", mock.Anything).Return()
 
 	h := &Handler{}
 	cmd := baseCmd()
@@ -261,18 +140,16 @@ func TestShowCommandHelp_OtherError(t *testing.T) {
 
 	resp, err := h.HandleCommand(context.Background(), cmd, proxy)
 	require.NoError(t, err)
-	assert.Contains(t, resp.Output, "Error getting help")
-	assert.Contains(t, resp.Output, "internal failure")
+	assert.Contains(t, resp.Output, "temporarily unavailable")
 }
 
 func TestSearchCommands_Matches(t *testing.T) {
-	proxy := &stubProxy{
-		commands: []plugins.CommandInfo{
-			{Name: "say", Help: "Say something", Source: "core"},
-			{Name: "pose", Help: "Pose an action", Source: "core"},
-			{Name: "dig", Help: "Create a location", Source: "building"},
-		},
-	}
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("ListCommands", mock.Anything, "char-01").Return([]plugins.CommandInfo{
+		{Name: "say", Help: "Say something", Source: "core"},
+		{Name: "pose", Help: "Pose an action", Source: "core"},
+		{Name: "dig", Help: "Create a location", Source: "building"},
+	}, nil)
 
 	h := &Handler{}
 	cmd := baseCmd()
@@ -287,11 +164,10 @@ func TestSearchCommands_Matches(t *testing.T) {
 }
 
 func TestSearchCommands_NoMatches(t *testing.T) {
-	proxy := &stubProxy{
-		commands: []plugins.CommandInfo{
-			{Name: "say", Help: "Say something", Source: "core"},
-		},
-	}
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("ListCommands", mock.Anything, "char-01").Return([]plugins.CommandInfo{
+		{Name: "say", Help: "Say something", Source: "core"},
+	}, nil)
 
 	h := &Handler{}
 	cmd := baseCmd()
@@ -303,7 +179,9 @@ func TestSearchCommands_NoMatches(t *testing.T) {
 }
 
 func TestSearchCommands_Error(t *testing.T) {
-	proxy := &stubProxy{commandsErr: errors.New("timeout")}
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("ListCommands", mock.Anything, "char-01").Return(nil, errors.New("timeout"))
+	proxy.On("Log", mock.Anything, "error", mock.Anything).Return()
 
 	h := &Handler{}
 	cmd := baseCmd()
@@ -311,16 +189,14 @@ func TestSearchCommands_Error(t *testing.T) {
 
 	resp, err := h.HandleCommand(context.Background(), cmd, proxy)
 	require.NoError(t, err)
-	assert.Contains(t, resp.Output, "Error searching commands")
-	assert.Contains(t, resp.Output, "timeout")
+	assert.Contains(t, resp.Output, "temporarily unavailable")
 }
 
 func TestSearchCommands_CaseInsensitive(t *testing.T) {
-	proxy := &stubProxy{
-		commands: []plugins.CommandInfo{
-			{Name: "Say", Help: "Say something", Source: "core"},
-		},
-	}
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("ListCommands", mock.Anything, "char-01").Return([]plugins.CommandInfo{
+		{Name: "Say", Help: "Say something", Source: "core"},
+	}, nil)
 
 	h := &Handler{}
 	cmd := baseCmd()
@@ -332,11 +208,10 @@ func TestSearchCommands_CaseInsensitive(t *testing.T) {
 }
 
 func TestSearchCommands_MatchesDescription(t *testing.T) {
-	proxy := &stubProxy{
-		commands: []plugins.CommandInfo{
-			{Name: "dig", Help: "Create a new location", Source: "building"},
-		},
-	}
+	proxy := pluginmocks.NewMockServiceProxy(t)
+	proxy.On("ListCommands", mock.Anything, "char-01").Return([]plugins.CommandInfo{
+		{Name: "dig", Help: "Create a new location", Source: "building"},
+	}, nil)
 
 	h := &Handler{}
 	cmd := baseCmd()

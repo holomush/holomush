@@ -43,44 +43,46 @@ func parseLink(args string) (*linkArgs, error) {
 }
 
 func resolveLocation(ctx context.Context, proxy plugins.ServiceProxy, subjectID, target string) (*plugins.LocationResult, error) {
+	if target == "#" {
+		return nil, fmt.Errorf("missing location ID after #")
+	}
 	if strings.HasPrefix(target, "#") {
 		id := target[1:]
 		loc, err := proxy.QueryLocation(ctx, subjectID, id)
 		if err != nil {
-			return nil, fmt.Errorf("location not found: %s", id)
+			proxy.Log(ctx, "error", fmt.Sprintf("link: failed to query location %s: %v", id, err))
+			return nil, fmt.Errorf("unable to find location %q", id)
 		}
 		return loc, nil
 	}
 
 	loc, err := proxy.FindLocation(ctx, subjectID, target)
 	if err != nil {
-		return nil, fmt.Errorf("location not found: %s", target)
+		proxy.Log(ctx, "error", fmt.Sprintf("link: failed to find location %q: %v", target, err))
+		return nil, fmt.Errorf("unable to find location %q", target)
 	}
 	return loc, nil
 }
 
 func handleLink(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	if cmd.Args == "" {
-		return &pluginsdk.CommandResponse{Output: linkUsage}, nil
+		return pluginsdk.Errorf("%s", linkUsage), nil
 	}
 
 	parsed, err := parseLink(cmd.Args)
 	if err != nil {
-		return &pluginsdk.CommandResponse{Output: err.Error()}, nil
+		return pluginsdk.Errorf("%s", err.Error()), nil
 	}
 
 	targetLoc, err := resolveLocation(ctx, proxy, cmd.CharacterID, parsed.target)
 	if err != nil {
-		return &pluginsdk.CommandResponse{Output: err.Error()}, nil
+		return pluginsdk.Errorf("%s", err.Error()), nil
 	}
 
 	if err := proxy.CreateExit(ctx, cmd.CharacterID, cmd.LocationID, targetLoc.ID, parsed.exitName, plugins.CreateExitOpts{}); err != nil {
-		return &pluginsdk.CommandResponse{
-			Output: fmt.Sprintf("Failed to create exit: %v", err),
-		}, nil
+		proxy.Log(ctx, "error", fmt.Sprintf("link: failed to create exit %q: %v", parsed.exitName, err))
+		return pluginsdk.Failuref("Unable to create exit right now. Please try again."), nil
 	}
 
-	return &pluginsdk.CommandResponse{
-		Output: fmt.Sprintf("Linked %q to %q.", parsed.exitName, targetLoc.Name),
-	}, nil
+	return pluginsdk.OK(fmt.Sprintf("Linked %q to %q.", parsed.exitName, targetLoc.Name)), nil
 }

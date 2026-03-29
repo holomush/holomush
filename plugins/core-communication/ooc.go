@@ -28,22 +28,24 @@ type OOCHandler struct{}
 func (h *OOCHandler) HandleCommand(_ context.Context, cmd pluginsdk.CommandRequest, _ plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	msg := strings.TrimSpace(cmd.Args)
 	if msg == "" {
-		return &pluginsdk.CommandResponse{
-			Output: "Usage: ooc <message>",
-		}, nil
+		return pluginsdk.Errorf("Usage: ooc <message>"), nil
 	}
 
 	var style, text string
 	switch {
 	case strings.HasPrefix(msg, ":"):
 		style = "pose"
-		text = msg[1:]
+		text = strings.TrimSpace(msg[1:])
 	case strings.HasPrefix(msg, ";"):
 		style = "semipose"
-		text = msg[1:]
+		text = strings.TrimSpace(msg[1:])
 	default:
 		style = "say"
 		text = msg
+	}
+
+	if text == "" {
+		return pluginsdk.Errorf("Usage: ooc <message>"), nil
 	}
 
 	payload, err := json.Marshal(oocPayload{
@@ -56,6 +58,7 @@ func (h *OOCHandler) HandleCommand(_ context.Context, cmd pluginsdk.CommandReque
 	}
 
 	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
 		Events: []pluginsdk.EmitEvent{
 			{
 				Stream:  "location:" + cmd.LocationID,

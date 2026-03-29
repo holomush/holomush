@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/samber/oops"
-
 	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
@@ -36,21 +34,17 @@ type WallHandler struct{}
 func (h *WallHandler) HandleCommand(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	args := strings.TrimSpace(cmd.Args)
 	if args == "" {
-		return &pluginsdk.CommandResponse{
-			Output: "Usage: wall [info|warning|critical] <message>",
-		}, nil
+		return pluginsdk.Errorf("Usage: wall [info|warning|critical] <message>"), nil
 	}
 
 	urgency, message := parseWallArgs(args)
 	if message == "" {
-		return &pluginsdk.CommandResponse{
-			Output: "Usage: wall [info|warning|critical] <message>",
-		}, nil
+		return pluginsdk.Errorf("Usage: wall [info|warning|critical] <message>"), nil
 	}
 
-	sessions, err := proxy.ListActiveSessions(ctx)
-	if err != nil {
-		return nil, oops.With("operation", "list_active_sessions").Wrap(err)
+	sessions, listErr := proxy.ListActiveSessions(ctx)
+	if listErr != nil {
+		proxy.Log(ctx, "warn", fmt.Sprintf("wall: failed to list sessions: %v", listErr))
 	}
 
 	prefix := urgencyPrefixes[urgency]
@@ -60,17 +54,24 @@ func (h *WallHandler) HandleCommand(ctx context.Context, cmd pluginsdk.CommandRe
 		cmd.CharacterName, urgency, len(sessions), message))
 
 	if err := proxy.BroadcastSystemMessage(ctx, announcement); err != nil {
-		return nil, oops.With("operation", "broadcast_wall").Wrap(err)
+		proxy.Log(ctx, "error", fmt.Sprintf("wall: failed to broadcast: %v", err))
+		return pluginsdk.Failuref("Unable to broadcast announcement right now. Please try again."), nil
 	}
 
+	sessionCount := len(sessions)
 	sessionWord := "sessions"
-	if len(sessions) == 1 {
+	if sessionCount == 1 {
 		sessionWord = "session"
 	}
 
-	return &pluginsdk.CommandResponse{
-		Output: fmt.Sprintf("Announcement sent to %d %s.", len(sessions), sessionWord),
-	}, nil
+	var output string
+	if listErr != nil {
+		output = "Announcement broadcast."
+	} else {
+		output = fmt.Sprintf("Announcement sent to %d %s.", sessionCount, sessionWord)
+	}
+
+	return pluginsdk.OK(output), nil
 }
 
 func parseWallArgs(args string) (wallUrgency, string) {

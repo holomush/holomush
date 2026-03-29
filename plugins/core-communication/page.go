@@ -35,9 +35,7 @@ type PageHandler struct{}
 func (h *PageHandler) HandleCommand(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	args := strings.TrimSpace(cmd.Args)
 	if args == "" {
-		return &pluginsdk.CommandResponse{
-			Output: "Usage: page <name>=<message>",
-		}, nil
+		return pluginsdk.Errorf("Usage: page <name>=<message>"), nil
 	}
 
 	var targetName, rawMessage string
@@ -47,27 +45,26 @@ func (h *PageHandler) HandleCommand(ctx context.Context, cmd pluginsdk.CommandRe
 	if idx > 0 {
 		targetName = strings.TrimSpace(args[:idx])
 		rawMessage = args[idx+1:] // do NOT trim -- leading : or ; is meaningful
+	} else if idx == 0 {
+		return pluginsdk.Errorf("Usage: page <name>=<message>"), nil
 	} else {
 		rawMessage = args
 		useLastPaged = true
 	}
 
-	if rawMessage == "" {
-		return &pluginsdk.CommandResponse{
-			Output: "Usage: page <name>=<message>",
-		}, nil
+	if strings.TrimSpace(rawMessage) == "" {
+		return pluginsdk.Errorf("Usage: page <name>=<message>"), nil
 	}
 
 	// Resolve target name from last-paged if needed.
 	if useLastPaged {
 		senderSession, err := proxy.FindSessionByName(ctx, cmd.CharacterName)
 		if err != nil {
-			return nil, oops.With("operation", "find_sender_session").Wrap(err)
+			proxy.Log(ctx, "error", fmt.Sprintf("page: failed to find sender session: %v", err))
+			return pluginsdk.Failuref("Unable to page right now. Please try again."), nil
 		}
 		if senderSession == nil || senderSession.LastWhispered == "" {
-			return &pluginsdk.CommandResponse{
-				Output: "You have no last-paged character. Use: page <name>=<message>",
-			}, nil
+			return pluginsdk.Errorf("You have no last-paged character. Use: page <name>=<message>"), nil
 		}
 		targetName = senderSession.LastWhispered
 	}
@@ -75,12 +72,11 @@ func (h *PageHandler) HandleCommand(ctx context.Context, cmd pluginsdk.CommandRe
 	// Look up target session.
 	targetSession, err := proxy.FindSessionByName(ctx, targetName)
 	if err != nil {
-		return nil, oops.With("operation", "find_target_session").Wrap(err)
+		proxy.Log(ctx, "error", fmt.Sprintf("page: failed to find session for %q: %v", targetName, err))
+		return pluginsdk.Failuref("Unable to reach %q right now. Please try again.", targetName), nil
 	}
 	if targetSession == nil {
-		return &pluginsdk.CommandResponse{
-			Output: fmt.Sprintf("No one named %q is connected.", targetName),
-		}, nil
+		return pluginsdk.Errorf("No one named %q is connected.", targetName), nil
 	}
 
 	// Determine pose vs. normal message.
@@ -89,22 +85,18 @@ func (h *PageHandler) HandleCommand(ctx context.Context, cmd pluginsdk.CommandRe
 
 	switch {
 	case strings.HasPrefix(rawMessage, ":"):
-		action := rawMessage[1:]
+		action := strings.TrimSpace(rawMessage[1:])
 		if action == "" {
-			return &pluginsdk.CommandResponse{
-				Output: "Usage: page <name>=:<action>",
-			}, nil
+			return pluginsdk.Errorf("Usage: page <name>=:<action>"), nil
 		}
 		isPose = true
 		formattedForTarget = fmt.Sprintf("From afar, %s %s", cmd.CharacterName, action)
 		formattedForSender = fmt.Sprintf("Long distance to %s: %s %s", targetSession.CharacterName, cmd.CharacterName, action)
 
 	case strings.HasPrefix(rawMessage, ";"):
-		action := rawMessage[1:]
+		action := strings.TrimSpace(rawMessage[1:])
 		if action == "" {
-			return &pluginsdk.CommandResponse{
-				Output: "Usage: page <name>=;<action>",
-			}, nil
+			return pluginsdk.Errorf("Usage: page <name>=;<action>"), nil
 		}
 		isPose = true
 		formattedForTarget = fmt.Sprintf("From afar, %s%s", cmd.CharacterName, action)
@@ -135,6 +127,7 @@ func (h *PageHandler) HandleCommand(ctx context.Context, cmd pluginsdk.CommandRe
 	}
 
 	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
 		Events: []pluginsdk.EmitEvent{
 			{
 				Stream:  "character:" + targetSession.CharacterID,

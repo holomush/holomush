@@ -18,11 +18,11 @@ import (
 func handleAliasAdd(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	alias, command, err := parseAliasDefinition(cmd.Args)
 	if err != nil {
-		return nil, err
+		return pluginsdk.Errorf("%s", err.Error()), nil
 	}
 
 	if err := validateAliasName(alias); err != nil {
-		return nil, err
+		return pluginsdk.Errorf("%s", err.Error()), nil
 	}
 
 	var warnings []string
@@ -30,7 +30,8 @@ func handleAliasAdd(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plu
 	// Check if alias shadows an existing command.
 	shadows, shadowedCmd, err := proxy.CheckAliasShadow(ctx, alias)
 	if err != nil {
-		return nil, fmt.Errorf("checking alias shadow: %w", err)
+		proxy.Log(ctx, "error", fmt.Sprintf("alias: failed to check shadow for %q: %v", alias, err))
+		return pluginsdk.Failuref("Unable to create alias right now. Please try again."), nil
 	}
 	if shadows {
 		warnings = append(warnings, fmt.Sprintf("Warning: '%s' is an existing command. Your alias will override it.", alias))
@@ -39,7 +40,8 @@ func handleAliasAdd(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plu
 	// Check if alias shadows a system alias.
 	sysAliases, err := proxy.ListSystemAliases(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("checking system aliases: %w", err)
+		proxy.Log(ctx, "error", fmt.Sprintf("alias: failed to list system aliases: %v", err))
+		return pluginsdk.Failuref("Unable to create alias right now. Please try again."), nil
 	}
 	if sysCmd, ok := findAlias(sysAliases, alias); ok {
 		warnings = append(warnings, fmt.Sprintf("Warning: '%s' is a system alias for '%s'. Your alias will take precedence.", alias, sysCmd))
@@ -49,7 +51,8 @@ func handleAliasAdd(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plu
 	// Check if replacing an existing player alias.
 	playerAliases, err := proxy.ListPlayerAliases(ctx, cmd.CharacterID)
 	if err != nil {
-		return nil, fmt.Errorf("listing player aliases: %w", err)
+		proxy.Log(ctx, "error", fmt.Sprintf("alias: failed to list player aliases: %v", err))
+		return pluginsdk.Failuref("Unable to create alias right now. Please try again."), nil
 	}
 	if existingCmd, ok := findAlias(playerAliases, alias); ok {
 		warnings = append(warnings, fmt.Sprintf("Warning: Replacing existing alias '%s' (was: '%s').", alias, existingCmd))
@@ -57,7 +60,8 @@ func handleAliasAdd(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plu
 
 	// Set the alias (proxy handles DB + cache).
 	if err := proxy.SetPlayerAlias(ctx, cmd.CharacterID, alias, command); err != nil {
-		return nil, err //nolint:wrapcheck // proxy returns structured errors
+		proxy.Log(ctx, "error", fmt.Sprintf("alias: failed to set alias %q: %v", alias, err))
+		return pluginsdk.Failuref("Unable to create alias right now. Please try again."), nil
 	}
 
 	var out strings.Builder
@@ -66,7 +70,7 @@ func handleAliasAdd(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plu
 	}
 	fmt.Fprintf(&out, "Alias '%s' added: %s\n", alias, command)
 
-	return &pluginsdk.CommandResponse{Output: out.String()}, nil
+	return pluginsdk.OK(out.String()), nil
 }
 
 // handleAliasRemove removes a player alias.
@@ -74,27 +78,25 @@ func handleAliasAdd(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plu
 func handleAliasRemove(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	alias := strings.TrimSpace(cmd.Args)
 	if alias == "" {
-		return nil, fmt.Errorf("usage: unalias <alias>")
+		return pluginsdk.Errorf("Usage: unalias <alias>"), nil
 	}
 
 	// Check if alias exists before removing.
 	playerAliases, err := proxy.ListPlayerAliases(ctx, cmd.CharacterID)
 	if err != nil {
-		return nil, fmt.Errorf("listing player aliases: %w", err)
+		proxy.Log(ctx, "error", fmt.Sprintf("unalias: failed to list player aliases: %v", err))
+		return pluginsdk.Failuref("Unable to remove alias right now. Please try again."), nil
 	}
 	if _, ok := findAlias(playerAliases, alias); !ok {
-		return &pluginsdk.CommandResponse{
-			Output: fmt.Sprintf("No alias '%s' found.\n", alias),
-		}, nil
+		return pluginsdk.Errorf("No alias '%s' found.", alias), nil
 	}
 
 	if err := proxy.DeletePlayerAlias(ctx, cmd.CharacterID, alias); err != nil {
-		return nil, err //nolint:wrapcheck // proxy returns structured errors
+		proxy.Log(ctx, "error", fmt.Sprintf("unalias: failed to delete alias %q: %v", alias, err))
+		return pluginsdk.Failuref("Unable to remove alias right now. Please try again."), nil
 	}
 
-	return &pluginsdk.CommandResponse{
-		Output: fmt.Sprintf("Alias '%s' removed.\n", alias),
-	}, nil
+	return pluginsdk.OK(fmt.Sprintf("Alias '%s' removed.\n", alias)), nil
 }
 
 // handleAliasList lists all player aliases.
@@ -102,11 +104,12 @@ func handleAliasRemove(ctx context.Context, cmd pluginsdk.CommandRequest, proxy 
 func handleAliasList(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	aliases, err := proxy.ListPlayerAliases(ctx, cmd.CharacterID)
 	if err != nil {
-		return nil, fmt.Errorf("listing player aliases: %w", err)
+		proxy.Log(ctx, "error", fmt.Sprintf("aliases: failed to list player aliases: %v", err))
+		return pluginsdk.Failuref("Unable to list aliases right now. Please try again."), nil
 	}
 
 	if len(aliases) == 0 {
-		return &pluginsdk.CommandResponse{Output: "You have no aliases defined."}, nil
+		return pluginsdk.OK("You have no aliases defined."), nil
 	}
 
 	sort.Slice(aliases, func(i, j int) bool {
@@ -119,5 +122,5 @@ func handleAliasList(ctx context.Context, cmd pluginsdk.CommandRequest, proxy pl
 		fmt.Fprintf(&out, "  %s = %s\n", a.Alias, a.Command)
 	}
 
-	return &pluginsdk.CommandResponse{Output: out.String()}, nil
+	return pluginsdk.OK(out.String()), nil
 }

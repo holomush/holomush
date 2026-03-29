@@ -430,7 +430,7 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 
 	// Emit any buffered output as a command_response event.
 	if buf.Len() > 0 {
-		isError := dispatchErr != nil && !errors.Is(dispatchErr, command.ErrSessionEnded)
+		isError := exec.ResponseIsError() || (dispatchErr != nil && !errors.Is(dispatchErr, command.ErrSessionEnded))
 		if emitErr := s.emitCommandResponse(ctx, char, strings.TrimRight(buf.String(), "\n"), isError); emitErr != nil {
 			return oops.Wrap(emitErr)
 		}

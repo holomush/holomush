@@ -22,16 +22,12 @@ var createPattern = regexp.MustCompile(`^(\w+)\s+"([^"]+)"$`)
 func handleCreate(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	args := strings.TrimSpace(cmd.Args)
 	if args == "" {
-		return &pluginsdk.CommandResponse{
-			Output: "Usage: create <type> \"<name>\"\n",
-		}, nil
+		return pluginsdk.Errorf("Usage: create <type> \"<name>\""), nil
 	}
 
 	matches := createPattern.FindStringSubmatch(args)
 	if matches == nil {
-		return &pluginsdk.CommandResponse{
-			Output: "Usage: create <type> \"<name>\"\n",
-		}, nil
+		return pluginsdk.Errorf("Usage: create <type> \"<name>\""), nil
 	}
 
 	entityType := strings.ToLower(matches[1])
@@ -43,34 +39,26 @@ func handleCreate(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugi
 	case "location":
 		return createLocation(ctx, cmd, proxy, name)
 	default:
-		return &pluginsdk.CommandResponse{
-			Output: "Usage: create <type> \"<name>\" (valid types: object, location)\n",
-		}, nil
+		return pluginsdk.Errorf("Usage: create <type> \"<name>\" (valid types: object, location)"), nil
 	}
 }
 
 func createObject(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy, name string) (*pluginsdk.CommandResponse, error) {
 	result, err := proxy.CreateObject(ctx, cmd.CharacterID, name, "")
 	if err != nil {
-		return &pluginsdk.CommandResponse{
-			Output: "Failed to create object.\n",
-		}, nil
+		proxy.Log(ctx, "error", fmt.Sprintf("create: failed to create object %q: %v", name, err))
+		return pluginsdk.Failuref("Unable to create object right now. Please try again."), nil
 	}
 
-	return &pluginsdk.CommandResponse{
-		Output: fmt.Sprintf("Created object \"%s\" (#%s)\n", name, result.ID),
-	}, nil
+	return pluginsdk.OK(fmt.Sprintf("Created object \"%s\" (#%s)\n", name, result.ID)), nil
 }
 
 func createLocation(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy, name string) (*pluginsdk.CommandResponse, error) {
 	result, err := proxy.CreateLocation(ctx, cmd.CharacterID, name, "", "persistent")
 	if err != nil {
-		return &pluginsdk.CommandResponse{
-			Output: "Failed to create location.\n",
-		}, nil
+		proxy.Log(ctx, "error", fmt.Sprintf("create: failed to create location %q: %v", name, err))
+		return pluginsdk.Failuref("Unable to create location right now. Please try again."), nil
 	}
 
-	return &pluginsdk.CommandResponse{
-		Output: fmt.Sprintf("Created location \"%s\" (#%s)\n", name, result.ID),
-	}, nil
+	return pluginsdk.OK(fmt.Sprintf("Created location \"%s\" (#%s)\n", name, result.ID)), nil
 }

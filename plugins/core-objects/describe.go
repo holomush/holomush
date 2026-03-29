@@ -21,14 +21,12 @@ import (
 func handleDescribe(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	args := strings.TrimSpace(cmd.Args)
 	if args == "" {
-		return &pluginsdk.CommandResponse{
-			Output: "Usage: describe me <text> | describe here <text> | describe <target>=<text>\n",
-		}, nil
+		return pluginsdk.Errorf("Usage: describe me <text> | describe here <text> | describe <target>=<text>"), nil
 	}
 
 	target, text, err := parseDescribeArgs(args)
 	if err != nil {
-		return &pluginsdk.CommandResponse{Output: err.Error() + "\n"}, nil
+		return pluginsdk.Errorf("%s", err.Error()), nil
 	}
 
 	if target == "me" {
@@ -71,40 +69,36 @@ func parseDescribeArgs(args string) (target, text string, err error) {
 // describeSelf updates the calling character's own description.
 func describeSelf(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy, text string) (*pluginsdk.CommandResponse, error) {
 	if err := proxy.UpdateCharacterDescription(ctx, cmd.CharacterID, cmd.CharacterID, text); err != nil {
-		return &pluginsdk.CommandResponse{
-			Output: "Failed to set description. Please try again.\n",
-		}, nil
+		proxy.Log(ctx, "error", fmt.Sprintf("describe: failed to update character description: %v", err))
+		return pluginsdk.Failuref("Unable to set description right now. Please try again."), nil
 	}
-	return &pluginsdk.CommandResponse{
-		Output: "Description set.\n",
-	}, nil
+	return pluginsdk.OK("Description set.\n"), nil
 }
 
 // describeTarget updates the description of a named target using the property system.
 func describeTarget(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy, target, text string) (*pluginsdk.CommandResponse, error) {
 	props, err := proxy.FindPropertyByPrefix(ctx, "description")
-	if err != nil || len(props) == 0 {
-		return &pluginsdk.CommandResponse{
-			Output: "Unknown property: description\n",
-		}, nil
+	if err != nil {
+		proxy.Log(ctx, "error", fmt.Sprintf("describe: failed to find property: %v", err))
+		return pluginsdk.Failuref("Unable to set description right now. Please try again."), nil
 	}
+	if len(props) == 0 {
+		return pluginsdk.Errorf("Unknown property: description"), nil
+	}
+
+	propName := props[0].Name
 
 	entityType, entityID := resolveTarget(cmd, target)
 	if entityType == "" {
-		return &pluginsdk.CommandResponse{
-			Output: fmt.Sprintf("Could not find target: %s\n", target),
-		}, nil
+		return pluginsdk.Errorf("Could not find target: %s", target), nil
 	}
 
-	if err := proxy.SetProperty(ctx, cmd.CharacterID, entityType, entityID, "description", text); err != nil {
-		return &pluginsdk.CommandResponse{
-			Output: "Failed to set description. Please try again.\n",
-		}, nil
+	if err := proxy.SetProperty(ctx, cmd.CharacterID, entityType, entityID, propName, text); err != nil {
+		proxy.Log(ctx, "error", fmt.Sprintf("describe: failed to set property: %v", err))
+		return pluginsdk.Failuref("Unable to set description right now. Please try again."), nil
 	}
 
-	return &pluginsdk.CommandResponse{
-		Output: "Description set.\n",
-	}, nil
+	return pluginsdk.OK("Description set.\n"), nil
 }
 
 // resolveTarget resolves a target string to an entity type and ID.
@@ -116,7 +110,11 @@ func resolveTarget(cmd pluginsdk.CommandRequest, target string) (entityType, ent
 		return "character", cmd.CharacterID
 	default:
 		if strings.HasPrefix(target, "#") {
-			return "object", target[1:]
+			id := strings.TrimSpace(target[1:])
+			if id == "" {
+				return "", ""
+			}
+			return "object", id
 		}
 		return "", ""
 	}

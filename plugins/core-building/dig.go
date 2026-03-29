@@ -38,19 +38,18 @@ func parseDig(args string) (*digArgs, error) {
 
 func handleDig(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	if cmd.Args == "" {
-		return &pluginsdk.CommandResponse{Output: digUsage}, nil
+		return pluginsdk.Errorf("%s", digUsage), nil
 	}
 
 	parsed, err := parseDig(cmd.Args)
 	if err != nil {
-		return &pluginsdk.CommandResponse{Output: err.Error()}, nil
+		return pluginsdk.Errorf("%s", err.Error()), nil
 	}
 
 	loc, err := proxy.CreateLocation(ctx, cmd.CharacterID, parsed.locationName, "", "persistent")
 	if err != nil {
-		return &pluginsdk.CommandResponse{
-			Output: fmt.Sprintf("Failed to create location: %v", err),
-		}, nil
+		proxy.Log(ctx, "error", fmt.Sprintf("dig: failed to create location %q: %v", parsed.locationName, err))
+		return pluginsdk.Failuref("Unable to create location right now. Please try again."), nil
 	}
 
 	opts := plugins.CreateExitOpts{}
@@ -60,9 +59,8 @@ func handleDig(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.
 	}
 
 	if err := proxy.CreateExit(ctx, cmd.CharacterID, cmd.LocationID, loc.ID, parsed.exitName, opts); err != nil {
-		return &pluginsdk.CommandResponse{
-			Output: fmt.Sprintf("Location created but exit failed: %v", err),
-		}, nil
+		proxy.Log(ctx, "error", fmt.Sprintf("dig: location created but exit %q failed: %v", parsed.exitName, err))
+		return pluginsdk.Failuref("Location created but exit failed. Please try again."), nil
 	}
 
 	msg := fmt.Sprintf("Created %q with exit %q", parsed.locationName, parsed.exitName)
@@ -71,5 +69,5 @@ func handleDig(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.
 	}
 	msg += "."
 
-	return &pluginsdk.CommandResponse{Output: msg}, nil
+	return pluginsdk.OK(msg), nil
 }

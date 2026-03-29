@@ -43,9 +43,7 @@ type WhisperHandler struct{}
 func (h *WhisperHandler) HandleCommand(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	args := strings.TrimSpace(cmd.Args)
 	if args == "" {
-		return &pluginsdk.CommandResponse{
-			Output: "Usage: whisper <name>=<message>",
-		}, nil
+		return pluginsdk.Errorf("Usage: whisper <name>=<message>"), nil
 	}
 
 	var targetName, message string
@@ -58,48 +56,43 @@ func (h *WhisperHandler) HandleCommand(ctx context.Context, cmd pluginsdk.Comman
 		// Short form: use last whispered target.
 		senderSession, err := proxy.FindSessionByName(ctx, cmd.CharacterName)
 		if err != nil {
-			return nil, oops.With("operation", "find_sender_session").Wrap(err)
+			proxy.Log(ctx, "error", fmt.Sprintf("whisper: failed to find sender session: %v", err))
+			return pluginsdk.Failuref("Unable to whisper right now. Please try again."), nil
 		}
 		if senderSession == nil || senderSession.LastWhispered == "" {
-			return &pluginsdk.CommandResponse{
-				Output: "Whisper to whom? Use: whisper <name>=<message>",
-			}, nil
+			return pluginsdk.Errorf("Whisper to whom? Use: whisper <name>=<message>"), nil
 		}
 		targetName = senderSession.LastWhispered
 		message = args
 	} else {
-		return &pluginsdk.CommandResponse{
-			Output: "Usage: whisper <name>=<message> or w <message>",
-		}, nil
+		return pluginsdk.Errorf("Usage: whisper <name>=<message> or w <message>"), nil
 	}
 
 	if targetName == "" {
-		return &pluginsdk.CommandResponse{
-			Output: "Whisper to whom? Use: whisper <name>=<message>",
-		}, nil
+		return pluginsdk.Errorf("Whisper to whom? Use: whisper <name>=<message>"), nil
 	}
 	if message == "" {
-		return &pluginsdk.CommandResponse{
-			Output: "What do you want to whisper?",
-		}, nil
+		return pluginsdk.Errorf("What do you want to whisper?"), nil
 	}
 
 	// Find target session.
 	target, err := proxy.FindSessionByName(ctx, targetName)
 	if err != nil {
-		return nil, oops.With("operation", "find_target_session").Wrap(err)
+		proxy.Log(ctx, "error", fmt.Sprintf("whisper: failed to find session for %q: %v", targetName, err))
+		return pluginsdk.Failuref("Unable to reach %q right now. Please try again.", targetName), nil
 	}
 	if target == nil {
-		return &pluginsdk.CommandResponse{
-			Output: fmt.Sprintf("No one named %q is connected.", targetName),
-		}, nil
+		return pluginsdk.Errorf("No one named %q is connected.", targetName), nil
+	}
+
+	// Reject location-less whispers before emitting to an invalid stream.
+	if cmd.LocationID == "" || cmd.LocationID == "00000000000000000000000000" {
+		return pluginsdk.Errorf("You must be in a location to whisper."), nil
 	}
 
 	// Same-location check.
 	if target.LocationID != cmd.LocationID {
-		return &pluginsdk.CommandResponse{
-			Output: fmt.Sprintf("You don't see anyone named %q here.", targetName),
-		}, nil
+		return pluginsdk.Errorf("You don't see anyone named %q here.", targetName), nil
 	}
 
 	// Detect pose mode.
@@ -116,9 +109,7 @@ func (h *WhisperHandler) HandleCommand(ctx context.Context, cmd pluginsdk.Comman
 	}
 
 	if message == "" {
-		return &pluginsdk.CommandResponse{
-			Output: "What do you want to whisper?",
-		}, nil
+		return pluginsdk.Errorf("What do you want to whisper?"), nil
 	}
 
 	// Build target message.
@@ -166,6 +157,7 @@ func (h *WhisperHandler) HandleCommand(ctx context.Context, cmd pluginsdk.Comman
 	}
 
 	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
 		Events: []pluginsdk.EmitEvent{
 			{
 				Stream:  "location:" + cmd.LocationID,

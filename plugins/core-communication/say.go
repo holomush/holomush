@@ -33,6 +33,7 @@ func (h *SayHandler) HandleCommand(_ context.Context, cmd pluginsdk.CommandReque
 	}
 
 	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
 		Events: []pluginsdk.EmitEvent{
 			{
 				Stream:  "location:" + cmd.LocationID,
