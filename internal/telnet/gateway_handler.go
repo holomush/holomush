@@ -20,6 +20,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
 
 const (
@@ -618,6 +619,13 @@ func (h *GatewayHandler) formatEvent(ev *corev1.EventFrame) string {
 	reg, found := h.verbRegistry.Lookup(ev.GetType())
 	if !found {
 		return h.formatFallback(ev)
+	}
+
+	// Only format events targeted at TERMINAL or BOTH.
+	// STATE-only and other non-terminal events have no telnet representation.
+	if reg.DisplayTarget != webv1.EventChannel_EVENT_CHANNEL_TERMINAL &&
+		reg.DisplayTarget != webv1.EventChannel_EVENT_CHANNEL_BOTH {
+		return ""
 	}
 
 	switch reg.Category {

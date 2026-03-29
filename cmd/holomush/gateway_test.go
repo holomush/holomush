@@ -611,14 +611,14 @@ func TestTelnetAcceptLoop_BackoffOnErrors(t *testing.T) {
 		closeCh:      make(chan struct{}),
 	}
 
+	// Bootstrap registry on the test goroutine so failures are reported cleanly
+	registry := core.NewVerbRegistry()
+	require.NoError(t, core.RegisterBuiltinTypes(registry))
+
 	// Run the accept loop in a goroutine
 	done := make(chan struct{})
 	go func() {
-		registry := core.NewVerbRegistry()
-			if err := core.RegisterBuiltinTypes(registry); err != nil {
-				panic("RegisterBuiltinTypes failed: " + err.Error())
-			}
-			runTelnetAcceptLoop(ctx, mock, &mockGRPCClient{}, registry, cancel)
+		runTelnetAcceptLoop(ctx, mock, &mockGRPCClient{}, registry, cancel)
 		close(done)
 	}()
 
