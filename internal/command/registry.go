@@ -6,6 +6,8 @@ package command
 import (
 	"log/slog"
 	"sync"
+
+	"github.com/samber/oops"
 )
 
 // Registry manages command registration and lookup.
@@ -63,6 +65,22 @@ func (r *Registry) Get(name string) (CommandEntry, bool) {
 
 	entry, ok := r.commands[name]
 	return entry, ok
+}
+
+// Unregister removes a command from the registry. It is safe for concurrent use.
+// Returns an error if the command is not found.
+func (r *Registry) Unregister(name string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, ok := r.commands[name]; !ok {
+		return oops.
+			With("command", name).
+			Errorf("cannot unregister unknown command: %s", name)
+	}
+
+	delete(r.commands, name)
+	return nil
 }
 
 // All returns all registered commands. It is safe for concurrent use.

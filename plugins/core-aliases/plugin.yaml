@@ -1,0 +1,147 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: core-aliases
+version: 1.0.0
+type: core
+load_priority: -1000
+commands:
+  - name: alias
+    capabilities:
+      - player.alias
+    help: "Add a personal alias"
+    usage: "alias <name>=<command>"
+    helpText: |
+      ## Alias
+
+      Create or update a personal command alias.
+
+      ### Usage
+
+      - `alias <name>=<command>` - Create an alias
+
+      ### Examples
+
+      - `alias l=look` - Create shortcut for look
+      - `alias n=north` - Create shortcut for north
+      - `alias aa=attack all` - Create alias with arguments
+
+      ### Notes
+
+      - Personal aliases take precedence over system aliases
+      - Warnings are shown if your alias shadows an existing command or system alias
+      - Circular alias chains are automatically rejected
+
+      ### Permissions
+
+      Requires the `player.alias` capability.
+
+  - name: unalias
+    capabilities:
+      - player.alias
+    help: "Remove a personal alias"
+    usage: "unalias <name>"
+    helpText: |
+      ## Unalias
+
+      Remove a personal command alias.
+
+      ### Usage
+
+      - `unalias <name>` - Remove the named alias
+
+      ### Examples
+
+      - `unalias l` - Remove the 'l' alias
+
+      ### Permissions
+
+      Requires the `player.alias` capability.
+
+  - name: aliases
+    capabilities:
+      - player.alias
+    help: "List your personal aliases"
+    usage: "aliases"
+    helpText: |
+      ## Aliases
+
+      Display all your personal command aliases.
+
+      ### Usage
+
+      - `aliases` - List all your aliases
+
+      ### Permissions
+
+      Requires the `player.alias` capability.
+
+  - name: sysalias
+    capabilities:
+      - admin.alias
+    help: "Add a system alias"
+    usage: "sysalias <name>=<command>"
+    helpText: |
+      ## Sysalias
+
+      Create or update a system-wide command alias.
+
+      ### Usage
+
+      - `sysalias <name>=<command>` - Create a system alias
+
+      ### Examples
+
+      - `sysalias l=look` - Create system shortcut for look
+      - `sysalias n=north` - Create system shortcut for north
+
+      ### Notes
+
+      - System aliases apply to all players
+      - Cannot shadow an existing system alias (remove it first with sysunsalias)
+      - Warnings are shown if the alias shadows an existing command
+      - Circular alias chains are automatically rejected
+
+      ### Permissions
+
+      Requires the `admin.alias` capability.
+
+  - name: sysunsalias
+    capabilities:
+      - admin.alias
+    help: "Remove a system alias"
+    usage: "sysunsalias <name>"
+    helpText: |
+      ## Sysunsalias
+
+      Remove a system-wide command alias.
+
+      ### Usage
+
+      - `sysunsalias <name>` - Remove the named system alias
+
+      ### Examples
+
+      - `sysunsalias l` - Remove the system 'l' alias
+
+      ### Permissions
+
+      Requires the `admin.alias` capability.
+
+  - name: sysaliases
+    capabilities:
+      - admin.alias
+    help: "List all system aliases"
+    usage: "sysaliases"
+    helpText: |-
+      ## Sysaliases
+
+      Display all system-wide command aliases.
+
+      ### Usage
+
+      - `sysaliases` - List all system aliases
+
+      ### Permissions
+
+      Requires the `admin.alias` capability.
