@@ -239,6 +239,49 @@ func TestTranslateEvent_CommandResponseError(t *testing.T) {
 	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetChannel())
 }
 
+func TestTranslateEvent_OOC(t *testing.T) {
+	ev := &corev1.EventFrame{
+		Type:    "ooc",
+		Payload: mustMarshal(t, core.OOCPayload{CharacterName: "Alice", Message: "brb", Style: "say"}),
+	}
+
+	got := translateEvent(ev)
+	require.NotNil(t, got)
+	assert.Equal(t, "ooc", got.GetType())
+	assert.Equal(t, "Alice", got.GetCharacterName())
+	assert.Equal(t, "brb", got.GetText())
+	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetChannel())
+}
+
+func TestTranslateEvent_OOC_PoseStyle(t *testing.T) {
+	ev := &corev1.EventFrame{
+		Type:    "ooc",
+		Payload: mustMarshal(t, core.OOCPayload{CharacterName: "Bob", Message: "waves.", Style: "pose"}),
+	}
+
+	got := translateEvent(ev)
+	require.NotNil(t, got)
+	assert.Equal(t, "ooc", got.GetType())
+	require.NotNil(t, got.GetMetadata())
+	assert.Equal(t, "pose", got.GetMetadata().AsMap()["style"])
+}
+
+func TestTranslateEvent_Pemit(t *testing.T) {
+	ev := &corev1.EventFrame{
+		Type: "pemit",
+		Payload: mustMarshal(t, core.PemitPayload{
+			SenderName: "Alice",
+			Message:    "Secret message.",
+		}),
+	}
+
+	got := translateEvent(ev)
+	require.NotNil(t, got)
+	assert.Equal(t, "pemit", got.GetType())
+	assert.Equal(t, "Secret message.", got.GetText())
+	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetChannel())
+}
+
 func TestTranslateEvent_Unknown(t *testing.T) {
 	ev := &corev1.EventFrame{
 		Type:    "teleport",

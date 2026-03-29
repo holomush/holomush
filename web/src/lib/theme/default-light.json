@@ -10,6 +10,8 @@
     "leave": "#616161",
     "command.output": "#1a1a1a",
     "command.error": "#c62828",
+    "ooc": "#6a1b9a",
+    "pemit": "#00695c",
     "background": "#fafafa",
     "surface": "#f0f0f0",
     "border": "#e0e0e0",

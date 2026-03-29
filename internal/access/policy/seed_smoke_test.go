@@ -699,3 +699,82 @@ func TestSeedSmoke_PlayerDeniedOtherLocationRead(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, decision.IsAllowed(), "player should NOT read non-current location; got: %s — %s", decision.Effect(), decision.Reason())
 }
+
+// Phase-2 command smoke tests
+
+func TestSeedSmoke_PlayerTeleportAndHomeCommands(t *testing.T) {
+	commands := []string{"teleport", "home"}
+	for _, cmd := range commands {
+		t.Run(cmd, func(t *testing.T) {
+			engine := createSeedEngine(t, []attribute.AttributeProvider{
+				characterProvider(
+					map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
+					nil,
+				),
+				commandProvider(map[string]any{"name": cmd}),
+			})
+
+			decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+				Subject:  "character:01CHAR01",
+				Action:   "execute",
+				Resource: "command:" + cmd,
+			})
+			require.NoError(t, err)
+			assert.True(t, decision.IsAllowed(), "player should execute %s; got: %s — %s", cmd, decision.Effect(), decision.Reason())
+		})
+	}
+}
+
+func TestSeedSmoke_PemitDeniedForPlayers(t *testing.T) {
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		characterProvider(
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
+			nil,
+		),
+		commandProvider(map[string]any{"name": "pemit"}),
+	})
+
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:  "character:01CHAR01",
+		Action:   "execute",
+		Resource: "command:pemit",
+	})
+	require.NoError(t, err)
+	assert.False(t, decision.IsAllowed(), "regular player should NOT execute pemit; got: %s — %s", decision.Effect(), decision.Reason())
+}
+
+func TestSeedSmoke_PemitAllowedForAdmin(t *testing.T) {
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		characterProvider(
+			map[string]any{"id": "01ADMIN1", "roles": []string{"admin"}, "location": "01LOC000"},
+			nil,
+		),
+		commandProvider(map[string]any{"name": "pemit"}),
+	})
+
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:  "character:01ADMIN1",
+		Action:   "execute",
+		Resource: "command:pemit",
+	})
+	require.NoError(t, err)
+	assert.True(t, decision.IsAllowed(), "admin should execute pemit; got: %s — %s", decision.Effect(), decision.Reason())
+}
+
+func TestSeedSmoke_PemitAllowedForStoryteller(t *testing.T) {
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		characterProvider(
+			map[string]any{"id": "01STORY1", "roles": []string{"storyteller"}, "location": "01LOC000"},
+			nil,
+		),
+		commandProvider(map[string]any{"name": "pemit"}),
+	})
+
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:  "character:01STORY1",
+		Action:   "execute",
+		Resource: "command:pemit",
+	})
+	require.NoError(t, err)
+	assert.True(t, decision.IsAllowed(), "storyteller should execute pemit; got: %s — %s", decision.Effect(), decision.Reason())
+}

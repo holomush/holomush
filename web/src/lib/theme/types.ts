@@ -8,6 +8,8 @@ export interface ThemeColors {
   leave: string;
   'command.output': string;
   'command.error': string;
+  ooc: string;
+  pemit: string;
   background: string;
   surface: string;
   border: string;

@@ -11,8 +11,8 @@ type SeedPolicy struct {
 	SeedVersion int
 }
 
-// SeedPolicies returns the complete set of 23 seed policies (22 permit, 1 forbid).
-// The initial 18 (T22) plus 5 gap-fill policies (T22b: G1-G4).
+// SeedPolicies returns the complete set of 25 seed policies (24 permit, 1 forbid).
+// The initial 18 (T22) plus 5 gap-fill policies (T22b: G1-G4), and 2 phase-2 command policies.
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
 // See ADR 087 for rationale on default-deny instead of explicit forbid for system properties.
 //
@@ -167,6 +167,27 @@ func SeedPolicies() []SeedPolicy {
 			Name:        "seed:player-scene-read",
 			Description: "Characters can view scenes",
 			DSLText:     `permit(principal is character, action in ["read"], resource is scene);`,
+			SeedVersion: 1,
+		},
+
+		// --- Phase-2 command policies ---
+
+		// All players can execute home and teleport commands.
+		// Scope enforcement (home-only for default role, self-only for builder)
+		// is handled in the command handlers, not here, because the ABAC engine
+		// does not have access to runtime command arguments like target location.
+		{
+			Name:        "seed:player-teleport",
+			Description: "All players can execute home and teleport commands",
+			DSLText:     `permit(principal is character, action in ["execute"], resource is command) when { resource.command.name in ["teleport", "home"] };`,
+			SeedVersion: 1,
+		},
+		// Pemit: storyteller and admin roles only. The storyteller role is not
+		// created by default — this policy will simply not match until it exists.
+		{
+			Name:        "seed:pemit-storyteller",
+			Description: "Storyteller and admin roles can execute pemit",
+			DSLText:     `permit(principal is character, action in ["execute"], resource is command) when { principal.character.roles.containsAny(["storyteller", "admin"]) && resource.command.name == "pemit" };`,
 			SeedVersion: 1,
 		},
 	}

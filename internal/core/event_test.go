@@ -28,6 +28,8 @@ func TestEventType_String(t *testing.T) {
 		{"object_give event", EventTypeObjectGive, "object_give"},
 		{"location_state event", EventTypeLocationState, "location_state"},
 		{"exit_update event", EventTypeExitUpdate, "exit_update"},
+		{"ooc event", EventTypeOOC, "ooc"},
+		{"pemit event", EventTypePemit, "pemit"},
 	}
 
 	for _, tt := range tests {

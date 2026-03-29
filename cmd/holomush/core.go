@@ -484,13 +484,14 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		}
 
 		cmdServices, cmdSvcErr := command.NewServices(command.ServicesConfig{
-			World:      worldService,
-			Session:    sessionStore,
-			Engine:     policyEngine,
-			Events:     realStore,
-			AliasCache: aliasCache,
-			AliasRepo:  aliasRepo,
-			Registry:   cmdRegistry,
+			World:              worldService,
+			Session:            sessionStore,
+			Engine:             policyEngine,
+			Events:             realStore,
+			AliasCache:         aliasCache,
+			AliasRepo:          aliasRepo,
+			Registry:           cmdRegistry,
+			StartingLocationID: startLocationID,
 		})
 		if cmdSvcErr != nil {
 			return oops.Code("COMMAND_SERVICES_FAILED").Wrap(cmdSvcErr)

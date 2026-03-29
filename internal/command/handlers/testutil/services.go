@@ -120,6 +120,12 @@ func (b *ServicesBuilder) WithPropertyRegistry(registry *property.Registry) *Ser
 	return b
 }
 
+// WithStartingLocationID sets the default starting location ID for home fallback.
+func (b *ServicesBuilder) WithStartingLocationID(id ulid.ULID) *ServicesBuilder {
+	b.config.StartingLocationID = id
+	return b
+}
+
 // Build returns a Services instance for tests.
 func (b *ServicesBuilder) Build() *command.Services {
 	return command.NewTestServices(b.config)

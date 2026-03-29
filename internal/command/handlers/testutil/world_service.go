@@ -19,6 +19,7 @@ type WorldServiceMocks struct {
 	SceneRepo     *worldtest.MockSceneRepository
 	CharacterRepo *worldtest.MockCharacterRepository
 	EventEmitter  *worldtest.MockEventEmitter
+	PropertyRepo  *worldtest.MockPropertyRepository
 }
 
 // WorldServiceFixture bundles a world service with its mocks.
@@ -36,6 +37,7 @@ type WorldServiceBuilder struct {
 	sceneRepo     *worldtest.MockSceneRepository
 	characterRepo *worldtest.MockCharacterRepository
 	eventEmitter  *worldtest.MockEventEmitter
+	propertyRepo  *worldtest.MockPropertyRepository
 }
 
 // NewWorldServiceBuilder returns a builder with default mocks.
@@ -48,6 +50,7 @@ func NewWorldServiceBuilder(t *testing.T) *WorldServiceBuilder {
 		sceneRepo:     worldtest.NewMockSceneRepository(t),
 		characterRepo: worldtest.NewMockCharacterRepository(t),
 		eventEmitter:  worldtest.NewMockEventEmitter(t),
+		propertyRepo:  worldtest.NewMockPropertyRepository(t),
 	}
 }
 
@@ -93,6 +96,12 @@ func (b *WorldServiceBuilder) WithEventEmitter(eventEmitter *worldtest.MockEvent
 	return b
 }
 
+// WithPropertyRepo sets the property repository mock.
+func (b *WorldServiceBuilder) WithPropertyRepo(propertyRepo *worldtest.MockPropertyRepository) *WorldServiceBuilder {
+	b.propertyRepo = propertyRepo
+	return b
+}
+
 // Build creates a WorldServiceFixture from the builder.
 func (b *WorldServiceBuilder) Build() *WorldServiceFixture {
 	if b.engine == nil {
@@ -105,6 +114,7 @@ func (b *WorldServiceBuilder) Build() *WorldServiceFixture {
 		ObjectRepo:    b.objectRepo,
 		SceneRepo:     b.sceneRepo,
 		CharacterRepo: b.characterRepo,
+		PropertyRepo:  b.propertyRepo,
 		Engine:        b.engine,
 		EventEmitter:  b.eventEmitter,
 	})
@@ -119,6 +129,7 @@ func (b *WorldServiceBuilder) Build() *WorldServiceFixture {
 			SceneRepo:     b.sceneRepo,
 			CharacterRepo: b.characterRepo,
 			EventEmitter:  b.eventEmitter,
+			PropertyRepo:  b.propertyRepo,
 		},
 	}
 }
