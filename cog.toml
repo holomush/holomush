@@ -2,10 +2,9 @@
 # https://docs.cocogitto.io/
 #
 # NOTE: Cocogitto is used ONLY for commit message validation.
-# Release-please handles versioning, changelog, and releases.
+# git-cliff handles versioning, changelog, and releases.
 
 [settings]
-# Disable version tagging (release-please handles this)
 ignore_merge_commits = true
 
 # Allowed commit types for validation

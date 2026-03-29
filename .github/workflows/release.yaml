@@ -4,54 +4,135 @@
 name: Release
 
 on:
-  push:
-    branches: [main]
-    tags:
-      - "v*"
+  workflow_dispatch: {}
 
-permissions:
-  contents: write
-  packages: write
-  pull-requests: write
-  id-token: write # Required for Cosign keyless signing
-  attestations: write # Required for provenance attestations
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  release-please:
-    name: Release Please
+  release:
+    name: Release
+    permissions:
+      contents: write
     runs-on: namespace-profile-linux-amd64-4x8
-    if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
+      new_tag: ${{ steps.push.outputs.new_tag || steps.check.outputs.new_tag }}
+      version: ${{ steps.check.outputs.version }}
     steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
+      - uses: actions/checkout@v6
         with:
-          release-type: go
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Generate release app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Install git-cliff
+        uses: orhun/git-cliff-action@v4
+        id: cliff
+        with:
+          args: --bump
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OUTPUT: CHANGELOG.md
+
+      - name: Check if version bumped
+        id: check
+        run: |
+          TAG="${{ steps.cliff.outputs.version }}"
+          if [ -z "$TAG" ]; then
+            echo "No releasable commits since last tag. Exiting."
+            echo "new_tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          VERSION="${TAG#v}"
+          echo "new_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Commit changelog and push
+        id: push
+        if: steps.check.outputs.new_tag != ''
+        run: |
+          # Override the remote URL to use the app token for authentication.
+          # actions/checkout bakes the default GITHUB_TOKEN into git credentials;
+          # we must replace it with the app token to bypass branch protection.
+          git remote set-url origin "https://x-access-token:${APP_TOKEN}@github.com/${{ github.repository }}.git"
+          git config user.name "holomush-release-bot[bot]"
+          git config user.email "holomush-release-bot[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+
+          CHANGED=false
+
+          # Commit only if changelog actually changed.
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): ${TAG}"
+            git push
+            CHANGED=true
+          fi
+
+          # Create tag if it doesn't already exist.
+          if ! git rev-parse "${TAG}" >/dev/null 2>&1; then
+            git tag "${TAG}"
+            git push origin "${TAG}"
+            CHANGED=true
+          fi
+
+          # If nothing changed, this is a no-op re-run. Clear the tag so
+          # downstream steps (release creation, goreleaser) are skipped.
+          if [ "$CHANGED" = "false" ]; then
+            echo "Tag ${TAG} and changelog already exist. Nothing to do."
+            echo "new_tag=" >> "$GITHUB_OUTPUT"
+          else
+            echo "new_tag=${TAG}" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ steps.check.outputs.new_tag }}
+
+      - name: Create GitHub release
+        if: steps.push.outputs.new_tag != ''
+        run: |
+          # Create release if it doesn't already exist (idempotent).
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --notes "$NOTES" \
+              --verify-tag \
+              --draft
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.push.outputs.new_tag }}
+          NOTES: ${{ steps.cliff.outputs.content }}
 
   goreleaser:
     name: Build, Sign, and Release
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    needs: release
+    if: needs.release.outputs.new_tag != ''
     runs-on: namespace-profile-linux-amd64-4x8
-    needs: release-please
-    if: needs.release-please.outputs.release_created || startsWith(github.ref, 'refs/tags/')
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      version: ${{ needs.release.outputs.version }}
+      new_tag: ${{ needs.release.outputs.new_tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Get version
-        id: version
-        run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF_NAME}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Building version: ${VERSION}"
+          ref: ${{ needs.release.outputs.new_tag }}
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: false
@@ -74,9 +155,6 @@ jobs:
       - name: Install Syft
         uses: anchore/sbom-action/download-syft@v0
 
-      # GoReleaser handles building, signing, and releasing atomically.
-      # Signing happens BEFORE artifacts are published - releases are never
-      # published with unsigned artifacts.
       - name: Run GoReleaser
         id: goreleaser
         uses: goreleaser/goreleaser-action@v7
@@ -87,13 +165,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Verify signing artifacts were created (defense-in-depth)
       - name: Verify signing artifacts exist
         run: |
           set -euo pipefail
           echo "Verifying signing artifacts..."
 
-          # Check that checksums signature and certificate exist
           if [[ ! -f dist/checksums.txt.sig ]]; then
             echo "ERROR: checksums.txt.sig not found - signing may have failed"
             ls -la dist/
@@ -106,79 +182,34 @@ jobs:
             exit 1
           fi
 
-          echo "✓ Signing artifacts verified:"
+          echo "Signing artifacts verified:"
           ls -la dist/checksums.txt.sig*
 
-      # Upload artifacts for provenance attestation
-      - name: Upload release artifacts
-        uses: actions/upload-artifact@v7
+      - name: Scan Docker image
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
-          name: release-artifacts
-          path: dist/*.tar.gz
-          retention-days: 1
-          if-no-files-found: error
-
-  # Provenance attestation runs after goreleaser completes.
-  # This adds SLSA provenance to the already-signed artifacts.
-  attest-provenance:
-    name: Attest Provenance
-    runs-on: namespace-profile-linux-amd64-4x8
-    needs: goreleaser
-    permissions:
-      id-token: write
-      attestations: write
-    steps:
-      - name: Download release artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: release-artifacts
-          path: dist
-
-      - name: Verify artifacts exist
-        run: |
-          set -euo pipefail
-          count=$(find dist -name '*.tar.gz' -type f | wc -l)
-          if [[ $count -eq 0 ]]; then
-            echo "ERROR: No release artifacts found"
-            exit 1
-          fi
-          echo "Found ${count} artifacts to attest"
-          ls -la dist/
+          image-ref: "ghcr.io/holomush/holomush:${{ needs.release.outputs.version }}"
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
 
       - name: Attest binary provenance
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: "dist/*.tar.gz"
 
-  # Attest container images for provenance
-  attest-containers:
-    name: Attest Container Provenance
-    runs-on: namespace-profile-linux-amd64-4x8
-    needs: goreleaser
-    permissions:
-      id-token: write
-      attestations: write
-      packages: write
-    steps:
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get image digest
+      - name: Get container image digest
         id: digest
         run: |
           set -euo pipefail
-          VERSION="${{ needs.goreleaser.outputs.version }}"
+          VERSION="${{ needs.release.outputs.version }}"
           IMAGE="ghcr.io/holomush/holomush:${VERSION}"
 
           echo "Fetching digest for ${IMAGE}"
           MANIFEST_STDERR=$(mktemp)
           if ! docker manifest inspect "${IMAGE}" --verbose > /tmp/manifest.json 2> "${MANIFEST_STDERR}"; then
             echo "ERROR: Failed to inspect manifest for ${IMAGE}"
-            echo "Docker manifest inspect stderr:"
             cat "${MANIFEST_STDERR}"
             exit 1
           fi
@@ -187,7 +218,6 @@ jobs:
 
           if [[ -z "${DIGEST}" || "${DIGEST}" == "null" ]]; then
             echo "ERROR: Could not extract digest from manifest"
-            echo "Manifest output:"
             cat /tmp/manifest.json
             exit 1
           fi
@@ -202,11 +232,16 @@ jobs:
           subject-digest: ${{ steps.digest.outputs.digest }}
           push-to-registry: true
 
-  # Final verification step - ensures all signing and attestation succeeded
+      - name: Publish release
+        run: gh release edit "$TAG" --draft=false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release.outputs.new_tag }}
+
   verify-release:
     name: Verify Release
     runs-on: namespace-profile-linux-amd64-4x8
-    needs: [goreleaser, attest-provenance, attest-containers]
+    needs: [goreleaser]
     permissions:
       contents: read
     steps:
@@ -218,7 +253,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          VERSION="${{ needs.goreleaser.outputs.version }}"
+          VERSION="${{ needs.goreleaser.outputs.new_tag }}"
 
           echo "Verifying release ${VERSION}..."
 
@@ -236,7 +271,6 @@ jobs:
           if ! gh release download "${VERSION}" -R holomush/holomush -D dist \
             -p 'checksums.txt' -p 'checksums.txt.sig' -p 'checksums.txt.sig.cert'; then
             echo "ERROR: Failed to download release artifacts"
-            echo "This may indicate the release was not published or signing failed"
             gh release view "${VERSION}" -R holomush/holomush --json assets || true
             exit 1
           fi
@@ -249,23 +283,23 @@ jobs:
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             dist/checksums.txt
 
-          echo "✓ Checksums signature verified"
+          echo "Checksums signature verified"
 
       - name: Verify container signature
         run: |
           set -euo pipefail
-          VERSION="${{ needs.goreleaser.outputs.version }}"
+          VERSION="${{ needs.goreleaser.outputs.new_tag }}"
 
           cosign verify \
             --certificate-identity-regexp "https://github.com/holomush/holomush/.*" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            "ghcr.io/holomush/holomush:${VERSION}"
+            "ghcr.io/holomush/holomush:${{ needs.goreleaser.outputs.version }}"
 
-          echo "✓ Container signature verified"
+          echo "Container signature verified"
 
       - name: Release verification complete
-        run: |-
-          echo "✓ All release artifacts are properly signed and attested"
+        run: |
+          echo "All release artifacts are properly signed and attested"
           echo "  - Binary checksums: signed with Cosign"
           echo "  - Container images: signed with Cosign"
           echo "  - Binary provenance: attested"

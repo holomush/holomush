@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+#
+# Codecov configuration
+# https://docs.codecov.io/docs/codecovyml-reference
+codecov:
+  require_ci_to_pass: true
+coverage:
+  precision: 2
+  round: down
+  range: "60...90"
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 2% # allow 2% drop without failing
+        if_ci_failed: error
+    patch:
+      default:
+        informational: true # report only, don't block PRs
+    changes:
+      default:
+        enabled: true # report files with coverage changes
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true # only comment when coverage changes
+ignore:
+  - "web/**" # SvelteKit frontend (not Go)
+  - "site/**" # documentation site
+  - "plugins/**" # Lua plugin examples
+  - "schemas/**" # JSON schemas
+  - "test/integration/**" # integration test infrastructure
+flags:
+  unit:
+    paths:
+      - "internal/**"
+    carryforward: true

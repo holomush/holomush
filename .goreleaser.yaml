@@ -91,15 +91,9 @@ docker_signs:
       - "${artifact}"
       - "--yes"
 
+# Changelog is handled by git-cliff (see cliff.toml and release.yaml)
 changelog:
-  sort: asc
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-      - "^chore:"
-      - "Merge pull request"
-      - "Merge branch"
+  disable: true
 
 dockers:
   - image_templates:
@@ -143,5 +137,5 @@ release:
   github:
     owner: holomush
     name: holomush
-  draft: false
+  mode: append
   prerelease: auto
