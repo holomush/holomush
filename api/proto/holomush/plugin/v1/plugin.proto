@@ -8,11 +8,35 @@ package holomush.plugin.v1;
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1";
 
-// PluginService is called by the go-plugin host to send events to binary plugins.
+// PluginService is called by the go-plugin host to send events and commands to binary plugins.
 // This service is implemented by the plugin (the gRPC server runs in the plugin process).
 service PluginService {
   // HandleEvent delivers an event to the plugin and receives any response events.
   rpc HandleEvent(HandleEventRequest) returns (HandleEventResponse);
+
+  // HandleCommand delivers a command to the plugin.
+  rpc HandleCommand(HandleCommandRequest) returns (HandleCommandResponse);
+}
+
+// PluginHostService runs in the host process, allowing binary plugins
+// to call back for world queries, KV storage, and session operations.
+service PluginHostService {
+  // QueryLocation retrieves a location by ID.
+  rpc QueryLocation(QueryLocationRequest) returns (QueryLocationResponse);
+  // QueryCharacter retrieves a character by ID.
+  rpc QueryCharacter(HostQueryCharacterRequest) returns (HostQueryCharacterResponse);
+  // QueryLocationCharacters returns all characters present at a location.
+  rpc QueryLocationCharacters(HostQueryLocationCharactersRequest) returns (HostQueryLocationCharactersResponse);
+  // EmitEvent publishes an event to a stream.
+  rpc EmitEvent(HostEmitEventRequest) returns (HostEmitEventResponse);
+  // Log writes a log message through the host's logging system.
+  rpc Log(HostLogRequest) returns (HostLogResponse);
+  // KVGet retrieves a value from the plugin's key-value store.
+  rpc KVGet(HostKVGetRequest) returns (HostKVGetResponse);
+  // KVSet stores a value in the plugin's key-value store.
+  rpc KVSet(HostKVSetRequest) returns (HostKVSetResponse);
+  // KVDelete removes a value from the plugin's key-value store.
+  rpc KVDelete(HostKVDeleteRequest) returns (HostKVDeleteResponse);
 }
 
 // Event represents a game event delivered to plugins.
@@ -57,3 +81,156 @@ message HandleEventResponse {
   // Events to emit in response.
   repeated EmitEvent emit_events = 1;
 }
+
+// CommandRequest carries context for a plugin command invocation.
+message CommandRequest {
+  // Parsed command name (e.g., "say", "dig").
+  string command = 1;
+  // Everything after the command name.
+  string args = 2;
+  // What the player actually typed (alias support).
+  string raw_input = 3;
+  // Invoking character ULID.
+  string character_id = 4;
+  // Character display name.
+  string character_name = 5;
+  // Character's current location ULID.
+  string location_id = 6;
+  // Active session ULID.
+  string session_id = 7;
+  // Player account ULID.
+  string player_id = 8;
+}
+
+// CommandStatus maps to pkg/plugin.CommandStatus values.
+enum CommandStatus {
+  COMMAND_STATUS_OK = 0;
+  COMMAND_STATUS_ERROR = 1;
+  COMMAND_STATUS_FAILURE = 2;
+  COMMAND_STATUS_FATAL = 3;
+}
+
+// CommandResponse carries the result of a plugin command execution.
+message CommandResponse {
+  // Outcome category.
+  CommandStatus status = 1;
+  // Synchronous text output to the invoking player.
+  string output = 2;
+  // Events to append to the event store.
+  repeated EmitEvent events = 3;
+}
+
+// HandleCommandRequest wraps a command for delivery to the plugin.
+message HandleCommandRequest {
+  // The command to handle.
+  CommandRequest command = 1;
+}
+
+// HandleCommandResponse wraps the command result from the plugin.
+message HandleCommandResponse {
+  // The command result.
+  CommandResponse response = 1;
+}
+
+// --- PluginHostService messages ---
+
+// LocationInfo contains basic location information.
+message LocationInfo {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string type = 4;
+  string owner_id = 5;
+}
+
+// HostCharacterInfo contains basic character information for host service responses.
+message HostCharacterInfo {
+  string id = 1;
+  string player_id = 2;
+  string name = 3;
+  string description = 4;
+  string location_id = 5;
+}
+
+// QueryLocationRequest requests information about a location.
+message QueryLocationRequest {
+  string subject_id = 1;
+  string location_id = 2;
+}
+
+// QueryLocationResponse contains location information.
+message QueryLocationResponse {
+  LocationInfo location = 1;
+}
+
+// HostQueryCharacterRequest requests information about a character.
+message HostQueryCharacterRequest {
+  string subject_id = 1;
+  string character_id = 2;
+}
+
+// HostQueryCharacterResponse contains character information.
+message HostQueryCharacterResponse {
+  HostCharacterInfo character = 1;
+}
+
+// HostQueryLocationCharactersRequest requests all characters at a location.
+message HostQueryLocationCharactersRequest {
+  string subject_id = 1;
+  string location_id = 2;
+}
+
+// HostQueryLocationCharactersResponse contains the list of characters.
+message HostQueryLocationCharactersResponse {
+  repeated HostCharacterInfo characters = 1;
+}
+
+// HostEmitEventRequest wraps an event for emission by the host.
+message HostEmitEventRequest {
+  string stream = 1;
+  string event_type = 2;
+  bytes payload = 3;
+}
+
+// HostEmitEventResponse indicates success.
+message HostEmitEventResponse {}
+
+// HostLogRequest writes a log message through the host.
+message HostLogRequest {
+  string level = 1;
+  string message = 2;
+}
+
+// HostLogResponse is empty (logging is fire-and-forget).
+message HostLogResponse {}
+
+// HostKVGetRequest retrieves a value by key.
+message HostKVGetRequest {
+  string plugin_name = 1;
+  string key = 2;
+}
+
+// HostKVGetResponse contains the retrieved value.
+message HostKVGetResponse {
+  string value = 1;
+  bool found = 2;
+}
+
+// HostKVSetRequest stores a key-value pair.
+message HostKVSetRequest {
+  string plugin_name = 1;
+  string key = 2;
+  string value = 3;
+}
+
+// HostKVSetResponse indicates success.
+message HostKVSetResponse {}
+
+// HostKVDeleteRequest removes a key.
+message HostKVDeleteRequest {
+  string plugin_name = 1;
+  string key = 2;
+}
+
+// HostKVDeleteResponse indicates success.
+message HostKVDeleteResponse {}

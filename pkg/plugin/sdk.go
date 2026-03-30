@@ -19,6 +19,13 @@ type Handler interface {
 	HandleEvent(ctx context.Context, event Event) ([]EmitEvent, error)
 }
 
+// CommandHandler is implemented by binary plugins that handle commands.
+// Plugins that only handle events need not implement this interface.
+type CommandHandler interface {
+	// HandleCommand processes a command and returns the result.
+	HandleCommand(ctx context.Context, req CommandRequest) (*CommandResponse, error)
+}
+
 // HandshakeConfig is the go-plugin handshake configuration.
 // Both host and plugins must use the same values.
 var HandshakeConfig = hashiplug.HandshakeConfig{
@@ -90,7 +97,11 @@ func (p *grpcPlugin) GRPCServer(_ *hashiplug.GRPCBroker, s *grpc.Server) error {
 	if p.handler == nil {
 		return errors.New("plugin: handler is nil")
 	}
-	pluginv1.RegisterPluginServiceServer(s, &pluginServerAdapter{handler: p.handler})
+	adapter := &pluginServerAdapter{handler: p.handler}
+	if ch, ok := p.handler.(CommandHandler); ok {
+		adapter.cmdHandler = ch
+	}
+	pluginv1.RegisterPluginServiceServer(s, adapter)
 	return nil
 }
 
@@ -100,10 +111,11 @@ func (p *grpcPlugin) GRPCClient(_ context.Context, _ *hashiplug.GRPCBroker, _ *g
 	return nil, errors.New("plugin: GRPCClient not implemented on plugin side")
 }
 
-// pluginServerAdapter adapts Handler to pluginv1.PluginServiceServer.
+// pluginServerAdapter adapts Handler (and optionally CommandHandler) to pluginv1.PluginServiceServer.
 type pluginServerAdapter struct {
 	pluginv1.UnimplementedPluginServiceServer
-	handler Handler
+	handler    Handler
+	cmdHandler CommandHandler // nil if handler does not implement CommandHandler
 }
 
 // HandleEvent implements pluginv1.PluginServiceServer.
@@ -140,6 +152,66 @@ func (a *pluginServerAdapter) HandleEvent(ctx context.Context, req *pluginv1.Han
 	}
 
 	return &pluginv1.HandleEventResponse{EmitEvents: protoEmits}, nil
+}
+
+// HandleCommand implements pluginv1.PluginServiceServer.
+func (a *pluginServerAdapter) HandleCommand(ctx context.Context, req *pluginv1.HandleCommandRequest) (*pluginv1.HandleCommandResponse, error) {
+	if a.cmdHandler == nil {
+		return nil, errors.New("plugin: command handler not implemented")
+	}
+
+	protoCmd := req.GetCommand()
+	cmd := CommandRequest{
+		Command:       protoCmd.GetCommand(),
+		Args:          protoCmd.GetArgs(),
+		CharacterID:   protoCmd.GetCharacterId(),
+		CharacterName: protoCmd.GetCharacterName(),
+		LocationID:    protoCmd.GetLocationId(),
+		SessionID:     protoCmd.GetSessionId(),
+		InvokedAs:     protoCmd.GetRawInput(),
+	}
+
+	resp, err := a.cmdHandler.HandleCommand(ctx, cmd)
+	if err != nil {
+		return nil, oops.With("command", cmd.Command).Wrap(err)
+	}
+
+	if resp == nil {
+		return &pluginv1.HandleCommandResponse{Response: &pluginv1.CommandResponse{}}, nil
+	}
+
+	protoEvents := make([]*pluginv1.EmitEvent, len(resp.Events))
+	for i, e := range resp.Events {
+		protoEvents[i] = &pluginv1.EmitEvent{
+			Stream:  e.Stream,
+			Type:    string(e.Type),
+			Payload: e.Payload,
+		}
+	}
+
+	return &pluginv1.HandleCommandResponse{
+		Response: &pluginv1.CommandResponse{
+			Status: sdkCommandStatusToProto(resp.Status),
+			Output: resp.Output,
+			Events: protoEvents,
+		},
+	}, nil
+}
+
+// sdkCommandStatusToProto converts an SDK CommandStatus to a proto CommandStatus.
+func sdkCommandStatusToProto(s CommandStatus) pluginv1.CommandStatus {
+	switch s {
+	case CommandOK:
+		return pluginv1.CommandStatus_COMMAND_STATUS_OK
+	case CommandError:
+		return pluginv1.CommandStatus_COMMAND_STATUS_ERROR
+	case CommandFailure:
+		return pluginv1.CommandStatus_COMMAND_STATUS_FAILURE
+	case CommandFatal:
+		return pluginv1.CommandStatus_COMMAND_STATUS_FATAL
+	default:
+		return pluginv1.CommandStatus_COMMAND_STATUS_OK
+	}
 }
 
 // protoActorKindToActorKind converts proto ActorKind to pkg/plugin ActorKind.

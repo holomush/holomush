@@ -46,6 +46,28 @@ func TestServeConfig_ConfigRequired(t *testing.T) {
 	pluginsdk.Serve(nil)
 }
 
+func TestCommandHandler_Interface(_ *testing.T) {
+	// Verify CommandHandler interface is properly defined
+	var _ pluginsdk.CommandHandler = (*testCommandHandler)(nil)
+}
+
+type testCommandHandler struct{}
+
+func (h *testCommandHandler) HandleCommand(_ context.Context, req pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+	return pluginsdk.OK("handled: " + req.Command), nil
+}
+
+func TestCommandHandler_WithHandler(_ *testing.T) {
+	// Verify a type can implement both Handler and CommandHandler
+	var _ pluginsdk.Handler = (*testFullHandler)(nil)
+	var _ pluginsdk.CommandHandler = (*testFullHandler)(nil)
+}
+
+type testFullHandler struct {
+	testHandler
+	testCommandHandler
+}
+
 func TestHandshakeConfig(t *testing.T) {
 	assert.Equal(t, uint(1), pluginsdk.HandshakeConfig.ProtocolVersion, "HandshakeConfig protocol version should be 1")
 	assert.Equal(t, "HOLOMUSH_PLUGIN", pluginsdk.HandshakeConfig.MagicCookieKey, "HandshakeConfig magic cookie key mismatch")

@@ -267,10 +267,81 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	return emits, nil
 }
 
-// DeliverCommand is not yet implemented for binary plugins.
-// This stub satisfies the Host interface. Phase 4 implements the real version.
-func (h *Host) DeliverCommand(_ context.Context, name string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
-	return nil, oops.In("goplugin").With("plugin", name).New("DeliverCommand not yet implemented for binary plugins")
+// DeliverCommand sends a command to a binary plugin and returns the response.
+//
+// The RLock is released before the gRPC call (same pattern as DeliverEvent).
+func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+	h.mu.RLock()
+	if h.closed {
+		h.mu.RUnlock()
+		return nil, ErrHostClosed
+	}
+	p, ok := h.plugins[name]
+	h.mu.RUnlock()
+
+	if !ok {
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "deliver_command").Wrap(ErrPluginNotLoaded)
+	}
+
+	protoReq := &pluginv1.HandleCommandRequest{
+		Command: &pluginv1.CommandRequest{
+			Command:       cmd.Command,
+			Args:          cmd.Args,
+			RawInput:      cmd.InvokedAs,
+			CharacterId:   cmd.CharacterID,
+			CharacterName: cmd.CharacterName,
+			LocationId:    cmd.LocationID,
+			SessionId:     cmd.SessionID,
+		},
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, DefaultEventTimeout)
+	defer cancel()
+
+	resp, err := p.plugin.HandleCommand(callCtx, protoReq)
+	if err != nil {
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "handle_command").Wrap(err)
+	}
+
+	return protoCommandResponseToSDK(resp.GetResponse()), nil
+}
+
+// protoCommandResponseToSDK converts a proto CommandResponse to an SDK CommandResponse.
+func protoCommandResponseToSDK(r *pluginv1.CommandResponse) *pluginsdk.CommandResponse {
+	if r == nil {
+		return &pluginsdk.CommandResponse{}
+	}
+
+	events := make([]pluginsdk.EmitEvent, len(r.GetEvents()))
+	for i, e := range r.GetEvents() {
+		events[i] = pluginsdk.EmitEvent{
+			Stream:  e.GetStream(),
+			Type:    pluginsdk.EventType(e.GetType()),
+			Payload: e.GetPayload(),
+		}
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: protoCommandStatusToSDK(r.GetStatus()),
+		Output: r.GetOutput(),
+		Events: events,
+	}
+}
+
+// protoCommandStatusToSDK converts a proto CommandStatus to an SDK CommandStatus.
+func protoCommandStatusToSDK(s pluginv1.CommandStatus) pluginsdk.CommandStatus {
+	switch s {
+	case pluginv1.CommandStatus_COMMAND_STATUS_OK:
+		return pluginsdk.CommandOK
+	case pluginv1.CommandStatus_COMMAND_STATUS_ERROR:
+		return pluginsdk.CommandError
+	case pluginv1.CommandStatus_COMMAND_STATUS_FAILURE:
+		return pluginsdk.CommandFailure
+	case pluginv1.CommandStatus_COMMAND_STATUS_FATAL:
+		return pluginsdk.CommandFatal
+	default:
+		return pluginsdk.CommandOK
+	}
 }
 
 // Plugins returns names of all loaded plugins.

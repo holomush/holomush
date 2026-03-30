@@ -8,11 +8,11 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { HandleEventRequest, HandleEventResponse } from "./plugin_pb.js";
+import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, HostEmitEventRequest, HostEmitEventResponse, HostKVDeleteRequest, HostKVDeleteResponse, HostKVGetRequest, HostKVGetResponse, HostKVSetRequest, HostKVSetResponse, HostLogRequest, HostLogResponse, HostQueryCharacterRequest, HostQueryCharacterResponse, HostQueryLocationCharactersRequest, HostQueryLocationCharactersResponse, QueryLocationRequest, QueryLocationResponse } from "./plugin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
- * PluginService is called by the go-plugin host to send events to binary plugins.
+ * PluginService is called by the go-plugin host to send events and commands to binary plugins.
  * This service is implemented by the plugin (the gRPC server runs in the plugin process).
  *
  * @generated from service holomush.plugin.v1.PluginService
@@ -29,6 +29,117 @@ export const PluginService = {
       name: "HandleEvent",
       I: HandleEventRequest,
       O: HandleEventResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * HandleCommand delivers a command to the plugin.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginService.HandleCommand
+     */
+    handleCommand: {
+      name: "HandleCommand",
+      I: HandleCommandRequest,
+      O: HandleCommandResponse,
+      kind: MethodKind.Unary,
+    },
+  }
+} as const;
+
+/**
+ * PluginHostService runs in the host process, allowing binary plugins
+ * to call back for world queries, KV storage, and session operations.
+ *
+ * @generated from service holomush.plugin.v1.PluginHostService
+ */
+export const PluginHostService = {
+  typeName: "holomush.plugin.v1.PluginHostService",
+  methods: {
+    /**
+     * QueryLocation retrieves a location by ID.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.QueryLocation
+     */
+    queryLocation: {
+      name: "QueryLocation",
+      I: QueryLocationRequest,
+      O: QueryLocationResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * QueryCharacter retrieves a character by ID.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.QueryCharacter
+     */
+    queryCharacter: {
+      name: "QueryCharacter",
+      I: HostQueryCharacterRequest,
+      O: HostQueryCharacterResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * QueryLocationCharacters returns all characters present at a location.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.QueryLocationCharacters
+     */
+    queryLocationCharacters: {
+      name: "QueryLocationCharacters",
+      I: HostQueryLocationCharactersRequest,
+      O: HostQueryLocationCharactersResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * EmitEvent publishes an event to a stream.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.EmitEvent
+     */
+    emitEvent: {
+      name: "EmitEvent",
+      I: HostEmitEventRequest,
+      O: HostEmitEventResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Log writes a log message through the host's logging system.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.Log
+     */
+    log: {
+      name: "Log",
+      I: HostLogRequest,
+      O: HostLogResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * KVGet retrieves a value from the plugin's key-value store.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.KVGet
+     */
+    kVGet: {
+      name: "KVGet",
+      I: HostKVGetRequest,
+      O: HostKVGetResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * KVSet stores a value in the plugin's key-value store.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.KVSet
+     */
+    kVSet: {
+      name: "KVSet",
+      I: HostKVSetRequest,
+      O: HostKVSetResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * KVDelete removes a value from the plugin's key-value store.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.KVDelete
+     */
+    kVDelete: {
+      name: "KVDelete",
+      I: HostKVDeleteRequest,
+      O: HostKVDeleteResponse,
       kind: MethodKind.Unary,
     },
   }

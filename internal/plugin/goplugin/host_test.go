@@ -68,6 +68,10 @@ type mockGRPCPluginClient struct {
 	response  *pluginv1.HandleEventResponse
 	err       error
 	returnNil bool // If true, return nil response (simulates edge case)
+
+	cmdResponse  *pluginv1.HandleCommandResponse
+	cmdErr       error
+	cmdReturnNil bool
 }
 
 func (m *mockGRPCPluginClient) HandleEvent(_ context.Context, _ *pluginv1.HandleEventRequest, _ ...grpc.CallOption) (*pluginv1.HandleEventResponse, error) {
@@ -81,6 +85,19 @@ func (m *mockGRPCPluginClient) HandleEvent(_ context.Context, _ *pluginv1.Handle
 		return m.response, nil
 	}
 	return &pluginv1.HandleEventResponse{}, nil
+}
+
+func (m *mockGRPCPluginClient) HandleCommand(_ context.Context, _ *pluginv1.HandleCommandRequest, _ ...grpc.CallOption) (*pluginv1.HandleCommandResponse, error) {
+	if m.cmdErr != nil {
+		return nil, m.cmdErr
+	}
+	if m.cmdReturnNil {
+		return nil, nil
+	}
+	if m.cmdResponse != nil {
+		return m.cmdResponse, nil
+	}
+	return &pluginv1.HandleCommandResponse{Response: &pluginv1.CommandResponse{}}, nil
 }
 
 // mockClientFactory creates mock clients for testing.
@@ -809,4 +826,196 @@ func TestLoad_InvalidPluginClient(t *testing.T) {
 	require.Error(t, err, "expected error when plugin does not implement PluginClient")
 	assert.Contains(t, err.Error(), "does not implement PluginClient", "expected error to mention 'does not implement PluginClient'")
 	assert.True(t, mockClient.killed, "expected client to be killed after type assertion failure")
+}
+
+// --- DeliverCommand tests ---
+
+func TestDeliverCommand_Success(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{
+		cmdResponse: &pluginv1.HandleCommandResponse{
+			Response: &pluginv1.CommandResponse{
+				Status: pluginv1.CommandStatus_COMMAND_STATUS_OK,
+				Output: "Hello, world!",
+				Events: []*pluginv1.EmitEvent{
+					{Stream: "location:123", Type: "say", Payload: `{"text":"hello"}`},
+				},
+			},
+		},
+	}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	host := NewHostWithFactory(factory)
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	err := createTempExecutable(tmpDir + "/test-plugin")
+	require.NoError(t, err)
+
+	manifest := &plugins.Manifest{
+		Name:    "test-plugin",
+		Version: "1.0.0",
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "test-plugin",
+		},
+	}
+
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err)
+
+	cmd := pluginsdk.CommandRequest{
+		Command:       "say",
+		Args:          "hello world",
+		CharacterID:   "char-123",
+		CharacterName: "Alice",
+		LocationID:    "loc-456",
+		SessionID:     "sess-789",
+	}
+
+	resp, err := host.DeliverCommand(ctx, "test-plugin", cmd)
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Equal(t, "Hello, world!", resp.Output)
+	require.Len(t, resp.Events, 1)
+	assert.Equal(t, "location:123", resp.Events[0].Stream)
+	assert.Equal(t, pluginsdk.EventTypeSay, resp.Events[0].Type)
+}
+
+func TestDeliverCommand_NotLoaded(t *testing.T) {
+	host := NewHost()
+
+	_, err := host.DeliverCommand(context.Background(), "nonexistent", pluginsdk.CommandRequest{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrPluginNotLoaded)
+}
+
+func TestDeliverCommand_HostClosed(t *testing.T) {
+	host := NewHost()
+
+	err := host.Close(context.Background())
+	require.NoError(t, err)
+
+	_, err = host.DeliverCommand(context.Background(), "any-plugin", pluginsdk.CommandRequest{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrHostClosed)
+}
+
+func TestDeliverCommand_HandleCommandError(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{
+		cmdErr: errors.New("command handler crashed"),
+	}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	host := NewHostWithFactory(factory)
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	err := createTempExecutable(tmpDir + "/test-plugin")
+	require.NoError(t, err)
+
+	manifest := &plugins.Manifest{
+		Name:    "test-plugin",
+		Version: "1.0.0",
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "test-plugin",
+		},
+	}
+
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err)
+
+	_, err = host.DeliverCommand(ctx, "test-plugin", pluginsdk.CommandRequest{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "command handler crashed")
+}
+
+func TestDeliverCommand_NilResponse(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{
+		cmdReturnNil: true,
+	}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	host := NewHostWithFactory(factory)
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	err := createTempExecutable(tmpDir + "/test-plugin")
+	require.NoError(t, err)
+
+	manifest := &plugins.Manifest{
+		Name:    "test-plugin",
+		Version: "1.0.0",
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "test-plugin",
+		},
+	}
+
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err)
+
+	resp, err := host.DeliverCommand(ctx, "test-plugin", pluginsdk.CommandRequest{})
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Empty(t, resp.Output)
+}
+
+func TestDeliverCommand_StatusMapping(t *testing.T) {
+	tests := []struct {
+		name        string
+		protoStatus pluginv1.CommandStatus
+		sdkStatus   pluginsdk.CommandStatus
+	}{
+		{"OK", pluginv1.CommandStatus_COMMAND_STATUS_OK, pluginsdk.CommandOK},
+		{"Error", pluginv1.CommandStatus_COMMAND_STATUS_ERROR, pluginsdk.CommandError},
+		{"Failure", pluginv1.CommandStatus_COMMAND_STATUS_FAILURE, pluginsdk.CommandFailure},
+		{"Fatal", pluginv1.CommandStatus_COMMAND_STATUS_FATAL, pluginsdk.CommandFatal},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			grpcClient := &mockGRPCPluginClient{
+				cmdResponse: &pluginv1.HandleCommandResponse{
+					Response: &pluginv1.CommandResponse{
+						Status: tt.protoStatus,
+						Output: "test output",
+					},
+				},
+			}
+			mockClient := &mockPluginClient{
+				protocol: &mockClientProtocol{pluginClient: grpcClient},
+			}
+			factory := &mockClientFactory{client: mockClient}
+			host := NewHostWithFactory(factory)
+
+			ctx := context.Background()
+			tmpDir := t.TempDir()
+			err := createTempExecutable(tmpDir + "/test-plugin")
+			require.NoError(t, err)
+
+			manifest := &plugins.Manifest{
+				Name:    "test-plugin",
+				Version: "1.0.0",
+				Type:    plugins.TypeBinary,
+				BinaryPlugin: &plugins.BinaryConfig{
+					Executable: "test-plugin",
+				},
+			}
+
+			err = host.Load(ctx, manifest, tmpDir)
+			require.NoError(t, err)
+
+			resp, err := host.DeliverCommand(ctx, "test-plugin", pluginsdk.CommandRequest{})
+			require.NoError(t, err)
+			assert.Equal(t, tt.sdkStatus, resp.Status)
+		})
+	}
 }
