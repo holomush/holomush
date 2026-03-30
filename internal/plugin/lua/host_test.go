@@ -1335,6 +1335,66 @@ end
 	assert.Equal(t, "Unknown command: bogus", resp.Output)
 }
 
+func TestLuaHost_DeliverCommand_FailureModes(t *testing.T) {
+	tests := []struct {
+		name       string
+		luaSource  string
+		wantErr    bool
+		wantStatus pluginsdk.CommandStatus
+	}{
+		{
+			name:      "runtime error in handler",
+			luaSource: `function on_command(ctx) error("kaboom") end`,
+			wantErr:   true,
+		},
+		{
+			name:      "undefined variable reference",
+			luaSource: `function on_command(ctx) return undefined_var .. "x" end`,
+			wantErr:   true,
+		},
+		{
+			name:       "out-of-range status clamps to OK",
+			luaSource:  `function on_command(ctx) return { status = 999, output = "bad" } end`,
+			wantStatus: pluginsdk.CommandOK,
+		},
+		{
+			name:       "negative status clamps to OK",
+			luaSource:  `function on_command(ctx) return { status = -1, output = "neg" } end`,
+			wantStatus: pluginsdk.CommandOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeMainLua(t, dir, tt.luaSource)
+
+			host := pluginlua.NewHost()
+			defer closeHost(t, host)
+
+			manifest := &plugins.Manifest{
+				Name:      "fail-" + tt.name,
+				Version:   "1.0.0",
+				Type:      plugins.TypeLua,
+				LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+			}
+			require.NoError(t, host.Load(context.Background(), manifest, dir))
+
+			resp, err := host.DeliverCommand(context.Background(), manifest.Name, pluginsdk.CommandRequest{
+				Command: "test",
+			})
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, resp)
+				assert.Equal(t, tt.wantStatus, resp.Status)
+			}
+		})
+	}
+}
+
 func TestLuaHost_DeliverCommand_AllContextFields(t *testing.T) {
 	dir := t.TempDir()
 
