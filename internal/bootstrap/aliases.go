@@ -43,7 +43,7 @@ func SeedSystemAliases(ctx context.Context, repo AliasSeeder, cache *command.Ali
 		if _, exists := existing[a.alias]; exists {
 			continue
 		}
-		if err := repo.SetSystemAlias(ctx, a.alias, a.command, "system:bootstrap"); err != nil {
+		if err := repo.SetSystemAlias(ctx, a.alias, a.command, ""); err != nil {
 			return oops.With("operation", "set system alias").With("alias", a.alias).Wrap(err)
 		}
 		seeded = append(seeded, a.alias)
