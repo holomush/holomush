@@ -63,11 +63,10 @@ func registerTestCommands(reg *command.Registry) {
 		Name: "say",
 		Handler: func(ctx context.Context, exec *command.CommandExecution) error {
 			return exec.Services().Events().Append(ctx, core.Event{
-				Stream:    "location:" + exec.LocationID().String(),
-				Type:      pluginsdk.EventTypeSay,
-				ActorKind: core.ActorCharacter,
-				ActorID:   exec.CharacterID(),
-				Payload:   fmt.Sprintf(`{"character_name":"%s","message":"%s"}`, exec.CharacterName(), exec.Args),
+				Stream:  "location:" + exec.LocationID().String(),
+				Type:    core.EventType(pluginsdk.EventTypeSay),
+				Actor:   core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+				Payload: []byte(fmt.Sprintf(`{"character_name":"%s","message":"%s"}`, exec.CharacterName(), exec.Args)),
 			})
 		},
 		Help:   "Say something",
@@ -79,11 +78,10 @@ func registerTestCommands(reg *command.Registry) {
 		Name: "pose",
 		Handler: func(ctx context.Context, exec *command.CommandExecution) error {
 			return exec.Services().Events().Append(ctx, core.Event{
-				Stream:    "location:" + exec.LocationID().String(),
-				Type:      pluginsdk.EventTypePose,
-				ActorKind: core.ActorCharacter,
-				ActorID:   exec.CharacterID(),
-				Payload:   fmt.Sprintf(`{"character_name":"%s","message":"%s"}`, exec.CharacterName(), exec.Args),
+				Stream:  "location:" + exec.LocationID().String(),
+				Type:    core.EventType(pluginsdk.EventTypePose),
+				Actor:   core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+				Payload: []byte(fmt.Sprintf(`{"character_name":"%s","message":"%s"}`, exec.CharacterName(), exec.Args)),
 			})
 		},
 		Help:   "Pose an action",
