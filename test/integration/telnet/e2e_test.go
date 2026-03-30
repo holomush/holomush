@@ -29,6 +29,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	grpcpkg "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/session"
@@ -43,6 +44,53 @@ var (
 	startLocation ulid.ULID
 	eventStore    *store.PostgresEventStore
 )
+
+// registerTestCommands adds say and pose handlers for E2E tests.
+// These replicate the behavior of the core plugins via the old handler interface
+// so the telnet pipeline test doesn't need the full plugin system.
+func registerTestCommands(reg *command.Registry) {
+	mustRegister := func(cfg command.CommandEntryConfig) {
+		entry, err := command.NewCommandEntry(cfg)
+		if err != nil {
+			panic("failed to create test command " + cfg.Name + ": " + err.Error())
+		}
+		if err := reg.Register(*entry); err != nil {
+			panic("failed to register test command " + cfg.Name + ": " + err.Error())
+		}
+	}
+
+	mustRegister(command.CommandEntryConfig{
+		Name: "say",
+		Handler: func(ctx context.Context, exec *command.CommandExecution) error {
+			return exec.Services().Events().Append(ctx, core.Event{
+				ID:      ulid.Make(),
+				Stream:  "location:" + exec.LocationID().String(),
+				Type:    core.EventType(pluginsdk.EventTypeSay),
+				Actor:   core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+				Payload: []byte(fmt.Sprintf(`{"character_name":"%s","message":"%s"}`, exec.CharacterName(), exec.Args)),
+			})
+		},
+		Help:   "Say something",
+		Usage:  "say <message>",
+		Source: "test",
+	})
+
+	mustRegister(command.CommandEntryConfig{
+		Name: "pose",
+		Handler: func(ctx context.Context, exec *command.CommandExecution) error {
+			return exec.Services().Events().Append(ctx, core.Event{
+				ID:      ulid.Make(),
+				Stream:  "location:" + exec.LocationID().String(),
+				Type:    core.EventType(pluginsdk.EventTypePose),
+				Actor:   core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+				Payload: []byte(fmt.Sprintf(`{"character_name":"%s","message":"%s"}`, exec.CharacterName(), exec.Args)),
+			})
+		},
+		Help:   "Pose an action",
+		Usage:  "pose <action>",
+		Source: "test",
+	})
+}
 
 // testTelnetClient wraps a raw TCP connection for telnet interaction.
 type testTelnetClient struct {
@@ -214,6 +262,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		sessStore := session.NewMemStore()
 		reg := command.NewRegistry()
 		handlers.RegisterAll(reg)
+		registerTestCommands(reg)
 		pe := policytest.AllowAllEngine()
 		cmdSvc := command.NewTestServices(command.ServicesConfig{
 			Session: sessStore,

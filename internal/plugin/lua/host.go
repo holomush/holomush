@@ -189,10 +189,61 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	return emits, nil
 }
 
-// DeliverCommand is not yet implemented for Lua plugins.
-// This stub satisfies the Host interface. Phase 4 implements the real version.
-func (h *Host) DeliverCommand(_ context.Context, name string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
-	return nil, oops.In("lua").With("plugin", name).New("DeliverCommand not yet implemented for Lua plugins")
+// DeliverCommand executes the plugin's on_command handler with a CommandRequest.
+// Returns a CommandResponse with status, output, and optional emit events.
+// If on_command is not defined, returns OK with no output.
+func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+	h.mu.RLock()
+	if h.closed {
+		h.mu.RUnlock()
+		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_command").New("host is closed")
+	}
+	p, ok := h.plugins[name]
+	if !ok {
+		h.mu.RUnlock()
+		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_command").New("plugin not loaded")
+	}
+	code := p.code
+	h.mu.RUnlock()
+
+	L, err := h.factory.NewState(ctx)
+	if err != nil {
+		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_command").Hint("failed to create state").Wrap(err)
+	}
+	defer L.Close()
+
+	L.SetContext(ctx)
+
+	if h.hostFuncs != nil {
+		h.hostFuncs.Register(L, name)
+	}
+
+	if err := L.DoString(code); err != nil {
+		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_command").Hint("failed to load code").Wrap(err)
+	}
+
+	onCommand := L.GetGlobal("on_command")
+	if onCommand.Type() == lua.LTNil {
+		slog.Debug("plugin has no on_command handler",
+			"plugin", name,
+			"command", cmd.Command)
+		return pluginsdk.OK(""), nil
+	}
+
+	ctxTable := h.buildCommandRequestTable(L, cmd)
+
+	if err := L.CallByParam(lua.P{
+		Fn:      onCommand,
+		NRet:    1,
+		Protect: true,
+	}, ctxTable); err != nil {
+		return nil, oops.In("lua").With("plugin", name).With("operation", "on_command").Wrap(err)
+	}
+
+	ret := L.Get(-1)
+	L.Pop(1)
+
+	return h.parseCommandResponse(ret, name), nil
 }
 
 // Plugins returns names of loaded plugins.
@@ -250,7 +301,7 @@ func (h *Host) callOnCommand(state *lua.LState, name string, event pluginsdk.Eve
 // buildContextTable creates a Lua table from a CommandContext.
 func (h *Host) buildContextTable(state *lua.LState, ctx holo.CommandContext) *lua.LTable {
 	t := state.NewTable()
-	state.SetField(t, "name", lua.LString(ctx.Name))
+	state.SetField(t, "command", lua.LString(ctx.Name))
 	state.SetField(t, "args", lua.LString(ctx.Args))
 	state.SetField(t, "invoked_as", lua.LString(ctx.InvokedAs))
 	state.SetField(t, "character_name", lua.LString(ctx.CharacterName))
@@ -322,4 +373,62 @@ func (h *Host) parseEmitEvents(ret lua.LValue) (emits []pluginsdk.EmitEvent, val
 	})
 
 	return emits, validationErrs
+}
+
+// buildCommandRequestTable creates a Lua table from a CommandRequest.
+func (h *Host) buildCommandRequestTable(state *lua.LState, cmd pluginsdk.CommandRequest) *lua.LTable {
+	t := state.NewTable()
+	state.SetField(t, "command", lua.LString(cmd.Command))
+	state.SetField(t, "name", lua.LString(cmd.Command)) // alias for parity with event-path on_command(ctx)
+	state.SetField(t, "args", lua.LString(cmd.Args))
+	state.SetField(t, "character_id", lua.LString(cmd.CharacterID))
+	state.SetField(t, "character_name", lua.LString(cmd.CharacterName))
+	state.SetField(t, "location_id", lua.LString(cmd.LocationID))
+	state.SetField(t, "session_id", lua.LString(cmd.SessionID))
+	state.SetField(t, "player_id", lua.LString(cmd.PlayerID))
+	state.SetField(t, "invoked_as", lua.LString(cmd.InvokedAs))
+	return t
+}
+
+// parseCommandResponse converts a Lua return value into a CommandResponse.
+// Handles three cases: nil (OK, no output), string (OK with output), table (full response).
+func (h *Host) parseCommandResponse(ret lua.LValue, pluginName string) *pluginsdk.CommandResponse {
+	switch v := ret.(type) {
+	case *lua.LNilType:
+		return pluginsdk.OK("")
+	case lua.LString:
+		return pluginsdk.OK(string(v))
+	case *lua.LTable:
+		resp := &pluginsdk.CommandResponse{}
+
+		if statusVal := v.RawGetString("status"); statusVal.Type() == lua.LTNumber {
+			s := pluginsdk.CommandStatus(int(lua.LVAsNumber(statusVal)))
+			if s < pluginsdk.CommandOK || s > pluginsdk.CommandFatal {
+				s = pluginsdk.CommandOK
+			}
+			resp.Status = s
+		}
+
+		if outputVal := v.RawGetString("output"); outputVal.Type() == lua.LTString {
+			resp.Output = lua.LVAsString(outputVal)
+		}
+
+		if eventsVal := v.RawGetString("events"); eventsVal.Type() == lua.LTTable {
+			emits, validationErrs := h.parseEmitEvents(eventsVal)
+			if len(validationErrs) > 0 {
+				slog.Warn("plugin command emit validation errors",
+					"plugin", pluginName,
+					"error_count", len(validationErrs),
+					"errors", validationErrs)
+			}
+			resp.Events = emits
+		}
+
+		return resp
+	default:
+		slog.Warn("plugin on_command returned unexpected type",
+			"plugin", pluginName,
+			"type", ret.Type().String())
+		return pluginsdk.OK("")
+	}
 }

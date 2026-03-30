@@ -30,7 +30,34 @@ import (
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telnet"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
+
+// registerTestSayCommand adds a minimal say handler for integration tests.
+func registerTestSayCommand(reg *command.Registry) {
+	entry, err := command.NewCommandEntry(command.CommandEntryConfig{
+		Name: "say",
+		Handler: func(ctx context.Context, exec *command.CommandExecution) error {
+			payload := []byte(`{"character_name":"` + exec.CharacterName() + `","message":"` + exec.Args + `"}`)
+			return exec.Services().Events().Append(ctx, core.Event{
+				ID:      ulid.Make(),
+				Stream:  "location:" + exec.LocationID().String(),
+				Type:    core.EventType(pluginsdk.EventTypeSay),
+				Actor:   core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+				Payload: payload,
+			})
+		},
+		Help:   "Say something",
+		Usage:  "say <message>",
+		Source: "test",
+	})
+	if err != nil {
+		panic("failed to create test say command: " + err.Error())
+	}
+	if err := reg.Register(*entry); err != nil {
+		panic("failed to register test say command: " + err.Error())
+	}
+}
 
 // authenticateGuest authenticates as a guest and returns the session ID and character name.
 func authenticateGuest(ctx context.Context, cli *grpcpkg.Client) (sessionID, charName string) {
@@ -107,6 +134,7 @@ var _ = Describe("Session Persistence", func() {
 		pe := policytest.AllowAllEngine()
 		reg := command.NewRegistry()
 		handlers.RegisterAll(reg)
+		registerTestSayCommand(reg)
 		cmdSvc := command.NewTestServices(command.ServicesConfig{
 			Engine:  pe,
 			Session: sessionStore,

@@ -21,7 +21,6 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	tlscerts "github.com/holomush/holomush/internal/tls"
@@ -56,7 +55,7 @@ func newHandleCommandServer(t *testing.T, store core.EventStore, sessStore sessi
 	}
 
 	reg := command.NewRegistry()
-	handlers.RegisterAll(reg)
+	registerTestCommands(t, reg)
 
 	policyEngine := policytest.AllowAllEngine()
 	svc := command.NewTestServices(command.ServicesConfig{

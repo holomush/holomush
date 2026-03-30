@@ -656,7 +656,7 @@ function on_command(ctx)
         {
             stream = "location:" .. ctx.location_id,
             type = "echo",
-            payload = ctx.name .. "|" .. ctx.args .. "|" .. ctx.invoked_as .. "|" ..
+            payload = ctx.command .. "|" .. ctx.args .. "|" .. ctx.invoked_as .. "|" ..
                       ctx.character_name .. "|" .. ctx.character_id .. "|" ..
                       ctx.location_id .. "|" .. ctx.player_id
         }
@@ -853,7 +853,7 @@ function on_command(ctx)
         {
             stream = "test:1",
             type = "echo",
-            payload = "name=" .. (ctx.name or "nil")
+            payload = "name=" .. (ctx.command or "nil")
         }
     }
 end
@@ -882,7 +882,7 @@ end
 	emits, err := host.DeliverEvent(context.Background(), "invalid-payload-test", event)
 	require.NoError(t, err)
 	require.Len(t, emits, 1)
-	// With invalid JSON, ctx.name should be empty string
+	// With invalid JSON, ctx.command should be empty string
 	assert.Equal(t, "name=", emits[0].Payload)
 }
 
@@ -1115,4 +1115,355 @@ end
 	assert.Contains(t, logOutput, "entry[1]", "expected entry 1 error")
 	assert.Contains(t, logOutput, "entry[2]", "expected entry 2 error")
 	assert.Contains(t, logOutput, "entry[4]", "expected entry 4 error")
+}
+
+func TestLuaHost_DeliverCommand_StringReturn(t *testing.T) {
+	dir := t.TempDir()
+
+	writeMainLua(t, dir, `
+function on_command(ctx)
+    return "Hello from " .. ctx.command .. " " .. ctx.args
+end
+`)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "cmd-string",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	resp, err := host.DeliverCommand(context.Background(), "cmd-string", pluginsdk.CommandRequest{
+		Command:       "say",
+		Args:          "Hello everyone!",
+		CharacterID:   "01CHAR",
+		CharacterName: "Alice",
+		LocationID:    "01LOC",
+		SessionID:     "01SESS",
+		InvokedAs:     "say",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Equal(t, "Hello from say Hello everyone!", resp.Output)
+}
+
+func TestLuaHost_DeliverCommand_TableReturn(t *testing.T) {
+	dir := t.TempDir()
+
+	writeMainLua(t, dir, `
+function on_command(ctx)
+    return {
+        status = 0,
+        output = "You say: " .. ctx.args,
+        events = {
+            {
+                stream = "location:" .. ctx.location_id,
+                type = "say",
+                payload = ctx.args,
+            },
+        },
+    }
+end
+`)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "cmd-table",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	resp, err := host.DeliverCommand(context.Background(), "cmd-table", pluginsdk.CommandRequest{
+		Command:       "say",
+		Args:          "Hello!",
+		CharacterID:   "01CHAR",
+		CharacterName: "Alice",
+		LocationID:    "01LOC",
+		SessionID:     "01SESS",
+		InvokedAs:     "say",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Equal(t, "You say: Hello!", resp.Output)
+	require.Len(t, resp.Events, 1)
+	assert.Equal(t, "location:01LOC", resp.Events[0].Stream)
+	assert.Equal(t, pluginsdk.EventType("say"), resp.Events[0].Type)
+	assert.Equal(t, "Hello!", resp.Events[0].Payload)
+}
+
+func TestLuaHost_DeliverCommand_PluginNotFound(t *testing.T) {
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	_, err := host.DeliverCommand(context.Background(), "nonexistent", pluginsdk.CommandRequest{
+		Command: "say",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "plugin not loaded")
+}
+
+func TestLuaHost_DeliverCommand_NoHandler(t *testing.T) {
+	dir := t.TempDir()
+
+	writeMainLua(t, dir, `x = 1`)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "cmd-no-handler",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	resp, err := host.DeliverCommand(context.Background(), "cmd-no-handler", pluginsdk.CommandRequest{
+		Command: "say",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Empty(t, resp.Output)
+}
+
+func TestLuaHost_DeliverCommand_AfterClose(t *testing.T) {
+	dir := t.TempDir()
+
+	writeMainLua(t, dir, `function on_command(ctx) return "ok" end`)
+
+	host := pluginlua.NewHost()
+
+	manifest := &plugins.Manifest{
+		Name:      "cmd-closed",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	err = host.Close(context.Background())
+	require.NoError(t, err)
+
+	_, err = host.DeliverCommand(context.Background(), "cmd-closed", pluginsdk.CommandRequest{
+		Command: "say",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "host is closed")
+}
+
+func TestLuaHost_DeliverCommand_NilReturn(t *testing.T) {
+	dir := t.TempDir()
+
+	writeMainLua(t, dir, `
+function on_command(ctx)
+    return nil
+end
+`)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "cmd-nil",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	resp, err := host.DeliverCommand(context.Background(), "cmd-nil", pluginsdk.CommandRequest{
+		Command: "say",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Empty(t, resp.Output)
+}
+
+func TestLuaHost_DeliverCommand_ErrorStatus(t *testing.T) {
+	dir := t.TempDir()
+
+	writeMainLua(t, dir, `
+function on_command(ctx)
+    return {
+        status = 1,
+        output = "Unknown command: " .. ctx.command,
+    }
+end
+`)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "cmd-error",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	resp, err := host.DeliverCommand(context.Background(), "cmd-error", pluginsdk.CommandRequest{
+		Command: "bogus",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Equal(t, "Unknown command: bogus", resp.Output)
+}
+
+func TestLuaHost_DeliverCommand_FailureModes(t *testing.T) {
+	tests := []struct {
+		name       string
+		luaSource  string
+		wantErr    bool
+		wantStatus pluginsdk.CommandStatus
+	}{
+		{
+			name:      "runtime error in handler",
+			luaSource: `function on_command(ctx) error("kaboom") end`,
+			wantErr:   true,
+		},
+		{
+			name:      "undefined variable reference",
+			luaSource: `function on_command(ctx) return undefined_var .. "x" end`,
+			wantErr:   true,
+		},
+		{
+			name:       "out-of-range status clamps to OK",
+			luaSource:  `function on_command(ctx) return { status = 999, output = "bad" } end`,
+			wantStatus: pluginsdk.CommandOK,
+		},
+		{
+			name:       "negative status clamps to OK",
+			luaSource:  `function on_command(ctx) return { status = -1, output = "neg" } end`,
+			wantStatus: pluginsdk.CommandOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeMainLua(t, dir, tt.luaSource)
+
+			host := pluginlua.NewHost()
+			defer closeHost(t, host)
+
+			manifest := &plugins.Manifest{
+				Name:      "fail-" + tt.name,
+				Version:   "1.0.0",
+				Type:      plugins.TypeLua,
+				LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+			}
+			require.NoError(t, host.Load(context.Background(), manifest, dir))
+
+			resp, err := host.DeliverCommand(context.Background(), manifest.Name, pluginsdk.CommandRequest{
+				Command: "test",
+			})
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, resp)
+				assert.Equal(t, tt.wantStatus, resp.Status)
+			}
+		})
+	}
+}
+
+func TestLuaHost_DeliverCommand_AllContextFields(t *testing.T) {
+	dir := t.TempDir()
+
+	writeMainLua(t, dir, `
+function on_command(ctx)
+    return ctx.command .. "|" .. ctx.args .. "|" ..
+           ctx.character_id .. "|" .. ctx.character_name .. "|" ..
+           ctx.location_id .. "|" .. ctx.session_id .. "|" ..
+           ctx.player_id .. "|" .. ctx.invoked_as
+end
+`)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "cmd-fields",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	resp, err := host.DeliverCommand(context.Background(), "cmd-fields", pluginsdk.CommandRequest{
+		Command:       "say",
+		Args:          "Hello!",
+		CharacterID:   "01CHAR",
+		CharacterName: "Alice",
+		LocationID:    "01LOC",
+		SessionID:     "01SESS",
+		PlayerID:      "01PLAYER",
+		InvokedAs:     ";",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "say|Hello!|01CHAR|Alice|01LOC|01SESS|01PLAYER|;", resp.Output)
+}
+
+func TestLuaHost_DeliverCommand_WithHostFunctions(t *testing.T) {
+	dir := t.TempDir()
+
+	writeMainLua(t, dir, `
+function on_command(ctx)
+    local id = holomush.new_request_id()
+    holomush.log("info", "Command: " .. ctx.command)
+    return "request_id=" .. id
+end
+`)
+
+	hostFuncs := hostfunc.New(nil)
+	host := pluginlua.NewHostWithFunctions(hostFuncs)
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "cmd-hostfuncs",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	resp, err := host.DeliverCommand(context.Background(), "cmd-hostfuncs", pluginsdk.CommandRequest{
+		Command: "test",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Contains(t, resp.Output, "request_id=")
 }

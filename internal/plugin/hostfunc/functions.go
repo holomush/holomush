@@ -137,9 +137,9 @@ func (f *Functions) Register(ls *lua.LState, pluginName string) {
 	ls.SetField(mod, "kv_delete", ls.NewFunction(f.kvDeleteFn(pluginName)))
 
 	// World queries
-	ls.SetField(mod, "query_room", ls.NewFunction(f.queryRoomFn(pluginName)))
+	ls.SetField(mod, "query_location", ls.NewFunction(f.queryLocationFn(pluginName)))
 	ls.SetField(mod, "query_character", ls.NewFunction(f.queryCharacterFn(pluginName)))
-	ls.SetField(mod, "query_room_characters", ls.NewFunction(f.queryRoomCharactersFn(pluginName)))
+	ls.SetField(mod, "query_location_characters", ls.NewFunction(f.queryLocationCharactersFn(pluginName)))
 	ls.SetField(mod, "query_object", ls.NewFunction(f.queryObjectFn(pluginName)))
 
 	// World mutations

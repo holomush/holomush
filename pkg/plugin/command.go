@@ -31,6 +31,7 @@ type CommandRequest struct {
 	CharacterName string // display name
 	LocationID    string // character's current location ULID
 	SessionID     string // active session ULID
+	PlayerID      string // player account ULID
 	InvokedAs     string // what the player actually typed (alias support)
 }
 
