@@ -36,16 +36,16 @@ func NewPluginHostService(proxy plugins.ServiceProxy, logger *slog.Logger) *Plug
 }
 
 // QueryLocation retrieves a location by ID.
-func (s *PluginHostService) QueryLocation(ctx context.Context, req *pluginv1.QueryLocationRequest) (*pluginv1.QueryLocationResponse, error) {
+func (s *PluginHostService) QueryLocation(ctx context.Context, req *pluginv1.PluginHostServiceQueryLocationRequest) (*pluginv1.PluginHostServiceQueryLocationResponse, error) {
 	result, err := s.proxy.QueryLocation(ctx, req.GetSubjectId(), req.GetLocationId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "query location: %v", err)
 	}
 	if result == nil {
-		return &pluginv1.QueryLocationResponse{}, nil
+		return &pluginv1.PluginHostServiceQueryLocationResponse{}, nil
 	}
-	return &pluginv1.QueryLocationResponse{
-		Location: &pluginv1.LocationInfo{
+	return &pluginv1.PluginHostServiceQueryLocationResponse{
+		Location: &pluginv1.PluginHostServiceLocationInfo{
 			Id:          result.ID,
 			Name:        result.Name,
 			Description: result.Description,
@@ -56,77 +56,77 @@ func (s *PluginHostService) QueryLocation(ctx context.Context, req *pluginv1.Que
 }
 
 // QueryCharacter retrieves a character by ID.
-func (s *PluginHostService) QueryCharacter(ctx context.Context, req *pluginv1.HostQueryCharacterRequest) (*pluginv1.HostQueryCharacterResponse, error) {
+func (s *PluginHostService) QueryCharacter(ctx context.Context, req *pluginv1.PluginHostServiceQueryCharacterRequest) (*pluginv1.PluginHostServiceQueryCharacterResponse, error) {
 	result, err := s.proxy.QueryCharacter(ctx, req.GetSubjectId(), req.GetCharacterId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "query character: %v", err)
 	}
 	if result == nil {
-		return &pluginv1.HostQueryCharacterResponse{}, nil
+		return &pluginv1.PluginHostServiceQueryCharacterResponse{}, nil
 	}
-	return &pluginv1.HostQueryCharacterResponse{
+	return &pluginv1.PluginHostServiceQueryCharacterResponse{
 		Character: characterResultToProto(result),
 	}, nil
 }
 
 // QueryLocationCharacters returns all characters present at a location.
-func (s *PluginHostService) QueryLocationCharacters(ctx context.Context, req *pluginv1.HostQueryLocationCharactersRequest) (*pluginv1.HostQueryLocationCharactersResponse, error) {
+func (s *PluginHostService) QueryLocationCharacters(ctx context.Context, req *pluginv1.PluginHostServiceQueryLocationCharactersRequest) (*pluginv1.PluginHostServiceQueryLocationCharactersResponse, error) {
 	results, err := s.proxy.QueryLocationCharacters(ctx, req.GetSubjectId(), req.GetLocationId())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "query location characters: %v", err)
 	}
-	chars := make([]*pluginv1.HostCharacterInfo, len(results))
+	chars := make([]*pluginv1.PluginHostServiceCharacterInfo, len(results))
 	for i := range results {
 		chars[i] = characterResultToProto(&results[i])
 	}
-	return &pluginv1.HostQueryLocationCharactersResponse{Characters: chars}, nil
+	return &pluginv1.PluginHostServiceQueryLocationCharactersResponse{Characters: chars}, nil
 }
 
 // EmitEvent publishes an event to a stream.
-func (s *PluginHostService) EmitEvent(ctx context.Context, req *pluginv1.HostEmitEventRequest) (*pluginv1.HostEmitEventResponse, error) {
+func (s *PluginHostService) EmitEvent(ctx context.Context, req *pluginv1.PluginHostServiceEmitEventRequest) (*pluginv1.PluginHostServiceEmitEventResponse, error) {
 	err := s.proxy.EmitEvent(ctx, req.GetStream(), req.GetEventType(), req.GetPayload())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "emit event: %v", err)
 	}
-	return &pluginv1.HostEmitEventResponse{}, nil
+	return &pluginv1.PluginHostServiceEmitEventResponse{}, nil
 }
 
 // Log writes a log message through the host's logging system.
-func (s *PluginHostService) Log(ctx context.Context, req *pluginv1.HostLogRequest) (*pluginv1.HostLogResponse, error) {
+func (s *PluginHostService) Log(ctx context.Context, req *pluginv1.PluginHostServiceLogRequest) (*pluginv1.PluginHostServiceLogResponse, error) {
 	s.proxy.Log(ctx, req.GetLevel(), req.GetMessage())
-	return &pluginv1.HostLogResponse{}, nil
+	return &pluginv1.PluginHostServiceLogResponse{}, nil
 }
 
 // KVGet retrieves a value from the plugin's key-value store.
-func (s *PluginHostService) KVGet(ctx context.Context, req *pluginv1.HostKVGetRequest) (*pluginv1.HostKVGetResponse, error) {
+func (s *PluginHostService) KVGet(ctx context.Context, req *pluginv1.PluginHostServiceKVGetRequest) (*pluginv1.PluginHostServiceKVGetResponse, error) {
 	value, found, err := s.proxy.KVGet(ctx, req.GetPluginName(), req.GetKey())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "kv get: %v", err)
 	}
-	return &pluginv1.HostKVGetResponse{Value: value, Found: found}, nil
+	return &pluginv1.PluginHostServiceKVGetResponse{Value: value, Found: found}, nil
 }
 
 // KVSet stores a value in the plugin's key-value store.
-func (s *PluginHostService) KVSet(ctx context.Context, req *pluginv1.HostKVSetRequest) (*pluginv1.HostKVSetResponse, error) {
+func (s *PluginHostService) KVSet(ctx context.Context, req *pluginv1.PluginHostServiceKVSetRequest) (*pluginv1.PluginHostServiceKVSetResponse, error) {
 	err := s.proxy.KVSet(ctx, req.GetPluginName(), req.GetKey(), req.GetValue())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "kv set: %v", err)
 	}
-	return &pluginv1.HostKVSetResponse{}, nil
+	return &pluginv1.PluginHostServiceKVSetResponse{}, nil
 }
 
 // KVDelete removes a value from the plugin's key-value store.
-func (s *PluginHostService) KVDelete(ctx context.Context, req *pluginv1.HostKVDeleteRequest) (*pluginv1.HostKVDeleteResponse, error) {
+func (s *PluginHostService) KVDelete(ctx context.Context, req *pluginv1.PluginHostServiceKVDeleteRequest) (*pluginv1.PluginHostServiceKVDeleteResponse, error) {
 	err := s.proxy.KVDelete(ctx, req.GetPluginName(), req.GetKey())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "kv delete: %v", err)
 	}
-	return &pluginv1.HostKVDeleteResponse{}, nil
+	return &pluginv1.PluginHostServiceKVDeleteResponse{}, nil
 }
 
 // characterResultToProto converts a CharacterResult to a proto HostCharacterInfo.
-func characterResultToProto(r *plugins.CharacterResult) *pluginv1.HostCharacterInfo {
-	return &pluginv1.HostCharacterInfo{
+func characterResultToProto(r *plugins.CharacterResult) *pluginv1.PluginHostServiceCharacterInfo {
+	return &pluginv1.PluginHostServiceCharacterInfo{
 		Id:          r.ID,
 		PlayerId:    r.PlayerID,
 		Name:        r.Name,

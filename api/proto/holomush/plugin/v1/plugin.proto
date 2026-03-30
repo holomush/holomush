@@ -22,21 +22,21 @@ service PluginService {
 // to call back for world queries, KV storage, and session operations.
 service PluginHostService {
   // QueryLocation retrieves a location by ID.
-  rpc QueryLocation(QueryLocationRequest) returns (QueryLocationResponse);
+  rpc QueryLocation(PluginHostServiceQueryLocationRequest) returns (PluginHostServiceQueryLocationResponse);
   // QueryCharacter retrieves a character by ID.
-  rpc QueryCharacter(HostQueryCharacterRequest) returns (HostQueryCharacterResponse);
+  rpc QueryCharacter(PluginHostServiceQueryCharacterRequest) returns (PluginHostServiceQueryCharacterResponse);
   // QueryLocationCharacters returns all characters present at a location.
-  rpc QueryLocationCharacters(HostQueryLocationCharactersRequest) returns (HostQueryLocationCharactersResponse);
+  rpc QueryLocationCharacters(PluginHostServiceQueryLocationCharactersRequest) returns (PluginHostServiceQueryLocationCharactersResponse);
   // EmitEvent publishes an event to a stream.
-  rpc EmitEvent(HostEmitEventRequest) returns (HostEmitEventResponse);
+  rpc EmitEvent(PluginHostServiceEmitEventRequest) returns (PluginHostServiceEmitEventResponse);
   // Log writes a log message through the host's logging system.
-  rpc Log(HostLogRequest) returns (HostLogResponse);
+  rpc Log(PluginHostServiceLogRequest) returns (PluginHostServiceLogResponse);
   // KVGet retrieves a value from the plugin's key-value store.
-  rpc KVGet(HostKVGetRequest) returns (HostKVGetResponse);
+  rpc KVGet(PluginHostServiceKVGetRequest) returns (PluginHostServiceKVGetResponse);
   // KVSet stores a value in the plugin's key-value store.
-  rpc KVSet(HostKVSetRequest) returns (HostKVSetResponse);
+  rpc KVSet(PluginHostServiceKVSetRequest) returns (PluginHostServiceKVSetResponse);
   // KVDelete removes a value from the plugin's key-value store.
-  rpc KVDelete(HostKVDeleteRequest) returns (HostKVDeleteResponse);
+  rpc KVDelete(PluginHostServiceKVDeleteRequest) returns (PluginHostServiceKVDeleteResponse);
 }
 
 // Event represents a game event delivered to plugins.
@@ -104,10 +104,11 @@ message CommandRequest {
 
 // CommandStatus maps to pkg/plugin.CommandStatus values.
 enum CommandStatus {
-  COMMAND_STATUS_OK = 0;
-  COMMAND_STATUS_ERROR = 1;
-  COMMAND_STATUS_FAILURE = 2;
-  COMMAND_STATUS_FATAL = 3;
+  COMMAND_STATUS_UNSPECIFIED = 0;
+  COMMAND_STATUS_OK = 1;
+  COMMAND_STATUS_ERROR = 2;
+  COMMAND_STATUS_FAILURE = 3;
+  COMMAND_STATUS_FATAL = 4;
 }
 
 // CommandResponse carries the result of a plugin command execution.
@@ -133,9 +134,10 @@ message HandleCommandResponse {
 }
 
 // --- PluginHostService messages ---
+// Prefixed with PluginHostService to avoid collisions with hostfunc.proto types.
 
-// LocationInfo contains basic location information.
-message LocationInfo {
+// PluginHostServiceLocationInfo contains basic location information.
+message PluginHostServiceLocationInfo {
   string id = 1;
   string name = 2;
   string description = 3;
@@ -143,8 +145,8 @@ message LocationInfo {
   string owner_id = 5;
 }
 
-// HostCharacterInfo contains basic character information for host service responses.
-message HostCharacterInfo {
+// PluginHostServiceCharacterInfo contains basic character information.
+message PluginHostServiceCharacterInfo {
   string id = 1;
   string player_id = 2;
   string name = 3;
@@ -152,85 +154,69 @@ message HostCharacterInfo {
   string location_id = 5;
 }
 
-// QueryLocationRequest requests information about a location.
-message QueryLocationRequest {
+message PluginHostServiceQueryLocationRequest {
   string subject_id = 1;
   string location_id = 2;
 }
 
-// QueryLocationResponse contains location information.
-message QueryLocationResponse {
-  LocationInfo location = 1;
+message PluginHostServiceQueryLocationResponse {
+  PluginHostServiceLocationInfo location = 1;
 }
 
-// HostQueryCharacterRequest requests information about a character.
-message HostQueryCharacterRequest {
+message PluginHostServiceQueryCharacterRequest {
   string subject_id = 1;
   string character_id = 2;
 }
 
-// HostQueryCharacterResponse contains character information.
-message HostQueryCharacterResponse {
-  HostCharacterInfo character = 1;
+message PluginHostServiceQueryCharacterResponse {
+  PluginHostServiceCharacterInfo character = 1;
 }
 
-// HostQueryLocationCharactersRequest requests all characters at a location.
-message HostQueryLocationCharactersRequest {
+message PluginHostServiceQueryLocationCharactersRequest {
   string subject_id = 1;
   string location_id = 2;
 }
 
-// HostQueryLocationCharactersResponse contains the list of characters.
-message HostQueryLocationCharactersResponse {
-  repeated HostCharacterInfo characters = 1;
+message PluginHostServiceQueryLocationCharactersResponse {
+  repeated PluginHostServiceCharacterInfo characters = 1;
 }
 
-// HostEmitEventRequest wraps an event for emission by the host.
-message HostEmitEventRequest {
+message PluginHostServiceEmitEventRequest {
   string stream = 1;
   string event_type = 2;
   bytes payload = 3;
 }
 
-// HostEmitEventResponse indicates success.
-message HostEmitEventResponse {}
+message PluginHostServiceEmitEventResponse {}
 
-// HostLogRequest writes a log message through the host.
-message HostLogRequest {
+message PluginHostServiceLogRequest {
   string level = 1;
   string message = 2;
 }
 
-// HostLogResponse is empty (logging is fire-and-forget).
-message HostLogResponse {}
+message PluginHostServiceLogResponse {}
 
-// HostKVGetRequest retrieves a value by key.
-message HostKVGetRequest {
+message PluginHostServiceKVGetRequest {
   string plugin_name = 1;
   string key = 2;
 }
 
-// HostKVGetResponse contains the retrieved value.
-message HostKVGetResponse {
+message PluginHostServiceKVGetResponse {
   string value = 1;
   bool found = 2;
 }
 
-// HostKVSetRequest stores a key-value pair.
-message HostKVSetRequest {
+message PluginHostServiceKVSetRequest {
   string plugin_name = 1;
   string key = 2;
   string value = 3;
 }
 
-// HostKVSetResponse indicates success.
-message HostKVSetResponse {}
+message PluginHostServiceKVSetResponse {}
 
-// HostKVDeleteRequest removes a key.
-message HostKVDeleteRequest {
+message PluginHostServiceKVDeleteRequest {
   string plugin_name = 1;
   string key = 2;
 }
 
-// HostKVDeleteResponse indicates success.
-message HostKVDeleteResponse {}
+message PluginHostServiceKVDeleteResponse {}

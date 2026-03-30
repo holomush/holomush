@@ -192,21 +192,21 @@ const (
 // to call back for world queries, KV storage, and session operations.
 type PluginHostServiceClient interface {
 	// QueryLocation retrieves a location by ID.
-	QueryLocation(ctx context.Context, in *QueryLocationRequest, opts ...grpc.CallOption) (*QueryLocationResponse, error)
+	QueryLocation(ctx context.Context, in *PluginHostServiceQueryLocationRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryLocationResponse, error)
 	// QueryCharacter retrieves a character by ID.
-	QueryCharacter(ctx context.Context, in *HostQueryCharacterRequest, opts ...grpc.CallOption) (*HostQueryCharacterResponse, error)
+	QueryCharacter(ctx context.Context, in *PluginHostServiceQueryCharacterRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryCharacterResponse, error)
 	// QueryLocationCharacters returns all characters present at a location.
-	QueryLocationCharacters(ctx context.Context, in *HostQueryLocationCharactersRequest, opts ...grpc.CallOption) (*HostQueryLocationCharactersResponse, error)
+	QueryLocationCharacters(ctx context.Context, in *PluginHostServiceQueryLocationCharactersRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryLocationCharactersResponse, error)
 	// EmitEvent publishes an event to a stream.
-	EmitEvent(ctx context.Context, in *HostEmitEventRequest, opts ...grpc.CallOption) (*HostEmitEventResponse, error)
+	EmitEvent(ctx context.Context, in *PluginHostServiceEmitEventRequest, opts ...grpc.CallOption) (*PluginHostServiceEmitEventResponse, error)
 	// Log writes a log message through the host's logging system.
-	Log(ctx context.Context, in *HostLogRequest, opts ...grpc.CallOption) (*HostLogResponse, error)
+	Log(ctx context.Context, in *PluginHostServiceLogRequest, opts ...grpc.CallOption) (*PluginHostServiceLogResponse, error)
 	// KVGet retrieves a value from the plugin's key-value store.
-	KVGet(ctx context.Context, in *HostKVGetRequest, opts ...grpc.CallOption) (*HostKVGetResponse, error)
+	KVGet(ctx context.Context, in *PluginHostServiceKVGetRequest, opts ...grpc.CallOption) (*PluginHostServiceKVGetResponse, error)
 	// KVSet stores a value in the plugin's key-value store.
-	KVSet(ctx context.Context, in *HostKVSetRequest, opts ...grpc.CallOption) (*HostKVSetResponse, error)
+	KVSet(ctx context.Context, in *PluginHostServiceKVSetRequest, opts ...grpc.CallOption) (*PluginHostServiceKVSetResponse, error)
 	// KVDelete removes a value from the plugin's key-value store.
-	KVDelete(ctx context.Context, in *HostKVDeleteRequest, opts ...grpc.CallOption) (*HostKVDeleteResponse, error)
+	KVDelete(ctx context.Context, in *PluginHostServiceKVDeleteRequest, opts ...grpc.CallOption) (*PluginHostServiceKVDeleteResponse, error)
 }
 
 type pluginHostServiceClient struct {
@@ -217,9 +217,9 @@ func NewPluginHostServiceClient(cc grpc.ClientConnInterface) PluginHostServiceCl
 	return &pluginHostServiceClient{cc}
 }
 
-func (c *pluginHostServiceClient) QueryLocation(ctx context.Context, in *QueryLocationRequest, opts ...grpc.CallOption) (*QueryLocationResponse, error) {
+func (c *pluginHostServiceClient) QueryLocation(ctx context.Context, in *PluginHostServiceQueryLocationRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryLocationResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(QueryLocationResponse)
+	out := new(PluginHostServiceQueryLocationResponse)
 	err := c.cc.Invoke(ctx, PluginHostService_QueryLocation_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -227,9 +227,9 @@ func (c *pluginHostServiceClient) QueryLocation(ctx context.Context, in *QueryLo
 	return out, nil
 }
 
-func (c *pluginHostServiceClient) QueryCharacter(ctx context.Context, in *HostQueryCharacterRequest, opts ...grpc.CallOption) (*HostQueryCharacterResponse, error) {
+func (c *pluginHostServiceClient) QueryCharacter(ctx context.Context, in *PluginHostServiceQueryCharacterRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryCharacterResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HostQueryCharacterResponse)
+	out := new(PluginHostServiceQueryCharacterResponse)
 	err := c.cc.Invoke(ctx, PluginHostService_QueryCharacter_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -237,9 +237,9 @@ func (c *pluginHostServiceClient) QueryCharacter(ctx context.Context, in *HostQu
 	return out, nil
 }
 
-func (c *pluginHostServiceClient) QueryLocationCharacters(ctx context.Context, in *HostQueryLocationCharactersRequest, opts ...grpc.CallOption) (*HostQueryLocationCharactersResponse, error) {
+func (c *pluginHostServiceClient) QueryLocationCharacters(ctx context.Context, in *PluginHostServiceQueryLocationCharactersRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryLocationCharactersResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HostQueryLocationCharactersResponse)
+	out := new(PluginHostServiceQueryLocationCharactersResponse)
 	err := c.cc.Invoke(ctx, PluginHostService_QueryLocationCharacters_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -247,9 +247,9 @@ func (c *pluginHostServiceClient) QueryLocationCharacters(ctx context.Context, i
 	return out, nil
 }
 
-func (c *pluginHostServiceClient) EmitEvent(ctx context.Context, in *HostEmitEventRequest, opts ...grpc.CallOption) (*HostEmitEventResponse, error) {
+func (c *pluginHostServiceClient) EmitEvent(ctx context.Context, in *PluginHostServiceEmitEventRequest, opts ...grpc.CallOption) (*PluginHostServiceEmitEventResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HostEmitEventResponse)
+	out := new(PluginHostServiceEmitEventResponse)
 	err := c.cc.Invoke(ctx, PluginHostService_EmitEvent_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -257,9 +257,9 @@ func (c *pluginHostServiceClient) EmitEvent(ctx context.Context, in *HostEmitEve
 	return out, nil
 }
 
-func (c *pluginHostServiceClient) Log(ctx context.Context, in *HostLogRequest, opts ...grpc.CallOption) (*HostLogResponse, error) {
+func (c *pluginHostServiceClient) Log(ctx context.Context, in *PluginHostServiceLogRequest, opts ...grpc.CallOption) (*PluginHostServiceLogResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HostLogResponse)
+	out := new(PluginHostServiceLogResponse)
 	err := c.cc.Invoke(ctx, PluginHostService_Log_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -267,9 +267,9 @@ func (c *pluginHostServiceClient) Log(ctx context.Context, in *HostLogRequest, o
 	return out, nil
 }
 
-func (c *pluginHostServiceClient) KVGet(ctx context.Context, in *HostKVGetRequest, opts ...grpc.CallOption) (*HostKVGetResponse, error) {
+func (c *pluginHostServiceClient) KVGet(ctx context.Context, in *PluginHostServiceKVGetRequest, opts ...grpc.CallOption) (*PluginHostServiceKVGetResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HostKVGetResponse)
+	out := new(PluginHostServiceKVGetResponse)
 	err := c.cc.Invoke(ctx, PluginHostService_KVGet_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -277,9 +277,9 @@ func (c *pluginHostServiceClient) KVGet(ctx context.Context, in *HostKVGetReques
 	return out, nil
 }
 
-func (c *pluginHostServiceClient) KVSet(ctx context.Context, in *HostKVSetRequest, opts ...grpc.CallOption) (*HostKVSetResponse, error) {
+func (c *pluginHostServiceClient) KVSet(ctx context.Context, in *PluginHostServiceKVSetRequest, opts ...grpc.CallOption) (*PluginHostServiceKVSetResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HostKVSetResponse)
+	out := new(PluginHostServiceKVSetResponse)
 	err := c.cc.Invoke(ctx, PluginHostService_KVSet_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -287,9 +287,9 @@ func (c *pluginHostServiceClient) KVSet(ctx context.Context, in *HostKVSetReques
 	return out, nil
 }
 
-func (c *pluginHostServiceClient) KVDelete(ctx context.Context, in *HostKVDeleteRequest, opts ...grpc.CallOption) (*HostKVDeleteResponse, error) {
+func (c *pluginHostServiceClient) KVDelete(ctx context.Context, in *PluginHostServiceKVDeleteRequest, opts ...grpc.CallOption) (*PluginHostServiceKVDeleteResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(HostKVDeleteResponse)
+	out := new(PluginHostServiceKVDeleteResponse)
 	err := c.cc.Invoke(ctx, PluginHostService_KVDelete_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -305,21 +305,21 @@ func (c *pluginHostServiceClient) KVDelete(ctx context.Context, in *HostKVDelete
 // to call back for world queries, KV storage, and session operations.
 type PluginHostServiceServer interface {
 	// QueryLocation retrieves a location by ID.
-	QueryLocation(context.Context, *QueryLocationRequest) (*QueryLocationResponse, error)
+	QueryLocation(context.Context, *PluginHostServiceQueryLocationRequest) (*PluginHostServiceQueryLocationResponse, error)
 	// QueryCharacter retrieves a character by ID.
-	QueryCharacter(context.Context, *HostQueryCharacterRequest) (*HostQueryCharacterResponse, error)
+	QueryCharacter(context.Context, *PluginHostServiceQueryCharacterRequest) (*PluginHostServiceQueryCharacterResponse, error)
 	// QueryLocationCharacters returns all characters present at a location.
-	QueryLocationCharacters(context.Context, *HostQueryLocationCharactersRequest) (*HostQueryLocationCharactersResponse, error)
+	QueryLocationCharacters(context.Context, *PluginHostServiceQueryLocationCharactersRequest) (*PluginHostServiceQueryLocationCharactersResponse, error)
 	// EmitEvent publishes an event to a stream.
-	EmitEvent(context.Context, *HostEmitEventRequest) (*HostEmitEventResponse, error)
+	EmitEvent(context.Context, *PluginHostServiceEmitEventRequest) (*PluginHostServiceEmitEventResponse, error)
 	// Log writes a log message through the host's logging system.
-	Log(context.Context, *HostLogRequest) (*HostLogResponse, error)
+	Log(context.Context, *PluginHostServiceLogRequest) (*PluginHostServiceLogResponse, error)
 	// KVGet retrieves a value from the plugin's key-value store.
-	KVGet(context.Context, *HostKVGetRequest) (*HostKVGetResponse, error)
+	KVGet(context.Context, *PluginHostServiceKVGetRequest) (*PluginHostServiceKVGetResponse, error)
 	// KVSet stores a value in the plugin's key-value store.
-	KVSet(context.Context, *HostKVSetRequest) (*HostKVSetResponse, error)
+	KVSet(context.Context, *PluginHostServiceKVSetRequest) (*PluginHostServiceKVSetResponse, error)
 	// KVDelete removes a value from the plugin's key-value store.
-	KVDelete(context.Context, *HostKVDeleteRequest) (*HostKVDeleteResponse, error)
+	KVDelete(context.Context, *PluginHostServiceKVDeleteRequest) (*PluginHostServiceKVDeleteResponse, error)
 	mustEmbedUnimplementedPluginHostServiceServer()
 }
 
@@ -330,28 +330,28 @@ type PluginHostServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedPluginHostServiceServer struct{}
 
-func (UnimplementedPluginHostServiceServer) QueryLocation(context.Context, *QueryLocationRequest) (*QueryLocationResponse, error) {
+func (UnimplementedPluginHostServiceServer) QueryLocation(context.Context, *PluginHostServiceQueryLocationRequest) (*PluginHostServiceQueryLocationResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method QueryLocation not implemented")
 }
-func (UnimplementedPluginHostServiceServer) QueryCharacter(context.Context, *HostQueryCharacterRequest) (*HostQueryCharacterResponse, error) {
+func (UnimplementedPluginHostServiceServer) QueryCharacter(context.Context, *PluginHostServiceQueryCharacterRequest) (*PluginHostServiceQueryCharacterResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method QueryCharacter not implemented")
 }
-func (UnimplementedPluginHostServiceServer) QueryLocationCharacters(context.Context, *HostQueryLocationCharactersRequest) (*HostQueryLocationCharactersResponse, error) {
+func (UnimplementedPluginHostServiceServer) QueryLocationCharacters(context.Context, *PluginHostServiceQueryLocationCharactersRequest) (*PluginHostServiceQueryLocationCharactersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method QueryLocationCharacters not implemented")
 }
-func (UnimplementedPluginHostServiceServer) EmitEvent(context.Context, *HostEmitEventRequest) (*HostEmitEventResponse, error) {
+func (UnimplementedPluginHostServiceServer) EmitEvent(context.Context, *PluginHostServiceEmitEventRequest) (*PluginHostServiceEmitEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EmitEvent not implemented")
 }
-func (UnimplementedPluginHostServiceServer) Log(context.Context, *HostLogRequest) (*HostLogResponse, error) {
+func (UnimplementedPluginHostServiceServer) Log(context.Context, *PluginHostServiceLogRequest) (*PluginHostServiceLogResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Log not implemented")
 }
-func (UnimplementedPluginHostServiceServer) KVGet(context.Context, *HostKVGetRequest) (*HostKVGetResponse, error) {
+func (UnimplementedPluginHostServiceServer) KVGet(context.Context, *PluginHostServiceKVGetRequest) (*PluginHostServiceKVGetResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method KVGet not implemented")
 }
-func (UnimplementedPluginHostServiceServer) KVSet(context.Context, *HostKVSetRequest) (*HostKVSetResponse, error) {
+func (UnimplementedPluginHostServiceServer) KVSet(context.Context, *PluginHostServiceKVSetRequest) (*PluginHostServiceKVSetResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method KVSet not implemented")
 }
-func (UnimplementedPluginHostServiceServer) KVDelete(context.Context, *HostKVDeleteRequest) (*HostKVDeleteResponse, error) {
+func (UnimplementedPluginHostServiceServer) KVDelete(context.Context, *PluginHostServiceKVDeleteRequest) (*PluginHostServiceKVDeleteResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method KVDelete not implemented")
 }
 func (UnimplementedPluginHostServiceServer) mustEmbedUnimplementedPluginHostServiceServer() {}
@@ -376,7 +376,7 @@ func RegisterPluginHostServiceServer(s grpc.ServiceRegistrar, srv PluginHostServ
 }
 
 func _PluginHostService_QueryLocation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(QueryLocationRequest)
+	in := new(PluginHostServiceQueryLocationRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -388,13 +388,13 @@ func _PluginHostService_QueryLocation_Handler(srv interface{}, ctx context.Conte
 		FullMethod: PluginHostService_QueryLocation_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginHostServiceServer).QueryLocation(ctx, req.(*QueryLocationRequest))
+		return srv.(PluginHostServiceServer).QueryLocation(ctx, req.(*PluginHostServiceQueryLocationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _PluginHostService_QueryCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(HostQueryCharacterRequest)
+	in := new(PluginHostServiceQueryCharacterRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -406,13 +406,13 @@ func _PluginHostService_QueryCharacter_Handler(srv interface{}, ctx context.Cont
 		FullMethod: PluginHostService_QueryCharacter_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginHostServiceServer).QueryCharacter(ctx, req.(*HostQueryCharacterRequest))
+		return srv.(PluginHostServiceServer).QueryCharacter(ctx, req.(*PluginHostServiceQueryCharacterRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _PluginHostService_QueryLocationCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(HostQueryLocationCharactersRequest)
+	in := new(PluginHostServiceQueryLocationCharactersRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -424,13 +424,13 @@ func _PluginHostService_QueryLocationCharacters_Handler(srv interface{}, ctx con
 		FullMethod: PluginHostService_QueryLocationCharacters_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginHostServiceServer).QueryLocationCharacters(ctx, req.(*HostQueryLocationCharactersRequest))
+		return srv.(PluginHostServiceServer).QueryLocationCharacters(ctx, req.(*PluginHostServiceQueryLocationCharactersRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _PluginHostService_EmitEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(HostEmitEventRequest)
+	in := new(PluginHostServiceEmitEventRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -442,13 +442,13 @@ func _PluginHostService_EmitEvent_Handler(srv interface{}, ctx context.Context, 
 		FullMethod: PluginHostService_EmitEvent_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginHostServiceServer).EmitEvent(ctx, req.(*HostEmitEventRequest))
+		return srv.(PluginHostServiceServer).EmitEvent(ctx, req.(*PluginHostServiceEmitEventRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _PluginHostService_Log_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(HostLogRequest)
+	in := new(PluginHostServiceLogRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -460,13 +460,13 @@ func _PluginHostService_Log_Handler(srv interface{}, ctx context.Context, dec fu
 		FullMethod: PluginHostService_Log_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginHostServiceServer).Log(ctx, req.(*HostLogRequest))
+		return srv.(PluginHostServiceServer).Log(ctx, req.(*PluginHostServiceLogRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _PluginHostService_KVGet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(HostKVGetRequest)
+	in := new(PluginHostServiceKVGetRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -478,13 +478,13 @@ func _PluginHostService_KVGet_Handler(srv interface{}, ctx context.Context, dec 
 		FullMethod: PluginHostService_KVGet_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginHostServiceServer).KVGet(ctx, req.(*HostKVGetRequest))
+		return srv.(PluginHostServiceServer).KVGet(ctx, req.(*PluginHostServiceKVGetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _PluginHostService_KVSet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(HostKVSetRequest)
+	in := new(PluginHostServiceKVSetRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -496,13 +496,13 @@ func _PluginHostService_KVSet_Handler(srv interface{}, ctx context.Context, dec 
 		FullMethod: PluginHostService_KVSet_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginHostServiceServer).KVSet(ctx, req.(*HostKVSetRequest))
+		return srv.(PluginHostServiceServer).KVSet(ctx, req.(*PluginHostServiceKVSetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _PluginHostService_KVDelete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(HostKVDeleteRequest)
+	in := new(PluginHostServiceKVDeleteRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -514,7 +514,7 @@ func _PluginHostService_KVDelete_Handler(srv interface{}, ctx context.Context, d
 		FullMethod: PluginHostService_KVDelete_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginHostServiceServer).KVDelete(ctx, req.(*HostKVDeleteRequest))
+		return srv.(PluginHostServiceServer).KVDelete(ctx, req.(*PluginHostServiceKVDeleteRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

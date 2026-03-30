@@ -102,7 +102,7 @@ func TestPluginHostService_QueryLocation(t *testing.T) {
 			proxy := &mockServiceProxy{queryLocationResult: tt.result, queryLocationErr: tt.proxyErr}
 			svc := NewPluginHostService(proxy, slog.Default())
 
-			resp, err := svc.QueryLocation(context.Background(), &pluginv1.QueryLocationRequest{
+			resp, err := svc.QueryLocation(context.Background(), &pluginv1.PluginHostServiceQueryLocationRequest{
 				SubjectId:  "char-1",
 				LocationId: "loc-1",
 			})
@@ -157,7 +157,7 @@ func TestPluginHostService_QueryCharacter(t *testing.T) {
 			proxy := &mockServiceProxy{queryCharacterResult: tt.result, queryCharacterErr: tt.proxyErr}
 			svc := NewPluginHostService(proxy, slog.Default())
 
-			resp, err := svc.QueryCharacter(context.Background(), &pluginv1.HostQueryCharacterRequest{
+			resp, err := svc.QueryCharacter(context.Background(), &pluginv1.PluginHostServiceQueryCharacterRequest{
 				SubjectId:   "char-1",
 				CharacterId: "char-1",
 			})
@@ -212,7 +212,7 @@ func TestPluginHostService_QueryLocationCharacters(t *testing.T) {
 			proxy := &mockServiceProxy{queryLocCharsResult: tt.results, queryLocCharsErr: tt.proxyErr}
 			svc := NewPluginHostService(proxy, slog.Default())
 
-			resp, err := svc.QueryLocationCharacters(context.Background(), &pluginv1.HostQueryLocationCharactersRequest{
+			resp, err := svc.QueryLocationCharacters(context.Background(), &pluginv1.PluginHostServiceQueryLocationCharactersRequest{
 				SubjectId:  "char-1",
 				LocationId: "loc-1",
 			})
@@ -242,7 +242,7 @@ func TestPluginHostService_EmitEvent(t *testing.T) {
 			proxy := &mockServiceProxy{emitEventErr: tt.proxyErr}
 			svc := NewPluginHostService(proxy, slog.Default())
 
-			_, err := svc.EmitEvent(context.Background(), &pluginv1.HostEmitEventRequest{
+			_, err := svc.EmitEvent(context.Background(), &pluginv1.PluginHostServiceEmitEventRequest{
 				Stream:    "location:123",
 				EventType: "say",
 				Payload:   []byte(`{"text":"hello"}`),
@@ -261,7 +261,7 @@ func TestPluginHostService_Log(t *testing.T) {
 	proxy := &mockServiceProxy{}
 	svc := NewPluginHostService(proxy, slog.Default())
 
-	resp, err := svc.Log(context.Background(), &pluginv1.HostLogRequest{
+	resp, err := svc.Log(context.Background(), &pluginv1.PluginHostServiceLogRequest{
 		Level:   "info",
 		Message: "test log message",
 	})
@@ -292,7 +292,7 @@ func TestPluginHostService_KVGet(t *testing.T) {
 			proxy := &mockServiceProxy{kvGetValue: tt.value, kvGetFound: tt.found, kvGetErr: tt.proxyErr}
 			svc := NewPluginHostService(proxy, slog.Default())
 
-			resp, err := svc.KVGet(context.Background(), &pluginv1.HostKVGetRequest{
+			resp, err := svc.KVGet(context.Background(), &pluginv1.PluginHostServiceKVGetRequest{
 				PluginName: "test-plugin",
 				Key:        "my-key",
 			})
@@ -325,7 +325,7 @@ func TestPluginHostService_KVSet(t *testing.T) {
 			proxy := &mockServiceProxy{kvSetErr: tt.proxyErr}
 			svc := NewPluginHostService(proxy, slog.Default())
 
-			_, err := svc.KVSet(context.Background(), &pluginv1.HostKVSetRequest{
+			_, err := svc.KVSet(context.Background(), &pluginv1.PluginHostServiceKVSetRequest{
 				PluginName: "test-plugin",
 				Key:        "my-key",
 				Value:      "my-value",
@@ -355,7 +355,7 @@ func TestPluginHostService_KVDelete(t *testing.T) {
 			proxy := &mockServiceProxy{kvDeleteErr: tt.proxyErr}
 			svc := NewPluginHostService(proxy, slog.Default())
 
-			_, err := svc.KVDelete(context.Background(), &pluginv1.HostKVDeleteRequest{
+			_, err := svc.KVDelete(context.Background(), &pluginv1.PluginHostServiceKVDeleteRequest{
 				PluginName: "test-plugin",
 				Key:        "my-key",
 			})
