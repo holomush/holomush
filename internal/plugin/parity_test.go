@@ -19,7 +19,7 @@ import (
 // corresponding Lua host function and gRPC RPC (when implemented).
 //
 // luaFunction uses the form "namespace.function" for namespaced functions:
-//   - "holomush.query_room"     -> registered on the holomush global table
+//   - "holomush.query_location"  -> registered on the holomush global table
 //   - "holo.session.find_by_name" -> registered on the holo.session table
 //   - "holo.emit.location"      -> registered on the holo.emit table
 //   - "holo.fmt.bold"           -> registered on the holo.fmt table
@@ -40,14 +40,14 @@ type parityEntry struct {
 // empty string and add a comment explaining why (e.g., "TODO: Phase 4").
 var parityTable = []parityEntry{
 	// --- World read ---
-	{"QueryLocation", "holomush.query_room", ""},
-	{"QueryCharacter", "holomush.query_character", ""},
-	{"QueryLocationCharacters", "holomush.query_room_characters", ""},
+	{"QueryLocation", "holomush.query_location", "QueryLocation"},
+	{"QueryCharacter", "holomush.query_character", "QueryCharacter"},
+	{"QueryLocationCharacters", "holomush.query_location_characters", "QueryLocationCharacters"},
 	{"QueryObject", "holomush.query_object", ""},
 	{"FindLocation", "holomush.find_location", ""},
-	{"GetCharactersByLocation", "", ""},  // TODO: no Lua equivalent yet (query_room_characters covers the use case differently)
-	{"GetObjectsByLocation", "", ""},     // TODO: no Lua equivalent yet
-	{"UpdateLocation", "", ""},           // TODO: no Lua equivalent yet (set_property covers name/description)
+	{"GetCharactersByLocation", "", ""},    // TODO: no Lua equivalent yet (query_location_characters covers the use case differently)
+	{"GetObjectsByLocation", "", ""},       // TODO: no Lua equivalent yet
+	{"UpdateLocation", "", ""},             // TODO: no Lua equivalent yet (set_property covers name/description)
 	{"UpdateCharacterDescription", "", ""}, // TODO: no Lua equivalent yet (set_property covers description)
 
 	// --- World write ---
@@ -58,43 +58,43 @@ var parityTable = []parityEntry{
 	// --- Properties ---
 	{"SetProperty", "holomush.set_property", ""},
 	{"GetProperty", "holomush.get_property", ""},
-	{"FindPropertyByPrefix", "", ""},       // TODO: no Lua equivalent yet
-	{"ListPropertiesByParent", "", ""},      // TODO: no Lua equivalent yet
+	{"FindPropertyByPrefix", "", ""},  // TODO: no Lua equivalent yet
+	{"ListPropertiesByParent", "", ""}, // TODO: no Lua equivalent yet
 
 	// --- Plugin KV ---
-	{"KVGet", "holomush.kv_get", ""},
-	{"KVSet", "holomush.kv_set", ""},
-	{"KVDelete", "holomush.kv_delete", ""},
+	{"KVGet", "holomush.kv_get", "KVGet"},
+	{"KVSet", "holomush.kv_set", "KVSet"},
+	{"KVDelete", "holomush.kv_delete", "KVDelete"},
 
 	// --- Session ---
 	{"FindSessionByName", "holo.session.find_by_name", ""},
 	{"SetLastWhispered", "holo.session.set_last_whispered", ""},
-	{"DisconnectSession", "", ""},     // TODO: no Lua equivalent yet
-	{"ListActiveSessions", "", ""},    // TODO: no Lua equivalent yet
+	{"DisconnectSession", "", ""},      // TODO: no Lua equivalent yet
+	{"ListActiveSessions", "", ""},     // TODO: no Lua equivalent yet
 	{"BroadcastSystemMessage", "", ""}, // TODO: no Lua equivalent yet
-	{"UpdateActivity", "", ""},        // TODO: no Lua equivalent yet
+	{"UpdateActivity", "", ""},         // TODO: no Lua equivalent yet
 
 	// --- Aliases ---
-	{"SetPlayerAlias", "", ""},     // TODO: no Lua equivalent yet
-	{"DeletePlayerAlias", "", ""},  // TODO: no Lua equivalent yet
-	{"ListPlayerAliases", "", ""},  // TODO: no Lua equivalent yet
-	{"SetSystemAlias", "", ""},     // TODO: no Lua equivalent yet
-	{"DeleteSystemAlias", "", ""},  // TODO: no Lua equivalent yet
-	{"ListSystemAliases", "", ""},  // TODO: no Lua equivalent yet
-	{"CheckAliasShadow", "", ""},   // TODO: no Lua equivalent yet
+	{"SetPlayerAlias", "", ""},    // TODO: no Lua equivalent yet
+	{"DeletePlayerAlias", "", ""}, // TODO: no Lua equivalent yet
+	{"ListPlayerAliases", "", ""}, // TODO: no Lua equivalent yet
+	{"SetSystemAlias", "", ""},    // TODO: no Lua equivalent yet
+	{"DeleteSystemAlias", "", ""}, // TODO: no Lua equivalent yet
+	{"ListSystemAliases", "", ""}, // TODO: no Lua equivalent yet
+	{"CheckAliasShadow", "", ""},  // TODO: no Lua equivalent yet
 
 	// --- Commands ---
 	{"ListCommands", "holomush.list_commands", ""},
 	{"GetCommandHelp", "holomush.get_command_help", ""},
 
 	// --- Events ---
-	{"EmitEvent", "", ""},  // Lua uses holo.emit.* (location/character/global) instead of a direct EmitEvent call
+	{"EmitEvent", "", "EmitEvent"}, // Lua uses holo.emit.* (location/character/global) instead of direct EmitEvent
 
 	// --- Config ---
-	{"GetStartingLocationID", "", ""},  // TODO: no Lua equivalent yet
+	{"GetStartingLocationID", "", ""}, // TODO: no Lua equivalent yet
 
 	// --- Utility ---
-	{"Log", "holomush.log", ""},
+	{"Log", "holomush.log", "Log"},
 }
 
 // allLuaFunctions returns the set of Lua host function names registered
@@ -110,9 +110,9 @@ func allLuaFunctions() map[string]bool {
 		"holomush.kv_get":               true,
 		"holomush.kv_set":               true,
 		"holomush.kv_delete":            true,
-		"holomush.query_room":           true,
-		"holomush.query_character":      true,
-		"holomush.query_room_characters": true,
+		"holomush.query_location":            true,
+		"holomush.query_character":           true,
+		"holomush.query_location_characters": true,
 		"holomush.query_object":         true,
 		"holomush.create_location":      true,
 		"holomush.create_exit":          true,
@@ -258,6 +258,24 @@ func TestAllRegisteredLuaFunctionsAccountedFor(t *testing.T) {
 			"registered Lua function %q is not in parityTable and not in luaOnlyFuncs — "+
 				"add it to parityTable or mark it as Lua-only",
 			funcName)
+	}
+}
+
+// TestParityTableGRPCRPCsExist verifies that every gRPC RPC referenced in the
+// parity table is actually a method on PluginHostService.
+func TestParityTableGRPCRPCsExist(t *testing.T) {
+	hostServiceType := reflect.TypeOf(&goplugin.PluginHostService{})
+
+	for _, entry := range parityTable {
+		if entry.grpcRPC == "" {
+			continue
+		}
+		t.Run(entry.proxyMethod+"->"+entry.grpcRPC, func(t *testing.T) {
+			_, ok := hostServiceType.MethodByName(entry.grpcRPC)
+			assert.True(t, ok,
+				"parityTable maps %q to gRPC RPC %q, but PluginHostService has no such method",
+				entry.proxyMethod, entry.grpcRPC)
+		})
 	}
 }
 
