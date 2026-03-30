@@ -4,15 +4,16 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/command/handlers/testutil"
 )
 
 func TestQuitHandler(t *testing.T) {
@@ -46,13 +47,13 @@ func TestQuitHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			player := testutil.RegularPlayer()
-			mock := testutil.NewMockSessionAccess()
-			services := testutil.NewServicesBuilder().WithSession(mock).Build()
-			exec, buf := testutil.NewExecutionBuilder().
-				WithCharacter(player).
-				WithServices(services).
-				Build()
+			var buf bytes.Buffer
+			exec := command.NewTestExecution(command.CommandExecutionConfig{
+				CharacterID:   ulid.Make(),
+				CharacterName: "Player",
+				PlayerID:      ulid.Make(),
+				Output:        &buf,
+			})
 
 			err := QuitHandler(context.Background(), exec)
 			tt.assertion(t, buf.String(), err)
