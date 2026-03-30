@@ -63,6 +63,7 @@ func registerTestCommands(reg *command.Registry) {
 		Name: "say",
 		Handler: func(ctx context.Context, exec *command.CommandExecution) error {
 			return exec.Services().Events().Append(ctx, core.Event{
+				ID:      ulid.Make(),
 				Stream:  "location:" + exec.LocationID().String(),
 				Type:    core.EventType(pluginsdk.EventTypeSay),
 				Actor:   core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
@@ -78,6 +79,7 @@ func registerTestCommands(reg *command.Registry) {
 		Name: "pose",
 		Handler: func(ctx context.Context, exec *command.CommandExecution) error {
 			return exec.Services().Events().Append(ctx, core.Event{
+				ID:      ulid.Make(),
 				Stream:  "location:" + exec.LocationID().String(),
 				Type:    core.EventType(pluginsdk.EventTypePose),
 				Actor:   core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
