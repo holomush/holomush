@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/plugin/v1/plugin.proto.
  */
 export const file_holomush_plugin_v1_plugin: GenFile = /*@__PURE__*/
-  fileDesc("Ch9ob2xvbXVzaC9wbHVnaW4vdjEvcGx1Z2luLnByb3RvEhJob2xvbXVzaC5wbHVnaW4udjEiewoFRXZlbnQSCgoCaWQYASABKAkSDgoGc3RyZWFtGAIgASgJEgwKBHR5cGUYAyABKAkSEQoJdGltZXN0YW1wGAQgASgDEhIKCmFjdG9yX2tpbmQYBSABKAkSEAoIYWN0b3JfaWQYBiABKAkSDwoHcGF5bG9hZBgHIAEoCSI6CglFbWl0RXZlbnQSDgoGc3RyZWFtGAEgASgJEgwKBHR5cGUYAiABKAkSDwoHcGF5bG9hZBgDIAEoCSI+ChJIYW5kbGVFdmVudFJlcXVlc3QSKAoFZXZlbnQYASABKAsyGS5ob2xvbXVzaC5wbHVnaW4udjEuRXZlbnQiSQoTSGFuZGxlRXZlbnRSZXNwb25zZRIyCgtlbWl0X2V2ZW50cxgBIAMoCzIdLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnQirAEKDkNvbW1hbmRSZXF1ZXN0Eg8KB2NvbW1hbmQYASABKAkSDAoEYXJncxgCIAEoCRIRCglyYXdfaW5wdXQYAyABKAkSFAoMY2hhcmFjdGVyX2lkGAQgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAUgASgJEhMKC2xvY2F0aW9uX2lkGAYgASgJEhIKCnNlc3Npb25faWQYByABKAkSEQoJcGxheWVyX2lkGAggASgJIoMBCg9Db21tYW5kUmVzcG9uc2USMQoGc3RhdHVzGAEgASgOMiEuaG9sb211c2gucGx1Z2luLnYxLkNvbW1hbmRTdGF0dXMSDgoGb3V0cHV0GAIgASgJEi0KBmV2ZW50cxgDIAMoCzIdLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnQiSwoUSGFuZGxlQ29tbWFuZFJlcXVlc3QSMwoHY29tbWFuZBgBIAEoCzIiLmhvbG9tdXNoLnBsdWdpbi52MS5Db21tYW5kUmVxdWVzdCJOChVIYW5kbGVDb21tYW5kUmVzcG9uc2USNQoIcmVzcG9uc2UYASABKAsyIy5ob2xvbXVzaC5wbHVnaW4udjEuQ29tbWFuZFJlc3BvbnNlIl0KDExvY2F0aW9uSW5mbxIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEgwKBHR5cGUYBCABKAkSEAoIb3duZXJfaWQYBSABKAkiagoRSG9zdENoYXJhY3RlckluZm8SCgoCaWQYASABKAkSEQoJcGxheWVyX2lkGAIgASgJEgwKBG5hbWUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSEwoLbG9jYXRpb25faWQYBSABKAkiPwoUUXVlcnlMb2NhdGlvblJlcXVlc3QSEgoKc3ViamVjdF9pZBgBIAEoCRITCgtsb2NhdGlvbl9pZBgCIAEoCSJLChVRdWVyeUxvY2F0aW9uUmVzcG9uc2USMgoIbG9jYXRpb24YASABKAsyIC5ob2xvbXVzaC5wbHVnaW4udjEuTG9jYXRpb25JbmZvIkUKGUhvc3RRdWVyeUNoYXJhY3RlclJlcXVlc3QSEgoKc3ViamVjdF9pZBgBIAEoCRIUCgxjaGFyYWN0ZXJfaWQYAiABKAkiVgoaSG9zdFF1ZXJ5Q2hhcmFjdGVyUmVzcG9uc2USOAoJY2hhcmFjdGVyGAEgASgLMiUuaG9sb211c2gucGx1Z2luLnYxLkhvc3RDaGFyYWN0ZXJJbmZvIk0KIkhvc3RRdWVyeUxvY2F0aW9uQ2hhcmFjdGVyc1JlcXVlc3QSEgoKc3ViamVjdF9pZBgBIAEoCRITCgtsb2NhdGlvbl9pZBgCIAEoCSJgCiNIb3N0UXVlcnlMb2NhdGlvbkNoYXJhY3RlcnNSZXNwb25zZRI5CgpjaGFyYWN0ZXJzGAEgAygLMiUuaG9sb211c2gucGx1Z2luLnYxLkhvc3RDaGFyYWN0ZXJJbmZvIksKFEhvc3RFbWl0RXZlbnRSZXF1ZXN0Eg4KBnN0cmVhbRgBIAEoCRISCgpldmVudF90eXBlGAIgASgJEg8KB3BheWxvYWQYAyABKAwiFwoVSG9zdEVtaXRFdmVudFJlc3BvbnNlIjAKDkhvc3RMb2dSZXF1ZXN0Eg0KBWxldmVsGAEgASgJEg8KB21lc3NhZ2UYAiABKAkiEQoPSG9zdExvZ1Jlc3BvbnNlIjQKEEhvc3RLVkdldFJlcXVlc3QSEwoLcGx1Z2luX25hbWUYASABKAkSCwoDa2V5GAIgASgJIjEKEUhvc3RLVkdldFJlc3BvbnNlEg0KBXZhbHVlGAEgASgJEg0KBWZvdW5kGAIgASgIIkMKEEhvc3RLVlNldFJlcXVlc3QSEwoLcGx1Z2luX25hbWUYASABKAkSCwoDa2V5GAIgASgJEg0KBXZhbHVlGAMgASgJIhMKEUhvc3RLVlNldFJlc3BvbnNlIjcKE0hvc3RLVkRlbGV0ZVJlcXVlc3QSEwoLcGx1Z2luX25hbWUYASABKAkSCwoDa2V5GAIgASgJIhYKFEhvc3RLVkRlbGV0ZVJlc3BvbnNlKnYKDUNvbW1hbmRTdGF0dXMSFQoRQ09NTUFORF9TVEFUVVNfT0sQABIYChRDT01NQU5EX1NUQVRVU19FUlJPUhABEhoKFkNPTU1BTkRfU1RBVFVTX0ZBSUxVUkUQAhIYChRDT01NQU5EX1NUQVRVU19GQVRBTBADMtUBCg1QbHVnaW5TZXJ2aWNlEl4KC0hhbmRsZUV2ZW50EiYuaG9sb211c2gucGx1Z2luLnYxLkhhbmRsZUV2ZW50UmVxdWVzdBonLmhvbG9tdXNoLnBsdWdpbi52MS5IYW5kbGVFdmVudFJlc3BvbnNlEmQKDUhhbmRsZUNvbW1hbmQSKC5ob2xvbXVzaC5wbHVnaW4udjEuSGFuZGxlQ29tbWFuZFJlcXVlc3QaKS5ob2xvbXVzaC5wbHVnaW4udjEuSGFuZGxlQ29tbWFuZFJlc3BvbnNlMrQGChFQbHVnaW5Ib3N0U2VydmljZRJkCg1RdWVyeUxvY2F0aW9uEiguaG9sb211c2gucGx1Z2luLnYxLlF1ZXJ5TG9jYXRpb25SZXF1ZXN0GikuaG9sb211c2gucGx1Z2luLnYxLlF1ZXJ5TG9jYXRpb25SZXNwb25zZRJvCg5RdWVyeUNoYXJhY3RlchItLmhvbG9tdXNoLnBsdWdpbi52MS5Ib3N0UXVlcnlDaGFyYWN0ZXJSZXF1ZXN0Gi4uaG9sb211c2gucGx1Z2luLnYxLkhvc3RRdWVyeUNoYXJhY3RlclJlc3BvbnNlEooBChdRdWVyeUxvY2F0aW9uQ2hhcmFjdGVycxI2LmhvbG9tdXNoLnBsdWdpbi52MS5Ib3N0UXVlcnlMb2NhdGlvbkNoYXJhY3RlcnNSZXF1ZXN0GjcuaG9sb211c2gucGx1Z2luLnYxLkhvc3RRdWVyeUxvY2F0aW9uQ2hhcmFjdGVyc1Jlc3BvbnNlEmAKCUVtaXRFdmVudBIoLmhvbG9tdXNoLnBsdWdpbi52MS5Ib3N0RW1pdEV2ZW50UmVxdWVzdBopLmhvbG9tdXNoLnBsdWdpbi52MS5Ib3N0RW1pdEV2ZW50UmVzcG9uc2USTgoDTG9nEiIuaG9sb211c2gucGx1Z2luLnYxLkhvc3RMb2dSZXF1ZXN0GiMuaG9sb211c2gucGx1Z2luLnYxLkhvc3RMb2dSZXNwb25zZRJUCgVLVkdldBIkLmhvbG9tdXNoLnBsdWdpbi52MS5Ib3N0S1ZHZXRSZXF1ZXN0GiUuaG9sb211c2gucGx1Z2luLnYxLkhvc3RLVkdldFJlc3BvbnNlElQKBUtWU2V0EiQuaG9sb211c2gucGx1Z2luLnYxLkhvc3RLVlNldFJlcXVlc3QaJS5ob2xvbXVzaC5wbHVnaW4udjEuSG9zdEtWU2V0UmVzcG9uc2USXQoIS1ZEZWxldGUSJy5ob2xvbXVzaC5wbHVnaW4udjEuSG9zdEtWRGVsZXRlUmVxdWVzdBooLmhvbG9tdXNoLnBsdWdpbi52MS5Ib3N0S1ZEZWxldGVSZXNwb25zZUJEWkJnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC9wbHVnaW4vdjE7cGx1Z2ludjFiBnByb3RvMw");
+  fileDesc("Ch9ob2xvbXVzaC9wbHVnaW4vdjEvcGx1Z2luLnByb3RvEhJob2xvbXVzaC5wbHVnaW4udjEiewoFRXZlbnQSCgoCaWQYASABKAkSDgoGc3RyZWFtGAIgASgJEgwKBHR5cGUYAyABKAkSEQoJdGltZXN0YW1wGAQgASgDEhIKCmFjdG9yX2tpbmQYBSABKAkSEAoIYWN0b3JfaWQYBiABKAkSDwoHcGF5bG9hZBgHIAEoCSI6CglFbWl0RXZlbnQSDgoGc3RyZWFtGAEgASgJEgwKBHR5cGUYAiABKAkSDwoHcGF5bG9hZBgDIAEoCSI+ChJIYW5kbGVFdmVudFJlcXVlc3QSKAoFZXZlbnQYASABKAsyGS5ob2xvbXVzaC5wbHVnaW4udjEuRXZlbnQiSQoTSGFuZGxlRXZlbnRSZXNwb25zZRIyCgtlbWl0X2V2ZW50cxgBIAMoCzIdLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnQirAEKDkNvbW1hbmRSZXF1ZXN0Eg8KB2NvbW1hbmQYASABKAkSDAoEYXJncxgCIAEoCRIRCglyYXdfaW5wdXQYAyABKAkSFAoMY2hhcmFjdGVyX2lkGAQgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAUgASgJEhMKC2xvY2F0aW9uX2lkGAYgASgJEhIKCnNlc3Npb25faWQYByABKAkSEQoJcGxheWVyX2lkGAggASgJIoMBCg9Db21tYW5kUmVzcG9uc2USMQoGc3RhdHVzGAEgASgOMiEuaG9sb211c2gucGx1Z2luLnYxLkNvbW1hbmRTdGF0dXMSDgoGb3V0cHV0GAIgASgJEi0KBmV2ZW50cxgDIAMoCzIdLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnQiSwoUSGFuZGxlQ29tbWFuZFJlcXVlc3QSMwoHY29tbWFuZBgBIAEoCzIiLmhvbG9tdXNoLnBsdWdpbi52MS5Db21tYW5kUmVxdWVzdCJOChVIYW5kbGVDb21tYW5kUmVzcG9uc2USNQoIcmVzcG9uc2UYASABKAsyIy5ob2xvbXVzaC5wbHVnaW4udjEuQ29tbWFuZFJlc3BvbnNlIm4KHVBsdWdpbkhvc3RTZXJ2aWNlTG9jYXRpb25JbmZvEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSDAoEdHlwZRgEIAEoCRIQCghvd25lcl9pZBgFIAEoCSJ3Ch5QbHVnaW5Ib3N0U2VydmljZUNoYXJhY3RlckluZm8SCgoCaWQYASABKAkSEQoJcGxheWVyX2lkGAIgASgJEgwKBG5hbWUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSEwoLbG9jYXRpb25faWQYBSABKAkiUAolUGx1Z2luSG9zdFNlcnZpY2VRdWVyeUxvY2F0aW9uUmVxdWVzdBISCgpzdWJqZWN0X2lkGAEgASgJEhMKC2xvY2F0aW9uX2lkGAIgASgJIm0KJlBsdWdpbkhvc3RTZXJ2aWNlUXVlcnlMb2NhdGlvblJlc3BvbnNlEkMKCGxvY2F0aW9uGAEgASgLMjEuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlTG9jYXRpb25JbmZvIlIKJlBsdWdpbkhvc3RTZXJ2aWNlUXVlcnlDaGFyYWN0ZXJSZXF1ZXN0EhIKCnN1YmplY3RfaWQYASABKAkSFAoMY2hhcmFjdGVyX2lkGAIgASgJInAKJ1BsdWdpbkhvc3RTZXJ2aWNlUXVlcnlDaGFyYWN0ZXJSZXNwb25zZRJFCgljaGFyYWN0ZXIYASABKAsyMi5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VDaGFyYWN0ZXJJbmZvIloKL1BsdWdpbkhvc3RTZXJ2aWNlUXVlcnlMb2NhdGlvbkNoYXJhY3RlcnNSZXF1ZXN0EhIKCnN1YmplY3RfaWQYASABKAkSEwoLbG9jYXRpb25faWQYAiABKAkiegowUGx1Z2luSG9zdFNlcnZpY2VRdWVyeUxvY2F0aW9uQ2hhcmFjdGVyc1Jlc3BvbnNlEkYKCmNoYXJhY3RlcnMYASADKAsyMi5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VDaGFyYWN0ZXJJbmZvIlgKIVBsdWdpbkhvc3RTZXJ2aWNlRW1pdEV2ZW50UmVxdWVzdBIOCgZzdHJlYW0YASABKAkSEgoKZXZlbnRfdHlwZRgCIAEoCRIPCgdwYXlsb2FkGAMgASgMIiQKIlBsdWdpbkhvc3RTZXJ2aWNlRW1pdEV2ZW50UmVzcG9uc2UiPQobUGx1Z2luSG9zdFNlcnZpY2VMb2dSZXF1ZXN0Eg0KBWxldmVsGAEgASgJEg8KB21lc3NhZ2UYAiABKAkiHgocUGx1Z2luSG9zdFNlcnZpY2VMb2dSZXNwb25zZSJBCh1QbHVnaW5Ib3N0U2VydmljZUtWR2V0UmVxdWVzdBITCgtwbHVnaW5fbmFtZRgBIAEoCRILCgNrZXkYAiABKAkiPgoeUGx1Z2luSG9zdFNlcnZpY2VLVkdldFJlc3BvbnNlEg0KBXZhbHVlGAEgASgJEg0KBWZvdW5kGAIgASgIIlAKHVBsdWdpbkhvc3RTZXJ2aWNlS1ZTZXRSZXF1ZXN0EhMKC3BsdWdpbl9uYW1lGAEgASgJEgsKA2tleRgCIAEoCRINCgV2YWx1ZRgDIAEoCSIgCh5QbHVnaW5Ib3N0U2VydmljZUtWU2V0UmVzcG9uc2UiRAogUGx1Z2luSG9zdFNlcnZpY2VLVkRlbGV0ZVJlcXVlc3QSEwoLcGx1Z2luX25hbWUYASABKAkSCwoDa2V5GAIgASgJIiMKIVBsdWdpbkhvc3RTZXJ2aWNlS1ZEZWxldGVSZXNwb25zZSqWAQoNQ29tbWFuZFN0YXR1cxIeChpDT01NQU5EX1NUQVRVU19VTlNQRUNJRklFRBAAEhUKEUNPTU1BTkRfU1RBVFVTX09LEAESGAoUQ09NTUFORF9TVEFUVVNfRVJST1IQAhIaChZDT01NQU5EX1NUQVRVU19GQUlMVVJFEAMSGAoUQ09NTUFORF9TVEFUVVNfRkFUQUwQBDLVAQoNUGx1Z2luU2VydmljZRJeCgtIYW5kbGVFdmVudBImLmhvbG9tdXNoLnBsdWdpbi52MS5IYW5kbGVFdmVudFJlcXVlc3QaJy5ob2xvbXVzaC5wbHVnaW4udjEuSGFuZGxlRXZlbnRSZXNwb25zZRJkCg1IYW5kbGVDb21tYW5kEiguaG9sb211c2gucGx1Z2luLnYxLkhhbmRsZUNvbW1hbmRSZXF1ZXN0GikuaG9sb211c2gucGx1Z2luLnYxLkhhbmRsZUNvbW1hbmRSZXNwb25zZTKOCAoRUGx1Z2luSG9zdFNlcnZpY2UShgEKDVF1ZXJ5TG9jYXRpb24SOS5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VRdWVyeUxvY2F0aW9uUmVxdWVzdBo6LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZVF1ZXJ5TG9jYXRpb25SZXNwb25zZRKJAQoOUXVlcnlDaGFyYWN0ZXISOi5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VRdWVyeUNoYXJhY3RlclJlcXVlc3QaOy5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VRdWVyeUNoYXJhY3RlclJlc3BvbnNlEqQBChdRdWVyeUxvY2F0aW9uQ2hhcmFjdGVycxJDLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZVF1ZXJ5TG9jYXRpb25DaGFyYWN0ZXJzUmVxdWVzdBpELmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZVF1ZXJ5TG9jYXRpb25DaGFyYWN0ZXJzUmVzcG9uc2USegoJRW1pdEV2ZW50EjUuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlRW1pdEV2ZW50UmVxdWVzdBo2LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUVtaXRFdmVudFJlc3BvbnNlEmgKA0xvZxIvLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUxvZ1JlcXVlc3QaMC5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VMb2dSZXNwb25zZRJuCgVLVkdldBIxLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUtWR2V0UmVxdWVzdBoyLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUtWR2V0UmVzcG9uc2USbgoFS1ZTZXQSMS5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VLVlNldFJlcXVlc3QaMi5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VLVlNldFJlc3BvbnNlEncKCEtWRGVsZXRlEjQuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlS1ZEZWxldGVSZXF1ZXN0GjUuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlS1ZEZWxldGVSZXNwb25zZUJEWkJnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC9wbHVnaW4vdjE7cGx1Z2ludjFiBnByb3RvMw");
 
 /**
  * Event represents a game event delivered to plugins.
@@ -308,11 +308,11 @@ export const HandleCommandResponseSchema: GenMessage<HandleCommandResponse> = /*
   messageDesc(file_holomush_plugin_v1_plugin, 7);
 
 /**
- * LocationInfo contains basic location information.
+ * PluginHostServiceLocationInfo contains basic location information.
  *
- * @generated from message holomush.plugin.v1.LocationInfo
+ * @generated from message holomush.plugin.v1.PluginHostServiceLocationInfo
  */
-export type LocationInfo = Message<"holomush.plugin.v1.LocationInfo"> & {
+export type PluginHostServiceLocationInfo = Message<"holomush.plugin.v1.PluginHostServiceLocationInfo"> & {
   /**
    * @generated from field: string id = 1;
    */
@@ -340,18 +340,18 @@ export type LocationInfo = Message<"holomush.plugin.v1.LocationInfo"> & {
 };
 
 /**
- * Describes the message holomush.plugin.v1.LocationInfo.
- * Use `create(LocationInfoSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceLocationInfo.
+ * Use `create(PluginHostServiceLocationInfoSchema)` to create a new message.
  */
-export const LocationInfoSchema: GenMessage<LocationInfo> = /*@__PURE__*/
+export const PluginHostServiceLocationInfoSchema: GenMessage<PluginHostServiceLocationInfo> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 8);
 
 /**
- * HostCharacterInfo contains basic character information for host service responses.
+ * PluginHostServiceCharacterInfo contains basic character information.
  *
- * @generated from message holomush.plugin.v1.HostCharacterInfo
+ * @generated from message holomush.plugin.v1.PluginHostServiceCharacterInfo
  */
-export type HostCharacterInfo = Message<"holomush.plugin.v1.HostCharacterInfo"> & {
+export type PluginHostServiceCharacterInfo = Message<"holomush.plugin.v1.PluginHostServiceCharacterInfo"> & {
   /**
    * @generated from field: string id = 1;
    */
@@ -379,18 +379,16 @@ export type HostCharacterInfo = Message<"holomush.plugin.v1.HostCharacterInfo"> 
 };
 
 /**
- * Describes the message holomush.plugin.v1.HostCharacterInfo.
- * Use `create(HostCharacterInfoSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceCharacterInfo.
+ * Use `create(PluginHostServiceCharacterInfoSchema)` to create a new message.
  */
-export const HostCharacterInfoSchema: GenMessage<HostCharacterInfo> = /*@__PURE__*/
+export const PluginHostServiceCharacterInfoSchema: GenMessage<PluginHostServiceCharacterInfo> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 9);
 
 /**
- * QueryLocationRequest requests information about a location.
- *
- * @generated from message holomush.plugin.v1.QueryLocationRequest
+ * @generated from message holomush.plugin.v1.PluginHostServiceQueryLocationRequest
  */
-export type QueryLocationRequest = Message<"holomush.plugin.v1.QueryLocationRequest"> & {
+export type PluginHostServiceQueryLocationRequest = Message<"holomush.plugin.v1.PluginHostServiceQueryLocationRequest"> & {
   /**
    * @generated from field: string subject_id = 1;
    */
@@ -403,37 +401,33 @@ export type QueryLocationRequest = Message<"holomush.plugin.v1.QueryLocationRequ
 };
 
 /**
- * Describes the message holomush.plugin.v1.QueryLocationRequest.
- * Use `create(QueryLocationRequestSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceQueryLocationRequest.
+ * Use `create(PluginHostServiceQueryLocationRequestSchema)` to create a new message.
  */
-export const QueryLocationRequestSchema: GenMessage<QueryLocationRequest> = /*@__PURE__*/
+export const PluginHostServiceQueryLocationRequestSchema: GenMessage<PluginHostServiceQueryLocationRequest> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 10);
 
 /**
- * QueryLocationResponse contains location information.
- *
- * @generated from message holomush.plugin.v1.QueryLocationResponse
+ * @generated from message holomush.plugin.v1.PluginHostServiceQueryLocationResponse
  */
-export type QueryLocationResponse = Message<"holomush.plugin.v1.QueryLocationResponse"> & {
+export type PluginHostServiceQueryLocationResponse = Message<"holomush.plugin.v1.PluginHostServiceQueryLocationResponse"> & {
   /**
-   * @generated from field: holomush.plugin.v1.LocationInfo location = 1;
+   * @generated from field: holomush.plugin.v1.PluginHostServiceLocationInfo location = 1;
    */
-  location?: LocationInfo;
+  location?: PluginHostServiceLocationInfo;
 };
 
 /**
- * Describes the message holomush.plugin.v1.QueryLocationResponse.
- * Use `create(QueryLocationResponseSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceQueryLocationResponse.
+ * Use `create(PluginHostServiceQueryLocationResponseSchema)` to create a new message.
  */
-export const QueryLocationResponseSchema: GenMessage<QueryLocationResponse> = /*@__PURE__*/
+export const PluginHostServiceQueryLocationResponseSchema: GenMessage<PluginHostServiceQueryLocationResponse> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 11);
 
 /**
- * HostQueryCharacterRequest requests information about a character.
- *
- * @generated from message holomush.plugin.v1.HostQueryCharacterRequest
+ * @generated from message holomush.plugin.v1.PluginHostServiceQueryCharacterRequest
  */
-export type HostQueryCharacterRequest = Message<"holomush.plugin.v1.HostQueryCharacterRequest"> & {
+export type PluginHostServiceQueryCharacterRequest = Message<"holomush.plugin.v1.PluginHostServiceQueryCharacterRequest"> & {
   /**
    * @generated from field: string subject_id = 1;
    */
@@ -446,37 +440,33 @@ export type HostQueryCharacterRequest = Message<"holomush.plugin.v1.HostQueryCha
 };
 
 /**
- * Describes the message holomush.plugin.v1.HostQueryCharacterRequest.
- * Use `create(HostQueryCharacterRequestSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceQueryCharacterRequest.
+ * Use `create(PluginHostServiceQueryCharacterRequestSchema)` to create a new message.
  */
-export const HostQueryCharacterRequestSchema: GenMessage<HostQueryCharacterRequest> = /*@__PURE__*/
+export const PluginHostServiceQueryCharacterRequestSchema: GenMessage<PluginHostServiceQueryCharacterRequest> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 12);
 
 /**
- * HostQueryCharacterResponse contains character information.
- *
- * @generated from message holomush.plugin.v1.HostQueryCharacterResponse
+ * @generated from message holomush.plugin.v1.PluginHostServiceQueryCharacterResponse
  */
-export type HostQueryCharacterResponse = Message<"holomush.plugin.v1.HostQueryCharacterResponse"> & {
+export type PluginHostServiceQueryCharacterResponse = Message<"holomush.plugin.v1.PluginHostServiceQueryCharacterResponse"> & {
   /**
-   * @generated from field: holomush.plugin.v1.HostCharacterInfo character = 1;
+   * @generated from field: holomush.plugin.v1.PluginHostServiceCharacterInfo character = 1;
    */
-  character?: HostCharacterInfo;
+  character?: PluginHostServiceCharacterInfo;
 };
 
 /**
- * Describes the message holomush.plugin.v1.HostQueryCharacterResponse.
- * Use `create(HostQueryCharacterResponseSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceQueryCharacterResponse.
+ * Use `create(PluginHostServiceQueryCharacterResponseSchema)` to create a new message.
  */
-export const HostQueryCharacterResponseSchema: GenMessage<HostQueryCharacterResponse> = /*@__PURE__*/
+export const PluginHostServiceQueryCharacterResponseSchema: GenMessage<PluginHostServiceQueryCharacterResponse> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 13);
 
 /**
- * HostQueryLocationCharactersRequest requests all characters at a location.
- *
- * @generated from message holomush.plugin.v1.HostQueryLocationCharactersRequest
+ * @generated from message holomush.plugin.v1.PluginHostServiceQueryLocationCharactersRequest
  */
-export type HostQueryLocationCharactersRequest = Message<"holomush.plugin.v1.HostQueryLocationCharactersRequest"> & {
+export type PluginHostServiceQueryLocationCharactersRequest = Message<"holomush.plugin.v1.PluginHostServiceQueryLocationCharactersRequest"> & {
   /**
    * @generated from field: string subject_id = 1;
    */
@@ -489,37 +479,33 @@ export type HostQueryLocationCharactersRequest = Message<"holomush.plugin.v1.Hos
 };
 
 /**
- * Describes the message holomush.plugin.v1.HostQueryLocationCharactersRequest.
- * Use `create(HostQueryLocationCharactersRequestSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceQueryLocationCharactersRequest.
+ * Use `create(PluginHostServiceQueryLocationCharactersRequestSchema)` to create a new message.
  */
-export const HostQueryLocationCharactersRequestSchema: GenMessage<HostQueryLocationCharactersRequest> = /*@__PURE__*/
+export const PluginHostServiceQueryLocationCharactersRequestSchema: GenMessage<PluginHostServiceQueryLocationCharactersRequest> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 14);
 
 /**
- * HostQueryLocationCharactersResponse contains the list of characters.
- *
- * @generated from message holomush.plugin.v1.HostQueryLocationCharactersResponse
+ * @generated from message holomush.plugin.v1.PluginHostServiceQueryLocationCharactersResponse
  */
-export type HostQueryLocationCharactersResponse = Message<"holomush.plugin.v1.HostQueryLocationCharactersResponse"> & {
+export type PluginHostServiceQueryLocationCharactersResponse = Message<"holomush.plugin.v1.PluginHostServiceQueryLocationCharactersResponse"> & {
   /**
-   * @generated from field: repeated holomush.plugin.v1.HostCharacterInfo characters = 1;
+   * @generated from field: repeated holomush.plugin.v1.PluginHostServiceCharacterInfo characters = 1;
    */
-  characters: HostCharacterInfo[];
+  characters: PluginHostServiceCharacterInfo[];
 };
 
 /**
- * Describes the message holomush.plugin.v1.HostQueryLocationCharactersResponse.
- * Use `create(HostQueryLocationCharactersResponseSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceQueryLocationCharactersResponse.
+ * Use `create(PluginHostServiceQueryLocationCharactersResponseSchema)` to create a new message.
  */
-export const HostQueryLocationCharactersResponseSchema: GenMessage<HostQueryLocationCharactersResponse> = /*@__PURE__*/
+export const PluginHostServiceQueryLocationCharactersResponseSchema: GenMessage<PluginHostServiceQueryLocationCharactersResponse> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 15);
 
 /**
- * HostEmitEventRequest wraps an event for emission by the host.
- *
- * @generated from message holomush.plugin.v1.HostEmitEventRequest
+ * @generated from message holomush.plugin.v1.PluginHostServiceEmitEventRequest
  */
-export type HostEmitEventRequest = Message<"holomush.plugin.v1.HostEmitEventRequest"> & {
+export type PluginHostServiceEmitEventRequest = Message<"holomush.plugin.v1.PluginHostServiceEmitEventRequest"> & {
   /**
    * @generated from field: string stream = 1;
    */
@@ -537,33 +523,29 @@ export type HostEmitEventRequest = Message<"holomush.plugin.v1.HostEmitEventRequ
 };
 
 /**
- * Describes the message holomush.plugin.v1.HostEmitEventRequest.
- * Use `create(HostEmitEventRequestSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceEmitEventRequest.
+ * Use `create(PluginHostServiceEmitEventRequestSchema)` to create a new message.
  */
-export const HostEmitEventRequestSchema: GenMessage<HostEmitEventRequest> = /*@__PURE__*/
+export const PluginHostServiceEmitEventRequestSchema: GenMessage<PluginHostServiceEmitEventRequest> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 16);
 
 /**
- * HostEmitEventResponse indicates success.
- *
- * @generated from message holomush.plugin.v1.HostEmitEventResponse
+ * @generated from message holomush.plugin.v1.PluginHostServiceEmitEventResponse
  */
-export type HostEmitEventResponse = Message<"holomush.plugin.v1.HostEmitEventResponse"> & {
+export type PluginHostServiceEmitEventResponse = Message<"holomush.plugin.v1.PluginHostServiceEmitEventResponse"> & {
 };
 
 /**
- * Describes the message holomush.plugin.v1.HostEmitEventResponse.
- * Use `create(HostEmitEventResponseSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceEmitEventResponse.
+ * Use `create(PluginHostServiceEmitEventResponseSchema)` to create a new message.
  */
-export const HostEmitEventResponseSchema: GenMessage<HostEmitEventResponse> = /*@__PURE__*/
+export const PluginHostServiceEmitEventResponseSchema: GenMessage<PluginHostServiceEmitEventResponse> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 17);
 
 /**
- * HostLogRequest writes a log message through the host.
- *
- * @generated from message holomush.plugin.v1.HostLogRequest
+ * @generated from message holomush.plugin.v1.PluginHostServiceLogRequest
  */
-export type HostLogRequest = Message<"holomush.plugin.v1.HostLogRequest"> & {
+export type PluginHostServiceLogRequest = Message<"holomush.plugin.v1.PluginHostServiceLogRequest"> & {
   /**
    * @generated from field: string level = 1;
    */
@@ -576,33 +558,29 @@ export type HostLogRequest = Message<"holomush.plugin.v1.HostLogRequest"> & {
 };
 
 /**
- * Describes the message holomush.plugin.v1.HostLogRequest.
- * Use `create(HostLogRequestSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceLogRequest.
+ * Use `create(PluginHostServiceLogRequestSchema)` to create a new message.
  */
-export const HostLogRequestSchema: GenMessage<HostLogRequest> = /*@__PURE__*/
+export const PluginHostServiceLogRequestSchema: GenMessage<PluginHostServiceLogRequest> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 18);
 
 /**
- * HostLogResponse is empty (logging is fire-and-forget).
- *
- * @generated from message holomush.plugin.v1.HostLogResponse
+ * @generated from message holomush.plugin.v1.PluginHostServiceLogResponse
  */
-export type HostLogResponse = Message<"holomush.plugin.v1.HostLogResponse"> & {
+export type PluginHostServiceLogResponse = Message<"holomush.plugin.v1.PluginHostServiceLogResponse"> & {
 };
 
 /**
- * Describes the message holomush.plugin.v1.HostLogResponse.
- * Use `create(HostLogResponseSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceLogResponse.
+ * Use `create(PluginHostServiceLogResponseSchema)` to create a new message.
  */
-export const HostLogResponseSchema: GenMessage<HostLogResponse> = /*@__PURE__*/
+export const PluginHostServiceLogResponseSchema: GenMessage<PluginHostServiceLogResponse> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 19);
 
 /**
- * HostKVGetRequest retrieves a value by key.
- *
- * @generated from message holomush.plugin.v1.HostKVGetRequest
+ * @generated from message holomush.plugin.v1.PluginHostServiceKVGetRequest
  */
-export type HostKVGetRequest = Message<"holomush.plugin.v1.HostKVGetRequest"> & {
+export type PluginHostServiceKVGetRequest = Message<"holomush.plugin.v1.PluginHostServiceKVGetRequest"> & {
   /**
    * @generated from field: string plugin_name = 1;
    */
@@ -615,18 +593,16 @@ export type HostKVGetRequest = Message<"holomush.plugin.v1.HostKVGetRequest"> & 
 };
 
 /**
- * Describes the message holomush.plugin.v1.HostKVGetRequest.
- * Use `create(HostKVGetRequestSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceKVGetRequest.
+ * Use `create(PluginHostServiceKVGetRequestSchema)` to create a new message.
  */
-export const HostKVGetRequestSchema: GenMessage<HostKVGetRequest> = /*@__PURE__*/
+export const PluginHostServiceKVGetRequestSchema: GenMessage<PluginHostServiceKVGetRequest> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 20);
 
 /**
- * HostKVGetResponse contains the retrieved value.
- *
- * @generated from message holomush.plugin.v1.HostKVGetResponse
+ * @generated from message holomush.plugin.v1.PluginHostServiceKVGetResponse
  */
-export type HostKVGetResponse = Message<"holomush.plugin.v1.HostKVGetResponse"> & {
+export type PluginHostServiceKVGetResponse = Message<"holomush.plugin.v1.PluginHostServiceKVGetResponse"> & {
   /**
    * @generated from field: string value = 1;
    */
@@ -639,18 +615,16 @@ export type HostKVGetResponse = Message<"holomush.plugin.v1.HostKVGetResponse"> 
 };
 
 /**
- * Describes the message holomush.plugin.v1.HostKVGetResponse.
- * Use `create(HostKVGetResponseSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceKVGetResponse.
+ * Use `create(PluginHostServiceKVGetResponseSchema)` to create a new message.
  */
-export const HostKVGetResponseSchema: GenMessage<HostKVGetResponse> = /*@__PURE__*/
+export const PluginHostServiceKVGetResponseSchema: GenMessage<PluginHostServiceKVGetResponse> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 21);
 
 /**
- * HostKVSetRequest stores a key-value pair.
- *
- * @generated from message holomush.plugin.v1.HostKVSetRequest
+ * @generated from message holomush.plugin.v1.PluginHostServiceKVSetRequest
  */
-export type HostKVSetRequest = Message<"holomush.plugin.v1.HostKVSetRequest"> & {
+export type PluginHostServiceKVSetRequest = Message<"holomush.plugin.v1.PluginHostServiceKVSetRequest"> & {
   /**
    * @generated from field: string plugin_name = 1;
    */
@@ -668,33 +642,29 @@ export type HostKVSetRequest = Message<"holomush.plugin.v1.HostKVSetRequest"> & 
 };
 
 /**
- * Describes the message holomush.plugin.v1.HostKVSetRequest.
- * Use `create(HostKVSetRequestSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceKVSetRequest.
+ * Use `create(PluginHostServiceKVSetRequestSchema)` to create a new message.
  */
-export const HostKVSetRequestSchema: GenMessage<HostKVSetRequest> = /*@__PURE__*/
+export const PluginHostServiceKVSetRequestSchema: GenMessage<PluginHostServiceKVSetRequest> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 22);
 
 /**
- * HostKVSetResponse indicates success.
- *
- * @generated from message holomush.plugin.v1.HostKVSetResponse
+ * @generated from message holomush.plugin.v1.PluginHostServiceKVSetResponse
  */
-export type HostKVSetResponse = Message<"holomush.plugin.v1.HostKVSetResponse"> & {
+export type PluginHostServiceKVSetResponse = Message<"holomush.plugin.v1.PluginHostServiceKVSetResponse"> & {
 };
 
 /**
- * Describes the message holomush.plugin.v1.HostKVSetResponse.
- * Use `create(HostKVSetResponseSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceKVSetResponse.
+ * Use `create(PluginHostServiceKVSetResponseSchema)` to create a new message.
  */
-export const HostKVSetResponseSchema: GenMessage<HostKVSetResponse> = /*@__PURE__*/
+export const PluginHostServiceKVSetResponseSchema: GenMessage<PluginHostServiceKVSetResponse> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 23);
 
 /**
- * HostKVDeleteRequest removes a key.
- *
- * @generated from message holomush.plugin.v1.HostKVDeleteRequest
+ * @generated from message holomush.plugin.v1.PluginHostServiceKVDeleteRequest
  */
-export type HostKVDeleteRequest = Message<"holomush.plugin.v1.HostKVDeleteRequest"> & {
+export type PluginHostServiceKVDeleteRequest = Message<"holomush.plugin.v1.PluginHostServiceKVDeleteRequest"> & {
   /**
    * @generated from field: string plugin_name = 1;
    */
@@ -707,25 +677,23 @@ export type HostKVDeleteRequest = Message<"holomush.plugin.v1.HostKVDeleteReques
 };
 
 /**
- * Describes the message holomush.plugin.v1.HostKVDeleteRequest.
- * Use `create(HostKVDeleteRequestSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceKVDeleteRequest.
+ * Use `create(PluginHostServiceKVDeleteRequestSchema)` to create a new message.
  */
-export const HostKVDeleteRequestSchema: GenMessage<HostKVDeleteRequest> = /*@__PURE__*/
+export const PluginHostServiceKVDeleteRequestSchema: GenMessage<PluginHostServiceKVDeleteRequest> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 24);
 
 /**
- * HostKVDeleteResponse indicates success.
- *
- * @generated from message holomush.plugin.v1.HostKVDeleteResponse
+ * @generated from message holomush.plugin.v1.PluginHostServiceKVDeleteResponse
  */
-export type HostKVDeleteResponse = Message<"holomush.plugin.v1.HostKVDeleteResponse"> & {
+export type PluginHostServiceKVDeleteResponse = Message<"holomush.plugin.v1.PluginHostServiceKVDeleteResponse"> & {
 };
 
 /**
- * Describes the message holomush.plugin.v1.HostKVDeleteResponse.
- * Use `create(HostKVDeleteResponseSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.PluginHostServiceKVDeleteResponse.
+ * Use `create(PluginHostServiceKVDeleteResponseSchema)` to create a new message.
  */
-export const HostKVDeleteResponseSchema: GenMessage<HostKVDeleteResponse> = /*@__PURE__*/
+export const PluginHostServiceKVDeleteResponseSchema: GenMessage<PluginHostServiceKVDeleteResponse> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 25);
 
 /**
@@ -735,24 +703,29 @@ export const HostKVDeleteResponseSchema: GenMessage<HostKVDeleteResponse> = /*@_
  */
 export enum CommandStatus {
   /**
-   * @generated from enum value: COMMAND_STATUS_OK = 0;
+   * @generated from enum value: COMMAND_STATUS_UNSPECIFIED = 0;
    */
-  OK = 0,
+  UNSPECIFIED = 0,
 
   /**
-   * @generated from enum value: COMMAND_STATUS_ERROR = 1;
+   * @generated from enum value: COMMAND_STATUS_OK = 1;
    */
-  ERROR = 1,
+  OK = 1,
 
   /**
-   * @generated from enum value: COMMAND_STATUS_FAILURE = 2;
+   * @generated from enum value: COMMAND_STATUS_ERROR = 2;
    */
-  FAILURE = 2,
+  ERROR = 2,
 
   /**
-   * @generated from enum value: COMMAND_STATUS_FATAL = 3;
+   * @generated from enum value: COMMAND_STATUS_FAILURE = 3;
    */
-  FATAL = 3,
+  FAILURE = 3,
+
+  /**
+   * @generated from enum value: COMMAND_STATUS_FATAL = 4;
+   */
+  FATAL = 4,
 }
 
 /**
@@ -805,8 +778,8 @@ export const PluginHostService: GenService<{
    */
   queryLocation: {
     methodKind: "unary";
-    input: typeof QueryLocationRequestSchema;
-    output: typeof QueryLocationResponseSchema;
+    input: typeof PluginHostServiceQueryLocationRequestSchema;
+    output: typeof PluginHostServiceQueryLocationResponseSchema;
   },
   /**
    * QueryCharacter retrieves a character by ID.
@@ -815,8 +788,8 @@ export const PluginHostService: GenService<{
    */
   queryCharacter: {
     methodKind: "unary";
-    input: typeof HostQueryCharacterRequestSchema;
-    output: typeof HostQueryCharacterResponseSchema;
+    input: typeof PluginHostServiceQueryCharacterRequestSchema;
+    output: typeof PluginHostServiceQueryCharacterResponseSchema;
   },
   /**
    * QueryLocationCharacters returns all characters present at a location.
@@ -825,8 +798,8 @@ export const PluginHostService: GenService<{
    */
   queryLocationCharacters: {
     methodKind: "unary";
-    input: typeof HostQueryLocationCharactersRequestSchema;
-    output: typeof HostQueryLocationCharactersResponseSchema;
+    input: typeof PluginHostServiceQueryLocationCharactersRequestSchema;
+    output: typeof PluginHostServiceQueryLocationCharactersResponseSchema;
   },
   /**
    * EmitEvent publishes an event to a stream.
@@ -835,8 +808,8 @@ export const PluginHostService: GenService<{
    */
   emitEvent: {
     methodKind: "unary";
-    input: typeof HostEmitEventRequestSchema;
-    output: typeof HostEmitEventResponseSchema;
+    input: typeof PluginHostServiceEmitEventRequestSchema;
+    output: typeof PluginHostServiceEmitEventResponseSchema;
   },
   /**
    * Log writes a log message through the host's logging system.
@@ -845,8 +818,8 @@ export const PluginHostService: GenService<{
    */
   log: {
     methodKind: "unary";
-    input: typeof HostLogRequestSchema;
-    output: typeof HostLogResponseSchema;
+    input: typeof PluginHostServiceLogRequestSchema;
+    output: typeof PluginHostServiceLogResponseSchema;
   },
   /**
    * KVGet retrieves a value from the plugin's key-value store.
@@ -855,8 +828,8 @@ export const PluginHostService: GenService<{
    */
   kVGet: {
     methodKind: "unary";
-    input: typeof HostKVGetRequestSchema;
-    output: typeof HostKVGetResponseSchema;
+    input: typeof PluginHostServiceKVGetRequestSchema;
+    output: typeof PluginHostServiceKVGetResponseSchema;
   },
   /**
    * KVSet stores a value in the plugin's key-value store.
@@ -865,8 +838,8 @@ export const PluginHostService: GenService<{
    */
   kVSet: {
     methodKind: "unary";
-    input: typeof HostKVSetRequestSchema;
-    output: typeof HostKVSetResponseSchema;
+    input: typeof PluginHostServiceKVSetRequestSchema;
+    output: typeof PluginHostServiceKVSetResponseSchema;
   },
   /**
    * KVDelete removes a value from the plugin's key-value store.
@@ -875,8 +848,8 @@ export const PluginHostService: GenService<{
    */
   kVDelete: {
     methodKind: "unary";
-    input: typeof HostKVDeleteRequestSchema;
-    output: typeof HostKVDeleteResponseSchema;
+    input: typeof PluginHostServiceKVDeleteRequestSchema;
+    output: typeof PluginHostServiceKVDeleteResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_holomush_plugin_v1_plugin, 1);

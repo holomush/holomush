@@ -656,7 +656,7 @@ function on_command(ctx)
         {
             stream = "location:" .. ctx.location_id,
             type = "echo",
-            payload = ctx.name .. "|" .. ctx.args .. "|" .. ctx.invoked_as .. "|" ..
+            payload = ctx.command .. "|" .. ctx.args .. "|" .. ctx.invoked_as .. "|" ..
                       ctx.character_name .. "|" .. ctx.character_id .. "|" ..
                       ctx.location_id .. "|" .. ctx.player_id
         }
@@ -853,7 +853,7 @@ function on_command(ctx)
         {
             stream = "test:1",
             type = "echo",
-            payload = "name=" .. (ctx.name or "nil")
+            payload = "name=" .. (ctx.command or "nil")
         }
     }
 end
@@ -882,7 +882,7 @@ end
 	emits, err := host.DeliverEvent(context.Background(), "invalid-payload-test", event)
 	require.NoError(t, err)
 	require.Len(t, emits, 1)
-	// With invalid JSON, ctx.name should be empty string
+	// With invalid JSON, ctx.command should be empty string
 	assert.Equal(t, "name=", emits[0].Payload)
 }
 

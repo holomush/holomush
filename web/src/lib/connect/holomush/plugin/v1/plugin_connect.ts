@@ -8,7 +8,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, HostEmitEventRequest, HostEmitEventResponse, HostKVDeleteRequest, HostKVDeleteResponse, HostKVGetRequest, HostKVGetResponse, HostKVSetRequest, HostKVSetResponse, HostLogRequest, HostLogResponse, HostQueryCharacterRequest, HostQueryCharacterResponse, HostQueryLocationCharactersRequest, HostQueryLocationCharactersResponse, QueryLocationRequest, QueryLocationResponse } from "./plugin_pb.js";
+import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServiceQueryCharacterRequest, PluginHostServiceQueryCharacterResponse, PluginHostServiceQueryLocationCharactersRequest, PluginHostServiceQueryLocationCharactersResponse, PluginHostServiceQueryLocationRequest, PluginHostServiceQueryLocationResponse } from "./plugin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -61,8 +61,8 @@ export const PluginHostService = {
      */
     queryLocation: {
       name: "QueryLocation",
-      I: QueryLocationRequest,
-      O: QueryLocationResponse,
+      I: PluginHostServiceQueryLocationRequest,
+      O: PluginHostServiceQueryLocationResponse,
       kind: MethodKind.Unary,
     },
     /**
@@ -72,8 +72,8 @@ export const PluginHostService = {
      */
     queryCharacter: {
       name: "QueryCharacter",
-      I: HostQueryCharacterRequest,
-      O: HostQueryCharacterResponse,
+      I: PluginHostServiceQueryCharacterRequest,
+      O: PluginHostServiceQueryCharacterResponse,
       kind: MethodKind.Unary,
     },
     /**
@@ -83,8 +83,8 @@ export const PluginHostService = {
      */
     queryLocationCharacters: {
       name: "QueryLocationCharacters",
-      I: HostQueryLocationCharactersRequest,
-      O: HostQueryLocationCharactersResponse,
+      I: PluginHostServiceQueryLocationCharactersRequest,
+      O: PluginHostServiceQueryLocationCharactersResponse,
       kind: MethodKind.Unary,
     },
     /**
@@ -94,8 +94,8 @@ export const PluginHostService = {
      */
     emitEvent: {
       name: "EmitEvent",
-      I: HostEmitEventRequest,
-      O: HostEmitEventResponse,
+      I: PluginHostServiceEmitEventRequest,
+      O: PluginHostServiceEmitEventResponse,
       kind: MethodKind.Unary,
     },
     /**
@@ -105,8 +105,8 @@ export const PluginHostService = {
      */
     log: {
       name: "Log",
-      I: HostLogRequest,
-      O: HostLogResponse,
+      I: PluginHostServiceLogRequest,
+      O: PluginHostServiceLogResponse,
       kind: MethodKind.Unary,
     },
     /**
@@ -116,8 +116,8 @@ export const PluginHostService = {
      */
     kVGet: {
       name: "KVGet",
-      I: HostKVGetRequest,
-      O: HostKVGetResponse,
+      I: PluginHostServiceKVGetRequest,
+      O: PluginHostServiceKVGetResponse,
       kind: MethodKind.Unary,
     },
     /**
@@ -127,8 +127,8 @@ export const PluginHostService = {
      */
     kVSet: {
       name: "KVSet",
-      I: HostKVSetRequest,
-      O: HostKVSetResponse,
+      I: PluginHostServiceKVSetRequest,
+      O: PluginHostServiceKVSetResponse,
       kind: MethodKind.Unary,
     },
     /**
@@ -138,8 +138,8 @@ export const PluginHostService = {
      */
     kVDelete: {
       name: "KVDelete",
-      I: HostKVDeleteRequest,
-      O: HostKVDeleteResponse,
+      I: PluginHostServiceKVDeleteRequest,
+      O: PluginHostServiceKVDeleteResponse,
       kind: MethodKind.Unary,
     },
   }

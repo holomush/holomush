@@ -301,7 +301,7 @@ func (h *Host) callOnCommand(state *lua.LState, name string, event pluginsdk.Eve
 // buildContextTable creates a Lua table from a CommandContext.
 func (h *Host) buildContextTable(state *lua.LState, ctx holo.CommandContext) *lua.LTable {
 	t := state.NewTable()
-	state.SetField(t, "name", lua.LString(ctx.Name))
+	state.SetField(t, "command", lua.LString(ctx.Name))
 	state.SetField(t, "args", lua.LString(ctx.Args))
 	state.SetField(t, "invoked_as", lua.LString(ctx.InvokedAs))
 	state.SetField(t, "character_name", lua.LString(ctx.CharacterName))
@@ -379,6 +379,7 @@ func (h *Host) parseEmitEvents(ret lua.LValue) (emits []pluginsdk.EmitEvent, val
 func (h *Host) buildCommandRequestTable(state *lua.LState, cmd pluginsdk.CommandRequest) *lua.LTable {
 	t := state.NewTable()
 	state.SetField(t, "command", lua.LString(cmd.Command))
+	state.SetField(t, "name", lua.LString(cmd.Command)) // alias for parity with event-path on_command(ctx)
 	state.SetField(t, "args", lua.LString(cmd.Args))
 	state.SetField(t, "character_id", lua.LString(cmd.CharacterID))
 	state.SetField(t, "character_name", lua.LString(cmd.CharacterName))
@@ -401,7 +402,11 @@ func (h *Host) parseCommandResponse(ret lua.LValue, pluginName string) *pluginsd
 		resp := &pluginsdk.CommandResponse{}
 
 		if statusVal := v.RawGetString("status"); statusVal.Type() == lua.LTNumber {
-			resp.Status = pluginsdk.CommandStatus(int(lua.LVAsNumber(statusVal)))
+			s := pluginsdk.CommandStatus(int(lua.LVAsNumber(statusVal)))
+			if s < pluginsdk.CommandOK || s > pluginsdk.CommandFatal {
+				s = pluginsdk.CommandOK
+			}
+			resp.Status = s
 		}
 
 		if outputVal := v.RawGetString("output"); outputVal.Type() == lua.LTString {
