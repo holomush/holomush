@@ -425,8 +425,16 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			return oops.Code("HOST_MW_FAILED").Wrap(hostMWErr)
 		}
 
+		// Wrap Lua host with OTel instrumentation (same as core host).
+		instrumentedLuaHost, luaMWErr := plugins.NewHostMiddleware(
+			luaHost, otel.GetTracerProvider(), otel.GetMeterProvider(),
+		)
+		if luaMWErr != nil {
+			return oops.Code("LUA_HOST_MW_FAILED").Wrap(luaMWErr)
+		}
+
 		pluginManager = plugins.NewManager(pluginsDir,
-			plugins.WithLuaHost(luaHost),
+			plugins.WithLuaHost(instrumentedLuaHost),
 			plugins.WithPolicyInstaller(abacStack.PolicyInstaller),
 		)
 		pluginManager.RegisterHost(plugins.TypeCore, instrumentedHost)

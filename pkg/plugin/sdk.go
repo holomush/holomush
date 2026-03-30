@@ -157,7 +157,7 @@ func (a *pluginServerAdapter) HandleEvent(ctx context.Context, req *pluginv1.Han
 // HandleCommand implements pluginv1.PluginServiceServer.
 func (a *pluginServerAdapter) HandleCommand(ctx context.Context, req *pluginv1.HandleCommandRequest) (*pluginv1.HandleCommandResponse, error) {
 	if a.cmdHandler == nil {
-		return nil, errors.New("plugin: command handler not implemented")
+		return &pluginv1.HandleCommandResponse{Response: &pluginv1.CommandResponse{}}, nil
 	}
 
 	protoCmd := req.GetCommand()
@@ -168,6 +168,7 @@ func (a *pluginServerAdapter) HandleCommand(ctx context.Context, req *pluginv1.H
 		CharacterName: protoCmd.GetCharacterName(),
 		LocationID:    protoCmd.GetLocationId(),
 		SessionID:     protoCmd.GetSessionId(),
+		PlayerID:      protoCmd.GetPlayerId(),
 		InvokedAs:     protoCmd.GetRawInput(),
 	}
 

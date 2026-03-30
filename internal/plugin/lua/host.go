@@ -384,6 +384,7 @@ func (h *Host) buildCommandRequestTable(state *lua.LState, cmd pluginsdk.Command
 	state.SetField(t, "character_name", lua.LString(cmd.CharacterName))
 	state.SetField(t, "location_id", lua.LString(cmd.LocationID))
 	state.SetField(t, "session_id", lua.LString(cmd.SessionID))
+	state.SetField(t, "player_id", lua.LString(cmd.PlayerID))
 	state.SetField(t, "invoked_as", lua.LString(cmd.InvokedAs))
 	return t
 }

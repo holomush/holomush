@@ -292,6 +292,7 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 			CharacterName: cmd.CharacterName,
 			LocationId:    cmd.LocationID,
 			SessionId:     cmd.SessionID,
+			PlayerId:      cmd.PlayerID,
 		},
 	}
 
