@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -20,6 +21,79 @@ import (
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
+
+// registerTestCommands registers quit/shutdown (compiled-in) plus stub handlers
+// for say, pose, and ooc so that dispatcher and pipeline tests can exercise the
+// full dispatch path. The stub payloads match the format expected by the web
+// translation layer (character_name, message, action fields).
+func registerTestCommands(t *testing.T, reg *command.Registry) {
+	t.Helper()
+	handlers.RegisterAll(reg)
+	mustRegister := func(cfg command.CommandEntryConfig) {
+		t.Helper()
+		entry, err := command.NewCommandEntry(cfg)
+		require.NoError(t, err)
+		require.NoError(t, reg.Register(*entry))
+	}
+	mustRegister(command.CommandEntryConfig{
+		Name:   "say",
+		Source: "test",
+		Handler: func(ctx context.Context, exec *command.CommandExecution) error {
+			payload, _ := json.Marshal(map[string]string{
+				"character_name": exec.CharacterName(),
+				"message":        exec.Args,
+			})
+			event := core.Event{
+				ID:        core.NewULID(),
+				Type:      core.EventTypeSay,
+				Stream:    "location:" + exec.LocationID().String(),
+				Timestamp: time.Now(),
+				Actor:     core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+				Payload:   payload,
+			}
+			return exec.Services().Events().Append(ctx, event)
+		},
+	})
+	mustRegister(command.CommandEntryConfig{
+		Name:   "pose",
+		Source: "test",
+		Handler: func(ctx context.Context, exec *command.CommandExecution) error {
+			payload, _ := json.Marshal(map[string]string{
+				"character_name": exec.CharacterName(),
+				"action":         exec.Args,
+			})
+			event := core.Event{
+				ID:        core.NewULID(),
+				Type:      core.EventTypePose,
+				Stream:    "location:" + exec.LocationID().String(),
+				Timestamp: time.Now(),
+				Actor:     core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+				Payload:   payload,
+			}
+			return exec.Services().Events().Append(ctx, event)
+		},
+	})
+	mustRegister(command.CommandEntryConfig{
+		Name:   "ooc",
+		Source: "test",
+		Handler: func(ctx context.Context, exec *command.CommandExecution) error {
+			payload, _ := json.Marshal(core.OOCPayload{
+				CharacterName: exec.CharacterName(),
+				Message:       exec.Args,
+				Style:         "say",
+			})
+			event := core.Event{
+				ID:        core.NewULID(),
+				Type:      core.EventTypeOOC,
+				Stream:    "location:" + exec.LocationID().String(),
+				Timestamp: time.Now(),
+				Actor:     core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+				Payload:   payload,
+			}
+			return exec.Services().Events().Append(ctx, event)
+		},
+	})
+}
 
 // newDispatcherTestServer creates a CoreServer wired with the unified
 // command dispatcher, using in-memory stores for testing.
@@ -36,7 +110,7 @@ func newDispatcherTestServerWithAliases(t *testing.T, store core.EventStore, opt
 	sessStore := session.NewMemStore()
 
 	reg := command.NewRegistry()
-	handlers.RegisterAll(reg)
+	registerTestCommands(t, reg)
 
 	policyEngine := policytest.AllowAllEngine()
 	aliasCache := command.NewAliasCache()
