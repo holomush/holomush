@@ -18,6 +18,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/spf13/cobra"
+	"go.opentelemetry.io/otel"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -406,13 +407,29 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		if proxyErr != nil {
 			return oops.Code("SERVICE_PROXY_FAILED").Wrap(proxyErr)
 		}
-		localHost := plugins.NewLocalPluginHost(serviceProxy)
+		// Wrap service proxy with OTel instrumentation (uses global providers,
+		// which are noop until a real exporter is registered).
+		instrumentedProxy, proxyMWErr := plugins.NewServiceProxyMiddleware(
+			serviceProxy, otel.GetTracerProvider(), otel.GetMeterProvider(),
+		)
+		if proxyMWErr != nil {
+			return oops.Code("SERVICE_PROXY_MW_FAILED").Wrap(proxyMWErr)
+		}
+		localHost := plugins.NewLocalPluginHost(instrumentedProxy)
+
+		// Wrap local host with OTel instrumentation.
+		instrumentedHost, hostMWErr := plugins.NewHostMiddleware(
+			localHost, otel.GetTracerProvider(), otel.GetMeterProvider(),
+		)
+		if hostMWErr != nil {
+			return oops.Code("HOST_MW_FAILED").Wrap(hostMWErr)
+		}
 
 		pluginManager = plugins.NewManager(pluginsDir,
 			plugins.WithLuaHost(luaHost),
 			plugins.WithPolicyInstaller(abacStack.PolicyInstaller),
 		)
-		pluginManager.RegisterHost(plugins.TypeCore, localHost)
+		pluginManager.RegisterHost(plugins.TypeCore, instrumentedHost)
 
 		// Complete circular dependency: set plugin registry
 		abacStack.PluginProvider.SetRegistry(pluginManager)
