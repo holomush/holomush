@@ -1343,7 +1343,7 @@ function on_command(ctx)
     return ctx.command .. "|" .. ctx.args .. "|" ..
            ctx.character_id .. "|" .. ctx.character_name .. "|" ..
            ctx.location_id .. "|" .. ctx.session_id .. "|" ..
-           ctx.invoked_as
+           ctx.player_id .. "|" .. ctx.invoked_as
 end
 `)
 
@@ -1367,11 +1367,12 @@ end
 		CharacterName: "Alice",
 		LocationID:    "01LOC",
 		SessionID:     "01SESS",
+		PlayerID:      "01PLAYER",
 		InvokedAs:     ";",
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
-	assert.Equal(t, "say|Hello!|01CHAR|Alice|01LOC|01SESS|;", resp.Output)
+	assert.Equal(t, "say|Hello!|01CHAR|Alice|01LOC|01SESS|01PLAYER|;", resp.Output)
 }
 
 func TestLuaHost_DeliverCommand_WithHostFunctions(t *testing.T) {
