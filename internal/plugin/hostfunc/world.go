@@ -68,15 +68,15 @@ type WorldQuerier interface {
 	GetObject(ctx context.Context, id ulid.ULID) (*world.Object, error)
 }
 
-// queryRoomFn returns a Lua function that queries room information.
-func (f *Functions) queryRoomFn(pluginName string) lua.LGFunction {
+// queryLocationFn returns a Lua function that queries location information.
+func (f *Functions) queryLocationFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		if f.worldMutator == nil {
-			return f.pushServiceUnavailable(L, "query_room", pluginName)
+			return f.pushServiceUnavailable(L, "query_location", pluginName)
 		}
 
-		roomID := L.CheckString(1)
-		id, ok := parseULID(L, roomID, pluginName, "query_room", "room ID")
+		locationID := L.CheckString(1)
+		id, ok := parseULID(L, locationID, pluginName, "query_location", "location ID")
 		if !ok {
 			return 2
 		}
@@ -85,20 +85,20 @@ func (f *Functions) queryRoomFn(pluginName string) lua.LGFunction {
 			loc, err := adapter.GetLocation(ctx, id)
 			if err != nil {
 				if errors.Is(err, world.ErrNotFound) {
-					slog.Debug("query_room: room not found",
+					slog.Debug("query_location: location not found",
 						"plugin", pluginName,
-						"room_id", roomID)
+						"location_id", locationID)
 				}
-				return pushError(L, sanitizeErrorForPlugin(pluginName, "room", roomID, err))
+				return pushError(L, sanitizeErrorForPlugin(pluginName, "location", locationID, err))
 			}
 
-			room := L.NewTable()
-			L.SetField(room, "id", lua.LString(loc.ID.String()))
-			L.SetField(room, "name", lua.LString(loc.Name))
-			L.SetField(room, "description", lua.LString(loc.Description))
-			L.SetField(room, "type", lua.LString(string(loc.Type)))
+			location := L.NewTable()
+			L.SetField(location, "id", lua.LString(loc.ID.String()))
+			L.SetField(location, "name", lua.LString(loc.Name))
+			L.SetField(location, "description", lua.LString(loc.Description))
+			L.SetField(location, "type", lua.LString(string(loc.Type)))
 
-			return pushSuccess(L, room)
+			return pushSuccess(L, location)
 		})
 	}
 }
@@ -141,19 +141,19 @@ func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 	}
 }
 
-// queryRoomCharactersFn returns a Lua function that queries characters in a room.
-// Lua signature: query_room_characters(room_id, [opts])
+// queryLocationCharactersFn returns a Lua function that queries characters at a location.
+// Lua signature: query_location_characters(location_id, [opts])
 // opts is an optional table with:
 //   - limit: max results (default: 100)
 //   - offset: number of results to skip (default: 0)
-func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
+func (f *Functions) queryLocationCharactersFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		if f.worldMutator == nil {
-			return f.pushServiceUnavailable(L, "query_room_characters", pluginName)
+			return f.pushServiceUnavailable(L, "query_location_characters", pluginName)
 		}
 
-		roomID := L.CheckString(1)
-		id, ok := parseULID(L, roomID, pluginName, "query_room_characters", "room ID")
+		locationID := L.CheckString(1)
+		id, ok := parseULID(L, locationID, pluginName, "query_location_characters", "location ID")
 		if !ok {
 			return 2
 		}
@@ -174,11 +174,11 @@ func (f *Functions) queryRoomCharactersFn(pluginName string) lua.LGFunction {
 			chars, err := adapter.GetCharactersByLocation(ctx, id, opts)
 			if err != nil {
 				if errors.Is(err, world.ErrNotFound) {
-					slog.Debug("query_room_characters: room not found",
+					slog.Debug("query_location_characters: location not found",
 						"plugin", pluginName,
-						"room_id", roomID)
+						"location_id", locationID)
 				}
-				return pushError(L, sanitizeErrorForPlugin(pluginName, "room", roomID, err))
+				return pushError(L, sanitizeErrorForPlugin(pluginName, "location", locationID, err))
 			}
 
 			// Return lightweight list of characters (id, name only).

@@ -85,12 +85,12 @@ func (m *mockWorldQuerier) FindLocationByName(_ context.Context, _, _ string) (*
 // Compile-time interface check.
 var _ hostfunc.WorldMutator = (*mockWorldQuerier)(nil)
 
-func TestQueryRoom(t *testing.T) {
+func TestQueryLocation(t *testing.T) {
 	locID := ulid.Make()
 	loc := &world.Location{
 		ID:          locID,
-		Name:        "Test Room",
-		Description: "A test room for testing",
+		Name:        "Test Location",
+		Description: "A test location for testing",
 		Type:        world.LocationTypePersistent,
 	}
 
@@ -101,25 +101,25 @@ func TestQueryRoom(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`room, err = holomush.query_room("` + locID.String() + `")`)
+	err := L.DoString(`location, err = holomush.query_location("` + locID.String() + `")`)
 	require.NoError(t, err)
 
 	// Check err is nil
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, errVal.Type(), "expected nil error")
 
-	// Check room is a table with expected fields
-	room := L.GetGlobal("room")
-	require.Equal(t, lua.LTTable, room.Type(), "expected table result")
+	// Check location is a table with expected fields
+	luaLoc := L.GetGlobal("location")
+	require.Equal(t, lua.LTTable, luaLoc.Type(), "expected table result")
 
-	tbl := room.(*lua.LTable)
+	tbl := luaLoc.(*lua.LTable)
 	assert.Equal(t, locID.String(), tbl.RawGetString("id").String())
 	assert.Equal(t, loc.Name, tbl.RawGetString("name").String())
 	assert.Equal(t, loc.Description, tbl.RawGetString("description").String())
 	assert.Equal(t, string(loc.Type), tbl.RawGetString("type").String())
 }
 
-func TestQueryRoom_InvalidID(t *testing.T) {
+func TestQueryLocation_InvalidID(t *testing.T) {
 	querier := &mockWorldQuerier{}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
@@ -127,17 +127,17 @@ func TestQueryRoom_InvalidID(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`room, err = holomush.query_room("not-a-valid-ulid")`)
+	err := L.DoString(`location, err = holomush.query_location("not-a-valid-ulid")`)
 	require.NoError(t, err)
 
-	room := L.GetGlobal("room")
+	loc := L.GetGlobal("location")
 	errVal := L.GetGlobal("err")
-	assert.Equal(t, lua.LTNil, room.Type(), "expected nil room for invalid ID")
+	assert.Equal(t, lua.LTNil, loc.Type(), "expected nil location for invalid ID")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string")
-	assert.Contains(t, errVal.String(), "invalid room ID")
+	assert.Contains(t, errVal.String(), "invalid location ID")
 }
 
-func TestQueryRoom_NotFound(t *testing.T) {
+func TestQueryLocation_NotFound(t *testing.T) {
 	querier := &mockWorldQuerier{err: world.ErrNotFound}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
@@ -145,17 +145,17 @@ func TestQueryRoom_NotFound(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`room, err = holomush.query_room("` + ulid.Make().String() + `")`)
+	err := L.DoString(`location, err = holomush.query_location("` + ulid.Make().String() + `")`)
 	require.NoError(t, err)
 
-	room := L.GetGlobal("room")
+	loc := L.GetGlobal("location")
 	errVal := L.GetGlobal("err")
-	assert.Equal(t, lua.LTNil, room.Type(), "expected nil room for not found")
+	assert.Equal(t, lua.LTNil, loc.Type(), "expected nil location for not found")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string")
-	assert.Equal(t, "room not found", errVal.String(), "expected sanitized error message")
+	assert.Equal(t, "location not found", errVal.String(), "expected sanitized error message")
 }
 
-func TestQueryRoom_NoQuerierConfigured(t *testing.T) {
+func TestQueryLocation_NoQuerierConfigured(t *testing.T) {
 	// No world querier provided
 	funcs := hostfunc.New(nil)
 
@@ -163,18 +163,18 @@ func TestQueryRoom_NoQuerierConfigured(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`room, err = holomush.query_room("` + ulid.Make().String() + `")`)
+	err := L.DoString(`location, err = holomush.query_location("` + ulid.Make().String() + `")`)
 	require.NoError(t, err)
 
-	room := L.GetGlobal("room")
+	loc := L.GetGlobal("location")
 	errVal := L.GetGlobal("err")
-	assert.Equal(t, lua.LTNil, room.Type(), "expected nil room")
+	assert.Equal(t, lua.LTNil, loc.Type(), "expected nil location")
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string")
 	assert.Contains(t, errVal.String(), "world service not configured - contact server administrator")
 }
 
-func TestQueryRoom_InternalError(t *testing.T) {
-	roomID := ulid.Make()
+func TestQueryLocation_InternalError(t *testing.T) {
+	locationID := ulid.Make()
 	// Internal error should be sanitized - plugin should not see "database error"
 	querier := &mockWorldQuerier{err: errors.New("database error connection timeout with stack trace")}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
@@ -183,12 +183,12 @@ func TestQueryRoom_InternalError(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`room, err = holomush.query_room("` + roomID.String() + `")`)
+	err := L.DoString(`location, err = holomush.query_location("` + locationID.String() + `")`)
 	require.NoError(t, err)
 
-	room := L.GetGlobal("room")
+	loc := L.GetGlobal("location")
 	errVal := L.GetGlobal("err")
-	assert.Equal(t, lua.LTNil, room.Type())
+	assert.Equal(t, lua.LTNil, loc.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
 	// Should return sanitized message with correlation ID, not the actual error
 	errStr := errVal.String()
@@ -206,8 +206,8 @@ func TestQueryRoom_InternalError(t *testing.T) {
 	assert.NoError(t, parseErr, "reference ID should be a valid ULID")
 }
 
-func TestQueryRoom_PermissionDenied(t *testing.T) {
-	roomID := ulid.Make()
+func TestQueryLocation_PermissionDenied(t *testing.T) {
+	locationID := ulid.Make()
 	querier := &mockWorldQuerier{err: world.ErrPermissionDenied}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
@@ -215,18 +215,18 @@ func TestQueryRoom_PermissionDenied(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`room, err = holomush.query_room("` + roomID.String() + `")`)
+	err := L.DoString(`location, err = holomush.query_location("` + locationID.String() + `")`)
 	require.NoError(t, err)
 
-	room := L.GetGlobal("room")
+	loc := L.GetGlobal("location")
 	errVal := L.GetGlobal("err")
-	assert.Equal(t, lua.LTNil, room.Type())
+	assert.Equal(t, lua.LTNil, loc.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
 	assert.Equal(t, "access denied", errVal.String(), "expected sanitized access denied message")
 }
 
-func TestQueryRoom_Timeout(t *testing.T) {
-	roomID := ulid.Make()
+func TestQueryLocation_Timeout(t *testing.T) {
+	locationID := ulid.Make()
 	// Context timeout should be surfaced to plugins as "query timed out"
 	querier := &mockWorldQuerier{err: context.DeadlineExceeded}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
@@ -235,12 +235,12 @@ func TestQueryRoom_Timeout(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`room, err = holomush.query_room("` + roomID.String() + `")`)
+	err := L.DoString(`location, err = holomush.query_location("` + locationID.String() + `")`)
 	require.NoError(t, err)
 
-	room := L.GetGlobal("room")
+	loc := L.GetGlobal("location")
 	errVal := L.GetGlobal("err")
-	assert.Equal(t, lua.LTNil, room.Type())
+	assert.Equal(t, lua.LTNil, loc.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
 	assert.Equal(t, "query timed out", errVal.String(), "expected timeout error message")
 }
@@ -414,8 +414,8 @@ func TestQueryCharacter_NoQuerierConfigured(t *testing.T) {
 	assert.Contains(t, errVal.String(), "world service not configured - contact server administrator")
 }
 
-func TestQueryRoomCharacters(t *testing.T) {
-	roomID := ulid.Make()
+func TestQueryLocationCharacters(t *testing.T) {
+	locationID := ulid.Make()
 	char1 := &world.Character{
 		ID:   ulid.Make(),
 		Name: "Alice",
@@ -432,7 +432,7 @@ func TestQueryRoomCharacters(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`characters, err = holomush.query_room_characters("` + roomID.String() + `")`)
+	err := L.DoString(`characters, err = holomush.query_location_characters("` + locationID.String() + `")`)
 	require.NoError(t, err)
 
 	errVal := L.GetGlobal("err")
@@ -459,8 +459,8 @@ func TestQueryRoomCharacters(t *testing.T) {
 	assert.Equal(t, char2.Name, secondTbl.RawGetString("name").String())
 }
 
-func TestQueryRoomCharacters_EmptyRoom(t *testing.T) {
-	roomID := ulid.Make()
+func TestQueryLocationCharacters_EmptyLocation(t *testing.T) {
+	locationID := ulid.Make()
 
 	querier := &mockWorldQuerier{characters: []*world.Character{}}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
@@ -469,7 +469,7 @@ func TestQueryRoomCharacters_EmptyRoom(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`characters, err = holomush.query_room_characters("` + roomID.String() + `")`)
+	err := L.DoString(`characters, err = holomush.query_location_characters("` + locationID.String() + `")`)
 	require.NoError(t, err)
 
 	errVal := L.GetGlobal("err")
@@ -482,7 +482,7 @@ func TestQueryRoomCharacters_EmptyRoom(t *testing.T) {
 	assert.Equal(t, 0, tbl.Len(), "expected empty table")
 }
 
-func TestQueryRoomCharacters_InvalidID(t *testing.T) {
+func TestQueryLocationCharacters_InvalidID(t *testing.T) {
 	querier := &mockWorldQuerier{}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
@@ -490,18 +490,18 @@ func TestQueryRoomCharacters_InvalidID(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`characters, err = holomush.query_room_characters("invalid")`)
+	err := L.DoString(`characters, err = holomush.query_location_characters("invalid")`)
 	require.NoError(t, err)
 
 	characters := L.GetGlobal("characters")
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, characters.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
-	assert.Contains(t, errVal.String(), "invalid room ID")
+	assert.Contains(t, errVal.String(), "invalid location ID")
 }
 
-func TestQueryRoomCharacters_NotFound(t *testing.T) {
-	roomID := ulid.Make()
+func TestQueryLocationCharacters_NotFound(t *testing.T) {
+	locationID := ulid.Make()
 	querier := &mockWorldQuerier{err: world.ErrNotFound}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
@@ -509,18 +509,18 @@ func TestQueryRoomCharacters_NotFound(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`characters, err = holomush.query_room_characters("` + roomID.String() + `")`)
+	err := L.DoString(`characters, err = holomush.query_location_characters("` + locationID.String() + `")`)
 	require.NoError(t, err)
 
 	characters := L.GetGlobal("characters")
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, characters.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
-	assert.Equal(t, "room not found", errVal.String(), "expected sanitized error message")
+	assert.Equal(t, "location not found", errVal.String(), "expected sanitized error message")
 }
 
-func TestQueryRoomCharacters_InternalError(t *testing.T) {
-	roomID := ulid.Make()
+func TestQueryLocationCharacters_InternalError(t *testing.T) {
+	locationID := ulid.Make()
 	// Internal error should be sanitized - plugin should not see "database error"
 	querier := &mockWorldQuerier{err: errors.New("database error connection timeout with stack trace")}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
@@ -529,7 +529,7 @@ func TestQueryRoomCharacters_InternalError(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`characters, err = holomush.query_room_characters("` + roomID.String() + `")`)
+	err := L.DoString(`characters, err = holomush.query_location_characters("` + locationID.String() + `")`)
 	require.NoError(t, err)
 
 	characters := L.GetGlobal("characters")
@@ -551,8 +551,8 @@ func TestQueryRoomCharacters_InternalError(t *testing.T) {
 	assert.NoError(t, parseErr, "reference ID should be a valid ULID")
 }
 
-func TestQueryRoomCharacters_PermissionDenied(t *testing.T) {
-	roomID := ulid.Make()
+func TestQueryLocationCharacters_PermissionDenied(t *testing.T) {
+	locationID := ulid.Make()
 	querier := &mockWorldQuerier{err: world.ErrPermissionDenied}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
@@ -560,7 +560,7 @@ func TestQueryRoomCharacters_PermissionDenied(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`characters, err = holomush.query_room_characters("` + roomID.String() + `")`)
+	err := L.DoString(`characters, err = holomush.query_location_characters("` + locationID.String() + `")`)
 	require.NoError(t, err)
 
 	characters := L.GetGlobal("characters")
@@ -570,7 +570,7 @@ func TestQueryRoomCharacters_PermissionDenied(t *testing.T) {
 	assert.Equal(t, "access denied", errVal.String(), "expected sanitized access denied message")
 }
 
-func TestQueryRoomCharacters_NoQuerierConfigured(t *testing.T) {
+func TestQueryLocationCharacters_NoQuerierConfigured(t *testing.T) {
 	// No world querier provided
 	funcs := hostfunc.New(nil)
 
@@ -578,7 +578,7 @@ func TestQueryRoomCharacters_NoQuerierConfigured(t *testing.T) {
 	defer L.Close()
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`characters, err = holomush.query_room_characters("` + ulid.Make().String() + `")`)
+	err := L.DoString(`characters, err = holomush.query_location_characters("` + ulid.Make().String() + `")`)
 	require.NoError(t, err)
 
 	characters := L.GetGlobal("characters")
@@ -908,7 +908,7 @@ func (m *contextAwareWorldQuerier) FindLocationByName(_ context.Context, _, _ st
 // Compile-time interface check.
 var _ hostfunc.WorldMutator = (*contextAwareWorldQuerier)(nil)
 
-func TestQueryRoom_InheritsParentContext(t *testing.T) {
+func TestQueryLocation_InheritsParentContext(t *testing.T) {
 	// Create a parent context with a custom value to verify inheritance
 	type ctxKey string
 	const testKey ctxKey = "test-key"
@@ -923,7 +923,7 @@ func TestQueryRoom_InheritsParentContext(t *testing.T) {
 	L.SetContext(parentCtx) // Set the parent context on the Lua state
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`room, err = holomush.query_room("` + ulid.Make().String() + `")`)
+	err := L.DoString(`location, err = holomush.query_location("` + ulid.Make().String() + `")`)
 	require.NoError(t, err)
 
 	// The context passed to the querier should inherit from the Lua state's context
@@ -963,7 +963,7 @@ func TestQueryCharacter_InheritsParentContext(t *testing.T) {
 	}
 }
 
-func TestQueryRoomCharacters_InheritsParentContext(t *testing.T) {
+func TestQueryLocationCharacters_InheritsParentContext(t *testing.T) {
 	type ctxKey string
 	const testKey ctxKey = "test-key"
 	parentCtx := context.WithValue(context.Background(), testKey, "test-value")
@@ -977,7 +977,7 @@ func TestQueryRoomCharacters_InheritsParentContext(t *testing.T) {
 	L.SetContext(parentCtx)
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`chars, err = holomush.query_room_characters("` + ulid.Make().String() + `")`)
+	err := L.DoString(`chars, err = holomush.query_location_characters("` + ulid.Make().String() + `")`)
 	require.NoError(t, err)
 
 	select {
@@ -1015,7 +1015,7 @@ func TestQueryObject_InheritsParentContext(t *testing.T) {
 	}
 }
 
-func TestQueryRoom_InheritsContextDeadline(t *testing.T) {
+func TestQueryLocation_InheritsContextDeadline(t *testing.T) {
 	// Create a context with a short deadline (10ms) - shorter than the 5s default
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
@@ -1029,7 +1029,7 @@ func TestQueryRoom_InheritsContextDeadline(t *testing.T) {
 	L.SetContext(ctx)
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`room, err = holomush.query_room("` + ulid.Make().String() + `")`)
+	err := L.DoString(`location, err = holomush.query_location("` + ulid.Make().String() + `")`)
 	require.NoError(t, err)
 
 	// Verify the derived context respects the parent's deadline
@@ -1046,7 +1046,7 @@ func TestQueryRoom_InheritsContextDeadline(t *testing.T) {
 	}
 }
 
-func TestQueryRoom_FallbackToBackgroundContext(t *testing.T) {
+func TestQueryLocation_FallbackToBackgroundContext(t *testing.T) {
 	// Test that when Lua state has no context set, we fall back to context.Background()
 	// This ensures backwards compatibility
 
@@ -1059,7 +1059,7 @@ func TestQueryRoom_FallbackToBackgroundContext(t *testing.T) {
 	// Note: NOT calling L.SetContext() - context is nil
 	funcs.Register(L, "test-plugin")
 
-	err := L.DoString(`room, err = holomush.query_room("` + ulid.Make().String() + `")`)
+	err := L.DoString(`location, err = holomush.query_location("` + ulid.Make().String() + `")`)
 	require.NoError(t, err)
 
 	// The query should still work and use a 5-second timeout derived from Background
