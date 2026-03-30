@@ -516,6 +516,17 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			pluginManager.RegisterPluginCommands(cmdRegistry)
 		}
 
+		// Remove disabled commands from the registry. This runs after all
+		// registrations (built-in + plugin) so game configs can replace any
+		// built-in command with a plugin alternative.
+		for _, name := range gameConfig.DisabledCommands {
+			if unregErr := cmdRegistry.Unregister(name); unregErr != nil {
+				slog.Warn("disabled command not found in registry", "command", name)
+			} else {
+				slog.Warn("disabled built-in command", "command", name)
+			}
+		}
+
 		cmdServices, cmdSvcErr := command.NewServices(command.ServicesConfig{
 			World:              worldService,
 			Session:            sessionStore,

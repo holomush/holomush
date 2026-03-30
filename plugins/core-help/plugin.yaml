@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: core-help
+version: 1.0.0
+type: core
+load_priority: -1000
+events: []
+commands:
+  - name: help
+    capabilities: []
+    help: "Display help for commands"
+    usage: "help [command|search <term>]"
+    helpText: |-
+      ## Help
+
+      Display help information about available commands.
+
+      ### Usage
+
+      - `help` - List all available commands
+      - `help <command>` - Show detailed help for a specific command
+      - `help search <term>` - Search commands by keyword
+
+      ### Examples
+
+      - `help` - Lists all commands you can use
+      - `help say` - Shows detailed help for the say command
+      - `help search build` - Finds commands related to building

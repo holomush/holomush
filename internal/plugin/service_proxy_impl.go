@@ -421,9 +421,14 @@ func (p *ServiceProxyImpl) ListPropertiesByParent(ctx context.Context, subjectID
 		if prop.Value != nil {
 			val = *prop.Value
 		}
+		visibility := prop.Visibility
+		if visibility == "" {
+			visibility = "public"
+		}
 		results[i] = PropertyInfo{
-			Name:  prop.Name,
-			Value: val,
+			Name:       prop.Name,
+			Value:      val,
+			Visibility: visibility,
 		}
 	}
 	return results, nil

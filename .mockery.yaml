@@ -29,6 +29,7 @@ packages:
     interfaces:
       Host:
       EventEmitter:
+      ServiceProxy:
   github.com/holomush/holomush/internal/plugin/hostfunc:
     config:
       dir: "{{.InterfaceDir}}/mocks"

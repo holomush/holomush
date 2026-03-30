@@ -267,6 +267,11 @@ type CommandExecution struct {
 	// endSession signals that the invoking session should end (e.g. quit command).
 	endSession bool
 
+	// responseIsError is set by the dispatcher when a plugin command returns
+	// CommandError or CommandFailure status. The gRPC server reads this to
+	// decide whether to emit command_response or command_error events.
+	responseIsError bool
+
 	// Public fields - dispatcher sets these after construction
 	Args string
 	// InvokedAs is the original command name as typed by the user, before alias
@@ -315,6 +320,13 @@ func (e *CommandExecution) SetEndSession(v bool) { e.endSession = v }
 
 // EndSession returns true if the invoking session should end.
 func (e *CommandExecution) EndSession() bool { return e.endSession }
+
+// SetResponseIsError marks the response as an error (CommandError or CommandFailure).
+// The gRPC server reads this to choose command_error vs command_response event type.
+func (e *CommandExecution) SetResponseIsError(v bool) { e.responseIsError = v }
+
+// ResponseIsError returns true if the plugin handler returned an error status.
+func (e *CommandExecution) ResponseIsError() bool { return e.responseIsError }
 
 // NewCommandExecution creates a validated CommandExecution.
 // Returns an error if CharacterID is zero, Services is nil, or Output is nil.

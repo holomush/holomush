@@ -5,6 +5,7 @@ package command
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -210,20 +211,28 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	exec.InvokedAs = invokedAs
 
 	// Route: plugin-backed commands go through PluginManager, compiled-in commands call handler directly.
-	if entry.PluginName() != "" {
+	isPlugin := entry.PluginName() != ""
+	if isPlugin {
+		// Plugin commands: dispatchToPlugin sets metrics and session activity
+		// based on the CommandStatus returned by the handler.
 		err = d.dispatchToPlugin(ctx, &entry, exec, invokedAs, metrics, span)
 	} else {
 		err = entry.Handler()(ctx, exec)
 	}
 
 	if err != nil {
-		metrics.SetStatus(StatusError)
+		// ErrSessionEnded is a graceful signal, not a failure — preserve the
+		// metrics status that dispatchToPlugin already set (success).
+		if !errors.Is(err, ErrSessionEnded) {
+			metrics.SetStatus(StatusError)
+		}
 		slog.WarnContext(ctx, "command execution failed",
 			"command", parsed.Name,
 			"character_id", exec.CharacterID().String(),
 			"error", err,
 		)
-	} else {
+	} else if !isPlugin {
+		// Non-plugin commands: set success metrics and bump activity.
 		metrics.SetStatus(StatusSuccess)
 		// Bump session activity timestamp so "who" idle time is accurate.
 		if sid := exec.SessionID(); sid.Compare(ulid.ULID{}) != 0 {
@@ -266,6 +275,51 @@ func (d *Dispatcher) dispatchToPlugin(ctx context.Context, entry *CommandEntry, 
 	}
 	if resp == nil {
 		return nil
+	}
+
+	// Handle CommandStatus: set metrics, activity, error flags based on outcome.
+	switch resp.Status {
+	case pluginsdk.CommandOK:
+		metrics.SetStatus(StatusSuccess)
+		// Bump session activity — normal successful command.
+		if sid := exec.SessionID(); sid.Compare(ulid.ULID{}) != 0 {
+			if actErr := exec.Services().Session().UpdateActivity(ctx, sid.String()); actErr != nil {
+				slog.WarnContext(ctx, "session activity update failed",
+					"session_id", sid.String(), "error", actErr)
+			}
+		}
+
+	case pluginsdk.CommandError:
+		// User errors are normal — count as success for metrics.
+		metrics.SetStatus(StatusSuccess)
+		exec.SetResponseIsError(true)
+		// Bump session activity — user is still active.
+		if sid := exec.SessionID(); sid.Compare(ulid.ULID{}) != 0 {
+			if actErr := exec.Services().Session().UpdateActivity(ctx, sid.String()); actErr != nil {
+				slog.WarnContext(ctx, "session activity update failed",
+					"session_id", sid.String(), "error", actErr)
+			}
+		}
+
+	case pluginsdk.CommandFailure:
+		// Service degraded — count as error for metrics.
+		metrics.SetStatus(StatusError)
+		exec.SetResponseIsError(true)
+		span.RecordError(oops.Errorf("plugin command service failure: %s", entry.Name))
+		span.SetStatus(codes.Error, "service failure")
+		// Do NOT update session activity — not a real user action.
+
+	case pluginsdk.CommandFatal:
+		metrics.SetStatus(StatusError)
+		exec.SetResponseIsError(true)
+		span.RecordError(oops.Errorf("plugin command fatal: %s", entry.Name))
+		span.SetStatus(codes.Error, "fatal")
+		return oops.In("dispatcher").With("command", entry.Name).With("plugin", entry.PluginName()).
+			Errorf("plugin command returned fatal status")
+
+	default:
+		return oops.In("dispatcher").With("command", entry.Name).With("plugin", entry.PluginName()).
+			With("status", resp.Status).Errorf("plugin command returned unknown status")
 	}
 
 	// Process response events: emit each to the event store.
@@ -321,9 +375,6 @@ func (d *Dispatcher) dispatchToPlugin(ctx context.Context, entry *CommandEntry, 
 		exec.SetEndSession(true)
 		return oops.Code("SESSION_ENDED").Wrap(ErrSessionEnded)
 	}
-
-	// Suppress unused variable warnings for metrics/span in future instrumentation.
-	_ = metrics
 
 	return nil
 }

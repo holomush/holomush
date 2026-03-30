@@ -1,0 +1,196 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: core-communication
+version: 1.0.0
+type: core
+commands:
+  - name: say
+    help: "Say something to the location"
+    usage: "say <message>"
+    helpText: |
+      ## Say
+
+      Say something aloud to everyone in your current location.
+
+      ### Usage
+
+      - `say <message>` - Speak the message aloud
+
+      ### Examples
+
+      - `say Hello, everyone!`
+      - `say How are you?`
+
+  - name: pose
+    help: "Perform an action"
+    usage: "pose <action>"
+    helpText: |
+      ## Pose
+
+      Describe an action your character performs, visible to everyone in your
+      current location.
+
+      ### Usage
+
+      - `pose <action>` - Perform the action
+      - `:<action>` - Shorthand for pose
+
+      ### Examples
+
+      - `pose waves hello` - Shows "CharName waves hello"
+      - `:waves hello` - Same as above
+
+  - name: page
+    capabilities:
+      - comms.page
+    help: "Send a private message"
+    usage: "page <name>=<message>"
+    helpText: |
+      ## Page
+
+      Send an OOC private message to another connected character.
+
+      ### Usage
+
+      - `page <name>=<message>` - Send a private message
+      - `page <message>` - Page your last-paged character
+      - `page <name>=:<action>` - Pose-page (shows "From afar, ...")
+      - `page <name>=;<action>` - No-space pose-page
+
+      ### Examples
+
+      - `page Alex=Hey, are you around?`
+      - `page How's it going?` - Pages last-paged character
+      - `page Alex=:waves hello.` - Pose-page
+
+  - name: p
+    capabilities:
+      - comms.page
+    help: "Send a private message (alias for page)"
+    usage: "p <name>=<message>"
+
+  - name: whisper
+    help: "Whisper to someone in your location"
+    usage: "whisper <name>=<message>"
+    helpText: |
+      ## Whisper
+
+      Send a private message to someone in the same location. Others see
+      that you whispered but not the content.
+
+      ### Usage
+
+      - `whisper <name>=<message>` - Whisper to someone
+      - `whisper <name>=:<action>` - Whisper-pose
+      - `whisper <name>=;<action>` - No-space whisper-pose
+
+      ### Examples
+
+      - `whisper Alex=Let's get out of here`
+      - `whisper Alex=:nods meaningfully.`
+
+  - name: w
+    help: "Whisper to last whispered target"
+    usage: "w <message>"
+
+  - name: ooc
+    help: "Say or pose something out of character"
+    usage: "ooc <message>"
+    helpText: |
+      ## OOC
+
+      Speak out of character to everyone in your current location.
+
+      ### Usage
+
+      - `ooc <message>` - Say something OOC
+      - `ooc :<action>` - Pose something OOC
+      - `ooc ;<action>` - Semipose something OOC
+
+      ### Examples
+
+      - `ooc brb` - [OOC] Sean says, "brb"
+      - `ooc :laughs` - [OOC] Sean laughs
+      - `ooc ;'s phone rings` - [OOC] Sean's phone rings
+
+  - name: pemit
+    capabilities:
+      - comms.pemit
+    help: "Send a private narration to a specific character"
+    usage: "pemit <character>=<message>"
+    helpText: |
+      ## Pemit
+
+      Send a private narration to a specific character. Used by GMs and
+      storytellers to describe what only one character sees or experiences.
+
+      ### Usage
+
+      - `pemit <character>=<message>` - Send private narration to character
+
+      ### Examples
+
+      - `pemit Sean=You feel a chill run down your spine.`
+      - `pemit Alex=A figure in the shadows beckons to you.`
+
+      ### Notes
+
+      - Does not require sender and target to be in the same location
+      - Target sees the raw message with no prefix
+      - Sender receives a confirmation message
+
+      ### Permissions
+
+      Requires the `comms.pemit` capability.
+
+  - name: emit
+    help: "Emit a message to the location"
+    usage: "emit <message>"
+    helpText: |
+      ## Emit
+
+      Emit arbitrary text to everyone in your current location.
+      Unlike say or pose, the text appears exactly as typed with
+      no character name prefix.
+
+      ### Usage
+
+      - `emit <message>` - Emit the message
+
+      ### Examples
+
+      - `emit The ground shakes violently.`
+      - `emit A cold wind blows through the room.`
+
+  - name: wall
+    capabilities:
+      - admin.wall
+    help: "Broadcast a message to all players"
+    usage: "wall [urgency] <message>"
+    helpText: |-
+      ## Wall
+
+      Send a broadcast message to all connected players.
+
+      ### Usage
+
+      - `wall <message>` - Send an info-level announcement
+      - `wall info <message>` - Same as above (explicit)
+      - `wall warning <message>` - Send a warning message
+      - `wall critical <message>` - Send a critical alert
+
+      ### Urgency Levels
+
+      - `info` - Normal announcements (default)
+      - `warning` - Important notices
+      - `critical` - Urgent alerts
+
+      ### Examples
+
+      - `wall Server restart in 10 minutes`
+      - `wall warning Database maintenance starting soon`
+
+      ### Permissions
+
+      Requires the `admin.wall` capability.

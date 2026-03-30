@@ -244,3 +244,42 @@ func TestRegistry_Register_InvalidName(t *testing.T) {
 		})
 	}
 }
+
+func TestRegistry_Unregister(t *testing.T) {
+	reg := NewRegistry()
+
+	_ = reg.Register(CommandEntry{Name: "say", handler: noopHandler, Source: "core"})
+	_ = reg.Register(CommandEntry{Name: "pose", handler: noopHandler, Source: "core"})
+
+	err := reg.Unregister("say")
+	require.NoError(t, err)
+
+	_, ok := reg.Get("say")
+	assert.False(t, ok, "unregistered command should not be found")
+
+	// Other commands remain
+	_, ok = reg.Get("pose")
+	assert.True(t, ok, "other commands should still exist")
+
+	// All should reflect removal
+	assert.Len(t, reg.All(), 1)
+}
+
+func TestRegistry_Unregister_NotFound(t *testing.T) {
+	reg := NewRegistry()
+
+	err := reg.Unregister("nonexistent")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nonexistent")
+}
+
+func TestRegistry_Unregister_DisabledCommandDispatch(t *testing.T) {
+	reg := NewRegistry()
+
+	_ = reg.Register(CommandEntry{Name: "say", handler: noopHandler, Source: "core"})
+	_ = reg.Unregister("say")
+
+	// After unregister, Get returns false — dispatcher would produce "unknown command"
+	_, ok := reg.Get("say")
+	assert.False(t, ok, "disabled command should behave as unknown")
+}

@@ -24,7 +24,8 @@ import (
 
 // GameConfig holds game-level configuration read by the core command.
 type GameConfig struct {
-	GuestStartLocation string `koanf:"guest_start_location"`
+	GuestStartLocation string   `koanf:"guest_start_location"`
+	DisabledCommands   []string `koanf:"disabled_commands"`
 }
 
 // Load reads configuration from a YAML file and overlays explicitly-set CLI flags.
