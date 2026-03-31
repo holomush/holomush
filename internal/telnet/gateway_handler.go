@@ -289,7 +289,7 @@ func (h *GatewayHandler) handleConnectGuest(ctx context.Context, username, passw
 
 	slog.DebugContext(ctx, "telnet: authentication success",
 		"session_id", h.sessionID,
-		"char_name", h.charName,
+		"character_name", h.charName,
 	)
 
 	h.send(fmt.Sprintf("Welcome, %s!", h.charName))
@@ -443,7 +443,7 @@ func (h *GatewayHandler) selectCharacter(ctx context.Context, ch *corev1.Charact
 
 	slog.DebugContext(ctx, "telnet: authentication success",
 		"session_id", h.sessionID,
-		"char_name", h.charName,
+		"character_name", h.charName,
 	)
 
 	if resp.GetReattached() {
