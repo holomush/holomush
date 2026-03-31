@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/samber/oops"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -63,6 +64,7 @@ func NewClient(_ context.Context, cfg ClientConfig) (*Client, error) {
 			Timeout:             cfg.KeepaliveTimeout,
 			PermitWithoutStream: true,
 		}),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	}
 
 	// Configure TLS

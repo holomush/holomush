@@ -17,6 +17,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -1030,7 +1031,10 @@ func responseMeta(requestID string) *corev1.ResponseMeta {
 // NewGRPCServer creates a new gRPC server with mTLS credentials.
 func NewGRPCServer(tlsConfig *tls.Config) *grpc.Server {
 	creds := credentials.NewTLS(tlsConfig)
-	return grpc.NewServer(grpc.Creds(creds))
+	return grpc.NewServer(
+		grpc.Creds(creds),
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+	)
 }
 
 // NewGRPCServerInsecure creates a new gRPC server without TLS (for testing).
@@ -1042,5 +1046,6 @@ func NewGRPCServerInsecure() *grpc.Server {
 			MinTime:             10 * time.Second,
 			PermitWithoutStream: true,
 		}),
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
 }
