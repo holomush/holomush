@@ -207,13 +207,14 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		return oops.Code("CONFIG_INVALID").Errorf("DATABASE_URL environment variable is required")
 	}
 
-	// Run auto-migration if enabled (default: true)
-	if deps.AutoMigrateGetter() {
-		if err := runAutoMigration(databaseURL, deps.MigratorFactory); err != nil {
-			return err
-		}
-	} else {
-		slog.Info("auto-migration disabled via HOLOMUSH_DB_AUTO_MIGRATE=false")
+	// Run schema migration before any DB queries (must complete before event store init).
+	// Adapt MigratorFactory from main.AutoMigrator to bootstrap.AutoMigrator.
+	migratorAdapter := func(url string) (bootstrap.AutoMigrator, error) {
+		return deps.MigratorFactory(url)
+	}
+	migrationBoot := bootstrap.NewMigrationBootstrapper(databaseURL, migratorAdapter, deps.AutoMigrateGetter())
+	if err := migrationBoot.Bootstrap(ctx, nil, ""); err != nil {
+		return err
 	}
 
 	eventStore, err := deps.EventStoreFactory(ctx, databaseURL)
@@ -257,12 +258,13 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 	slog.Info("game ID initialized", "game_id", gameID)
 
-	// Bootstrap seed policies and audit log partitions (ADR #91, #92).
-	// Fatal on error — server MUST NOT start without seed policies.
-	if bootstrapErr := deps.PolicyBootstrapper(ctx, cfg.SkipSeedMigrations); bootstrapErr != nil {
-		return oops.Code("BOOTSTRAP_FAILED").With("operation", "bootstrap seed policies").Wrap(bootstrapErr)
-	}
-	slog.Info("seed policies bootstrapped")
+	// Create the bootstrap runner. Migration ran above (schema must exist before
+	// any DB queries). Remaining bootstrappers are registered as their
+	// dependencies become available, then RunAll executes them in priority order.
+	bootstrapRunner := plugins.NewBootstrapRunner(slog.Default())
+
+	// Register policy bootstrapper (priority 200).
+	bootstrapRunner.Register(bootstrap.NewPolicyBootstrapper(deps.PolicyBootstrapper, cfg.SkipSeedMigrations))
 
 	// Build ABAC engine stack (requires PostgresEventStore for pool access).
 	// In test mode with mock stores, ABAC wiring is skipped.
@@ -284,6 +286,11 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		// only triggers in tests with mock stores. Log at Error to surface
 		// if this ever happens unexpectedly in production.
 		slog.Error("ABAC stack not initialized: event store does not expose a connection pool")
+
+		// Run policy bootstrap only (admin + alias require the pool).
+		if runErr := bootstrapRunner.RunAll(ctx); runErr != nil {
+			return oops.Code("BOOTSTRAP_FAILED").With("operation", "run bootstrap plugins").Wrap(runErr)
+		}
 	} else {
 		abacPool := realStoreForABAC.Pool()
 
@@ -361,18 +368,15 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			return oops.Code("AUTH_SETUP_FAILED").Wrap(charErr)
 		}
 
-		// Admin bootstrap — create admin account on first boot
-		adminBootErr := bootstrap.SeedAdmin(ctx, bootstrap.SeedAdminDeps{
+		// Register admin bootstrapper (priority 400).
+		bootstrapRunner.Register(bootstrap.NewAdminBootstrapper(bootstrap.SeedAdminDeps{
 			PlayerRepo:  authPlayerRepo,
 			CharService: characterService,
 			RoleStore:   roleStore,
 			Hasher:      authHasher,
 			NameTheme:   naming.NewStarTheme(),
 			Transactor:  &bootstrapTransactor{inner: worldpostgres.NewTransactor(abacPool)},
-		})
-		if adminBootErr != nil {
-			return oops.Code("ADMIN_BOOTSTRAP_FAILED").Wrap(adminBootErr)
-		}
+		}))
 
 		// Create session store early so plugins can access session functions
 		sessionStore = store.NewPostgresSessionStore(abacPool)
@@ -519,9 +523,13 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		aliasRepo := store.NewPostgresAliasRepository(realStore.Pool())
 		aliasCache := command.NewAliasCache()
 
-		// Seed standard MUSH aliases and load all into cache (idempotent)
-		if seedErr := bootstrap.SeedSystemAliases(ctx, aliasRepo, aliasCache); seedErr != nil {
-			return oops.Code("ALIAS_SEED_FAILED").Wrap(seedErr)
+		// Register alias bootstrapper (priority 500).
+		bootstrapRunner.Register(bootstrap.NewAliasBootstrapper(aliasRepo, aliasCache))
+
+		// Run all bootstrap plugins in priority order: policy (200) → admin (400) → alias (500).
+		// Migration (100) already ran directly above before DB connection was established.
+		if runErr := bootstrapRunner.RunAll(ctx); runErr != nil {
+			return oops.Code("BOOTSTRAP_FAILED").With("operation", "run bootstrap plugins").Wrap(runErr)
 		}
 
 		// Complete the ServiceProxy with late-bound dependencies so core plugins
@@ -860,6 +868,9 @@ func monitorServerErrors(ctx context.Context, cancel context.CancelFunc, errCh <
 
 // runAutoMigration runs database migrations using the provided factory.
 // It logs the migration status and ensures the migrator is closed.
+// Used by auto-migration unit/integration tests; production code uses MigrationBootstrapper.
+//
+//nolint:unparam // databaseURL varies in integration tests (connStr from testcontainers)
 func runAutoMigration(databaseURL string, factory func(string) (AutoMigrator, error)) error {
 	slog.Info("running auto-migration")
 
