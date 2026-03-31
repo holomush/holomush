@@ -88,11 +88,12 @@ type BinaryConfig struct {
 
 // SettingConfig holds setting plugin configuration.
 type SettingConfig struct {
-	DisplayName string `yaml:"display_name" json:"display_name" jsonschema:"required"`
-	Description string `yaml:"description" json:"description"`
-	ContentDir  string `yaml:"content_dir" json:"content_dir" jsonschema:"required"`
-	WorldDir    string `yaml:"world_dir" json:"world_dir"`
-	Theme       string `yaml:"theme" json:"theme"`
+	DisplayName      string `yaml:"display_name" json:"display_name" jsonschema:"required"`
+	Description      string `yaml:"description" json:"description"`
+	ContentDir       string `yaml:"content_dir" json:"content_dir" jsonschema:"required"`
+	WorldDir         string `yaml:"world_dir" json:"world_dir"`
+	Theme            string `yaml:"theme" json:"theme"`
+	StartingLocation string `yaml:"starting_location" json:"starting_location"`
 }
 
 // CommandSpec declares a command provided by a plugin.
@@ -224,6 +225,9 @@ func (m *Manifest) Validate() error {
 		}
 		if m.Setting.ContentDir == "" {
 			return oops.In("manifest").With("name", m.Name).New("setting.content_dir is required")
+		}
+		if m.Setting.StartingLocation == "" {
+			return oops.In("manifest").With("name", m.Name).New("setting.starting_location is required")
 		}
 		if len(m.Commands) > 0 {
 			return oops.In("manifest").With("name", m.Name).New("setting plugins must not declare commands")

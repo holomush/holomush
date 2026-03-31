@@ -138,6 +138,9 @@
         },
         "theme": {
           "type": "string"
+        },
+        "starting_location": {
+          "type": "string"
         }
       },
       "additionalProperties": false,
@@ -147,7 +150,8 @@
         "description",
         "content_dir",
         "world_dir",
-        "theme"
+        "theme",
+        "starting_location"
       ]
     }
   },

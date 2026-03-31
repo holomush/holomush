@@ -93,12 +93,14 @@ func (a *authCharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.UL
 	return chars, nil
 }
 
-// authLocRepoAdapter implements auth.LocationRepository by returning a fixed starting location.
+// authLocRepoAdapter implements auth.LocationRepository using a pointer to the starting
+// location ID. The pointer is necessary because the ID is resolved after bootstrap, which
+// runs after this adapter is created during server setup.
 type authLocRepoAdapter struct {
-	startLocationID ulid.ULID
+	startLocationID *ulid.ULID
 	locRepo         *worldpostgres.LocationRepository
 }
 
 func (a *authLocRepoAdapter) GetStartingLocation(ctx context.Context) (*world.Location, error) {
-	return a.locRepo.Get(ctx, a.startLocationID)
+	return a.locRepo.Get(ctx, *a.startLocationID)
 }

@@ -184,11 +184,12 @@ func settingManifest(worldDir, theme string) *plugins.Manifest {
 		Version: "1.0.0",
 		Type:    plugins.TypeSetting,
 		Setting: &plugins.SettingConfig{
-			DisplayName: "Test Setting",
-			Description: "For unit tests",
-			ContentDir:  "content",
-			WorldDir:    worldDir,
-			Theme:       theme,
+			DisplayName:      "Test Setting",
+			Description:      "For unit tests",
+			ContentDir:       "content",
+			WorldDir:         worldDir,
+			Theme:            theme,
+			StartingLocation: "The Nexus",
 		},
 	}
 }
@@ -507,6 +508,54 @@ func TestSettingBootstrapper_Bootstrap_SeedsLocationsAndExits(t *testing.T) {
 	require.Len(t, ws.exits, 1)
 	assert.Equal(t, "threshold", ws.exits[0].Name)
 	assert.Equal(t, []string{"arch"}, ws.exits[0].Aliases)
+}
+
+func TestSettingBootstrapper_Bootstrap_RecordsStartingLocationInMetadata(t *testing.T) {
+	tmpDir := t.TempDir()
+	contentDir := filepath.Join(tmpDir, "content")
+	worldDir := filepath.Join(tmpDir, "world")
+	require.NoError(t, os.MkdirAll(contentDir, 0o750))
+	require.NoError(t, os.MkdirAll(worldDir, 0o750))
+
+	locYAML := `
+- name: "The Nexus"
+  type: "persistent"
+  description: "A plaza"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(worldDir, "locations.yaml"), []byte(locYAML), 0o600))
+
+	ws := newMockWorldSeeder()
+	cs := newMockContentStore()
+	ms := newMockMetadataStore()
+
+	b := newTestBootstrapper(cs, ws, ms, SettingBootstrapperOpts{SettingName: "my-setting"})
+
+	manifest := &plugins.Manifest{
+		Name:    "test-setting",
+		Version: "1.0.0",
+		Type:    plugins.TypeSetting,
+		Setting: &plugins.SettingConfig{
+			DisplayName:      "Test Setting",
+			ContentDir:       "content",
+			WorldDir:         "world",
+			StartingLocation: "The Nexus",
+		},
+	}
+	err := b.Bootstrap(context.Background(), manifest, tmpDir)
+	require.NoError(t, err)
+
+	// Verify starting_location_id was recorded in metadata.
+	val, found, metaErr := ms.Get(context.Background(), "starting_location_id")
+	require.NoError(t, metaErr)
+	assert.True(t, found, "starting_location_id should be recorded in metadata")
+	assert.NotEmpty(t, val, "starting_location_id should be a non-empty ULID")
+
+	// Verify the ID matches the created location.
+	ws.mu.RLock()
+	nexus := ws.locations["The Nexus"]
+	ws.mu.RUnlock()
+	require.NotNil(t, nexus)
+	assert.Equal(t, nexus.ID.String(), val)
 }
 
 func TestSettingBootstrapper_Bootstrap_WorldIdempotent(t *testing.T) {

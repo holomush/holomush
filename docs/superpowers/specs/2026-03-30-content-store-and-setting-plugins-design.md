@@ -197,7 +197,7 @@ Setting plugins provide content, seed locations, and theme customizations.
 ### Manifest Schema
 
 ```yaml
-name: setting-crossroads
+name: crossroads
 version: 1.0.0
 type: setting
 
@@ -208,6 +208,11 @@ setting:
   world_dir: world/        # Seed locations/exits (YAML)
   theme: theme.json        # Theme color/font overrides
 ```
+
+> **Naming convention:** Setting plugins use short names (e.g. `crossroads`,
+> not `setting-crossroads`) because the `type: setting` field already declares
+> the plugin type. Core plugins keep their `core-` prefix because that IS their
+> identity/name, not a type prefix.
 
 **Manifest validation changes:**
 

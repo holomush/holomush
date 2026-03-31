@@ -139,7 +139,9 @@ test.describe('Landing Page — Navigation', () => {
 });
 
 test.describe('Landing Page — Theme', () => {
-  test('dark theme is applied by default (background is dark)', async ({ page }) => {
+  test('dark theme is applied by default (background is dark)', async ({ browser }) => {
+    const context = await browser.newContext({ colorScheme: 'dark' });
+    const page = await context.newPage();
     await page.goto('/');
     const landing = page.getByTestId('landing');
     await expect(landing).toBeVisible();

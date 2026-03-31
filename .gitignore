@@ -13,6 +13,7 @@
 
 # Output of go coverage
 *.out
+.coverdata/
 coverage.html
 
 # Go workspace

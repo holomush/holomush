@@ -14,6 +14,28 @@ import (
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
 
+func TestFormatMovementText(t *testing.T) {
+	tests := []struct {
+		name      string
+		eventType string
+		actor     string
+		payload   *genericPayload
+		want      string
+	}{
+		{"arrive", "arrive", "Ruby", &genericPayload{}, "Ruby has arrived."},
+		{"leave", "leave", "Pearl", &genericPayload{}, "Pearl has left."},
+		{"leave with reason", "leave", "Opal", &genericPayload{Reason: "disconnected"}, "Opal has left (disconnected)."},
+		{"empty actor", "arrive", "", &genericPayload{}, ""},
+		{"unknown type", "move", "Ruby", &genericPayload{}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatMovementText(tt.eventType, tt.actor, tt.payload)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 // TestTranslatePipeline_CategoryRendering verifies that the event translation
 // pipeline produces GameEvent fields that drive category-based rendering on
 // the web client. Each subtest represents one renderer category.
@@ -280,6 +302,42 @@ func TestTranslatePipeline_CorruptPayloadGraceful(t *testing.T) {
 			assert.Nil(t, got, "corrupt %s payload should be dropped gracefully", typ)
 		})
 	}
+
+	// Movement types produce arrive/leave text from character_name.
+	t.Run("arrive event synthesizes text", func(t *testing.T) {
+		ev := &corev1.EventFrame{
+			Type:      "arrive",
+			Timestamp: timestamppb.Now(),
+			Payload:   []byte(`{"character_name":"Ruby_Helium"}`),
+		}
+		got := h.translateEvent(ev)
+		require.NotNil(t, got)
+		assert.Equal(t, "Ruby_Helium has arrived.", got.Text)
+		assert.Equal(t, "Ruby_Helium", got.Actor)
+		assert.Equal(t, "movement", got.Category)
+	})
+
+	t.Run("leave event synthesizes text", func(t *testing.T) {
+		ev := &corev1.EventFrame{
+			Type:      "leave",
+			Timestamp: timestamppb.Now(),
+			Payload:   []byte(`{"character_name":"Pearl_Copper"}`),
+		}
+		got := h.translateEvent(ev)
+		require.NotNil(t, got)
+		assert.Equal(t, "Pearl_Copper has left.", got.Text)
+	})
+
+	t.Run("leave event with reason", func(t *testing.T) {
+		ev := &corev1.EventFrame{
+			Type:      "leave",
+			Timestamp: timestamppb.Now(),
+			Payload:   []byte(`{"character_name":"Opal_Neon","reason":"disconnected"}`),
+		}
+		got := h.translateEvent(ev)
+		require.NotNil(t, got)
+		assert.Equal(t, "Opal_Neon has left (disconnected).", got.Text)
+	})
 
 	// State types also produce nil on corrupt payload.
 	stateTypes := []string{"location_state", "exit_update"}

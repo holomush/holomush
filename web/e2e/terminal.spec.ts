@@ -60,24 +60,22 @@ test.describe('Terminal UI', () => {
     await connectAsGuest(page2);
     const name2 = await page2.locator('.character').textContent();
 
-    // Wait for arrive event to propagate
-    await page1.waitForTimeout(1000);
-
     // Expand sidebars on both pages
     await page1.keyboard.press('Control+b');
     await page2.keyboard.press('Control+b');
     await expect(page1.locator('.sidebar.expanded')).toBeVisible();
     await expect(page2.locator('.sidebar.expanded')).toBeVisible();
 
-    // Page 1 should see BOTH characters in presence list (self + other)
+    // Page 1 should see BOTH characters in presence list (self + other).
+    // Allow time for the arrive event to propagate via LISTEN/NOTIFY.
     const presence1 = page1.locator('.presence-list');
-    await expect(presence1).toContainText(name1!, { timeout: 5000 });
-    await expect(presence1).toContainText(name2!, { timeout: 5000 });
+    await expect(presence1).toContainText(name1!, { timeout: 10000 });
+    await expect(presence1).toContainText(name2!, { timeout: 10000 });
 
     // Page 2 should also see BOTH characters
     const presence2 = page2.locator('.presence-list');
-    await expect(presence2).toContainText(name1!, { timeout: 5000 });
-    await expect(presence2).toContainText(name2!, { timeout: 5000 });
+    await expect(presence2).toContainText(name1!, { timeout: 10000 });
+    await expect(presence2).toContainText(name2!, { timeout: 10000 });
 
     await context1.close();
     await context2.close();

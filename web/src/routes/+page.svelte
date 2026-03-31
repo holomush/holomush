@@ -13,17 +13,12 @@
   import FeatureCard from '$lib/components/FeatureCard.svelte';
   import type { ContentItem } from '$lib/stores/contentStore';
 
-  let {
-    hero,
-    pitch,
-    features,
-    connectInfo,
-  }: {
-    hero?: ContentItem;
-    pitch?: ContentItem;
-    features: ContentItem[];
-    connectInfo?: ContentItem;
-  } = $props();
+  let { data }: { data: { hero?: ContentItem; pitch?: ContentItem; features?: ContentItem[]; connectInfo?: ContentItem } } = $props();
+
+  const hero = $derived(data.hero);
+  const pitch = $derived(data.pitch);
+  const features = $derived(data.features ?? []);
+  const connectInfo = $derived(data.connectInfo);
 
   const client = createClient(WebService, transport);
 

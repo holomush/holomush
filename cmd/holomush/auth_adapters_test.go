@@ -56,10 +56,10 @@ func TestAuthLocRepoAdapter_GetStartingLocation_UsesFixedID(t *testing.T) {
 	startID := ulid.Make()
 	locRepo := worldpostgres.NewLocationRepository(nil)
 	adapter := &authLocRepoAdapter{
-		startLocationID: startID,
+		startLocationID: &startID,
 		locRepo:         locRepo,
 	}
-	assert.Equal(t, startID, adapter.startLocationID)
+	assert.Equal(t, startID, *adapter.startLocationID)
 	require.NotNil(t, adapter.locRepo)
 	assert.Equal(t, locRepo, adapter.locRepo)
 }

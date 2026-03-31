@@ -238,8 +238,14 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		slog.Info("observability server started", "addr", obsServer.Addr())
 	}
 
+	// Build the verb registry for event formatting (shared by web + telnet).
+	verbRegistry := core.NewVerbRegistry()
+	if regErr := core.RegisterBuiltinTypes(verbRegistry); regErr != nil {
+		return oops.Code("VERB_REGISTRY_INIT_FAILED").Wrap(regErr)
+	}
+
 	// Start web HTTP server
-	webHandler := web.NewHandler(grpcClient, web.WithContentClient(grpcClient))
+	webHandler := web.NewHandler(grpcClient, web.WithContentClient(grpcClient), web.WithVerbRegistry(verbRegistry))
 	webServer := web.NewServer(web.Config{
 		Addr:        cfg.WebAddr,
 		Handler:     webHandler,
@@ -272,12 +278,6 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigChan)
-
-	// Build the verb registry for telnet event formatting.
-	verbRegistry := core.NewVerbRegistry()
-	if err := core.RegisterBuiltinTypes(verbRegistry); err != nil {
-		return oops.Code("VERB_REGISTRY_INIT_FAILED").Wrap(err)
-	}
 
 	// Start accepting telnet connections in goroutine with backoff on errors
 	go runTelnetAcceptLoop(ctx, telnetListener, grpcClient, verbRegistry, cancel)
