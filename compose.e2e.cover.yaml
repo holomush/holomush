@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+#
+# E2E coverage overlay. Mounts host directories for GOCOVERDIR so the
+# coverage-instrumented binary writes coverage data that survives container stop.
+#
+# Usage: task test:e2e:cover
+
+services:
+  core:
+    environment:
+      GOCOVERDIR: /coverdata
+    volumes:
+      - ./.coverdata/core:/coverdata
+
+  gateway:
+    environment:
+      GOCOVERDIR: /coverdata
+    volumes:
+      - ./.coverdata/gateway:/coverdata

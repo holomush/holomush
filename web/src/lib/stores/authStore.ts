@@ -25,6 +25,7 @@ export const hasCharacter = derived(authState, ($s) => !!$s.sessionId && !!$s.ch
 
 export function setPlayerAuth(playerToken: string, playerName: string) {
   authState.update((s) => ({ ...s, playerToken, playerName, isGuest: false }));
+  sessionStorage.setItem('holomush-player', JSON.stringify({ playerToken, playerName }));
 }
 
 export function setCharacterSession(sessionId: string, characterName: string) {
@@ -46,6 +47,7 @@ export function setGuestSession(sessionId: string, characterName: string) {
 export function clearAuth() {
   authState.set(initial);
   sessionStorage.removeItem('holomush-session');
+  sessionStorage.removeItem('holomush-player');
 }
 
 export function restoreSession() {
@@ -54,6 +56,15 @@ export function restoreSession() {
     try {
       const { sessionId, characterName } = JSON.parse(saved);
       if (sessionId) authState.update((s) => ({ ...s, sessionId, characterName }));
+    } catch {
+      /* ignore corrupt data */
+    }
+  }
+  const playerSaved = sessionStorage.getItem('holomush-player');
+  if (playerSaved) {
+    try {
+      const { playerToken, playerName } = JSON.parse(playerSaved);
+      if (playerToken) authState.update((s) => ({ ...s, playerToken, playerName }));
     } catch {
       /* ignore corrupt data */
     }

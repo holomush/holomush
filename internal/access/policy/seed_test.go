@@ -13,8 +13,8 @@ import (
 
 func TestSeedPolicies_Count(t *testing.T) {
 	seeds := SeedPolicies()
-	// 24 permit + 1 forbid = 25 total (18 base + 5 gap-fill from T22b + 2 phase-2 commands)
-	assert.Len(t, seeds, 25, "expected 25 seed policies (24 permit, 1 forbid)")
+	// 26 permit + 1 forbid = 27 total (18 base + 5 gap-fill from T22b + 2 phase-2 commands + 2 system bootstrap)
+	assert.Len(t, seeds, 27, "expected 27 seed policies (26 permit, 1 forbid)")
 }
 
 func TestSeedPolicies_AllNamesHaveSeedPrefix(t *testing.T) {
@@ -71,7 +71,7 @@ func TestSeedPolicies_EffectDistribution(t *testing.T) {
 			forbidCount++
 		}
 	}
-	assert.Equal(t, 24, permitCount, "expected 24 permit policies")
+	assert.Equal(t, 26, permitCount, "expected 26 permit policies")
 	assert.Equal(t, 1, forbidCount, "expected 1 forbid policy")
 }
 
@@ -105,6 +105,9 @@ func TestSeedPolicies_ExpectedNames(t *testing.T) {
 		// Phase-2 command policies
 		"seed:player-teleport",   // all players can execute home and teleport
 		"seed:pemit-storyteller", // storyteller/admin can execute pemit
+		// System bootstrap policies
+		"seed:system-bootstrap-world",
+		"seed:system-bootstrap-exits",
 	}
 
 	seeds := SeedPolicies()

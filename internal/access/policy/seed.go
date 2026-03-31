@@ -11,7 +11,7 @@ type SeedPolicy struct {
 	SeedVersion int
 }
 
-// SeedPolicies returns the complete set of 25 seed policies (24 permit, 1 forbid).
+// SeedPolicies returns the complete set of 27 seed policies (26 permit, 1 forbid).
 // The initial 18 (T22) plus 5 gap-fill policies (T22b: G1-G4), and 2 phase-2 command policies.
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
 // See ADR 087 for rationale on default-deny instead of explicit forbid for system properties.
@@ -188,6 +188,21 @@ func SeedPolicies() []SeedPolicy {
 			Name:        "seed:pemit-storyteller",
 			Description: "Storyteller and admin roles can execute pemit",
 			DSLText:     `permit(principal is character, action in ["execute"], resource is command) when { principal.character.roles.containsAny(["storyteller", "admin"]) && resource.command.name == "pemit" };`,
+			SeedVersion: 1,
+		},
+		// System bootstrap: setting plugins create locations and exits during server startup.
+		// The subject "system:bootstrap" is used by the SettingBootstrapper, which runs
+		// before any user connections. This policy grants the minimum privileges needed.
+		{
+			Name:        "seed:system-bootstrap-world",
+			Description: "System bootstrap can create and read locations for world seeding",
+			DSLText:     `permit(principal is system, action in ["read", "write"], resource is location);`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:system-bootstrap-exits",
+			Description: "System bootstrap can create exits for world seeding",
+			DSLText:     `permit(principal is system, action in ["read", "write"], resource is exit);`,
 			SeedVersion: 1,
 		},
 	}

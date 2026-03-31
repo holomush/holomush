@@ -39,6 +39,8 @@ type SettingBootstrapper struct {
 	metadataStore MetadataStore
 	settingName   string
 	resetSetting  bool
+	manifest      *plugins.Manifest
+	pluginDir     string
 	logger        *slog.Logger
 }
 
@@ -49,6 +51,8 @@ type SettingBootstrapperOpts struct {
 	MetadataStore MetadataStore
 	SettingName   string
 	ResetSetting  bool
+	Manifest      *plugins.Manifest
+	PluginDir     string
 	Logger        *slog.Logger
 }
 
@@ -63,6 +67,8 @@ func NewSettingBootstrapper(opts SettingBootstrapperOpts) *SettingBootstrapper {
 		metadataStore: opts.MetadataStore,
 		settingName:   opts.SettingName,
 		resetSetting:  opts.ResetSetting,
+		manifest:      opts.Manifest,
+		pluginDir:     opts.PluginDir,
 		logger:        logger,
 	}
 	if opts.WorldService != nil {
@@ -80,6 +86,12 @@ func (b *SettingBootstrapper) Priority() int {
 // It is idempotent: if the setting has already been bootstrapped and
 // resetSetting is false, it returns nil without doing anything.
 func (b *SettingBootstrapper) Bootstrap(ctx context.Context, manifest *plugins.Manifest, pluginDir string) error {
+	if manifest == nil {
+		manifest = b.manifest
+	}
+	if pluginDir == "" {
+		pluginDir = b.pluginDir
+	}
 	if manifest == nil {
 		return oops.Code("SETTING_BOOTSTRAP_FAILED").New("manifest is nil")
 	}
@@ -115,6 +127,22 @@ func (b *SettingBootstrapper) Bootstrap(ctx context.Context, manifest *plugins.M
 		if err := b.seedWorld(ctx, manifest, pluginDir); err != nil {
 			return err
 		}
+	}
+
+	// Step 3b: resolve and record starting location from manifest.
+	if manifest.Setting.StartingLocation != "" && b.worldService != nil {
+		loc, findErr := b.worldService.FindLocationByName(ctx, "system:bootstrap", manifest.Setting.StartingLocation)
+		if findErr != nil {
+			return oops.Code("SETTING_BOOTSTRAP_FAILED").
+				With("starting_location", manifest.Setting.StartingLocation).
+				Wrapf(findErr, "starting location not found in seeded world")
+		}
+		if err := b.metadataStore.Set(ctx, "starting_location_id", loc.ID.String()); err != nil {
+			return oops.Code("SETTING_BOOTSTRAP_FAILED").With("key", "starting_location_id").Wrap(err)
+		}
+		b.logger.InfoContext(ctx, "starting location recorded",
+			"name", manifest.Setting.StartingLocation,
+			"id", loc.ID.String())
 	}
 
 	// Step 4: seed theme.

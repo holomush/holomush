@@ -354,9 +354,9 @@ func (s *PostgresStore) ReplaceBySource(ctx context.Context, source, namePrefix 
 			return validateErr
 		}
 		_, err = tx.Exec(ctx,
-			`INSERT INTO access_policies (name, description, effect, source, dsl_text, compiled_ast, enabled, created_by)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			p.Name, p.Description, p.Effect, p.Source, p.DSLText, p.CompiledAST, p.Enabled, p.CreatedBy)
+			`INSERT INTO access_policies (id, name, description, effect, source, dsl_text, compiled_ast, enabled, created_by)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			ulid.Make().String(), p.Name, p.Description, p.Effect, p.Source, p.DSLText, p.CompiledAST, p.Enabled, p.CreatedBy)
 		if err != nil {
 			return oops.In("policy_store").With("policy", p.Name).Wrap(err)
 		}
@@ -390,9 +390,9 @@ func (s *PostgresStore) CreateBatch(ctx context.Context, policies []*StoredPolic
 			return validateErr
 		}
 		_, err = tx.Exec(ctx,
-			`INSERT INTO access_policies (name, description, effect, source, dsl_text, compiled_ast, enabled, created_by)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			p.Name, p.Description, p.Effect, p.Source, p.DSLText, p.CompiledAST, p.Enabled, p.CreatedBy)
+			`INSERT INTO access_policies (id, name, description, effect, source, dsl_text, compiled_ast, enabled, created_by)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			ulid.Make().String(), p.Name, p.Description, p.Effect, p.Source, p.DSLText, p.CompiledAST, p.Enabled, p.CreatedBy)
 		if err != nil {
 			return oops.In("policy_store").With("policy", p.Name).Wrap(err)
 		}

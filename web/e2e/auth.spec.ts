@@ -68,13 +68,8 @@ test.describe('Auth Flows', () => {
 });
 
 test.describe('Auth Flows — Full Registration Flow', () => {
-  // These tests require the full Docker stack (task dev)
-  const testUser = `e2e_${Date.now()}`;
-
-  test.skip('register → character select → create character → terminal', async ({ page }) => {
-    // Skip: requires full dispatcher wiring (bead a3a7.7) before this can pass.
-    // The gateway proxies CreatePlayer + CreateCharacter RPCs to core, but the
-    // core needs a real player database with the dispatcher connected end-to-end.
+  test('register → character select → create character → terminal', async ({ page }) => {
+    const testUser = `e2e_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     // Register
     await page.goto('/register');
     await page.fill('input[name="username"]', testUser);
@@ -85,16 +80,16 @@ test.describe('Auth Flows — Full Registration Flow', () => {
     // Should redirect to character select (new player has no characters)
     await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
 
-    // Create a character
+    // Create a character with auto-enter
     const createBtn = page.locator('text=Create New Character');
-    if (await createBtn.isVisible()) {
-      await createBtn.click();
-      await page.fill('input[name="characterName"]', 'TestHero');
-      await page.locator('button:has-text("Create")').click();
-    }
+    await expect(createBtn).toBeVisible({ timeout: 10000 });
+    await createBtn.click();
+    await page.fill('input[name="characterName"]', 'TestHero');
+    await page.locator('label.checkbox-label input[type="checkbox"]').check();
+    await page.locator('button:has-text("Create")').click();
 
     // Should auto-enter terminal
-    await expect(page).toHaveURL(/\/terminal/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
     await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
   });
 });

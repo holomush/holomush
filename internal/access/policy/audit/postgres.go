@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 )
 
@@ -46,9 +47,9 @@ func NewPostgresWriter(db *sql.DB) *PostgresWriter {
 func (w *PostgresWriter) WriteSync(ctx context.Context, entry Entry) error {
 	query := `
 		INSERT INTO access_audit_log (
-			subject, action, resource, effect, policy_id, policy_name,
+			id, subject, action, resource, effect, policy_id, policy_name,
 			attributes, duration_us, timestamp
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
 	attributesJSON, err := json.Marshal(entry.Attributes)
@@ -57,6 +58,7 @@ func (w *PostgresWriter) WriteSync(ctx context.Context, entry Entry) error {
 	}
 
 	_, err = w.db.ExecContext(ctx, query,
+		ulid.Make().String(),
 		entry.Subject,
 		entry.Action,
 		entry.Resource,
@@ -157,9 +159,9 @@ func (w *PostgresWriter) writeBatch(ctx context.Context, entries []Entry) error 
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO access_audit_log (
-			subject, action, resource, effect, policy_id, policy_name,
+			id, subject, action, resource, effect, policy_id, policy_name,
 			attributes, duration_us, timestamp
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`)
 	if err != nil {
 		return oops.Wrap(err)
@@ -178,6 +180,7 @@ func (w *PostgresWriter) writeBatch(ctx context.Context, entries []Entry) error 
 		}
 
 		_, err = stmt.ExecContext(ctx,
+			ulid.Make().String(),
 			entry.Subject,
 			entry.Action,
 			entry.Resource,

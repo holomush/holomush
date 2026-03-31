@@ -22,6 +22,7 @@ type genericPayload struct {
 	Text          string `json:"text"`
 	Action        string `json:"action"`
 	Notice        string `json:"notice"`
+	Reason        string `json:"reason"`
 	NoSpace       bool   `json:"no_space,omitempty"`
 	Style         string `json:"style,omitempty"`
 	Channel       string `json:"channel,omitempty"`
@@ -91,6 +92,14 @@ func (h *Handler) translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 		text = p.Notice
 	}
 
+	// Arrive/leave events need formatted text (e.g., "X has arrived.") since
+	// their payloads only carry character_name. Mirrors the telnet gateway's
+	// formatMovement in gateway_handler.go. Move events already have text
+	// (e.g., "Eve goes north.") from the generic extraction above.
+	if category == "movement" && (eventType == "arrive" || eventType == "leave") {
+		text = formatMovementText(eventType, actor, &p)
+	}
+
 	// Build metadata with type-specific fields.
 	meta := make(map[string]any)
 	if label != "" {
@@ -129,6 +138,25 @@ func (h *Handler) translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 		Actor:         actor,
 		Text:          text,
 		Metadata:      metadata,
+	}
+}
+
+// formatMovementText synthesizes human-readable text for movement events.
+// Mirrors the telnet gateway's formatMovement (gateway_handler.go).
+func formatMovementText(eventType, actor string, p *genericPayload) string {
+	if actor == "" {
+		return ""
+	}
+	switch eventType {
+	case "arrive":
+		return actor + " has arrived."
+	case "leave":
+		if reason := p.Reason; reason != "" {
+			return actor + " has left (" + reason + ")."
+		}
+		return actor + " has left."
+	default:
+		return ""
 	}
 }
 

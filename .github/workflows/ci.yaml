@@ -154,10 +154,66 @@ jobs:
       - name: Run integration tests
         run: task test:int
 
+      - name: Upload integration coverage
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage-int.out
+          flags: integration
+          fail_ci_if_error: false
+
+  e2e:
+    name: E2E Test
+    runs-on: namespace-profile-linux-amd64-4x8
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: go
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run E2E tests with coverage
+        run: task test:e2e:cover
+
+      - name: Upload E2E coverage
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage-e2e.out
+          flags: e2e
+          fail_ci_if_error: false
+
   build:
     name: Build
     runs-on: namespace-profile-linux-amd64-4x8
-    needs: [lint, test, integration]
+    needs: [lint, test, integration, e2e]
     steps:
       - uses: actions/checkout@v6
 

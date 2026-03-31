@@ -1330,6 +1330,7 @@ setting:
   content_dir: content
   world_dir: world
   theme: default
+  starting_location: The Nexus
 `
 	m, err := plugins.ParseManifest([]byte(yaml))
 	require.NoError(t, err)
@@ -1341,6 +1342,7 @@ setting:
 	assert.Equal(t, "content", m.Setting.ContentDir)
 	assert.Equal(t, "world", m.Setting.WorldDir)
 	assert.Equal(t, "default", m.Setting.Theme)
+	assert.Equal(t, "The Nexus", m.Setting.StartingLocation)
 }
 
 func TestParseManifest_SettingPlugin_MissingStanza(t *testing.T) {
@@ -1354,6 +1356,20 @@ type: setting
 	assert.Contains(t, err.Error(), "setting")
 }
 
+func TestParseManifest_SettingPlugin_MissingStartingLocation(t *testing.T) {
+	yaml := `
+name: my-setting
+version: 1.0.0
+type: setting
+setting:
+  display_name: My Setting
+  content_dir: content
+`
+	_, err := plugins.ParseManifest([]byte(yaml))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "starting_location")
+}
+
 func TestParseManifest_SettingPlugin_WithCommands(t *testing.T) {
 	yaml := `
 name: my-setting
@@ -1362,6 +1378,7 @@ type: setting
 setting:
   display_name: My Setting
   content_dir: content
+  starting_location: The Nexus
 commands:
   - name: look
     help: look around
@@ -1379,6 +1396,7 @@ type: setting
 setting:
   display_name: My Setting
   content_dir: content
+  starting_location: The Nexus
 lua-plugin:
   entry: main.lua
 `
@@ -1395,6 +1413,7 @@ type: setting
 setting:
   display_name: My Setting
   content_dir: content
+  starting_location: The Nexus
 binary-plugin:
   executable: my-binary
 `

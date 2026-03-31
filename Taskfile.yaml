@@ -70,7 +70,8 @@ tasks:
   test:int:
     desc: Run integration tests (needs Docker for testcontainers)
     cmds:
-      - go test -race -v -tags=integration -count=1 ./internal/content/ ./internal/store/ ./test/integration/...
+      - go test -race -v -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic ./internal/content/ ./internal/store/
+        ./test/integration/...
 
   test:e2e:
     desc: Run Playwright E2E tests in Docker
@@ -79,6 +80,17 @@ tasks:
       - docker compose -f compose.yaml -f compose.e2e.yaml run --rm playwright npx playwright test --reporter=line {{.CLI_ARGS}}
       - defer: docker compose -f compose.yaml -f compose.e2e.yaml down
 
+  test:e2e:cover:
+    desc: Run E2E tests with binary coverage instrumentation
+    deps: ['docker:build:cover']
+    cmds:
+      - mkdir -p .coverdata/core .coverdata/gateway
+      - defer: {docker compose -f compose.yaml -f compose.e2e.yaml -f compose.e2e.cover.yaml down -v; rm -rf .coverdata;: ''}
+      - >-
+        E2E_EXIT=0; docker compose -f compose.yaml -f compose.e2e.yaml -f compose.e2e.cover.yaml run --rm playwright npx playwright
+        test --reporter=line {{.CLI_ARGS}} || E2E_EXIT=$?; docker compose -f compose.yaml -f compose.e2e.yaml -f compose.e2e.cover.yaml
+        stop core gateway; go tool covdata textfmt -i=.coverdata/core,.coverdata/gateway -o coverage-e2e.out; echo "E2E coverage
+        written to coverage-e2e.out"; exit $E2E_EXIT #magic___^_^___line
   test:bench:
     desc: Run benchmarks
     cmds:
@@ -111,6 +123,13 @@ tasks:
     deps: ['web:embed']
     cmds:
       - CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o holomush {{.MAIN_PKG}}
+      - docker build -t holomush .
+
+  docker:build:cover:
+    desc: Build Docker image with coverage instrumentation
+    deps: ['web:embed']
+    cmds:
+      - CGO_ENABLED=0 GOOS=linux go build -cover -o holomush {{.MAIN_PKG}}
       - docker build -t holomush .
 
   # ──────────────────────────────────────────

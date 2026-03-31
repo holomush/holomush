@@ -52,6 +52,11 @@ import (
 	"github.com/holomush/holomush/internal/xdg"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	corealiases "github.com/holomush/holomush/plugins/core-aliases"
+	corebuilding "github.com/holomush/holomush/plugins/core-building"
+	"github.com/holomush/holomush/plugins/core-communication"
+	corehelp "github.com/holomush/holomush/plugins/core-help"
+	coreobjects "github.com/holomush/holomush/plugins/core-objects"
 )
 
 // bootstrapTransactor adapts world.Transactor (InTransaction) to the
@@ -146,14 +151,15 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		deps = &CoreDeps{}
 	}
 
-	// Validate game config early — fail before any side effects (migrations, TLS, etc.)
+	// Parse guest start location if provided via config; otherwise resolved after bootstrap.
+	var startLocationID ulid.ULID
 	startLocationStr := gameConfig.GuestStartLocation
-	if startLocationStr == "" {
-		startLocationStr = "01HK153X0006AFVGQT61FPQX3S" // The Nexus seed ULID
-	}
-	startLocationID, parseErr := ulid.Parse(startLocationStr)
-	if parseErr != nil {
-		return oops.Code("INVALID_START_LOCATION").With("value", startLocationStr).Wrap(parseErr)
+	if startLocationStr != "" {
+		var parseErr error
+		startLocationID, parseErr = ulid.Parse(startLocationStr)
+		if parseErr != nil {
+			return oops.Code("INVALID_START_LOCATION").With("value", startLocationStr).Wrap(parseErr)
+		}
 	}
 
 	// Set up default factories
@@ -360,7 +366,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			charRepo: worldpostgres.NewCharacterRepository(abacPool),
 		}
 		authLocRepo := &authLocRepoAdapter{
-			startLocationID: startLocationID,
+			startLocationID: &startLocationID,
 			locRepo:         worldpostgres.NewLocationRepository(abacPool),
 		}
 
@@ -422,6 +428,14 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			return oops.Code("SERVICE_PROXY_MW_FAILED").Wrap(proxyMWErr)
 		}
 		localHost := plugins.NewLocalPluginHost(instrumentedProxy)
+
+		// Register in-process Go handlers for core plugins (per spec: plugin-first
+		// command architecture, Chunk 3 Step 11 of each migration task).
+		localHost.RegisterHandler("core-aliases", &corealiases.Handler{}, nil)
+		localHost.RegisterHandler("core-building", &corebuilding.Handler{}, nil)
+		localHost.RegisterHandler("core-communication", communication.NewHandler(), nil)
+		localHost.RegisterHandler("core-help", &corehelp.Handler{}, nil)
+		localHost.RegisterHandler("core-objects", &coreobjects.Handler{}, nil)
 
 		// Wrap local host with OTel instrumentation.
 		instrumentedHost, hostMWErr := plugins.NewHostMiddleware(
@@ -515,7 +529,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			}),
 		)
 
-		guestAuth := telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocationID)
+		// guestAuth is created after bootstrap resolves startLocationID (see below).
 
 		// Session store was created earlier (in the ABAC stack block) — reuse it here.
 
@@ -569,6 +583,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 						MetadataStore: metadataStore,
 						SettingName:   cfg.Setting,
 						ResetSetting:  cfg.ResetSetting,
+						Manifest:      settingPlugin.Manifest,
+						PluginDir:     settingPlugin.Dir,
 						Logger:        slog.Default(),
 					}))
 					slog.Info("setting bootstrapper registered", "setting", cfg.Setting)
@@ -581,6 +597,30 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		if runErr := bootstrapRunner.RunAll(ctx); runErr != nil {
 			return oops.Code("BOOTSTRAP_FAILED").With("operation", "run bootstrap plugins").Wrap(runErr)
 		}
+
+		// Resolve starting location from bootstrap metadata if not explicitly configured.
+		// The setting bootstrapper records starting_location_id after world seeding.
+		if startLocationID.IsZero() {
+			metadataStore := bootstrap.NewPostgresMetadataStore(realStore.Pool())
+			locIDStr, found, metaErr := metadataStore.Get(ctx, "starting_location_id")
+			if metaErr != nil {
+				return oops.Code("START_LOCATION_FAILED").Wrap(metaErr)
+			}
+			if !found {
+				return oops.Code("START_LOCATION_NOT_FOUND").
+					Hint("set guest-start-location in config or add starting_location to the setting plugin manifest").
+					New("no starting_location_id in bootstrap metadata")
+			}
+			parsed, parseErr := ulid.Parse(locIDStr)
+			if parseErr != nil {
+				return oops.Code("START_LOCATION_INVALID").With("value", locIDStr).Wrap(parseErr)
+			}
+			startLocationID = parsed
+			slog.Info("resolved starting location from bootstrap metadata", "id", locIDStr)
+		}
+
+		// Create guest authenticator now that startLocationID is resolved.
+		guestAuth := telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocationID)
 
 		// Complete the ServiceProxy with late-bound dependencies so core plugins
 		// can access aliases, the command registry, and the starting location.
