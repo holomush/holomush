@@ -80,6 +80,8 @@ func WithCharacterRepo(repo auth.CharacterRepository) CoreServerOption {
 
 // AuthenticatePlayer validates credentials and returns a player token for character selection.
 func (s *CoreServer) AuthenticatePlayer(ctx context.Context, req *corev1.AuthenticatePlayerRequest) (*corev1.AuthenticatePlayerResponse, error) {
+	slog.DebugContext(ctx, "grpc: AuthenticatePlayer", "username", req.GetUsername())
+
 	if s.authService == nil {
 		return &corev1.AuthenticatePlayerResponse{
 			Success:      false,
@@ -132,6 +134,8 @@ func (s *CoreServer) AuthenticatePlayer(ctx context.Context, req *corev1.Authent
 // SelectCharacter validates a player token, creates or reattaches a game session.
 // TODO: Thread connID through SelectCharacterResponse proto once the field is added.
 func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectCharacterRequest) (*corev1.SelectCharacterResponse, error) {
+	slog.DebugContext(ctx, "grpc: SelectCharacter", "character_id", req.GetCharacterId())
+
 	if s.playerTokenRepo == nil {
 		return &corev1.SelectCharacterResponse{
 			Success: false, ErrorMessage: "player token service not configured",
@@ -270,6 +274,8 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 
 // CreatePlayer creates a new player account.
 func (s *CoreServer) CreatePlayer(ctx context.Context, req *corev1.CreatePlayerRequest) (*corev1.CreatePlayerResponse, error) {
+	slog.DebugContext(ctx, "grpc: CreatePlayer", "username", req.GetUsername())
+
 	if s.authService == nil {
 		return &corev1.CreatePlayerResponse{
 			Success:      false,
@@ -303,6 +309,8 @@ func (s *CoreServer) CreatePlayer(ctx context.Context, req *corev1.CreatePlayerR
 
 // CreateCharacter creates a new character for an authenticated player.
 func (s *CoreServer) CreateCharacter(ctx context.Context, req *corev1.CreateCharacterRequest) (*corev1.CreateCharacterResponse, error) {
+	slog.DebugContext(ctx, "grpc: CreateCharacter", "character_name", req.GetCharacterName())
+
 	if s.playerTokenRepo == nil {
 		return &corev1.CreateCharacterResponse{
 			Success: false, ErrorMessage: "character creation not configured",
@@ -349,6 +357,8 @@ func (s *CoreServer) CreateCharacter(ctx context.Context, req *corev1.CreateChar
 
 // ListCharacters returns characters for an authenticated player.
 func (s *CoreServer) ListCharacters(ctx context.Context, req *corev1.ListCharactersRequest) (*corev1.ListCharactersResponse, error) {
+	slog.DebugContext(ctx, "grpc: ListCharacters")
+
 	if s.playerTokenRepo == nil {
 		return &corev1.ListCharactersResponse{}, nil
 	}
@@ -414,6 +424,8 @@ func (s *CoreServer) ConfirmPasswordReset(ctx context.Context, req *corev1.Confi
 
 // Logout ends a web session.
 func (s *CoreServer) Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1.LogoutResponse, error) {
+	slog.DebugContext(ctx, "grpc: Logout", "session_id", req.GetSessionId())
+
 	if s.authService == nil {
 		return nil, oops.Code("NOT_CONFIGURED").Errorf("auth service not configured")
 	}

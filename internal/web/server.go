@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
 	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
 )
 
@@ -48,6 +50,9 @@ func NewServer(cfg Config) *Server {
 	if len(cfg.CORSOrigins) > 0 {
 		handler = CORSMiddleware(cfg.CORSOrigins, handler)
 	}
+
+	// Wrap with OpenTelemetry HTTP instrumentation
+	handler = otelhttp.NewHandler(handler, "holomush-gateway")
 
 	return &Server{
 		httpServer: &http.Server{

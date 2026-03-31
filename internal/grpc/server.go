@@ -537,7 +537,7 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 	}
 
 	if s.eventStore == nil {
-		slog.Debug("emitCommandResponse: eventStore not configured, event not emitted")
+		slog.DebugContext(ctx, "emitCommandResponse: eventStore not configured, event not emitted")
 		return nil
 	}
 

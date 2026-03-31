@@ -18,10 +18,16 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/holomush/holomush/internal/core"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
+
+var tracer = otel.Tracer("holomush.telnet")
 
 const (
 	// maxLineSize is the maximum line length from a telnet client (8 KiB).
@@ -86,7 +92,15 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 	childCtx, childCancel := context.WithCancel(ctx)
 	defer childCancel()
 
+	slog.DebugContext(ctx, "telnet: client connected",
+		"remote_addr", h.conn.RemoteAddr().String(),
+	)
+
 	defer func() {
+		slog.DebugContext(ctx, "telnet: client disconnected",
+			"remote_addr", h.conn.RemoteAddr().String(),
+			"session_id", h.sessionID,
+		)
 		if h.authed && h.sessionID != "" {
 			// Use a fresh context — the session ctx may already be cancelled.
 			disconnCtx, disconnCancel := context.WithTimeout(context.Background(), rpcTimeout)
@@ -95,11 +109,11 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 				SessionId:    h.sessionID,
 				ConnectionId: h.connectionID,
 			}); err != nil {
-				slog.Debug("gateway: disconnect RPC failed", "session_id", h.sessionID, "error", err)
+				slog.DebugContext(ctx, "gateway: disconnect RPC failed", "session_id", h.sessionID, "error", err)
 			}
 		}
 		if err := h.conn.Close(); err != nil {
-			slog.Debug("gateway: error closing connection", "error", err)
+			slog.DebugContext(ctx, "gateway: error closing connection", "error", err)
 		}
 	}()
 
@@ -143,7 +157,7 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 
 		case err := <-errCh:
 			if !errors.Is(err, io.EOF) {
-				slog.Debug("gateway: connection read error", "error", err)
+				slog.DebugContext(childCtx, "gateway: connection read error", "error", err)
 			}
 			return
 
@@ -161,7 +175,7 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 		case resp, ok := <-eventRecv:
 			if !ok {
 				eventRecv = nil
-				slog.Debug("gateway: event stream closed", "session_id", h.sessionID)
+				slog.DebugContext(childCtx, "gateway: event stream closed", "session_id", h.sessionID)
 				h.send("Connection to server lost.")
 				continue
 			}
@@ -176,7 +190,7 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 					return
 				}
 				// REPLAY_COMPLETE: no-op for telnet — replay renders the same as live.
-				slog.Debug("gateway: replay complete", "session_id", h.sessionID)
+				slog.DebugContext(childCtx, "gateway: replay complete", "session_id", h.sessionID)
 			}
 		}
 	}
@@ -261,6 +275,9 @@ func (h *GatewayHandler) handleConnectGuest(ctx context.Context, username, passw
 		return nil
 	}
 	if !resp.GetSuccess() {
+		slog.DebugContext(ctx, "telnet: guest authentication failed",
+			"remote_addr", h.conn.RemoteAddr().String(),
+		)
 		h.send("Login failed. Use `connect guest` to play.")
 		return nil
 	}
@@ -269,6 +286,11 @@ func (h *GatewayHandler) handleConnectGuest(ctx context.Context, username, passw
 	h.connectionID = resp.GetConnectionId()
 	h.charName = resp.GetCharacterName()
 	h.authed = true
+
+	slog.DebugContext(ctx, "telnet: authentication success",
+		"session_id", h.sessionID,
+		"char_name", h.charName,
+	)
 
 	h.send(fmt.Sprintf("Welcome, %s!", h.charName))
 
@@ -290,6 +312,9 @@ func (h *GatewayHandler) handleConnectPlayer(ctx context.Context, username, pass
 		return nil
 	}
 	if !resp.GetSuccess() {
+		slog.DebugContext(ctx, "telnet: player authentication failed",
+			"remote_addr", h.conn.RemoteAddr().String(),
+		)
 		h.send("Login failed. Use `connect guest` to play.")
 		return nil
 	}
@@ -416,6 +441,11 @@ func (h *GatewayHandler) selectCharacter(ctx context.Context, ch *corev1.Charact
 	h.playerToken = ""
 	h.characters = nil
 
+	slog.DebugContext(ctx, "telnet: authentication success",
+		"session_id", h.sessionID,
+		"char_name", h.charName,
+	)
+
 	if resp.GetReattached() {
 		h.send("Reattaching to existing session...")
 	}
@@ -447,7 +477,7 @@ func (h *GatewayHandler) subscribeAndEnter(ctx context.Context) <-chan *corev1.S
 			resp, recvErr := stream.Recv()
 			if recvErr != nil {
 				if !errors.Is(recvErr, io.EOF) {
-					slog.Debug("gateway: event stream recv error", "session_id", h.sessionID, "error", recvErr)
+					slog.DebugContext(ctx, "gateway: event stream recv error", "session_id", h.sessionID, "error", recvErr)
 				}
 				return
 			}
@@ -471,6 +501,15 @@ func (h *GatewayHandler) handleSay(ctx context.Context, message string) {
 		h.send("Say what?")
 		return
 	}
+
+	ctx, span := tracer.Start(ctx, "telnet.command",
+		trace.WithAttributes(
+			attribute.String("session.id", h.sessionID),
+			attribute.String("character.name", h.charName),
+			attribute.String("command", "say"),
+		),
+	)
+	defer span.End()
 
 	cmdCtx, cmdCancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cmdCancel()
@@ -500,6 +539,15 @@ func (h *GatewayHandler) handlePose(ctx context.Context, action string) {
 		h.send("Pose what?")
 		return
 	}
+
+	ctx, span := tracer.Start(ctx, "telnet.command",
+		trace.WithAttributes(
+			attribute.String("session.id", h.sessionID),
+			attribute.String("character.name", h.charName),
+			attribute.String("command", "pose"),
+		),
+	)
+	defer span.End()
 
 	cmdCtx, cmdCancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cmdCancel()
@@ -536,6 +584,15 @@ func (h *GatewayHandler) handleGenericCommand(ctx context.Context, cmd, arg stri
 		return
 	}
 
+	ctx, span := tracer.Start(ctx, "telnet.command",
+		trace.WithAttributes(
+			attribute.String("session.id", h.sessionID),
+			attribute.String("character.name", h.charName),
+			attribute.String("command", cmd),
+		),
+	)
+	defer span.End()
+
 	cmdCtx, cmdCancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cmdCancel()
 
@@ -552,7 +609,16 @@ func (h *GatewayHandler) handleGenericCommand(ctx context.Context, cmd, arg stri
 func (h *GatewayHandler) handleQuit(ctx context.Context) {
 	if h.authed {
 		// Forward quit to the server so it can emit events and clean up.
-		cmdCtx, cmdCancel := context.WithTimeout(ctx, rpcTimeout)
+		spanCtx, span := tracer.Start(ctx, "telnet.command",
+			trace.WithAttributes(
+				attribute.String("session.id", h.sessionID),
+				attribute.String("character.name", h.charName),
+				attribute.String("command", "quit"),
+			),
+		)
+		defer span.End()
+
+		cmdCtx, cmdCancel := context.WithTimeout(spanCtx, rpcTimeout)
 		defer cmdCancel()
 
 		if _, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
