@@ -11,6 +11,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/holomush/holomush/internal/bootstrap"
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
@@ -56,7 +57,7 @@ type CoreDeps struct {
 
 	// MigratorFactory creates a database migrator.
 	// Default: store.NewMigrator
-	MigratorFactory func(databaseURL string) (AutoMigrator, error)
+	MigratorFactory func(databaseURL string) (bootstrap.AutoMigrator, error)
 
 	// AutoMigrateGetter returns whether auto-migration is enabled.
 	// Default: parseAutoMigrate (reads HOLOMUSH_DB_AUTO_MIGRATE env var)
@@ -136,8 +137,3 @@ type GRPCClient interface {
 	Close() error
 }
 
-// AutoMigrator is the minimal interface for startup auto-migration.
-type AutoMigrator interface {
-	Up() error
-	Close() error
-}

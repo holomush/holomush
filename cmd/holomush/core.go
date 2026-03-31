@@ -181,7 +181,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		}
 	}
 	if deps.MigratorFactory == nil {
-		deps.MigratorFactory = func(url string) (AutoMigrator, error) {
+		deps.MigratorFactory = func(url string) (bootstrap.AutoMigrator, error) {
 			return store.NewMigrator(url)
 		}
 	}
@@ -208,11 +208,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	}
 
 	// Run schema migration before any DB queries (must complete before event store init).
-	// Adapt MigratorFactory from main.AutoMigrator to bootstrap.AutoMigrator.
-	migratorAdapter := func(url string) (bootstrap.AutoMigrator, error) {
-		return deps.MigratorFactory(url)
-	}
-	migrationBoot := bootstrap.NewMigrationBootstrapper(databaseURL, migratorAdapter, deps.AutoMigrateGetter())
+	migrationBoot := bootstrap.NewMigrationBootstrapper(databaseURL, deps.MigratorFactory, deps.AutoMigrateGetter())
 	if err := migrationBoot.Bootstrap(ctx, nil, ""); err != nil {
 		return err
 	}
@@ -871,7 +867,7 @@ func monitorServerErrors(ctx context.Context, cancel context.CancelFunc, errCh <
 // Used by auto-migration unit/integration tests; production code uses MigrationBootstrapper.
 //
 //nolint:unparam // databaseURL varies in integration tests (connStr from testcontainers)
-func runAutoMigration(databaseURL string, factory func(string) (AutoMigrator, error)) error {
+func runAutoMigration(databaseURL string, factory func(string) (bootstrap.AutoMigrator, error)) error {
 	slog.Info("running auto-migration")
 
 	migrator, err := factory(databaseURL)

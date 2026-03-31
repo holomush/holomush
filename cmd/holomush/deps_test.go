@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/bootstrap"
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -164,7 +165,7 @@ func (m *mockGRPCClient) Logout(_ context.Context, _ *corev1.LogoutRequest) (*co
 	return nil, nil
 }
 
-// mockMigrator implements AutoMigrator for testing.
+// mockMigrator implements bootstrap.AutoMigrator for testing.
 type mockMigrator struct {
 	upFunc    func() error
 	closeFunc func() error
@@ -184,9 +185,9 @@ func (m *mockMigrator) Close() error {
 	return nil
 }
 
-// noOpMigratorFactory returns an AutoMigrator that does nothing, for use in tests
+// noOpMigratorFactory returns a bootstrap.AutoMigrator that does nothing, for use in tests
 // that don't care about migration behavior.
-func noOpMigratorFactory(_ string) (AutoMigrator, error) {
+func noOpMigratorFactory(_ string) (bootstrap.AutoMigrator, error) {
 	return &mockMigrator{}, nil
 }
 
