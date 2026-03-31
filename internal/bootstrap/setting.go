@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"gopkg.in/yaml.v3"
@@ -145,9 +146,9 @@ func (b *SettingBootstrapper) seedContent(ctx context.Context, manifest *plugins
 
 	contentDir := filepath.Join(pluginDir, manifest.Setting.ContentDir)
 	if _, err := os.Stat(contentDir); os.IsNotExist(err) {
-		b.logger.InfoContext(ctx, "content dir does not exist, skipping",
-			"dir", contentDir)
-		return nil
+		return oops.Code("SETTING_BOOTSTRAP_FAILED").
+			With("content_dir", contentDir).
+			New("content_dir declared in manifest but directory does not exist")
 	}
 
 	items, err := content.ParseContentDir(contentDir)
@@ -158,15 +159,17 @@ func (b *SettingBootstrapper) seedContent(ctx context.Context, manifest *plugins
 	}
 
 	for _, item := range items {
-		existing, err := b.contentStore.Get(ctx, item.Key)
-		if err != nil {
-			return oops.Code("SETTING_BOOTSTRAP_FAILED").
-				With("key", item.Key).
-				Wrap(err)
-		}
-		if existing != nil {
-			b.logger.DebugContext(ctx, "content item already exists, skipping", "key", item.Key)
-			continue
+		if !b.resetSetting {
+			existing, err := b.contentStore.Get(ctx, item.Key)
+			if err != nil {
+				return oops.Code("SETTING_BOOTSTRAP_FAILED").
+					With("key", item.Key).
+					Wrap(err)
+			}
+			if existing != nil {
+				b.logger.DebugContext(ctx, "content item already exists, skipping", "key", item.Key)
+				continue
+			}
 		}
 		if err := b.contentStore.Put(ctx, item); err != nil {
 			return oops.Code("SETTING_BOOTSTRAP_FAILED").
@@ -243,9 +246,12 @@ func (b *SettingBootstrapper) seedWorld(ctx context.Context, manifest *plugins.M
 					b.logger.DebugContext(ctx, "location already exists, skipping", "name", s.Name)
 					// Still need the ID for exit resolution — look it up.
 					existing, findErr := b.worldService.FindLocationByName(ctx, "system:bootstrap", s.Name)
-					if findErr == nil {
-						locationIDs[s.Name] = existing.ID
+					if findErr != nil {
+						return oops.Code("SETTING_BOOTSTRAP_FAILED").
+							With("location", s.Name).
+							Wrap(findErr)
 					}
+					locationIDs[s.Name] = existing.ID
 					continue
 				}
 				return oops.Code("SETTING_BOOTSTRAP_FAILED").
@@ -382,15 +388,20 @@ func (b *SettingBootstrapper) seedTheme(ctx context.Context, manifest *plugins.M
 	return nil
 }
 
-// isAlreadyExists checks whether an error represents a "already exists" condition.
-// The world service uses oops error codes, so we check for LOCATION_CREATE_FAILED
-// wrapping a unique-constraint violation, or an explicit "already exists" code.
+// isAlreadyExists checks whether an error represents an "already exists" condition.
+// It accepts:
+//   - the errAlreadyExists sentinel (returned by the test mock)
+//   - a *pgconn.PgError with SqlState "23505" (unique_violation) anywhere in the
+//     unwrap chain (returned by the real Postgres repository through oops wrappers)
 func isAlreadyExists(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Accept any error that carries the sentinel.
-	return errors.Is(err, errAlreadyExists)
+	if errors.Is(err, errAlreadyExists) {
+		return true
+	}
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 // errAlreadyExists is a sentinel used by tests and the bootstrapper itself.

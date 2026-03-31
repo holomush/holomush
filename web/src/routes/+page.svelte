@@ -53,20 +53,20 @@
   }
 </script>
 
-<div class="landing" style={themeToCssVars($activeTheme.colors)}>
+<div class="landing" style={themeToCssVars($activeTheme.colors)} data-testid="landing">
   <!-- Hero -->
-  <section class="hero">
-    <h1 class="title">{heroTitle}</h1>
-    <p class="subtitle">{heroTagline}</p>
+  <section class="hero" data-testid="hero">
+    <h1 class="title" data-testid="hero-title">{heroTitle}</h1>
+    <p class="subtitle" data-testid="hero-tagline">{heroTagline}</p>
 
     {#if error}
-      <p class="error">{error}</p>
+      <p class="error" data-testid="hero-error">{error}</p>
     {/if}
 
     <div class="actions">
-      <a href="/login" class="btn-primary">Login</a>
-      <a href="/register" class="btn-secondary">Register</a>
-      <button class="btn-ghost" onclick={handleGuest} disabled={loading}>
+      <a href="/login" class="btn-primary" data-testid="login-link">Login</a>
+      <a href="/register" class="btn-secondary" data-testid="register-link">Register</a>
+      <button class="btn-ghost" onclick={handleGuest} disabled={loading} data-testid="guest-button">
         {loading ? 'Connecting…' : 'Try as Guest'}
       </button>
     </div>
@@ -75,15 +75,15 @@
   {#if hasContent}
     <!-- Pitch -->
     {#if pitch}
-      <section class="pitch">
+      <section class="pitch" data-testid="pitch">
         <MarkdownContent content={pitch.body} />
       </section>
     {/if}
 
     <!-- Feature grid -->
     {#if features.length > 0}
-      <section class="features">
-        <div class="feature-grid">
+      <section class="features" data-testid="features">
+        <div class="feature-grid" data-testid="feature-grid">
           {#each features as feature (feature.key)}
             <FeatureCard
               title={feature.metadata?.title ?? feature.key}
@@ -96,7 +96,7 @@
 
     <!-- Connect info -->
     {#if connectInfo}
-      <section class="connect">
+      <section class="connect" data-testid="connect">
         <MarkdownContent content={connectInfo.body} />
       </section>
     {/if}

@@ -6,6 +6,7 @@ package content
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
@@ -27,6 +28,9 @@ func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore {
 // Put creates or updates a content item. For text/* and application/json content
 // types the search_vector column is populated; all others set it to NULL.
 func (s *PostgresStore) Put(ctx context.Context, item *Item) error {
+	if item == nil {
+		return oops.New("content item must not be nil")
+	}
 	meta, err := json.Marshal(item.Metadata)
 	if err != nil {
 		return oops.With("key", item.Key).With("operation", "marshal metadata").Wrap(err)
@@ -78,13 +82,22 @@ func (s *PostgresStore) Get(ctx context.Context, key string) (*Item, error) {
 	return item, nil
 }
 
+// escapeLike escapes LIKE special characters in s so it can be used as a
+// literal prefix in a LIKE pattern (with ESCAPE '\').
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
+}
+
 // List returns content items whose key starts with prefix, with optional
 // cursor-based pagination.
 func (s *PostgresStore) List(ctx context.Context, prefix string, opts ListOptions) (*ListResult, error) {
-	args := []any{prefix + "%"}
+	args := []any{escapeLike(prefix) + "%"}
 	query := `SELECT key, content_type, body, metadata, updated_at
 	            FROM content_items
-	           WHERE key LIKE $1`
+	           WHERE key LIKE $1 ESCAPE '\'`
 
 	if opts.Cursor != "" {
 		args = append(args, opts.Cursor)
@@ -158,7 +171,7 @@ func scanItem(s scanner) (*Item, error) {
 
 	err := s.Scan(&key, &contentType, &body, &metaRaw, &updatedAt)
 	if err != nil {
-		if strings.Contains(err.Error(), pgx.ErrNoRows.Error()) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, oops.With("operation", "scan row").Wrap(err)

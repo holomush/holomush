@@ -32,7 +32,6 @@ import (
 	authpostgres "github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/bootstrap"
 	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/content"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/content"
@@ -543,7 +542,24 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 					}
 				}
 				if settingPlugin == nil {
-					slog.Warn("setting plugin not found, skipping setting bootstrap", "setting", cfg.Setting)
+					// If no active_setting has been recorded yet, this is first boot (or reset) and
+					// the missing plugin is a fatal configuration error — the world cannot be seeded.
+					// On subsequent boots (active_setting already persisted), a missing plugin is
+					// tolerable: the world data already exists, so log a warning and continue.
+					metadataStore := bootstrap.NewPostgresMetadataStore(realStore.Pool())
+					_, settingRecorded, metaErr := metadataStore.Get(ctx, "active_setting")
+					if metaErr != nil {
+						return oops.Code("BOOTSTRAP_FAILED").
+							With("setting", cfg.Setting).
+							With("operation", "check active_setting metadata").
+							Wrap(metaErr)
+					}
+					if !settingRecorded {
+						return oops.Code("BOOTSTRAP_FAILED").
+							With("setting", cfg.Setting).
+							New("setting plugin not found and no active_setting recorded; cannot bootstrap world on first boot")
+					}
+					slog.Warn("setting plugin not found, skipping setting bootstrap (world already seeded)", "setting", cfg.Setting)
 				} else {
 					contentStore := content.NewPostgresStore(realStore.Pool())
 					metadataStore := bootstrap.NewPostgresMetadataStore(realStore.Pool())

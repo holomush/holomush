@@ -42,4 +42,6 @@ export function applyOverrides(customThemes: Record<string, Theme>, overrides: R
       themes[base] = { ...themes[base], colors: { ...themes[base].colors, ...colors } };
     }
   }
+  // Force activeTheme to re-derive with updated themes map.
+  activeThemeId.update((id) => id);
 }

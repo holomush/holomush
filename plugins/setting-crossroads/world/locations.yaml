@@ -6,12 +6,12 @@
   type: "persistent"
   description: >
     A vast circular plaza beneath an impossible sky where fragments of other worlds drift like clouds. Doorways line the perimeter
-    — some stable, some flickering. This is the heart of the Crossroads, where all paths converge. #magic___^_^___line
+    — some stable, some flickering. This is the heart of the Crossroads, where all paths converge.
 - name: "The Threshold"
   type: "persistent"
   description: >
     A shimmering archway where new arrivals step through, disoriented and blinking. The air tastes of ozone and possibility.
-    Beyond the arch, the Nexus stretches out in every direction. #magic___^_^___line
+    Beyond the arch, the Nexus stretches out in every direction.
 - name: "The Doors Market"
   type: "persistent"
   description: >-

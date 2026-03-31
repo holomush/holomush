@@ -436,13 +436,15 @@ func TestSettingBootstrapper_Bootstrap_MissingContentDir(t *testing.T) {
 
 	manifest := settingManifest("", "")
 	err := b.Bootstrap(context.Background(), manifest, tmpDir)
-	require.NoError(t, err, "missing content dir should be handled gracefully")
+	// A missing content_dir is now a hard error: the manifest declares it but the
+	// directory does not exist, so bootstrapping cannot proceed.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "content_dir declared in manifest but directory does not exist")
 
-	// metadata should still be recorded.
-	v, found, err := ms.Get(context.Background(), "active_setting")
-	require.NoError(t, err)
-	require.True(t, found)
-	assert.Equal(t, "my-setting", v)
+	// metadata must NOT have been recorded (bootstrap failed before step 5).
+	_, found, metaErr := ms.Get(context.Background(), "active_setting")
+	require.NoError(t, metaErr)
+	assert.False(t, found, "active_setting should not be recorded when bootstrap fails")
 }
 
 func TestSettingBootstrapper_Bootstrap_ManifestWithNoSettingStanza(t *testing.T) {

@@ -5,7 +5,12 @@ import { listContent } from '$lib/stores/contentStore';
 import type { ContentItem } from '$lib/stores/contentStore';
 
 export async function load() {
-  const items = await listContent('landing.');
+  let items: ContentItem[] = [];
+  try {
+    items = await listContent('landing.');
+  } catch {
+    // Content service unavailable — render with fallback defaults.
+  }
 
   const hero = items.find((i) => i.key === 'landing.hero');
   const pitch = items.find((i) => i.key === 'landing.pitch');

@@ -219,6 +219,12 @@ func (m *Manifest) Validate() error {
 		if m.Setting == nil {
 			return oops.In("manifest").With("name", m.Name).New("setting stanza is required when type is setting")
 		}
+		if m.Setting.DisplayName == "" {
+			return oops.In("manifest").With("name", m.Name).New("setting.display_name is required")
+		}
+		if m.Setting.ContentDir == "" {
+			return oops.In("manifest").With("name", m.Name).New("setting.content_dir is required")
+		}
 		if len(m.Commands) > 0 {
 			return oops.In("manifest").With("name", m.Name).New("setting plugins must not declare commands")
 		}

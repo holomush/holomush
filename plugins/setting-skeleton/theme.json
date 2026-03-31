@@ -1,5 +1,7 @@
 {
-  "default": "default-dark",
+  "default": {
+    "name": "default-dark"
+  },
   "overrides": {},
   "custom": {}
 }
