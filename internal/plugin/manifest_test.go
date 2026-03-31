@@ -1314,3 +1314,91 @@ lua-plugin:
 		})
 	}
 }
+
+func TestTypeSetting_Constant(t *testing.T) {
+	assert.Equal(t, plugins.Type("setting"), plugins.TypeSetting)
+}
+
+func TestParseManifest_SettingPlugin(t *testing.T) {
+	yaml := `
+name: my-setting
+version: 1.0.0
+type: setting
+setting:
+  display_name: My Setting
+  description: A test setting
+  content_dir: content
+  world_dir: world
+  theme: default
+`
+	m, err := plugins.ParseManifest([]byte(yaml))
+	require.NoError(t, err)
+
+	assert.Equal(t, plugins.TypeSetting, m.Type)
+	require.NotNil(t, m.Setting)
+	assert.Equal(t, "My Setting", m.Setting.DisplayName)
+	assert.Equal(t, "A test setting", m.Setting.Description)
+	assert.Equal(t, "content", m.Setting.ContentDir)
+	assert.Equal(t, "world", m.Setting.WorldDir)
+	assert.Equal(t, "default", m.Setting.Theme)
+}
+
+func TestParseManifest_SettingPlugin_MissingStanza(t *testing.T) {
+	yaml := `
+name: my-setting
+version: 1.0.0
+type: setting
+`
+	_, err := plugins.ParseManifest([]byte(yaml))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "setting")
+}
+
+func TestParseManifest_SettingPlugin_WithCommands(t *testing.T) {
+	yaml := `
+name: my-setting
+version: 1.0.0
+type: setting
+setting:
+  display_name: My Setting
+  content_dir: content
+commands:
+  - name: look
+    help: look around
+`
+	_, err := plugins.ParseManifest([]byte(yaml))
+	require.Error(t, err)
+	assert.True(t, strings.Contains(err.Error(), "command") || strings.Contains(err.Error(), "setting"))
+}
+
+func TestParseManifest_SettingPlugin_WithLuaPlugin(t *testing.T) {
+	yaml := `
+name: my-setting
+version: 1.0.0
+type: setting
+setting:
+  display_name: My Setting
+  content_dir: content
+lua-plugin:
+  entry: main.lua
+`
+	_, err := plugins.ParseManifest([]byte(yaml))
+	require.Error(t, err)
+	assert.True(t, strings.Contains(err.Error(), "lua") || strings.Contains(err.Error(), "setting"))
+}
+
+func TestParseManifest_SettingPlugin_WithBinaryPlugin(t *testing.T) {
+	yaml := `
+name: my-setting
+version: 1.0.0
+type: setting
+setting:
+  display_name: My Setting
+  content_dir: content
+binary-plugin:
+  executable: my-binary
+`
+	_, err := plugins.ParseManifest([]byte(yaml))
+	require.Error(t, err)
+	assert.True(t, strings.Contains(err.Error(), "binary") || strings.Contains(err.Error(), "setting"))
+}

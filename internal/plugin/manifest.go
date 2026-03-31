@@ -21,9 +21,10 @@ type Type string
 
 // Plugin types supported by the system.
 const (
-	TypeCore   Type = "core"
-	TypeLua    Type = "lua"
-	TypeBinary Type = "binary"
+	TypeCore    Type = "core"
+	TypeLua     Type = "lua"
+	TypeBinary  Type = "binary"
+	TypeSetting Type = "setting"
 )
 
 // LoadPriority determines plugin load order. Lower values load first.
@@ -45,7 +46,7 @@ type ManifestPolicy struct {
 type Manifest struct {
 	Name         string            `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=64,pattern=^[a-z](-?[a-z0-9])*$"`
 	Version      string            `yaml:"version" json:"version" jsonschema:"required,minLength=1"`
-	Type         Type              `yaml:"type" json:"type" jsonschema:"required,enum=core,enum=lua,enum=binary"`
+	Type         Type              `yaml:"type" json:"type" jsonschema:"required,enum=core,enum=lua,enum=binary,enum=setting"`
 	Engine       string            `yaml:"engine,omitempty" json:"engine,omitempty" jsonschema:"description=HoloMUSH version constraint (e.g. >= 2.0.0)"`
 	Dependencies map[string]string `yaml:"dependencies,omitempty" json:"dependencies,omitempty" jsonschema:"description=Plugin dependencies with version constraints"`
 	Events       []string          `yaml:"events,omitempty" json:"events,omitempty"`
@@ -54,6 +55,7 @@ type Manifest struct {
 	Priority     *LoadPriority     `yaml:"priority,omitempty" json:"priority,omitempty" jsonschema:"description=Load priority (lower loads first)"`
 	LuaPlugin    *LuaConfig        `yaml:"lua-plugin,omitempty" json:"lua-plugin,omitempty"`
 	BinaryPlugin *BinaryConfig     `yaml:"binary-plugin,omitempty" json:"binary-plugin,omitempty"`
+	Setting      *SettingConfig    `yaml:"setting,omitempty" json:"setting,omitempty"`
 
 	// Deprecated: capabilities field is no longer supported. Use policies instead.
 	// This field exists only to detect old-format manifests and produce a clear error.
@@ -82,6 +84,15 @@ type LuaConfig struct {
 // BinaryConfig holds binary plugin configuration.
 type BinaryConfig struct {
 	Executable string `yaml:"executable" json:"executable" jsonschema:"required,minLength=1"`
+}
+
+// SettingConfig holds setting plugin configuration.
+type SettingConfig struct {
+	DisplayName string `yaml:"display_name" json:"display_name" jsonschema:"required"`
+	Description string `yaml:"description" json:"description"`
+	ContentDir  string `yaml:"content_dir" json:"content_dir" jsonschema:"required"`
+	WorldDir    string `yaml:"world_dir" json:"world_dir"`
+	Theme       string `yaml:"theme" json:"theme"`
 }
 
 // CommandSpec declares a command provided by a plugin.
@@ -204,8 +215,21 @@ func (m *Manifest) Validate() error {
 		if m.BinaryPlugin.Executable == "" {
 			return oops.In("manifest").With("name", m.Name).New("binary-plugin.executable is required")
 		}
+	case TypeSetting:
+		if m.Setting == nil {
+			return oops.In("manifest").With("name", m.Name).New("setting stanza is required when type is setting")
+		}
+		if len(m.Commands) > 0 {
+			return oops.In("manifest").With("name", m.Name).New("setting plugins must not declare commands")
+		}
+		if m.LuaPlugin != nil {
+			return oops.In("manifest").With("name", m.Name).New("setting plugins must not specify lua-plugin")
+		}
+		if m.BinaryPlugin != nil {
+			return oops.In("manifest").With("name", m.Name).New("setting plugins must not specify binary-plugin")
+		}
 	default:
-		return oops.In("manifest").With("name", m.Name).With("type", m.Type).New("type must be 'core', 'lua', or 'binary'")
+		return oops.In("manifest").With("name", m.Name).With("type", m.Type).New("type must be 'core', 'lua', 'binary', or 'setting'")
 	}
 
 	// Validate load priority: priorities below -999 are reserved for core plugins.

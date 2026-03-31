@@ -17,7 +17,8 @@
       "enum": [
         "core",
         "lua",
-        "binary"
+        "binary",
+        "setting"
       ]
     },
     "engine": {
@@ -119,6 +120,34 @@
       "type": "object",
       "required": [
         "executable"
+      ]
+    },
+    "setting": {
+      "properties": {
+        "display_name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "content_dir": {
+          "type": "string"
+        },
+        "world_dir": {
+          "type": "string"
+        },
+        "theme": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "display_name",
+        "description",
+        "content_dir",
+        "world_dir",
+        "theme"
       ]
     }
   },
