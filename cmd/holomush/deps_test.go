@@ -19,11 +19,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/bootstrap"
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/pkg/errutil"
+	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -164,7 +166,15 @@ func (m *mockGRPCClient) Logout(_ context.Context, _ *corev1.LogoutRequest) (*co
 	return nil, nil
 }
 
-// mockMigrator implements AutoMigrator for testing.
+func (m *mockGRPCClient) GetContent(_ context.Context, _ *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) ListContent(_ context.Context, _ *contentv1.ListContentRequest) (*contentv1.ListContentResponse, error) {
+	return nil, nil
+}
+
+// mockMigrator implements bootstrap.AutoMigrator for testing.
 type mockMigrator struct {
 	upFunc    func() error
 	closeFunc func() error
@@ -184,9 +194,9 @@ func (m *mockMigrator) Close() error {
 	return nil
 }
 
-// noOpMigratorFactory returns an AutoMigrator that does nothing, for use in tests
+// noOpMigratorFactory returns a bootstrap.AutoMigrator that does nothing, for use in tests
 // that don't care about migration behavior.
-func noOpMigratorFactory(_ string) (AutoMigrator, error) {
+func noOpMigratorFactory(_ string) (bootstrap.AutoMigrator, error) {
 	return &mockMigrator{}, nil
 }
 

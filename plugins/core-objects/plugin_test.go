@@ -36,7 +36,6 @@ func TestDescribe_Me(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 	assert.Equal(t, "Description set.\n", resp.Output)
-
 }
 
 func TestDescribe_Me_Error(t *testing.T) {
@@ -75,7 +74,6 @@ func TestDescribe_Here(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 	assert.Equal(t, "Description set.\n", resp.Output)
-
 }
 
 func TestDescribe_Target(t *testing.T) {
@@ -96,7 +94,6 @@ func TestDescribe_Target(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 	assert.Equal(t, "Description set.\n", resp.Output)
-
 }
 
 func TestDescribe_EmptyArgs(t *testing.T) {
@@ -173,7 +170,6 @@ func TestExamine_CurrentLocation(t *testing.T) {
 	assert.Contains(t, resp.Output, "The Grand Hall")
 	assert.Contains(t, resp.Output, "marble columns")
 	assert.Contains(t, resp.Output, "capacity: 50")
-
 }
 
 func TestExamine_Here(t *testing.T) {
@@ -349,7 +345,6 @@ func TestCreate_Object(t *testing.T) {
 	assert.Contains(t, resp.Output, "Created object")
 	assert.Contains(t, resp.Output, "Iron Sword")
 	assert.Contains(t, resp.Output, "obj-1")
-
 }
 
 func TestCreate_Location(t *testing.T) {
@@ -368,7 +363,6 @@ func TestCreate_Location(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, resp.Output, "Created location")
 	assert.Contains(t, resp.Output, "Secret Room")
-
 }
 
 func TestCreate_InvalidType(t *testing.T) {
@@ -448,7 +442,6 @@ func TestSet_PropertyOnLocation(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Contains(t, resp.Output, "Set description of here")
-
 }
 
 func TestSet_PrefixMatch(t *testing.T) {
@@ -580,7 +573,6 @@ func TestSet_OnObject(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Contains(t, resp.Output, "Set description of #OBJ123")
-
 }
 
 func TestSet_OnSelf(t *testing.T) {
@@ -600,5 +592,4 @@ func TestSet_OnSelf(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Contains(t, resp.Output, "Set description of me")
-
 }

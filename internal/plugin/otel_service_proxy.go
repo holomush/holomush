@@ -12,6 +12,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/holomush/holomush/internal/content"
 )
 
 // Compile-time interface check.
@@ -374,6 +376,24 @@ func (m *ServiceProxyMiddleware) EmitEvent(ctx context.Context, stream, eventTyp
 func (m *ServiceProxyMiddleware) GetStartingLocationID(ctx context.Context) (id string, err error) {
 	err = m.instrument(ctx, "get_starting_location_id", func(ctx context.Context) error {
 		id, err = m.next.GetStartingLocationID(ctx)
+		return err
+	})
+	return
+}
+
+// GetContent delegates to the wrapped proxy with OTel instrumentation.
+func (m *ServiceProxyMiddleware) GetContent(ctx context.Context, key string) (result *content.Item, err error) {
+	err = m.instrument(ctx, "GetContent", func(ctx context.Context) error {
+		result, err = m.next.GetContent(ctx, key)
+		return err
+	})
+	return
+}
+
+// ListContent delegates to the wrapped proxy with OTel instrumentation.
+func (m *ServiceProxyMiddleware) ListContent(ctx context.Context, prefix string, opts content.ListOptions) (result *content.ListResult, err error) {
+	err = m.instrument(ctx, "ListContent", func(ctx context.Context) error {
+		result, err = m.next.ListContent(ctx, prefix, opts)
 		return err
 	})
 	return

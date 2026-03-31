@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/holomush/holomush/internal/bootstrap"
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/observability"
@@ -19,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// autoMigrateMockMigrator implements AutoMigrator interface for testing.
+// autoMigrateMockMigrator implements bootstrap.AutoMigrator interface for testing.
 type autoMigrateMockMigrator struct {
 	upCalled    bool
 	upError     error
@@ -69,7 +70,7 @@ func TestAutoMigrate_RunsByDefault(t *testing.T) {
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
 		},
-		MigratorFactory: func(_ string) (AutoMigrator, error) {
+		MigratorFactory: func(_ string) (bootstrap.AutoMigrator, error) {
 			return migrator, nil
 		},
 		AutoMigrateGetter: func() bool {
@@ -127,7 +128,7 @@ func TestAutoMigrate_DisabledWhenEnvVarFalse(t *testing.T) {
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
 		},
-		MigratorFactory: func(_ string) (AutoMigrator, error) {
+		MigratorFactory: func(_ string) (bootstrap.AutoMigrator, error) {
 			return migrator, nil
 		},
 		AutoMigrateGetter: func() bool {
@@ -172,7 +173,7 @@ func TestAutoMigrate_ErrorSurfaced(t *testing.T) {
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
 		},
-		MigratorFactory: func(_ string) (AutoMigrator, error) {
+		MigratorFactory: func(_ string) (bootstrap.AutoMigrator, error) {
 			return migrator, nil
 		},
 		AutoMigrateGetter: func() bool {
@@ -211,7 +212,7 @@ func TestAutoMigrate_MigratorCreationError(t *testing.T) {
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
 		},
-		MigratorFactory: func(_ string) (AutoMigrator, error) {
+		MigratorFactory: func(_ string) (bootstrap.AutoMigrator, error) {
 			return nil, fmt.Errorf("failed to connect to database for migrations")
 		},
 		AutoMigrateGetter: func() bool {
@@ -309,7 +310,7 @@ func TestParseAutoMigrate(t *testing.T) {
 func TestRunAutoMigration(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		migrator := &autoMigrateMockMigrator{}
-		err := runAutoMigration("postgres://test@localhost/test", func(_ string) (AutoMigrator, error) {
+		err := runAutoMigration("postgres://test@localhost/test", func(_ string) (bootstrap.AutoMigrator, error) {
 			return migrator, nil
 		})
 		require.NoError(t, err)
@@ -318,7 +319,7 @@ func TestRunAutoMigration(t *testing.T) {
 	})
 
 	t.Run("factory error", func(t *testing.T) {
-		err := runAutoMigration("postgres://test@localhost/test", func(_ string) (AutoMigrator, error) {
+		err := runAutoMigration("postgres://test@localhost/test", func(_ string) (bootstrap.AutoMigrator, error) {
 			return nil, fmt.Errorf("connection failed")
 		})
 		require.Error(t, err)
@@ -328,7 +329,7 @@ func TestRunAutoMigration(t *testing.T) {
 
 	t.Run("up error", func(t *testing.T) {
 		migrator := &autoMigrateMockMigrator{upError: fmt.Errorf("schema error")}
-		err := runAutoMigration("postgres://test@localhost/test", func(_ string) (AutoMigrator, error) {
+		err := runAutoMigration("postgres://test@localhost/test", func(_ string) (bootstrap.AutoMigrator, error) {
 			return migrator, nil
 		})
 		require.Error(t, err)
@@ -341,7 +342,7 @@ func TestRunAutoMigration(t *testing.T) {
 		// When database is already at latest version, Up() succeeds (returns nil)
 		// because our wrapper treats ErrNoChange as success
 		migrator := &autoMigrateMockMigrator{}
-		err := runAutoMigration("postgres://test@localhost/test", func(_ string) (AutoMigrator, error) {
+		err := runAutoMigration("postgres://test@localhost/test", func(_ string) (bootstrap.AutoMigrator, error) {
 			return migrator, nil
 		})
 		require.NoError(t, err, "auto-migration should succeed when already at latest")
@@ -358,7 +359,7 @@ func TestRunAutoMigration(t *testing.T) {
 		defer slog.SetDefault(oldLogger)
 
 		migrator := &autoMigrateMockMigrator{closeError: fmt.Errorf("connection reset")}
-		err := runAutoMigration("postgres://test@localhost/test", func(_ string) (AutoMigrator, error) {
+		err := runAutoMigration("postgres://test@localhost/test", func(_ string) (bootstrap.AutoMigrator, error) {
 			return migrator, nil
 		})
 

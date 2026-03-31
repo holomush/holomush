@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: setting-crossroads
+version: 1.0.0
+type: setting
+
+setting:
+  display_name: "The Crossroads"
+  description: "A nexus where worlds collide"
+  content_dir: content
+  world_dir: world
+  theme: theme.json

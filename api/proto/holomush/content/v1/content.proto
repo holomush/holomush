@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.content.v1;
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/content/v1;contentv1";
+
+// ContentService provides read access to the content store.
+service ContentService {
+  // GetContent retrieves a single content item by key.
+  rpc GetContent(GetContentRequest) returns (GetContentResponse);
+
+  // ListContent returns all content items matching a key prefix.
+  rpc ListContent(ListContentRequest) returns (ListContentResponse);
+}
+
+message GetContentRequest {
+  string key = 1;
+}
+
+message GetContentResponse {
+  ContentItem item = 1;
+}
+
+message ListContentRequest {
+  string prefix = 1;
+  int32 limit = 2;
+  string cursor = 3;
+}
+
+message ListContentResponse {
+  repeated ContentItem items = 1;
+  string next_cursor = 2;
+}
+
+message ContentItem {
+  string key = 1;
+  string content_type = 2;
+  bytes body = 3;
+  map<string, string> metadata = 4;
+}

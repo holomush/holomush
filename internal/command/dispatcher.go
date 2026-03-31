@@ -35,10 +35,10 @@ type PluginCommandDeliverer interface {
 type Dispatcher struct {
 	registry        *Registry
 	engine          types.AccessPolicyEngine
-	aliasCache      *AliasCache              // optional, can be nil
-	rateLimiter     *RateLimitMiddleware      // optional, can be nil
-	pluginDeliverer PluginCommandDeliverer   // optional, can be nil
-	optErr          error                    // error from applying options
+	aliasCache      *AliasCache            // optional, can be nil
+	rateLimiter     *RateLimitMiddleware   // optional, can be nil
+	pluginDeliverer PluginCommandDeliverer // optional, can be nil
+	optErr          error                  // error from applying options
 }
 
 // DispatcherOption configures a Dispatcher during construction.

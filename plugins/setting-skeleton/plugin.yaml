@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: setting-skeleton
+version: 1.0.0
+type: setting
+
+setting:
+  display_name: "New Game"
+  description: "A blank canvas for your world"
+  content_dir: content
+  world_dir: world
+  theme: theme.json

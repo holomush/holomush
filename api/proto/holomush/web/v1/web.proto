@@ -53,6 +53,10 @@ service WebService {
   rpc WebLogout(WebLogoutRequest) returns (WebLogoutResponse);
   rpc WebRequestPasswordReset(WebRequestPasswordResetRequest) returns (WebRequestPasswordResetResponse);
   rpc WebConfirmPasswordReset(WebConfirmPasswordResetRequest) returns (WebConfirmPasswordResetResponse);
+
+  // Content store access (public, no auth required).
+  rpc WebGetContent(WebGetContentRequest) returns (WebGetContentResponse);
+  rpc WebListContent(WebListContentRequest) returns (WebListContentResponse);
 }
 
 message LoginRequest {
@@ -208,4 +212,32 @@ message WebConfirmPasswordResetRequest {
 message WebConfirmPasswordResetResponse {
   bool success = 1;
   string error_message = 2;
+}
+
+// --- Web content messages ---
+
+message WebGetContentRequest {
+  string key = 1;
+}
+
+message WebGetContentResponse {
+  WebContentItem item = 1;
+}
+
+message WebListContentRequest {
+  string prefix = 1;
+  int32 limit = 2;
+  string cursor = 3;
+}
+
+message WebListContentResponse {
+  repeated WebContentItem items = 1;
+  string next_cursor = 2;
+}
+
+message WebContentItem {
+  string key = 1;
+  string content_type = 2;
+  bytes body = 3;
+  map<string, string> metadata = 4;
 }

@@ -20,21 +20,21 @@ import (
 type mockServiceProxy struct {
 	plugins.ServiceProxy // embed to satisfy interface; only override what we test
 
-	queryLocationResult     *plugins.LocationResult
-	queryLocationErr        error
-	queryCharacterResult    *plugins.CharacterResult
-	queryCharacterErr       error
-	queryLocCharsResult     []plugins.CharacterResult
-	queryLocCharsErr        error
-	emitEventErr            error
-	kvGetValue              string
-	kvGetFound              bool
-	kvGetErr                error
-	kvSetErr                error
-	kvDeleteErr             error
-	logCalled               bool
-	logLevel                string
-	logMessage              string
+	queryLocationResult  *plugins.LocationResult
+	queryLocationErr     error
+	queryCharacterResult *plugins.CharacterResult
+	queryCharacterErr    error
+	queryLocCharsResult  []plugins.CharacterResult
+	queryLocCharsErr     error
+	emitEventErr         error
+	kvGetValue           string
+	kvGetFound           bool
+	kvGetErr             error
+	kvSetErr             error
+	kvDeleteErr          error
+	logCalled            bool
+	logLevel             string
+	logMessage           string
 }
 
 func (m *mockServiceProxy) QueryLocation(_ context.Context, _, _ string) (*plugins.LocationResult, error) {

@@ -239,7 +239,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	}
 
 	// Start web HTTP server
-	webHandler := web.NewHandler(grpcClient)
+	webHandler := web.NewHandler(grpcClient, web.WithContentClient(grpcClient))
 	webServer := web.NewServer(web.Config{
 		Addr:        cfg.WebAddr,
 		Handler:     webHandler,

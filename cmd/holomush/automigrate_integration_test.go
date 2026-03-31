@@ -17,6 +17,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/holomush/holomush/internal/bootstrap"
 	"github.com/holomush/holomush/internal/store"
 )
 
@@ -96,7 +97,7 @@ func TestAutoMigrate_Integration_RunsOnStartup(t *testing.T) {
 	assert.False(t, exists, "schema_migrations should not exist before auto-migrate")
 
 	// Run auto-migration using the runAutoMigration function
-	err = runAutoMigration(connStr, func(url string) (AutoMigrator, error) {
+	err = runAutoMigration(connStr, func(url string) (bootstrap.AutoMigrator, error) {
 		return store.NewMigrator(url)
 	})
 	require.NoError(t, err)
@@ -128,7 +129,7 @@ func TestAutoMigrate_Integration_SkippedWhenDisabled(t *testing.T) {
 	deps := &CoreDeps{
 		DatabaseURLGetter: func() string { return connStr },
 		AutoMigrateGetter: func() bool { return false },
-		MigratorFactory: func(url string) (AutoMigrator, error) {
+		MigratorFactory: func(url string) (bootstrap.AutoMigrator, error) {
 			t.Error("MigratorFactory should not be called when auto-migrate is disabled")
 			return store.NewMigrator(url)
 		},
@@ -154,7 +155,7 @@ func TestAutoMigrate_Integration_IdempotentOnRerun(t *testing.T) {
 	connStr, cleanup := startPostgresContainer(t)
 	defer cleanup()
 
-	migratorFactory := func(url string) (AutoMigrator, error) {
+	migratorFactory := func(url string) (bootstrap.AutoMigrator, error) {
 		return store.NewMigrator(url)
 	}
 

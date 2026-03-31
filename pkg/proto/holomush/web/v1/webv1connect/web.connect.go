@@ -70,6 +70,12 @@ const (
 	// WebServiceWebConfirmPasswordResetProcedure is the fully-qualified name of the WebService's
 	// WebConfirmPasswordReset RPC.
 	WebServiceWebConfirmPasswordResetProcedure = "/holomush.web.v1.WebService/WebConfirmPasswordReset"
+	// WebServiceWebGetContentProcedure is the fully-qualified name of the WebService's WebGetContent
+	// RPC.
+	WebServiceWebGetContentProcedure = "/holomush.web.v1.WebService/WebGetContent"
+	// WebServiceWebListContentProcedure is the fully-qualified name of the WebService's WebListContent
+	// RPC.
+	WebServiceWebListContentProcedure = "/holomush.web.v1.WebService/WebListContent"
 )
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
@@ -94,6 +100,9 @@ type WebServiceClient interface {
 	WebLogout(context.Context, *connect.Request[v1.WebLogoutRequest]) (*connect.Response[v1.WebLogoutResponse], error)
 	WebRequestPasswordReset(context.Context, *connect.Request[v1.WebRequestPasswordResetRequest]) (*connect.Response[v1.WebRequestPasswordResetResponse], error)
 	WebConfirmPasswordReset(context.Context, *connect.Request[v1.WebConfirmPasswordResetRequest]) (*connect.Response[v1.WebConfirmPasswordResetResponse], error)
+	// Content store access (public, no auth required).
+	WebGetContent(context.Context, *connect.Request[v1.WebGetContentRequest]) (*connect.Response[v1.WebGetContentResponse], error)
+	WebListContent(context.Context, *connect.Request[v1.WebListContentRequest]) (*connect.Response[v1.WebListContentResponse], error)
 }
 
 // NewWebServiceClient constructs a client for the holomush.web.v1.WebService service. By default,
@@ -185,6 +194,18 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebConfirmPasswordReset")),
 			connect.WithClientOptions(opts...),
 		),
+		webGetContent: connect.NewClient[v1.WebGetContentRequest, v1.WebGetContentResponse](
+			httpClient,
+			baseURL+WebServiceWebGetContentProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebGetContent")),
+			connect.WithClientOptions(opts...),
+		),
+		webListContent: connect.NewClient[v1.WebListContentRequest, v1.WebListContentResponse](
+			httpClient,
+			baseURL+WebServiceWebListContentProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebListContent")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -203,6 +224,8 @@ type webServiceClient struct {
 	webLogout               *connect.Client[v1.WebLogoutRequest, v1.WebLogoutResponse]
 	webRequestPasswordReset *connect.Client[v1.WebRequestPasswordResetRequest, v1.WebRequestPasswordResetResponse]
 	webConfirmPasswordReset *connect.Client[v1.WebConfirmPasswordResetRequest, v1.WebConfirmPasswordResetResponse]
+	webGetContent           *connect.Client[v1.WebGetContentRequest, v1.WebGetContentResponse]
+	webListContent          *connect.Client[v1.WebListContentRequest, v1.WebListContentResponse]
 }
 
 // Login calls holomush.web.v1.WebService.Login.
@@ -270,6 +293,16 @@ func (c *webServiceClient) WebConfirmPasswordReset(ctx context.Context, req *con
 	return c.webConfirmPasswordReset.CallUnary(ctx, req)
 }
 
+// WebGetContent calls holomush.web.v1.WebService.WebGetContent.
+func (c *webServiceClient) WebGetContent(ctx context.Context, req *connect.Request[v1.WebGetContentRequest]) (*connect.Response[v1.WebGetContentResponse], error) {
+	return c.webGetContent.CallUnary(ctx, req)
+}
+
+// WebListContent calls holomush.web.v1.WebService.WebListContent.
+func (c *webServiceClient) WebListContent(ctx context.Context, req *connect.Request[v1.WebListContentRequest]) (*connect.Response[v1.WebListContentResponse], error) {
+	return c.webListContent.CallUnary(ctx, req)
+}
+
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
 	// Authenticate as guest or registered user.
@@ -292,6 +325,9 @@ type WebServiceHandler interface {
 	WebLogout(context.Context, *connect.Request[v1.WebLogoutRequest]) (*connect.Response[v1.WebLogoutResponse], error)
 	WebRequestPasswordReset(context.Context, *connect.Request[v1.WebRequestPasswordResetRequest]) (*connect.Response[v1.WebRequestPasswordResetResponse], error)
 	WebConfirmPasswordReset(context.Context, *connect.Request[v1.WebConfirmPasswordResetRequest]) (*connect.Response[v1.WebConfirmPasswordResetResponse], error)
+	// Content store access (public, no auth required).
+	WebGetContent(context.Context, *connect.Request[v1.WebGetContentRequest]) (*connect.Response[v1.WebGetContentResponse], error)
+	WebListContent(context.Context, *connect.Request[v1.WebListContentRequest]) (*connect.Response[v1.WebListContentResponse], error)
 }
 
 // NewWebServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -379,6 +415,18 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebConfirmPasswordReset")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebGetContentHandler := connect.NewUnaryHandler(
+		WebServiceWebGetContentProcedure,
+		svc.WebGetContent,
+		connect.WithSchema(webServiceMethods.ByName("WebGetContent")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebListContentHandler := connect.NewUnaryHandler(
+		WebServiceWebListContentProcedure,
+		svc.WebListContent,
+		connect.WithSchema(webServiceMethods.ByName("WebListContent")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.web.v1.WebService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WebServiceLoginProcedure:
@@ -407,6 +455,10 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebRequestPasswordResetHandler.ServeHTTP(w, r)
 		case WebServiceWebConfirmPasswordResetProcedure:
 			webServiceWebConfirmPasswordResetHandler.ServeHTTP(w, r)
+		case WebServiceWebGetContentProcedure:
+			webServiceWebGetContentHandler.ServeHTTP(w, r)
+		case WebServiceWebListContentProcedure:
+			webServiceWebListContentHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -466,4 +518,12 @@ func (UnimplementedWebServiceHandler) WebRequestPasswordReset(context.Context, *
 
 func (UnimplementedWebServiceHandler) WebConfirmPasswordReset(context.Context, *connect.Request[v1.WebConfirmPasswordResetRequest]) (*connect.Response[v1.WebConfirmPasswordResetResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebConfirmPasswordReset is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebGetContent(context.Context, *connect.Request[v1.WebGetContentRequest]) (*connect.Response[v1.WebGetContentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebGetContent is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebListContent(context.Context, *connect.Request[v1.WebListContentRequest]) (*connect.Response[v1.WebListContentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListContent is not implemented"))
 }

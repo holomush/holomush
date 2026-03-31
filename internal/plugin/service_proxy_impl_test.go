@@ -322,7 +322,6 @@ func (m *mockCommandRegistry) All() []command.CommandEntry {
 	return nil
 }
 
-
 // --- Test helpers ---
 
 func makeTestID() ulid.ULID {
@@ -382,12 +381,12 @@ func TestServiceProxy_QueryLocation(t *testing.T) {
 	locID := makeTestID()
 
 	tests := []struct {
-		name      string
-		id        string
-		setup     func(m *mockWorldService)
-		wantName  string
-		wantErr   bool
-		errCode   string
+		name     string
+		id       string
+		setup    func(m *mockWorldService)
+		wantName string
+		wantErr  bool
+		errCode  string
 	}{
 		{
 			name: "valid location",

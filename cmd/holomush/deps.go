@@ -11,9 +11,11 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/holomush/holomush/internal/bootstrap"
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
+	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -56,7 +58,7 @@ type CoreDeps struct {
 
 	// MigratorFactory creates a database migrator.
 	// Default: store.NewMigrator
-	MigratorFactory func(databaseURL string) (AutoMigrator, error)
+	MigratorFactory func(databaseURL string) (bootstrap.AutoMigrator, error)
 
 	// AutoMigrateGetter returns whether auto-migration is enabled.
 	// Default: parseAutoMigrate (reads HOLOMUSH_DB_AUTO_MIGRATE env var)
@@ -133,11 +135,8 @@ type GRPCClient interface {
 	RequestPasswordReset(ctx context.Context, req *corev1.RequestPasswordResetRequest) (*corev1.RequestPasswordResetResponse, error)
 	ConfirmPasswordReset(ctx context.Context, req *corev1.ConfirmPasswordResetRequest) (*corev1.ConfirmPasswordResetResponse, error)
 	Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1.LogoutResponse, error)
-	Close() error
-}
-
-// AutoMigrator is the minimal interface for startup auto-migration.
-type AutoMigrator interface {
-	Up() error
+	// Content RPCs
+	GetContent(ctx context.Context, req *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error)
+	ListContent(ctx context.Context, req *contentv1.ListContentRequest) (*contentv1.ListContentResponse, error)
 	Close() error
 }

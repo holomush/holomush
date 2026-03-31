@@ -103,8 +103,8 @@ func TestSeedPolicies_ExpectedNames(t *testing.T) {
 		"seed:player-scene-participant",        // G4
 		"seed:player-scene-read",               // G4
 		// Phase-2 command policies
-		"seed:player-teleport",    // all players can execute home and teleport
-		"seed:pemit-storyteller",  // storyteller/admin can execute pemit
+		"seed:player-teleport",   // all players can execute home and teleport
+		"seed:pemit-storyteller", // storyteller/admin can execute pemit
 	}
 
 	seeds := SeedPolicies()

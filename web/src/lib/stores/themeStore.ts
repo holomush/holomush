@@ -32,3 +32,16 @@ export function themeToCssVars(colors: ThemeColors): string {
     .map(([key, value]) => `--color-${key.replace(/\./g, '-')}: ${value}`)
     .join('; ');
 }
+
+export function applyOverrides(customThemes: Record<string, Theme>, overrides: Record<string, Partial<ThemeColors>>) {
+  for (const [name, theme] of Object.entries(customThemes)) {
+    themes[name] = theme;
+  }
+  for (const [base, colors] of Object.entries(overrides)) {
+    if (themes[base]) {
+      themes[base] = { ...themes[base], colors: { ...themes[base].colors, ...colors } };
+    }
+  }
+  // Force activeTheme to re-derive with updated themes map.
+  activeThemeId.update((id) => id);
+}

@@ -13,6 +13,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/content"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/session"
@@ -60,6 +61,7 @@ type ServiceProxyImpl struct {
 	world           command.WorldService
 	sessions        SessionAccess
 	events          core.EventStore
+	contentStore    content.Store
 	aliasWriter     command.AliasWriter
 	aliasCache      AliasCacheAccess
 	commandRegistry CommandRegistry
@@ -73,6 +75,7 @@ type ServiceProxyConfig struct {
 	World           command.WorldService
 	Sessions        SessionAccess
 	Events          core.EventStore
+	ContentStore    content.Store
 	AliasWriter     command.AliasWriter
 	AliasCache      AliasCacheAccess
 	CommandRegistry CommandRegistry
@@ -97,6 +100,7 @@ func NewServiceProxy(cfg ServiceProxyConfig) (*ServiceProxyImpl, error) {
 		world:           cfg.World,
 		sessions:        cfg.Sessions,
 		events:          cfg.Events,
+		contentStore:    cfg.ContentStore,
 		aliasWriter:     cfg.AliasWriter,
 		aliasCache:      cfg.AliasCache,
 		commandRegistry: cfg.CommandRegistry,
@@ -775,6 +779,34 @@ func (p *ServiceProxyImpl) Log(_ context.Context, level, message string) {
 	default:
 		p.logger.Info(message, "requested_level", level)
 	}
+}
+
+// --- Content (read-only) ---
+
+// GetContent retrieves a single content item by key.
+// Returns nil, nil if the key does not exist or the content store is not configured.
+func (p *ServiceProxyImpl) GetContent(ctx context.Context, key string) (*content.Item, error) {
+	if p.contentStore == nil {
+		return nil, nil
+	}
+	item, err := p.contentStore.Get(ctx, key)
+	if err != nil {
+		return nil, oops.Code("CONTENT_GET_FAILED").With("key", key).Wrap(err)
+	}
+	return item, nil
+}
+
+// ListContent returns content items matching a key prefix with optional pagination.
+// Returns an empty result if the content store is not configured.
+func (p *ServiceProxyImpl) ListContent(ctx context.Context, prefix string, opts content.ListOptions) (*content.ListResult, error) {
+	if p.contentStore == nil {
+		return &content.ListResult{}, nil
+	}
+	result, err := p.contentStore.List(ctx, prefix, opts)
+	if err != nil {
+		return nil, oops.Code("CONTENT_LIST_FAILED").With("prefix", prefix).Wrap(err)
+	}
+	return result, nil
 }
 
 // --- Conversion helpers ---

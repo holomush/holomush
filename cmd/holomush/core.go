@@ -34,6 +34,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/config"
+	"github.com/holomush/holomush/internal/content"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -49,6 +50,7 @@ import (
 	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/internal/xdg"
+	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -74,6 +76,8 @@ type coreConfig struct {
 	SessionTTL            string `koanf:"session_ttl"`
 	SessionMaxHistory     int    `koanf:"session_max_history"`
 	SessionReaperInterval string `koanf:"session_reaper_interval"`
+	Setting               string `koanf:"setting"`
+	ResetSetting          bool   `koanf:"reset_setting"`
 }
 
 // Validate checks that the configuration is valid.
@@ -129,6 +133,8 @@ manages plugins, and handles game state.`,
 	cmd.Flags().StringVar(&cfg.SessionTTL, "session-ttl", "30m", "default session TTL after disconnect")
 	cmd.Flags().IntVar(&cfg.SessionMaxHistory, "session-max-history", 500, "max command history entries per session")
 	cmd.Flags().StringVar(&cfg.SessionReaperInterval, "session-reaper-interval", "30s", "session reaper check interval")
+	cmd.Flags().StringVar(&cfg.Setting, "setting", "crossroads", "setting plugin to bootstrap on first boot")
+	cmd.Flags().BoolVar(&cfg.ResetSetting, "reset-setting", false, "force re-bootstrap from setting plugin")
 
 	return cmd
 }
@@ -181,7 +187,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		}
 	}
 	if deps.MigratorFactory == nil {
-		deps.MigratorFactory = func(url string) (AutoMigrator, error) {
+		deps.MigratorFactory = func(url string) (bootstrap.AutoMigrator, error) {
 			return store.NewMigrator(url)
 		}
 	}
@@ -207,13 +213,10 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		return oops.Code("CONFIG_INVALID").Errorf("DATABASE_URL environment variable is required")
 	}
 
-	// Run auto-migration if enabled (default: true)
-	if deps.AutoMigrateGetter() {
-		if err := runAutoMigration(databaseURL, deps.MigratorFactory); err != nil {
-			return err
-		}
-	} else {
-		slog.Info("auto-migration disabled via HOLOMUSH_DB_AUTO_MIGRATE=false")
+	// Run schema migration before any DB queries (must complete before event store init).
+	migrationBoot := bootstrap.NewMigrationBootstrapper(databaseURL, deps.MigratorFactory, deps.AutoMigrateGetter())
+	if err := migrationBoot.Bootstrap(ctx, nil, ""); err != nil {
+		return err
 	}
 
 	eventStore, err := deps.EventStoreFactory(ctx, databaseURL)
@@ -257,12 +260,13 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 	slog.Info("game ID initialized", "game_id", gameID)
 
-	// Bootstrap seed policies and audit log partitions (ADR #91, #92).
-	// Fatal on error — server MUST NOT start without seed policies.
-	if bootstrapErr := deps.PolicyBootstrapper(ctx, cfg.SkipSeedMigrations); bootstrapErr != nil {
-		return oops.Code("BOOTSTRAP_FAILED").With("operation", "bootstrap seed policies").Wrap(bootstrapErr)
-	}
-	slog.Info("seed policies bootstrapped")
+	// Create the bootstrap runner. Migration ran above (schema must exist before
+	// any DB queries). Remaining bootstrappers are registered as their
+	// dependencies become available, then RunAll executes them in priority order.
+	bootstrapRunner := plugins.NewBootstrapRunner(slog.Default())
+
+	// Register policy bootstrapper (priority 200).
+	bootstrapRunner.Register(bootstrap.NewPolicyBootstrapper(deps.PolicyBootstrapper, cfg.SkipSeedMigrations))
 
 	// Build ABAC engine stack (requires PostgresEventStore for pool access).
 	// In test mode with mock stores, ABAC wiring is skipped.
@@ -275,15 +279,20 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	var authPlayerRepo *authpostgres.PlayerRepository
 	var authPlayerTokenRepo *store.PostgresPlayerTokenStore
 	var authCharRepo *authCharRepoAdapter
-	var sessionStore *store.PostgresSessionStore  // hoisted for hostfunc + gRPC wiring
-	var pluginManager *plugins.Manager              // hoisted for dispatcher wiring
-	var serviceProxy  *plugins.ServiceProxyImpl     // hoisted for late-binding after command stack init
+	var sessionStore *store.PostgresSessionStore // hoisted for hostfunc + gRPC wiring
+	var pluginManager *plugins.Manager           // hoisted for dispatcher wiring
+	var serviceProxy *plugins.ServiceProxyImpl   // hoisted for late-binding after command stack init
 	realStoreForABAC, hasPool := eventStore.(*store.PostgresEventStore)
 	if !hasPool {
 		// In production, PostgresEventStore always has a pool. This branch
 		// only triggers in tests with mock stores. Log at Error to surface
 		// if this ever happens unexpectedly in production.
 		slog.Error("ABAC stack not initialized: event store does not expose a connection pool")
+
+		// Run policy bootstrap only (admin + alias require the pool).
+		if runErr := bootstrapRunner.RunAll(ctx); runErr != nil {
+			return oops.Code("BOOTSTRAP_FAILED").With("operation", "run bootstrap plugins").Wrap(runErr)
+		}
 	} else {
 		abacPool := realStoreForABAC.Pool()
 
@@ -361,18 +370,15 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			return oops.Code("AUTH_SETUP_FAILED").Wrap(charErr)
 		}
 
-		// Admin bootstrap — create admin account on first boot
-		adminBootErr := bootstrap.SeedAdmin(ctx, bootstrap.SeedAdminDeps{
+		// Register admin bootstrapper (priority 400).
+		bootstrapRunner.Register(bootstrap.NewAdminBootstrapper(bootstrap.SeedAdminDeps{
 			PlayerRepo:  authPlayerRepo,
 			CharService: characterService,
 			RoleStore:   roleStore,
 			Hasher:      authHasher,
 			NameTheme:   naming.NewStarTheme(),
 			Transactor:  &bootstrapTransactor{inner: worldpostgres.NewTransactor(abacPool)},
-		})
-		if adminBootErr != nil {
-			return oops.Code("ADMIN_BOOTSTRAP_FAILED").Wrap(adminBootErr)
-		}
+		}))
 
 		// Create session store early so plugins can access session functions
 		sessionStore = store.NewPostgresSessionStore(abacPool)
@@ -519,9 +525,61 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		aliasRepo := store.NewPostgresAliasRepository(realStore.Pool())
 		aliasCache := command.NewAliasCache()
 
-		// Seed standard MUSH aliases and load all into cache (idempotent)
-		if seedErr := bootstrap.SeedSystemAliases(ctx, aliasRepo, aliasCache); seedErr != nil {
-			return oops.Code("ALIAS_SEED_FAILED").Wrap(seedErr)
+		// Register alias bootstrapper (priority 500).
+		bootstrapRunner.Register(bootstrap.NewAliasBootstrapper(aliasRepo, aliasCache))
+
+		// Register setting bootstrapper (priority 300) if a matching setting plugin is discovered.
+		if cfg.Setting != "" && pluginManager != nil {
+			discovered, discoverErr := pluginManager.Discover(ctx)
+			if discoverErr != nil {
+				slog.Warn("failed to discover setting plugins", "error", discoverErr)
+			} else {
+				var settingPlugin *plugins.DiscoveredPlugin
+				for _, dp := range discovered {
+					if dp.Manifest.Type == plugins.TypeSetting && dp.Manifest.Name == cfg.Setting {
+						settingPlugin = dp
+						break
+					}
+				}
+				if settingPlugin == nil {
+					// If no active_setting has been recorded yet, this is first boot (or reset) and
+					// the missing plugin is a fatal configuration error — the world cannot be seeded.
+					// On subsequent boots (active_setting already persisted), a missing plugin is
+					// tolerable: the world data already exists, so log a warning and continue.
+					metadataStore := bootstrap.NewPostgresMetadataStore(realStore.Pool())
+					_, settingRecorded, metaErr := metadataStore.Get(ctx, "active_setting")
+					if metaErr != nil {
+						return oops.Code("BOOTSTRAP_FAILED").
+							With("setting", cfg.Setting).
+							With("operation", "check active_setting metadata").
+							Wrap(metaErr)
+					}
+					if !settingRecorded {
+						return oops.Code("BOOTSTRAP_FAILED").
+							With("setting", cfg.Setting).
+							New("setting plugin not found and no active_setting recorded; cannot bootstrap world on first boot")
+					}
+					slog.Warn("setting plugin not found, skipping setting bootstrap (world already seeded)", "setting", cfg.Setting)
+				} else {
+					contentStore := content.NewPostgresStore(realStore.Pool())
+					metadataStore := bootstrap.NewPostgresMetadataStore(realStore.Pool())
+					bootstrapRunner.Register(bootstrap.NewSettingBootstrapper(bootstrap.SettingBootstrapperOpts{
+						ContentStore:  contentStore,
+						WorldService:  worldService,
+						MetadataStore: metadataStore,
+						SettingName:   cfg.Setting,
+						ResetSetting:  cfg.ResetSetting,
+						Logger:        slog.Default(),
+					}))
+					slog.Info("setting bootstrapper registered", "setting", cfg.Setting)
+				}
+			}
+		}
+
+		// Run all bootstrap plugins in priority order: policy (200) → setting (300) → admin (400) → alias (500).
+		// Migration (100) already ran directly above before DB connection was established.
+		if runErr := bootstrapRunner.RunAll(ctx); runErr != nil {
+			return oops.Code("BOOTSTRAP_FAILED").With("operation", "run bootstrap plugins").Wrap(runErr)
 		}
 
 		// Complete the ServiceProxy with late-bound dependencies so core plugins
@@ -594,6 +652,9 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			}),
 		)
 		corev1.RegisterCoreServiceServer(grpcServer, coreServer)
+
+		contentStore := content.NewPostgresStore(realStore.Pool())
+		contentv1.RegisterContentServiceServer(grpcServer, holoGRPC.NewContentServiceServer(contentStore))
 
 		// Start session reaper
 		sessionReaper = session.NewReaper(sessionStore, session.ReaperConfig{
@@ -860,7 +921,10 @@ func monitorServerErrors(ctx context.Context, cancel context.CancelFunc, errCh <
 
 // runAutoMigration runs database migrations using the provided factory.
 // It logs the migration status and ensures the migrator is closed.
-func runAutoMigration(databaseURL string, factory func(string) (AutoMigrator, error)) error {
+// Used by auto-migration unit/integration tests; production code uses MigrationBootstrapper.
+//
+//nolint:unparam // databaseURL varies in integration tests (connStr from testcontainers)
+func runAutoMigration(databaseURL string, factory func(string) (bootstrap.AutoMigrator, error)) error {
 	slog.Info("running auto-migration")
 
 	migrator, err := factory(databaseURL)

@@ -47,18 +47,22 @@ func TestHandler_HandleCommand_Dispatch(t *testing.T) {
 		wantErr    bool
 		wantStatus pluginsdk.CommandStatus
 	}{
-		{"alias with valid args", "alias", "l=look",
+		{
+			"alias with valid args", "alias", "l=look",
 			func(p *pluginmocks.MockServiceProxy) {
 				p.On("SetPlayerAlias", mock.Anything, mock.Anything, "l", "look").Return(nil)
 			},
-			false, pluginsdk.CommandOK},
+			false, pluginsdk.CommandOK,
+		},
 		{"unalias with valid args", "unalias", "l", nil, false, pluginsdk.CommandError},
 		{"aliases", "aliases", "", nil, false, pluginsdk.CommandOK},
-		{"sysalias with valid args", "sysalias", "l=look",
+		{
+			"sysalias with valid args", "sysalias", "l=look",
 			func(p *pluginmocks.MockServiceProxy) {
 				p.On("SetSystemAlias", mock.Anything, "l", "look", mock.Anything).Return(nil)
 			},
-			false, pluginsdk.CommandOK},
+			false, pluginsdk.CommandOK,
+		},
 		{"sysunsalias with valid args", "sysunsalias", "l", nil, false, pluginsdk.CommandError},
 		{"sysaliases", "sysaliases", "", nil, false, pluginsdk.CommandOK},
 		{"unknown command", "badcmd", "", nil, false, pluginsdk.CommandFailure},

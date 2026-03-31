@@ -54,4 +54,3 @@ func writeOutputf(ctx context.Context, exec *command.CommandExecution, cmd, form
 		logOutputError(ctx, cmd, exec.CharacterID().String(), n, err)
 	}
 }
-

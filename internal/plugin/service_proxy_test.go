@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/holomush/holomush/internal/content"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/stretchr/testify/assert"
 )
@@ -157,6 +158,16 @@ func (m *mockServiceProxy) EmitEvent(context.Context, string, string, []byte) er
 
 func (m *mockServiceProxy) GetStartingLocationID(context.Context) (string, error) { return "", nil }
 
+// --- Content (read-only) ---
+
+func (m *mockServiceProxy) GetContent(_ context.Context, _ string) (*content.Item, error) {
+	return nil, nil
+}
+
+func (m *mockServiceProxy) ListContent(_ context.Context, _ string, _ content.ListOptions) (*content.ListResult, error) {
+	return nil, nil
+}
+
 // --- Utility ---
 
 func (m *mockServiceProxy) Log(context.Context, string, string) {}
@@ -191,9 +202,10 @@ func TestServiceProxy_MethodCount(t *testing.T) {
 	//   Commands:    2 (ListCommands, GetCommandHelp)
 	//   Events:      1 (EmitEvent)
 	//   Config:      1 (GetStartingLocationID)
+	//   Content:     2 (GetContent, ListContent)
 	//   Utility:     1 (Log)
-	//   Total:      37
-	expectedMethods := 37
+	//   Total:      39
+	expectedMethods := 39
 	assert.Equal(t, expectedMethods, proxyType.NumMethod(),
 		"ServiceProxy method count changed — update this test and the parity table if intentional")
 }
@@ -247,12 +259,15 @@ func TestServiceProxy_ExpectedMethods(t *testing.T) {
 		"EmitEvent",
 		// Config
 		"GetStartingLocationID",
+		// Content
+		"GetContent",
+		"ListContent",
 		// Utility
 		"Log",
 	}
 
 	for _, name := range expected {
-		_, ok := proxyType.MethodByName(name)
+		_, ok := proxyType.MethodByName(name) // nosemgrep: go.lang.security.audit.unsafe-reflect-by-name.unsafe-reflect-by-name
 		assert.True(t, ok, "ServiceProxy missing expected method: %s", name)
 	}
 }

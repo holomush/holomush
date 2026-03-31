@@ -9,11 +9,30 @@
   import { setGuestSession } from '$lib/stores/authStore';
   import { activeTheme, themeToCssVars } from '$lib/stores/themeStore';
   import { goto } from '$app/navigation';
+  import MarkdownContent from '$lib/components/MarkdownContent.svelte';
+  import FeatureCard from '$lib/components/FeatureCard.svelte';
+  import type { ContentItem } from '$lib/stores/contentStore';
+
+  let {
+    hero,
+    pitch,
+    features,
+    connectInfo,
+  }: {
+    hero?: ContentItem;
+    pitch?: ContentItem;
+    features: ContentItem[];
+    connectInfo?: ContentItem;
+  } = $props();
 
   const client = createClient(WebService, transport);
 
   let loading = $state(false);
   let error = $state('');
+
+  const hasContent = $derived(!!hero || !!pitch || features.length > 0 || !!connectInfo);
+  const heroTitle = $derived(hero?.metadata?.title ?? 'HoloMUSH');
+  const heroTagline = $derived(hero?.metadata?.tagline ?? 'A modern MUSH platform');
 
   async function handleGuest() {
     error = '';
@@ -34,21 +53,54 @@
   }
 </script>
 
-<div class="landing" style={themeToCssVars($activeTheme.colors)}>
-  <h1 class="title">HoloMUSH</h1>
-  <p class="subtitle">A modern MUSH platform</p>
+<div class="landing" style={themeToCssVars($activeTheme.colors)} data-testid="landing">
+  <!-- Hero -->
+  <section class="hero" data-testid="hero">
+    <h1 class="title" data-testid="hero-title">{heroTitle}</h1>
+    <p class="subtitle" data-testid="hero-tagline">{heroTagline}</p>
 
-  {#if error}
-    <p class="error">{error}</p>
+    {#if error}
+      <p class="error" data-testid="hero-error">{error}</p>
+    {/if}
+
+    <div class="actions">
+      <a href="/login" class="btn-primary" data-testid="login-link">Login</a>
+      <a href="/register" class="btn-secondary" data-testid="register-link">Register</a>
+      <button class="btn-ghost" onclick={handleGuest} disabled={loading} data-testid="guest-button">
+        {loading ? 'Connecting…' : 'Try as Guest'}
+      </button>
+    </div>
+  </section>
+
+  {#if hasContent}
+    <!-- Pitch -->
+    {#if pitch}
+      <section class="pitch" data-testid="pitch">
+        <MarkdownContent content={pitch.body} />
+      </section>
+    {/if}
+
+    <!-- Feature grid -->
+    {#if features.length > 0}
+      <section class="features" data-testid="features">
+        <div class="feature-grid" data-testid="feature-grid">
+          {#each features as feature (feature.key)}
+            <FeatureCard
+              title={feature.metadata?.title ?? feature.key}
+              body={feature.body}
+            />
+          {/each}
+        </div>
+      </section>
+    {/if}
+
+    <!-- Connect info -->
+    {#if connectInfo}
+      <section class="connect" data-testid="connect">
+        <MarkdownContent content={connectInfo.body} />
+      </section>
+    {/if}
   {/if}
-
-  <div class="actions">
-    <a href="/login" class="btn-primary">Login</a>
-    <a href="/register" class="btn-secondary">Register</a>
-    <button class="btn-ghost" onclick={handleGuest} disabled={loading}>
-      {loading ? 'Connecting…' : 'Try as Guest'}
-    </button>
-  </div>
 </div>
 
 <style>
@@ -56,12 +108,22 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
     min-height: calc(100vh - 32px);
-    gap: 16px;
     font-family: 'JetBrains Mono', monospace;
     background: var(--color-background);
     color: var(--color-input-text);
+    padding: 0 24px 48px;
+    box-sizing: border-box;
+  }
+
+  /* Hero */
+  .hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 64px 0 48px;
   }
 
   .title {
@@ -134,5 +196,64 @@
   .btn-ghost:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  /* Pitch */
+  .pitch {
+    max-width: 680px;
+    width: 100%;
+    text-align: center;
+    font-size: 14px;
+    color: var(--color-input-text);
+    line-height: 1.7;
+    padding-bottom: 40px;
+    border-bottom: 1px solid var(--color-border);
+    margin-bottom: 40px;
+  }
+
+  .pitch :global(p) {
+    margin: 0 0 12px;
+  }
+
+  .pitch :global(p:last-child) {
+    margin-bottom: 0;
+  }
+
+  /* Features */
+  .features {
+    width: 100%;
+    max-width: 900px;
+    padding-bottom: 40px;
+  }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+  }
+
+  /* Connect info */
+  .connect {
+    max-width: 680px;
+    width: 100%;
+    text-align: center;
+    font-size: 13px;
+    color: var(--color-status-text);
+    line-height: 1.6;
+    padding-top: 8px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .connect :global(p) {
+    margin: 0 0 8px;
+  }
+
+  .connect :global(code) {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: inherit;
+    font-size: 12px;
   }
 </style>
