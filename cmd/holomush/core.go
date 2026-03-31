@@ -206,11 +206,11 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		return oops.Code("CONFIG_INVALID").With("operation", "validate configuration").Wrap(err)
 	}
 
-	logLvl, logLvlErr := resolveLogLevel(cmd)
-	if logLvlErr != nil {
-		return logLvlErr
+	level, err := resolveLogLevel(cmd)
+	if err != nil {
+		return err
 	}
-	logging.SetDefault("holomush-core", version, cfg.LogFormat, logLvl)
+	logging.SetDefault("holomush-core", version, cfg.LogFormat, level)
 
 	slog.Info("starting core process",
 		"grpc_addr", cfg.GRPCAddr,
