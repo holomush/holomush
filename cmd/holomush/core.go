@@ -34,6 +34,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/config"
+	"github.com/holomush/holomush/internal/logging"
 	"github.com/holomush/holomush/internal/content"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
@@ -205,9 +206,11 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		return oops.Code("CONFIG_INVALID").With("operation", "validate configuration").Wrap(err)
 	}
 
-	if err := setupLogging(cfg.LogFormat); err != nil {
-		return oops.Code("LOGGING_SETUP_FAILED").With("operation", "set up logging").Wrap(err)
+	logLvl, logLvlErr := resolveLogLevel(cmd)
+	if logLvlErr != nil {
+		return logLvlErr
 	}
+	logging.SetDefault("holomush-core", version, cfg.LogFormat, logLvl)
 
 	slog.Info("starting core process",
 		"grpc_addr", cfg.GRPCAddr,
@@ -836,27 +839,6 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	}
 
 	slog.Info("shutdown complete")
-	return nil
-}
-
-// setupLogging configures the default slog logger.
-func setupLogging(format string) error {
-	var handler slog.Handler
-
-	switch format {
-	case "json":
-		handler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-			Level: slog.LevelInfo,
-		})
-	case "text":
-		handler = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-			Level: slog.LevelInfo,
-		})
-	default:
-		return oops.Code("CONFIG_INVALID").Errorf("invalid log format %q: must be 'json' or 'text'", format)
-	}
-
-	slog.SetDefault(slog.New(handler))
 	return nil
 }
 

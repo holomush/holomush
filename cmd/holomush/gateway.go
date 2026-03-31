@@ -17,6 +17,7 @@ import (
 
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/config"
+	"github.com/holomush/holomush/internal/logging"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -138,9 +139,11 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		return oops.Code("CONFIG_INVALID").With("operation", "validate configuration").Wrap(err)
 	}
 
-	if err := setupLogging(cfg.LogFormat); err != nil {
-		return oops.Code("LOGGING_SETUP_FAILED").With("operation", "set up logging").Wrap(err)
+	level, err := resolveLogLevel(cmd)
+	if err != nil {
+		return err
 	}
+	logging.SetDefault("holomush-gateway", version, cfg.LogFormat, level)
 
 	slog.Info("starting gateway process",
 		"telnet_addr", cfg.TelnetAddr,

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"os/signal"
@@ -173,41 +174,31 @@ func TestCoreCommand_FlagParsing(t *testing.T) {
 	}
 }
 
-func TestSetupLogging(t *testing.T) {
+func TestParseLogLevel(t *testing.T) {
 	tests := []struct {
 		name      string
-		format    string
+		input     string
+		wantLevel slog.Level
 		wantError bool
 	}{
-		{
-			name:      "json format",
-			format:    "json",
-			wantError: false,
-		},
-		{
-			name:      "text format",
-			format:    "text",
-			wantError: false,
-		},
-		{
-			name:      "invalid format",
-			format:    "invalid",
-			wantError: true,
-		},
-		{
-			name:      "empty format",
-			format:    "",
-			wantError: true,
-		},
+		{name: "debug lowercase", input: "debug", wantLevel: slog.LevelDebug},
+		{name: "info lowercase", input: "info", wantLevel: slog.LevelInfo},
+		{name: "warn lowercase", input: "warn", wantLevel: slog.LevelWarn},
+		{name: "error lowercase", input: "error", wantLevel: slog.LevelError},
+		{name: "INFO uppercase", input: "INFO", wantLevel: slog.LevelInfo},
+		{name: "DEBUG uppercase", input: "DEBUG", wantLevel: slog.LevelDebug},
+		{name: "invalid level", input: "verbose", wantError: true},
+		{name: "empty level", input: "", wantError: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := setupLogging(tt.format)
+			got, err := parseLogLevel(tt.input)
 			if tt.wantError {
 				assert.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantLevel, got)
 			}
 		})
 	}
