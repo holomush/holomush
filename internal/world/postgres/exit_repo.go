@@ -14,6 +14,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -48,7 +49,7 @@ func (r *ExitRepository) Get(ctx context.Context, id ulid.ULID) (*world.Exit, er
 func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) error {
 	// Assign ID if not set
 	if exit.ID.Compare(ulid.ULID{}) == 0 {
-		exit.ID = ulid.Make()
+		exit.ID = idgen.New()
 	}
 	if exit.CreatedAt.IsZero() {
 		exit.CreatedAt = time.Now()
@@ -75,7 +76,7 @@ func (r *ExitRepository) Create(ctx context.Context, exit *world.Exit) error {
 			return oops.With("operation", "create reverse exit").Wrap(err)
 		}
 		if returnExit != nil {
-			returnExit.ID = ulid.Make()
+			returnExit.ID = idgen.New()
 			returnExit.CreatedAt = exit.CreatedAt
 
 			if err := r.insertExitTx(ctx, tx, returnExit); err != nil {

@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
@@ -481,7 +482,7 @@ func (s *Services) BroadcastSystemMessage(ctx context.Context, stream, message s
 	})
 
 	event := core.Event{
-		ID:        ulid.Make(),
+		ID:        idgen.New(),
 		Stream:    stream,
 		Type:      core.EventTypeSystem,
 		Timestamp: time.Now(),

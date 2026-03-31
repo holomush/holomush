@@ -12,6 +12,8 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/idgen"
 )
 
 // LocationType identifies the kind of location.
@@ -58,7 +60,7 @@ type Location struct {
 // NewLocation creates a new Location with a generated ID.
 // The location is validated before being returned.
 func NewLocation(name, description string, locType LocationType) (*Location, error) {
-	return NewLocationWithID(ulid.Make(), name, description, locType)
+	return NewLocationWithID(idgen.New(), name, description, locType)
 }
 
 // NewLocationWithID creates a new Location with the provided ID.

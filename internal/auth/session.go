@@ -13,6 +13,8 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/idgen"
 )
 
 // Session token configuration.
@@ -54,7 +56,7 @@ func NewWebSession(playerID ulid.ULID, characterID *ulid.ULID, tokenHash, userAg
 
 	now := time.Now()
 	return &WebSession{
-		ID:          ulid.Make(),
+		ID:          idgen.New(),
 		PlayerID:    playerID,
 		CharacterID: characterID,
 		TokenHash:   tokenHash,

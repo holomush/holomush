@@ -12,6 +12,7 @@ import (
 	"github.com/samber/oops"
 
 	grpcserver "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/naming"
 )
 
@@ -47,7 +48,7 @@ func (a *GuestAuthenticator) Authenticate(_ context.Context, username, _ string)
 	}
 
 	return &grpcserver.AuthResult{
-		CharacterID:   ulid.Make(),
+		CharacterID:   idgen.New(),
 		CharacterName: name,
 		LocationID:    a.startLocation,
 		IsGuest:       true,

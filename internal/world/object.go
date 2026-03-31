@@ -9,6 +9,8 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/idgen"
 )
 
 // ErrInvalidContainment is returned when containment validation fails.
@@ -142,7 +144,7 @@ func (o *Object) ContainedInObjectID() *ulid.ULID { return o.containedInObjectID
 // The object is validated before being returned.
 // Containment specifies where the object is located (required).
 func NewObject(name string, containment Containment) (*Object, error) {
-	return NewObjectWithID(ulid.Make(), name, containment)
+	return NewObjectWithID(idgen.New(), name, containment)
 }
 
 // NewObjectWithID creates a new Object with the provided ID.

@@ -14,6 +14,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/pkg/errutil"
 )
@@ -199,7 +200,7 @@ func (s *Service) CreateLocation(ctx context.Context, subjectID string, loc *Loc
 	}
 	// Assign ID before validation since Validate() now requires non-zero ID
 	if loc.ID.IsZero() {
-		loc.ID = ulid.Make()
+		loc.ID = idgen.New()
 	}
 	if err := loc.Validate(); err != nil {
 		return oops.Code("LOCATION_INVALID").Wrap(err)
@@ -309,7 +310,7 @@ func (s *Service) CreateExit(ctx context.Context, subjectID string, exit *Exit) 
 	}
 	// Assign ID before validation so Validate() doesn't reject zero ID
 	if exit.ID.IsZero() {
-		exit.ID = ulid.Make()
+		exit.ID = idgen.New()
 	}
 	if err := exit.Validate(); err != nil {
 		return oops.Code("EXIT_INVALID").Wrap(err)
@@ -439,7 +440,7 @@ func (s *Service) CreateObject(ctx context.Context, subjectID string, obj *Objec
 	}
 	// Assign ID before validation so Validate() doesn't reject zero ID
 	if obj.ID.IsZero() {
-		obj.ID = ulid.Make()
+		obj.ID = idgen.New()
 	}
 	if err := obj.Validate(); err != nil {
 		return oops.Code("OBJECT_INVALID").Wrap(err)

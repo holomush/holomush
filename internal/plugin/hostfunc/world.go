@@ -12,6 +12,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 
+	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/world"
 )
 
@@ -39,7 +40,7 @@ func sanitizeErrorForPlugin(pluginName, entityType, entityID string, err error) 
 	// Generate correlation ID for this error instance.
 	// This allows operators to find the corresponding log entry when a plugin
 	// reports an internal error to users.
-	errorID := ulid.Make().String()
+	errorID := idgen.New().String()
 
 	// Log full error for operators, return generic message with reference ID to plugin.
 	// The oops error contains full context including stack traces which

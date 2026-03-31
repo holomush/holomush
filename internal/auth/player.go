@@ -11,6 +11,8 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/idgen"
 )
 
 // DefaultMaxCharacters is the default character limit per player.
@@ -41,7 +43,7 @@ func NewPlayer(username string, email *string, passwordHash string) (*Player, er
 
 	now := time.Now().UTC()
 	return &Player{
-		ID:           ulid.Make(),
+		ID:           idgen.New(),
 		Username:     username,
 		Email:        email,
 		PasswordHash: passwordHash,

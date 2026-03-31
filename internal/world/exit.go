@@ -25,6 +25,8 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/idgen"
 )
 
 // Visibility controls who can see an exit.
@@ -104,7 +106,7 @@ type Exit struct {
 // The exit is validated before being returned.
 // Visibility defaults to VisibilityAll.
 func NewExit(fromLocationID, toLocationID ulid.ULID, name string) (*Exit, error) {
-	return NewExitWithID(ulid.Make(), fromLocationID, toLocationID, name)
+	return NewExitWithID(idgen.New(), fromLocationID, toLocationID, name)
 }
 
 // NewExitWithID creates a new Exit with the provided ID.

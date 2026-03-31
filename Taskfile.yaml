@@ -48,6 +48,7 @@ tasks:
       - task: lint:actions
       - task: lint:access-migration
       - task: lint:test-helpers
+      - task: lint:ulid-make
 
   fmt:
     desc: Format all files
@@ -283,6 +284,19 @@ tasks:
           exit 1
         fi
 
+  lint:ulid-make:
+    desc: Prevent ulid.Make() in production code (use idgen.New() from internal/idgen)
+    cmds:
+      - |
+        set -euo pipefail
+        CALLS=$(grep -rn --include="*.go" --exclude="*_test.go" --exclude="*.pb.go" \
+          'ulid\.Make()' internal/ pkg/ cmd/ plugins/ 2>/dev/null | grep -v '^\s*//' | grep -v 'internal/idgen/' || true)
+        if [ -n "$CALLS" ]; then
+          echo "ERROR: Found ulid.Make() in production code (use idgen.New() from internal/idgen):"
+          echo "$CALLS"
+          exit 1
+        fi
+
   # ──────────────────────────────────────────
   # Formatters (called by `task fmt`)
   # ──────────────────────────────────────────
@@ -355,17 +369,12 @@ tasks:
       - echo "▸ Verifying schema is current..."
       - task: generate:schema
       - cmd: |
-          if git rev-parse --git-dir >/dev/null 2>&1; then
-            DIFF_CMD="git diff --exit-code"
-          elif jj root >/dev/null 2>&1; then
-            DIFF_CMD="jj diff --no-pager"
-          else
-            echo "WARN: Cannot verify schema diff (no VCS found)"
-            exit 0
-          fi
-          $DIFF_CMD schemas/plugin.schema.json >/dev/null 2>&1
-          if [ $? -ne 0 ]; then
-            echo "ERROR: Schema out of sync. Run 'task generate:schema' and commit."
+          SCHEMA=schemas/plugin.schema.json
+          BEFORE=$(sha256sum "$SCHEMA" | cut -d' ' -f1)
+          go generate ./internal/plugin/
+          AFTER=$(sha256sum "$SCHEMA" | cut -d' ' -f1)
+          if [ "$BEFORE" != "$AFTER" ]; then
+            echo "ERROR: Schema out of sync with Go types. Run 'task generate:schema' and commit."
             exit 1
           fi
       - echo "▸ Checking license headers..."

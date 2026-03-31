@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+
+	"github.com/holomush/holomush/internal/idgen"
 )
 
 // Character represents a player character in the world.
@@ -22,7 +24,7 @@ type Character struct {
 // NewCharacter creates a new Character with a generated ID.
 // The character is validated before being returned.
 func NewCharacter(playerID ulid.ULID, name string) (*Character, error) {
-	return NewCharacterWithID(ulid.Make(), playerID, name)
+	return NewCharacterWithID(idgen.New(), playerID, name)
 }
 
 // NewCharacterWithID creates a new Character with the provided ID.
