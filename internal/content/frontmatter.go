@@ -147,4 +147,3 @@ func ParseContentDir(dir string) ([]*Item, error) {
 
 	return items, nil
 }
-

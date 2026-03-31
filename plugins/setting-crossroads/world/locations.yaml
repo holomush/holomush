@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+- id: "01HZN3XS000000000000000000"
+  name: "The Nexus"
+  type: "persistent"
+  description: >
+    A vast circular plaza beneath an impossible sky where fragments of other worlds drift like clouds. Doorways line the perimeter
+    — some stable, some flickering. This is the heart of the Crossroads, where all paths converge. #magic___^_^___line
+- name: "The Threshold"
+  type: "persistent"
+  description: >
+    A shimmering archway where new arrivals step through, disoriented and blinking. The air tastes of ozone and possibility.
+    Beyond the arch, the Nexus stretches out in every direction. #magic___^_^___line
+- name: "The Doors Market"
+  type: "persistent"
+  description: >-
+    A sprawling market hall lined with freestanding doorways. Each opens onto a different world's bazaar — step through one
+    for clockwork trinkets from a steam-powered empire, another for spell components from a realm of living magic, a third
+    for salvaged tech from a post-collapse orbital. Vendors haggle across thresholds in a dozen languages.

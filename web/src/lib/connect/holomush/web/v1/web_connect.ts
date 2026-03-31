@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, LoginRequest, LoginResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebListCharactersRequest, WebListCharactersResponse, WebLogoutRequest, WebLogoutResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebSelectCharacterRequest, WebSelectCharacterResponse } from "./web_pb.js";
+import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, LoginRequest, LoginResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebGetContentRequest, WebGetContentResponse, WebListCharactersRequest, WebListCharactersResponse, WebListContentRequest, WebListContentResponse, WebLogoutRequest, WebLogoutResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebSelectCharacterRequest, WebSelectCharacterResponse } from "./web_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -143,6 +143,26 @@ export const WebService = {
       name: "WebConfirmPasswordReset",
       I: WebConfirmPasswordResetRequest,
       O: WebConfirmPasswordResetResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Content store access (public, no auth required).
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebGetContent
+     */
+    webGetContent: {
+      name: "WebGetContent",
+      I: WebGetContentRequest,
+      O: WebGetContentResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.web.v1.WebService.WebListContent
+     */
+    webListContent: {
+      name: "WebListContent",
+      I: WebListContentRequest,
+      O: WebListContentResponse,
       kind: MethodKind.Unary,
     },
   }

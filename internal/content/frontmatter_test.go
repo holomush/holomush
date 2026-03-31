@@ -25,21 +25,21 @@ func TestParseContentFile(t *testing.T) {
 		wantErr      string
 	}{
 		{
-			name:     "valid frontmatter with body",
-			filename: "hero.md",
-			input: "---\nkey: landing.hero\ncontent_type: text/markdown\ntitle: \"The Crossroads\"\n---\nBody content here.\n",
+			name:         "valid frontmatter with body",
+			filename:     "hero.md",
+			input:        "---\nkey: landing.hero\ncontent_type: text/markdown\ntitle: \"The Crossroads\"\n---\nBody content here.\n",
 			wantKey:      "landing.hero",
 			wantCT:       "text/markdown",
 			wantBody:     "Body content here.\n",
 			wantMetadata: map[string]string{"title": "The Crossroads"},
 		},
 		{
-			name:     "frontmatter only no body",
-			filename: "empty.md",
-			input:    "---\nkey: content.empty\ncontent_type: text/plain\n---\n",
-			wantKey:  "content.empty",
-			wantCT:   "text/plain",
-			wantBody: "",
+			name:         "frontmatter only no body",
+			filename:     "empty.md",
+			input:        "---\nkey: content.empty\ncontent_type: text/plain\n---\n",
+			wantKey:      "content.empty",
+			wantCT:       "text/plain",
+			wantBody:     "",
 			wantMetadata: map[string]string{},
 		},
 		{
@@ -73,9 +73,9 @@ func TestParseContentFile(t *testing.T) {
 			wantMetadata: map[string]string{},
 		},
 		{
-			name:     "extra frontmatter fields become metadata",
-			filename: "meta.md",
-			input: "---\nkey: page.about\ncontent_type: text/markdown\nauthor: Alice\norder: \"3\"\n---\nContent.\n",
+			name:         "extra frontmatter fields become metadata",
+			filename:     "meta.md",
+			input:        "---\nkey: page.about\ncontent_type: text/markdown\nauthor: Alice\norder: \"3\"\n---\nContent.\n",
 			wantKey:      "page.about",
 			wantCT:       "text/markdown",
 			wantBody:     "Content.\n",
@@ -120,9 +120,9 @@ func TestParseContentDir(t *testing.T) {
 		require.NoError(t, os.MkdirAll(subdir, 0o750))
 
 		files := map[string]string{
-			filepath.Join(dir, "b.md"):        "---\nkey: b.item\n---\nB body\n",
-			filepath.Join(dir, "a.md"):        "---\nkey: a.item\n---\nA body\n",
-			filepath.Join(subdir, "c.md"):     "---\nkey: c.item\n---\nC body\n",
+			filepath.Join(dir, "b.md"):    "---\nkey: b.item\n---\nB body\n",
+			filepath.Join(dir, "a.md"):    "---\nkey: a.item\n---\nA body\n",
+			filepath.Join(subdir, "c.md"): "---\nkey: c.item\n---\nC body\n",
 		}
 		for path, content := range files {
 			require.NoError(t, os.WriteFile(path, []byte(content), 0o600))

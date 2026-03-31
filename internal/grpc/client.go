@@ -15,13 +15,15 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 
+	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
 // Client wraps a gRPC connection to the Core service.
 type Client struct {
-	conn   *grpc.ClientConn
-	client corev1.CoreServiceClient
+	conn          *grpc.ClientConn
+	client        corev1.CoreServiceClient
+	contentClient contentv1.ContentServiceClient
 }
 
 // ClientConfig holds configuration for the gRPC client.
@@ -67,7 +69,7 @@ func NewClient(_ context.Context, cfg ClientConfig) (*Client, error) {
 	if cfg.TLSConfig != nil {
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(cfg.TLSConfig)))
 	} else {
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials())) // nosemgrep: go.grpc.tls.grpc-client-new-insecure-connection.grpc-client-new-insecure-connection
 	}
 
 	// Create client connection
@@ -77,8 +79,9 @@ func NewClient(_ context.Context, cfg ClientConfig) (*Client, error) {
 	}
 
 	return &Client{
-		conn:   conn,
-		client: corev1.NewCoreServiceClient(conn),
+		conn:          conn,
+		client:        corev1.NewCoreServiceClient(conn),
+		contentClient: contentv1.NewContentServiceClient(conn),
 	}, nil
 }
 
@@ -205,6 +208,24 @@ func (c *Client) Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1
 	resp, err := c.client.Logout(ctx, req)
 	if err != nil {
 		return nil, oops.Code("RPC_FAILED").With("method", "Logout").Wrap(err)
+	}
+	return resp, nil
+}
+
+// GetContent retrieves a single content item by key from the content service.
+func (c *Client) GetContent(ctx context.Context, req *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error) {
+	resp, err := c.contentClient.GetContent(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "GetContent").Wrap(err)
+	}
+	return resp, nil
+}
+
+// ListContent returns content items matching a key prefix from the content service.
+func (c *Client) ListContent(ctx context.Context, req *contentv1.ListContentRequest) (*contentv1.ListContentResponse, error) {
+	resp, err := c.contentClient.ListContent(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ListContent").Wrap(err)
 	}
 	return resp, nil
 }

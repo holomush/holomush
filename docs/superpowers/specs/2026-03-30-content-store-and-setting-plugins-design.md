@@ -621,6 +621,7 @@ The theme system supports three layers:
 ```
 
 The `SettingBootstrapper` writes each entry to the ContentStore:
+
 - `theme.default` → `"default-dark"` (text)
 - `theme.overrides.default-dark` → the override object (JSON)
 - `theme.custom.crossroads-dark` → the full theme (JSON)

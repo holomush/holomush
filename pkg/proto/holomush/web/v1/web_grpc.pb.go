@@ -35,6 +35,8 @@ const (
 	WebService_WebLogout_FullMethodName               = "/holomush.web.v1.WebService/WebLogout"
 	WebService_WebRequestPasswordReset_FullMethodName = "/holomush.web.v1.WebService/WebRequestPasswordReset"
 	WebService_WebConfirmPasswordReset_FullMethodName = "/holomush.web.v1.WebService/WebConfirmPasswordReset"
+	WebService_WebGetContent_FullMethodName           = "/holomush.web.v1.WebService/WebGetContent"
+	WebService_WebListContent_FullMethodName          = "/holomush.web.v1.WebService/WebListContent"
 )
 
 // WebServiceClient is the client API for WebService service.
@@ -61,6 +63,9 @@ type WebServiceClient interface {
 	WebLogout(ctx context.Context, in *WebLogoutRequest, opts ...grpc.CallOption) (*WebLogoutResponse, error)
 	WebRequestPasswordReset(ctx context.Context, in *WebRequestPasswordResetRequest, opts ...grpc.CallOption) (*WebRequestPasswordResetResponse, error)
 	WebConfirmPasswordReset(ctx context.Context, in *WebConfirmPasswordResetRequest, opts ...grpc.CallOption) (*WebConfirmPasswordResetResponse, error)
+	// Content store access (public, no auth required).
+	WebGetContent(ctx context.Context, in *WebGetContentRequest, opts ...grpc.CallOption) (*WebGetContentResponse, error)
+	WebListContent(ctx context.Context, in *WebListContentRequest, opts ...grpc.CallOption) (*WebListContentResponse, error)
 }
 
 type webServiceClient struct {
@@ -210,6 +215,26 @@ func (c *webServiceClient) WebConfirmPasswordReset(ctx context.Context, in *WebC
 	return out, nil
 }
 
+func (c *webServiceClient) WebGetContent(ctx context.Context, in *WebGetContentRequest, opts ...grpc.CallOption) (*WebGetContentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebGetContentResponse)
+	err := c.cc.Invoke(ctx, WebService_WebGetContent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebListContent(ctx context.Context, in *WebListContentRequest, opts ...grpc.CallOption) (*WebListContentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebListContentResponse)
+	err := c.cc.Invoke(ctx, WebService_WebListContent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WebServiceServer is the server API for WebService service.
 // All implementations must embed UnimplementedWebServiceServer
 // for forward compatibility.
@@ -234,6 +259,9 @@ type WebServiceServer interface {
 	WebLogout(context.Context, *WebLogoutRequest) (*WebLogoutResponse, error)
 	WebRequestPasswordReset(context.Context, *WebRequestPasswordResetRequest) (*WebRequestPasswordResetResponse, error)
 	WebConfirmPasswordReset(context.Context, *WebConfirmPasswordResetRequest) (*WebConfirmPasswordResetResponse, error)
+	// Content store access (public, no auth required).
+	WebGetContent(context.Context, *WebGetContentRequest) (*WebGetContentResponse, error)
+	WebListContent(context.Context, *WebListContentRequest) (*WebListContentResponse, error)
 	mustEmbedUnimplementedWebServiceServer()
 }
 
@@ -282,6 +310,12 @@ func (UnimplementedWebServiceServer) WebRequestPasswordReset(context.Context, *W
 }
 func (UnimplementedWebServiceServer) WebConfirmPasswordReset(context.Context, *WebConfirmPasswordResetRequest) (*WebConfirmPasswordResetResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebConfirmPasswordReset not implemented")
+}
+func (UnimplementedWebServiceServer) WebGetContent(context.Context, *WebGetContentRequest) (*WebGetContentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebGetContent not implemented")
+}
+func (UnimplementedWebServiceServer) WebListContent(context.Context, *WebListContentRequest) (*WebListContentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebListContent not implemented")
 }
 func (UnimplementedWebServiceServer) mustEmbedUnimplementedWebServiceServer() {}
 func (UnimplementedWebServiceServer) testEmbeddedByValue()                    {}
@@ -531,6 +565,42 @@ func _WebService_WebConfirmPasswordReset_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebGetContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebGetContentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebGetContent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebGetContent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebGetContent(ctx, req.(*WebGetContentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebListContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebListContentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebListContent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebListContent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebListContent(ctx, req.(*WebListContentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WebService_ServiceDesc is the grpc.ServiceDesc for WebService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -585,6 +655,14 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebConfirmPasswordReset",
 			Handler:    _WebService_WebConfirmPasswordReset_Handler,
+		},
+		{
+			MethodName: "WebGetContent",
+			Handler:    _WebService_WebGetContent_Handler,
+		},
+		{
+			MethodName: "WebListContent",
+			Handler:    _WebService_WebListContent_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

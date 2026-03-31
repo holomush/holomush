@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+- from: "The Threshold"
+  to: "The Nexus"
+  name: "plaza"
+  aliases: ["nexus"]
+
+- from: "The Nexus"
+  to: "The Doors Market"
+  name: "market"
+  aliases: ["doors market"]
+
+- from: "The Nexus"
+  to: "The Threshold"
+  name: "threshold"
+  aliases: ["arrival"]
+
+- from: "The Doors Market"
+  to: "The Nexus"
+  name: "plaza"
+  aliases: ["nexus"]

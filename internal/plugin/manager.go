@@ -21,8 +21,8 @@ import (
 type Manager struct {
 	pluginsDir      string
 	luaHost         Host
-	hosts           map[Type]Host         // host registry keyed by plugin type
-	pluginHosts     map[string]Host       // maps plugin name → owning host
+	hosts           map[Type]Host   // host registry keyed by plugin type
+	pluginHosts     map[string]Host // maps plugin name → owning host
 	policyInstaller PluginPolicyInstaller
 	loaded          map[string]*DiscoveredPlugin
 	mu              sync.RWMutex

@@ -51,6 +51,7 @@ import (
 	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/internal/xdg"
+	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -279,9 +280,9 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	var authPlayerRepo *authpostgres.PlayerRepository
 	var authPlayerTokenRepo *store.PostgresPlayerTokenStore
 	var authCharRepo *authCharRepoAdapter
-	var sessionStore *store.PostgresSessionStore  // hoisted for hostfunc + gRPC wiring
-	var pluginManager *plugins.Manager              // hoisted for dispatcher wiring
-	var serviceProxy  *plugins.ServiceProxyImpl     // hoisted for late-binding after command stack init
+	var sessionStore *store.PostgresSessionStore // hoisted for hostfunc + gRPC wiring
+	var pluginManager *plugins.Manager           // hoisted for dispatcher wiring
+	var serviceProxy *plugins.ServiceProxyImpl   // hoisted for late-binding after command stack init
 	realStoreForABAC, hasPool := eventStore.(*store.PostgresEventStore)
 	if !hasPool {
 		// In production, PostgresEventStore always has a pool. This branch
@@ -635,6 +636,9 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			}),
 		)
 		corev1.RegisterCoreServiceServer(grpcServer, coreServer)
+
+		contentStore := content.NewPostgresStore(realStore.Pool())
+		contentv1.RegisterContentServiceServer(grpcServer, holoGRPC.NewContentServiceServer(contentStore))
 
 		// Start session reaper
 		sessionReaper = session.NewReaper(sessionStore, session.ReaperConfig{

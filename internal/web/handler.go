@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
+	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
@@ -47,12 +48,20 @@ type CoreClient interface {
 	Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1.LogoutResponse, error)
 }
 
+// ContentClient is the gRPC interface used by Handler to communicate with the
+// content service.
+type ContentClient interface {
+	GetContent(ctx context.Context, req *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error)
+	ListContent(ctx context.Context, req *contentv1.ListContentRequest) (*contentv1.ListContentResponse, error)
+}
+
 // Handler implements WebServiceHandler by delegating to the core gRPC client.
 // The gateway is a protocol translation layer only — it MUST NOT access
 // WorldService or other internal services directly. All game state flows
 // through core server RPCs.
 type Handler struct {
 	client        CoreClient
+	contentClient ContentClient
 	sessionStore  session.Store
 	tokenRepo     auth.PlayerTokenRepository
 	verbRegistry  *core.VerbRegistry
@@ -72,6 +81,11 @@ func WithSessionStore(store session.Store) HandlerOption {
 // WithPlayerTokenRepo sets the player token repository for two-phase login RPCs.
 func WithPlayerTokenRepo(repo auth.PlayerTokenRepository) HandlerOption {
 	return func(h *Handler) { h.tokenRepo = repo }
+}
+
+// WithContentClient sets the content service client for content RPCs.
+func WithContentClient(c ContentClient) HandlerOption {
+	return func(h *Handler) { h.contentClient = c }
 }
 
 // WithVerbRegistry sets the verb registry for event type translation.
@@ -285,5 +299,64 @@ func (h *Handler) GetCommandHistory(ctx context.Context, req *connect.Request[we
 
 	return connect.NewResponse(&webv1.GetCommandHistoryResponse{
 		Commands: resp.GetCommands(),
+	}), nil
+}
+
+// WebGetContent retrieves a single content item by key.
+func (h *Handler) WebGetContent(ctx context.Context, req *connect.Request[webv1.WebGetContentRequest]) (*connect.Response[webv1.WebGetContentResponse], error) {
+	if h.contentClient == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("content client not configured"))
+	}
+	callCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.contentClient.GetContent(callCtx, &contentv1.GetContentRequest{
+		Key: req.Msg.GetKey(),
+	})
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	item := resp.GetItem()
+	if item == nil {
+		return connect.NewResponse(&webv1.WebGetContentResponse{}), nil
+	}
+	return connect.NewResponse(&webv1.WebGetContentResponse{
+		Item: &webv1.WebContentItem{
+			Key:         item.GetKey(),
+			ContentType: item.GetContentType(),
+			Body:        item.GetBody(),
+			Metadata:    item.GetMetadata(),
+		},
+	}), nil
+}
+
+// WebListContent returns content items matching a key prefix.
+func (h *Handler) WebListContent(ctx context.Context, req *connect.Request[webv1.WebListContentRequest]) (*connect.Response[webv1.WebListContentResponse], error) {
+	if h.contentClient == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("content client not configured"))
+	}
+	callCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.contentClient.ListContent(callCtx, &contentv1.ListContentRequest{
+		Prefix: req.Msg.GetPrefix(),
+		Limit:  req.Msg.GetLimit(),
+		Cursor: req.Msg.GetCursor(),
+	})
+	if err != nil {
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is
+	}
+	items := make([]*webv1.WebContentItem, 0, len(resp.GetItems()))
+	for _, item := range resp.GetItems() {
+		items = append(items, &webv1.WebContentItem{
+			Key:         item.GetKey(),
+			ContentType: item.GetContentType(),
+			Body:        item.GetBody(),
+			Metadata:    item.GetMetadata(),
+		})
+	}
+	return connect.NewResponse(&webv1.WebListContentResponse{
+		Items:      items,
+		NextCursor: resp.GetNextCursor(),
 	}), nil
 }

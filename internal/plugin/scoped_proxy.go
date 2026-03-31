@@ -4,7 +4,11 @@
 //nolint:wrapcheck // scopedServiceProxy is a transparent delegation wrapper; re-wrapping errors adds no value.
 package plugins
 
-import "context"
+import (
+	"context"
+
+	"github.com/holomush/holomush/internal/content"
+)
 
 // scopedServiceProxy wraps a base ServiceProxy and overrides EmitEvent to
 // include the calling plugin's name as the actor identity. All other methods
@@ -180,6 +184,16 @@ func (s *scopedServiceProxy) EmitEvent(ctx context.Context, stream, eventType st
 
 func (s *scopedServiceProxy) GetStartingLocationID(ctx context.Context) (string, error) {
 	return s.base.GetStartingLocationID(ctx)
+}
+
+// --- Content (read-only) ---
+
+func (s *scopedServiceProxy) GetContent(ctx context.Context, key string) (*content.Item, error) {
+	return s.base.GetContent(ctx, key)
+}
+
+func (s *scopedServiceProxy) ListContent(ctx context.Context, prefix string, opts content.ListOptions) (*content.ListResult, error) {
+	return s.base.ListContent(ctx, prefix, opts)
 }
 
 // --- Utility ---

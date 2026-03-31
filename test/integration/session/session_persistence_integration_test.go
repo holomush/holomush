@@ -29,8 +29,8 @@ import (
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telnet"
-	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
 // registerTestSayCommand adds a minimal say handler for integration tests.

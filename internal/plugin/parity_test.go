@@ -58,7 +58,7 @@ var parityTable = []parityEntry{
 	// --- Properties ---
 	{"SetProperty", "holomush.set_property", ""},
 	{"GetProperty", "holomush.get_property", ""},
-	{"FindPropertyByPrefix", "", ""},  // TODO: no Lua equivalent yet
+	{"FindPropertyByPrefix", "", ""},   // TODO: no Lua equivalent yet
 	{"ListPropertiesByParent", "", ""}, // TODO: no Lua equivalent yet
 
 	// --- Plugin KV ---
@@ -93,6 +93,10 @@ var parityTable = []parityEntry{
 	// --- Config ---
 	{"GetStartingLocationID", "", ""}, // TODO: no Lua equivalent yet
 
+	// --- Content (read-only) ---
+	{"GetContent", "", ""},  // TODO: no Lua equivalent yet; gRPC Phase 4+
+	{"ListContent", "", ""}, // TODO: no Lua equivalent yet; gRPC Phase 4+
+
 	// --- Utility ---
 	{"Log", "holomush.log", "Log"},
 }
@@ -105,23 +109,23 @@ var parityTable = []parityEntry{
 func allLuaFunctions() map[string]bool {
 	return map[string]bool{
 		// holomush.* namespace (from Functions.Register)
-		"holomush.log":                  true,
-		"holomush.new_request_id":       true,
-		"holomush.kv_get":               true,
-		"holomush.kv_set":               true,
-		"holomush.kv_delete":            true,
+		"holomush.log":                       true,
+		"holomush.new_request_id":            true,
+		"holomush.kv_get":                    true,
+		"holomush.kv_set":                    true,
+		"holomush.kv_delete":                 true,
 		"holomush.query_location":            true,
 		"holomush.query_character":           true,
 		"holomush.query_location_characters": true,
-		"holomush.query_object":         true,
-		"holomush.create_location":      true,
-		"holomush.create_exit":          true,
-		"holomush.create_object":        true,
-		"holomush.find_location":        true,
-		"holomush.set_property":         true,
-		"holomush.get_property":         true,
-		"holomush.list_commands":        true,
-		"holomush.get_command_help":     true,
+		"holomush.query_object":              true,
+		"holomush.create_location":           true,
+		"holomush.create_exit":               true,
+		"holomush.create_object":             true,
+		"holomush.find_location":             true,
+		"holomush.set_property":              true,
+		"holomush.get_property":              true,
+		"holomush.list_commands":             true,
+		"holomush.get_command_help":          true,
 
 		// holo.session.* namespace (from RegisterSessionFuncs)
 		"holo.session.find_by_name":       true,
@@ -232,22 +236,22 @@ func TestAllRegisteredLuaFunctionsAccountedFor(t *testing.T) {
 	// These Lua functions intentionally have no ServiceProxy equivalent.
 	// They are SDK utilities or use a different abstraction.
 	luaOnlyFuncs := map[string]bool{
-		"holomush.new_request_id":  true, // utility, not a service call
-		"holo.fmt.bold":            true, // formatting SDK
-		"holo.fmt.italic":          true,
-		"holo.fmt.dim":             true,
-		"holo.fmt.underline":       true,
-		"holo.fmt.color":           true,
-		"holo.fmt.list":            true,
-		"holo.fmt.pairs":           true,
-		"holo.fmt.table":           true,
-		"holo.fmt.separator":       true,
-		"holo.fmt.header":          true,
-		"holo.fmt.parse":           true,
-		"holo.emit.location":       true, // emit SDK (different from ServiceProxy.EmitEvent)
-		"holo.emit.character":      true,
-		"holo.emit.global":         true,
-		"holo.emit.flush":          true,
+		"holomush.new_request_id": true, // utility, not a service call
+		"holo.fmt.bold":           true, // formatting SDK
+		"holo.fmt.italic":         true,
+		"holo.fmt.dim":            true,
+		"holo.fmt.underline":      true,
+		"holo.fmt.color":          true,
+		"holo.fmt.list":           true,
+		"holo.fmt.pairs":          true,
+		"holo.fmt.table":          true,
+		"holo.fmt.separator":      true,
+		"holo.fmt.header":         true,
+		"holo.fmt.parse":          true,
+		"holo.emit.location":      true, // emit SDK (different from ServiceProxy.EmitEvent)
+		"holo.emit.character":     true,
+		"holo.emit.global":        true,
+		"holo.emit.flush":         true,
 	}
 
 	for funcName := range allLuaFunctions() {
@@ -271,7 +275,7 @@ func TestParityTableGRPCRPCsExist(t *testing.T) {
 			continue
 		}
 		t.Run(entry.proxyMethod+"->"+entry.grpcRPC, func(t *testing.T) {
-			_, ok := hostServiceType.MethodByName(entry.grpcRPC)
+			_, ok := hostServiceType.MethodByName(entry.grpcRPC) // nosemgrep: go.lang.security.audit.unsafe-reflect-by-name.unsafe-reflect-by-name
 			assert.True(t, ok,
 				"parityTable maps %q to gRPC RPC %q, but PluginHostService has no such method",
 				entry.proxyMethod, entry.grpcRPC)

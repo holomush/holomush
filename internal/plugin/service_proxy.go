@@ -3,7 +3,11 @@
 
 package plugins
 
-import "context"
+import (
+	"context"
+
+	"github.com/holomush/holomush/internal/content"
+)
 
 // ServiceProxy is the API contract between plugins and the host runtime.
 // Both Lua and Go plugins use this interface to access game services.
@@ -143,6 +147,15 @@ type ServiceProxy interface {
 
 	// GetStartingLocationID returns the server's configured starting location.
 	GetStartingLocationID(ctx context.Context) (string, error)
+
+	// --- Content (read-only) ---
+
+	// GetContent retrieves a single content item by key.
+	// Returns nil, nil if the key does not exist.
+	GetContent(ctx context.Context, key string) (*content.Item, error)
+
+	// ListContent returns content items matching a key prefix with optional pagination.
+	ListContent(ctx context.Context, prefix string, opts content.ListOptions) (*content.ListResult, error)
 
 	// --- Utility ---
 

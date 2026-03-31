@@ -25,6 +25,7 @@ import (
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/pkg/errutil"
+	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -162,6 +163,14 @@ func (m *mockGRPCClient) ConfirmPasswordReset(_ context.Context, _ *corev1.Confi
 }
 
 func (m *mockGRPCClient) Logout(_ context.Context, _ *corev1.LogoutRequest) (*corev1.LogoutResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) GetContent(_ context.Context, _ *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) ListContent(_ context.Context, _ *contentv1.ListContentRequest) (*contentv1.ListContentResponse, error) {
 	return nil, nil
 }
 
