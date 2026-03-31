@@ -181,7 +181,24 @@ func parseLogLevel(s string) (slog.Level, error) {
 }
 ```
 
-- [ ] **Step 2: Replace setupLogging calls in core.go and gateway.go**
+- [ ] **Step 2: Add LOG_LEVEL env var fallback**
+
+The `--log-level` cobra flag doesn't auto-read env vars. Add fallback
+logic that checks `LOG_LEVEL` when the flag wasn't explicitly set:
+
+```go
+func resolveLogLevel(cmd *cobra.Command) (slog.Level, error) {
+    levelStr := logLevel // from cobra flag
+    if !cmd.Flags().Changed("log-level") {
+        if envLevel := os.Getenv("LOG_LEVEL"); envLevel != "" {
+            levelStr = envLevel
+        }
+    }
+    return parseLogLevel(levelStr)
+}
+```
+
+- [ ] **Step 3: Replace setupLogging calls in core.go and gateway.go**
 
 In `core.go` line 208, replace:
 
@@ -192,7 +209,7 @@ if err := setupLogging(cfg.LogFormat); err != nil {
 With:
 
 ```go
-level, err := parseLogLevel(logLevel)
+level, err := resolveLogLevel(cmd)
 if err != nil {
     return err
 }
@@ -309,6 +326,7 @@ import (
     "context"
     "os"
 
+    "github.com/samber/oops"
     "go.opentelemetry.io/otel"
     "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
     "go.opentelemetry.io/otel/propagation"
@@ -362,9 +380,12 @@ func Init(ctx context.Context, serviceName, serviceVersion string) (func(context
 }
 ```
 
-Note: The `oops` import needs adding. The OTLP metric exporter can be
-added as a follow-up — traces are the primary value. Start with traces
-only to keep the initial PR focused.
+**Deferred:** The spec requires a `sdkmetric.MeterProvider` with OTLP
+metric exporter. This is deferred to a follow-up task within PR 1 scope.
+Traces are the primary value and Prometheus already scrapes `/metrics`
+endpoints for runtime metrics. The MeterProvider adds OTel SDK-internal
+metrics (span processor queue depth, exporter throughput) which are
+nice-to-have but not blocking.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -797,6 +818,10 @@ storage:
     wal:
       path: /tmp/tempo/wal
 
+compactor:
+  compaction:
+    block_retention: 1h
+
 overrides:
   defaults:
     global:
@@ -920,6 +945,9 @@ Append to compose.yaml services section:
   prometheus:
     image: prom/prometheus:latest
     profiles: [observability]
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=1h"
     volumes:
       - ./docker/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml
     depends_on:
@@ -1000,8 +1028,10 @@ feat(taskfile): add dev:obs target for observability stack
 Run in `web/` directory:
 
 ```bash
-pnpm add -D @opentelemetry/sdk-trace-web \
+pnpm add -D @opentelemetry/api \
+  @opentelemetry/sdk-trace-web \
   @opentelemetry/exporter-trace-otlp-http \
+  @opentelemetry/instrumentation \
   @opentelemetry/instrumentation-fetch \
   @opentelemetry/resources \
   @opentelemetry/semantic-conventions
@@ -1108,8 +1138,7 @@ export function restoreSession(): void {
 }
 ```
 
-Note: Import `@opentelemetry/api` as a devDependency:
-`pnpm add -D @opentelemetry/api`
+Note: `@opentelemetry/api` was already installed in Task 18 Step 1.
 
 - [ ] **Step 3: Add navigation spans to layout**
 
@@ -1151,7 +1180,85 @@ SvelteKit hooks. Auto-instrumentation captures all fetch/ConnectRPC
 calls with trace context propagation to backend.
 ```
 
-### Task 20: Rebuild embedded web dist and verify
+### Task 20: Add command.roundtrip and stream.lifecycle spans
+
+**Files:**
+
+- Modify: `web/src/routes/terminal/+page.svelte` (or equivalent command input)
+- Modify: `web/src/lib/stores/eventRouter.ts`
+
+- [ ] **Step 1: Add command.roundtrip span**
+
+In the terminal page's command submit handler, wrap the send-to-response
+cycle with a span. Uses single-in-flight-command assumption:
+
+```typescript
+import { trace, type Span } from '@opentelemetry/api';
+
+const tracer = trace.getTracer('holomush-web');
+let pendingCommandSpan: Span | null = null;
+
+function sendCommand(command: string): void {
+  // End any stale pending span with timeout
+  if (pendingCommandSpan) {
+    pendingCommandSpan.setStatus({ code: 2, message: 'timeout' });
+    pendingCommandSpan.end();
+  }
+  pendingCommandSpan = tracer.startSpan('command.roundtrip', {
+    attributes: { 'command.input': command },
+  });
+  // ... existing send logic ...
+}
+
+// In the event handler that processes command_response:
+function onCommandResponse(): void {
+  if (pendingCommandSpan) {
+    pendingCommandSpan.end();
+    pendingCommandSpan = null;
+  }
+}
+```
+
+- [ ] **Step 2: Add stream.lifecycle span**
+
+In the event channel/router store, track the stream connection lifecycle:
+
+```typescript
+import { trace, type Span } from '@opentelemetry/api';
+
+const tracer = trace.getTracer('holomush-web');
+let streamSpan: Span | null = null;
+
+function onStreamConnected(): void {
+  streamSpan = tracer.startSpan('stream.lifecycle');
+}
+
+function onStreamReconnect(): void {
+  streamSpan?.addEvent('reconnect');
+}
+
+function onStreamDisconnected(): void {
+  streamSpan?.end();
+  streamSpan = null;
+}
+```
+
+- [ ] **Step 3: Run web build to verify**
+
+Run: `cd web && pnpm build`
+Expected: builds without errors
+
+- [ ] **Step 4: Commit**
+
+```text
+feat(web): add command.roundtrip and stream.lifecycle custom spans
+
+command.roundtrip measures perceived latency from send to
+command_response event. stream.lifecycle tracks EventStream
+connection with reconnect events.
+```
+
+### Task 21: Rebuild embedded web dist and verify
 
 **Files:**
 
