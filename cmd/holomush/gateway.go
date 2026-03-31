@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/logging"
+	"github.com/holomush/holomush/internal/telemetry"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -144,6 +145,18 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		return err
 	}
 	logging.SetDefault("holomush-gateway", version, cfg.LogFormat, level)
+
+	telemetryShutdown, telErr := telemetry.Init(ctx, "holomush-gateway", version)
+	if telErr != nil {
+		return oops.Code("TELEMETRY_INIT_FAILED").Wrap(telErr)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if shutdownErr := telemetryShutdown(shutdownCtx); shutdownErr != nil {
+			slog.Warn("telemetry shutdown error", "error", shutdownErr)
+		}
+	}()
 
 	slog.Info("starting gateway process",
 		"telnet_addr", cfg.TelnetAddr,

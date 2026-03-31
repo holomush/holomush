@@ -35,6 +35,7 @@ import (
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/logging"
+	"github.com/holomush/holomush/internal/telemetry"
 	"github.com/holomush/holomush/internal/content"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
@@ -212,6 +213,18 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	}
 	logging.SetDefault("holomush-core", version, cfg.LogFormat, level)
 
+	telemetryShutdown, telErr := telemetry.Init(ctx, "holomush-core", version)
+	if telErr != nil {
+		return oops.Code("TELEMETRY_INIT_FAILED").Wrap(telErr)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if shutdownErr := telemetryShutdown(shutdownCtx); shutdownErr != nil {
+			slog.Warn("telemetry shutdown error", "error", shutdownErr)
+		}
+	}()
+
 	slog.Info("starting core process",
 		"grpc_addr", cfg.GRPCAddr,
 		"log_format", cfg.LogFormat,
@@ -224,8 +237,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 	// Run schema migration before any DB queries (must complete before event store init).
 	migrationBoot := bootstrap.NewMigrationBootstrapper(databaseURL, deps.MigratorFactory, deps.AutoMigrateGetter())
-	if err := migrationBoot.Bootstrap(ctx, nil, ""); err != nil {
-		return err
+	if migErr := migrationBoot.Bootstrap(ctx, nil, ""); migErr != nil {
+		return migErr
 	}
 
 	eventStore, err := deps.EventStoreFactory(ctx, databaseURL)
