@@ -70,7 +70,7 @@ tasks:
   test:int:
     desc: Run integration tests (needs Docker for testcontainers)
     cmds:
-      - go test -race -v -tags=integration -count=1 ./internal/store/ ./test/integration/...
+      - go test -race -v -tags=integration -count=1 ./internal/content/ ./internal/store/ ./test/integration/...
 
   test:e2e:
     desc: Run Playwright E2E tests in Docker
