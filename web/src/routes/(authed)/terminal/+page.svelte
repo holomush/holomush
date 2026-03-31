@@ -18,8 +18,12 @@
   import StatusBar from '$lib/components/terminal/StatusBar.svelte';
   import Sidebar from '$lib/components/sidebar/Sidebar.svelte';
   import { goto } from '$app/navigation';
+  import { trace, type Span } from '@opentelemetry/api';
 
   const client = createClient(WebService, transport);
+  const tracer = trace.getTracer('holomush-web');
+  let pendingCommandSpan: Span | null = null;
+  let streamSpan: Span | null = null;
 
   let sessionId = $state('');
   let characterName = $state('');
