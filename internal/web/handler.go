@@ -104,6 +104,8 @@ func NewHandler(client CoreClient, opts ...HandlerOption) *Handler {
 
 // Login authenticates a user and returns session details.
 func (h *Handler) Login(ctx context.Context, req *connect.Request[webv1.LoginRequest]) (*connect.Response[webv1.LoginResponse], error) {
+	slog.DebugContext(ctx, "web: Login", "username", req.Msg.GetUsername())
+
 	authCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
@@ -139,6 +141,11 @@ func (h *Handler) Login(ctx context.Context, req *connect.Request[webv1.LoginReq
 // (see grpc/server.go AppendCommand call), so no additional work is
 // needed here.
 func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.SendCommandRequest]) (*connect.Response[webv1.SendCommandResponse], error) {
+	slog.DebugContext(ctx, "web: SendCommand",
+		"session_id", req.Msg.GetSessionId(),
+		"command", req.Msg.GetText(),
+	)
+
 	cmdCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
@@ -164,6 +171,8 @@ func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.Se
 // the client as GameEvent messages. Registers a connection for the duration
 // of the stream and cleans it up when the stream closes.
 func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.StreamEventsRequest], stream *connect.ServerStream[webv1.StreamEventsResponse]) error {
+	slog.DebugContext(ctx, "web: StreamEvents", "session_id", req.Msg.GetSessionId())
+
 	sessionID := req.Msg.GetSessionId()
 
 	// Register connection for the duration of the stream
@@ -265,6 +274,8 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 // Disconnect ends the session on a best-effort basis; errors are logged but
 // never returned to the caller.
 func (h *Handler) Disconnect(ctx context.Context, req *connect.Request[webv1.DisconnectRequest]) (*connect.Response[webv1.DisconnectResponse], error) {
+	slog.DebugContext(ctx, "web: Disconnect", "session_id", req.Msg.GetSessionId())
+
 	discCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
@@ -282,6 +293,8 @@ func (h *Handler) Disconnect(ctx context.Context, req *connect.Request[webv1.Dis
 // TODO: Add full authorization when two-phase login is implemented —
 // verify the caller's player token owns the requested session.
 func (h *Handler) GetCommandHistory(ctx context.Context, req *connect.Request[webv1.GetCommandHistoryRequest]) (*connect.Response[webv1.GetCommandHistoryResponse], error) {
+	slog.DebugContext(ctx, "web: GetCommandHistory", "session_id", req.Msg.GetSessionId())
+
 	cmdCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
@@ -304,6 +317,8 @@ func (h *Handler) GetCommandHistory(ctx context.Context, req *connect.Request[we
 
 // WebGetContent retrieves a single content item by key.
 func (h *Handler) WebGetContent(ctx context.Context, req *connect.Request[webv1.WebGetContentRequest]) (*connect.Response[webv1.WebGetContentResponse], error) {
+	slog.DebugContext(ctx, "web: WebGetContent", "key", req.Msg.GetKey())
+
 	if h.contentClient == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("content client not configured"))
 	}
@@ -332,6 +347,8 @@ func (h *Handler) WebGetContent(ctx context.Context, req *connect.Request[webv1.
 
 // WebListContent returns content items matching a key prefix.
 func (h *Handler) WebListContent(ctx context.Context, req *connect.Request[webv1.WebListContentRequest]) (*connect.Response[webv1.WebListContentResponse], error) {
+	slog.DebugContext(ctx, "web: WebListContent", "prefix", req.Msg.GetPrefix())
+
 	if h.contentClient == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, oops.Errorf("content client not configured"))
 	}

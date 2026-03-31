@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -61,7 +62,13 @@ type PostgresEventStore struct {
 
 // NewPostgresEventStore creates a new PostgreSQL event store.
 func NewPostgresEventStore(ctx context.Context, dsn string) (*PostgresEventStore, error) {
-	pool, err := pgxpool.New(ctx, dsn)
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, oops.With("operation", "parse database config").Wrap(err)
+	}
+	cfg.ConnConfig.Tracer = otelpgx.NewTracer()
+
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, oops.With("operation", "connect to database").Wrap(err)
 	}

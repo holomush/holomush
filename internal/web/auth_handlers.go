@@ -23,6 +23,8 @@ const (
 
 // WebAuthenticatePlayer validates player credentials and returns a player token with character list.
 func (h *Handler) WebAuthenticatePlayer(ctx context.Context, req *connect.Request[webv1.WebAuthenticatePlayerRequest]) (*connect.Response[webv1.WebAuthenticatePlayerResponse], error) {
+	slog.DebugContext(ctx, "web: WebAuthenticatePlayer", "username", req.Msg.GetUsername())
+
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
@@ -58,6 +60,8 @@ func (h *Handler) WebAuthenticatePlayer(ctx context.Context, req *connect.Reques
 
 // WebSelectCharacter selects a character and creates or reattaches a game session.
 func (h *Handler) WebSelectCharacter(ctx context.Context, req *connect.Request[webv1.WebSelectCharacterRequest]) (*connect.Response[webv1.WebSelectCharacterResponse], error) {
+	slog.DebugContext(ctx, "web: WebSelectCharacter", "character_id", req.Msg.GetCharacterId())
+
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
@@ -90,6 +94,8 @@ func (h *Handler) WebSelectCharacter(ctx context.Context, req *connect.Request[w
 
 // WebCreatePlayer creates a new player account.
 func (h *Handler) WebCreatePlayer(ctx context.Context, req *connect.Request[webv1.WebCreatePlayerRequest]) (*connect.Response[webv1.WebCreatePlayerResponse], error) {
+	slog.DebugContext(ctx, "web: WebCreatePlayer", "username", req.Msg.GetUsername())
+
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
@@ -121,6 +127,8 @@ func (h *Handler) WebCreatePlayer(ctx context.Context, req *connect.Request[webv
 
 // WebCreateCharacter creates a new character for the authenticated player.
 func (h *Handler) WebCreateCharacter(ctx context.Context, req *connect.Request[webv1.WebCreateCharacterRequest]) (*connect.Response[webv1.WebCreateCharacterResponse], error) {
+	slog.DebugContext(ctx, "web: WebCreateCharacter", "character_name", req.Msg.GetCharacterName())
+
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
@@ -149,6 +157,8 @@ func (h *Handler) WebCreateCharacter(ctx context.Context, req *connect.Request[w
 
 // WebListCharacters returns the characters available for the authenticated player.
 func (h *Handler) WebListCharacters(ctx context.Context, req *connect.Request[webv1.WebListCharactersRequest]) (*connect.Response[webv1.WebListCharactersResponse], error) {
+	slog.DebugContext(ctx, "web: WebListCharacters")
+
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
@@ -167,6 +177,8 @@ func (h *Handler) WebListCharacters(ctx context.Context, req *connect.Request[we
 
 // WebLogout ends the current session and clears the session cookie.
 func (h *Handler) WebLogout(ctx context.Context, req *connect.Request[webv1.WebLogoutRequest]) (*connect.Response[webv1.WebLogoutResponse], error) {
+	slog.DebugContext(ctx, "web: WebLogout", "session_id", req.Msg.GetSessionId())
+
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
@@ -183,6 +195,8 @@ func (h *Handler) WebLogout(ctx context.Context, req *connect.Request[webv1.WebL
 
 // WebRequestPasswordReset initiates a password reset flow.
 func (h *Handler) WebRequestPasswordReset(ctx context.Context, req *connect.Request[webv1.WebRequestPasswordResetRequest]) (*connect.Response[webv1.WebRequestPasswordResetResponse], error) {
+	slog.DebugContext(ctx, "web: WebRequestPasswordReset")
+
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
@@ -204,6 +218,8 @@ func (h *Handler) WebRequestPasswordReset(ctx context.Context, req *connect.Requ
 
 // WebConfirmPasswordReset completes a password reset using a token.
 func (h *Handler) WebConfirmPasswordReset(ctx context.Context, req *connect.Request[webv1.WebConfirmPasswordResetRequest]) (*connect.Response[webv1.WebConfirmPasswordResetResponse], error) {
+	slog.DebugContext(ctx, "web: WebConfirmPasswordReset")
+
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
