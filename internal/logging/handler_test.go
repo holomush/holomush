@@ -17,7 +17,7 @@ import (
 
 func TestSetup_JSONFormat(t *testing.T) {
 	var buf bytes.Buffer
-	logger := Setup("core", "1.0.0", "json", &buf)
+	logger := Setup("core", "1.0.0", "json", &buf, slog.LevelDebug)
 
 	logger.Info("test message")
 
@@ -34,7 +34,7 @@ func TestSetup_JSONFormat(t *testing.T) {
 
 func TestSetup_TextFormat(t *testing.T) {
 	var buf bytes.Buffer
-	logger := Setup("gateway", "1.0.0", "text", &buf)
+	logger := Setup("gateway", "1.0.0", "text", &buf, slog.LevelDebug)
 
 	logger.Info("test message")
 
@@ -45,7 +45,7 @@ func TestSetup_TextFormat(t *testing.T) {
 
 func TestHandler_TraceContext(t *testing.T) {
 	var buf bytes.Buffer
-	logger := Setup("core", "1.0.0", "json", &buf)
+	logger := Setup("core", "1.0.0", "json", &buf, slog.LevelDebug)
 
 	// Create a mock span context
 	traceID, _ := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
@@ -68,7 +68,7 @@ func TestHandler_TraceContext(t *testing.T) {
 
 func TestHandler_NoTraceContext(t *testing.T) {
 	var buf bytes.Buffer
-	logger := Setup("core", "1.0.0", "json", &buf)
+	logger := Setup("core", "1.0.0", "json", &buf, slog.LevelDebug)
 
 	logger.Info("no trace message")
 
@@ -87,7 +87,7 @@ func TestHandler_NoTraceContext(t *testing.T) {
 
 func TestSetup_DefaultFormat(t *testing.T) {
 	var buf bytes.Buffer
-	logger := Setup("core", "1.0.0", "", &buf)
+	logger := Setup("core", "1.0.0", "", &buf, slog.LevelDebug)
 
 	logger.Info("test message")
 
@@ -102,8 +102,30 @@ func TestSetDefault(t *testing.T) {
 	original := slog.Default()
 	defer slog.SetDefault(original)
 
-	SetDefault("test-service", "2.0.0", "json")
+	SetDefault("test-service", "2.0.0", "json", slog.LevelInfo)
 
 	// Verify the default was set (we can't easily test the output without more setup)
 	assert.NotEqual(t, original, slog.Default(), "SetDefault did not change the default logger")
+}
+
+func TestSetup_LevelFiltering(t *testing.T) {
+	tests := []struct {
+		name      string
+		threshold slog.Level // minimum level configured for the handler
+		msgLevel  slog.Level // level of the log message being checked
+		want      bool
+	}{
+		{"debug enabled at debug threshold", slog.LevelDebug, slog.LevelDebug, true},
+		{"debug disabled at info threshold", slog.LevelInfo, slog.LevelDebug, false},
+		{"info enabled at info threshold", slog.LevelInfo, slog.LevelInfo, true},
+		{"warn enabled at info threshold", slog.LevelInfo, slog.LevelWarn, true},
+		{"error enabled at error threshold", slog.LevelError, slog.LevelError, true},
+		{"info disabled at error threshold", slog.LevelError, slog.LevelInfo, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := Setup("test", "1.0", "json", nil, tt.threshold)
+			assert.Equal(t, tt.want, logger.Handler().Enabled(context.Background(), tt.msgLevel))
+		})
+	}
 }
