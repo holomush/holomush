@@ -32,6 +32,7 @@ import (
 	authpostgres "github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/bootstrap"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/content"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
@@ -74,6 +75,8 @@ type coreConfig struct {
 	SessionTTL            string `koanf:"session_ttl"`
 	SessionMaxHistory     int    `koanf:"session_max_history"`
 	SessionReaperInterval string `koanf:"session_reaper_interval"`
+	Setting               string `koanf:"setting"`
+	ResetSetting          bool   `koanf:"reset_setting"`
 }
 
 // Validate checks that the configuration is valid.
@@ -129,6 +132,8 @@ manages plugins, and handles game state.`,
 	cmd.Flags().StringVar(&cfg.SessionTTL, "session-ttl", "30m", "default session TTL after disconnect")
 	cmd.Flags().IntVar(&cfg.SessionMaxHistory, "session-max-history", 500, "max command history entries per session")
 	cmd.Flags().StringVar(&cfg.SessionReaperInterval, "session-reaper-interval", "30s", "session reaper check interval")
+	cmd.Flags().StringVar(&cfg.Setting, "setting", "crossroads", "setting plugin to bootstrap on first boot")
+	cmd.Flags().BoolVar(&cfg.ResetSetting, "reset-setting", false, "force re-bootstrap from setting plugin")
 
 	return cmd
 }
@@ -522,7 +527,38 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		// Register alias bootstrapper (priority 500).
 		bootstrapRunner.Register(bootstrap.NewAliasBootstrapper(aliasRepo, aliasCache))
 
-		// Run all bootstrap plugins in priority order: policy (200) → admin (400) → alias (500).
+		// Register setting bootstrapper (priority 300) if a matching setting plugin is discovered.
+		if cfg.Setting != "" && pluginManager != nil {
+			discovered, discoverErr := pluginManager.Discover(ctx)
+			if discoverErr != nil {
+				slog.Warn("failed to discover setting plugins", "error", discoverErr)
+			} else {
+				var settingPlugin *plugins.DiscoveredPlugin
+				for _, dp := range discovered {
+					if dp.Manifest.Type == plugins.TypeSetting && dp.Manifest.Name == cfg.Setting {
+						settingPlugin = dp
+						break
+					}
+				}
+				if settingPlugin == nil {
+					slog.Warn("setting plugin not found, skipping setting bootstrap", "setting", cfg.Setting)
+				} else {
+					contentStore := content.NewPostgresStore(realStore.Pool())
+					metadataStore := bootstrap.NewPostgresMetadataStore(realStore.Pool())
+					bootstrapRunner.Register(bootstrap.NewSettingBootstrapper(bootstrap.SettingBootstrapperOpts{
+						ContentStore:  contentStore,
+						WorldService:  worldService,
+						MetadataStore: metadataStore,
+						SettingName:   cfg.Setting,
+						ResetSetting:  cfg.ResetSetting,
+						Logger:        slog.Default(),
+					}))
+					slog.Info("setting bootstrapper registered", "setting", cfg.Setting)
+				}
+			}
+		}
+
+		// Run all bootstrap plugins in priority order: policy (200) → setting (300) → admin (400) → alias (500).
 		// Migration (100) already ran directly above before DB connection was established.
 		if runErr := bootstrapRunner.RunAll(ctx); runErr != nil {
 			return oops.Code("BOOTSTRAP_FAILED").With("operation", "run bootstrap plugins").Wrap(runErr)
