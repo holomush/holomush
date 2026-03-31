@@ -13,6 +13,8 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/idgen"
 )
 
 // Reset token configuration.
@@ -45,7 +47,7 @@ func NewPasswordReset(playerID ulid.ULID, tokenHash string, expiresAt time.Time)
 
 	now := time.Now()
 	return &PasswordReset{
-		ID:        ulid.Make(),
+		ID:        idgen.New(),
 		PlayerID:  playerID,
 		TokenHash: tokenHash,
 		ExpiresAt: expiresAt,

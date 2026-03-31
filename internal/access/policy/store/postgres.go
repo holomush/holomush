@@ -12,10 +12,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/idgen"
 )
 
 // PostgresStore implements PolicyStore using PostgreSQL.
@@ -117,7 +117,7 @@ func (s *PostgresStore) Create(ctx context.Context, p *StoredPolicy) error {
 		return err
 	}
 
-	id := ulid.Make().String()
+	id := idgen.New().String()
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -215,7 +215,7 @@ func (s *PostgresStore) Update(ctx context.Context, p *StoredPolicy) error {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO access_policy_versions (id, policy_id, version, dsl_text, changed_by, change_note)
 			VALUES ($1, $2, $3, $4, $5, $6)
-		`, ulid.Make().String(), policyID, currentVersion, currentDSL, p.CreatedBy, p.ChangeNote)
+		`, idgen.New().String(), policyID, currentVersion, currentDSL, p.CreatedBy, p.ChangeNote)
 		if err != nil {
 			return oops.Code("POLICY_UPDATE_FAILED").With("name", p.Name).With("operation", "version_history").Wrap(err)
 		}
@@ -356,7 +356,7 @@ func (s *PostgresStore) ReplaceBySource(ctx context.Context, source, namePrefix 
 		_, err = tx.Exec(ctx,
 			`INSERT INTO access_policies (id, name, description, effect, source, dsl_text, compiled_ast, enabled, created_by)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-			ulid.Make().String(), p.Name, p.Description, p.Effect, p.Source, p.DSLText, p.CompiledAST, p.Enabled, p.CreatedBy)
+			idgen.New().String(), p.Name, p.Description, p.Effect, p.Source, p.DSLText, p.CompiledAST, p.Enabled, p.CreatedBy)
 		if err != nil {
 			return oops.In("policy_store").With("policy", p.Name).Wrap(err)
 		}
@@ -392,7 +392,7 @@ func (s *PostgresStore) CreateBatch(ctx context.Context, policies []*StoredPolic
 		_, err = tx.Exec(ctx,
 			`INSERT INTO access_policies (id, name, description, effect, source, dsl_text, compiled_ast, enabled, created_by)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-			ulid.Make().String(), p.Name, p.Description, p.Effect, p.Source, p.DSLText, p.CompiledAST, p.Enabled, p.CreatedBy)
+			idgen.New().String(), p.Name, p.Description, p.Effect, p.Source, p.DSLText, p.CompiledAST, p.Enabled, p.CreatedBy)
 		if err != nil {
 			return oops.In("policy_store").With("policy", p.Name).Wrap(err)
 		}

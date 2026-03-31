@@ -16,11 +16,11 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
@@ -185,11 +185,9 @@ func (f *Functions) logFn(pluginName string) lua.LGFunction {
 
 func (f *Functions) newRequestIDFn() lua.LGFunction {
 	return func(L *lua.LState) int {
-		// ulid.Make() cannot panic per library documentation:
-		// "NOTE: MustNew can't panic since DefaultEntropy never returns an error."
-		// See: https://github.com/oklog/ulid/blob/main/ulid.go (func Make)
-		id := ulid.Make()
-		L.Push(lua.LString(id.String()))
+		// idgen.New() panics only if crypto/rand is unavailable (unrecoverable OS failure).
+		reqID := idgen.New()
+		L.Push(lua.LString(reqID.String()))
 		return 1
 	}
 }
@@ -214,7 +212,7 @@ func sanitizeKVErrorForPlugin(pluginName, operation, key string, err error) stri
 	}
 
 	// Generate correlation ID for this error instance.
-	errorID := ulid.Make().String()
+	errorID := idgen.New().String()
 
 	slog.Error("internal error in plugin KV operation",
 		"error_id", errorID,

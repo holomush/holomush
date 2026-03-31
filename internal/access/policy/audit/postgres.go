@@ -12,8 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/idgen"
 )
 
 // PostgresWriter implements Writer for PostgreSQL.
@@ -58,7 +59,7 @@ func (w *PostgresWriter) WriteSync(ctx context.Context, entry Entry) error {
 	}
 
 	_, err = w.db.ExecContext(ctx, query,
-		ulid.Make().String(),
+		idgen.New().String(),
 		entry.Subject,
 		entry.Action,
 		entry.Resource,
@@ -180,7 +181,7 @@ func (w *PostgresWriter) writeBatch(ctx context.Context, entries []Entry) error 
 		}
 
 		_, err = stmt.ExecContext(ctx,
-			ulid.Make().String(),
+			idgen.New().String(),
 			entry.Subject,
 			entry.Action,
 			entry.Resource,

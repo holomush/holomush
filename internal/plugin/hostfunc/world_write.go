@@ -14,6 +14,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/internal/access"
+	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/world"
 )
@@ -36,7 +37,7 @@ func (f *Functions) createLocationFn(pluginName string) lua.LGFunction {
 		}
 
 		loc := &world.Location{
-			ID:          ulid.Make(),
+			ID:          idgen.New(),
 			Name:        name,
 			Description: description,
 			Type:        locType,
@@ -80,7 +81,7 @@ func (f *Functions) createExitFn(pluginName string) lua.LGFunction {
 		}
 
 		exit := &world.Exit{
-			ID:             ulid.Make(),
+			ID:             idgen.New(),
 			FromLocationID: fromID,
 			ToLocationID:   toID,
 			Name:           name,
@@ -169,7 +170,7 @@ func (f *Functions) createObjectFn(pluginName string) lua.LGFunction {
 			return pushError(L, "must specify exactly one containment: location_id, character_id, or container_id")
 		}
 
-		obj, err := world.NewObjectWithID(ulid.Make(), name, containment)
+		obj, err := world.NewObjectWithID(idgen.New(), name, containment)
 		if err != nil {
 			return pushError(L, "invalid object: "+err.Error())
 		}
