@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"os/signal"
@@ -173,41 +174,31 @@ func TestCoreCommand_FlagParsing(t *testing.T) {
 	}
 }
 
-func TestSetupLogging(t *testing.T) {
+func TestParseLogLevel(t *testing.T) {
 	tests := []struct {
 		name      string
-		format    string
+		input     string
+		wantLevel slog.Level
 		wantError bool
 	}{
-		{
-			name:      "json format",
-			format:    "json",
-			wantError: false,
-		},
-		{
-			name:      "text format",
-			format:    "text",
-			wantError: false,
-		},
-		{
-			name:      "invalid format",
-			format:    "invalid",
-			wantError: true,
-		},
-		{
-			name:      "empty format",
-			format:    "",
-			wantError: true,
-		},
+		{name: "debug lowercase", input: "debug", wantLevel: slog.LevelDebug},
+		{name: "info lowercase", input: "info", wantLevel: slog.LevelInfo},
+		{name: "warn lowercase", input: "warn", wantLevel: slog.LevelWarn},
+		{name: "error lowercase", input: "error", wantLevel: slog.LevelError},
+		{name: "INFO uppercase", input: "INFO", wantLevel: slog.LevelInfo},
+		{name: "DEBUG uppercase", input: "DEBUG", wantLevel: slog.LevelDebug},
+		{name: "invalid level", input: "verbose", wantError: true},
+		{name: "empty level", input: "", wantError: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := setupLogging(tt.format)
+			got, err := parseLogLevel(tt.input)
 			if tt.wantError {
 				assert.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantLevel, got)
 			}
 		})
 	}
@@ -973,4 +964,68 @@ func TestCoreCommand_ConfigFileLoading(t *testing.T) {
 	assert.Equal(t, "0.0.0.0:7777", cfg.GRPCAddr)
 	assert.Equal(t, "0.0.0.0:7778", cfg.ControlAddr)
 	assert.Equal(t, "text", cfg.LogFormat)
+}
+
+// TestResolveLogLevel verifies that resolveLogLevel correctly resolves log level
+// from the flag, LOG_LEVEL env var, and default.
+func TestResolveLogLevel(t *testing.T) {
+	tests := []struct {
+		name      string
+		setup     func(t *testing.T, cmd *cobra.Command)
+		wantLevel slog.Level
+		wantError bool
+	}{
+		{
+			name: "flag explicitly set uses flag value",
+			setup: func(t *testing.T, cmd *cobra.Command) {
+				t.Helper()
+				require.NoError(t, cmd.Flags().Set("log-level", "debug"))
+			},
+			wantLevel: slog.LevelDebug,
+		},
+		{
+			name: "flag not set, LOG_LEVEL env var set uses env var",
+			setup: func(t *testing.T, _ *cobra.Command) {
+				t.Helper()
+				t.Setenv("LOG_LEVEL", "warn")
+			},
+			wantLevel: slog.LevelWarn,
+		},
+		{
+			name: "flag not set, no env var returns slog.LevelInfo",
+			setup: func(t *testing.T, _ *cobra.Command) {
+				t.Helper()
+				t.Setenv("LOG_LEVEL", "")
+			},
+			wantLevel: slog.LevelInfo,
+		},
+		{
+			name: "flag not set, invalid LOG_LEVEL env var returns error",
+			setup: func(t *testing.T, _ *cobra.Command) {
+				t.Helper()
+				t.Setenv("LOG_LEVEL", "verbose")
+			},
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Build a minimal command with the --log-level flag registered,
+			// mirroring how NewRootCmd registers it on the persistent flags
+			// and each subcommand inherits it.
+			cmd := &cobra.Command{Use: "test"}
+			cmd.Flags().StringVar(&logLevel, "log-level", "info", "log level")
+
+			tt.setup(t, cmd)
+
+			got, err := resolveLogLevel(cmd)
+			if tt.wantError {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantLevel, got)
+			}
+		})
+	}
 }

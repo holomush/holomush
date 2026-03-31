@@ -67,15 +67,13 @@ func (h *traceHandler) WithGroup(name string) slog.Handler {
 // Setup creates a configured slog.Logger.
 // format: "json" or "text" (defaults to "json" if empty)
 // If w is nil, writes to os.Stderr.
-func Setup(service, version, format string, w io.Writer) *slog.Logger {
+func Setup(service, version, format string, w io.Writer, level slog.Level) *slog.Logger {
 	if w == nil {
 		w = os.Stderr
 	}
 
 	var baseHandler slog.Handler
-	opts := &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}
+	opts := &slog.HandlerOptions{Level: level}
 
 	if format == "text" {
 		baseHandler = slog.NewTextHandler(w, opts)
@@ -93,7 +91,7 @@ func Setup(service, version, format string, w io.Writer) *slog.Logger {
 }
 
 // SetDefault sets up and configures the default logger.
-func SetDefault(service, version, format string) {
-	logger := Setup(service, version, format, nil)
+func SetDefault(service, version, format string, level slog.Level) {
+	logger := Setup(service, version, format, nil, level)
 	slog.SetDefault(logger)
 }
