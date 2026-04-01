@@ -138,7 +138,7 @@ test.describe('Terminal UI', () => {
     const dbSession = await db.getActiveSessionByCharacterName(charName!);
     // TODO(holomush-y3yp): tighten to expect(dbSession).toBeNull() once quit
     // properly expires the session in DB for guests.
-    expect(dbSession).not.toBeUndefined();
+    expect(dbSession).not.toBeNull();
 
     // On reload, auth guard redirects to login since session is gone
     await page.reload();

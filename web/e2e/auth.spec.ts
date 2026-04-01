@@ -126,9 +126,10 @@ test.describe('Auth Flows — Full Registration Flow', () => {
     expect(session!.is_guest).toBe(false);
     expect(db.isValidLocationId(session!.location_id)).toBe(true);
 
-    // DB: character exists and location matches session
+    // DB: character exists, matches testChar, and location matches session
     const chars = await db.getCharactersByPlayerId(player!.id);
     expect(chars.length).toBe(1);
+    expect(chars[0].name.toLowerCase()).toBe(testChar.toLowerCase());
     expect(chars[0].location_id).toBe(session!.location_id);
   });
 });
