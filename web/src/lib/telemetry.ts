@@ -41,7 +41,11 @@ export function initTelemetry(): void {
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-      provider.shutdown();
+      provider.forceFlush();
     }
+  });
+
+  document.addEventListener('pagehide', () => {
+    provider.shutdown();
   });
 }
