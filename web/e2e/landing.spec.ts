@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-import { test, expect } from '@playwright/test';
+import { test, expect, db } from './helpers/fixtures';
 
 // Content bootstrap on first boot may take a few extra seconds.
 const CONTENT_TIMEOUT = 15000;
@@ -91,6 +91,61 @@ test.describe('Landing Page — Content', () => {
 
   test('connect section is visible', async ({ page }) => {
     await expect(page.getByTestId('connect')).toBeVisible({ timeout: CONTENT_TIMEOUT });
+  });
+});
+
+test.describe('Landing Page — Content from DB', () => {
+  test('hero and pitch content matches content_items in database', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByTestId('hero-title')).toBeVisible({ timeout: CONTENT_TIMEOUT });
+
+    // DB: content_items table has entries for the landing page
+    const items = await db.getContentItemsByPrefix('landing.');
+    expect(items.length, 'Expected landing.* content items in DB').toBeGreaterThan(0);
+
+    // Hero content: single landing.hero item, title/tagline in metadata
+    const hero = items.find((i) => i.key === 'landing.hero');
+    expect(hero, 'Expected landing.hero content item in DB').toBeDefined();
+    const heroMeta = hero!.metadata as Record<string, string>;
+
+    const displayedTitle = await page.getByTestId('hero-title').textContent();
+    expect(displayedTitle?.trim()).toBe(heroMeta.title);
+
+    const displayedTagline = await page.getByTestId('hero-tagline').textContent();
+    expect(displayedTagline?.trim()).toBe(heroMeta.tagline);
+
+    // Pitch content: landing.pitch item, rendered from markdown body
+    const pitch = items.find((i) => i.key === 'landing.pitch');
+    expect(pitch, 'Expected landing.pitch content item in DB').toBeDefined();
+    const displayedPitch = await page.getByTestId('pitch').textContent();
+    // Strip markdown heading syntax (# Title) to get plain text for comparison.
+    // The browser renders markdown → HTML, so headings become <h1>, etc.
+    const plainBody = pitch!.body.replace(/^#+\s+.*\n/gm, '').trim();
+    expect(displayedPitch).toContain(plainBody.slice(0, 40));
+  });
+
+  test('feature card titles and count match content_items in database', async ({ page }) => {
+    await page.goto('/');
+    const grid = page.getByTestId('feature-grid');
+    await expect(grid).toBeVisible({ timeout: CONTENT_TIMEOUT });
+
+    // DB: landing.features.* items — each has metadata.title and body
+    const featureItems = await db.getContentItemsByPrefix('landing.features.');
+    expect(featureItems.length, 'Expected landing.features.* content items in DB').toBeGreaterThan(0);
+
+    const cards = grid.locator('.feature-card');
+    const cardCount = await cards.count();
+    expect(featureItems.length).toBe(cardCount);
+
+    // Verify each feature's metadata.title appears as a heading on the page
+    for (const item of featureItems) {
+      const meta = item.metadata as Record<string, string>;
+      const title = meta.title ?? item.key;
+      await expect(
+        grid.getByRole('heading', { name: title }),
+        `Expected feature heading "${title}" from DB key ${item.key}`,
+      ).toBeVisible();
+    }
   });
 });
 

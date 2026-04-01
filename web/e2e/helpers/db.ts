@@ -146,6 +146,62 @@ export async function getStartingLocation(): Promise<DbLocation | null> {
   return loc.rows[0] ?? null;
 }
 
+// ── Event queries ──────────────────────────────────────────────
+
+export interface DbEvent {
+  id: string;
+  stream: string;
+  type: string;
+  actor_id: string;
+  payload: Record<string, unknown>;
+  created_at: Date;
+}
+
+export async function getEventsByStream(stream: string): Promise<DbEvent[]> {
+  const { rows } = await getPool().query<DbEvent>(
+    'SELECT id, stream, type, actor_id, payload, created_at FROM events WHERE stream = $1 ORDER BY id',
+    [stream],
+  );
+  return rows;
+}
+
+// ── Command history queries ────────────────────────────────────
+
+export async function getCommandHistory(sessionId: string): Promise<string[]> {
+  const { rows } = await getPool().query<{ command_history: string[] }>(
+    'SELECT command_history FROM sessions WHERE id = $1',
+    [sessionId],
+  );
+  return rows[0]?.command_history ?? [];
+}
+
+// ── Content item queries ───────────────────────────────────────
+
+export interface DbContentItem {
+  key: string;
+  content_type: string;
+  body: string;
+  metadata: Record<string, unknown>;
+}
+
+export async function getContentItemsByPrefix(prefix: string): Promise<DbContentItem[]> {
+  const { rows } = await getPool().query<DbContentItem>(
+    `SELECT key, content_type, convert_from(body, 'UTF8') AS body, metadata
+     FROM content_items WHERE key LIKE $1 ORDER BY key`,
+    [`${prefix}%`],
+  );
+  return rows;
+}
+
+export async function getContentItem(key: string): Promise<DbContentItem | null> {
+  const { rows } = await getPool().query<DbContentItem>(
+    `SELECT key, content_type, convert_from(body, 'UTF8') AS body, metadata
+     FROM content_items WHERE key = $1`,
+    [key],
+  );
+  return rows[0] ?? null;
+}
+
 // ── Zero ULID check ─────────────────────────────────────────────
 
 const ZERO_ULID = '00000000000000000000000000';

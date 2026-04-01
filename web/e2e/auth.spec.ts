@@ -81,6 +81,124 @@ test.describe('Auth Flows', () => {
   });
 });
 
+test.describe('Auth Flows — Registered User Login', () => {
+  test('register → logout → login → terminal with DB validation', async ({ page }) => {
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const testUser = `e2e_login_${suffix}`;
+    const alpha = 'abcdefghijklmnopqrstuvwxyz';
+    const charSuffix = Array.from({ length: 6 }, () => alpha[Math.floor(Math.random() * 26)]).join('');
+    const testChar = `Loginhero ${charSuffix}`;
+
+    // ── Phase 1: Register and create character ──
+    await page.goto('/register');
+    await page.fill('input[name="username"]', testUser);
+    await page.fill('input[name="password"]', 'testpass123');
+    await page.fill('input[name="confirmPassword"]', 'testpass123');
+    await page.locator('button[type="submit"]').click();
+    await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
+
+    const createBtn = page.locator('text=Create New Character');
+    await expect(createBtn).toBeVisible({ timeout: 10000 });
+    await createBtn.click();
+    await page.fill('input[name="characterName"]', testChar);
+    await page.locator('label.checkbox-label input[type="checkbox"]').check();
+    await page.locator('button:has-text("Create")').click();
+    await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
+    await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+
+    // ── Phase 2: Logout ──
+    // Send quit command to disconnect and clear session
+    const input = page.locator('textarea');
+    await input.fill('quit');
+    await input.press('Enter');
+    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
+
+    // ── Phase 3: Login with credentials ──
+    await page.fill('input[name="username"]', testUser);
+    await page.fill('input[name="password"]', 'testpass123');
+    await page.locator('button[type="submit"]').click();
+
+    // Should auto-select the single character and enter terminal
+    await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
+    await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+
+    // ── DB validations ──
+    const player = await db.getPlayerByUsername(testUser);
+    expect(player).not.toBeNull();
+
+    // DB: player_token was consumed (one-time use) — none should remain
+    const tokens = await db.getPlayerTokens(player!.id);
+    expect(tokens.length).toBe(0);
+
+    // DB: session created, active, non-guest
+    const sessionId = await getClientSessionId(page);
+    expect(sessionId).toBeTruthy();
+    const session = await db.getSessionById(sessionId!);
+    expect(session).not.toBeNull();
+    expect(session!.status).toBe('active');
+    expect(session!.is_guest).toBe(false);
+    expect(db.isValidLocationId(session!.location_id)).toBe(true);
+
+    // DB: session location matches character location
+    const chars = await db.getCharactersByPlayerId(player!.id);
+    expect(chars.length).toBe(1);
+    expect(chars[0].location_id).toBe(session!.location_id);
+  });
+});
+
+test.describe('Auth Flows — Logout', () => {
+  test('registered user logout clears session from DB', async ({ page }) => {
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const testUser = `e2e_logout_${suffix}`;
+    const alpha = 'abcdefghijklmnopqrstuvwxyz';
+    const charSuffix = Array.from({ length: 6 }, () => alpha[Math.floor(Math.random() * 26)]).join('');
+    const testChar = `Logouthero ${charSuffix}`;
+
+    // Register and enter terminal
+    await page.goto('/register');
+    await page.fill('input[name="username"]', testUser);
+    await page.fill('input[name="password"]', 'testpass123');
+    await page.fill('input[name="confirmPassword"]', 'testpass123');
+    await page.locator('button[type="submit"]').click();
+    await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
+
+    const createBtn = page.locator('text=Create New Character');
+    await expect(createBtn).toBeVisible({ timeout: 10000 });
+    await createBtn.click();
+    await page.fill('input[name="characterName"]', testChar);
+    await page.locator('label.checkbox-label input[type="checkbox"]').check();
+    await page.locator('button:has-text("Create")').click();
+    await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
+    await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+
+    const sessionId = await getClientSessionId(page);
+    expect(sessionId).toBeTruthy();
+
+    // Verify session exists in DB before logout
+    const sessionBefore = await db.getSessionById(sessionId!);
+    expect(sessionBefore).not.toBeNull();
+    expect(sessionBefore!.status).toBe('active');
+
+    // Logout via quit command
+    const input = page.locator('textarea');
+    await input.fill('quit');
+    await input.press('Enter');
+    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible({ timeout: 10000 });
+
+    // Verify sessionStorage cleared
+    const storedSession = await page.evaluate(() => sessionStorage.getItem('holomush-session'));
+    expect(storedSession).toBeNull();
+
+    // DB: session deleted after quit
+    await expect(async () => {
+      const dbSession = await db.getSessionById(sessionId!);
+      expect(dbSession).toBeNull();
+    }).toPass({ timeout: 5000 });
+  });
+});
+
 test.describe('Auth Flows — Full Registration Flow', () => {
   test('register → character select → create character → terminal', async ({ page }) => {
     const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;

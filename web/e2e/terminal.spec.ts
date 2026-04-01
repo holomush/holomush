@@ -41,6 +41,63 @@ test.describe('Terminal UI', () => {
     await expect(page.locator('[data-testid="event"]').first()).toBeVisible({ timeout: 10000 });
   });
 
+  test('say command creates event in DB with correct actor and stream', async ({ page }) => {
+    await connectAsGuest(page);
+    const sessionId = await getClientSessionId(page);
+    expect(sessionId).toBeTruthy();
+
+    const session = await db.getSessionById(sessionId!);
+    expect(session).not.toBeNull();
+
+    // Send a unique say command
+    const token = `dbcheck-${Date.now()}`;
+    const input = page.locator('textarea');
+    await input.fill(`say ${token}`);
+    await input.press('Enter');
+    // Wait for the event to appear in UI (confirms server processed it)
+    await expect(
+      page.locator('[data-testid="event"]').filter({ hasText: token }),
+    ).toBeVisible({ timeout: 10000 });
+
+    // DB: events table has row for this say event on the location stream
+    const stream = `location:${session!.location_id}`;
+    const events = await db.getEventsByStream(stream);
+    const sayEvent = events.find(
+      (e) => e.type === 'say' && JSON.stringify(e.payload).includes(token),
+    );
+    expect(sayEvent, `Expected say event with "${token}" in stream ${stream}`).toBeDefined();
+    expect(sayEvent!.actor_id).toBe(session!.character_id);
+  });
+
+  test('command history is stored in sessions table', async ({ page }) => {
+    await connectAsGuest(page);
+    const sessionId = await getClientSessionId(page);
+    expect(sessionId).toBeTruthy();
+
+    // Send 3 commands with unique tokens
+    const token = Date.now();
+    const commands = [`say first-${token}`, `say second-${token}`, `say third-${token}`];
+    const input = page.locator('textarea');
+
+    for (const cmd of commands) {
+      await input.fill(cmd);
+      await input.press('Enter');
+      // Wait for each event to appear before sending the next
+      const keyword = cmd.replace('say ', '');
+      await expect(
+        page.locator('[data-testid="event"]').filter({ hasText: keyword }),
+      ).toBeVisible({ timeout: 10000 });
+    }
+
+    // DB: sessions.command_history contains all 3 commands in order
+    await expect(async () => {
+      const history = await db.getCommandHistory(sessionId!);
+      // History may contain earlier commands (e.g. from login flow), so check suffix
+      const tail = history.slice(-3);
+      expect(tail).toEqual(commands);
+    }).toPass({ timeout: 5000 });
+  });
+
   test('sidebar toggles with Ctrl+B', async ({ page }) => {
     await connectAsGuest(page);
     await expect(page.locator('.sidebar:not(.expanded)')).toBeVisible();
