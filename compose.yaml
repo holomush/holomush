@@ -62,14 +62,15 @@ services:
       - "4317:4317"
       - "4318:4318"
     depends_on:
-      - tempo
+      - jaeger
 
-  tempo:
-    image: grafana/tempo:latest
+  jaeger:
+    image: jaegertracing/all-in-one:latest
     profiles: [observability]
-    volumes:
-      - ./docker/tempo/config.yaml:/etc/tempo/config.yaml
-    command: ["-config.file=/etc/tempo/config.yaml"]
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
 
   prometheus:
     image: prom/prometheus:latest
@@ -95,7 +96,7 @@ services:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning
     depends_on:
       - prometheus
-      - tempo
+      - jaeger
 
   dozzle:
     image: amir20/dozzle:latest
