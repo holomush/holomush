@@ -68,7 +68,8 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 
 	// h2c wraps the handler to accept HTTP/2 cleartext (no TLS) connections.
-	// This ensures HTTP/2 pings work in both dev (no TLS) and production (TLS).
+	// Enables HTTP/2 pings for programmatic clients (gRPC, ConnectRPC Go).
+	// Browsers don't support h2c — they fall through to HTTP/1.1.
 	h2cHandler := h2c.NewHandler(handler, h2s)
 
 	httpServer := &http.Server{
