@@ -84,7 +84,11 @@ func NewServer(cfg Config) (*Server, error) {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	// Also configure HTTP/2 for TLS connections (production mode).
+	// Defensive: register h2s with the HTTP server so the ping/timeout
+	// settings apply if the listener is externally wrapped for TLS (e.g.,
+	// by a reverse proxy doing TLS passthrough). This server itself uses
+	// h2c (HTTP/2 cleartext) via the h2cHandler above; TLS termination
+	// is expected at a reverse proxy or load balancer, not in-process.
 	if err := http2.ConfigureServer(httpServer, h2s); err != nil {
 		return nil, fmt.Errorf("configure http2: %w", err)
 	}
