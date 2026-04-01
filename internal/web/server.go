@@ -63,14 +63,16 @@ func NewServer(cfg Config) (*Server, error) {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	// Configure HTTP/2 server with keepalive pings to detect dead
-	// connections. Without this, server-streaming handlers block
-	// indefinitely when a client silently disconnects (network drop,
-	// tab close without clean HTTP/2 RST_STREAM).
+	// Configure HTTP/2 with keepalive pings to detect dead connections.
+	// These settings apply to TLS connections (production) where browsers
+	// negotiate HTTP/2 via ALPN. In dev mode (no TLS), browsers use
+	// HTTP/1.1 and the application-level heartbeat in StreamEvents
+	// handles disconnect detection instead.
+	// See: docs/specs/decisions/001-http2-required.md
 	h2s := &http2.Server{
 		ReadIdleTimeout:  30 * time.Second, // Send PING after 30s of silence
-		PingTimeout:      15 * time.Second, // Close connection if no PONG within 15s
-		WriteByteTimeout: 10 * time.Second, // Close if a write blocks >10s (dead peer)
+		PingTimeout:      15 * time.Second, // Close if no PONG within 15s
+		WriteByteTimeout: 10 * time.Second, // Close if a write blocks >10s
 	}
 	if err := http2.ConfigureServer(httpServer, h2s); err != nil {
 		return nil, fmt.Errorf("configure http2: %w", err)
