@@ -117,7 +117,8 @@ test.describe('Terminal UI', () => {
 
   test('disconnect clears session so reload shows login', async ({ page }) => {
     await connectAsGuest(page);
-    const charName = await getClientCharacterName(page);
+    const sessionId = await getClientSessionId(page);
+    expect(sessionId).toBeTruthy();
 
     // Send quit command to disconnect
     const input = page.locator('textarea');
@@ -131,25 +132,11 @@ test.describe('Terminal UI', () => {
     const session = await page.evaluate(() => sessionStorage.getItem('holomush-session'));
     expect(session).toBeNull();
 
-    // DB: after quit, the session should no longer be active.
-    // The timing of session cleanup varies — on fast hosts the session is
-    // gone immediately, on slower hosts the reaper handles it later.
-    // Poll briefly, then accept either null (cleaned up) or non-active status.
-    // TODO(holomush-y3yp): once quit consistently expires guest sessions,
-    // tighten to always expect null.
-    let dbSession: Awaited<ReturnType<typeof db.getActiveSessionByCharacterName>>;
-    try {
-      await expect(async () => {
-        dbSession = await db.getActiveSessionByCharacterName(charName!);
-        expect(dbSession).toBeNull();
-      }).toPass({ timeout: 3000 });
-    } catch {
-      // Session still active — known issue, verify it at least has valid state
-      dbSession = await db.getActiveSessionByCharacterName(charName!);
-      if (dbSession) {
-        expect(dbSession.character_name).toBe(charName);
-      }
-    }
+    // DB: session row should be deleted after quit
+    await expect(async () => {
+      const dbSession = await db.getSessionById(sessionId!);
+      expect(dbSession).toBeNull();
+    }).toPass({ timeout: 5000 });
 
     // On reload, auth guard redirects to login since session is gone
     await page.reload();

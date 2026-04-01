@@ -66,6 +66,10 @@
     window.removeEventListener('resize', checkMobile);
     window.removeEventListener('keydown', onKeydown);
     abortController?.abort();
+    // Best-effort server disconnect on component unmount (SPA navigation)
+    if (sessionId) {
+      client.disconnect({ sessionId }).catch(() => {});
+    }
     pendingCommandSpan?.end();
     pendingCommandSpan = null;
     streamSpan?.end();

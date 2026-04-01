@@ -17,11 +17,12 @@ func TestServer_StartsAndServes(t *testing.T) {
 	mock := &mockCoreClient{} // Defined in handler_test.go (same package)
 	handler := NewHandler(mock)
 
-	srv := NewServer(Config{
+	srv, err := NewServer(Config{
 		Addr:    "127.0.0.1:0",
 		Handler: handler,
 		WebDir:  "",
 	})
+	require.NoError(t, err)
 
 	errCh, err := srv.Start()
 	require.NoError(t, err)
@@ -45,10 +46,11 @@ func TestServer_ConnectRPCRouting(t *testing.T) {
 	mock := &mockCoreClient{}
 	handler := NewHandler(mock)
 
-	srv := NewServer(Config{
+	srv, err := NewServer(Config{
 		Addr:    "127.0.0.1:0",
 		Handler: handler,
 	})
+	require.NoError(t, err)
 
 	errCh, err := srv.Start()
 	require.NoError(t, err)

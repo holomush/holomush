@@ -29,6 +29,9 @@ const (
 	rpcTimeout = 10 * time.Second
 )
 
+// errStreamClosed is a sentinel to signal that the stream was closed by the server.
+var errStreamClosed = errors.New("stream closed")
+
 // CoreClient is the gRPC interface used by Handler to communicate with the
 // core service.
 type CoreClient interface {
@@ -194,11 +197,20 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 			)
 		} else {
 			defer func() {
-				if removeErr := h.sessionStore.RemoveConnection(context.Background(), connID); removeErr != nil {
-					slog.Warn("web: failed to remove stream connection",
+				// Call Disconnect on core — this removes the connection AND
+				// runs session lifecycle logic (detach/delete based on
+				// remaining connection count). Using a fresh context because
+				// the stream context is already cancelled.
+				disconnCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if _, disconnErr := h.client.Disconnect(disconnCtx, &corev1.DisconnectRequest{
+					SessionId:    sessionID,
+					ConnectionId: connID.String(),
+				}); disconnErr != nil {
+					slog.Warn("web: disconnect RPC failed on stream close",
 						"session_id", sessionID,
 						"connection_id", connID.String(),
-						"error", removeErr,
+						"error", disconnErr,
 					)
 				}
 			}()
@@ -217,58 +229,116 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 			oops.With("session_id", sessionID).Wrap(err))
 	}
 
-	for {
-		resp, recvErr := sub.Recv()
-		if recvErr != nil {
-			if errors.Is(recvErr, io.EOF) ||
-				errors.Is(recvErr, context.Canceled) ||
-				errors.Is(recvErr, context.DeadlineExceeded) {
-				return nil
+	// Pump upstream events in a goroutine. The main loop selects on the
+	// recv channel, ctx.Done(), and a heartbeat timer. For HTTP/2 (TLS),
+	// ReadIdleTimeout + PingTimeout on the server also detects dead
+	// connections. For HTTP/1.1 (dev mode), the heartbeat write is the
+	// only way to detect a dead peer — Send() fails with broken pipe.
+	type recvResult struct {
+		resp *corev1.SubscribeResponse
+		err  error
+	}
+	recvCh := make(chan recvResult)
+	go func() {
+		defer close(recvCh)
+		for {
+			resp, recvErr := sub.Recv()
+			recvCh <- recvResult{resp, recvErr}
+			if recvErr != nil {
+				return
 			}
-			slog.WarnContext(ctx, "web: event stream recv error", "session_id", sessionID, "error", recvErr)
-			return connect.NewError(connect.CodeUnavailable,
-				oops.With("session_id", sessionID).Wrap(recvErr))
 		}
+	}()
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
 
-		switch frame := resp.GetFrame().(type) {
-		case *corev1.SubscribeResponse_Event:
-			gameEvent := h.translateEvent(frame.Event)
-			if gameEvent == nil {
-				continue
-			}
-			if sendErr := stream.Send(&webv1.StreamEventsResponse{
-				Frame: &webv1.StreamEventsResponse_Event{Event: gameEvent},
-			}); sendErr != nil {
-				if errors.Is(sendErr, context.Canceled) ||
-					errors.Is(sendErr, context.DeadlineExceeded) {
-					return nil
-				}
-				slog.WarnContext(ctx, "web: stream send error", "session_id", sessionID, "error", sendErr)
-				return connect.NewError(connect.CodeUnavailable,
-					oops.With("session_id", sessionID).Wrap(sendErr))
-			}
-		case *corev1.SubscribeResponse_Control:
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+
+		case <-heartbeat.C:
+			// Probe the connection — if the client is gone, Send fails.
 			if sendErr := stream.Send(&webv1.StreamEventsResponse{
 				Frame: &webv1.StreamEventsResponse_Control{
 					Control: &webv1.ControlFrame{
-						Signal:  webv1.ControlSignal(frame.Control.GetSignal()),
-						Message: frame.Control.GetMessage(),
+						Signal: webv1.ControlSignal_CONTROL_SIGNAL_UNSPECIFIED,
 					},
 				},
 			}); sendErr != nil {
-				if errors.Is(sendErr, context.Canceled) ||
-					errors.Is(sendErr, context.DeadlineExceeded) {
+				return nil
+			}
+
+		case result, ok := <-recvCh:
+			if !ok {
+				return nil
+			}
+			if result.err != nil {
+				if errors.Is(result.err, io.EOF) ||
+					errors.Is(result.err, context.Canceled) ||
+					errors.Is(result.err, context.DeadlineExceeded) {
 					return nil
 				}
-				slog.WarnContext(ctx, "web: stream send error", "session_id", sessionID, "error", sendErr)
+				slog.WarnContext(ctx, "web: event stream recv error", "session_id", sessionID, "error", result.err)
 				return connect.NewError(connect.CodeUnavailable,
-					oops.With("session_id", sessionID).Wrap(sendErr))
+					oops.With("session_id", sessionID).Wrap(result.err))
 			}
-			if frame.Control.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED {
-				return nil
+			if fwdErr := h.forwardFrame(ctx, result.resp, stream, sessionID); fwdErr != nil {
+				if errors.Is(fwdErr, errStreamClosed) {
+					return nil
+				}
+				return fwdErr
 			}
 		}
 	}
+}
+
+// forwardFrame translates and sends a single upstream frame to the web client.
+func (h *Handler) forwardFrame(
+	ctx context.Context,
+	resp *corev1.SubscribeResponse,
+	stream *connect.ServerStream[webv1.StreamEventsResponse],
+	sessionID string,
+) error {
+	switch frame := resp.GetFrame().(type) {
+	case *corev1.SubscribeResponse_Event:
+		gameEvent := h.translateEvent(frame.Event)
+		if gameEvent == nil {
+			return nil
+		}
+		if sendErr := stream.Send(&webv1.StreamEventsResponse{
+			Frame: &webv1.StreamEventsResponse_Event{Event: gameEvent},
+		}); sendErr != nil {
+			if errors.Is(sendErr, context.Canceled) ||
+				errors.Is(sendErr, context.DeadlineExceeded) {
+				return nil
+			}
+			slog.WarnContext(ctx, "web: stream send error", "session_id", sessionID, "error", sendErr)
+			return connect.NewError(connect.CodeUnavailable,
+				oops.With("session_id", sessionID).Wrap(sendErr))
+		}
+	case *corev1.SubscribeResponse_Control:
+		if sendErr := stream.Send(&webv1.StreamEventsResponse{
+			Frame: &webv1.StreamEventsResponse_Control{
+				Control: &webv1.ControlFrame{
+					Signal:  webv1.ControlSignal(frame.Control.GetSignal()),
+					Message: frame.Control.GetMessage(),
+				},
+			},
+		}); sendErr != nil {
+			if errors.Is(sendErr, context.Canceled) ||
+				errors.Is(sendErr, context.DeadlineExceeded) {
+				return nil
+			}
+			slog.WarnContext(ctx, "web: stream send error", "session_id", sessionID, "error", sendErr)
+			return connect.NewError(connect.CodeUnavailable,
+				oops.With("session_id", sessionID).Wrap(sendErr))
+		}
+		if frame.Control.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED {
+			return errStreamClosed
+		}
+	}
+	return nil
 }
 
 // Disconnect ends the session on a best-effort basis; errors are logged but
