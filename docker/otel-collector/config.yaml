@@ -10,6 +10,7 @@ receivers:
         cors:
           allowed-origins:
             - "http://localhost:*"
+            - "http://127.0.0.1:*"
 
 exporters:
   otlp/tempo:

@@ -39,7 +39,9 @@ export function initTelemetry(): void {
     ],
   });
 
-  window.addEventListener('beforeunload', () => {
-    provider.shutdown();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      provider.shutdown();
+    }
   });
 }

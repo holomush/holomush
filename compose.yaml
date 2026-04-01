@@ -21,9 +21,11 @@ services:
 
   core:
     image: holomush
-    command: ["core", "--log-format", "text", "--grpc-addr", "0.0.0.0:9000"]
+    command: ["core", "--log-format", "text", "--grpc-addr", "0.0.0.0:9000", "--metrics-addr", "0.0.0.0:9100"]
     environment:
       DATABASE_URL: postgres://holomush:holomush@postgres:5432/holomush?sslmode=disable
+      # Set unconditionally — when the observability profile is inactive, the OTel SDK
+      # retries silently with a no-op error handler (see internal/telemetry/provider.go).
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     volumes:
       - certs:/home/holomush/.config/holomush/certs
@@ -39,7 +41,7 @@ services:
 
   gateway:
     image: holomush
-    command: ["gateway", "--log-format", "text", "--core-addr", "core:9000"]
+    command: ["gateway", "--log-format", "text", "--core-addr", "core:9000", "--metrics-addr", "0.0.0.0:9101"]
     environment:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     volumes:
