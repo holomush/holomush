@@ -6,12 +6,14 @@ package web
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"golang.org/x/net/http2"
 
 	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
 )
@@ -33,7 +35,7 @@ type Server struct {
 }
 
 // NewServer creates a web server with ConnectRPC handler and static file server.
-func NewServer(cfg Config) *Server {
+func NewServer(cfg Config) (*Server, error) {
 	mux := http.NewServeMux()
 
 	// Register ConnectRPC handler
@@ -54,14 +56,30 @@ func NewServer(cfg Config) *Server {
 	// Wrap with OpenTelemetry HTTP instrumentation
 	handler = otelhttp.NewHandler(handler, "holomush-gateway")
 
-	return &Server{
-		httpServer: &http.Server{
-			Addr:              cfg.Addr,
-			Handler:           handler,
-			ReadHeaderTimeout: 10 * time.Second,
-		},
-		errCh: make(chan error, 1),
+	httpServer := &http.Server{
+		Addr:              cfg.Addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
+
+	// Configure HTTP/2 server with keepalive pings to detect dead
+	// connections. Without this, server-streaming handlers block
+	// indefinitely when a client silently disconnects (network drop,
+	// tab close without clean HTTP/2 RST_STREAM).
+	h2s := &http2.Server{
+		ReadIdleTimeout:  30 * time.Second, // Send PING after 30s of silence
+		PingTimeout:      15 * time.Second, // Close connection if no PONG within 15s
+		WriteByteTimeout: 10 * time.Second, // Close if a write blocks >10s (dead peer)
+	}
+	if err := http2.ConfigureServer(httpServer, h2s); err != nil {
+		return nil, fmt.Errorf("configure http2: %w", err)
+	}
+
+	return &Server{
+		httpServer: httpServer,
+		errCh:      make(chan error, 1),
+	}, nil
 }
 
 // Start begins listening and serving.

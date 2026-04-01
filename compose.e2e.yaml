@@ -39,6 +39,7 @@ services:
       - ./web:/work
     environment:
       PLAYWRIGHT_BASE_URL: http://gateway:8080
+      E2E_DATABASE_URL: postgres://holomush:holomush@postgres:5432/holomush_test?sslmode=disable
     depends_on:
       gateway:
         condition: service_healthy
