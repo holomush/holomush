@@ -62,6 +62,14 @@ holomush core \
 
 The gateway process handles telnet and web client connections.
 
+!!! note "HTTP/2 Required"
+    The web gateway requires HTTP/2 for all client connections. HTTP/1.1 is
+    not supported. In non-TLS mode, the gateway uses h2c (HTTP/2 cleartext)
+    automatically. Reverse proxies placed in front of the gateway **must**
+    support HTTP/2 upstream connections. See
+    [ADR-001](https://github.com/holomush/holomush/blob/main/docs/specs/decisions/001-http2-required.md)
+    for rationale.
+
 ```bash
 holomush gateway [flags]
 ```

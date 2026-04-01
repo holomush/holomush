@@ -14,6 +14,7 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 
 	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
 )
@@ -56,22 +57,28 @@ func NewServer(cfg Config) (*Server, error) {
 	// Wrap with OpenTelemetry HTTP instrumentation
 	handler = otelhttp.NewHandler(handler, "holomush-gateway")
 
+	// HTTP/2 server with keepalive pings to detect dead connections.
+	// Server-streaming handlers block indefinitely when a client silently
+	// disconnects — PING/PONG detects dead peers in ~45s.
+	// See: docs/specs/decisions/001-http2-required.md
+	h2s := &http2.Server{
+		ReadIdleTimeout:  30 * time.Second, // Send PING after 30s of silence
+		PingTimeout:      15 * time.Second, // Close if no PONG within 15s
+		WriteByteTimeout: 10 * time.Second, // Close if a write blocks >10s
+	}
+
+	// h2c wraps the handler to accept HTTP/2 cleartext (no TLS) connections.
+	// This ensures HTTP/2 pings work in both dev (no TLS) and production (TLS).
+	h2cHandler := h2c.NewHandler(handler, h2s)
+
 	httpServer := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           handler,
+		Handler:           h2cHandler,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
 
-	// Configure HTTP/2 server with keepalive pings to detect dead
-	// connections. Without this, server-streaming handlers block
-	// indefinitely when a client silently disconnects (network drop,
-	// tab close without clean HTTP/2 RST_STREAM).
-	h2s := &http2.Server{
-		ReadIdleTimeout:  30 * time.Second, // Send PING after 30s of silence
-		PingTimeout:      15 * time.Second, // Close connection if no PONG within 15s
-		WriteByteTimeout: 10 * time.Second, // Close if a write blocks >10s (dead peer)
-	}
+	// Also configure HTTP/2 for TLS connections (production mode).
 	if err := http2.ConfigureServer(httpServer, h2s); err != nil {
 		return nil, fmt.Errorf("configure http2: %w", err)
 	}
