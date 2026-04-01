@@ -238,7 +238,7 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 		resp *corev1.SubscribeResponse
 		err  error
 	}
-	recvCh := make(chan recvResult)
+	recvCh := make(chan recvResult, 1)
 	go func() {
 		defer close(recvCh)
 		for {
