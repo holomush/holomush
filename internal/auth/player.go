@@ -151,6 +151,10 @@ type PlayerRepository interface {
 	// UpdatePassword updates only the password hash for a player.
 	UpdatePassword(ctx context.Context, id ulid.ULID, passwordHash string) error
 
+	// UpdatePasswordAndClearLockout atomically updates the password hash and
+	// clears lockout state (failed_attempts = 0, locked_until = NULL).
+	UpdatePasswordAndClearLockout(ctx context.Context, id ulid.ULID, passwordHash string) error
+
 	// Delete removes a player.
 	Delete(ctx context.Context, id ulid.ULID) error
 }

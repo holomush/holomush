@@ -450,6 +450,54 @@ func (_c *MockPlayerRepository_UpdatePassword_Call) RunAndReturn(run func(contex
 	return _c
 }
 
+// UpdatePasswordAndClearLockout provides a mock function with given fields: ctx, id, passwordHash
+func (_m *MockPlayerRepository) UpdatePasswordAndClearLockout(ctx context.Context, id ulid.ULID, passwordHash string) error {
+	ret := _m.Called(ctx, id, passwordHash)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdatePasswordAndClearLockout")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, string) error); ok {
+		r0 = rf(ctx, id, passwordHash)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockPlayerRepository_UpdatePasswordAndClearLockout_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdatePasswordAndClearLockout'
+type MockPlayerRepository_UpdatePasswordAndClearLockout_Call struct {
+	*mock.Call
+}
+
+// UpdatePasswordAndClearLockout is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id ulid.ULID
+//   - passwordHash string
+func (_e *MockPlayerRepository_Expecter) UpdatePasswordAndClearLockout(ctx interface{}, id interface{}, passwordHash interface{}) *MockPlayerRepository_UpdatePasswordAndClearLockout_Call {
+	return &MockPlayerRepository_UpdatePasswordAndClearLockout_Call{Call: _e.mock.On("UpdatePasswordAndClearLockout", ctx, id, passwordHash)}
+}
+
+func (_c *MockPlayerRepository_UpdatePasswordAndClearLockout_Call) Run(run func(ctx context.Context, id ulid.ULID, passwordHash string)) *MockPlayerRepository_UpdatePasswordAndClearLockout_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(string))
+	})
+	return _c
+}
+
+func (_c *MockPlayerRepository_UpdatePasswordAndClearLockout_Call) Return(_a0 error) *MockPlayerRepository_UpdatePasswordAndClearLockout_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockPlayerRepository_UpdatePasswordAndClearLockout_Call) RunAndReturn(run func(context.Context, ulid.ULID, string) error) *MockPlayerRepository_UpdatePasswordAndClearLockout_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewMockPlayerRepository creates a new instance of MockPlayerRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockPlayerRepository(t interface {

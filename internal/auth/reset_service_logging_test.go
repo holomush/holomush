@@ -117,6 +117,10 @@ func (m *mockPlayerRepoForReset) UpdatePassword(_ context.Context, _ ulid.ULID, 
 	return nil
 }
 
+func (m *mockPlayerRepoForReset) UpdatePasswordAndClearLockout(_ context.Context, _ ulid.ULID, _ string) error {
+	return nil
+}
+
 func (m *mockPlayerRepoForReset) GetByID(_ context.Context, _ ulid.ULID) (*auth.Player, error) {
 	return nil, auth.ErrNotFound
 }

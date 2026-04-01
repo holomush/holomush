@@ -50,6 +50,10 @@ func (m *mockPlayerRepoLogging) UpdatePassword(_ context.Context, _ ulid.ULID, _
 	return nil
 }
 
+func (m *mockPlayerRepoLogging) UpdatePasswordAndClearLockout(_ context.Context, _ ulid.ULID, _ string) error {
+	return nil
+}
+
 func (m *mockPlayerRepoLogging) GetByID(_ context.Context, id ulid.ULID) (*auth.Player, error) {
 	if m.player != nil && m.player.ID == id {
 		playerCopy := *m.player

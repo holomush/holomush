@@ -26,6 +26,7 @@ const (
 	CodeNilServices            = "NIL_SERVICES"
 	CodeInvalidName            = "INVALID_NAME"
 	CodeNoAliasCache           = "NO_ALIAS_CACHE"
+	CodeResetPasswordFailed    = "RESET_PASSWORD_FAILED"
 )
 
 // Sentinel errors for special conditions.
@@ -139,6 +140,11 @@ func ErrTargetNotFound(target string) error {
 		Errorf("player not found: %s", target)
 }
 
+// ErrResetPasswordFailed creates an error for password reset failures.
+func ErrResetPasswordFailed(cause error) error {
+	return oops.Code(CodeResetPasswordFailed).Wrap(cause)
+}
+
 // ErrNilServices creates an error when command execution has nil Services.
 func ErrNilServices() error {
 	return oops.Code(CodeNilServices).
@@ -240,6 +246,8 @@ func PlayerMessage(err error) string {
 		return "Invalid name."
 	case CodeNoAliasCache:
 		return "Alias system is not available. Contact the server administrator."
+	case CodeResetPasswordFailed:
+		return "Password reset failed. Please try again."
 	default:
 		slog.Warn("unhandled error code in PlayerMessage",
 			"code", code,

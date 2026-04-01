@@ -228,6 +228,27 @@ func (r *PlayerRepository) UpdatePassword(ctx context.Context, id ulid.ULID, pas
 	return nil
 }
 
+// UpdatePasswordAndClearLockout atomically updates the password hash and
+// clears lockout state (failed_attempts = 0, locked_until = NULL).
+func (r *PlayerRepository) UpdatePasswordAndClearLockout(ctx context.Context, id ulid.ULID, passwordHash string) error {
+	result, err := r.pool.Exec(ctx, `
+		UPDATE players SET password_hash = $2, failed_attempts = 0, locked_until = NULL, updated_at = $3
+		WHERE id = $1
+	`, id.String(), passwordHash, time.Now())
+	if err != nil {
+		return oops.Code("PLAYER_UPDATE_PASSWORD_FAILED").
+			With("operation", "update password and clear lockout").
+			With("id", id.String()).
+			Wrap(err)
+	}
+	if result.RowsAffected() == 0 {
+		return oops.Code("PLAYER_NOT_FOUND").
+			With("id", id.String()).
+			Wrap(auth.ErrNotFound)
+	}
+	return nil
+}
+
 // Delete removes a player.
 func (r *PlayerRepository) Delete(ctx context.Context, id ulid.ULID) error {
 	result, err := r.pool.Exec(ctx, `
