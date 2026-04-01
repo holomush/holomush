@@ -2,6 +2,9 @@
 // Copyright 2026 HoloMUSH Contributors
 
 import { writable, derived } from 'svelte/store';
+import { trace } from '@opentelemetry/api';
+
+const tracer = trace.getTracer('holomush-web');
 
 interface AuthState {
   playerToken: string | null;
@@ -50,23 +53,28 @@ export function clearAuth() {
   sessionStorage.removeItem('holomush-player');
 }
 
-export function restoreSession() {
-  const saved = sessionStorage.getItem('holomush-session');
-  if (saved) {
-    try {
-      const { sessionId, characterName } = JSON.parse(saved);
-      if (sessionId) authState.update((s) => ({ ...s, sessionId, characterName }));
-    } catch {
-      /* ignore corrupt data */
+export function restoreSession(): void {
+  const span = tracer.startSpan('session.restore');
+  try {
+    const saved = sessionStorage.getItem('holomush-session');
+    if (saved) {
+      try {
+        const { sessionId, characterName } = JSON.parse(saved);
+        if (sessionId) authState.update((s) => ({ ...s, sessionId, characterName }));
+      } catch {
+        /* ignore corrupt data */
+      }
     }
-  }
-  const playerSaved = sessionStorage.getItem('holomush-player');
-  if (playerSaved) {
-    try {
-      const { playerToken, playerName } = JSON.parse(playerSaved);
-      if (playerToken) authState.update((s) => ({ ...s, playerToken, playerName }));
-    } catch {
-      /* ignore corrupt data */
+    const playerSaved = sessionStorage.getItem('holomush-player');
+    if (playerSaved) {
+      try {
+        const { playerToken, playerName } = JSON.parse(playerSaved);
+        if (playerToken) authState.update((s) => ({ ...s, playerToken, playerName }));
+      } catch {
+        /* ignore corrupt data */
+      }
     }
+  } finally {
+    span.end();
   }
 }

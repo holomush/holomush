@@ -34,6 +34,12 @@ tasks:
     cmds:
       - docker compose down -v
 
+  dev:obs:
+    desc: Start dev environment with observability stack (Grafana, Tempo, Prometheus, Dozzle)
+    cmds:
+      - task: docker:build
+      - COMPOSE_PROFILES=observability docker compose up --force-recreate --remove-orphans
+
   test:
     desc: Run unit tests
     cmds:

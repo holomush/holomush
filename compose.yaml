@@ -21,9 +21,12 @@ services:
 
   core:
     image: holomush
-    command: ["core", "--log-format", "text", "--grpc-addr", "0.0.0.0:9000"]
+    command: ["core", "--log-format", "text", "--grpc-addr", "0.0.0.0:9000", "--metrics-addr", "0.0.0.0:9100"]
     environment:
       DATABASE_URL: postgres://holomush:holomush@postgres:5432/holomush?sslmode=disable
+      # Set unconditionally — when the observability profile is inactive, the OTel SDK
+      # retries silently with a no-op error handler (see internal/telemetry/provider.go).
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     volumes:
       - certs:/home/holomush/.config/holomush/certs
     depends_on:
@@ -38,7 +41,9 @@ services:
 
   gateway:
     image: holomush
-    command: ["gateway", "--log-format", "text", "--core-addr", "core:9000"]
+    command: ["gateway", "--log-format", "text", "--core-addr", "core:9000", "--metrics-addr", "0.0.0.0:9101"]
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     volumes:
       - certs:/home/holomush/.config/holomush/certs:ro
     ports:
@@ -47,6 +52,58 @@ services:
     depends_on:
       core:
         condition: service_healthy
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    profiles: [observability]
+    volumes:
+      - ./docker/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      - tempo
+
+  tempo:
+    image: grafana/tempo:latest
+    profiles: [observability]
+    volumes:
+      - ./docker/tempo/config.yaml:/etc/tempo/config.yaml
+    command: ["-config.file=/etc/tempo/config.yaml"]
+
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: [observability]
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=1h"
+    volumes:
+      - ./docker/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml
+    depends_on:
+      core:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:latest
+    profiles: [observability]
+    ports:
+      - "3001:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+      - tempo
+
+  dozzle:
+    image: amir20/dozzle:latest
+    profiles: [observability]
+    ports:
+      - "8888:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
 volumes:
   pgdata:

@@ -18,8 +18,12 @@
   import StatusBar from '$lib/components/terminal/StatusBar.svelte';
   import Sidebar from '$lib/components/sidebar/Sidebar.svelte';
   import { goto } from '$app/navigation';
+  import { trace, type Span } from '@opentelemetry/api';
 
   const client = createClient(WebService, transport);
+  const tracer = trace.getTracer('holomush-web');
+  let pendingCommandSpan: Span | null = null;
+  let streamSpan: Span | null = null;
 
   let sessionId = $state('');
   let characterName = $state('');
@@ -62,6 +66,10 @@
     window.removeEventListener('resize', checkMobile);
     window.removeEventListener('keydown', onKeydown);
     abortController?.abort();
+    pendingCommandSpan?.end();
+    pendingCommandSpan = null;
+    streamSpan?.end();
+    streamSpan = null;
   });
 
   function checkMobile() {
@@ -74,6 +82,13 @@
     clearLines();
     replayActive.set(true);
     let inReplay = true;
+
+    // stream.lifecycle span — tracks the lifetime of the event stream connection
+    if (streamSpan) {
+      streamSpan.addEvent('reconnect');
+      streamSpan.end();
+    }
+    streamSpan = tracer.startSpan('stream.lifecycle');
 
     try {
       for await (const response of client.streamEvents(
@@ -95,9 +110,16 @@
             clearAuth();
             connected = false;
             sessionId = '';
+            streamSpan?.end();
+            streamSpan = null;
             return;
           }
         } else if (response.frame.case === 'event') {
+          // Resolve any pending command.roundtrip span on first response after a command
+          if (pendingCommandSpan && response.frame.value.type === 'command_response') {
+            pendingCommandSpan.end();
+            pendingCommandSpan = null;
+          }
           routeEvent(response.frame.value, inReplay);
         }
       }
@@ -106,17 +128,35 @@
         connected = false;
         error = 'Connection lost. Click "Reconnect" or refresh the page.';
       }
+    } finally {
+      streamSpan?.end();
+      streamSpan = null;
     }
   }
 
   async function sendCommand(command: string) {
+    // command.roundtrip span — tracks from send to first command_response event
+    if (pendingCommandSpan) {
+      pendingCommandSpan.setStatus({ code: 2, message: 'timeout' });
+      pendingCommandSpan.end();
+    }
+    pendingCommandSpan = tracer.startSpan('command.roundtrip', {
+      attributes: { 'command.input': command },
+    });
+
     try {
       const resp = await client.sendCommand({ sessionId, text: command });
       if (!resp.success) {
         error = resp.errorMessage || 'Command failed';
+        pendingCommandSpan?.setStatus({ code: 2, message: error });
+        pendingCommandSpan?.end();
+        pendingCommandSpan = null;
       }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Command failed';
+      pendingCommandSpan?.setStatus({ code: 2, message: error });
+      pendingCommandSpan?.end();
+      pendingCommandSpan = null;
     }
   }
 
