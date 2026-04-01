@@ -14,7 +14,6 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
 )
@@ -57,38 +56,24 @@ func NewServer(cfg Config) (*Server, error) {
 	// Wrap with OpenTelemetry HTTP instrumentation
 	handler = otelhttp.NewHandler(handler, "holomush-gateway")
 
-	// HTTP/2 server with keepalive pings to detect dead connections.
-	// Server-streaming handlers block indefinitely when a client silently
-	// disconnects — PING/PONG detects dead peers in ~45s.
+	httpServer := &http.Server{
+		Addr:              cfg.Addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	// Configure HTTP/2 with keepalive pings to detect dead connections.
+	// These settings apply to TLS connections (production) where browsers
+	// negotiate HTTP/2 via ALPN. In dev mode (no TLS), browsers use
+	// HTTP/1.1 and the application-level heartbeat in StreamEvents
+	// handles disconnect detection instead.
 	// See: docs/specs/decisions/001-http2-required.md
 	h2s := &http2.Server{
 		ReadIdleTimeout:  30 * time.Second, // Send PING after 30s of silence
 		PingTimeout:      15 * time.Second, // Close if no PONG within 15s
 		WriteByteTimeout: 10 * time.Second, // Close if a write blocks >10s
 	}
-
-	// h2c wraps the handler to accept HTTP/2 cleartext (no TLS) connections.
-	// Enables HTTP/2 pings for programmatic clients (gRPC, ConnectRPC Go).
-	// Browsers don't support h2c — they fall through to HTTP/1.1.
-	// MaxBytesHandler bounds the initial h2c request body that is buffered
-	// in memory during connection upgrade (per h2c package docs).
-	h2cHandler := http.MaxBytesHandler(
-		h2c.NewHandler(handler, h2s),
-		1<<20, // 1 MB
-	)
-
-	httpServer := &http.Server{
-		Addr:              cfg.Addr,
-		Handler:           h2cHandler,
-		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
-
-	// Defensive: register h2s with the HTTP server so the ping/timeout
-	// settings apply if the listener is externally wrapped for TLS (e.g.,
-	// by a reverse proxy doing TLS passthrough). This server itself uses
-	// h2c (HTTP/2 cleartext) via the h2cHandler above; TLS termination
-	// is expected at a reverse proxy or load balancer, not in-process.
 	if err := http2.ConfigureServer(httpServer, h2s); err != nil {
 		return nil, fmt.Errorf("configure http2: %w", err)
 	}

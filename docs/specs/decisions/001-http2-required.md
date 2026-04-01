@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
-# ADR-001: Gateway Requires HTTP/2 for All Connections
+# ADR-001: Dead Connection Detection Strategy
 
 **Date:** 2026-04-01
 **Status:** Accepted
@@ -17,101 +17,94 @@ When a client silently disconnects (network drop, tab close, mobile app
 killed), the server must detect the dead connection and clean up the session
 (emit leave events, update presence, delete or detach the session record).
 
-### The HTTP/1.1 Problem
+### The Problem
 
-With HTTP/1.1, the server has no transport-level mechanism to detect dead
-peers. The only detection path is:
+Neither HTTP/1.1 nor HTTP/2 automatically notifies the server when a TCP
+peer silently dies. Detection requires active probing:
 
-1. Server writes data to the stream (heartbeat or game event)
-2. TCP write succeeds because the kernel send buffer absorbs the small frame
-3. Kernel TCP retransmit timer eventually expires (~1-2 minutes)
-4. Next write fails with broken pipe
-
-This means sessions leak for 1-2 minutes after every unclean disconnect.
-During that window, the player appears "grid present" to other players,
-presence lists are stale, and session resources are held.
-
-### The HTTP/2 Solution
-
-HTTP/2 provides PING/PONG frames at the transport layer. Go's `x/net/http2`
-server supports:
-
-- `ReadIdleTimeout`: send PING after N seconds of silence
-- `PingTimeout`: close connection if no PONG within N seconds
-- `WriteByteTimeout`: close if a write blocks longer than N seconds
-
-When a dead connection is detected, all stream contexts on that connection
-are cancelled, and cleanup defers fire immediately.
+- **HTTP/2 (TLS, production):** Server PING/PONG frames detect dead peers
+  in ~45 seconds via `ReadIdleTimeout` + `PingTimeout` on `http2.Server`.
+- **HTTP/1.1 (no TLS, dev):** No transport-level ping mechanism. Browsers
+  only negotiate HTTP/2 via TLS ALPN — they do NOT support h2c (HTTP/2
+  cleartext). In dev mode without TLS, browser connections are HTTP/1.1.
 
 ## Decision
 
-The web gateway MUST use HTTP/2 for all client connections. HTTP/1.1 is not
-supported.
+Use a two-layer detection strategy:
 
-- **Production (TLS):** HTTP/2 via ALPN negotiation (standard)
-- **Development (no TLS):** HTTP/2 via h2c (HTTP/2 cleartext)
+**Layer 1 — HTTP/2 server pings (production, TLS):**
 
-The gateway is configured with:
+Configure `http2.Server` with keepalive settings. When browsers negotiate
+HTTP/2 via TLS ALPN, server pings detect dead peers in ~45 seconds.
 
-| Setting            | Value | Purpose                         |
-| ------------------ | ----- | ------------------------------- |
-| `ReadIdleTimeout`  | 30s   | Send PING after 30s of silence  |
-| `PingTimeout`      | 15s   | Close if no PONG within 15s     |
-| `WriteByteTimeout` | 10s   | Close if write blocks >10s      |
+| Setting            | Value | Purpose                        |
+| ------------------ | ----- | ------------------------------ |
+| `ReadIdleTimeout`  | 30s   | Send PING after 30s of silence |
+| `PingTimeout`      | 15s   | Close if no PONG within 15s    |
+| `WriteByteTimeout` | 10s   | Close if write blocks >10s     |
 
-**Maximum detection latency:** 45 seconds (30s idle + 15s ping timeout).
+**Layer 2 — Application heartbeat (dev, HTTP/1.1):**
+
+The `StreamEvents` handler sends a control frame every 15 seconds. When the
+heartbeat write fails (broken pipe after TCP retransmit timeout), the stream
+exits and the cleanup defer fires. Detection latency: ~1-2 minutes depending
+on kernel TCP settings.
+
+**Layer 3 — Client-side disconnect (SPA navigation):**
+
+The terminal page's `onDestroy` calls `client.disconnect()` when the user
+navigates away within the SPA. This provides immediate cleanup for the
+common case of in-app navigation.
+
+### h2c Considered and Rejected
+
+We evaluated wrapping the handler with `h2c.NewHandler` for HTTP/2 cleartext
+in dev mode. This was rejected because:
+
+- Browsers do NOT support h2c — they only negotiate HTTP/2 via TLS ALPN
+- h2c adds attack surface (`h2c.NewHandler` buffers the entire first request
+  body in memory, requiring `MaxBytesHandler` mitigation)
+- The only beneficiaries would be programmatic Go/Java clients in dev, which
+  is not a meaningful use case
+- The heartbeat already handles dev mode disconnect detection
 
 ## Alternatives Considered
 
-- **Application-level heartbeat only:** Heartbeat writes to dead HTTP/1.1
-  connections succeed because TCP write buffers absorb small frames. Detection
-  still takes ~1-2 minutes. Does not solve the fundamental problem.
-
-- **Dual HTTP/1.1 + HTTP/2 support:** Adds complexity for a protocol no target
-  client needs. Session cleanup behavior would differ by protocol version,
-  creating subtle bugs in presence and disconnect handling.
+- **h2c for dev mode:** Rejected — browsers don't support it, adds complexity
+  and attack surface for no practical benefit. See above.
 
 - **WebSocket for streaming:** Large architectural change that abandons
-  ConnectRPC server-streaming and requires separate connection management.
-  Disproportionate to the problem.
+  ConnectRPC server-streaming. Disproportionate to the problem.
+
+- **Heartbeat only (no HTTP/2 pings):** Insufficient for production. TCP
+  write buffer absorbs small heartbeat frames; detection takes 1-2 minutes.
+  HTTP/2 pings operate at the transport layer and detect dead peers in ~45s.
 
 ## Consequences
 
 ### Positive
 
-- Dead connection detection works consistently in all modes (~45s)
-- No application-level heartbeat workarounds needed for connection liveness
-- Simpler stream handler code (no dual-protocol paths)
+- Production (TLS): dead connection detection in ~45 seconds
+- Dev (no TLS): detection via heartbeat, acceptable latency for development
+- Clean client-side disconnect on SPA navigation
+- No unnecessary h2c complexity or attack surface
 
 ### Negative
 
-- `curl` requests in dev need `--http2-prior-knowledge` flag
-- Very old HTTP clients or proxies that don't support HTTP/2 cannot connect
-- Reverse proxies in front of the gateway MUST support HTTP/2 upstream
-
-### Neutral
-
-- All modern browsers support HTTP/2 over TLS (>97% global support)
-- ConnectRPC Go/Java clients support h2c natively
-- **Browsers do NOT support h2c** — they only negotiate HTTP/2 via TLS ALPN.
-  In dev mode (no TLS), browser connections fall back to HTTP/1.1 through the
-  h2c handler's HTTP/1.1 passthrough. HTTP/2 ping-based detection only applies
-  to production (TLS) and programmatic clients.
-- In dev mode, the application-level heartbeat (15s interval) remains the
-  primary dead connection detection mechanism for browser clients. Detection
-  latency depends on TCP retransmit timeout (~1-2 minutes)
+- Dev mode detection is slower (~1-2 min) than production (~45s)
+- Reverse proxies in production MUST support HTTP/2 upstream
 
 ## Affected Components
 
-| Component                  | Change                                           |
-| -------------------------- | ------------------------------------------------ |
-| `internal/web/server.go`   | Wrap handler with `h2c.NewHandler`               |
-| `internal/web/handler.go`  | Stream loop uses `ctx.Done()` for cancellation   |
-| `site/docs/operating/`     | Document HTTP/2 requirement                      |
-| `compose.yaml`             | No change (internal networking supports h2c)     |
+| Component                 | Change                                                |
+| ------------------------- | ----------------------------------------------------- |
+| `internal/web/server.go`  | `http2.ConfigureServer` with ping/timeout settings    |
+| `internal/web/handler.go` | Heartbeat + `ctx.Done()` select in stream loop        |
+| `internal/web/handler.go` | Defer calls core `Disconnect` RPC on stream close     |
+| `terminal/+page.svelte`   | `onDestroy` calls `client.disconnect()`               |
+| `site/docs/operating/`    | HTTP/2 requirement noted for reverse proxies          |
 
 ## References
 
 - [ConnectRPC #668: detect if client closed stream](https://github.com/connectrpc/connect-go/issues/668)
 - [Go x/net/http2.Server](https://pkg.go.dev/golang.org/x/net/http2#Server)
-- [h2c: HTTP/2 without TLS](https://pkg.go.dev/golang.org/x/net/http2/h2c)
