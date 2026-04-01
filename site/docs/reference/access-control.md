@@ -23,7 +23,7 @@ want to do it to (resource) — and checks it against all installed policies.
 
 **For players and admins**, policies come from role-based seed policies that ship
 with the server. Each command declares the capabilities it requires (e.g.,
-`comms.page`, `admin.boot`, `objects.create`), and the engine checks whether the
+`comms.page`, `admin:boot`, `objects.create`), and the engine checks whether the
 player's role grants those capabilities.
 
 **For plugins**, policies are declared in the plugin manifest and installed when
@@ -93,10 +93,13 @@ capabilities:
 | `objects.create` | builder, admin   | `create` (objects)          |
 | `objects.set`    | builder, admin   | `set` (object properties)   |
 | `player.alias`   | player and above | `alias`, `unalias`, `aliases` |
-| `admin.boot`     | admin            | `boot`                      |
-| `admin.shutdown` | admin            | `shutdown`                  |
-| `admin.wall`     | admin            | `wall`                      |
-| `admin.alias`    | admin            | `sysalias`, `sysunsalias`, `sysaliases` |
+| `admin:boot`           | admin            | `boot`                                    |
+| `admin:shutdown`       | admin            | `shutdown`                                |
+| `admin:wall`           | admin            | `wall`                                    |
+| `admin:alias`          | admin            | `sysalias`, `sysunsalias`, `sysaliases`   |
+| `admin:password.reset` | admin            | `resetpassword`                           |
+| `admin:password.set`   | admin            | `resetpassword` (explicit password)       |
+| `admin:session.kick`   | admin            | `resetpassword --kick`                    |
 
 Commands without capability requirements (like `say`, `look`, `pose`, `quit`)
 are available to all authenticated players.

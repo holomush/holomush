@@ -202,6 +202,41 @@ export async function getContentItem(key: string): Promise<DbContentItem | null>
   return rows[0] ?? null;
 }
 
+// ── Password hash queries ──────────────────────────────────────
+
+export async function getPlayerPasswordHash(playerId: string): Promise<string | null> {
+  const { rows } = await getPool().query<{ password_hash: string }>(
+    'SELECT password_hash FROM players WHERE id = $1',
+    [playerId],
+  );
+  return rows[0]?.password_hash ?? null;
+}
+
+// ── Web session queries ────────────────────────────────────────
+
+export interface DbWebSession {
+  id: string;
+  player_id: string;
+  expires_at: Date;
+}
+
+export async function getWebSessionsByPlayerId(playerId: string): Promise<DbWebSession[]> {
+  const { rows } = await getPool().query<DbWebSession>(
+    'SELECT id, player_id, expires_at FROM web_sessions WHERE player_id = $1',
+    [playerId],
+  );
+  return rows;
+}
+
+// ── Role queries ───────────────────────────────────────────────
+
+export async function grantAdminRole(characterId: string): Promise<void> {
+  await getPool().query(
+    `INSERT INTO character_roles (character_id, role) VALUES ($1, 'admin') ON CONFLICT DO NOTHING`,
+    [characterId],
+  );
+}
+
 // ── Zero ULID check ─────────────────────────────────────────────
 
 const ZERO_ULID = '00000000000000000000000000';

@@ -38,7 +38,10 @@ func (f *fakePlayerRepo) GetByEmail(_ context.Context, _ string) (*auth.Player, 
 }
 func (f *fakePlayerRepo) Update(_ context.Context, _ *auth.Player) error                { return nil }
 func (f *fakePlayerRepo) UpdatePassword(_ context.Context, _ ulid.ULID, _ string) error { return nil }
-func (f *fakePlayerRepo) Delete(_ context.Context, _ ulid.ULID) error                   { return nil }
+func (f *fakePlayerRepo) UpdatePasswordAndClearLockout(_ context.Context, _ ulid.ULID, _ string) error {
+	return nil
+}
+func (f *fakePlayerRepo) Delete(_ context.Context, _ ulid.ULID) error { return nil }
 
 type fakeCharService struct {
 	createdName string

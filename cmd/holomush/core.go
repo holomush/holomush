@@ -34,12 +34,11 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/config"
-	"github.com/holomush/holomush/internal/logging"
-	"github.com/holomush/holomush/internal/telemetry"
 	"github.com/holomush/holomush/internal/content"
 	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/logging"
 	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/observability"
 	plugins "github.com/holomush/holomush/internal/plugin"
@@ -47,6 +46,7 @@ import (
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/internal/telemetry"
 	"github.com/holomush/holomush/internal/telnet"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	"github.com/holomush/holomush/internal/world"
@@ -301,6 +301,9 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	var authPlayerRepo *authpostgres.PlayerRepository
 	var authPlayerTokenRepo *store.PostgresPlayerTokenStore
 	var authCharRepo *authCharRepoAdapter
+	var authSessionRepo *authpostgres.WebSessionRepository
+	var authResetRepo *authpostgres.PasswordResetRepository
+	var authHasher auth.PasswordHasher
 	var sessionStore *store.PostgresSessionStore // hoisted for hostfunc + gRPC wiring
 	var pluginManager *plugins.Manager           // hoisted for dispatcher wiring
 	var serviceProxy *plugins.ServiceProxyImpl   // hoisted for late-binding after command stack init
@@ -360,10 +363,10 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 		// Wire auth services for two-phase login
 		authPlayerRepo = authpostgres.NewPlayerRepository(abacPool)
-		authSessionRepo := authpostgres.NewWebSessionRepository(abacPool)
-		authResetRepo := authpostgres.NewPasswordResetRepository(abacPool)
+		authSessionRepo = authpostgres.NewWebSessionRepository(abacPool)
+		authResetRepo = authpostgres.NewPasswordResetRepository(abacPool)
 		authPlayerTokenRepo = store.NewPostgresPlayerTokenStore(abacPool)
-		authHasher := auth.NewArgon2idHasher()
+		authHasher = auth.NewArgon2idHasher()
 
 		var authErr error
 		authService, authErr = auth.NewAuthServiceWithLogger(authPlayerRepo, authSessionRepo, authHasher, slog.Default())
@@ -552,6 +555,13 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		// Build unified command dispatcher with alias dependencies
 		cmdRegistry := command.NewRegistry()
 		handlers.RegisterAll(cmdRegistry)
+		handlers.RegisterAdmin(cmdRegistry, handlers.AdminDeps{
+			PlayerRepo:  authPlayerRepo,
+			Hasher:      authHasher,
+			WebSessions: authSessionRepo,
+			ResetRepo:   authResetRepo,
+			CharLister:  authCharRepo,
+		})
 		aliasRepo := store.NewPostgresAliasRepository(realStore.Pool())
 		aliasCache := command.NewAliasCache()
 

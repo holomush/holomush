@@ -173,6 +173,16 @@ func TestPlayerMessage(t *testing.T) {
 			err:      oops.Code(CodeAccessEvaluationFailed).Errorf("engine error"),
 			expected: "Permission check failed. Please try again or contact an administrator.",
 		},
+		{
+			name:     "reset password failed",
+			err:      ErrResetPasswordFailed(oops.Errorf("hash error")),
+			expected: "Password reset failed. Please try again.",
+		},
+		{
+			name:     "reset password failed - no context fallback",
+			err:      oops.Code(CodeResetPasswordFailed).Errorf("raw error"),
+			expected: "Password reset failed. Please try again.",
+		},
 	}
 
 	for _, tt := range tests {
