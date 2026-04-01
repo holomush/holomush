@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-import { test, expect } from '@playwright/test';
+import { test, expect, db, getClientSessionId } from './helpers/fixtures';
 
 test.describe('Auth Flows', () => {
   test('landing page shows login and register links', async ({ page }) => {
@@ -29,6 +29,20 @@ test.describe('Auth Flows', () => {
     await page.getByRole('main').getByRole('button', { name: 'Try as Guest' }).click();
     await expect(page).toHaveURL(/\/terminal/, { timeout: 10000 });
     await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+
+    // DB: session exists with valid location
+    const sessionId = await getClientSessionId(page);
+    expect(sessionId).toBeTruthy();
+    const session = await db.getSessionById(sessionId!);
+    expect(session).not.toBeNull();
+    expect(session!.is_guest).toBe(true);
+    expect(session!.status).toBe('active');
+    expect(db.isValidLocationId(session!.location_id)).toBe(true);
+
+    // DB: location matches the starting location
+    const startLoc = await db.getStartingLocation();
+    expect(startLoc).not.toBeNull();
+    expect(session!.location_id).toBe(startLoc!.id);
   });
 
   test('register with mismatched passwords shows error', async ({ page }) => {
@@ -69,7 +83,12 @@ test.describe('Auth Flows', () => {
 
 test.describe('Auth Flows — Full Registration Flow', () => {
   test('register → character select → create character → terminal', async ({ page }) => {
-    const testUser = `e2e_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const testUser = `e2e_${suffix}`;
+    // Character names allow letters and spaces only — use alpha suffix
+    const alpha = 'abcdefghijklmnopqrstuvwxyz';
+    const charSuffix = Array.from({ length: 6 }, () => alpha[Math.floor(Math.random() * 26)]).join('');
+    const testChar = `Testhero ${charSuffix}`;
     // Register
     await page.goto('/register');
     await page.fill('input[name="username"]', testUser);
@@ -84,12 +103,32 @@ test.describe('Auth Flows — Full Registration Flow', () => {
     const createBtn = page.locator('text=Create New Character');
     await expect(createBtn).toBeVisible({ timeout: 10000 });
     await createBtn.click();
-    await page.fill('input[name="characterName"]', 'TestHero');
+    await page.fill('input[name="characterName"]', testChar);
     await page.locator('label.checkbox-label input[type="checkbox"]').check();
     await page.locator('button:has-text("Create")').click();
 
     // Should auto-enter terminal
     await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
     await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+
+    // ── DB validations (all after UI flow completes) ──
+
+    // DB: player exists
+    const player = await db.getPlayerByUsername(testUser);
+    expect(player).not.toBeNull();
+
+    // DB: session exists with valid location
+    const sessionId = await getClientSessionId(page);
+    expect(sessionId).toBeTruthy();
+    const session = await db.getSessionById(sessionId!);
+    expect(session).not.toBeNull();
+    expect(session!.status).toBe('active');
+    expect(session!.is_guest).toBe(false);
+    expect(db.isValidLocationId(session!.location_id)).toBe(true);
+
+    // DB: character exists and location matches session
+    const chars = await db.getCharactersByPlayerId(player!.id);
+    expect(chars.length).toBe(1);
+    expect(chars[0].location_id).toBe(session!.location_id);
   });
 });
