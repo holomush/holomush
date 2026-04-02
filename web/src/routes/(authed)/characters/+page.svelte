@@ -105,6 +105,14 @@
   <div class="container">
     <h1 class="title">Choose Your Character</h1>
 
+    {#if !loading && characters.length === 0}
+      <p class="hint">
+        Now pick a name and step into the world. This is your in-character
+        identity — who people will see and interact with. You can always
+        come back and create more characters later.
+      </p>
+    {/if}
+
     {#if error}
       <p class="error">{error}</p>
     {/if}
@@ -194,6 +202,14 @@
     color: var(--color-say-speaker);
     margin: 0 0 24px;
     font-weight: 600;
+  }
+
+  .hint {
+    font-size: 12px;
+    color: var(--color-status-text);
+    line-height: 1.5;
+    margin: -16px 0 16px;
+    text-align: center;
   }
 
   .error {
