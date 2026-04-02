@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+#
+# Production deployment stack.
+# Copy to /opt/holomush/compose.yaml and configure .env before starting.
+# See: https://holomush.dev/operating/deployment/
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: holomush
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: holomush
+    volumes:
+      - ${DATA_DIR:-/opt/holomush/data}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U holomush"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  core:
+    image: ghcr.io/holomush/holomush:${HOLOMUSH_VERSION:-latest}
+    restart: unless-stopped
+    command:
+      - core
+      - --grpc-addr=0.0.0.0:9000
+      - --metrics-addr=0.0.0.0:9100
+      - --log-format=json
+    environment:
+      DATABASE_URL: postgres://holomush:${POSTGRES_PASSWORD}@postgres:5432/holomush?sslmode=disable
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}
+    volumes:
+      - ${CONFIG_DIR:-/opt/holomush/config}/certs:/home/holomush/.config/holomush/certs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9100/healthz/readiness || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 15s
+
+  gateway:
+    image: ghcr.io/holomush/holomush:${HOLOMUSH_VERSION:-latest}
+    restart: unless-stopped
+    command:
+      - gateway
+      - --core-addr=core:9000
+      - --metrics-addr=0.0.0.0:9101
+      - --log-format=json
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}
+    volumes:
+      - ${CONFIG_DIR:-/opt/holomush/config}/certs:/home/holomush/.config/holomush/certs:ro
+    ports:
+      - "4201:4201"
+    depends_on:
+      core:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env}
+    command: caddy reverse-proxy --from ${DOMAIN} --to gateway:8080
+    volumes:
+      - ${CADDY_DIR:-/opt/holomush/caddy}/data:/data
+      - ${CADDY_DIR:-/opt/holomush/caddy}/config:/config
+    depends_on:
+      - gateway
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    restart: unless-stopped
+    profiles: [observability]
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS}
+    volumes:
+      - ${CONFIG_DIR:-/opt/holomush/config}/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
