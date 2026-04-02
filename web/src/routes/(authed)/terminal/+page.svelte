@@ -96,7 +96,7 @@
 
     try {
       for await (const response of client.streamEvents(
-        { sessionId, replayFromCursor: true },
+        { sessionId, replayFromCursor: false },
         { signal: abortController.signal }
       )) {
         if (response.frame.case === 'control') {
