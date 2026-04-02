@@ -127,7 +127,7 @@
             <div class="char-info">
               <span class="char-name">{char.characterName}</span>
               <span class="char-meta">Last played: {formatDate(char.lastPlayedAt)}</span>
-              {#if char.lastLocation}
+              {#if char.lastLocation && !/^[0-9A-Z]{26}$/.test(char.lastLocation)}
                 <span class="char-meta">At: {char.lastLocation}</span>
               {/if}
               {#if char.hasActiveSession}

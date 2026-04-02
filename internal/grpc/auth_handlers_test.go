@@ -5,6 +5,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -516,6 +517,85 @@ func TestListCharacters_Success(t *testing.T) {
 	require.Len(t, resp.Characters, 1)
 	assert.Equal(t, charID.String(), resp.Characters[0].CharacterId)
 	assert.Equal(t, "Alice", resp.Characters[0].CharacterName)
+	assert.Empty(t, resp.Characters[0].LastLocation, "no worldQuerier = no location name, never expose raw IDs")
+}
+
+func TestListCharacters_ResolvesLocationName(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	charID := ulid.Make()
+	locID := ulid.Make()
+
+	tokenRepo := authmocks.NewMockPlayerTokenRepository(t)
+	tokenRepo.EXPECT().GetByToken(mock.Anything, "valid-token").
+		Return(&auth.PlayerToken{
+			Token:     "valid-token",
+			PlayerID:  playerID,
+			ExpiresAt: time.Now().Add(5 * time.Minute),
+		}, nil)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{
+			{ID: charID, PlayerID: playerID, Name: "Bob", LocationID: &locID},
+		}, nil)
+
+	server := &CoreServer{
+		engine:          core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:    session.NewMemStore(),
+		playerTokenRepo: tokenRepo,
+		charRepo:        charRepo,
+		worldQuerier: &mockWorldQuerier{
+			location: &world.Location{ID: locID, Name: "The Nexus"},
+		},
+	}
+
+	resp, err := server.ListCharacters(ctx, &corev1.ListCharactersRequest{
+		PlayerToken: "valid-token",
+	})
+	require.NoError(t, err)
+
+	require.Len(t, resp.Characters, 1)
+	assert.Equal(t, "The Nexus", resp.Characters[0].LastLocation, "should resolve location ID to name")
+}
+
+func TestListCharacters_LocationLookupFailure_OmitsLocation(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	charID := ulid.Make()
+	locID := ulid.Make()
+
+	tokenRepo := authmocks.NewMockPlayerTokenRepository(t)
+	tokenRepo.EXPECT().GetByToken(mock.Anything, "valid-token").
+		Return(&auth.PlayerToken{
+			Token:     "valid-token",
+			PlayerID:  playerID,
+			ExpiresAt: time.Now().Add(5 * time.Minute),
+		}, nil)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{
+			{ID: charID, PlayerID: playerID, Name: "Carol", LocationID: &locID},
+		}, nil)
+
+	server := &CoreServer{
+		engine:          core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:    session.NewMemStore(),
+		playerTokenRepo: tokenRepo,
+		charRepo:        charRepo,
+		worldQuerier: &mockWorldQuerier{
+			locErr: errors.New("db connection failed"),
+		},
+	}
+
+	resp, err := server.ListCharacters(ctx, &corev1.ListCharactersRequest{
+		PlayerToken: "valid-token",
+	})
+	require.NoError(t, err)
+
+	require.Len(t, resp.Characters, 1)
+	assert.Empty(t, resp.Characters[0].LastLocation, "should not expose ULID when lookup fails")
 }
 
 // --- RequestPasswordReset ---
