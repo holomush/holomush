@@ -42,6 +42,7 @@ Guide = [
 [[project.nav]]
 Operating = [
   "operating/index.md",
+  "operating/deployment.md",
   "operating/installation.md",
   "operating/configuration.md",
   "operating/database.md",
