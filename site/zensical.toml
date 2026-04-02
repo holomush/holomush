@@ -34,6 +34,7 @@ name = "GitHub"
 [[project.nav]]
 Guide = [
   "guide/index.md",
+  "guide/the-world.md",
   "guide/connecting.md",
   "guide/commands.md",
   "guide/building.md",
