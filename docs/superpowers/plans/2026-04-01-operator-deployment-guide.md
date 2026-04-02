@@ -354,7 +354,7 @@ UFW firewall. Idempotent — skips if .env already exists."
 
 - [ ] **Step 1: Create the deployment guide**
 
-```markdown
+````markdown
 # Deploying HoloMUSH
 
 Deploy a production HoloMUSH instance on a DigitalOcean droplet with automatic
@@ -543,7 +543,7 @@ and instead:
    script for the template)
 5. Create the data directories: `mkdir -p /opt/holomush/{data/postgres,config/certs,caddy/{data,config}}`
 6. Follow steps 3–5 from the Quick Start above
-```
+````
 
 - [ ] **Step 2: Add deployment link to the operating index page**
 

@@ -12,7 +12,9 @@ set -euo pipefail
 
 HOLOMUSH_DIR="/opt/holomush"
 HOLOMUSH_USER="holomush"
-RELEASE_URL="https://raw.githubusercontent.com/holomush/holomush/main"
+# Set this to the release you want to deploy (e.g., "0.1.0").
+HOLOMUSH_VERSION="${HOLOMUSH_VERSION:-0.1.0}"
+RELEASE_URL="https://raw.githubusercontent.com/holomush/holomush/v${HOLOMUSH_VERSION}"
 
 # --- Idempotency guard ---
 if [ -f "${HOLOMUSH_DIR}/.env" ]; then
@@ -67,8 +69,8 @@ DOMAIN=mush.example.com
 # Database (auto-generated, change only if using external DB)
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 
-# Image version (default: latest)
-# HOLOMUSH_VERSION=latest
+# Image version (pinned to the release this script was downloaded from)
+HOLOMUSH_VERSION=${HOLOMUSH_VERSION}
 
 # Data paths (default: /opt/holomush/*)
 # DATA_DIR=/opt/holomush/data

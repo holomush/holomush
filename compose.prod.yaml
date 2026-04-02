@@ -15,6 +15,8 @@ services:
       POSTGRES_DB: holomush
     volumes:
       - ${DATA_DIR:-/opt/holomush/data}/postgres:/var/lib/postgresql/data
+    networks:
+      - backend
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U holomush"]
       interval: 5s
@@ -22,7 +24,7 @@ services:
       retries: 10
 
   core:
-    image: ghcr.io/holomush/holomush:${HOLOMUSH_VERSION:-latest}
+    image: ghcr.io/holomush/holomush:${HOLOMUSH_VERSION:?Set HOLOMUSH_VERSION in .env}
     restart: unless-stopped
     command:
       - core
@@ -34,6 +36,9 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}
     volumes:
       - ${CONFIG_DIR:-/opt/holomush/config}/certs:/home/holomush/.config/holomush/certs
+    networks:
+      - backend
+      - frontend
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,7 +50,7 @@ services:
       start_period: 15s
 
   gateway:
-    image: ghcr.io/holomush/holomush:${HOLOMUSH_VERSION:-latest}
+    image: ghcr.io/holomush/holomush:${HOLOMUSH_VERSION:?Set HOLOMUSH_VERSION in .env}
     restart: unless-stopped
     command:
       - gateway
@@ -56,6 +61,8 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}
     volumes:
       - ${CONFIG_DIR:-/opt/holomush/config}/certs:/home/holomush/.config/holomush/certs:ro
+    networks:
+      - frontend
     ports:
       - "4201:4201"
     depends_on:
@@ -74,6 +81,8 @@ services:
     volumes:
       - ${CADDY_DIR:-/opt/holomush/caddy}/data:/data
       - ${CADDY_DIR:-/opt/holomush/caddy}/config:/config
+    networks:
+      - frontend
     depends_on:
       - gateway
 
@@ -86,3 +95,9 @@ services:
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS}
     volumes:
       - ${CONFIG_DIR:-/opt/holomush/config}/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    networks:
+      - backend
+
+networks:
+  frontend:
+  backend:

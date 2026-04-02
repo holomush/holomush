@@ -13,6 +13,8 @@ services:
       POSTGRES_DB: holomush
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - backend
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U holomush"]
       interval: 2s
@@ -29,6 +31,9 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     volumes:
       - certs:/home/holomush/.config/holomush/certs
+    networks:
+      - backend
+      - frontend
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,6 +51,8 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     volumes:
       - certs:/home/holomush/.config/holomush/certs:ro
+    networks:
+      - frontend
     ports:
       - "8080:8080"
       - "4201:4201"
@@ -58,6 +65,8 @@ services:
     profiles: [observability]
     volumes:
       - ./docker/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml
+    networks:
+      - backend
     ports:
       - "4317:4317"
       - "4318:4318"
@@ -69,6 +78,8 @@ services:
     profiles: [observability]
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - backend
     ports:
       - "16686:16686"
 
@@ -80,6 +91,8 @@ services:
       - "--storage.tsdb.retention.time=1h"
     volumes:
       - ./docker/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml
+    networks:
+      - backend
     depends_on:
       core:
         condition: service_healthy
@@ -94,6 +107,8 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
     volumes:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - backend
     depends_on:
       - prometheus
       - jaeger
@@ -105,6 +120,10 @@ services:
       - "8888:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+
+networks:
+  frontend:
+  backend:
 
 volumes:
   pgdata:
