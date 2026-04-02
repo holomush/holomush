@@ -45,6 +45,23 @@ Site settings in `zensical.toml`:
 - `theme.variant`, `theme.palette` - Visual appearance
 - `theme.features` - Navigation and search options
 
+## Voice and Tone
+
+The docs are written for people, not robots. Match this voice:
+
+- **Conversational and direct.** Use "you" naturally. Write like you're
+  explaining something to a friend who's smart but new to this.
+- **Grounded, not breathless.** Don't oversell. State what something does
+  and why it matters. Let the reader decide if it's exciting.
+- **Vivid when it counts.** Game-world descriptions should paint a picture
+  ("a hall of freestanding doorways, each opening onto a different world's
+  bazaar"), but technical explanations should be plain and precise.
+- **No filler.** Cut "simply," "just," "easily," "of course," "Note that."
+  If something is simple, the explanation will show it.
+- **Acknowledge the MU\* tradition.** Many readers come from classic MUSHes.
+  Reference that background when it helps ("Unlike traditional MU\*s..."),
+  but don't assume everyone does.
+
 ## Markdown Standards
 
 Site uses same markdown standards as `docs/CLAUDE.md`:
