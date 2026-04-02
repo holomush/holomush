@@ -26,6 +26,7 @@ Run one or both depending on your player base.
 ## Documentation
 
 - [Installation](installation.md) -- Docker, binaries, or build from source
+- [Deployment](deployment.md) -- Production deployment with Docker Compose
 - [Configuration](configuration.md) -- Flags, config files, and environment variables
 - [Database](database.md) -- PostgreSQL setup, migrations, and maintenance
 - [Authentication](authentication.md) -- Security properties, rate limiting, and session management
