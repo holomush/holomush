@@ -20,7 +20,7 @@ test.describe('Terminal UI', () => {
   test('connects and displays events', async ({ page }) => {
     await connectAsGuest(page);
     // Guest characters get random names like "Beryl_Helium"
-    await expect(page.locator('.character')).toContainText(/\w+_\w+/);
+    await expect(page.locator('.status-bar .character')).toContainText(/\w+_\w+/);
 
     // DB: session is active with valid location at the starting location
     const sessionId = await getClientSessionId(page);
@@ -100,11 +100,11 @@ test.describe('Terminal UI', () => {
 
   test('sidebar toggles with Ctrl+B', async ({ page }) => {
     await connectAsGuest(page);
-    await expect(page.locator('.sidebar:not(.expanded)')).toBeVisible();
-    await page.keyboard.press('Control+b');
     await expect(page.locator('.sidebar.expanded')).toBeVisible();
     await page.keyboard.press('Control+b');
     await expect(page.locator('.sidebar:not(.expanded)')).toBeVisible();
+    await page.keyboard.press('Control+b');
+    await expect(page.locator('.sidebar.expanded')).toBeVisible();
   });
 
   test('responsive layout hides sidebar on mobile', async ({ page }) => {
@@ -122,10 +122,12 @@ test.describe('Terminal UI', () => {
 
     // Both connect as guests
     await connectAsGuest(page1);
-    const name1 = await page1.locator('.character').textContent();
+    const name1 = await getClientCharacterName(page1);
+    expect(name1).toBeTruthy();
 
     await connectAsGuest(page2);
-    const name2 = await page2.locator('.character').textContent();
+    const name2 = await getClientCharacterName(page2);
+    expect(name2).toBeTruthy();
 
     // DB: both sessions are active at the same location
     const session1 = await db.getActiveSessionByCharacterName(name1!);
@@ -134,12 +136,7 @@ test.describe('Terminal UI', () => {
     expect(session2).not.toBeNull();
     expect(session1!.location_id).toBe(session2!.location_id);
 
-    // Expand sidebars on both pages
-    await page1.keyboard.press('Control+b');
-    await page2.keyboard.press('Control+b');
-    await expect(page1.locator('.sidebar.expanded')).toBeVisible();
-    await expect(page2.locator('.sidebar.expanded')).toBeVisible();
-
+    // Sidebar defaults to expanded — presence list should be visible.
     // Page 1 should see BOTH characters in presence list (self + other).
     // Allow time for the arrive event to propagate via LISTEN/NOTIFY.
     const presence1 = page1.locator('.presence-list');
@@ -157,13 +154,15 @@ test.describe('Terminal UI', () => {
 
   test('session survives page reload', async ({ page }) => {
     await connectAsGuest(page);
-    const nameBefore = await page.locator('.character').textContent();
+    const nameBefore = await getClientCharacterName(page);
+    expect(nameBefore).toBeTruthy();
     const sessionIdBefore = await getClientSessionId(page);
 
     // Reload — session persists, stream reconnects
     await page.reload();
     await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
-    const nameAfter = await page.locator('.character').textContent();
+    const nameAfter = await getClientCharacterName(page);
+    expect(nameAfter).toBeTruthy();
     expect(nameAfter).toBe(nameBefore);
 
     // DB: same session still active after reload

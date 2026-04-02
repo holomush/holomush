@@ -20,7 +20,7 @@ export interface RoomCharacter {
 export const location = writable<RoomLocation | null>(null);
 export const exits = writable<RoomExit[]>([]);
 export const presence = writable<RoomCharacter[]>([]);
-export const sidebarExpanded = writable<boolean>(false);
+export const sidebarExpanded = writable<boolean>(true);
 
 export function applyLocationState(metadata: Record<string, unknown>) {
   const loc = metadata.location as RoomLocation | undefined;
