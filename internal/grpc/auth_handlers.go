@@ -474,8 +474,11 @@ func (s *CoreServer) buildCharacterSummaries(ctx context.Context, playerID ulid.
 			CharacterName: c.Name,
 		}
 
-		if c.LocationID != nil {
-			summary.LastLocation = c.LocationID.String()
+		if c.LocationID != nil && s.worldQuerier != nil {
+			subj := "character:" + c.ID.String()
+			if loc, locErr := s.worldQuerier.GetLocation(ctx, subj, *c.LocationID); locErr == nil && loc != nil {
+				summary.LastLocation = loc.Name
+			}
 		}
 
 		if sess, ok := sessionByChar[c.ID]; ok {
