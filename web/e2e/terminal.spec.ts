@@ -230,6 +230,109 @@ test.describe('Terminal UI', () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
+  test('page reload replays prior events from multiple guests', async ({ browser }) => {
+    // Two independent browser contexts (separate sessions, same starting location)
+    const ctx1 = await browser.newContext();
+    const ctx2 = await browser.newContext();
+    const page1 = await ctx1.newPage();
+    const page2 = await ctx2.newPage();
+
+    // Both connect as guests
+    await connectAsGuest(page1);
+    await connectAsGuest(page2);
+
+    // Guest 1 says something unique
+    const token = Date.now();
+    const input1 = page1.locator('textarea');
+    await input1.fill(`say alpha-${token}`);
+    await input1.press('Enter');
+    await expect(
+      page1.locator('[data-testid="event"]').filter({ hasText: `alpha-${token}` }),
+    ).toBeVisible({ timeout: 10000 });
+
+    // Guest 2 says something unique — visible to Guest 1 (same location)
+    const input2 = page2.locator('textarea');
+    await input2.fill(`say bravo-${token}`);
+    await input2.press('Enter');
+    await expect(
+      page1.locator('[data-testid="event"]').filter({ hasText: `bravo-${token}` }),
+    ).toBeVisible({ timeout: 10000 });
+
+    // Guest 1 says a third thing
+    await input1.fill(`say charlie-${token}`);
+    await input1.press('Enter');
+    await expect(
+      page1.locator('[data-testid="event"]').filter({ hasText: `charlie-${token}` }),
+    ).toBeVisible({ timeout: 10000 });
+
+    // Capture event order before reload
+    const eventsBefore = await page1
+      .locator('[data-testid="event"]')
+      .filter({ hasText: new RegExp(`(alpha|bravo|charlie)-${token}`) })
+      .allTextContents();
+    expect(eventsBefore).toHaveLength(3);
+
+    // --- Page reload ---
+    await page1.reload();
+    await expect(page1.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+
+    // All three events should reappear after replay
+    await expect(
+      page1.locator('[data-testid="event"]').filter({ hasText: `alpha-${token}` }),
+    ).toBeVisible({ timeout: 10000 });
+    await expect(
+      page1.locator('[data-testid="event"]').filter({ hasText: `bravo-${token}` }),
+    ).toBeVisible({ timeout: 10000 });
+    await expect(
+      page1.locator('[data-testid="event"]').filter({ hasText: `charlie-${token}` }),
+    ).toBeVisible({ timeout: 10000 });
+
+    // Verify replay order matches original order
+    const eventsAfter = await page1
+      .locator('[data-testid="event"]')
+      .filter({ hasText: new RegExp(`(alpha|bravo|charlie)-${token}`) })
+      .allTextContents();
+    expect(eventsAfter).toHaveLength(3);
+    expect(eventsAfter).toEqual(eventsBefore);
+
+    // Replayed events should be dimmed (opacity 0.5 via .dimmed class)
+    await expect(async () => {
+      const dimmedCount = await page1
+        .locator('.dimmed [data-testid="event"]')
+        .filter({ hasText: new RegExp(`(alpha|bravo|charlie)-${token}`) })
+        .count();
+      expect(dimmedCount).toBe(3);
+    }).toPass({ timeout: 5000 });
+
+    // Live event after replay should NOT be dimmed
+    const reloadedInput = page1.locator('textarea');
+    await reloadedInput.fill(`say delta-${token}`);
+    await reloadedInput.press('Enter');
+    await expect(
+      page1.locator('[data-testid="event"]').filter({ hasText: `delta-${token}` }),
+    ).toBeVisible({ timeout: 10000 });
+    const deltaDimmed = await page1
+      .locator('.dimmed [data-testid="event"]')
+      .filter({ hasText: `delta-${token}` })
+      .count();
+    expect(deltaDimmed).toBe(0);
+
+    // DB: all 4 events exist on the location stream
+    const sessionId = await getClientSessionId(page1);
+    const session = await db.getSessionById(sessionId!);
+    const stream = `location:${session!.location_id}`;
+    const events = await db.getEventsByStream(stream);
+    for (const label of ['alpha', 'bravo', 'charlie', 'delta']) {
+      const found = events.find(
+        (e) => e.type === 'say' && JSON.stringify(e.payload).includes(`${label}-${token}`),
+      );
+      expect(found, `Expected say event "${label}-${token}" in stream ${stream}`).toBeDefined();
+    }
+
+    await ctx1.close();
+    await ctx2.close();
+  });
+
   test('command history persists across reconnect', async ({ page }) => {
     await connectAsGuest(page);
 
