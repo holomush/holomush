@@ -56,6 +56,12 @@
   <form class="card" onsubmit={(e) => { e.preventDefault(); handleRegister(); }}>
     <h1 class="title">Create Account</h1>
 
+    <p class="hint">
+      This creates your player account — think of it as your login.
+      Once you're in, you'll pick a character name to enter the world.
+      You can have multiple characters on one account.
+    </p>
+
     {#if error}
       <p class="error">{error}</p>
     {/if}
@@ -129,6 +135,14 @@
     color: var(--color-say-speaker);
     margin: 0;
     font-weight: 600;
+    text-align: center;
+  }
+
+  .hint {
+    font-size: 12px;
+    color: var(--color-status-text);
+    line-height: 1.5;
+    margin: 0;
     text-align: center;
   }
 

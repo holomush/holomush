@@ -393,6 +393,10 @@ Create an **A record** pointing your domain to the droplet's IP address:
 ```text
 mush.example.com  →  A  →  203.0.113.42
 ```
+```
+
+
+```text
 
 Wait for DNS to propagate (usually 1–5 minutes).
 
@@ -543,7 +547,8 @@ and instead:
    script for the template)
 5. Create the data directories: `mkdir -p /opt/holomush/{data/postgres,config/certs,caddy/{data,config}}`
 6. Follow steps 3–5 from the Quick Start above
-```
+
+```text
 
 - [ ] **Step 2: Add deployment link to the operating index page**
 
