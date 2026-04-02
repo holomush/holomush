@@ -418,13 +418,10 @@ task dev       # Run dev server
 | **MUST NOT** disable lint/format rules | Without explicit user confirmation                |
 | **SHOULD** run `task fmt`              | Before committing to ensure consistent formatting |
 
-**Pre-PR checklist** — E2E and integration tests MUST pass before creating a PR:
-
-```bash
-task test && task lint && task test:int && task test:e2e
-```
-
-Docker is always available — never skip E2E tests.
+**MUST** run `task pr-prep` before creating a PR or pushing to a PR branch.
+This mirrors all CI jobs (lint, format, schema, license, unit, integration,
+E2E) and MUST pass with zero failures. Do NOT push to a PR branch without
+a green `task pr-prep`. Docker is always available — never skip E2E tests.
 
 ### Beads Commands
 
@@ -566,16 +563,11 @@ When wrapping `http.ResponseWriter` (e.g., cookie middleware), the wrapper
 MUST implement `http.Flusher` and `Unwrap()` — ConnectRPC server-streaming
 calls `Flush()` after each frame and will error if the interface is missing.
 
-### SvelteKit Auth Guards
+### Web Client
 
-SvelteKit `load()` runs BEFORE `onMount()`. Session restoration from
-`sessionStorage` must happen in `load()`, not `onMount()`, or auth guards
-will redirect on page reload.
-
-### Svelte Form Inputs
-
-All form inputs MUST have `name` attributes for Playwright E2E testability.
-Buttons that submit forms MUST have `type="submit"`.
+See `web/CLAUDE.md` for SvelteKit-specific patterns including theme system
+architecture, shadcn-svelte conventions, Tailwind v4 guidance, and Svelte 5
+runes patterns.
 
 <!-- BEGIN BEADS INTEGRATION -->
 ## Issue Tracking with bd (beads)

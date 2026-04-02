@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+/*
+  Register theme tokens with static default-dark values.
+  Tailwind v4 needs @theme to generate utility classes (bg-primary, etc.).
+  Runtime theme switching overrides these via inline styles on .app-root,
+  which cascade to children through normal CSS custom property inheritance.
+*/
+@theme {
+  --color-primary: #ff7043;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #2a1e16;
+  --color-secondary-foreground: #e0d6cf;
+  --color-muted: #2a1e16;
+  --color-muted-foreground: #666055;
+  --color-accent: #ffb74d;
+  --color-accent-foreground: #1a1210;
+  --color-destructive: #e57373;
+  --color-destructive-foreground: #ffffff;
+  --color-card: #1e1612;
+  --color-card-foreground: #e0d6cf;
+  --color-popover: #1e1612;
+  --color-popover-foreground: #e0d6cf;
+  --color-border: #3e2a1a;
+  --color-input: #3e2a1a;
+  --color-ring: #ff7043;
+  --color-background: #1a1210;
+  --color-foreground: #e0d6cf;
+  --color-sidebar: #1e1612;
+  --color-sidebar-foreground: #e0d6cf;
+  --color-sidebar-primary: #ff7043;
+  --color-sidebar-primary-foreground: #ffffff;
+  --color-sidebar-accent: #2a1e16;
+  --color-sidebar-accent-foreground: #e0d6cf;
+  --color-sidebar-border: #3e2a1a;
+  --color-sidebar-ring: #ff7043;
+  --color-input-text: #e0d6cf;
+  --color-input-background: #16100c;
+  --color-input-prompt: #ff7043;
+  --color-surface: #1e1612;
+  --color-status-text: #666055;
+  --color-status-background: #1e1612;
+  --color-sidebar-background: #1e1612;
+  --color-scrollback-indicator: #ffb74d;
+  --radius: 0.5rem;
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border, currentcolor);
+  }
+}
+
+@layer base {
+  body {
+    font-family: -apple-system, 'Inter', system-ui, sans-serif;
+  }
+}

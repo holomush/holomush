@@ -47,7 +47,7 @@ test.describe('Landing Page — Content', () => {
     await expect(grid).toBeVisible({ timeout: CONTENT_TIMEOUT });
 
     for (const title of expectedTitles) {
-      await expect(grid.getByRole('heading', { name: title })).toBeVisible();
+      await expect(grid.locator('[data-slot="card-title"]', { hasText: title })).toBeVisible();
     }
   });
 
@@ -55,8 +55,8 @@ test.describe('Landing Page — Content', () => {
     const grid = page.getByTestId('feature-grid');
     await expect(grid).toBeVisible({ timeout: CONTENT_TIMEOUT });
 
-    const headings = grid.getByRole('heading');
-    const count = await headings.count();
+    const titles = grid.locator('[data-slot="card-title"]');
+    const count = await titles.count();
     expect(count).toBe(4);
 
     const expectedOrder = [
@@ -67,7 +67,7 @@ test.describe('Landing Page — Content', () => {
     ];
 
     for (let i = 0; i < expectedOrder.length; i++) {
-      await expect(headings.nth(i)).toHaveText(expectedOrder[i]);
+      await expect(titles.nth(i)).toHaveText(expectedOrder[i]);
     }
   });
 
@@ -75,16 +75,16 @@ test.describe('Landing Page — Content', () => {
     const grid = page.getByTestId('feature-grid');
     await expect(grid).toBeVisible({ timeout: CONTENT_TIMEOUT });
 
-    const cards = grid.locator('.feature-card');
+    const cards = grid.locator('[data-slot="card"]');
     const count = await cards.count();
     expect(count).toBe(4);
 
     for (let i = 0; i < count; i++) {
       const card = cards.nth(i);
       const text = await card.textContent();
-      // Text content includes the heading; strip heading to check body is non-empty.
-      const heading = await card.getByRole('heading').textContent();
-      const body = text?.replace(heading ?? '', '').trim();
+      // Text content includes the title; strip title to check body is non-empty.
+      const title = await card.locator('[data-slot="card-title"]').textContent();
+      const body = text?.replace(title ?? '', '').trim();
       expect(body?.length ?? 0, `Card ${i} body was empty`).toBeGreaterThan(0);
     }
   });
@@ -133,17 +133,17 @@ test.describe('Landing Page — Content from DB', () => {
     const featureItems = await db.getContentItemsByPrefix('landing.features.');
     expect(featureItems.length, 'Expected landing.features.* content items in DB').toBeGreaterThan(0);
 
-    const cards = grid.locator('.feature-card');
+    const cards = grid.locator('[data-slot="card"]');
     const cardCount = await cards.count();
     expect(featureItems.length).toBe(cardCount);
 
-    // Verify each feature's metadata.title appears as a heading on the page
+    // Verify each feature's metadata.title appears as a card title on the page
     for (const item of featureItems) {
       const meta = item.metadata as Record<string, string>;
       const title = meta.title ?? item.key;
       await expect(
-        grid.getByRole('heading', { name: title }),
-        `Expected feature heading "${title}" from DB key ${item.key}`,
+        grid.locator('[data-slot="card-title"]', { hasText: title }),
+        `Expected feature card title "${title}" from DB key ${item.key}`,
       ).toBeVisible();
     }
   });

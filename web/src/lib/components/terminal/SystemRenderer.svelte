@@ -29,6 +29,6 @@
 
 <style>
   .event { line-height: 1.7; }
-  .system-text { color: var(--color-system); white-space: pre-wrap; }
-  .system-error { color: var(--color-command-error); white-space: pre-wrap; }
+  .system-text { color: var(--mush-system); white-space: pre-wrap; }
+  .system-error { color: var(--mush-command-error); white-space: pre-wrap; }
 </style>

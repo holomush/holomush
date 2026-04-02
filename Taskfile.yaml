@@ -371,7 +371,7 @@ tasks:
   # ──────────────────────────────────────────
 
   pr-prep:
-    desc: Run all CI checks locally before pushing (mirrors the Lint CI job)
+    desc: Run all CI checks locally before pushing (mirrors ALL CI jobs)
     cmds:
       - echo "▸ Verifying schema is current..."
       - task: generate:schema
@@ -390,8 +390,12 @@ tasks:
       - task: lint
       - echo "▸ Checking formatting..."
       - task: fmt:check
-      - echo "▸ Running tests..."
+      - echo "▸ Running unit tests..."
       - task: test
+      - echo "▸ Running integration tests..."
+      - task: test:int
+      - echo "▸ Running E2E tests..."
+      - task: test:e2e
       - echo "✓ All PR checks passed."
 
   # ──────────────────────────────────────────

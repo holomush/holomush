@@ -28,7 +28,7 @@ async function registerAndEnterGame(
 
   await page.locator('text=Create New Character').click();
   await page.fill('input[name="characterName"]', charName);
-  await page.locator('label.checkbox-label input[type="checkbox"]').check();
+  await page.locator('button[role="checkbox"]').click();
   await page.locator('button:has-text("Create")').click();
   await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
   await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
@@ -44,7 +44,7 @@ test.describe('Character Switcher', () => {
     await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
 
     // The existing character should appear in the picker grid (not the TopBar)
-    await expect(page.locator('.grid .char-name', { hasText: charName })).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[data-testid="char-name"]', { hasText: charName })).toBeVisible({ timeout: 10000 });
   });
 
   test('quit character lands on character picker with player still authenticated', async ({
@@ -101,7 +101,7 @@ test.describe('Character Switcher', () => {
     await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
 
     // Select the existing character to re-enter
-    const charCard = page.locator('.char-name', { hasText: charName });
+    const charCard = page.locator('[data-testid="char-name"]', { hasText: charName });
     await expect(charCard).toBeVisible({ timeout: 10000 });
     await charCard.click();
     await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });

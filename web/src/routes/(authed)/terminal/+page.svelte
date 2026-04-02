@@ -11,7 +11,8 @@
   import { routeEvent } from '$lib/stores/eventRouter';
   import { appendLine, clearLines, replayActive } from '$lib/stores/terminalStore';
   import { toggleSidebar } from '$lib/stores/sidebarStore';
-  import { activeTheme, themeToCssVars } from '$lib/stores/themeStore';
+  import { themePreferences, terminalBlackOverrideVars } from '$lib/stores/themeStore';
+  import * as Resizable from '$lib/components/ui/resizable';
   import { authState, clearAuth, clearCharacterSession } from '$lib/stores/authStore';
   import TerminalView from '$lib/components/terminal/TerminalView.svelte';
   import CommandInput from '$lib/components/terminal/CommandInput.svelte';
@@ -199,7 +200,7 @@
     {/if}
   </div>
 {:else}
-  <div class="terminal-layout" style={themeToCssVars($activeTheme.colors)}>
+  <div class="terminal-layout" style={$themePreferences.terminalBlackBackground ? terminalBlackOverrideVars() : ''}>
     <StatusBar
       {characterName}
       {connected}
@@ -207,17 +208,26 @@
       onToggleSidebar={toggleSidebar}
       showHamburger={isMobile}
     />
-    <div class="main-area">
-      <div class="terminal-column">
-        <TerminalView />
-        <CommandInput {sessionId} onSend={sendCommand} />
-      </div>
-      {#if !isMobile}
-        <Sidebar onExitClick={handleExitClick} />
-      {:else}
+    {#if !isMobile}
+      <Resizable.PaneGroup direction="horizontal" class="main-area">
+        <Resizable.Pane defaultSize={75} class="terminal-column">
+          <TerminalView />
+          <CommandInput {sessionId} onSend={sendCommand} />
+        </Resizable.Pane>
+        <Resizable.Handle withHandle />
+        <Resizable.Pane defaultSize={25}>
+          <Sidebar onExitClick={handleExitClick} resizable />
+        </Resizable.Pane>
+      </Resizable.PaneGroup>
+    {:else}
+      <div class="main-area">
+        <div class="terminal-column">
+          <TerminalView />
+          <CommandInput {sessionId} onSend={sendCommand} />
+        </div>
         <Sidebar onExitClick={handleExitClick} overlay />
-      {/if}
-    </div>
+      </div>
+    {/if}
   </div>
 {/if}
 
@@ -230,31 +240,31 @@
     height: calc(100vh - 32px);
     gap: 16px;
     font-family: 'JetBrains Mono', monospace;
-    background: #0d0d1a;
-    color: #e0e0e0;
+    background: var(--color-background, #0d0d1a);
+    color: var(--color-input-text, #e0e0e0);
   }
   .login-screen button {
     padding: 8px 24px;
-    background: #4fc3f7;
-    color: #0d0d1a;
+    background: var(--color-input-prompt, #4fc3f7);
+    color: var(--color-background, #0d0d1a);
     border: none;
     border-radius: 4px;
     cursor: pointer;
     font-family: inherit;
     font-size: 14px;
   }
-  .error { color: #e57373; }
+  .error { color: var(--mush-system, #e57373); }
   .login-screen .secondary {
     background: transparent;
-    color: #888;
-    border: 1px solid #444;
+    color: var(--color-status-text, #888);
+    border: 1px solid var(--color-border, #444);
   }
   .terminal-layout {
     display: flex;
     flex-direction: column;
     height: calc(100vh - 32px);
     font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
-    font-size: 13px;
+    font-size: 15px;
     background: var(--color-background);
     color: var(--color-input-text);
   }
@@ -269,5 +279,6 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    height: 100%;
   }
 </style>

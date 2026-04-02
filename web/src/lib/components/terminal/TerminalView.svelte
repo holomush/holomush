@@ -69,14 +69,14 @@
     overflow-y: auto;
     background: var(--color-background);
     font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
-    font-size: 13px;
+    font-size: 15px;
     position: relative;
   }
   .scrollback { padding: 8px 12px; }
   .sentinel { height: 1px; }
   .separator {
     color: var(--color-status-text);
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 1px;
     margin: 4px 0;
   }
@@ -88,7 +88,7 @@
     color: var(--color-scrollback-indicator);
     border: none;
     padding: 4px;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
     text-align: center;
   }

@@ -9,8 +9,12 @@
   import type { CharacterSummary } from '$lib/connect/holomush/web/v1/web_pb';
   import { transport } from '$lib/transport';
   import { authState, setCharacterSession } from '$lib/stores/authStore';
-  import { activeTheme, themeToCssVars } from '$lib/stores/themeStore';
   import { goto } from '$app/navigation';
+  import * as Card from '$lib/components/ui/card';
+  import { Badge } from '$lib/components/ui/badge';
+  import { Input } from '$lib/components/ui/input';
+  import { Button } from '$lib/components/ui/button';
+  import { Checkbox } from '$lib/components/ui/checkbox';
 
   const client = createClient(WebService, transport);
 
@@ -101,12 +105,12 @@
   }
 </script>
 
-<div class="page" style={themeToCssVars($activeTheme.colors)}>
-  <div class="container">
-    <h1 class="title">Choose Your Character</h1>
+<div class="min-h-[calc(100vh-36px)] flex items-start justify-center p-10">
+  <div class="w-full max-w-[720px]">
+    <h1 class="text-xl font-semibold text-primary mb-6">Choose Your Character</h1>
 
     {#if !loading && characters.length === 0}
-      <p class="hint">
+      <p class="text-xs text-muted-foreground text-center -mt-4 mb-4 leading-relaxed">
         Now pick a name and step into the world. This is your in-character
         identity — who people will see and interact with. You can always
         come back and create more characters later.
@@ -114,286 +118,91 @@
     {/if}
 
     {#if error}
-      <p class="error">{error}</p>
+      <p class="rounded-md border border-destructive bg-destructive/10 p-3 text-xs text-destructive mb-4">{error}</p>
     {/if}
 
     {#if loading}
-      <p class="loading">Loading characters…</p>
+      <p class="text-xs text-muted-foreground">Loading characters…</p>
     {:else}
-      <div class="grid">
+      <div class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
         {#each characters as char (char.characterId)}
-          <button class="char-card" onclick={() => selectCharacter(char.characterId)}>
-            <div class="char-icon">{char.characterName.charAt(0).toUpperCase()}</div>
-            <div class="char-info">
-              <span class="char-name">{char.characterName}</span>
-              <span class="char-meta">Last played: {formatDate(char.lastPlayedAt)}</span>
-              {#if char.lastLocation && !/^[0-9A-Z]{26}$/.test(char.lastLocation)}
-                <span class="char-meta">At: {char.lastLocation}</span>
-              {/if}
-              {#if char.hasActiveSession}
-                <span class="status-badge active">Active</span>
-              {:else}
-                <span class="status-badge offline">{char.sessionStatus || 'Offline'}</span>
-              {/if}
-            </div>
-          </button>
+          <Card.Root
+            class="cursor-pointer hover:border-primary transition-colors"
+            onclick={() => selectCharacter(char.characterId)}
+          >
+            <Card.Content class="flex items-start gap-3 px-4 py-4">
+              <div class="w-11 h-11 bg-primary text-primary-foreground rounded-md flex items-center justify-center text-xl font-bold shrink-0">
+                {char.characterName.charAt(0).toUpperCase()}
+              </div>
+              <div class="flex flex-col gap-0.5 min-w-0">
+                <span class="text-sm font-semibold" data-testid="char-name">{char.characterName}</span>
+                <span class="text-xs text-muted-foreground">Last played: {formatDate(char.lastPlayedAt)}</span>
+                {#if char.lastLocation && !/^[0-9A-Z]{26}$/.test(char.lastLocation)}
+                  <span class="text-xs text-muted-foreground">At: {char.lastLocation}</span>
+                {/if}
+                {#if char.hasActiveSession}
+                  <Badge class="text-[10px] w-fit mt-0.5">Active</Badge>
+                {:else}
+                  <Badge variant="outline" class="text-[10px] w-fit mt-0.5">{char.sessionStatus || 'Offline'}</Badge>
+                {/if}
+              </div>
+            </Card.Content>
+          </Card.Root>
         {/each}
 
         {#if !creating}
-          <button class="char-card new-char" onclick={() => (creating = true)}>
-            <div class="char-icon new">+</div>
-            <span class="char-name">Create New Character</span>
-          </button>
+          <Card.Root
+            class="cursor-pointer hover:border-primary transition-colors border-dashed"
+            onclick={() => (creating = true)}
+          >
+            <Card.Content class="flex items-center gap-3 px-4 py-4">
+              <div class="w-11 h-11 bg-border text-muted-foreground rounded-md flex items-center justify-center text-xl shrink-0">
+                +
+              </div>
+              <span class="text-sm font-semibold">Create New Character</span>
+            </Card.Content>
+          </Card.Root>
         {:else}
-          <div class="char-card create-form">
-            <div class="char-icon new">+</div>
-            <div class="create-fields">
+          <Card.Root class="border-dashed">
+            <Card.Content class="flex flex-col gap-2 px-4 py-4">
+              <div class="flex items-center gap-3">
+                <div class="w-11 h-11 bg-border text-muted-foreground rounded-md flex items-center justify-center text-xl shrink-0">
+                  +
+                </div>
+                <span class="text-sm font-semibold">New Character</span>
+              </div>
               {#if createError}
-                <p class="create-error">{createError}</p>
+                <p class="text-xs text-destructive">{createError}</p>
               {/if}
-              <input
+              <Input
                 type="text"
                 name="characterName"
                 bind:value={newCharName}
                 placeholder="Character name"
+                class="text-xs h-8"
                 onkeydown={(e) => e.key === 'Enter' && createCharacter()}
               />
-              <label class="checkbox-label">
-                <input type="checkbox" bind:checked={autoDefault} />
+              <label class="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                <Checkbox bind:checked={autoDefault} name="autoDefault" />
                 <span>Enter game immediately</span>
               </label>
-              <div class="create-actions">
-                <button class="btn-sm btn-primary" onclick={createCharacter}>Create</button>
-                <button
-                  class="btn-sm btn-ghost"
+              <div class="flex gap-1.5">
+                <Button size="sm" class="text-xs h-7 px-3" onclick={createCharacter}>Create</Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="text-xs h-7 px-3"
                   onclick={() => {
                     creating = false;
                     newCharName = '';
                     createError = '';
-                  }}>Cancel</button
+                  }}>Cancel</Button
                 >
               </div>
-            </div>
-          </div>
+            </Card.Content>
+          </Card.Root>
         {/if}
       </div>
     {/if}
   </div>
 </div>
-
-<style>
-  .page {
-    min-height: calc(100vh - 32px);
-    background: var(--color-background);
-    font-family: 'JetBrains Mono', monospace;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding: 40px 16px;
-  }
-
-  .container {
-    width: 100%;
-    max-width: 720px;
-  }
-
-  .title {
-    font-size: 20px;
-    color: var(--color-say-speaker);
-    margin: 0 0 24px;
-    font-weight: 600;
-  }
-
-  .hint {
-    font-size: 12px;
-    color: var(--color-status-text);
-    line-height: 1.5;
-    margin: -16px 0 16px;
-    text-align: center;
-  }
-
-  .error {
-    background: rgba(229, 115, 115, 0.1);
-    border: 1px solid var(--color-command-error);
-    border-radius: 4px;
-    color: var(--color-command-error);
-    padding: 8px 12px;
-    font-size: 12px;
-    margin-bottom: 16px;
-  }
-
-  .loading {
-    color: var(--color-status-text);
-    font-size: 13px;
-  }
-
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 12px;
-  }
-
-  .char-card {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    padding: 16px;
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    cursor: pointer;
-    text-align: left;
-    font-family: inherit;
-    color: var(--color-input-text);
-    transition: border-color 0.15s;
-    width: 100%;
-  }
-
-  .char-card:hover {
-    border-color: var(--color-say-speaker);
-  }
-
-  .new-char {
-    border-style: dashed;
-    align-items: center;
-    justify-content: flex-start;
-    color: var(--color-status-text);
-  }
-
-  .new-char:hover {
-    color: var(--color-say-speaker);
-  }
-
-  .create-form {
-    cursor: default;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-  }
-
-  .create-form:hover {
-    border-color: var(--color-say-speaker);
-  }
-
-  .char-icon {
-    width: 44px;
-    height: 44px;
-    background: var(--color-say-speaker);
-    color: var(--color-background);
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-    font-weight: bold;
-    flex-shrink: 0;
-  }
-
-  .char-icon.new {
-    background: var(--color-border);
-    color: var(--color-status-text);
-  }
-
-  .char-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-
-  .char-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--color-input-text);
-  }
-
-  .char-meta {
-    font-size: 11px;
-    color: var(--color-status-text);
-  }
-
-  .status-badge {
-    display: inline-block;
-    font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 3px;
-    margin-top: 2px;
-  }
-
-  .status-badge.active {
-    background: rgba(129, 199, 132, 0.2);
-    color: var(--color-pose-actor);
-    border: 1px solid var(--color-pose-actor);
-  }
-
-  .status-badge.offline {
-    background: transparent;
-    color: var(--color-status-text);
-    border: 1px solid var(--color-border);
-  }
-
-  .create-fields {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    width: 100%;
-  }
-
-  .create-error {
-    font-size: 11px;
-    color: var(--color-command-error);
-    margin: 0;
-  }
-
-  .create-fields input[type='text'] {
-    background: var(--color-input-background);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    color: var(--color-input-text);
-    font-family: inherit;
-    font-size: 12px;
-    padding: 6px 8px;
-    outline: none;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .create-fields input[type='text']:focus {
-    border-color: var(--color-say-speaker);
-  }
-
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    color: var(--color-status-text);
-    cursor: pointer;
-  }
-
-  .create-actions {
-    display: flex;
-    gap: 6px;
-  }
-
-  .btn-sm {
-    padding: 4px 10px;
-    border-radius: 3px;
-    font-family: inherit;
-    font-size: 11px;
-    cursor: pointer;
-  }
-
-  .btn-primary {
-    background: var(--color-say-speaker);
-    color: var(--color-background);
-    border: none;
-    font-weight: 600;
-  }
-
-  .btn-ghost {
-    background: transparent;
-    border: 1px solid var(--color-border);
-    color: var(--color-input-text);
-  }
-</style>

@@ -113,12 +113,12 @@ type CoreServer struct {
 	cmdServices     *command.Services
 
 	// Auth services for two-phase login and account management.
-	authService      AuthServiceProvider
-	resetService     ResetServiceProvider
-	characterService CharacterServiceProvider
-	playerSessionRepo  auth.PlayerSessionRepository
-	playerRepo         auth.PlayerRepository
-	charRepo         auth.CharacterRepository
+	authService       AuthServiceProvider
+	resetService      ResetServiceProvider
+	characterService  CharacterServiceProvider
+	playerSessionRepo auth.PlayerSessionRepository
+	playerRepo        auth.PlayerRepository
+	charRepo          auth.CharacterRepository
 
 	// newSessionID is used for generating session IDs. Can be overridden for testing.
 	newSessionID func() ulid.ULID

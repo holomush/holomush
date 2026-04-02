@@ -3,11 +3,14 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
+  import '../app.css';
   import TopBar from '$lib/components/TopBar.svelte';
   import { initTelemetry, startNavigationSpan, endNavigationSpan } from '$lib/telemetry';
   import { restoreSession } from '$lib/stores/authStore';
+  import { activeTheme, themeToCssVars } from '$lib/stores/themeStore';
   import { beforeNavigate, afterNavigate } from '$app/navigation';
   import { onMount } from 'svelte';
+  import '../app.css';
 
   let { children } = $props();
 
@@ -25,10 +28,19 @@
   });
 </script>
 
-<TopBar />
-<main>{@render children()}</main>
+<div class="app-root" style={themeToCssVars($activeTheme.colors)}>
+  <TopBar />
+  <main>{@render children()}</main>
+</div>
 
 <style>
+  .app-root {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background: var(--color-background);
+    color: var(--color-input-text);
+  }
   main {
     flex: 1;
     display: flex;

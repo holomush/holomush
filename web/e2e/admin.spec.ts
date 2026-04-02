@@ -39,7 +39,7 @@ async function registerAndEnterTerminal(
   await expect(createBtn).toBeVisible({ timeout: 10000 });
   await createBtn.click();
   await page.fill('input[name="characterName"]', charName);
-  await page.locator('label.checkbox-label input[type="checkbox"]').check();
+  await page.locator('button[role="checkbox"]').click();
   await page.locator('button:has-text("Create")').click();
   await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
   await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
