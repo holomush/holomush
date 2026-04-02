@@ -9,19 +9,14 @@ import (
 )
 
 const (
-	cookieName       = "holomush_session"
-	cookieMaxAge     = 86400   // 24 hours
-	cookieMaxAgeLong = 2592000 // 30 days
+	cookieName   = "holomush_session"
+	cookieMaxAge = 86400 // 24 hours
 )
 
-// SetSessionCookie writes an HTTP session cookie to the response. When
-// rememberMe is true the cookie persists for 30 days; otherwise 24 hours.
-// The Secure flag and SameSite policy are adjusted based on the secure param.
-func SetSessionCookie(w http.ResponseWriter, token string, rememberMe, secure bool) {
-	maxAge := cookieMaxAge
-	if rememberMe {
-		maxAge = cookieMaxAgeLong
-	}
+// SetSessionCookie writes an HTTP session cookie to the response with a 24h
+// lifetime. The Secure flag and SameSite policy are adjusted based on the
+// secure param.
+func SetSessionCookie(w http.ResponseWriter, token string, secure bool) {
 	sameSite := http.SameSiteStrictMode
 	if !secure {
 		sameSite = http.SameSiteLaxMode
@@ -30,7 +25,7 @@ func SetSessionCookie(w http.ResponseWriter, token string, rememberMe, secure bo
 		Name:     cookieName,
 		Value:    token,
 		Path:     "/",
-		MaxAge:   maxAge,
+		MaxAge:   cookieMaxAge,
 		HttpOnly: true,
 		Secure:   secure,
 		SameSite: sameSite,
@@ -127,10 +122,8 @@ func (cw *cookieWriter) applyCookieHeaders() {
 	h := cw.Header()
 
 	if token := h.Get(headerSetSessionToken); token != "" {
-		rememberMe := h.Get(headerRememberMe) == "true"
-		SetSessionCookie(cw.ResponseWriter, token, rememberMe, cw.secure)
+		SetSessionCookie(cw.ResponseWriter, token, cw.secure)
 		h.Del(headerSetSessionToken)
-		h.Del(headerRememberMe)
 	}
 
 	if h.Get(headerClearSession) == "true" {

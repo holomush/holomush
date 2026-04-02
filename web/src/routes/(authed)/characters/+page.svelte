@@ -23,12 +23,12 @@
   let autoDefault = $state(false);
 
   onMount(async () => {
-    if (!$authState.playerToken) {
+    if (!$authState.playerSessionToken) {
       goto('/login');
       return;
     }
     try {
-      const resp = await client.webListCharacters({ playerToken: $authState.playerToken });
+      const resp = await client.webListCharacters({ playerSessionToken: $authState.playerSessionToken });
       characters = [...resp.characters];
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load characters.';
@@ -38,10 +38,10 @@
   });
 
   async function selectCharacter(charId: string) {
-    if (!$authState.playerToken) return;
+    if (!$authState.playerSessionToken) return;
     try {
       const resp = await client.webSelectCharacter({
-        playerToken: $authState.playerToken,
+        playerSessionToken: $authState.playerSessionToken,
         characterId: charId,
       });
       if (resp.success) {
@@ -60,18 +60,18 @@
       createError = 'Character name is required.';
       return;
     }
-    if (!$authState.playerToken) return;
+    if (!$authState.playerSessionToken) return;
     createError = '';
     try {
       const resp = await client.webCreateCharacter({
-        playerToken: $authState.playerToken,
+        playerSessionToken: $authState.playerSessionToken,
         characterName: newCharName.trim(),
       });
       if (resp.success) {
         if (autoDefault) {
           // Create a real game session via SelectCharacter before entering terminal.
           const selectResp = await client.webSelectCharacter({
-            playerToken: $authState.playerToken ?? '',
+            playerSessionToken: $authState.playerSessionToken ?? '',
             characterId: resp.characterId,
           });
           if (selectResp.success) {
@@ -82,7 +82,7 @@
           }
         } else {
           // Refresh the character list
-          const listResp = await client.webListCharacters({ playerToken: $authState.playerToken });
+          const listResp = await client.webListCharacters({ playerSessionToken: $authState.playerSessionToken });
           characters = [...listResp.characters];
           creating = false;
           newCharName = '';

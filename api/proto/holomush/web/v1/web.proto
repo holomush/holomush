@@ -138,14 +138,14 @@ message WebAuthenticatePlayerRequest {
 
 message WebAuthenticatePlayerResponse {
   bool success = 1;
-  string player_token = 2;
+  string player_session_token = 2;
   string error_message = 3;
   repeated CharacterSummary characters = 4;
   string default_character_id = 5;
 }
 
 message WebSelectCharacterRequest {
-  string player_token = 1;
+  string player_session_token = 1;
   string character_id = 2;
 }
 
@@ -165,13 +165,13 @@ message WebCreatePlayerRequest {
 
 message WebCreatePlayerResponse {
   bool success = 1;
-  string player_token = 2;
+  string player_session_token = 2;
   repeated CharacterSummary characters = 3;
   string error_message = 4;
 }
 
 message WebCreateCharacterRequest {
-  string player_token = 1;
+  string player_session_token = 1;
   string character_name = 2;
 }
 
@@ -183,7 +183,7 @@ message WebCreateCharacterResponse {
 }
 
 message WebListCharactersRequest {
-  string player_token = 1;
+  string player_session_token = 1;
 }
 
 message WebListCharactersResponse {
@@ -191,7 +191,7 @@ message WebListCharactersResponse {
 }
 
 message WebLogoutRequest {
-  string session_id = 1;
+  string player_session_token = 1;
 }
 
 message WebLogoutResponse {}

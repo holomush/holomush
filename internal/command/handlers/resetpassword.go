@@ -37,11 +37,11 @@ type CharacterLister interface {
 
 // AdminDeps holds the dependencies injected into the reset password handler.
 type AdminDeps struct {
-	PlayerRepo  auth.PlayerRepository
-	Hasher      auth.PasswordHasher
-	WebSessions auth.WebSessionRepository
-	ResetRepo   auth.PasswordResetRepository
-	CharLister  CharacterLister
+	PlayerRepo     auth.PlayerRepository
+	Hasher         auth.PasswordHasher
+	PlayerSessions auth.PlayerSessionRepository
+	ResetRepo      auth.PasswordResetRepository
+	CharLister     CharacterLister
 }
 
 type resetArgs struct {
@@ -170,10 +170,10 @@ func handleResetPassword(ctx context.Context, exec *command.CommandExecution, de
 		warnings = append(warnings, "reset token cleanup failed")
 	}
 
-	if err := deps.WebSessions.DeleteByPlayer(ctx, player.ID); err != nil {
-		slog.WarnContext(ctx, "best-effort web session invalidation failed",
+	if err := deps.PlayerSessions.DeleteByPlayer(ctx, player.ID); err != nil {
+		slog.WarnContext(ctx, "best-effort player session invalidation failed",
 			"player", args.username, "error", err)
-		warnings = append(warnings, "web session invalidation failed")
+		warnings = append(warnings, "player session invalidation failed")
 	}
 
 	// If --kick: terminate game sessions for all player characters.

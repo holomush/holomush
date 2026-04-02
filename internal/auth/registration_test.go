@@ -70,9 +70,8 @@ func TestService_ValidateCredentials(t *testing.T) {
 
 	t.Run("valid credentials return player", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
-		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		svc, err := auth.NewAuthService(playerRepo, mocks.NewMockPlayerSessionRepository(t), hasher)
 		require.NoError(t, err)
 
 		playerID := ulid.Make()
@@ -96,9 +95,8 @@ func TestService_ValidateCredentials(t *testing.T) {
 
 	t.Run("invalid password returns error", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
-		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		svc, err := auth.NewAuthService(playerRepo, mocks.NewMockPlayerSessionRepository(t), hasher)
 		require.NoError(t, err)
 
 		playerID := ulid.Make()
@@ -122,9 +120,8 @@ func TestService_ValidateCredentials(t *testing.T) {
 
 	t.Run("non-existent user uses constant time and returns error", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
-		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		svc, err := auth.NewAuthService(playerRepo, mocks.NewMockPlayerSessionRepository(t), hasher)
 		require.NoError(t, err)
 
 		playerRepo.On("GetByUsername", ctx, "unknown").Return(nil, auth.ErrNotFound)
@@ -139,9 +136,8 @@ func TestService_ValidateCredentials(t *testing.T) {
 
 	t.Run("locked account returns error after password check", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
-		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		svc, err := auth.NewAuthService(playerRepo, mocks.NewMockPlayerSessionRepository(t), hasher)
 		require.NoError(t, err)
 
 		playerID := ulid.Make()
@@ -170,104 +166,105 @@ func TestService_CreatePlayer(t *testing.T) {
 
 	t.Run("success with email", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
-		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		svc, err := auth.NewAuthService(playerRepo, mocks.NewMockPlayerSessionRepository(t), hasher)
 		require.NoError(t, err)
 
 		playerRepo.On("GetByUsername", ctx, "newuser").Return(nil, auth.ErrNotFound)
 		hasher.On("Hash", "password123").Return("$argon2id$v=19$m=65536,t=1,p=4$salt$hash", nil)
 		playerRepo.On("Create", ctx, mock.AnythingOfType("*auth.Player")).Return(nil)
 
-		player, token, err := svc.CreatePlayer(ctx, "newuser", "password123", "user@example.com")
+		player, session, rawToken, err := svc.CreatePlayer(ctx, "newuser", "password123", "user@example.com")
 		require.NoError(t, err)
 		assert.NotNil(t, player)
-		assert.NotNil(t, token)
+		assert.NotNil(t, session)
 		assert.Equal(t, "newuser", player.Username)
 		assert.NotNil(t, player.Email)
 		assert.Equal(t, "user@example.com", *player.Email)
-		assert.NotEmpty(t, token.Token)
-		assert.Equal(t, player.ID, token.PlayerID)
+		assert.NotEmpty(t, rawToken)
+		assert.Len(t, rawToken, 64) // 32 bytes hex-encoded
+		assert.Equal(t, player.ID, session.PlayerID)
+		assert.NotEqual(t, ulid.ULID{}, session.ID)
 	})
 
 	t.Run("success without email", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
-		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		svc, err := auth.NewAuthService(playerRepo, mocks.NewMockPlayerSessionRepository(t), hasher)
 		require.NoError(t, err)
 
 		playerRepo.On("GetByUsername", ctx, "newuser").Return(nil, auth.ErrNotFound)
 		hasher.On("Hash", "password123").Return("$argon2id$v=19$m=65536,t=1,p=4$salt$hash", nil)
 		playerRepo.On("Create", ctx, mock.AnythingOfType("*auth.Player")).Return(nil)
 
-		player, token, err := svc.CreatePlayer(ctx, "newuser", "password123", "")
+		player, session, rawToken, err := svc.CreatePlayer(ctx, "newuser", "password123", "")
 		require.NoError(t, err)
 		assert.NotNil(t, player)
-		assert.NotNil(t, token)
+		assert.NotNil(t, session)
+		assert.NotEmpty(t, rawToken)
 		assert.Nil(t, player.Email)
 	})
 
 	t.Run("username taken returns error", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
-		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		svc, err := auth.NewAuthService(playerRepo, mocks.NewMockPlayerSessionRepository(t), hasher)
 		require.NoError(t, err)
 
 		existing := &auth.Player{ID: ulid.Make(), Username: "existing"}
 		playerRepo.On("GetByUsername", ctx, "existing").Return(existing, nil)
 
-		player, token, err := svc.CreatePlayer(ctx, "existing", "password123", "")
+		player, session, rawToken, err := svc.CreatePlayer(ctx, "existing", "password123", "")
 		require.Error(t, err)
 		assert.Nil(t, player)
-		assert.Nil(t, token)
+		assert.Nil(t, session)
+		assert.Empty(t, rawToken)
 		errutil.AssertErrorCode(t, err, "REGISTER_USERNAME_TAKEN")
 	})
 
 	t.Run("invalid username returns error", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
-		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		svc, err := auth.NewAuthService(playerRepo, mocks.NewMockPlayerSessionRepository(t), hasher)
 		require.NoError(t, err)
 
 		// Username starting with digit is invalid
-		player, token, err := svc.CreatePlayer(ctx, "1invalid", "password123", "")
+		player, session, rawToken, err := svc.CreatePlayer(ctx, "1invalid", "password123", "")
 		require.Error(t, err)
 		assert.Nil(t, player)
-		assert.Nil(t, token)
+		assert.Nil(t, session)
+		assert.Empty(t, rawToken)
 		errutil.AssertErrorCode(t, err, "REGISTER_INVALID_USERNAME")
 	})
 
 	t.Run("invalid password returns error", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
-		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		svc, err := auth.NewAuthService(playerRepo, mocks.NewMockPlayerSessionRepository(t), hasher)
 		require.NoError(t, err)
 
 		// Password too short (< 8 chars)
-		player, token, err := svc.CreatePlayer(ctx, "validuser", "short", "")
+		player, session, rawToken, err := svc.CreatePlayer(ctx, "validuser", "short", "")
 		require.Error(t, err)
 		assert.Nil(t, player)
-		assert.Nil(t, token)
+		assert.Nil(t, session)
+		assert.Empty(t, rawToken)
 		errutil.AssertErrorCode(t, err, "REGISTER_INVALID_PASSWORD")
 	})
 
 	t.Run("repository error on username check propagates", func(t *testing.T) {
 		playerRepo := mocks.NewMockPlayerRepository(t)
-		sessionRepo := mocks.NewMockWebSessionRepository(t)
 		hasher := mocks.NewMockPasswordHasher(t)
-		svc, err := auth.NewAuthService(playerRepo, sessionRepo, hasher)
+		svc, err := auth.NewAuthService(playerRepo, mocks.NewMockPlayerSessionRepository(t), hasher)
 		require.NoError(t, err)
 
 		playerRepo.On("GetByUsername", ctx, "validuser").Return(nil, errors.New("database error"))
 
-		player, token, err := svc.CreatePlayer(ctx, "validuser", "password123", "")
+		player, session, rawToken, err := svc.CreatePlayer(ctx, "validuser", "password123", "")
 		require.Error(t, err)
 		assert.Nil(t, player)
-		assert.Nil(t, token)
+		assert.Nil(t, session)
+		assert.Empty(t, rawToken)
 		errutil.AssertErrorCode(t, err, "REGISTER_FAILED")
 	})
 }

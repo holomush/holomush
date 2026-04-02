@@ -22,28 +22,12 @@ import (
 // mockSessionRepoForReset is a no-op session repo stub for reset logging tests.
 type mockSessionRepoForReset struct{}
 
-func (m *mockSessionRepoForReset) Create(_ context.Context, _ *auth.WebSession) error {
+func (m *mockSessionRepoForReset) Create(_ context.Context, _ *auth.PlayerSession) error {
 	return nil
 }
 
-func (m *mockSessionRepoForReset) GetByID(_ context.Context, _ ulid.ULID) (*auth.WebSession, error) {
+func (m *mockSessionRepoForReset) GetByTokenHash(_ context.Context, _ string) (*auth.PlayerSession, error) {
 	return nil, auth.ErrNotFound
-}
-
-func (m *mockSessionRepoForReset) GetByTokenHash(_ context.Context, _ string) (*auth.WebSession, error) {
-	return nil, auth.ErrNotFound
-}
-
-func (m *mockSessionRepoForReset) GetByPlayer(_ context.Context, _ ulid.ULID) ([]*auth.WebSession, error) {
-	return nil, nil
-}
-
-func (m *mockSessionRepoForReset) UpdateLastSeen(_ context.Context, _ ulid.ULID, _ time.Time) error {
-	return nil
-}
-
-func (m *mockSessionRepoForReset) UpdateCharacter(_ context.Context, _, _ ulid.ULID) error {
-	return nil
 }
 
 func (m *mockSessionRepoForReset) Delete(_ context.Context, _ ulid.ULID) error {
@@ -56,6 +40,10 @@ func (m *mockSessionRepoForReset) DeleteByPlayer(_ context.Context, _ ulid.ULID)
 
 func (m *mockSessionRepoForReset) DeleteExpired(_ context.Context) (int64, error) {
 	return 0, nil
+}
+
+func (m *mockSessionRepoForReset) RefreshTTL(_ context.Context, _ ulid.ULID, _ time.Duration) error {
+	return nil
 }
 
 // mockResetRepoLogging is a mock that can fail on DeleteByPlayer for testing logging.

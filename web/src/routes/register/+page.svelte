@@ -39,7 +39,7 @@
       if (resp.success) {
         // TODO: Once web RPCs read playerToken from the httpOnly cookie exclusively,
         // stop storing it in authStore and just set playerName for display.
-        setPlayerAuth(resp.playerToken, username);
+        setPlayerAuth(resp.playerSessionToken, username);
         goto('/characters');
       } else {
         error = resp.errorMessage || 'Registration failed.';

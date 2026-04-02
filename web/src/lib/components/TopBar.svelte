@@ -15,7 +15,7 @@
 
   async function handleLogout() {
     try {
-      await client.webLogout({ sessionId: $authState.sessionId ?? '' });
+      await client.webLogout({ playerSessionToken: $authState.playerSessionToken ?? '' });
     } catch {
       /* best effort — may fail if no server-side session exists */
     }
@@ -36,7 +36,7 @@
     </a>
   </div>
   <nav class="right">
-    {#if !$authState.playerToken && !$authState.sessionId}
+    {#if !$authState.playerSessionToken && !$authState.sessionId}
       <a href="/login" class="nav-link">Login</a>
       <a href="/register" class="nav-link accent">Register</a>
     {:else if $authState.sessionId && $authState.characterName}
@@ -47,7 +47,7 @@
       <button class="icon-btn" onclick={handleLogout} title="Logout" aria-label="Log out">
         <LogOut size={16} />
       </button>
-    {:else if $authState.playerToken}
+    {:else if $authState.playerSessionToken}
       <span class="player-name">{$authState.playerName}</span>
       <button class="icon-btn" onclick={handleLogout} title="Logout" aria-label="Log out">
         <LogOut size={16} />

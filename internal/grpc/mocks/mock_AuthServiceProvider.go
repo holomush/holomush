@@ -29,7 +29,7 @@ func (_m *MockAuthServiceProvider) EXPECT() *MockAuthServiceProvider_Expecter {
 }
 
 // CreatePlayer provides a mock function with given fields: ctx, username, password, email
-func (_m *MockAuthServiceProvider) CreatePlayer(ctx context.Context, username string, password string, email string) (*auth.Player, *auth.PlayerToken, error) {
+func (_m *MockAuthServiceProvider) CreatePlayer(ctx context.Context, username string, password string, email string) (*auth.Player, *auth.PlayerSession, string, error) {
 	ret := _m.Called(ctx, username, password, email)
 
 	if len(ret) == 0 {
@@ -37,9 +37,10 @@ func (_m *MockAuthServiceProvider) CreatePlayer(ctx context.Context, username st
 	}
 
 	var r0 *auth.Player
-	var r1 *auth.PlayerToken
-	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) (*auth.Player, *auth.PlayerToken, error)); ok {
+	var r1 *auth.PlayerSession
+	var r2 string
+	var r3 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) (*auth.Player, *auth.PlayerSession, string, error)); ok {
 		return rf(ctx, username, password, email)
 	}
 	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) *auth.Player); ok {
@@ -50,21 +51,27 @@ func (_m *MockAuthServiceProvider) CreatePlayer(ctx context.Context, username st
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, string, string) *auth.PlayerToken); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, string) *auth.PlayerSession); ok {
 		r1 = rf(ctx, username, password, email)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*auth.PlayerToken)
+			r1 = ret.Get(1).(*auth.PlayerSession)
 		}
 	}
 
-	if rf, ok := ret.Get(2).(func(context.Context, string, string, string) error); ok {
+	if rf, ok := ret.Get(2).(func(context.Context, string, string, string) string); ok {
 		r2 = rf(ctx, username, password, email)
 	} else {
-		r2 = ret.Error(2)
+		r2 = ret.Get(2).(string)
 	}
 
-	return r0, r1, r2
+	if rf, ok := ret.Get(3).(func(context.Context, string, string, string) error); ok {
+		r3 = rf(ctx, username, password, email)
+	} else {
+		r3 = ret.Error(3)
+	}
+
+	return r0, r1, r2, r3
 }
 
 // MockAuthServiceProvider_CreatePlayer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreatePlayer'
@@ -88,32 +95,44 @@ func (_c *MockAuthServiceProvider_CreatePlayer_Call) Run(run func(ctx context.Co
 	return _c
 }
 
-func (_c *MockAuthServiceProvider_CreatePlayer_Call) Return(_a0 *auth.Player, _a1 *auth.PlayerToken, _a2 error) *MockAuthServiceProvider_CreatePlayer_Call {
-	_c.Call.Return(_a0, _a1, _a2)
+func (_c *MockAuthServiceProvider_CreatePlayer_Call) Return(_a0 *auth.Player, _a1 *auth.PlayerSession, _a2 string, _a3 error) *MockAuthServiceProvider_CreatePlayer_Call {
+	_c.Call.Return(_a0, _a1, _a2, _a3)
 	return _c
 }
 
-func (_c *MockAuthServiceProvider_CreatePlayer_Call) RunAndReturn(run func(context.Context, string, string, string) (*auth.Player, *auth.PlayerToken, error)) *MockAuthServiceProvider_CreatePlayer_Call {
+func (_c *MockAuthServiceProvider_CreatePlayer_Call) RunAndReturn(run func(context.Context, string, string, string) (*auth.Player, *auth.PlayerSession, string, error)) *MockAuthServiceProvider_CreatePlayer_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// Logout provides a mock function with given fields: ctx, sessionID
-func (_m *MockAuthServiceProvider) Logout(ctx context.Context, sessionID ulid.ULID) error {
-	ret := _m.Called(ctx, sessionID)
+// Logout provides a mock function with given fields: ctx, tokenHash
+func (_m *MockAuthServiceProvider) Logout(ctx context.Context, tokenHash string) (ulid.ULID, error) {
+	ret := _m.Called(ctx, tokenHash)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Logout")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) error); ok {
-		r0 = rf(ctx, sessionID)
+	var r0 ulid.ULID
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) (ulid.ULID, error)); ok {
+		return rf(ctx, tokenHash)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) ulid.ULID); ok {
+		r0 = rf(ctx, tokenHash)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(ulid.ULID)
+		}
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, tokenHash)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // MockAuthServiceProvider_Logout_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Logout'
@@ -123,24 +142,24 @@ type MockAuthServiceProvider_Logout_Call struct {
 
 // Logout is a helper method to define mock.On call
 //   - ctx context.Context
-//   - sessionID ulid.ULID
-func (_e *MockAuthServiceProvider_Expecter) Logout(ctx interface{}, sessionID interface{}) *MockAuthServiceProvider_Logout_Call {
-	return &MockAuthServiceProvider_Logout_Call{Call: _e.mock.On("Logout", ctx, sessionID)}
+//   - tokenHash string
+func (_e *MockAuthServiceProvider_Expecter) Logout(ctx interface{}, tokenHash interface{}) *MockAuthServiceProvider_Logout_Call {
+	return &MockAuthServiceProvider_Logout_Call{Call: _e.mock.On("Logout", ctx, tokenHash)}
 }
 
-func (_c *MockAuthServiceProvider_Logout_Call) Run(run func(ctx context.Context, sessionID ulid.ULID)) *MockAuthServiceProvider_Logout_Call {
+func (_c *MockAuthServiceProvider_Logout_Call) Run(run func(ctx context.Context, tokenHash string)) *MockAuthServiceProvider_Logout_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(ulid.ULID))
+		run(args[0].(context.Context), args[1].(string))
 	})
 	return _c
 }
 
-func (_c *MockAuthServiceProvider_Logout_Call) Return(_a0 error) *MockAuthServiceProvider_Logout_Call {
-	_c.Call.Return(_a0)
+func (_c *MockAuthServiceProvider_Logout_Call) Return(_a0 ulid.ULID, _a1 error) *MockAuthServiceProvider_Logout_Call {
+	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockAuthServiceProvider_Logout_Call) RunAndReturn(run func(context.Context, ulid.ULID) error) *MockAuthServiceProvider_Logout_Call {
+func (_c *MockAuthServiceProvider_Logout_Call) RunAndReturn(run func(context.Context, string) (ulid.ULID, error)) *MockAuthServiceProvider_Logout_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -47,34 +47,6 @@ async function registerAndEnterTerminal(
   return { username, charName };
 }
 
-/**
- * Login with credentials and navigate to terminal.
- * Handles both auto-select (single character) and character list.
- */
-async function loginAndEnterTerminal(
-  page: Page,
-  username: string,
-  password: string,
-): Promise<void> {
-  await page.goto('/login');
-  await page.fill('input[name="username"]', username);
-  await page.fill('input[name="password"]', password);
-  await page.locator('button[type="submit"]').click();
-
-  // May go to /characters or /terminal depending on character count
-  await expect(page).toHaveURL(/\/(characters|terminal)/, { timeout: 15000 });
-
-  // If on /characters, select the first (only) character
-  if (page.url().includes('/characters')) {
-    const charLink = page.locator('.character-card, [data-testid="character-card"]').first();
-    await expect(charLink).toBeVisible({ timeout: 10000 });
-    await charLink.click();
-    await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
-  }
-
-  await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
-}
-
 test.describe('Admin Commands', () => {
   test('admin resets player password (generated)', async ({ browser }) => {
     // ── Phase 1: Register target player ──
@@ -82,13 +54,11 @@ test.describe('Admin Commands', () => {
     const targetPage = await targetCtx.newPage();
     const target = await registerAndEnterTerminal(targetPage, 'e2etgt', 'Tgt');
 
-    // Quit the target session
+    // Quit the target session — registered user goes to character picker
     const targetInput = targetPage.locator('textarea');
     await targetInput.fill('quit');
     await targetInput.press('Enter');
-    await expect(targetPage.getByRole('button', { name: 'Sign In' })).toBeVisible({
-      timeout: 10000,
-    });
+    await expect(targetPage).toHaveURL(/\/characters/, { timeout: 10000 });
     await targetCtx.close();
 
     // ── Phase 2: Register admin player and grant admin role via DB ──
@@ -103,17 +73,17 @@ test.describe('Admin Commands', () => {
     expect(adminChars.length).toBe(1);
     await db.grantAdminRole(adminChars[0].id);
 
-    // Quit and re-login so the session picks up the admin role
+    // Quit and re-enter so the session picks up the admin role
     const adminInput = adminPage.locator('textarea');
     await adminInput.fill('quit');
     await adminInput.press('Enter');
-    await expect(adminPage.getByRole('button', { name: 'Sign In' })).toBeVisible({
-      timeout: 10000,
-    });
-    await adminPage.getByRole('button', { name: 'Sign In' }).click();
-    await expect(adminPage).toHaveURL(/\/login/, { timeout: 10000 });
+    await expect(adminPage).toHaveURL(/\/characters/, { timeout: 10000 });
 
-    await loginAndEnterTerminal(adminPage, admin.username, 'testpass123');
+    // Select the existing character to re-enter with the admin role
+    await expect(adminPage.locator('text=' + admin.charName)).toBeVisible({ timeout: 10000 });
+    await adminPage.locator('text=' + admin.charName).click();
+    await expect(adminPage).toHaveURL(/\/terminal/, { timeout: 15000 });
+    await expect(adminPage.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
 
     // ── Phase 3: Reset target password ──
     // Get target's password hash before reset

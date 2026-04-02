@@ -12,7 +12,7 @@
   import { appendLine, clearLines, replayActive } from '$lib/stores/terminalStore';
   import { toggleSidebar } from '$lib/stores/sidebarStore';
   import { activeTheme, themeToCssVars } from '$lib/stores/themeStore';
-  import { authState, clearAuth } from '$lib/stores/authStore';
+  import { authState, clearAuth, clearCharacterSession } from '$lib/stores/authStore';
   import TerminalView from '$lib/components/terminal/TerminalView.svelte';
   import CommandInput from '$lib/components/terminal/CommandInput.svelte';
   import StatusBar from '$lib/components/terminal/StatusBar.svelte';
@@ -111,11 +111,12 @@
                 false,
               );
             }
-            clearAuth();
+            clearCharacterSession();
             connected = false;
             sessionId = '';
             streamSpan?.end();
             streamSpan = null;
+            goto('/characters');
             return;
           }
         } else if (response.frame.case === 'event') {
@@ -173,10 +174,10 @@
     try {
       await client.disconnect({ sessionId });
     } catch { /* best effort */ }
-    clearAuth();
+    clearCharacterSession();
     connected = false;
     sessionId = '';
-    goto('/');
+    goto('/characters');
   }
 
   async function reconnect() {

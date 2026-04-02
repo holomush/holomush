@@ -15,8 +15,8 @@ func RegisterAdmin(reg *command.Registry, deps AdminDeps) {
 		panic("missing admin dependency: PlayerRepo")
 	case deps.Hasher == nil:
 		panic("missing admin dependency: Hasher")
-	case deps.WebSessions == nil:
-		panic("missing admin dependency: WebSessions")
+	case deps.PlayerSessions == nil:
+		panic("missing admin dependency: PlayerSessions")
 	case deps.ResetRepo == nil:
 		panic("missing admin dependency: ResetRepo")
 	case deps.CharLister == nil:

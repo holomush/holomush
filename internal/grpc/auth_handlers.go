@@ -5,6 +5,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -21,8 +22,8 @@ import (
 // AuthServiceProvider defines the auth.Service methods used by auth handlers.
 type AuthServiceProvider interface {
 	ValidateCredentials(ctx context.Context, username, password string) (*auth.Player, error)
-	CreatePlayer(ctx context.Context, username, password, email string) (*auth.Player, *auth.PlayerToken, error)
-	Logout(ctx context.Context, sessionID ulid.ULID) error
+	CreatePlayer(ctx context.Context, username, password, email string) (*auth.Player, *auth.PlayerSession, string, error)
+	Logout(ctx context.Context, tokenHash string) (ulid.ULID, error)
 }
 
 // CharacterServiceProvider defines the auth.CharacterService methods used by auth handlers.
@@ -57,10 +58,10 @@ func WithCharacterService(svc CharacterServiceProvider) CoreServerOption {
 	}
 }
 
-// WithPlayerTokenRepo sets the player token repository.
-func WithPlayerTokenRepo(repo auth.PlayerTokenRepository) CoreServerOption {
+// WithPlayerSessionRepo sets the player session repository.
+func WithPlayerSessionRepo(repo auth.PlayerSessionRepository) CoreServerOption {
 	return func(s *CoreServer) {
-		s.playerTokenRepo = repo
+		s.playerSessionRepo = repo
 	}
 }
 
@@ -78,7 +79,41 @@ func WithCharacterRepo(repo auth.CharacterRepository) CoreServerOption {
 	}
 }
 
-// AuthenticatePlayer validates credentials and returns a player token for character selection.
+// isPlayerSessionAuthError reports whether err is a user-facing authentication
+// failure (session not found, expired, or service not configured) as opposed to
+// an infrastructure error (e.g., database unavailable).
+func isPlayerSessionAuthError(err error) bool {
+	if errors.Is(err, auth.ErrNotFound) {
+		return true
+	}
+	oopsErr, isOops := oops.AsOops(err)
+	if !isOops {
+		return false
+	}
+	switch oopsErr.Code() {
+	case "PLAYER_SESSION_NOT_FOUND", "PLAYER_SESSION_EXPIRED", "NOT_CONFIGURED":
+		return true
+	}
+	return false
+}
+
+// resolvePlayerSession looks up a PlayerSession by raw token, validates it,
+// and refreshes the TTL. Returns the session or an error.
+func (s *CoreServer) resolvePlayerSession(ctx context.Context, rawToken string) (*auth.PlayerSession, error) {
+	if s.playerSessionRepo == nil {
+		return nil, oops.Code("NOT_CONFIGURED").Errorf("player session service not configured")
+	}
+	tokenHash := auth.HashSessionToken(rawToken)
+	ps, err := s.playerSessionRepo.GetByTokenHash(ctx, tokenHash)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // intentional: preserve repository error codes (PLAYER_SESSION_NOT_FOUND / PLAYER_SESSION_EXPIRED)
+	}
+	// Best-effort TTL refresh — intentionally ignore errors.
+	s.playerSessionRepo.RefreshTTL(ctx, ps.ID, auth.PlayerSessionTTL) //nolint:errcheck // best-effort
+	return ps, nil
+}
+
+// AuthenticatePlayer validates credentials and returns a player session token for character selection.
 func (s *CoreServer) AuthenticatePlayer(ctx context.Context, req *corev1.AuthenticatePlayerRequest) (*corev1.AuthenticatePlayerResponse, error) {
 	slog.DebugContext(ctx, "grpc: AuthenticatePlayer", "username", req.GetUsername())
 
@@ -88,10 +123,10 @@ func (s *CoreServer) AuthenticatePlayer(ctx context.Context, req *corev1.Authent
 			ErrorMessage: "authentication not configured",
 		}, nil
 	}
-	if s.playerTokenRepo == nil {
+	if s.playerSessionRepo == nil {
 		return &corev1.AuthenticatePlayerResponse{
 			Success:      false,
-			ErrorMessage: "player token service not configured",
+			ErrorMessage: "player session service not configured",
 		}, nil
 	}
 
@@ -104,13 +139,19 @@ func (s *CoreServer) AuthenticatePlayer(ctx context.Context, req *corev1.Authent
 		}, nil
 	}
 
-	playerToken, tokenErr := auth.NewPlayerToken(player.ID, 5*time.Minute)
+	// Create a durable player session.
+	rawToken, tokenHash, tokenErr := auth.GenerateSessionToken()
 	if tokenErr != nil {
 		return nil, oops.Code("TOKEN_GENERATION_FAILED").Wrap(tokenErr)
 	}
 
-	if storeErr := s.playerTokenRepo.Create(ctx, playerToken); storeErr != nil {
-		return nil, oops.Code("TOKEN_STORE_FAILED").Wrap(storeErr)
+	playerSession, sessionErr := auth.NewPlayerSession(player.ID, tokenHash, "", "", auth.PlayerSessionTTL)
+	if sessionErr != nil {
+		return nil, oops.Code("SESSION_CREATE_FAILED").Wrap(sessionErr)
+	}
+
+	if storeErr := s.playerSessionRepo.Create(ctx, playerSession); storeErr != nil {
+		return nil, oops.Code("SESSION_STORE_FAILED").Wrap(storeErr)
 	}
 
 	characters, err := s.buildCharacterSummaries(ctx, player.ID)
@@ -125,36 +166,25 @@ func (s *CoreServer) AuthenticatePlayer(ctx context.Context, req *corev1.Authent
 
 	return &corev1.AuthenticatePlayerResponse{
 		Success:            true,
-		PlayerToken:        playerToken.Token,
+		PlayerSessionToken: rawToken,
 		Characters:         characters,
 		DefaultCharacterId: defaultCharID,
 	}, nil
 }
 
-// SelectCharacter validates a player token, creates or reattaches a game session.
+// SelectCharacter validates a player session, creates or reattaches a game session.
 // TODO: Thread connID through SelectCharacterResponse proto once the field is added.
 func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectCharacterRequest) (*corev1.SelectCharacterResponse, error) {
 	slog.DebugContext(ctx, "grpc: SelectCharacter", "character_id", req.GetCharacterId())
 
-	if s.playerTokenRepo == nil {
-		return &corev1.SelectCharacterResponse{
-			Success: false, ErrorMessage: "player token service not configured",
-		}, nil
-	}
-	token, tokenErr := s.playerTokenRepo.GetByToken(ctx, req.PlayerToken)
-	if tokenErr != nil {
-		//nolint:nilerr // intentional: return user-facing error in response body
-		return &corev1.SelectCharacterResponse{
-			Success:      false,
-			ErrorMessage: "invalid player token",
-		}, nil
-	}
-
-	if token.IsExpired() {
-		return &corev1.SelectCharacterResponse{
-			Success:      false,
-			ErrorMessage: "player token expired",
-		}, nil
+	playerSession, err := s.resolvePlayerSession(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		if isPlayerSessionAuthError(err) {
+			return &corev1.SelectCharacterResponse{
+				Success: false, ErrorMessage: "invalid or expired player session",
+			}, nil
+		}
+		return nil, err
 	}
 
 	charID, parseErr := ulid.Parse(req.CharacterId)
@@ -167,7 +197,7 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 	}
 
 	// Security check: character must belong to the authenticated player.
-	chars, err := s.charRepo.ListByPlayer(ctx, token.PlayerID)
+	chars, err := s.charRepo.ListByPlayer(ctx, playerSession.PlayerID)
 	if err != nil {
 		return nil, oops.Code("CHARACTER_LOOKUP_FAILED").Wrap(err)
 	}
@@ -203,11 +233,6 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 		}
 		existingSession.Status = session.StatusActive
 		existingSession.UpdatedAt = now
-
-		// Delete the player token (one-time use).
-		if delErr := s.playerTokenRepo.DeleteByToken(ctx, req.PlayerToken); delErr != nil {
-			slog.WarnContext(ctx, "failed to delete player token", "error", delErr)
-		}
 
 		return &corev1.SelectCharacterResponse{
 			Success:       true,
@@ -259,11 +284,6 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 		slog.WarnContext(ctx, "arrive event failed", "error", err)
 	}
 
-	// Delete the player token (one-time use).
-	if delErr := s.playerTokenRepo.DeleteByToken(ctx, req.PlayerToken); delErr != nil {
-		slog.WarnContext(ctx, "failed to delete player token", "error", delErr)
-	}
-
 	return &corev1.SelectCharacterResponse{
 		Success:       true,
 		SessionId:     sessionID.String(),
@@ -282,8 +302,14 @@ func (s *CoreServer) CreatePlayer(ctx context.Context, req *corev1.CreatePlayerR
 			ErrorMessage: "registration not configured",
 		}, nil
 	}
+	if s.playerSessionRepo == nil {
+		return &corev1.CreatePlayerResponse{
+			Success:      false,
+			ErrorMessage: "player session service not configured",
+		}, nil
+	}
 
-	player, playerToken, createErr := s.authService.CreatePlayer(ctx, req.Username, req.Password, req.Email)
+	player, playerSession, rawToken, createErr := s.authService.CreatePlayer(ctx, req.Username, req.Password, req.Email)
 	if createErr != nil {
 		//nolint:nilerr // intentional: return user-facing error in response body
 		return &corev1.CreatePlayerResponse{
@@ -292,18 +318,17 @@ func (s *CoreServer) CreatePlayer(ctx context.Context, req *corev1.CreatePlayerR
 		}, nil
 	}
 
-	if s.playerTokenRepo != nil {
-		if err := s.playerTokenRepo.Create(ctx, playerToken); err != nil {
-			return nil, oops.Code("TOKEN_STORE_FAILED").
-				With("player_id", player.ID.String()).
-				Wrap(err)
-		}
+	// Persist the player session (repo confirmed non-nil above).
+	if err := s.playerSessionRepo.Create(ctx, playerSession); err != nil {
+		return nil, oops.Code("SESSION_STORE_FAILED").
+			With("player_id", player.ID.String()).
+			Wrap(err)
 	}
 
 	return &corev1.CreatePlayerResponse{
-		Success:     true,
-		PlayerToken: playerToken.Token,
-		Characters:  []*corev1.CharacterSummary{}, // new player has no characters
+		Success:            true,
+		PlayerSessionToken: rawToken,
+		Characters:         []*corev1.CharacterSummary{}, // new player has no characters
 	}, nil
 }
 
@@ -311,25 +336,14 @@ func (s *CoreServer) CreatePlayer(ctx context.Context, req *corev1.CreatePlayerR
 func (s *CoreServer) CreateCharacter(ctx context.Context, req *corev1.CreateCharacterRequest) (*corev1.CreateCharacterResponse, error) {
 	slog.DebugContext(ctx, "grpc: CreateCharacter", "character_name", req.GetCharacterName())
 
-	if s.playerTokenRepo == nil {
-		return &corev1.CreateCharacterResponse{
-			Success: false, ErrorMessage: "character creation not configured",
-		}, nil
-	}
-	token, tokenErr := s.playerTokenRepo.GetByToken(ctx, req.PlayerToken)
-	if tokenErr != nil {
-		//nolint:nilerr // intentional: return user-facing error in response body
-		return &corev1.CreateCharacterResponse{
-			Success:      false,
-			ErrorMessage: "invalid player token",
-		}, nil
-	}
-
-	if token.IsExpired() {
-		return &corev1.CreateCharacterResponse{
-			Success:      false,
-			ErrorMessage: "player token expired",
-		}, nil
+	playerSession, err := s.resolvePlayerSession(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		if isPlayerSessionAuthError(err) {
+			return &corev1.CreateCharacterResponse{
+				Success: false, ErrorMessage: "invalid or expired player session",
+			}, nil
+		}
+		return nil, err
 	}
 
 	if s.characterService == nil {
@@ -339,7 +353,7 @@ func (s *CoreServer) CreateCharacter(ctx context.Context, req *corev1.CreateChar
 		}, nil
 	}
 
-	char, createErr := s.characterService.Create(ctx, token.PlayerID, req.CharacterName)
+	char, createErr := s.characterService.Create(ctx, playerSession.PlayerID, req.CharacterName)
 	if createErr != nil {
 		//nolint:nilerr // intentional: return user-facing error in response body
 		return &corev1.CreateCharacterResponse{
@@ -359,27 +373,17 @@ func (s *CoreServer) CreateCharacter(ctx context.Context, req *corev1.CreateChar
 func (s *CoreServer) ListCharacters(ctx context.Context, req *corev1.ListCharactersRequest) (*corev1.ListCharactersResponse, error) {
 	slog.DebugContext(ctx, "grpc: ListCharacters")
 
-	if s.playerTokenRepo == nil {
-		return &corev1.ListCharactersResponse{}, nil
-	}
-	token, tokenErr := s.playerTokenRepo.GetByToken(ctx, req.PlayerToken)
-	if tokenErr != nil {
-		//nolint:nilerr // intentional: invalid token returns empty list
-		return &corev1.ListCharactersResponse{}, nil
+	playerSession, err := s.resolvePlayerSession(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err // propagates PLAYER_SESSION_NOT_FOUND or PLAYER_SESSION_EXPIRED
 	}
 
-	if token.IsExpired() {
-		return &corev1.ListCharactersResponse{}, nil
-	}
-
-	characters, err := s.buildCharacterSummaries(ctx, token.PlayerID)
+	characters, err := s.buildCharacterSummaries(ctx, playerSession.PlayerID)
 	if err != nil {
 		return nil, oops.Code("CHARACTER_LIST_FAILED").Wrap(err)
 	}
 
-	return &corev1.ListCharactersResponse{
-		Characters: characters,
-	}, nil
+	return &corev1.ListCharactersResponse{Characters: characters}, nil
 }
 
 // RequestPasswordReset handles password reset requests.
@@ -422,24 +426,19 @@ func (s *CoreServer) ConfirmPasswordReset(ctx context.Context, req *corev1.Confi
 	}, nil
 }
 
-// Logout ends a web session.
+// Logout ends a player session.
 func (s *CoreServer) Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1.LogoutResponse, error) {
-	slog.DebugContext(ctx, "grpc: Logout", "session_id", req.GetSessionId())
+	// Hash the raw token before logging — never log the live bearer credential.
+	tokenHash := auth.HashSessionToken(req.PlayerSessionToken)
+	slog.DebugContext(ctx, "grpc: Logout", "token_hash_prefix", tokenHash[:16])
 
 	if s.authService == nil {
 		return nil, oops.Code("NOT_CONFIGURED").Errorf("auth service not configured")
 	}
 
-	sessionID, err := ulid.Parse(req.SessionId)
-	if err != nil {
-		return nil, oops.Code("INVALID_SESSION_ID").
-			With("session_id", req.SessionId).
-			Errorf("invalid session ID")
-	}
-
-	if err := s.authService.Logout(ctx, sessionID); err != nil {
+	if _, err := s.authService.Logout(ctx, tokenHash); err != nil {
 		return nil, oops.Code("LOGOUT_FAILED").
-			With("session_id", req.SessionId).
+			With("token_hash_prefix", tokenHash[:16]).
 			Wrap(err)
 	}
 

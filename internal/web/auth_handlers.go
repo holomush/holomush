@@ -5,6 +5,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"connectrpc.com/connect"
@@ -17,7 +18,6 @@ import (
 const (
 	headerSetSessionToken    = "X-Set-Session-Token" //nolint:gosec // not a credential, just a header name
 	headerClearSession       = "X-Clear-Session"
-	headerRememberMe         = "X-Remember-Me"
 	headerInjectSessionToken = "X-Session-Token"
 )
 
@@ -47,14 +47,11 @@ func (h *Handler) WebAuthenticatePlayer(ctx context.Context, req *connect.Reques
 
 	resp := connect.NewResponse(&webv1.WebAuthenticatePlayerResponse{
 		Success:            true,
-		PlayerToken:        coreResp.GetPlayerToken(),
+		PlayerSessionToken: coreResp.GetPlayerSessionToken(),
 		Characters:         translateCharacterSummaries(coreResp.GetCharacters()),
 		DefaultCharacterId: coreResp.GetDefaultCharacterId(),
 	})
-	resp.Header().Set(headerSetSessionToken, coreResp.GetPlayerToken())
-	if req.Msg.GetRememberMe() {
-		resp.Header().Set(headerRememberMe, "true")
-	}
+	resp.Header().Set(headerSetSessionToken, coreResp.GetPlayerSessionToken())
 	return resp, nil
 }
 
@@ -66,8 +63,8 @@ func (h *Handler) WebSelectCharacter(ctx context.Context, req *connect.Request[w
 	defer cancel()
 
 	coreResp, err := h.client.SelectCharacter(rpcCtx, &corev1.SelectCharacterRequest{
-		PlayerToken: req.Msg.GetPlayerToken(),
-		CharacterId: req.Msg.GetCharacterId(),
+		PlayerSessionToken: req.Msg.GetPlayerSessionToken(),
+		CharacterId:        req.Msg.GetCharacterId(),
 	})
 	if err != nil {
 		slog.Error("web: select character RPC failed", "error", err)
@@ -117,11 +114,11 @@ func (h *Handler) WebCreatePlayer(ctx context.Context, req *connect.Request[webv
 	}
 
 	resp := connect.NewResponse(&webv1.WebCreatePlayerResponse{
-		Success:     true,
-		PlayerToken: coreResp.GetPlayerToken(),
-		Characters:  translateCharacterSummaries(coreResp.GetCharacters()),
+		Success:            true,
+		PlayerSessionToken: coreResp.GetPlayerSessionToken(),
+		Characters:         translateCharacterSummaries(coreResp.GetCharacters()),
 	})
-	resp.Header().Set(headerSetSessionToken, coreResp.GetPlayerToken())
+	resp.Header().Set(headerSetSessionToken, coreResp.GetPlayerSessionToken())
 	return resp, nil
 }
 
@@ -133,8 +130,8 @@ func (h *Handler) WebCreateCharacter(ctx context.Context, req *connect.Request[w
 	defer cancel()
 
 	coreResp, err := h.client.CreateCharacter(rpcCtx, &corev1.CreateCharacterRequest{
-		PlayerToken:   req.Msg.GetPlayerToken(),
-		CharacterName: req.Msg.GetCharacterName(),
+		PlayerSessionToken: req.Msg.GetPlayerSessionToken(),
+		CharacterName:      req.Msg.GetCharacterName(),
 	})
 	if err != nil {
 		slog.Error("web: create character RPC failed", "error", err)
@@ -163,11 +160,11 @@ func (h *Handler) WebListCharacters(ctx context.Context, req *connect.Request[we
 	defer cancel()
 
 	coreResp, err := h.client.ListCharacters(rpcCtx, &corev1.ListCharactersRequest{
-		PlayerToken: req.Msg.GetPlayerToken(),
+		PlayerSessionToken: req.Msg.GetPlayerSessionToken(),
 	})
 	if err != nil {
 		slog.Error("web: list characters RPC failed", "error", err)
-		return connect.NewResponse(&webv1.WebListCharactersResponse{}), nil
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("session expired or invalid"))
 	}
 
 	return connect.NewResponse(&webv1.WebListCharactersResponse{
@@ -177,15 +174,15 @@ func (h *Handler) WebListCharacters(ctx context.Context, req *connect.Request[we
 
 // WebLogout ends the current session and clears the session cookie.
 func (h *Handler) WebLogout(ctx context.Context, req *connect.Request[webv1.WebLogoutRequest]) (*connect.Response[webv1.WebLogoutResponse], error) {
-	slog.DebugContext(ctx, "web: WebLogout", "session_id", req.Msg.GetSessionId())
+	slog.DebugContext(ctx, "web: WebLogout")
 
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
 	if _, err := h.client.Logout(rpcCtx, &corev1.LogoutRequest{
-		SessionId: req.Msg.GetSessionId(),
+		PlayerSessionToken: req.Msg.GetPlayerSessionToken(),
 	}); err != nil {
-		slog.Error("web: logout RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
+		slog.Error("web: logout RPC failed", "error", err)
 	}
 
 	resp := connect.NewResponse(&webv1.WebLogoutResponse{})

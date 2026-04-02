@@ -24,7 +24,7 @@ func TestWebAuthenticatePlayer_Success(t *testing.T) {
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
 			Success:     true,
-			PlayerToken: "tok-abc",
+			PlayerSessionToken: "tok-abc",
 			Characters: []*corev1.CharacterSummary{
 				{CharacterId: "c1", CharacterName: "Alice"},
 			},
@@ -40,12 +40,11 @@ func TestWebAuthenticatePlayer_Success(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.GetSuccess())
-	assert.Equal(t, "tok-abc", resp.Msg.GetPlayerToken())
+	assert.Equal(t, "tok-abc", resp.Msg.GetPlayerSessionToken())
 	assert.Len(t, resp.Msg.GetCharacters(), 1)
 	assert.Equal(t, "Alice", resp.Msg.GetCharacters()[0].GetCharacterName())
 	assert.Equal(t, "c1", resp.Msg.GetDefaultCharacterId())
 	assert.Equal(t, "tok-abc", resp.Header().Get(headerSetSessionToken))
-	assert.Equal(t, "true", resp.Header().Get(headerRememberMe))
 }
 
 func TestWebAuthenticatePlayer_CoreFailure(t *testing.T) {
@@ -87,7 +86,7 @@ func TestWebAuthenticatePlayer_NoRememberMe(t *testing.T) {
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
 			Success:     true,
-			PlayerToken: "tok-short",
+			PlayerSessionToken: "tok-short",
 		},
 	}
 	h := NewHandler(client)
@@ -100,7 +99,6 @@ func TestWebAuthenticatePlayer_NoRememberMe(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.GetSuccess())
 	assert.Equal(t, "tok-short", resp.Header().Get(headerSetSessionToken))
-	assert.Empty(t, resp.Header().Get(headerRememberMe))
 }
 
 // --- WebSelectCharacter ---
@@ -117,7 +115,7 @@ func TestWebSelectCharacter_Success(t *testing.T) {
 	h := NewHandler(client)
 
 	resp, err := h.WebSelectCharacter(context.Background(), connect.NewRequest(&webv1.WebSelectCharacterRequest{
-		PlayerToken: "tok-abc",
+		PlayerSessionToken: "tok-abc",
 		CharacterId: "c1",
 	}))
 	require.NoError(t, err)
@@ -139,7 +137,7 @@ func TestWebSelectCharacter_Reattached(t *testing.T) {
 	h := NewHandler(client)
 
 	resp, err := h.WebSelectCharacter(context.Background(), connect.NewRequest(&webv1.WebSelectCharacterRequest{
-		PlayerToken: "tok-abc",
+		PlayerSessionToken: "tok-abc",
 		CharacterId: "c2",
 	}))
 	require.NoError(t, err)
@@ -153,7 +151,7 @@ func TestWebSelectCharacter_RPCError(t *testing.T) {
 	h := NewHandler(client)
 
 	resp, err := h.WebSelectCharacter(context.Background(), connect.NewRequest(&webv1.WebSelectCharacterRequest{
-		PlayerToken: "tok-abc",
+		PlayerSessionToken: "tok-abc",
 		CharacterId: "c1",
 	}))
 	require.NoError(t, err)
@@ -167,7 +165,7 @@ func TestWebCreatePlayer_Success(t *testing.T) {
 	client := &mockCoreClient{
 		createPlayerResp: &corev1.CreatePlayerResponse{
 			Success:     true,
-			PlayerToken: "tok-new",
+			PlayerSessionToken: "tok-new",
 			Characters:  []*corev1.CharacterSummary{},
 		},
 	}
@@ -180,7 +178,7 @@ func TestWebCreatePlayer_Success(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.GetSuccess())
-	assert.Equal(t, "tok-new", resp.Msg.GetPlayerToken())
+	assert.Equal(t, "tok-new", resp.Msg.GetPlayerSessionToken())
 	assert.Equal(t, "tok-new", resp.Header().Get(headerSetSessionToken))
 }
 
@@ -232,7 +230,7 @@ func TestWebCreateCharacter_Success(t *testing.T) {
 	h := NewHandler(client)
 
 	resp, err := h.WebCreateCharacter(context.Background(), connect.NewRequest(&webv1.WebCreateCharacterRequest{
-		PlayerToken:   "tok-abc",
+		PlayerSessionToken:   "tok-abc",
 		CharacterName: "NewChar",
 	}))
 	require.NoError(t, err)
@@ -248,7 +246,7 @@ func TestWebCreateCharacter_RPCError(t *testing.T) {
 	h := NewHandler(client)
 
 	resp, err := h.WebCreateCharacter(context.Background(), connect.NewRequest(&webv1.WebCreateCharacterRequest{
-		PlayerToken:   "tok-abc",
+		PlayerSessionToken:   "tok-abc",
 		CharacterName: "Char",
 	}))
 	require.NoError(t, err)
@@ -270,7 +268,7 @@ func TestWebListCharacters_Success(t *testing.T) {
 	h := NewHandler(client)
 
 	resp, err := h.WebListCharacters(context.Background(), connect.NewRequest(&webv1.WebListCharactersRequest{
-		PlayerToken: "tok-abc",
+		PlayerSessionToken: "tok-abc",
 	}))
 	require.NoError(t, err)
 	assert.Len(t, resp.Msg.GetCharacters(), 2)
@@ -285,10 +283,13 @@ func TestWebListCharacters_RPCError(t *testing.T) {
 	h := NewHandler(client)
 
 	resp, err := h.WebListCharacters(context.Background(), connect.NewRequest(&webv1.WebListCharactersRequest{
-		PlayerToken: "tok-abc",
+		PlayerSessionToken: "tok-abc",
 	}))
-	require.NoError(t, err)
-	assert.Empty(t, resp.Msg.GetCharacters())
+	require.Error(t, err)
+	assert.Nil(t, resp)
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
 }
 
 // --- WebLogout ---
@@ -300,7 +301,7 @@ func TestWebLogout_Success(t *testing.T) {
 	h := NewHandler(client)
 
 	resp, err := h.WebLogout(context.Background(), connect.NewRequest(&webv1.WebLogoutRequest{
-		SessionId: "sess-123",
+		PlayerSessionToken: "sess-123",
 	}))
 	require.NoError(t, err)
 	assert.NotNil(t, resp.Msg)
@@ -314,7 +315,7 @@ func TestWebLogout_RPCError(t *testing.T) {
 	h := NewHandler(client)
 
 	resp, err := h.WebLogout(context.Background(), connect.NewRequest(&webv1.WebLogoutRequest{
-		SessionId: "sess-123",
+		PlayerSessionToken: "sess-123",
 	}))
 	require.NoError(t, err)
 	assert.NotNil(t, resp.Msg)
@@ -470,7 +471,6 @@ func TestCookieMiddleware_NoCookieNoHeader(t *testing.T) {
 func TestCookieMiddleware_SetsSessionCookieFromSignalHeader(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set(headerSetSessionToken, "new-token")
-		w.Header().Set(headerRememberMe, "true")
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -483,11 +483,10 @@ func TestCookieMiddleware_SetsSessionCookieFromSignalHeader(t *testing.T) {
 	require.Len(t, cookies, 1)
 	assert.Equal(t, cookieName, cookies[0].Name)
 	assert.Equal(t, "new-token", cookies[0].Value)
-	assert.Equal(t, cookieMaxAgeLong, cookies[0].MaxAge)
+	assert.Equal(t, cookieMaxAge, cookies[0].MaxAge)
 
-	// Signal headers should be stripped
+	// Signal header should be stripped
 	assert.Empty(t, rr.Header().Get(headerSetSessionToken))
-	assert.Empty(t, rr.Header().Get(headerRememberMe))
 }
 
 func TestCookieMiddleware_SetsSessionCookieShortLived(t *testing.T) {

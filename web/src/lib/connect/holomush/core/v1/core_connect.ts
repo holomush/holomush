@@ -150,7 +150,7 @@ export const CoreService = {
       kind: MethodKind.Unary,
     },
     /**
-     * End a web session.
+     * End a player session.
      *
      * @generated from rpc holomush.core.v1.CoreService.Logout
      */

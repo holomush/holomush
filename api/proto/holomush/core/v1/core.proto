@@ -59,7 +59,7 @@ service CoreService {
   // Confirm a password reset with token.
   rpc ConfirmPasswordReset(ConfirmPasswordResetRequest) returns (ConfirmPasswordResetResponse);
 
-  // End a web session.
+  // End a player session.
   rpc Logout(LogoutRequest) returns (LogoutResponse);
 }
 
@@ -171,14 +171,14 @@ message AuthenticatePlayerRequest {
 
 message AuthenticatePlayerResponse {
   bool success = 1;
-  string player_token = 2;
+  string player_session_token = 2;
   string error_message = 3;
   repeated CharacterSummary characters = 4;
   string default_character_id = 5;
 }
 
 message SelectCharacterRequest {
-  string player_token = 1;
+  string player_session_token = 1;
   string character_id = 2;
 }
 
@@ -199,13 +199,13 @@ message CreatePlayerRequest {
 
 message CreatePlayerResponse {
   bool success = 1;
-  string player_token = 2;
+  string player_session_token = 2;
   repeated CharacterSummary characters = 3;
   string error_message = 4;
 }
 
 message CreateCharacterRequest {
-  string player_token = 1;
+  string player_session_token = 1;
   string character_name = 2;
 }
 
@@ -217,7 +217,7 @@ message CreateCharacterResponse {
 }
 
 message ListCharactersRequest {
-  string player_token = 1;
+  string player_session_token = 1;
 }
 
 message ListCharactersResponse {
@@ -243,7 +243,7 @@ message ConfirmPasswordResetResponse {
 }
 
 message LogoutRequest {
-  string session_id = 1;
+  string player_session_token = 1;
 }
 
 message LogoutResponse {}

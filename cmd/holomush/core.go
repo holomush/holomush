@@ -299,9 +299,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	var resetService *auth.PasswordResetService
 	var characterService *auth.CharacterService
 	var authPlayerRepo *authpostgres.PlayerRepository
-	var authPlayerTokenRepo *store.PostgresPlayerTokenStore
+	var authPlayerSessionRepo *store.PostgresPlayerSessionStore
 	var authCharRepo *authCharRepoAdapter
-	var authSessionRepo *authpostgres.WebSessionRepository
 	var authResetRepo *authpostgres.PasswordResetRepository
 	var authHasher auth.PasswordHasher
 	var sessionStore *store.PostgresSessionStore // hoisted for hostfunc + gRPC wiring
@@ -363,19 +362,18 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 		// Wire auth services for two-phase login
 		authPlayerRepo = authpostgres.NewPlayerRepository(abacPool)
-		authSessionRepo = authpostgres.NewWebSessionRepository(abacPool)
 		authResetRepo = authpostgres.NewPasswordResetRepository(abacPool)
-		authPlayerTokenRepo = store.NewPostgresPlayerTokenStore(abacPool)
+		authPlayerSessionRepo = store.NewPostgresPlayerSessionStore(abacPool)
 		authHasher = auth.NewArgon2idHasher()
 
 		var authErr error
-		authService, authErr = auth.NewAuthServiceWithLogger(authPlayerRepo, authSessionRepo, authHasher, slog.Default())
+		authService, authErr = auth.NewAuthServiceWithLogger(authPlayerRepo, authPlayerSessionRepo, authHasher, slog.Default())
 		if authErr != nil {
 			return oops.Code("AUTH_SETUP_FAILED").Wrap(authErr)
 		}
 
 		var resetErr error
-		resetService, resetErr = auth.NewPasswordResetServiceWithLogger(authPlayerRepo, authResetRepo, authSessionRepo, authHasher, slog.Default())
+		resetService, resetErr = auth.NewPasswordResetServiceWithLogger(authPlayerRepo, authResetRepo, authPlayerSessionRepo, authHasher, slog.Default())
 		if resetErr != nil {
 			return oops.Code("AUTH_SETUP_FAILED").Wrap(resetErr)
 		}
@@ -556,11 +554,11 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		cmdRegistry := command.NewRegistry()
 		handlers.RegisterAll(cmdRegistry)
 		handlers.RegisterAdmin(cmdRegistry, handlers.AdminDeps{
-			PlayerRepo:  authPlayerRepo,
-			Hasher:      authHasher,
-			WebSessions: authSessionRepo,
-			ResetRepo:   authResetRepo,
-			CharLister:  authCharRepo,
+			PlayerRepo:     authPlayerRepo,
+			Hasher:         authHasher,
+			PlayerSessions: authPlayerSessionRepo,
+			ResetRepo:      authResetRepo,
+			CharLister:     authCharRepo,
 		})
 		aliasRepo := store.NewPostgresAliasRepository(realStore.Pool())
 		aliasCache := command.NewAliasCache()
@@ -704,7 +702,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			holoGRPC.WithAuthService(authService),
 			holoGRPC.WithResetService(resetService),
 			holoGRPC.WithCharacterService(characterService),
-			holoGRPC.WithPlayerTokenRepo(authPlayerTokenRepo),
+			holoGRPC.WithPlayerSessionRepo(authPlayerSessionRepo),
 			holoGRPC.WithPlayerRepo(authPlayerRepo),
 			holoGRPC.WithCharacterRepo(authCharRepo),
 			holoGRPC.WithSessionDefaults(holoGRPC.SessionDefaults{
