@@ -18,3 +18,7 @@
 </script>
 
 <span class="ansi-output">{@html html}</span>
+
+<style>
+  .ansi-output { white-space: pre-wrap; }
+</style>
