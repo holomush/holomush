@@ -41,7 +41,10 @@
     // Restore saved draft (or clear if none exists)
     const saved = localStorage.getItem(DRAFT_KEY_PREFIX + sessionId);
     text = saved ?? '';
-    requestAnimationFrame(autoGrow);
+    requestAnimationFrame(() => {
+      autoGrow();
+      if (textarea) textarea.focus();
+    });
 
     const captured = sessionId;
     client.getCommandHistory({ sessionId }).then((resp) => {

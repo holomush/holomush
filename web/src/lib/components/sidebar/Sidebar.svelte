@@ -46,7 +46,7 @@
     display: flex;
     flex-direction: column;
   }
-  .sidebar:not(.expanded) { width: 36px; }
+  .sidebar:not(.expanded) { width: 48px; }
   .sidebar.expanded { width: 220px; }
   .sidebar.overlay {
     position: absolute;
@@ -76,7 +76,7 @@
     padding: 8px 0;
     gap: 2px;
   }
-  .icon { font-size: 14px; }
+  .icon { font-size: 28px; }
   .badge { font-size: 8px; color: var(--color-status-text); margin-bottom: 4px; }
   .spacer { flex: 1; }
   .toggle {
