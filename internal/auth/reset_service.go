@@ -17,7 +17,7 @@ import (
 type PasswordResetService struct {
 	playerRepo PlayerRepository
 	resetRepo  PasswordResetRepository
-	sessions   WebSessionRepository
+	sessions   PlayerSessionRepository
 	hasher     PasswordHasher
 	logger     *slog.Logger
 }
@@ -27,7 +27,7 @@ type PasswordResetService struct {
 func NewPasswordResetService(
 	playerRepo PlayerRepository,
 	resetRepo PasswordResetRepository,
-	sessions WebSessionRepository,
+	sessions PlayerSessionRepository,
 	hasher PasswordHasher,
 ) (*PasswordResetService, error) {
 	if playerRepo == nil {
@@ -56,7 +56,7 @@ func NewPasswordResetService(
 func NewPasswordResetServiceWithLogger(
 	playerRepo PlayerRepository,
 	resetRepo PasswordResetRepository,
-	sessions WebSessionRepository,
+	sessions PlayerSessionRepository,
 	hasher PasswordHasher,
 	logger *slog.Logger,
 ) (*PasswordResetService, error) {

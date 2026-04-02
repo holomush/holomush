@@ -72,9 +72,10 @@ type GatewayHandler struct {
 	eventCh      chan *corev1.SubscribeResponse
 
 	// Two-phase auth state.
-	playerToken string                     // set after AuthenticatePlayer, cleared after SelectCharacter
-	characters  []*corev1.CharacterSummary // available characters while in selectMode
-	selectMode  bool                       // true when waiting for PLAY/CREATE
+	playerSessionToken string                     // set after AuthenticatePlayer, persists across character selection
+	characters         []*corev1.CharacterSummary // available characters while in selectMode
+	selectMode         bool                       // true when waiting for PLAY/CREATE
+	loggingOut         bool                       // true when LOGOUT initiated (close connection after quit)
 }
 
 // NewGatewayHandler creates a new GatewayHandler for the given connection.
@@ -169,7 +170,20 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 				// Wait for the STREAM_CLOSED control frame with "Goodbye!" before
 				// closing. The server sends it after processing quit.
 				h.drainUntilClosed(eventRecv)
-				return
+				if h.loggingOut || h.playerSessionToken == "" {
+					return // LOGOUT or guest: close connection
+				}
+				// QUIT: return to character picker
+				eventRecv = nil
+				h.sessionID = ""
+				h.connectionID = ""
+				h.charName = ""
+				h.authed = false
+				h.quitting = false
+				h.refreshCharacterList(childCtx)
+				h.selectMode = true
+				h.showCharacterList()
+				continue
 			}
 
 		case resp, ok := <-eventRecv:
@@ -186,6 +200,18 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 				if frame.Control.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED {
 					if msg := frame.Control.GetMessage(); msg != "" {
 						h.send(msg)
+					}
+					if h.playerSessionToken != "" {
+						// Server-initiated disconnect: return to character picker.
+						eventRecv = nil
+						h.sessionID = ""
+						h.connectionID = ""
+						h.charName = ""
+						h.authed = false
+						h.refreshCharacterList(childCtx)
+						h.selectMode = true
+						h.showCharacterList()
+						continue
 					}
 					return
 				}
@@ -205,10 +231,10 @@ func (h *GatewayHandler) processLine(ctx context.Context, line string) <-chan *c
 			return h.handlePlay(ctx, strings.TrimSpace(line[5:]))
 		case strings.HasPrefix(lower, "create "):
 			return h.handleCreate(ctx, strings.TrimSpace(line[7:]))
-		case lower == "quit":
-			h.handleQuit(ctx)
+		case lower == "quit" || lower == "logout":
+			h.handleLogout(ctx)
 		default:
-			h.send("Use PLAY <name|number> or CREATE <name>. Type QUIT to disconnect.")
+			h.send("Use PLAY <name|number> or CREATE <name>. Type QUIT to log out.")
 		}
 		return nil
 	}
@@ -224,6 +250,8 @@ func (h *GatewayHandler) processLine(ctx context.Context, line string) <-chan *c
 		h.handlePose(ctx, arg)
 	case "quit":
 		h.handleQuit(ctx)
+	case "logout":
+		h.handleLogout(ctx)
 	default:
 		if cmd != "" {
 			h.handleGenericCommand(ctx, cmd, arg)
@@ -319,7 +347,7 @@ func (h *GatewayHandler) handleConnectPlayer(ctx context.Context, username, pass
 		return nil
 	}
 
-	h.playerToken = resp.GetPlayerToken()
+	h.playerSessionToken = resp.GetPlayerSessionToken()
 	h.characters = resp.GetCharacters()
 	defaultID := resp.GetDefaultCharacterId()
 
@@ -374,8 +402,8 @@ func (h *GatewayHandler) handleCreate(ctx context.Context, name string) <-chan *
 	defer createCancel()
 
 	resp, err := h.client.CreateCharacter(createCtx, &corev1.CreateCharacterRequest{
-		PlayerToken:   h.playerToken,
-		CharacterName: name,
+		PlayerSessionToken: h.playerSessionToken,
+		CharacterName:      name,
 	})
 	if err != nil {
 		slog.Error("gateway: create character RPC failed", "error", err)
@@ -421,8 +449,8 @@ func (h *GatewayHandler) selectCharacter(ctx context.Context, ch *corev1.Charact
 	defer selCancel()
 
 	resp, err := h.client.SelectCharacter(selCtx, &corev1.SelectCharacterRequest{
-		PlayerToken: h.playerToken,
-		CharacterId: ch.GetCharacterId(),
+		PlayerSessionToken: h.playerSessionToken,
+		CharacterId:        ch.GetCharacterId(),
 	})
 	if err != nil {
 		slog.Error("gateway: select character RPC failed", "error", err)
@@ -438,7 +466,6 @@ func (h *GatewayHandler) selectCharacter(ctx context.Context, ch *corev1.Charact
 	h.charName = resp.GetCharacterName()
 	h.authed = true
 	h.selectMode = false
-	h.playerToken = ""
 	h.characters = nil
 
 	slog.DebugContext(ctx, "telnet: authentication success",
@@ -629,6 +656,41 @@ func (h *GatewayHandler) handleQuit(ctx context.Context) {
 		}
 	}
 	h.quitting = true
+}
+
+func (h *GatewayHandler) handleLogout(ctx context.Context) {
+	if h.authed {
+		// If playing a character, quit it first.
+		h.handleQuit(ctx)
+	}
+	h.loggingOut = true
+	if h.playerSessionToken != "" {
+		logoutCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+		defer cancel()
+		if _, err := h.client.Logout(logoutCtx, &corev1.LogoutRequest{
+			PlayerSessionToken: h.playerSessionToken,
+		}); err != nil {
+			slog.Warn("gateway: logout RPC failed", "error", err)
+		}
+	}
+	if !h.authed {
+		// Not playing a character, just close.
+		h.send("Goodbye!")
+		h.quitting = true
+	}
+}
+
+func (h *GatewayHandler) refreshCharacterList(ctx context.Context) {
+	listCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+	resp, err := h.client.ListCharacters(listCtx, &corev1.ListCharactersRequest{
+		PlayerSessionToken: h.playerSessionToken,
+	})
+	if err != nil {
+		h.send("Failed to refresh character list.")
+		return
+	}
+	h.characters = resp.GetCharacters()
 }
 
 // drainUntilClosed reads from the event channel until a STREAM_CLOSED

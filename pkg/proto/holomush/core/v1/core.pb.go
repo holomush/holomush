@@ -1141,7 +1141,7 @@ func (x *AuthenticatePlayerRequest) GetRememberMe() bool {
 type AuthenticatePlayerResponse struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Success            bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	PlayerToken        string                 `protobuf:"bytes,2,opt,name=player_token,json=playerToken,proto3" json:"player_token,omitempty"`
+	PlayerSessionToken string                 `protobuf:"bytes,2,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
 	ErrorMessage       string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	Characters         []*CharacterSummary    `protobuf:"bytes,4,rep,name=characters,proto3" json:"characters,omitempty"`
 	DefaultCharacterId string                 `protobuf:"bytes,5,opt,name=default_character_id,json=defaultCharacterId,proto3" json:"default_character_id,omitempty"`
@@ -1186,9 +1186,9 @@ func (x *AuthenticatePlayerResponse) GetSuccess() bool {
 	return false
 }
 
-func (x *AuthenticatePlayerResponse) GetPlayerToken() string {
+func (x *AuthenticatePlayerResponse) GetPlayerSessionToken() string {
 	if x != nil {
-		return x.PlayerToken
+		return x.PlayerSessionToken
 	}
 	return ""
 }
@@ -1215,11 +1215,11 @@ func (x *AuthenticatePlayerResponse) GetDefaultCharacterId() string {
 }
 
 type SelectCharacterRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerToken   string                 `protobuf:"bytes,1,opt,name=player_token,json=playerToken,proto3" json:"player_token,omitempty"`
-	CharacterId   string                 `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	PlayerSessionToken string                 `protobuf:"bytes,1,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	CharacterId        string                 `protobuf:"bytes,2,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *SelectCharacterRequest) Reset() {
@@ -1252,9 +1252,9 @@ func (*SelectCharacterRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{17}
 }
 
-func (x *SelectCharacterRequest) GetPlayerToken() string {
+func (x *SelectCharacterRequest) GetPlayerSessionToken() string {
 	if x != nil {
-		return x.PlayerToken
+		return x.PlayerSessionToken
 	}
 	return ""
 }
@@ -1411,13 +1411,13 @@ func (x *CreatePlayerRequest) GetCaptchaToken() string {
 }
 
 type CreatePlayerResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	PlayerToken   string                 `protobuf:"bytes,2,opt,name=player_token,json=playerToken,proto3" json:"player_token,omitempty"`
-	Characters    []*CharacterSummary    `protobuf:"bytes,3,rep,name=characters,proto3" json:"characters,omitempty"`
-	ErrorMessage  string                 `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Success            bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	PlayerSessionToken string                 `protobuf:"bytes,2,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	Characters         []*CharacterSummary    `protobuf:"bytes,3,rep,name=characters,proto3" json:"characters,omitempty"`
+	ErrorMessage       string                 `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *CreatePlayerResponse) Reset() {
@@ -1457,9 +1457,9 @@ func (x *CreatePlayerResponse) GetSuccess() bool {
 	return false
 }
 
-func (x *CreatePlayerResponse) GetPlayerToken() string {
+func (x *CreatePlayerResponse) GetPlayerSessionToken() string {
 	if x != nil {
-		return x.PlayerToken
+		return x.PlayerSessionToken
 	}
 	return ""
 }
@@ -1479,11 +1479,11 @@ func (x *CreatePlayerResponse) GetErrorMessage() string {
 }
 
 type CreateCharacterRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerToken   string                 `protobuf:"bytes,1,opt,name=player_token,json=playerToken,proto3" json:"player_token,omitempty"`
-	CharacterName string                 `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	PlayerSessionToken string                 `protobuf:"bytes,1,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	CharacterName      string                 `protobuf:"bytes,2,opt,name=character_name,json=characterName,proto3" json:"character_name,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *CreateCharacterRequest) Reset() {
@@ -1516,9 +1516,9 @@ func (*CreateCharacterRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{21}
 }
 
-func (x *CreateCharacterRequest) GetPlayerToken() string {
+func (x *CreateCharacterRequest) GetPlayerSessionToken() string {
 	if x != nil {
-		return x.PlayerToken
+		return x.PlayerSessionToken
 	}
 	return ""
 }
@@ -1599,10 +1599,10 @@ func (x *CreateCharacterResponse) GetErrorMessage() string {
 }
 
 type ListCharactersRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerToken   string                 `protobuf:"bytes,1,opt,name=player_token,json=playerToken,proto3" json:"player_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	PlayerSessionToken string                 `protobuf:"bytes,1,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ListCharactersRequest) Reset() {
@@ -1635,9 +1635,9 @@ func (*ListCharactersRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{23}
 }
 
-func (x *ListCharactersRequest) GetPlayerToken() string {
+func (x *ListCharactersRequest) GetPlayerSessionToken() string {
 	if x != nil {
-		return x.PlayerToken
+		return x.PlayerSessionToken
 	}
 	return ""
 }
@@ -1879,10 +1879,10 @@ func (x *ConfirmPasswordResetResponse) GetErrorMessage() string {
 }
 
 type LogoutRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	PlayerSessionToken string                 `protobuf:"bytes,1,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *LogoutRequest) Reset() {
@@ -1915,9 +1915,9 @@ func (*LogoutRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{29}
 }
 
-func (x *LogoutRequest) GetSessionId() string {
+func (x *LogoutRequest) GetPlayerSessionToken() string {
 	if x != nil {
-		return x.SessionId
+		return x.PlayerSessionToken
 	}
 	return ""
 }
@@ -2047,17 +2047,17 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x12#\n" +
 	"\rcaptcha_token\x18\x03 \x01(\tR\fcaptchaToken\x12\x1f\n" +
 	"\vremember_me\x18\x04 \x01(\bR\n" +
-	"rememberMe\"\xf4\x01\n" +
+	"rememberMe\"\x83\x02\n" +
 	"\x1aAuthenticatePlayerResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12!\n" +
-	"\fplayer_token\x18\x02 \x01(\tR\vplayerToken\x12#\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x120\n" +
+	"\x14player_session_token\x18\x02 \x01(\tR\x12playerSessionToken\x12#\n" +
 	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\x12B\n" +
 	"\n" +
 	"characters\x18\x04 \x03(\v2\".holomush.core.v1.CharacterSummaryR\n" +
 	"characters\x120\n" +
-	"\x14default_character_id\x18\x05 \x01(\tR\x12defaultCharacterId\"^\n" +
-	"\x16SelectCharacterRequest\x12!\n" +
-	"\fplayer_token\x18\x01 \x01(\tR\vplayerToken\x12!\n" +
+	"\x14default_character_id\x18\x05 \x01(\tR\x12defaultCharacterId\"m\n" +
+	"\x16SelectCharacterRequest\x120\n" +
+	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\x12!\n" +
 	"\fcharacter_id\x18\x02 \x01(\tR\vcharacterId\"\xbe\x01\n" +
 	"\x17SelectCharacterResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1d\n" +
@@ -2072,24 +2072,24 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x12\x14\n" +
 	"\x05email\x18\x03 \x01(\tR\x05email\x12#\n" +
-	"\rcaptcha_token\x18\x04 \x01(\tR\fcaptchaToken\"\xbc\x01\n" +
+	"\rcaptcha_token\x18\x04 \x01(\tR\fcaptchaToken\"\xcb\x01\n" +
 	"\x14CreatePlayerResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12!\n" +
-	"\fplayer_token\x18\x02 \x01(\tR\vplayerToken\x12B\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x120\n" +
+	"\x14player_session_token\x18\x02 \x01(\tR\x12playerSessionToken\x12B\n" +
 	"\n" +
 	"characters\x18\x03 \x03(\v2\".holomush.core.v1.CharacterSummaryR\n" +
 	"characters\x12#\n" +
-	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"b\n" +
-	"\x16CreateCharacterRequest\x12!\n" +
-	"\fplayer_token\x18\x01 \x01(\tR\vplayerToken\x12%\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"q\n" +
+	"\x16CreateCharacterRequest\x120\n" +
+	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\x12%\n" +
 	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\"\xa2\x01\n" +
 	"\x17CreateCharacterResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12!\n" +
 	"\fcharacter_id\x18\x02 \x01(\tR\vcharacterId\x12%\n" +
 	"\x0echaracter_name\x18\x03 \x01(\tR\rcharacterName\x12#\n" +
-	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\":\n" +
-	"\x15ListCharactersRequest\x12!\n" +
-	"\fplayer_token\x18\x01 \x01(\tR\vplayerToken\"\\\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"I\n" +
+	"\x15ListCharactersRequest\x120\n" +
+	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\"\\\n" +
 	"\x16ListCharactersResponse\x12B\n" +
 	"\n" +
 	"characters\x18\x01 \x03(\v2\".holomush.core.v1.CharacterSummaryR\n" +
@@ -2103,10 +2103,9 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\fnew_password\x18\x02 \x01(\tR\vnewPassword\"]\n" +
 	"\x1cConfirmPasswordResetResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
-	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\".\n" +
-	"\rLogoutRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"\x10\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"A\n" +
+	"\rLogoutRequest\x120\n" +
+	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\"\x10\n" +
 	"\x0eLogoutResponse*u\n" +
 	"\rControlSignal\x12\x1e\n" +
 	"\x1aCONTROL_SIGNAL_UNSPECIFIED\x10\x00\x12\"\n" +

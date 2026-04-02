@@ -57,11 +57,20 @@ type mockCoreClient struct {
 	cmdErr  error
 	cmdFn   func(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error)
 
-	subStream corev1.CoreService_SubscribeClient
-	subErr    error
+	subStream   corev1.CoreService_SubscribeClient
+	subErr      error
+	subscribeFn func(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error)
 
 	discResp *corev1.DisconnectResponse
 	discErr  error
+
+	logoutResp    *corev1.LogoutResponse
+	logoutErr     error
+	logoutCalled  bool
+	lastLogoutReq *corev1.LogoutRequest
+
+	listCharResp *corev1.ListCharactersResponse
+	listCharErr  error
 }
 
 func (m *mockCoreClient) Authenticate(_ context.Context, _ *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
@@ -87,6 +96,9 @@ func (m *mockCoreClient) CreateCharacter(_ context.Context, _ *corev1.CreateChar
 }
 
 func (m *mockCoreClient) ListCharacters(_ context.Context, _ *corev1.ListCharactersRequest) (*corev1.ListCharactersResponse, error) {
+	if m.listCharResp != nil || m.listCharErr != nil {
+		return m.listCharResp, m.listCharErr
+	}
 	return &corev1.ListCharactersResponse{}, nil
 }
 
@@ -98,7 +110,12 @@ func (m *mockCoreClient) ConfirmPasswordReset(_ context.Context, _ *corev1.Confi
 	return &corev1.ConfirmPasswordResetResponse{}, nil
 }
 
-func (m *mockCoreClient) Logout(_ context.Context, _ *corev1.LogoutRequest) (*corev1.LogoutResponse, error) {
+func (m *mockCoreClient) Logout(_ context.Context, req *corev1.LogoutRequest) (*corev1.LogoutResponse, error) {
+	m.logoutCalled = true
+	m.lastLogoutReq = req
+	if m.logoutResp != nil || m.logoutErr != nil {
+		return m.logoutResp, m.logoutErr
+	}
 	return &corev1.LogoutResponse{}, nil
 }
 
@@ -109,7 +126,10 @@ func (m *mockCoreClient) HandleCommand(ctx context.Context, req *corev1.HandleCo
 	return m.cmdResp, m.cmdErr
 }
 
-func (m *mockCoreClient) Subscribe(_ context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+func (m *mockCoreClient) Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+	if m.subscribeFn != nil {
+		return m.subscribeFn(ctx, req)
+	}
 	return m.subStream, m.subErr
 }
 
@@ -597,7 +617,7 @@ func TestGatewayHandler_TwoPhase_SingleCharAutoSelect(t *testing.T) {
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
 			Success:            true,
-			PlayerToken:        "tok-single",
+			PlayerSessionToken:        "tok-single",
 			Characters:         []*corev1.CharacterSummary{{CharacterId: "char-one", CharacterName: "Alaric"}},
 			DefaultCharacterId: "char-one",
 		},
@@ -648,7 +668,7 @@ func TestGatewayHandler_TwoPhase_MultiChar_ShowsListEntersSelectMode(t *testing.
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
 			Success:     true,
-			PlayerToken: "tok-multi",
+			PlayerSessionToken: "tok-multi",
 			Characters:  twoCharList(),
 		},
 		discResp: &corev1.DisconnectResponse{Success: true},
@@ -692,7 +712,7 @@ func TestGatewayHandler_TwoPhase_PlayByIndex(t *testing.T) {
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
 			Success:     true,
-			PlayerToken: "tok-idx",
+			PlayerSessionToken: "tok-idx",
 			Characters:  twoCharList(),
 		},
 		selectCharResp: &corev1.SelectCharacterResponse{
@@ -732,9 +752,9 @@ func TestGatewayHandler_TwoPhase_PlayByIndex(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, strings.TrimRight(line, "\r\n"), "Alaric")
 
-	// Verify the correct playerToken and characterId were sent to the server.
+	// Verify the correct playerSessionToken and characterId were sent to the server.
 	require.NotNil(t, client.lastSelectCharReq)
-	assert.Equal(t, "tok-idx", client.lastSelectCharReq.GetPlayerToken())
+	assert.Equal(t, "tok-idx", client.lastSelectCharReq.GetPlayerSessionToken())
 	assert.Equal(t, "char-alaric", client.lastSelectCharReq.GetCharacterId())
 
 	cancel()
@@ -749,7 +769,7 @@ func TestGatewayHandler_TwoPhase_PlayByName(t *testing.T) {
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
 			Success:     true,
-			PlayerToken: "tok-name",
+			PlayerSessionToken: "tok-name",
 			Characters:  twoCharList(),
 		},
 		selectCharResp: &corev1.SelectCharacterResponse{
@@ -802,7 +822,7 @@ func TestGatewayHandler_TwoPhase_PlayReattach(t *testing.T) {
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
 			Success:     true,
-			PlayerToken: "tok-reattach",
+			PlayerSessionToken: "tok-reattach",
 			Characters:  twoCharList(),
 		},
 		selectCharResp: &corev1.SelectCharacterResponse{
@@ -857,7 +877,7 @@ func TestGatewayHandler_TwoPhase_CreateCharacter(t *testing.T) {
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
 			Success:     true,
-			PlayerToken: "tok-create",
+			PlayerSessionToken: "tok-create",
 			Characters:  twoCharList(),
 		},
 		createCharResp: &corev1.CreateCharacterResponse{
@@ -915,7 +935,7 @@ func TestGatewayHandler_TwoPhase_InvalidCommandInSelectMode(t *testing.T) {
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
 			Success:     true,
-			PlayerToken: "tok-inv",
+			PlayerSessionToken: "tok-inv",
 			Characters:  twoCharList(),
 		},
 		discResp: &corev1.DisconnectResponse{Success: true},
@@ -1203,4 +1223,694 @@ func TestFormatEvent_Unknown_NoText(t *testing.T) {
 	}
 	got := h.formatEvent(ev)
 	assert.Equal(t, "<event: mystery>", got)
+}
+
+// --- QUIT / LOGOUT behaviour tests ---
+
+// chanSubscribeStream is a channel-backed subscribe stream for tests that need
+// to control event delivery timing (e.g., sending STREAM_CLOSED after quit).
+type chanSubscribeStream struct {
+	ch  chan *corev1.SubscribeResponse
+	ctx context.Context
+}
+
+func newChanSubscribeStream(ctx context.Context) *chanSubscribeStream {
+	return &chanSubscribeStream{
+		ch:  make(chan *corev1.SubscribeResponse, 8),
+		ctx: ctx,
+	}
+}
+
+func (s *chanSubscribeStream) Recv() (*corev1.SubscribeResponse, error) {
+	select {
+	case resp, ok := <-s.ch:
+		if !ok {
+			return nil, io.EOF
+		}
+		return resp, nil
+	case <-s.ctx.Done():
+		return nil, s.ctx.Err()
+	}
+}
+
+func (s *chanSubscribeStream) Header() (metadata.MD, error) { return nil, nil }
+func (s *chanSubscribeStream) Trailer() metadata.MD         { return nil }
+func (s *chanSubscribeStream) CloseSend() error             { return nil }
+func (s *chanSubscribeStream) Context() context.Context     { return s.ctx }
+func (s *chanSubscribeStream) SendMsg(any) error            { return nil }
+func (s *chanSubscribeStream) RecvMsg(any) error            { return nil }
+
+// streamClosedFrame returns a STREAM_CLOSED control frame with the given message.
+func streamClosedFrame(msg string) *corev1.SubscribeResponse {
+	return &corev1.SubscribeResponse{
+		Frame: &corev1.SubscribeResponse_Control{Control: &corev1.ControlFrame{
+			Signal:  corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED,
+			Message: msg,
+		}},
+	}
+}
+
+// TestQuitWhilePlaying_ReturnsToSelectMode verifies that QUIT while playing a
+// character drains the event stream, then returns to the character picker
+// instead of closing the connection.
+func TestQuitWhilePlaying_ReturnsToSelectMode(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream := newChanSubscribeStream(ctx)
+
+	var quitSent bool
+	client := &mockCoreClient{
+		authPlayerResp: &corev1.AuthenticatePlayerResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-quit",
+			Characters:         twoCharList(),
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
+			Success:       true,
+			SessionId:     "sess-quit",
+			CharacterName: "Alaric",
+		},
+		subscribeFn: func(_ context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+			return stream, nil
+		},
+		cmdFn: func(_ context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
+			if req.GetCommand() == "quit" {
+				quitSent = true
+				// Simulate server sending STREAM_CLOSED after processing quit.
+				go func() {
+					stream.ch <- streamClosedFrame("Goodbye!")
+				}()
+			}
+			return &corev1.HandleCommandResponse{Success: true}, nil
+		},
+		listCharResp: &corev1.ListCharactersResponse{Characters: twoCharList()},
+		discResp:     &corev1.DisconnectResponse{Success: true},
+	}
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	reset := withDeadline(t, clientConn)
+	defer reset()
+
+	r := bufio.NewReader(clientConn)
+	readLines(t, r, 2) // banner
+
+	// Login → selectMode
+	_, err := clientConn.Write([]byte("connect alice secret\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "play")
+
+	// Select character
+	_, err = clientConn.Write([]byte("play 1\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "Alaric")
+
+	// Quit while playing — should return to selectMode
+	_, err = clientConn.Write([]byte("quit\n"))
+	require.NoError(t, err)
+
+	// Should see "Goodbye!" from drain, then character list again.
+	lines := readLinesUntil(t, r, "play")
+	combined := strings.Join(lines, "\n")
+	assert.Contains(t, combined, "Goodbye!")
+	assert.Contains(t, combined, "Alaric")
+	assert.Contains(t, combined, "Beatrix")
+	assert.True(t, quitSent, "quit command should have been sent to server")
+
+	cancel()
+	<-done
+}
+
+// TestQuitInSelectMode_LogsOut verifies that QUIT in selectMode calls
+// the Logout RPC and closes the connection.
+func TestQuitInSelectMode_LogsOut(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	client := &mockCoreClient{
+		authPlayerResp: &corev1.AuthenticatePlayerResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-sel-quit",
+			Characters:         twoCharList(),
+		},
+		discResp: &corev1.DisconnectResponse{Success: true},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	reset := withDeadline(t, clientConn)
+	defer reset()
+
+	r := bufio.NewReader(clientConn)
+	readLines(t, r, 2) // banner
+
+	_, err := clientConn.Write([]byte("connect alice secret\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "play")
+
+	// QUIT in selectMode → should logout and close
+	_, err = clientConn.Write([]byte("quit\n"))
+	require.NoError(t, err)
+
+	// Should see "Goodbye!" and then the handler should exit.
+	line, err := r.ReadString('\n')
+	require.NoError(t, err)
+	assert.Contains(t, strings.TrimRight(line, "\r\n"), "Goodbye!")
+
+	assert.True(t, client.logoutCalled, "Logout RPC should be called")
+	require.NotNil(t, client.lastLogoutReq)
+	assert.Equal(t, "tok-sel-quit", client.lastLogoutReq.GetPlayerSessionToken())
+
+	select {
+	case <-done:
+		// expected — handler exited
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not exit after QUIT in selectMode")
+	}
+}
+
+// TestLogoutWhilePlaying verifies that LOGOUT while playing sends quit to the
+// server and calls the Logout RPC, then closes the connection.
+func TestLogoutWhilePlaying(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream := newChanSubscribeStream(ctx)
+
+	var quitSent bool
+	client := &mockCoreClient{
+		authPlayerResp: &corev1.AuthenticatePlayerResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-logout",
+			Characters:         twoCharList(),
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
+			Success:       true,
+			SessionId:     "sess-logout",
+			CharacterName: "Alaric",
+		},
+		subscribeFn: func(_ context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+			return stream, nil
+		},
+		cmdFn: func(_ context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
+			if req.GetCommand() == "quit" {
+				quitSent = true
+				go func() {
+					stream.ch <- streamClosedFrame("Goodbye!")
+				}()
+			}
+			return &corev1.HandleCommandResponse{Success: true}, nil
+		},
+		discResp: &corev1.DisconnectResponse{Success: true},
+	}
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	reset := withDeadline(t, clientConn)
+	defer reset()
+
+	r := bufio.NewReader(clientConn)
+	readLines(t, r, 2) // banner
+
+	_, err := clientConn.Write([]byte("connect alice secret\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "play")
+
+	_, err = clientConn.Write([]byte("play 1\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "Alaric")
+
+	// LOGOUT while playing — should quit + logout + close
+	_, err = clientConn.Write([]byte("logout\n"))
+	require.NoError(t, err)
+
+	// Drain remaining output.
+	go func() {
+		for {
+			_, readErr := r.ReadString('\n')
+			if readErr != nil {
+				return
+			}
+		}
+	}()
+
+	select {
+	case <-done:
+		// expected — handler exited
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not exit after LOGOUT while playing")
+	}
+
+	assert.True(t, quitSent, "quit command should have been forwarded")
+	assert.True(t, client.logoutCalled, "Logout RPC should be called")
+	require.NotNil(t, client.lastLogoutReq)
+	assert.Equal(t, "tok-logout", client.lastLogoutReq.GetPlayerSessionToken())
+}
+
+// TestHandleLogout_WhenNotAuthed_GuestPath verifies that LOGOUT when not
+// authenticated (no playerSessionToken) sends "Goodbye!" and closes.
+func TestHandleLogout_WhenNotAuthed_GuestPath(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	client := &mockCoreClient{
+		discResp: &corev1.DisconnectResponse{Success: true},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	reset := withDeadline(t, clientConn)
+	defer reset()
+
+	r := bufio.NewReader(clientConn)
+	readLines(t, r, 2) // banner
+
+	// Guest not connected yet — send logout. Since there's no playerSessionToken
+	// and not authed, handleLogout sends "Goodbye!" and sets quitting = true.
+	_, err := clientConn.Write([]byte("logout\n"))
+	require.NoError(t, err)
+
+	line, err := r.ReadString('\n')
+	require.NoError(t, err)
+	assert.Contains(t, strings.TrimRight(line, "\r\n"), "Goodbye!")
+
+	// Handler should exit since loggingOut && no playerSessionToken.
+	select {
+	case <-done:
+		// expected
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not exit after LOGOUT when not authed")
+	}
+
+	// Logout RPC should NOT be called since there's no playerSessionToken.
+	assert.False(t, client.logoutCalled, "Logout RPC should not be called without session token")
+}
+
+// TestHandleLogout_LogoutRPCError verifies that a Logout RPC error does not
+// prevent the handler from sending "Goodbye!" and exiting.
+func TestHandleLogout_LogoutRPCError(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	client := &mockCoreClient{
+		authPlayerResp: &corev1.AuthenticatePlayerResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-logout-err",
+			Characters:         twoCharList(),
+		},
+		logoutResp: nil,
+		logoutErr:  errors.New("timeout"),
+		discResp:   &corev1.DisconnectResponse{Success: true},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	reset := withDeadline(t, clientConn)
+	defer reset()
+
+	r := bufio.NewReader(clientConn)
+	readLines(t, r, 2) // banner
+
+	_, err := clientConn.Write([]byte("connect alice secret\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "play")
+
+	// LOGOUT in selectMode — Logout RPC will fail
+	_, err = clientConn.Write([]byte("logout\n"))
+	require.NoError(t, err)
+
+	line, err := r.ReadString('\n')
+	require.NoError(t, err)
+	assert.Contains(t, strings.TrimRight(line, "\r\n"), "Goodbye!")
+
+	// Despite the error, logout was attempted.
+	assert.True(t, client.logoutCalled, "Logout RPC should have been called even though it failed")
+
+	select {
+	case <-done:
+		// expected — handler exited
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not exit after LOGOUT with RPC error")
+	}
+}
+
+// TestRefreshCharacterList_Success verifies that after QUIT in playing mode,
+// refreshCharacterList is called and the new character list is displayed.
+func TestRefreshCharacterList_Success(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream := newChanSubscribeStream(ctx)
+
+	updatedChars := []*corev1.CharacterSummary{
+		{CharacterId: "char-alaric", CharacterName: "Alaric", HasActiveSession: false},
+		{CharacterId: "char-beatrix", CharacterName: "Beatrix", HasActiveSession: false},
+		{CharacterId: "char-new", CharacterName: "Celeste", HasActiveSession: false},
+	}
+
+	client := &mockCoreClient{
+		authPlayerResp: &corev1.AuthenticatePlayerResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-refresh",
+			Characters:         twoCharList(),
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
+			Success:       true,
+			SessionId:     "sess-refresh",
+			CharacterName: "Alaric",
+		},
+		subscribeFn: func(_ context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+			return stream, nil
+		},
+		cmdFn: func(_ context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
+			if req.GetCommand() == "quit" {
+				go func() {
+					stream.ch <- streamClosedFrame("Goodbye!")
+				}()
+			}
+			return &corev1.HandleCommandResponse{Success: true}, nil
+		},
+		// After refresh, return an updated list (includes Celeste).
+		listCharResp: &corev1.ListCharactersResponse{Characters: updatedChars},
+		discResp:     &corev1.DisconnectResponse{Success: true},
+	}
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	reset := withDeadline(t, clientConn)
+	defer reset()
+
+	r := bufio.NewReader(clientConn)
+	readLines(t, r, 2) // banner
+
+	_, err := clientConn.Write([]byte("connect alice secret\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "play")
+
+	_, err = clientConn.Write([]byte("play 1\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "Alaric")
+
+	_, err = clientConn.Write([]byte("quit\n"))
+	require.NoError(t, err)
+
+	// Should see the refreshed character list including Celeste.
+	lines := readLinesUntil(t, r, "play")
+	combined := strings.Join(lines, "\n")
+	assert.Contains(t, combined, "Celeste", "refreshed character list should include new character")
+
+	cancel()
+	<-done
+}
+
+// TestRefreshCharacterList_Error verifies that when ListCharacters fails,
+// an error is shown and selectMode still activates with an empty list.
+func TestRefreshCharacterList_Error(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream := newChanSubscribeStream(ctx)
+
+	client := &mockCoreClient{
+		authPlayerResp: &corev1.AuthenticatePlayerResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-refresh-err",
+			Characters:         twoCharList(),
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
+			Success:       true,
+			SessionId:     "sess-refresh-err",
+			CharacterName: "Alaric",
+		},
+		subscribeFn: func(_ context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+			return stream, nil
+		},
+		cmdFn: func(_ context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
+			if req.GetCommand() == "quit" {
+				go func() {
+					stream.ch <- streamClosedFrame("Goodbye!")
+				}()
+			}
+			return &corev1.HandleCommandResponse{Success: true}, nil
+		},
+		listCharErr: errors.New("database connection lost"),
+		discResp:    &corev1.DisconnectResponse{Success: true},
+	}
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	reset := withDeadline(t, clientConn)
+	defer reset()
+
+	r := bufio.NewReader(clientConn)
+	readLines(t, r, 2) // banner
+
+	_, err := clientConn.Write([]byte("connect alice secret\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "play")
+
+	_, err = clientConn.Write([]byte("play 1\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "Alaric")
+
+	_, err = clientConn.Write([]byte("quit\n"))
+	require.NoError(t, err)
+
+	// Should see error about failing to refresh, then an empty character list.
+	lines := readLinesUntil(t, r, "play")
+	combined := strings.Join(lines, "\n")
+	assert.Contains(t, strings.ToLower(combined), "failed to refresh",
+		"should indicate refresh failure")
+
+	cancel()
+	<-done
+}
+
+// TestLogoutCommand_InSelectMode verifies that "logout" in selectMode dispatches
+// to handleLogout (same as "quit" in selectMode).
+func TestLogoutCommand_InSelectMode(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	client := &mockCoreClient{
+		authPlayerResp: &corev1.AuthenticatePlayerResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-sel-logout",
+			Characters:         twoCharList(),
+		},
+		discResp: &corev1.DisconnectResponse{Success: true},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	reset := withDeadline(t, clientConn)
+	defer reset()
+
+	r := bufio.NewReader(clientConn)
+	readLines(t, r, 2) // banner
+
+	_, err := clientConn.Write([]byte("connect alice secret\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "play")
+
+	// Send "logout" (not "quit") while in selectMode
+	_, err = clientConn.Write([]byte("logout\n"))
+	require.NoError(t, err)
+
+	line, err := r.ReadString('\n')
+	require.NoError(t, err)
+	assert.Contains(t, strings.TrimRight(line, "\r\n"), "Goodbye!")
+
+	assert.True(t, client.logoutCalled, "Logout RPC should be called for 'logout' command")
+	require.NotNil(t, client.lastLogoutReq)
+	assert.Equal(t, "tok-sel-logout", client.lastLogoutReq.GetPlayerSessionToken())
+
+	select {
+	case <-done:
+		// expected
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not exit after LOGOUT in selectMode")
+	}
+}
+
+// TestServerInitiated_StreamClosed_ReturnsToSelectMode verifies that a
+// server-initiated STREAM_CLOSED while playing returns to the character picker
+// (when the player has a session token).
+func TestServerInitiated_StreamClosed_ReturnsToSelectMode(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream := newChanSubscribeStream(ctx)
+
+	client := &mockCoreClient{
+		authPlayerResp: &corev1.AuthenticatePlayerResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-server-close",
+			Characters:         twoCharList(),
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
+			Success:       true,
+			SessionId:     "sess-server-close",
+			CharacterName: "Alaric",
+		},
+		subscribeFn: func(_ context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+			return stream, nil
+		},
+		listCharResp: &corev1.ListCharactersResponse{Characters: twoCharList()},
+		discResp:     &corev1.DisconnectResponse{Success: true},
+	}
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	reset := withDeadline(t, clientConn)
+	defer reset()
+
+	r := bufio.NewReader(clientConn)
+	readLines(t, r, 2) // banner
+
+	_, err := clientConn.Write([]byte("connect alice secret\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "play")
+
+	_, err = clientConn.Write([]byte("play 1\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "Alaric")
+
+	// Server initiates STREAM_CLOSED (not from quit).
+	stream.ch <- streamClosedFrame("Server restarting.")
+
+	// Should return to character picker.
+	lines := readLinesUntil(t, r, "play")
+	combined := strings.Join(lines, "\n")
+	assert.Contains(t, combined, "Server restarting.")
+	assert.Contains(t, combined, "Alaric", "character list should be shown after server-initiated disconnect")
+
+	cancel()
+	<-done
+}
+
+// TestPlayerSessionTokenSurvivesPlay verifies that playerSessionToken is NOT
+// cleared after selecting a character, allowing return to selectMode.
+func TestPlayerSessionTokenSurvivesPlay(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	client := &mockCoreClient{
+		authPlayerResp: &corev1.AuthenticatePlayerResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-persist",
+			Characters:         twoCharList(),
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
+			Success:       true,
+			SessionId:     "sess-persist",
+			CharacterName: "Alaric",
+		},
+		subErr:   errors.New("no subscribe"),
+		discResp: &corev1.DisconnectResponse{Success: true},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	reset := withDeadline(t, clientConn)
+	defer reset()
+
+	r := bufio.NewReader(clientConn)
+	readLines(t, r, 2) // banner
+
+	_, err := clientConn.Write([]byte("connect alice secret\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "play")
+
+	_, err = clientConn.Write([]byte("play 1\n"))
+	require.NoError(t, err)
+	readLinesUntil(t, r, "Alaric")
+
+	// After PLAY, the token must still be set.
+	assert.Equal(t, "tok-persist", handler.playerSessionToken,
+		"playerSessionToken must persist after character selection")
+
+	cancel()
+	<-done
 }

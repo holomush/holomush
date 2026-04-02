@@ -14,7 +14,6 @@
 
   let username = $state('');
   let password = $state('');
-  let rememberMe = $state(false);
   let error = $state('');
   let loading = $state(false);
 
@@ -26,13 +25,13 @@
     error = '';
     loading = true;
     try {
-      const resp = await client.webAuthenticatePlayer({ username, password, rememberMe });
+      const resp = await client.webAuthenticatePlayer({ username, password });
       if (resp.success) {
-        setPlayerAuth(resp.playerToken, username);
+        setPlayerAuth(resp.playerSessionToken, username);
         const autoCharId = resp.defaultCharacterId || (resp.characters.length === 1 ? resp.characters[0].characterId : '');
         if (autoCharId) {
           const selectResp = await client.webSelectCharacter({
-            playerToken: resp.playerToken,
+            playerSessionToken: resp.playerSessionToken,
             characterId: autoCharId,
           });
           if (selectResp.success) {
@@ -108,10 +107,6 @@
     </label>
 
     <div class="row">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={rememberMe} />
-        <span>Remember me</span>
-      </label>
       <a href="/reset" class="forgot">Forgot password?</a>
     </div>
 
@@ -207,16 +202,6 @@
   .row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-  }
-
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--color-input-text);
-    cursor: pointer;
   }
 
   .forgot {

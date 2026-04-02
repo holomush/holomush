@@ -38,7 +38,7 @@ func (m *mockCharLister) ListByPlayer(ctx context.Context, playerID ulid.ULID) (
 type resetTestSetup struct {
 	playerRepo  *authmocks.MockPlayerRepository
 	hasher      *authmocks.MockPasswordHasher
-	webSessions *authmocks.MockWebSessionRepository
+	playerSessions *authmocks.MockPlayerSessionRepository
 	resetRepo   *authmocks.MockPasswordResetRepository
 	charLister  *mockCharLister
 	sessionMgr  *session.MemStore
@@ -53,7 +53,7 @@ func newResetTestSetup(t *testing.T) *resetTestSetup {
 	return &resetTestSetup{
 		playerRepo:  authmocks.NewMockPlayerRepository(t),
 		hasher:      authmocks.NewMockPasswordHasher(t),
-		webSessions: authmocks.NewMockWebSessionRepository(t),
+		playerSessions: authmocks.NewMockPlayerSessionRepository(t),
 		resetRepo:   authmocks.NewMockPasswordResetRepository(t),
 		charLister:  &mockCharLister{},
 		sessionMgr:  session.NewMemStore(),
@@ -68,7 +68,7 @@ func (s *resetTestSetup) deps() AdminDeps {
 	return AdminDeps{
 		PlayerRepo:  s.playerRepo,
 		Hasher:      s.hasher,
-		WebSessions: s.webSessions,
+		PlayerSessions: s.playerSessions,
 		ResetRepo:   s.resetRepo,
 		CharLister:  s.charLister,
 	}
@@ -128,7 +128,7 @@ func TestResetPassword(t *testing.T) {
 		s.hasher.EXPECT().Hash(mock.AnythingOfType("string")).Return("hashed-pw", nil)
 		s.playerRepo.EXPECT().UpdatePasswordAndClearLockout(ctx, s.targetID, "hashed-pw").Return(nil)
 		s.resetRepo.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
-		s.webSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
+		s.playerSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
 
 		handler := NewResetPasswordHandler(s.deps())
 		e := s.execAllowAll(t, "targetuser")
@@ -147,7 +147,7 @@ func TestResetPassword(t *testing.T) {
 		s.hasher.EXPECT().Hash("newpassword1").Return("hashed-pw", nil)
 		s.playerRepo.EXPECT().UpdatePasswordAndClearLockout(ctx, s.targetID, "hashed-pw").Return(nil)
 		s.resetRepo.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
-		s.webSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
+		s.playerSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
 
 		handler := NewResetPasswordHandler(s.deps())
 		e := s.execAllowAll(t, "targetuser newpassword1")
@@ -177,7 +177,7 @@ func TestResetPassword(t *testing.T) {
 		s.hasher.EXPECT().Hash(mock.AnythingOfType("string")).Return("hashed-pw", nil)
 		s.playerRepo.EXPECT().UpdatePasswordAndClearLockout(ctx, s.targetID, "hashed-pw").Return(nil)
 		s.resetRepo.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
-		s.webSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
+		s.playerSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
 		s.charLister.On("ListByPlayer", ctx, s.targetID).Return([]*world.Character{
 			{ID: char1ID, Name: "Char1"},
 			{ID: char2ID, Name: "Char2"},
@@ -215,7 +215,7 @@ func TestResetPassword(t *testing.T) {
 		s.hasher.EXPECT().Hash("mypassword").Return("hashed-pw", nil)
 		s.playerRepo.EXPECT().UpdatePasswordAndClearLockout(ctx, s.targetID, "hashed-pw").Return(nil)
 		s.resetRepo.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
-		s.webSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
+		s.playerSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
 		s.charLister.On("ListByPlayer", ctx, s.targetID).Return([]*world.Character{
 			{ID: char1ID, Name: "Char1"},
 		}, nil)
@@ -242,7 +242,7 @@ func TestResetPassword(t *testing.T) {
 		s.hasher.EXPECT().Hash("mypassword").Return("hashed-pw", nil)
 		s.playerRepo.EXPECT().UpdatePasswordAndClearLockout(ctx, s.targetID, "hashed-pw").Return(nil)
 		s.resetRepo.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
-		s.webSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
+		s.playerSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
 		s.charLister.On("ListByPlayer", ctx, s.targetID).Return([]*world.Character{}, nil)
 
 		handler := NewResetPasswordHandler(s.deps())
@@ -323,7 +323,7 @@ func TestResetPassword(t *testing.T) {
 		s.hasher.EXPECT().Hash(mock.AnythingOfType("string")).Return("hashed-pw", nil)
 		s.playerRepo.EXPECT().UpdatePasswordAndClearLockout(ctx, s.playerID, "hashed-pw").Return(nil)
 		s.resetRepo.EXPECT().DeleteByPlayer(ctx, s.playerID).Return(nil)
-		s.webSessions.EXPECT().DeleteByPlayer(ctx, s.playerID).Return(nil)
+		s.playerSessions.EXPECT().DeleteByPlayer(ctx, s.playerID).Return(nil)
 
 		handler := NewResetPasswordHandler(s.deps())
 		e := s.execAllowAll(t, "adminuser")
@@ -386,7 +386,7 @@ func TestResetPassword(t *testing.T) {
 		s.hasher.EXPECT().Hash(mock.AnythingOfType("string")).Return("hashed-pw", nil)
 		s.playerRepo.EXPECT().UpdatePasswordAndClearLockout(ctx, s.targetID, "hashed-pw").Return(nil)
 		s.resetRepo.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
-		s.webSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(errors.New("session error"))
+		s.playerSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(errors.New("session error"))
 
 		handler := NewResetPasswordHandler(s.deps())
 		e := s.execAllowAll(t, "targetuser")
@@ -405,7 +405,7 @@ func TestResetPassword(t *testing.T) {
 		s.hasher.EXPECT().Hash(mock.AnythingOfType("string")).Return("hashed-pw", nil)
 		s.playerRepo.EXPECT().UpdatePasswordAndClearLockout(ctx, s.targetID, "hashed-pw").Return(nil)
 		s.resetRepo.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
-		s.webSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
+		s.playerSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
 		s.charLister.On("ListByPlayer", ctx, s.targetID).Return([]*world.Character{
 			{ID: char1ID, Name: "Char1"},
 		}, nil)
@@ -425,7 +425,7 @@ func TestResetPassword(t *testing.T) {
 		s.hasher.EXPECT().Hash(mock.AnythingOfType("string")).Return("hashed-pw", nil)
 		s.playerRepo.EXPECT().UpdatePasswordAndClearLockout(ctx, s.targetID, "hashed-pw").Return(nil)
 		s.resetRepo.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(errors.New("cleanup error"))
-		s.webSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
+		s.playerSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
 
 		handler := NewResetPasswordHandler(s.deps())
 		e := s.execAllowAll(t, "targetuser")
@@ -445,7 +445,7 @@ func TestResetPassword(t *testing.T) {
 		// UpdatePasswordAndClearLockout atomically clears lockout — no separate Update needed.
 		s.playerRepo.EXPECT().UpdatePasswordAndClearLockout(ctx, s.targetID, "hashed-pw").Return(nil)
 		s.resetRepo.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
-		s.webSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
+		s.playerSessions.EXPECT().DeleteByPlayer(ctx, s.targetID).Return(nil)
 
 		handler := NewResetPasswordHandler(s.deps())
 		e := s.execAllowAll(t, "targetuser")

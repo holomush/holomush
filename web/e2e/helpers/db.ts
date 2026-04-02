@@ -41,17 +41,18 @@ export async function getPlayerByUsername(username: string): Promise<DbPlayer | 
   return rows[0] ?? null;
 }
 
-// ── Player token queries ────────────────────────────────────────
+// ── Player session queries ──────────────────────────────────────
 
-export interface DbPlayerToken {
-  token: string;
+export interface DbPlayerSession {
+  id: string;
   player_id: string;
+  token_hash: string;
   expires_at: Date;
 }
 
-export async function getPlayerTokens(playerId: string): Promise<DbPlayerToken[]> {
-  const { rows } = await getPool().query<DbPlayerToken>(
-    'SELECT token, player_id, expires_at FROM player_tokens WHERE player_id = $1 AND expires_at > now()',
+export async function getPlayerSessions(playerId: string): Promise<DbPlayerSession[]> {
+  const { rows } = await getPool().query<DbPlayerSession>(
+    'SELECT id, player_id, token_hash, expires_at FROM player_sessions WHERE player_id = $1 AND expires_at > now()',
     [playerId],
   );
   return rows;
@@ -210,22 +211,6 @@ export async function getPlayerPasswordHash(playerId: string): Promise<string | 
     [playerId],
   );
   return rows[0]?.password_hash ?? null;
-}
-
-// ── Web session queries ────────────────────────────────────────
-
-export interface DbWebSession {
-  id: string;
-  player_id: string;
-  expires_at: Date;
-}
-
-export async function getWebSessionsByPlayerId(playerId: string): Promise<DbWebSession[]> {
-  const { rows } = await getPool().query<DbWebSession>(
-    'SELECT id, player_id, expires_at FROM web_sessions WHERE player_id = $1',
-    [playerId],
-  );
-  return rows;
 }
 
 // ── Role queries ───────────────────────────────────────────────

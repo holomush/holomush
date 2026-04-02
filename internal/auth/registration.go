@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"time"
 
 	"github.com/samber/oops"
 )
@@ -100,18 +99,17 @@ func (s *Service) ValidateCredentials(ctx context.Context, username, password st
 // CreatePlayer creates a new player account with the given credentials.
 // Validates the username and password, checks for username availability,
 // hashes the password, and persists the new player.
-// Returns the created Player and a short-lived PlayerToken for character selection.
-// NOTE: The returned PlayerToken is not persisted here — the caller (gRPC handler)
-// is responsible for storing it via PlayerTokenRepository.Create.
-func (s *Service) CreatePlayer(ctx context.Context, username, password, email string) (*Player, *PlayerToken, error) {
+// Returns the created Player, a PlayerSession, and the raw session token.
+// The raw token is needed by the caller (gRPC handler) for the RPC response.
+func (s *Service) CreatePlayer(ctx context.Context, username, password, email string) (*Player, *PlayerSession, string, error) {
 	if err := ValidateUsername(username); err != nil {
-		return nil, nil, oops.Code("REGISTER_INVALID_USERNAME").
+		return nil, nil, "", oops.Code("REGISTER_INVALID_USERNAME").
 			With("username", username).
 			With("reason", err.Error()).
 			Errorf("invalid username")
 	}
 	if err := ValidatePassword(password); err != nil {
-		return nil, nil, oops.Code("REGISTER_INVALID_PASSWORD").
+		return nil, nil, "", oops.Code("REGISTER_INVALID_PASSWORD").
 			With("reason", err.Error()).
 			Errorf("invalid password")
 	}
@@ -119,19 +117,19 @@ func (s *Service) CreatePlayer(ctx context.Context, username, password, email st
 	// Check if username is already taken
 	_, err := s.players.GetByUsername(ctx, username)
 	if err == nil {
-		return nil, nil, oops.Code("REGISTER_USERNAME_TAKEN").
+		return nil, nil, "", oops.Code("REGISTER_USERNAME_TAKEN").
 			With("username", username).
 			Errorf("username %q is already taken", username)
 	}
 	if !errors.Is(err, ErrNotFound) {
-		return nil, nil, oops.Code("REGISTER_FAILED").
+		return nil, nil, "", oops.Code("REGISTER_FAILED").
 			With("operation", "check username availability").
 			Wrap(err)
 	}
 
 	hashedPassword, err := s.hasher.Hash(password)
 	if err != nil {
-		return nil, nil, oops.Code("REGISTER_FAILED").
+		return nil, nil, "", oops.Code("REGISTER_FAILED").
 			With("operation", "hash password").
 			Wrap(err)
 	}
@@ -143,7 +141,7 @@ func (s *Service) CreatePlayer(ctx context.Context, username, password, email st
 
 	player, err := NewPlayer(username, emailPtr, hashedPassword)
 	if err != nil {
-		return nil, nil, oops.Code("REGISTER_FAILED").
+		return nil, nil, "", oops.Code("REGISTER_FAILED").
 			With("operation", "create player").
 			Wrap(err)
 	}
@@ -155,21 +153,28 @@ func (s *Service) CreatePlayer(ctx context.Context, username, password, email st
 		if strings.Contains(errMsg, "duplicate") ||
 			strings.Contains(errMsg, "unique_violation") ||
 			strings.Contains(errMsg, "23505") {
-			return nil, nil, oops.Code("REGISTER_USERNAME_TAKEN").
+			return nil, nil, "", oops.Code("REGISTER_USERNAME_TAKEN").
 				With("username", username).
 				Errorf("username %q is already taken", username)
 		}
-		return nil, nil, oops.Code("REGISTER_FAILED").
+		return nil, nil, "", oops.Code("REGISTER_FAILED").
 			With("operation", "persist player").
 			Wrap(createErr)
 	}
 
-	token, err := NewPlayerToken(player.ID, 5*time.Minute)
+	rawToken, tokenHash, err := GenerateSessionToken()
 	if err != nil {
-		return nil, nil, oops.Code("REGISTER_FAILED").
-			With("operation", "generate player token").
+		return nil, nil, "", oops.Code("REGISTER_FAILED").
+			With("operation", "generate session token").
 			Wrap(err)
 	}
 
-	return player, token, nil
+	session, err := NewPlayerSession(player.ID, tokenHash, "", "", PlayerSessionTTL)
+	if err != nil {
+		return nil, nil, "", oops.Code("REGISTER_FAILED").
+			With("operation", "create player session").
+			Wrap(err)
+	}
+
+	return player, session, rawToken, nil
 }

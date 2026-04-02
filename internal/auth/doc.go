@@ -5,10 +5,10 @@
 //
 // # Domain Types
 //
-// Domain types (Player, WebSession, PasswordReset) should be created
+// Domain types (Player, PlayerSession, PasswordReset) should be created
 // using their respective constructors:
 //   - NewPlayer - creates a Player with validated username and password hash
-//   - NewWebSession - creates a WebSession with validated player and expiry
+//   - NewPlayerSession - creates a PlayerSession with validated player and token hash
 //   - NewPasswordReset - creates a PasswordReset with validated player and expiry
 //
 // Direct struct initialization bypasses validation and may create invalid state.

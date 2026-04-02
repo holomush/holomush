@@ -116,8 +116,8 @@ type CoreServer struct {
 	authService      AuthServiceProvider
 	resetService     ResetServiceProvider
 	characterService CharacterServiceProvider
-	playerTokenRepo  auth.PlayerTokenRepository
-	playerRepo       auth.PlayerRepository
+	playerSessionRepo  auth.PlayerSessionRepository
+	playerRepo         auth.PlayerRepository
 	charRepo         auth.CharacterRepository
 
 	// newSessionID is used for generating session IDs. Can be overridden for testing.

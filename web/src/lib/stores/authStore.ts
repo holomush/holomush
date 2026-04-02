@@ -7,7 +7,7 @@ import { trace } from '@opentelemetry/api';
 const tracer = trace.getTracer('holomush-web');
 
 interface AuthState {
-  playerToken: string | null;
+  playerSessionToken: string | null;
   sessionId: string | null;
   characterName: string | null;
   playerName: string | null;
@@ -15,7 +15,7 @@ interface AuthState {
 }
 
 const initial: AuthState = {
-  playerToken: null,
+  playerSessionToken: null,
   sessionId: null,
   characterName: null,
   playerName: null,
@@ -23,12 +23,12 @@ const initial: AuthState = {
 };
 
 export const authState = writable<AuthState>(initial);
-export const isAuthenticated = derived(authState, ($s) => !!$s.playerToken || !!$s.sessionId);
+export const isAuthenticated = derived(authState, ($s) => !!$s.playerSessionToken || !!$s.sessionId);
 export const hasCharacter = derived(authState, ($s) => !!$s.sessionId && !!$s.characterName);
 
-export function setPlayerAuth(playerToken: string, playerName: string) {
-  authState.update((s) => ({ ...s, playerToken, playerName, isGuest: false }));
-  sessionStorage.setItem('holomush-player', JSON.stringify({ playerToken, playerName }));
+export function setPlayerAuth(playerSessionToken: string, playerName: string) {
+  authState.update((s) => ({ ...s, playerSessionToken, playerName, isGuest: false }));
+  sessionStorage.setItem('holomush-player', JSON.stringify({ playerSessionToken, playerName }));
 }
 
 export function setCharacterSession(sessionId: string, characterName: string) {
@@ -53,6 +53,11 @@ export function clearAuth() {
   sessionStorage.removeItem('holomush-player');
 }
 
+export function clearCharacterSession() {
+  authState.update((s) => ({ ...s, sessionId: null, characterName: null }));
+  sessionStorage.removeItem('holomush-session');
+}
+
 export function restoreSession(): void {
   const span = tracer.startSpan('session.restore');
   try {
@@ -68,8 +73,8 @@ export function restoreSession(): void {
     const playerSaved = sessionStorage.getItem('holomush-player');
     if (playerSaved) {
       try {
-        const { playerToken, playerName } = JSON.parse(playerSaved);
-        if (playerToken) authState.update((s) => ({ ...s, playerToken, playerName }));
+        const { playerSessionToken, playerName } = JSON.parse(playerSaved);
+        if (playerSessionToken) authState.update((s) => ({ ...s, playerSessionToken, playerName }));
       } catch {
         /* ignore corrupt data */
       }

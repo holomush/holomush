@@ -14,7 +14,7 @@ import (
 
 func TestSetSessionCookie(t *testing.T) {
 	w := httptest.NewRecorder()
-	SetSessionCookie(w, "test-token", false, true)
+	SetSessionCookie(w, "test-token", true)
 	cookies := w.Result().Cookies()
 	require.Len(t, cookies, 1)
 	assert.Equal(t, "holomush_session", cookies[0].Name)
@@ -24,17 +24,9 @@ func TestSetSessionCookie(t *testing.T) {
 	assert.Equal(t, 86400, cookies[0].MaxAge)
 }
 
-func TestSetSessionCookie_RememberMe(t *testing.T) {
-	w := httptest.NewRecorder()
-	SetSessionCookie(w, "test-token", true, true)
-	cookies := w.Result().Cookies()
-	require.Len(t, cookies, 1)
-	assert.Equal(t, 2592000, cookies[0].MaxAge)
-}
-
 func TestSetSessionCookie_Insecure(t *testing.T) {
 	w := httptest.NewRecorder()
-	SetSessionCookie(w, "test-token", false, false)
+	SetSessionCookie(w, "test-token", false)
 	cookies := w.Result().Cookies()
 	require.Len(t, cookies, 1)
 	assert.False(t, cookies[0].Secure)

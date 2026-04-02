@@ -15,7 +15,6 @@ import (
 	"connectrpc.com/connect"
 	"github.com/samber/oops"
 
-	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
@@ -66,7 +65,6 @@ type Handler struct {
 	client        CoreClient
 	contentClient ContentClient
 	sessionStore  session.Store
-	tokenRepo     auth.PlayerTokenRepository
 	verbRegistry  *core.VerbRegistry
 }
 
@@ -79,11 +77,6 @@ type HandlerOption func(*Handler)
 // WithSessionStore sets the session store for session-related RPCs.
 func WithSessionStore(store session.Store) HandlerOption {
 	return func(h *Handler) { h.sessionStore = store }
-}
-
-// WithPlayerTokenRepo sets the player token repository for two-phase login RPCs.
-func WithPlayerTokenRepo(repo auth.PlayerTokenRepository) HandlerOption {
-	return func(h *Handler) { h.tokenRepo = repo }
 }
 
 // WithContentClient sets the content service client for content RPCs.
