@@ -47,21 +47,21 @@
     padding: 6px 12px;
     background: var(--color-status-background);
     border-bottom: 1px solid var(--color-border);
-    font-size: 11px;
+    font-size: 12px;
   }
   .left, .right { display: flex; align-items: center; gap: 8px; }
   .brand { color: var(--color-input-prompt); }
   .divider { color: var(--color-border); }
-  .character { color: var(--color-pose-actor); }
-  .loc { color: var(--color-status-text); font-size: 10px; }
+  .character { color: var(--mush-pose-actor); }
+  .loc { color: var(--color-status-text); font-size: 11px; }
   .connected { color: var(--color-status-text); }
-  .syncing { color: var(--color-pose-actor); }
-  .disconnected { color: var(--color-system); }
+  .syncing { color: var(--mush-pose-actor); }
+  .disconnected { color: var(--mush-system); }
   .icon-btn {
     background: none;
     border: none;
     color: var(--color-status-text);
     cursor: pointer;
-    font-size: 13px;
+    font-size: 14px;
   }
 </style>

@@ -35,7 +35,7 @@
 
 <style>
   .event { line-height: 1.7; }
-  .actor { color: var(--color-pose-actor); }
-  .generic { color: var(--color-command-output); white-space: pre-wrap; }
-  .raw-metadata { color: var(--color-system); opacity: 0.6; font-size: 0.9em; }
+  .actor { color: var(--mush-pose-actor); }
+  .generic { color: var(--mush-command-output); white-space: pre-wrap; }
+  .raw-metadata { color: var(--mush-system); opacity: 0.6; font-size: 0.9em; }
 </style>

@@ -36,41 +36,41 @@ func (m *mockCharLister) ListByPlayer(ctx context.Context, playerID ulid.ULID) (
 
 // resetTestSetup holds common test fixtures for reset password tests.
 type resetTestSetup struct {
-	playerRepo  *authmocks.MockPlayerRepository
-	hasher      *authmocks.MockPasswordHasher
+	playerRepo     *authmocks.MockPlayerRepository
+	hasher         *authmocks.MockPasswordHasher
 	playerSessions *authmocks.MockPlayerSessionRepository
-	resetRepo   *authmocks.MockPasswordResetRepository
-	charLister  *mockCharLister
-	sessionMgr  *session.MemStore
-	buf         *bytes.Buffer
-	charID      ulid.ULID
-	playerID    ulid.ULID
-	targetID    ulid.ULID
+	resetRepo      *authmocks.MockPasswordResetRepository
+	charLister     *mockCharLister
+	sessionMgr     *session.MemStore
+	buf            *bytes.Buffer
+	charID         ulid.ULID
+	playerID       ulid.ULID
+	targetID       ulid.ULID
 }
 
 func newResetTestSetup(t *testing.T) *resetTestSetup {
 	t.Helper()
 	return &resetTestSetup{
-		playerRepo:  authmocks.NewMockPlayerRepository(t),
-		hasher:      authmocks.NewMockPasswordHasher(t),
+		playerRepo:     authmocks.NewMockPlayerRepository(t),
+		hasher:         authmocks.NewMockPasswordHasher(t),
 		playerSessions: authmocks.NewMockPlayerSessionRepository(t),
-		resetRepo:   authmocks.NewMockPasswordResetRepository(t),
-		charLister:  &mockCharLister{},
-		sessionMgr:  session.NewMemStore(),
-		buf:         &bytes.Buffer{},
-		charID:      ulid.Make(),
-		playerID:    ulid.Make(),
-		targetID:    ulid.Make(),
+		resetRepo:      authmocks.NewMockPasswordResetRepository(t),
+		charLister:     &mockCharLister{},
+		sessionMgr:     session.NewMemStore(),
+		buf:            &bytes.Buffer{},
+		charID:         ulid.Make(),
+		playerID:       ulid.Make(),
+		targetID:       ulid.Make(),
 	}
 }
 
 func (s *resetTestSetup) deps() AdminDeps {
 	return AdminDeps{
-		PlayerRepo:  s.playerRepo,
-		Hasher:      s.hasher,
+		PlayerRepo:     s.playerRepo,
+		Hasher:         s.hasher,
 		PlayerSessions: s.playerSessions,
-		ResetRepo:   s.resetRepo,
-		CharLister:  s.charLister,
+		ResetRepo:      s.resetRepo,
+		CharLister:     s.charLister,
 	}
 }
 

@@ -101,7 +101,7 @@ test.describe('Auth Flows — Registered User Login', () => {
     await expect(createBtn).toBeVisible({ timeout: 10000 });
     await createBtn.click();
     await page.fill('input[name="characterName"]', testChar);
-    await page.locator('label.checkbox-label input[type="checkbox"]').check();
+    await page.locator('button[role="checkbox"]').click();
     await page.locator('button:has-text("Create")').click();
     await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
     await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
@@ -171,7 +171,7 @@ test.describe('Auth Flows — Logout', () => {
     await expect(createBtn).toBeVisible({ timeout: 10000 });
     await createBtn.click();
     await page.fill('input[name="characterName"]', testChar);
-    await page.locator('label.checkbox-label input[type="checkbox"]').check();
+    await page.locator('button[role="checkbox"]').click();
     await page.locator('button:has-text("Create")').click();
     await expect(page).toHaveURL(/\/terminal/, { timeout: 15000 });
     await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
@@ -243,7 +243,7 @@ test.describe('Auth Flows — Full Registration Flow', () => {
     await expect(createBtn).toBeVisible({ timeout: 10000 });
     await createBtn.click();
     await page.fill('input[name="characterName"]', testChar);
-    await page.locator('label.checkbox-label input[type="checkbox"]').check();
+    await page.locator('button[role="checkbox"]').click();
     await page.locator('button:has-text("Create")').click();
 
     // Should auto-enter terminal

@@ -27,7 +27,7 @@
     display: block;
     background: none;
     border: none;
-    color: var(--color-pose-actor);
+    color: var(--mush-pose-actor);
     cursor: pointer;
     font-family: inherit;
     font-size: inherit;

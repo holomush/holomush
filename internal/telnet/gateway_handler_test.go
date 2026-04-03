@@ -617,7 +617,7 @@ func TestGatewayHandler_TwoPhase_SingleCharAutoSelect(t *testing.T) {
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
 			Success:            true,
-			PlayerSessionToken:        "tok-single",
+			PlayerSessionToken: "tok-single",
 			Characters:         []*corev1.CharacterSummary{{CharacterId: "char-one", CharacterName: "Alaric"}},
 			DefaultCharacterId: "char-one",
 		},
@@ -667,9 +667,9 @@ func TestGatewayHandler_TwoPhase_MultiChar_ShowsListEntersSelectMode(t *testing.
 
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
-			Success:     true,
+			Success:            true,
 			PlayerSessionToken: "tok-multi",
-			Characters:  twoCharList(),
+			Characters:         twoCharList(),
 		},
 		discResp: &corev1.DisconnectResponse{Success: true},
 	}
@@ -711,9 +711,9 @@ func TestGatewayHandler_TwoPhase_PlayByIndex(t *testing.T) {
 
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
-			Success:     true,
+			Success:            true,
 			PlayerSessionToken: "tok-idx",
-			Characters:  twoCharList(),
+			Characters:         twoCharList(),
 		},
 		selectCharResp: &corev1.SelectCharacterResponse{
 			Success:       true,
@@ -768,9 +768,9 @@ func TestGatewayHandler_TwoPhase_PlayByName(t *testing.T) {
 
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
-			Success:     true,
+			Success:            true,
 			PlayerSessionToken: "tok-name",
-			Characters:  twoCharList(),
+			Characters:         twoCharList(),
 		},
 		selectCharResp: &corev1.SelectCharacterResponse{
 			Success:       true,
@@ -821,9 +821,9 @@ func TestGatewayHandler_TwoPhase_PlayReattach(t *testing.T) {
 
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
-			Success:     true,
+			Success:            true,
 			PlayerSessionToken: "tok-reattach",
-			Characters:  twoCharList(),
+			Characters:         twoCharList(),
 		},
 		selectCharResp: &corev1.SelectCharacterResponse{
 			Success:       true,
@@ -876,9 +876,9 @@ func TestGatewayHandler_TwoPhase_CreateCharacter(t *testing.T) {
 
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
-			Success:     true,
+			Success:            true,
 			PlayerSessionToken: "tok-create",
-			Characters:  twoCharList(),
+			Characters:         twoCharList(),
 		},
 		createCharResp: &corev1.CreateCharacterResponse{
 			Success:       true,
@@ -934,9 +934,9 @@ func TestGatewayHandler_TwoPhase_InvalidCommandInSelectMode(t *testing.T) {
 
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
-			Success:     true,
+			Success:            true,
 			PlayerSessionToken: "tok-inv",
-			Characters:  twoCharList(),
+			Characters:         twoCharList(),
 		},
 		discResp: &corev1.DisconnectResponse{Success: true},
 	}

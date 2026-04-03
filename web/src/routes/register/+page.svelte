@@ -7,8 +7,11 @@
   import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
   import { transport } from '$lib/transport';
   import { setPlayerAuth } from '$lib/stores/authStore';
-  import { activeTheme, themeToCssVars } from '$lib/stores/themeStore';
   import { goto } from '$app/navigation';
+  import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
+  import { Input } from '$lib/components/ui/input';
+  import { Label } from '$lib/components/ui/label';
 
   const client = createClient(WebService, transport);
 
@@ -52,170 +55,64 @@
   }
 </script>
 
-<div class="page" style={themeToCssVars($activeTheme.colors)}>
-  <form class="card" onsubmit={(e) => { e.preventDefault(); handleRegister(); }}>
-    <h1 class="title">Create Account</h1>
+<div class="flex items-center justify-center min-h-[calc(100vh-36px)]">
+  <Card.Root class="w-full max-w-[360px]">
+    <Card.Header>
+      <Card.Title class="text-center">Create Account</Card.Title>
+      <Card.Description class="text-center">
+        This creates your player account — think of it as your login.
+        Once you're in, you'll pick a character name to enter the world.
+        You can have multiple characters on one account.
+      </Card.Description>
+    </Card.Header>
+    <form onsubmit={(e) => { e.preventDefault(); handleRegister(); }}>
+      <Card.Content class="space-y-4">
+        {#if error}
+          <div class="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+        {/if}
 
-    <p class="hint">
-      This creates your player account — think of it as your login.
-      Once you're in, you'll pick a character name to enter the world.
-      You can have multiple characters on one account.
-    </p>
+        <div class="space-y-2">
+          <Label for="username">Username</Label>
+          <Input id="username" name="username" type="text" bind:value={username} placeholder="username" autocomplete="username" />
+        </div>
 
-    {#if error}
-      <p class="error">{error}</p>
-    {/if}
+        <div class="space-y-2">
+          <Label for="email">Email (optional)</Label>
+          <Input id="email" name="email" type="email" bind:value={email} placeholder="you@example.com" autocomplete="email" />
+        </div>
 
-    <label class="field">
-      <span class="label">Username</span>
-      <input type="text" name="username" bind:value={username} placeholder="username" autocomplete="username" />
-    </label>
+        <div class="space-y-2">
+          <Label for="password">Password</Label>
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            bind:value={password}
+            placeholder="min 8 characters"
+            autocomplete="new-password"
+          />
+        </div>
 
-    <label class="field">
-      <span class="label">Email (optional)</span>
-      <input type="email" name="email" bind:value={email} placeholder="you@example.com" autocomplete="email" />
-    </label>
-
-    <label class="field">
-      <span class="label">Password</span>
-      <input
-        type="password"
-        name="password"
-        bind:value={password}
-        placeholder="min 8 characters"
-        autocomplete="new-password"
-      />
-    </label>
-
-    <label class="field">
-      <span class="label">Confirm Password</span>
-      <input
-        type="password"
-        name="confirmPassword"
-        bind:value={confirmPassword}
-        placeholder="••••••••"
-        autocomplete="new-password"
-      />
-    </label>
-
-    <button class="btn-primary" type="submit" disabled={loading}>
-      {loading ? 'Creating account…' : 'Create Account'}
-    </button>
-
-    <p class="login-link">
-      Already have an account? <a href="/login">Sign in</a>
-    </p>
-  </form>
+        <div class="space-y-2">
+          <Label for="confirmPassword">Confirm Password</Label>
+          <Input
+            id="confirmPassword"
+            name="confirmPassword"
+            type="password"
+            bind:value={confirmPassword}
+            placeholder="••••••••"
+            autocomplete="new-password"
+          />
+        </div>
+      </Card.Content>
+      <Card.Footer class="flex-col gap-4">
+        <Button type="submit" class="w-full" disabled={loading}>
+          {loading ? 'Creating account...' : 'Create Account'}
+        </Button>
+        <p class="text-sm text-muted-foreground text-center">
+          Already have an account? <a href="/login" class="text-primary hover:underline">Sign in</a>
+        </p>
+      </Card.Footer>
+    </form>
+  </Card.Root>
 </div>
-
-<style>
-  .page {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: calc(100vh - 32px);
-    background: var(--color-background);
-    font-family: 'JetBrains Mono', monospace;
-  }
-
-  .card {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    padding: 32px;
-    width: 100%;
-    max-width: 360px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .title {
-    font-size: 20px;
-    color: var(--color-say-speaker);
-    margin: 0;
-    font-weight: 600;
-    text-align: center;
-  }
-
-  .hint {
-    font-size: 12px;
-    color: var(--color-status-text);
-    line-height: 1.5;
-    margin: 0;
-    text-align: center;
-  }
-
-  .error {
-    background: rgba(229, 115, 115, 0.1);
-    border: 1px solid var(--color-command-error);
-    border-radius: 4px;
-    color: var(--color-command-error);
-    padding: 8px 12px;
-    font-size: 12px;
-    margin: 0;
-  }
-
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .label {
-    font-size: 11px;
-    color: var(--color-status-text);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  input[type='text'],
-  input[type='email'],
-  input[type='password'] {
-    background: var(--color-input-background);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    color: var(--color-input-text);
-    font-family: inherit;
-    font-size: 13px;
-    padding: 8px 10px;
-    outline: none;
-    transition: border-color 0.15s;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  input:focus {
-    border-color: var(--color-say-speaker);
-  }
-
-  .btn-primary {
-    background: var(--color-say-speaker);
-    color: var(--color-background);
-    border: none;
-    border-radius: 4px;
-    padding: 10px;
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: opacity 0.15s;
-  }
-
-  .btn-primary:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .login-link {
-    font-size: 12px;
-    color: var(--color-status-text);
-    text-align: center;
-    margin: 0;
-  }
-
-  .login-link a {
-    color: var(--color-say-speaker);
-    text-decoration: none;
-  }
-</style>

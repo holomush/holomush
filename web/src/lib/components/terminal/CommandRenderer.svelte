@@ -35,6 +35,6 @@
 
 <style>
   .event { line-height: 1.7; }
-  .command-output { color: var(--color-command-output); white-space: pre-wrap; }
-  .command-error { color: var(--color-command-error); white-space: pre-wrap; }
+  .command-output { color: var(--mush-command-output); white-space: pre-wrap; }
+  .command-error { color: var(--mush-command-error); white-space: pre-wrap; }
 </style>

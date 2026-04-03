@@ -7,16 +7,17 @@
   interface Props {
     onExitClick: (direction: string) => void;
     overlay?: boolean;
+    resizable?: boolean;
   }
 
-  let { onExitClick, overlay = false }: Props = $props();
+  let { onExitClick, overlay = false, resizable = false }: Props = $props();
 </script>
 
 {#if overlay && $sidebarExpanded}
   <button class="overlay-backdrop" onclick={toggleSidebar} aria-label="Close sidebar"></button>
 {/if}
 
-<aside class="sidebar" class:expanded={$sidebarExpanded} class:overlay>
+<aside class="sidebar" class:expanded={$sidebarExpanded} class:overlay class:resizable>
   {#if $sidebarExpanded}
     <div class="sidebar-content">
       <RoomInfo />
@@ -48,6 +49,7 @@
   }
   .sidebar:not(.expanded) { width: 48px; }
   .sidebar.expanded { width: 220px; }
+  .sidebar.resizable { width: 100%; height: 100%; }
   .sidebar.overlay {
     position: absolute;
     right: 0;
@@ -66,7 +68,7 @@
     flex: 1;
     padding: 12px;
     overflow-y: auto;
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1.6;
   }
   .icon-strip {
@@ -77,7 +79,7 @@
     gap: 2px;
   }
   .icon { font-size: 28px; }
-  .badge { font-size: 8px; color: var(--color-status-text); margin-bottom: 4px; }
+  .badge { font-size: 9px; color: var(--color-status-text); margin-bottom: 4px; }
   .spacer { flex: 1; }
   .toggle {
     background: none;

@@ -166,7 +166,7 @@
   }
   .hints {
     padding: 3px 12px;
-    font-size: 9px;
+    font-size: 10px;
     color: var(--color-status-text);
     background: var(--color-background);
   }

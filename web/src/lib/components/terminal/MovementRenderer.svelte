@@ -25,5 +25,5 @@
 
 <style>
   .event { line-height: 1.7; }
-  .movement { color: var(--color-arrive); }
+  .movement { color: var(--mush-arrive); }
 </style>

@@ -23,7 +23,7 @@ import (
 func TestWebAuthenticatePlayer_Success(t *testing.T) {
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
-			Success:     true,
+			Success:            true,
 			PlayerSessionToken: "tok-abc",
 			Characters: []*corev1.CharacterSummary{
 				{CharacterId: "c1", CharacterName: "Alice"},
@@ -85,7 +85,7 @@ func TestWebAuthenticatePlayer_RPCError(t *testing.T) {
 func TestWebAuthenticatePlayer_NoRememberMe(t *testing.T) {
 	client := &mockCoreClient{
 		authPlayerResp: &corev1.AuthenticatePlayerResponse{
-			Success:     true,
+			Success:            true,
 			PlayerSessionToken: "tok-short",
 		},
 	}
@@ -116,7 +116,7 @@ func TestWebSelectCharacter_Success(t *testing.T) {
 
 	resp, err := h.WebSelectCharacter(context.Background(), connect.NewRequest(&webv1.WebSelectCharacterRequest{
 		PlayerSessionToken: "tok-abc",
-		CharacterId: "c1",
+		CharacterId:        "c1",
 	}))
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.GetSuccess())
@@ -138,7 +138,7 @@ func TestWebSelectCharacter_Reattached(t *testing.T) {
 
 	resp, err := h.WebSelectCharacter(context.Background(), connect.NewRequest(&webv1.WebSelectCharacterRequest{
 		PlayerSessionToken: "tok-abc",
-		CharacterId: "c2",
+		CharacterId:        "c2",
 	}))
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.GetReattached())
@@ -152,7 +152,7 @@ func TestWebSelectCharacter_RPCError(t *testing.T) {
 
 	resp, err := h.WebSelectCharacter(context.Background(), connect.NewRequest(&webv1.WebSelectCharacterRequest{
 		PlayerSessionToken: "tok-abc",
-		CharacterId: "c1",
+		CharacterId:        "c1",
 	}))
 	require.NoError(t, err)
 	assert.False(t, resp.Msg.GetSuccess())
@@ -164,9 +164,9 @@ func TestWebSelectCharacter_RPCError(t *testing.T) {
 func TestWebCreatePlayer_Success(t *testing.T) {
 	client := &mockCoreClient{
 		createPlayerResp: &corev1.CreatePlayerResponse{
-			Success:     true,
+			Success:            true,
 			PlayerSessionToken: "tok-new",
-			Characters:  []*corev1.CharacterSummary{},
+			Characters:         []*corev1.CharacterSummary{},
 		},
 	}
 	h := NewHandler(client)
@@ -230,8 +230,8 @@ func TestWebCreateCharacter_Success(t *testing.T) {
 	h := NewHandler(client)
 
 	resp, err := h.WebCreateCharacter(context.Background(), connect.NewRequest(&webv1.WebCreateCharacterRequest{
-		PlayerSessionToken:   "tok-abc",
-		CharacterName: "NewChar",
+		PlayerSessionToken: "tok-abc",
+		CharacterName:      "NewChar",
 	}))
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.GetSuccess())
@@ -246,8 +246,8 @@ func TestWebCreateCharacter_RPCError(t *testing.T) {
 	h := NewHandler(client)
 
 	resp, err := h.WebCreateCharacter(context.Background(), connect.NewRequest(&webv1.WebCreateCharacterRequest{
-		PlayerSessionToken:   "tok-abc",
-		CharacterName: "Char",
+		PlayerSessionToken: "tok-abc",
+		CharacterName:      "Char",
 	}))
 	require.NoError(t, err)
 	assert.False(t, resp.Msg.GetSuccess())

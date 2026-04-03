@@ -46,14 +46,14 @@
 
 <style>
   .event { line-height: 1.7; }
-  .channel-prefix { color: var(--color-system); font-weight: bold; }
-  .speaker { color: var(--color-say-speaker); }
-  .speech { color: var(--color-say-speech); }
-  .actor { color: var(--color-pose-actor); }
-  .action { color: var(--color-pose-action); }
-  .ooc-prefix { color: var(--color-ooc); font-weight: bold; }
-  .ooc-speaker { color: var(--color-ooc); }
-  .ooc-actor { color: var(--color-ooc); }
-  .ooc-message { color: var(--color-ooc); opacity: 0.85; }
-  .pemit-message { color: var(--color-pemit); font-style: italic; }
+  .channel-prefix { color: var(--mush-system); font-weight: bold; }
+  .speaker { color: var(--mush-say-speaker); }
+  .speech { color: var(--mush-say-speech); }
+  .actor { color: var(--mush-pose-actor); }
+  .action { color: var(--mush-pose-action); }
+  .ooc-prefix { color: var(--mush-ooc); font-weight: bold; }
+  .ooc-speaker { color: var(--mush-ooc); }
+  .ooc-actor { color: var(--mush-ooc); }
+  .ooc-message { color: var(--mush-ooc); opacity: 0.85; }
+  .pemit-message { color: var(--mush-pemit); font-style: italic; }
 </style>
