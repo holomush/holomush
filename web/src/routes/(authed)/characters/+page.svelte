@@ -8,7 +8,7 @@
   import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
   import type { CharacterSummary } from '$lib/connect/holomush/web/v1/web_pb';
   import { transport } from '$lib/transport';
-  import { authState, setCharacterSession } from '$lib/stores/authStore';
+  import { setCharacterSession } from '$lib/stores/authStore';
   import { goto } from '$app/navigation';
   import * as Card from '$lib/components/ui/card';
   import { Badge } from '$lib/components/ui/badge';
@@ -27,12 +27,8 @@
   let autoDefault = $state(false);
 
   onMount(async () => {
-    if (!$authState.playerSessionToken) {
-      goto('/login');
-      return;
-    }
     try {
-      const resp = await client.webListCharacters({ playerSessionToken: $authState.playerSessionToken });
+      const resp = await client.webListCharacters({});
       characters = [...resp.characters];
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load characters.';
@@ -42,10 +38,8 @@
   });
 
   async function selectCharacter(charId: string) {
-    if (!$authState.playerSessionToken) return;
     try {
       const resp = await client.webSelectCharacter({
-        playerSessionToken: $authState.playerSessionToken,
         characterId: charId,
       });
       if (resp.success) {
@@ -64,18 +58,14 @@
       createError = 'Character name is required.';
       return;
     }
-    if (!$authState.playerSessionToken) return;
     createError = '';
     try {
       const resp = await client.webCreateCharacter({
-        playerSessionToken: $authState.playerSessionToken,
         characterName: newCharName.trim(),
       });
       if (resp.success) {
         if (autoDefault) {
-          // Create a real game session via SelectCharacter before entering terminal.
           const selectResp = await client.webSelectCharacter({
-            playerSessionToken: $authState.playerSessionToken ?? '',
             characterId: resp.characterId,
           });
           if (selectResp.success) {
@@ -85,8 +75,7 @@
             createError = selectResp.errorMessage || 'Failed to enter game.';
           }
         } else {
-          // Refresh the character list
-          const listResp = await client.webListCharacters({ playerSessionToken: $authState.playerSessionToken });
+          const listResp = await client.webListCharacters({});
           characters = [...listResp.characters];
           creating = false;
           newCharName = '';

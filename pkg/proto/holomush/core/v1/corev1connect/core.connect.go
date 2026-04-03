@@ -72,6 +72,9 @@ const (
 	CoreServiceConfirmPasswordResetProcedure = "/holomush.core.v1.CoreService/ConfirmPasswordReset"
 	// CoreServiceLogoutProcedure is the fully-qualified name of the CoreService's Logout RPC.
 	CoreServiceLogoutProcedure = "/holomush.core.v1.CoreService/Logout"
+	// CoreServiceCheckPlayerSessionProcedure is the fully-qualified name of the CoreService's
+	// CheckPlayerSession RPC.
+	CoreServiceCheckPlayerSessionProcedure = "/holomush.core.v1.CoreService/CheckPlayerSession"
 )
 
 // CoreServiceClient is a client for the holomush.core.v1.CoreService service.
@@ -102,6 +105,8 @@ type CoreServiceClient interface {
 	ConfirmPasswordReset(context.Context, *connect.Request[v1.ConfirmPasswordResetRequest]) (*connect.Response[v1.ConfirmPasswordResetResponse], error)
 	// End a player session.
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
+	// Validate a player session token. Used by web gateway for cookie-based auth checks.
+	CheckPlayerSession(context.Context, *connect.Request[v1.CheckPlayerSessionRequest]) (*connect.Response[v1.CheckPlayerSessionResponse], error)
 }
 
 // NewCoreServiceClient constructs a client for the holomush.core.v1.CoreService service. By
@@ -193,6 +198,12 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(coreServiceMethods.ByName("Logout")),
 			connect.WithClientOptions(opts...),
 		),
+		checkPlayerSession: connect.NewClient[v1.CheckPlayerSessionRequest, v1.CheckPlayerSessionResponse](
+			httpClient,
+			baseURL+CoreServiceCheckPlayerSessionProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("CheckPlayerSession")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -211,6 +222,7 @@ type coreServiceClient struct {
 	requestPasswordReset *connect.Client[v1.RequestPasswordResetRequest, v1.RequestPasswordResetResponse]
 	confirmPasswordReset *connect.Client[v1.ConfirmPasswordResetRequest, v1.ConfirmPasswordResetResponse]
 	logout               *connect.Client[v1.LogoutRequest, v1.LogoutResponse]
+	checkPlayerSession   *connect.Client[v1.CheckPlayerSessionRequest, v1.CheckPlayerSessionResponse]
 }
 
 // Authenticate calls holomush.core.v1.CoreService.Authenticate.
@@ -278,6 +290,11 @@ func (c *coreServiceClient) Logout(ctx context.Context, req *connect.Request[v1.
 	return c.logout.CallUnary(ctx, req)
 }
 
+// CheckPlayerSession calls holomush.core.v1.CoreService.CheckPlayerSession.
+func (c *coreServiceClient) CheckPlayerSession(ctx context.Context, req *connect.Request[v1.CheckPlayerSessionRequest]) (*connect.Response[v1.CheckPlayerSessionResponse], error) {
+	return c.checkPlayerSession.CallUnary(ctx, req)
+}
+
 // CoreServiceHandler is an implementation of the holomush.core.v1.CoreService service.
 type CoreServiceHandler interface {
 	// Authenticate validates credentials and creates a session.
@@ -306,6 +323,8 @@ type CoreServiceHandler interface {
 	ConfirmPasswordReset(context.Context, *connect.Request[v1.ConfirmPasswordResetRequest]) (*connect.Response[v1.ConfirmPasswordResetResponse], error)
 	// End a player session.
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
+	// Validate a player session token. Used by web gateway for cookie-based auth checks.
+	CheckPlayerSession(context.Context, *connect.Request[v1.CheckPlayerSessionRequest]) (*connect.Response[v1.CheckPlayerSessionResponse], error)
 }
 
 // NewCoreServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -393,6 +412,12 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(coreServiceMethods.ByName("Logout")),
 		connect.WithHandlerOptions(opts...),
 	)
+	coreServiceCheckPlayerSessionHandler := connect.NewUnaryHandler(
+		CoreServiceCheckPlayerSessionProcedure,
+		svc.CheckPlayerSession,
+		connect.WithSchema(coreServiceMethods.ByName("CheckPlayerSession")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.core.v1.CoreService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CoreServiceAuthenticateProcedure:
@@ -421,6 +446,8 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 			coreServiceConfirmPasswordResetHandler.ServeHTTP(w, r)
 		case CoreServiceLogoutProcedure:
 			coreServiceLogoutHandler.ServeHTTP(w, r)
+		case CoreServiceCheckPlayerSessionProcedure:
+			coreServiceCheckPlayerSessionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -480,4 +507,8 @@ func (UnimplementedCoreServiceHandler) ConfirmPasswordReset(context.Context, *co
 
 func (UnimplementedCoreServiceHandler) Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.Logout is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) CheckPlayerSession(context.Context, *connect.Request[v1.CheckPlayerSessionRequest]) (*connect.Response[v1.CheckPlayerSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.CheckPlayerSession is not implemented"))
 }

@@ -3,16 +3,30 @@
 
 import { get } from 'svelte/store';
 import { redirect } from '@sveltejs/kit';
-import { isAuthenticated, restoreSession } from '$lib/stores/authStore';
+import { createClient } from '@connectrpc/connect';
+import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
+import { transport } from '$lib/transport';
+import { authState, clearAuth, setPlayerAuth, restoreSession } from '$lib/stores/authStore';
 
-export function load() {
-  if (typeof window !== 'undefined') {
-    // Restore session from sessionStorage before checking auth.
-    // On page reload, the in-memory store is empty but sessionStorage
-    // retains the session from before the reload.
-    restoreSession();
-    if (!get(isAuthenticated)) {
-      redirect(302, '/login');
-    }
+export const ssr = false;
+
+export async function load() {
+  if (typeof window === 'undefined') return;
+
+  // Restore game session (sessionId/characterName) from sessionStorage.
+  restoreSession();
+
+  // If a game session was restored (guest or character), we're already
+  // authenticated at the session level — no server round-trip needed.
+  if (get(authState).sessionId) return;
+
+  // Validate player auth via cookie — server is the authority.
+  const client = createClient(WebService, transport);
+  try {
+    const resp = await client.webCheckSession({});
+    setPlayerAuth(resp.playerName);
+  } catch {
+    clearAuth();
+    redirect(302, '/login');
   }
 }

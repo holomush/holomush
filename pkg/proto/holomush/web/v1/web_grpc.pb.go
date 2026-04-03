@@ -35,6 +35,7 @@ const (
 	WebService_WebLogout_FullMethodName               = "/holomush.web.v1.WebService/WebLogout"
 	WebService_WebRequestPasswordReset_FullMethodName = "/holomush.web.v1.WebService/WebRequestPasswordReset"
 	WebService_WebConfirmPasswordReset_FullMethodName = "/holomush.web.v1.WebService/WebConfirmPasswordReset"
+	WebService_WebCheckSession_FullMethodName         = "/holomush.web.v1.WebService/WebCheckSession"
 	WebService_WebGetContent_FullMethodName           = "/holomush.web.v1.WebService/WebGetContent"
 	WebService_WebListContent_FullMethodName          = "/holomush.web.v1.WebService/WebListContent"
 )
@@ -63,6 +64,8 @@ type WebServiceClient interface {
 	WebLogout(ctx context.Context, in *WebLogoutRequest, opts ...grpc.CallOption) (*WebLogoutResponse, error)
 	WebRequestPasswordReset(ctx context.Context, in *WebRequestPasswordResetRequest, opts ...grpc.CallOption) (*WebRequestPasswordResetResponse, error)
 	WebConfirmPasswordReset(ctx context.Context, in *WebConfirmPasswordResetRequest, opts ...grpc.CallOption) (*WebConfirmPasswordResetResponse, error)
+	// Validate player session from cookie. Returns player info or Unauthenticated error.
+	WebCheckSession(ctx context.Context, in *WebCheckSessionRequest, opts ...grpc.CallOption) (*WebCheckSessionResponse, error)
 	// Content store access (public, no auth required).
 	WebGetContent(ctx context.Context, in *WebGetContentRequest, opts ...grpc.CallOption) (*WebGetContentResponse, error)
 	WebListContent(ctx context.Context, in *WebListContentRequest, opts ...grpc.CallOption) (*WebListContentResponse, error)
@@ -215,6 +218,16 @@ func (c *webServiceClient) WebConfirmPasswordReset(ctx context.Context, in *WebC
 	return out, nil
 }
 
+func (c *webServiceClient) WebCheckSession(ctx context.Context, in *WebCheckSessionRequest, opts ...grpc.CallOption) (*WebCheckSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebCheckSessionResponse)
+	err := c.cc.Invoke(ctx, WebService_WebCheckSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *webServiceClient) WebGetContent(ctx context.Context, in *WebGetContentRequest, opts ...grpc.CallOption) (*WebGetContentResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(WebGetContentResponse)
@@ -259,6 +272,8 @@ type WebServiceServer interface {
 	WebLogout(context.Context, *WebLogoutRequest) (*WebLogoutResponse, error)
 	WebRequestPasswordReset(context.Context, *WebRequestPasswordResetRequest) (*WebRequestPasswordResetResponse, error)
 	WebConfirmPasswordReset(context.Context, *WebConfirmPasswordResetRequest) (*WebConfirmPasswordResetResponse, error)
+	// Validate player session from cookie. Returns player info or Unauthenticated error.
+	WebCheckSession(context.Context, *WebCheckSessionRequest) (*WebCheckSessionResponse, error)
 	// Content store access (public, no auth required).
 	WebGetContent(context.Context, *WebGetContentRequest) (*WebGetContentResponse, error)
 	WebListContent(context.Context, *WebListContentRequest) (*WebListContentResponse, error)
@@ -310,6 +325,9 @@ func (UnimplementedWebServiceServer) WebRequestPasswordReset(context.Context, *W
 }
 func (UnimplementedWebServiceServer) WebConfirmPasswordReset(context.Context, *WebConfirmPasswordResetRequest) (*WebConfirmPasswordResetResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebConfirmPasswordReset not implemented")
+}
+func (UnimplementedWebServiceServer) WebCheckSession(context.Context, *WebCheckSessionRequest) (*WebCheckSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebCheckSession not implemented")
 }
 func (UnimplementedWebServiceServer) WebGetContent(context.Context, *WebGetContentRequest) (*WebGetContentResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebGetContent not implemented")
@@ -565,6 +583,24 @@ func _WebService_WebConfirmPasswordReset_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebCheckSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebCheckSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebCheckSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebCheckSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebCheckSession(ctx, req.(*WebCheckSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _WebService_WebGetContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(WebGetContentRequest)
 	if err := dec(in); err != nil {
@@ -655,6 +691,10 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebConfirmPasswordReset",
 			Handler:    _WebService_WebConfirmPasswordReset_Handler,
+		},
+		{
+			MethodName: "WebCheckSession",
+			Handler:    _WebService_WebCheckSession_Handler,
 		},
 		{
 			MethodName: "WebGetContent",

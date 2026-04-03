@@ -70,6 +70,9 @@ const (
 	// WebServiceWebConfirmPasswordResetProcedure is the fully-qualified name of the WebService's
 	// WebConfirmPasswordReset RPC.
 	WebServiceWebConfirmPasswordResetProcedure = "/holomush.web.v1.WebService/WebConfirmPasswordReset"
+	// WebServiceWebCheckSessionProcedure is the fully-qualified name of the WebService's
+	// WebCheckSession RPC.
+	WebServiceWebCheckSessionProcedure = "/holomush.web.v1.WebService/WebCheckSession"
 	// WebServiceWebGetContentProcedure is the fully-qualified name of the WebService's WebGetContent
 	// RPC.
 	WebServiceWebGetContentProcedure = "/holomush.web.v1.WebService/WebGetContent"
@@ -100,6 +103,8 @@ type WebServiceClient interface {
 	WebLogout(context.Context, *connect.Request[v1.WebLogoutRequest]) (*connect.Response[v1.WebLogoutResponse], error)
 	WebRequestPasswordReset(context.Context, *connect.Request[v1.WebRequestPasswordResetRequest]) (*connect.Response[v1.WebRequestPasswordResetResponse], error)
 	WebConfirmPasswordReset(context.Context, *connect.Request[v1.WebConfirmPasswordResetRequest]) (*connect.Response[v1.WebConfirmPasswordResetResponse], error)
+	// Validate player session from cookie. Returns player info or Unauthenticated error.
+	WebCheckSession(context.Context, *connect.Request[v1.WebCheckSessionRequest]) (*connect.Response[v1.WebCheckSessionResponse], error)
 	// Content store access (public, no auth required).
 	WebGetContent(context.Context, *connect.Request[v1.WebGetContentRequest]) (*connect.Response[v1.WebGetContentResponse], error)
 	WebListContent(context.Context, *connect.Request[v1.WebListContentRequest]) (*connect.Response[v1.WebListContentResponse], error)
@@ -194,6 +199,12 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebConfirmPasswordReset")),
 			connect.WithClientOptions(opts...),
 		),
+		webCheckSession: connect.NewClient[v1.WebCheckSessionRequest, v1.WebCheckSessionResponse](
+			httpClient,
+			baseURL+WebServiceWebCheckSessionProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebCheckSession")),
+			connect.WithClientOptions(opts...),
+		),
 		webGetContent: connect.NewClient[v1.WebGetContentRequest, v1.WebGetContentResponse](
 			httpClient,
 			baseURL+WebServiceWebGetContentProcedure,
@@ -224,6 +235,7 @@ type webServiceClient struct {
 	webLogout               *connect.Client[v1.WebLogoutRequest, v1.WebLogoutResponse]
 	webRequestPasswordReset *connect.Client[v1.WebRequestPasswordResetRequest, v1.WebRequestPasswordResetResponse]
 	webConfirmPasswordReset *connect.Client[v1.WebConfirmPasswordResetRequest, v1.WebConfirmPasswordResetResponse]
+	webCheckSession         *connect.Client[v1.WebCheckSessionRequest, v1.WebCheckSessionResponse]
 	webGetContent           *connect.Client[v1.WebGetContentRequest, v1.WebGetContentResponse]
 	webListContent          *connect.Client[v1.WebListContentRequest, v1.WebListContentResponse]
 }
@@ -293,6 +305,11 @@ func (c *webServiceClient) WebConfirmPasswordReset(ctx context.Context, req *con
 	return c.webConfirmPasswordReset.CallUnary(ctx, req)
 }
 
+// WebCheckSession calls holomush.web.v1.WebService.WebCheckSession.
+func (c *webServiceClient) WebCheckSession(ctx context.Context, req *connect.Request[v1.WebCheckSessionRequest]) (*connect.Response[v1.WebCheckSessionResponse], error) {
+	return c.webCheckSession.CallUnary(ctx, req)
+}
+
 // WebGetContent calls holomush.web.v1.WebService.WebGetContent.
 func (c *webServiceClient) WebGetContent(ctx context.Context, req *connect.Request[v1.WebGetContentRequest]) (*connect.Response[v1.WebGetContentResponse], error) {
 	return c.webGetContent.CallUnary(ctx, req)
@@ -325,6 +342,8 @@ type WebServiceHandler interface {
 	WebLogout(context.Context, *connect.Request[v1.WebLogoutRequest]) (*connect.Response[v1.WebLogoutResponse], error)
 	WebRequestPasswordReset(context.Context, *connect.Request[v1.WebRequestPasswordResetRequest]) (*connect.Response[v1.WebRequestPasswordResetResponse], error)
 	WebConfirmPasswordReset(context.Context, *connect.Request[v1.WebConfirmPasswordResetRequest]) (*connect.Response[v1.WebConfirmPasswordResetResponse], error)
+	// Validate player session from cookie. Returns player info or Unauthenticated error.
+	WebCheckSession(context.Context, *connect.Request[v1.WebCheckSessionRequest]) (*connect.Response[v1.WebCheckSessionResponse], error)
 	// Content store access (public, no auth required).
 	WebGetContent(context.Context, *connect.Request[v1.WebGetContentRequest]) (*connect.Response[v1.WebGetContentResponse], error)
 	WebListContent(context.Context, *connect.Request[v1.WebListContentRequest]) (*connect.Response[v1.WebListContentResponse], error)
@@ -415,6 +434,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebConfirmPasswordReset")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebCheckSessionHandler := connect.NewUnaryHandler(
+		WebServiceWebCheckSessionProcedure,
+		svc.WebCheckSession,
+		connect.WithSchema(webServiceMethods.ByName("WebCheckSession")),
+		connect.WithHandlerOptions(opts...),
+	)
 	webServiceWebGetContentHandler := connect.NewUnaryHandler(
 		WebServiceWebGetContentProcedure,
 		svc.WebGetContent,
@@ -455,6 +480,8 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebRequestPasswordResetHandler.ServeHTTP(w, r)
 		case WebServiceWebConfirmPasswordResetProcedure:
 			webServiceWebConfirmPasswordResetHandler.ServeHTTP(w, r)
+		case WebServiceWebCheckSessionProcedure:
+			webServiceWebCheckSessionHandler.ServeHTTP(w, r)
 		case WebServiceWebGetContentProcedure:
 			webServiceWebGetContentHandler.ServeHTTP(w, r)
 		case WebServiceWebListContentProcedure:
@@ -518,6 +545,10 @@ func (UnimplementedWebServiceHandler) WebRequestPasswordReset(context.Context, *
 
 func (UnimplementedWebServiceHandler) WebConfirmPasswordReset(context.Context, *connect.Request[v1.WebConfirmPasswordResetRequest]) (*connect.Response[v1.WebConfirmPasswordResetResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebConfirmPasswordReset is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebCheckSession(context.Context, *connect.Request[v1.WebCheckSessionRequest]) (*connect.Response[v1.WebCheckSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebCheckSession is not implemented"))
 }
 
 func (UnimplementedWebServiceHandler) WebGetContent(context.Context, *connect.Request[v1.WebGetContentRequest]) (*connect.Response[v1.WebGetContentResponse], error) {

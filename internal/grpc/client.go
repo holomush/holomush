@@ -214,6 +214,15 @@ func (c *Client) Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1
 	return resp, nil
 }
 
+// CheckPlayerSession validates a player session token.
+func (c *Client) CheckPlayerSession(ctx context.Context, req *corev1.CheckPlayerSessionRequest) (*corev1.CheckPlayerSessionResponse, error) {
+	resp, err := c.client.CheckPlayerSession(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "CheckPlayerSession").Wrap(err)
+	}
+	return resp, nil
+}
+
 // GetContent retrieves a single content item by key from the content service.
 func (c *Client) GetContent(ctx context.Context, req *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error) {
 	resp, err := c.contentClient.GetContent(ctx, req)

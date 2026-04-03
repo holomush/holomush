@@ -54,6 +54,9 @@ service WebService {
   rpc WebRequestPasswordReset(WebRequestPasswordResetRequest) returns (WebRequestPasswordResetResponse);
   rpc WebConfirmPasswordReset(WebConfirmPasswordResetRequest) returns (WebConfirmPasswordResetResponse);
 
+  // Validate player session from cookie. Returns player info or Unauthenticated error.
+  rpc WebCheckSession(WebCheckSessionRequest) returns (WebCheckSessionResponse);
+
   // Content store access (public, no auth required).
   rpc WebGetContent(WebGetContentRequest) returns (WebGetContentResponse);
   rpc WebListContent(WebListContentRequest) returns (WebListContentResponse);
@@ -138,14 +141,12 @@ message WebAuthenticatePlayerRequest {
 
 message WebAuthenticatePlayerResponse {
   bool success = 1;
-  string player_session_token = 2;
   string error_message = 3;
   repeated CharacterSummary characters = 4;
   string default_character_id = 5;
 }
 
 message WebSelectCharacterRequest {
-  string player_session_token = 1;
   string character_id = 2;
 }
 
@@ -165,13 +166,11 @@ message WebCreatePlayerRequest {
 
 message WebCreatePlayerResponse {
   bool success = 1;
-  string player_session_token = 2;
   repeated CharacterSummary characters = 3;
   string error_message = 4;
 }
 
 message WebCreateCharacterRequest {
-  string player_session_token = 1;
   string character_name = 2;
 }
 
@@ -182,17 +181,13 @@ message WebCreateCharacterResponse {
   string error_message = 4;
 }
 
-message WebListCharactersRequest {
-  string player_session_token = 1;
-}
+message WebListCharactersRequest {}
 
 message WebListCharactersResponse {
   repeated CharacterSummary characters = 1;
 }
 
-message WebLogoutRequest {
-  string player_session_token = 1;
-}
+message WebLogoutRequest {}
 
 message WebLogoutResponse {}
 
@@ -212,6 +207,12 @@ message WebConfirmPasswordResetRequest {
 message WebConfirmPasswordResetResponse {
   bool success = 1;
   string error_message = 2;
+}
+
+message WebCheckSessionRequest {}
+
+message WebCheckSessionResponse {
+  string player_name = 1;
 }
 
 // --- Web content messages ---

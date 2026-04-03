@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	"connectrpc.com/connect"
 
@@ -20,6 +21,17 @@ const (
 	headerClearSession       = "X-Clear-Session"
 	headerInjectSessionToken = "X-Session-Token"
 )
+
+// playerTokenFromHeader extracts the player session token from the
+// X-Session-Token header injected by CookieMiddleware. Returns
+// CodeUnauthenticated if the header is missing or empty.
+func playerTokenFromHeader(h http.Header) (string, error) {
+	token := h.Get(headerInjectSessionToken)
+	if token == "" {
+		return "", connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("no player session"))
+	}
+	return token, nil
+}
 
 // WebAuthenticatePlayer validates player credentials and returns a player token with character list.
 func (h *Handler) WebAuthenticatePlayer(ctx context.Context, req *connect.Request[webv1.WebAuthenticatePlayerRequest]) (*connect.Response[webv1.WebAuthenticatePlayerResponse], error) {
@@ -47,7 +59,6 @@ func (h *Handler) WebAuthenticatePlayer(ctx context.Context, req *connect.Reques
 
 	resp := connect.NewResponse(&webv1.WebAuthenticatePlayerResponse{
 		Success:            true,
-		PlayerSessionToken: coreResp.GetPlayerSessionToken(),
 		Characters:         translateCharacterSummaries(coreResp.GetCharacters()),
 		DefaultCharacterId: coreResp.GetDefaultCharacterId(),
 	})
@@ -59,11 +70,16 @@ func (h *Handler) WebAuthenticatePlayer(ctx context.Context, req *connect.Reques
 func (h *Handler) WebSelectCharacter(ctx context.Context, req *connect.Request[webv1.WebSelectCharacterRequest]) (*connect.Response[webv1.WebSelectCharacterResponse], error) {
 	slog.DebugContext(ctx, "web: WebSelectCharacter", "character_id", req.Msg.GetCharacterId())
 
+	token, err := playerTokenFromHeader(req.Header())
+	if err != nil {
+		return nil, err
+	}
+
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
 	coreResp, err := h.client.SelectCharacter(rpcCtx, &corev1.SelectCharacterRequest{
-		PlayerSessionToken: req.Msg.GetPlayerSessionToken(),
+		PlayerSessionToken: token,
 		CharacterId:        req.Msg.GetCharacterId(),
 	})
 	if err != nil {
@@ -78,15 +94,12 @@ func (h *Handler) WebSelectCharacter(ctx context.Context, req *connect.Request[w
 		}), nil
 	}
 
-	resp := connect.NewResponse(&webv1.WebSelectCharacterResponse{
+	return connect.NewResponse(&webv1.WebSelectCharacterResponse{
 		Success:       true,
 		SessionId:     coreResp.GetSessionId(),
 		CharacterName: coreResp.GetCharacterName(),
 		Reattached:    coreResp.GetReattached(),
-	})
-	// Rotate cookie from player token to session token.
-	resp.Header().Set(headerSetSessionToken, coreResp.GetSessionId())
-	return resp, nil
+	}), nil
 }
 
 // WebCreatePlayer creates a new player account.
@@ -114,9 +127,8 @@ func (h *Handler) WebCreatePlayer(ctx context.Context, req *connect.Request[webv
 	}
 
 	resp := connect.NewResponse(&webv1.WebCreatePlayerResponse{
-		Success:            true,
-		PlayerSessionToken: coreResp.GetPlayerSessionToken(),
-		Characters:         translateCharacterSummaries(coreResp.GetCharacters()),
+		Success:    true,
+		Characters: translateCharacterSummaries(coreResp.GetCharacters()),
 	})
 	resp.Header().Set(headerSetSessionToken, coreResp.GetPlayerSessionToken())
 	return resp, nil
@@ -126,11 +138,16 @@ func (h *Handler) WebCreatePlayer(ctx context.Context, req *connect.Request[webv
 func (h *Handler) WebCreateCharacter(ctx context.Context, req *connect.Request[webv1.WebCreateCharacterRequest]) (*connect.Response[webv1.WebCreateCharacterResponse], error) {
 	slog.DebugContext(ctx, "web: WebCreateCharacter", "character_name", req.Msg.GetCharacterName())
 
+	token, err := playerTokenFromHeader(req.Header())
+	if err != nil {
+		return nil, err
+	}
+
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
 	coreResp, err := h.client.CreateCharacter(rpcCtx, &corev1.CreateCharacterRequest{
-		PlayerSessionToken: req.Msg.GetPlayerSessionToken(),
+		PlayerSessionToken: token,
 		CharacterName:      req.Msg.GetCharacterName(),
 	})
 	if err != nil {
@@ -156,11 +173,16 @@ func (h *Handler) WebCreateCharacter(ctx context.Context, req *connect.Request[w
 func (h *Handler) WebListCharacters(ctx context.Context, req *connect.Request[webv1.WebListCharactersRequest]) (*connect.Response[webv1.WebListCharactersResponse], error) {
 	slog.DebugContext(ctx, "web: WebListCharacters")
 
+	token, err := playerTokenFromHeader(req.Header())
+	if err != nil {
+		return nil, err
+	}
+
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
 	coreResp, err := h.client.ListCharacters(rpcCtx, &corev1.ListCharactersRequest{
-		PlayerSessionToken: req.Msg.GetPlayerSessionToken(),
+		PlayerSessionToken: token,
 	})
 	if err != nil {
 		slog.Error("web: list characters RPC failed", "error", err)
@@ -176,18 +198,46 @@ func (h *Handler) WebListCharacters(ctx context.Context, req *connect.Request[we
 func (h *Handler) WebLogout(ctx context.Context, req *connect.Request[webv1.WebLogoutRequest]) (*connect.Response[webv1.WebLogoutResponse], error) {
 	slog.DebugContext(ctx, "web: WebLogout")
 
+	token := req.Header().Get(headerInjectSessionToken)
+
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	if _, err := h.client.Logout(rpcCtx, &corev1.LogoutRequest{
-		PlayerSessionToken: req.Msg.GetPlayerSessionToken(),
-	}); err != nil {
-		slog.Error("web: logout RPC failed", "error", err)
+	if token != "" {
+		if _, err := h.client.Logout(rpcCtx, &corev1.LogoutRequest{
+			PlayerSessionToken: token,
+		}); err != nil {
+			slog.Error("web: logout RPC failed", "error", err)
+		}
 	}
 
 	resp := connect.NewResponse(&webv1.WebLogoutResponse{})
 	resp.Header().Set(headerClearSession, "true")
 	return resp, nil
+}
+
+// WebCheckSession validates the player session from the cookie and returns the player name.
+func (h *Handler) WebCheckSession(ctx context.Context, req *connect.Request[webv1.WebCheckSessionRequest]) (*connect.Response[webv1.WebCheckSessionResponse], error) {
+	slog.DebugContext(ctx, "web: WebCheckSession")
+
+	token, err := playerTokenFromHeader(req.Header())
+	if err != nil {
+		return nil, err
+	}
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	coreResp, err := h.client.CheckPlayerSession(rpcCtx, &corev1.CheckPlayerSessionRequest{
+		PlayerSessionToken: token,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("session expired or invalid"))
+	}
+
+	return connect.NewResponse(&webv1.WebCheckSessionResponse{
+		PlayerName: coreResp.GetPlayerName(),
+	}), nil
 }
 
 // WebRequestPasswordReset initiates a password reset flow.

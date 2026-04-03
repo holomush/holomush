@@ -190,11 +190,9 @@ test.describe('Auth Flows — Logout', () => {
     await input.press('Enter');
     await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
 
-    // Verify character sessionStorage cleared but player session persists
+    // Verify character sessionStorage cleared (player auth is cookie-only)
     const storedSession = await page.evaluate(() => sessionStorage.getItem('holomush-session'));
     expect(storedSession).toBeNull();
-    const storedPlayer = await page.evaluate(() => sessionStorage.getItem('holomush-player'));
-    expect(storedPlayer).not.toBeNull();
 
     // DB: game session deleted after quit
     await expect(async () => {

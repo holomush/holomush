@@ -445,6 +445,29 @@ func (s *CoreServer) Logout(ctx context.Context, req *corev1.LogoutRequest) (*co
 	return &corev1.LogoutResponse{}, nil
 }
 
+// CheckPlayerSession validates a player session token and returns the player name.
+func (s *CoreServer) CheckPlayerSession(ctx context.Context, req *corev1.CheckPlayerSessionRequest) (*corev1.CheckPlayerSessionResponse, error) {
+	slog.DebugContext(ctx, "grpc: CheckPlayerSession")
+
+	ps, err := s.resolvePlayerSession(ctx, req.GetPlayerSessionToken())
+	if err != nil {
+		return nil, err
+	}
+
+	if s.playerRepo == nil {
+		return nil, oops.Code("NOT_CONFIGURED").Errorf("player repository not configured")
+	}
+
+	player, err := s.playerRepo.GetByID(ctx, ps.PlayerID)
+	if err != nil {
+		return nil, oops.Code("PLAYER_LOOKUP_FAILED").Wrap(err)
+	}
+
+	return &corev1.CheckPlayerSessionResponse{
+		PlayerName: player.Username,
+	}, nil
+}
+
 // buildCharacterSummaries lists characters for a player and enriches with session status.
 func (s *CoreServer) buildCharacterSummaries(ctx context.Context, playerID ulid.ULID) ([]*corev1.CharacterSummary, error) {
 	if s.charRepo == nil {

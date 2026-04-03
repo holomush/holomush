@@ -64,9 +64,7 @@ test.describe('Character Switcher', () => {
     // Player is still authenticated — character picker title visible
     await expect(page.locator('text=Choose Your Character')).toBeVisible({ timeout: 10000 });
 
-    // Player session token still in sessionStorage
-    const storedPlayer = await page.evaluate(() => sessionStorage.getItem('holomush-player'));
-    expect(storedPlayer).not.toBeNull();
+    // Player remains authenticated via cookie (no client-side token storage)
   });
 
   test('logout button navigates to home and clears session', async ({ page }) => {
