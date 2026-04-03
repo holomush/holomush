@@ -15,28 +15,38 @@ func TestMigrationsFS_EmbeddedFiles(t *testing.T) {
 	entries, err := migrationsFS.ReadDir("migrations")
 	require.NoError(t, err, "should read embedded migrations directory")
 
-	// We have at least 8 migrations, each with up and down = at least 16 files
-	assert.GreaterOrEqual(t, len(entries), 16, "should have at least 16 migration files (8 up + 8 down)")
-
-	// Verify naming pattern - check first migration exists
-	expectedFiles := []string{
-		"000001_initial.up.sql",
-		"000001_initial.down.sql",
-	}
+	assert.GreaterOrEqual(t, len(entries), 2, "should have at least 2 migration files (1 up + 1 down)")
 
 	fileNames := make(map[string]bool)
 	for _, entry := range entries {
 		fileNames[entry.Name()] = true
 	}
+	assert.True(t, fileNames["000001_baseline.up.sql"], "should contain baseline up migration")
+	assert.True(t, fileNames["000001_baseline.down.sql"], "should contain baseline down migration")
 
-	for _, expected := range expectedFiles {
-		assert.True(t, fileNames[expected], "should contain %s", expected)
-	}
-
-	// Verify all files follow expected naming pattern
 	pattern := regexp.MustCompile(`^\d{6}_\w+\.(up|down)\.sql$`)
 	for _, entry := range entries {
 		assert.True(t, pattern.MatchString(entry.Name()),
 			"file %s should match pattern NNNNNN_name.(up|down).sql", entry.Name())
+	}
+
+	upPattern := regexp.MustCompile(`\.up\.sql$`)
+	downPattern := regexp.MustCompile(`\.down\.sql$`)
+	ups := make(map[string]bool)
+	downs := make(map[string]bool)
+	for name := range fileNames {
+		base := name[:6]
+		if upPattern.MatchString(name) {
+			ups[base] = true
+		}
+		if downPattern.MatchString(name) {
+			downs[base] = true
+		}
+	}
+	for v := range ups {
+		assert.True(t, downs[v], "migration %s has .up.sql but no .down.sql", v)
+	}
+	for v := range downs {
+		assert.True(t, ups[v], "migration %s has .down.sql but no .up.sql", v)
 	}
 }

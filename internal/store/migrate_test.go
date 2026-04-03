@@ -263,27 +263,27 @@ func TestMigrator_Close_Idempotent(t *testing.T) {
 }
 
 func TestMigrator_PendingMigrations_Success(t *testing.T) {
-	// At version 3, migrations 4-24 should be pending
-	m := &Migrator{m: &mockMigrate{versionVal: 3}}
+	// At version 0, migration 1 should be pending (only baseline exists)
+	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24}, pending)
+	assert.Equal(t, []uint{1}, pending)
 }
 
 func TestMigrator_PendingMigrations_AtLatest(t *testing.T) {
-	// At version 24 (latest), no migrations should be pending
-	m := &Migrator{m: &mockMigrate{versionVal: 24}}
+	// At version 1 (latest), no migrations should be pending
+	m := &Migrator{m: &mockMigrate{versionVal: 1}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
 	assert.Empty(t, pending)
 }
 
 func TestMigrator_PendingMigrations_AtZero(t *testing.T) {
-	// At version 0 (fresh db), all migrations should be pending
+	// At version 0 (fresh db), baseline migration should be pending
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24}, pending)
+	assert.Equal(t, []uint{1}, pending)
 }
 
 func TestMigrator_PendingMigrations_VersionError(t *testing.T) {
@@ -295,11 +295,11 @@ func TestMigrator_PendingMigrations_VersionError(t *testing.T) {
 }
 
 func TestMigrator_AppliedMigrations_Success(t *testing.T) {
-	// At version 3, migrations 1-3 should be applied
-	m := &Migrator{m: &mockMigrate{versionVal: 3}}
+	// At version 1, baseline should be applied
+	m := &Migrator{m: &mockMigrate{versionVal: 1}}
 	applied, err := m.AppliedMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3}, applied)
+	assert.Equal(t, []uint{1}, applied)
 }
 
 func TestMigrator_AppliedMigrations_AtZero(t *testing.T) {
@@ -311,11 +311,11 @@ func TestMigrator_AppliedMigrations_AtZero(t *testing.T) {
 }
 
 func TestMigrator_AppliedMigrations_AtLatest(t *testing.T) {
-	// At version 17 (latest), all migrations applied
-	m := &Migrator{m: &mockMigrate{versionVal: 17}}
+	// At version 1 (latest baseline), all migrations applied
+	m := &Migrator{m: &mockMigrate{versionVal: 1}}
 	applied, err := m.AppliedMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}, applied)
+	assert.Equal(t, []uint{1}, applied)
 }
 
 func TestMigrator_AppliedMigrations_VersionError(t *testing.T) {
@@ -451,10 +451,10 @@ func TestMigrationName(t *testing.T) {
 		expected    string
 		expectError bool
 	}{
-		{1, "000001_initial", false},
-		{2, "000002_system_info", false},
-		{3, "000003_world_model", false},
-		{7, "000007_exit_self_reference_constraint", false},
+		{1, "000001_baseline", false},
+		{2, "", false},   // No migration 2 after collapse
+		{3, "", false},   // No migration 3 after collapse
+		{7, "", false},   // No migration 7 after collapse
 		{999, "", false}, // Unknown version returns empty string and nil error (not found is expected)
 	}
 
@@ -515,12 +515,12 @@ func TestMigrationName_UsesCache(t *testing.T) {
 	// Test known version
 	name1, err := MigrationName(1)
 	require.NoError(t, err)
-	assert.Equal(t, "000001_initial", name1)
+	assert.Equal(t, "000001_baseline", name1)
 
-	// Test another known version
+	// Test unknown version (no migration 4 after collapse)
 	name4, err := MigrationName(4)
 	require.NoError(t, err)
-	assert.Equal(t, "000004_pg_trgm", name4)
+	assert.Equal(t, "", name4)
 
 	// Test unknown version (should return empty, not error)
 	name999, err := MigrationName(999)
