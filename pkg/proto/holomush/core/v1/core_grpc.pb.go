@@ -35,6 +35,7 @@ const (
 	CoreService_RequestPasswordReset_FullMethodName = "/holomush.core.v1.CoreService/RequestPasswordReset"
 	CoreService_ConfirmPasswordReset_FullMethodName = "/holomush.core.v1.CoreService/ConfirmPasswordReset"
 	CoreService_Logout_FullMethodName               = "/holomush.core.v1.CoreService/Logout"
+	CoreService_CheckPlayerSession_FullMethodName   = "/holomush.core.v1.CoreService/CheckPlayerSession"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -69,6 +70,8 @@ type CoreServiceClient interface {
 	ConfirmPasswordReset(ctx context.Context, in *ConfirmPasswordResetRequest, opts ...grpc.CallOption) (*ConfirmPasswordResetResponse, error)
 	// End a player session.
 	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error)
+	// Validate a player session token. Used by web gateway for cookie-based auth checks.
+	CheckPlayerSession(ctx context.Context, in *CheckPlayerSessionRequest, opts ...grpc.CallOption) (*CheckPlayerSessionResponse, error)
 }
 
 type coreServiceClient struct {
@@ -218,6 +221,16 @@ func (c *coreServiceClient) Logout(ctx context.Context, in *LogoutRequest, opts 
 	return out, nil
 }
 
+func (c *coreServiceClient) CheckPlayerSession(ctx context.Context, in *CheckPlayerSessionRequest, opts ...grpc.CallOption) (*CheckPlayerSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckPlayerSessionResponse)
+	err := c.cc.Invoke(ctx, CoreService_CheckPlayerSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -250,6 +263,8 @@ type CoreServiceServer interface {
 	ConfirmPasswordReset(context.Context, *ConfirmPasswordResetRequest) (*ConfirmPasswordResetResponse, error)
 	// End a player session.
 	Logout(context.Context, *LogoutRequest) (*LogoutResponse, error)
+	// Validate a player session token. Used by web gateway for cookie-based auth checks.
+	CheckPlayerSession(context.Context, *CheckPlayerSessionRequest) (*CheckPlayerSessionResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -298,6 +313,9 @@ func (UnimplementedCoreServiceServer) ConfirmPasswordReset(context.Context, *Con
 }
 func (UnimplementedCoreServiceServer) Logout(context.Context, *LogoutRequest) (*LogoutResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Logout not implemented")
+}
+func (UnimplementedCoreServiceServer) CheckPlayerSession(context.Context, *CheckPlayerSessionRequest) (*CheckPlayerSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckPlayerSession not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -547,6 +565,24 @@ func _CoreService_Logout_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_CheckPlayerSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckPlayerSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).CheckPlayerSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_CheckPlayerSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).CheckPlayerSession(ctx, req.(*CheckPlayerSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -601,6 +637,10 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Logout",
 			Handler:    _CoreService_Logout_Handler,
+		},
+		{
+			MethodName: "CheckPlayerSession",
+			Handler:    _CoreService_CheckPlayerSession_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

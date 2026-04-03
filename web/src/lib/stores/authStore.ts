@@ -7,7 +7,7 @@ import { trace } from '@opentelemetry/api';
 const tracer = trace.getTracer('holomush-web');
 
 interface AuthState {
-  playerSessionToken: string | null;
+  isPlayerAuthenticated: boolean;
   sessionId: string | null;
   characterName: string | null;
   playerName: string | null;
@@ -15,7 +15,7 @@ interface AuthState {
 }
 
 const initial: AuthState = {
-  playerSessionToken: null,
+  isPlayerAuthenticated: false,
   sessionId: null,
   characterName: null,
   playerName: null,
@@ -23,12 +23,12 @@ const initial: AuthState = {
 };
 
 export const authState = writable<AuthState>(initial);
-export const isAuthenticated = derived(authState, ($s) => !!$s.playerSessionToken || !!$s.sessionId);
+export const isAuthenticated = derived(authState, ($s) => $s.isPlayerAuthenticated || !!$s.sessionId);
 export const hasCharacter = derived(authState, ($s) => !!$s.sessionId && !!$s.characterName);
 
-export function setPlayerAuth(playerSessionToken: string, playerName: string) {
-  authState.update((s) => ({ ...s, playerSessionToken, playerName, isGuest: false }));
-  sessionStorage.setItem('holomush-player', JSON.stringify({ playerSessionToken, playerName }));
+export function setPlayerAuth(playerName: string) {
+  sessionStorage.removeItem('holomush-player'); // clean up legacy raw-token key
+  authState.update((s) => ({ ...s, isPlayerAuthenticated: true, playerName, isGuest: false }));
 }
 
 export function setCharacterSession(sessionId: string, characterName: string) {
@@ -50,7 +50,6 @@ export function setGuestSession(sessionId: string, characterName: string) {
 export function clearAuth() {
   authState.set(initial);
   sessionStorage.removeItem('holomush-session');
-  sessionStorage.removeItem('holomush-player');
 }
 
 export function clearCharacterSession() {
@@ -61,20 +60,12 @@ export function clearCharacterSession() {
 export function restoreSession(): void {
   const span = tracer.startSpan('session.restore');
   try {
+    sessionStorage.removeItem('holomush-player'); // clean up legacy raw-token key
     const saved = sessionStorage.getItem('holomush-session');
     if (saved) {
       try {
         const { sessionId, characterName } = JSON.parse(saved);
         if (sessionId) authState.update((s) => ({ ...s, sessionId, characterName }));
-      } catch {
-        /* ignore corrupt data */
-      }
-    }
-    const playerSaved = sessionStorage.getItem('holomush-player');
-    if (playerSaved) {
-      try {
-        const { playerSessionToken, playerName } = JSON.parse(playerSaved);
-        if (playerSessionToken) authState.update((s) => ({ ...s, playerSessionToken, playerName }));
       } catch {
         /* ignore corrupt data */
       }

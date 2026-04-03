@@ -166,6 +166,10 @@ func (m *mockGRPCClient) Logout(_ context.Context, _ *corev1.LogoutRequest) (*co
 	return nil, nil
 }
 
+func (m *mockGRPCClient) CheckPlayerSession(_ context.Context, _ *corev1.CheckPlayerSessionRequest) (*corev1.CheckPlayerSessionResponse, error) {
+	return nil, nil
+}
+
 func (m *mockGRPCClient) GetContent(_ context.Context, _ *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error) {
 	return nil, nil
 }

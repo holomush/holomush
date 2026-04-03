@@ -872,6 +872,99 @@ func TestResolvePlayerSession_RefreshTTLError_StillReturnsSession(t *testing.T) 
 	assert.Equal(t, playerID, got.PlayerID)
 }
 
+// --- CheckPlayerSession tests ---
+
+func TestCheckPlayerSession(t *testing.T) {
+	tests := []struct {
+		name       string
+		setup      func(t *testing.T) (*CoreServer, *corev1.CheckPlayerSessionRequest)
+		expectErr  bool
+		errContain string
+		expectName string
+	}{
+		{
+			name: "valid session returns player name",
+			setup: func(t *testing.T) (*CoreServer, *corev1.CheckPlayerSessionRequest) {
+				playerID := ulid.Make()
+				ps := makePlayerSession(playerID)
+				sessionRepo := setupSessionRepo(t, ps)
+				playerRepo := authmocks.NewMockPlayerRepository(t)
+				playerRepo.EXPECT().GetByID(mock.Anything, playerID).
+					Return(&auth.Player{ID: playerID, Username: "alice"}, nil)
+				server := &CoreServer{
+					engine:            core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore:      session.NewMemStore(),
+					playerSessionRepo: sessionRepo,
+					playerRepo:        playerRepo,
+				}
+				return server, &corev1.CheckPlayerSessionRequest{PlayerSessionToken: validToken}
+			},
+			expectName: "alice",
+		},
+		{
+			name: "invalid token returns error",
+			setup: func(t *testing.T) (*CoreServer, *corev1.CheckPlayerSessionRequest) {
+				sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+				tokenHash := auth.HashSessionToken("bad-token")
+				sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).
+					Return(nil, auth.ErrNotFound)
+				server := &CoreServer{
+					engine:            core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore:      session.NewMemStore(),
+					playerSessionRepo: sessionRepo,
+				}
+				return server, &corev1.CheckPlayerSessionRequest{PlayerSessionToken: "bad-token"}
+			},
+			expectErr: true,
+		},
+		{
+			name: "session repo not configured",
+			setup: func(_ *testing.T) (*CoreServer, *corev1.CheckPlayerSessionRequest) {
+				server := &CoreServer{
+					engine:       core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore: session.NewMemStore(),
+				}
+				return server, &corev1.CheckPlayerSessionRequest{PlayerSessionToken: validToken}
+			},
+			expectErr:  true,
+			errContain: "not configured",
+		},
+		{
+			name: "player repo not configured",
+			setup: func(t *testing.T) (*CoreServer, *corev1.CheckPlayerSessionRequest) {
+				playerID := ulid.Make()
+				ps := makePlayerSession(playerID)
+				sessionRepo := setupSessionRepo(t, ps)
+				server := &CoreServer{
+					engine:            core.NewEngine(core.NewMemoryEventStore()),
+					sessionStore:      session.NewMemStore(),
+					playerSessionRepo: sessionRepo,
+				}
+				return server, &corev1.CheckPlayerSessionRequest{PlayerSessionToken: validToken}
+			},
+			expectErr:  true,
+			errContain: "not configured",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server, req := tt.setup(t)
+			resp, err := server.CheckPlayerSession(context.Background(), req)
+			if tt.expectErr {
+				assert.Nil(t, resp)
+				require.Error(t, err)
+				if tt.errContain != "" {
+					assert.Contains(t, err.Error(), tt.errContain)
+				}
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectName, resp.GetPlayerName())
+			}
+		})
+	}
+}
+
 // --- AuthenticatePlayer additional paths ---
 
 func TestAuthenticatePlayer_SessionRepoCreateFails(t *testing.T) {

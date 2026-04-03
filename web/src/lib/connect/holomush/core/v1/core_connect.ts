@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, AuthenticateRequest, AuthenticateResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListCharactersRequest, ListCharactersResponse, LogoutRequest, LogoutResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
+import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, AuthenticateRequest, AuthenticateResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListCharactersRequest, ListCharactersResponse, LogoutRequest, LogoutResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -158,6 +158,17 @@ export const CoreService = {
       name: "Logout",
       I: LogoutRequest,
       O: LogoutResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Validate a player session token. Used by web gateway for cookie-based auth checks.
+     *
+     * @generated from rpc holomush.core.v1.CoreService.CheckPlayerSession
+     */
+    checkPlayerSession: {
+      name: "CheckPlayerSession",
+      I: CheckPlayerSessionRequest,
+      O: CheckPlayerSessionResponse,
       kind: MethodKind.Unary,
     },
   }

@@ -181,8 +181,8 @@ test.describe('Terminal UI', () => {
     await input.fill('quit');
     await input.press('Enter');
 
-    // Guest quit navigates to /characters, which redirects to /login (no player session)
-    await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
+    // Guest quit clears auth and navigates to landing page
+    await expect(page).toHaveURL(/^\S+\/$/, { timeout: 10000 });
 
     // Verify sessionStorage was cleared
     const session = await page.evaluate(() => sessionStorage.getItem('holomush-session'));
@@ -389,10 +389,10 @@ test.describe('Terminal UI', () => {
     await input.fill('leaked draft from old session');
     await page.waitForTimeout(700);
 
-    // Quit — guest navigates to /characters then redirects to /login
+    // Quit — guest clears auth and navigates to landing page
     await input.fill('quit');
     await input.press('Enter');
-    await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
+    await expect(page).toHaveURL(/^\S+\/$/, { timeout: 10000 });
 
     // Reconnect as guest from landing page
     await connectAsGuest(page);

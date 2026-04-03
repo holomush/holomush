@@ -33,11 +33,10 @@
     try {
       const resp = await client.webAuthenticatePlayer({ username, password });
       if (resp.success) {
-        setPlayerAuth(resp.playerSessionToken, username);
+        setPlayerAuth(username);
         const autoCharId = resp.defaultCharacterId || (resp.characters.length === 1 ? resp.characters[0].characterId : '');
         if (autoCharId) {
           const selectResp = await client.webSelectCharacter({
-            playerSessionToken: resp.playerSessionToken,
             characterId: autoCharId,
           });
           if (selectResp.success) {

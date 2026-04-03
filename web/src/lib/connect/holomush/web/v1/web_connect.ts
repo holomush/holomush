@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, LoginRequest, LoginResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebGetContentRequest, WebGetContentResponse, WebListCharactersRequest, WebListCharactersResponse, WebListContentRequest, WebListContentResponse, WebLogoutRequest, WebLogoutResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebSelectCharacterRequest, WebSelectCharacterResponse } from "./web_pb.js";
+import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, LoginRequest, LoginResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebCheckSessionRequest, WebCheckSessionResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebGetContentRequest, WebGetContentResponse, WebListCharactersRequest, WebListCharactersResponse, WebListContentRequest, WebListContentResponse, WebLogoutRequest, WebLogoutResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebSelectCharacterRequest, WebSelectCharacterResponse } from "./web_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -143,6 +143,17 @@ export const WebService = {
       name: "WebConfirmPasswordReset",
       I: WebConfirmPasswordResetRequest,
       O: WebConfirmPasswordResetResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Validate player session from cookie. Returns player info or Unauthenticated error.
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebCheckSession
+     */
+    webCheckSession: {
+      name: "WebCheckSession",
+      I: WebCheckSessionRequest,
+      O: WebCheckSessionResponse,
       kind: MethodKind.Unary,
     },
     /**

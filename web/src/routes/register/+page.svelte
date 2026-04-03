@@ -40,9 +40,7 @@
     try {
       const resp = await client.webCreatePlayer({ username, password, email });
       if (resp.success) {
-        // TODO: Once web RPCs read playerToken from the httpOnly cookie exclusively,
-        // stop storing it in authStore and just set playerName for display.
-        setPlayerAuth(resp.playerSessionToken, username);
+        setPlayerAuth(username);
         goto('/characters');
       } else {
         error = resp.errorMessage || 'Registration failed.';

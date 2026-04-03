@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+coverage:
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 2%
+    patch:
+      default:
+        target: 80%
+        threshold: 5%
+
+ignore:
+  # Generated protobuf Go code (buf generate)
+  - "pkg/proto/**"
+  # Generated ConnectRPC TypeScript clients (buf generate)
+  - "web/src/lib/connect/**"
+  # Embedded SvelteKit production build (task web:embed)
+  - "internal/web/dist/**"
+  # Test helpers and mocks
+  - "**/*_test.go"
+  - "**/mocks/**"
+
+comment:
+  layout: "condensed_header, condensed_files, condensed_footer"
+  require_changes: true

@@ -68,6 +68,8 @@ type mockCoreClient struct {
 	reqPwResetErr      error
 	confirmPwResetResp *corev1.ConfirmPasswordResetResponse
 	confirmPwResetErr  error
+	checkSessionResp   *corev1.CheckPlayerSessionResponse
+	checkSessionErr    error
 }
 
 func (m *mockCoreClient) Authenticate(_ context.Context, _ *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
@@ -135,6 +137,10 @@ func (m *mockCoreClient) ConfirmPasswordReset(_ context.Context, _ *corev1.Confi
 
 func (m *mockCoreClient) Logout(_ context.Context, _ *corev1.LogoutRequest) (*corev1.LogoutResponse, error) {
 	return m.logoutResp, m.logoutErr
+}
+
+func (m *mockCoreClient) CheckPlayerSession(_ context.Context, _ *corev1.CheckPlayerSessionRequest) (*corev1.CheckPlayerSessionResponse, error) {
+	return m.checkSessionResp, m.checkSessionErr
 }
 
 func TestHandler_Login_Success(t *testing.T) {

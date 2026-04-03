@@ -18,6 +18,44 @@ import (
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
 
+// requestWithToken builds a connect.Request with the session token header injected.
+func requestWithToken[T any](msg *T, token string) *connect.Request[T] {
+	req := connect.NewRequest(msg)
+	req.Header().Set(headerInjectSessionToken, token)
+	return req
+}
+
+// --- playerTokenFromHeader ---
+
+func TestPlayerTokenFromHeader_Present(t *testing.T) {
+	h := http.Header{}
+	h.Set(headerInjectSessionToken, "tok-abc")
+	token, err := playerTokenFromHeader(h)
+	require.NoError(t, err)
+	assert.Equal(t, "tok-abc", token)
+}
+
+func TestPlayerTokenFromHeader_Missing(t *testing.T) {
+	h := http.Header{}
+	token, err := playerTokenFromHeader(h)
+	assert.Empty(t, token)
+	require.Error(t, err)
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
+}
+
+func TestPlayerTokenFromHeader_Empty(t *testing.T) {
+	h := http.Header{}
+	h.Set(headerInjectSessionToken, "")
+	token, err := playerTokenFromHeader(h)
+	assert.Empty(t, token)
+	require.Error(t, err)
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
+}
+
 // --- WebAuthenticatePlayer ---
 
 func TestWebAuthenticatePlayer_Success(t *testing.T) {
@@ -40,7 +78,6 @@ func TestWebAuthenticatePlayer_Success(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.GetSuccess())
-	assert.Equal(t, "tok-abc", resp.Msg.GetPlayerSessionToken())
 	assert.Len(t, resp.Msg.GetCharacters(), 1)
 	assert.Equal(t, "Alice", resp.Msg.GetCharacters()[0].GetCharacterName())
 	assert.Equal(t, "c1", resp.Msg.GetDefaultCharacterId())
@@ -114,10 +151,9 @@ func TestWebSelectCharacter_Success(t *testing.T) {
 	}
 	h := NewHandler(client)
 
-	resp, err := h.WebSelectCharacter(context.Background(), connect.NewRequest(&webv1.WebSelectCharacterRequest{
-		PlayerSessionToken: "tok-abc",
-		CharacterId:        "c1",
-	}))
+	resp, err := h.WebSelectCharacter(context.Background(), requestWithToken(&webv1.WebSelectCharacterRequest{
+		CharacterId: "c1",
+	}, "tok-abc"))
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.GetSuccess())
 	assert.Equal(t, "sess-123", resp.Msg.GetSessionId())
@@ -136,12 +172,24 @@ func TestWebSelectCharacter_Reattached(t *testing.T) {
 	}
 	h := NewHandler(client)
 
-	resp, err := h.WebSelectCharacter(context.Background(), connect.NewRequest(&webv1.WebSelectCharacterRequest{
-		PlayerSessionToken: "tok-abc",
-		CharacterId:        "c2",
-	}))
+	resp, err := h.WebSelectCharacter(context.Background(), requestWithToken(&webv1.WebSelectCharacterRequest{
+		CharacterId: "c2",
+	}, "tok-abc"))
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.GetReattached())
+}
+
+func TestWebSelectCharacter_MissingToken(t *testing.T) {
+	client := &mockCoreClient{}
+	h := NewHandler(client)
+
+	_, err := h.WebSelectCharacter(context.Background(), connect.NewRequest(&webv1.WebSelectCharacterRequest{
+		CharacterId: "c1",
+	}))
+	require.Error(t, err)
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
 }
 
 func TestWebSelectCharacter_RPCError(t *testing.T) {
@@ -150,10 +198,9 @@ func TestWebSelectCharacter_RPCError(t *testing.T) {
 	}
 	h := NewHandler(client)
 
-	resp, err := h.WebSelectCharacter(context.Background(), connect.NewRequest(&webv1.WebSelectCharacterRequest{
-		PlayerSessionToken: "tok-abc",
-		CharacterId:        "c1",
-	}))
+	resp, err := h.WebSelectCharacter(context.Background(), requestWithToken(&webv1.WebSelectCharacterRequest{
+		CharacterId: "c1",
+	}, "tok-abc"))
 	require.NoError(t, err)
 	assert.False(t, resp.Msg.GetSuccess())
 	assert.Equal(t, "character selection error", resp.Msg.GetErrorMessage())
@@ -178,7 +225,6 @@ func TestWebCreatePlayer_Success(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.GetSuccess())
-	assert.Equal(t, "tok-new", resp.Msg.GetPlayerSessionToken())
 	assert.Equal(t, "tok-new", resp.Header().Get(headerSetSessionToken))
 }
 
@@ -229,14 +275,26 @@ func TestWebCreateCharacter_Success(t *testing.T) {
 	}
 	h := NewHandler(client)
 
-	resp, err := h.WebCreateCharacter(context.Background(), connect.NewRequest(&webv1.WebCreateCharacterRequest{
-		PlayerSessionToken: "tok-abc",
-		CharacterName:      "NewChar",
-	}))
+	resp, err := h.WebCreateCharacter(context.Background(), requestWithToken(&webv1.WebCreateCharacterRequest{
+		CharacterName: "NewChar",
+	}, "tok-abc"))
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.GetSuccess())
 	assert.Equal(t, "char-new", resp.Msg.GetCharacterId())
 	assert.Equal(t, "NewChar", resp.Msg.GetCharacterName())
+}
+
+func TestWebCreateCharacter_MissingToken(t *testing.T) {
+	client := &mockCoreClient{}
+	h := NewHandler(client)
+
+	_, err := h.WebCreateCharacter(context.Background(), connect.NewRequest(&webv1.WebCreateCharacterRequest{
+		CharacterName: "Char",
+	}))
+	require.Error(t, err)
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
 }
 
 func TestWebCreateCharacter_RPCError(t *testing.T) {
@@ -245,10 +303,9 @@ func TestWebCreateCharacter_RPCError(t *testing.T) {
 	}
 	h := NewHandler(client)
 
-	resp, err := h.WebCreateCharacter(context.Background(), connect.NewRequest(&webv1.WebCreateCharacterRequest{
-		PlayerSessionToken: "tok-abc",
-		CharacterName:      "Char",
-	}))
+	resp, err := h.WebCreateCharacter(context.Background(), requestWithToken(&webv1.WebCreateCharacterRequest{
+		CharacterName: "Char",
+	}, "tok-abc"))
 	require.NoError(t, err)
 	assert.False(t, resp.Msg.GetSuccess())
 	assert.Equal(t, "character creation error", resp.Msg.GetErrorMessage())
@@ -267,13 +324,23 @@ func TestWebListCharacters_Success(t *testing.T) {
 	}
 	h := NewHandler(client)
 
-	resp, err := h.WebListCharacters(context.Background(), connect.NewRequest(&webv1.WebListCharactersRequest{
-		PlayerSessionToken: "tok-abc",
-	}))
+	resp, err := h.WebListCharacters(context.Background(), requestWithToken(&webv1.WebListCharactersRequest{}, "tok-abc"))
 	require.NoError(t, err)
 	assert.Len(t, resp.Msg.GetCharacters(), 2)
 	assert.Equal(t, "Alice", resp.Msg.GetCharacters()[0].GetCharacterName())
 	assert.True(t, resp.Msg.GetCharacters()[0].GetHasActiveSession())
+}
+
+func TestWebListCharacters_MissingToken(t *testing.T) {
+	client := &mockCoreClient{}
+	h := NewHandler(client)
+
+	resp, err := h.WebListCharacters(context.Background(), connect.NewRequest(&webv1.WebListCharactersRequest{}))
+	require.Error(t, err)
+	assert.Nil(t, resp)
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
 }
 
 func TestWebListCharacters_RPCError(t *testing.T) {
@@ -282,9 +349,7 @@ func TestWebListCharacters_RPCError(t *testing.T) {
 	}
 	h := NewHandler(client)
 
-	resp, err := h.WebListCharacters(context.Background(), connect.NewRequest(&webv1.WebListCharactersRequest{
-		PlayerSessionToken: "tok-abc",
-	}))
+	resp, err := h.WebListCharacters(context.Background(), requestWithToken(&webv1.WebListCharactersRequest{}, "tok-abc"))
 	require.Error(t, err)
 	assert.Nil(t, resp)
 	var connectErr *connect.Error
@@ -300,9 +365,7 @@ func TestWebLogout_Success(t *testing.T) {
 	}
 	h := NewHandler(client)
 
-	resp, err := h.WebLogout(context.Background(), connect.NewRequest(&webv1.WebLogoutRequest{
-		PlayerSessionToken: "sess-123",
-	}))
+	resp, err := h.WebLogout(context.Background(), requestWithToken(&webv1.WebLogoutRequest{}, "sess-123"))
 	require.NoError(t, err)
 	assert.NotNil(t, resp.Msg)
 	assert.Equal(t, "true", resp.Header().Get(headerClearSession))
@@ -314,12 +377,59 @@ func TestWebLogout_RPCError(t *testing.T) {
 	}
 	h := NewHandler(client)
 
-	resp, err := h.WebLogout(context.Background(), connect.NewRequest(&webv1.WebLogoutRequest{
-		PlayerSessionToken: "sess-123",
-	}))
+	resp, err := h.WebLogout(context.Background(), requestWithToken(&webv1.WebLogoutRequest{}, "sess-123"))
 	require.NoError(t, err)
 	assert.NotNil(t, resp.Msg)
 	assert.Equal(t, "true", resp.Header().Get(headerClearSession), "cookie should be cleared even on RPC error")
+}
+
+func TestWebLogout_NoToken_StillClears(t *testing.T) {
+	client := &mockCoreClient{}
+	h := NewHandler(client)
+
+	resp, err := h.WebLogout(context.Background(), connect.NewRequest(&webv1.WebLogoutRequest{}))
+	require.NoError(t, err)
+	assert.NotNil(t, resp.Msg)
+	assert.Equal(t, "true", resp.Header().Get(headerClearSession))
+}
+
+// --- WebCheckSession ---
+
+func TestWebCheckSession_Success(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionResp: &corev1.CheckPlayerSessionResponse{
+			PlayerName: "alice",
+		},
+	}
+	h := NewHandler(client)
+
+	resp, err := h.WebCheckSession(context.Background(), requestWithToken(&webv1.WebCheckSessionRequest{}, "tok-abc"))
+	require.NoError(t, err)
+	assert.Equal(t, "alice", resp.Msg.GetPlayerName())
+}
+
+func TestWebCheckSession_NoCookie(t *testing.T) {
+	client := &mockCoreClient{}
+	h := NewHandler(client)
+
+	_, err := h.WebCheckSession(context.Background(), connect.NewRequest(&webv1.WebCheckSessionRequest{}))
+	require.Error(t, err)
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
+}
+
+func TestWebCheckSession_CoreRPCError(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionErr: errors.New("session expired"),
+	}
+	h := NewHandler(client)
+
+	_, err := h.WebCheckSession(context.Background(), requestWithToken(&webv1.WebCheckSessionRequest{}, "tok-expired"))
+	require.Error(t, err)
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
 }
 
 // --- WebRequestPasswordReset ---
@@ -448,7 +558,7 @@ func TestCookieMiddleware_InjectsCookieAsHeader(t *testing.T) {
 
 	handler := CookieMiddleware(false, inner)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.AddCookie(&http.Cookie{Name: cookieName, Value: "my-token"})
+	req.AddCookie(&http.Cookie{Name: cookieName, Value: "my-token", HttpOnly: true, Secure: true})
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)

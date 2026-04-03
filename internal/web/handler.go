@@ -48,6 +48,7 @@ type CoreClient interface {
 	RequestPasswordReset(ctx context.Context, req *corev1.RequestPasswordResetRequest) (*corev1.RequestPasswordResetResponse, error)
 	ConfirmPasswordReset(ctx context.Context, req *corev1.ConfirmPasswordResetRequest) (*corev1.ConfirmPasswordResetResponse, error)
 	Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1.LogoutResponse, error)
+	CheckPlayerSession(ctx context.Context, req *corev1.CheckPlayerSessionRequest) (*corev1.CheckPlayerSessionResponse, error)
 }
 
 // ContentClient is the gRPC interface used by Handler to communicate with the
