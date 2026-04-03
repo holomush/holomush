@@ -437,6 +437,7 @@ func (e *Engine) CanPerformAction(ctx context.Context, subject, action, resource
 ```
 
 The `evaluateSubjectOnlyConditions` helper evaluates condition blocks, returning:
+
 - `condTrue` if all conditions evaluate to true using only subject attributes
 - `condFalse` if any condition evaluates to false
 - `condUnknown` if conditions reference resource attributes (optimistic)
@@ -820,6 +821,7 @@ format instead of dotted/colon string capabilities.
 Replace all `capabilities: []string{"admin:manage"}` with structured capabilities. Replace all `Grant(subject, "execute", "admin:manage")` calls with appropriate ABAC grants for the new check flow.
 
 The dispatcher now does two checks:
+
 1. `CheckCommandExecution` → needs `command:<name>` to be permitted
 2. `CheckCapabilityPreFlight` → needs `CanPerformAction` to return true
 

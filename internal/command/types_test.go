@@ -183,6 +183,10 @@ func (m *mockEngine) Evaluate(_ context.Context, _ types.AccessRequest) (types.D
 	return types.Decision{}, nil
 }
 
+func (m *mockEngine) CanPerformAction(_ context.Context, _, _, _, _ string) (bool, error) {
+	return false, nil
+}
+
 // TestDecision_ZeroValue_IsDeny verifies that the zero-value Decision denies access.
 // This is critical for fail-closed security - mocks returning Decision{} must deny by default.
 func TestDecision_ZeroValue_IsDeny(t *testing.T) {

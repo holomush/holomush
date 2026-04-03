@@ -25,6 +25,66 @@ func (_m *MockAccessPolicyEngine) EXPECT() *MockAccessPolicyEngine_Expecter {
 	return &MockAccessPolicyEngine_Expecter{mock: &_m.Mock}
 }
 
+// CanPerformAction provides a mock function with given fields: ctx, subject, action, resourceType, scope
+func (_m *MockAccessPolicyEngine) CanPerformAction(ctx context.Context, subject string, action string, resourceType string, scope string) (bool, error) {
+	ret := _m.Called(ctx, subject, action, resourceType, scope)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CanPerformAction")
+	}
+
+	var r0 bool
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, string) (bool, error)); ok {
+		return rf(ctx, subject, action, resourceType, scope)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, string) bool); ok {
+		r0 = rf(ctx, subject, action, resourceType, scope)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, string, string) error); ok {
+		r1 = rf(ctx, subject, action, resourceType, scope)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockAccessPolicyEngine_CanPerformAction_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CanPerformAction'
+type MockAccessPolicyEngine_CanPerformAction_Call struct {
+	*mock.Call
+}
+
+// CanPerformAction is a helper method to define mock.On call
+//   - ctx context.Context
+//   - subject string
+//   - action string
+//   - resourceType string
+//   - scope string
+func (_e *MockAccessPolicyEngine_Expecter) CanPerformAction(ctx interface{}, subject interface{}, action interface{}, resourceType interface{}, scope interface{}) *MockAccessPolicyEngine_CanPerformAction_Call {
+	return &MockAccessPolicyEngine_CanPerformAction_Call{Call: _e.mock.On("CanPerformAction", ctx, subject, action, resourceType, scope)}
+}
+
+func (_c *MockAccessPolicyEngine_CanPerformAction_Call) Run(run func(ctx context.Context, subject string, action string, resourceType string, scope string)) *MockAccessPolicyEngine_CanPerformAction_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string), args[4].(string))
+	})
+	return _c
+}
+
+func (_c *MockAccessPolicyEngine_CanPerformAction_Call) Return(_a0 bool, _a1 error) *MockAccessPolicyEngine_CanPerformAction_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockAccessPolicyEngine_CanPerformAction_Call) RunAndReturn(run func(context.Context, string, string, string, string) (bool, error)) *MockAccessPolicyEngine_CanPerformAction_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Evaluate provides a mock function with given fields: ctx, request
 func (_m *MockAccessPolicyEngine) Evaluate(ctx context.Context, request types.AccessRequest) (types.Decision, error) {
 	ret := _m.Called(ctx, request)

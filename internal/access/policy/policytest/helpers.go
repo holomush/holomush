@@ -19,6 +19,8 @@ func AllowAllEngine() *MockAccessPolicyEngine {
 	m := &MockAccessPolicyEngine{}
 	m.On("Evaluate", mock.Anything, mock.Anything).
 		Return(types.NewDecision(types.EffectAllow, "test-allow-all", ""), nil)
+	m.On("CanPerformAction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil)
 	return m
 }
 
@@ -27,6 +29,8 @@ func DenyAllEngine() *MockAccessPolicyEngine {
 	m := &MockAccessPolicyEngine{}
 	m.On("Evaluate", mock.Anything, mock.Anything).
 		Return(types.NewDecision(types.EffectDeny, "test-deny-all", ""), nil)
+	m.On("CanPerformAction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(false, nil)
 	return m
 }
 
@@ -55,6 +59,20 @@ func (g *GrantEngine) Evaluate(_ context.Context, req types.AccessRequest) (type
 	return types.NewDecision(types.EffectDefaultDeny, "test-no-grant", ""), nil
 }
 
+// CanPerformAction implements types.AccessPolicyEngine.
+// Returns true if any grant matches subject+action (resource type is not checked —
+// type-level pre-flight ignores the specific resource instance, consistent with the
+// spec's coarse capability check intent).
+func (g *GrantEngine) CanPerformAction(_ context.Context, subject, action, _, _ string) (bool, error) {
+	for key := range g.grants {
+		parts := strings.SplitN(key, "\x00", 3)
+		if len(parts) == 3 && parts[0] == subject && parts[1] == action {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // ErrorEngine is a test types.AccessPolicyEngine that always returns the configured error.
 // Used to test fail-closed error paths.
 type ErrorEngine struct {
@@ -69,6 +87,11 @@ func NewErrorEngine(err error) *ErrorEngine {
 // Evaluate returns a zero-value decision and the configured error.
 func (e *ErrorEngine) Evaluate(_ context.Context, _ types.AccessRequest) (types.Decision, error) {
 	return types.Decision{}, e.err
+}
+
+// CanPerformAction returns false and the configured error.
+func (e *ErrorEngine) CanPerformAction(_ context.Context, _, _, _, _ string) (bool, error) {
+	return false, e.err
 }
 
 // InfraFailureEngine is a test types.AccessPolicyEngine that returns deny decisions
@@ -92,4 +115,9 @@ func NewInfraFailureEngine(t testing.TB, reason, policyID string) *InfraFailureE
 // Evaluate returns a deny decision with the infra: policy ID prefix.
 func (e *InfraFailureEngine) Evaluate(_ context.Context, _ types.AccessRequest) (types.Decision, error) {
 	return types.NewDecision(types.EffectDefaultDeny, e.reason, e.policyID), nil
+}
+
+// CanPerformAction returns false, nil (infrastructure failures deny without error).
+func (e *InfraFailureEngine) CanPerformAction(_ context.Context, _, _, _, _ string) (bool, error) {
+	return false, nil
 }

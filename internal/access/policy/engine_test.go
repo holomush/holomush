@@ -1938,3 +1938,89 @@ func TestEngine_OnCorruptPermitPolicy_DoesNotEnterDegraded(t *testing.T) {
 	engine.OnPolicyCorruption("policy-456", types.PolicyEffectPermit)
 	assert.False(t, engine.IsDegraded())
 }
+
+// --- CanPerformAction tests ---
+
+func TestEngine_CanPerformAction_AdminPermitted(t *testing.T) {
+	dslText := `permit(principal is character, action in ["write"], resource is location) when { "admin" in principal.character.roles };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"roles": []string{"admin"}},
+	}
+	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.True(t, allowed, "admin should be permitted to write on location type")
+}
+
+func TestEngine_CanPerformAction_NoMatchingPolicy(t *testing.T) {
+	// Policy only covers "read" but we're checking "write"
+	dslText := `permit(principal is character, action in ["read"], resource is location);`
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "no write policy → default deny")
+}
+
+func TestEngine_CanPerformAction_ForbidOverridesPermit(t *testing.T) {
+	permitDSL := `permit(principal is character, action in ["write"], resource is location);`
+	forbidDSL := `forbid(principal is character, action in ["write"], resource is location) when { "banned" in principal.character.roles };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"roles": []string{"player", "banned"}},
+	}
+	engine := createTestEngineWithPolicies(t, []string{permitDSL, forbidDSL}, []attribute.AttributeProvider{provider})
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "forbid should override permit")
+}
+
+func TestEngine_CanPerformAction_DegradedMode(t *testing.T) {
+	engine, _ := createTestEngine(t, &mockSessionResolver{})
+	engine.EnterDegradedMode("test")
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "degraded mode → fail-closed")
+}
+
+func TestEngine_CanPerformAction_ContextCancelled(t *testing.T) {
+	engine, _ := createTestEngine(t, &mockSessionResolver{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	allowed, err := engine.CanPerformAction(ctx, "character:01ABC", "write", "location", "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.False(t, allowed)
+}
+
+func TestEngine_CanPerformAction_UnconditionalPermit(t *testing.T) {
+	// Policy with no conditions (always matches)
+	dslText := `permit(principal is character, action in ["say"], resource is location);`
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "say", "location", "")
+	require.NoError(t, err)
+	assert.True(t, allowed, "unconditional permit should match")
+}
+
+func TestEngine_CanPerformAction_ExactResourcePolicySkipped(t *testing.T) {
+	// Policy targets a specific resource exact match — should be skipped in type-level check
+	dslText := `permit(principal is character, action in ["write"], resource == "location:special-room");`
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
+
+	// Type-level check should not match the exact-resource policy
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "exact-resource policies should be skipped in type-level pre-flight")
+}
