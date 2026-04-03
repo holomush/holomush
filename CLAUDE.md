@@ -204,6 +204,19 @@ errutil.AssertErrorContext(t, err, "key", expectedValue)
 - Avoid abbreviations except well-known ones (ID, URL, HTTP)
 - Package names are lowercase, single words when possible
 
+### Database Migrations
+
+Migrations live in `internal/store/migrations/` and are embedded at compile time.
+See the full guide at [site/docs/contributing/database-migrations.md](site/docs/contributing/database-migrations.md).
+
+| Requirement | Description |
+| ----------- | ----------- |
+| **MUST** use sequential numbering | `000002_`, `000003_`, etc. after baseline |
+| **MUST** provide both `.up.sql` and `.down.sql` | Every migration needs a reversible pair |
+| **MUST** be idempotent | Use `IF NOT EXISTS`, `IF EXISTS`, `ON CONFLICT DO NOTHING` |
+| **MUST NOT** modify the baseline | Add new migrations instead of editing `000001_baseline` |
+| **MUST NOT** use triggers or functions | All logic lives in Go; PostgreSQL is storage only |
+
 ### License Headers
 
 All source files MUST include SPDX license headers at the top:

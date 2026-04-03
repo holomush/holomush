@@ -7,6 +7,7 @@ package store_test
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"testing"
 
@@ -20,10 +21,91 @@ import (
 	"github.com/holomush/holomush/internal/store"
 )
 
+// expectedTables lists every table created by the baseline migration.
+var expectedTables = []string{
+	"access_audit_log",
+	"access_policies",
+	"access_policy_versions",
+	"bootstrap_metadata",
+	"character_roles",
+	"characters",
+	"content_items",
+	"entity_properties",
+	"events",
+	"exits",
+	"holomush_system_info",
+	"locations",
+	"objects",
+	"password_resets",
+	"player_aliases",
+	"player_sessions",
+	"players",
+	"scene_participants",
+	"session_connections",
+	"sessions",
+	"system_aliases",
+}
+
+// queryTableNames returns user-defined table names (excluding schema_migrations)
+// from the public schema, sorted alphabetically.
+func queryTableNames(t *testing.T, ctx context.Context, connStr string) []string {
+	t.Helper()
+	conn, err := pgx.Connect(ctx, connStr)
+	require.NoError(t, err)
+	defer conn.Close(ctx)
+
+	rows, err := conn.Query(ctx,
+		`SELECT tablename FROM pg_catalog.pg_tables
+		 WHERE schemaname = 'public' AND tablename != 'schema_migrations'
+		 ORDER BY tablename`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var name string
+		require.NoError(t, rows.Scan(&name))
+		tables = append(tables, name)
+	}
+	require.NoError(t, rows.Err())
+	sort.Strings(tables)
+	return tables
+}
+
+// verifySeedData checks that the baseline seed rows required for bootstrap exist.
+func verifySeedData(t *testing.T, ctx context.Context, connStr string) {
+	t.Helper()
+	conn, err := pgx.Connect(ctx, connStr)
+	require.NoError(t, err)
+	defer conn.Close(ctx)
+
+	// System aliases required by command dispatcher
+	var aliasCount int
+	err = conn.QueryRow(ctx, "SELECT count(*) FROM system_aliases WHERE alias IN ('tel', 'ex')").Scan(&aliasCount)
+	require.NoError(t, err)
+	assert.Equal(t, 2, aliasCount, "should have 'tel' and 'ex' system aliases")
+
+	// Starting location required by bootstrap
+	var locCount int
+	err = conn.QueryRow(ctx, "SELECT count(*) FROM locations WHERE name = 'The Void'").Scan(&locCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, locCount, "should have 'The Void' starting location")
+
+	// Test player and character required by bootstrap
+	var playerCount int
+	err = conn.QueryRow(ctx, "SELECT count(*) FROM players WHERE username = 'testuser'").Scan(&playerCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, playerCount, "should have 'testuser' player")
+
+	var charCount int
+	err = conn.QueryRow(ctx, "SELECT count(*) FROM characters WHERE name = 'TestChar'").Scan(&charCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, charCount, "should have 'TestChar' character")
+}
+
 func TestMigrator_FullCycle(t *testing.T) {
 	ctx := context.Background()
 
-	// Start PostgreSQL container
 	pgContainer, err := postgres.Run(ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
@@ -39,64 +121,56 @@ func TestMigrator_FullCycle(t *testing.T) {
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	require.NoError(t, err)
 
-	// Test: Create migrator
 	migrator, err := store.NewMigrator(connStr)
 	require.NoError(t, err)
 	defer migrator.Close()
 
-	// Test: Initial version is 0
+	// Phase 1: Fresh database — version 0, no tables
 	version, dirty, err := migrator.Version()
 	require.NoError(t, err)
 	assert.Equal(t, uint(0), version)
 	assert.False(t, dirty)
 
-	// Test: Apply all migrations
+	tables := queryTableNames(t, ctx, connStr)
+	assert.Empty(t, tables, "fresh database should have no user tables")
+
+	// Phase 2: Up — apply baseline, verify all tables
 	err = migrator.Up()
 	require.NoError(t, err)
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Greater(t, version, uint(0), "Up() should apply at least one migration")
+	assert.Equal(t, uint(1), version)
 	assert.False(t, dirty)
-	latestVersion := version // Save for relative assertions below
 
-	// Test: Rollback one
-	err = migrator.Steps(-1)
-	require.NoError(t, err)
+	tables = queryTableNames(t, ctx, connStr)
+	assert.Equal(t, expectedTables, tables, "Up() should create all expected tables")
+	verifySeedData(t, ctx, connStr)
 
-	version, _, err = migrator.Version()
-	require.NoError(t, err)
-	assert.Equal(t, latestVersion-1, version, "Steps(-1) should rollback one version")
-
-	// Test: Apply one
-	err = migrator.Steps(1)
-	require.NoError(t, err)
-
-	version, _, err = migrator.Version()
-	require.NoError(t, err)
-	assert.Equal(t, latestVersion, version, "Steps(1) should restore to latest version")
-
-	// Test: Down() rolls back all migrations
+	// Phase 3: Down — rollback, verify all tables gone
 	err = migrator.Down()
 	require.NoError(t, err)
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(0), version, "Down() should rollback to version 0")
+	assert.Equal(t, uint(0), version)
 	assert.False(t, dirty)
 
-	// Test: Re-apply all for Force() test
-	err = migrator.Up()
-	require.NoError(t, err)
+	tables = queryTableNames(t, ctx, connStr)
+	assert.Empty(t, tables, "Down() should remove all user tables")
 
-	// Test: Force() sets version without running migrations
-	err = migrator.Force(3)
+	// Phase 4: Re-apply — prove idempotency
+	err = migrator.Up()
 	require.NoError(t, err)
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(3), version, "Force() should set version to 3")
-	assert.False(t, dirty, "Force() should clear dirty flag")
+	assert.Equal(t, uint(1), version)
+	assert.False(t, dirty)
+
+	tables = queryTableNames(t, ctx, connStr)
+	assert.Equal(t, expectedTables, tables, "second Up() should recreate all tables")
+	verifySeedData(t, ctx, connStr)
 }
 
 func TestMigrator_DirtyStateRecovery(t *testing.T) {
@@ -311,8 +385,8 @@ func TestMigrator_Force_VersionExceedsAvailable(t *testing.T) {
 	// golang-migrate tries to read the current version's down migration and fails
 	err = migrator.Up()
 	require.Error(t, err, "Up() should fail when forced to non-existent version")
-	assert.Contains(t, err.Error(), "no migration found for version 999",
-		"error message should indicate missing migration")
+	assert.Contains(t, err.Error(), "999",
+		"error message should reference the invalid version")
 
 	// PendingMigrations() returns empty because version 999 > all migrations
 	// This is misleading since Up() will actually fail

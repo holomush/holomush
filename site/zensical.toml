@@ -68,6 +68,7 @@ Contributing = [
   "contributing/architecture.md",
   "contributing/coding-standards.md",
   "contributing/authentication.md",
+  "contributing/database-migrations.md",
   "contributing/event-delivery.md",
   "contributing/pr-guide.md",
 ]

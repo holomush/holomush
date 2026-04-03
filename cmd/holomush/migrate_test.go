@@ -510,8 +510,8 @@ func TestMigrateDownLogic_VersionErrorAfter(t *testing.T) {
 func TestMigrateUpDryRun_PendingMigrations(t *testing.T) {
 	var buf bytes.Buffer
 	mock := &migrateLogicMock{
-		version:           3,
-		pendingMigrations: []uint{4, 5, 6, 7},
+		version:           0,
+		pendingMigrations: []uint{1},
 	}
 
 	err := runMigrateUpDryRun(&buf, mock)
@@ -519,13 +519,9 @@ func TestMigrateUpDryRun_PendingMigrations(t *testing.T) {
 	require.NoError(t, err)
 	output := buf.String()
 	assert.Contains(t, output, "Dry run - the following migrations would be applied:")
-	// Output shows migration names (e.g., "000004_pg_trgm") instead of "Version X"
-	assert.Contains(t, output, "000004_pg_trgm")
-	assert.Contains(t, output, "000005_pg_stat_statements")
-	assert.Contains(t, output, "000006_object_containment_constraint")
-	assert.Contains(t, output, "000007_exit_self_reference_constraint")
-	assert.Contains(t, output, "Current version: 3")
-	assert.Contains(t, output, "Target version: 7")
+	assert.Contains(t, output, "000001_baseline")
+	assert.Contains(t, output, "Current version: 0")
+	assert.Contains(t, output, "Target version: 1")
 	assert.False(t, mock.upCalled, "Up() should not be called in dry-run mode")
 }
 
@@ -571,8 +567,8 @@ func TestMigrateUpDryRun_PendingError(t *testing.T) {
 func TestMigrateDownDryRun_RollbackOne(t *testing.T) {
 	var buf bytes.Buffer
 	mock := &migrateLogicMock{
-		version:           5,
-		appliedMigrations: []uint{1, 2, 3, 4, 5},
+		version:           1,
+		appliedMigrations: []uint{1},
 	}
 
 	err := runMigrateDownDryRun(&buf, mock, false)
@@ -580,10 +576,9 @@ func TestMigrateDownDryRun_RollbackOne(t *testing.T) {
 	require.NoError(t, err)
 	output := buf.String()
 	assert.Contains(t, output, "Dry run - the following migration would be rolled back:")
-	// Output shows migration name instead of "Version X"
-	assert.Contains(t, output, "000005_pg_stat_statements")
-	assert.Contains(t, output, "Current version: 5")
-	assert.Contains(t, output, "Target version: 4")
+	assert.Contains(t, output, "000001_baseline")
+	assert.Contains(t, output, "Current version: 1")
+	assert.Contains(t, output, "Target version: 0")
 	assert.False(t, mock.downCalled, "Down() should not be called in dry-run mode")
 	assert.False(t, mock.stepsCalled, "Steps() should not be called in dry-run mode")
 }
@@ -591,8 +586,8 @@ func TestMigrateDownDryRun_RollbackOne(t *testing.T) {
 func TestMigrateDownDryRun_RollbackAll(t *testing.T) {
 	var buf bytes.Buffer
 	mock := &migrateLogicMock{
-		version:           5,
-		appliedMigrations: []uint{1, 2, 3, 4, 5},
+		version:           1,
+		appliedMigrations: []uint{1},
 	}
 
 	err := runMigrateDownDryRun(&buf, mock, true)
@@ -600,13 +595,8 @@ func TestMigrateDownDryRun_RollbackAll(t *testing.T) {
 	require.NoError(t, err)
 	output := buf.String()
 	assert.Contains(t, output, "Dry run - the following migrations would be rolled back:")
-	// Should show in reverse order with migration names
-	assert.Contains(t, output, "000005_pg_stat_statements")
-	assert.Contains(t, output, "000004_pg_trgm")
-	assert.Contains(t, output, "000003_world_model")
-	assert.Contains(t, output, "000002_system_info")
-	assert.Contains(t, output, "000001_initial")
-	assert.Contains(t, output, "Current version: 5")
+	assert.Contains(t, output, "000001_baseline")
+	assert.Contains(t, output, "Current version: 1")
 	assert.Contains(t, output, "Target version: 0")
 	assert.False(t, mock.downCalled)
 }
@@ -638,8 +628,7 @@ func TestMigrateDownDryRun_RollbackOneToZero(t *testing.T) {
 	require.NoError(t, err)
 	output := buf.String()
 	assert.Contains(t, output, "Dry run - the following migration would be rolled back:")
-	// Output shows migration name instead of "Version X"
-	assert.Contains(t, output, "000001_initial")
+	assert.Contains(t, output, "000001_baseline")
 	assert.Contains(t, output, "Current version: 1")
 	assert.Contains(t, output, "Target version: 0")
 }
@@ -747,7 +736,7 @@ func TestMigrateDownDryRun_UnknownVersionFallbackAll(t *testing.T) {
 	assert.Contains(t, output, "Version 999")
 	assert.Contains(t, output, "Version 998")
 	// Known version 1 should show migration name
-	assert.Contains(t, output, "000001_initial")
+	assert.Contains(t, output, "000001_baseline")
 	assert.Contains(t, output, "Current version: 999")
 	assert.Contains(t, output, "Target version: 0")
 }
