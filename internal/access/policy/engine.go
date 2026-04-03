@@ -400,7 +400,7 @@ func (e *Engine) findApplicablePolicies(req types.AccessRequest, policies []Cach
 // If any forbid policy with satisfied conditions matches, returns false.
 // If any permit policy with satisfied conditions matches, returns true.
 // No match → default deny (false, nil).
-func (e *Engine) CanPerformAction(ctx context.Context, subject, action, resourceType, scope string) (bool, error) {
+func (e *Engine) CanPerformAction(ctx context.Context, subject, action, resourceType, _ string) (bool, error) {
 	// Step 1: Context cancellation check
 	if err := ctx.Err(); err != nil {
 		return false, oops.Wrapf(err, "context cancelled before CanPerformAction")
