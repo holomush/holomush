@@ -291,6 +291,35 @@ func (h *Handler) WebConfirmPasswordReset(ctx context.Context, req *connect.Requ
 	}), nil
 }
 
+// WebCreateGuest creates an ephemeral guest player and returns a session cookie.
+func (h *Handler) WebCreateGuest(ctx context.Context, _ *connect.Request[webv1.WebCreateGuestRequest]) (*connect.Response[webv1.WebCreateGuestResponse], error) {
+	slog.DebugContext(ctx, "web: WebCreateGuest")
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	coreResp, err := h.client.CreateGuest(rpcCtx, &corev1.CreateGuestRequest{})
+	if err != nil {
+		slog.Error("web: create guest RPC failed", "error", err)
+		return connect.NewResponse(&webv1.WebCreateGuestResponse{
+			Success: false, ErrorMessage: "guest creation error",
+		}), nil
+	}
+	if !coreResp.GetSuccess() {
+		return connect.NewResponse(&webv1.WebCreateGuestResponse{
+			Success: false, ErrorMessage: coreResp.GetErrorMessage(),
+		}), nil
+	}
+
+	resp := connect.NewResponse(&webv1.WebCreateGuestResponse{
+		Success:            true,
+		Characters:         translateCharacterSummaries(coreResp.GetCharacters()),
+		DefaultCharacterId: coreResp.GetDefaultCharacterId(),
+	})
+	resp.Header().Set(headerSetSessionToken, coreResp.GetPlayerSessionToken())
+	return resp, nil
+}
+
 // translateCharacterSummaries converts core proto CharacterSummary slices to web proto equivalents.
 func translateCharacterSummaries(core []*corev1.CharacterSummary) []*webv1.CharacterSummary {
 	if len(core) == 0 {

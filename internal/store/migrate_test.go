@@ -263,27 +263,27 @@ func TestMigrator_Close_Idempotent(t *testing.T) {
 }
 
 func TestMigrator_PendingMigrations_Success(t *testing.T) {
-	// At version 0, migration 1 should be pending (only baseline exists)
+	// At version 0, migrations 1-2 should be pending (baseline + is_guest)
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1}, pending)
+	assert.Equal(t, []uint{1, 2}, pending)
 }
 
 func TestMigrator_PendingMigrations_AtLatest(t *testing.T) {
-	// At version 1 (latest), no migrations should be pending
-	m := &Migrator{m: &mockMigrate{versionVal: 1}}
+	// At version 2 (latest), no migrations should be pending
+	m := &Migrator{m: &mockMigrate{versionVal: 2}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
 	assert.Empty(t, pending)
 }
 
 func TestMigrator_PendingMigrations_AtZero(t *testing.T) {
-	// At version 0 (fresh db), baseline migration should be pending
+	// At version 0 (fresh db), all migrations should be pending
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1}, pending)
+	assert.Equal(t, []uint{1, 2}, pending)
 }
 
 func TestMigrator_PendingMigrations_VersionError(t *testing.T) {
@@ -311,11 +311,11 @@ func TestMigrator_AppliedMigrations_AtZero(t *testing.T) {
 }
 
 func TestMigrator_AppliedMigrations_AtLatest(t *testing.T) {
-	// At version 1 (latest baseline), all migrations applied
-	m := &Migrator{m: &mockMigrate{versionVal: 1}}
+	// At version 2 (latest), all migrations applied
+	m := &Migrator{m: &mockMigrate{versionVal: 2}}
 	applied, err := m.AppliedMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1}, applied)
+	assert.Equal(t, []uint{1, 2}, applied)
 }
 
 func TestMigrator_AppliedMigrations_VersionError(t *testing.T) {
@@ -452,7 +452,7 @@ func TestMigrationName(t *testing.T) {
 		expectError bool
 	}{
 		{1, "000001_baseline", false},
-		{2, "", false},   // No migration 2 after collapse
+		{2, "000002_player_is_guest", false},
 		{3, "", false},   // No migration 3 after collapse
 		{7, "", false},   // No migration 7 after collapse
 		{999, "", false}, // Unknown version returns empty string and nil error (not found is expected)

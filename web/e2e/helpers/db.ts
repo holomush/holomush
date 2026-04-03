@@ -30,13 +30,24 @@ export async function closePool(): Promise<void> {
 export interface DbPlayer {
   id: string;
   username: string;
+  is_guest: boolean;
   created_at: Date;
 }
 
 export async function getPlayerByUsername(username: string): Promise<DbPlayer | null> {
   const { rows } = await getPool().query<DbPlayer>(
-    'SELECT id, username, created_at FROM players WHERE username = $1',
+    'SELECT id, username, is_guest, created_at FROM players WHERE username = $1',
     [username],
+  );
+  return rows[0] ?? null;
+}
+
+export async function getPlayerByCharacterId(characterId: string): Promise<DbPlayer | null> {
+  const { rows } = await getPool().query<DbPlayer>(
+    `SELECT p.id, p.username, p.is_guest, p.created_at
+     FROM players p JOIN characters c ON c.player_id = p.id
+     WHERE c.id = $1`,
+    [characterId],
   );
   return rows[0] ?? null;
 }

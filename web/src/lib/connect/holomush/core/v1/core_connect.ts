@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, AuthenticateRequest, AuthenticateResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListCharactersRequest, ListCharactersResponse, LogoutRequest, LogoutResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
+import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, AuthenticateRequest, AuthenticateResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreateGuestRequest, CreateGuestResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListCharactersRequest, ListCharactersResponse, LogoutRequest, LogoutResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -103,6 +103,17 @@ export const CoreService = {
       name: "CreatePlayer",
       I: CreatePlayerRequest,
       O: CreatePlayerResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Create an ephemeral guest player and character.
+     *
+     * @generated from rpc holomush.core.v1.CoreService.CreateGuest
+     */
+    createGuest: {
+      name: "CreateGuest",
+      I: CreateGuestRequest,
+      O: CreateGuestResponse,
       kind: MethodKind.Unary,
     },
     /**

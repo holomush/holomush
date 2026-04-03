@@ -22,7 +22,6 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	WebService_Login_FullMethodName                   = "/holomush.web.v1.WebService/Login"
 	WebService_SendCommand_FullMethodName             = "/holomush.web.v1.WebService/SendCommand"
 	WebService_StreamEvents_FullMethodName            = "/holomush.web.v1.WebService/StreamEvents"
 	WebService_Disconnect_FullMethodName              = "/holomush.web.v1.WebService/Disconnect"
@@ -30,6 +29,7 @@ const (
 	WebService_WebAuthenticatePlayer_FullMethodName   = "/holomush.web.v1.WebService/WebAuthenticatePlayer"
 	WebService_WebSelectCharacter_FullMethodName      = "/holomush.web.v1.WebService/WebSelectCharacter"
 	WebService_WebCreatePlayer_FullMethodName         = "/holomush.web.v1.WebService/WebCreatePlayer"
+	WebService_WebCreateGuest_FullMethodName          = "/holomush.web.v1.WebService/WebCreateGuest"
 	WebService_WebCreateCharacter_FullMethodName      = "/holomush.web.v1.WebService/WebCreateCharacter"
 	WebService_WebListCharacters_FullMethodName       = "/holomush.web.v1.WebService/WebListCharacters"
 	WebService_WebLogout_FullMethodName               = "/holomush.web.v1.WebService/WebLogout"
@@ -44,8 +44,6 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WebServiceClient interface {
-	// Authenticate as guest or registered user.
-	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
 	// Send a game command (say, pose, quit, etc.)
 	SendCommand(ctx context.Context, in *SendCommandRequest, opts ...grpc.CallOption) (*SendCommandResponse, error)
 	// Server-streaming event feed. Client receives game events
@@ -59,6 +57,8 @@ type WebServiceClient interface {
 	WebAuthenticatePlayer(ctx context.Context, in *WebAuthenticatePlayerRequest, opts ...grpc.CallOption) (*WebAuthenticatePlayerResponse, error)
 	WebSelectCharacter(ctx context.Context, in *WebSelectCharacterRequest, opts ...grpc.CallOption) (*WebSelectCharacterResponse, error)
 	WebCreatePlayer(ctx context.Context, in *WebCreatePlayerRequest, opts ...grpc.CallOption) (*WebCreatePlayerResponse, error)
+	// Create an ephemeral guest player and character.
+	WebCreateGuest(ctx context.Context, in *WebCreateGuestRequest, opts ...grpc.CallOption) (*WebCreateGuestResponse, error)
 	WebCreateCharacter(ctx context.Context, in *WebCreateCharacterRequest, opts ...grpc.CallOption) (*WebCreateCharacterResponse, error)
 	WebListCharacters(ctx context.Context, in *WebListCharactersRequest, opts ...grpc.CallOption) (*WebListCharactersResponse, error)
 	WebLogout(ctx context.Context, in *WebLogoutRequest, opts ...grpc.CallOption) (*WebLogoutResponse, error)
@@ -77,16 +77,6 @@ type webServiceClient struct {
 
 func NewWebServiceClient(cc grpc.ClientConnInterface) WebServiceClient {
 	return &webServiceClient{cc}
-}
-
-func (c *webServiceClient) Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(LoginResponse)
-	err := c.cc.Invoke(ctx, WebService_Login_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *webServiceClient) SendCommand(ctx context.Context, in *SendCommandRequest, opts ...grpc.CallOption) (*SendCommandResponse, error) {
@@ -162,6 +152,16 @@ func (c *webServiceClient) WebCreatePlayer(ctx context.Context, in *WebCreatePla
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(WebCreatePlayerResponse)
 	err := c.cc.Invoke(ctx, WebService_WebCreatePlayer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebCreateGuest(ctx context.Context, in *WebCreateGuestRequest, opts ...grpc.CallOption) (*WebCreateGuestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebCreateGuestResponse)
+	err := c.cc.Invoke(ctx, WebService_WebCreateGuest_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -252,8 +252,6 @@ func (c *webServiceClient) WebListContent(ctx context.Context, in *WebListConten
 // All implementations must embed UnimplementedWebServiceServer
 // for forward compatibility.
 type WebServiceServer interface {
-	// Authenticate as guest or registered user.
-	Login(context.Context, *LoginRequest) (*LoginResponse, error)
 	// Send a game command (say, pose, quit, etc.)
 	SendCommand(context.Context, *SendCommandRequest) (*SendCommandResponse, error)
 	// Server-streaming event feed. Client receives game events
@@ -267,6 +265,8 @@ type WebServiceServer interface {
 	WebAuthenticatePlayer(context.Context, *WebAuthenticatePlayerRequest) (*WebAuthenticatePlayerResponse, error)
 	WebSelectCharacter(context.Context, *WebSelectCharacterRequest) (*WebSelectCharacterResponse, error)
 	WebCreatePlayer(context.Context, *WebCreatePlayerRequest) (*WebCreatePlayerResponse, error)
+	// Create an ephemeral guest player and character.
+	WebCreateGuest(context.Context, *WebCreateGuestRequest) (*WebCreateGuestResponse, error)
 	WebCreateCharacter(context.Context, *WebCreateCharacterRequest) (*WebCreateCharacterResponse, error)
 	WebListCharacters(context.Context, *WebListCharactersRequest) (*WebListCharactersResponse, error)
 	WebLogout(context.Context, *WebLogoutRequest) (*WebLogoutResponse, error)
@@ -287,9 +287,6 @@ type WebServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedWebServiceServer struct{}
 
-func (UnimplementedWebServiceServer) Login(context.Context, *LoginRequest) (*LoginResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Login not implemented")
-}
 func (UnimplementedWebServiceServer) SendCommand(context.Context, *SendCommandRequest) (*SendCommandResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SendCommand not implemented")
 }
@@ -310,6 +307,9 @@ func (UnimplementedWebServiceServer) WebSelectCharacter(context.Context, *WebSel
 }
 func (UnimplementedWebServiceServer) WebCreatePlayer(context.Context, *WebCreatePlayerRequest) (*WebCreatePlayerResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebCreatePlayer not implemented")
+}
+func (UnimplementedWebServiceServer) WebCreateGuest(context.Context, *WebCreateGuestRequest) (*WebCreateGuestResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebCreateGuest not implemented")
 }
 func (UnimplementedWebServiceServer) WebCreateCharacter(context.Context, *WebCreateCharacterRequest) (*WebCreateCharacterResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebCreateCharacter not implemented")
@@ -354,24 +354,6 @@ func RegisterWebServiceServer(s grpc.ServiceRegistrar, srv WebServiceServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&WebService_ServiceDesc, srv)
-}
-
-func _WebService_Login_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LoginRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WebServiceServer).Login(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WebService_Login_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WebServiceServer).Login(ctx, req.(*LoginRequest))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _WebService_SendCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -489,6 +471,24 @@ func _WebService_WebCreatePlayer_Handler(srv interface{}, ctx context.Context, d
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(WebServiceServer).WebCreatePlayer(ctx, req.(*WebCreatePlayerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebCreateGuest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebCreateGuestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebCreateGuest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebCreateGuest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebCreateGuest(ctx, req.(*WebCreateGuestRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -645,10 +645,6 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*WebServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Login",
-			Handler:    _WebService_Login_Handler,
-		},
-		{
 			MethodName: "SendCommand",
 			Handler:    _WebService_SendCommand_Handler,
 		},
@@ -671,6 +667,10 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebCreatePlayer",
 			Handler:    _WebService_WebCreatePlayer_Handler,
+		},
+		{
+			MethodName: "WebCreateGuest",
+			Handler:    _WebService_WebCreateGuest_Handler,
 		},
 		{
 			MethodName: "WebCreateCharacter",

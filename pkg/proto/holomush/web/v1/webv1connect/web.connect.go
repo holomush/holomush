@@ -36,8 +36,6 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// WebServiceLoginProcedure is the fully-qualified name of the WebService's Login RPC.
-	WebServiceLoginProcedure = "/holomush.web.v1.WebService/Login"
 	// WebServiceSendCommandProcedure is the fully-qualified name of the WebService's SendCommand RPC.
 	WebServiceSendCommandProcedure = "/holomush.web.v1.WebService/SendCommand"
 	// WebServiceStreamEventsProcedure is the fully-qualified name of the WebService's StreamEvents RPC.
@@ -56,6 +54,9 @@ const (
 	// WebServiceWebCreatePlayerProcedure is the fully-qualified name of the WebService's
 	// WebCreatePlayer RPC.
 	WebServiceWebCreatePlayerProcedure = "/holomush.web.v1.WebService/WebCreatePlayer"
+	// WebServiceWebCreateGuestProcedure is the fully-qualified name of the WebService's WebCreateGuest
+	// RPC.
+	WebServiceWebCreateGuestProcedure = "/holomush.web.v1.WebService/WebCreateGuest"
 	// WebServiceWebCreateCharacterProcedure is the fully-qualified name of the WebService's
 	// WebCreateCharacter RPC.
 	WebServiceWebCreateCharacterProcedure = "/holomush.web.v1.WebService/WebCreateCharacter"
@@ -83,8 +84,6 @@ const (
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
 type WebServiceClient interface {
-	// Authenticate as guest or registered user.
-	Login(context.Context, *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error)
 	// Send a game command (say, pose, quit, etc.)
 	SendCommand(context.Context, *connect.Request[v1.SendCommandRequest]) (*connect.Response[v1.SendCommandResponse], error)
 	// Server-streaming event feed. Client receives game events
@@ -98,6 +97,8 @@ type WebServiceClient interface {
 	WebAuthenticatePlayer(context.Context, *connect.Request[v1.WebAuthenticatePlayerRequest]) (*connect.Response[v1.WebAuthenticatePlayerResponse], error)
 	WebSelectCharacter(context.Context, *connect.Request[v1.WebSelectCharacterRequest]) (*connect.Response[v1.WebSelectCharacterResponse], error)
 	WebCreatePlayer(context.Context, *connect.Request[v1.WebCreatePlayerRequest]) (*connect.Response[v1.WebCreatePlayerResponse], error)
+	// Create an ephemeral guest player and character.
+	WebCreateGuest(context.Context, *connect.Request[v1.WebCreateGuestRequest]) (*connect.Response[v1.WebCreateGuestResponse], error)
 	WebCreateCharacter(context.Context, *connect.Request[v1.WebCreateCharacterRequest]) (*connect.Response[v1.WebCreateCharacterResponse], error)
 	WebListCharacters(context.Context, *connect.Request[v1.WebListCharactersRequest]) (*connect.Response[v1.WebListCharactersResponse], error)
 	WebLogout(context.Context, *connect.Request[v1.WebLogoutRequest]) (*connect.Response[v1.WebLogoutResponse], error)
@@ -121,12 +122,6 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 	baseURL = strings.TrimRight(baseURL, "/")
 	webServiceMethods := v1.File_holomush_web_v1_web_proto.Services().ByName("WebService").Methods()
 	return &webServiceClient{
-		login: connect.NewClient[v1.LoginRequest, v1.LoginResponse](
-			httpClient,
-			baseURL+WebServiceLoginProcedure,
-			connect.WithSchema(webServiceMethods.ByName("Login")),
-			connect.WithClientOptions(opts...),
-		),
 		sendCommand: connect.NewClient[v1.SendCommandRequest, v1.SendCommandResponse](
 			httpClient,
 			baseURL+WebServiceSendCommandProcedure,
@@ -167,6 +162,12 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+WebServiceWebCreatePlayerProcedure,
 			connect.WithSchema(webServiceMethods.ByName("WebCreatePlayer")),
+			connect.WithClientOptions(opts...),
+		),
+		webCreateGuest: connect.NewClient[v1.WebCreateGuestRequest, v1.WebCreateGuestResponse](
+			httpClient,
+			baseURL+WebServiceWebCreateGuestProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebCreateGuest")),
 			connect.WithClientOptions(opts...),
 		),
 		webCreateCharacter: connect.NewClient[v1.WebCreateCharacterRequest, v1.WebCreateCharacterResponse](
@@ -222,7 +223,6 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 
 // webServiceClient implements WebServiceClient.
 type webServiceClient struct {
-	login                   *connect.Client[v1.LoginRequest, v1.LoginResponse]
 	sendCommand             *connect.Client[v1.SendCommandRequest, v1.SendCommandResponse]
 	streamEvents            *connect.Client[v1.StreamEventsRequest, v1.StreamEventsResponse]
 	disconnect              *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
@@ -230,6 +230,7 @@ type webServiceClient struct {
 	webAuthenticatePlayer   *connect.Client[v1.WebAuthenticatePlayerRequest, v1.WebAuthenticatePlayerResponse]
 	webSelectCharacter      *connect.Client[v1.WebSelectCharacterRequest, v1.WebSelectCharacterResponse]
 	webCreatePlayer         *connect.Client[v1.WebCreatePlayerRequest, v1.WebCreatePlayerResponse]
+	webCreateGuest          *connect.Client[v1.WebCreateGuestRequest, v1.WebCreateGuestResponse]
 	webCreateCharacter      *connect.Client[v1.WebCreateCharacterRequest, v1.WebCreateCharacterResponse]
 	webListCharacters       *connect.Client[v1.WebListCharactersRequest, v1.WebListCharactersResponse]
 	webLogout               *connect.Client[v1.WebLogoutRequest, v1.WebLogoutResponse]
@@ -238,11 +239,6 @@ type webServiceClient struct {
 	webCheckSession         *connect.Client[v1.WebCheckSessionRequest, v1.WebCheckSessionResponse]
 	webGetContent           *connect.Client[v1.WebGetContentRequest, v1.WebGetContentResponse]
 	webListContent          *connect.Client[v1.WebListContentRequest, v1.WebListContentResponse]
-}
-
-// Login calls holomush.web.v1.WebService.Login.
-func (c *webServiceClient) Login(ctx context.Context, req *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error) {
-	return c.login.CallUnary(ctx, req)
 }
 
 // SendCommand calls holomush.web.v1.WebService.SendCommand.
@@ -278,6 +274,11 @@ func (c *webServiceClient) WebSelectCharacter(ctx context.Context, req *connect.
 // WebCreatePlayer calls holomush.web.v1.WebService.WebCreatePlayer.
 func (c *webServiceClient) WebCreatePlayer(ctx context.Context, req *connect.Request[v1.WebCreatePlayerRequest]) (*connect.Response[v1.WebCreatePlayerResponse], error) {
 	return c.webCreatePlayer.CallUnary(ctx, req)
+}
+
+// WebCreateGuest calls holomush.web.v1.WebService.WebCreateGuest.
+func (c *webServiceClient) WebCreateGuest(ctx context.Context, req *connect.Request[v1.WebCreateGuestRequest]) (*connect.Response[v1.WebCreateGuestResponse], error) {
+	return c.webCreateGuest.CallUnary(ctx, req)
 }
 
 // WebCreateCharacter calls holomush.web.v1.WebService.WebCreateCharacter.
@@ -322,8 +323,6 @@ func (c *webServiceClient) WebListContent(ctx context.Context, req *connect.Requ
 
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
-	// Authenticate as guest or registered user.
-	Login(context.Context, *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error)
 	// Send a game command (say, pose, quit, etc.)
 	SendCommand(context.Context, *connect.Request[v1.SendCommandRequest]) (*connect.Response[v1.SendCommandResponse], error)
 	// Server-streaming event feed. Client receives game events
@@ -337,6 +336,8 @@ type WebServiceHandler interface {
 	WebAuthenticatePlayer(context.Context, *connect.Request[v1.WebAuthenticatePlayerRequest]) (*connect.Response[v1.WebAuthenticatePlayerResponse], error)
 	WebSelectCharacter(context.Context, *connect.Request[v1.WebSelectCharacterRequest]) (*connect.Response[v1.WebSelectCharacterResponse], error)
 	WebCreatePlayer(context.Context, *connect.Request[v1.WebCreatePlayerRequest]) (*connect.Response[v1.WebCreatePlayerResponse], error)
+	// Create an ephemeral guest player and character.
+	WebCreateGuest(context.Context, *connect.Request[v1.WebCreateGuestRequest]) (*connect.Response[v1.WebCreateGuestResponse], error)
 	WebCreateCharacter(context.Context, *connect.Request[v1.WebCreateCharacterRequest]) (*connect.Response[v1.WebCreateCharacterResponse], error)
 	WebListCharacters(context.Context, *connect.Request[v1.WebListCharactersRequest]) (*connect.Response[v1.WebListCharactersResponse], error)
 	WebLogout(context.Context, *connect.Request[v1.WebLogoutRequest]) (*connect.Response[v1.WebLogoutResponse], error)
@@ -356,12 +357,6 @@ type WebServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	webServiceMethods := v1.File_holomush_web_v1_web_proto.Services().ByName("WebService").Methods()
-	webServiceLoginHandler := connect.NewUnaryHandler(
-		WebServiceLoginProcedure,
-		svc.Login,
-		connect.WithSchema(webServiceMethods.ByName("Login")),
-		connect.WithHandlerOptions(opts...),
-	)
 	webServiceSendCommandHandler := connect.NewUnaryHandler(
 		WebServiceSendCommandProcedure,
 		svc.SendCommand,
@@ -402,6 +397,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		WebServiceWebCreatePlayerProcedure,
 		svc.WebCreatePlayer,
 		connect.WithSchema(webServiceMethods.ByName("WebCreatePlayer")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebCreateGuestHandler := connect.NewUnaryHandler(
+		WebServiceWebCreateGuestProcedure,
+		svc.WebCreateGuest,
+		connect.WithSchema(webServiceMethods.ByName("WebCreateGuest")),
 		connect.WithHandlerOptions(opts...),
 	)
 	webServiceWebCreateCharacterHandler := connect.NewUnaryHandler(
@@ -454,8 +455,6 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 	)
 	return "/holomush.web.v1.WebService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case WebServiceLoginProcedure:
-			webServiceLoginHandler.ServeHTTP(w, r)
 		case WebServiceSendCommandProcedure:
 			webServiceSendCommandHandler.ServeHTTP(w, r)
 		case WebServiceStreamEventsProcedure:
@@ -470,6 +469,8 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebSelectCharacterHandler.ServeHTTP(w, r)
 		case WebServiceWebCreatePlayerProcedure:
 			webServiceWebCreatePlayerHandler.ServeHTTP(w, r)
+		case WebServiceWebCreateGuestProcedure:
+			webServiceWebCreateGuestHandler.ServeHTTP(w, r)
 		case WebServiceWebCreateCharacterProcedure:
 			webServiceWebCreateCharacterHandler.ServeHTTP(w, r)
 		case WebServiceWebListCharactersProcedure:
@@ -494,10 +495,6 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 
 // UnimplementedWebServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedWebServiceHandler struct{}
-
-func (UnimplementedWebServiceHandler) Login(context.Context, *connect.Request[v1.LoginRequest]) (*connect.Response[v1.LoginResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.Login is not implemented"))
-}
 
 func (UnimplementedWebServiceHandler) SendCommand(context.Context, *connect.Request[v1.SendCommandRequest]) (*connect.Response[v1.SendCommandResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.SendCommand is not implemented"))
@@ -525,6 +522,10 @@ func (UnimplementedWebServiceHandler) WebSelectCharacter(context.Context, *conne
 
 func (UnimplementedWebServiceHandler) WebCreatePlayer(context.Context, *connect.Request[v1.WebCreatePlayerRequest]) (*connect.Response[v1.WebCreatePlayerResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebCreatePlayer is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebCreateGuest(context.Context, *connect.Request[v1.WebCreateGuestRequest]) (*connect.Response[v1.WebCreateGuestResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebCreateGuest is not implemented"))
 }
 
 func (UnimplementedWebServiceHandler) WebCreateCharacter(context.Context, *connect.Request[v1.WebCreateCharacterRequest]) (*connect.Response[v1.WebCreateCharacterResponse], error) {

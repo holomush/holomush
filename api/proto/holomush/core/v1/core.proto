@@ -47,6 +47,9 @@ service CoreService {
   // Create a new player account.
   rpc CreatePlayer(CreatePlayerRequest) returns (CreatePlayerResponse);
 
+  // Create an ephemeral guest player and character.
+  rpc CreateGuest(CreateGuestRequest) returns (CreateGuestResponse);
+
   // Create a new character for an authenticated player.
   rpc CreateCharacter(CreateCharacterRequest) returns (CreateCharacterResponse);
 
@@ -205,6 +208,16 @@ message CreatePlayerResponse {
   string player_session_token = 2;
   repeated CharacterSummary characters = 3;
   string error_message = 4;
+}
+
+message CreateGuestRequest {}
+
+message CreateGuestResponse {
+  bool success = 1;
+  string error_message = 2;
+  string player_session_token = 3;
+  repeated CharacterSummary characters = 4;
+  string default_character_id = 5;
 }
 
 message CreateCharacterRequest {

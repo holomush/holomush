@@ -7,6 +7,7 @@ package mocks
 
 import (
 	context "context"
+	time "time"
 
 	auth "github.com/holomush/holomush/internal/auth"
 
@@ -494,6 +495,112 @@ func (_c *MockPlayerRepository_UpdatePasswordAndClearLockout_Call) Return(_a0 er
 }
 
 func (_c *MockPlayerRepository_UpdatePasswordAndClearLockout_Call) RunAndReturn(run func(context.Context, ulid.ULID, string) error) *MockPlayerRepository_UpdatePasswordAndClearLockout_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeleteGuestPlayer provides a mock function with given fields: ctx, playerID
+func (_m *MockPlayerRepository) DeleteGuestPlayer(ctx context.Context, playerID ulid.ULID) error {
+	ret := _m.Called(ctx, playerID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteGuestPlayer")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) error); ok {
+		r0 = rf(ctx, playerID)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockPlayerRepository_DeleteGuestPlayer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteGuestPlayer'
+type MockPlayerRepository_DeleteGuestPlayer_Call struct {
+	*mock.Call
+}
+
+// DeleteGuestPlayer is a helper method to define mock.On call
+//   - ctx context.Context
+//   - playerID ulid.ULID
+func (_e *MockPlayerRepository_Expecter) DeleteGuestPlayer(ctx interface{}, playerID interface{}) *MockPlayerRepository_DeleteGuestPlayer_Call {
+	return &MockPlayerRepository_DeleteGuestPlayer_Call{Call: _e.mock.On("DeleteGuestPlayer", ctx, playerID)}
+}
+
+func (_c *MockPlayerRepository_DeleteGuestPlayer_Call) Run(run func(ctx context.Context, playerID ulid.ULID)) *MockPlayerRepository_DeleteGuestPlayer_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(ulid.ULID))
+	})
+	return _c
+}
+
+func (_c *MockPlayerRepository_DeleteGuestPlayer_Call) Return(_a0 error) *MockPlayerRepository_DeleteGuestPlayer_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockPlayerRepository_DeleteGuestPlayer_Call) RunAndReturn(run func(context.Context, ulid.ULID) error) *MockPlayerRepository_DeleteGuestPlayer_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListIdleGuests provides a mock function with given fields: ctx, idleSince
+func (_m *MockPlayerRepository) ListIdleGuests(ctx context.Context, idleSince time.Time) ([]*auth.Player, error) {
+	ret := _m.Called(ctx, idleSince)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListIdleGuests")
+	}
+
+	var r0 []*auth.Player
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time) ([]*auth.Player, error)); ok {
+		return rf(ctx, idleSince)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time) []*auth.Player); ok {
+		r0 = rf(ctx, idleSince)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*auth.Player)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, time.Time) error); ok {
+		r1 = rf(ctx, idleSince)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockPlayerRepository_ListIdleGuests_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListIdleGuests'
+type MockPlayerRepository_ListIdleGuests_Call struct {
+	*mock.Call
+}
+
+// ListIdleGuests is a helper method to define mock.On call
+//   - ctx context.Context
+//   - idleSince time.Time
+func (_e *MockPlayerRepository_Expecter) ListIdleGuests(ctx interface{}, idleSince interface{}) *MockPlayerRepository_ListIdleGuests_Call {
+	return &MockPlayerRepository_ListIdleGuests_Call{Call: _e.mock.On("ListIdleGuests", ctx, idleSince)}
+}
+
+func (_c *MockPlayerRepository_ListIdleGuests_Call) Run(run func(ctx context.Context, idleSince time.Time)) *MockPlayerRepository_ListIdleGuests_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockPlayerRepository_ListIdleGuests_Call) Return(_a0 []*auth.Player, _a1 error) *MockPlayerRepository_ListIdleGuests_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockPlayerRepository_ListIdleGuests_Call) RunAndReturn(run func(context.Context, time.Time) ([]*auth.Player, error)) *MockPlayerRepository_ListIdleGuests_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -30,14 +30,18 @@ test.describe('Auth Flows', () => {
     await expect(page).toHaveURL(/\/terminal/, { timeout: 10000 });
     await expect(page.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
 
-    // DB: session exists with valid location
+    // DB: game session exists with valid location
     const sessionId = await getClientSessionId(page);
     expect(sessionId).toBeTruthy();
     const session = await db.getSessionById(sessionId!);
     expect(session).not.toBeNull();
-    expect(session!.is_guest).toBe(true);
     expect(session!.status).toBe('active');
     expect(db.isValidLocationId(session!.location_id)).toBe(true);
+
+    // DB: player is a guest (is_guest=true on the player, not the game session)
+    const player = await db.getPlayerByCharacterId(session!.character_id);
+    expect(player).not.toBeNull();
+    expect(player!.is_guest).toBe(true);
 
     // DB: location matches the starting location
     const startLoc = await db.getStartingLocation();

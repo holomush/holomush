@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, LoginRequest, LoginResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebCheckSessionRequest, WebCheckSessionResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebGetContentRequest, WebGetContentResponse, WebListCharactersRequest, WebListCharactersResponse, WebListContentRequest, WebListContentResponse, WebLogoutRequest, WebLogoutResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebSelectCharacterRequest, WebSelectCharacterResponse } from "./web_pb.js";
+import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebCheckSessionRequest, WebCheckSessionResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreateGuestRequest, WebCreateGuestResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebGetContentRequest, WebGetContentResponse, WebListCharactersRequest, WebListCharactersResponse, WebListContentRequest, WebListContentResponse, WebLogoutRequest, WebLogoutResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebSelectCharacterRequest, WebSelectCharacterResponse } from "./web_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -15,17 +15,6 @@ import { MethodKind } from "@bufbuild/protobuf";
 export const WebService = {
   typeName: "holomush.web.v1.WebService",
   methods: {
-    /**
-     * Authenticate as guest or registered user.
-     *
-     * @generated from rpc holomush.web.v1.WebService.Login
-     */
-    login: {
-      name: "Login",
-      I: LoginRequest,
-      O: LoginResponse,
-      kind: MethodKind.Unary,
-    },
     /**
      * Send a game command (say, pose, quit, etc.)
      *
@@ -98,6 +87,17 @@ export const WebService = {
       name: "WebCreatePlayer",
       I: WebCreatePlayerRequest,
       O: WebCreatePlayerResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Create an ephemeral guest player and character.
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebCreateGuest
+     */
+    webCreateGuest: {
+      name: "WebCreateGuest",
+      I: WebCreateGuestRequest,
+      O: WebCreateGuestResponse,
       kind: MethodKind.Unary,
     },
     /**

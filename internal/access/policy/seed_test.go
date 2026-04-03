@@ -118,14 +118,17 @@ func TestSeedPolicies_ExpectedNames(t *testing.T) {
 	assert.ElementsMatch(t, expectedNames, seedNames)
 }
 
-func TestSeedPolicies_ForbidPolicyIsPropertyRestrictedExcluded(t *testing.T) {
+func TestSeedPolicies_ForbidPoliciesAreExpected(t *testing.T) {
+	expectedForbids := map[string]bool{
+		"seed:property-restricted-excluded": true,
+	}
 	compiler := NewCompiler(emptySchema())
 	for _, s := range SeedPolicies() {
 		compiled, _, err := compiler.Compile(s.DSLText)
 		require.NoError(t, err)
 		if compiled.Effect == "forbid" {
-			assert.Equal(t, "seed:property-restricted-excluded", s.Name,
-				"only seed:property-restricted-excluded should be a forbid policy")
+			assert.True(t, expectedForbids[s.Name],
+				"unexpected forbid policy: %q", s.Name)
 		}
 	}
 }
@@ -258,3 +261,4 @@ func TestSeedPolicies_PemitStoryteller(t *testing.T) {
 	}
 	assert.True(t, found, "seed:pemit-storyteller policy must exist")
 }
+

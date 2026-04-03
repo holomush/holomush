@@ -12,9 +12,12 @@ type SeedPolicy struct {
 }
 
 // SeedPolicies returns the complete set of 27 seed policies (26 permit, 1 forbid).
-// The initial 18 (T22) plus 5 gap-fill policies (T22b: G1-G4), and 2 phase-2 command policies.
+// The initial 18 (T22) plus 5 gap-fill policies (T22b: G1-G4), 2 phase-2 command policies, and 2 system bootstrap policies.
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
 // See ADR 087 for rationale on default-deny instead of explicit forbid for system properties.
+//
+// Note: guest restrictions for character creation and switching are enforced at the RPC layer
+// (web handlers and grpc auth_handlers), not via game commands. No seed policies are needed.
 //
 // Attribute paths use fully-qualified namespace.key syntax matching the resolver's
 // storage format (e.g., principal.character.roles, resource.location.id).
@@ -205,5 +208,6 @@ func SeedPolicies() []SeedPolicy {
 			DSLText:     `permit(principal is system, action in ["read", "write"], resource is exit);`,
 			SeedVersion: 1,
 		},
+
 	}
 }

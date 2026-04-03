@@ -36,13 +36,25 @@ func NewGuestAuthenticator(theme naming.Theme, startLocation ulid.ULID) *GuestAu
 	}
 }
 
+// GenerateName generates a unique themed guest name and reserves it
+// in the active set. The caller is responsible for calling ReleaseGuest
+// when the name is no longer in use.
+func (a *GuestAuthenticator) GenerateName() (string, error) {
+	return a.generateUniqueName()
+}
+
+// StartLocation returns the start location for guest characters.
+func (a *GuestAuthenticator) StartLocation() ulid.ULID {
+	return a.startLocation
+}
+
 // Authenticate handles guest logins. Only "guest" username is accepted.
 func (a *GuestAuthenticator) Authenticate(_ context.Context, username, _ string) (*grpcserver.AuthResult, error) {
 	if username != "guest" {
 		return nil, oops.Errorf("Registered accounts are not yet available. Use `connect guest` to play.")
 	}
 
-	name, err := a.generateUniqueName()
+	name, err := a.GenerateName()
 	if err != nil {
 		return nil, err
 	}

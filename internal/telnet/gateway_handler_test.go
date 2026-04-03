@@ -39,8 +39,8 @@ func TestCoreClient_SatisfiedByGRPCClient(t *testing.T) {
 
 // mockCoreClient is a test double for CoreClient.
 type mockCoreClient struct {
-	authResp *corev1.AuthenticateResponse
-	authErr  error
+	createGuestResp *corev1.CreateGuestResponse
+	createGuestErr  error
 
 	authPlayerResp    *corev1.AuthenticatePlayerResponse
 	authPlayerErr     error
@@ -71,10 +71,6 @@ type mockCoreClient struct {
 
 	listCharResp *corev1.ListCharactersResponse
 	listCharErr  error
-}
-
-func (m *mockCoreClient) Authenticate(_ context.Context, _ *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
-	return m.authResp, m.authErr
 }
 
 func (m *mockCoreClient) AuthenticatePlayer(_ context.Context, req *corev1.AuthenticatePlayerRequest) (*corev1.AuthenticatePlayerResponse, error) {
@@ -117,6 +113,10 @@ func (m *mockCoreClient) Logout(_ context.Context, req *corev1.LogoutRequest) (*
 		return m.logoutResp, m.logoutErr
 	}
 	return &corev1.LogoutResponse{}, nil
+}
+
+func (m *mockCoreClient) CreateGuest(_ context.Context, _ *corev1.CreateGuestRequest) (*corev1.CreateGuestResponse, error) {
+	return m.createGuestResp, m.createGuestErr
 }
 
 func (m *mockCoreClient) HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
@@ -162,10 +162,14 @@ func TestGatewayHandler_GuestConnect(t *testing.T) {
 	defer clientConn.Close()
 
 	client := &mockCoreClient{
-		authResp: &corev1.AuthenticateResponse{
+		createGuestResp: &corev1.CreateGuestResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-guest-1",
+			Characters:         []*corev1.CharacterSummary{{CharacterId: "char-1", CharacterName: "Guest-7"}},
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
 			Success:       true,
 			SessionId:     "sess-1",
-			CharacterId:   "char-1",
 			CharacterName: "Guest-7",
 		},
 		// Prevent Subscribe goroutine from launching.
@@ -200,11 +204,8 @@ func TestGatewayHandler_GuestConnect(t *testing.T) {
 	line = strings.TrimRight(line, "\r\n")
 	assert.Contains(t, line, "Guest-7")
 
-	// Disconnect cleanly. "Goodbye!" is now delivered via event stream,
-	// not inline — the handler just exits.
-	_, err = clientConn.Write([]byte("quit\n"))
-	require.NoError(t, err)
-
+	// Disconnect cleanly.
+	cancel()
 	<-done
 }
 
@@ -218,10 +219,14 @@ func TestGatewayHandler_SayCommand(t *testing.T) {
 	var receivedCmd string
 	cmdCalled := make(chan struct{})
 	client := &mockCoreClient{
-		authResp: &corev1.AuthenticateResponse{
+		createGuestResp: &corev1.CreateGuestResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-guest-2",
+			Characters:         []*corev1.CharacterSummary{{CharacterId: "char-2", CharacterName: "Tester"}},
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
 			Success:       true,
 			SessionId:     "sess-2",
-			CharacterId:   "char-2",
 			CharacterName: "Tester",
 		},
 		cmdFn: func(_ context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
@@ -312,10 +317,14 @@ func TestGatewayHandler_SendProtoEvent_CommandResponse(t *testing.T) {
 	}
 
 	client := &mockCoreClient{
-		authResp: &corev1.AuthenticateResponse{
+		createGuestResp: &corev1.CreateGuestResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-guest-cr",
+			Characters:         []*corev1.CharacterSummary{{CharacterId: "char-cr", CharacterName: "CRUser"}},
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
 			Success:       true,
 			SessionId:     "sess-cr",
-			ConnectionId:  "conn-cr",
 			CharacterName: "CRUser",
 		},
 		subStream: eventStream,
@@ -374,10 +383,14 @@ func TestGatewayHandler_SendProtoEvent_CorruptCommandResponse(t *testing.T) {
 	}
 
 	client := &mockCoreClient{
-		authResp: &corev1.AuthenticateResponse{
+		createGuestResp: &corev1.CreateGuestResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-guest-corrupt",
+			Characters:         []*corev1.CharacterSummary{{CharacterId: "char-corrupt", CharacterName: "CorruptUser"}},
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
 			Success:       true,
 			SessionId:     "sess-corrupt",
-			ConnectionId:  "conn-corrupt",
 			CharacterName: "CorruptUser",
 		},
 		subStream: eventStream,
@@ -435,10 +448,14 @@ func TestGatewayHandler_StreamClosed(t *testing.T) {
 	}
 
 	client := &mockCoreClient{
-		authResp: &corev1.AuthenticateResponse{
+		createGuestResp: &corev1.CreateGuestResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-guest-sc",
+			Characters:         []*corev1.CharacterSummary{{CharacterId: "char-sc", CharacterName: "SCUser"}},
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
 			Success:       true,
 			SessionId:     "sess-sc",
-			ConnectionId:  "conn-sc",
 			CharacterName: "SCUser",
 		},
 		subStream: eventStream,
@@ -468,7 +485,12 @@ func TestGatewayHandler_StreamClosed(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Goodbye!", strings.TrimRight(line, "\r\n"))
 
-	// Handler exits on STREAM_CLOSED — done channel should close without cancel.
+	// After STREAM_CLOSED the handler returns to character picker and may
+	// write more output (character list). Drain the pipe so writes don't block.
+	go func() { _, _ = io.Copy(io.Discard, clientConn) }()
+
+	// Cancel context to let the handler exit.
+	cancel()
 	select {
 	case <-done:
 		// expected
@@ -484,10 +506,14 @@ func TestGatewayHandler_HandleGenericCommand_RPCError(t *testing.T) {
 	defer clientConn.Close()
 
 	client := &mockCoreClient{
-		authResp: &corev1.AuthenticateResponse{
+		createGuestResp: &corev1.CreateGuestResponse{
+			Success:            true,
+			PlayerSessionToken: "tok-guest-rpc-err",
+			Characters:         []*corev1.CharacterSummary{{CharacterId: "char-rpc-err", CharacterName: "RPCErrUser"}},
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
 			Success:       true,
 			SessionId:     "sess-rpc-err",
-			ConnectionId:  "conn-rpc-err",
 			CharacterName: "RPCErrUser",
 		},
 		cmdFn: func(_ context.Context, _ *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {

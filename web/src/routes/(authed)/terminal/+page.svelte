@@ -112,18 +112,12 @@
                 false,
               );
             }
-            const wasGuest = $authState.isGuest;
             clearCharacterSession();
             connected = false;
             sessionId = '';
             streamSpan?.end();
             streamSpan = null;
-            if (wasGuest) {
-              clearAuth();
-              goto('/');
-            } else {
-              goto('/characters');
-            }
+            goto('/characters');
             return;
           }
         } else if (response.frame.case === 'event') {
@@ -181,16 +175,10 @@
     try {
       await client.disconnect({ sessionId });
     } catch { /* best effort */ }
-    const wasGuest = $authState.isGuest;
     clearCharacterSession();
     connected = false;
     sessionId = '';
-    if (wasGuest) {
-      clearAuth();
-      goto('/');
-    } else {
-      goto('/characters');
-    }
+    goto('/characters');
   }
 
   async function reconnect() {

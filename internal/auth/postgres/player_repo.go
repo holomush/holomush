@@ -46,8 +46,8 @@ func (r *PlayerRepository) Create(ctx context.Context, player *auth.Player) erro
 		INSERT INTO players (
 			id, username, password_hash, email, email_verified,
 			failed_attempts, locked_until, default_character_id,
-			preferences, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			preferences, is_guest, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`,
 		player.ID.String(),
 		player.Username,
@@ -58,6 +58,7 @@ func (r *PlayerRepository) Create(ctx context.Context, player *auth.Player) erro
 		player.LockedUntil,
 		defaultCharID,
 		prefsJSON,
+		player.IsGuest,
 		player.CreatedAt,
 		player.UpdatedAt,
 	)
@@ -75,7 +76,7 @@ func (r *PlayerRepository) GetByID(ctx context.Context, id ulid.ULID) (*auth.Pla
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, username, password_hash, email, email_verified,
 		       failed_attempts, locked_until, default_character_id,
-		       preferences, created_at, updated_at
+		       preferences, is_guest, created_at, updated_at
 		FROM players
 		WHERE id = $1
 	`, id.String())
@@ -100,7 +101,7 @@ func (r *PlayerRepository) GetByUsername(ctx context.Context, username string) (
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, username, password_hash, email, email_verified,
 		       failed_attempts, locked_until, default_character_id,
-		       preferences, created_at, updated_at
+		       preferences, is_guest, created_at, updated_at
 		FROM players
 		WHERE LOWER(username) = LOWER($1)
 	`, username)
@@ -125,7 +126,7 @@ func (r *PlayerRepository) GetByEmail(ctx context.Context, email string) (*auth.
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, username, password_hash, email, email_verified,
 		       failed_attempts, locked_until, default_character_id,
-		       preferences, created_at, updated_at
+		       preferences, is_guest, created_at, updated_at
 		FROM players
 		WHERE LOWER(email) = LOWER($1)
 	`, email)
@@ -180,7 +181,8 @@ func (r *PlayerRepository) Update(ctx context.Context, player *auth.Player) erro
 			locked_until = $7,
 			default_character_id = $8,
 			preferences = $9,
-			updated_at = $10
+			is_guest = $10,
+			updated_at = $11
 		WHERE id = $1
 	`,
 		player.ID.String(),
@@ -192,6 +194,7 @@ func (r *PlayerRepository) Update(ctx context.Context, player *auth.Player) erro
 		player.LockedUntil,
 		defaultCharID,
 		prefsJSON,
+		player.IsGuest,
 		player.UpdatedAt,
 	)
 	if err != nil {
@@ -268,6 +271,62 @@ func (r *PlayerRepository) Delete(ctx context.Context, id ulid.ULID) error {
 	return nil
 }
 
+// ListIdleGuests returns guest players whose updated_at is before idleSince
+// and who have no active or detached game sessions.
+func (r *PlayerRepository) ListIdleGuests(ctx context.Context, idleSince time.Time) ([]*auth.Player, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT p.id, p.username, p.password_hash, p.email, p.email_verified,
+		       p.failed_attempts, p.locked_until, p.default_character_id,
+		       p.preferences, p.is_guest, p.created_at, p.updated_at
+		FROM players p
+		WHERE p.is_guest = true
+		  AND p.updated_at < $1
+		  AND NOT EXISTS (
+		    SELECT 1 FROM characters c
+		    JOIN sessions s ON s.character_id = c.id
+		    WHERE c.player_id = p.id
+		      AND s.status IN ('active', 'detached')
+		  )
+	`, idleSince)
+	if err != nil {
+		return nil, oops.Code("GUEST_LIST_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	var players []*auth.Player
+	for rows.Next() {
+		p, err := r.scanPlayer(rows)
+		if err != nil {
+			return nil, err
+		}
+		players = append(players, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.Code("GUEST_LIST_FAILED").
+			With("operation", "iterate guest players").Wrap(err)
+	}
+	return players, nil
+}
+
+// DeleteGuestPlayer removes a guest player. The is_guest=true guard prevents
+// accidental deletion of registered players. FK cascades delete characters
+// and player sessions.
+func (r *PlayerRepository) DeleteGuestPlayer(ctx context.Context, playerID ulid.ULID) error {
+	result, err := r.pool.Exec(ctx, `
+		DELETE FROM players WHERE id = $1 AND is_guest = true
+	`, playerID.String())
+	if err != nil {
+		return oops.Code("GUEST_DELETE_FAILED").
+			With("player_id", playerID.String()).Wrap(err)
+	}
+	if result.RowsAffected() == 0 {
+		return oops.Code("GUEST_NOT_FOUND").
+			With("player_id", playerID.String()).
+			Wrap(auth.ErrNotFound)
+	}
+	return nil
+}
+
 // scanPlayer scans a single row into a Player.
 // Callers are responsible for handling pgx.ErrNoRows.
 func (r *PlayerRepository) scanPlayer(row pgx.Row) (*auth.Player, error) {
@@ -281,6 +340,7 @@ func (r *PlayerRepository) scanPlayer(row pgx.Row) (*auth.Player, error) {
 		lockedUntil      *time.Time
 		defaultCharIDStr *string
 		prefsJSON        []byte
+		isGuest          bool
 		createdAt        time.Time
 		updatedAt        time.Time
 	)
@@ -295,6 +355,7 @@ func (r *PlayerRepository) scanPlayer(row pgx.Row) (*auth.Player, error) {
 		&lockedUntil,
 		&defaultCharIDStr,
 		&prefsJSON,
+		&isGuest,
 		&createdAt,
 		&updatedAt,
 	)
@@ -347,6 +408,7 @@ func (r *PlayerRepository) scanPlayer(row pgx.Row) (*auth.Player, error) {
 		LockedUntil:        lockedUntil,
 		DefaultCharacterID: defaultCharID,
 		Preferences:        prefs,
+		IsGuest:            isGuest,
 		CreatedAt:          createdAt,
 		UpdatedAt:          updatedAt,
 	}, nil
