@@ -29,7 +29,7 @@ func TestRegistry_RegisterAndGet(t *testing.T) {
 	entry := CommandEntry{
 		Name:         "look",
 		handler:      handler,
-		capabilities: []string{"world.look"},
+		capabilities: []Capability{{Action: "read", Resource: "location", Scope: ScopeLocal}},
 		Help:         "Look at your surroundings",
 		Usage:        "look [target]",
 		Source:       "core",
@@ -41,7 +41,7 @@ func TestRegistry_RegisterAndGet(t *testing.T) {
 	got, ok := reg.Get("look")
 	assert.True(t, ok)
 	assert.Equal(t, "look", got.Name)
-	assert.Equal(t, []string{"world.look"}, got.GetCapabilities())
+	assert.Equal(t, []Capability{{Action: "read", Resource: "location", Scope: ScopeLocal}}, got.GetCapabilities())
 	assert.Equal(t, "Look at your surroundings", got.Help)
 	assert.Equal(t, "look [target]", got.Usage)
 	assert.Equal(t, "core", got.Source)

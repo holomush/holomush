@@ -94,3 +94,65 @@ func CheckCapability(ctx context.Context, engine types.AccessPolicyEngine, subje
 
 	return nil
 }
+
+// CheckCommandExecution evaluates Layer 1: can the subject execute this command?
+func CheckCommandExecution(ctx context.Context, engine types.AccessPolicyEngine, subject, cmdName string) error {
+	req, reqErr := types.NewAccessRequest(subject, "execute", "command:"+cmdName)
+	if reqErr != nil {
+		errutil.LogErrorContext(ctx, cmdName+" command access request failed",
+			reqErr, "subject", subject, "command", cmdName)
+		observability.RecordEngineFailure(cmdName + "_command_access")
+		return oops.Code(CodeAccessEvaluationFailed).
+			With("command", cmdName).
+			Wrap(errors.Join(ErrCapabilityCheckFailed, reqErr))
+	}
+
+	decision, evalErr := engine.Evaluate(ctx, req)
+	if evalErr != nil {
+		errutil.LogErrorContext(ctx, cmdName+" command access evaluation failed",
+			evalErr, "subject", subject, "command", cmdName)
+		observability.RecordEngineFailure(cmdName + "_command_access")
+		return oops.Code(CodeAccessEvaluationFailed).
+			With("command", cmdName).
+			Wrap(errors.Join(ErrCapabilityCheckFailed, evalErr))
+	}
+
+	if !decision.IsAllowed() {
+		slog.DebugContext(ctx, cmdName+" command execution denied",
+			"subject", subject,
+			"reason", decision.Reason(),
+			"policy_id", decision.PolicyID())
+		return oops.Code(CodePermissionDenied).
+			With("command", cmdName).
+			With("capability", "execute").
+			With("reason", decision.Reason()).
+			With("policy_id", decision.PolicyID()).
+			Errorf("permission denied for command %s", cmdName)
+	}
+	return nil
+}
+
+// CheckCapabilityPreFlight evaluates Layer 2: does the subject have the class of permissions?
+func CheckCapabilityPreFlight(ctx context.Context, engine types.AccessPolicyEngine, subject, cmdName string, caps []Capability) error {
+	for _, cap := range caps {
+		allowed, err := engine.CanPerformAction(ctx, subject, cap.Action, cap.Resource, cap.EffectiveScope())
+		if err != nil {
+			errutil.LogErrorContext(ctx, cmdName+" capability pre-flight error",
+				err, "subject", subject, "action", cap.Action, "resource", cap.Resource)
+			return oops.Code(CodeAccessEvaluationFailed).
+				With("command", cmdName).
+				With("action", cap.Action).
+				With("resource", cap.Resource).
+				Wrap(err)
+		}
+		if !allowed {
+			slog.DebugContext(ctx, cmdName+" capability pre-flight denied",
+				"subject", subject,
+				"action", cap.Action,
+				"resource", cap.Resource,
+				"scope", cap.EffectiveScope())
+			return ErrInsufficientCapability(cmdName, cap)
+		}
+	}
+	return nil
+}

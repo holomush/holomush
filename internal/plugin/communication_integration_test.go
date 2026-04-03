@@ -15,6 +15,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
+	"github.com/holomush/holomush/internal/command"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
@@ -118,7 +119,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				}
 			}
 			Expect(sayCmd).NotTo(BeNil())
-			Expect(sayCmd.Capabilities).To(ContainElement("comms.say"))
+			Expect(sayCmd.Capabilities).To(ContainElement(command.Capability{Action: "emit", Resource: "stream", Scope: command.ScopeLocal}))
 			Expect(sayCmd.Help).To(Equal("Send a message to the room"))
 			Expect(sayCmd.Usage).To(Equal("say <message>"))
 		})
@@ -132,7 +133,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				}
 			}
 			Expect(poseCmd).NotTo(BeNil())
-			Expect(poseCmd.Capabilities).To(ContainElement("comms.pose"))
+			Expect(poseCmd.Capabilities).To(ContainElement(command.Capability{Action: "emit", Resource: "stream", Scope: command.ScopeLocal}))
 			Expect(poseCmd.Help).To(Equal("Perform an action in the room"))
 		})
 
@@ -145,7 +146,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				}
 			}
 			Expect(emitCmd).NotTo(BeNil())
-			Expect(emitCmd.Capabilities).To(ContainElement("comms.emit"))
+			Expect(emitCmd.Capabilities).To(ContainElement(command.Capability{Action: "emit", Resource: "stream", Scope: command.ScopeLocal}))
 			Expect(emitCmd.Help).To(Equal("Emit raw text to the room (privileged)"))
 		})
 	})

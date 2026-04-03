@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
@@ -117,7 +118,8 @@ func (e *InfraFailureEngine) Evaluate(_ context.Context, _ types.AccessRequest) 
 	return types.NewDecision(types.EffectDefaultDeny, e.reason, e.policyID), nil
 }
 
-// CanPerformAction returns false, nil (infrastructure failures deny without error).
+// CanPerformAction returns false with an error wrapping the reason, simulating
+// an infrastructure failure during capability pre-flight checks.
 func (e *InfraFailureEngine) CanPerformAction(_ context.Context, _, _, _, _ string) (bool, error) {
-	return false, nil
+	return false, oops.Code(e.policyID).Errorf("%s", e.reason)
 }

@@ -43,7 +43,9 @@ commands:
 
   - name: page
     capabilities:
-      - comms.page
+      - action: emit
+        resource: stream
+        scope: local
     help: "Send a private message"
     usage: "page <name>=<message>"
     helpText: |
@@ -66,11 +68,17 @@ commands:
 
   - name: p
     capabilities:
-      - comms.page
+      - action: emit
+        resource: stream
+        scope: local
     help: "Send a private message (alias for page)"
     usage: "p <name>=<message>"
 
   - name: whisper
+    capabilities:
+      - action: emit
+        resource: stream
+        scope: local
     help: "Whisper to someone in your location"
     usage: "whisper <name>=<message>"
     helpText: |
@@ -116,7 +124,9 @@ commands:
 
   - name: pemit
     capabilities:
-      - comms.pemit
+      - action: emit
+        resource: stream
+        scope: global
     help: "Send a private narration to a specific character"
     usage: "pemit <character>=<message>"
     helpText: |
@@ -142,9 +152,13 @@ commands:
 
       ### Permissions
 
-      Requires the `comms.pemit` capability.
+      Requires emit access to the stream resource at global scope.
 
   - name: emit
+    capabilities:
+      - action: emit
+        resource: stream
+        scope: local
     help: "Emit a message to the location"
     usage: "emit <message>"
     helpText: |
@@ -165,7 +179,9 @@ commands:
 
   - name: wall
     capabilities:
-      - admin:wall
+      - action: emit
+        resource: stream
+        scope: global
     help: "Broadcast a message to all players"
     usage: "wall [urgency] <message>"
     helpText: |-
@@ -193,4 +209,4 @@ commands:
 
       ### Permissions
 
-      Requires the `admin:wall` capability.
+      Requires emit access to the stream resource at global scope.

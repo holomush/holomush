@@ -56,7 +56,9 @@ commands:
       - `examine Gandalf` - Inspect a character
   - name: create
     capabilities:
-      - "objects.create"
+      - action: write
+        resource: object
+        scope: local
     help: "Create a new object or location"
     usage: 'create <type> "<name>"'
     helpText: |
@@ -80,10 +82,12 @@ commands:
 
       ### Permissions
 
-      Requires the `objects.create` capability.
+      Requires write access to the object resource.
   - name: set
     capabilities:
-      - "objects.set"
+      - action: write
+        resource: property
+        scope: local
     help: "Set a property on an object"
     usage: "set <property> of <target> to <value>"
     helpText: |-
@@ -105,4 +109,4 @@ commands:
 
       ### Permissions
 
-      Requires the `objects.set` capability.
+      Requires write access to the property resource.

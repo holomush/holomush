@@ -35,7 +35,7 @@ func (m *mockHelpCommandRegistry) All() []command.CommandEntry {
 			Help:         "Say something to the room",
 			Usage:        "say <message>",
 			HelpText:     "## Say\n\nSpeak a message to everyone in your location.",
-			Capabilities: []string{"comms.say"},
+			Capabilities: []command.Capability{{Action: "emit", Resource: "stream", Scope: command.ScopeLocal}},
 			Source:       "communication",
 		}),
 		command.NewTestEntry(command.CommandEntryConfig{
@@ -43,7 +43,7 @@ func (m *mockHelpCommandRegistry) All() []command.CommandEntry {
 			Help:         "Look at your surroundings",
 			Usage:        "look [target]",
 			HelpText:     "## Look\n\nExamine your surroundings or a specific target.",
-			Capabilities: []string{},
+			Capabilities: []command.Capability{},
 			Source:       "core",
 		}),
 		command.NewTestEntry(command.CommandEntryConfig{
@@ -51,7 +51,7 @@ func (m *mockHelpCommandRegistry) All() []command.CommandEntry {
 			Help:         "Create a new room or exit",
 			Usage:        "dig <direction> = <room name>",
 			HelpText:     "## Dig\n\nCreate new rooms and connections.",
-			Capabilities: []string{"building.dig"},
+			Capabilities: []command.Capability{{Action: "write", Resource: "location", Scope: command.ScopeLocal}},
 			Source:       "building",
 		}),
 	}

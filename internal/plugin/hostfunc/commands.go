@@ -184,31 +184,15 @@ func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd c
 
 	// Check ALL capabilities (AND logic) — fail-closed on errors
 	for _, cap := range caps {
-		req, err := types.NewAccessRequest(subject, "execute", cap)
+		ok, err := f.engine.CanPerformAction(ctx, subject, cap.Action, cap.Resource, cap.EffectiveScope())
 		if err != nil {
-			errutil.LogErrorContext(ctx, "access request construction failed",
-				err, "subject", subject, "action", "execute", "resource", cap)
-			observability.RecordEngineFailure("command_capability_request_error")
-			hadError = true
-			return false, hadError
-		}
-
-		decision, err := f.engine.Evaluate(ctx, req)
-		if err != nil {
-			errutil.LogErrorContext(ctx, "access evaluation failed",
-				err, "subject", subject, "action", "execute", "resource", cap)
+			errutil.LogErrorContext(ctx, "capability pre-flight failed",
+				err, "subject", subject, "action", cap.Action, "resource", cap.Resource)
 			observability.RecordEngineFailure("command_capability_engine_error")
 			hadError = true
 			return false, hadError
 		}
-		if !decision.IsAllowed() {
-			if decision.IsInfraFailure() {
-				slog.ErrorContext(ctx, "access check infrastructure failure",
-					"subject", subject, "action", "execute", "resource", cap,
-					"reason", decision.Reason(), "policy_id", decision.PolicyID())
-				observability.RecordEngineFailure("command_capability_engine_error")
-				hadError = true
-			}
+		if !ok {
 			return false, hadError
 		}
 	}
@@ -291,7 +275,13 @@ func (f *Functions) getCommandHelpFn(_ string) lua.LGFunction {
 		// Add capabilities array (use getter for defensive copy)
 		capsTbl := L.NewTable()
 		for i, cap := range cmd.GetCapabilities() {
-			L.SetTable(capsTbl, lua.LNumber(i+1), lua.LString(cap))
+			capTbl := L.NewTable()
+			L.SetField(capTbl, "action", lua.LString(cap.Action))
+			L.SetField(capTbl, "resource", lua.LString(cap.Resource))
+			if cap.Scope != "" {
+				L.SetField(capTbl, "scope", lua.LString(cap.Scope))
+			}
+			L.SetTable(capsTbl, lua.LNumber(i+1), capTbl)
 		}
 		L.SetField(tbl, "capabilities", capsTbl)
 

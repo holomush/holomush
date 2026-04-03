@@ -22,7 +22,7 @@ import (
 func TestCommandEntry_HasRequiredFields(t *testing.T) {
 	entry := &CommandEntry{
 		Name:         "say",
-		capabilities: []string{"rp:speak"},
+		capabilities: []Capability{{Action: "emit", Resource: "stream", Scope: ScopeLocal}},
 		Help:         "Say something to the room",
 		Usage:        "say <message>",
 		HelpText:     "Speaks a message to everyone in the current location.",
@@ -30,7 +30,7 @@ func TestCommandEntry_HasRequiredFields(t *testing.T) {
 	}
 
 	assert.Equal(t, "say", entry.Name)
-	assert.Equal(t, []string{"rp:speak"}, entry.GetCapabilities())
+	assert.Equal(t, []Capability{{Action: "emit", Resource: "stream", Scope: ScopeLocal}}, entry.GetCapabilities())
 	assert.Equal(t, "Say something to the room", entry.Help)
 	assert.Equal(t, "say <message>", entry.Usage)
 	assert.Equal(t, "Speaks a message to everyone in the current location.", entry.HelpText)
@@ -228,7 +228,7 @@ func TestNewCommandEntry_ValidInput_ReturnsEntry(t *testing.T) {
 	entry, err := NewCommandEntry(CommandEntryConfig{
 		Name:         "say",
 		Handler:      handler,
-		Capabilities: []string{"rp:speak"},
+		Capabilities: []Capability{{Action: "emit", Resource: "stream", Scope: ScopeLocal}},
 		Help:         "Say something to the room",
 		Usage:        "say <message>",
 		HelpText:     "Speaks a message to everyone in the current location.",
@@ -238,7 +238,7 @@ func TestNewCommandEntry_ValidInput_ReturnsEntry(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "say", entry.Name)
 	assert.NotNil(t, entry.Handler())
-	assert.Equal(t, []string{"rp:speak"}, entry.GetCapabilities())
+	assert.Equal(t, []Capability{{Action: "emit", Resource: "stream", Scope: ScopeLocal}}, entry.GetCapabilities())
 	assert.Equal(t, "Say something to the room", entry.Help)
 	assert.Equal(t, "say <message>", entry.Usage)
 	assert.Equal(t, "Speaks a message to everyone in the current location.", entry.HelpText)
@@ -468,10 +468,12 @@ func TestServices_BroadcastSystemMessage_NilEvents_IsNoOp(t *testing.T) {
 func TestCommandEntry_GetCapabilities_ReturnsDefensiveCopy(t *testing.T) {
 	t.Parallel()
 
+	capOne := Capability{Action: "read", Resource: "location", Scope: ScopeLocal}
+	capTwo := Capability{Action: "write", Resource: "exit", Scope: ScopeLocal}
 	entry, err := NewCommandEntry(CommandEntryConfig{
 		Name:         "test",
 		Handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
-		Capabilities: []string{"cap:one", "cap:two"},
+		Capabilities: []Capability{capOne, capTwo},
 	})
 	require.NoError(t, err)
 
@@ -480,15 +482,15 @@ func TestCommandEntry_GetCapabilities_ReturnsDefensiveCopy(t *testing.T) {
 	caps2 := entry.GetCapabilities()
 
 	// Verify values match
-	assert.Equal(t, []string{"cap:one", "cap:two"}, caps1)
-	assert.Equal(t, []string{"cap:one", "cap:two"}, caps2)
+	assert.Equal(t, []Capability{capOne, capTwo}, caps1)
+	assert.Equal(t, []Capability{capOne, capTwo}, caps2)
 
 	// Modify returned slice
-	caps1[0] = "cap:modified"
+	caps1[0] = Capability{Action: "admin", Resource: "server", Scope: ScopeGlobal}
 
 	// Original should be unchanged
 	caps3 := entry.GetCapabilities()
-	assert.Equal(t, []string{"cap:one", "cap:two"}, caps3,
+	assert.Equal(t, []Capability{capOne, capTwo}, caps3,
 		"Modifying returned slice should not affect entry")
 }
 
@@ -512,7 +514,7 @@ func TestCommandEntry_GetCapabilities_EmptyCapabilities_ReturnsEmpty(t *testing.
 	entry, err := NewCommandEntry(CommandEntryConfig{
 		Name:         "test",
 		Handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
-		Capabilities: []string{}, // Explicitly empty
+		Capabilities: []Capability{}, // Explicitly empty
 	})
 	require.NoError(t, err)
 

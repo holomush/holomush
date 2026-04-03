@@ -188,22 +188,32 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 	metrics.SetCommandSource(entry.Source)
 	span.SetAttributes(attribute.String("command.source", entry.Source))
 
-	// Check capabilities using getter to ensure defensive copy
-	for _, cap := range entry.GetCapabilities() {
-		capErr := CheckCapability(ctx, d.engine, subject, cap, parsed.Name)
-		if capErr == nil {
-			continue
-		}
-		oopsErr, ok := oops.AsOops(capErr)
+	// Layer 1: Command execution check
+	if execErr := CheckCommandExecution(ctx, d.engine, subject, parsed.Name); execErr != nil {
+		oopsErr, ok := oops.AsOops(execErr)
 		code, isStr := oopsErr.Code().(string)
 		if ok && isStr && code == CodePermissionDenied {
 			metrics.SetStatus(StatusPermissionDenied)
 		} else {
 			metrics.SetStatus(StatusEngineFailure)
-			span.RecordError(capErr)
-			span.SetStatus(codes.Error, capErr.Error())
+			span.RecordError(execErr)
+			span.SetStatus(codes.Error, execErr.Error())
 		}
-		return capErr
+		return execErr
+	}
+
+	// Layer 2: Capability pre-flight
+	if preflightErr := CheckCapabilityPreFlight(ctx, d.engine, subject, parsed.Name, entry.GetCapabilities()); preflightErr != nil {
+		oopsErr, ok := oops.AsOops(preflightErr)
+		code, isStr := oopsErr.Code().(string)
+		if ok && isStr && code == CodePermissionDenied {
+			metrics.SetStatus(StatusPermissionDenied)
+		} else {
+			metrics.SetStatus(StatusEngineFailure)
+			span.RecordError(preflightErr)
+			span.SetStatus(codes.Error, preflightErr.Error())
+		}
+		return preflightErr
 	}
 
 	// Execute

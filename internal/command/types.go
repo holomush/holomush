@@ -179,7 +179,7 @@ type CommandEntryConfig struct {
 	Name         string         // canonical name (e.g. "say") - REQUIRED
 	Handler      CommandHandler // Go handler — nil for plugin-backed commands
 	PluginName   string         // non-empty for plugin-backed commands
-	Capabilities []string       // ALL required capabilities (AND logic)
+	Capabilities []Capability    // ALL required capabilities (AND logic)
 	Help         string         // short description (one line)
 	Usage        string         // usage pattern (e.g. "say <message>")
 	HelpText     string         // detailed markdown help
@@ -205,7 +205,7 @@ type CommandEntry struct {
 	Name         string         // canonical name (e.g., "say")
 	handler      CommandHandler // Go handler — nil for plugin-backed commands; use Handler() getter
 	pluginName   string         // non-empty for plugin-backed commands; use PluginName() getter
-	capabilities []string       // ALL required capabilities (AND logic) - use GetCapabilities() for safe access
+	capabilities []Capability    // ALL required capabilities (AND logic) - use GetCapabilities() for safe access
 	Help         string         // short description (one line)
 	Usage        string         // usage pattern (e.g., "say <message>")
 	HelpText     string         // detailed markdown help
@@ -237,12 +237,12 @@ const (
 // GetCapabilities returns a defensive copy of the command's required capabilities.
 // This prevents external modification of the entry's internal state.
 // Returns nil if no capabilities are set, or an empty slice if explicitly set to empty.
-func (e *CommandEntry) GetCapabilities() []string {
+func (e *CommandEntry) GetCapabilities() []Capability {
 	if e.capabilities == nil {
 		return nil
 	}
 	// Preserve distinction between nil and empty slice
-	result := make([]string, len(e.capabilities))
+	result := make([]Capability, len(e.capabilities))
 	copy(result, e.capabilities)
 	return result
 }
@@ -265,6 +265,15 @@ func NewCommandEntry(cfg CommandEntryConfig) (*CommandEntry, error) {
 		return nil, oops.Code("AMBIGUOUS_HANDLER").
 			With("field", "Handler/PluginName").
 			Errorf("cannot set both Handler and PluginName")
+	}
+
+	for i, cap := range cfg.Capabilities {
+		if err := cap.Validate(); err != nil {
+			return nil, oops.Code("INVALID_CAPABILITY").
+				With("command", cfg.Name).
+				With("index", i).
+				Wrap(err)
+		}
 	}
 
 	return &CommandEntry{

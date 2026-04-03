@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/command"
 	plugins "github.com/holomush/holomush/internal/plugin"
 )
 
@@ -772,8 +773,9 @@ type: lua
 commands:
   - name: teleport
     capabilities:
-      - world.write.location
-      - player.move
+      - action: write
+        resource: location
+        scope: global
     help: Teleport to a location
     usage: "teleport <destination>"
 lua-plugin:
@@ -893,15 +895,19 @@ lua-plugin:
 }
 
 func TestParseManifest_CommandSpec_Fields(t *testing.T) {
-	yaml := `
+	yamlData := `
 name: test
 version: 1.0.0
 type: lua
 commands:
   - name: teleport
     capabilities:
-      - world.write.location
-      - player.move
+      - action: write
+        resource: location
+        scope: global
+      - action: enter
+        resource: location
+        scope: global
     help: Teleport to a location
     usage: "teleport <destination>"
     helpText: |
@@ -913,13 +919,17 @@ commands:
 lua-plugin:
   entry: main.lua
 `
-	m, err := plugins.ParseManifest([]byte(yaml))
+	m, err := plugins.ParseManifest([]byte(yamlData))
 	require.NoError(t, err)
 	require.Len(t, m.Commands, 1)
 
 	cmd := m.Commands[0]
 	assert.Equal(t, "teleport", cmd.Name)
-	assert.Equal(t, []string{"world.write.location", "player.move"}, cmd.Capabilities)
+	assert.Len(t, cmd.Capabilities, 2)
+	assert.Equal(t, "write", cmd.Capabilities[0].Action)
+	assert.Equal(t, "location", cmd.Capabilities[0].Resource)
+	assert.Equal(t, "global", cmd.Capabilities[0].Scope)
+	assert.Equal(t, "enter", cmd.Capabilities[1].Action)
 	assert.Equal(t, "Teleport to a location", cmd.Help)
 	assert.Equal(t, "teleport <destination>", cmd.Usage)
 	assert.Contains(t, cmd.HelpText, "Teleport yourself")
@@ -967,7 +977,7 @@ func TestCommandSpec_Validate(t *testing.T) {
 			name: "valid command full inline help",
 			cmd: plugins.CommandSpec{
 				Name:         "teleport",
-				Capabilities: []string{"world.write"},
+				Capabilities: []command.Capability{{Action: "write", Resource: "location", Scope: command.ScopeLocal}},
 				Help:         "Teleport to a location",
 				Usage:        "teleport <dest>",
 				HelpText:     "Detailed help here",
