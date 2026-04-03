@@ -97,6 +97,73 @@ var (
 	_ WorldService = (*world.Service)(nil)
 )
 
+// Scope constants define the spatial context for capability pre-flight checks.
+const (
+	ScopeSelf   = ""       // default — own character only
+	ScopeLocal  = "local"  // current location + contents
+	ScopeGlobal = "global" // server-wide
+)
+
+// validActions lists the known ABAC actions for capability validation.
+var validActions = map[string]bool{
+	"read": true, "write": true, "emit": true, "enter": true,
+	"use": true, "delete": true, "execute": true, "admin": true,
+}
+
+// validResourceTypes lists the known ABAC resource types for capability validation.
+var validResourceTypes = map[string]bool{
+	"character": true, "location": true, "exit": true, "object": true,
+	"stream": true, "property": true, "scene": true, "command": true,
+	"server": true, "alias": true, "player": true,
+}
+
+// validScopes lists the known scope values.
+var validScopes = map[string]bool{
+	ScopeSelf: true, ScopeLocal: true, ScopeGlobal: true,
+}
+
+// Capability declares a resource type and action that a command will
+// attempt. Used for pre-flight authorization at dispatch time.
+type Capability struct {
+	Action   string `yaml:"action" json:"action"`
+	Resource string `yaml:"resource" json:"resource"`
+	Scope    string `yaml:"scope,omitempty" json:"scope,omitempty"`
+}
+
+// Validate checks that the capability has valid action, resource, and scope.
+func (c Capability) Validate() error {
+	if c.Action == "" {
+		return oops.Code("INVALID_CAPABILITY").Errorf("action is required")
+	}
+	if !validActions[c.Action] {
+		return oops.Code("INVALID_CAPABILITY").
+			With("action", c.Action).
+			Errorf("unknown action %q", c.Action)
+	}
+	if c.Resource == "" {
+		return oops.Code("INVALID_CAPABILITY").Errorf("resource is required")
+	}
+	if !validResourceTypes[c.Resource] {
+		return oops.Code("INVALID_CAPABILITY").
+			With("resource", c.Resource).
+			Errorf("unknown resource type %q", c.Resource)
+	}
+	if !validScopes[c.Scope] {
+		return oops.Code("INVALID_CAPABILITY").
+			With("scope", c.Scope).
+			Errorf("unknown scope %q", c.Scope)
+	}
+	return nil
+}
+
+// EffectiveScope returns the scope, defaulting to ScopeSelf if empty.
+func (c Capability) EffectiveScope() string {
+	if c.Scope == "" {
+		return ScopeSelf
+	}
+	return c.Scope
+}
+
 // CommandHandler is the function signature for command handlers.
 //
 //nolint:revive // Name matches design spec; consistency with spec takes precedence over stutter avoidance

@@ -562,6 +562,50 @@ func TestCommandEntry_Handler_IsReadOnly(t *testing.T) {
 	assert.NotNil(t, h)
 }
 
+func TestCapability_Validate_Valid(t *testing.T) {
+	tests := []struct {
+		name string
+		cap  Capability
+	}{
+		{"basic", Capability{Action: "read", Resource: "location"}},
+		{"with local scope", Capability{Action: "write", Resource: "exit", Scope: ScopeLocal}},
+		{"with global scope", Capability{Action: "admin", Resource: "server", Scope: ScopeGlobal}},
+		{"self scope explicit", Capability{Action: "write", Resource: "character", Scope: ScopeSelf}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.NoError(t, tt.cap.Validate())
+		})
+	}
+}
+
+func TestCapability_Validate_Invalid(t *testing.T) {
+	tests := []struct {
+		name string
+		cap  Capability
+		want string
+	}{
+		{"empty action", Capability{Action: "", Resource: "location"}, "action"},
+		{"empty resource", Capability{Action: "read", Resource: ""}, "resource"},
+		{"unknown action", Capability{Action: "destroy", Resource: "location"}, "action"},
+		{"unknown resource", Capability{Action: "read", Resource: "spaceship"}, "resource"},
+		{"invalid scope", Capability{Action: "read", Resource: "location", Scope: "everywhere"}, "scope"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cap.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.want)
+		})
+	}
+}
+
+func TestCapability_EffectiveScope(t *testing.T) {
+	assert.Equal(t, ScopeSelf, Capability{Action: "read", Resource: "character"}.EffectiveScope())
+	assert.Equal(t, ScopeLocal, Capability{Action: "read", Resource: "location", Scope: ScopeLocal}.EffectiveScope())
+	assert.Equal(t, ScopeGlobal, Capability{Action: "emit", Resource: "stream", Scope: ScopeGlobal}.EffectiveScope())
+}
+
 func TestServices_BroadcastSystemMessage_CreatesCorrectEvent(t *testing.T) {
 	ctx := context.Background()
 	store := core.NewMemoryEventStore()
