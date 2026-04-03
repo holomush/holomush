@@ -257,8 +257,8 @@ func TestListCommands_FiltersCommandsByCharacterCapabilities(t *testing.T) {
 		commands: []command.CommandEntry{
 			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []string{"comms.say"}, Source: "core"}),
 			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
-			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin.boot"}, Source: "admin"}),             // Admin only
-			command.NewTestEntry(command.CommandEntryConfig{Name: "nuke", Help: "Dangerous", Capabilities: []string{"admin.nuke", "admin.danger"}, Source: "admin"}), // Multiple caps
+			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin:boot"}, Source: "admin"}),             // Admin only
+			command.NewTestEntry(command.CommandEntryConfig{Name: "nuke", Help: "Dangerous", Capabilities: []string{"admin:nuke", "admin:danger"}, Source: "admin"}), // Multiple caps
 		},
 	}
 
@@ -301,7 +301,7 @@ func TestListCommands_FiltersCommandsByCharacterCapabilities(t *testing.T) {
 	})
 
 	// Should include: say (has comms.say), look (no caps required)
-	// Should NOT include: boot (needs admin.boot), nuke (needs admin.nuke AND admin.danger)
+	// Should NOT include: boot (needs admin:boot), nuke (needs admin:nuke AND admin:danger)
 	assert.Contains(t, names, "say")
 	assert.Contains(t, names, "look")
 	assert.NotContains(t, names, "boot")
@@ -353,15 +353,15 @@ func TestListCommands_RequiresAllCapabilities_ANDLogic(t *testing.T) {
 	// Given: a command requiring multiple capabilities (AND logic)
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "nuke", Help: "Dangerous", Capabilities: []string{"admin.nuke", "admin.danger"}, Source: "admin"}),
+			command.NewTestEntry(command.CommandEntryConfig{Name: "nuke", Help: "Dangerous", Capabilities: []string{"admin:nuke", "admin:danger"}, Source: "admin"}),
 		},
 	}
 
 	charID := ulid.Make()
 	ac := policytest.NewGrantEngine()
 	// Grant only ONE of the required capabilities
-	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "admin.nuke")
-	// NOT granting admin.danger
+	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "admin:nuke")
+	// NOT granting admin:danger
 
 	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
 
@@ -395,15 +395,15 @@ func TestListCommands_WithAllCapabilitiesGranted(t *testing.T) {
 	// Given: a command requiring multiple capabilities
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "nuke", Help: "Dangerous", Capabilities: []string{"admin.nuke", "admin.danger"}, Source: "admin"}),
+			command.NewTestEntry(command.CommandEntryConfig{Name: "nuke", Help: "Dangerous", Capabilities: []string{"admin:nuke", "admin:danger"}, Source: "admin"}),
 		},
 	}
 
 	charID := ulid.Make()
 	ac := policytest.NewGrantEngine()
 	// Grant ALL required capabilities
-	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "admin.nuke")
-	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "admin.danger")
+	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "admin:nuke")
+	ac.Grant(access.SubjectCharacter+charID.String(), "execute", "admin:danger")
 
 	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
 
@@ -437,7 +437,7 @@ func TestListCommands_EngineError_HidesCapabilityCommands(t *testing.T) {
 	// Given: commands with capabilities and an engine that always errors
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin.boot"}, Source: "admin"}),
+			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin:boot"}, Source: "admin"}),
 			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
 		},
 	}
@@ -640,7 +640,7 @@ func TestListCommands_VerifiesAccessRequest(t *testing.T) {
 			command.NewTestEntry(command.CommandEntryConfig{
 				Name:         "admin_cmd",
 				Help:         "Admin command",
-				Capabilities: []string{"admin.manage"},
+				Capabilities: []string{"admin:manage"},
 				Source:       "admin",
 			}),
 		},
@@ -673,7 +673,7 @@ func TestListCommands_VerifiesAccessRequest(t *testing.T) {
 	// Verify AccessRequest fields
 	assert.Equal(t, subject, capturedRequest.Subject, "subject should be character:<id>")
 	assert.Equal(t, "execute", capturedRequest.Action, "action should be 'execute'")
-	assert.Equal(t, "admin.manage", capturedRequest.Resource, "resource should be the capability")
+	assert.Equal(t, "admin:manage", capturedRequest.Resource, "resource should be the capability")
 }
 
 func TestListCommands_EvaluateError_LogsErrorWithContext(t *testing.T) {
@@ -683,7 +683,7 @@ func TestListCommands_EvaluateError_LogsErrorWithContext(t *testing.T) {
 			command.NewTestEntry(command.CommandEntryConfig{
 				Name:         "protected",
 				Help:         "Protected command",
-				Capabilities: []string{"admin.manage"},
+				Capabilities: []string{"admin:manage"},
 				Source:       "core",
 			}),
 		},
@@ -699,7 +699,7 @@ func TestListCommands_EvaluateError_LogsErrorWithContext(t *testing.T) {
 	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
 		Subject:  subject,
 		Action:   "execute",
-		Resource: "admin.manage",
+		Resource: "admin:manage",
 	}).Return(types.Decision{}, evalErr)
 
 	// Capture log output
@@ -726,7 +726,7 @@ func TestListCommands_EvaluateError_LogsErrorWithContext(t *testing.T) {
 	assert.Contains(t, logOutput, "access evaluation failed", "log should mention access evaluation failure")
 	assert.Contains(t, logOutput, subject, "log should contain subject")
 	assert.Contains(t, logOutput, "execute", "log should contain action")
-	assert.Contains(t, logOutput, "admin.manage", "log should contain resource (capability)")
+	assert.Contains(t, logOutput, "admin:manage", "log should contain resource (capability)")
 	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
 }
 
@@ -736,7 +736,7 @@ func TestListCommands_ExplicitDeny_FiltersCommands(t *testing.T) {
 		commands: []command.CommandEntry{
 			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []string{"comms.say"}, Source: "core"}),
 			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
-			command.NewTestEntry(command.CommandEntryConfig{Name: "admin", Help: "Admin command", Capabilities: []string{"admin.manage"}, Source: "admin"}),
+			command.NewTestEntry(command.CommandEntryConfig{Name: "admin", Help: "Admin command", Capabilities: []string{"admin:manage"}, Source: "admin"}),
 		},
 	}
 
@@ -778,10 +778,10 @@ func TestListCommands_ExplicitDeny_FiltersCommands(t *testing.T) {
 	})
 
 	// Should include: look (no caps required)
-	// Should NOT include: say (EffectDeny for comms.say), admin (EffectDeny for admin.manage)
+	// Should NOT include: say (EffectDeny for comms.say), admin (EffectDeny for admin:manage)
 	assert.Contains(t, names, "look", "commands without capabilities should be included")
 	assert.NotContains(t, names, "say", "explicit deny should filter out command requiring comms.say")
-	assert.NotContains(t, names, "admin", "explicit deny should filter out command requiring admin.manage")
+	assert.NotContains(t, names, "admin", "explicit deny should filter out command requiring admin:manage")
 	assert.Len(t, names, 1, "only commands without capability requirements should be included")
 }
 
@@ -789,7 +789,7 @@ func TestListCommands_InfraFailure_SetsIncompleteTrue(t *testing.T) {
 	// Given: commands with capabilities and an engine that returns infra failure decisions
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin.boot"}, Source: "admin"}),
+			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin:boot"}, Source: "admin"}),
 			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
 		},
 	}
@@ -844,7 +844,7 @@ func TestListCommands_ThreadsLuaContext(t *testing.T) {
 			command.NewTestEntry(command.CommandEntryConfig{
 				Name:         "protected",
 				Help:         "Protected command",
-				Capabilities: []string{"admin.manage"},
+				Capabilities: []string{"admin:manage"},
 				Source:       "core",
 			}),
 		},
@@ -891,7 +891,7 @@ func TestListCommands_FallsBackToBackgroundContext(t *testing.T) {
 			command.NewTestEntry(command.CommandEntryConfig{
 				Name:         "protected",
 				Help:         "Protected command",
-				Capabilities: []string{"admin.manage"},
+				Capabilities: []string{"admin:manage"},
 				Source:       "core",
 			}),
 		},
@@ -981,7 +981,7 @@ func TestListCommands_IncompleteField_TrueWhenEngineErrors(t *testing.T) {
 	// Given: a registry with commands and an engine that always errors
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin.boot"}, Source: "admin"}),
+			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin:boot"}, Source: "admin"}),
 			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
 		},
 	}
@@ -1036,7 +1036,7 @@ func TestListCommands_IncompleteField_TrueWhenPartialErrors(t *testing.T) {
 		commands: []command.CommandEntry{
 			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []string{"comms.say"}, Source: "core"}),
 			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
-			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin.boot"}, Source: "admin"}),
+			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin:boot"}, Source: "admin"}),
 		},
 	}
 
@@ -1052,11 +1052,11 @@ func TestListCommands_IncompleteField_TrueWhenPartialErrors(t *testing.T) {
 		Resource: "comms.say",
 	}).Return(types.NewDecision(types.EffectAllow, "test", ""), nil).Maybe()
 
-	// admin.boot errors
+	// admin:boot errors
 	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
 		Subject:  subject,
 		Action:   "execute",
-		Resource: "admin.boot",
+		Resource: "admin:boot",
 	}).Return(types.Decision{}, errors.New("policy store unavailable")).Maybe()
 
 	hf := New(nil, WithCommandRegistry(registry), WithEngine(mockEngine))
@@ -1105,7 +1105,7 @@ func TestListCommands_ReturnsErrorWhenEngineErrors(t *testing.T) {
 	// Given: a registry with commands and an engine that always errors
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
-			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin.boot"}, Source: "admin"}),
+			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []string{"admin:boot"}, Source: "admin"}),
 			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
 		},
 	}
@@ -1167,7 +1167,7 @@ func TestGetCommandHelp_AccessDenied(t *testing.T) {
 				Name:         "secret-cmd",
 				Help:         "Secret command",
 				Usage:        "secret-cmd",
-				Capabilities: []string{"admin.secret"},
+				Capabilities: []string{"admin:secret"},
 				Source:       "admin",
 			}),
 		},
@@ -1239,7 +1239,7 @@ func TestGetCommandHelp_NilEngine_FailsClosed(t *testing.T) {
 		commands: []command.CommandEntry{
 			command.NewTestEntry(command.CommandEntryConfig{
 				Name: "secret-cmd", Help: "Secret",
-				Capabilities: []string{"admin.secret"}, Source: "admin",
+				Capabilities: []string{"admin:secret"}, Source: "admin",
 			}),
 		},
 	}
@@ -1259,7 +1259,7 @@ func TestGetCommandHelp_EngineError_ReturnsCheckFailed(t *testing.T) {
 		commands: []command.CommandEntry{
 			command.NewTestEntry(command.CommandEntryConfig{
 				Name: "secret-cmd", Help: "Secret",
-				Capabilities: []string{"admin.secret"}, Source: "admin",
+				Capabilities: []string{"admin:secret"}, Source: "admin",
 			}),
 		},
 	}

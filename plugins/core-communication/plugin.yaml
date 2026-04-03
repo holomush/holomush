@@ -165,7 +165,7 @@ commands:
 
   - name: wall
     capabilities:
-      - admin.wall
+      - admin:wall
     help: "Broadcast a message to all players"
     usage: "wall [urgency] <message>"
     helpText: |-
@@ -193,4 +193,4 @@ commands:
 
       ### Permissions
 
-      Requires the `admin.wall` capability.
+      Requires the `admin:wall` capability.

@@ -78,7 +78,7 @@ commands:
 
   - name: sysalias
     capabilities:
-      - admin.alias
+      - admin:alias
     help: "Add a system alias"
     usage: "sysalias <name>=<command>"
     helpText: |
@@ -104,11 +104,11 @@ commands:
 
       ### Permissions
 
-      Requires the `admin.alias` capability.
+      Requires the `admin:alias` capability.
 
   - name: sysunsalias
     capabilities:
-      - admin.alias
+      - admin:alias
     help: "Remove a system alias"
     usage: "sysunsalias <name>"
     helpText: |
@@ -126,11 +126,11 @@ commands:
 
       ### Permissions
 
-      Requires the `admin.alias` capability.
+      Requires the `admin:alias` capability.
 
   - name: sysaliases
     capabilities:
-      - admin.alias
+      - admin:alias
     help: "List all system aliases"
     usage: "sysaliases"
     helpText: |-
@@ -144,4 +144,4 @@ commands:
 
       ### Permissions
 
-      Requires the `admin.alias` capability.
+      Requires the `admin:alias` capability.

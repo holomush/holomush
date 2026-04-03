@@ -154,7 +154,7 @@ func TestDispatcher_PermissionDenied(t *testing.T) {
 
 	err := reg.Register(CommandEntry{
 		Name:         "admin",
-		capabilities: []string{"admin.manage"},
+		capabilities: []string{"admin:manage"},
 		handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
 		Source:       "core",
 	})
@@ -188,7 +188,7 @@ func TestDispatcher_ExplicitPolicyDeny_ReturnsAccessDenied(t *testing.T) {
 
 	err := reg.Register(CommandEntry{
 		Name:         "admin",
-		capabilities: []string{"admin.manage"},
+		capabilities: []string{"admin:manage"},
 		handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
 		Source:       "core",
 	})
@@ -222,7 +222,7 @@ func TestDispatch_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 
 	err := reg.Register(CommandEntry{
 		Name:         "admin",
-		capabilities: []string{"admin.manage"},
+		capabilities: []string{"admin:manage"},
 		handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
 		Source:       "core",
 	})
@@ -253,7 +253,7 @@ func TestDispatch_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok)
 	assert.Equal(t, "admin", oopsErr.Context()["command"])
-	assert.Equal(t, "admin.manage", oopsErr.Context()["capability"])
+	assert.Equal(t, "admin:manage", oopsErr.Context()["capability"])
 
 	// Verify wrapped error
 	assert.ErrorIs(t, err, engineErr)
@@ -271,7 +271,7 @@ func TestDispatcher_InfraFailure_ReturnsAccessEvaluationFailed(t *testing.T) {
 
 	err := reg.Register(CommandEntry{
 		Name:         "admin",
-		capabilities: []string{"admin.manage"},
+		capabilities: []string{"admin:manage"},
 		handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
 		Source:       "core",
 	})
@@ -302,7 +302,7 @@ func TestDispatcher_InfraFailure_ReturnsAccessEvaluationFailed(t *testing.T) {
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok)
 	assert.Equal(t, "admin", oopsErr.Context()["command"])
-	assert.Equal(t, "admin.manage", oopsErr.Context()["capability"])
+	assert.Equal(t, "admin:manage", oopsErr.Context()["capability"])
 	assert.Equal(t, "session resolution failed", oopsErr.Context()["reason"])
 	assert.Equal(t, "infra:session-resolver", oopsErr.Context()["policy_id"])
 
@@ -389,7 +389,7 @@ func TestDispatcher_MultipleCapabilities(t *testing.T) {
 	// Register command requiring multiple capabilities
 	err := reg.Register(CommandEntry{
 		Name:         "dangerous",
-		capabilities: []string{"admin.manage", "admin.danger"},
+		capabilities: []string{"admin:manage", "admin:danger"},
 		handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
 		Source:       "core",
 	})
@@ -399,7 +399,7 @@ func TestDispatcher_MultipleCapabilities(t *testing.T) {
 	subject := access.CharacterSubject(charID.String())
 
 	// Only grant one capability
-	mockAccess.Grant(subject, "execute", "admin.manage")
+	mockAccess.Grant(subject, "execute", "admin:manage")
 
 	dispatcher, err := NewDispatcher(reg, mockAccess)
 	require.NoError(t, err)
@@ -411,7 +411,7 @@ func TestDispatcher_MultipleCapabilities(t *testing.T) {
 		Services:    stubServices(),
 	})
 
-	// Should fail - missing admin.danger
+	// Should fail - missing admin:danger
 	err = dispatcher.Dispatch(context.Background(), "dangerous", exec)
 	require.Error(t, err)
 	oopsErr, ok := oops.AsOops(err)
@@ -419,7 +419,7 @@ func TestDispatcher_MultipleCapabilities(t *testing.T) {
 	assert.Equal(t, CodePermissionDenied, oopsErr.Code())
 
 	// Now grant the second capability
-	mockAccess.Grant(subject, "execute", "admin.danger")
+	mockAccess.Grant(subject, "execute", "admin:danger")
 
 	// Should succeed
 	err = dispatcher.Dispatch(context.Background(), "dangerous", exec)
@@ -1398,7 +1398,7 @@ func TestDispatcher_MetricsIntegration(t *testing.T) {
 
 	err = reg.Register(CommandEntry{
 		Name:         "metrics_protected",
-		capabilities: []string{"admin.manage"},
+		capabilities: []string{"admin:manage"},
 		handler: func(_ context.Context, _ *CommandExecution) error {
 			return nil
 		},
@@ -1459,7 +1459,7 @@ func TestDispatcher_MetricsIntegration(t *testing.T) {
 			Output:      &bytes.Buffer{},
 			Services:    stubServices(),
 		})
-		// Don't grant admin.manage capability
+		// Don't grant admin:manage capability
 		dispatchErr := dispatcher.Dispatch(context.Background(), "metrics_protected", exec)
 		require.Error(t, dispatchErr)
 	})
@@ -1741,7 +1741,7 @@ func TestDispatcher_PolicyDenial_ReturnsPermissionDeniedMetric(t *testing.T) {
 
 	err := reg.Register(CommandEntry{
 		Name:         "protected",
-		capabilities: []string{"admin.manage"},
+		capabilities: []string{"admin:manage"},
 		handler:      func(_ context.Context, _ *CommandExecution) error { return nil },
 		Source:       "core",
 	})
@@ -1784,7 +1784,7 @@ func TestDispatcher_EvaluateError_LogsErrorWithContext(t *testing.T) {
 	// Register command with capability
 	err := reg.Register(CommandEntry{
 		Name:         "protected",
-		capabilities: []string{"admin.manage"},
+		capabilities: []string{"admin:manage"},
 		handler: func(_ context.Context, _ *CommandExecution) error {
 			return nil
 		},
@@ -1803,7 +1803,7 @@ func TestDispatcher_EvaluateError_LogsErrorWithContext(t *testing.T) {
 	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
 		Subject:  subject,
 		Action:   "execute",
-		Resource: "admin.manage",
+		Resource: "admin:manage",
 	}).Return(types.Decision{}, evalErr)
 
 	// Capture log output
@@ -1829,7 +1829,7 @@ func TestDispatcher_EvaluateError_LogsErrorWithContext(t *testing.T) {
 	assert.Contains(t, logOutput, "access evaluation failed", "log should mention access evaluation failure")
 	assert.Contains(t, logOutput, subject, "log should contain subject")
 	assert.Contains(t, logOutput, "execute", "log should contain action")
-	assert.Contains(t, logOutput, "admin.manage", "log should contain resource (capability)")
+	assert.Contains(t, logOutput, "admin:manage", "log should contain resource (capability)")
 	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
 }
 
@@ -1840,7 +1840,7 @@ func TestDispatcher_PermissionDenial_PropagatesDecisionContext(t *testing.T) {
 	// Register command with capability
 	err := reg.Register(CommandEntry{
 		Name:         "admin",
-		capabilities: []string{"admin.manage"},
+		capabilities: []string{"admin:manage"},
 		handler: func(_ context.Context, _ *CommandExecution) error {
 			return nil
 		},
@@ -1860,7 +1860,7 @@ func TestDispatcher_PermissionDenial_PropagatesDecisionContext(t *testing.T) {
 	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
 		Subject:  subject,
 		Action:   "execute",
-		Resource: "admin.manage",
+		Resource: "admin:manage",
 	}).Return(types.NewDecision(types.EffectDeny, testReason, testPolicyID), nil)
 
 	// Execute command
@@ -1886,7 +1886,7 @@ func TestDispatcher_PermissionDenial_PropagatesDecisionContext(t *testing.T) {
 
 	// Also verify command and capability are still present
 	assert.Equal(t, "admin", context["command"])
-	assert.Equal(t, "admin.manage", context["capability"])
+	assert.Equal(t, "admin:manage", context["capability"])
 }
 
 func TestDispatcher_EngineError_DuringSecondCapability(t *testing.T) {
@@ -1896,7 +1896,7 @@ func TestDispatcher_EngineError_DuringSecondCapability(t *testing.T) {
 	// Register command with 2 capabilities
 	err := reg.Register(CommandEntry{
 		Name:         "dangerous",
-		capabilities: []string{"admin.manage", "admin.danger"},
+		capabilities: []string{"admin:manage", "admin:danger"},
 		handler: func(_ context.Context, _ *CommandExecution) error {
 			return nil
 		},
@@ -1915,14 +1915,14 @@ func TestDispatcher_EngineError_DuringSecondCapability(t *testing.T) {
 	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
 		Subject:  subject,
 		Action:   "execute",
-		Resource: "admin.manage",
+		Resource: "admin:manage",
 	}).Return(types.NewDecision(types.EffectAllow, "test", ""), nil)
 
 	// Second capability errors (fail-closed)
 	mockEngine.EXPECT().Evaluate(mock.Anything, types.AccessRequest{
 		Subject:  subject,
 		Action:   "execute",
-		Resource: "admin.danger",
+		Resource: "admin:danger",
 	}).Return(types.Decision{}, evalErr)
 
 	var output bytes.Buffer
@@ -1942,7 +1942,7 @@ func TestDispatcher_EngineError_DuringSecondCapability(t *testing.T) {
 	// Verify error context includes the failing capability
 	oopsErr, ok := oops.AsOops(dispatchErr)
 	require.True(t, ok)
-	assert.Equal(t, "admin.danger", oopsErr.Context()["capability"],
+	assert.Equal(t, "admin:danger", oopsErr.Context()["capability"],
 		"error should report which capability failed")
 	assert.Equal(t, "dangerous", oopsErr.Context()["command"])
 

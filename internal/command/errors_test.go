@@ -23,11 +23,11 @@ func TestErrUnknownCommand(t *testing.T) {
 }
 
 func TestErrPermissionDenied(t *testing.T) {
-	err := ErrPermissionDenied("boot", "admin.boot")
+	err := ErrPermissionDenied("boot", "admin:boot")
 	oopsErr, _ := oops.AsOops(err)
 	assert.Equal(t, "PERMISSION_DENIED", oopsErr.Code())
 	assert.Equal(t, "boot", oopsErr.Context()["command"])
-	assert.Equal(t, "admin.boot", oopsErr.Context()["capability"])
+	assert.Equal(t, "admin:boot", oopsErr.Context()["capability"])
 }
 
 func TestErrInvalidArgs(t *testing.T) {
@@ -100,7 +100,7 @@ func TestPlayerMessage(t *testing.T) {
 		},
 		{
 			name:     "permission denied",
-			err:      ErrPermissionDenied("boot", "admin.boot"),
+			err:      ErrPermissionDenied("boot", "admin:boot"),
 			expected: "You don't have permission to do that.",
 		},
 		{
