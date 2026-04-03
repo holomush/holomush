@@ -170,6 +170,10 @@ func (m *mockGRPCClient) CheckPlayerSession(_ context.Context, _ *corev1.CheckPl
 	return nil, nil
 }
 
+func (m *mockGRPCClient) CreateGuest(_ context.Context, _ *corev1.CreateGuestRequest) (*corev1.CreateGuestResponse, error) {
+	return nil, nil
+}
+
 func (m *mockGRPCClient) GetContent(_ context.Context, _ *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error) {
 	return nil, nil
 }

@@ -79,6 +79,13 @@ func WithCharacterRepo(repo auth.CharacterRepository) CoreServerOption {
 	}
 }
 
+// WithGuestService sets the guest creation service.
+func WithGuestService(svc *auth.GuestService) CoreServerOption {
+	return func(s *CoreServer) {
+		s.guestService = svc
+	}
+}
+
 // isPlayerSessionAuthError reports whether err is a user-facing authentication
 // failure (session not found, expired, or service not configured) as opposed to
 // an infrastructure error (e.g., database unavailable).
@@ -465,6 +472,39 @@ func (s *CoreServer) CheckPlayerSession(ctx context.Context, req *corev1.CheckPl
 
 	return &corev1.CheckPlayerSessionResponse{
 		PlayerName: player.Username,
+	}, nil
+}
+
+// CreateGuest creates an ephemeral guest player and character.
+func (s *CoreServer) CreateGuest(ctx context.Context, _ *corev1.CreateGuestRequest) (*corev1.CreateGuestResponse, error) {
+	slog.DebugContext(ctx, "grpc: CreateGuest")
+
+	if s.guestService == nil {
+		return &corev1.CreateGuestResponse{
+			Success:      false,
+			ErrorMessage: "guest login not configured",
+		}, nil
+	}
+
+	result, err := s.guestService.CreateGuest(ctx)
+	if err != nil {
+		slog.Error("grpc: guest creation failed", "error", err)
+		return &corev1.CreateGuestResponse{
+			Success:      false,
+			ErrorMessage: "guest creation failed",
+		}, nil
+	}
+
+	charSummary := &corev1.CharacterSummary{
+		CharacterId:   result.Character.ID.String(),
+		CharacterName: result.Character.Name,
+	}
+
+	return &corev1.CreateGuestResponse{
+		Success:            true,
+		PlayerSessionToken: result.RawToken,
+		Characters:         []*corev1.CharacterSummary{charSummary},
+		DefaultCharacterId: result.Character.ID.String(),
 	}, nil
 }
 

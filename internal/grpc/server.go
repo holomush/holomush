@@ -119,6 +119,7 @@ type CoreServer struct {
 	playerSessionRepo auth.PlayerSessionRepository
 	playerRepo        auth.PlayerRepository
 	charRepo          auth.CharacterRepository
+	guestService      *auth.GuestService
 
 	// newSessionID is used for generating session IDs. Can be overridden for testing.
 	newSessionID func() ulid.ULID
@@ -203,6 +204,9 @@ func NewCoreServer(engine *core.Engine, sessionStore session.Store, dispatcher *
 // Connection registration is intentionally omitted here — the caller (telnet
 // gateway or web StreamEvents handler) registers the connection after auth so
 // it can supply the correct client type and stream list.
+//
+// Deprecated: Use CreateGuest for guests or AuthenticatePlayer for registered
+// users. Kept for proto backward compatibility until the next major version.
 func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
 	requestID := ""
 	if req.Meta != nil {

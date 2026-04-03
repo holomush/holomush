@@ -28,9 +28,6 @@ message ControlFrame {
 }
 
 service WebService {
-  // Authenticate as guest or registered user.
-  rpc Login(LoginRequest) returns (LoginResponse);
-
   // Send a game command (say, pose, quit, etc.)
   rpc SendCommand(SendCommandRequest) returns (SendCommandResponse);
 
@@ -48,6 +45,8 @@ service WebService {
   rpc WebAuthenticatePlayer(WebAuthenticatePlayerRequest) returns (WebAuthenticatePlayerResponse);
   rpc WebSelectCharacter(WebSelectCharacterRequest) returns (WebSelectCharacterResponse);
   rpc WebCreatePlayer(WebCreatePlayerRequest) returns (WebCreatePlayerResponse);
+  // Create an ephemeral guest player and character.
+  rpc WebCreateGuest(WebCreateGuestRequest) returns (WebCreateGuestResponse);
   rpc WebCreateCharacter(WebCreateCharacterRequest) returns (WebCreateCharacterResponse);
   rpc WebListCharacters(WebListCharactersRequest) returns (WebListCharactersResponse);
   rpc WebLogout(WebLogoutRequest) returns (WebLogoutResponse);
@@ -60,18 +59,6 @@ service WebService {
   // Content store access (public, no auth required).
   rpc WebGetContent(WebGetContentRequest) returns (WebGetContentResponse);
   rpc WebListContent(WebListContentRequest) returns (WebListContentResponse);
-}
-
-message LoginRequest {
-  string username = 1;
-  string password = 2;
-}
-
-message LoginResponse {
-  bool success = 1;
-  string session_id = 2;
-  string character_name = 3;
-  string error_message = 4;
 }
 
 message SendCommandRequest {
@@ -168,6 +155,15 @@ message WebCreatePlayerResponse {
   bool success = 1;
   repeated CharacterSummary characters = 3;
   string error_message = 4;
+}
+
+message WebCreateGuestRequest {}
+
+message WebCreateGuestResponse {
+  bool success = 1;
+  string error_message = 2;
+  repeated CharacterSummary characters = 3;
+  string default_character_id = 4;
 }
 
 message WebCreateCharacterRequest {

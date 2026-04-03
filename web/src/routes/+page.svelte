@@ -6,7 +6,7 @@
   import { createClient } from '@connectrpc/connect';
   import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
   import { transport } from '$lib/transport';
-  import { setGuestSession } from '$lib/stores/authStore';
+  import { setPlayerAuth, setCharacterSession } from '$lib/stores/authStore';
   import { goto } from '$app/navigation';
   import MarkdownContent from '$lib/components/MarkdownContent.svelte';
   import { Button } from '$lib/components/ui/button';
@@ -33,10 +33,19 @@
     error = '';
     loading = true;
     try {
-      const resp = await client.login({ username: 'guest', password: '' });
+      const resp = await client.webCreateGuest({});
       if (resp.success) {
-        setGuestSession(resp.sessionId, resp.characterName);
-        goto('/terminal');
+        setPlayerAuth('Guest');
+        const charId = resp.defaultCharacterId || resp.characters[0]?.characterId;
+        if (charId) {
+          const selectResp = await client.webSelectCharacter({ characterId: charId });
+          if (selectResp.success) {
+            setCharacterSession(selectResp.sessionId, selectResp.characterName);
+            goto('/terminal');
+            return;
+          }
+        }
+        goto('/characters');
       } else {
         error = resp.errorMessage || 'Guest login failed.';
       }

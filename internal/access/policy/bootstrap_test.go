@@ -343,14 +343,18 @@ func TestBootstrap_SetsCorrectEffect(t *testing.T) {
 	err := Bootstrap(ctx, partitions, mockStore, compiler, logger, BootstrapOptions{})
 	require.NoError(t, err)
 
+	expectedForbids := map[string]bool{
+		"seed:property-restricted-excluded": true,
+	}
 	var forbidCount int
 	for _, created := range mockStore.created {
 		if created.Effect == types.PolicyEffectForbid {
 			forbidCount++
-			assert.Equal(t, "seed:property-restricted-excluded", created.Name)
+			assert.True(t, expectedForbids[created.Name],
+				"unexpected forbid policy: %q", created.Name)
 		}
 	}
-	assert.Equal(t, 1, forbidCount, "exactly one forbid policy expected")
+	assert.Equal(t, 1, forbidCount, "expected 1 forbid policy")
 }
 
 func TestBootstrap_NilSeedVersionNotUpgraded(t *testing.T) {

@@ -646,6 +646,17 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		// Create guest authenticator now that startLocationID is resolved.
 		guestAuth := telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocationID)
 
+		// Create guest service for gRPC-based guest login (web client).
+		guestService, guestSvcErr := auth.NewGuestService(
+			guestAuth,
+			authPlayerRepo,
+			authCharRepo,
+			authPlayerSessionRepo,
+		)
+		if guestSvcErr != nil {
+			return oops.Code("GUEST_SERVICE_FAILED").Wrap(guestSvcErr)
+		}
+
 		// Complete the ServiceProxy with late-bound dependencies so core plugins
 		// can access aliases, the command registry, and the starting location.
 		if serviceProxy != nil {
@@ -714,6 +725,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 					guestAuth.ReleaseGuest(info.CharacterName)
 				}
 			}),
+			holoGRPC.WithGuestService(guestService),
 		)
 		corev1.RegisterCoreServiceServer(grpcServer, coreServer)
 
@@ -763,6 +775,13 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	if sessionReaper != nil {
 		go sessionReaper.Run(ctx)
 	}
+
+	// Start guest reaper (cleans up idle guest players and their data).
+	guestReaper := auth.NewGuestReaper(auth.GuestReaperConfig{
+		Interval: 1 * time.Minute,
+		IdleTTL:  10 * time.Minute,
+	}, authPlayerRepo, authPlayerRepo)
+	go guestReaper.Run(ctx)
 
 	// Start control gRPC server (always enabled)
 	controlTLSConfig, tlsErr := deps.ControlTLSLoader(certsDir, "core")

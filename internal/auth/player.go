@@ -63,8 +63,25 @@ type Player struct {
 	LockedUntil        *time.Time
 	DefaultCharacterID *ulid.ULID
 	Preferences        PlayerPreferences
+	IsGuest            bool
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+}
+
+// NewGuestPlayer creates an ephemeral guest player. Guests have no password
+// or email — their identity is the auto-generated username (themed character name).
+func NewGuestPlayer(username string) (*Player, error) {
+	if username == "" {
+		return nil, oops.Code("AUTH_INVALID_USERNAME").Errorf("guest username cannot be empty")
+	}
+	now := time.Now().UTC()
+	return &Player{
+		ID:        idgen.New(),
+		Username:  username,
+		IsGuest:   true,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}, nil
 }
 
 // PlayerPreferences contains player-specific settings.
@@ -157,4 +174,12 @@ type PlayerRepository interface {
 
 	// Delete removes a player.
 	Delete(ctx context.Context, id ulid.ULID) error
+
+	// ListIdleGuests returns guest players whose updated_at is before idleSince.
+	ListIdleGuests(ctx context.Context, idleSince time.Time) ([]*Player, error)
+
+	// DeleteGuestPlayer removes a guest player. The is_guest=true guard prevents
+	// accidental deletion of registered players. FK cascades delete characters
+	// and player sessions.
+	DeleteGuestPlayer(ctx context.Context, playerID ulid.ULID) error
 }

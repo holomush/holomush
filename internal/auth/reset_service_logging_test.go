@@ -121,6 +121,14 @@ func (m *mockPlayerRepoForReset) Count(_ context.Context) (int, error) {
 	return 0, nil
 }
 
+func (m *mockPlayerRepoForReset) ListIdleGuests(_ context.Context, _ time.Time) ([]*auth.Player, error) {
+	return nil, nil
+}
+
+func (m *mockPlayerRepoForReset) DeleteGuestPlayer(_ context.Context, _ ulid.ULID) error {
+	return nil
+}
+
 func TestPasswordResetService_ResetPassword_LogsDeleteByPlayerFailure(t *testing.T) {
 	// Setup: valid reset token exists, password update succeeds, but DeleteByPlayer fails
 	playerID := ulid.Make()

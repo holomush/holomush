@@ -11,7 +11,6 @@ interface AuthState {
   sessionId: string | null;
   characterName: string | null;
   playerName: string | null;
-  isGuest: boolean;
 }
 
 const initial: AuthState = {
@@ -19,7 +18,6 @@ const initial: AuthState = {
   sessionId: null,
   characterName: null,
   playerName: null,
-  isGuest: false,
 };
 
 export const authState = writable<AuthState>(initial);
@@ -28,22 +26,11 @@ export const hasCharacter = derived(authState, ($s) => !!$s.sessionId && !!$s.ch
 
 export function setPlayerAuth(playerName: string) {
   sessionStorage.removeItem('holomush-player'); // clean up legacy raw-token key
-  authState.update((s) => ({ ...s, isPlayerAuthenticated: true, playerName, isGuest: false }));
+  authState.update((s) => ({ ...s, isPlayerAuthenticated: true, playerName }));
 }
 
 export function setCharacterSession(sessionId: string, characterName: string) {
   authState.update((s) => ({ ...s, sessionId, characterName }));
-  sessionStorage.setItem('holomush-session', JSON.stringify({ sessionId, characterName }));
-}
-
-export function setGuestSession(sessionId: string, characterName: string) {
-  authState.update((s) => ({
-    ...s,
-    sessionId,
-    characterName,
-    isGuest: true,
-    playerName: characterName,
-  }));
   sessionStorage.setItem('holomush-session', JSON.stringify({ sessionId, characterName }));
 }
 

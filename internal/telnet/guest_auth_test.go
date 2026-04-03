@@ -99,3 +99,27 @@ func TestGuestAuthenticator_UniqueNames(t *testing.T) {
 func TestGuestAuthenticator_ImplementsInterface(_ *testing.T) {
 	var _ grpcserver.Authenticator = (*GuestAuthenticator)(nil)
 }
+
+func TestGuestAuthenticator_GenerateName(t *testing.T) {
+	startLocation := ulid.Make()
+	auth := NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocation)
+
+	name, err := auth.GenerateName()
+	require.NoError(t, err)
+	assert.NotEmpty(t, name)
+	assert.Contains(t, name, "_") // themed names use underscore separator
+}
+
+func TestGuestAuthenticator_GenerateName_Unique(t *testing.T) {
+	startLocation := ulid.Make()
+	auth := NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocation)
+
+	seen := make(map[string]struct{})
+	for i := 0; i < 20; i++ {
+		name, err := auth.GenerateName()
+		require.NoError(t, err)
+		_, duplicate := seen[name]
+		assert.False(t, duplicate, "duplicate name: %s", name)
+		seen[name] = struct{}{}
+	}
+}

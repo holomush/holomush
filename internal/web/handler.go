@@ -34,7 +34,6 @@ var errStreamClosed = errors.New("stream closed")
 // CoreClient is the gRPC interface used by Handler to communicate with the
 // core service.
 type CoreClient interface {
-	Authenticate(ctx context.Context, req *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error)
 	HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error)
 	Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error)
 	Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error)
@@ -49,6 +48,7 @@ type CoreClient interface {
 	ConfirmPasswordReset(ctx context.Context, req *corev1.ConfirmPasswordResetRequest) (*corev1.ConfirmPasswordResetResponse, error)
 	Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1.LogoutResponse, error)
 	CheckPlayerSession(ctx context.Context, req *corev1.CheckPlayerSessionRequest) (*corev1.CheckPlayerSessionResponse, error)
+	CreateGuest(ctx context.Context, req *corev1.CreateGuestRequest) (*corev1.CreateGuestResponse, error)
 }
 
 // ContentClient is the gRPC interface used by Handler to communicate with the
@@ -97,40 +97,6 @@ func NewHandler(client CoreClient, opts ...HandlerOption) *Handler {
 		opt(h)
 	}
 	return h
-}
-
-// Login authenticates a user and returns session details.
-func (h *Handler) Login(ctx context.Context, req *connect.Request[webv1.LoginRequest]) (*connect.Response[webv1.LoginResponse], error) {
-	slog.DebugContext(ctx, "web: Login", "username", req.Msg.GetUsername())
-
-	authCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
-	defer cancel()
-
-	resp, err := h.client.Authenticate(authCtx, &corev1.AuthenticateRequest{
-		Username:   req.Msg.GetUsername(),
-		Password:   req.Msg.GetPassword(),
-		ClientType: "terminal",
-	})
-	if err != nil {
-		slog.Error("web: authenticate RPC failed", "error", err)
-		return connect.NewResponse(&webv1.LoginResponse{
-			Success:      false,
-			ErrorMessage: "authentication error",
-		}), nil
-	}
-
-	if !resp.GetSuccess() {
-		return connect.NewResponse(&webv1.LoginResponse{
-			Success:      false,
-			ErrorMessage: resp.GetError(),
-		}), nil
-	}
-
-	return connect.NewResponse(&webv1.LoginResponse{
-		Success:       true,
-		SessionId:     resp.GetSessionId(),
-		CharacterName: resp.GetCharacterName(),
-	}), nil
 }
 
 // SendCommand forwards a game command to the core service.

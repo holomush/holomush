@@ -134,13 +134,13 @@ func TestMigrator_FullCycle(t *testing.T) {
 	tables := queryTableNames(t, ctx, connStr)
 	assert.Empty(t, tables, "fresh database should have no user tables")
 
-	// Phase 2: Up — apply baseline, verify all tables
+	// Phase 2: Up — apply all migrations, verify all tables
 	err = migrator.Up()
 	require.NoError(t, err)
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(1), version)
+	assert.Equal(t, uint(2), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)
@@ -165,7 +165,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(1), version)
+	assert.Equal(t, uint(2), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)

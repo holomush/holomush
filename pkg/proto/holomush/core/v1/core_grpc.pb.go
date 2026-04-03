@@ -30,6 +30,7 @@ const (
 	CoreService_AuthenticatePlayer_FullMethodName   = "/holomush.core.v1.CoreService/AuthenticatePlayer"
 	CoreService_SelectCharacter_FullMethodName      = "/holomush.core.v1.CoreService/SelectCharacter"
 	CoreService_CreatePlayer_FullMethodName         = "/holomush.core.v1.CoreService/CreatePlayer"
+	CoreService_CreateGuest_FullMethodName          = "/holomush.core.v1.CoreService/CreateGuest"
 	CoreService_CreateCharacter_FullMethodName      = "/holomush.core.v1.CoreService/CreateCharacter"
 	CoreService_ListCharacters_FullMethodName       = "/holomush.core.v1.CoreService/ListCharacters"
 	CoreService_RequestPasswordReset_FullMethodName = "/holomush.core.v1.CoreService/RequestPasswordReset"
@@ -60,6 +61,8 @@ type CoreServiceClient interface {
 	SelectCharacter(ctx context.Context, in *SelectCharacterRequest, opts ...grpc.CallOption) (*SelectCharacterResponse, error)
 	// Create a new player account.
 	CreatePlayer(ctx context.Context, in *CreatePlayerRequest, opts ...grpc.CallOption) (*CreatePlayerResponse, error)
+	// Create an ephemeral guest player and character.
+	CreateGuest(ctx context.Context, in *CreateGuestRequest, opts ...grpc.CallOption) (*CreateGuestResponse, error)
 	// Create a new character for an authenticated player.
 	CreateCharacter(ctx context.Context, in *CreateCharacterRequest, opts ...grpc.CallOption) (*CreateCharacterResponse, error)
 	// List characters for an authenticated player.
@@ -171,6 +174,16 @@ func (c *coreServiceClient) CreatePlayer(ctx context.Context, in *CreatePlayerRe
 	return out, nil
 }
 
+func (c *coreServiceClient) CreateGuest(ctx context.Context, in *CreateGuestRequest, opts ...grpc.CallOption) (*CreateGuestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateGuestResponse)
+	err := c.cc.Invoke(ctx, CoreService_CreateGuest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *coreServiceClient) CreateCharacter(ctx context.Context, in *CreateCharacterRequest, opts ...grpc.CallOption) (*CreateCharacterResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CreateCharacterResponse)
@@ -253,6 +266,8 @@ type CoreServiceServer interface {
 	SelectCharacter(context.Context, *SelectCharacterRequest) (*SelectCharacterResponse, error)
 	// Create a new player account.
 	CreatePlayer(context.Context, *CreatePlayerRequest) (*CreatePlayerResponse, error)
+	// Create an ephemeral guest player and character.
+	CreateGuest(context.Context, *CreateGuestRequest) (*CreateGuestResponse, error)
 	// Create a new character for an authenticated player.
 	CreateCharacter(context.Context, *CreateCharacterRequest) (*CreateCharacterResponse, error)
 	// List characters for an authenticated player.
@@ -298,6 +313,9 @@ func (UnimplementedCoreServiceServer) SelectCharacter(context.Context, *SelectCh
 }
 func (UnimplementedCoreServiceServer) CreatePlayer(context.Context, *CreatePlayerRequest) (*CreatePlayerResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreatePlayer not implemented")
+}
+func (UnimplementedCoreServiceServer) CreateGuest(context.Context, *CreateGuestRequest) (*CreateGuestResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateGuest not implemented")
 }
 func (UnimplementedCoreServiceServer) CreateCharacter(context.Context, *CreateCharacterRequest) (*CreateCharacterResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateCharacter not implemented")
@@ -475,6 +493,24 @@ func _CoreService_CreatePlayer_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_CreateGuest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateGuestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).CreateGuest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_CreateGuest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).CreateGuest(ctx, req.(*CreateGuestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _CoreService_CreateCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateCharacterRequest)
 	if err := dec(in); err != nil {
@@ -617,6 +653,10 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreatePlayer",
 			Handler:    _CoreService_CreatePlayer_Handler,
+		},
+		{
+			MethodName: "CreateGuest",
+			Handler:    _CoreService_CreateGuest_Handler,
 		},
 		{
 			MethodName: "CreateCharacter",

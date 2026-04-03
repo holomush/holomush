@@ -19,8 +19,8 @@ async function connectAsGuest(page: Page) {
 test.describe('Terminal UI', () => {
   test('connects and displays events', async ({ page }) => {
     await connectAsGuest(page);
-    // Guest characters get random names like "Beryl_Helium"
-    await expect(page.locator('.status-bar .character')).toContainText(/\w+_\w+/);
+    // Guest characters get random themed names like "Beryl Helium"
+    await expect(page.locator('.status-bar .character')).toContainText(/\w+ \w+/);
 
     // DB: session is active with valid location at the starting location
     const sessionId = await getClientSessionId(page);
@@ -28,8 +28,12 @@ test.describe('Terminal UI', () => {
     const session = await db.getSessionById(sessionId!);
     expect(session).not.toBeNull();
     expect(session!.status).toBe('active');
-    expect(session!.is_guest).toBe(true);
     expect(db.isValidLocationId(session!.location_id)).toBe(true);
+
+    // DB: player is a guest
+    const player = await db.getPlayerByCharacterId(session!.character_id);
+    expect(player).not.toBeNull();
+    expect(player!.is_guest).toBe(true);
   });
 
   test('sends commands and receives output', async ({ page }) => {
@@ -181,8 +185,8 @@ test.describe('Terminal UI', () => {
     await input.fill('quit');
     await input.press('Enter');
 
-    // Guest quit clears auth and navigates to landing page
-    await expect(page).toHaveURL(/^\S+\/$/, { timeout: 10000 });
+    // Quit navigates to character picker; auth guard may redirect to /login
+    await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
 
     // Verify sessionStorage was cleared
     const session = await page.evaluate(() => sessionStorage.getItem('holomush-session'));
@@ -389,10 +393,10 @@ test.describe('Terminal UI', () => {
     await input.fill('leaked draft from old session');
     await page.waitForTimeout(700);
 
-    // Quit — guest clears auth and navigates to landing page
+    // Quit — navigates to character picker; auth guard may redirect to /login
     await input.fill('quit');
     await input.press('Enter');
-    await expect(page).toHaveURL(/^\S+\/$/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
 
     // Reconnect as guest from landing page
     await connectAsGuest(page);

@@ -56,7 +56,7 @@ func TestServer_ConnectRPCRouting(t *testing.T) {
 	require.NoError(t, err)
 
 	resp, err := http.Post(
-		"http://"+srv.Addr()+"/holomush.web.v1.WebService/Login",
+		"http://"+srv.Addr()+"/holomush.web.v1.WebService/WebCreateGuest",
 		"application/json",
 		nil,
 	)

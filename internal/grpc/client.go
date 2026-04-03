@@ -223,6 +223,15 @@ func (c *Client) CheckPlayerSession(ctx context.Context, req *corev1.CheckPlayer
 	return resp, nil
 }
 
+// CreateGuest creates an ephemeral guest player and character.
+func (c *Client) CreateGuest(ctx context.Context, req *corev1.CreateGuestRequest) (*corev1.CreateGuestResponse, error) {
+	resp, err := c.client.CreateGuest(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "CreateGuest").Wrap(err)
+	}
+	return resp, nil
+}
+
 // GetContent retrieves a single content item by key from the content service.
 func (c *Client) GetContent(ctx context.Context, req *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error) {
 	resp, err := c.contentClient.GetContent(ctx, req)

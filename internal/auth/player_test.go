@@ -200,6 +200,21 @@ func TestPlayer_Fields(t *testing.T) {
 	})
 }
 
+func TestNewGuestPlayer(t *testing.T) {
+	player, err := auth.NewGuestPlayer("guest_Sapphire_Diamond")
+	require.NoError(t, err)
+	assert.True(t, player.IsGuest)
+	assert.Equal(t, "guest_Sapphire_Diamond", player.Username)
+	assert.NotEqual(t, ulid.ULID{}, player.ID)
+	assert.Empty(t, player.PasswordHash) // guests have no password
+	assert.Nil(t, player.Email)
+}
+
+func TestNewGuestPlayer_EmptyUsername(t *testing.T) {
+	_, err := auth.NewGuestPlayer("")
+	assert.Error(t, err)
+}
+
 func TestValidateUsername(t *testing.T) {
 	tests := []struct {
 		name     string

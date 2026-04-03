@@ -58,6 +58,8 @@ const (
 	// CoreServiceCreatePlayerProcedure is the fully-qualified name of the CoreService's CreatePlayer
 	// RPC.
 	CoreServiceCreatePlayerProcedure = "/holomush.core.v1.CoreService/CreatePlayer"
+	// CoreServiceCreateGuestProcedure is the fully-qualified name of the CoreService's CreateGuest RPC.
+	CoreServiceCreateGuestProcedure = "/holomush.core.v1.CoreService/CreateGuest"
 	// CoreServiceCreateCharacterProcedure is the fully-qualified name of the CoreService's
 	// CreateCharacter RPC.
 	CoreServiceCreateCharacterProcedure = "/holomush.core.v1.CoreService/CreateCharacter"
@@ -95,6 +97,8 @@ type CoreServiceClient interface {
 	SelectCharacter(context.Context, *connect.Request[v1.SelectCharacterRequest]) (*connect.Response[v1.SelectCharacterResponse], error)
 	// Create a new player account.
 	CreatePlayer(context.Context, *connect.Request[v1.CreatePlayerRequest]) (*connect.Response[v1.CreatePlayerResponse], error)
+	// Create an ephemeral guest player and character.
+	CreateGuest(context.Context, *connect.Request[v1.CreateGuestRequest]) (*connect.Response[v1.CreateGuestResponse], error)
 	// Create a new character for an authenticated player.
 	CreateCharacter(context.Context, *connect.Request[v1.CreateCharacterRequest]) (*connect.Response[v1.CreateCharacterResponse], error)
 	// List characters for an authenticated player.
@@ -168,6 +172,12 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(coreServiceMethods.ByName("CreatePlayer")),
 			connect.WithClientOptions(opts...),
 		),
+		createGuest: connect.NewClient[v1.CreateGuestRequest, v1.CreateGuestResponse](
+			httpClient,
+			baseURL+CoreServiceCreateGuestProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("CreateGuest")),
+			connect.WithClientOptions(opts...),
+		),
 		createCharacter: connect.NewClient[v1.CreateCharacterRequest, v1.CreateCharacterResponse](
 			httpClient,
 			baseURL+CoreServiceCreateCharacterProcedure,
@@ -217,6 +227,7 @@ type coreServiceClient struct {
 	authenticatePlayer   *connect.Client[v1.AuthenticatePlayerRequest, v1.AuthenticatePlayerResponse]
 	selectCharacter      *connect.Client[v1.SelectCharacterRequest, v1.SelectCharacterResponse]
 	createPlayer         *connect.Client[v1.CreatePlayerRequest, v1.CreatePlayerResponse]
+	createGuest          *connect.Client[v1.CreateGuestRequest, v1.CreateGuestResponse]
 	createCharacter      *connect.Client[v1.CreateCharacterRequest, v1.CreateCharacterResponse]
 	listCharacters       *connect.Client[v1.ListCharactersRequest, v1.ListCharactersResponse]
 	requestPasswordReset *connect.Client[v1.RequestPasswordResetRequest, v1.RequestPasswordResetResponse]
@@ -263,6 +274,11 @@ func (c *coreServiceClient) SelectCharacter(ctx context.Context, req *connect.Re
 // CreatePlayer calls holomush.core.v1.CoreService.CreatePlayer.
 func (c *coreServiceClient) CreatePlayer(ctx context.Context, req *connect.Request[v1.CreatePlayerRequest]) (*connect.Response[v1.CreatePlayerResponse], error) {
 	return c.createPlayer.CallUnary(ctx, req)
+}
+
+// CreateGuest calls holomush.core.v1.CoreService.CreateGuest.
+func (c *coreServiceClient) CreateGuest(ctx context.Context, req *connect.Request[v1.CreateGuestRequest]) (*connect.Response[v1.CreateGuestResponse], error) {
+	return c.createGuest.CallUnary(ctx, req)
 }
 
 // CreateCharacter calls holomush.core.v1.CoreService.CreateCharacter.
@@ -313,6 +329,8 @@ type CoreServiceHandler interface {
 	SelectCharacter(context.Context, *connect.Request[v1.SelectCharacterRequest]) (*connect.Response[v1.SelectCharacterResponse], error)
 	// Create a new player account.
 	CreatePlayer(context.Context, *connect.Request[v1.CreatePlayerRequest]) (*connect.Response[v1.CreatePlayerResponse], error)
+	// Create an ephemeral guest player and character.
+	CreateGuest(context.Context, *connect.Request[v1.CreateGuestRequest]) (*connect.Response[v1.CreateGuestResponse], error)
 	// Create a new character for an authenticated player.
 	CreateCharacter(context.Context, *connect.Request[v1.CreateCharacterRequest]) (*connect.Response[v1.CreateCharacterResponse], error)
 	// List characters for an authenticated player.
@@ -382,6 +400,12 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(coreServiceMethods.ByName("CreatePlayer")),
 		connect.WithHandlerOptions(opts...),
 	)
+	coreServiceCreateGuestHandler := connect.NewUnaryHandler(
+		CoreServiceCreateGuestProcedure,
+		svc.CreateGuest,
+		connect.WithSchema(coreServiceMethods.ByName("CreateGuest")),
+		connect.WithHandlerOptions(opts...),
+	)
 	coreServiceCreateCharacterHandler := connect.NewUnaryHandler(
 		CoreServiceCreateCharacterProcedure,
 		svc.CreateCharacter,
@@ -436,6 +460,8 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 			coreServiceSelectCharacterHandler.ServeHTTP(w, r)
 		case CoreServiceCreatePlayerProcedure:
 			coreServiceCreatePlayerHandler.ServeHTTP(w, r)
+		case CoreServiceCreateGuestProcedure:
+			coreServiceCreateGuestHandler.ServeHTTP(w, r)
 		case CoreServiceCreateCharacterProcedure:
 			coreServiceCreateCharacterHandler.ServeHTTP(w, r)
 		case CoreServiceListCharactersProcedure:
@@ -487,6 +513,10 @@ func (UnimplementedCoreServiceHandler) SelectCharacter(context.Context, *connect
 
 func (UnimplementedCoreServiceHandler) CreatePlayer(context.Context, *connect.Request[v1.CreatePlayerRequest]) (*connect.Response[v1.CreatePlayerResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.CreatePlayer is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) CreateGuest(context.Context, *connect.Request[v1.CreateGuestRequest]) (*connect.Response[v1.CreateGuestResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.CreateGuest is not implemented"))
 }
 
 func (UnimplementedCoreServiceHandler) CreateCharacter(context.Context, *connect.Request[v1.CreateCharacterRequest]) (*connect.Response[v1.CreateCharacterResponse], error) {

@@ -16,9 +16,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
+	"github.com/samber/oops"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -26,6 +28,8 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/auth"
+	authpostgres "github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
@@ -35,9 +39,86 @@ import (
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telnet"
 	tlscerts "github.com/holomush/holomush/internal/tls"
+	"github.com/holomush/holomush/internal/world"
+	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
+
+// authCharRepoAdapter wraps a pgxpool.Pool to implement auth.CharacterRepository
+// (and auth.GuestCharacterRepository). Mirrors cmd/holomush/auth_adapters.go.
+type authCharRepoAdapter struct {
+	pool     *pgxpool.Pool
+	charRepo *worldpostgres.CharacterRepository
+}
+
+func (a *authCharRepoAdapter) Create(ctx context.Context, char *world.Character) error {
+	return a.charRepo.Create(ctx, char)
+}
+
+func (a *authCharRepoAdapter) ExistsByName(ctx context.Context, name string) (bool, error) {
+	var exists bool
+	err := a.pool.QueryRow(ctx,
+		"SELECT EXISTS(SELECT 1 FROM characters WHERE LOWER(name) = LOWER($1))", name,
+	).Scan(&exists)
+	if err != nil {
+		return false, oops.Code("CHARACTER_EXISTS_CHECK_FAILED").With("name", name).Wrap(err)
+	}
+	return exists, nil
+}
+
+func (a *authCharRepoAdapter) CountByPlayer(ctx context.Context, playerID ulid.ULID) (int, error) {
+	var count int
+	err := a.pool.QueryRow(ctx,
+		"SELECT COUNT(*) FROM characters WHERE player_id = $1", playerID.String(),
+	).Scan(&count)
+	if err != nil {
+		return 0, oops.Code("CHARACTER_COUNT_FAILED").With("player_id", playerID.String()).Wrap(err)
+	}
+	return count, nil
+}
+
+func (a *authCharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*world.Character, error) {
+	rows, err := a.pool.Query(ctx,
+		`SELECT id, player_id, name, description, location_id, created_at
+		 FROM characters WHERE player_id = $1 ORDER BY name`, playerID.String(),
+	)
+	if err != nil {
+		return nil, oops.Code("CHARACTER_LIST_FAILED").With("player_id", playerID.String()).Wrap(err)
+	}
+	defer rows.Close()
+
+	var chars []*world.Character
+	for rows.Next() {
+		var c world.Character
+		var idStr, pidStr string
+		var locStr *string
+		if scanErr := rows.Scan(&idStr, &pidStr, &c.Name, &c.Description, &locStr, &c.CreatedAt); scanErr != nil {
+			return nil, oops.Code("CHARACTER_SCAN_FAILED").Wrap(scanErr)
+		}
+		var parseErr error
+		c.ID, parseErr = ulid.Parse(idStr)
+		if parseErr != nil {
+			return nil, oops.Code("CHARACTER_PARSE_FAILED").With("field", "id").With("value", idStr).Wrap(parseErr)
+		}
+		c.PlayerID, parseErr = ulid.Parse(pidStr)
+		if parseErr != nil {
+			return nil, oops.Code("CHARACTER_PARSE_FAILED").With("field", "player_id").With("value", pidStr).Wrap(parseErr)
+		}
+		if locStr != nil {
+			lid, lidErr := ulid.Parse(*locStr)
+			if lidErr != nil {
+				return nil, oops.Code("CHARACTER_PARSE_FAILED").With("field", "location_id").With("value", *locStr).Wrap(lidErr)
+			}
+			c.LocationID = &lid
+		}
+		chars = append(chars, &c)
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, oops.Code("CHARACTER_ITERATE_FAILED").Wrap(rowsErr)
+	}
+	return chars, nil
+}
 
 // Package-level vars so Event Persistence tests can access them.
 var (
@@ -160,8 +241,8 @@ func connectAsGuest(c *testTelnetClient) string {
 
 	c.SendLine("connect guest")
 	welcomeLine := c.ReadLine()
-	// Extract name from "Welcome, <Name>!"
-	re := regexp.MustCompile(`Welcome, ([A-Z][a-z]+_[A-Z][a-z]+)!`)
+	// Extract name from "Welcome, <Name>!" — names use spaces (e.g. "Sapphire Diamond").
+	re := regexp.MustCompile(`Welcome, ([A-Z][a-z]+ [A-Z][a-z]+)!`)
 	match := re.FindStringSubmatch(welcomeLine)
 	Expect(match).NotTo(BeEmpty(), "expected welcome message to match themed name pattern, got: %s", welcomeLine)
 	return match[1]
@@ -226,6 +307,10 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		eventStore, err = store.NewPostgresEventStore(testCtx, connStr)
 		Expect(err).NotTo(HaveOccurred())
 
+		// 3a. Obtain the underlying pgxpool for auth repos.
+		pool := eventStore.Pool()
+		Expect(pool).NotTo(BeNil())
+
 		// 4. Init game ID
 		gameID, err := eventStore.InitGameID(testCtx)
 		Expect(err).NotTo(HaveOccurred())
@@ -254,9 +339,22 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		// 7. Create core components
 		engine := core.NewEngine(eventStore)
 
-		// 8. Create GuestAuthenticator
+		// 8. Create start location in DB and GuestAuthenticator
 		startLocation = ulid.Make()
+		_, locErr := pool.Exec(testCtx,
+			`INSERT INTO locations (id, name, description) VALUES ($1, $2, $3)`,
+			startLocation.String(), "Start Location", "The starting location for guests.",
+		)
+		Expect(locErr).NotTo(HaveOccurred())
 		guestAuth = telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocation)
+
+		// 8a. Create auth repos and GuestService.
+		playerRepo := authpostgres.NewPlayerRepository(pool)
+		playerSessionRepo := store.NewPostgresPlayerSessionStore(pool)
+		worldCharRepo := worldpostgres.NewCharacterRepository(pool)
+		charRepoAdapter := &authCharRepoAdapter{pool: pool, charRepo: worldCharRepo}
+		guestService, gsErr := auth.NewGuestService(guestAuth, playerRepo, charRepoAdapter, playerSessionRepo)
+		Expect(gsErr).NotTo(HaveOccurred())
 
 		// 9. Create gRPC server with command dispatcher
 		sessStore := session.NewMemStore()
@@ -275,10 +373,15 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		coreServer := grpcpkg.NewCoreServer(engine, sessStore, dispatcher, cmdSvc,
 			grpcpkg.WithAuthenticator(guestAuth),
 			grpcpkg.WithEventStore(eventStore),
+			grpcpkg.WithGuestService(guestService),
+			grpcpkg.WithPlayerRepo(playerRepo),
+			grpcpkg.WithPlayerSessionRepo(playerSessionRepo),
+			grpcpkg.WithCharacterRepo(charRepoAdapter),
 			grpcpkg.WithDisconnectHook(func(info session.Info) {
-				if info.IsGuest {
-					guestAuth.ReleaseGuest(info.CharacterName)
-				}
+				// Release the guest name (stored as underscore form in the namer's
+				// active set, but the session stores it as space-separated display form).
+				rawName := strings.ReplaceAll(info.CharacterName, " ", "_")
+				guestAuth.ReleaseGuest(rawName)
 			}),
 		)
 		grpcServer = grpc.NewServer(grpc.Creds(credentials.NewTLS(serverTLS)))
@@ -364,7 +467,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 			defer client.Close()
 
 			name := connectAsGuest(client)
-			Expect(name).To(MatchRegexp(`^[A-Z][a-z]+_[A-Z][a-z]+$`))
+			Expect(name).To(MatchRegexp(`^[A-Z][a-z]+ [A-Z][a-z]+$`))
 		})
 
 		It("rejects registered login with helpful message", func() {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -42,6 +43,10 @@ func (f *fakePlayerRepo) UpdatePasswordAndClearLockout(_ context.Context, _ ulid
 	return nil
 }
 func (f *fakePlayerRepo) Delete(_ context.Context, _ ulid.ULID) error { return nil }
+func (f *fakePlayerRepo) ListIdleGuests(_ context.Context, _ time.Time) ([]*auth.Player, error) {
+	return nil, nil
+}
+func (f *fakePlayerRepo) DeleteGuestPlayer(_ context.Context, _ ulid.ULID) error { return nil }
 
 type fakeCharService struct {
 	createdName string

@@ -41,7 +41,6 @@ const (
 // CoreClient is the gRPC interface used by GatewayHandler to communicate with
 // the core service.
 type CoreClient interface {
-	Authenticate(ctx context.Context, req *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error)
 	HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error)
 	Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error)
 	Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error)
@@ -55,6 +54,7 @@ type CoreClient interface {
 	RequestPasswordReset(ctx context.Context, req *corev1.RequestPasswordResetRequest) (*corev1.RequestPasswordResetResponse, error)
 	ConfirmPasswordReset(ctx context.Context, req *corev1.ConfirmPasswordResetRequest) (*corev1.ConfirmPasswordResetResponse, error)
 	Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1.LogoutResponse, error)
+	CreateGuest(ctx context.Context, req *corev1.CreateGuestRequest) (*corev1.CreateGuestResponse, error)
 }
 
 // GatewayHandler manages a single telnet connection, using gRPC to communicate
@@ -278,51 +278,43 @@ func (h *GatewayHandler) handleConnect(ctx context.Context, arg string) <-chan *
 		return nil
 	}
 
-	// Guest flow: use the legacy Authenticate RPC (unchanged).
+	// Guest flow: use the CreateGuest RPC.
 	if strings.EqualFold(username, "guest") {
-		return h.handleConnectGuest(ctx, username, password)
+		return h.handleConnectGuest(ctx)
 	}
 
 	// Registered player: two-phase flow.
 	return h.handleConnectPlayer(ctx, username, password)
 }
 
-// handleConnectGuest handles the legacy guest login path.
-func (h *GatewayHandler) handleConnectGuest(ctx context.Context, username, password string) <-chan *corev1.SubscribeResponse {
-	authCtx, authCancel := context.WithTimeout(ctx, rpcTimeout)
-	defer authCancel()
+// handleConnectGuest creates an ephemeral guest player and auto-selects the character.
+func (h *GatewayHandler) handleConnectGuest(ctx context.Context) <-chan *corev1.SubscribeResponse {
+	createCtx, createCancel := context.WithTimeout(ctx, rpcTimeout)
+	defer createCancel()
 
-	resp, err := h.client.Authenticate(authCtx, &corev1.AuthenticateRequest{
-		Username:   username,
-		Password:   password,
-		ClientType: "telnet",
-	})
+	resp, err := h.client.CreateGuest(createCtx, &corev1.CreateGuestRequest{})
 	if err != nil {
-		slog.Error("gateway: authenticate RPC failed", "error", err)
-		h.send("Authentication error. Please try again.")
+		slog.Error("gateway: create guest RPC failed", "error", err)
+		h.send("Guest login error. Please try again.")
 		return nil
 	}
 	if !resp.GetSuccess() {
-		slog.DebugContext(ctx, "telnet: guest authentication failed",
-			"remote_addr", h.conn.RemoteAddr().String(),
-		)
-		h.send("Login failed. Use `connect guest` to play.")
+		h.send("Guest login failed: " + resp.GetErrorMessage())
 		return nil
 	}
 
-	h.sessionID = resp.GetSessionId()
-	h.connectionID = resp.GetConnectionId()
-	h.charName = resp.GetCharacterName()
-	h.authed = true
+	h.playerSessionToken = resp.GetPlayerSessionToken()
+	h.characters = resp.GetCharacters()
 
-	slog.DebugContext(ctx, "telnet: authentication success",
-		"session_id", h.sessionID,
-		"character_name", h.charName,
-	)
+	// Auto-select the single guest character.
+	if len(h.characters) == 1 {
+		return h.selectCharacter(ctx, h.characters[0])
+	}
 
-	h.send(fmt.Sprintf("Welcome, %s!", h.charName))
-
-	return h.subscribeAndEnter(ctx)
+	// Should not happen for guests — CreateGuest always returns one character.
+	slog.Error("gateway: CreateGuest returned no characters")
+	h.send("Guest login failed. Please try again.")
+	return nil
 }
 
 // handleConnectPlayer handles the two-phase registered player login.

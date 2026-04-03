@@ -35,9 +35,6 @@ func TestCoreClient_SatisfiedByGRPCClient(t *testing.T) {
 
 // mockCoreClient is a test double for CoreClient.
 type mockCoreClient struct {
-	authResp *corev1.AuthenticateResponse
-	authErr  error
-
 	cmdResp *corev1.HandleCommandResponse
 	cmdErr  error
 
@@ -70,10 +67,8 @@ type mockCoreClient struct {
 	confirmPwResetErr  error
 	checkSessionResp   *corev1.CheckPlayerSessionResponse
 	checkSessionErr    error
-}
-
-func (m *mockCoreClient) Authenticate(_ context.Context, _ *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
-	return m.authResp, m.authErr
+	createGuestResp    *corev1.CreateGuestResponse
+	createGuestErr     error
 }
 
 func (m *mockCoreClient) HandleCommand(_ context.Context, _ *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
@@ -143,58 +138,8 @@ func (m *mockCoreClient) CheckPlayerSession(_ context.Context, _ *corev1.CheckPl
 	return m.checkSessionResp, m.checkSessionErr
 }
 
-func TestHandler_Login_Success(t *testing.T) {
-	client := &mockCoreClient{
-		authResp: &corev1.AuthenticateResponse{
-			Success:       true,
-			SessionId:     "sess-abc",
-			CharacterName: "Guest-1",
-		},
-	}
-	h := NewHandler(client)
-
-	resp, err := h.Login(context.Background(), connect.NewRequest(&webv1.LoginRequest{
-		Username: "guest",
-		Password: "",
-	}))
-	require.NoError(t, err)
-	assert.True(t, resp.Msg.GetSuccess())
-	assert.Equal(t, "sess-abc", resp.Msg.GetSessionId())
-	assert.Equal(t, "Guest-1", resp.Msg.GetCharacterName())
-	assert.Empty(t, resp.Msg.GetErrorMessage())
-}
-
-func TestHandler_Login_Failure(t *testing.T) {
-	client := &mockCoreClient{
-		authResp: &corev1.AuthenticateResponse{
-			Success: false,
-			Error:   "invalid credentials",
-		},
-	}
-	h := NewHandler(client)
-
-	resp, err := h.Login(context.Background(), connect.NewRequest(&webv1.LoginRequest{
-		Username: "user",
-		Password: "wrong",
-	}))
-	require.NoError(t, err)
-	assert.False(t, resp.Msg.GetSuccess())
-	assert.NotEmpty(t, resp.Msg.GetErrorMessage())
-	assert.Empty(t, resp.Msg.GetSessionId())
-}
-
-func TestHandler_Login_RPCError(t *testing.T) {
-	client := &mockCoreClient{
-		authErr: errors.New("connection refused"),
-	}
-	h := NewHandler(client)
-
-	resp, err := h.Login(context.Background(), connect.NewRequest(&webv1.LoginRequest{
-		Username: "guest",
-	}))
-	require.NoError(t, err)
-	assert.False(t, resp.Msg.GetSuccess())
-	assert.NotEmpty(t, resp.Msg.GetErrorMessage())
+func (m *mockCoreClient) CreateGuest(_ context.Context, _ *corev1.CreateGuestRequest) (*corev1.CreateGuestResponse, error) {
+	return m.createGuestResp, m.createGuestErr
 }
 
 func TestHandler_SendCommand_Success(t *testing.T) {
