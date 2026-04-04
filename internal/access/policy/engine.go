@@ -406,9 +406,10 @@ func (e *Engine) CanPerformAction(ctx context.Context, subject, action, resource
 		return false, oops.Wrapf(err, "context cancelled before CanPerformAction")
 	}
 
-	// Step 2: Degraded mode → fail-closed
+	// Step 2: Degraded mode → fail-closed with sentinel error so callers
+	// can distinguish infra failure from normal deny.
 	if e.degraded.Load() {
-		return false, nil
+		return false, types.ErrEngineDegraded
 	}
 
 	// Step 3: Validate subject format "type:id"

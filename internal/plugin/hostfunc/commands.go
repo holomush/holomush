@@ -176,21 +176,36 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 //   - allowed is true if command has no capabilities or subject has ALL required capabilities
 //   - hadError is true if any engine evaluation failed (returned error or indicated infrastructure failure)
 func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd command.CommandEntry) (allowed, hadError bool) {
-	caps := cmd.GetCapabilities()
-	// Commands with no capabilities are always available
-	if len(caps) == 0 {
-		return true, false
+	// Layer 1: can this character execute this command?
+	req, reqErr := types.NewAccessRequest(subject, "execute", "command:"+cmd.Name)
+	if reqErr != nil {
+		errutil.LogErrorContext(ctx, "command access request failed",
+			reqErr, "subject", subject, "command", cmd.Name)
+		observability.RecordEngineFailure("command_capability_engine_error")
+		return false, true
+	}
+	decision, evalErr := f.engine.Evaluate(ctx, req)
+	if evalErr != nil {
+		errutil.LogErrorContext(ctx, "command access evaluation failed",
+			evalErr, "subject", subject, "command", cmd.Name)
+		observability.RecordEngineFailure("command_capability_engine_error")
+		return false, true
+	}
+	if !decision.IsAllowed() {
+		if decision.IsInfraFailure() {
+			return false, true
+		}
+		return false, false
 	}
 
-	// Check ALL capabilities (AND logic) — fail-closed on errors
-	for _, cap := range caps {
-		ok, err := f.engine.CanPerformAction(ctx, subject, cap.Action, cap.Resource, cap.EffectiveScope())
+	// Layer 2: capability pre-flight (AND logic) — fail-closed on errors
+	for _, capability := range cmd.GetCapabilities() {
+		ok, err := f.engine.CanPerformAction(ctx, subject, capability.Action, capability.Resource, capability.EffectiveScope())
 		if err != nil {
 			errutil.LogErrorContext(ctx, "capability pre-flight failed",
-				err, "subject", subject, "action", cap.Action, "resource", cap.Resource)
+				err, "subject", subject, "action", capability.Action, "resource", capability.Resource)
 			observability.RecordEngineFailure("command_capability_engine_error")
-			hadError = true
-			return false, hadError
+			return false, true
 		}
 		if !ok {
 			return false, hadError

@@ -149,6 +149,7 @@ func TestGetCommandHelp_ReturnsCommandDetails(t *testing.T) {
 
 	charID := ulid.Make()
 	ac := policytest.NewGrantEngine()
+	ac.GrantCommandExecution(access.SubjectCharacter+charID.String(), "say")
 	ac.Grant(access.SubjectCharacter+charID.String(), "emit", "stream")
 
 	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
@@ -268,9 +269,10 @@ func TestListCommands_FiltersCommandsByCharacterCapabilities(t *testing.T) {
 		},
 	}
 
-	// AccessControl that grants "emit" to our character but NOT admin caps
+	// AccessControl that grants Layer 1 execute + Layer 2 "emit" to our character but NOT admin caps
 	charID := ulid.Make()
 	ac := policytest.NewGrantEngine()
+	ac.GrantCommandExecution(access.SubjectCharacter+charID.String(), "say")
 	ac.Grant(access.SubjectCharacter+charID.String(), "emit", "stream")
 
 	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
@@ -306,8 +308,8 @@ func TestListCommands_FiltersCommandsByCharacterCapabilities(t *testing.T) {
 		}
 	})
 
-	// Should include: say (has comms.say), look (no caps required)
-	// Should NOT include: boot (needs admin:boot), nuke (needs admin:nuke AND admin:danger)
+	// Should include: say (has Layer 1 execute + Layer 2 emit), look (no caps required)
+	// Should NOT include: boot (no Layer 1 grant), nuke (no Layer 1 grant)
 	assert.Contains(t, names, "say")
 	assert.Contains(t, names, "look")
 	assert.NotContains(t, names, "boot")
@@ -407,7 +409,8 @@ func TestListCommands_WithAllCapabilitiesGranted(t *testing.T) {
 
 	charID := ulid.Make()
 	ac := policytest.NewGrantEngine()
-	// Grant ALL required capabilities
+	// Grant Layer 1 execute + ALL required Layer 2 capabilities
+	ac.GrantCommandExecution(access.SubjectCharacter+charID.String(), "nuke")
 	ac.Grant(access.SubjectCharacter+charID.String(), "admin", "server")
 	ac.Grant(access.SubjectCharacter+charID.String(), "delete", "server")
 
@@ -423,7 +426,7 @@ func TestListCommands_WithAllCapabilitiesGranted(t *testing.T) {
 	`)
 	require.NoError(t, err)
 
-	// Then: command IS included because character has both caps
+	// Then: command IS included because character has Layer 1 execute + both Layer 2 caps
 	result := L.GetGlobal("result")
 	resultTbl, ok := result.(*lua.LTable)
 	require.True(t, ok)
@@ -658,6 +661,9 @@ func TestListCommands_VerifiesAccessRequest(t *testing.T) {
 	// Capture CanPerformAction args
 	var capturedSubject, capturedAction, capturedResource string
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+	// Layer 1: Evaluate must allow command execution
+	mockEngine.On("Evaluate", mock.Anything, mock.Anything).
+		Return(types.NewDecision(types.EffectAllow, "test-allow", ""), nil)
 	mockEngine.On("CanPerformAction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
 			capturedSubject = args.Get(1).(string)
@@ -701,6 +707,10 @@ func TestListCommands_EvaluateError_LogsErrorWithContext(t *testing.T) {
 	evalErr := errors.New("policy store unavailable")
 
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+
+	// Layer 1: Evaluate must allow so we reach capability pre-flight
+	mockEngine.On("Evaluate", mock.Anything, mock.Anything).
+		Return(types.NewDecision(types.EffectAllow, "test-allow", ""), nil)
 
 	// Mock engine to return error for the capability pre-flight
 	mockEngine.On("CanPerformAction", mock.Anything, subject, "admin", "server", "global").
@@ -858,6 +868,10 @@ func TestListCommands_ThreadsLuaContext(t *testing.T) {
 
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 
+	// Layer 1: Evaluate must allow so we reach capability pre-flight
+	mockEngine.On("Evaluate", mock.Anything, mock.Anything).
+		Return(types.NewDecision(types.EffectAllow, "test-allow", ""), nil)
+
 	// Capture the context passed to CanPerformAction
 	var capturedCtx context.Context
 	mockEngine.On("CanPerformAction", mock.MatchedBy(func(ctx context.Context) bool {
@@ -905,6 +919,10 @@ func TestListCommands_FallsBackToBackgroundContext(t *testing.T) {
 
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 
+	// Layer 1: Evaluate must allow so we reach capability pre-flight
+	mockEngine.On("Evaluate", mock.Anything, mock.Anything).
+		Return(types.NewDecision(types.EffectAllow, "test-allow", ""), nil)
+
 	// Capture the context passed to CanPerformAction
 	var capturedCtx context.Context
 	mockEngine.On("CanPerformAction", mock.MatchedBy(func(ctx context.Context) bool {
@@ -944,6 +962,7 @@ func TestListCommands_IncompleteField_FalseWhenNoErrors(t *testing.T) {
 
 	charID := ulid.Make()
 	ac := policytest.NewGrantEngine()
+	ac.GrantCommandExecution(access.SubjectCharacter+charID.String(), "say")
 	ac.Grant(access.SubjectCharacter+charID.String(), "emit", "stream")
 
 	hf := New(nil, WithCommandRegistry(registry), WithEngine(ac))
@@ -1048,6 +1067,10 @@ func TestListCommands_IncompleteField_TrueWhenPartialErrors(t *testing.T) {
 	subject := access.CharacterSubject(charID.String())
 
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
+
+	// Layer 1: Evaluate must allow so we reach capability pre-flight
+	mockEngine.On("Evaluate", mock.Anything, mock.Anything).
+		Return(types.NewDecision(types.EffectAllow, "test-allow", ""), nil)
 
 	// emit/stream succeeds (say command)
 	mockEngine.On("CanPerformAction", mock.Anything, subject, "emit", "stream", "local").

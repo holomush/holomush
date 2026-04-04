@@ -520,8 +520,8 @@ func TestCommandEntry_GetCapabilities_EmptyCapabilities_ReturnsEmpty(t *testing.
 	require.NoError(t, err)
 
 	caps := entry.GetCapabilities()
-	assert.NotNil(t, caps, "Should return non-nil empty slice")
-	assert.Empty(t, caps, "Should return empty slice")
+	assert.Empty(t, caps, "Should return empty capabilities")
+	assert.Nil(t, caps, "Defensive copy returns nil for empty input")
 }
 
 // Tests for Handler() getter

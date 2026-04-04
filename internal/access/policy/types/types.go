@@ -6,6 +6,7 @@ package types
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -390,6 +391,11 @@ const (
 // This interface is defined here (in types package) to avoid import cycles:
 // - world package needs to call the engine
 // - policy/attribute package needs to query world repositories
+// ErrEngineDegraded is returned by CanPerformAction when the engine is in
+// degraded mode. Callers should treat this as an infrastructure failure
+// (mark results incomplete) rather than a normal policy denial.
+var ErrEngineDegraded = errors.New("ABAC engine in degraded mode")
+
 // By defining the interface with the types it uses, both can import types without a cycle.
 type AccessPolicyEngine interface {
 	Evaluate(ctx context.Context, request AccessRequest) (Decision, error)

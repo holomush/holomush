@@ -1986,7 +1986,8 @@ func TestEngine_CanPerformAction_DegradedMode(t *testing.T) {
 	engine.EnterDegradedMode("test")
 
 	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, types.ErrEngineDegraded)
 	assert.False(t, allowed, "degraded mode → fail-closed")
 }
 

@@ -43,16 +43,23 @@ func CheckCommandExecution(ctx context.Context, engine types.AccessPolicyEngine,
 	}
 
 	if !decision.IsAllowed() {
+		if decision.IsInfraFailure() {
+			slog.ErrorContext(ctx, cmdName+" command access infra failure",
+				"subject", subject,
+				"reason", decision.Reason(),
+				"policy_id", decision.PolicyID())
+			observability.RecordEngineFailure(cmdName + "_command_access")
+			return oops.Code(CodeAccessEvaluationFailed).
+				With("command", cmdName).
+				With("reason", decision.Reason()).
+				With("policy_id", decision.PolicyID()).
+				Wrap(ErrCapabilityCheckFailed)
+		}
 		slog.DebugContext(ctx, cmdName+" command execution denied",
 			"subject", subject,
 			"reason", decision.Reason(),
 			"policy_id", decision.PolicyID())
-		return oops.Code(CodePermissionDenied).
-			With("command", cmdName).
-			With("capability", "execute").
-			With("reason", decision.Reason()).
-			With("policy_id", decision.PolicyID()).
-			Errorf("permission denied for command %s", cmdName)
+		return ErrPermissionDenied(cmdName, "execute")
 	}
 	return nil
 }

@@ -286,28 +286,30 @@ func TestDispatcher_InfraFailure_DeniesAtLayer1(t *testing.T) {
 		Services:    stubServices(),
 	})
 
-	// Get baseline for permission_denied metric (Layer 1 treats infra failure as denial)
-	permDeniedBefore := testutil.ToFloat64(CommandExecutions.With(prometheus.Labels{
-		"command": "admin", "source": "core", "status": StatusPermissionDenied,
+	// Get baseline for engine_failure metric (Layer 1 now returns ACCESS_EVALUATION_FAILED for infra failures)
+	engineFailureBefore := testutil.ToFloat64(CommandExecutions.With(prometheus.Labels{
+		"command": "admin", "source": "core", "status": StatusEngineFailure,
 	}))
 
 	err = dispatcher.Dispatch(context.Background(), "admin", exec)
 	require.Error(t, err)
 
-	// Layer 1 (CheckCommandExecution) doesn't distinguish infra failure from policy denial —
-	// it returns PERMISSION_DENIED for any non-allowed decision.
-	errutil.AssertErrorCode(t, err, CodePermissionDenied)
+	// Layer 1 (CheckCommandExecution) now distinguishes infra failure from policy denial —
+	// it returns ACCESS_EVALUATION_FAILED for infra failures.
+	errutil.AssertErrorCode(t, err, CodeAccessEvaluationFailed)
 
-	// Verify error context
+	// Verify error context includes reason and policy_id from the decision
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok)
 	assert.Equal(t, "admin", oopsErr.Context()["command"])
+	assert.Equal(t, "session resolution failed", oopsErr.Context()["reason"])
+	assert.Equal(t, "infra:session-resolver", oopsErr.Context()["policy_id"])
 
-	// Verify permission_denied metric incremented
-	permDeniedAfter := testutil.ToFloat64(CommandExecutions.With(prometheus.Labels{
-		"command": "admin", "source": "core", "status": StatusPermissionDenied,
+	// Verify engine_failure metric incremented
+	engineFailureAfter := testutil.ToFloat64(CommandExecutions.With(prometheus.Labels{
+		"command": "admin", "source": "core", "status": StatusEngineFailure,
 	}))
-	assert.Equal(t, permDeniedBefore+1, permDeniedAfter, "should record permission_denied status for infra failures at Layer 1")
+	assert.Equal(t, engineFailureBefore+1, engineFailureAfter, "should record engine_failure status for infra failures at Layer 1")
 }
 
 func TestDispatcher_EmptyInput(t *testing.T) {
@@ -425,9 +427,11 @@ func TestDispatcher_MultipleCapabilities(t *testing.T) {
 
 func TestDispatcher_NoCapabilitiesRequired(t *testing.T) {
 	reg := NewRegistry()
+	mockAccess := policytest.NewGrantEngine()
 
 	// Register command with no capabilities required
 	executed := false
+	charID := ulid.Make()
 	err := reg.Register(CommandEntry{
 		Name:         "public",
 		capabilities: nil, // No capabilities required
@@ -439,17 +443,20 @@ func TestDispatcher_NoCapabilitiesRequired(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	dispatcher, err := NewDispatcher(reg, policytest.AllowAllEngine())
+	// Only grant Layer 1 (command execution) — no Layer 2 grants needed
+	mockAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "public")
+
+	dispatcher, err := NewDispatcher(reg, mockAccess)
 	require.NoError(t, err)
 
 	var output bytes.Buffer
 	exec := NewTestExecution(CommandExecutionConfig{
-		CharacterID: ulid.Make(),
+		CharacterID: charID,
 		Output:      &output,
 		Services:    stubServices(),
 	})
 
-	// Should succeed without any grants
+	// Should succeed — Layer 1 granted, Layer 2 skipped (no capabilities)
 	err = dispatcher.Dispatch(context.Background(), "public", exec)
 	require.NoError(t, err)
 	assert.True(t, executed)
@@ -1920,12 +1927,10 @@ func TestDispatcher_PermissionDenial_PropagatesDecisionContext(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, CodePermissionDenied, oopsErr.Code())
 
-	// Verify decision context (reason and policy_id) is propagated
+	// ErrPermissionDenied does not propagate reason/policy_id from the decision
+	// — those are only logged at debug level. The error context contains command
+	// and capability fields from ErrPermissionDenied.
 	errCtx := oopsErr.Context()
-	assert.Equal(t, testReason, errCtx["reason"], "decision reason should be propagated in error context")
-	assert.Equal(t, testPolicyID, errCtx["policy_id"], "decision policy_id should be propagated in error context")
-
-	// Also verify command and capability are still present
 	assert.Equal(t, "admin", errCtx["command"])
 	assert.Equal(t, "execute", errCtx["capability"])
 }

@@ -276,11 +276,18 @@ func NewCommandEntry(cfg CommandEntryConfig) (*CommandEntry, error) {
 		}
 	}
 
+	// Defensive copy so callers can't mutate the entry's capabilities after construction.
+	var caps []Capability
+	if len(cfg.Capabilities) > 0 {
+		caps = make([]Capability, len(cfg.Capabilities))
+		copy(caps, cfg.Capabilities)
+	}
+
 	return &CommandEntry{
 		Name:         cfg.Name,
 		handler:      cfg.Handler,
 		pluginName:   cfg.PluginName,
-		capabilities: cfg.Capabilities,
+		capabilities: caps,
 		Help:         cfg.Help,
 		Usage:        cfg.Usage,
 		HelpText:     cfg.HelpText,
