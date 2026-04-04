@@ -13,16 +13,8 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 )
 
-func TestSceneProvider_Namespace(t *testing.T) {
-	provider := NewSceneProvider()
-	assert.Equal(t, "scene", provider.Namespace())
-}
-
-func TestSceneProvider_ResolveSubject(t *testing.T) {
-	provider := NewSceneProvider()
-	attrs, err := provider.ResolveSubject(context.Background(), "scene:01XYZ")
-	require.NoError(t, err)
-	assert.Nil(t, attrs)
+func TestSceneProviderContract(t *testing.T) {
+	assertProviderContract(t, NewSceneProvider())
 }
 
 func TestSceneProvider_ResolveResource(t *testing.T) {
@@ -75,7 +67,7 @@ func TestSceneProvider_ResolveResource(t *testing.T) {
 	}
 }
 
-func TestSceneProvider_Schema(t *testing.T) {
+func TestSceneProviderSchema(t *testing.T) {
 	provider := NewSceneProvider()
 	schema := provider.Schema()
 

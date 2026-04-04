@@ -13,12 +13,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCircuitBreaker_StartsInClosedState(t *testing.T) {
+func TestCircuitBreakerStartsInClosedState(t *testing.T) {
 	cb := NewCircuitBreaker("test", DefaultCircuitBreakerConfig(), nil)
 	assert.Equal(t, CircuitStateClosed, cb.State())
 }
 
-func TestCircuitBreaker_OpensOnHighBudgetUtilization(t *testing.T) {
+func TestCircuitBreakerOpensOnHighBudgetUtilization(t *testing.T) {
 	cb := NewCircuitBreaker("test", DefaultCircuitBreakerConfig(), nil)
 
 	for range 10 {
@@ -28,7 +28,7 @@ func TestCircuitBreaker_OpensOnHighBudgetUtilization(t *testing.T) {
 	assert.Equal(t, CircuitStateOpen, cb.State())
 }
 
-func TestCircuitBreaker_StaysClosedBelowThreshold(t *testing.T) {
+func TestCircuitBreakerStaysClosedBelowThreshold(t *testing.T) {
 	cb := NewCircuitBreaker("test", DefaultCircuitBreakerConfig(), nil)
 
 	for range 10 {
@@ -38,7 +38,7 @@ func TestCircuitBreaker_StaysClosedBelowThreshold(t *testing.T) {
 	assert.Equal(t, CircuitStateClosed, cb.State())
 }
 
-func TestCircuitBreaker_StaysClosedBelowMinCalls(t *testing.T) {
+func TestCircuitBreakerStaysClosedBelowMinCalls(t *testing.T) {
 	cb := NewCircuitBreaker("test", DefaultCircuitBreakerConfig(), nil)
 
 	for range 5 {
@@ -48,7 +48,7 @@ func TestCircuitBreaker_StaysClosedBelowMinCalls(t *testing.T) {
 	assert.Equal(t, CircuitStateClosed, cb.State())
 }
 
-func TestCircuitBreaker_AllowsProbeAfterOpenDuration(t *testing.T) {
+func TestCircuitBreakerAllowsProbeAfterOpenDuration(t *testing.T) {
 	config := DefaultCircuitBreakerConfig()
 	config.OpenDuration = 100 * time.Millisecond
 	cb := NewCircuitBreaker("test", config, nil)
@@ -62,7 +62,7 @@ func TestCircuitBreaker_AllowsProbeAfterOpenDuration(t *testing.T) {
 	assert.Equal(t, CircuitStateHalfOpen, cb.State())
 }
 
-func TestCircuitBreaker_ProbeSuccess_ClosesCircuit(t *testing.T) {
+func TestCircuitBreakerProbeSuccessClosesCircuit(t *testing.T) {
 	config := DefaultCircuitBreakerConfig()
 	config.OpenDuration = 100 * time.Millisecond
 	cb := NewCircuitBreaker("test", config, nil)
@@ -77,7 +77,7 @@ func TestCircuitBreaker_ProbeSuccess_ClosesCircuit(t *testing.T) {
 	assert.Equal(t, CircuitStateClosed, cb.State())
 }
 
-func TestCircuitBreaker_ProbeFailure_ReopensCircuit(t *testing.T) {
+func TestCircuitBreakerProbeFailureReopensCircuit(t *testing.T) {
 	config := DefaultCircuitBreakerConfig()
 	config.OpenDuration = 100 * time.Millisecond
 	cb := NewCircuitBreaker("test", config, nil)
@@ -92,7 +92,7 @@ func TestCircuitBreaker_ProbeFailure_ReopensCircuit(t *testing.T) {
 	assert.Equal(t, CircuitStateOpen, cb.State())
 }
 
-func TestCircuitBreaker_ShouldSkip(t *testing.T) {
+func TestCircuitBreakerShouldSkip(t *testing.T) {
 	cb := NewCircuitBreaker("test", DefaultCircuitBreakerConfig(), nil)
 
 	assert.False(t, cb.ShouldSkip())
@@ -104,7 +104,7 @@ func TestCircuitBreaker_ShouldSkip(t *testing.T) {
 	assert.True(t, cb.ShouldSkip())
 }
 
-func TestCircuitBreaker_TryAcquireProbe_OnlyOneWins(t *testing.T) {
+func TestCircuitBreakerTryAcquireProbeOnlyOneWins(t *testing.T) {
 	config := DefaultCircuitBreakerConfig()
 	config.OpenDuration = 100 * time.Millisecond
 	cb := NewCircuitBreaker("test", config, nil)
@@ -132,14 +132,14 @@ func TestCircuitBreaker_TryAcquireProbe_OnlyOneWins(t *testing.T) {
 	assert.Equal(t, int32(1), winners, "exactly one goroutine should win the probe")
 }
 
-func TestCircuitBreaker_RecordCall_ZeroBudget(t *testing.T) {
+func TestCircuitBreakerRecordCallZeroBudget(t *testing.T) {
 	cb := NewCircuitBreaker("test", DefaultCircuitBreakerConfig(), nil)
 	// Should not panic or corrupt state
 	cb.RecordCall(100*time.Millisecond, 0)
 	assert.Equal(t, CircuitStateClosed, cb.State())
 }
 
-func TestCircuitBreakerConfig_Validate(t *testing.T) {
+func TestCircuitBreakerConfigValidate(t *testing.T) {
 	valid := DefaultCircuitBreakerConfig()
 	assert.NoError(t, valid.Validate())
 

@@ -53,14 +53,11 @@ func (m *mockLocationRepository) FindByName(_ context.Context, _ string) (*world
 	return nil, errors.New("not implemented")
 }
 
-func TestLocationProvider_Namespace(t *testing.T) {
-	repo := &mockLocationRepository{}
-	provider := NewLocationProvider(repo)
-
-	assert.Equal(t, "location", provider.Namespace())
+func TestLocationProviderContract(t *testing.T) {
+	assertProviderContract(t, NewLocationProvider(&mockLocationRepository{}))
 }
 
-func TestLocationProvider_Schema(t *testing.T) {
+func TestLocationProviderSchema(t *testing.T) {
 	repo := &mockLocationRepository{}
 	provider := NewLocationProvider(repo)
 
@@ -79,20 +76,6 @@ func TestLocationProvider_Schema(t *testing.T) {
 	assert.Equal(t, types.AttrTypeBool, schema.Attributes["is_shadow"])
 	assert.Equal(t, types.AttrTypeString, schema.Attributes["replay_policy"])
 	assert.Equal(t, types.AttrTypeBool, schema.Attributes["archived"])
-}
-
-func TestLocationProvider_ResolveSubject(t *testing.T) {
-	// Locations are not subjects, should always return nil, nil
-	repo := &mockLocationRepository{}
-	provider := NewLocationProvider(repo)
-
-	attrs, err := provider.ResolveSubject(context.Background(), "location:"+ulid.Make().String())
-	require.NoError(t, err)
-	assert.Nil(t, attrs)
-
-	attrs, err = provider.ResolveSubject(context.Background(), "character:"+ulid.Make().String())
-	require.NoError(t, err)
-	assert.Nil(t, attrs)
 }
 
 func TestLocationProvider_ResolveResource(t *testing.T) {

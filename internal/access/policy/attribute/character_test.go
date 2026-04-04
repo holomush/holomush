@@ -65,14 +65,11 @@ func (m *mockCharacterRepository) IsOwnedByPlayer(_ context.Context, _, _ ulid.U
 	return false, errors.New("not implemented")
 }
 
-func TestCharacterProvider_Namespace(t *testing.T) {
-	repo := &mockCharacterRepository{}
-	provider := NewCharacterProvider(repo, nil)
-
-	assert.Equal(t, "character", provider.Namespace())
+func TestCharacterProviderContract(t *testing.T) {
+	assertProviderContract(t, NewCharacterProvider(&mockCharacterRepository{}, nil))
 }
 
-func TestCharacterProvider_Schema(t *testing.T) {
+func TestCharacterProviderSchema(t *testing.T) {
 	repo := &mockCharacterRepository{}
 	provider := NewCharacterProvider(repo, nil)
 

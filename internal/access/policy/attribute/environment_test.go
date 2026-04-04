@@ -14,7 +14,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 )
 
-func TestEnvironmentProvider_Namespace(t *testing.T) {
+func TestEnvironmentProviderNamespace(t *testing.T) {
 	provider := NewEnvironmentProvider(nil)
 	assert.Equal(t, "env", provider.Namespace())
 }
@@ -61,7 +61,7 @@ func TestEnvironmentProvider_Resolve(t *testing.T) {
 	}
 }
 
-func TestEnvironmentProvider_Schema(t *testing.T) {
+func TestEnvironmentProviderSchema(t *testing.T) {
 	provider := NewEnvironmentProvider(nil)
 	schema := provider.Schema()
 
@@ -78,7 +78,7 @@ func TestEnvironmentProvider_Schema(t *testing.T) {
 	assert.Equal(t, expected, schema)
 }
 
-func TestEnvironmentProvider_DefaultClock(t *testing.T) {
+func TestEnvironmentProviderDefaultClock(t *testing.T) {
 	provider := NewEnvironmentProvider(nil)
 	attrs, err := provider.Resolve(context.Background())
 	require.NoError(t, err)

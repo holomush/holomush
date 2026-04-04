@@ -62,16 +62,8 @@ func (m *mockParentLocationResolver) ResolveParentLocation(ctx context.Context, 
 	return nil, errors.New("not implemented")
 }
 
-func TestPropertyProvider_Namespace(t *testing.T) {
-	provider := NewPropertyProvider(nil, nil)
-	assert.Equal(t, "property", provider.Namespace())
-}
-
-func TestPropertyProvider_ResolveSubject(t *testing.T) {
-	provider := NewPropertyProvider(nil, nil)
-	attrs, err := provider.ResolveSubject(context.Background(), "property:01ABC")
-	require.NoError(t, err)
-	assert.Nil(t, attrs, "properties are not subjects")
+func TestPropertyProviderContract(t *testing.T) {
+	assertProviderContract(t, NewPropertyProvider(nil, nil))
 }
 
 func TestPropertyProvider_ResolveResource(t *testing.T) {
@@ -356,7 +348,7 @@ func TestPropertyProvider_ResolveResource(t *testing.T) {
 	}
 }
 
-func TestPropertyProvider_ResolveResource_Timeout(t *testing.T) {
+func TestPropertyProviderResolveResourceTimeout(t *testing.T) {
 	propID := ulid.MustNew(ulid.Now(), nil)
 	parentID := ulid.MustNew(ulid.Now(), nil)
 	value := "test-value"
@@ -397,7 +389,7 @@ func TestPropertyProvider_ResolveResource_Timeout(t *testing.T) {
 	assert.Equal(t, false, attrs["has_parent_location"], "has_parent_location should be false on timeout")
 }
 
-func TestPropertyProvider_Schema(t *testing.T) {
+func TestPropertyProviderSchema(t *testing.T) {
 	provider := NewPropertyProvider(nil, nil)
 	schema := provider.Schema()
 
