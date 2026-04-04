@@ -39,7 +39,7 @@ func TestEventType_String(t *testing.T) {
 	}
 }
 
-func TestEventType_LocationState(t *testing.T) {
+func TestEventTypeLocationStateConstantsMatchExpectedValues(t *testing.T) {
 	assert.Equal(t, EventType("location_state"), EventTypeLocationState)
 	assert.Equal(t, EventType("exit_update"), EventTypeExitUpdate)
 }
@@ -50,7 +50,7 @@ func TestEventType_LocationState(t *testing.T) {
 //
 // The documentation states: Event type (e.g., "say", "pose", "arrive")
 // These must all be valid EventType values.
-func TestDocumentedEventTypes(t *testing.T) {
+func TestDocumentedEventTypesAreValidEventTypeConstants(t *testing.T) {
 	// Event types documented in plugin-authoring.md line 104
 	// These are the examples given: "say", "pose", "arrive"
 	documentedTypes := []string{"say", "pose", "arrive"}

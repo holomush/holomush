@@ -33,7 +33,7 @@ func newTestCmd(cfg *testConfig) *cobra.Command {
 	return cmd
 }
 
-func TestLoad_FromYAMLFile(t *testing.T) {
+func TestLoadParsesYAMLConfigFile(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
 	err := os.WriteFile(cfgFile, []byte("server:\n  addr: \"0.0.0.0:9000\"\n  log_format: \"text\"\n  verbose: true\n"), 0o600)
@@ -50,7 +50,7 @@ func TestLoad_FromYAMLFile(t *testing.T) {
 	assert.True(t, cfg.Verbose)
 }
 
-func TestLoad_CLIFlagsOverrideConfigFile(t *testing.T) {
+func TestLoadCLIFlagsOverrideConfigFileValues(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
 	err := os.WriteFile(cfgFile, []byte("server:\n  addr: \"0.0.0.0:9000\"\n  log_format: \"text\"\n"), 0o600)
@@ -67,7 +67,7 @@ func TestLoad_CLIFlagsOverrideConfigFile(t *testing.T) {
 	assert.Equal(t, "text", cfg.LogFormat, "config file value should remain when flag not set")
 }
 
-func TestLoad_DefaultFlagsDoNotOverrideConfigFile(t *testing.T) {
+func TestLoadDefaultFlagValuesDoNotOverrideConfigFile(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
 	err := os.WriteFile(cfgFile, []byte("server:\n  addr: \"0.0.0.0:9000\"\n  log_format: \"text\"\n"), 0o600)
@@ -83,7 +83,7 @@ func TestLoad_DefaultFlagsDoNotOverrideConfigFile(t *testing.T) {
 	assert.Equal(t, "text", cfg.LogFormat, "config file should win over flag default")
 }
 
-func TestLoad_ExplicitPathMissing_ReturnsError(t *testing.T) {
+func TestLoadExplicitPathMissingReturnsError(t *testing.T) {
 	cfg := &testConfig{}
 	cmd := newTestCmd(cfg)
 
@@ -92,7 +92,7 @@ func TestLoad_ExplicitPathMissing_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "/nonexistent/config.yaml")
 }
 
-func TestLoad_DefaultPathMissing_NoError(t *testing.T) {
+func TestLoadDefaultPathMissingReturnsNoError(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
@@ -104,7 +104,7 @@ func TestLoad_DefaultPathMissing_NoError(t *testing.T) {
 	assert.Equal(t, "localhost:8080", cfg.Addr)
 }
 
-func TestLoad_MalformedYAML_ReturnsError(t *testing.T) {
+func TestLoadMalformedYAMLReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
 	err := os.WriteFile(cfgFile, []byte("{not: valid: yaml: ["), 0o600)
@@ -117,7 +117,7 @@ func TestLoad_MalformedYAML_ReturnsError(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestLoad_UnknownKeysIgnored(t *testing.T) {
+func TestLoadUnknownYAMLKeysAreIgnored(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
 	err := os.WriteFile(cfgFile, []byte("server:\n  addr: \"0.0.0.0:9000\"\n  unknown_key: \"should be ignored\"\n  another_unknown: 42\n"), 0o600)
@@ -131,7 +131,7 @@ func TestLoad_UnknownKeysIgnored(t *testing.T) {
 	assert.Equal(t, "0.0.0.0:9000", cfg.Addr)
 }
 
-func TestLoad_EmptyConfigFile_UsesDefaults(t *testing.T) {
+func TestLoadEmptyConfigFileUsesDefaults(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
 	err := os.WriteFile(cfgFile, []byte(""), 0o600)
@@ -145,7 +145,7 @@ func TestLoad_EmptyConfigFile_UsesDefaults(t *testing.T) {
 	assert.Equal(t, "localhost:8080", cfg.Addr)
 }
 
-func TestLoad_GameConfig(t *testing.T) {
+func TestLoadParsesGameConfigSection(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
 	err := os.WriteFile(cfgFile, []byte("game:\n  guest_start_location: \"01JMHZ5H3ZSBVTGARX4MSS1MBH\"\n"), 0o600)
@@ -159,7 +159,7 @@ func TestLoad_GameConfig(t *testing.T) {
 	assert.Equal(t, "01JMHZ5H3ZSBVTGARX4MSS1MBH", cfg.GuestStartLocation)
 }
 
-func TestLoad_ExplicitPathPermissionDenied(t *testing.T) {
+func TestLoadExplicitPathPermissionDeniedReturnsError(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("permission test skipped when running as root")
 	}
@@ -179,7 +179,7 @@ func TestLoad_ExplicitPathPermissionDenied(t *testing.T) {
 	assert.NotContains(t, err.Error(), "not found", "permission error should not be reported as 'not found'")
 }
 
-func TestLoad_HyphenFlagMatchesUnderscoreYAML(t *testing.T) {
+func TestLoadHyphenFlagNamesMatchUnderscoreYAMLKeys(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")
 	err := os.WriteFile(cfgFile, []byte("server:\n  log_format: \"text\"\n"), 0o600)
@@ -194,7 +194,7 @@ func TestLoad_HyphenFlagMatchesUnderscoreYAML(t *testing.T) {
 	assert.Equal(t, "json", cfg.LogFormat, "hyphenated flag should override underscored YAML key")
 }
 
-func TestLoad_DefaultXDGPath(t *testing.T) {
+func TestLoadUsesXDGConfigPathWhenNoPathFlagSet(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 

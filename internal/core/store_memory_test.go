@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMemoryEventStore_Append(t *testing.T) {
+func TestMemoryEventStoreAppendSucceedsWithValidEvent(t *testing.T) {
 	store := NewMemoryEventStore()
 	ctx := context.Background()
 
@@ -32,7 +32,7 @@ func TestMemoryEventStore_Append(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestMemoryEventStore_Replay(t *testing.T) {
+func TestMemoryEventStoreReplayReturnsEventsWithLimitAndAfterID(t *testing.T) {
 	store := NewMemoryEventStore()
 	ctx := context.Background()
 
@@ -64,7 +64,7 @@ func TestMemoryEventStore_Replay(t *testing.T) {
 	assert.Len(t, events, 2, "Expected 2 events after id[2]")
 }
 
-func TestMemoryEventStore_LastEventID(t *testing.T) {
+func TestMemoryEventStoreLastEventIDReturnsIDOfMostRecentEvent(t *testing.T) {
 	store := NewMemoryEventStore()
 	ctx := context.Background()
 
@@ -89,7 +89,7 @@ func TestMemoryEventStore_LastEventID(t *testing.T) {
 	assert.Equal(t, event.ID, lastID)
 }
 
-func TestMemoryEventStore_Replay_EmptyStream(t *testing.T) {
+func TestMemoryEventStoreReplayEmptyStreamReturnsNil(t *testing.T) {
 	store := NewMemoryEventStore()
 	ctx := context.Background()
 
@@ -98,7 +98,7 @@ func TestMemoryEventStore_Replay_EmptyStream(t *testing.T) {
 	assert.Nil(t, events, "Expected nil for empty stream")
 }
 
-func TestMemoryEventStore_Replay_AfterIDNotFound(t *testing.T) {
+func TestMemoryEventStoreReplayMissingCursorReturnsEmpty(t *testing.T) {
 	store := NewMemoryEventStore()
 	ctx := context.Background()
 
@@ -126,7 +126,7 @@ func TestMemoryEventStore_Replay_AfterIDNotFound(t *testing.T) {
 	assert.Empty(t, events, "missing afterID should return empty slice")
 }
 
-func TestMemoryEventStore_Replay_LimitExceedsEvents(t *testing.T) {
+func TestMemoryEventStoreReplayLimitHigherThanEventCountReturnsAll(t *testing.T) {
 	store := NewMemoryEventStore()
 	ctx := context.Background()
 
@@ -150,7 +150,7 @@ func TestMemoryEventStore_Replay_LimitExceedsEvents(t *testing.T) {
 	assert.Len(t, events, 2)
 }
 
-func TestMemoryEventStore_Subscribe_NotifiesOnAppend(t *testing.T) {
+func TestMemoryEventStoreSubscribeNotifiesWhenEventAppended(t *testing.T) {
 	store := NewMemoryEventStore()
 	ctx := context.Background()
 
@@ -179,7 +179,7 @@ func TestMemoryEventStore_Subscribe_NotifiesOnAppend(t *testing.T) {
 	}
 }
 
-func TestMemoryEventStore_Subscribe_IgnoresOtherStreams(t *testing.T) {
+func TestMemoryEventStoreSubscribeDoesNotNotifyForOtherStreams(t *testing.T) {
 	store := NewMemoryEventStore()
 	ctx := context.Background()
 
@@ -205,7 +205,7 @@ func TestMemoryEventStore_Subscribe_IgnoresOtherStreams(t *testing.T) {
 	}
 }
 
-func TestMemoryEventStore_Subscribe_CleansUpOnCancel(t *testing.T) {
+func TestMemoryEventStoreSubscribeClosesChannelOnContextCancel(t *testing.T) {
 	store := NewMemoryEventStore()
 	ctx, cancel := context.WithCancel(context.Background())
 

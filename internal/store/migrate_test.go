@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewMigrator_InvalidURL(t *testing.T) {
+func TestNewMigratorInvalidURLReturnsInitError(t *testing.T) {
 	_, err := NewMigrator("invalid://url")
 	require.Error(t, err)
 	// Verify the error code is set correctly
@@ -25,7 +25,7 @@ func TestNewMigrator_InvalidURL(t *testing.T) {
 // to pgx5:// for golang-migrate compatibility. The conversion is implemented in
 // NewMigrator. This test confirms the scheme is recognized (no "unknown driver" error)
 // even though connection will fail with a non-existent host.
-func TestNewMigrator_PostgresqlScheme(t *testing.T) {
+func TestNewMigratorPostgresqlSchemeIsConvertedToPgx5(t *testing.T) {
 	// Use postgresql:// which should be converted to pgx5://
 	// The error should be a connection error, not an "unknown driver" error
 	_, err := NewMigrator("postgresql://localhost:5432/testdb")
@@ -42,7 +42,7 @@ func TestNewMigrator_PostgresqlScheme(t *testing.T) {
 // The test exercises the error path by providing an invalid URL scheme that
 // causes NewWithSourceInstance to fail. The source.Close() call in the error
 // handler ensures the iofs source is cleaned up before returning the error.
-func TestNewMigrator_SourceCleanupOnFailure(t *testing.T) {
+func TestNewMigratorCleansUpSourceWhenInitFails(t *testing.T) {
 	// Use a URL with valid-looking structure but invalid scheme
 	// This causes iofs.New to succeed but migrate.NewWithSourceInstance to fail
 	// The fix ensures source.Close() is called before returning the error
@@ -74,57 +74,57 @@ func (m *mockMigrate) Version() (uint, bool, error) { return m.versionVal, m.dir
 func (m *mockMigrate) Force(_ int) error            { return m.forceErr }
 func (m *mockMigrate) Close() (error, error)        { return m.closeSourceErr, m.closeDbErr }
 
-func TestMigrator_Up_Success(t *testing.T) {
+func TestMigratorUpAppliesPendingMigrations(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{}}
 	err := m.Up()
 	require.NoError(t, err)
 }
 
-func TestMigrator_Up_NoChange(t *testing.T) {
+func TestMigratorUpTreatsNoChangeAsSuccess(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{upErr: migrate.ErrNoChange}}
 	err := m.Up()
 	require.NoError(t, err, "ErrNoChange should be treated as success")
 }
 
-func TestMigrator_Up_Error(t *testing.T) {
+func TestMigratorUpReturnsWrappedErrorOnFailure(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{upErr: errors.New("database locked")}}
 	err := m.Up()
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "MIGRATION_UP_FAILED")
 }
 
-func TestMigrator_Down_Success(t *testing.T) {
+func TestMigratorDownRollsBackMigrations(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{}}
 	err := m.Down()
 	require.NoError(t, err)
 }
 
-func TestMigrator_Down_NoChange(t *testing.T) {
+func TestMigratorDownTreatsNoChangeAsSuccess(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{downErr: migrate.ErrNoChange}}
 	err := m.Down()
 	require.NoError(t, err)
 }
 
-func TestMigrator_Down_Error(t *testing.T) {
+func TestMigratorDownReturnsWrappedErrorOnFailure(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{downErr: errors.New("constraint violation")}}
 	err := m.Down()
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "MIGRATION_DOWN_FAILED")
 }
 
-func TestMigrator_Steps_Success(t *testing.T) {
+func TestMigratorStepsAppliesNMigrations(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{}}
 	err := m.Steps(3)
 	require.NoError(t, err)
 }
 
-func TestMigrator_Steps_NoChange(t *testing.T) {
+func TestMigratorStepsTreatsNoChangeAsSuccess(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{stepsErr: migrate.ErrNoChange}}
 	err := m.Steps(-1)
 	require.NoError(t, err)
 }
 
-func TestMigrator_Steps_ZeroIsNoOp(t *testing.T) {
+func TestMigratorStepsZeroIsNoOp(t *testing.T) {
 	// golang-migrate returns ErrNoChange when n=0, which our wrapper
 	// treats as success. This documents that Steps(0) is a safe no-op.
 	m := &Migrator{m: &mockMigrate{stepsErr: migrate.ErrNoChange}}
@@ -132,14 +132,14 @@ func TestMigrator_Steps_ZeroIsNoOp(t *testing.T) {
 	require.NoError(t, err, "Steps(0) should be a no-op returning nil")
 }
 
-func TestMigrator_Steps_Error(t *testing.T) {
+func TestMigratorStepsReturnsWrappedErrorOnFailure(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{stepsErr: errors.New("invalid step")}}
 	err := m.Steps(5)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "MIGRATION_STEPS_FAILED")
 }
 
-func TestMigrator_Steps_ExceedsAvailable(t *testing.T) {
+func TestMigratorStepsExceedingAvailableReturnsError(t *testing.T) {
 	// When more steps are requested than migrations available (e.g., at version 3
 	// with 7 total migrations, requesting Steps(10) would exceed the limit),
 	// golang-migrate returns ErrShortLimit. Our wrapper treats this as a regular
@@ -156,7 +156,7 @@ func TestMigrator_Steps_ExceedsAvailable(t *testing.T) {
 	errutil.AssertErrorContext(t, err, "steps", 10)
 }
 
-func TestMigrator_Version_Success(t *testing.T) {
+func TestMigratorVersionReturnsCurrentVersionAndDirtyFlag(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{versionVal: 7, dirty: false}}
 	version, dirty, err := m.Version()
 	require.NoError(t, err)
@@ -164,7 +164,7 @@ func TestMigrator_Version_Success(t *testing.T) {
 	assert.False(t, dirty)
 }
 
-func TestMigrator_Version_Dirty(t *testing.T) {
+func TestMigratorVersionReturnsDirtyTrueWhenDirty(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{versionVal: 5, dirty: true}}
 	version, dirty, err := m.Version()
 	require.NoError(t, err)
@@ -172,7 +172,7 @@ func TestMigrator_Version_Dirty(t *testing.T) {
 	assert.True(t, dirty)
 }
 
-func TestMigrator_Version_NilVersion(t *testing.T) {
+func TestMigratorVersionTreatsNilVersionAsZero(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{versionErr: migrate.ErrNilVersion}}
 	version, dirty, err := m.Version()
 	require.NoError(t, err, "ErrNilVersion should return 0, false, nil")
@@ -180,40 +180,40 @@ func TestMigrator_Version_NilVersion(t *testing.T) {
 	assert.False(t, dirty)
 }
 
-func TestMigrator_Version_Error(t *testing.T) {
+func TestMigratorVersionReturnsWrappedErrorOnFailure(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{versionErr: errors.New("connection lost")}}
 	_, _, err := m.Version()
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "MIGRATION_VERSION_FAILED")
 }
 
-func TestMigrator_Force_Success(t *testing.T) {
+func TestMigratorForceSetsVersionWithoutRunningMigrations(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{}}
 	err := m.Force(5)
 	require.NoError(t, err)
 }
 
-func TestMigrator_Force_Error(t *testing.T) {
+func TestMigratorForceReturnsWrappedErrorOnFailure(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{forceErr: errors.New("invalid version")}}
 	err := m.Force(5)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "MIGRATION_FORCE_FAILED")
 }
 
-func TestMigrator_Force_NegativeVersionRejected(t *testing.T) {
+func TestMigratorForceNegativeVersionReturnsError(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{}}
 	err := m.Force(-1)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "INVALID_VERSION")
 }
 
-func TestMigrator_Close_Success(t *testing.T) {
+func TestMigratorCloseSucceedsWithCleanMigrator(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{}}
 	err := m.Close()
 	require.NoError(t, err)
 }
 
-func TestMigrator_Close_SourceError(t *testing.T) {
+func TestMigratorCloseReportsSourceCloseError(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{closeSourceErr: errors.New("source close failed")}}
 	err := m.Close()
 	require.Error(t, err)
@@ -221,7 +221,7 @@ func TestMigrator_Close_SourceError(t *testing.T) {
 	errutil.AssertErrorContext(t, err, "component", "source")
 }
 
-func TestMigrator_Close_DatabaseError(t *testing.T) {
+func TestMigratorCloseDatabaseCloseError(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{closeDbErr: errors.New("db close failed")}}
 	err := m.Close()
 	require.Error(t, err)
@@ -229,7 +229,7 @@ func TestMigrator_Close_DatabaseError(t *testing.T) {
 	errutil.AssertErrorContext(t, err, "component", "database")
 }
 
-func TestMigrator_Close_BothErrors(t *testing.T) {
+func TestMigratorCloseBothSourceAndDatabaseErrorsAreReported(t *testing.T) {
 	// When both source and database close fail, we should report both errors
 	m := &Migrator{m: &mockMigrate{
 		closeSourceErr: errors.New("source close failed"),
@@ -244,7 +244,7 @@ func TestMigrator_Close_BothErrors(t *testing.T) {
 	assert.Contains(t, err.Error(), "db close failed")
 }
 
-func TestMigrator_Close_Idempotent(t *testing.T) {
+func TestMigratorCloseIsIdempotent(t *testing.T) {
 	// Calling Close() multiple times should be safe (idempotent).
 	// This documents that golang-migrate's underlying Close() is idempotent,
 	// and our wrapper preserves this behavior. This is important for deferred
@@ -262,7 +262,7 @@ func TestMigrator_Close_Idempotent(t *testing.T) {
 	require.NoError(t, err3, "third Close() should also succeed (idempotent)")
 }
 
-func TestMigrator_PendingMigrations_Success(t *testing.T) {
+func TestMigratorPendingMigrationsReturnsMigrationsAboveCurrentVersion(t *testing.T) {
 	// At version 0, migrations 1-2 should be pending (baseline + is_guest)
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
@@ -270,7 +270,7 @@ func TestMigrator_PendingMigrations_Success(t *testing.T) {
 	assert.Equal(t, []uint{1, 2}, pending)
 }
 
-func TestMigrator_PendingMigrations_AtLatest(t *testing.T) {
+func TestMigratorPendingMigrationsReturnsEmptyAtLatestVersion(t *testing.T) {
 	// At version 2 (latest), no migrations should be pending
 	m := &Migrator{m: &mockMigrate{versionVal: 2}}
 	pending, err := m.PendingMigrations()
@@ -278,7 +278,7 @@ func TestMigrator_PendingMigrations_AtLatest(t *testing.T) {
 	assert.Empty(t, pending)
 }
 
-func TestMigrator_PendingMigrations_AtZero(t *testing.T) {
+func TestMigratorPendingMigrationsReturnsAllMigrationsAtVersionZero(t *testing.T) {
 	// At version 0 (fresh db), all migrations should be pending
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
@@ -286,7 +286,7 @@ func TestMigrator_PendingMigrations_AtZero(t *testing.T) {
 	assert.Equal(t, []uint{1, 2}, pending)
 }
 
-func TestMigrator_PendingMigrations_VersionError(t *testing.T) {
+func TestMigratorPendingMigrationsReturnsErrorWhenVersionFails(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{versionErr: errors.New("connection lost")}}
 	_, err := m.PendingMigrations()
 	require.Error(t, err)
@@ -294,7 +294,7 @@ func TestMigrator_PendingMigrations_VersionError(t *testing.T) {
 	errutil.AssertErrorContext(t, err, "operation", "get pending migrations")
 }
 
-func TestMigrator_AppliedMigrations_Success(t *testing.T) {
+func TestMigratorAppliedMigrationsReturnsMigrationsUpToCurrentVersion(t *testing.T) {
 	// At version 1, baseline should be applied
 	m := &Migrator{m: &mockMigrate{versionVal: 1}}
 	applied, err := m.AppliedMigrations()
@@ -302,7 +302,7 @@ func TestMigrator_AppliedMigrations_Success(t *testing.T) {
 	assert.Equal(t, []uint{1}, applied)
 }
 
-func TestMigrator_AppliedMigrations_AtZero(t *testing.T) {
+func TestMigratorAppliedMigrationsReturnsEmptyAtVersionZero(t *testing.T) {
 	// At version 0, no migrations applied
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	applied, err := m.AppliedMigrations()
@@ -310,7 +310,7 @@ func TestMigrator_AppliedMigrations_AtZero(t *testing.T) {
 	assert.Empty(t, applied)
 }
 
-func TestMigrator_AppliedMigrations_AtLatest(t *testing.T) {
+func TestMigratorAppliedMigrationsReturnsAllAtLatestVersion(t *testing.T) {
 	// At version 2 (latest), all migrations applied
 	m := &Migrator{m: &mockMigrate{versionVal: 2}}
 	applied, err := m.AppliedMigrations()
@@ -318,7 +318,7 @@ func TestMigrator_AppliedMigrations_AtLatest(t *testing.T) {
 	assert.Equal(t, []uint{1, 2}, applied)
 }
 
-func TestMigrator_AppliedMigrations_VersionError(t *testing.T) {
+func TestMigratorAppliedMigrationsReturnsErrorWhenVersionFails(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{versionErr: errors.New("connection lost")}}
 	_, err := m.AppliedMigrations()
 	require.Error(t, err)
@@ -473,7 +473,7 @@ func TestMigrationName(t *testing.T) {
 
 // TestMigrationName_ReturnsNilErrorForUnknownVersion verifies that looking up
 // an unknown version returns ("", nil) - not found is expected behavior, not an error.
-func TestMigrationName_ReturnsNilErrorForUnknownVersion(t *testing.T) {
+func TestMigrationNameReturnsEmptyStringForUnknownVersion(t *testing.T) {
 	name, err := MigrationName(99999)
 	require.NoError(t, err, "unknown version should return nil error, not an error")
 	assert.Equal(t, "", name, "unknown version should return empty string")
@@ -481,7 +481,7 @@ func TestMigrationName_ReturnsNilErrorForUnknownVersion(t *testing.T) {
 
 // TestAllMigrationVersions_ReturnsCopy verifies that allMigrationVersions returns
 // a copy of the cached slice, preventing callers from mutating the cache.
-func TestAllMigrationVersions_ReturnsCopy(t *testing.T) {
+func TestAllMigrationVersionsReturnsCopyPreventingCacheMutation(t *testing.T) {
 	versions1, err := allMigrationVersions()
 	require.NoError(t, err)
 	require.NotEmpty(t, versions1)
@@ -508,7 +508,7 @@ func BenchmarkAllMigrationVersions(b *testing.B) {
 
 // TestMigrationName_UsesCache verifies that MigrationName uses caching and
 // performs consistently across multiple calls for different versions.
-func TestMigrationName_UsesCache(t *testing.T) {
+func TestMigrationNameUsesCacheAcrossMultipleCalls(t *testing.T) {
 	// Call MigrationName multiple times for different versions
 	// All calls should succeed (verifies cache works)
 

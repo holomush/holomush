@@ -25,7 +25,7 @@ import (
 	controlv1 "github.com/holomush/holomush/pkg/proto/holomush/control/v1"
 )
 
-func TestGRPCServer_NewGRPCServer(t *testing.T) {
+func TestNewGRPCServerCreatesRunningServerWithComponent(t *testing.T) {
 	s, err := NewGRPCServer("core", nil)
 	require.NoError(t, err)
 
@@ -35,12 +35,12 @@ func TestGRPCServer_NewGRPCServer(t *testing.T) {
 
 // TestGRPCServer_NewGRPCServer_EmptyComponent tests that NewGRPCServer returns
 // an error when component is empty.
-func TestGRPCServer_NewGRPCServer_EmptyComponent(t *testing.T) {
+func TestNewGRPCServerEmptyComponentReturnsError(t *testing.T) {
 	_, err := NewGRPCServer("", nil)
 	assert.Error(t, err, "NewGRPCServer() should fail with empty component")
 }
 
-func TestGRPCServer_Status_ReturnsCorrectInfo(t *testing.T) {
+func TestGRPCServerStatusReturnsComponentPIDAndUptimeInfo(t *testing.T) {
 	s, err := NewGRPCServer("test-component", nil)
 	require.NoError(t, err)
 	// Wait a bit to ensure uptime > 0
@@ -58,7 +58,7 @@ func TestGRPCServer_Status_ReturnsCorrectInfo(t *testing.T) {
 	assert.Equal(t, "test-component", resp.Component)
 }
 
-func TestGRPCServer_Shutdown_TriggersCallback(t *testing.T) {
+func TestGRPCServerShutdownInvokesRegisteredCallback(t *testing.T) {
 	var shutdownCalled atomic.Bool
 
 	s, err := NewGRPCServer("core", func() {
@@ -77,7 +77,7 @@ func TestGRPCServer_Shutdown_TriggersCallback(t *testing.T) {
 	assert.True(t, shutdownCalled.Load(), "shutdown callback was not called")
 }
 
-func TestGRPCServer_Shutdown_NilCallback(t *testing.T) {
+func TestGRPCServerShutdownWithNilCallbackDoesNotPanic(t *testing.T) {
 	s, err := NewGRPCServer("core", nil)
 	require.NoError(t, err)
 
@@ -88,7 +88,7 @@ func TestGRPCServer_Shutdown_NilCallback(t *testing.T) {
 	assert.Equal(t, "shutdown initiated", resp.Message)
 }
 
-func TestGRPCServer_Stop_SetsRunningFalse(t *testing.T) {
+func TestGRPCServerStopSetsRunningToFalse(t *testing.T) {
 	s, err := NewGRPCServer("test", nil)
 	require.NoError(t, err)
 
@@ -120,7 +120,7 @@ func TestGRPCServer_IntegrationWithInsecure(t *testing.T) {
 	require.NoError(t, err, "failed to listen")
 
 	s.listener = serverListener
-	s.grpcServer = grpc.NewServer()
+	s.grpcServer = grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
 	controlv1.RegisterControlServiceServer(s.grpcServer, s)
 
 	go func() {
@@ -137,7 +137,7 @@ func TestGRPCServer_IntegrationWithInsecure(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Create client
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials())) // nosemgrep: insecure-grpc-connection — unit test, TLS not needed
 	require.NoError(t, err, "failed to create gRPC client")
 	defer func() { _ = conn.Close() }()
 
@@ -166,7 +166,7 @@ func TestGRPCServer_IntegrationWithInsecure(t *testing.T) {
 	})
 }
 
-func TestGRPCServer_Stop_HandlesNilServer(t *testing.T) {
+func TestGRPCServerStopWithNilServerComponentsSucceeds(t *testing.T) {
 	s, err := NewGRPCServer("test", nil)
 	require.NoError(t, err)
 	// grpcServer and listener are nil
@@ -175,7 +175,7 @@ func TestGRPCServer_Stop_HandlesNilServer(t *testing.T) {
 	assert.NoError(t, err, "Stop should succeed with nil server components")
 }
 
-func TestGRPCServer_ConcurrentStatusRequests(t *testing.T) {
+func TestGRPCServerStatusRequestsAreSafeConcurrently(t *testing.T) {
 	// Find available port
 	listener, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err, "failed to find available port")
@@ -190,7 +190,7 @@ func TestGRPCServer_ConcurrentStatusRequests(t *testing.T) {
 	require.NoError(t, err, "failed to listen")
 
 	s.listener = serverListener
-	s.grpcServer = grpc.NewServer()
+	s.grpcServer = grpc.NewServer() // nosemgrep: insecure-grpc-server — unit test, TLS not needed
 	controlv1.RegisterControlServiceServer(s.grpcServer, s)
 
 	go func() {
@@ -207,7 +207,7 @@ func TestGRPCServer_ConcurrentStatusRequests(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Create client
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials())) // nosemgrep: insecure-grpc-connection — unit test, TLS not needed
 	require.NoError(t, err, "failed to create gRPC client")
 	defer func() { _ = conn.Close() }()
 
@@ -245,14 +245,14 @@ func TestGRPCServer_ConcurrentStatusRequests(t *testing.T) {
 	assert.Empty(t, errors, "concurrent requests failed")
 }
 
-func TestLoadControlServerTLS_FailsWithMissingCerts(t *testing.T) {
+func TestLoadControlServerTLSMissingCertsReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	_, err := LoadControlServerTLS(tmpDir, "core")
 	require.Error(t, err, "LoadControlServerTLS should fail with missing certificates")
 }
 
-func TestLoadControlServerTLS_FailsWithInvalidCertContent(t *testing.T) {
+func TestLoadControlServerTLSInvalidCertContentReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create files with valid paths but invalid certificate content
@@ -275,7 +275,7 @@ func TestLoadControlServerTLS_FailsWithInvalidCertContent(t *testing.T) {
 	assert.Contains(t, err.Error(), "PEM")
 }
 
-func TestLoadControlServerTLS_FailsWithMalformedCAPEM(t *testing.T) {
+func TestLoadControlServerTLSMalformedCAPEMReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Generate valid server certificate first
@@ -305,7 +305,7 @@ not-valid-base64-data-here!!!
 	assert.Contains(t, err.Error(), "failed to add CA certificate to pool")
 }
 
-func TestLoadControlServerTLS_FailsWithEmptyCAPEM(t *testing.T) {
+func TestLoadControlServerTLSEmptyCAPEMReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Generate valid server certificate first
@@ -332,7 +332,7 @@ func TestLoadControlServerTLS_FailsWithEmptyCAPEM(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to add CA certificate to pool")
 }
 
-func TestLoadControlServerTLS_FailsWithMissingCAFile(t *testing.T) {
+func TestLoadControlServerTLSMissingCAFileReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Generate valid server certificate
@@ -359,21 +359,21 @@ func TestLoadControlServerTLS_FailsWithMissingCAFile(t *testing.T) {
 	assert.Contains(t, err.Error(), "no such file or directory")
 }
 
-func TestLoadControlClientTLS_FailsWithMissingCerts(t *testing.T) {
+func TestLoadControlClientTLSMissingCertsReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	_, err := LoadControlClientTLS(tmpDir, "core", "test-game")
 	require.Error(t, err, "LoadControlClientTLS should fail with missing certificates")
 }
 
-func TestExtractGameIDFromCA_FailsWithMissingCA(t *testing.T) {
+func TestExtractGameIDFromCAMissingCAFileReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	_, err := ExtractGameIDFromCA(tmpDir)
 	require.Error(t, err, "ExtractGameIDFromCA should fail with missing CA certificate")
 }
 
-func TestExtractGameIDFromCA_FailsWithInvalidPEM(t *testing.T) {
+func TestExtractGameIDFromCAInvalidPEMReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Write invalid PEM data
@@ -385,7 +385,7 @@ func TestExtractGameIDFromCA_FailsWithInvalidPEM(t *testing.T) {
 	require.Error(t, err, "ExtractGameIDFromCA should fail with invalid PEM")
 }
 
-func TestExtractGameIDFromCA_FailsWithWrongCNPrefix(t *testing.T) {
+func TestExtractGameIDFromCAWrongCNPrefixReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a PEM certificate with wrong CN prefix
@@ -412,7 +412,7 @@ Rg2YAiEA2c7q5J3wBxjNn6LpnQXIhwP6NLQxNIuMqI8B9XK3Fkk=
 	assert.NotEmpty(t, err.Error(), "error should have a message")
 }
 
-func TestExtractGameIDFromCA_ExtractsCorrectGameID(t *testing.T) {
+func TestExtractGameIDFromCAExtractsGameIDFromCNField(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Generate a proper CA using the tls package
@@ -431,7 +431,7 @@ func TestExtractGameIDFromCA_ExtractsCorrectGameID(t *testing.T) {
 	assert.Equal(t, expectedGameID, gotGameID)
 }
 
-func TestLoadControlClientTLS_WithValidCerts(t *testing.T) {
+func TestLoadControlClientTLSValidCertsReturnsConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Generate CA and client certificate
@@ -469,7 +469,7 @@ func TestLoadControlClientTLS_WithValidCerts(t *testing.T) {
 
 // TestGRPCServer_Start_FailsOnInvalidAddress tests that Start() returns an error
 // when the address is invalid or already in use.
-func TestGRPCServer_Start_FailsOnInvalidAddress(t *testing.T) {
+func TestGRPCServerStartInvalidAddressReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Generate valid certificates
@@ -503,7 +503,7 @@ func TestGRPCServer_Start_FailsOnInvalidAddress(t *testing.T) {
 
 // TestGRPCServer_Start_ReturnsErrorChannel tests that Start() returns an error channel
 // that can be used to detect server failures.
-func TestGRPCServer_Start_ReturnsErrorChannel(t *testing.T) {
+func TestGRPCServerStartReturnsErrorChannelForGracefulStop(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Generate valid certificates
@@ -552,7 +552,7 @@ func TestGRPCServer_Start_ReturnsErrorChannel(t *testing.T) {
 
 // TestGRPCServer_Start_PropagatesServerError tests that when the gRPC server
 // encounters an error, it is sent to the error channel.
-func TestGRPCServer_Start_PropagatesServerError(t *testing.T) {
+func TestGRPCServerStartPropagatesServerErrorToChannel(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Generate valid certificates
@@ -694,7 +694,7 @@ func TestGRPCServer_Integration_mTLS(t *testing.T) {
 
 // TestGRPCServer_mTLS_RejectsUnauthenticatedClient tests that the server rejects
 // clients that don't present valid client certificates.
-func TestGRPCServer_mTLS_RejectsUnauthenticatedClient(t *testing.T) {
+func TestGRPCServerMTLSRejectsClientWithoutValidCertificate(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Generate CA and server certificate
@@ -769,7 +769,7 @@ func TestGRPCServer_mTLS_RejectsUnauthenticatedClient(t *testing.T) {
 
 // TestGRPCServer_Start_ErrorChannelOnGracefulStop tests that the error channel
 // receives nil when the server is gracefully stopped.
-func TestGRPCServer_Start_ErrorChannelOnGracefulStop(t *testing.T) {
+func TestGRPCServerStartSendsNilToErrorChannelOnGracefulStop(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Generate valid certificates
@@ -819,7 +819,7 @@ func TestGRPCServer_Start_ErrorChannelOnGracefulStop(t *testing.T) {
 
 // TestGRPCServer_Start_DoubleStartReturnsError tests that calling Start() twice
 // returns an error instead of leaking the first listener (e55.57).
-func TestGRPCServer_Start_DoubleStartReturnsError(t *testing.T) {
+func TestGRPCServerStartSecondStartReturnsError(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Generate valid certificates
@@ -876,7 +876,7 @@ func TestGRPCServer_Start_DoubleStartReturnsError(t *testing.T) {
 
 // TestGRPCServer_Stop_ConcurrentCalls tests that calling Stop() concurrently
 // does not cause a race condition (e55.68).
-func TestGRPCServer_Stop_ConcurrentCalls(t *testing.T) {
+func TestGRPCServerStopConcurrentCallsAreSafe(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Generate valid certificates
@@ -937,7 +937,7 @@ func TestGRPCServer_Stop_ConcurrentCalls(t *testing.T) {
 
 // TestGRPCServer_Stop_DuringStart tests that calling Stop() during Start()
 // initialization does not cause a race condition (e55.95).
-func TestGRPCServer_Stop_DuringStart(t *testing.T) {
+func TestGRPCServerStopCalledDuringStartTerminatesGracefully(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Generate valid certificates
@@ -1007,7 +1007,7 @@ func TestGRPCServer_Stop_DuringStart(t *testing.T) {
 
 // TestGRPCServer_Stop_RunningStateAfterGracefulStop tests that running state is
 // false only after GracefulStop completes, not before (e55.59).
-func TestGRPCServer_Stop_RunningStateAfterGracefulStop(t *testing.T) {
+func TestGRPCServerStopSetsRunningFalseAfterGracefulStop(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Generate valid certificates

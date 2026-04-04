@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewULID(t *testing.T) {
+func TestNewULIDGeneratesUniqueMonotonicallyIncreasingIDs(t *testing.T) {
 	id1 := NewULID()
 	id2 := NewULID()
 
@@ -20,14 +20,14 @@ func TestNewULID(t *testing.T) {
 	assert.LessOrEqual(t, id1.String(), id2.String(), "Later ULID should sort after earlier ULID")
 }
 
-func TestParseULID(t *testing.T) {
+func TestParseULIDRoundTripsValidString(t *testing.T) {
 	original := NewULID()
 	parsed, err := ParseULID(original.String())
 	require.NoError(t, err)
 	assert.Equal(t, original, parsed)
 }
 
-func TestParseULID_Invalid(t *testing.T) {
+func TestParseULIDInvalidInputReturnsError(t *testing.T) {
 	_, err := ParseULID("invalid")
 	assert.Error(t, err, "ParseULID should fail on invalid input")
 }
