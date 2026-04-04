@@ -479,11 +479,18 @@ func (e *Engine) CanPerformAction(ctx context.Context, subject, action, resource
 	}
 
 	// Step 7 & 8: Evaluate conditions using subject attributes only.
-	// Resource attributes in bags will be empty (preflight resource doesn't exist),
-	// so conditions referencing resource attrs evaluate to false — those policies
-	// won't match here, which is the desired conservative behaviour.
+	// Resource attributes in bags will be empty (preflight resource doesn't exist).
 	//
-	// Deny-overrides: collect results first, then apply forbid-wins logic.
+	// Per the spec, policies with resource-specific conditions are treated
+	// optimistically for permit (the handler-level ABAC will do the instance
+	// check) but conservatively for forbid (unconditional forbids still deny).
+	//
+	// Strategy:
+	//   - If conditions pass with subject attrs only → definite match
+	//   - If conditions fail AND policy references resource attrs → optimistic
+	//     (conditions may depend on resource state we can't check here)
+	//   - If conditions fail AND policy only uses subject attrs → definitive
+	//     failure (subject doesn't have the required attributes)
 	anyForbid := false
 	anyPermit := false
 	for _, candidate := range candidates {
@@ -491,15 +498,26 @@ func (e *Engine) CanPerformAction(ctx context.Context, subject, action, resource
 			Bags:      bags,
 			GlobCache: candidate.Compiled.GlobCache,
 		}
-		if !dsl.EvaluateConditions(evalCtx, candidate.Compiled.Conditions) {
-			continue
-		}
-		switch candidate.Compiled.Effect.ToEffect() {
-		case types.EffectDeny:
-			anyForbid = true
-		case types.EffectAllow:
+		conditionsMet := dsl.EvaluateConditions(evalCtx, candidate.Compiled.Conditions)
+		effect := candidate.Compiled.Effect.ToEffect()
+
+		if conditionsMet {
+			// Conditions satisfied with available attributes — definite match.
+			switch effect {
+			case types.EffectDeny:
+				anyForbid = true
+			case types.EffectAllow:
+				anyPermit = true
+			}
+		} else if effect == types.EffectAllow && dsl.ReferencesResourceAttrs(candidate.Compiled.Conditions) {
+			// Permit policy with unmet conditions that reference resource
+			// attributes we can't evaluate without a specific instance.
+			// Treat as optimistic match — the handler's instance-level
+			// ABAC will enforce the full condition.
 			anyPermit = true
 		}
+		// Forbid with unmet conditions: not applied. Subject-only permit
+		// with unmet conditions: not applied (subject lacks required attrs).
 	}
 
 	// Step 8: Forbid overrides permit
