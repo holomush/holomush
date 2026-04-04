@@ -21,10 +21,13 @@ Policies are evaluated on every action. The engine receives a request with three
 parts — who is asking (principal), what they want to do (action), and what they
 want to do it to (resource) — and checks it against all installed policies.
 
-**For players and admins**, policies come from role-based seed policies that ship
-with the server. Each command declares the capabilities it requires (e.g.,
-`comms.page`, `admin:boot`, `objects.create`), and the engine checks whether the
-player's role grants those capabilities.
+**For players and admins**, command authorization uses two layers at dispatch
+time. Layer 1 checks whether the character can execute the command at all
+(via `command:<name>` policies). Layer 2 checks whether the character has the
+class of permissions the command needs — each command declares structured
+capabilities like `{action: emit, resource: stream, scope: local}`, and the
+engine verifies the character could perform those actions on those resource
+types. Both layers must pass before the handler runs.
 
 **For plugins**, policies are declared in the plugin manifest and installed when
 the plugin loads. They're removed when the plugin unloads.
