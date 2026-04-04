@@ -129,7 +129,7 @@ func (m *mockPlayerRepoForReset) DeleteGuestPlayer(_ context.Context, _ ulid.ULI
 	return nil
 }
 
-func TestPasswordResetService_ResetPassword_LogsDeleteByPlayerFailure(t *testing.T) {
+func TestPasswordResetServiceLogsDeleteByPlayerFailureOnReset(t *testing.T) {
 	// Setup: valid reset token exists, password update succeeds, but DeleteByPlayer fails
 	playerID := ulid.Make()
 	token, hash, err := auth.GenerateResetToken()

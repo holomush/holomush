@@ -75,7 +75,7 @@ func TestNewGuestService_NilDeps(t *testing.T) {
 	}
 }
 
-func TestGuestService_CreateGuest_Success(t *testing.T) {
+func TestGuestServiceCreatesGuestSuccessfully(t *testing.T) {
 	ctx := context.Background()
 	startLoc := ulid.MustNew(ulid.Now(), nil)
 	guestName := "Sapphire_Diamond"
@@ -113,7 +113,7 @@ func TestGuestService_CreateGuest_Success(t *testing.T) {
 	assert.Equal(t, result.Player.ID, result.PlayerSession.PlayerID)
 }
 
-func TestGuestService_CreateGuest_NameCollision(t *testing.T) {
+func TestGuestServiceRetriesOnNameCollision(t *testing.T) {
 	ctx := context.Background()
 	startLoc := ulid.MustNew(ulid.Now(), nil)
 	takenName := "Ruby_Flame"
@@ -151,7 +151,7 @@ func TestGuestService_CreateGuest_NameCollision(t *testing.T) {
 	assert.Equal(t, freeCharName, result.Character.Name)
 }
 
-func TestGuestService_CreateGuest_UpdateDefaultCharacterFailure(t *testing.T) {
+func TestGuestServiceSucceedsWhenDefaultCharacterUpdateFails(t *testing.T) {
 	// Update failure is best-effort — CreateGuest must still succeed.
 	ctx := context.Background()
 	startLoc := ulid.MustNew(ulid.Now(), nil)
@@ -178,7 +178,7 @@ func TestGuestService_CreateGuest_UpdateDefaultCharacterFailure(t *testing.T) {
 	require.NotNil(t, result)
 }
 
-func TestGuestService_CreateGuest_PlayerCreateError(t *testing.T) {
+func TestGuestServiceReturnsErrorWhenPlayerCreateFails(t *testing.T) {
 	ctx := context.Background()
 	guestName := "Amber_Storm"
 	dbErr := errors.New("db error")

@@ -68,18 +68,18 @@ func TestNewPlayer(t *testing.T) {
 }
 
 func TestPlayer_IsLocked(t *testing.T) {
-	t.Run("no lockout", func(t *testing.T) {
+	t.Run("returns false when no lockout is set", func(t *testing.T) {
 		p := &auth.Player{}
 		assert.False(t, p.IsLocked())
 	})
 
-	t.Run("future lockout", func(t *testing.T) {
+	t.Run("returns true when locked until is in the future", func(t *testing.T) {
 		future := time.Now().Add(time.Hour)
 		p := &auth.Player{LockedUntil: &future}
 		assert.True(t, p.IsLocked())
 	})
 
-	t.Run("past lockout", func(t *testing.T) {
+	t.Run("returns false when locked until is in the past", func(t *testing.T) {
 		past := time.Now().Add(-time.Hour)
 		p := &auth.Player{LockedUntil: &past}
 		assert.False(t, p.IsLocked())
@@ -87,20 +87,20 @@ func TestPlayer_IsLocked(t *testing.T) {
 }
 
 func TestPlayer_RecordFailure(t *testing.T) {
-	t.Run("increments counter", func(t *testing.T) {
+	t.Run("increments the failed attempts counter", func(t *testing.T) {
 		p := &auth.Player{FailedAttempts: 0}
 		p.RecordFailure()
 		assert.Equal(t, 1, p.FailedAttempts)
 	})
 
-	t.Run("no lockout below threshold", func(t *testing.T) {
+	t.Run("does not set lockout when below threshold", func(t *testing.T) {
 		p := &auth.Player{FailedAttempts: auth.LockoutThreshold - 2}
 		p.RecordFailure()
 		assert.Equal(t, auth.LockoutThreshold-1, p.FailedAttempts)
 		assert.Nil(t, p.LockedUntil)
 	})
 
-	t.Run("sets lockout at threshold", func(t *testing.T) {
+	t.Run("sets lockout when threshold is reached", func(t *testing.T) {
 		p := &auth.Player{FailedAttempts: auth.LockoutThreshold - 1}
 		p.RecordFailure()
 		assert.Equal(t, auth.LockoutThreshold, p.FailedAttempts)
@@ -108,7 +108,7 @@ func TestPlayer_RecordFailure(t *testing.T) {
 		assert.True(t, p.LockedUntil.After(time.Now()))
 	})
 
-	t.Run("updates UpdatedAt", func(t *testing.T) {
+	t.Run("updates the updated-at timestamp", func(t *testing.T) {
 		p := &auth.Player{FailedAttempts: 0}
 		before := time.Now().Add(-time.Millisecond)
 		p.RecordFailure()
@@ -117,7 +117,7 @@ func TestPlayer_RecordFailure(t *testing.T) {
 }
 
 func TestPlayer_RecordSuccess(t *testing.T) {
-	t.Run("resets failures and lockout", func(t *testing.T) {
+	t.Run("resets failed attempts and clears lockout", func(t *testing.T) {
 		future := time.Now().Add(time.Hour)
 		p := &auth.Player{
 			FailedAttempts: 5,
@@ -128,7 +128,7 @@ func TestPlayer_RecordSuccess(t *testing.T) {
 		assert.Nil(t, p.LockedUntil)
 	})
 
-	t.Run("updates UpdatedAt", func(t *testing.T) {
+	t.Run("updates the updated-at timestamp", func(t *testing.T) {
 		p := &auth.Player{FailedAttempts: 3}
 		before := time.Now().Add(-time.Millisecond)
 		p.RecordSuccess()
@@ -137,7 +137,7 @@ func TestPlayer_RecordSuccess(t *testing.T) {
 }
 
 func TestPlayerPreferences(t *testing.T) {
-	t.Run("default values", func(t *testing.T) {
+	t.Run("defaults to zero values with auto-login disabled", func(t *testing.T) {
 		prefs := auth.PlayerPreferences{}
 		assert.False(t, prefs.AutoLogin)
 		assert.Equal(t, 0, prefs.MaxCharacters) // 0 means use default
@@ -210,7 +210,7 @@ func TestNewGuestPlayer(t *testing.T) {
 	assert.Nil(t, player.Email)
 }
 
-func TestNewGuestPlayer_EmptyUsername(t *testing.T) {
+func TestNewGuestPlayerRejectsEmptyUsername(t *testing.T) {
 	_, err := auth.NewGuestPlayer("")
 	assert.Error(t, err)
 }
