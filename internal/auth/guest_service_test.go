@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/auth/mocks"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestNewGuestService_NilDeps(t *testing.T) {
@@ -75,7 +76,7 @@ func TestNewGuestService_NilDeps(t *testing.T) {
 	}
 }
 
-func TestGuestService_CreateGuest_Success(t *testing.T) {
+func TestGuestServiceCreatesGuestSuccessfully(t *testing.T) {
 	ctx := context.Background()
 	startLoc := ulid.MustNew(ulid.Now(), nil)
 	guestName := "Sapphire_Diamond"
@@ -113,7 +114,7 @@ func TestGuestService_CreateGuest_Success(t *testing.T) {
 	assert.Equal(t, result.Player.ID, result.PlayerSession.PlayerID)
 }
 
-func TestGuestService_CreateGuest_NameCollision(t *testing.T) {
+func TestGuestServiceRetriesOnNameCollision(t *testing.T) {
 	ctx := context.Background()
 	startLoc := ulid.MustNew(ulid.Now(), nil)
 	takenName := "Ruby_Flame"
@@ -151,7 +152,7 @@ func TestGuestService_CreateGuest_NameCollision(t *testing.T) {
 	assert.Equal(t, freeCharName, result.Character.Name)
 }
 
-func TestGuestService_CreateGuest_UpdateDefaultCharacterFailure(t *testing.T) {
+func TestGuestServiceSucceedsWhenDefaultCharacterUpdateFails(t *testing.T) {
 	// Update failure is best-effort — CreateGuest must still succeed.
 	ctx := context.Background()
 	startLoc := ulid.MustNew(ulid.Now(), nil)
@@ -178,7 +179,7 @@ func TestGuestService_CreateGuest_UpdateDefaultCharacterFailure(t *testing.T) {
 	require.NotNil(t, result)
 }
 
-func TestGuestService_CreateGuest_PlayerCreateError(t *testing.T) {
+func TestGuestServiceReturnsErrorWhenPlayerCreateFails(t *testing.T) {
 	ctx := context.Background()
 	guestName := "Amber_Storm"
 	dbErr := errors.New("db error")
@@ -199,4 +200,109 @@ func TestGuestService_CreateGuest_PlayerCreateError(t *testing.T) {
 	result, err := svc.CreateGuest(ctx)
 	require.Error(t, err)
 	assert.Nil(t, result)
+}
+
+func TestGuestServiceReturnsErrorWhenCharCreateFails(t *testing.T) {
+	ctx := context.Background()
+	guestName := "Topaz_Wind"
+	startLoc := ulid.MustNew(ulid.Now(), nil)
+
+	namer := mocks.NewMockGuestNamer(t)
+	players := mocks.NewMockPlayerRepository(t)
+	chars := mocks.NewMockGuestCharacterRepository(t)
+	sessions := mocks.NewMockPlayerSessionRepository(t)
+
+	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
+	namer.EXPECT().StartLocation().Return(startLoc)
+	chars.EXPECT().ExistsByName(ctx, "Topaz Wind").Return(false, nil).Once()
+	players.EXPECT().Create(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
+	chars.EXPECT().Create(ctx, mock.AnythingOfType("*world.Character")).Return(errors.New("db error")).Once()
+	namer.EXPECT().ReleaseGuest(guestName).Once()
+	// best-effort player cleanup
+	players.EXPECT().Delete(ctx, mock.AnythingOfType("ulid.ULID")).Return(nil).Once()
+
+	svc, err := auth.NewGuestService(namer, players, chars, sessions)
+	require.NoError(t, err)
+
+	result, err := svc.CreateGuest(ctx)
+	require.Error(t, err)
+	assert.Nil(t, result)
+	errutil.AssertErrorCode(t, err, "GUEST_CREATE_FAILED")
+}
+
+func TestGuestServiceReturnsErrorWhenSessionCreateFails(t *testing.T) {
+	ctx := context.Background()
+	guestName := "Marble_Creek"
+	startLoc := ulid.MustNew(ulid.Now(), nil)
+
+	namer := mocks.NewMockGuestNamer(t)
+	players := mocks.NewMockPlayerRepository(t)
+	chars := mocks.NewMockGuestCharacterRepository(t)
+	sessions := mocks.NewMockPlayerSessionRepository(t)
+
+	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
+	namer.EXPECT().StartLocation().Return(startLoc)
+	chars.EXPECT().ExistsByName(ctx, "Marble Creek").Return(false, nil).Once()
+	players.EXPECT().Create(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
+	chars.EXPECT().Create(ctx, mock.AnythingOfType("*world.Character")).Return(nil).Once()
+	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
+	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(errors.New("session db error")).Once()
+	namer.EXPECT().ReleaseGuest(guestName).Once()
+	// best-effort player cleanup
+	players.EXPECT().Delete(ctx, mock.AnythingOfType("ulid.ULID")).Return(nil).Once()
+
+	svc, err := auth.NewGuestService(namer, players, chars, sessions)
+	require.NoError(t, err)
+
+	result, err := svc.CreateGuest(ctx)
+	require.Error(t, err)
+	assert.Nil(t, result)
+	errutil.AssertErrorCode(t, err, "GUEST_CREATE_FAILED")
+}
+
+func TestGuestServiceReturnsErrorWhenNameExhausted(t *testing.T) {
+	ctx := context.Background()
+
+	namer := mocks.NewMockGuestNamer(t)
+	players := mocks.NewMockPlayerRepository(t)
+	chars := mocks.NewMockGuestCharacterRepository(t)
+	sessions := mocks.NewMockPlayerSessionRepository(t)
+
+	// All 10 generated names already exist in the database.
+	for range 10 {
+		name := "Taken_Name"
+		namer.EXPECT().GenerateName().Return(name, nil).Once()
+		chars.EXPECT().ExistsByName(ctx, "Taken Name").Return(true, nil).Once()
+		namer.EXPECT().ReleaseGuest(name).Once()
+	}
+
+	svc, err := auth.NewGuestService(namer, players, chars, sessions)
+	require.NoError(t, err)
+
+	result, err := svc.CreateGuest(ctx)
+	require.Error(t, err)
+	assert.Nil(t, result)
+	errutil.AssertErrorCode(t, err, "GUEST_NAME_EXHAUSTED")
+}
+
+func TestGuestServiceReturnsErrorWhenExistsByNameFails(t *testing.T) {
+	ctx := context.Background()
+	guestName := "Crystal_Fog"
+
+	namer := mocks.NewMockGuestNamer(t)
+	players := mocks.NewMockPlayerRepository(t)
+	chars := mocks.NewMockGuestCharacterRepository(t)
+	sessions := mocks.NewMockPlayerSessionRepository(t)
+
+	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
+	chars.EXPECT().ExistsByName(ctx, "Crystal Fog").Return(false, errors.New("db error")).Once()
+	namer.EXPECT().ReleaseGuest(guestName).Once()
+
+	svc, err := auth.NewGuestService(namer, players, chars, sessions)
+	require.NoError(t, err)
+
+	result, err := svc.CreateGuest(ctx)
+	require.Error(t, err)
+	assert.Nil(t, result)
+	errutil.AssertErrorCode(t, err, "GUEST_CREATE_FAILED")
 }

@@ -66,7 +66,7 @@ func (e *subscriberEmitter) emittedCount() int {
 	return len(e.emitted)
 }
 
-func TestSubscriber_DeliversEvents(t *testing.T) {
+func TestSubscriberDeliversEvents(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 
@@ -91,7 +91,7 @@ func TestSubscriber_DeliversEvents(t *testing.T) {
 	assert.Equal(t, 1, host.deliveredCount(), "delivered count")
 }
 
-func TestSubscriber_FiltersEventTypes(t *testing.T) {
+func TestSubscriberFiltersEventTypes(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 
@@ -112,7 +112,7 @@ func TestSubscriber_FiltersEventTypes(t *testing.T) {
 	assert.Equal(t, 1, host.deliveredCount(), "delivered count (pose should be filtered)")
 }
 
-func TestSubscriber_FiltersStreams(t *testing.T) {
+func TestSubscriberFiltersStreams(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 
@@ -133,7 +133,7 @@ func TestSubscriber_FiltersStreams(t *testing.T) {
 	assert.Equal(t, 1, host.deliveredCount(), "delivered count (different stream should be filtered)")
 }
 
-func TestSubscriber_SubscribeAllEventTypes(t *testing.T) {
+func TestSubscriberSubscribeAllEventTypes(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 
@@ -155,7 +155,7 @@ func TestSubscriber_SubscribeAllEventTypes(t *testing.T) {
 	assert.Equal(t, 3, host.deliveredCount(), "delivered count (all types should be delivered)")
 }
 
-func TestSubscriber_EmitsResponseEvents(t *testing.T) {
+func TestSubscriberEmitsResponseEvents(t *testing.T) {
 	host := &subscriberHost{
 		response: []pluginsdk.EmitEvent{
 			{Stream: "location:123", Type: pluginsdk.EventTypeSay, Payload: `{"text":"hello"}`},
@@ -179,7 +179,7 @@ func TestSubscriber_EmitsResponseEvents(t *testing.T) {
 	assert.Equal(t, 1, emitter.emittedCount(), "emitted count")
 }
 
-func TestSubscriber_HandlesHostError(t *testing.T) {
+func TestSubscriberHandlesHostError(t *testing.T) {
 	host := &subscriberHost{
 		err: errors.New("plugin error"),
 	}
@@ -205,7 +205,7 @@ func TestSubscriber_HandlesHostError(t *testing.T) {
 	assert.Equal(t, 0, emitter.emittedCount(), "emitted count (error should prevent emit)")
 }
 
-func TestSubscriber_MultiplePlugins(t *testing.T) {
+func TestSubscriberMultiplePlugins(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 
@@ -227,7 +227,7 @@ func TestSubscriber_MultiplePlugins(t *testing.T) {
 	assert.Equal(t, 2, host.deliveredCount(), "delivered count (both plugins should receive)")
 }
 
-func TestSubscriber_StopWaitsForCompletion(t *testing.T) {
+func TestSubscriberStopWaitsForCompletion(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 
@@ -259,7 +259,7 @@ func TestSubscriber_StopWaitsForCompletion(t *testing.T) {
 	}
 }
 
-func TestSubscriber_ChannelClose(t *testing.T) {
+func TestSubscriberChannelClose(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 
@@ -287,7 +287,7 @@ func TestSubscriber_ChannelClose(t *testing.T) {
 	}
 }
 
-func TestSubscriber_HandlesEmitterError(t *testing.T) {
+func TestSubscriberHandlesEmitterError(t *testing.T) {
 	host := &subscriberHost{
 		response: []pluginsdk.EmitEvent{
 			{Stream: "location:123", Type: pluginsdk.EventTypeSay, Payload: `{"text":"hello"}`},
@@ -315,7 +315,7 @@ func TestSubscriber_HandlesEmitterError(t *testing.T) {
 	assert.Equal(t, 1, emitter.emittedCount(), "emitted count (emitter should still be called)")
 }
 
-func TestSubscriber_EmptyEventTypesSliceReceivesAll(t *testing.T) {
+func TestSubscriberEmptyEventTypesSliceReceivesAll(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 
@@ -337,7 +337,7 @@ func TestSubscriber_EmptyEventTypesSliceReceivesAll(t *testing.T) {
 	assert.Equal(t, 3, host.deliveredCount(), "delivered count (empty slice should deliver all)")
 }
 
-func TestSubscriber_StopWaitsForInFlightDeliveries(t *testing.T) {
+func TestSubscriberStopWaitsForInFlightDeliveries(t *testing.T) {
 	// Use a slow host to simulate in-flight delivery
 	deliveryCh := make(chan struct{})
 	host := &slowSubscriberHost{
@@ -392,7 +392,7 @@ func TestSubscriber_StopWaitsForInFlightDeliveries(t *testing.T) {
 	assert.Equal(t, 1, host.deliveredCount(), "delivered count")
 }
 
-func TestSubscriber_CustomEventTypePassesThrough(t *testing.T) {
+func TestSubscriberCustomEventTypePassesThrough(t *testing.T) {
 	host := &subscriberHost{
 		response: []pluginsdk.EmitEvent{
 			{Stream: "location:123", Type: "telepathy", Payload: `{"text":"you hear a voice"}`},
@@ -427,7 +427,7 @@ func TestSubscriber_CustomEventTypePassesThrough(t *testing.T) {
 		"emitted event should preserve custom type from plugin response")
 }
 
-func TestSubscriber_CustomEventTypeFilteredBySubscription(t *testing.T) {
+func TestSubscriberCustomEventTypeFilteredBySubscription(t *testing.T) {
 	host := &subscriberHost{}
 	emitter := &subscriberEmitter{}
 

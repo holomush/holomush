@@ -15,25 +15,10 @@ import (
 )
 
 func TestPolicyBootstrapper_Priority(t *testing.T) {
-	tests := []struct {
-		name     string
-		expected int
-	}{
-		{
-			name:     "returns correct priority",
-			expected: plugins.BootstrapPriorityPolicy,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			pb := NewPolicyBootstrapper(func(_ context.Context, _ bool) error {
-				return nil
-			}, false)
-
-			assert.Equal(t, tt.expected, pb.Priority())
-		})
-	}
+	pb := NewPolicyBootstrapper(func(_ context.Context, _ bool) error {
+		return nil
+	}, false)
+	assert.Equal(t, plugins.BootstrapPriorityPolicy, pb.Priority())
 }
 
 func TestPolicyBootstrapper_Bootstrap(t *testing.T) {
@@ -88,12 +73,6 @@ func TestPolicyBootstrapper_Bootstrap(t *testing.T) {
 	}
 }
 
-func TestPolicyBootstrapper_CompilesWithInterface(_ *testing.T) {
-	// Compile-time check is done via var _ plugins.BootstrapPlugin = (*PolicyBootstrapper)(nil)
-	// but this runtime test ensures the interface is properly satisfied.
-	pb := NewPolicyBootstrapper(func(_ context.Context, _ bool) error {
-		return nil
-	}, false)
-
-	var _ plugins.BootstrapPlugin = pb
+func TestPolicyBootstrapper_ImplementsBootstrapPlugin(_ *testing.T) {
+	var _ plugins.BootstrapPlugin = (*PolicyBootstrapper)(nil)
 }

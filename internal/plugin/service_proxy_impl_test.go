@@ -579,7 +579,7 @@ func TestServiceProxy_SetPlayerAlias(t *testing.T) {
 	}
 }
 
-func TestServiceProxy_KVGet(t *testing.T) {
+func TestServiceProxyKVGet(t *testing.T) {
 	proxy := newTestProxy(t, &mockWorldService{}, &mockEventStore{})
 
 	_, _, err := proxy.KVGet(context.Background(), "my-plugin", "key")
@@ -804,7 +804,7 @@ func TestServiceProxy_FindSessionByName(t *testing.T) {
 	})
 }
 
-func TestServiceProxy_Log(t *testing.T) {
+func TestServiceProxyLog(t *testing.T) {
 	proxy := newTestProxy(t, &mockWorldService{}, &mockEventStore{})
 
 	// Log should not panic for any level

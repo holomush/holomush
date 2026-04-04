@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMigrationsFS_EmbeddedFiles(t *testing.T) {
+func TestMigrationsFSContainsMatchedUpDownPairsWithCorrectNaming(t *testing.T) {
 	entries, err := migrationsFS.ReadDir("migrations")
 	require.NoError(t, err, "should read embedded migrations directory")
 

@@ -13,14 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestConfigDir_EnvVar(t *testing.T) {
+func TestConfigDirUsesXDGEnvVarWhenSet(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/custom/config")
 	got, err := ConfigDir()
 	require.NoError(t, err)
 	assert.Equal(t, "/custom/config/holomush", got)
 }
 
-func TestConfigDir_Default(t *testing.T) {
+func TestConfigDirFallsBackToHomeDotConfigWhenEnvUnset(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", "/home/testuser")
 	got, err := ConfigDir()
@@ -28,14 +28,14 @@ func TestConfigDir_Default(t *testing.T) {
 	assert.Equal(t, "/home/testuser/.config/holomush", got)
 }
 
-func TestDataDir_EnvVar(t *testing.T) {
+func TestDataDirUsesXDGEnvVarWhenSet(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", "/custom/data")
 	got, err := DataDir()
 	require.NoError(t, err)
 	assert.Equal(t, "/custom/data/holomush", got)
 }
 
-func TestDataDir_Default(t *testing.T) {
+func TestDataDirFallsBackToHomeDotLocalShareWhenEnvUnset(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", "")
 	t.Setenv("HOME", "/home/testuser")
 	got, err := DataDir()
@@ -43,14 +43,14 @@ func TestDataDir_Default(t *testing.T) {
 	assert.Equal(t, "/home/testuser/.local/share/holomush", got)
 }
 
-func TestStateDir_EnvVar(t *testing.T) {
+func TestStateDirUsesXDGEnvVarWhenSet(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", "/custom/state")
 	got, err := StateDir()
 	require.NoError(t, err)
 	assert.Equal(t, "/custom/state/holomush", got)
 }
 
-func TestStateDir_Default(t *testing.T) {
+func TestStateDirFallsBackToHomeDotLocalStateWhenEnvUnset(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("HOME", "/home/testuser")
 	got, err := StateDir()
@@ -58,14 +58,14 @@ func TestStateDir_Default(t *testing.T) {
 	assert.Equal(t, "/home/testuser/.local/state/holomush", got)
 }
 
-func TestRuntimeDir_EnvVar(t *testing.T) {
+func TestRuntimeDirUsesXDGEnvVarWhenSet(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", "/run/user/1000")
 	got, err := RuntimeDir()
 	require.NoError(t, err)
 	assert.Equal(t, "/run/user/1000/holomush", got)
 }
 
-func TestRuntimeDir_Fallback(t *testing.T) {
+func TestRuntimeDirFallsBackToStateDirRunWhenEnvUnset(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", "")
 	t.Setenv("XDG_STATE_HOME", "/custom/state")
 	got, err := RuntimeDir()
@@ -73,14 +73,14 @@ func TestRuntimeDir_Fallback(t *testing.T) {
 	assert.Equal(t, "/custom/state/holomush/run", got)
 }
 
-func TestCertsDir(t *testing.T) {
+func TestCertsDirReturnsCertsSubdirOfConfigDir(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/custom/config")
 	got, err := CertsDir()
 	require.NoError(t, err)
 	assert.Equal(t, "/custom/config/holomush/certs", got)
 }
 
-func TestEnsureDir(t *testing.T) {
+func TestEnsureDirCreatesNestedDirectories(t *testing.T) {
 	tmpDir := t.TempDir()
 	testPath := filepath.Join(tmpDir, "nested", "dir")
 
@@ -92,7 +92,7 @@ func TestEnsureDir(t *testing.T) {
 	assert.True(t, info.IsDir(), "Expected directory, got file")
 }
 
-func TestEnsureDir_Permissions(t *testing.T) {
+func TestEnsureDirSetsPermissionsTo0700(t *testing.T) {
 	tmpDir := t.TempDir()
 	testPath := filepath.Join(tmpDir, "secure", "dir")
 
@@ -107,7 +107,7 @@ func TestEnsureDir_Permissions(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o700), perm, "EnsureDir() permissions mismatch")
 }
 
-func TestEnsureDir_Idempotent(t *testing.T) {
+func TestEnsureDirSucceedsWhenCalledTwice(t *testing.T) {
 	tmpDir := t.TempDir()
 	testPath := filepath.Join(tmpDir, "idempotent")
 
@@ -118,7 +118,7 @@ func TestEnsureDir_Idempotent(t *testing.T) {
 	require.NoError(t, err, "Second EnsureDir() failed")
 }
 
-func TestEnsureDir_Error(t *testing.T) {
+func TestEnsureDirFailsWhenParentIsAFile(t *testing.T) {
 	// Try to create a directory inside a file (should fail)
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "afile")
@@ -133,7 +133,7 @@ func TestEnsureDir_Error(t *testing.T) {
 	assert.Error(t, err, "EnsureDir() expected error")
 }
 
-func TestHomeDir_Fallback(t *testing.T) {
+func TestHomeDirFallsBackToOsUserHomeDirWhenHOMEUnset(t *testing.T) {
 	// Unset HOME to force os.UserHomeDir() fallback
 	t.Setenv("HOME", "")
 
@@ -152,46 +152,63 @@ func TestHomeDir_Fallback(t *testing.T) {
 	assert.NotEmpty(t, got, "homeDir() returned empty string")
 }
 
-func TestConfigDir_HomeDirError(t *testing.T) {
-	// Clear both HOME and XDG_CONFIG_HOME, then break os.UserHomeDir
-	// by setting HOME to empty on systems that require it
+func TestConfigDirReturnsErrorOrValidPathWhenBothEnvVarsUnset(t *testing.T) {
 	t.Setenv("HOME", "")
 	t.Setenv("XDG_CONFIG_HOME", "")
 
-	// On most test systems, os.UserHomeDir will still work
-	// So we just verify the function doesn't panic
-	_, _ = ConfigDir()
+	dir, err := ConfigDir()
+	if err != nil {
+		assert.Empty(t, dir, "ConfigDir() returned non-empty string with error")
+	} else {
+		assert.NotEmpty(t, dir, "ConfigDir() returned empty string without error")
+	}
 }
 
-func TestDataDir_HomeDirError(t *testing.T) {
+func TestDataDirReturnsErrorOrValidPathWhenBothEnvVarsUnset(t *testing.T) {
 	t.Setenv("HOME", "")
 	t.Setenv("XDG_DATA_HOME", "")
 
-	// Verify the function doesn't panic
-	_, _ = DataDir()
+	dir, err := DataDir()
+	if err != nil {
+		assert.Empty(t, dir, "DataDir() returned non-empty string with error")
+	} else {
+		assert.NotEmpty(t, dir, "DataDir() returned empty string without error")
+	}
 }
 
-func TestStateDir_HomeDirError(t *testing.T) {
+func TestStateDirReturnsErrorOrValidPathWhenBothEnvVarsUnset(t *testing.T) {
 	t.Setenv("HOME", "")
 	t.Setenv("XDG_STATE_HOME", "")
 
-	// Verify the function doesn't panic
-	_, _ = StateDir()
+	dir, err := StateDir()
+	if err != nil {
+		assert.Empty(t, dir, "StateDir() returned non-empty string with error")
+	} else {
+		assert.NotEmpty(t, dir, "StateDir() returned empty string without error")
+	}
 }
 
-func TestRuntimeDir_StateDirError(t *testing.T) {
+func TestRuntimeDirReturnsErrorOrValidPathWhenAllEnvVarsUnset(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", "")
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("HOME", "")
 
-	// Verify the function doesn't panic
-	_, _ = RuntimeDir()
+	dir, err := RuntimeDir()
+	if err != nil {
+		assert.Empty(t, dir, "RuntimeDir() returned non-empty string with error")
+	} else {
+		assert.NotEmpty(t, dir, "RuntimeDir() returned empty string without error")
+	}
 }
 
-func TestCertsDir_ConfigDirError(t *testing.T) {
+func TestCertsDirReturnsErrorOrValidPathWhenBothEnvVarsUnset(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", "")
 
-	// Verify the function doesn't panic
-	_, _ = CertsDir()
+	dir, err := CertsDir()
+	if err != nil {
+		assert.Empty(t, dir, "CertsDir() returned non-empty string with error")
+	} else {
+		assert.NotEmpty(t, dir, "CertsDir() returned empty string without error")
+	}
 }

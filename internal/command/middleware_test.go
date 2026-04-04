@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
 package command
@@ -20,7 +21,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 )
 
-func TestMetricsRecorder_RecordsExecution(t *testing.T) {
+func TestMetricsRecorderRecordsExecution(t *testing.T) {
 	recorder := NewMetricsRecorder()
 	recorder.SetCommandName("metrics_recorder_success")
 	recorder.SetCommandSource("core")
@@ -39,7 +40,7 @@ func TestMetricsRecorder_RecordsExecution(t *testing.T) {
 	assert.Equal(t, before+1, after)
 }
 
-func TestNewRateLimitMiddleware_NilRateLimiter(t *testing.T) {
+func TestNewRateLimitMiddlewareNilRateLimiter(t *testing.T) {
 	engine := policytest.DenyAllEngine()
 	middleware, err := NewRateLimitMiddleware(nil, engine)
 	require.Error(t, err)
@@ -47,7 +48,7 @@ func TestNewRateLimitMiddleware_NilRateLimiter(t *testing.T) {
 	assert.Equal(t, ErrNilRateLimiter, err)
 }
 
-func TestNewRateLimitMiddleware_NilEngine(t *testing.T) {
+func TestNewRateLimitMiddlewareNilEngine(t *testing.T) {
 	ratelimiter := NewRateLimiter(RateLimiterConfig{
 		BurstCapacity: 1,
 		SustainedRate: 0.1,
@@ -60,7 +61,7 @@ func TestNewRateLimitMiddleware_NilEngine(t *testing.T) {
 	assert.Equal(t, ErrNilRateLimiterEngine, err)
 }
 
-func TestRateLimitMiddleware_Enforce(t *testing.T) {
+func TestRateLimitMiddlewareEnforce(t *testing.T) {
 	engine := policytest.DenyAllEngine()
 
 	ratelimiter := NewRateLimiter(RateLimiterConfig{
@@ -97,7 +98,7 @@ func TestRateLimitMiddleware_Enforce(t *testing.T) {
 	assert.Equal(t, CodeRateLimited, oopsErr.Code())
 }
 
-func TestRateLimitMiddleware_EngineError_StillRateLimits(t *testing.T) {
+func TestRateLimitMiddlewareEngineErrorStillRateLimits(t *testing.T) {
 	engineErr := errors.New("policy store unavailable")
 	errorEngine := policytest.NewErrorEngine(engineErr)
 
@@ -135,7 +136,7 @@ func TestRateLimitMiddleware_EngineError_StillRateLimits(t *testing.T) {
 	assert.Equal(t, CodeRateLimited, oopsErr.Code())
 }
 
-func TestRateLimitMiddleware_BypassCapability(t *testing.T) {
+func TestRateLimitMiddlewareBypassCapability(t *testing.T) {
 	engine := policytest.NewGrantEngine()
 
 	ratelimiter := NewRateLimiter(RateLimiterConfig{

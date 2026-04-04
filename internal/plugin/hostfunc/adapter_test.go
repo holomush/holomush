@@ -88,7 +88,7 @@ func TestNewWorldQuerierAdapter_Validation(t *testing.T) {
 	})
 }
 
-func TestWorldQuerierAdapter_SubjectID(t *testing.T) {
+func TestWorldQuerierAdapterSubjectID(t *testing.T) {
 	svc := &mockWorldService{}
 	adapter := hostfunc.NewWorldQuerierAdapter(svc, "my-plugin")
 

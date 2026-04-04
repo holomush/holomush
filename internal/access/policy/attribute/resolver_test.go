@@ -139,7 +139,7 @@ func TestResolver_RegisterProvider(t *testing.T) {
 	}
 }
 
-func TestResolver_RegisterEnvironmentProvider(t *testing.T) {
+func TestResolverRegisterEnvironmentProvider(t *testing.T) {
 	registry := NewSchemaRegistry()
 	resolver := NewResolver(registry)
 
@@ -164,7 +164,7 @@ func TestResolver_RegisterEnvironmentProvider(t *testing.T) {
 	assert.Contains(t, err.Error(), "already registered")
 }
 
-func TestResolver_Resolve_SingleProvider(t *testing.T) {
+func TestResolverResolveSingleProvider(t *testing.T) {
 	registry := NewSchemaRegistry()
 	resolver := NewResolver(registry)
 
@@ -210,7 +210,7 @@ func TestResolver_Resolve_SingleProvider(t *testing.T) {
 	assert.Equal(t, "read", bags.Action["name"])
 }
 
-func TestResolver_Resolve_MultipleProviders(t *testing.T) {
+func TestResolverResolveMultipleProviders(t *testing.T) {
 	registry := NewSchemaRegistry()
 	resolver := NewResolver(registry)
 
@@ -261,7 +261,7 @@ func TestResolver_Resolve_MultipleProviders(t *testing.T) {
 	assert.Equal(t, []string{"read", "write"}, bags.Subject["permissions.permissions"])
 }
 
-func TestResolver_Resolve_ListMerging(t *testing.T) {
+func TestResolverResolveListMerging(t *testing.T) {
 	registry := NewSchemaRegistry()
 	resolver := NewResolver(registry)
 
@@ -304,7 +304,7 @@ func TestResolver_Resolve_ListMerging(t *testing.T) {
 	assert.Equal(t, []string{"verified", "premium"}, bags.Subject["provider2.tags"])
 }
 
-func TestResolver_Resolve_ProviderError(t *testing.T) {
+func TestResolverResolveProviderError(t *testing.T) {
 	registry := NewSchemaRegistry()
 	resolver := NewResolver(registry)
 
@@ -339,7 +339,7 @@ func TestResolver_Resolve_ProviderError(t *testing.T) {
 	assert.False(t, exists)
 }
 
-func TestResolver_Resolve_ProviderPanic(t *testing.T) {
+func TestResolverResolveProviderPanic(t *testing.T) {
 	registry := NewSchemaRegistry()
 	resolver := NewResolver(registry)
 
@@ -371,7 +371,7 @@ func TestResolver_Resolve_ProviderPanic(t *testing.T) {
 	assert.Equal(t, "user", bags.Subject["working.role"])
 }
 
-func TestResolver_Resolve_PerRequestCache(t *testing.T) {
+func TestResolverResolvePerRequestCache(t *testing.T) {
 	registry := NewSchemaRegistry()
 	resolver := NewResolver(registry)
 
@@ -406,7 +406,7 @@ func TestResolver_Resolve_PerRequestCache(t *testing.T) {
 	assert.Equal(t, "admin", bags.Resource["character.role"])
 }
 
-func TestResolver_Resolve_ReEntranceGuard(t *testing.T) {
+func TestResolverResolveReEntranceGuard(t *testing.T) {
 	registry := NewSchemaRegistry()
 	resolver := NewResolver(registry)
 
@@ -467,7 +467,7 @@ func (r *reentrantMockProvider) Schema() *types.NamespaceSchema {
 	}
 }
 
-func TestResolver_Resolve_UnknownEntityType(t *testing.T) {
+func TestResolverResolveUnknownEntityType(t *testing.T) {
 	registry := NewSchemaRegistry()
 	resolver := NewResolver(registry)
 
@@ -489,7 +489,7 @@ func TestResolver_Resolve_UnknownEntityType(t *testing.T) {
 	assert.Equal(t, "read", bags.Action["name"])
 }
 
-func TestResolver_Resolve_EnvironmentProvider(t *testing.T) {
+func TestResolverResolveEnvironmentProvider(t *testing.T) {
 	registry := NewSchemaRegistry()
 	resolver := NewResolver(registry)
 
@@ -523,7 +523,7 @@ func TestResolver_Resolve_EnvironmentProvider(t *testing.T) {
 	assert.Equal(t, "192.168.1.1", bags.Environment["environment.ip_address"])
 }
 
-func TestResolver_Resolve_InvalidEntityIDFormat(t *testing.T) {
+func TestResolverResolveInvalidEntityIDFormat(t *testing.T) {
 	registry := NewSchemaRegistry()
 	resolver := NewResolver(registry)
 
@@ -540,7 +540,7 @@ func TestResolver_Resolve_InvalidEntityIDFormat(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestResolver_Resolve_S6_NamespaceValidation(t *testing.T) {
+func TestResolverResolveNamespaceValidationRejectsUnregisteredKeys(t *testing.T) {
 	registry := NewSchemaRegistry()
 	resolver := NewResolver(registry)
 

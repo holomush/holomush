@@ -14,24 +14,9 @@ import (
 )
 
 func TestAdminBootstrapper_Priority(t *testing.T) {
-	tests := []struct {
-		name     string
-		expected int
-	}{
-		{
-			name:     "returns correct priority",
-			expected: plugins.BootstrapPriorityContent,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			deps, _, _, _ := makeDeps()
-			ab := NewAdminBootstrapper(deps)
-
-			assert.Equal(t, tt.expected, ab.Priority())
-		})
-	}
+	deps, _, _, _ := makeDeps()
+	ab := NewAdminBootstrapper(deps)
+	assert.Equal(t, plugins.BootstrapPriorityContent, ab.Priority())
 }
 
 func TestAdminBootstrapper_Bootstrap(t *testing.T) {
@@ -76,11 +61,6 @@ func TestAdminBootstrapper_Bootstrap(t *testing.T) {
 	}
 }
 
-func TestAdminBootstrapper_CompilesWithInterface(_ *testing.T) {
-	// Compile-time check is done via var _ plugins.BootstrapPlugin = (*AdminBootstrapper)(nil)
-	// but this runtime test ensures the interface is properly satisfied.
-	deps, _, _, _ := makeDeps()
-	ab := NewAdminBootstrapper(deps)
-
-	var _ plugins.BootstrapPlugin = ab
+func TestAdminBootstrapper_ImplementsBootstrapPlugin(_ *testing.T) {
+	var _ plugins.BootstrapPlugin = (*AdminBootstrapper)(nil)
 }

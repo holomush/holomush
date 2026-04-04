@@ -22,7 +22,7 @@ import (
 	"github.com/holomush/holomush/internal/world"
 )
 
-func TestWithWorldQuerier_PanicsWithHelpfulMessage(t *testing.T) {
+func TestWithWorldQuerierPanicsWithHelpfulMessage(t *testing.T) {
 	defer func() {
 		r := recover()
 		require.NotNil(t, r, "expected panic for WithWorldQuerier")
@@ -35,7 +35,7 @@ func TestWithWorldQuerier_PanicsWithHelpfulMessage(t *testing.T) {
 	_ = hostfunc.WithWorldQuerier(nil)
 }
 
-func TestWithWorldService_AcceptsWorldMutator(t *testing.T) {
+func TestWithWorldServiceAcceptsWorldMutator(t *testing.T) {
 	// This test verifies that WithWorldService accepts a WorldMutator at construction time
 	// The compile-time type check ensures only WorldMutator implementations can be passed
 	// If this compiles, the interface enforcement is working
@@ -94,7 +94,7 @@ func (m *mockWorldMutatorForConstructorTest) FindLocationByName(_ context.Contex
 // Compile-time interface check.
 var _ hostfunc.WorldMutator = (*mockWorldMutatorForConstructorTest)(nil)
 
-func TestHostFunctions_Log(t *testing.T) {
+func TestHostFunctionsLog(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -130,7 +130,7 @@ func TestHostFunctions_Log_Levels(t *testing.T) {
 	}
 }
 
-func TestHostFunctions_Log_InvalidLevel(t *testing.T) {
+func TestHostFunctionsLogInvalidLevel(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -190,7 +190,7 @@ func TestHostFunctions_Log_InvalidLevel_ErrorMessage(t *testing.T) {
 	}
 }
 
-func TestHostFunctions_NewRequestID(t *testing.T) {
+func TestHostFunctionsNewRequestID(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -208,7 +208,7 @@ func TestHostFunctions_NewRequestID(t *testing.T) {
 	assert.NoError(t, err, "id %q is not a valid ULID", id)
 }
 
-func TestHostFunctions_NewRequestID_Unique(t *testing.T) {
+func TestHostFunctionsNewRequestIDUnique(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -226,7 +226,7 @@ func TestHostFunctions_NewRequestID_Unique(t *testing.T) {
 	assert.NotEqual(t, id1, id2, "IDs should be unique")
 }
 
-func TestHostFunctions_KV_WithKVStore(t *testing.T) {
+func TestHostFunctionsKVWithKVStore(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -251,7 +251,7 @@ func TestHostFunctions_KV_WithKVStore(t *testing.T) {
 	assert.Equal(t, "myvalue", result)
 }
 
-func TestHostFunctions_KVGet_ReturnsNilForMissingKey(t *testing.T) {
+func TestHostFunctionsKVGetReturnsNilForMissingKey(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -271,7 +271,7 @@ func TestHostFunctions_KVGet_ReturnsNilForMissingKey(t *testing.T) {
 	assert.Equal(t, lua.LTNil, errVal.Type(), "expected nil error for missing key")
 }
 
-func TestHostFunctions_KVGet_NoStoreAvailable(t *testing.T) {
+func TestHostFunctionsKVGetNoStoreAvailable(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -288,7 +288,7 @@ func TestHostFunctions_KVGet_NoStoreAvailable(t *testing.T) {
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string when kv store unavailable")
 }
 
-func TestHostFunctions_KVSet_NoStoreAvailable(t *testing.T) {
+func TestHostFunctionsKVSetNoStoreAvailable(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -305,7 +305,7 @@ func TestHostFunctions_KVSet_NoStoreAvailable(t *testing.T) {
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string when kv store unavailable")
 }
 
-func TestHostFunctions_KVDelete(t *testing.T) {
+func TestHostFunctionsKVDelete(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -329,7 +329,7 @@ func TestHostFunctions_KVDelete(t *testing.T) {
 	assert.Equal(t, lua.LTNil, result.Type(), "expected nil after delete")
 }
 
-func TestHostFunctions_KVDelete_NoStoreAvailable(t *testing.T) {
+func TestHostFunctionsKVDeleteNoStoreAvailable(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -346,7 +346,7 @@ func TestHostFunctions_KVDelete_NoStoreAvailable(t *testing.T) {
 	assert.Equal(t, lua.LTString, errVal.Type(), "expected error string when kv store unavailable")
 }
 
-func TestHostFunctions_KVGet_StoreError(t *testing.T) {
+func TestHostFunctionsKVGetStoreError(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -370,7 +370,7 @@ func TestHostFunctions_KVGet_StoreError(t *testing.T) {
 		"raw error should not leak to plugin")
 }
 
-func TestHostFunctions_KVSet_StoreError(t *testing.T) {
+func TestHostFunctionsKVSetStoreError(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -396,7 +396,7 @@ func TestHostFunctions_KVSet_StoreError(t *testing.T) {
 		"raw error should not leak to plugin")
 }
 
-func TestHostFunctions_KVDelete_StoreError(t *testing.T) {
+func TestHostFunctionsKVDeleteStoreError(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -448,7 +448,7 @@ func TestHostFunctions_KV_MissingArguments(t *testing.T) {
 	}
 }
 
-func TestHostFunctions_KVGet_EmptyKeyRejected(t *testing.T) {
+func TestHostFunctionsKVGetEmptyKeyRejected(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -460,7 +460,7 @@ func TestHostFunctions_KVGet_EmptyKeyRejected(t *testing.T) {
 	assert.Error(t, err, "expected error for empty key")
 }
 
-func TestHostFunctions_KVSet_EmptyKeyRejected(t *testing.T) {
+func TestHostFunctionsKVSetEmptyKeyRejected(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -472,7 +472,7 @@ func TestHostFunctions_KVSet_EmptyKeyRejected(t *testing.T) {
 	assert.Error(t, err, "expected error for empty key")
 }
 
-func TestHostFunctions_KVDelete_EmptyKeyRejected(t *testing.T) {
+func TestHostFunctionsKVDeleteEmptyKeyRejected(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -484,7 +484,7 @@ func TestHostFunctions_KVDelete_EmptyKeyRejected(t *testing.T) {
 	assert.Error(t, err, "expected error for empty key")
 }
 
-func TestHostFunctions_KVSet_EmptyValueAllowed(t *testing.T) {
+func TestHostFunctionsKVSetEmptyValueAllowed(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -508,7 +508,7 @@ func TestHostFunctions_KVSet_EmptyValueAllowed(t *testing.T) {
 	assert.Equal(t, "", result.String(), "expected empty string")
 }
 
-func TestHostFunctions_KVGet_Timeout(t *testing.T) {
+func TestHostFunctionsKVGetTimeout(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -527,7 +527,7 @@ func TestHostFunctions_KVGet_Timeout(t *testing.T) {
 	assert.Equal(t, "operation timed out", errVal.String())
 }
 
-func TestHostFunctions_KVSet_Timeout(t *testing.T) {
+func TestHostFunctionsKVSetTimeout(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -545,7 +545,7 @@ func TestHostFunctions_KVSet_Timeout(t *testing.T) {
 	assert.Equal(t, "operation timed out", errVal.String())
 }
 
-func TestHostFunctions_KVDelete_Timeout(t *testing.T) {
+func TestHostFunctionsKVDeleteTimeout(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -563,7 +563,7 @@ func TestHostFunctions_KVDelete_Timeout(t *testing.T) {
 	assert.Equal(t, "operation timed out", errVal.String())
 }
 
-func TestHostFunctions_KV_NamespaceIsolation(t *testing.T) {
+func TestHostFunctionsKVNamespaceIsolation(t *testing.T) {
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 
 	// Plugin A writes
@@ -589,7 +589,7 @@ func TestHostFunctions_KV_NamespaceIsolation(t *testing.T) {
 	assert.Equal(t, lua.LTNil, val.Type(), "plugin-b should not see plugin-a's data")
 }
 
-func TestKVGet_DeniedByEngine(t *testing.T) {
+func TestKVGetDeniedByEngine(t *testing.T) {
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	engine := policytest.DenyAllEngine()
 	hf := hostfunc.New(kvStore, hostfunc.WithEngine(engine))
@@ -610,7 +610,7 @@ func TestKVGet_DeniedByEngine(t *testing.T) {
 	assert.Contains(t, errStr.String(), "access denied")
 }
 
-func TestKVGet_AllowedByEngine(t *testing.T) {
+func TestKVGetAllowedByEngine(t *testing.T) {
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	kvStore.data["test-plugin:mykey"] = []byte("hello")
 	engine := policytest.AllowAllEngine()
@@ -631,7 +631,7 @@ func TestKVGet_AllowedByEngine(t *testing.T) {
 	assert.Equal(t, lua.LNil, L.GetGlobal("result_err"))
 }
 
-func TestKVGet_NilEngine_Denied(t *testing.T) {
+func TestKVGetNilEngineDenied(t *testing.T) {
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	hf := hostfunc.New(kvStore) // No WithEngine
 
@@ -651,7 +651,7 @@ func TestKVGet_NilEngine_Denied(t *testing.T) {
 	assert.Contains(t, errStr.String(), "access engine not available")
 }
 
-func TestKVSet_DeniedByEngine(t *testing.T) {
+func TestKVSetDeniedByEngine(t *testing.T) {
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	engine := policytest.DenyAllEngine()
 	hf := hostfunc.New(kvStore, hostfunc.WithEngine(engine))
@@ -675,7 +675,7 @@ func TestKVSet_DeniedByEngine(t *testing.T) {
 	assert.Empty(t, kvStore.data, "kvStore should not have been called when access denied")
 }
 
-func TestKVDelete_DeniedByEngine(t *testing.T) {
+func TestKVDeleteDeniedByEngine(t *testing.T) {
 	kvStore := &mockKVStore{data: make(map[string][]byte)}
 	kvStore.data["test-plugin:mykey"] = []byte("value")
 	engine := policytest.DenyAllEngine()

@@ -13,16 +13,8 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 )
 
-func TestCommandProvider_Namespace(t *testing.T) {
-	provider := NewCommandProvider()
-	assert.Equal(t, "command", provider.Namespace())
-}
-
-func TestCommandProvider_ResolveSubject(t *testing.T) {
-	provider := NewCommandProvider()
-	attrs, err := provider.ResolveSubject(context.Background(), "command:say")
-	require.NoError(t, err)
-	assert.Nil(t, attrs)
+func TestCommandProviderContract(t *testing.T) {
+	assertProviderContract(t, NewCommandProvider())
 }
 
 func TestCommandProvider_ResolveResource(t *testing.T) {
@@ -75,7 +67,7 @@ func TestCommandProvider_ResolveResource(t *testing.T) {
 	}
 }
 
-func TestCommandProvider_Schema(t *testing.T) {
+func TestCommandProviderSchema(t *testing.T) {
 	provider := NewCommandProvider()
 	schema := provider.Schema()
 

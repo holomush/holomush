@@ -44,7 +44,7 @@ func (s *fakePolicyStore) ReplaceBySource(_ context.Context, source, prefix stri
 	return nil
 }
 
-func TestPolicyInstaller_Install(t *testing.T) {
+func TestPolicyInstallerInstall(t *testing.T) {
 	fs := &fakePolicyStore{}
 	installer := plugins.NewPolicyInstaller(fs)
 
@@ -69,7 +69,7 @@ func TestPolicyInstaller_Install(t *testing.T) {
 	assert.NotEmpty(t, p.CompiledAST)
 }
 
-func TestPolicyInstaller_Install_RejectNonPluginPrincipal(t *testing.T) {
+func TestPolicyInstallerInstallRejectNonPluginPrincipal(t *testing.T) {
 	fs := &fakePolicyStore{}
 	installer := plugins.NewPolicyInstaller(fs)
 
@@ -86,7 +86,7 @@ func TestPolicyInstaller_Install_RejectNonPluginPrincipal(t *testing.T) {
 	assert.Empty(t, fs.created)
 }
 
-func TestPolicyInstaller_Install_RejectNilPrincipalType(t *testing.T) {
+func TestPolicyInstallerInstallRejectNilPrincipalType(t *testing.T) {
 	fs := &fakePolicyStore{}
 	installer := plugins.NewPolicyInstaller(fs)
 
@@ -103,7 +103,7 @@ func TestPolicyInstaller_Install_RejectNilPrincipalType(t *testing.T) {
 	assert.Empty(t, fs.created)
 }
 
-func TestPolicyInstaller_Remove(t *testing.T) {
+func TestPolicyInstallerRemove(t *testing.T) {
 	fs := &fakePolicyStore{}
 	installer := plugins.NewPolicyInstaller(fs)
 
@@ -113,7 +113,7 @@ func TestPolicyInstaller_Remove(t *testing.T) {
 	assert.Equal(t, "plugin:my-plugin:", fs.deletedPrefix)
 }
 
-func TestPolicyInstaller_Install_CompilationError(t *testing.T) {
+func TestPolicyInstallerInstallCompilationError(t *testing.T) {
 	fs := &fakePolicyStore{}
 	installer := plugins.NewPolicyInstaller(fs)
 
@@ -129,7 +129,7 @@ func TestPolicyInstaller_Install_CompilationError(t *testing.T) {
 	assert.Empty(t, fs.created)
 }
 
-func TestPolicyInstaller_Install_RejectCrossPluginPrincipal(t *testing.T) {
+func TestPolicyInstallerInstallRejectCrossPluginPrincipal(t *testing.T) {
 	fs := &fakePolicyStore{}
 	installer := plugins.NewPolicyInstaller(fs)
 

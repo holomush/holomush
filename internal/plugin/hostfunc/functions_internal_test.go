@@ -87,7 +87,7 @@ func TestSanitizeKVErrorForPlugin(t *testing.T) {
 	}
 }
 
-func TestSanitizeKVErrorForPlugin_CorrelationIDUnique(t *testing.T) {
+func TestSanitizeKVErrorForPluginCorrelationIDUnique(t *testing.T) {
 	// Each call should produce a unique correlation ID
 	err := errors.New("internal failure")
 	msg1 := sanitizeKVErrorForPlugin("plugin", "get", "key", err)
@@ -98,7 +98,7 @@ func TestSanitizeKVErrorForPlugin_CorrelationIDUnique(t *testing.T) {
 	assert.Contains(t, msg2, "internal error (ref: ")
 }
 
-func TestSanitizeKVErrorForPlugin_LogsFullContext(t *testing.T) {
+func TestSanitizeKVErrorForPluginLogsFullContext(t *testing.T) {
 	var buf bytes.Buffer
 	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
 	origLogger := slog.Default()

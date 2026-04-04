@@ -14,7 +14,7 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 )
 
-func TestParseManifest_LuaPlugin(t *testing.T) {
+func TestParseManifestLuaPlugin(t *testing.T) {
 	yaml := `
 name: echo-bot
 version: 1.0.0
@@ -36,7 +36,7 @@ lua-plugin:
 	assert.Equal(t, "main.lua", m.LuaPlugin.Entry)
 }
 
-func TestParseManifest_BinaryPlugin(t *testing.T) {
+func TestParseManifestBinaryPlugin(t *testing.T) {
 	yaml := `
 name: combat-system
 version: 2.1.0
@@ -316,7 +316,7 @@ binary-plugin:
 	}
 }
 
-func TestParseManifest_InvalidYAML(t *testing.T) {
+func TestParseManifestInvalidYAML(t *testing.T) {
 	yaml := `name: test
 version: 1.0.0
 type: [invalid`
@@ -324,7 +324,7 @@ type: [invalid`
 	assert.Error(t, err, "expected error for invalid YAML")
 }
 
-func TestManifest_Validate(t *testing.T) {
+func TestManifestValidate(t *testing.T) {
 	// Test Validate() method directly
 	m := &plugins.Manifest{
 		Name:    "test-plugin",
@@ -337,7 +337,7 @@ func TestManifest_Validate(t *testing.T) {
 	assert.NoError(t, m.Validate())
 }
 
-func TestManifest_Validate_EmptyEntry(t *testing.T) {
+func TestManifestValidateEmptyEntry(t *testing.T) {
 	m := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
@@ -349,7 +349,7 @@ func TestManifest_Validate_EmptyEntry(t *testing.T) {
 	assert.Error(t, m.Validate(), "Validate() should fail for empty entry")
 }
 
-func TestManifest_Validate_EmptyExecutable(t *testing.T) {
+func TestManifestValidateEmptyExecutable(t *testing.T) {
 	m := &plugins.Manifest{
 		Name:    "test-plugin",
 		Version: "1.0.0",
@@ -581,7 +581,7 @@ lua-plugin:
 	}
 }
 
-func TestParseManifest_WithPolicies(t *testing.T) {
+func TestParseManifestWithPolicies(t *testing.T) {
 	data := []byte(`
 name: test-plugin
 version: "1.0.0"
@@ -610,7 +610,7 @@ lua-plugin:
 	assert.Equal(t, "allow-kv", m.Policies[1].Name)
 }
 
-func TestParseManifest_NoPolicies(t *testing.T) {
+func TestParseManifestNoPolicies(t *testing.T) {
 	data := []byte(`
 name: test-plugin
 version: "1.0.0"
@@ -623,7 +623,7 @@ lua-plugin:
 	assert.Empty(t, m.Policies)
 }
 
-func TestParseManifest_PolicyEmptyName(t *testing.T) {
+func TestParseManifestPolicyEmptyName(t *testing.T) {
 	data := []byte(`
 name: test-plugin
 version: "1.0.0"
@@ -639,7 +639,7 @@ lua-plugin:
 	assert.Contains(t, err.Error(), "name cannot be empty")
 }
 
-func TestParseManifest_PolicyEmptyDSL(t *testing.T) {
+func TestParseManifestPolicyEmptyDSL(t *testing.T) {
 	data := []byte(`
 name: test-plugin
 version: "1.0.0"
@@ -709,7 +709,7 @@ lua-plugin:
 	}
 }
 
-func TestManifest_HasEvent(t *testing.T) {
+func TestManifestHasEvent(t *testing.T) {
 	// Test that Events slice correctly stores event subscriptions
 	events := []string{"say", "pose"}
 	m := &plugins.Manifest{
@@ -722,7 +722,7 @@ func TestManifest_HasEvent(t *testing.T) {
 	assert.NotContains(t, m.Events, "arrive")
 }
 
-func TestParseManifest_Whitespace(t *testing.T) {
+func TestParseManifestWhitespace(t *testing.T) {
 	// Test that extra whitespace is handled correctly
 	yaml := `
 name:    test-plugin
@@ -894,7 +894,7 @@ lua-plugin:
 	}
 }
 
-func TestParseManifest_CommandSpec_Fields(t *testing.T) {
+func TestParseManifestCommandSpecFields(t *testing.T) {
 	yamlData := `
 name: test
 version: 1.0.0
@@ -936,7 +936,7 @@ lua-plugin:
 	assert.Empty(t, cmd.HelpFile)
 }
 
-func TestParseManifest_CommandSpec_HelpFile(t *testing.T) {
+func TestParseManifestCommandSpecHelpFile(t *testing.T) {
 	yaml := `
 name: test
 version: 1.0.0
@@ -1191,7 +1191,7 @@ lua-plugin:
 	}
 }
 
-func TestParseManifest_CorePlugin(t *testing.T) {
+func TestParseManifestCorePlugin(t *testing.T) {
 	yaml := `
 name: core-say
 version: 1.0.0
@@ -1210,7 +1210,7 @@ commands:
 	assert.Len(t, m.Commands, 1)
 }
 
-func TestParseManifest_CorePlugin_NoLuaOrBinaryRequired(t *testing.T) {
+func TestParseManifestCorePluginNoLuaOrBinaryRequired(t *testing.T) {
 	yaml := `
 name: core-look
 version: 1.0.0
@@ -1325,11 +1325,11 @@ lua-plugin:
 	}
 }
 
-func TestTypeSetting_Constant(t *testing.T) {
+func TestTypeSettingConstant(t *testing.T) {
 	assert.Equal(t, plugins.Type("setting"), plugins.TypeSetting)
 }
 
-func TestParseManifest_SettingPlugin(t *testing.T) {
+func TestParseManifestSettingPlugin(t *testing.T) {
 	yaml := `
 name: my-setting
 version: 1.0.0
@@ -1355,7 +1355,7 @@ setting:
 	assert.Equal(t, "The Nexus", m.Setting.StartingLocation)
 }
 
-func TestParseManifest_SettingPlugin_MissingStanza(t *testing.T) {
+func TestParseManifestSettingPluginMissingStanza(t *testing.T) {
 	yaml := `
 name: my-setting
 version: 1.0.0
@@ -1366,7 +1366,7 @@ type: setting
 	assert.Contains(t, err.Error(), "setting")
 }
 
-func TestParseManifest_SettingPlugin_MissingStartingLocation(t *testing.T) {
+func TestParseManifestSettingPluginMissingStartingLocation(t *testing.T) {
 	yaml := `
 name: my-setting
 version: 1.0.0
@@ -1380,7 +1380,7 @@ setting:
 	assert.Contains(t, err.Error(), "starting_location")
 }
 
-func TestParseManifest_SettingPlugin_WithCommands(t *testing.T) {
+func TestParseManifestSettingPluginWithCommands(t *testing.T) {
 	yaml := `
 name: my-setting
 version: 1.0.0
@@ -1398,7 +1398,7 @@ commands:
 	assert.True(t, strings.Contains(err.Error(), "command") || strings.Contains(err.Error(), "setting"))
 }
 
-func TestParseManifest_SettingPlugin_WithLuaPlugin(t *testing.T) {
+func TestParseManifestSettingPluginWithLuaPlugin(t *testing.T) {
 	yaml := `
 name: my-setting
 version: 1.0.0
@@ -1475,7 +1475,7 @@ func TestCommandSpec_Validate_InvalidCapability(t *testing.T) {
 	}
 }
 
-func TestParseManifest_CommandWithInvalidCapability(t *testing.T) {
+func TestParseManifestCommandWithInvalidCapability(t *testing.T) {
 	yamlData := `
 name: test
 version: 1.0.0
@@ -1493,7 +1493,7 @@ lua-plugin:
 	assert.Contains(t, err.Error(), "action")
 }
 
-func TestParseManifest_SettingPlugin_WithBinaryPlugin(t *testing.T) {
+func TestParseManifestSettingPluginWithBinaryPlugin(t *testing.T) {
 	yaml := `
 name: my-setting
 version: 1.0.0

@@ -88,7 +88,7 @@ func createTestEngine(t *testing.T, sessionResolver SessionResolver) (*Engine, *
 	return engine, mockWriter
 }
 
-func TestEngine_SystemBypass(t *testing.T) {
+func TestEngineSystemBypass(t *testing.T) {
 	engine, _ := createTestEngine(t, &mockSessionResolver{})
 
 	req := types.AccessRequest{
@@ -106,7 +106,7 @@ func TestEngine_SystemBypass(t *testing.T) {
 	assert.Equal(t, "system bypass", decision.Reason())
 }
 
-func TestEngine_SystemBypass_RejectedWithoutSystemContext(t *testing.T) {
+func TestEngineSystemBypassRejectedWithoutSystemContext(t *testing.T) {
 	engine, _ := createTestEngine(t, &mockSessionResolver{})
 
 	req := types.AccessRequest{
@@ -127,7 +127,7 @@ func TestEngine_SystemBypass_RejectedWithoutSystemContext(t *testing.T) {
 	assert.Empty(t, decision.PolicyID())
 }
 
-func TestEngine_SystemBypass_ValidatesDecision(t *testing.T) {
+func TestEngineSystemBypassValidatesDecision(t *testing.T) {
 	engine, _ := createTestEngine(t, &mockSessionResolver{})
 
 	req := types.AccessRequest{
@@ -143,7 +143,7 @@ func TestEngine_SystemBypass_ValidatesDecision(t *testing.T) {
 	assert.NoError(t, decision.Validate())
 }
 
-func TestEngine_SystemBypass_Audited(t *testing.T) {
+func TestEngineSystemBypassIsAudited(t *testing.T) {
 	engine, mockWriter := createTestEngine(t, &mockSessionResolver{})
 
 	req := types.AccessRequest{
@@ -163,7 +163,7 @@ func TestEngine_SystemBypass_Audited(t *testing.T) {
 	assert.Equal(t, types.EffectSystemBypass, entries[0].Effect)
 }
 
-func TestEngine_ContextCancelled(t *testing.T) {
+func TestEngineContextCancelled(t *testing.T) {
 	engine, _ := createTestEngine(t, &mockSessionResolver{})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -187,7 +187,7 @@ func TestEngine_ContextCancelled(t *testing.T) {
 	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 }
 
-func TestEngine_SessionResolved(t *testing.T) {
+func TestEngineSessionResolved(t *testing.T) {
 	resolver := &mockSessionResolver{
 		resolveFunc: func(_ context.Context, sessionID string) (string, error) {
 			assert.Equal(t, "web-123", sessionID)
@@ -212,7 +212,7 @@ func TestEngine_SessionResolved(t *testing.T) {
 	assert.NotNil(t, decision.Attributes(), "attributes should be populated")
 }
 
-func TestEngine_SessionResolved_RewritesSubject(t *testing.T) {
+func TestEngineSessionResolvedRewritesSubject(t *testing.T) {
 	var capturedRequest types.AccessRequest
 	resolver := &mockSessionResolver{
 		resolveFunc: func(_ context.Context, _ string) (string, error) {
@@ -238,7 +238,7 @@ func TestEngine_SessionResolved_RewritesSubject(t *testing.T) {
 	assert.Equal(t, "session:web-123", capturedRequest.Subject)
 }
 
-func TestEngine_SessionInvalid(t *testing.T) {
+func TestEngineSessionInvalidFailsClosed(t *testing.T) {
 	resolver := &mockSessionResolver{
 		resolveFunc: func(_ context.Context, _ string) (string, error) {
 			return "", oops.Code("SESSION_INVALID").Errorf("session not found")
@@ -261,7 +261,7 @@ func TestEngine_SessionInvalid(t *testing.T) {
 	assert.Equal(t, "infra:session-invalid", decision.PolicyID())
 }
 
-func TestEngine_SessionStoreError(t *testing.T) {
+func TestEngineSessionStoreErrorFailsClosed(t *testing.T) {
 	resolver := &mockSessionResolver{
 		resolveFunc: func(_ context.Context, _ string) (string, error) {
 			return "", oops.Errorf("database connection failed")
@@ -284,7 +284,7 @@ func TestEngine_SessionStoreError(t *testing.T) {
 	assert.Equal(t, "infra:session-store-error", decision.PolicyID())
 }
 
-func TestEngine_NonSystemNonSession(t *testing.T) {
+func TestEngineNonSystemNonSession(t *testing.T) {
 	engine, _ := createTestEngine(t, &mockSessionResolver{})
 
 	req := types.AccessRequest{
@@ -303,7 +303,7 @@ func TestEngine_NonSystemNonSession(t *testing.T) {
 	assert.NotNil(t, decision.Attributes(), "attributes should be populated")
 }
 
-func TestEngine_StaleCacheDefaultDeny(t *testing.T) {
+func TestEngineStaleCacheDefaultDeny(t *testing.T) {
 	registry := attribute.NewSchemaRegistry()
 	resolver := attribute.NewResolver(registry)
 
@@ -400,7 +400,7 @@ func TestEngine_AllDecisionsValidate(t *testing.T) {
 	}
 }
 
-func TestMockAuditWriter_ThreadSafety(t *testing.T) {
+func TestMockAuditWriterThreadSafety(t *testing.T) {
 	writer := &mockAuditWriter{}
 	ctx := context.Background()
 
@@ -428,7 +428,7 @@ func TestMockAuditWriter_ThreadSafety(t *testing.T) {
 	assert.Len(t, entries, 100)
 }
 
-func TestEngine_AuditLoggerCleanup(t *testing.T) {
+func TestEngineAuditLoggerCleanup(t *testing.T) {
 	// Verify that audit logger is properly closed in cleanup
 	registry := attribute.NewSchemaRegistry()
 	resolver := attribute.NewResolver(registry)
@@ -773,7 +773,7 @@ func TestEngine_FindApplicablePolicies(t *testing.T) {
 	}
 }
 
-func TestEngine_EvaluateWithAttributeResolution(t *testing.T) {
+func TestEngineEvaluateWithAttributeResolution(t *testing.T) {
 	tests := []struct {
 		name           string
 		req            types.AccessRequest
@@ -841,7 +841,7 @@ func (f *failingAttributeProvider) Schema() *types.NamespaceSchema {
 	}
 }
 
-func TestEngine_EvaluateAttributeResolutionError(t *testing.T) {
+func TestEngineEvaluateAttributeResolutionError(t *testing.T) {
 	// A failing attribute provider should cause the engine to fail closed:
 	// return a non-nil error with a zero-value decision.
 	providerErr := errors.New("database connection failed")
@@ -962,7 +962,7 @@ func createTestEngineWithPolicies(t *testing.T, dslTexts []string, providers []a
 	return engine
 }
 
-func TestEngine_EvaluateConditions_SimpleConditionSatisfied(t *testing.T) {
+func TestEngineEvaluateConditionsSimpleConditionSatisfied(t *testing.T) {
 	dslText := `permit(principal is character, action in ["say"], resource is location) when { "admin" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
@@ -987,7 +987,7 @@ func TestEngine_EvaluateConditions_SimpleConditionSatisfied(t *testing.T) {
 	assert.Equal(t, types.EffectAllow, decision.Policies()[0].Effect)
 }
 
-func TestEngine_EvaluateConditions_SimpleConditionUnsatisfied(t *testing.T) {
+func TestEngineEvaluateConditionsSimpleConditionUnsatisfied(t *testing.T) {
 	dslText := `permit(principal is character, action in ["say"], resource is location) when { "admin" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
@@ -1011,7 +1011,7 @@ func TestEngine_EvaluateConditions_SimpleConditionUnsatisfied(t *testing.T) {
 	assert.False(t, decision.Policies()[0].ConditionsMet, "condition should not be satisfied")
 }
 
-func TestEngine_EvaluateConditions_MissingAttribute(t *testing.T) {
+func TestEngineEvaluateConditionsMissingAttribute(t *testing.T) {
 	dslText := `permit(principal is character, action in ["say"], resource is location) when { principal.character.faction == "rebels" };`
 
 	provider := &mockAttributeProvider{
@@ -1034,7 +1034,7 @@ func TestEngine_EvaluateConditions_MissingAttribute(t *testing.T) {
 	assert.False(t, decision.Policies()[0].ConditionsMet, "missing attribute should cause condition to fail")
 }
 
-func TestEngine_EvaluateConditions_NumericComparison(t *testing.T) {
+func TestEngineEvaluateConditionsNumericComparison(t *testing.T) {
 	dslText := `permit(principal is character, action in ["dig"], resource is location) when { principal.character.level > 5 };`
 
 	provider := &mockAttributeProvider{
@@ -1057,7 +1057,7 @@ func TestEngine_EvaluateConditions_NumericComparison(t *testing.T) {
 	assert.True(t, decision.Policies()[0].ConditionsMet, "numeric comparison should be satisfied")
 }
 
-func TestEngine_EvaluateConditions_Unconditional(t *testing.T) {
+func TestEngineEvaluateConditionsUnconditional(t *testing.T) {
 	dslText := `permit(principal is character, action in ["say"], resource is location);`
 
 	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
@@ -1075,7 +1075,7 @@ func TestEngine_EvaluateConditions_Unconditional(t *testing.T) {
 	assert.True(t, decision.Policies()[0].ConditionsMet, "unconditional policy should always be satisfied")
 }
 
-func TestEngine_EvaluateConditions_MultiplePoliciesMixed(t *testing.T) {
+func TestEngineEvaluateConditionsMultiplePoliciesMixed(t *testing.T) {
 	dslTexts := []string{
 		`permit(principal is character, action in ["say"], resource is location) when { "admin" in principal.character.roles };`,
 		`permit(principal is character, action in ["say"], resource is location) when { principal.character.level > 10 };`,
@@ -1120,7 +1120,7 @@ func TestEngine_EvaluateConditions_MultiplePoliciesMixed(t *testing.T) {
 	assert.Equal(t, types.EffectDeny, decision.Policies()[2].Effect)
 }
 
-func TestEngine_EvaluateConditions_AllSatisfied(t *testing.T) {
+func TestEngineEvaluateConditionsAllSatisfied(t *testing.T) {
 	dslTexts := []string{
 		`permit(principal is character, action in ["say"], resource is location) when { "admin" in principal.character.roles };`,
 		`permit(principal is character, action in ["say"], resource is location) when { principal.character.level > 5 };`,
@@ -1150,7 +1150,7 @@ func TestEngine_EvaluateConditions_AllSatisfied(t *testing.T) {
 	assert.True(t, decision.Policies()[1].ConditionsMet)
 }
 
-func TestEngine_EvaluateConditions_PopulatesPolicyMatches(t *testing.T) {
+func TestEngineEvaluateConditionsPopulatesPolicyMatches(t *testing.T) {
 	dslText := `permit(principal is character, action in ["say"], resource is location) when { "admin" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
@@ -1179,7 +1179,7 @@ func TestEngine_EvaluateConditions_PopulatesPolicyMatches(t *testing.T) {
 
 // Deny-overrides combination tests
 
-func TestEngine_DenyOverrides_ForbidWins(t *testing.T) {
+func TestEngineDenyOverridesForbidWins(t *testing.T) {
 	dslTexts := []string{
 		`permit(principal is character, action in ["say"], resource is location) when { "player" in principal.character.roles };`,
 		`forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`,
@@ -1210,7 +1210,7 @@ func TestEngine_DenyOverrides_ForbidWins(t *testing.T) {
 	assert.Equal(t, "policy-2", decision.PolicyID())
 }
 
-func TestEngine_DenyOverrides_PermitOnly(t *testing.T) {
+func TestEngineDenyOverridesPermitOnly(t *testing.T) {
 	dslText := `permit(principal is character, action in ["say"], resource is location) when { "player" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
@@ -1235,7 +1235,7 @@ func TestEngine_DenyOverrides_PermitOnly(t *testing.T) {
 	assert.Equal(t, "policy-1", decision.PolicyID())
 }
 
-func TestEngine_DenyOverrides_DefaultDeny_NoPoliciesSatisfied(t *testing.T) {
+func TestEngineDenyOverridesDefaultDenyWhenNoPoliciesSatisfied(t *testing.T) {
 	dslText := `permit(principal is character, action in ["say"], resource is location) when { "admin" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
@@ -1260,7 +1260,7 @@ func TestEngine_DenyOverrides_DefaultDeny_NoPoliciesSatisfied(t *testing.T) {
 	assert.Equal(t, "", decision.PolicyID())
 }
 
-func TestEngine_DenyOverrides_MultipleForbid(t *testing.T) {
+func TestEngineDenyOverridesMultipleForbid(t *testing.T) {
 	dslTexts := []string{
 		`forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`,
 		`forbid(principal is character, action in ["say"], resource is location) when { principal.character.muted == true };`,
@@ -1291,7 +1291,7 @@ func TestEngine_DenyOverrides_MultipleForbid(t *testing.T) {
 	assert.Equal(t, "policy-1", decision.PolicyID()) // First forbid wins
 }
 
-func TestEngine_DenyOverrides_MultiplePermit(t *testing.T) {
+func TestEngineDenyOverridesMultiplePermit(t *testing.T) {
 	dslTexts := []string{
 		`permit(principal is character, action in ["say"], resource is location) when { "player" in principal.character.roles };`,
 		`permit(principal is character, action in ["say"], resource is location) when { principal.character.level > 5 };`,
@@ -1322,7 +1322,7 @@ func TestEngine_DenyOverrides_MultiplePermit(t *testing.T) {
 	assert.Equal(t, "policy-1", decision.PolicyID()) // First permit wins
 }
 
-func TestEngine_DenyOverrides_ForbidUnsatisfied_PermitSatisfied(t *testing.T) {
+func TestEngineDenyOverridesForbidUnsatisfiedPermitSatisfied(t *testing.T) {
 	dslTexts := []string{
 		`forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`,
 		`permit(principal is character, action in ["say"], resource is location) when { "player" in principal.character.roles };`,
@@ -1402,7 +1402,7 @@ func createTestEngineWithMode(t *testing.T, dslTexts []string, providers []attri
 	return engine, mockWriter
 }
 
-func TestEngine_Audit_ModeAll_AllowAudited(t *testing.T) {
+func TestEngineAuditModeAllAllowAudited(t *testing.T) {
 	dslText := `permit(principal is character, action in ["say"], resource is location) when { "player" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
@@ -1434,7 +1434,7 @@ func TestEngine_Audit_ModeAll_AllowAudited(t *testing.T) {
 	assert.Equal(t, "policy-1", entries[0].PolicyID)
 }
 
-func TestEngine_Audit_ModeAll_DenyAudited(t *testing.T) {
+func TestEngineAuditModeAllDenyAudited(t *testing.T) {
 	dslText := `forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`
 
 	provider := &mockAttributeProvider{
@@ -1463,7 +1463,7 @@ func TestEngine_Audit_ModeAll_DenyAudited(t *testing.T) {
 	assert.Equal(t, "policy-1", entries[0].PolicyID)
 }
 
-func TestEngine_Audit_ModeMinimal_AllowNotAudited(t *testing.T) {
+func TestEngineAuditModeMinimalAllowNotAudited(t *testing.T) {
 	dslText := `permit(principal is character, action in ["say"], resource is location) when { "player" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
@@ -1490,7 +1490,7 @@ func TestEngine_Audit_ModeMinimal_AllowNotAudited(t *testing.T) {
 	assert.Len(t, entries, 0, "ModeMinimal should not audit allow decisions")
 }
 
-func TestEngine_Audit_ModeMinimal_DenyAudited(t *testing.T) {
+func TestEngineAuditModeMinimalDenyAudited(t *testing.T) {
 	dslText := `forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`
 
 	provider := &mockAttributeProvider{
@@ -1517,7 +1517,7 @@ func TestEngine_Audit_ModeMinimal_DenyAudited(t *testing.T) {
 
 // End-to-end integration tests
 
-func TestEngine_EndToEnd_FullFlow_AdminPermit(t *testing.T) {
+func TestEngineEndToEndAdminPermit(t *testing.T) {
 	dslText := `permit(principal is character, action in ["say"], resource is location) when { "admin" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
@@ -1545,7 +1545,7 @@ func TestEngine_EndToEnd_FullFlow_AdminPermit(t *testing.T) {
 	assert.True(t, decision.Policies()[0].ConditionsMet)
 }
 
-func TestEngine_EndToEnd_FullFlow_DenyOverrides(t *testing.T) {
+func TestEngineEndToEndDenyOverrides(t *testing.T) {
 	dslTexts := []string{
 		`permit(principal is character, action in ["say"], resource is location) when { "player" in principal.character.roles };`,
 		`forbid(principal is character, action in ["say"], resource is location) when { principal.character.banned == true };`,
@@ -1580,7 +1580,7 @@ func TestEngine_EndToEnd_FullFlow_DenyOverrides(t *testing.T) {
 	assert.True(t, decision.Policies()[1].ConditionsMet) // forbid satisfied (wins)
 }
 
-func TestEngine_EndToEnd_FullFlow_SessionResolution(t *testing.T) {
+func TestEngineEndToEndSessionResolution(t *testing.T) {
 	dslText := `permit(principal is character, action in ["say"], resource is location) when { "player" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
@@ -1667,7 +1667,7 @@ func (f *failingProvider) ResolveResource(_ context.Context, _ string) (map[stri
 }
 func (f *failingProvider) Schema() *types.NamespaceSchema { return nil }
 
-func TestEngine_ResolverError_FailsClosed(t *testing.T) {
+func TestEngineResolverErrorFailsClosed(t *testing.T) {
 	// When an attribute provider returns an error, the engine must fail closed:
 	// return a zero-value Decision (denied) and propagate the error.
 	providerErr := fmt.Errorf("database connection lost")
@@ -1722,7 +1722,7 @@ func (p *partialFailingProvider) ResolveResource(_ context.Context, _ string) (m
 }
 func (p *partialFailingProvider) Schema() *types.NamespaceSchema { return nil }
 
-func TestEngine_ResolverPartialBags_DiscardedOnError(t *testing.T) {
+func TestEngineResolverPartialBagsDiscardedOnError(t *testing.T) {
 	// Verify the contract documented in resolver.Resolve's godoc: partial bags
 	// returned alongside errors are for diagnostics only. The engine must NOT
 	// evaluate policies against partial data — it must fail closed with a zero
@@ -1770,7 +1770,7 @@ func (f *failingEnvProvider) Namespace() string                                 
 func (f *failingEnvProvider) Resolve(_ context.Context) (map[string]any, error) { return nil, f.err }
 func (f *failingEnvProvider) Schema() *types.NamespaceSchema                    { return nil }
 
-func TestEngine_EnvironmentResolverError_FailsClosed(t *testing.T) {
+func TestEngineEnvironmentResolverErrorFailsClosed(t *testing.T) {
 	// When an environment provider returns an error, the engine must fail closed:
 	// return a zero-value Decision and propagate the error.
 	envErr := fmt.Errorf("environment provider unavailable")
@@ -1821,7 +1821,7 @@ func (p *panickingProvider) ResolveResource(_ context.Context, _ string) (map[st
 }
 func (p *panickingProvider) Schema() *types.NamespaceSchema { return nil }
 
-func TestEngine_ResolverPanic_FailsClosed(t *testing.T) {
+func TestEngineResolverPanicFailsClosed(t *testing.T) {
 	// When a provider panics, safeResolve recovers the panic and returns an error.
 	// The engine must fail closed: zero Decision + propagated error.
 	registry := attribute.NewSchemaRegistry()
@@ -1895,7 +1895,7 @@ func TestEngine_DegradedMode(t *testing.T) {
 	}
 }
 
-func TestEngine_DegradedMode_ClearResumesNormal(t *testing.T) {
+func TestEngineDegradedModeClearResumesNormal(t *testing.T) {
 	engine, _ := createTestEngine(t, nil)
 	engine.EnterDegradedMode("test")
 
@@ -1912,7 +1912,7 @@ func TestEngine_DegradedMode_ClearResumesNormal(t *testing.T) {
 	assert.NotContains(t, decision.Reason(), "degraded_mode")
 }
 
-func TestEngine_DegradedMode_SystemBypassStillWorks(t *testing.T) {
+func TestEngineDegradedModeSystemBypassStillWorks(t *testing.T) {
 	engine, _ := createTestEngine(t, nil)
 	engine.EnterDegradedMode("test")
 
@@ -1927,13 +1927,13 @@ func TestEngine_DegradedMode_SystemBypassStillWorks(t *testing.T) {
 	assert.Equal(t, types.EffectSystemBypass, decision.Effect())
 }
 
-func TestEngine_OnCorruptForbidPolicy_EntersDegraded(t *testing.T) {
+func TestEngineOnCorruptForbidPolicyEntersDegraded(t *testing.T) {
 	engine, _ := createTestEngine(t, nil)
 	engine.OnPolicyCorruption("policy-123", types.PolicyEffectForbid)
 	assert.True(t, engine.IsDegraded())
 }
 
-func TestEngine_OnCorruptPermitPolicy_DoesNotEnterDegraded(t *testing.T) {
+func TestEngineOnCorruptPermitPolicyDoesNotEnterDegraded(t *testing.T) {
 	engine, _ := createTestEngine(t, nil)
 	engine.OnPolicyCorruption("policy-456", types.PolicyEffectPermit)
 	assert.False(t, engine.IsDegraded())
@@ -1941,7 +1941,7 @@ func TestEngine_OnCorruptPermitPolicy_DoesNotEnterDegraded(t *testing.T) {
 
 // --- CanPerformAction tests ---
 
-func TestEngine_CanPerformAction_AdminPermitted(t *testing.T) {
+func TestEngineCanPerformActionAdminPermitted(t *testing.T) {
 	dslText := `permit(principal is character, action in ["write"], resource is location) when { "admin" in principal.character.roles };`
 
 	provider := &mockAttributeProvider{
@@ -1955,7 +1955,7 @@ func TestEngine_CanPerformAction_AdminPermitted(t *testing.T) {
 	assert.True(t, allowed, "admin should be permitted to write on location type")
 }
 
-func TestEngine_CanPerformAction_NoMatchingPolicy(t *testing.T) {
+func TestEngineCanPerformActionNoMatchingPolicy(t *testing.T) {
 	// Policy only covers "read" but we're checking "write"
 	dslText := `permit(principal is character, action in ["read"], resource is location);`
 
@@ -1966,7 +1966,7 @@ func TestEngine_CanPerformAction_NoMatchingPolicy(t *testing.T) {
 	assert.False(t, allowed, "no write policy → default deny")
 }
 
-func TestEngine_CanPerformAction_ForbidOverridesPermit(t *testing.T) {
+func TestEngineCanPerformActionForbidOverridesPermit(t *testing.T) {
 	permitDSL := `permit(principal is character, action in ["write"], resource is location);`
 	forbidDSL := `forbid(principal is character, action in ["write"], resource is location) when { "banned" in principal.character.roles };`
 
@@ -1981,7 +1981,7 @@ func TestEngine_CanPerformAction_ForbidOverridesPermit(t *testing.T) {
 	assert.False(t, allowed, "forbid should override permit")
 }
 
-func TestEngine_CanPerformAction_DegradedMode(t *testing.T) {
+func TestEngineCanPerformActionDegradedMode(t *testing.T) {
 	engine, _ := createTestEngine(t, &mockSessionResolver{})
 	engine.EnterDegradedMode("test")
 
@@ -1991,7 +1991,7 @@ func TestEngine_CanPerformAction_DegradedMode(t *testing.T) {
 	assert.False(t, allowed, "degraded mode → fail-closed")
 }
 
-func TestEngine_CanPerformAction_ContextCancelled(t *testing.T) {
+func TestEngineCanPerformActionContextCancelled(t *testing.T) {
 	engine, _ := createTestEngine(t, &mockSessionResolver{})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -2003,7 +2003,7 @@ func TestEngine_CanPerformAction_ContextCancelled(t *testing.T) {
 	assert.False(t, allowed)
 }
 
-func TestEngine_CanPerformAction_UnconditionalPermit(t *testing.T) {
+func TestEngineCanPerformActionUnconditionalPermit(t *testing.T) {
 	// Policy with no conditions (always matches)
 	dslText := `permit(principal is character, action in ["say"], resource is location);`
 
@@ -2014,7 +2014,7 @@ func TestEngine_CanPerformAction_UnconditionalPermit(t *testing.T) {
 	assert.True(t, allowed, "unconditional permit should match")
 }
 
-func TestEngine_CanPerformAction_ExactResourcePolicySkipped(t *testing.T) {
+func TestEngineCanPerformActionExactResourcePolicySkipped(t *testing.T) {
 	// Policy targets a specific resource exact match — should be skipped in type-level check
 	dslText := `permit(principal is character, action in ["write"], resource == "location:special-room");`
 
@@ -2052,7 +2052,7 @@ func TestEngine_CanPerformAction_InvalidSubjectFormat(t *testing.T) {
 	}
 }
 
-func TestEngine_CanPerformAction_AttributeResolutionError(t *testing.T) {
+func TestEngineCanPerformActionAttributeResolutionError(t *testing.T) {
 	// A failing attribute provider should cause CanPerformAction to fail closed
 	// and propagate the error so callers can distinguish infra failures from denials.
 	failingProvider := &failingAttributeProvider{
@@ -2080,7 +2080,7 @@ func TestEngine_CanPerformAction_AttributeResolutionError(t *testing.T) {
 	assert.Contains(t, err.Error(), "database connection failed")
 }
 
-func TestEngine_CanPerformAction_PrincipalTypeMismatch(t *testing.T) {
+func TestEngineCanPerformActionPrincipalTypeMismatch(t *testing.T) {
 	// Policy targets "plugin" principal but subject is "character"
 	dslText := `permit(principal is plugin, action in ["write"], resource is location);`
 
@@ -2091,7 +2091,7 @@ func TestEngine_CanPerformAction_PrincipalTypeMismatch(t *testing.T) {
 	assert.False(t, allowed, "character subject should not match plugin-only policy")
 }
 
-func TestEngine_CanPerformAction_ActionMismatch(t *testing.T) {
+func TestEngineCanPerformActionActionMismatch(t *testing.T) {
 	// Policy only permits "read" but we're checking "delete"
 	dslText := `permit(principal is character, action in ["read"], resource is location);`
 
@@ -2102,7 +2102,7 @@ func TestEngine_CanPerformAction_ActionMismatch(t *testing.T) {
 	assert.False(t, allowed, "delete should not match read-only policy")
 }
 
-func TestEngine_CanPerformAction_ResourceTypeMismatch(t *testing.T) {
+func TestEngineCanPerformActionResourceTypeMismatch(t *testing.T) {
 	// Policy targets "exit" resource but we're checking "location"
 	dslText := `permit(principal is character, action in ["write"], resource is exit);`
 
@@ -2113,7 +2113,7 @@ func TestEngine_CanPerformAction_ResourceTypeMismatch(t *testing.T) {
 	assert.False(t, allowed, "location should not match exit-only policy")
 }
 
-func TestEngine_CanPerformAction_NilCompiledPolicySkipped(t *testing.T) {
+func TestEngineCanPerformActionNilCompiledPolicySkipped(t *testing.T) {
 	// A policy with Compiled == nil should be silently skipped
 	registry := attribute.NewSchemaRegistry()
 	resolver := attribute.NewResolver(registry)
@@ -2141,7 +2141,7 @@ func TestEngine_CanPerformAction_NilCompiledPolicySkipped(t *testing.T) {
 	assert.False(t, allowed, "nil-compiled policy should be skipped, resulting in default deny")
 }
 
-func TestEngine_CanPerformAction_ConditionUnsatisfied(t *testing.T) {
+func TestEngineCanPerformActionConditionUnsatisfied(t *testing.T) {
 	// Permit policy exists but condition is not met
 	dslText := `permit(principal is character, action in ["write"], resource is location) when { "admin" in principal.character.roles };`
 
@@ -2157,7 +2157,7 @@ func TestEngine_CanPerformAction_ConditionUnsatisfied(t *testing.T) {
 	assert.False(t, allowed, "unsatisfied condition should result in default deny")
 }
 
-func TestEngine_OnPolicyCorruption_UnknownEffect(t *testing.T) {
+func TestEngineOnPolicyCorruptionUnknownEffect(t *testing.T) {
 	// Exercise the default branch in OnPolicyCorruption
 	engine, _ := createTestEngine(t, nil)
 	engine.OnPolicyCorruption("policy-789", types.PolicyEffect("bogus"))

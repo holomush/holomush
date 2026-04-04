@@ -126,7 +126,7 @@ func TestNewHost(t *testing.T) {
 	require.NotNil(t, host, "NewHost returned nil")
 }
 
-func TestNewHostWithFactory_NilFactory(t *testing.T) {
+func TestNewHostWithFactoryNilFactory(t *testing.T) {
 	defer func() {
 		r := recover()
 		require.NotNil(t, r, "expected panic when factory is nil")
@@ -134,14 +134,14 @@ func TestNewHostWithFactory_NilFactory(t *testing.T) {
 	NewHostWithFactory(nil)
 }
 
-func TestPlugins_Empty(t *testing.T) {
+func TestPluginsEmpty(t *testing.T) {
 	host := NewHost()
 
 	plugins := host.Plugins()
 	assert.Empty(t, plugins, "expected empty plugins list")
 }
 
-func TestPlugins_AfterClose(t *testing.T) {
+func TestPluginsAfterClose(t *testing.T) {
 	host := NewHost()
 
 	err := host.Close(context.Background())
@@ -151,14 +151,14 @@ func TestPlugins_AfterClose(t *testing.T) {
 	assert.Nil(t, plugins, "expected nil plugins after close")
 }
 
-func TestClose_NoPlugins(t *testing.T) {
+func TestCloseNoPlugins(t *testing.T) {
 	host := NewHost()
 
 	err := host.Close(context.Background())
 	assert.NoError(t, err, "Close returned error")
 }
 
-func TestClose_PreventsFurtherLoads(t *testing.T) {
+func TestClosePreventsFurtherLoads(t *testing.T) {
 	host := NewHost()
 
 	err := host.Close(context.Background())
@@ -178,7 +178,7 @@ func TestClose_PreventsFurtherLoads(t *testing.T) {
 	assert.ErrorIs(t, err, ErrHostClosed, "expected ErrHostClosed")
 }
 
-func TestClose_Idempotent(t *testing.T) {
+func TestCloseIdempotent(t *testing.T) {
 	host := NewHost()
 
 	// First close should succeed
@@ -190,7 +190,7 @@ func TestClose_Idempotent(t *testing.T) {
 	assert.NoError(t, err2, "second Close returned error")
 }
 
-func TestLoad_ContextCancelled(t *testing.T) {
+func TestLoadContextCancelled(t *testing.T) {
 	host := NewHost()
 
 	// Create a cancelled context
@@ -214,7 +214,7 @@ func TestLoad_ContextCancelled(t *testing.T) {
 	assert.Contains(t, err.Error(), "context canceled", "expected error to contain 'context canceled'")
 }
 
-func TestUnload_NotLoaded(t *testing.T) {
+func TestUnloadNotLoaded(t *testing.T) {
 	host := NewHost()
 
 	err := host.Unload(context.Background(), "nonexistent")
@@ -222,7 +222,7 @@ func TestUnload_NotLoaded(t *testing.T) {
 	assert.ErrorIs(t, err, ErrPluginNotLoaded, "expected ErrPluginNotLoaded")
 }
 
-func TestUnload_AfterClose(t *testing.T) {
+func TestUnloadAfterClose(t *testing.T) {
 	host := NewHost()
 
 	err := host.Close(context.Background())
@@ -233,7 +233,7 @@ func TestUnload_AfterClose(t *testing.T) {
 	assert.ErrorIs(t, err, ErrHostClosed, "expected ErrHostClosed")
 }
 
-func TestDeliverEvent_NotLoaded(t *testing.T) {
+func TestDeliverEventNotLoaded(t *testing.T) {
 	host := NewHost()
 
 	_, err := host.DeliverEvent(context.Background(), "nonexistent", pluginsdk.Event{})
@@ -241,7 +241,7 @@ func TestDeliverEvent_NotLoaded(t *testing.T) {
 	assert.ErrorIs(t, err, ErrPluginNotLoaded, "expected ErrPluginNotLoaded")
 }
 
-func TestDeliverEvent_HostClosed(t *testing.T) {
+func TestDeliverEventHostClosed(t *testing.T) {
 	host := NewHost()
 
 	err := host.Close(context.Background())
@@ -252,7 +252,7 @@ func TestDeliverEvent_HostClosed(t *testing.T) {
 	assert.ErrorIs(t, err, ErrHostClosed, "expected ErrHostClosed")
 }
 
-func TestDeliverEvent_HandleEventError(t *testing.T) {
+func TestDeliverEventHandleEventError(t *testing.T) {
 	grpcClient := &mockGRPCPluginClient{
 		err: errors.New("plugin crashed"),
 	}
@@ -285,7 +285,7 @@ func TestDeliverEvent_HandleEventError(t *testing.T) {
 	assert.Contains(t, err.Error(), "plugin crashed", "expected error to contain mock error message")
 }
 
-func TestDeliverEvent_NilResponse(t *testing.T) {
+func TestDeliverEventNilResponse(t *testing.T) {
 	grpcClient := &mockGRPCPluginClient{
 		returnNil: true, // Simulates nil response without error (edge case)
 	}
@@ -318,7 +318,7 @@ func TestDeliverEvent_NilResponse(t *testing.T) {
 	assert.Empty(t, emits, "expected empty emits for nil response")
 }
 
-func TestDeliverEvent_Timeout(t *testing.T) {
+func TestDeliverEventTimeout(t *testing.T) {
 	grpcClient := &mockGRPCPluginClient{
 		err: context.DeadlineExceeded, // Simulates timeout
 	}
@@ -350,7 +350,7 @@ func TestDeliverEvent_Timeout(t *testing.T) {
 	assert.ErrorIs(t, err, context.DeadlineExceeded, "expected context.DeadlineExceeded")
 }
 
-func TestLoad_ClientError(t *testing.T) {
+func TestLoadClientError(t *testing.T) {
 	mockClient := &mockPluginClient{
 		clientErr: errors.New("connection failed"),
 	}
@@ -378,7 +378,7 @@ func TestLoad_ClientError(t *testing.T) {
 	assert.True(t, mockClient.killed, "expected client to be killed after connection failure")
 }
 
-func TestLoad_DispenseError(t *testing.T) {
+func TestLoadDispenseError(t *testing.T) {
 	mockClient := &mockPluginClient{
 		protocol: &mockClientProtocol{
 			dispenseErr: errors.New("dispense failed"),
@@ -408,7 +408,7 @@ func TestLoad_DispenseError(t *testing.T) {
 	assert.True(t, mockClient.killed, "expected client to be killed after dispense failure")
 }
 
-func TestLoad_Unload_Plugins_Cycle(t *testing.T) {
+func TestLoadUnloadPluginsCycle(t *testing.T) {
 	host, mockClient := newMockHost(t)
 	ctx := context.Background()
 
@@ -442,7 +442,7 @@ func TestLoad_Unload_Plugins_Cycle(t *testing.T) {
 	assert.True(t, mockClient.killed, "expected mock client to be killed on unload")
 }
 
-func TestLoad_DuplicateName(t *testing.T) {
+func TestLoadDuplicateName(t *testing.T) {
 	host, _ := newMockHost(t)
 	ctx := context.Background()
 
@@ -468,7 +468,7 @@ func TestLoad_DuplicateName(t *testing.T) {
 	assert.ErrorIs(t, err, ErrPluginAlreadyLoaded, "expected ErrPluginAlreadyLoaded")
 }
 
-func TestLoad_ExecutableNotFound(t *testing.T) {
+func TestLoadExecutableNotFound(t *testing.T) {
 	host := NewHost()
 	ctx := context.Background()
 
@@ -490,7 +490,7 @@ func TestLoad_ExecutableNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, os.ErrNotExist, "expected error to wrap os.ErrNotExist")
 }
 
-func TestLoad_ExecutableStatError(t *testing.T) {
+func TestLoadExecutableStatError(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("skipping test when running as root (permissions ignored)")
 	}
@@ -538,7 +538,7 @@ func TestLoad_ExecutableStatError(t *testing.T) {
 	assert.NotContains(t, err.Error(), "not found", "expected permission error, not 'not found'")
 }
 
-func TestLoad_ExecutableNotExecutable(t *testing.T) {
+func TestLoadExecutableNotExecutable(t *testing.T) {
 	host := NewHost()
 	ctx := context.Background()
 
@@ -562,7 +562,7 @@ func TestLoad_ExecutableNotExecutable(t *testing.T) {
 	assert.Contains(t, err.Error(), "not executable", "expected error to mention 'not executable'")
 }
 
-func TestLoad_ExecutablePathTraversal(t *testing.T) {
+func TestLoadExecutablePathTraversal(t *testing.T) {
 	host := NewHost()
 	ctx := context.Background()
 
@@ -589,7 +589,7 @@ func TestLoad_ExecutablePathTraversal(t *testing.T) {
 	assert.Contains(t, err.Error(), "escapes plugin directory", "expected error to mention 'escapes plugin directory'")
 }
 
-func TestLoad_ExecutableSymlinkEscape(t *testing.T) {
+func TestLoadExecutableSymlinkEscape(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("skipping test when running as root")
 	}
@@ -628,7 +628,7 @@ func TestLoad_ExecutableSymlinkEscape(t *testing.T) {
 	assert.Contains(t, err.Error(), "escapes plugin directory", "expected error to mention 'escapes plugin directory'")
 }
 
-func TestDeliverEvent_Success(t *testing.T) {
+func TestDeliverEventSuccess(t *testing.T) {
 	grpcClient := &mockGRPCPluginClient{
 		response: &pluginv1.HandleEventResponse{
 			EmitEvents: []*pluginv1.EmitEvent{
@@ -676,7 +676,7 @@ func TestDeliverEvent_Success(t *testing.T) {
 	assert.Equal(t, pluginsdk.EventTypeSay, emits[0].Type, "expected type 'say'")
 }
 
-func TestClose_KillsPlugins(t *testing.T) {
+func TestCloseKillsPlugins(t *testing.T) {
 	host, mockClient := newMockHost(t)
 	ctx := context.Background()
 
@@ -750,7 +750,7 @@ func TestDeliverEvent_ActorKinds(t *testing.T) {
 	}
 }
 
-func TestLoad_NilBinaryPlugin(t *testing.T) {
+func TestLoadNilBinaryPlugin(t *testing.T) {
 	host := NewHost()
 	ctx := context.Background()
 
@@ -767,7 +767,7 @@ func TestLoad_NilBinaryPlugin(t *testing.T) {
 	assert.Contains(t, err.Error(), "not a binary plugin", "expected error to mention 'not a binary plugin'")
 }
 
-func TestLoad_NilManifest(t *testing.T) {
+func TestLoadNilManifest(t *testing.T) {
 	host := NewHost()
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -777,7 +777,7 @@ func TestLoad_NilManifest(t *testing.T) {
 	assert.Contains(t, err.Error(), "manifest cannot be nil", "expected error to mention 'manifest cannot be nil'")
 }
 
-func TestLoad_EmptyPluginName(t *testing.T) {
+func TestLoadEmptyPluginName(t *testing.T) {
 	host, _ := newMockHost(t)
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -798,7 +798,7 @@ func TestLoad_EmptyPluginName(t *testing.T) {
 	assert.Contains(t, err.Error(), "plugin name cannot be empty", "expected error to mention 'plugin name cannot be empty'")
 }
 
-func TestLoad_InvalidPluginClient(t *testing.T) {
+func TestLoadInvalidPluginClient(t *testing.T) {
 	// Return a non-PluginClient from Dispense to trigger type assertion failure
 	mockClient := &mockPluginClient{
 		protocol: &mockClientProtocol{
@@ -830,7 +830,7 @@ func TestLoad_InvalidPluginClient(t *testing.T) {
 
 // --- DeliverCommand tests ---
 
-func TestDeliverCommand_Success(t *testing.T) {
+func TestDeliverCommandSuccess(t *testing.T) {
 	grpcClient := &mockGRPCPluginClient{
 		cmdResponse: &pluginv1.HandleCommandResponse{
 			Response: &pluginv1.CommandResponse{
@@ -883,7 +883,7 @@ func TestDeliverCommand_Success(t *testing.T) {
 	assert.Equal(t, pluginsdk.EventTypeSay, resp.Events[0].Type)
 }
 
-func TestDeliverCommand_NotLoaded(t *testing.T) {
+func TestDeliverCommandNotLoaded(t *testing.T) {
 	host := NewHost()
 
 	_, err := host.DeliverCommand(context.Background(), "nonexistent", pluginsdk.CommandRequest{})
@@ -891,7 +891,7 @@ func TestDeliverCommand_NotLoaded(t *testing.T) {
 	assert.ErrorIs(t, err, ErrPluginNotLoaded)
 }
 
-func TestDeliverCommand_HostClosed(t *testing.T) {
+func TestDeliverCommandHostClosed(t *testing.T) {
 	host := NewHost()
 
 	err := host.Close(context.Background())
@@ -902,7 +902,7 @@ func TestDeliverCommand_HostClosed(t *testing.T) {
 	assert.ErrorIs(t, err, ErrHostClosed)
 }
 
-func TestDeliverCommand_HandleCommandError(t *testing.T) {
+func TestDeliverCommandHandleCommandError(t *testing.T) {
 	grpcClient := &mockGRPCPluginClient{
 		cmdErr: errors.New("command handler crashed"),
 	}
@@ -934,7 +934,7 @@ func TestDeliverCommand_HandleCommandError(t *testing.T) {
 	assert.Contains(t, err.Error(), "command handler crashed")
 }
 
-func TestDeliverCommand_NilResponse(t *testing.T) {
+func TestDeliverCommandNilResponse(t *testing.T) {
 	grpcClient := &mockGRPCPluginClient{
 		cmdReturnNil: true,
 	}

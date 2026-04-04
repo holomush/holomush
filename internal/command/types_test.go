@@ -20,7 +20,7 @@ import (
 	"github.com/holomush/holomush/internal/world"
 )
 
-func TestCommandEntry_HasRequiredFields(t *testing.T) {
+func TestCommandEntryHasRequiredFields(t *testing.T) {
 	entry := &CommandEntry{
 		Name:         "say",
 		capabilities: []Capability{{Action: "emit", Resource: "stream", Scope: ScopeLocal}},
@@ -39,7 +39,7 @@ func TestCommandEntry_HasRequiredFields(t *testing.T) {
 	assert.Nil(t, entry.Handler(), "Handler() should return nil when not set")
 }
 
-func TestCommandExecution_HasRequiredFields(t *testing.T) {
+func TestCommandExecutionHasRequiredFields(t *testing.T) {
 	// Create a minimal valid CommandExecution to test field access via getters
 	exec, err := NewCommandExecution(CommandExecutionConfig{
 		CharacterID: ulid.Make(),
@@ -62,7 +62,7 @@ func TestCommandExecution_HasRequiredFields(t *testing.T) {
 	_ = exec.InvokedAs
 }
 
-func TestServices_HasAllDependencies(t *testing.T) {
+func TestServicesHasAllDependencies(t *testing.T) {
 	svc := NewTestServices(ServicesConfig{})
 
 	assert.Nil(t, svc.World(), "World service should be nil when not set")
@@ -71,7 +71,7 @@ func TestServices_HasAllDependencies(t *testing.T) {
 	assert.Nil(t, svc.Events(), "Events service should be nil when not set")
 }
 
-func TestNewServices_NilWorld_ReturnsError(t *testing.T) {
+func TestNewServicesNilWorldReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
 		World:   nil,
 		Session: &mockAccess{},
@@ -82,7 +82,7 @@ func TestNewServices_NilWorld_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "World")
 }
 
-func TestNewServices_NilSession_ReturnsError(t *testing.T) {
+func TestNewServicesNilSessionReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
 		World:   &world.Service{},
 		Session: nil,
@@ -93,7 +93,7 @@ func TestNewServices_NilSession_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "Session")
 }
 
-func TestNewServices_NilEngine_ReturnsError(t *testing.T) {
+func TestNewServicesNilEngineReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
 		World:   &world.Service{},
 		Session: &mockAccess{},
@@ -104,7 +104,7 @@ func TestNewServices_NilEngine_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "Engine")
 }
 
-func TestNewServices_NilEvents_ReturnsError(t *testing.T) {
+func TestNewServicesNilEventsReturnsError(t *testing.T) {
 	_, err := NewServices(ServicesConfig{
 		World:   &world.Service{},
 		Session: &mockAccess{},
@@ -115,7 +115,7 @@ func TestNewServices_NilEvents_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "Events")
 }
 
-func TestNewServices_AllValid_ReturnsServices(t *testing.T) {
+func TestNewServicesAllValidReturnsServices(t *testing.T) {
 	worldSvc := &world.Service{}
 	sessionSvc := &mockAccess{}
 	engine := &mockEngine{}
@@ -134,7 +134,7 @@ func TestNewServices_AllValid_ReturnsServices(t *testing.T) {
 	assert.Same(t, eventStore, svc.Events())
 }
 
-func TestNewServices_MultipleNil_ReturnsFirstError(t *testing.T) {
+func TestNewServicesMultipleNilReturnsFirstError(t *testing.T) {
 	// When multiple fields are nil, should return error mentioning
 	// World since that's checked first
 	_, err := NewServices(ServicesConfig{
@@ -190,7 +190,7 @@ func (m *mockEngine) CanPerformAction(_ context.Context, _, _, _, _ string) (boo
 
 // TestDecision_ZeroValue_IsDeny verifies that the zero-value Decision denies access.
 // This is critical for fail-closed security - mocks returning Decision{} must deny by default.
-func TestDecision_ZeroValue_IsDeny(t *testing.T) {
+func TestDecisionZeroValueIsDeny(t *testing.T) {
 	t.Parallel()
 
 	var d types.Decision
@@ -213,7 +213,7 @@ func (m *mockEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULI
 	return nil, nil, nil
 }
 
-func TestCommandHandler_Signature(t *testing.T) {
+func TestCommandHandlerSignature(t *testing.T) {
 	// Verify CommandHandler can be assigned a function with the correct signature
 	var handler CommandHandler = func(_ context.Context, _ *CommandExecution) error {
 		return nil
@@ -223,7 +223,7 @@ func TestCommandHandler_Signature(t *testing.T) {
 
 // Tests for NewCommandEntry constructor
 
-func TestNewCommandEntry_ValidInput_ReturnsEntry(t *testing.T) {
+func TestNewCommandEntryValidInputReturnsEntry(t *testing.T) {
 	handler := func(_ context.Context, _ *CommandExecution) error { return nil }
 
 	entry, err := NewCommandEntry(CommandEntryConfig{
@@ -246,7 +246,7 @@ func TestNewCommandEntry_ValidInput_ReturnsEntry(t *testing.T) {
 	assert.Equal(t, "core", entry.Source)
 }
 
-func TestNewCommandEntry_EmptyName_ReturnsError(t *testing.T) {
+func TestNewCommandEntryEmptyNameReturnsError(t *testing.T) {
 	handler := func(_ context.Context, _ *CommandExecution) error { return nil }
 
 	_, err := NewCommandEntry(CommandEntryConfig{
@@ -258,7 +258,7 @@ func TestNewCommandEntry_EmptyName_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "Name")
 }
 
-func TestNewCommandEntry_NilHandler_ReturnsError(t *testing.T) {
+func TestNewCommandEntryNilHandlerReturnsError(t *testing.T) {
 	_, err := NewCommandEntry(CommandEntryConfig{
 		Name:    "say",
 		Handler: nil,
@@ -268,7 +268,7 @@ func TestNewCommandEntry_NilHandler_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "Handler")
 }
 
-func TestNewCommandEntry_MinimalValid_ReturnsEntry(t *testing.T) {
+func TestNewCommandEntryMinimalValidReturnsEntry(t *testing.T) {
 	handler := func(_ context.Context, _ *CommandExecution) error { return nil }
 
 	entry, err := NewCommandEntry(CommandEntryConfig{
@@ -288,7 +288,7 @@ func TestNewCommandEntry_MinimalValid_ReturnsEntry(t *testing.T) {
 
 // Tests for NewCommandExecution constructor
 
-func TestNewCommandExecution_ValidInput_ReturnsExecution(t *testing.T) {
+func TestNewCommandExecutionValidInputReturnsExecution(t *testing.T) {
 	charID := ulid.Make()
 	locID := ulid.Make()
 	playerID := ulid.Make()
@@ -320,7 +320,7 @@ func TestNewCommandExecution_ValidInput_ReturnsExecution(t *testing.T) {
 	assert.Equal(t, "say", exec.InvokedAs)
 }
 
-func TestNewCommandExecution_ZeroCharacterID_ReturnsError(t *testing.T) {
+func TestNewCommandExecutionZeroCharacterIDReturnsError(t *testing.T) {
 	output := &mockWriter{}
 	services := NewTestServices(ServicesConfig{})
 
@@ -334,7 +334,7 @@ func TestNewCommandExecution_ZeroCharacterID_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "CharacterID")
 }
 
-func TestNewCommandExecution_NilServices_ReturnsError(t *testing.T) {
+func TestNewCommandExecutionNilServicesReturnsError(t *testing.T) {
 	output := &mockWriter{}
 
 	_, err := NewCommandExecution(CommandExecutionConfig{
@@ -347,7 +347,7 @@ func TestNewCommandExecution_NilServices_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "Services")
 }
 
-func TestNewCommandExecution_NilOutput_ReturnsError(t *testing.T) {
+func TestNewCommandExecutionNilOutputReturnsError(t *testing.T) {
 	services := NewTestServices(ServicesConfig{})
 
 	_, err := NewCommandExecution(CommandExecutionConfig{
@@ -360,7 +360,7 @@ func TestNewCommandExecution_NilOutput_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "Output")
 }
 
-func TestNewCommandExecution_MinimalValid_ReturnsExecution(t *testing.T) {
+func TestNewCommandExecutionMinimalValidReturnsExecution(t *testing.T) {
 	charID := ulid.Make()
 	output := &mockWriter{}
 	services := NewTestServices(ServicesConfig{})
@@ -386,7 +386,7 @@ func TestNewCommandExecution_MinimalValid_ReturnsExecution(t *testing.T) {
 
 // Tests for CommandExecution getters - verify immutability
 
-func TestCommandExecution_Getters_ReturnCorrectValues(t *testing.T) {
+func TestCommandExecutionGettersReturnCorrectValues(t *testing.T) {
 	t.Parallel()
 
 	charID := ulid.Make()
@@ -423,7 +423,7 @@ func TestCommandExecution_Getters_ReturnCorrectValues(t *testing.T) {
 	assert.Equal(t, "testcmd", exec.InvokedAs)
 }
 
-func TestCommandExecution_PublicFields_AreModifiable(t *testing.T) {
+func TestCommandExecutionPublicFieldsAreModifiable(t *testing.T) {
 	t.Parallel()
 
 	exec, err := NewCommandExecution(CommandExecutionConfig{
@@ -450,7 +450,7 @@ func (m *mockWriter) Write(p []byte) (n int, err error) {
 
 // Tests for BroadcastSystemMessage
 
-func TestServices_BroadcastSystemMessage_NilEvents_IsNoOp(t *testing.T) {
+func TestServicesBroadcastSystemMessageNilEventsIsNoOp(t *testing.T) {
 	t.Parallel()
 
 	// Create services with nil Events store
@@ -466,7 +466,7 @@ func TestServices_BroadcastSystemMessage_NilEvents_IsNoOp(t *testing.T) {
 
 // Tests for CommandEntry.GetCapabilities defensive copy
 
-func TestCommandEntry_GetCapabilities_ReturnsDefensiveCopy(t *testing.T) {
+func TestCommandEntryGetCapabilitiesReturnsDefensiveCopy(t *testing.T) {
 	t.Parallel()
 
 	capOne := Capability{Action: "read", Resource: "location", Scope: ScopeLocal}
@@ -495,7 +495,7 @@ func TestCommandEntry_GetCapabilities_ReturnsDefensiveCopy(t *testing.T) {
 		"Modifying returned slice should not affect entry")
 }
 
-func TestCommandEntry_GetCapabilities_NilCapabilities_ReturnsNil(t *testing.T) {
+func TestCommandEntryGetCapabilitiesNilCapabilitiesReturnsNil(t *testing.T) {
 	t.Parallel()
 
 	entry, err := NewCommandEntry(CommandEntryConfig{
@@ -509,7 +509,7 @@ func TestCommandEntry_GetCapabilities_NilCapabilities_ReturnsNil(t *testing.T) {
 	assert.Nil(t, caps, "Should return nil when no capabilities set")
 }
 
-func TestCommandEntry_GetCapabilities_EmptyCapabilities_ReturnsEmpty(t *testing.T) {
+func TestCommandEntryGetCapabilitiesEmptyCapabilitiesReturnsEmpty(t *testing.T) {
 	t.Parallel()
 
 	entry, err := NewCommandEntry(CommandEntryConfig{
@@ -526,7 +526,7 @@ func TestCommandEntry_GetCapabilities_EmptyCapabilities_ReturnsEmpty(t *testing.
 
 // Tests for Handler() getter
 
-func TestCommandEntry_Handler_ReturnsHandler(t *testing.T) {
+func TestCommandEntryHandlerReturnsHandler(t *testing.T) {
 	t.Parallel()
 
 	handlerCalled := false
@@ -551,7 +551,7 @@ func TestCommandEntry_Handler_ReturnsHandler(t *testing.T) {
 	assert.True(t, handlerCalled, "Handler should have been called")
 }
 
-func TestCommandEntry_Handler_IsReadOnly(t *testing.T) {
+func TestCommandEntryHandlerIsReadOnly(t *testing.T) {
 	t.Parallel()
 
 	entry, err := NewCommandEntry(CommandEntryConfig{
@@ -569,7 +569,7 @@ func TestCommandEntry_Handler_IsReadOnly(t *testing.T) {
 	assert.NotNil(t, h)
 }
 
-func TestCapability_Validate_Valid(t *testing.T) {
+func TestCapability_ValidateValid(t *testing.T) {
 	tests := []struct {
 		name string
 		cap  Capability
@@ -586,7 +586,7 @@ func TestCapability_Validate_Valid(t *testing.T) {
 	}
 }
 
-func TestCapability_Validate_Invalid(t *testing.T) {
+func TestCapability_ValidateInvalid(t *testing.T) {
 	tests := []struct {
 		name string
 		cap  Capability
@@ -607,13 +607,13 @@ func TestCapability_Validate_Invalid(t *testing.T) {
 	}
 }
 
-func TestCapability_EffectiveScope(t *testing.T) {
+func TestCapabilityEffectiveScope(t *testing.T) {
 	assert.Equal(t, ScopeSelf, Capability{Action: "read", Resource: "character"}.EffectiveScope())
 	assert.Equal(t, ScopeLocal, Capability{Action: "read", Resource: "location", Scope: ScopeLocal}.EffectiveScope())
 	assert.Equal(t, ScopeGlobal, Capability{Action: "emit", Resource: "stream", Scope: ScopeGlobal}.EffectiveScope())
 }
 
-func TestNewCommandEntry_InvalidCapability_ReturnsError(t *testing.T) {
+func TestNewCommandEntry_InvalidCapabilityReturnsError(t *testing.T) {
 	handler := func(_ context.Context, _ *CommandExecution) error { return nil }
 
 	tests := []struct {
@@ -673,7 +673,7 @@ func TestNewCommandEntry_InvalidCapability_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestNewCommandEntry_ValidCapabilities_Succeeds(t *testing.T) {
+func TestNewCommandEntryValidCapabilitiesSucceeds(t *testing.T) {
 	handler := func(_ context.Context, _ *CommandExecution) error { return nil }
 
 	entry, err := NewCommandEntry(CommandEntryConfig{
@@ -690,7 +690,7 @@ func TestNewCommandEntry_ValidCapabilities_Succeeds(t *testing.T) {
 	assert.Len(t, entry.GetCapabilities(), 2)
 }
 
-func TestNewCommandEntry_PluginName_WithCapabilities(t *testing.T) {
+func TestNewCommandEntryPluginNameWithCapabilities(t *testing.T) {
 	entry, err := NewCommandEntry(CommandEntryConfig{
 		Name:       "dig",
 		PluginName: "core-building",
@@ -703,7 +703,7 @@ func TestNewCommandEntry_PluginName_WithCapabilities(t *testing.T) {
 	assert.Len(t, entry.GetCapabilities(), 1)
 }
 
-func TestServices_BroadcastSystemMessage_CreatesCorrectEvent(t *testing.T) {
+func TestServicesBroadcastSystemMessageCreatesCorrectEvent(t *testing.T) {
 	ctx := context.Background()
 	store := core.NewMemoryEventStore()
 	stream := "test-stream"

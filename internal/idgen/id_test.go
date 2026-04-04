@@ -11,12 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNew_ReturnsValidULID(t *testing.T) {
+func TestNewReturnsValidULID(t *testing.T) {
 	got := New()
 	require.NotEqual(t, ulid.ULID{}, got)
 }
 
-func TestNew_ReturnsUniqueValues(t *testing.T) {
+func TestNewReturnsUniqueValuesAcrossCalls(t *testing.T) {
 	seen := make(map[ulid.ULID]struct{}, 100)
 	for range 100 {
 		id := New()
@@ -26,7 +26,7 @@ func TestNew_ReturnsUniqueValues(t *testing.T) {
 	}
 }
 
-func TestNew_HasNonDecreasingTimestamps(t *testing.T) {
+func TestNewReturnsNonDecreasingTimestamps(t *testing.T) {
 	prev := New()
 	for range 10 {
 		next := New()

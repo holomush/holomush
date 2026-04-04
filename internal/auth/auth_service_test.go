@@ -58,7 +58,7 @@ func TestNewAuthService_NilDependencies(t *testing.T) {
 	}
 }
 
-func TestNewAuthServiceWithLogger_NilLogger(t *testing.T) {
+func TestNewAuthServiceWithLoggerRejectsNilLogger(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	playerSessions := mocks.NewMockPlayerSessionRepository(t)
 	hasher := mocks.NewMockPasswordHasher(t)

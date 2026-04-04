@@ -40,7 +40,7 @@ func (writer failingWriter) Write(_ []byte) (int, error) {
 	return writer.n, writer.err
 }
 
-func TestLogOutputError_LogsAtWarnLevel(t *testing.T) {
+func TestLogOutputErrorLogsAtWarnLevel(t *testing.T) {
 	buf := setTestLogger(t)
 
 	ctx := context.Background()
@@ -57,7 +57,7 @@ func TestLogOutputError_LogsAtWarnLevel(t *testing.T) {
 	assert.Contains(t, output, "connection reset by peer")
 }
 
-func TestLogOutputError_IncludesAllStructuredFields(t *testing.T) {
+func TestLogOutputErrorIncludesAllStructuredFields(t *testing.T) {
 	buf := setTestLogger(t)
 
 	ctx := context.Background()
@@ -72,7 +72,7 @@ func TestLogOutputError_IncludesAllStructuredFields(t *testing.T) {
 	assert.Contains(t, output, `"error":"broken pipe"`)
 }
 
-func TestLogOutputError_HandlesZeroBytesWritten(t *testing.T) {
+func TestLogOutputErrorHandlesZeroBytesWritten(t *testing.T) {
 	buf := setTestLogger(t)
 
 	ctx := context.Background()
@@ -103,7 +103,7 @@ func TestLogOutputError_HandlesVariousCommands(t *testing.T) {
 	}
 }
 
-func TestWriteOutput_LogsErrorOnWriteFailure(t *testing.T) {
+func TestWriteOutputLogsErrorOnWriteFailure(t *testing.T) {
 	buf := setTestLogger(t)
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: ulid.MustParse("01HQ1234567890ABCDEFGH1001"),
@@ -119,7 +119,7 @@ func TestWriteOutput_LogsErrorOnWriteFailure(t *testing.T) {
 	assert.Contains(t, output, `"error":"write failed"`)
 }
 
-func TestWriteOutputf_LogsErrorOnWriteFailure(t *testing.T) {
+func TestWriteOutputfLogsErrorOnWriteFailure(t *testing.T) {
 	buf := setTestLogger(t)
 	exec := command.NewTestExecution(command.CommandExecutionConfig{
 		CharacterID: ulid.MustParse("01HQ1234567890ABCDEFGH1002"),

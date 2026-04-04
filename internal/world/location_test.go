@@ -267,7 +267,7 @@ func TestNewLocationWithID(t *testing.T) {
 	})
 }
 
-func TestLocation_Validate_ZeroID(t *testing.T) {
+func TestLocationValidateZeroID(t *testing.T) {
 	loc := &world.Location{
 		ID:   ulid.ULID{}, // zero
 		Name: "Test",

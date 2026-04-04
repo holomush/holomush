@@ -11,17 +11,18 @@ import (
 
 func TestActorKind_String(t *testing.T) {
 	tests := []struct {
+		name     string
 		kind     ActorKind
 		expected string
 	}{
-		{ActorCharacter, "character"},
-		{ActorSystem, "system"},
-		{ActorPlugin, "plugin"},
-		{ActorKind(99), "unknown"}, // Unknown kind
+		{"Character", ActorCharacter, "character"},
+		{"System", ActorSystem, "system"},
+		{"Plugin", ActorPlugin, "plugin"},
+		{"UnknownValue", ActorKind(99), "unknown"},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.expected, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.kind.String())
 		})
 	}

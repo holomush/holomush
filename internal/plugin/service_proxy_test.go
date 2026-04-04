@@ -175,14 +175,14 @@ func (m *mockServiceProxy) Log(context.Context, string, string) {}
 // Compile-time check: mockServiceProxy implements ServiceProxy.
 var _ plugins.ServiceProxy = (*mockServiceProxy)(nil)
 
-func TestServiceProxy_InterfaceSatisfaction(t *testing.T) {
+func TestServiceProxyInterfaceSatisfaction(t *testing.T) {
 	// The compile-time check above guarantees this, but an explicit test
 	// makes failures visible in test output rather than only at build time.
 	var proxy plugins.ServiceProxy = &mockServiceProxy{}
 	assert.NotNil(t, proxy)
 }
 
-func TestServiceProxy_MethodCount(t *testing.T) {
+func TestServiceProxyMethodCount(t *testing.T) {
 	proxyType := reflect.TypeOf((*plugins.ServiceProxy)(nil)).Elem()
 
 	// All operations from the spec's parity table plus task-specified additions:
@@ -210,7 +210,7 @@ func TestServiceProxy_MethodCount(t *testing.T) {
 		"ServiceProxy method count changed — update this test and the parity table if intentional")
 }
 
-func TestServiceProxy_ExpectedMethods(t *testing.T) {
+func TestServiceProxyExpectedMethods(t *testing.T) {
 	proxyType := reflect.TypeOf((*plugins.ServiceProxy)(nil)).Elem()
 
 	expected := []string{

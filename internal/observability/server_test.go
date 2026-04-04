@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestServer_Metrics(t *testing.T) {
+func TestServerMetricsEndpointReturnsPrometheusOutput(t *testing.T) {
 	// Create server with always-ready checker
 	server := NewServer("127.0.0.1:0", func() bool { return true })
 
@@ -72,7 +72,7 @@ func TestServer_Metrics(t *testing.T) {
 	assert.Contains(t, bodyStr2, "holomush_requests_total", "expected holomush_requests_total metric")
 }
 
-func TestServer_LivenessReturns200(t *testing.T) {
+func TestServerLivenessReturns200(t *testing.T) {
 	server := NewServer("127.0.0.1:0", nil)
 
 	_, err := server.Start()
@@ -95,7 +95,7 @@ func TestServer_LivenessReturns200(t *testing.T) {
 	assert.Equal(t, "ok", strings.TrimSpace(string(body)), "expected body 'ok'")
 }
 
-func TestServer_ReadinessWhenReady(t *testing.T) {
+func TestServerReadinessReturns200WhenReady(t *testing.T) {
 	// Create server with always-ready checker
 	server := NewServer("127.0.0.1:0", func() bool { return true })
 
@@ -119,7 +119,7 @@ func TestServer_ReadinessWhenReady(t *testing.T) {
 	assert.Equal(t, "ok", strings.TrimSpace(string(body)), "expected body 'ok'")
 }
 
-func TestServer_ReadinessWhenNotReady(t *testing.T) {
+func TestServerReadinessReturns503WhenNotReady(t *testing.T) {
 	// Create server with never-ready checker
 	server := NewServer("127.0.0.1:0", func() bool { return false })
 
@@ -143,7 +143,7 @@ func TestServer_ReadinessWhenNotReady(t *testing.T) {
 	assert.Equal(t, "not ready", strings.TrimSpace(string(body)), "expected body 'not ready'")
 }
 
-func TestServer_ReadinessWithNilChecker(t *testing.T) {
+func TestServerReadinessReturns200WhenCheckerIsNil(t *testing.T) {
 	// Create server with nil readiness checker (should default to ready)
 	server := NewServer("127.0.0.1:0", nil)
 
@@ -162,7 +162,14 @@ func TestServer_ReadinessWithNilChecker(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "expected status 200 with nil checker")
 }
 
-func TestServer_DoubleStartFails(t *testing.T) {
+func TestServerStartFailsWithInvalidAddress(t *testing.T) {
+	server := NewServer("not-a-valid-address:99999", nil)
+
+	_, err := server.Start()
+	assert.Error(t, err, "expected error when starting server with invalid address")
+}
+
+func TestServerStartFailsWhenAlreadyRunning(t *testing.T) {
 	server := NewServer("127.0.0.1:0", nil)
 
 	_, err := server.Start()
@@ -178,7 +185,7 @@ func TestServer_DoubleStartFails(t *testing.T) {
 	assert.Error(t, err, "expected error on double start")
 }
 
-func TestServer_StopIdempotent(t *testing.T) {
+func TestServerStopSucceedsWhenCalledTwice(t *testing.T) {
 	server := NewServer("127.0.0.1:0", nil)
 
 	// Stop without start should not error
@@ -188,7 +195,7 @@ func TestServer_StopIdempotent(t *testing.T) {
 	assert.NoError(t, err, "stop without start should not error")
 }
 
-func TestServer_ErrorChannelReportsServeErrors(t *testing.T) {
+func TestServerErrorChannelReportsServeErrors(t *testing.T) {
 	// This test proves the bug fix: when the server encounters an error after Start() returns,
 	// the caller can now detect it via the error channel.
 
@@ -222,7 +229,7 @@ func TestServer_ErrorChannelReportsServeErrors(t *testing.T) {
 	_ = server.Stop(ctx)
 }
 
-func TestServer_ErrorChannelClosesOnNormalShutdown(t *testing.T) {
+func TestServerErrorChannelClosesOnNormalShutdown(t *testing.T) {
 	// Verify the error channel closes gracefully on normal shutdown (no error sent)
 	server := NewServer("127.0.0.1:0", nil)
 
@@ -247,7 +254,7 @@ func TestServer_ErrorChannelClosesOnNormalShutdown(t *testing.T) {
 	}
 }
 
-func TestServer_ConcurrentStopCalls(t *testing.T) {
+func TestServerStopIsSafeConcurrently(t *testing.T) {
 	// This test verifies that Stop() uses CompareAndSwap for atomic state transition.
 	// Multiple concurrent Stop() calls should be safe and idempotent.
 	// Only one Stop() should actually perform the shutdown; others should return nil.
@@ -298,7 +305,7 @@ func TestServer_ConcurrentStopCalls(t *testing.T) {
 	assert.NotEmpty(t, server.Addr(), "server should be running after Start")
 }
 
-func TestServer_StopContextTimeout(t *testing.T) {
+func TestServerStopReturnsErrorWhenContextExpires(t *testing.T) {
 	// This test verifies that when Stop() times out due to active connections,
 	// the server returns an error and restores the running state so it can be retried.
 	server := NewServer("127.0.0.1:0", nil)
@@ -362,7 +369,7 @@ func TestServer_StopContextTimeout(t *testing.T) {
 	_ = server.Stop(cleanupCtx)
 }
 
-func TestServer_StopContextTimeoutRestoresState(t *testing.T) {
+func TestServerStopRestoresStateWhenContextExpires(t *testing.T) {
 	// This test specifically verifies that when Stop() fails due to context timeout,
 	// the running state is restored to true, allowing Stop() to be retried.
 	// This tests the state restoration logic at line 149-150 in server.go.
@@ -432,7 +439,7 @@ func TestServer_StopContextTimeoutRestoresState(t *testing.T) {
 	_ = server.Stop(cleanupCtx)
 }
 
-func TestServer_MetricsIncrement(t *testing.T) {
+func TestServerMetricsIncrementUpdatesCounters(t *testing.T) {
 	server := NewServer("127.0.0.1:0", func() bool { return true })
 
 	_, err := server.Start()
@@ -466,7 +473,7 @@ func TestServer_MetricsIncrement(t *testing.T) {
 	assert.Contains(t, bodyStr, `holomush_requests_total{status="success",type="command"} 1`, "expected command request counter to be 1")
 }
 
-func TestRecordEngineFailure(t *testing.T) {
+func TestRecordEngineFailureIncrementsCounter(t *testing.T) {
 	server := NewServer("127.0.0.1:0", func() bool { return true })
 
 	_, err := server.Start()
@@ -497,7 +504,7 @@ func TestRecordEngineFailure(t *testing.T) {
 		"expected engine failures counter for checkCapability")
 }
 
-func TestRecordCircuitBreakerTrip(t *testing.T) {
+func TestRecordCircuitBreakerTripIncrementsCounter(t *testing.T) {
 	server := NewServer("127.0.0.1:0", func() bool { return true })
 
 	_, err := server.Start()

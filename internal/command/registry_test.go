@@ -19,7 +19,7 @@ func noopHandler(_ context.Context, _ *CommandExecution) error {
 	return nil
 }
 
-func TestRegistry_RegisterAndGet(t *testing.T) {
+func TestRegistryRegisterAndGet(t *testing.T) {
 	reg := NewRegistry()
 
 	handler := func(_ context.Context, _ *CommandExecution) error {
@@ -47,13 +47,13 @@ func TestRegistry_RegisterAndGet(t *testing.T) {
 	assert.Equal(t, "core", got.Source)
 }
 
-func TestRegistry_GetNotFound(t *testing.T) {
+func TestRegistryGetNotFound(t *testing.T) {
 	reg := NewRegistry()
 	_, ok := reg.Get("nonexistent")
 	assert.False(t, ok)
 }
 
-func TestRegistry_All(t *testing.T) {
+func TestRegistryAll(t *testing.T) {
 	reg := NewRegistry()
 
 	_ = reg.Register(CommandEntry{Name: "look", handler: noopHandler, Source: "core"})
@@ -71,14 +71,14 @@ func TestRegistry_All(t *testing.T) {
 	assert.True(t, names["say"])
 }
 
-func TestRegistry_AllEmpty(t *testing.T) {
+func TestRegistryAllEmpty(t *testing.T) {
 	reg := NewRegistry()
 	all := reg.All()
 	assert.Empty(t, all)
 	assert.NotNil(t, all) // Should return empty slice, not nil
 }
 
-func TestRegistry_ConflictWarning(t *testing.T) {
+func TestRegistryConflictWarning(t *testing.T) {
 	reg := NewRegistry()
 
 	_ = reg.Register(CommandEntry{Name: "look", handler: noopHandler, Source: "core"})
@@ -90,7 +90,7 @@ func TestRegistry_ConflictWarning(t *testing.T) {
 	assert.Equal(t, "plugin-a", got.Source)
 }
 
-func TestRegistry_ConflictWarning_LogOutput(t *testing.T) {
+func TestRegistryConflictWarningLogOutput(t *testing.T) {
 	var buf bytes.Buffer
 	handler := slog.NewTextHandler(&buf, nil)
 	oldLogger := slog.Default()
@@ -110,7 +110,7 @@ func TestRegistry_ConflictWarning_LogOutput(t *testing.T) {
 	assert.Contains(t, logOutput, "plugin-override")
 }
 
-func TestRegistry_ConcurrentAccess(t *testing.T) {
+func TestRegistryConcurrentAccess(t *testing.T) {
 	reg := NewRegistry()
 
 	// Pre-populate with some commands
@@ -151,7 +151,7 @@ func TestRegistry_ConcurrentAccess(t *testing.T) {
 	assert.True(t, ok)
 }
 
-func TestRegistry_AllReturnsCopy(t *testing.T) {
+func TestRegistryAllReturnsCopy(t *testing.T) {
 	reg := NewRegistry()
 	_ = reg.Register(CommandEntry{Name: "look", handler: noopHandler, Source: "core"})
 
@@ -168,7 +168,7 @@ func TestRegistry_AllReturnsCopy(t *testing.T) {
 	assert.NotEqual(t, all1[0].Name, all2[0].Name) // all1 was modified, all2 was not
 }
 
-func TestRegistry_Register_EmptyName(t *testing.T) {
+func TestRegistryRegisterEmptyName(t *testing.T) {
 	reg := NewRegistry()
 
 	err := reg.Register(CommandEntry{
@@ -180,7 +180,7 @@ func TestRegistry_Register_EmptyName(t *testing.T) {
 	assert.ErrorIs(t, err, ErrEmptyCommandName)
 }
 
-func TestRegistry_Register_NilHandler(t *testing.T) {
+func TestRegistryRegisterNilHandler(t *testing.T) {
 	reg := NewRegistry()
 
 	err := reg.Register(CommandEntry{
@@ -192,7 +192,7 @@ func TestRegistry_Register_NilHandler(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNilHandler)
 }
 
-func TestRegistry_Register_InvalidName(t *testing.T) {
+func TestRegistry_RegisterInvalidName(t *testing.T) {
 	reg := NewRegistry()
 
 	tests := []struct {
@@ -245,7 +245,7 @@ func TestRegistry_Register_InvalidName(t *testing.T) {
 	}
 }
 
-func TestRegistry_Unregister(t *testing.T) {
+func TestRegistryUnregister(t *testing.T) {
 	reg := NewRegistry()
 
 	_ = reg.Register(CommandEntry{Name: "say", handler: noopHandler, Source: "core"})
@@ -265,7 +265,7 @@ func TestRegistry_Unregister(t *testing.T) {
 	assert.Len(t, reg.All(), 1)
 }
 
-func TestRegistry_Unregister_NotFound(t *testing.T) {
+func TestRegistryUnregisterNotFound(t *testing.T) {
 	reg := NewRegistry()
 
 	err := reg.Unregister("nonexistent")
@@ -273,7 +273,7 @@ func TestRegistry_Unregister_NotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "nonexistent")
 }
 
-func TestRegistry_Unregister_DisabledCommandDispatch(t *testing.T) {
+func TestRegistryUnregisterDisabledCommandDispatch(t *testing.T) {
 	reg := NewRegistry()
 
 	_ = reg.Register(CommandEntry{Name: "say", handler: noopHandler, Source: "core"})

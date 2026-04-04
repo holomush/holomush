@@ -65,7 +65,7 @@ func TestScanPoliciesForRemovedAttributes(t *testing.T) {
 	assert.Empty(t, refs)
 }
 
-func TestSchemaRegistry_UpdateNamespace(t *testing.T) {
+func TestSchemaRegistryUpdateNamespace(t *testing.T) {
 	reg := NewSchemaRegistry()
 	oldSchema := &types.NamespaceSchema{Attributes: map[string]types.AttrType{
 		"name": types.AttrTypeString,
@@ -86,7 +86,7 @@ func TestSchemaRegistry_UpdateNamespace(t *testing.T) {
 	assert.False(t, reg.IsRegistered("character", "role"))
 }
 
-func TestSchemaRegistry_RemoveNamespace_BlockedByPolicies(t *testing.T) {
+func TestSchemaRegistryRemoveNamespaceBlockedByPolicies(t *testing.T) {
 	reg := NewSchemaRegistry()
 	require.NoError(t, reg.Register("plugin_x", &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{"val": types.AttrTypeString},
@@ -96,7 +96,7 @@ func TestSchemaRegistry_RemoveNamespace_BlockedByPolicies(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestSchemaRegistry_RemoveNamespace_AllowedWhenUnreferenced(t *testing.T) {
+func TestSchemaRegistryRemoveNamespaceAllowedWhenUnreferenced(t *testing.T) {
 	reg := NewSchemaRegistry()
 	require.NoError(t, reg.Register("plugin_x", &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{"val": types.AttrTypeString},
@@ -107,7 +107,7 @@ func TestSchemaRegistry_RemoveNamespace_AllowedWhenUnreferenced(t *testing.T) {
 	assert.False(t, reg.HasNamespace("plugin_x"))
 }
 
-func TestDetectSchemaChanges_NilAttributes(t *testing.T) {
+func TestDetectSchemaChangesNilAttributes(t *testing.T) {
 	// Empty old, something new — all additions
 	changes := DetectSchemaChanges(
 		&types.NamespaceSchema{Attributes: map[string]types.AttrType{}},
@@ -117,7 +117,7 @@ func TestDetectSchemaChanges_NilAttributes(t *testing.T) {
 	assert.Empty(t, changes.Removed)
 }
 
-func TestUpdateNamespace_NilSchemaReturnsError(t *testing.T) {
+func TestUpdateNamespaceNilSchemaReturnsError(t *testing.T) {
 	reg := NewSchemaRegistry()
 	require.NoError(t, reg.Register("ns", &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{"a": types.AttrTypeString},

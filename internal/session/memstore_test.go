@@ -268,7 +268,7 @@ func TestMemStore_WatchSession_ChannelClosedOnDelete(t *testing.T) {
 	assert.False(t, ok, "channel should be closed")
 }
 
-func TestMemStore_ConcurrentAccess(t *testing.T) {
+func TestMemStore_ConcurrentAccess(_ *testing.T) {
 	store := NewMemStore()
 	ctx := context.Background()
 
@@ -296,7 +296,6 @@ func TestMemStore_ConcurrentAccess(t *testing.T) {
 
 	wg.Wait()
 	// No assertion needed — the test passes if the race detector finds no issues.
-	assert.True(t, true)
 }
 
 func TestMemStore_FindByCharacterName(t *testing.T) {

@@ -691,15 +691,17 @@ func TestPostgresEventStore_InitGameID(t *testing.T) {
 	}
 }
 
-func TestPostgresEventStore_Close(t *testing.T) {
+func TestPostgresEventStoreCloseDoesNotPanic(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err, "failed to create mock")
 
 	store := &PostgresEventStore{pool: mock}
-	store.Close()
 
-	// Verify the mock was closed (pgxmock tracks this internally)
-	// After Close(), pool operations should fail
+	// Close delegates to pool.Close() which is a void method.
+	// Verify it completes without panic.
+	require.NotPanics(t, func() {
+		store.Close()
+	})
 }
 
 func TestErrSystemInfoNotFound(t *testing.T) {

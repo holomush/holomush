@@ -67,7 +67,7 @@ func (m *mockEnvironmentProvider) Schema() *types.NamespaceSchema {
 	return m.schema
 }
 
-func TestAttributeProvider_Interface(t *testing.T) {
+func TestAttributeProviderInterface(t *testing.T) {
 	provider := &mockAttributeProvider{
 		namespace: "character",
 		subjectAttrs: map[string]any{
@@ -108,7 +108,7 @@ func TestAttributeProvider_Interface(t *testing.T) {
 	assert.Equal(t, types.AttrTypeFloat, schema.Attributes["level"])
 }
 
-func TestEnvironmentProvider_Interface(t *testing.T) {
+func TestEnvironmentProviderInterface(t *testing.T) {
 	provider := &mockEnvironmentProvider{
 		namespace: "env",
 		attrs: map[string]any{
@@ -141,7 +141,7 @@ func TestEnvironmentProvider_Interface(t *testing.T) {
 	assert.Equal(t, types.AttrTypeBool, schema.Attributes["maintenance"])
 }
 
-func TestAttributeProvider_NumericTypesAsFloat64(t *testing.T) {
+func TestAttributeProviderNumericTypesAsFloat64(t *testing.T) {
 	// This test verifies that providers return numeric attributes as float64
 	// as per the spec requirement
 	provider := &mockAttributeProvider{

@@ -21,9 +21,8 @@ func (m *mockPluginRegistry) IsPluginLoaded(name string) bool {
 	return m.loaded[name]
 }
 
-func TestPluginProvider_Namespace(t *testing.T) {
-	p := NewPluginProvider(&mockPluginRegistry{})
-	assert.Equal(t, "plugin", p.Namespace())
+func TestPluginProviderContract(t *testing.T) {
+	assertProviderContract(t, NewPluginProvider(&mockPluginRegistry{}))
 }
 
 func TestPluginProvider_ResolveSubject(t *testing.T) {
@@ -66,14 +65,14 @@ func TestPluginProvider_ResolveSubject(t *testing.T) {
 	}
 }
 
-func TestPluginProvider_NilRegistry_DeniesAll(t *testing.T) {
+func TestPluginProviderNilRegistryDeniesAll(t *testing.T) {
 	p := NewPluginProvider(nil)
 	attrs, err := p.ResolveSubject(context.Background(), "any-plugin")
 	require.NoError(t, err)
 	assert.Nil(t, attrs, "nil registry must deny attribute resolution (fail-closed)")
 }
 
-func TestPluginProvider_SetRegistry(t *testing.T) {
+func TestPluginProviderSetRegistry(t *testing.T) {
 	p := NewPluginProvider(nil)
 
 	// Before SetRegistry: returns nil for any plugin
@@ -96,14 +95,7 @@ func TestPluginProvider_SetRegistry(t *testing.T) {
 	assert.Nil(t, attrs)
 }
 
-func TestPluginProvider_ResolveResource(t *testing.T) {
-	p := NewPluginProvider(&mockPluginRegistry{})
-	attrs, err := p.ResolveResource(context.Background(), "anything")
-	require.NoError(t, err)
-	assert.Nil(t, attrs)
-}
-
-func TestPluginProvider_Schema(t *testing.T) {
+func TestPluginProviderSchema(t *testing.T) {
 	p := NewPluginProvider(&mockPluginRegistry{})
 	schema := p.Schema()
 	require.NotNil(t, schema)

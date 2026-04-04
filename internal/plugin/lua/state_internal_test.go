@@ -12,8 +12,8 @@ import (
 	luavm "github.com/yuin/gopher-lua"
 )
 
-// TestNewState_LibraryLoadError tests the error path when a library fails to load.
-func TestNewState_LibraryLoadError(t *testing.T) {
+// TestNewStateLibraryLoadError tests the error path when a library fails to load.
+func TestNewStateLibraryLoadError(t *testing.T) {
 	// Create a library loader that always errors
 	failingLoader := func(L *luavm.LState) int {
 		L.RaiseError("simulated library load failure")

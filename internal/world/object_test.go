@@ -230,7 +230,7 @@ func TestObject_SetContainment(t *testing.T) {
 	})
 }
 
-func TestContainment_Validate_AllThreeSet(t *testing.T) {
+func TestContainmentValidateAllThreeSet(t *testing.T) {
 	locID := ulid.Make()
 	charID := ulid.Make()
 	objID := ulid.Make()
@@ -246,7 +246,7 @@ func TestContainment_Validate_AllThreeSet(t *testing.T) {
 	assert.ErrorIs(t, err, world.ErrInvalidContainment)
 }
 
-func TestContainment_Validate_ErrorContext(t *testing.T) {
+func TestContainment_ValidateErrorContext(t *testing.T) {
 	locID := ulid.Make()
 	charID := ulid.Make()
 

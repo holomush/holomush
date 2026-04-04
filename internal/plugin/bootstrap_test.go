@@ -37,13 +37,13 @@ func newTestRunner() *BootstrapRunner {
 	return NewBootstrapRunner(slog.Default())
 }
 
-func TestBootstrapRunner_EmptySucceeds(t *testing.T) {
+func TestBootstrapRunnerEmptySucceeds(t *testing.T) {
 	r := newTestRunner()
 	err := r.RunAll(context.Background())
 	require.NoError(t, err)
 }
 
-func TestBootstrapRunner_SinglePluginRuns(t *testing.T) {
+func TestBootstrapRunnerSinglePluginRuns(t *testing.T) {
 	r := newTestRunner()
 	p := &mockBootstrapPlugin{priority: 100, name: "a"}
 	r.Register(p)
@@ -53,7 +53,7 @@ func TestBootstrapRunner_SinglePluginRuns(t *testing.T) {
 	assert.True(t, p.called)
 }
 
-func TestBootstrapRunner_PriorityOrdering(t *testing.T) {
+func TestBootstrapRunnerPriorityOrdering(t *testing.T) {
 	r := newTestRunner()
 	order := []string{}
 	r.Register(&mockBootstrapPlugin{priority: 300, name: "300", callOrder: &order})
@@ -65,7 +65,7 @@ func TestBootstrapRunner_PriorityOrdering(t *testing.T) {
 	assert.Equal(t, []string{"100", "200", "300"}, order)
 }
 
-func TestBootstrapRunner_SamePriorityPreservesRegistrationOrder(t *testing.T) {
+func TestBootstrapRunnerSamePriorityPreservesRegistrationOrder(t *testing.T) {
 	r := newTestRunner()
 	order := []string{}
 	r.Register(&mockBootstrapPlugin{priority: 100, name: "A", callOrder: &order})
@@ -77,7 +77,7 @@ func TestBootstrapRunner_SamePriorityPreservesRegistrationOrder(t *testing.T) {
 	assert.Equal(t, []string{"A", "B", "C"}, order)
 }
 
-func TestBootstrapRunner_ErrorStopsExecution(t *testing.T) {
+func TestBootstrapRunnerErrorStopsExecution(t *testing.T) {
 	r := newTestRunner()
 	order := []string{}
 	errB := errors.New("bootstrap failed")
@@ -98,7 +98,7 @@ func TestBootstrapRunner_ErrorStopsExecution(t *testing.T) {
 	assert.Equal(t, []string{"A", "B"}, order)
 }
 
-func TestBootstrapRunner_ContextCancellation(t *testing.T) {
+func TestBootstrapRunnerContextCancellation(t *testing.T) {
 	r := newTestRunner()
 	p := &mockBootstrapPlugin{priority: 100, name: "a"}
 	r.Register(p)

@@ -17,8 +17,8 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 )
 
-// TestMetrics_MetricsRegistered verifies all metric descriptors are registered.
-func TestMetrics_MetricsRegistered(t *testing.T) {
+// TestMetricsMetricsRegistered verifies all metric descriptors are registered.
+func TestMetricsMetricsRegistered(t *testing.T) {
 	families, err := prometheus.DefaultGatherer.Gather()
 	require.NoError(t, err)
 
@@ -37,8 +37,8 @@ func TestMetrics_MetricsRegistered(t *testing.T) {
 	}
 }
 
-// TestMetrics_RecordEvaluationMetrics verifies the helper function increments counters.
-func TestMetrics_RecordEvaluationMetrics(t *testing.T) {
+// TestMetricsRecordEvaluationMetrics verifies the helper function increments counters.
+func TestMetricsRecordEvaluationMetrics(t *testing.T) {
 	initialCount := testutil.ToFloat64(policyEvaluations.WithLabelValues("unknown", "allow"))
 
 	RecordEvaluationMetrics(50*time.Millisecond, types.EffectAllow)
@@ -47,8 +47,8 @@ func TestMetrics_RecordEvaluationMetrics(t *testing.T) {
 	assert.Equal(t, initialCount+1, newCount)
 }
 
-// TestMetrics_EvaluateDuration_Recorded verifies that engine.Evaluate() records metrics.
-func TestMetrics_EvaluateDuration_Recorded(t *testing.T) {
+// TestMetricsEvaluateDurationRecorded verifies that engine.Evaluate() records metrics.
+func TestMetricsEvaluateDurationRecorded(t *testing.T) {
 	dslText := `permit(principal is character, action in ["read"], resource is location);`
 
 	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{})

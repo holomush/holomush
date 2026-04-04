@@ -32,7 +32,7 @@ func writeFile(t *testing.T, path string, content []byte) {
 	require.NoError(t, os.WriteFile(path, content, 0o600))
 }
 
-func TestManager_Discover(t *testing.T) {
+func TestManagerDiscover(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create plugin directories
@@ -60,7 +60,7 @@ lua-plugin:
 	assert.Equal(t, echoDir, manifests[0].Dir)
 }
 
-func TestManager_Discover_SkipsInvalidPlugins(t *testing.T) {
+func TestManagerDiscoverSkipsInvalidPlugins(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 
@@ -87,7 +87,7 @@ lua-plugin:
 	assert.Len(t, manifests, 1, "len(manifests) should be 1 (valid only)")
 }
 
-func TestManager_Discover_EmptyDirectory(t *testing.T) {
+func TestManagerDiscoverEmptyDirectory(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 	mkdirAll(t, pluginsDir)
@@ -98,7 +98,7 @@ func TestManager_Discover_EmptyDirectory(t *testing.T) {
 	assert.Empty(t, manifests, "len(manifests) should be 0 for empty directory")
 }
 
-func TestManager_Discover_NonExistentDirectory(t *testing.T) {
+func TestManagerDiscoverNonExistentDirectory(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "non-existent-plugins")
 
@@ -108,7 +108,7 @@ func TestManager_Discover_NonExistentDirectory(t *testing.T) {
 	assert.Empty(t, manifests, "len(manifests) should be 0 for non-existent directory")
 }
 
-func TestManager_Discover_SkipsFilesNotDirectories(t *testing.T) {
+func TestManagerDiscoverSkipsFilesNotDirectories(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 	mkdirAll(t, pluginsDir)
@@ -133,7 +133,7 @@ lua-plugin:
 	assert.Len(t, manifests, 1, "len(manifests) should be 1 (files should be skipped)")
 }
 
-func TestManager_Discover_SkipsDirWithoutManifest(t *testing.T) {
+func TestManagerDiscoverSkipsDirWithoutManifest(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 
@@ -149,7 +149,7 @@ func TestManager_Discover_SkipsDirWithoutManifest(t *testing.T) {
 	assert.Empty(t, manifests, "len(manifests) should be 0 (dir without manifest should be skipped)")
 }
 
-func TestManager_Discover_MultiplePlugins(t *testing.T) {
+func TestManagerDiscoverMultiplePlugins(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 
@@ -186,7 +186,7 @@ func TestManager_Discover_MultiplePlugins(t *testing.T) {
 	assert.Equal(t, expected, names)
 }
 
-func TestManager_Discover_BinaryPlugin(t *testing.T) {
+func TestManagerDiscoverBinaryPlugin(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 
@@ -207,7 +207,7 @@ binary-plugin:
 	assert.Equal(t, plugins.TypeBinary, manifests[0].Manifest.Type)
 }
 
-func TestManager_ListPlugins_NoPluginsLoaded(t *testing.T) {
+func TestManagerListPluginsNoPluginsLoaded(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 	mkdirAll(t, pluginsDir)
@@ -217,7 +217,7 @@ func TestManager_ListPlugins_NoPluginsLoaded(t *testing.T) {
 	assert.Empty(t, plugins, "ListPlugins() should return empty slice before any plugins loaded")
 }
 
-func TestManager_LoadAll_LuaPlugins(t *testing.T) {
+func TestManagerLoadAllLuaPlugins(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 
@@ -244,7 +244,7 @@ lua-plugin:
 	assert.Equal(t, "echo-bot", plugins[0])
 }
 
-func TestManager_LoadAll_SkipsInvalidManifests(t *testing.T) {
+func TestManagerLoadAllSkipsInvalidManifests(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 
@@ -270,7 +270,7 @@ func TestManager_LoadAll_SkipsInvalidManifests(t *testing.T) {
 	assert.Len(t, plugins, 1, "ListPlugins() should return 1 (invalid should be skipped)")
 }
 
-func TestManager_LoadAll_SkipsLuaPluginsWithoutHost(t *testing.T) {
+func TestManagerLoadAllSkipsLuaPluginsWithoutHost(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 
@@ -290,7 +290,7 @@ func TestManager_LoadAll_SkipsLuaPluginsWithoutHost(t *testing.T) {
 	assert.Empty(t, plugins, "ListPlugins() should be empty (no LuaHost)")
 }
 
-func TestManager_LoadAll_SkipsBinaryPlugins(t *testing.T) {
+func TestManagerLoadAllSkipsBinaryPlugins(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 
@@ -308,7 +308,7 @@ func TestManager_LoadAll_SkipsBinaryPlugins(t *testing.T) {
 	assert.Empty(t, plugins, "ListPlugins() should be empty (binary not supported)")
 }
 
-func TestManager_LoadAll_FailsOnLuaSyntaxError(t *testing.T) {
+func TestManagerLoadAllFailsOnLuaSyntaxError(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 
@@ -330,7 +330,7 @@ func TestManager_LoadAll_FailsOnLuaSyntaxError(t *testing.T) {
 	assert.Empty(t, plugins, "ListPlugins() should be empty (bad Lua syntax)")
 }
 
-func TestManager_Close_WithoutLuaHost(t *testing.T) {
+func TestManagerCloseWithoutLuaHost(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 	mkdirAll(t, pluginsDir)
@@ -341,7 +341,7 @@ func TestManager_Close_WithoutLuaHost(t *testing.T) {
 	assert.NoError(t, mgr.Close(context.Background()))
 }
 
-func TestManager_Close(t *testing.T) {
+func TestManagerClose(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 
@@ -365,7 +365,7 @@ func TestManager_Close(t *testing.T) {
 	assert.Empty(t, mgr.ListPlugins(), "ListPlugins() after Close() should be empty")
 }
 
-func TestManager_Close_PropagatesHostError(t *testing.T) {
+func TestManagerClosePropagatesHostError(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 
@@ -400,7 +400,7 @@ func TestManager_Close_PropagatesHostError(t *testing.T) {
 // Compile-time check: Manager implements attribute.PluginRegistry.
 var _ attribute.PluginRegistry = (*plugins.Manager)(nil)
 
-func TestManager_IsPluginLoaded(t *testing.T) {
+func TestManagerIsPluginLoaded(t *testing.T) {
 	m := plugins.NewManager("/nonexistent")
 	assert.False(t, m.IsPluginLoaded("echo-bot"), "no plugins loaded yet")
 }

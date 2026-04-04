@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestEngine_HandleSay(t *testing.T) {
+func TestEngineHandleSayStoresEventWithCharacterNameAndMessage(t *testing.T) {
 	store := NewMemoryEventStore()
 	engine := NewEngine(store)
 
@@ -40,7 +40,7 @@ func TestEngine_HandleSay(t *testing.T) {
 	assert.Equal(t, "Hello, world!", payload.Message)
 }
 
-func TestEngine_HandlePose(t *testing.T) {
+func TestEngineHandlePoseStoresEventWithCharacterNameAndAction(t *testing.T) {
 	store := NewMemoryEventStore()
 	engine := NewEngine(store)
 
@@ -67,7 +67,7 @@ func TestEngine_HandlePose(t *testing.T) {
 	assert.Equal(t, "waves hello", payload.Action)
 }
 
-func TestEngine_HandleSay_AppendsToStore(t *testing.T) {
+func TestEngineHandleSayAppendsEventToLocationStream(t *testing.T) {
 	store := NewMemoryEventStore()
 	engine := NewEngine(store)
 
@@ -89,7 +89,7 @@ func TestEngine_HandleSay_AppendsToStore(t *testing.T) {
 	assert.Equal(t, stream, events[0].Stream)
 }
 
-func TestEngine_HandlePose_AppendsToStore(t *testing.T) {
+func TestEngineHandlePoseAppendsEventToLocationStream(t *testing.T) {
 	store := NewMemoryEventStore()
 	engine := NewEngine(store)
 
@@ -140,7 +140,7 @@ func (e *storeError) Error() string {
 	return e.msg
 }
 
-func TestEngine_HandleSay_StoreError(t *testing.T) {
+func TestEngineHandleSayPropagatesStoreError(t *testing.T) {
 	store := &failingEventStore{}
 	engine := NewEngine(store)
 
@@ -154,7 +154,7 @@ func TestEngine_HandleSay_StoreError(t *testing.T) {
 	assert.ErrorIs(t, err, errStoreFailure, "Should wrap store error")
 }
 
-func TestEngine_HandlePose_StoreError(t *testing.T) {
+func TestEngineHandlePosePropagatesStoreError(t *testing.T) {
 	store := &failingEventStore{}
 	engine := NewEngine(store)
 
@@ -168,7 +168,7 @@ func TestEngine_HandlePose_StoreError(t *testing.T) {
 	assert.ErrorIs(t, err, errStoreFailure, "Should wrap store error")
 }
 
-func TestEngine_HandleConnect(t *testing.T) {
+func TestEngineHandleConnectStoresArriveEventWithCharacterPayload(t *testing.T) {
 	store := NewMemoryEventStore()
 	engine := NewEngine(store)
 
@@ -197,7 +197,7 @@ func TestEngine_HandleConnect(t *testing.T) {
 	assert.Equal(t, "Alyssa", payload.CharacterName)
 }
 
-func TestEngine_HandleDisconnect(t *testing.T) {
+func TestEngineHandleDisconnectStoresLeaveEventWithReasonPayload(t *testing.T) {
 	store := NewMemoryEventStore()
 	engine := NewEngine(store)
 

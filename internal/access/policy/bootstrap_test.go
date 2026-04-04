@@ -138,7 +138,7 @@ func (h *captureHandler) WithGroup(_ string) slog.Handler { return h }
 
 // --- Tests ---
 
-func TestBootstrap_CreatesPartitionsFirst(t *testing.T) {
+func TestBootstrapCreatesPartitionsFirst(t *testing.T) {
 	mockStore := newBootstrapMockStore()
 	partitions := &mockPartitionManager{}
 	compiler := NewCompiler(emptySchema())
@@ -152,7 +152,7 @@ func TestBootstrap_CreatesPartitionsFirst(t *testing.T) {
 	assert.Equal(t, 3, partitions.months, "must create 3 months of partitions")
 }
 
-func TestBootstrap_PartitionFailureIsFatal(t *testing.T) {
+func TestBootstrapPartitionFailureIsFatal(t *testing.T) {
 	mockStore := newBootstrapMockStore()
 	partitions := &mockPartitionManager{err: fmt.Errorf("partition creation failed")}
 	compiler := NewCompiler(emptySchema())
@@ -164,7 +164,7 @@ func TestBootstrap_PartitionFailureIsFatal(t *testing.T) {
 	assert.Contains(t, err.Error(), "partition")
 }
 
-func TestBootstrap_SeedsAllPoliciesOnEmptyStore(t *testing.T) {
+func TestBootstrapSeedsAllPoliciesOnEmptyStore(t *testing.T) {
 	mockStore := newBootstrapMockStore()
 	partitions := &mockPartitionManager{}
 	compiler := NewCompiler(emptySchema())
@@ -193,7 +193,7 @@ func TestBootstrap_SeedsAllPoliciesOnEmptyStore(t *testing.T) {
 	}
 }
 
-func TestBootstrap_SkipsExistingSeedPolicy(t *testing.T) {
+func TestBootstrapSkipsExistingSeedPolicy(t *testing.T) {
 	mockStore := newBootstrapMockStore()
 	seedVersion := 2 // matches current SeedVersion for seed:player-self-access
 	mockStore.policies["seed:player-self-access"] = &store.StoredPolicy{
@@ -218,7 +218,7 @@ func TestBootstrap_SkipsExistingSeedPolicy(t *testing.T) {
 	}
 }
 
-func TestBootstrap_WarnsOnAdminCollision(t *testing.T) {
+func TestBootstrapWarnsOnAdminCollision(t *testing.T) {
 	mockStore := newBootstrapMockStore()
 	mockStore.policies["seed:player-self-access"] = &store.StoredPolicy{
 		Name:   "seed:player-self-access",
@@ -239,7 +239,7 @@ func TestBootstrap_WarnsOnAdminCollision(t *testing.T) {
 	assert.NotEmpty(t, lc.warnings, "should log warning about admin collision")
 }
 
-func TestBootstrap_UpgradesSeedVersion(t *testing.T) {
+func TestBootstrapUpgradesSeedVersion(t *testing.T) {
 	mockStore := newBootstrapMockStore()
 	// Use version 1 as the stored version; the current seed is version 2.
 	oldVersion := 1
@@ -271,7 +271,7 @@ func TestBootstrap_UpgradesSeedVersion(t *testing.T) {
 	assert.Contains(t, upgraded.ChangeNote, "Auto-upgraded from seed v1 to v2")
 }
 
-func TestBootstrap_SkipSeedMigrations(t *testing.T) {
+func TestBootstrapSkipSeedMigrationsOption(t *testing.T) {
 	mockStore := newBootstrapMockStore()
 	oldVersion := 0
 	mockStore.policies["seed:player-self-access"] = &store.StoredPolicy{
@@ -298,7 +298,7 @@ func TestBootstrap_SkipSeedMigrations(t *testing.T) {
 	}
 }
 
-func TestBootstrap_CompilationErrorIsFatal(t *testing.T) {
+func TestBootstrapCompilationErrorIsFatal(t *testing.T) {
 	// Use a custom seed list with an invalid DSL to test fatal compilation errors.
 	// We test this by confirming the bootstrap function validates all seeds compile.
 	// Since we can't inject bad seeds into SeedPolicies(), we verify the error path
@@ -314,7 +314,7 @@ func TestBootstrap_CompilationErrorIsFatal(t *testing.T) {
 	require.Error(t, err, "bootstrap must fail when store create fails")
 }
 
-func TestBootstrap_CreatedPoliciesHaveValidCompiledAST(t *testing.T) {
+func TestBootstrapCreatedPoliciesHaveValidCompiledAST(t *testing.T) {
 	mockStore := newBootstrapMockStore()
 	partitions := &mockPartitionManager{}
 	compiler := NewCompiler(emptySchema())
@@ -333,7 +333,7 @@ func TestBootstrap_CreatedPoliciesHaveValidCompiledAST(t *testing.T) {
 	}
 }
 
-func TestBootstrap_SetsCorrectEffect(t *testing.T) {
+func TestBootstrapSetsCorrectPolicyEffect(t *testing.T) {
 	mockStore := newBootstrapMockStore()
 	partitions := &mockPartitionManager{}
 	compiler := NewCompiler(emptySchema())
@@ -357,7 +357,7 @@ func TestBootstrap_SetsCorrectEffect(t *testing.T) {
 	assert.Equal(t, 1, forbidCount, "expected 1 forbid policy")
 }
 
-func TestBootstrap_NilSeedVersionNotUpgraded(t *testing.T) {
+func TestBootstrapNilSeedVersionNotUpgraded(t *testing.T) {
 	mockStore := newBootstrapMockStore()
 	// Simulate a legacy policy with nil SeedVersion
 	mockStore.policies["seed:player-self-access"] = &store.StoredPolicy{
@@ -384,27 +384,27 @@ func TestBootstrap_NilSeedVersionNotUpgraded(t *testing.T) {
 
 // --- IsNotFound tests ---
 
-func TestIsNotFound_TrueForPolicyNotFound(t *testing.T) {
+func TestIsNotFoundReturnsTrueForPolicyNotFound(t *testing.T) {
 	err := oops.Code("POLICY_NOT_FOUND").Errorf("not found")
 	assert.True(t, store.IsNotFound(err))
 }
 
-func TestIsNotFound_FalseForOtherErrors(t *testing.T) {
+func TestIsNotFoundReturnsFalseForOtherErrors(t *testing.T) {
 	err := oops.Code("POLICY_CREATE_FAILED").Errorf("create failed")
 	assert.False(t, store.IsNotFound(err))
 }
 
-func TestIsNotFound_FalseForNil(t *testing.T) {
+func TestIsNotFoundReturnsFalseForNil(t *testing.T) {
 	assert.False(t, store.IsNotFound(nil))
 }
 
-func TestIsNotFound_FalseForPlainError(t *testing.T) {
+func TestIsNotFoundReturnsFalseForPlainError(t *testing.T) {
 	assert.False(t, store.IsNotFound(fmt.Errorf("plain error")))
 }
 
 // --- UpdateSeed tests ---
 
-func TestUpdateSeed_SkipsIfDSLMatches(t *testing.T) {
+func TestUpdateSeedSkipsWhenDSLMatches(t *testing.T) {
 	mockStore := newBootstrapMockStore()
 	mockStore.policies["seed:player-self-access"] = &store.StoredPolicy{
 		Name:    "seed:player-self-access",
@@ -428,7 +428,7 @@ func TestUpdateSeed_SkipsIfDSLMatches(t *testing.T) {
 	assert.Empty(t, mockStore.updated, "no update when DSL matches")
 }
 
-func TestUpdateSeed_WarnsOnAdminCustomization(t *testing.T) {
+func TestUpdateSeedWarnsOnAdminCustomization(t *testing.T) {
 	mockStore := newBootstrapMockStore()
 	mockStore.policies["seed:player-self-access"] = &store.StoredPolicy{
 		Name:    "seed:player-self-access",
@@ -453,7 +453,7 @@ func TestUpdateSeed_WarnsOnAdminCustomization(t *testing.T) {
 	assert.NotEmpty(t, lc.warnings, "should warn about admin customization")
 }
 
-func TestUpdateSeed_UpdatesUncustomizedPolicy(t *testing.T) {
+func TestUpdateSeedUpdatesUncustomizedPolicy(t *testing.T) {
 	oldDSL := `permit(principal is character, action in ["read", "write"], resource is character) when { resource.id == principal.id };`
 	newDSL := `permit(principal is character, action in ["read", "write", "delete"], resource is character) when { resource.id == principal.id };`
 	mockStore := newBootstrapMockStore()
@@ -481,7 +481,7 @@ func TestUpdateSeed_UpdatesUncustomizedPolicy(t *testing.T) {
 	assert.Equal(t, "added delete action", mockStore.updated[0].ChangeNote)
 }
 
-func TestUpdateSeed_FailsForNonSeedPolicy(t *testing.T) {
+func TestUpdateSeedFailsForNonSeedPolicy(t *testing.T) {
 	mockStore := newBootstrapMockStore()
 	mockStore.policies["seed:player-self-access"] = &store.StoredPolicy{
 		Name:   "seed:player-self-access",
@@ -503,7 +503,7 @@ func TestUpdateSeed_FailsForNonSeedPolicy(t *testing.T) {
 	require.Error(t, err, "should fail when source is not seed")
 }
 
-func TestUpdateSeed_FailsForMissingPolicy(t *testing.T) {
+func TestUpdateSeedFailsForMissingPolicy(t *testing.T) {
 	mockStore := newBootstrapMockStore()
 	compiler := NewCompiler(emptySchema())
 	_, logger := newLogCapture()

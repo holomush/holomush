@@ -42,7 +42,7 @@ func TestFmtBold(t *testing.T) {
 	assert.Contains(t, resultStr, "\x1b[0m", "should contain reset ANSI code")
 }
 
-func TestFmtBold_EmptyString(t *testing.T) {
+func TestFmtBoldEmptyString(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -154,7 +154,7 @@ func TestFmtColor(t *testing.T) {
 	}
 }
 
-func TestFmtColor_UnknownColor(t *testing.T) {
+func TestFmtColorUnknownColor(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -188,7 +188,7 @@ func TestFmtList(t *testing.T) {
 	assert.Contains(t, resultStr, "  - potion")
 }
 
-func TestFmtList_Empty(t *testing.T) {
+func TestFmtListEmpty(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -200,7 +200,7 @@ func TestFmtList_Empty(t *testing.T) {
 	assert.Equal(t, "", result.String())
 }
 
-func TestFmtList_SingleItem(t *testing.T) {
+func TestFmtListSingleItem(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -233,7 +233,7 @@ func TestFmtPairs(t *testing.T) {
 	assert.Contains(t, resultStr, "MP: 50")
 }
 
-func TestFmtPairs_Empty(t *testing.T) {
+func TestFmtPairsEmpty(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -279,7 +279,7 @@ func TestFmtTable(t *testing.T) {
 	assert.Contains(t, resultStr, "---")
 }
 
-func TestFmtTable_Empty(t *testing.T) {
+func TestFmtTableEmpty(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -291,7 +291,7 @@ func TestFmtTable_Empty(t *testing.T) {
 	assert.Equal(t, "", result.String())
 }
 
-func TestFmtTable_NoHeaders(t *testing.T) {
+func TestFmtTableNoHeaders(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -355,7 +355,7 @@ func TestFmtHeader(t *testing.T) {
 	assert.Contains(t, resultStr, "\x1b[0m", "should contain reset ANSI code")
 }
 
-func TestFmtHeader_Empty(t *testing.T) {
+func TestFmtHeaderEmpty(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -390,7 +390,7 @@ func TestFmtParse(t *testing.T) {
 	assert.Contains(t, resultStr, "text")
 }
 
-func TestFmtParse_WhitespaceCodes(t *testing.T) {
+func TestFmtParseWhitespaceCodes(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -406,7 +406,7 @@ func TestFmtParse_WhitespaceCodes(t *testing.T) {
 	assert.Contains(t, resultStr, "word    tab", "should convert %t to 4 spaces")
 }
 
-func TestFmtParse_256Color(t *testing.T) {
+func TestFmtParse256Color(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -420,7 +420,7 @@ func TestFmtParse_256Color(t *testing.T) {
 	assert.Contains(t, resultStr, "\x1b[38;5;196m", "should contain 256-color ANSI code")
 }
 
-func TestFmtParse_Empty(t *testing.T) {
+func TestFmtParseEmpty(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -432,7 +432,7 @@ func TestFmtParse_Empty(t *testing.T) {
 	assert.Equal(t, "", result.String())
 }
 
-func TestFmtParse_UnknownCodes(t *testing.T) {
+func TestFmtParseUnknownCodes(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -478,7 +478,7 @@ func TestEmitLocation(t *testing.T) {
 	assert.Contains(t, payload, `"Alice"`)
 }
 
-func TestEmitLocation_EmptyPayload(t *testing.T) {
+func TestEmitLocationEmptyPayload(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -552,7 +552,7 @@ func TestEmitGlobal(t *testing.T) {
 // holo.emit.flush()
 // =============================================================================
 
-func TestEmitFlush_MultipleEvents(t *testing.T) {
+func TestEmitFlushMultipleEvents(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -581,7 +581,7 @@ func TestEmitFlush_MultipleEvents(t *testing.T) {
 	assert.Equal(t, "global", event3.RawGetString("stream").String())
 }
 
-func TestEmitFlush_ClearsBuffer(t *testing.T) {
+func TestEmitFlushClearsBuffer(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -601,7 +601,7 @@ func TestEmitFlush_ClearsBuffer(t *testing.T) {
 	assert.Equal(t, lua.LTNil, secondResult.Type())
 }
 
-func TestEmitFlush_Empty(t *testing.T) {
+func TestEmitFlushEmpty(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -616,7 +616,7 @@ func TestEmitFlush_Empty(t *testing.T) {
 // Nested payload conversion
 // =============================================================================
 
-func TestEmitLocation_NestedPayload(t *testing.T) {
+func TestEmitLocationNestedPayload(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -646,7 +646,7 @@ func TestEmitLocation_NestedPayload(t *testing.T) {
 	assert.Contains(t, payload, `"shield"`)
 }
 
-func TestEmitLocation_NumericValues(t *testing.T) {
+func TestEmitLocationNumericValues(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -668,7 +668,7 @@ func TestEmitLocation_NumericValues(t *testing.T) {
 	assert.Contains(t, payload, `"alive":true`)
 }
 
-func TestEmitLocation_NilValue(t *testing.T) {
+func TestEmitLocationNilValue(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -694,7 +694,7 @@ func TestEmitLocation_NilValue(t *testing.T) {
 // Edge cases and error paths
 // =============================================================================
 
-func TestFmtTable_RowsWithDifferentLengths(t *testing.T) {
+func TestFmtTableRowsWithDifferentLengths(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -718,7 +718,7 @@ func TestFmtTable_RowsWithDifferentLengths(t *testing.T) {
 	assert.Contains(t, resultStr, "1")
 }
 
-func TestFmtPairs_MixedTypes(t *testing.T) {
+func TestFmtPairsMixedTypes(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -734,7 +734,7 @@ func TestFmtPairs_MixedTypes(t *testing.T) {
 	assert.Contains(t, resultStr, "flag: true")
 }
 
-func TestFmtList_WithNumbers(t *testing.T) {
+func TestFmtListWithNumbers(t *testing.T) {
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
 
@@ -754,7 +754,7 @@ func TestFmtList_WithNumbers(t *testing.T) {
 // Integration test: Simulated plugin using stdlib
 // =============================================================================
 
-func TestIntegration_PluginUsesStdlib(t *testing.T) {
+func TestIntegrationPluginUsesStdlib(t *testing.T) {
 	// This test simulates a realistic plugin that uses both fmt and emit functions
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()
@@ -799,7 +799,7 @@ func TestIntegration_PluginUsesStdlib(t *testing.T) {
 	assert.Contains(t, payload, `\u001b[1m`, "should contain bold ANSI from %xh (JSON-escaped)")
 }
 
-func TestIntegration_WhoCommand(t *testing.T) {
+func TestIntegrationWhoCommand(t *testing.T) {
 	// Simulates a 'who' command that formats a table and emits to the character
 	L := newLuaStateWithStdlib(t)
 	defer L.Close()

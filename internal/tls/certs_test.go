@@ -26,7 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGenerateCA(t *testing.T) {
+func TestGenerateCAReturnsValidSelfSignedCertificate(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "01HX7MZABC123DEF456GHJ"
 
@@ -68,7 +68,7 @@ func TestGenerateCA(t *testing.T) {
 	assert.True(t, x509Cert.IsCA, "Loaded certificate is not a CA")
 }
 
-func TestGenerateServerCert(t *testing.T) {
+func TestGenerateServerCertReturnsValidCertSignedByCA(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "01HX7MZABC123DEF456GHJ"
 
@@ -109,7 +109,7 @@ func TestGenerateServerCert(t *testing.T) {
 	assert.False(t, x509Cert.IsCA, "Server certificate should not be a CA")
 }
 
-func TestSaveAndLoadCertificates(t *testing.T) {
+func TestSaveAndLoadCertificatesRoundTripsCorrectly(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "01HX7MZABC123DEF456GHJ"
 
@@ -145,7 +145,7 @@ func TestSaveAndLoadCertificates(t *testing.T) {
 	assert.Equal(t, expectedCN, loadedCA.Certificate.Subject.CommonName)
 }
 
-func TestLoadCA_MissingFiles(t *testing.T) {
+func TestLoadCAFailsWhenFilesAreMissing(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Try to load from empty directory
@@ -161,7 +161,7 @@ func TestLoadCA_MissingFiles(t *testing.T) {
 	assert.Error(t, err, "LoadCA() should return error when key file is missing")
 }
 
-func TestSaveCertificates_OnlyCA(t *testing.T) {
+func TestSaveCertificatesWritesOnlyCAWhenServerCertIsNil(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "01HX7MZABC123DEF456GHJ"
 
@@ -187,7 +187,7 @@ func TestSaveCertificates_OnlyCA(t *testing.T) {
 	}
 }
 
-func TestGameIDExtraction(t *testing.T) {
+func TestGameIDExtractionParsesURIFromCertificate(t *testing.T) {
 	gameID := "01HX7MZABC123DEF456GHJ"
 
 	ca, err := GenerateCA(gameID)
@@ -205,7 +205,7 @@ func TestGameIDExtraction(t *testing.T) {
 	assert.Equal(t, gameID, extractedID)
 }
 
-func TestGenerateCA_URIFormat(t *testing.T) {
+func TestGenerateCAIncludesGameIDAsURISAN(t *testing.T) {
 	gameID := "01HX7MZABC123DEF456GHJ"
 
 	ca, err := GenerateCA(gameID)
@@ -226,7 +226,7 @@ func TestGenerateCA_URIFormat(t *testing.T) {
 	assert.True(t, found, "CA certificate missing URI SAN holomush://game/%s", gameID)
 }
 
-func TestGenerateClientCert(t *testing.T) {
+func TestGenerateClientCertReturnsValidCertSignedByCA(t *testing.T) {
 	gameID := "01HX7MZABC123DEF456GHJ"
 
 	ca, err := GenerateCA(gameID)
@@ -251,7 +251,7 @@ func TestGenerateClientCert(t *testing.T) {
 	assert.Contains(t, clientCert.Certificate.ExtKeyUsage, x509.ExtKeyUsageClientAuth, "Client certificate missing ClientAuth ExtKeyUsage")
 }
 
-func TestSaveClientCert(t *testing.T) {
+func TestSaveClientCertWritesPEMFilesToDisk(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "01HX7MZABC123DEF456GHJ"
 
@@ -284,7 +284,7 @@ func TestSaveClientCert(t *testing.T) {
 	assert.Equal(t, "holomush-gateway", x509Cert.Subject.CommonName)
 }
 
-func TestLoadServerTLS(t *testing.T) {
+func TestLoadServerTLSReturnsConfigWithMutualAuth(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "01HX7MZABC123DEF456GHJ"
 
@@ -310,7 +310,7 @@ func TestLoadServerTLS(t *testing.T) {
 	assert.Equal(t, uint16(tls.VersionTLS13), config.MinVersion)
 }
 
-func TestLoadClientTLS(t *testing.T) {
+func TestLoadClientTLSReturnsConfigWithClientCert(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "01HX7MZABC123DEF456GHJ"
 
@@ -340,7 +340,7 @@ func TestLoadClientTLS(t *testing.T) {
 	assert.Equal(t, uint16(tls.VersionTLS13), config.MinVersion)
 }
 
-func TestLoadServerTLS_MissingFiles(t *testing.T) {
+func TestLoadServerTLSFailsWhenFilesAreMissing(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Try to load from empty directory
@@ -348,7 +348,7 @@ func TestLoadServerTLS_MissingFiles(t *testing.T) {
 	assert.Error(t, err, "LoadServerTLS() should return error for missing files")
 }
 
-func TestLoadClientTLS_MissingFiles(t *testing.T) {
+func TestLoadClientTLSFailsWhenFilesAreMissing(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Try to load from empty directory
@@ -360,7 +360,7 @@ func TestLoadClientTLS_MissingFiles(t *testing.T) {
 // Certificate Expiration Tests (e55.34)
 // =============================================================================
 
-func TestCertificateNearExpiration(t *testing.T) {
+func TestCheckCertificateExpirationReturnsTrueWhenNearExpiry(t *testing.T) {
 	gameID := "01HX7MZABC123DEF456GHJ"
 
 	ca, err := GenerateCA(gameID)
@@ -378,7 +378,7 @@ func TestCertificateNearExpiration(t *testing.T) {
 	assert.NotEmpty(t, status.Warning, "Expected warning message for near-expiration certificate")
 }
 
-func TestCertificateExpired(t *testing.T) {
+func TestCheckCertificateExpirationReturnsTrueWhenExpired(t *testing.T) {
 	gameID := "01HX7MZABC123DEF456GHJ"
 
 	ca, err := GenerateCA(gameID)
@@ -395,7 +395,7 @@ func TestCertificateExpired(t *testing.T) {
 	assert.Less(t, status.DaysUntilExpiration, 0, "DaysUntilExpiration should be < 0 for expired cert")
 }
 
-func TestCertificateValid(t *testing.T) {
+func TestCheckCertificateExpirationReturnsFalseWhenValid(t *testing.T) {
 	gameID := "01HX7MZABC123DEF456GHJ"
 
 	ca, err := GenerateCA(gameID)
@@ -413,7 +413,7 @@ func TestCertificateValid(t *testing.T) {
 	assert.GreaterOrEqual(t, status.DaysUntilExpiration, 360, "DaysUntilExpiration should be >= 360 for 1-year cert")
 }
 
-func TestCertificateRotation(t *testing.T) {
+func TestCertificateRotationGeneratesNewCertsWhenExpired(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "01HX7MZABC123DEF456GHJ"
 
@@ -457,7 +457,7 @@ func TestCertificateRotation(t *testing.T) {
 // Invalid Certificate Tests (e55.35)
 // =============================================================================
 
-func TestSelfSignedCertWithoutCA(t *testing.T) {
+func TestSelfSignedCertFailsVerificationWithoutCA(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "01HX7MZABC123DEF456GHJ"
 
@@ -486,7 +486,7 @@ func TestSelfSignedCertWithoutCA(t *testing.T) {
 	}
 }
 
-func TestWrongHostnameInCertificate(t *testing.T) {
+func TestWrongHostnameInCertificateFailsValidation(t *testing.T) {
 	gameID := "01HX7MZABC123DEF456GHJ"
 
 	ca, err := GenerateCA(gameID)
@@ -503,29 +503,29 @@ func TestWrongHostnameInCertificate(t *testing.T) {
 		expectErrPart string
 	}{
 		{
-			name:        "valid localhost",
+			name:        "localhost is accepted",
 			hostname:    "localhost",
 			expectValid: true,
 		},
 		{
-			name:        "valid game hostname",
+			name:        "game hostname is accepted",
 			hostname:    "holomush-" + gameID,
 			expectValid: true,
 		},
 		{
-			name:          "wrong hostname",
+			name:          "unrelated hostname is rejected",
 			hostname:      "wrong.example.com",
 			expectValid:   false,
 			expectErrPart: "hostname",
 		},
 		{
-			name:          "different game id",
+			name:          "hostname with different game id is rejected",
 			hostname:      "holomush-different-game",
 			expectValid:   false,
 			expectErrPart: "hostname",
 		},
 		{
-			name:          "empty hostname",
+			name:          "empty hostname is rejected",
 			hostname:      "",
 			expectValid:   false,
 			expectErrPart: "hostname",
@@ -547,7 +547,7 @@ func TestWrongHostnameInCertificate(t *testing.T) {
 	}
 }
 
-func TestMismatchedKeyAndCertPair(t *testing.T) {
+func TestMismatchedKeyAndCertPairFailsToLoad(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "01HX7MZABC123DEF456GHJ"
 
@@ -582,7 +582,7 @@ func TestMismatchedKeyAndCertPair(t *testing.T) {
 	}
 }
 
-func TestValidateCertificateChain_ValidChain(t *testing.T) {
+func TestValidateCertificateChainSucceedsForValidChain(t *testing.T) {
 	gameID := "01HX7MZABC123DEF456GHJ"
 
 	ca, err := GenerateCA(gameID)
@@ -596,7 +596,7 @@ func TestValidateCertificateChain_ValidChain(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestLoadCertificate_InvalidPEM(t *testing.T) {
+func TestLoadCertificateFailsForInvalidPEM(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Write invalid PEM data
@@ -612,7 +612,7 @@ func TestLoadCertificate_InvalidPEM(t *testing.T) {
 	assert.Nil(t, block, "pem.Decode() should return nil for invalid PEM")
 }
 
-func TestClientCertForServerAuth(t *testing.T) {
+func TestClientCertFailsWhenUsedForServerAuth(t *testing.T) {
 	gameID := "01HX7MZABC123DEF456GHJ"
 
 	ca, err := GenerateCA(gameID)
@@ -633,7 +633,7 @@ func TestClientCertForServerAuth(t *testing.T) {
 	}
 }
 
-func TestServerCertForClientAuth(t *testing.T) {
+func TestServerCertFailsWhenUsedForClientAuth(t *testing.T) {
 	gameID := "01HX7MZABC123DEF456GHJ"
 
 	ca, err := GenerateCA(gameID)
@@ -746,7 +746,7 @@ func containsAny(s string, substrings []string) bool {
 // Additional Coverage Tests (e55.69)
 // =============================================================================
 
-func TestLoadCA_InvalidCertPEM(t *testing.T) {
+func TestLoadCAFailsForInvalidCertPEM(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create valid key but invalid cert PEM
@@ -770,7 +770,7 @@ func TestLoadCA_InvalidCertPEM(t *testing.T) {
 	assert.Contains(t, err.Error(), "decode CA certificate PEM")
 }
 
-func TestLoadCA_InvalidKeyPEM(t *testing.T) {
+func TestLoadCAFailsForInvalidKeyPEM(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "test-game"
 
@@ -795,7 +795,7 @@ func TestLoadCA_InvalidKeyPEM(t *testing.T) {
 	assert.Contains(t, err.Error(), "decode CA key PEM")
 }
 
-func TestLoadCA_InvalidCertificateData(t *testing.T) {
+func TestLoadCAFailsForInvalidCertificateData(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	certPath := filepath.Join(tmpDir, "root-ca.crt")
@@ -816,7 +816,7 @@ func TestLoadCA_InvalidCertificateData(t *testing.T) {
 	errutil.AssertErrorContext(t, err, "operation", "parse CA certificate")
 }
 
-func TestLoadCA_InvalidKeyData(t *testing.T) {
+func TestLoadCAFailsForInvalidKeyData(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "test-game"
 
@@ -842,7 +842,7 @@ func TestLoadCA_InvalidKeyData(t *testing.T) {
 	errutil.AssertErrorContext(t, err, "operation", "parse CA key")
 }
 
-func TestLoadServerTLS_InvalidCAPEM(t *testing.T) {
+func TestLoadServerTLSFailsForInvalidCAPEM(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "test-game"
 
@@ -869,7 +869,7 @@ func TestLoadServerTLS_InvalidCAPEM(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to add CA certificate")
 }
 
-func TestLoadClientTLS_InvalidCAPEM(t *testing.T) {
+func TestLoadClientTLSFailsForInvalidCAPEM(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "test-game"
 
@@ -896,7 +896,7 @@ func TestLoadClientTLS_InvalidCAPEM(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to add CA certificate")
 }
 
-func TestLoadServerTLS_MissingCAFile(t *testing.T) {
+func TestLoadServerTLSFailsWhenCAFileIsMissing(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "test-game"
 
@@ -918,7 +918,7 @@ func TestLoadServerTLS_MissingCAFile(t *testing.T) {
 	errutil.AssertErrorContext(t, err, "operation", "read CA certificate")
 }
 
-func TestLoadClientTLS_MissingCAFile(t *testing.T) {
+func TestLoadClientTLSFailsWhenCAFileIsMissing(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "test-game"
 
@@ -940,7 +940,7 @@ func TestLoadClientTLS_MissingCAFile(t *testing.T) {
 	errutil.AssertErrorContext(t, err, "operation", "read CA certificate")
 }
 
-func TestValidateCertificateChain_NilCert(t *testing.T) {
+func TestValidateCertificateChainFailsForNilCert(t *testing.T) {
 	gameID := "test-game"
 
 	ca, err := GenerateCA(gameID)
@@ -951,7 +951,7 @@ func TestValidateCertificateChain_NilCert(t *testing.T) {
 	assert.Contains(t, err.Error(), "certificate is nil")
 }
 
-func TestValidateCertificateChain_NilCA(t *testing.T) {
+func TestValidateCertificateChainFailsForNilCA(t *testing.T) {
 	gameID := "test-game"
 
 	ca, err := GenerateCA(gameID)
@@ -965,13 +965,13 @@ func TestValidateCertificateChain_NilCA(t *testing.T) {
 	assert.Contains(t, err.Error(), "CA certificate is nil")
 }
 
-func TestValidateHostname_NilCert(t *testing.T) {
+func TestValidateHostnameFailsForNilCert(t *testing.T) {
 	err := ValidateHostname(nil, "localhost")
 	assert.Error(t, err, "ValidateHostname() should return error for nil cert")
 	assert.Contains(t, err.Error(), "certificate is nil")
 }
 
-func TestValidateHostname_IPAddress(t *testing.T) {
+func TestValidateHostnameSucceedsForIPAddress(t *testing.T) {
 	gameID := "test-game"
 
 	ca, err := GenerateCA(gameID)
@@ -989,13 +989,13 @@ func TestValidateHostname_IPAddress(t *testing.T) {
 	assert.Error(t, err, "ValidateHostname() should reject 192.168.1.1")
 }
 
-func TestValidateExtKeyUsage_NilCert(t *testing.T) {
+func TestValidateExtKeyUsageFailsForNilCert(t *testing.T) {
 	err := ValidateExtKeyUsage(nil, x509.ExtKeyUsageServerAuth)
 	assert.Error(t, err, "ValidateExtKeyUsage() should return error for nil cert")
 	assert.Contains(t, err.Error(), "certificate is nil")
 }
 
-func TestCheckCertificateExpiration_NotYetValid(t *testing.T) {
+func TestCheckCertificateExpirationReturnsTrueWhenNotYetValid(t *testing.T) {
 	gameID := "test-game"
 
 	ca, err := GenerateCA(gameID)

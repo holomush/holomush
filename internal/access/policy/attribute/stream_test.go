@@ -13,16 +13,8 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 )
 
-func TestStreamProvider_Namespace(t *testing.T) {
-	provider := NewStreamProvider()
-	assert.Equal(t, "stream", provider.Namespace())
-}
-
-func TestStreamProvider_ResolveSubject(t *testing.T) {
-	provider := NewStreamProvider()
-	attrs, err := provider.ResolveSubject(context.Background(), "stream:location:01XYZ")
-	require.NoError(t, err)
-	assert.Nil(t, attrs)
+func TestStreamProviderContract(t *testing.T) {
+	assertProviderContract(t, NewStreamProvider())
 }
 
 func TestStreamProvider_ResolveResource(t *testing.T) {
@@ -84,7 +76,7 @@ func TestStreamProvider_ResolveResource(t *testing.T) {
 	}
 }
 
-func TestStreamProvider_Schema(t *testing.T) {
+func TestStreamProviderSchema(t *testing.T) {
 	provider := NewStreamProvider()
 	schema := provider.Schema()
 

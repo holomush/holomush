@@ -112,7 +112,7 @@ var _ hostfunc.WorldMutator = (*mockWorldMutatorService)(nil)
 
 // --- create_location tests ---
 
-func TestCreateLocationFn_Success(t *testing.T) {
+func TestCreateLocationFnSuccess(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
 
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
@@ -136,7 +136,7 @@ func TestCreateLocationFn_Success(t *testing.T) {
 	assert.Equal(t, "Test Room", tbl.RawGetString("name").String())
 }
 
-func TestCreateLocationFn_InvalidLocationType(t *testing.T) {
+func TestCreateLocationFnInvalidLocationType(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
 
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
@@ -154,7 +154,7 @@ func TestCreateLocationFn_InvalidLocationType(t *testing.T) {
 	assert.Contains(t, errVal.String(), "invalid location type")
 }
 
-func TestCreateLocationFn_NoWorldService(t *testing.T) {
+func TestCreateLocationFnNoWorldService(t *testing.T) {
 	funcs := hostfunc.New(nil)
 	L := lua.NewState()
 	defer L.Close()
@@ -169,7 +169,7 @@ func TestCreateLocationFn_NoWorldService(t *testing.T) {
 	assert.Contains(t, errVal.String(), "world service not configured")
 }
 
-func TestCreateLocationFn_ServiceError(t *testing.T) {
+func TestCreateLocationFnServiceError(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		createLocationErr: errors.New("database connection timeout with stack trace"),
 	}
@@ -197,7 +197,7 @@ func TestCreateLocationFn_ServiceError(t *testing.T) {
 
 // --- create_exit tests ---
 
-func TestCreateExitFn_Success(t *testing.T) {
+func TestCreateExitFnSuccess(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
 
 	fromID := ulid.Make()
@@ -223,7 +223,7 @@ func TestCreateExitFn_Success(t *testing.T) {
 	assert.Equal(t, "north", tbl.RawGetString("name").String())
 }
 
-func TestCreateExitFn_WithBidirectionalOptions(t *testing.T) {
+func TestCreateExitFnWithBidirectionalOptions(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
 
 	fromID := ulid.Make()
@@ -245,7 +245,7 @@ func TestCreateExitFn_WithBidirectionalOptions(t *testing.T) {
 	require.Equal(t, lua.LTTable, result.Type())
 }
 
-func TestCreateExitFn_InvalidFromID(t *testing.T) {
+func TestCreateExitFnInvalidFromID(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
 
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
@@ -264,7 +264,7 @@ func TestCreateExitFn_InvalidFromID(t *testing.T) {
 	assert.Contains(t, errVal.String(), "invalid from_id")
 }
 
-func TestCreateExitFn_InvalidToID(t *testing.T) {
+func TestCreateExitFnInvalidToID(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
 
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
@@ -283,7 +283,7 @@ func TestCreateExitFn_InvalidToID(t *testing.T) {
 	assert.Contains(t, errVal.String(), "invalid to_id")
 }
 
-func TestCreateExitFn_NoWorldService(t *testing.T) {
+func TestCreateExitFnNoWorldService(t *testing.T) {
 	funcs := hostfunc.New(nil)
 	L := lua.NewState()
 	defer L.Close()
@@ -301,7 +301,7 @@ func TestCreateExitFn_NoWorldService(t *testing.T) {
 	assert.Contains(t, errVal.String(), "world service not configured")
 }
 
-func TestCreateExitFn_ServiceError(t *testing.T) {
+func TestCreateExitFnServiceError(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		createExitErr: errors.New("database connection timeout with stack trace"),
 	}
@@ -333,7 +333,7 @@ func TestCreateExitFn_ServiceError(t *testing.T) {
 
 // --- create_object tests ---
 
-func TestCreateObjectFn_Success(t *testing.T) {
+func TestCreateObjectFnSuccess(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
 
 	locID := ulid.Make()
@@ -358,7 +358,7 @@ func TestCreateObjectFn_Success(t *testing.T) {
 	assert.Equal(t, "Magic Sword", tbl.RawGetString("name").String())
 }
 
-func TestCreateObjectFn_NoContainment(t *testing.T) {
+func TestCreateObjectFnNoContainment(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
 
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
@@ -375,7 +375,7 @@ func TestCreateObjectFn_NoContainment(t *testing.T) {
 	assert.Contains(t, errVal.String(), "must specify exactly one containment")
 }
 
-func TestCreateObjectFn_MissingOptsTable(t *testing.T) {
+func TestCreateObjectFnMissingOptsTable(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
 
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
@@ -394,7 +394,7 @@ func TestCreateObjectFn_MissingOptsTable(t *testing.T) {
 	assert.Contains(t, errVal.String(), "second argument must be an options table")
 }
 
-func TestCreateObjectFn_OptsNotATable(t *testing.T) {
+func TestCreateObjectFnOptsNotATable(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
 
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
@@ -413,7 +413,7 @@ func TestCreateObjectFn_OptsNotATable(t *testing.T) {
 	assert.Contains(t, errVal.String(), "second argument must be an options table")
 }
 
-func TestCreateObjectFn_ServiceError(t *testing.T) {
+func TestCreateObjectFnServiceError(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		createObjectErr: errors.New("database connection timeout with stack trace"),
 	}
@@ -444,7 +444,7 @@ func TestCreateObjectFn_ServiceError(t *testing.T) {
 
 // --- find_location tests ---
 
-func TestFindLocationFn_Success(t *testing.T) {
+func TestFindLocationFnSuccess(t *testing.T) {
 	locID := ulid.Make()
 	loc := &world.Location{
 		ID:          locID,
@@ -480,7 +480,7 @@ func TestFindLocationFn_Success(t *testing.T) {
 	assert.Equal(t, "Town Square", tbl.RawGetString("name").String())
 }
 
-func TestFindLocationFn_NotFound(t *testing.T) {
+func TestFindLocationFnNotFound(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		findLocationByNameFn: func(_ context.Context, _, _ string) (*world.Location, error) {
 			return nil, world.ErrNotFound
@@ -501,7 +501,7 @@ func TestFindLocationFn_NotFound(t *testing.T) {
 	assert.Equal(t, "location not found", errVal.String())
 }
 
-func TestFindLocationFn_ServiceError(t *testing.T) {
+func TestFindLocationFnServiceError(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		findLocationByNameFn: func(_ context.Context, _, _ string) (*world.Location, error) {
 			return nil, errors.New("database connection timeout with stack trace")
@@ -531,7 +531,7 @@ func TestFindLocationFn_ServiceError(t *testing.T) {
 
 // --- set_property tests ---
 
-func TestSetPropertyFn_LocationDescription(t *testing.T) {
+func TestSetPropertyFnLocationDescription(t *testing.T) {
 	locID := ulid.Make()
 	loc := &world.Location{
 		ID:          locID,
@@ -560,7 +560,7 @@ func TestSetPropertyFn_LocationDescription(t *testing.T) {
 	assert.Equal(t, lua.LTrue, result, "expected true result")
 }
 
-func TestSetPropertyFn_ObjectDescription(t *testing.T) {
+func TestSetPropertyFnObjectDescription(t *testing.T) {
 	objID := ulid.Make()
 	locID := ulid.Make()
 	obj, err := world.NewObjectWithID(objID, "Magic Sword", world.InLocation(locID))
@@ -583,7 +583,7 @@ func TestSetPropertyFn_ObjectDescription(t *testing.T) {
 	assert.Equal(t, lua.LTNil, errVal.Type(), "expected nil error")
 }
 
-func TestSetPropertyFn_InvalidEntityType(t *testing.T) {
+func TestSetPropertyFnInvalidEntityType(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
 
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
@@ -602,7 +602,7 @@ func TestSetPropertyFn_InvalidEntityType(t *testing.T) {
 	assert.Contains(t, errVal.String(), "invalid entity type")
 }
 
-func TestSetPropertyFn_InvalidEntityID(t *testing.T) {
+func TestSetPropertyFnInvalidEntityID(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
 
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
@@ -619,7 +619,7 @@ func TestSetPropertyFn_InvalidEntityID(t *testing.T) {
 	assert.Contains(t, errVal.String(), "invalid entity_id")
 }
 
-func TestSetPropertyFn_InvalidProperty(t *testing.T) {
+func TestSetPropertyFnInvalidProperty(t *testing.T) {
 	locID := ulid.Make()
 	loc := &world.Location{
 		ID:   locID,
@@ -645,7 +645,7 @@ func TestSetPropertyFn_InvalidProperty(t *testing.T) {
 	assert.Contains(t, errVal.String(), "invalid property")
 }
 
-func TestSetPropertyFn_ServiceError(t *testing.T) {
+func TestSetPropertyFnServiceError(t *testing.T) {
 	locID := ulid.Make()
 	loc := &world.Location{
 		ID:          locID,
@@ -683,7 +683,7 @@ func TestSetPropertyFn_ServiceError(t *testing.T) {
 
 // --- get_property tests ---
 
-func TestGetPropertyFn_LocationDescription(t *testing.T) {
+func TestGetPropertyFnLocationDescription(t *testing.T) {
 	locID := ulid.Make()
 	loc := &world.Location{
 		ID:          locID,
@@ -712,7 +712,7 @@ func TestGetPropertyFn_LocationDescription(t *testing.T) {
 	assert.Equal(t, "A cozy room", result.String())
 }
 
-func TestGetPropertyFn_ObjectName(t *testing.T) {
+func TestGetPropertyFnObjectName(t *testing.T) {
 	objID := ulid.Make()
 	locID := ulid.Make()
 	obj, err := world.NewObjectWithID(objID, "Magic Sword", world.InLocation(locID))
@@ -739,7 +739,7 @@ func TestGetPropertyFn_ObjectName(t *testing.T) {
 	assert.Equal(t, "Magic Sword", result.String())
 }
 
-func TestGetPropertyFn_InvalidEntityType(t *testing.T) {
+func TestGetPropertyFnInvalidEntityType(t *testing.T) {
 	mutator := &mockWorldMutatorService{}
 
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(mutator))
@@ -758,7 +758,7 @@ func TestGetPropertyFn_InvalidEntityType(t *testing.T) {
 	assert.Contains(t, errVal.String(), "invalid entity type")
 }
 
-func TestGetPropertyFn_EntityNotFound(t *testing.T) {
+func TestGetPropertyFnEntityNotFound(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		err: world.ErrNotFound,
 	}
@@ -779,7 +779,7 @@ func TestGetPropertyFn_EntityNotFound(t *testing.T) {
 	assert.Contains(t, errVal.String(), "not found")
 }
 
-func TestGetPropertyFn_ServiceError(t *testing.T) {
+func TestGetPropertyFnServiceError(t *testing.T) {
 	mutator := &mockWorldMutatorService{
 		err: errors.New("database connection timeout with stack trace"),
 	}
@@ -809,7 +809,7 @@ func TestGetPropertyFn_ServiceError(t *testing.T) {
 
 // --- Additional coverage tests ---
 
-func TestWorldWriteFunctions_SubjectIDFormat(t *testing.T) {
+func TestWorldWriteFunctionsSubjectIDFormat(t *testing.T) {
 	// Verify that subject ID is formatted correctly as "plugin:<name>"
 	var capturedSubjectID string
 	mutator := &mockWorldMutatorService{

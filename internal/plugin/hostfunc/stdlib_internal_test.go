@@ -22,7 +22,7 @@ type logEntry struct {
 	Hint        string `json:"hint"`
 }
 
-func TestGetEmitter_ReturnsNilWhenEmitterMissing(t *testing.T) {
+func TestGetEmitterReturnsNilWhenEmitterMissing(t *testing.T) {
 	// Create a Lua state WITHOUT calling RegisterStdlib
 	// This simulates the bug where RegisterStdlib wasn't called
 	L := lua.NewState()
@@ -52,7 +52,7 @@ func TestGetEmitter_ReturnsNilWhenEmitterMissing(t *testing.T) {
 	assert.Contains(t, entry.Hint, "RegisterStdlib must be called", "should include hint about RegisterStdlib")
 }
 
-func TestGetEmitter_ReturnsEmitterWhenRegistered(t *testing.T) {
+func TestGetEmitterReturnsEmitterWhenRegistered(t *testing.T) {
 	// Create a Lua state WITH RegisterStdlib called
 	L := lua.NewState()
 	defer L.Close()
@@ -77,7 +77,7 @@ func TestGetEmitter_ReturnsEmitterWhenRegistered(t *testing.T) {
 // Emit functions fail when RegisterStdlib not called
 // =============================================================================
 
-func TestEmitLocation_RaisesLuaErrorWithoutRegisterStdlib(t *testing.T) {
+func TestEmitLocationRaisesLuaErrorWithoutRegisterStdlib(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -94,7 +94,7 @@ func TestEmitLocation_RaisesLuaErrorWithoutRegisterStdlib(t *testing.T) {
 	assert.Contains(t, err.Error(), "RegisterStdlib not called")
 }
 
-func TestEmitCharacter_RaisesLuaErrorWithoutRegisterStdlib(t *testing.T) {
+func TestEmitCharacterRaisesLuaErrorWithoutRegisterStdlib(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -110,7 +110,7 @@ func TestEmitCharacter_RaisesLuaErrorWithoutRegisterStdlib(t *testing.T) {
 	assert.Contains(t, err.Error(), "RegisterStdlib not called")
 }
 
-func TestEmitGlobal_RaisesLuaErrorWithoutRegisterStdlib(t *testing.T) {
+func TestEmitGlobalRaisesLuaErrorWithoutRegisterStdlib(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
@@ -126,7 +126,7 @@ func TestEmitGlobal_RaisesLuaErrorWithoutRegisterStdlib(t *testing.T) {
 	assert.Contains(t, err.Error(), "RegisterStdlib not called")
 }
 
-func TestEmitFlush_RaisesLuaErrorWithoutRegisterStdlib(t *testing.T) {
+func TestEmitFlushRaisesLuaErrorWithoutRegisterStdlib(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 

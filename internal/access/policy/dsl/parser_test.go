@@ -4,8 +4,10 @@
 package dsl_test
 
 import (
+	"encoding/json"
 	"testing"
 
+	"github.com/alecthomas/participle/v2"
 	"github.com/holomush/holomush/internal/access/policy/dsl"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -111,7 +113,7 @@ func TestParse_InvalidPolicies(t *testing.T) {
 	}
 }
 
-func TestParse_NestingDepthLimit(t *testing.T) {
+func TestParseNestingDepthLimitRejected(t *testing.T) {
 	// Build a deeply nested expression: (((((...(true)...))))
 	deep := "permit(principal, action, resource) when { "
 	for range 33 {
@@ -233,16 +235,46 @@ func TestParse_StructuralChecks(t *testing.T) {
 	})
 }
 
-func TestParse_ContainsEmptyPath(t *testing.T) {
+func TestParseContainsEmptyPathRejected(t *testing.T) {
 	// principal.containsAll(...) has no attribute path between root and method — should fail validation.
 	_, err := dsl.Parse(`permit(principal, action, resource) when { principal.containsAll(["x"]) };`)
 	assert.Error(t, err, "contains with empty path should be rejected")
 	assert.Contains(t, err.Error(), "at least one attribute path segment")
 }
 
-func TestParse_ReservedWordAsAttribute(t *testing.T) {
+func TestParseReservedWordAsAttributeRejected(t *testing.T) {
 	// Using a reserved word as an attribute segment should be rejected.
 	// "permit" is reserved and should not appear as an attribute name.
 	_, err := dsl.Parse(`permit(principal, action, resource) when { principal.permit == "x" };`)
 	assert.Error(t, err, "reserved word as attribute should be rejected")
+}
+
+func TestNewParserBuilds(t *testing.T) {
+	parser, err := dsl.NewParser()
+	require.NoError(t, err, "NewParser should build without error")
+	require.NotNil(t, parser, "NewParser should return non-nil parser")
+}
+
+func TestJSONRoundTrip_PositionExcluded(t *testing.T) {
+	parser := newTestParser(t)
+
+	ast, err := parser.ParseString("", `permit(principal, action, resource);`)
+	require.NoError(t, err)
+
+	jsonBytes, err := json.Marshal(ast)
+	require.NoError(t, err)
+
+	var raw map[string]any
+	err = json.Unmarshal(jsonBytes, &raw)
+	require.NoError(t, err)
+
+	_, hasPos := raw["Pos"]
+	assert.False(t, hasPos, "position field must be excluded from JSON output")
+}
+
+func newTestParser(t *testing.T) *participle.Parser[dsl.Policy] {
+	t.Helper()
+	p, err := dsl.NewParser()
+	require.NoError(t, err)
+	return p
 }

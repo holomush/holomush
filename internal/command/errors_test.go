@@ -59,7 +59,7 @@ func TestWorldError(t *testing.T) {
 	assert.Equal(t, "There's no exit to the north.", oopsErr.Context()["message"])
 }
 
-func TestWorldError_WithCause(t *testing.T) {
+func TestWorldErrorWithCause(t *testing.T) {
 	cause := oops.Errorf("database connection failed")
 	err := WorldError("There's no exit to the north.", cause)
 

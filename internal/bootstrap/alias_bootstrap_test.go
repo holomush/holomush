@@ -16,25 +16,10 @@ import (
 )
 
 func TestAliasBootstrapper_Priority(t *testing.T) {
-	tests := []struct {
-		name     string
-		expected int
-	}{
-		{
-			name:     "returns correct priority",
-			expected: plugins.BootstrapPriorityAlias,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			repo := newFakeAliasRepo()
-			cache := command.NewAliasCache()
-			ab := NewAliasBootstrapper(repo, cache)
-
-			assert.Equal(t, tt.expected, ab.Priority())
-		})
-	}
+	repo := newFakeAliasRepo()
+	cache := command.NewAliasCache()
+	ab := NewAliasBootstrapper(repo, cache)
+	assert.Equal(t, plugins.BootstrapPriorityAlias, ab.Priority())
 }
 
 func TestAliasBootstrapper_Bootstrap(t *testing.T) {
@@ -109,14 +94,8 @@ func TestAliasBootstrapper_BootstrapPropagatesError(t *testing.T) {
 	assert.Contains(t, err.Error(), "test error")
 }
 
-func TestAliasBootstrapper_CompilesWithInterface(_ *testing.T) {
-	// Compile-time check is done via var _ plugins.BootstrapPlugin = (*AliasBootstrapper)(nil)
-	// but this runtime test ensures the interface is properly satisfied.
-	repo := newFakeAliasRepo()
-	cache := command.NewAliasCache()
-	ab := NewAliasBootstrapper(repo, cache)
-
-	var _ plugins.BootstrapPlugin = ab
+func TestAliasBootstrapper_ImplementsBootstrapPlugin(_ *testing.T) {
+	var _ plugins.BootstrapPlugin = (*AliasBootstrapper)(nil)
 }
 
 // fakeAliasRepoWithError is used for testing error propagation.

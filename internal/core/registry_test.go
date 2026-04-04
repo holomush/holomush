@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestVerbRegistry_Register(t *testing.T) {
+func TestVerbRegistryRegisterStoresVerbAndAllowsLookup(t *testing.T) {
 	r := NewVerbRegistry()
 	err := r.Register(VerbRegistration{
 		Type:     "say",
@@ -29,7 +29,7 @@ func TestVerbRegistry_Register(t *testing.T) {
 	assert.Equal(t, "says", reg.Label)
 }
 
-func TestVerbRegistry_Register_DuplicateRejected(t *testing.T) {
+func TestVerbRegistryRegisterDuplicateTypeReturnsError(t *testing.T) {
 	r := NewVerbRegistry()
 	err := r.Register(VerbRegistration{Type: "say", Category: "communication", Format: "speech", Label: "says"})
 	require.NoError(t, err)
@@ -39,20 +39,20 @@ func TestVerbRegistry_Register_DuplicateRejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "already registered")
 }
 
-func TestVerbRegistry_Lookup_NotFound(t *testing.T) {
+func TestVerbRegistryLookupUnknownTypeReturnsFalse(t *testing.T) {
 	r := NewVerbRegistry()
 	_, ok := r.Lookup("nonexistent")
 	assert.False(t, ok)
 }
 
-func TestVerbRegistry_Register_SpeechRequiresLabel(t *testing.T) {
+func TestVerbRegistryRegisterSpeechFormatWithoutLabelReturnsError(t *testing.T) {
 	r := NewVerbRegistry()
 	err := r.Register(VerbRegistration{Type: "say", Category: "communication", Format: "speech"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "label is required")
 }
 
-func TestVerbRegistry_Register_ValidationErrors(t *testing.T) {
+func TestVerbRegistry_Register(t *testing.T) {
 	tests := []struct {
 		name string
 		reg  VerbRegistration
@@ -72,7 +72,7 @@ func TestVerbRegistry_Register_ValidationErrors(t *testing.T) {
 	}
 }
 
-func TestVerbRegistry_ConcurrentAccess(t *testing.T) {
+func TestVerbRegistryConcurrentAccessIsSafe(t *testing.T) {
 	r := NewVerbRegistry()
 	var wg sync.WaitGroup
 	errs := make(chan error, 50)
@@ -109,7 +109,7 @@ func TestVerbRegistry_ConcurrentAccess(t *testing.T) {
 	}
 }
 
-func TestRegisterBuiltinTypes(t *testing.T) {
+func TestRegisterBuiltinTypesRegistersAllKnownEventTypes(t *testing.T) {
 	r := NewVerbRegistry()
 	err := RegisterBuiltinTypes(r)
 	require.NoError(t, err)

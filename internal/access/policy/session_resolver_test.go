@@ -14,7 +14,7 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-func TestMockSessionResolver_Success(t *testing.T) {
+func TestMockSessionResolverSuccess(t *testing.T) {
 	resolver := &mockSessionResolver{
 		resolveFunc: func(_ context.Context, _ string) (string, error) {
 			return "01ABC", nil
@@ -26,7 +26,7 @@ func TestMockSessionResolver_Success(t *testing.T) {
 	assert.Equal(t, "01ABC", characterID)
 }
 
-func TestMockSessionResolver_SessionInvalid(t *testing.T) {
+func TestMockSessionResolverSessionInvalid(t *testing.T) {
 	resolver := &mockSessionResolver{
 		resolveFunc: func(_ context.Context, _ string) (string, error) {
 			return "", oops.Code("SESSION_INVALID").Errorf("session not found")
@@ -40,7 +40,7 @@ func TestMockSessionResolver_SessionInvalid(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "SESSION_INVALID")
 }
 
-func TestMockSessionResolver_GenericError(t *testing.T) {
+func TestMockSessionResolverGenericError(t *testing.T) {
 	resolver := &mockSessionResolver{
 		resolveFunc: func(_ context.Context, _ string) (string, error) {
 			return "", oops.Errorf("database connection failed")
@@ -57,7 +57,7 @@ func TestMockSessionResolver_GenericError(t *testing.T) {
 	assert.NotEqual(t, "SESSION_INVALID", oopsErr.Code())
 }
 
-func TestMockSessionResolver_NotConfigured(t *testing.T) {
+func TestMockSessionResolverNotConfigured(t *testing.T) {
 	resolver := &mockSessionResolver{}
 
 	characterID, err := resolver.ResolveSession(context.Background(), "web-123")
@@ -66,7 +66,7 @@ func TestMockSessionResolver_NotConfigured(t *testing.T) {
 	assert.Contains(t, err.Error(), "mock not configured")
 }
 
-func TestMockSessionResolver_PassesThroughSessionID(t *testing.T) {
+func TestMockSessionResolverPassesThroughSessionID(t *testing.T) {
 	var capturedSessionID string
 	resolver := &mockSessionResolver{
 		resolveFunc: func(_ context.Context, sessionID string) (string, error) {
@@ -80,7 +80,7 @@ func TestMockSessionResolver_PassesThroughSessionID(t *testing.T) {
 	assert.Equal(t, "web-999", capturedSessionID)
 }
 
-func TestMockSessionResolver_PassesThroughContext(t *testing.T) {
+func TestMockSessionResolverPassesThroughContext(t *testing.T) {
 	type ctxKey string
 	const testKey ctxKey = "test"
 

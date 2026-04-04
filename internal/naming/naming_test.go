@@ -66,8 +66,8 @@ func TestTheme_ImplementsInterface(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(_ *testing.T) {
-			_ = tt.theme
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Implements(t, (*Theme)(nil), tt.theme)
 		})
 	}
 }

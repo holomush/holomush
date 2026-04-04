@@ -13,16 +13,18 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 )
 
-func TestExitProvider_Namespace(t *testing.T) {
-	provider := NewExitProvider()
-	assert.Equal(t, "exit", provider.Namespace())
-}
+func TestExitProviderContract(t *testing.T) {
+	assertProviderContract(t, NewExitProvider())
 
-func TestExitProvider_ResolveSubject(t *testing.T) {
-	provider := NewExitProvider()
-	attrs, err := provider.ResolveSubject(context.Background(), "exit:01XYZ")
-	require.NoError(t, err)
-	assert.Nil(t, attrs)
+	t.Run("namespace is exit", func(t *testing.T) {
+		assert.Equal(t, "exit", NewExitProvider().Namespace())
+	})
+
+	t.Run("resolve subject for exit IDs returns nil", func(t *testing.T) {
+		attrs, err := NewExitProvider().ResolveSubject(context.Background(), "exit:01XYZ")
+		require.NoError(t, err)
+		assert.Nil(t, attrs)
+	})
 }
 
 func TestExitProvider_ResolveResource(t *testing.T) {
@@ -75,7 +77,7 @@ func TestExitProvider_ResolveResource(t *testing.T) {
 	}
 }
 
-func TestExitProvider_Schema(t *testing.T) {
+func TestExitProviderSchema(t *testing.T) {
 	provider := NewExitProvider()
 	schema := provider.Schema()
 

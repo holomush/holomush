@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLocationResolver_Interface(_ *testing.T) {
+func TestLocationResolverSatisfiesInterface(_ *testing.T) {
 	// Verify NullResolver satisfies LocationResolver interface with both value and pointer
 	var _ access.LocationResolver = access.NullResolver{}
 	var _ access.LocationResolver = (*access.NullResolver)(nil)

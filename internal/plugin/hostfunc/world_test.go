@@ -119,7 +119,7 @@ func TestQueryLocation(t *testing.T) {
 	assert.Equal(t, string(loc.Type), tbl.RawGetString("type").String())
 }
 
-func TestQueryLocation_InvalidID(t *testing.T) {
+func TestQueryLocationInvalidID(t *testing.T) {
 	querier := &mockWorldQuerier{}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
@@ -137,7 +137,7 @@ func TestQueryLocation_InvalidID(t *testing.T) {
 	assert.Contains(t, errVal.String(), "invalid location ID")
 }
 
-func TestQueryLocation_NotFound(t *testing.T) {
+func TestQueryLocationNotFound(t *testing.T) {
 	querier := &mockWorldQuerier{err: world.ErrNotFound}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
@@ -155,7 +155,7 @@ func TestQueryLocation_NotFound(t *testing.T) {
 	assert.Equal(t, "location not found", errVal.String(), "expected sanitized error message")
 }
 
-func TestQueryLocation_NoQuerierConfigured(t *testing.T) {
+func TestQueryLocationNoQuerierConfigured(t *testing.T) {
 	// No world querier provided
 	funcs := hostfunc.New(nil)
 
@@ -173,7 +173,7 @@ func TestQueryLocation_NoQuerierConfigured(t *testing.T) {
 	assert.Contains(t, errVal.String(), "world service not configured - contact server administrator")
 }
 
-func TestQueryLocation_InternalError(t *testing.T) {
+func TestQueryLocationInternalError(t *testing.T) {
 	locationID := ulid.Make()
 	// Internal error should be sanitized - plugin should not see "database error"
 	querier := &mockWorldQuerier{err: errors.New("database error connection timeout with stack trace")}
@@ -206,7 +206,7 @@ func TestQueryLocation_InternalError(t *testing.T) {
 	assert.NoError(t, parseErr, "reference ID should be a valid ULID")
 }
 
-func TestQueryLocation_PermissionDenied(t *testing.T) {
+func TestQueryLocationPermissionDenied(t *testing.T) {
 	locationID := ulid.Make()
 	querier := &mockWorldQuerier{err: world.ErrPermissionDenied}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
@@ -225,7 +225,7 @@ func TestQueryLocation_PermissionDenied(t *testing.T) {
 	assert.Equal(t, "access denied", errVal.String(), "expected sanitized access denied message")
 }
 
-func TestQueryLocation_Timeout(t *testing.T) {
+func TestQueryLocationTimeout(t *testing.T) {
 	locationID := ulid.Make()
 	// Context timeout should be surfaced to plugins as "query timed out"
 	querier := &mockWorldQuerier{err: context.DeadlineExceeded}
@@ -283,7 +283,7 @@ func TestQueryCharacter(t *testing.T) {
 	assert.Equal(t, locID.String(), tbl.RawGetString("location_id").String())
 }
 
-func TestQueryCharacter_NilLocation(t *testing.T) {
+func TestQueryCharacterNilLocation(t *testing.T) {
 	charID := ulid.Make()
 	char := &world.Character{
 		ID:         charID,
@@ -309,7 +309,7 @@ func TestQueryCharacter_NilLocation(t *testing.T) {
 	assert.Equal(t, lua.LTNil, locID.Type(), "expected nil location_id")
 }
 
-func TestQueryCharacter_InvalidID(t *testing.T) {
+func TestQueryCharacterInvalidID(t *testing.T) {
 	querier := &mockWorldQuerier{}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
@@ -327,7 +327,7 @@ func TestQueryCharacter_InvalidID(t *testing.T) {
 	assert.Contains(t, errVal.String(), "invalid character ID")
 }
 
-func TestQueryCharacter_NotFound(t *testing.T) {
+func TestQueryCharacterNotFound(t *testing.T) {
 	querier := &mockWorldQuerier{err: world.ErrNotFound}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
@@ -345,7 +345,7 @@ func TestQueryCharacter_NotFound(t *testing.T) {
 	assert.Equal(t, "character not found", errVal.String(), "expected sanitized error message")
 }
 
-func TestQueryCharacter_InternalError(t *testing.T) {
+func TestQueryCharacterInternalError(t *testing.T) {
 	charID := ulid.Make()
 	// Internal error should be sanitized - plugin should not see "database error"
 	querier := &mockWorldQuerier{err: errors.New("database error connection timeout with stack trace")}
@@ -377,7 +377,7 @@ func TestQueryCharacter_InternalError(t *testing.T) {
 	assert.NoError(t, parseErr, "reference ID should be a valid ULID")
 }
 
-func TestQueryCharacter_PermissionDenied(t *testing.T) {
+func TestQueryCharacterPermissionDenied(t *testing.T) {
 	charID := ulid.Make()
 	querier := &mockWorldQuerier{err: world.ErrPermissionDenied}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
@@ -396,7 +396,7 @@ func TestQueryCharacter_PermissionDenied(t *testing.T) {
 	assert.Equal(t, "access denied", errVal.String(), "expected sanitized access denied message")
 }
 
-func TestQueryCharacter_NoQuerierConfigured(t *testing.T) {
+func TestQueryCharacterNoQuerierConfigured(t *testing.T) {
 	// No world querier provided
 	funcs := hostfunc.New(nil)
 
@@ -459,7 +459,7 @@ func TestQueryLocationCharacters(t *testing.T) {
 	assert.Equal(t, char2.Name, secondTbl.RawGetString("name").String())
 }
 
-func TestQueryLocationCharacters_EmptyLocation(t *testing.T) {
+func TestQueryLocationCharactersEmptyLocation(t *testing.T) {
 	locationID := ulid.Make()
 
 	querier := &mockWorldQuerier{characters: []*world.Character{}}
@@ -482,7 +482,7 @@ func TestQueryLocationCharacters_EmptyLocation(t *testing.T) {
 	assert.Equal(t, 0, tbl.Len(), "expected empty table")
 }
 
-func TestQueryLocationCharacters_InvalidID(t *testing.T) {
+func TestQueryLocationCharactersInvalidID(t *testing.T) {
 	querier := &mockWorldQuerier{}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
@@ -500,7 +500,7 @@ func TestQueryLocationCharacters_InvalidID(t *testing.T) {
 	assert.Contains(t, errVal.String(), "invalid location ID")
 }
 
-func TestQueryLocationCharacters_NotFound(t *testing.T) {
+func TestQueryLocationCharactersNotFound(t *testing.T) {
 	locationID := ulid.Make()
 	querier := &mockWorldQuerier{err: world.ErrNotFound}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
@@ -519,7 +519,7 @@ func TestQueryLocationCharacters_NotFound(t *testing.T) {
 	assert.Equal(t, "location not found", errVal.String(), "expected sanitized error message")
 }
 
-func TestQueryLocationCharacters_InternalError(t *testing.T) {
+func TestQueryLocationCharactersInternalError(t *testing.T) {
 	locationID := ulid.Make()
 	// Internal error should be sanitized - plugin should not see "database error"
 	querier := &mockWorldQuerier{err: errors.New("database error connection timeout with stack trace")}
@@ -551,7 +551,7 @@ func TestQueryLocationCharacters_InternalError(t *testing.T) {
 	assert.NoError(t, parseErr, "reference ID should be a valid ULID")
 }
 
-func TestQueryLocationCharacters_PermissionDenied(t *testing.T) {
+func TestQueryLocationCharactersPermissionDenied(t *testing.T) {
 	locationID := ulid.Make()
 	querier := &mockWorldQuerier{err: world.ErrPermissionDenied}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
@@ -570,7 +570,7 @@ func TestQueryLocationCharacters_PermissionDenied(t *testing.T) {
 	assert.Equal(t, "access denied", errVal.String(), "expected sanitized access denied message")
 }
 
-func TestQueryLocationCharacters_NoQuerierConfigured(t *testing.T) {
+func TestQueryLocationCharactersNoQuerierConfigured(t *testing.T) {
 	// No world querier provided
 	funcs := hostfunc.New(nil)
 
@@ -625,7 +625,7 @@ func TestQueryObject(t *testing.T) {
 	assert.Equal(t, "location", tbl.RawGetString("containment_type").String())
 }
 
-func TestQueryObject_WithContainer(t *testing.T) {
+func TestQueryObjectWithContainer(t *testing.T) {
 	objID := ulid.Make()
 	containerID := ulid.Make()
 	obj, err := world.NewObjectWithID(objID, "Gold Coins", world.ContainedInObject(containerID))
@@ -652,7 +652,7 @@ func TestQueryObject_WithContainer(t *testing.T) {
 	assert.Equal(t, "object", tbl.RawGetString("containment_type").String())
 }
 
-func TestQueryObject_HeldByCharacter(t *testing.T) {
+func TestQueryObjectHeldByCharacter(t *testing.T) {
 	objID := ulid.Make()
 	charID := ulid.Make()
 	obj, err := world.NewObjectWithID(objID, "Magic Sword", world.HeldByCharacter(charID))
@@ -685,7 +685,7 @@ func TestQueryObject_HeldByCharacter(t *testing.T) {
 // objects are always created via NewObjectWithID() which requires containment, so this
 // invalid state should never occur. This test ensures plugins won't crash if they somehow
 // receive an object in an unexpected state.
-func TestQueryObject_NilOptionalFields(t *testing.T) {
+func TestQueryObjectNilOptionalFields(t *testing.T) {
 	objID := ulid.Make()
 	obj := &world.Object{
 		ID:          objID,
@@ -716,7 +716,7 @@ func TestQueryObject_NilOptionalFields(t *testing.T) {
 	assert.Equal(t, lua.LTNil, tbl.RawGetString("owner_id").Type())
 }
 
-func TestQueryObject_InvalidID(t *testing.T) {
+func TestQueryObjectInvalidID(t *testing.T) {
 	querier := &mockWorldQuerier{}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
@@ -734,7 +734,7 @@ func TestQueryObject_InvalidID(t *testing.T) {
 	assert.Contains(t, errVal.String(), "invalid object ID")
 }
 
-func TestQueryObject_NotFound(t *testing.T) {
+func TestQueryObjectNotFound(t *testing.T) {
 	querier := &mockWorldQuerier{err: world.ErrNotFound}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
@@ -752,7 +752,7 @@ func TestQueryObject_NotFound(t *testing.T) {
 	assert.Equal(t, "object not found", errVal.String(), "expected sanitized error message")
 }
 
-func TestQueryObject_InternalError(t *testing.T) {
+func TestQueryObjectInternalError(t *testing.T) {
 	objID := ulid.Make()
 	// Internal error should be sanitized - plugin should not see "database error"
 	querier := &mockWorldQuerier{err: errors.New("database error connection timeout with stack trace")}
@@ -784,7 +784,7 @@ func TestQueryObject_InternalError(t *testing.T) {
 	assert.NoError(t, parseErr, "reference ID should be a valid ULID")
 }
 
-func TestQueryObject_PermissionDenied(t *testing.T) {
+func TestQueryObjectPermissionDenied(t *testing.T) {
 	objID := ulid.Make()
 	querier := &mockWorldQuerier{err: world.ErrPermissionDenied}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
@@ -803,7 +803,7 @@ func TestQueryObject_PermissionDenied(t *testing.T) {
 	assert.Equal(t, "access denied", errVal.String(), "expected sanitized access denied message")
 }
 
-func TestQueryObject_NoQuerierConfigured(t *testing.T) {
+func TestQueryObjectNoQuerierConfigured(t *testing.T) {
 	// No world querier provided
 	funcs := hostfunc.New(nil)
 
@@ -908,7 +908,7 @@ func (m *contextAwareWorldQuerier) FindLocationByName(_ context.Context, _, _ st
 // Compile-time interface check.
 var _ hostfunc.WorldMutator = (*contextAwareWorldQuerier)(nil)
 
-func TestQueryLocation_InheritsParentContext(t *testing.T) {
+func TestQueryLocationInheritsParentContext(t *testing.T) {
 	// Create a parent context with a custom value to verify inheritance
 	type ctxKey string
 	const testKey ctxKey = "test-key"
@@ -937,7 +937,7 @@ func TestQueryLocation_InheritsParentContext(t *testing.T) {
 	}
 }
 
-func TestQueryCharacter_InheritsParentContext(t *testing.T) {
+func TestQueryCharacterInheritsParentContext(t *testing.T) {
 	type ctxKey string
 	const testKey ctxKey = "test-key"
 	parentCtx := context.WithValue(context.Background(), testKey, "test-value")
@@ -963,7 +963,7 @@ func TestQueryCharacter_InheritsParentContext(t *testing.T) {
 	}
 }
 
-func TestQueryLocationCharacters_InheritsParentContext(t *testing.T) {
+func TestQueryLocationCharactersInheritsParentContext(t *testing.T) {
 	type ctxKey string
 	const testKey ctxKey = "test-key"
 	parentCtx := context.WithValue(context.Background(), testKey, "test-value")
@@ -989,7 +989,7 @@ func TestQueryLocationCharacters_InheritsParentContext(t *testing.T) {
 	}
 }
 
-func TestQueryObject_InheritsParentContext(t *testing.T) {
+func TestQueryObjectInheritsParentContext(t *testing.T) {
 	type ctxKey string
 	const testKey ctxKey = "test-key"
 	parentCtx := context.WithValue(context.Background(), testKey, "test-value")
@@ -1015,7 +1015,7 @@ func TestQueryObject_InheritsParentContext(t *testing.T) {
 	}
 }
 
-func TestQueryLocation_InheritsContextDeadline(t *testing.T) {
+func TestQueryLocationInheritsContextDeadline(t *testing.T) {
 	// Create a context with a short deadline (10ms) - shorter than the 5s default
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
@@ -1046,7 +1046,7 @@ func TestQueryLocation_InheritsContextDeadline(t *testing.T) {
 	}
 }
 
-func TestQueryLocation_FallbackToBackgroundContext(t *testing.T) {
+func TestQueryLocationFallbackToBackgroundContext(t *testing.T) {
 	// Test that when Lua state has no context set, we fall back to context.Background()
 	// This ensures backwards compatibility
 

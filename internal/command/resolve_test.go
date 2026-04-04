@@ -14,7 +14,7 @@ import (
 // Tests for the refactored Resolve methods
 // These test each extracted method in isolation
 
-func TestAliasCache_resolveExact_Match(t *testing.T) {
+func TestAliasCacheResolveExactMatch(t *testing.T) {
 	cache := NewAliasCache()
 	registry := NewRegistry()
 
@@ -32,7 +32,7 @@ func TestAliasCache_resolveExact_Match(t *testing.T) {
 	assert.Equal(t, "look", resolved)
 }
 
-func TestAliasCache_resolveExact_NoMatch(t *testing.T) {
+func TestAliasCacheResolveExactNoMatch(t *testing.T) {
 	cache := NewAliasCache()
 	registry := NewRegistry()
 
@@ -50,7 +50,7 @@ func TestAliasCache_resolveExact_NoMatch(t *testing.T) {
 	assert.Empty(t, resolved)
 }
 
-func TestAliasCache_resolveExact_NilRegistry(t *testing.T) {
+func TestAliasCacheResolveExactNilRegistry(t *testing.T) {
 	cache := NewAliasCache()
 
 	// Should return empty and false when registry is nil
@@ -59,7 +59,7 @@ func TestAliasCache_resolveExact_NilRegistry(t *testing.T) {
 	assert.Empty(t, resolved)
 }
 
-func TestAliasCache_resolveExact_EmptyInput(t *testing.T) {
+func TestAliasCacheResolveExactEmptyInput(t *testing.T) {
 	cache := NewAliasCache()
 	registry := NewRegistry()
 
@@ -69,7 +69,7 @@ func TestAliasCache_resolveExact_EmptyInput(t *testing.T) {
 	assert.Empty(t, resolved)
 }
 
-func TestAliasCache_resolvePlayerAlias_Match(t *testing.T) {
+func TestAliasCacheResolvePlayerAliasMatch(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
@@ -85,7 +85,7 @@ func TestAliasCache_resolvePlayerAlias_Match(t *testing.T) {
 	assert.Empty(t, result.rest)
 }
 
-func TestAliasCache_resolvePlayerAlias_NoMatch(t *testing.T) {
+func TestAliasCacheResolvePlayerAliasNoMatch(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
@@ -96,7 +96,7 @@ func TestAliasCache_resolvePlayerAlias_NoMatch(t *testing.T) {
 	assert.Empty(t, result.aliasUsed)
 }
 
-func TestAliasCache_resolvePlayerAlias_WrongPlayer(t *testing.T) {
+func TestAliasCacheResolvePlayerAliasWrongPlayer(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 	otherPlayer := ulid.MustNew(2, nil)
@@ -110,7 +110,7 @@ func TestAliasCache_resolvePlayerAlias_WrongPlayer(t *testing.T) {
 	assert.Empty(t, result.resolvedCmd)
 }
 
-func TestAliasCache_resolveSystemAlias_Match(t *testing.T) {
+func TestAliasCacheResolveSystemAliasMatch(t *testing.T) {
 	cache := NewAliasCache()
 
 	err := cache.SetSystemAlias("l", "look")
@@ -125,7 +125,7 @@ func TestAliasCache_resolveSystemAlias_Match(t *testing.T) {
 	assert.Empty(t, result.rest)
 }
 
-func TestAliasCache_resolveSystemAlias_NoMatch(t *testing.T) {
+func TestAliasCacheResolveSystemAliasNoMatch(t *testing.T) {
 	cache := NewAliasCache()
 
 	// Should not match when no alias exists
@@ -135,7 +135,7 @@ func TestAliasCache_resolveSystemAlias_NoMatch(t *testing.T) {
 	assert.Empty(t, result.aliasUsed)
 }
 
-func TestAliasCache_resolvePrefix_PlayerAlias(t *testing.T) {
+func TestAliasCacheResolvePrefixPlayerAlias(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
@@ -152,7 +152,7 @@ func TestAliasCache_resolvePrefix_PlayerAlias(t *testing.T) {
 	assert.Equal(t, "waves", result.rest)
 }
 
-func TestAliasCache_resolvePrefix_SystemAlias(t *testing.T) {
+func TestAliasCacheResolvePrefixSystemAlias(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
@@ -169,7 +169,7 @@ func TestAliasCache_resolvePrefix_SystemAlias(t *testing.T) {
 	assert.Equal(t, "hello", result.rest)
 }
 
-func TestAliasCache_resolvePrefix_PlayerOverridesSystem(t *testing.T) {
+func TestAliasCacheResolvePrefixPlayerOverridesSystem(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
@@ -188,7 +188,7 @@ func TestAliasCache_resolvePrefix_PlayerOverridesSystem(t *testing.T) {
 	assert.Equal(t, "waves", result.rest)
 }
 
-func TestAliasCache_resolvePrefix_NoMatch(t *testing.T) {
+func TestAliasCacheResolvePrefixNoMatch(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
@@ -198,7 +198,7 @@ func TestAliasCache_resolvePrefix_NoMatch(t *testing.T) {
 	assert.Empty(t, result.resolvedCmd)
 }
 
-func TestAliasCache_resolvePrefix_SingleChar(t *testing.T) {
+func TestAliasCacheResolvePrefixSingleChar(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
@@ -212,7 +212,7 @@ func TestAliasCache_resolvePrefix_SingleChar(t *testing.T) {
 	assert.False(t, matched)
 }
 
-func TestAliasCache_resolvePrefix_EmptyInput(t *testing.T) {
+func TestAliasCacheResolvePrefixEmptyInput(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
@@ -225,7 +225,7 @@ func TestAliasCache_resolvePrefix_EmptyInput(t *testing.T) {
 	assert.False(t, matched)
 }
 
-func TestAliasCache_resolvePrefix_Possessive(t *testing.T) {
+func TestAliasCacheResolvePrefixPossessive(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
@@ -242,7 +242,7 @@ func TestAliasCache_resolvePrefix_Possessive(t *testing.T) {
 	assert.Equal(t, "'s eyes widen", result.rest)
 }
 
-func TestAliasCache_resolveAlias_WithRecursiveExpansion(t *testing.T) {
+func TestAliasCacheResolveAliasWithRecursiveExpansion(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
@@ -260,7 +260,7 @@ func TestAliasCache_resolveAlias_WithRecursiveExpansion(t *testing.T) {
 	assert.False(t, result.isPrefix)
 }
 
-func TestAliasCache_resolveAlias_PlayerOverridesSystem(t *testing.T) {
+func TestAliasCacheResolveAliasPlayerOverridesSystem(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
@@ -277,7 +277,7 @@ func TestAliasCache_resolveAlias_PlayerOverridesSystem(t *testing.T) {
 	assert.Equal(t, "l", result.aliasUsed)
 }
 
-func TestAliasCache_resolveAlias_NoMatch(t *testing.T) {
+func TestAliasCacheResolveAliasNoMatch(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
@@ -288,7 +288,7 @@ func TestAliasCache_resolveAlias_NoMatch(t *testing.T) {
 	assert.Empty(t, result.aliasUsed)
 }
 
-func TestAliasCache_resolveAlias_WithArgs(t *testing.T) {
+func TestAliasCacheResolveAliasWithArgs(t *testing.T) {
 	cache := NewAliasCache()
 	playerID := ulid.MustNew(1, nil)
 
@@ -305,7 +305,7 @@ func TestAliasCache_resolveAlias_WithArgs(t *testing.T) {
 	assert.Equal(t, "a", result.aliasUsed)
 }
 
-func TestAliasCache_resolveAlias_DepthLimit(t *testing.T) {
+func TestAliasCacheResolveAliasDepthLimit(t *testing.T) {
 	cache := NewAliasCache()
 
 	// Create a deep chain (11 levels)

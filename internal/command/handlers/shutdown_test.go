@@ -41,7 +41,7 @@ func newShutdownExec(t *testing.T, args string, store core.EventStore) (*command
 	return exec, &buf
 }
 
-func TestShutdownHandler_ImmediateShutdown(t *testing.T) {
+func TestShutdownHandlerImmediateShutdown(t *testing.T) {
 	ctx := context.Background()
 	store := core.NewMemoryEventStore()
 	exec, buf := newShutdownExec(t, "", store)
@@ -60,7 +60,7 @@ func TestShutdownHandler_ImmediateShutdown(t *testing.T) {
 	assert.Contains(t, buf.String(), "Initiating server shutdown")
 }
 
-func TestShutdownHandler_DelayedShutdown(t *testing.T) {
+func TestShutdownHandlerDelayedShutdown(t *testing.T) {
 	ctx := context.Background()
 	store := core.NewMemoryEventStore()
 	exec, buf := newShutdownExec(t, "60", store)
@@ -104,7 +104,7 @@ func TestShutdownHandler_InvalidDelay(t *testing.T) {
 	}
 }
 
-func TestShutdownHandler_BroadcastsToSystemStream(t *testing.T) {
+func TestShutdownHandlerBroadcastsToSystemStream(t *testing.T) {
 	ctx := context.Background()
 	store := core.NewMemoryEventStore()
 	exec, _ := newShutdownExec(t, "", store)
@@ -121,7 +121,7 @@ func TestShutdownHandler_BroadcastsToSystemStream(t *testing.T) {
 	assert.Contains(t, string(events[0].Payload), "[SHUTDOWN]")
 }
 
-func TestShutdownHandler_WithNilEvents_IsNoOp(t *testing.T) {
+func TestShutdownHandlerWithNilEventsIsNoOp(t *testing.T) {
 	exec, buf := newShutdownExec(t, "", nil)
 
 	err := ShutdownHandler(context.Background(), exec)

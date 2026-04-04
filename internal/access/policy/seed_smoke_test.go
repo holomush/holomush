@@ -119,7 +119,7 @@ func propertyProvider(resourceAttrs map[string]any) *mockAttributeProvider {
 
 // --- Smoke tests ---
 
-func TestSeedSmoke_PlayerSelfAccess(t *testing.T) {
+func TestSeedSmokePlayerSelfAccess(t *testing.T) {
 	charID := "01CHARSELF0000000000000000"
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
@@ -139,7 +139,7 @@ func TestSeedSmoke_PlayerSelfAccess(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "player should read own character; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_PlayerLocationRead(t *testing.T) {
+func TestSeedSmokePlayerLocationRead(t *testing.T) {
 	locID := "01LOC000AAAAAAAAAAAAAAAAAA"
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
@@ -160,7 +160,7 @@ func TestSeedSmoke_PlayerLocationRead(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "player should read current location; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_PlayerColocatedCharacter(t *testing.T) {
+func TestSeedSmokePlayerColocatedCharacter(t *testing.T) {
 	locID := "01LOC000BBBBBBBBBBBBBBBBBB"
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
@@ -180,7 +180,7 @@ func TestSeedSmoke_PlayerColocatedCharacter(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "player should read co-located character; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_PlayerColocatedObject(t *testing.T) {
+func TestSeedSmokePlayerColocatedObject(t *testing.T) {
 	locID := "01LOC000CCCCCCCCCCCCCCCCCC"
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
@@ -201,7 +201,7 @@ func TestSeedSmoke_PlayerColocatedObject(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "player should read co-located object; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_PlayerStreamEmit(t *testing.T) {
+func TestSeedSmokePlayerStreamEmit(t *testing.T) {
 	locID := "01LOC000DDDDDDDDDDDDDDDDDD"
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
@@ -222,7 +222,7 @@ func TestSeedSmoke_PlayerStreamEmit(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "player should emit to co-located stream; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_PlayerMovement(t *testing.T) {
+func TestSeedSmokePlayerMovement(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
 			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC_A"},
@@ -241,7 +241,7 @@ func TestSeedSmoke_PlayerMovement(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "player should enter location; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_PlayerExitUse(t *testing.T) {
+func TestSeedSmokePlayerExitUse(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
 			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
@@ -305,7 +305,7 @@ func TestSeedSmoke_PlayerDeniedBuilderCommands(t *testing.T) {
 	}
 }
 
-func TestSeedSmoke_BuilderLocationWrite(t *testing.T) {
+func TestSeedSmokeBuilderLocationWrite(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
 			map[string]any{"id": "01CHAR01", "roles": []string{"builder"}, "location": "01LOC000"},
@@ -383,7 +383,7 @@ func TestSeedSmoke_AdminFullAccess(t *testing.T) {
 	}
 }
 
-func TestSeedSmoke_DefaultDenyNoMatchingPolicy(t *testing.T) {
+func TestSeedSmokeDefaultDenyNoMatchingPolicy(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
 			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
@@ -402,7 +402,7 @@ func TestSeedSmoke_DefaultDenyNoMatchingPolicy(t *testing.T) {
 	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
 }
 
-func TestSeedSmoke_PropertyPublicRead(t *testing.T) {
+func TestSeedSmokePropertyPublicRead(t *testing.T) {
 	locID := "01LOC000EEEEEEEEEEEEEEEEEE"
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
@@ -426,7 +426,7 @@ func TestSeedSmoke_PropertyPublicRead(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "co-located player should read public property; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_PropertyPrivateReadOwner(t *testing.T) {
+func TestSeedSmokePropertyPrivateReadOwner(t *testing.T) {
 	charID := "01CHAROWNER00000000000000"
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
@@ -449,7 +449,7 @@ func TestSeedSmoke_PropertyPrivateReadOwner(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "owner should read private property; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_PropertyPrivateReadDeniedNonOwner(t *testing.T) {
+func TestSeedSmokePropertyPrivateReadDeniedNonOwner(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
 			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
@@ -470,7 +470,7 @@ func TestSeedSmoke_PropertyPrivateReadDeniedNonOwner(t *testing.T) {
 	assert.False(t, decision.IsAllowed(), "non-owner should NOT read private property; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_PropertyRestrictedForbid(t *testing.T) {
+func TestSeedSmokePropertyRestrictedForbid(t *testing.T) {
 	charID := "01CHAREXCLUDED00000000000"
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
@@ -496,7 +496,7 @@ func TestSeedSmoke_PropertyRestrictedForbid(t *testing.T) {
 	assert.False(t, decision.IsAllowed(), "forbid should override permit for excluded character; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_PropertyOwnerWrite(t *testing.T) {
+func TestSeedSmokePropertyOwnerWrite(t *testing.T) {
 	charID := "01CHAROWNWRITE00000000000"
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
@@ -518,7 +518,7 @@ func TestSeedSmoke_PropertyOwnerWrite(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "owner should write property; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_PlayerExitRead(t *testing.T) {
+func TestSeedSmokePlayerExitRead(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
 			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
@@ -557,7 +557,7 @@ func TestSeedSmoke_BuilderExitWrite(t *testing.T) {
 	}
 }
 
-func TestSeedSmoke_PlayerLocationListCharacters(t *testing.T) {
+func TestSeedSmokePlayerLocationListCharacters(t *testing.T) {
 	locID := "01LOC000FFFFFFFFFFFFFFFF"
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
@@ -578,7 +578,7 @@ func TestSeedSmoke_PlayerLocationListCharacters(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "player should list characters at current location (G3); got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_PlayerDeniedListCharacters_NonCurrentLocation(t *testing.T) {
+func TestSeedSmokePlayerDeniedListCharactersNonCurrentLocation(t *testing.T) {
 	currentLocID := "01LOC000AAAAAAAAAAAAAA"
 	otherLocID := "01LOC000BBBBBBBBBBBBBB"
 
@@ -600,7 +600,7 @@ func TestSeedSmoke_PlayerDeniedListCharacters_NonCurrentLocation(t *testing.T) {
 	assert.False(t, decision.IsAllowed(), "player should NOT list characters at non-current location; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_AdminLocationListCharacters(t *testing.T) {
+func TestSeedSmokeAdminLocationListCharacters(t *testing.T) {
 	locID := "01LOC000FFFFFFFFFFFFFFFF"
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
@@ -620,7 +620,7 @@ func TestSeedSmoke_AdminLocationListCharacters(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "admin should list characters at location; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_BuilderLocationListCharacters(t *testing.T) {
+func TestSeedSmokeBuilderLocationListCharacters(t *testing.T) {
 	locID := "01LOC000FFFFFFFFFFFFFFFF"
 
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
@@ -662,7 +662,7 @@ func TestSeedSmoke_PlayerSceneAccess(t *testing.T) {
 	}
 }
 
-func TestSeedSmoke_PlayerDeniedLocationWrite(t *testing.T) {
+func TestSeedSmokePlayerDeniedLocationWrite(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
 			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
@@ -681,7 +681,7 @@ func TestSeedSmoke_PlayerDeniedLocationWrite(t *testing.T) {
 	assert.False(t, decision.IsAllowed(), "player should NOT write location; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_PlayerDeniedOtherLocationRead(t *testing.T) {
+func TestSeedSmokePlayerDeniedOtherLocationRead(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
 			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC_A0"},
@@ -725,7 +725,7 @@ func TestSeedSmoke_PlayerTeleportAndHomeCommands(t *testing.T) {
 	}
 }
 
-func TestSeedSmoke_PemitDeniedForPlayers(t *testing.T) {
+func TestSeedSmokePemitDeniedForPlayers(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
 			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": "01LOC000"},
@@ -743,7 +743,7 @@ func TestSeedSmoke_PemitDeniedForPlayers(t *testing.T) {
 	assert.False(t, decision.IsAllowed(), "regular player should NOT execute pemit; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_PemitAllowedForAdmin(t *testing.T) {
+func TestSeedSmokePemitAllowedForAdmin(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
 			map[string]any{"id": "01ADMIN1", "roles": []string{"admin"}, "location": "01LOC000"},
@@ -761,7 +761,7 @@ func TestSeedSmoke_PemitAllowedForAdmin(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "admin should execute pemit; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
-func TestSeedSmoke_PemitAllowedForStoryteller(t *testing.T) {
+func TestSeedSmokePemitAllowedForStoryteller(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
 			map[string]any{"id": "01STORY1", "roles": []string{"storyteller"}, "location": "01LOC000"},

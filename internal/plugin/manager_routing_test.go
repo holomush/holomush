@@ -50,7 +50,7 @@ lua-plugin:
 	return pluginsDir
 }
 
-func TestManager_RegisterHost(t *testing.T) {
+func TestManagerRegisterHost(t *testing.T) {
 	mgr := plugins.NewManager(t.TempDir())
 
 	mockHost := mocks.NewMockHost(t)
@@ -63,7 +63,7 @@ func TestManager_RegisterHost(t *testing.T) {
 	// No panic, no error -- just replacement
 }
 
-func TestManager_RegisterHost_PanicsOnNil(t *testing.T) {
+func TestManagerRegisterHostPanicsOnNil(t *testing.T) {
 	mgr := plugins.NewManager(t.TempDir())
 
 	assert.Panics(t, func() {
@@ -71,7 +71,7 @@ func TestManager_RegisterHost_PanicsOnNil(t *testing.T) {
 	})
 }
 
-func TestManager_DeliverCommand_RoutesToCorrectHost(t *testing.T) {
+func TestManagerDeliverCommandRoutesToCorrectHost(t *testing.T) {
 	pluginsDir := setupRoutingFixture(t)
 
 	mockCore := mocks.NewMockHost(t)
@@ -103,7 +103,7 @@ func TestManager_DeliverCommand_RoutesToCorrectHost(t *testing.T) {
 	assert.Equal(t, "hello world", resp.Output)
 }
 
-func TestManager_DeliverCommand_UnknownPlugin(t *testing.T) {
+func TestManagerDeliverCommandUnknownPlugin(t *testing.T) {
 	mgr := plugins.NewManager(t.TempDir())
 
 	_, err := mgr.DeliverCommand(context.Background(), "nonexistent", pluginsdk.CommandRequest{})
@@ -111,7 +111,7 @@ func TestManager_DeliverCommand_UnknownPlugin(t *testing.T) {
 	assert.Contains(t, err.Error(), "plugin not loaded")
 }
 
-func TestManager_DeliverEvent_RoutesToCorrectHost(t *testing.T) {
+func TestManagerDeliverEventRoutesToCorrectHost(t *testing.T) {
 	pluginsDir := setupRoutingFixture(t)
 
 	mockCore := mocks.NewMockHost(t)
@@ -141,7 +141,7 @@ func TestManager_DeliverEvent_RoutesToCorrectHost(t *testing.T) {
 	assert.Equal(t, "loc:1", emits[0].Stream)
 }
 
-func TestManager_DeliverEvent_UnknownPlugin(t *testing.T) {
+func TestManagerDeliverEventUnknownPlugin(t *testing.T) {
 	mgr := plugins.NewManager(t.TempDir())
 
 	_, err := mgr.DeliverEvent(context.Background(), "nonexistent", pluginsdk.Event{})
@@ -149,7 +149,7 @@ func TestManager_DeliverEvent_UnknownPlugin(t *testing.T) {
 	assert.Contains(t, err.Error(), "plugin not loaded")
 }
 
-func TestManager_DeliverCommand_ConcurrentSafety(t *testing.T) {
+func TestManagerDeliverCommandConcurrentSafety(t *testing.T) {
 	pluginsDir := setupRoutingFixture(t)
 
 	mockCore := mocks.NewMockHost(t)
@@ -191,7 +191,7 @@ func TestManager_DeliverCommand_ConcurrentSafety(t *testing.T) {
 	wg.Wait()
 }
 
-func TestManager_LoadAll_SkipsPluginsWithoutHost(t *testing.T) {
+func TestManagerLoadAllSkipsPluginsWithoutHost(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 
@@ -213,7 +213,7 @@ commands:
 	assert.Empty(t, mgr.ListPlugins())
 }
 
-func TestManager_PluginHostMapping_TrackedCorrectly(t *testing.T) {
+func TestManagerPluginHostMappingTrackedCorrectly(t *testing.T) {
 	pluginsDir := setupRoutingFixture(t)
 
 	mockCore := mocks.NewMockHost(t)
@@ -252,7 +252,7 @@ func TestManager_PluginHostMapping_TrackedCorrectly(t *testing.T) {
 	// (command to lua plugin should go to lua host)
 }
 
-func TestManager_Close_ClearsPluginHostMapping(t *testing.T) {
+func TestManagerCloseClearsPluginHostMapping(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 
@@ -284,7 +284,7 @@ commands:
 	assert.Contains(t, err.Error(), "plugin not loaded")
 }
 
-func TestManager_Close_ClosesAllHosts(t *testing.T) {
+func TestManagerCloseClosesAllHosts(t *testing.T) {
 	pluginsDir := setupRoutingFixture(t)
 
 	mockCore := mocks.NewMockHost(t)
@@ -307,7 +307,7 @@ func TestManager_Close_ClosesAllHosts(t *testing.T) {
 }
 
 // Verify the PluginPolicyInstaller test still works with new routing
-func TestManager_LoadAll_WithPolicies_MultiHost(t *testing.T) {
+func TestManagerLoadAllWithPoliciesMultiHost(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")
 

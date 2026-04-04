@@ -220,7 +220,7 @@ func TestSchemaRegistry_HasNamespace(t *testing.T) {
 	}
 }
 
-func TestSchemaRegistry_Schema(t *testing.T) {
+func TestSchemaRegistrySchema(t *testing.T) {
 	registry := NewSchemaRegistry()
 
 	// Register a namespace

@@ -46,6 +46,7 @@ func playerSessionRow(s *auth.PlayerSession) []any {
 }
 
 func TestPostgresPlayerSessionStore_CompileTimeCheck(_ *testing.T) {
+	// Compile-time interface satisfaction check.
 	var _ auth.PlayerSessionRepository = (*PostgresPlayerSessionStore)(nil)
 }
 
