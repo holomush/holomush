@@ -58,7 +58,15 @@ func TestValidateAliasName(t *testing.T) {
 	}{
 		{"single letter", "l", false},
 		{"lowercase", "look", false},
+		{"with exclamation suffix", "go!", false},
+		{"with question mark suffix", "go?", false},
+		{"max length 20", "abcdefghijklmnopqrst", false},
 		{"starts with digit", "1look", true},
+		{"empty", "", true},
+		{"only spaces", "   ", true},
+		{"too long 21", "abcdefghijklmnopqrstu", true},
+		{"starts with at", "@look", true},
+		{"starts with plus", "+look", true},
 	}
 
 	for _, tt := range tests {

@@ -7,9 +7,11 @@ import (
 	"testing"
 	"time"
 
+	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRecordCommandExecution(t *testing.T) {
@@ -71,21 +73,36 @@ func TestRecordCommandExecution(t *testing.T) {
 	}
 }
 
-func TestRecordCommandDuration(_ *testing.T) {
-	// Record durations - use unique command names for this test
-	RecordCommandDuration("duration_look", "core", 50*time.Millisecond)
-	RecordCommandDuration("duration_say", "lua", 100*time.Millisecond)
-	RecordCommandDuration("duration_look", "core", 75*time.Millisecond) // Second observation
+func TestRecordCommandDuration(t *testing.T) {
+	// Record durations - use unique command names for this test.
+	// Use unique names to avoid interference from other test runs.
+	RecordCommandDuration("duration_look_t2", "core", 50*time.Millisecond)
+	RecordCommandDuration("duration_say_t2", "lua", 100*time.Millisecond)
+	RecordCommandDuration("duration_look_t2", "core", 75*time.Millisecond) // Second observation
 
-	// Verify histogram exists and can be accessed without panic
-	// Note: testutil.ToFloat64 doesn't support histograms directly,
-	// so we just verify the metric was created without error
-	lookLabels := prometheus.Labels{"command": "duration_look", "source": "core"}
-	sayLabels := prometheus.Labels{"command": "duration_say", "source": "lua"}
+	// Collect the histogram directly and inspect sample counts.
+	// testutil.ToFloat64 panics on multi-value collectors; instead we
+	// collect through the Collector interface and read the dto.Metric.
+	collectSampleCount := func(labels prometheus.Labels) uint64 {
+		t.Helper()
+		obs := CommandDuration.With(labels)
+		mCh := make(chan prometheus.Metric, 1)
+		obs.(prometheus.Collector).Collect(mCh)
+		close(mCh)
+		m := <-mCh
+		if m == nil {
+			return 0
+		}
+		var pb dto.Metric
+		require.NoError(t, m.Write(&pb))
+		return pb.GetHistogram().GetSampleCount()
+	}
 
-	// These will panic if the metric doesn't exist, so successful execution = test passes
-	_ = CommandDuration.With(lookLabels)
-	_ = CommandDuration.With(sayLabels)
+	lookCount := collectSampleCount(prometheus.Labels{"command": "duration_look_t2", "source": "core"})
+	sayCount := collectSampleCount(prometheus.Labels{"command": "duration_say_t2", "source": "lua"})
+
+	assert.GreaterOrEqual(t, lookCount, uint64(2), "expected at least 2 observations for duration_look_t2/core")
+	assert.GreaterOrEqual(t, sayCount, uint64(1), "expected at least 1 observation for duration_say_t2/lua")
 }
 
 func TestRecordAliasExpansion(t *testing.T) {
@@ -126,4 +143,5 @@ func TestMetricsStatusConstants(t *testing.T) {
 	assert.Equal(t, "not_found", StatusNotFound)
 	assert.Equal(t, "permission_denied", StatusPermissionDenied)
 	assert.Equal(t, "rate_limited", StatusRateLimited)
+	assert.Equal(t, "engine_failure", StatusEngineFailure)
 }
