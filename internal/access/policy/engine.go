@@ -429,18 +429,17 @@ func (e *Engine) CanPerformAction(ctx context.Context, subject, action, resource
 	}
 	bags, resolveErr := e.resolver.Resolve(ctx, syntheticReq)
 	if resolveErr != nil {
-		// Type-level pre-flight fails closed on attribute resolution errors.
-		// We do not propagate the error: callers interpret (false, nil) as "no capability"
-		// and fall back to the human-readable "you can't do that" path, while
-		// instance-level Evaluate will surface the infrastructure error when the
-		// command handler runs.
 		errutil.LogErrorContext(ctx, "CanPerformAction: attribute resolution failed — fail-closed",
 			resolveErr,
 			"subject", subject,
 			"action", action,
 			"resourceType", resourceType,
 		)
-		return false, nil
+		return false, oops.
+			With("subject", subject).
+			With("action", action).
+			With("resourceType", resourceType).
+			Wrap(resolveErr)
 	}
 
 	// Step 5: Get compiled policies from the cache snapshot

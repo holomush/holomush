@@ -2053,7 +2053,7 @@ func TestEngine_CanPerformAction_InvalidSubjectFormat(t *testing.T) {
 
 func TestEngine_CanPerformAction_AttributeResolutionError(t *testing.T) {
 	// A failing attribute provider should cause CanPerformAction to fail closed
-	// and return (false, nil) — no error propagated.
+	// and propagate the error so callers can distinguish infra failures from denials.
 	failingProvider := &failingAttributeProvider{
 		namespace: "character",
 		err:       errors.New("database connection failed"),
@@ -2074,8 +2074,9 @@ func TestEngine_CanPerformAction_AttributeResolutionError(t *testing.T) {
 	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
 
 	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
-	require.NoError(t, err, "attribute resolution error should not propagate — (false, nil) is the contract")
+	require.Error(t, err, "attribute resolution error should propagate")
 	assert.False(t, allowed, "should fail closed on attribute resolution error")
+	assert.Contains(t, err.Error(), "database connection failed")
 }
 
 func TestEngine_CanPerformAction_PrincipalTypeMismatch(t *testing.T) {
