@@ -32,8 +32,8 @@ func TestErrPermissionDenied(t *testing.T) {
 }
 
 func TestErrInsufficientCapability(t *testing.T) {
-	cap := Capability{Action: "emit", Resource: "stream", Scope: ScopeLocal}
-	err := ErrInsufficientCapability("say", cap)
+	capability := Capability{Action: "emit", Resource: "stream", Scope: ScopeLocal}
+	err := ErrInsufficientCapability("say", capability)
 
 	oopsErr, ok := oops.AsOops(err)
 	require.True(t, ok)

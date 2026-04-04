@@ -111,18 +111,22 @@ func handleResetPassword(ctx context.Context, exec *command.CommandExecution, de
 	if args.password != "" {
 		allowed, capErr := engine.CanPerformAction(ctx, subject, capPasswordSet.Action, capPasswordSet.Resource, capPasswordSet.EffectiveScope())
 		if capErr != nil {
+			//nolint:wrapcheck // ErrResetPasswordFailed already creates structured oops error
 			return command.ErrResetPasswordFailed(capErr)
 		}
 		if !allowed {
+			//nolint:wrapcheck // ErrInsufficientCapability already creates structured oops error
 			return command.ErrInsufficientCapability(resetPasswordCommandName, capPasswordSet)
 		}
 	}
 	if args.kick {
 		allowed, capErr := engine.CanPerformAction(ctx, subject, capSessionKick.Action, capSessionKick.Resource, capSessionKick.EffectiveScope())
 		if capErr != nil {
+			//nolint:wrapcheck // ErrResetPasswordFailed already creates structured oops error
 			return command.ErrResetPasswordFailed(capErr)
 		}
 		if !allowed {
+			//nolint:wrapcheck // ErrInsufficientCapability already creates structured oops error
 			return command.ErrInsufficientCapability(resetPasswordCommandName, capSessionKick)
 		}
 	}
