@@ -1938,3 +1938,228 @@ func TestEngine_OnCorruptPermitPolicy_DoesNotEnterDegraded(t *testing.T) {
 	engine.OnPolicyCorruption("policy-456", types.PolicyEffectPermit)
 	assert.False(t, engine.IsDegraded())
 }
+
+// --- CanPerformAction tests ---
+
+func TestEngine_CanPerformAction_AdminPermitted(t *testing.T) {
+	dslText := `permit(principal is character, action in ["write"], resource is location) when { "admin" in principal.character.roles };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"roles": []string{"admin"}},
+	}
+	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.True(t, allowed, "admin should be permitted to write on location type")
+}
+
+func TestEngine_CanPerformAction_NoMatchingPolicy(t *testing.T) {
+	// Policy only covers "read" but we're checking "write"
+	dslText := `permit(principal is character, action in ["read"], resource is location);`
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "no write policy → default deny")
+}
+
+func TestEngine_CanPerformAction_ForbidOverridesPermit(t *testing.T) {
+	permitDSL := `permit(principal is character, action in ["write"], resource is location);`
+	forbidDSL := `forbid(principal is character, action in ["write"], resource is location) when { "banned" in principal.character.roles };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"roles": []string{"player", "banned"}},
+	}
+	engine := createTestEngineWithPolicies(t, []string{permitDSL, forbidDSL}, []attribute.AttributeProvider{provider})
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "forbid should override permit")
+}
+
+func TestEngine_CanPerformAction_DegradedMode(t *testing.T) {
+	engine, _ := createTestEngine(t, &mockSessionResolver{})
+	engine.EnterDegradedMode("test")
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, types.ErrEngineDegraded)
+	assert.False(t, allowed, "degraded mode → fail-closed")
+}
+
+func TestEngine_CanPerformAction_ContextCancelled(t *testing.T) {
+	engine, _ := createTestEngine(t, &mockSessionResolver{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	allowed, err := engine.CanPerformAction(ctx, "character:01ABC", "write", "location", "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.False(t, allowed)
+}
+
+func TestEngine_CanPerformAction_UnconditionalPermit(t *testing.T) {
+	// Policy with no conditions (always matches)
+	dslText := `permit(principal is character, action in ["say"], resource is location);`
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "say", "location", "")
+	require.NoError(t, err)
+	assert.True(t, allowed, "unconditional permit should match")
+}
+
+func TestEngine_CanPerformAction_ExactResourcePolicySkipped(t *testing.T) {
+	// Policy targets a specific resource exact match — should be skipped in type-level check
+	dslText := `permit(principal is character, action in ["write"], resource == "location:special-room");`
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
+
+	// Type-level check should not match the exact-resource policy
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "exact-resource policies should be skipped in type-level pre-flight")
+}
+
+func TestEngine_CanPerformAction_InvalidSubjectFormat(t *testing.T) {
+	tests := []struct {
+		name    string
+		subject string
+	}{
+		{"no colon", "badsubject"},
+		{"empty type", ":01ABC"},
+		{"empty id", "character:"},
+		{"whitespace type", " :01ABC"},
+		{"whitespace id", "character: "},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine, _ := createTestEngine(t, &mockSessionResolver{})
+			allowed, err := engine.CanPerformAction(context.Background(), tt.subject, "write", "location", "")
+			require.Error(t, err)
+			assert.False(t, allowed, "invalid subject format should return false")
+
+			oopsErr, ok := oops.AsOops(err)
+			require.True(t, ok)
+			assert.Equal(t, "INVALID_ENTITY_REF", oopsErr.Code())
+		})
+	}
+}
+
+func TestEngine_CanPerformAction_AttributeResolutionError(t *testing.T) {
+	// A failing attribute provider should cause CanPerformAction to fail closed
+	// and propagate the error so callers can distinguish infra failures from denials.
+	failingProvider := &failingAttributeProvider{
+		namespace: "character",
+		err:       errors.New("database connection failed"),
+	}
+
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+	require.NoError(t, resolver.RegisterProvider(failingProvider))
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() { _ = auditLogger.Close() })
+
+	cache := NewCache(nil, nil)
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.Error(t, err, "attribute resolution error should propagate")
+	assert.False(t, allowed, "should fail closed on attribute resolution error")
+	assert.Contains(t, err.Error(), "database connection failed")
+}
+
+func TestEngine_CanPerformAction_PrincipalTypeMismatch(t *testing.T) {
+	// Policy targets "plugin" principal but subject is "character"
+	dslText := `permit(principal is plugin, action in ["write"], resource is location);`
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "character subject should not match plugin-only policy")
+}
+
+func TestEngine_CanPerformAction_ActionMismatch(t *testing.T) {
+	// Policy only permits "read" but we're checking "delete"
+	dslText := `permit(principal is character, action in ["read"], resource is location);`
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "delete", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "delete should not match read-only policy")
+}
+
+func TestEngine_CanPerformAction_ResourceTypeMismatch(t *testing.T) {
+	// Policy targets "exit" resource but we're checking "location"
+	dslText := `permit(principal is character, action in ["write"], resource is exit);`
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "location should not match exit-only policy")
+}
+
+func TestEngine_CanPerformAction_NilCompiledPolicySkipped(t *testing.T) {
+	// A policy with Compiled == nil should be silently skipped
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() { _ = auditLogger.Close() })
+
+	cache := NewCache(nil, nil)
+	cache.mu.Lock()
+	cache.snapshot = &Snapshot{
+		Policies: []CachedPolicy{
+			{ID: "nil-compiled", Name: "broken", Compiled: nil},
+		},
+		CreatedAt: time.Now(),
+	}
+	cache.mu.Unlock()
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "nil-compiled policy should be skipped, resulting in default deny")
+}
+
+func TestEngine_CanPerformAction_ConditionUnsatisfied(t *testing.T) {
+	// Permit policy exists but condition is not met
+	dslText := `permit(principal is character, action in ["write"], resource is location) when { "admin" in principal.character.roles };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"roles": []string{"player"}}, // not admin
+	}
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "unsatisfied condition should result in default deny")
+}
+
+func TestEngine_OnPolicyCorruption_UnknownEffect(t *testing.T) {
+	// Exercise the default branch in OnPolicyCorruption
+	engine, _ := createTestEngine(t, nil)
+	engine.OnPolicyCorruption("policy-789", types.PolicyEffect("bogus"))
+	assert.True(t, engine.IsDegraded(), "unknown effect type should trigger degraded mode")
+}

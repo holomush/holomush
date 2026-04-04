@@ -34,7 +34,7 @@ func TestRegisterAdmin(t *testing.T) {
 	entry, found := reg.Get("resetpassword")
 	require.True(t, found, "resetpassword should be registered")
 	assert.Equal(t, "resetpassword", entry.Name)
-	assert.Equal(t, []string{"admin:password.reset"}, entry.GetCapabilities())
+	assert.Equal(t, []command.Capability{{Action: "write", Resource: "player", Scope: command.ScopeGlobal}}, entry.GetCapabilities())
 	assert.Equal(t, "core", entry.Source)
 	assert.NotNil(t, entry.Handler())
 }

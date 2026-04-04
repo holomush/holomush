@@ -124,6 +124,11 @@ func (e *capturingEngineImpl) Evaluate(_ context.Context, req types.AccessReques
 	return types.NewDecision(types.EffectDeny, "test", ""), nil
 }
 
+// CanPerformAction returns false (deny) for test purposes.
+func (e *capturingEngineImpl) CanPerformAction(_ context.Context, _, _, _, _ string) (bool, error) {
+	return false, nil
+}
+
 func TestRateLimitMiddleware_Enforce_EngineError(t *testing.T) {
 	// Engine that returns an error
 	engineErr := errors.New("policy store unavailable")

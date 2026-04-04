@@ -364,6 +364,18 @@ store := mocks.NewMockEventStore(t)
 store.EXPECT().Append(mock.Anything, mock.Anything).Return(nil)
 ```
 
+### Test Engine Helpers
+
+Use `policytest.GrantEngine` for authorization in tests:
+
+```go
+mockAccess := policytest.NewGrantEngine()
+mockAccess.GrantCommandExecution(subject, "say", "look") // Layer 1 grants
+mockAccess.Grant(subject, "emit", "stream")              // Layer 2 / capability grants
+```
+
+Other test engines: `AllowAllEngine()`, `DenyAllEngine()`, `NewErrorEngine(err)`, `NewInfraFailureEngine(t, reason, policyID)`.
+
 ### MemoryEventStore
 
 MemoryEventStore is for **unit tests only**. It MUST NOT be used in integration
@@ -418,18 +430,28 @@ go test -race -v -tags=integration ./test/integration/...
 ```bash
 task lint      # Run all linters
 task fmt       # Format all files
-task test      # Run tests
+task test      # Run unit tests (compact output via gotestsum)
 task build     # Build binary
 task dev       # Run dev server
 ```
 
+**Test commands accept arguments after `--`:**
+
+```bash
+task test                                        # All unit tests
+task test -- ./internal/command/                  # Single package
+task test -- -run TestCapability ./internal/command/  # Specific test
+task test:verbose -- ./internal/command/          # Full verbose output
+task test:int                                    # Integration tests (needs Docker)
+```
+
 | Requirement                            | Description                                       |
 | -------------------------------------- | ------------------------------------------------- |
-| **MUST** use `task`                    | Never run Go/lint/fmt commands directly           |
-| **MUST** run `task test`               | Before claiming any implementation is complete    |
-| **MUST** run `task lint`               | Before committing changes                         |
-| **MUST NOT** disable lint/format rules | Without explicit user confirmation                |
-| **SHOULD** run `task fmt`              | Before committing to ensure consistent formatting |
+| **MUST** use `task`                    | Never run Go/lint/fmt commands directly            |
+| **MUST** run `task test`               | Before claiming any implementation is complete     |
+| **MUST** run `task lint`               | Before committing changes                          |
+| **MUST NOT** disable lint/format rules | Without explicit user confirmation                 |
+| **SHOULD** run `task fmt`              | Before committing to ensure consistent formatting  |
 
 **MUST** run `task pr-prep` before creating a PR or pushing to a PR branch.
 This mirrors all CI jobs (lint, format, schema, license, unit, integration,
@@ -561,6 +583,23 @@ allowed := evaluator.Evaluate(ctx, subject, action, resource)
 ```
 
 Default deny - explicit permission required for all operations.
+
+### Command Authorization
+
+Commands use two-layer authorization at dispatch time:
+
+1. **Layer 1 — Command Execution:** `engine.Evaluate(subject, "execute", "command:<name>")` — can this character run this command?
+2. **Layer 2 — Capability Pre-Flight:** `engine.CanPerformAction(subject, action, resource, scope)` per declared capability — does this character have the class of permissions this command needs?
+
+Commands declare capabilities as structured objects:
+
+```go
+Capabilities: []command.Capability{
+    {Action: "write", Resource: "location", Scope: command.ScopeLocal},
+}
+```
+
+Scope: `ScopeSelf` (default, own character), `ScopeLocal` (current location), `ScopeGlobal` (server-wide).
 
 ## Patterns
 

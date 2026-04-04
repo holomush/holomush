@@ -390,6 +390,151 @@ func (e *Engine) findApplicablePolicies(req types.AccessRequest, policies []Cach
 	return result
 }
 
+// CanPerformAction performs a type-level pre-flight check: it evaluates whether
+// the subject could potentially perform an action on a resource TYPE without
+// requiring a specific resource instance.
+//
+// This is fail-closed: degraded mode and context cancellation both return false.
+// Conditions that reference resource attributes evaluate to false (optimistic skip
+// is intentional: type-level check is coarse; instance-level Evaluate handles those).
+// If any forbid policy with satisfied conditions matches, returns false.
+// If any permit policy with satisfied conditions matches, returns true.
+// No match → default deny (false, nil).
+func (e *Engine) CanPerformAction(ctx context.Context, subject, action, resourceType, _ string) (bool, error) {
+	// Step 1: Context cancellation check
+	if err := ctx.Err(); err != nil {
+		return false, oops.Wrapf(err, "context cancelled before CanPerformAction")
+	}
+
+	// Step 2: Degraded mode → fail-closed with sentinel error so callers
+	// can distinguish infra failure from normal deny.
+	if e.degraded.Load() {
+		return false, types.ErrEngineDegraded
+	}
+
+	// Step 3: Validate subject format "type:id"
+	parts := strings.SplitN(subject, ":", 2)
+	if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+		return false, oops.
+			Code("INVALID_ENTITY_REF").
+			With("subject", subject).
+			Errorf("subject must be in 'type:id' format with non-empty type and id")
+	}
+
+	// Step 4: Resolve subject attributes via a synthetic request.
+	// The resource uses resourceType+":__preflight__" to satisfy resolver format
+	// requirements without needing a real resource instance.
+	syntheticReq, reqErr := types.NewAccessRequest(subject, action, resourceType+":__preflight__")
+	if reqErr != nil {
+		return false, oops.With("subject", subject).With("action", action).With("resourceType", resourceType).Wrap(reqErr)
+	}
+	bags, resolveErr := e.resolver.Resolve(ctx, syntheticReq)
+	if resolveErr != nil {
+		errutil.LogErrorContext(ctx, "CanPerformAction: attribute resolution failed — fail-closed",
+			resolveErr,
+			"subject", subject,
+			"action", action,
+			"resourceType", resourceType,
+		)
+		return false, oops.
+			With("subject", subject).
+			With("action", action).
+			With("resourceType", resourceType).
+			Wrap(resolveErr)
+	}
+
+	// Step 5: Get compiled policies from the cache snapshot
+	snap := e.cache.Snapshot()
+
+	// Step 6: Filter policies by principal type, action, and resource TYPE only.
+	// We match on resource type, not exact resource (since we have no instance).
+	subjectType := parts[0]
+	var candidates []CachedPolicy
+	for _, policy := range snap.Policies {
+		if policy.Compiled == nil {
+			continue
+		}
+		target := policy.Compiled.Target
+
+		// Filter by principal type
+		if target.PrincipalType != nil && *target.PrincipalType != subjectType {
+			continue
+		}
+
+		// Filter by action
+		if len(target.ActionList) > 0 && !contains(target.ActionList, action) {
+			continue
+		}
+
+		// Filter by resource type only (skip exact-resource-only policies)
+		if target.ResourceExact != nil {
+			// This policy targets a specific resource instance — skip it for
+			// type-level pre-flight since we have no instance to compare.
+			continue
+		}
+		if target.ResourceType != nil && *target.ResourceType != resourceType {
+			continue
+		}
+
+		candidates = append(candidates, policy)
+	}
+
+	// Step 7 & 8: Evaluate conditions using subject attributes only.
+	// Resource attributes in bags will be empty (preflight resource doesn't exist).
+	//
+	// Per the spec, policies with resource-specific conditions are treated
+	// optimistically for permit (the handler-level ABAC will do the instance
+	// check) but conservatively for forbid (unconditional forbids still deny).
+	//
+	// Strategy:
+	//   - If conditions pass with subject attrs only → definite match
+	//   - If conditions fail AND policy references resource attrs → optimistic
+	//     (conditions may depend on resource state we can't check here)
+	//   - If conditions fail AND policy only uses subject attrs → definitive
+	//     failure (subject doesn't have the required attributes)
+	anyForbid := false
+	anyPermit := false
+	for _, candidate := range candidates {
+		evalCtx := &dsl.EvalContext{
+			Bags:      bags,
+			GlobCache: candidate.Compiled.GlobCache,
+		}
+		conditionsMet := dsl.EvaluateConditions(evalCtx, candidate.Compiled.Conditions)
+		effect := candidate.Compiled.Effect.ToEffect()
+
+		if conditionsMet {
+			// Conditions satisfied with available attributes — definite match.
+			switch effect {
+			case types.EffectDeny:
+				anyForbid = true
+			case types.EffectAllow:
+				anyPermit = true
+			}
+		} else if effect == types.EffectAllow && dsl.ReferencesResourceAttrs(candidate.Compiled.Conditions) {
+			// Permit policy with unmet conditions that reference resource
+			// attributes we can't evaluate without a specific instance.
+			// Treat as optimistic match — the handler's instance-level
+			// ABAC will enforce the full condition.
+			anyPermit = true
+		}
+		// Forbid with unmet conditions: not applied. Subject-only permit
+		// with unmet conditions: not applied (subject lacks required attrs).
+	}
+
+	// Step 8: Forbid overrides permit
+	if anyForbid {
+		return false, nil
+	}
+
+	// Step 9: Permit without forbid
+	if anyPermit {
+		return true, nil
+	}
+
+	// Step 10: No matches → default deny
+	return false, nil
+}
+
 func parseEntityType(id string) string {
 	parts := strings.SplitN(id, ":", 2)
 	if len(parts) < 2 {

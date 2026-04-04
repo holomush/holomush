@@ -72,8 +72,8 @@ func SeedPolicies() []SeedPolicy {
 		{
 			Name:        "seed:player-basic-commands",
 			Description: "Characters can execute basic commands",
-			DSLText:     `permit(principal is character, action in ["execute"], resource is command) when { resource.command.name in ["say", "pose", "look", "go"] };`,
-			SeedVersion: 2,
+			DSLText:     `permit(principal is character, action in ["execute"], resource is command) when { resource.command.name in ["say", "pose", "look", "go", "quit", "page", "whisper", "emit", "who", "examine", "help", "alias", "unalias", "aliases", "set"] };`,
+			SeedVersion: 3,
 		},
 		{
 			Name:        "seed:builder-location-write",
@@ -208,6 +208,5 @@ func SeedPolicies() []SeedPolicy {
 			DSLText:     `permit(principal is system, action in ["read", "write"], resource is exit);`,
 			SeedVersion: 1,
 		},
-
 	}
 }

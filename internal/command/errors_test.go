@@ -8,6 +8,7 @@ import (
 
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/world"
 )
@@ -23,11 +24,24 @@ func TestErrUnknownCommand(t *testing.T) {
 }
 
 func TestErrPermissionDenied(t *testing.T) {
-	err := ErrPermissionDenied("boot", "admin.boot")
+	err := ErrPermissionDenied("boot", "admin:boot")
 	oopsErr, _ := oops.AsOops(err)
 	assert.Equal(t, "PERMISSION_DENIED", oopsErr.Code())
 	assert.Equal(t, "boot", oopsErr.Context()["command"])
-	assert.Equal(t, "admin.boot", oopsErr.Context()["capability"])
+	assert.Equal(t, "admin:boot", oopsErr.Context()["capability"])
+}
+
+func TestErrInsufficientCapability(t *testing.T) {
+	capability := Capability{Action: "emit", Resource: "stream", Scope: ScopeLocal}
+	err := ErrInsufficientCapability("say", capability)
+
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, CodePermissionDenied, oopsErr.Code())
+	assert.Equal(t, "say", oopsErr.Context()["command"])
+	assert.Equal(t, "emit", oopsErr.Context()["required_action"])
+	assert.Equal(t, "stream", oopsErr.Context()["required_resource"])
+	assert.Contains(t, err.Error(), "insufficient capability")
 }
 
 func TestErrInvalidArgs(t *testing.T) {
@@ -100,7 +114,7 @@ func TestPlayerMessage(t *testing.T) {
 		},
 		{
 			name:     "permission denied",
-			err:      ErrPermissionDenied("boot", "admin.boot"),
+			err:      ErrPermissionDenied("boot", "admin:boot"),
 			expected: "You don't have permission to do that.",
 		},
 		{

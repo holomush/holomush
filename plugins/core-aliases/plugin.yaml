@@ -8,7 +8,8 @@ load_priority: -1000
 commands:
   - name: alias
     capabilities:
-      - player.alias
+      - action: write
+        resource: alias
     help: "Add a personal alias"
     usage: "alias <name>=<command>"
     helpText: |
@@ -34,11 +35,12 @@ commands:
 
       ### Permissions
 
-      Requires the `player.alias` capability.
+      Requires write access to the alias resource.
 
   - name: unalias
     capabilities:
-      - player.alias
+      - action: write
+        resource: alias
     help: "Remove a personal alias"
     usage: "unalias <name>"
     helpText: |
@@ -56,11 +58,12 @@ commands:
 
       ### Permissions
 
-      Requires the `player.alias` capability.
+      Requires write access to the alias resource.
 
   - name: aliases
     capabilities:
-      - player.alias
+      - action: read
+        resource: alias
     help: "List your personal aliases"
     usage: "aliases"
     helpText: |
@@ -74,11 +77,13 @@ commands:
 
       ### Permissions
 
-      Requires the `player.alias` capability.
+      Requires read access to the alias resource.
 
   - name: sysalias
     capabilities:
-      - admin.alias
+      - action: write
+        resource: alias
+        scope: global
     help: "Add a system alias"
     usage: "sysalias <name>=<command>"
     helpText: |
@@ -104,11 +109,13 @@ commands:
 
       ### Permissions
 
-      Requires the `admin.alias` capability.
+      Requires write access to the alias resource at global scope.
 
   - name: sysunsalias
     capabilities:
-      - admin.alias
+      - action: write
+        resource: alias
+        scope: global
     help: "Remove a system alias"
     usage: "sysunsalias <name>"
     helpText: |
@@ -126,11 +133,13 @@ commands:
 
       ### Permissions
 
-      Requires the `admin.alias` capability.
+      Requires write access to the alias resource at global scope.
 
   - name: sysaliases
     capabilities:
-      - admin.alias
+      - action: read
+        resource: alias
+        scope: global
     help: "List all system aliases"
     usage: "sysaliases"
     helpText: |-
@@ -144,4 +153,4 @@ commands:
 
       ### Permissions
 
-      Requires the `admin.alias` capability.
+      Requires read access to the alias resource at global scope.

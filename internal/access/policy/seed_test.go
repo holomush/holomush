@@ -261,4 +261,3 @@ func TestSeedPolicies_PemitStoryteller(t *testing.T) {
 	}
 	assert.True(t, found, "seed:pemit-storyteller policy must exist")
 }
-

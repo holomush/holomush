@@ -6,6 +6,7 @@ package types
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -391,6 +392,22 @@ const (
 // - world package needs to call the engine
 // - policy/attribute package needs to query world repositories
 // By defining the interface with the types it uses, both can import types without a cycle.
+
+// ErrEngineDegraded is returned by CanPerformAction when the engine is in
+// degraded mode. Callers should treat this as an infrastructure failure
+// (mark results incomplete) rather than a normal policy denial.
+var ErrEngineDegraded = errors.New("ABAC engine in degraded mode")
+
+// AccessPolicyEngine defines the interface for ABAC policy evaluation.
 type AccessPolicyEngine interface {
 	Evaluate(ctx context.Context, request AccessRequest) (Decision, error)
+	// CanPerformAction performs a type-level pre-flight check: it evaluates whether
+	// the subject could potentially perform an action on a resource TYPE without
+	// requiring a specific resource instance. This is a coarse capability check
+	// used by the dispatcher before routing to command handlers.
+	//
+	// subject and scope are informational — scope is reserved for future scoping
+	// (e.g., "location:01ABC") and is currently ignored.
+	// Returns (false, nil) for default-deny; (false, err) on infrastructure failure.
+	CanPerformAction(ctx context.Context, subject, action, resourceType, scope string) (bool, error)
 }

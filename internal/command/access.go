@@ -20,77 +20,71 @@ import (
 // as distinct from policy denials (CodePermissionDenied).
 var ErrCapabilityCheckFailed = errors.New("capability check failed")
 
-// CheckCapability evaluates whether a subject can execute a given capability
-// using the ABAC policy engine. It handles request construction errors, engine
-// evaluation errors, infrastructure failures, and permission denial with
-// consistent logging, metrics, and error codes.
-//
-// Returned errors carry oops codes and context:
-//   - CodeAccessEvaluationFailed with command, capability: request construction
-//     failed, engine returned an error, or the engine denied due to infrastructure failure
-//   - CodePermissionDenied with command, capability, reason, policy_id: the engine
-//     denied access based on policy
-func CheckCapability(ctx context.Context, engine types.AccessPolicyEngine, subject, capability, cmdName string) error {
-	req, reqErr := types.NewAccessRequest(subject, "execute", capability)
+// CheckCommandExecution evaluates Layer 1: can the subject execute this command?
+func CheckCommandExecution(ctx context.Context, engine types.AccessPolicyEngine, subject, cmdName string) error {
+	req, reqErr := types.NewAccessRequest(subject, "execute", "command:"+cmdName)
 	if reqErr != nil {
-		errutil.LogErrorContext(ctx, cmdName+" access request construction failed",
-			reqErr,
-			"subject", subject,
-			"action", "execute",
-			"resource", capability,
-		)
-		observability.RecordEngineFailure(cmdName + "_access_check")
+		errutil.LogErrorContext(ctx, cmdName+" command access request failed",
+			reqErr, "subject", subject, "command", cmdName)
+		observability.RecordEngineFailure(cmdName + "_command_access")
 		return oops.Code(CodeAccessEvaluationFailed).
 			With("command", cmdName).
-			With("capability", capability).
 			Wrap(errors.Join(ErrCapabilityCheckFailed, reqErr))
 	}
 
 	decision, evalErr := engine.Evaluate(ctx, req)
 	if evalErr != nil {
-		errutil.LogErrorContext(ctx, cmdName+" access evaluation failed",
-			evalErr,
-			"subject", subject,
-			"action", "execute",
-			"resource", capability,
-		)
-		observability.RecordEngineFailure(cmdName + "_access_check")
+		errutil.LogErrorContext(ctx, cmdName+" command access evaluation failed",
+			evalErr, "subject", subject, "command", cmdName)
+		observability.RecordEngineFailure(cmdName + "_command_access")
 		return oops.Code(CodeAccessEvaluationFailed).
 			With("command", cmdName).
-			With("capability", capability).
 			Wrap(errors.Join(ErrCapabilityCheckFailed, evalErr))
 	}
 
 	if !decision.IsAllowed() {
 		if decision.IsInfraFailure() {
-			slog.ErrorContext(ctx, cmdName+" access check infrastructure failure",
+			slog.ErrorContext(ctx, cmdName+" command access infra failure",
 				"subject", subject,
-				"action", "execute",
-				"resource", capability,
 				"reason", decision.Reason(),
-				"policy_id", decision.PolicyID(),
-			)
-			observability.RecordEngineFailure(cmdName + "_access_check")
+				"policy_id", decision.PolicyID())
+			observability.RecordEngineFailure(cmdName + "_command_access")
 			return oops.Code(CodeAccessEvaluationFailed).
 				With("command", cmdName).
-				With("capability", capability).
 				With("reason", decision.Reason()).
 				With("policy_id", decision.PolicyID()).
 				Wrap(ErrCapabilityCheckFailed)
 		}
-		slog.DebugContext(ctx, cmdName+" permission denied",
+		slog.DebugContext(ctx, cmdName+" command execution denied",
 			"subject", subject,
-			"capability", capability,
 			"reason", decision.Reason(),
-			"policy_id", decision.PolicyID(),
-		)
-		return oops.Code(CodePermissionDenied).
-			With("command", cmdName).
-			With("capability", capability).
-			With("reason", decision.Reason()).
-			With("policy_id", decision.PolicyID()).
-			Errorf("permission denied for command %s", cmdName)
+			"policy_id", decision.PolicyID())
+		return ErrPermissionDenied(cmdName, "execute")
 	}
+	return nil
+}
 
+// CheckCapabilityPreFlight evaluates Layer 2: does the subject have the class of permissions?
+func CheckCapabilityPreFlight(ctx context.Context, engine types.AccessPolicyEngine, subject, cmdName string, caps []Capability) error {
+	for _, capability := range caps {
+		allowed, err := engine.CanPerformAction(ctx, subject, capability.Action, capability.Resource, capability.EffectiveScope())
+		if err != nil {
+			errutil.LogErrorContext(ctx, cmdName+" capability pre-flight error",
+				err, "subject", subject, "action", capability.Action, "resource", capability.Resource)
+			return oops.Code(CodeAccessEvaluationFailed).
+				With("command", cmdName).
+				With("action", capability.Action).
+				With("resource", capability.Resource).
+				Wrap(err)
+		}
+		if !allowed {
+			slog.DebugContext(ctx, cmdName+" capability pre-flight denied",
+				"subject", subject,
+				"action", capability.Action,
+				"resource", capability.Resource,
+				"scope", capability.EffectiveScope())
+			return ErrInsufficientCapability(cmdName, capability)
+		}
+	}
 	return nil
 }

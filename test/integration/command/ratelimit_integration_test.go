@@ -83,14 +83,14 @@ func (s *stubEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULI
 
 var _ = Describe("Rate Limiting Integration", func() {
 	var (
-		registry   *command.Registry
-		dispatcher *command.Dispatcher
-		mockAccess *policytest.GrantEngine
+		registry    *command.Registry
+		dispatcher  *command.Dispatcher
+		grantAccess *policytest.GrantEngine
 	)
 
 	BeforeEach(func() {
 		registry = command.NewRegistry()
-		mockAccess = policytest.NewGrantEngine()
+		grantAccess = policytest.NewGrantEngine()
 	})
 
 	Describe("End-to-end rate limiting", func() {
@@ -123,7 +123,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 			})
 
 			var dispErr error
-			dispatcher, dispErr = command.NewDispatcher(registry, mockAccess,
+			dispatcher, dispErr = command.NewDispatcher(registry, grantAccess,
 				command.WithRateLimiter(rateLimiter))
 			Expect(dispErr).NotTo(HaveOccurred())
 		})
@@ -140,6 +140,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 
 			sessionID := ulid.Make()
 			charID := ulid.Make()
+			grantAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "test")
 
 			// Execute commands up to burst capacity
 			for i := 0; i < 3; i++ {
@@ -162,6 +163,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 
 			sessionID := ulid.Make()
 			charID := ulid.Make()
+			grantAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "test")
 
 			// Exhaust burst capacity
 			for i := 0; i < 3; i++ {
@@ -201,6 +203,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 
 			sessionID := ulid.Make()
 			charID := ulid.Make()
+			grantAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "test")
 
 			// Exhaust burst capacity
 			for i := 0; i < 3; i++ {
@@ -238,6 +241,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 
 			sessionID := ulid.Make()
 			charID := ulid.Make()
+			grantAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "test")
 
 			// Exhaust burst capacity
 			for i := 0; i < 3; i++ {
@@ -297,7 +301,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 			})
 
 			var dispErr error
-			dispatcher, dispErr = command.NewDispatcher(registry, mockAccess,
+			dispatcher, dispErr = command.NewDispatcher(registry, grantAccess,
 				command.WithRateLimiter(rateLimiter))
 			Expect(dispErr).NotTo(HaveOccurred())
 		})
@@ -314,10 +318,14 @@ var _ = Describe("Rate Limiting Integration", func() {
 
 			session1 := ulid.Make()
 			session2 := ulid.Make()
+			char1 := ulid.Make()
+			char2 := ulid.Make()
+			grantAccess.GrantCommandExecution(access.SubjectCharacter+char1.String(), "test")
+			grantAccess.GrantCommandExecution(access.SubjectCharacter+char2.String(), "test")
 
 			// Session 1 uses its token
 			exec1 := command.NewTestExecution(command.CommandExecutionConfig{
-				CharacterID: ulid.Make(),
+				CharacterID: char1,
 				SessionID:   session1,
 				Output:      &bytes.Buffer{},
 				Services:    stubServices(),
@@ -335,7 +343,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 
 			// Session 2 should still have its own token
 			exec2 := command.NewTestExecution(command.CommandExecutionConfig{
-				CharacterID: ulid.Make(),
+				CharacterID: char2,
 				SessionID:   session2,
 				Output:      &bytes.Buffer{},
 				Services:    stubServices(),
@@ -348,16 +356,24 @@ var _ = Describe("Rate Limiting Integration", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			sessions := make([]ulid.ULID, 5)
-			for i := range sessions {
-				sessions[i] = ulid.Make()
+			type sessionChar struct {
+				sessionID   ulid.ULID
+				characterID ulid.ULID
+			}
+			entries := make([]sessionChar, 5)
+			for i := range entries {
+				entries[i] = sessionChar{
+					sessionID:   ulid.Make(),
+					characterID: ulid.Make(),
+				}
+				grantAccess.GrantCommandExecution(access.SubjectCharacter+entries[i].characterID.String(), "test")
 			}
 
 			// Each session should be able to execute exactly one command
-			for _, sessionID := range sessions {
+			for _, e := range entries {
 				exec := command.NewTestExecution(command.CommandExecutionConfig{
-					CharacterID: ulid.Make(),
-					SessionID:   sessionID,
+					CharacterID: e.characterID,
+					SessionID:   e.sessionID,
 					Output:      &bytes.Buffer{},
 					Services:    stubServices(),
 				})
@@ -366,10 +382,10 @@ var _ = Describe("Rate Limiting Integration", func() {
 			}
 
 			// All sessions should now be rate limited
-			for _, sessionID := range sessions {
+			for _, e := range entries {
 				exec := command.NewTestExecution(command.CommandExecutionConfig{
-					CharacterID: ulid.Make(),
-					SessionID:   sessionID,
+					CharacterID: e.characterID,
+					SessionID:   e.sessionID,
 					Output:      &bytes.Buffer{},
 					Services:    stubServices(),
 				})
@@ -400,7 +416,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 			})
 
 			var dispErr error
-			dispatcher, dispErr = command.NewDispatcher(registry, mockAccess,
+			dispatcher, dispErr = command.NewDispatcher(registry, grantAccess,
 				command.WithRateLimiter(rateLimiter))
 			Expect(dispErr).NotTo(HaveOccurred())
 		})
@@ -418,8 +434,9 @@ var _ = Describe("Rate Limiting Integration", func() {
 			adminCharID := ulid.Make()
 			sessionID := ulid.Make()
 
-			// Grant bypass capability to admin character
-			mockAccess.Grant(access.SubjectCharacter+adminCharID.String(), "execute", command.CapabilityRateLimitBypass)
+			// Grant bypass capability and command execution to admin character
+			grantAccess.Grant(access.SubjectCharacter+adminCharID.String(), "execute", command.CapabilityRateLimitBypass)
+			grantAccess.GrantCommandExecution(access.SubjectCharacter+adminCharID.String(), "test")
 
 			// Admin should be able to execute many commands without rate limiting
 			for i := 0; i < 10; i++ {
@@ -443,8 +460,10 @@ var _ = Describe("Rate Limiting Integration", func() {
 			adminSession := ulid.Make()
 			regularSession := ulid.Make()
 
-			// Grant bypass only to admin
-			mockAccess.Grant(access.SubjectCharacter+adminCharID.String(), "execute", command.CapabilityRateLimitBypass)
+			// Grant bypass and command execution to admin, only command execution to regular
+			grantAccess.Grant(access.SubjectCharacter+adminCharID.String(), "execute", command.CapabilityRateLimitBypass)
+			grantAccess.GrantCommandExecution(access.SubjectCharacter+adminCharID.String(), "test")
+			grantAccess.GrantCommandExecution(access.SubjectCharacter+regularCharID.String(), "test")
 
 			// Admin can execute multiple commands
 			for i := 0; i < 3; i++ {
@@ -509,7 +528,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 			})
 
 			var dispErr error
-			dispatcher, dispErr = command.NewDispatcher(registry, mockAccess,
+			dispatcher, dispErr = command.NewDispatcher(registry, grantAccess,
 				command.WithAliasCache(aliasCache),
 				command.WithRateLimiter(rateLimiter))
 			Expect(dispErr).NotTo(HaveOccurred())
@@ -528,6 +547,7 @@ var _ = Describe("Rate Limiting Integration", func() {
 			sessionID := ulid.Make()
 			playerID := ulid.Make()
 			charID := ulid.Make()
+			grantAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "look")
 
 			// Use alias - should succeed
 			exec := command.NewTestExecution(command.CommandExecutionConfig{

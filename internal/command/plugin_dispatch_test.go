@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
-	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -53,12 +52,8 @@ func TestDispatch_PluginBackedCommand(t *testing.T) {
 		},
 	}
 
-	// Create a permit-all engine
-	engine := policytest.NewMockAccessPolicyEngine(t)
-	engine.EXPECT().Evaluate(
-		context.Background(),
-		types.AccessRequest{},
-	).Maybe().Return(types.Decision{}, nil)
+	// Create a permit-all engine (AllowAllEngine handles both Layer 1 and Layer 2)
+	engine := policytest.AllowAllEngine()
 
 	dispatcher, err := command.NewDispatcher(registry, engine,
 		command.WithPluginDeliverer(deliverer),
@@ -104,8 +99,8 @@ func TestDispatch_PluginBackedCommand_NoDeliverer(t *testing.T) {
 	err := registry.Register(entry)
 	require.NoError(t, err)
 
-	// No plugin deliverer configured
-	engine := policytest.NewMockAccessPolicyEngine(t)
+	// No plugin deliverer configured — use AllowAllEngine so auth passes (tests plugin path, not auth)
+	engine := policytest.AllowAllEngine()
 	dispatcher, err := command.NewDispatcher(registry, engine)
 	require.NoError(t, err)
 

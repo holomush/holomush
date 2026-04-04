@@ -34,11 +34,13 @@ func RegisterAdmin(reg *command.Registry, deps AdminDeps) {
 	}
 
 	mustRegister(command.CommandEntryConfig{
-		Name:         "resetpassword",
-		Handler:      NewResetPasswordHandler(deps),
-		Capabilities: []string{"admin:password.reset"},
-		Help:         "Reset a player's password",
-		Usage:        "resetpassword <player> [password] [--kick]",
+		Name:    "resetpassword",
+		Handler: NewResetPasswordHandler(deps),
+		Capabilities: []command.Capability{
+			{Action: "write", Resource: "player", Scope: command.ScopeGlobal},
+		},
+		Help:  "Reset a player's password",
+		Usage: "resetpassword <player> [password] [--kick]",
 		HelpText: `## Reset Password
 
 Reset a player's password. Generates a random password if none provided.
@@ -46,14 +48,12 @@ Reset a player's password. Generates a random password if none provided.
 ### Usage
 
 - ` + "`resetpassword <player>`" + ` - Generate a new random password
-- ` + "`resetpassword <player> <password>`" + ` - Set a specific password (requires admin:password.set)
-- ` + "`resetpassword <player> --kick`" + ` - Reset and disconnect active sessions (requires admin:session.kick)
+- ` + "`resetpassword <player> <password>`" + ` - Set a specific password
+- ` + "`resetpassword <player> --kick`" + ` - Reset and disconnect active sessions
 
 ### Capabilities
 
-- ` + "`admin:password.reset`" + ` - Required for all resets
-- ` + "`admin:password.set`" + ` - Required to provide an explicit password
-- ` + "`admin:session.kick`" + ` - Required to force-disconnect active sessions`,
+Requires write access to the player resource at global scope.`,
 		Source: "core",
 	})
 }
@@ -90,11 +90,13 @@ Your character remains in-world but becomes inactive.
 	})
 
 	mustRegister(command.CommandEntryConfig{
-		Name:         "shutdown",
-		Handler:      ShutdownHandler,
-		Capabilities: []string{"admin:shutdown"},
-		Help:         "Shut down the server",
-		Usage:        "shutdown [delay_seconds]",
+		Name:    "shutdown",
+		Handler: ShutdownHandler,
+		Capabilities: []command.Capability{
+			{Action: "admin", Resource: "server", Scope: command.ScopeGlobal},
+		},
+		Help:  "Shut down the server",
+		Usage: "shutdown [delay_seconds]",
 		HelpText: `## Shutdown
 
 Initiate a server shutdown.
@@ -111,7 +113,7 @@ Initiate a server shutdown.
 
 ### Permissions
 
-Requires the ` + "`admin:shutdown`" + ` capability.`,
+Requires admin action on the server resource at global scope.`,
 		Source: "core",
 	})
 }

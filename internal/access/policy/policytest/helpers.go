@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
@@ -19,6 +20,8 @@ func AllowAllEngine() *MockAccessPolicyEngine {
 	m := &MockAccessPolicyEngine{}
 	m.On("Evaluate", mock.Anything, mock.Anything).
 		Return(types.NewDecision(types.EffectAllow, "test-allow-all", ""), nil)
+	m.On("CanPerformAction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil)
 	return m
 }
 
@@ -27,6 +30,8 @@ func DenyAllEngine() *MockAccessPolicyEngine {
 	m := &MockAccessPolicyEngine{}
 	m.On("Evaluate", mock.Anything, mock.Anything).
 		Return(types.NewDecision(types.EffectDeny, "test-deny-all", ""), nil)
+	m.On("CanPerformAction", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(false, nil)
 	return m
 }
 
@@ -46,6 +51,15 @@ func (g *GrantEngine) Grant(subject, action, resource string) {
 	g.grants[subject+"\x00"+action+"\x00"+resource] = true
 }
 
+// GrantCommandExecution grants Layer 1 command execution for the named
+// commands. This is the standard grant needed for any dispatched command
+// in the two-layer authorization model.
+func (g *GrantEngine) GrantCommandExecution(subject string, commands ...string) {
+	for _, cmd := range commands {
+		g.Grant(subject, "execute", "command:"+cmd)
+	}
+}
+
 // Evaluate implements types.AccessPolicyEngine.
 func (g *GrantEngine) Evaluate(_ context.Context, req types.AccessRequest) (types.Decision, error) {
 	key := req.Subject + "\x00" + req.Action + "\x00" + req.Resource
@@ -53,6 +67,23 @@ func (g *GrantEngine) Evaluate(_ context.Context, req types.AccessRequest) (type
 		return types.NewDecision(types.EffectAllow, "test-grant", ""), nil
 	}
 	return types.NewDecision(types.EffectDefaultDeny, "test-no-grant", ""), nil
+}
+
+// CanPerformAction implements types.AccessPolicyEngine.
+// Returns true if any grant matches subject+action+resourceType.
+// The resource in a grant can be either a bare type ("stream") or a
+// typed ID ("stream:01ABC"); both match the type-level pre-flight.
+func (g *GrantEngine) CanPerformAction(_ context.Context, subject, action, resourceType, _ string) (bool, error) {
+	for key := range g.grants {
+		parts := strings.SplitN(key, "\x00", 3)
+		if len(parts) == 3 &&
+			parts[0] == subject &&
+			parts[1] == action &&
+			(parts[2] == resourceType || strings.HasPrefix(parts[2], resourceType+":")) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // ErrorEngine is a test types.AccessPolicyEngine that always returns the configured error.
@@ -69,6 +100,11 @@ func NewErrorEngine(err error) *ErrorEngine {
 // Evaluate returns a zero-value decision and the configured error.
 func (e *ErrorEngine) Evaluate(_ context.Context, _ types.AccessRequest) (types.Decision, error) {
 	return types.Decision{}, e.err
+}
+
+// CanPerformAction returns false and the configured error.
+func (e *ErrorEngine) CanPerformAction(_ context.Context, _, _, _, _ string) (bool, error) {
+	return false, e.err
 }
 
 // InfraFailureEngine is a test types.AccessPolicyEngine that returns deny decisions
@@ -92,4 +128,12 @@ func NewInfraFailureEngine(t testing.TB, reason, policyID string) *InfraFailureE
 // Evaluate returns a deny decision with the infra: policy ID prefix.
 func (e *InfraFailureEngine) Evaluate(_ context.Context, _ types.AccessRequest) (types.Decision, error) {
 	return types.NewDecision(types.EffectDefaultDeny, e.reason, e.policyID), nil
+}
+
+// CanPerformAction returns (false, error) for infra failures. This differs from
+// Evaluate which signals infra failure via Decision.IsInfraFailure(). The
+// asymmetry is intentional: CanPerformAction uses (bool, error) where error IS
+// the infra failure signal, while Evaluate uses the richer Decision type.
+func (e *InfraFailureEngine) CanPerformAction(_ context.Context, _, _, _, _ string) (bool, error) {
+	return false, oops.Code(e.policyID).Errorf("%s", e.reason)
 }

@@ -103,7 +103,7 @@ type CommandSpec struct {
 
 	// Capabilities lists all required capabilities for the command (AND logic).
 	// The player must have ALL listed capabilities to use this command.
-	Capabilities []string `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
+	Capabilities []command.Capability `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
 
 	// Help is a short one-line description of the command.
 	Help string `yaml:"help,omitempty" json:"help,omitempty"`
@@ -129,6 +129,12 @@ func (c *CommandSpec) Validate() error {
 
 	if c.HelpText != "" && c.HelpFile != "" {
 		return oops.In("command").With("name", c.Name).New("cannot specify both helpText and helpFile")
+	}
+
+	for i, cap := range c.Capabilities {
+		if err := cap.Validate(); err != nil {
+			return oops.In("command").With("name", c.Name).With("capability_index", i).Wrap(err)
+		}
 	}
 
 	return nil

@@ -96,7 +96,13 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 		}
 	}
 
-	// 9. Plugin provider (nil registry — two-phase init)
+	// 9. Command provider (resolves resource.command.name for seed policies)
+	cmdProvider := attribute.NewCommandProvider()
+	if err := resolver.RegisterProvider(cmdProvider); err != nil {
+		return nil, eb.Wrapf(err, "register command provider")
+	}
+
+	// 10. Plugin provider (nil registry — two-phase init)
 	pluginProvider := attribute.NewPluginProvider(nil)
 	if err := resolver.RegisterProvider(pluginProvider); err != nil {
 		return nil, eb.Wrapf(err, "register plugin provider")

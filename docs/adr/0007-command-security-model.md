@@ -1,5 +1,11 @@
 # ADR 0007: Command Security Model
 
+> **Superseded:** This ADR's capability-namespace model was fully replaced
+> by structured capabilities (see spec: `docs/superpowers/specs/2026-04-03-command-capability-enforcement-design.md`).
+> Commands now declare capabilities as `{action, resource, scope}` objects
+> validated against the ABAC policy engine at dispatch time via two-layer
+> authorization (command execution check + capability pre-flight).
+
 **Date:** 2026-02-02
 **Status:** Superseded by [ADR 0014](0014-direct-static-access-control-replacement.md)
 **Deciders:** HoloMUSH Contributors

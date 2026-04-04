@@ -25,9 +25,13 @@ const (
 	resetPasswordCommandName = "resetpassword"
 	resetPasswordUsage       = "resetpassword <username> [password] [--kick]"
 	alphanumericChars        = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+)
 
-	capPasswordSet = "admin:password.set"
-	capSessionKick = "admin:session.kick"
+// Sub-capability definitions for handler-internal permission refinements.
+// These are checked AFTER Layer 1+2 dispatch authorization has passed.
+var (
+	capPasswordSet = command.Capability{Action: "write", Resource: "player", Scope: command.ScopeGlobal}
+	capSessionKick = command.Capability{Action: "admin", Resource: "session", Scope: command.ScopeGlobal}
 )
 
 // CharacterLister is the ISP interface for listing characters by player.
@@ -101,18 +105,29 @@ func handleResetPassword(ctx context.Context, exec *command.CommandExecution, de
 	engine := exec.Services().Engine()
 	subject := fmt.Sprintf("character:%s", exec.CharacterID().String())
 
-	// Capability checks: explicit password requires admin:password.set,
-	// --kick requires admin:session.kick.
+	// Sub-capability checks: explicit password requires write on player,
+	// --kick requires admin on session. These refine the handler's behavior
+	// after Layer 1+2 dispatch authorization has already passed.
 	if args.password != "" {
-		//nolint:wrapcheck // CheckCapability returns structured oops errors with codes
-		if capErr := command.CheckCapability(ctx, engine, subject, capPasswordSet, resetPasswordCommandName); capErr != nil {
-			return capErr
+		allowed, capErr := engine.CanPerformAction(ctx, subject, capPasswordSet.Action, capPasswordSet.Resource, capPasswordSet.EffectiveScope())
+		if capErr != nil {
+			//nolint:wrapcheck // ErrResetPasswordFailed already creates structured oops error
+			return command.ErrResetPasswordFailed(capErr)
+		}
+		if !allowed {
+			//nolint:wrapcheck // ErrInsufficientCapability already creates structured oops error
+			return command.ErrInsufficientCapability(resetPasswordCommandName, capPasswordSet)
 		}
 	}
 	if args.kick {
-		//nolint:wrapcheck // CheckCapability returns structured oops errors with codes
-		if capErr := command.CheckCapability(ctx, engine, subject, capSessionKick, resetPasswordCommandName); capErr != nil {
-			return capErr
+		allowed, capErr := engine.CanPerformAction(ctx, subject, capSessionKick.Action, capSessionKick.Resource, capSessionKick.EffectiveScope())
+		if capErr != nil {
+			//nolint:wrapcheck // ErrResetPasswordFailed already creates structured oops error
+			return command.ErrResetPasswordFailed(capErr)
+		}
+		if !allowed {
+			//nolint:wrapcheck // ErrInsufficientCapability already creates structured oops error
+			return command.ErrInsufficientCapability(resetPasswordCommandName, capSessionKick)
 		}
 	}
 

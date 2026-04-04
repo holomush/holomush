@@ -41,9 +41,14 @@ tasks:
       - COMPOSE_PROFILES=observability docker compose up --force-recreate --remove-orphans
 
   test:
-    desc: Run unit tests
+    desc: Run unit tests (pass package/test args after --)
     cmds:
-      - go test -race -v ./...
+      - gotestsum --format pkgname -- -race -count=1 {{.CLI_ARGS | default "./..."}}
+
+  test:verbose:
+    desc: Run unit tests with full verbose output
+    cmds:
+      - gotestsum --format standard-verbose -- -race -count=1 {{.CLI_ARGS | default "./..."}}
 
   lint:
     desc: Run all linters
@@ -71,14 +76,14 @@ tasks:
   test:cover:
     desc: Run tests with coverage report
     cmds:
-      - go test -race -coverprofile=coverage.out -covermode=atomic ./...
+      - gotestsum --format pkgname -- -race -coverprofile=coverage.out -covermode=atomic ./...
       - go tool cover -html=coverage.out -o coverage.html
 
   test:int:
     desc: Run integration tests (needs Docker for testcontainers)
     cmds:
-      - go test -race -v -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic ./internal/content/ ./internal/store/
-        ./test/integration/...
+      - gotestsum --format pkgname -- -race -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic ./internal/content/
+        ./internal/store/ ./test/integration/...
 
   test:e2e:
     desc: Run Playwright E2E tests in Docker
@@ -415,7 +420,7 @@ tasks:
   setup:
     desc: Install all dev tools and git hooks
     cmds:
-      - brew install golangci-lint gofumpt lefthook actionlint goreleaser dprint cocogitto rumdl yamlfmt binaryen
+      - brew install golangci-lint gofumpt lefthook actionlint goreleaser dprint cocogitto rumdl yamlfmt binaryen gotestsum
       - brew install steveyegge/beads/bd
       - go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@latest
       - lefthook install

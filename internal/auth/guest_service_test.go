@@ -24,12 +24,12 @@ func TestNewGuestService_NilDeps(t *testing.T) {
 	validSessions := mocks.NewMockPlayerSessionRepository(t)
 
 	tests := []struct {
-		name    string
-		namer   auth.GuestNamer
-		players auth.PlayerRepository
-		chars   auth.GuestCharacterRepository
+		name     string
+		namer    auth.GuestNamer
+		players  auth.PlayerRepository
+		chars    auth.GuestCharacterRepository
 		sessions auth.PlayerSessionRepository
-		wantErr string
+		wantErr  string
 	}{
 		{
 			name:     "nil namer",
@@ -124,8 +124,8 @@ func TestGuestService_CreateGuest_NameCollision(t *testing.T) {
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
 
-	takenCharName := "Ruby Flame"   // underscore→space form
-	freeCharName := "Jade River"    // underscore→space form
+	takenCharName := "Ruby Flame" // underscore→space form
+	freeCharName := "Jade River"  // underscore→space form
 
 	// First name is taken in DB; second name is free.
 	namer.EXPECT().GenerateName().Return(takenName, nil).Once()

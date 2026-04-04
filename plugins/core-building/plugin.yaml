@@ -8,8 +8,12 @@ load_priority: -1000
 commands:
   - name: dig
     capabilities:
-      - build.location
-      - build.exit
+      - action: write
+        resource: location
+        scope: local
+      - action: write
+        resource: exit
+        scope: local
     help: "Create a new location with connecting exit"
     usage: "dig <exit> to \"<location>\" [return <exit>]"
     helpText: |
@@ -32,11 +36,13 @@ commands:
 
       ### Requirements
 
-      Requires `build.location` and `build.exit` capabilities.
+      Requires write access to location and exit resources.
 
   - name: link
     capabilities:
-      - build.exit
+      - action: write
+        resource: exit
+        scope: local
     help: "Link current location to another with an exit"
     usage: "link <exit> to <target>"
     helpText: |
@@ -66,7 +72,7 @@ commands:
 
       ### Requirements
 
-      Requires `build.exit` capability.
+      Requires write access to the exit resource.
 
 policies:
   - name: "world-write-location"

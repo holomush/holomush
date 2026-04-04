@@ -176,39 +176,38 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 //   - allowed is true if command has no capabilities or subject has ALL required capabilities
 //   - hadError is true if any engine evaluation failed (returned error or indicated infrastructure failure)
 func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd command.CommandEntry) (allowed, hadError bool) {
-	caps := cmd.GetCapabilities()
-	// Commands with no capabilities are always available
-	if len(caps) == 0 {
-		return true, false
+	// Layer 1: can this character execute this command?
+	req, reqErr := types.NewAccessRequest(subject, "execute", "command:"+cmd.Name)
+	if reqErr != nil {
+		errutil.LogErrorContext(ctx, "command access request failed",
+			reqErr, "subject", subject, "command", cmd.Name)
+		observability.RecordEngineFailure("command_capability_engine_error")
+		return false, true
+	}
+	decision, evalErr := f.engine.Evaluate(ctx, req)
+	if evalErr != nil {
+		errutil.LogErrorContext(ctx, "command access evaluation failed",
+			evalErr, "subject", subject, "command", cmd.Name)
+		observability.RecordEngineFailure("command_capability_engine_error")
+		return false, true
+	}
+	if !decision.IsAllowed() {
+		if decision.IsInfraFailure() {
+			return false, true
+		}
+		return false, false
 	}
 
-	// Check ALL capabilities (AND logic) — fail-closed on errors
-	for _, cap := range caps {
-		req, err := types.NewAccessRequest(subject, "execute", cap)
+	// Layer 2: capability pre-flight (AND logic) — fail-closed on errors
+	for _, capability := range cmd.GetCapabilities() {
+		ok, err := f.engine.CanPerformAction(ctx, subject, capability.Action, capability.Resource, capability.EffectiveScope())
 		if err != nil {
-			errutil.LogErrorContext(ctx, "access request construction failed",
-				err, "subject", subject, "action", "execute", "resource", cap)
-			observability.RecordEngineFailure("command_capability_request_error")
-			hadError = true
-			return false, hadError
-		}
-
-		decision, err := f.engine.Evaluate(ctx, req)
-		if err != nil {
-			errutil.LogErrorContext(ctx, "access evaluation failed",
-				err, "subject", subject, "action", "execute", "resource", cap)
+			errutil.LogErrorContext(ctx, "capability pre-flight failed",
+				err, "subject", subject, "action", capability.Action, "resource", capability.Resource)
 			observability.RecordEngineFailure("command_capability_engine_error")
-			hadError = true
-			return false, hadError
+			return false, true
 		}
-		if !decision.IsAllowed() {
-			if decision.IsInfraFailure() {
-				slog.ErrorContext(ctx, "access check infrastructure failure",
-					"subject", subject, "action", "execute", "resource", cap,
-					"reason", decision.Reason(), "policy_id", decision.PolicyID())
-				observability.RecordEngineFailure("command_capability_engine_error")
-				hadError = true
-			}
+		if !ok {
 			return false, hadError
 		}
 	}
@@ -291,7 +290,13 @@ func (f *Functions) getCommandHelpFn(_ string) lua.LGFunction {
 		// Add capabilities array (use getter for defensive copy)
 		capsTbl := L.NewTable()
 		for i, cap := range cmd.GetCapabilities() {
-			L.SetTable(capsTbl, lua.LNumber(i+1), lua.LString(cap))
+			capTbl := L.NewTable()
+			L.SetField(capTbl, "action", lua.LString(cap.Action))
+			L.SetField(capTbl, "resource", lua.LString(cap.Resource))
+			if cap.Scope != "" {
+				L.SetField(capTbl, "scope", lua.LString(cap.Scope))
+			}
+			L.SetTable(capsTbl, lua.LNumber(i+1), capTbl)
 		}
 		L.SetField(tbl, "capabilities", capsTbl)
 
