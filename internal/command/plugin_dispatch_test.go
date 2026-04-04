@@ -34,7 +34,7 @@ func (m *mockPluginDeliverer) DeliverCommand(_ context.Context, pluginName strin
 	return m.response, m.err
 }
 
-func TestDispatch_PluginBackedCommand(t *testing.T) {
+func TestDispatchPluginBackedCommand(t *testing.T) {
 	// Set up a plugin-backed command in the registry
 	registry := command.NewRegistry()
 	entry := command.NewTestEntry(command.CommandEntryConfig{
@@ -89,7 +89,7 @@ func TestDispatch_PluginBackedCommand(t *testing.T) {
 	assert.Equal(t, "Hello, World!", buf.String())
 }
 
-func TestDispatch_PluginBackedCommand_NoDeliverer(t *testing.T) {
+func TestDispatchPluginBackedCommandNoDeliverer(t *testing.T) {
 	registry := command.NewRegistry()
 	entry := command.NewTestEntry(command.CommandEntryConfig{
 		Name:       "greet",
@@ -116,7 +116,7 @@ func TestDispatch_PluginBackedCommand_NoDeliverer(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "NO_PLUGIN_DELIVERER")
 }
 
-func TestNewCommandEntry_PluginName(t *testing.T) {
+func TestNewCommandEntryPluginName(t *testing.T) {
 	// Plugin-backed entry: PluginName set, no handler
 	entry, err := command.NewCommandEntry(command.CommandEntryConfig{
 		Name:       "say",

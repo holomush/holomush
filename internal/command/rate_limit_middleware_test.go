@@ -77,7 +77,7 @@ func TestNewRateLimitMiddleware(t *testing.T) {
 	}
 }
 
-func TestRateLimitMiddleware_Enforce_AccessRequest(t *testing.T) {
+func TestRateLimitMiddlewareEnforceAccessRequest(t *testing.T) {
 	// Create a simple capturing engine implementation
 	var captured types.AccessRequest
 	captureEngine := &capturingEngineImpl{captured: &captured}
@@ -129,7 +129,7 @@ func (e *capturingEngineImpl) CanPerformAction(_ context.Context, _, _, _, _ str
 	return false, nil
 }
 
-func TestRateLimitMiddleware_Enforce_EngineError(t *testing.T) {
+func TestRateLimitMiddlewareEnforceEngineError(t *testing.T) {
 	// Engine that returns an error
 	engineErr := errors.New("policy store unavailable")
 	errorEngine := policytest.NewErrorEngine(engineErr)
@@ -166,7 +166,7 @@ func TestRateLimitMiddleware_Enforce_EngineError(t *testing.T) {
 	errutil.AssertErrorCode(t, err, CodeRateLimited)
 }
 
-func TestRateLimitMiddleware_Enforce_DenyDecision(t *testing.T) {
+func TestRateLimitMiddlewareEnforceDenyDecision(t *testing.T) {
 	// Engine that explicitly denies
 	engine := policytest.DenyAllEngine()
 
@@ -202,7 +202,7 @@ func TestRateLimitMiddleware_Enforce_DenyDecision(t *testing.T) {
 	errutil.AssertErrorCode(t, err, CodeRateLimited)
 }
 
-func TestRateLimitMiddleware_Enforce_AllowDecision(t *testing.T) {
+func TestRateLimitMiddlewareEnforceAllowDecision(t *testing.T) {
 	// Engine that allows bypass
 	engine := policytest.NewGrantEngine()
 
@@ -237,7 +237,7 @@ func TestRateLimitMiddleware_Enforce_AllowDecision(t *testing.T) {
 	}
 }
 
-func TestRateLimitMiddleware_Enforce_InfraFailure(t *testing.T) {
+func TestRateLimitMiddlewareEnforceInfraFailure(t *testing.T) {
 	// Engine returns an infra failure decision (PolicyID starting with "infra:")
 	// rather than a Go error. The middleware should treat this as fail-closed:
 	// the bypass is denied and rate limiting is still applied.
@@ -275,7 +275,7 @@ func TestRateLimitMiddleware_Enforce_InfraFailure(t *testing.T) {
 	errutil.AssertErrorCode(t, err, CodeRateLimited)
 }
 
-func TestDispatcher_WithRateLimiter_ConstructorError(t *testing.T) {
+func TestDispatcher_WithRateLimiterConstructorError(t *testing.T) {
 	// Verify that dispatcher properly propagates constructor errors from WithRateLimiter.
 	// The error path occurs when NewRateLimitMiddleware is called with invalid arguments.
 	// While WithRateLimiter silently disables rate limiting when passed a nil limiter,
@@ -323,7 +323,7 @@ func TestDispatcher_WithRateLimiter_ConstructorError(t *testing.T) {
 	}
 }
 
-func TestDispatcher_WithRateLimiter_Success(t *testing.T) {
+func TestDispatcherWithRateLimiterSuccess(t *testing.T) {
 	// Verify that dispatcher successfully creates with valid RateLimiter configuration
 	reg := NewRegistry()
 	engine := policytest.AllowAllEngine()

@@ -85,7 +85,7 @@ func TestCheckCommandExecution(t *testing.T) {
 	}
 }
 
-func TestCheckCommandExecution_InvalidRequest(t *testing.T) {
+func TestCheckCommandExecutionInvalidRequest(t *testing.T) {
 	ctx := context.Background()
 	engine := policytest.NewGrantEngine()
 

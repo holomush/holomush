@@ -87,7 +87,7 @@ func (s *stubEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULI
 	return nil, nil, nil
 }
 
-func TestDispatcher_Dispatch(t *testing.T) {
+func TestDispatcherDispatch(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
 
@@ -126,7 +126,7 @@ func TestDispatcher_Dispatch(t *testing.T) {
 	assert.Equal(t, "echoed: hello world", output.String())
 }
 
-func TestDispatcher_UnknownCommand(t *testing.T) {
+func TestDispatcherUnknownCommand(t *testing.T) {
 	reg := NewRegistry()
 	dispatcher, err := NewDispatcher(reg, policytest.AllowAllEngine())
 	require.NoError(t, err)
@@ -148,7 +148,7 @@ func TestDispatcher_UnknownCommand(t *testing.T) {
 	assert.Equal(t, CodeUnknownCommand, oopsErr.Code())
 }
 
-func TestDispatcher_PermissionDenied(t *testing.T) {
+func TestDispatcherPermissionDenied(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
 
@@ -181,7 +181,7 @@ func TestDispatcher_PermissionDenied(t *testing.T) {
 	assert.Equal(t, CodePermissionDenied, oopsErr.Code())
 }
 
-func TestDispatcher_ExplicitPolicyDeny_ReturnsAccessDenied(t *testing.T) {
+func TestDispatcherExplicitPolicyDenyReturnsAccessDenied(t *testing.T) {
 	reg := NewRegistry()
 	// DenyAllEngine returns EffectDeny with err == nil (explicit policy denial)
 	denyEngine := policytest.DenyAllEngine()
@@ -215,7 +215,7 @@ func TestDispatcher_ExplicitPolicyDeny_ReturnsAccessDenied(t *testing.T) {
 		"explicit policy deny should return PERMISSION_DENIED")
 }
 
-func TestDispatch_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
+func TestDispatchEngineErrorReturnsAccessEvaluationFailed(t *testing.T) {
 	reg := NewRegistry()
 	engineErr := errors.New("policy store unavailable")
 	errorEngine := policytest.NewErrorEngine(engineErr)
@@ -264,7 +264,7 @@ func TestDispatch_EngineError_ReturnsAccessEvaluationFailed(t *testing.T) {
 	assert.Equal(t, engineFailureBefore+1, engineFailureAfter, "should have engine_failure status")
 }
 
-func TestDispatcher_InfraFailure_DeniesAtLayer1(t *testing.T) {
+func TestDispatcherInfraFailureDeniesAtLayer1(t *testing.T) {
 	reg := NewRegistry()
 	infraEngine := policytest.NewInfraFailureEngine(t, "session resolution failed", "infra:session-resolver")
 
@@ -312,7 +312,7 @@ func TestDispatcher_InfraFailure_DeniesAtLayer1(t *testing.T) {
 	assert.Equal(t, engineFailureBefore+1, engineFailureAfter, "should record engine_failure status for infra failures at Layer 1")
 }
 
-func TestDispatcher_EmptyInput(t *testing.T) {
+func TestDispatcherEmptyInput(t *testing.T) {
 	reg := NewRegistry()
 	dispatcher, err := NewDispatcher(reg, policytest.AllowAllEngine())
 	require.NoError(t, err)
@@ -333,7 +333,7 @@ func TestDispatcher_EmptyInput(t *testing.T) {
 	assert.Equal(t, "EMPTY_INPUT", oopsErr.Code())
 }
 
-func TestDispatch_NoGrants_DeniedAtLayer1(t *testing.T) {
+func TestDispatchNoGrantsDeniedAtLayer1(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
 
@@ -379,7 +379,7 @@ func TestDispatch_NoGrants_DeniedAtLayer1(t *testing.T) {
 	assert.Equal(t, permDeniedBefore+1, permDeniedAfter, "should have permission_denied status")
 }
 
-func TestDispatcher_MultipleCapabilities(t *testing.T) {
+func TestDispatcherMultipleCapabilities(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
 
@@ -425,7 +425,7 @@ func TestDispatcher_MultipleCapabilities(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestDispatcher_NoCapabilitiesRequired(t *testing.T) {
+func TestDispatcherNoCapabilitiesRequired(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
 
@@ -462,7 +462,7 @@ func TestDispatcher_NoCapabilitiesRequired(t *testing.T) {
 	assert.True(t, executed)
 }
 
-func TestDispatcher_HandlerError(t *testing.T) {
+func TestDispatcherHandlerError(t *testing.T) {
 	reg := NewRegistry()
 
 	handlerErr := errors.New("handler failed")
@@ -492,7 +492,7 @@ func TestDispatcher_HandlerError(t *testing.T) {
 	assert.Equal(t, handlerErr, err)
 }
 
-func TestDispatcher_HandlerError_LogsWarning(t *testing.T) {
+func TestDispatcherHandlerErrorLogsWarning(t *testing.T) {
 	reg := NewRegistry()
 
 	handlerErr := errors.New("handler failed")
@@ -535,7 +535,7 @@ func TestDispatcher_HandlerError_LogsWarning(t *testing.T) {
 	assert.Contains(t, logOutput, "handler failed")
 }
 
-func TestDispatcher_WhitespaceInput(t *testing.T) {
+func TestDispatcherWhitespaceInput(t *testing.T) {
 	reg := NewRegistry()
 	dispatcher, err := NewDispatcher(reg, policytest.AllowAllEngine())
 	require.NoError(t, err)
@@ -556,7 +556,7 @@ func TestDispatcher_WhitespaceInput(t *testing.T) {
 	require.Error(t, dispErr)
 }
 
-func TestDispatcher_CommandWithNoArgs(t *testing.T) {
+func TestDispatcherCommandWithNoArgs(t *testing.T) {
 	reg := NewRegistry()
 
 	var capturedArgs string
@@ -586,7 +586,7 @@ func TestDispatcher_CommandWithNoArgs(t *testing.T) {
 	assert.Equal(t, "", capturedArgs)
 }
 
-func TestDispatcher_PreservesWhitespaceInArgs(t *testing.T) {
+func TestDispatcherPreservesWhitespaceInArgs(t *testing.T) {
 	reg := NewRegistry()
 
 	var capturedArgs string
@@ -616,14 +616,14 @@ func TestDispatcher_PreservesWhitespaceInArgs(t *testing.T) {
 	assert.Equal(t, "hello   world", capturedArgs)
 }
 
-func TestNewDispatcher_NilRegistry(t *testing.T) {
+func TestNewDispatcherNilRegistry(t *testing.T) {
 	dispatcher, err := NewDispatcher(nil, policytest.AllowAllEngine())
 	require.Error(t, err)
 	assert.Nil(t, dispatcher)
 	assert.Equal(t, ErrNilRegistry, err)
 }
 
-func TestNewDispatcher_NilEngine(t *testing.T) {
+func TestNewDispatcherNilEngine(t *testing.T) {
 	reg := NewRegistry()
 	dispatcher, err := NewDispatcher(reg, nil)
 	require.Error(t, err)
@@ -631,7 +631,7 @@ func TestNewDispatcher_NilEngine(t *testing.T) {
 	assert.Equal(t, ErrNilDispatcherEngine, err)
 }
 
-func TestNewDispatcher_WithAliasCache(t *testing.T) {
+func TestNewDispatcherWithAliasCache(t *testing.T) {
 	reg := NewRegistry()
 	engine := policytest.AllowAllEngine()
 
@@ -652,7 +652,7 @@ func TestNewDispatcher_WithAliasCache(t *testing.T) {
 	assert.Nil(t, dispatcher.aliasCache)
 }
 
-func TestDispatcher_WithoutAliasCache(t *testing.T) {
+func TestDispatcherWithoutAliasCache(t *testing.T) {
 	// Ensure dispatcher works exactly as before when no alias cache is set
 	reg := NewRegistry()
 
@@ -685,7 +685,7 @@ func TestDispatcher_WithoutAliasCache(t *testing.T) {
 	assert.Equal(t, "here", capturedArgs)
 }
 
-func TestDispatcher_WithAliasCache_NoAliasMatch(t *testing.T) {
+func TestDispatcherWithAliasCacheNoAliasMatch(t *testing.T) {
 	reg := NewRegistry()
 
 	var capturedArgs string
@@ -723,7 +723,7 @@ func TestDispatcher_WithAliasCache_NoAliasMatch(t *testing.T) {
 	assert.Equal(t, "here", capturedArgs)
 }
 
-func TestDispatcher_WithAliasCache_SystemAliasExpanded(t *testing.T) {
+func TestDispatcherWithAliasCacheSystemAliasExpanded(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
 
@@ -765,7 +765,7 @@ func TestDispatcher_WithAliasCache_SystemAliasExpanded(t *testing.T) {
 	assert.Equal(t, "around", capturedArgs)
 }
 
-func TestDispatcher_WithAliasCache_PlayerAliasExpanded(t *testing.T) {
+func TestDispatcherWithAliasCachePlayerAliasExpanded(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
 
@@ -808,7 +808,7 @@ func TestDispatcher_WithAliasCache_PlayerAliasExpanded(t *testing.T) {
 	assert.Equal(t, "Hello everyone!", capturedArgs)
 }
 
-func TestDispatcher_WithAliasCache_PlayerAliasOverridesSystem(t *testing.T) {
+func TestDispatcherWithAliasCachePlayerAliasOverridesSystem(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
 
@@ -855,7 +855,7 @@ func TestDispatcher_WithAliasCache_PlayerAliasOverridesSystem(t *testing.T) {
 	assert.Equal(t, "hello from player", capturedArgs)
 }
 
-func TestDispatcher_WithAliasCache_AliasWithExtraArgs(t *testing.T) {
+func TestDispatcherWithAliasCacheAliasWithExtraArgs(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
 
@@ -896,7 +896,7 @@ func TestDispatcher_WithAliasCache_AliasWithExtraArgs(t *testing.T) {
 	assert.Equal(t, "this is my message", capturedArgs)
 }
 
-func TestDispatcher_NoCharacter(t *testing.T) {
+func TestDispatcherNoCharacter(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
 
@@ -927,7 +927,7 @@ func TestDispatcher_NoCharacter(t *testing.T) {
 	assert.Equal(t, CodeNoCharacter, oopsErr.Code())
 }
 
-func TestDispatcher_ContextCancellation(t *testing.T) {
+func TestDispatcherContextCancellation(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
 	reg := NewRegistry()
@@ -992,7 +992,7 @@ func TestDispatcher_ContextCancellation(t *testing.T) {
 	assert.ErrorIs(t, dispatchErr, context.Canceled)
 }
 
-func TestDispatcher_ContextAlreadyCancelled(t *testing.T) {
+func TestDispatcherContextAlreadyCancelled(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
 	reg := NewRegistry()
@@ -1042,7 +1042,7 @@ func TestDispatcher_ContextAlreadyCancelled(t *testing.T) {
 	assert.ErrorIs(t, dispatchErr, context.Canceled)
 }
 
-func TestDispatcher_NilServices(t *testing.T) {
+func TestDispatcherNilServices(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
 
@@ -1524,7 +1524,7 @@ func TestDispatcher_MetricsIntegration(t *testing.T) {
 	_ = CommandDuration.With(prometheus.Labels{"command": "metrics_failing", "source": "lua"})
 }
 
-func TestDispatcher_AliasMetrics(t *testing.T) {
+func TestDispatcherAliasMetrics(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
 
@@ -1567,7 +1567,7 @@ func TestDispatcher_AliasMetrics(t *testing.T) {
 	assert.Equal(t, before+1, after, "should have 1 expansion for 'la' alias")
 }
 
-func TestNewDispatcher_WithRateLimiter_NilEngine_ReturnsError(t *testing.T) {
+func TestNewDispatcherWithRateLimiterNilEngineReturnsError(t *testing.T) {
 	reg := NewRegistry()
 	rl := NewRateLimiter(RateLimiterConfig{
 		BurstCapacity: 5,
@@ -1586,7 +1586,7 @@ func TestNewDispatcher_WithRateLimiter_NilEngine_ReturnsError(t *testing.T) {
 	// We can't easily test this without a mock, but the error path is covered by the optErr field
 }
 
-func TestNewDispatcher_WithRateLimiter_Nil_ReturnsError(t *testing.T) {
+func TestNewDispatcherWithRateLimiterNilReturnsError(t *testing.T) {
 	reg := NewRegistry()
 	engine := policytest.AllowAllEngine()
 
@@ -1596,7 +1596,7 @@ func TestNewDispatcher_WithRateLimiter_Nil_ReturnsError(t *testing.T) {
 	assert.Equal(t, ErrNilRateLimiter, err)
 }
 
-func TestNewDispatcher_MultipleOptionErrors_ReturnsFirstError(t *testing.T) {
+func TestNewDispatcher_MultipleOptionErrorsReturnsFirstError(t *testing.T) {
 	tests := []struct {
 		name           string
 		opts           []DispatcherOption
@@ -1665,7 +1665,7 @@ func TestNewDispatcher_MultipleOptionErrors_ReturnsFirstError(t *testing.T) {
 	}
 }
 
-func TestDispatcher_RateLimitMetrics(t *testing.T) {
+func TestDispatcherRateLimitMetrics(t *testing.T) {
 	reg := NewRegistry()
 	mockAccess := policytest.NewGrantEngine()
 
@@ -1731,7 +1731,7 @@ func TestDispatcher_RateLimitMetrics(t *testing.T) {
 	assert.Equal(t, rateLimitedBefore+1, rateLimitedAfter, "should have rate_limited status")
 }
 
-func TestDispatcher_VerifiesAccessRequest(t *testing.T) {
+func TestDispatcherVerifiesAccessRequest(t *testing.T) {
 	reg := NewRegistry()
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 
@@ -1778,7 +1778,7 @@ func TestDispatcher_VerifiesAccessRequest(t *testing.T) {
 	assert.Equal(t, "command:test_cmd", capturedRequest.Resource, "resource should be command:<name>")
 }
 
-func TestDispatcher_PolicyDenial_ReturnsPermissionDeniedMetric(t *testing.T) {
+func TestDispatcherPolicyDenialReturnsPermissionDeniedMetric(t *testing.T) {
 	reg := NewRegistry()
 	// DenyAllEngine returns EffectDeny with err == nil (explicit policy denial)
 	denyEngine := policytest.DenyAllEngine()
@@ -1821,7 +1821,7 @@ func TestDispatcher_PolicyDenial_ReturnsPermissionDeniedMetric(t *testing.T) {
 	assert.Equal(t, permDeniedBefore+1, permDeniedAfter, "should have permission_denied status for policy denial")
 }
 
-func TestDispatcher_EvaluateError_LogsErrorWithContext(t *testing.T) {
+func TestDispatcherEvaluateErrorLogsErrorWithContext(t *testing.T) {
 	reg := NewRegistry()
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 
@@ -1881,7 +1881,7 @@ func TestDispatcher_EvaluateError_LogsErrorWithContext(t *testing.T) {
 	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
 }
 
-func TestDispatcher_PermissionDenial_PropagatesDecisionContext(t *testing.T) {
+func TestDispatcherPermissionDenialPropagatesDecisionContext(t *testing.T) {
 	reg := NewRegistry()
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 
@@ -1935,7 +1935,7 @@ func TestDispatcher_PermissionDenial_PropagatesDecisionContext(t *testing.T) {
 	assert.Equal(t, "execute", errCtx["capability"])
 }
 
-func TestDispatcher_EngineError_DuringSecondCapability(t *testing.T) {
+func TestDispatcherEngineErrorDuringSecondCapability(t *testing.T) {
 	reg := NewRegistry()
 	mockEngine := policytest.NewMockAccessPolicyEngine(t)
 

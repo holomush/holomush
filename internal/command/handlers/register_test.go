@@ -39,14 +39,14 @@ func TestRegisterAdmin(t *testing.T) {
 	assert.NotNil(t, entry.Handler())
 }
 
-func TestRegisterAdmin_PanicsOnNilDeps(t *testing.T) {
+func TestRegisterAdminPanicsOnNilDeps(t *testing.T) {
 	reg := command.NewRegistry()
 	assert.PanicsWithValue(t, "missing admin dependency: PlayerRepo", func() {
 		RegisterAdmin(reg, AdminDeps{})
 	})
 }
 
-func TestRegisterAdmin_OverwritesOnDuplicate(t *testing.T) {
+func TestRegisterAdminOverwritesOnDuplicate(t *testing.T) {
 	reg := command.NewRegistry()
 	s := newResetTestSetup(t)
 	deps := s.deps()
