@@ -4,8 +4,10 @@
 package dsl_test
 
 import (
+	"encoding/json"
 	"testing"
 
+	"github.com/alecthomas/participle/v2"
 	"github.com/holomush/holomush/internal/access/policy/dsl"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -245,4 +247,34 @@ func TestParseReservedWordAsAttributeRejected(t *testing.T) {
 	// "permit" is reserved and should not appear as an attribute name.
 	_, err := dsl.Parse(`permit(principal, action, resource) when { principal.permit == "x" };`)
 	assert.Error(t, err, "reserved word as attribute should be rejected")
+}
+
+func TestNewParserBuilds(t *testing.T) {
+	parser, err := dsl.NewParser()
+	require.NoError(t, err, "NewParser should build without error")
+	require.NotNil(t, parser, "NewParser should return non-nil parser")
+}
+
+func TestJSONRoundTrip_PositionExcluded(t *testing.T) {
+	parser := newTestParser(t)
+
+	ast, err := parser.ParseString("", `permit(principal, action, resource);`)
+	require.NoError(t, err)
+
+	jsonBytes, err := json.Marshal(ast)
+	require.NoError(t, err)
+
+	var raw map[string]any
+	err = json.Unmarshal(jsonBytes, &raw)
+	require.NoError(t, err)
+
+	_, hasPos := raw["Pos"]
+	assert.False(t, hasPos, "position field must be excluded from JSON output")
+}
+
+func newTestParser(t *testing.T) *participle.Parser[dsl.Policy] {
+	t.Helper()
+	p, err := dsl.NewParser()
+	require.NoError(t, err)
+	return p
 }
