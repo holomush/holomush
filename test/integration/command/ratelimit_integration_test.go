@@ -17,6 +17,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
@@ -85,12 +86,12 @@ var _ = Describe("Rate Limiting Integration", func() {
 	var (
 		registry   *command.Registry
 		dispatcher *command.Dispatcher
-		mockAccess *policytest.GrantEngine
+		mockAccess types.AccessPolicyEngine
 	)
 
 	BeforeEach(func() {
 		registry = command.NewRegistry()
-		mockAccess = policytest.NewGrantEngine()
+		mockAccess = policytest.AllowAllEngine()
 	})
 
 	Describe("End-to-end rate limiting", func() {
@@ -380,9 +381,15 @@ var _ = Describe("Rate Limiting Integration", func() {
 	})
 
 	Describe("Admin bypass capability", func() {
-		var rateLimiter *command.RateLimiter
+		var (
+			rateLimiter  *command.RateLimiter
+			grantAccess  *policytest.GrantEngine
+		)
 
 		BeforeEach(func() {
+			grantAccess = policytest.NewGrantEngine()
+			mockAccess = grantAccess
+
 			entry, err := command.NewCommandEntry(command.CommandEntryConfig{
 				Name: "test",
 				Handler: func(_ context.Context, _ *command.CommandExecution) error {
@@ -418,8 +425,9 @@ var _ = Describe("Rate Limiting Integration", func() {
 			adminCharID := ulid.Make()
 			sessionID := ulid.Make()
 
-			// Grant bypass capability to admin character
-			mockAccess.Grant(access.SubjectCharacter+adminCharID.String(), "execute", command.CapabilityRateLimitBypass)
+			// Grant bypass capability and command execution to admin character
+			grantAccess.Grant(access.SubjectCharacter+adminCharID.String(), "execute", command.CapabilityRateLimitBypass)
+			grantAccess.Grant(access.SubjectCharacter+adminCharID.String(), "execute", "command:test")
 
 			// Admin should be able to execute many commands without rate limiting
 			for i := 0; i < 10; i++ {
@@ -443,8 +451,10 @@ var _ = Describe("Rate Limiting Integration", func() {
 			adminSession := ulid.Make()
 			regularSession := ulid.Make()
 
-			// Grant bypass only to admin
-			mockAccess.Grant(access.SubjectCharacter+adminCharID.String(), "execute", command.CapabilityRateLimitBypass)
+			// Grant bypass and command execution to admin, only command execution to regular
+			grantAccess.Grant(access.SubjectCharacter+adminCharID.String(), "execute", command.CapabilityRateLimitBypass)
+			grantAccess.Grant(access.SubjectCharacter+adminCharID.String(), "execute", "command:test")
+			grantAccess.Grant(access.SubjectCharacter+regularCharID.String(), "execute", "command:test")
 
 			// Admin can execute multiple commands
 			for i := 0; i < 3; i++ {

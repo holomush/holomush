@@ -51,6 +51,10 @@ func (e *transientErrorEngine) Evaluate(_ context.Context, _ types.AccessRequest
 	return types.NewDecision(types.EffectAllow, "recovered", "test-policy"), nil
 }
 
+func (e *transientErrorEngine) CanPerformAction(_ context.Context, _, _, _, _ string) (bool, error) {
+	return false, nil
+}
+
 func (e *transientErrorEngine) CallCount() int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -77,6 +81,10 @@ func (e *perCallEngine) Evaluate(_ context.Context, _ types.AccessRequest) (type
 	return e.fn(n)
 }
 
+func (e *perCallEngine) CanPerformAction(_ context.Context, _, _, _, _ string) (bool, error) {
+	return false, nil
+}
+
 // alwaysErrorEngine returns the configured error on every call. Safe for concurrent use.
 type alwaysErrorEngine struct {
 	err error
@@ -84,6 +92,10 @@ type alwaysErrorEngine struct {
 
 func (e *alwaysErrorEngine) Evaluate(_ context.Context, _ types.AccessRequest) (types.Decision, error) {
 	return types.Decision{}, e.err
+}
+
+func (e *alwaysErrorEngine) CanPerformAction(_ context.Context, _, _, _, _ string) (bool, error) {
+	return false, e.err
 }
 
 var _ = Describe("Concurrent engine failures and recovery", func() {
