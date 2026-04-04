@@ -364,6 +364,18 @@ store := mocks.NewMockEventStore(t)
 store.EXPECT().Append(mock.Anything, mock.Anything).Return(nil)
 ```
 
+### Test Engine Helpers
+
+Use `policytest.GrantEngine` for authorization in tests:
+
+```go
+mockAccess := policytest.NewGrantEngine()
+mockAccess.GrantCommandExecution(subject, "say", "look") // Layer 1 grants
+mockAccess.Grant(subject, "emit", "stream")              // Layer 2 / capability grants
+```
+
+Other test engines: `AllowAllEngine()`, `DenyAllEngine()`, `NewErrorEngine(err)`, `NewInfraFailureEngine(t, reason, policyID)`.
+
 ### MemoryEventStore
 
 MemoryEventStore is for **unit tests only**. It MUST NOT be used in integration
@@ -561,6 +573,23 @@ allowed := evaluator.Evaluate(ctx, subject, action, resource)
 ```
 
 Default deny - explicit permission required for all operations.
+
+### Command Authorization
+
+Commands use two-layer authorization at dispatch time:
+
+1. **Layer 1 — Command Execution:** `engine.Evaluate(subject, "execute", "command:<name>")` — can this character run this command?
+2. **Layer 2 — Capability Pre-Flight:** `engine.CanPerformAction(subject, action, resource, scope)` per declared capability — does this character have the class of permissions this command needs?
+
+Commands declare capabilities as structured objects:
+
+```go
+Capabilities: []command.Capability{
+    {Action: "write", Resource: "location", Scope: command.ScopeLocal},
+}
+```
+
+Scope: `ScopeSelf` (default, own character), `ScopeLocal` (current location), `ScopeGlobal` (server-wide).
 
 ## Patterns
 

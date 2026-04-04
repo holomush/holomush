@@ -71,9 +71,9 @@ func TestGuestReaper_ReapsIdleGuests(t *testing.T) {
 	cleaner := &stubCleaner{}
 
 	var (
-		mu      sync.Mutex
-		reaped  []ulid.ULID
-		done    = make(chan struct{})
+		mu     sync.Mutex
+		reaped []ulid.ULID
+		done   = make(chan struct{})
 	)
 
 	config := auth.GuestReaperConfig{

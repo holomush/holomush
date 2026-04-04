@@ -263,7 +263,7 @@ func TestListCommands_FiltersCommandsByCharacterCapabilities(t *testing.T) {
 		commands: []command.CommandEntry{
 			command.NewTestEntry(command.CommandEntryConfig{Name: "say", Help: "Say something", Capabilities: []command.Capability{{Action: "emit", Resource: "stream", Scope: command.ScopeLocal}}, Source: "core"}),
 			{Name: "look", Help: "Look around", Source: "core"}, // No capabilities required
-			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}}, Source: "admin"}),                                                                                          // Admin only
+			command.NewTestEntry(command.CommandEntryConfig{Name: "boot", Help: "Boot a player", Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}}, Source: "admin"}),                                                                 // Admin only
 			command.NewTestEntry(command.CommandEntryConfig{Name: "nuke", Help: "Dangerous", Capabilities: []command.Capability{{Action: "admin", Resource: "server", Scope: command.ScopeGlobal}, {Action: "delete", Resource: "server", Scope: command.ScopeGlobal}}, Source: "admin"}), // Multiple caps
 		},
 	}

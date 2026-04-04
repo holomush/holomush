@@ -208,6 +208,5 @@ func SeedPolicies() []SeedPolicy {
 			DSLText:     `permit(principal is system, action in ["read", "write"], resource is exit);`,
 			SeedVersion: 1,
 		},
-
 	}
 }

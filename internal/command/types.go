@@ -179,7 +179,7 @@ type CommandEntryConfig struct {
 	Name         string         // canonical name (e.g. "say") - REQUIRED
 	Handler      CommandHandler // Go handler — nil for plugin-backed commands
 	PluginName   string         // non-empty for plugin-backed commands
-	Capabilities []Capability    // ALL required capabilities (AND logic)
+	Capabilities []Capability   // ALL required capabilities (AND logic)
 	Help         string         // short description (one line)
 	Usage        string         // usage pattern (e.g. "say <message>")
 	HelpText     string         // detailed markdown help
@@ -205,7 +205,7 @@ type CommandEntry struct {
 	Name         string         // canonical name (e.g., "say")
 	handler      CommandHandler // Go handler — nil for plugin-backed commands; use Handler() getter
 	pluginName   string         // non-empty for plugin-backed commands; use PluginName() getter
-	capabilities []Capability    // ALL required capabilities (AND logic) - use GetCapabilities() for safe access
+	capabilities []Capability   // ALL required capabilities (AND logic) - use GetCapabilities() for safe access
 	Help         string         // short description (one line)
 	Usage        string         // usage pattern (e.g., "say <message>")
 	HelpText     string         // detailed markdown help
