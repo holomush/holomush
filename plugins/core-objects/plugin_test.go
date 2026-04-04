@@ -127,22 +127,6 @@ func TestDescribe_UnresolvableTarget(t *testing.T) {
 	assert.Contains(t, resp.Output, "Could not find target")
 }
 
-func TestDesc_Alias(t *testing.T) {
-	proxy := pluginmocks.NewMockServiceProxy(t)
-	proxy.On("UpdateCharacterDescription", mock.Anything, "char-1", "char-1", "Short").Return(nil)
-
-	h := &Handler{}
-	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
-		Command:     "desc",
-		Args:        "me Short",
-		CharacterID: "char-1",
-	}, proxy)
-
-	require.NoError(t, err)
-	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
-	assert.Equal(t, "Description set.\n", resp.Output)
-}
-
 // --- Examine Tests ---
 
 func TestExamine_CurrentLocation(t *testing.T) {

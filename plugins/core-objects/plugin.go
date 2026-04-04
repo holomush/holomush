@@ -2,7 +2,7 @@
 // Copyright 2026 HoloMUSH Contributors
 
 // Package coreobjects provides the core-objects plugin, handling object-related
-// commands: describe, desc, examine, create, and set.
+// commands: describe, examine, create, and set.
 package coreobjects
 
 import (
@@ -19,7 +19,7 @@ type Handler struct{}
 // HandleCommand dispatches to the appropriate command handler.
 func (h *Handler) HandleCommand(ctx context.Context, cmd pluginsdk.CommandRequest, proxy plugins.ServiceProxy) (*pluginsdk.CommandResponse, error) {
 	switch cmd.Command {
-	case "describe", "desc":
+	case "describe":
 		return handleDescribe(ctx, cmd, proxy)
 	case "examine":
 		return handleExamine(ctx, cmd, proxy)

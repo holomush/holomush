@@ -27,6 +27,9 @@ var standardAliases = []struct {
 	{`"`, "say"},
 	{":", "pose"},
 	{";", "pose"},
+	{"p", "page"},
+	{"w", "whisper"},
+	{"desc", "describe"},
 }
 
 // SeedSystemAliases ensures standard MUSH command aliases exist in the database

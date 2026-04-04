@@ -45,22 +45,22 @@ func TestSeedSystemAliases(t *testing.T) {
 		wantAliases  map[string]string
 	}{
 		{
-			name:         "seeds all three on empty repo",
+			name:         "seeds all on empty repo",
 			preExisting:  nil,
-			wantSetCalls: 3,
-			wantAliases:  map[string]string{`"`: "say", ":": "pose", ";": "pose"},
+			wantSetCalls: 6,
+			wantAliases:  map[string]string{`"`: "say", ":": "pose", ";": "pose", "p": "page", "w": "whisper", "desc": "describe"},
 		},
 		{
 			name:         "skips existing aliases",
 			preExisting:  map[string]string{`"`: "say"},
-			wantSetCalls: 2,
-			wantAliases:  map[string]string{`"`: "say", ":": "pose", ";": "pose"},
+			wantSetCalls: 5,
+			wantAliases:  map[string]string{`"`: "say", ":": "pose", ";": "pose", "p": "page", "w": "whisper", "desc": "describe"},
 		},
 		{
 			name:         "all pre-existing seeds nothing",
-			preExisting:  map[string]string{`"`: "say", ":": "pose", ";": "pose"},
+			preExisting:  map[string]string{`"`: "say", ":": "pose", ";": "pose", "p": "page", "w": "whisper", "desc": "describe"},
 			wantSetCalls: 0,
-			wantAliases:  map[string]string{`"`: "say", ":": "pose", ";": "pose"},
+			wantAliases:  map[string]string{`"`: "say", ":": "pose", ";": "pose", "p": "page", "w": "whisper", "desc": "describe"},
 		},
 	}
 
@@ -89,12 +89,12 @@ func TestSeedSystemAliases_Idempotent(t *testing.T) {
 
 	err := SeedSystemAliases(context.Background(), repo, cache)
 	require.NoError(t, err)
-	assert.Equal(t, 3, repo.setCalls)
+	assert.Equal(t, 6, repo.setCalls)
 
 	// Second call should seed nothing new.
 	err = SeedSystemAliases(context.Background(), repo, cache)
 	require.NoError(t, err)
-	assert.Equal(t, 3, repo.setCalls)
+	assert.Equal(t, 6, repo.setCalls)
 }
 
 func TestSeedSystemAliases_AlwaysLoadsCache(t *testing.T) {
@@ -102,6 +102,9 @@ func TestSeedSystemAliases_AlwaysLoadsCache(t *testing.T) {
 	repo.aliases[`"`] = "say"
 	repo.aliases[":"] = "pose"
 	repo.aliases[";"] = "pose"
+	repo.aliases["p"] = "page"
+	repo.aliases["w"] = "whisper"
+	repo.aliases["desc"] = "describe"
 	cache := command.NewAliasCache()
 
 	err := SeedSystemAliases(context.Background(), repo, cache)
@@ -116,6 +119,9 @@ func TestSeedSystemAliases_AlwaysLoadsCache(t *testing.T) {
 		{`"`, "say"},
 		{":", "pose"},
 		{";", "pose"},
+		{"p", "page"},
+		{"w", "whisper"},
+		{"desc", "describe"},
 	}
 	for _, tt := range tests {
 		cmd, ok := cache.GetSystemAlias(tt.alias)
