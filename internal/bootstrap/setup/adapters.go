@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-package main
+package setup
 
 import (
 	"context"
@@ -10,22 +10,39 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 )
 
-// authCharRepoAdapter wraps a pgxpool.Pool to implement auth.CharacterRepository.
+// Compile-time checks.
+var (
+	_ auth.CharacterRepository = (*CharRepoAdapter)(nil)
+	_ auth.LocationRepository  = (*LocRepoAdapter)(nil)
+)
+
+// CharRepoAdapter wraps a pgxpool.Pool to implement auth.CharacterRepository.
 // It delegates Create to worldpostgres and adds auth-specific queries.
-type authCharRepoAdapter struct {
+type CharRepoAdapter struct {
 	pool     *pgxpool.Pool
 	charRepo *worldpostgres.CharacterRepository
 }
 
-func (a *authCharRepoAdapter) Create(ctx context.Context, char *world.Character) error {
-	return a.charRepo.Create(ctx, char)
+// NewCharRepoAdapter creates a CharRepoAdapter from a pool and character repository.
+func NewCharRepoAdapter(pool *pgxpool.Pool, charRepo *worldpostgres.CharacterRepository) *CharRepoAdapter {
+	return &CharRepoAdapter{pool: pool, charRepo: charRepo}
 }
 
-func (a *authCharRepoAdapter) ExistsByName(ctx context.Context, name string) (bool, error) {
+// Create persists a new character using the underlying world repository.
+func (a *CharRepoAdapter) Create(ctx context.Context, char *world.Character) error {
+	if err := a.charRepo.Create(ctx, char); err != nil {
+		return oops.Code("CHARACTER_CREATE_FAILED").Wrap(err)
+	}
+	return nil
+}
+
+// ExistsByName reports whether a character with the given name already exists (case-insensitive).
+func (a *CharRepoAdapter) ExistsByName(ctx context.Context, name string) (bool, error) {
 	var exists bool
 	err := a.pool.QueryRow(ctx,
 		"SELECT EXISTS(SELECT 1 FROM characters WHERE LOWER(name) = LOWER($1))",
@@ -37,7 +54,8 @@ func (a *authCharRepoAdapter) ExistsByName(ctx context.Context, name string) (bo
 	return exists, nil
 }
 
-func (a *authCharRepoAdapter) CountByPlayer(ctx context.Context, playerID ulid.ULID) (int, error) {
+// CountByPlayer returns the number of characters owned by the given player.
+func (a *CharRepoAdapter) CountByPlayer(ctx context.Context, playerID ulid.ULID) (int, error) {
 	var count int
 	err := a.pool.QueryRow(ctx,
 		"SELECT COUNT(*) FROM characters WHERE player_id = $1",
@@ -49,7 +67,8 @@ func (a *authCharRepoAdapter) CountByPlayer(ctx context.Context, playerID ulid.U
 	return count, nil
 }
 
-func (a *authCharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*world.Character, error) {
+// ListByPlayer returns all characters owned by the given player, ordered by name.
+func (a *CharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*world.Character, error) {
 	rows, err := a.pool.Query(ctx,
 		`SELECT id, player_id, name, description, location_id, created_at
          FROM characters WHERE player_id = $1 ORDER BY name`,
@@ -93,14 +112,29 @@ func (a *authCharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.UL
 	return chars, nil
 }
 
-// authLocRepoAdapter implements auth.LocationRepository using a pointer to the starting
-// location ID. The pointer is necessary because the ID is resolved after bootstrap, which
-// runs after this adapter is created during server setup.
-type authLocRepoAdapter struct {
+// LocRepoAdapter implements auth.LocationRepository using a pointer to the starting
+// location ID. The pointer is necessary because the ID may be resolved after bootstrap,
+// which runs after this adapter is created.
+type LocRepoAdapter struct {
 	startLocationID *ulid.ULID
 	locRepo         *worldpostgres.LocationRepository
 }
 
-func (a *authLocRepoAdapter) GetStartingLocation(ctx context.Context) (*world.Location, error) {
-	return a.locRepo.Get(ctx, *a.startLocationID)
+// NewLocRepoAdapter creates a LocRepoAdapter from a starting location ID pointer
+// and a location repository.
+func NewLocRepoAdapter(startLocationID *ulid.ULID, locRepo *worldpostgres.LocationRepository) *LocRepoAdapter {
+	return &LocRepoAdapter{startLocationID: startLocationID, locRepo: locRepo}
+}
+
+// GetStartingLocation returns the configured starting location for new characters.
+func (a *LocRepoAdapter) GetStartingLocation(ctx context.Context) (*world.Location, error) {
+	if a.startLocationID == nil || a.startLocationID.IsZero() {
+		return nil, oops.Code("START_LOCATION_NOT_SET").Errorf("starting location ID not yet resolved")
+	}
+	loc, err := a.locRepo.Get(ctx, *a.startLocationID)
+	if err != nil {
+		return nil, oops.Code("START_LOCATION_FETCH_FAILED").
+			With("location_id", a.startLocationID.String()).Wrap(err)
+	}
+	return loc, nil
 }

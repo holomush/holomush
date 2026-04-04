@@ -244,36 +244,6 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			oops.With("subject", req.Subject).With("action", req.Action).With("resource", req.Resource).Wrap(resolveErr)
 	}
 
-	// Step 6b: Staleness check — fail-closed when cache is stale
-	if e.cache.IsStale() {
-		slog.WarnContext(ctx, "policy cache stale — denying request fail-closed",
-			"subject", req.Subject,
-			"action", req.Action,
-			"resource", req.Resource,
-		)
-		decision := types.NewDecision(types.EffectDefaultDeny, "policy cache stale", "infra:policy-cache-stale")
-		decision.SetAttributes(bags)
-		if valErr := decision.Validate(); valErr != nil {
-			return decision, oops.Wrapf(valErr, "decision validation failed")
-		}
-		entry := audit.Entry{
-			Subject:    req.Subject,
-			Action:     req.Action,
-			Resource:   req.Resource,
-			Effect:     types.EffectDefaultDeny,
-			PolicyID:   "infra:policy-cache-stale",
-			PolicyName: "",
-			DurationUS: time.Since(start).Microseconds(),
-			Timestamp:  time.Now(),
-		}
-		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
-			slog.WarnContext(ctx, "audit log failed", "error", auditErr)
-			audit.RecordEngineAuditFailure()
-		}
-		RecordEvaluationMetrics(time.Since(start), decision.Effect())
-		return decision, nil
-	}
-
 	// Step 7: Load snapshot and filter policies
 	snap := e.cache.Snapshot()
 	candidates := e.findApplicablePolicies(req, snap.Policies)

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,7 +21,15 @@ import (
 
 // PostgresStore implements PolicyStore using PostgreSQL.
 type PostgresStore struct {
-	pool *pgxpool.Pool
+	pool     *pgxpool.Pool
+	onMutate func(ctx context.Context)
+}
+
+// SetOnMutate sets a callback invoked after successful policy mutations.
+// This enables the store to trigger cache invalidation without a direct
+// cache dependency (avoids circular init ordering).
+func (s *PostgresStore) SetOnMutate(fn func(ctx context.Context)) {
+	s.onMutate = fn
 }
 
 // NewPostgresStore creates a PostgresStore backed by the given connection pool.
@@ -108,7 +117,6 @@ func ValidateGrammarVersion(ast json.RawMessage) error {
 }
 
 // Create inserts a new policy, generating a ULID for its ID.
-// pg_notify('policy_changed', id) is sent in the same transaction.
 func (s *PostgresStore) Create(ctx context.Context, p *StoredPolicy) error {
 	if err := ValidateSourceNaming(p.Name, p.Source); err != nil {
 		return err
@@ -134,13 +142,12 @@ func (s *PostgresStore) Create(ctx context.Context, p *StoredPolicy) error {
 		return oops.Code("POLICY_CREATE_FAILED").With("name", p.Name).Wrap(err)
 	}
 
-	_, err = tx.Exec(ctx, `SELECT pg_notify('policy_changed', $1)`, id)
-	if err != nil {
-		return oops.Code("POLICY_CREATE_FAILED").With("name", p.Name).With("operation", "notify").Wrap(err)
-	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return oops.Code("POLICY_CREATE_FAILED").With("name", p.Name).With("operation", "commit").Wrap(err)
+	}
+
+	if s.onMutate != nil {
+		s.onMutate(ctx)
 	}
 
 	p.ID = id
@@ -176,8 +183,8 @@ func (s *PostgresStore) GetByID(ctx context.Context, id string) (*StoredPolicy, 
 	return p, nil
 }
 
-// Update modifies an existing policy, increments its version, records the
-// old version in access_policy_versions, and sends pg_notify.
+// Update modifies an existing policy, increments its version, and records the
+// old version in access_policy_versions.
 func (s *PostgresStore) Update(ctx context.Context, p *StoredPolicy) error {
 	if err := ValidateSourceNaming(p.Name, p.Source); err != nil {
 		return err
@@ -235,13 +242,12 @@ func (s *PostgresStore) Update(ctx context.Context, p *StoredPolicy) error {
 		return oops.Code("POLICY_NOT_FOUND").With("name", p.Name).Errorf("policy not found")
 	}
 
-	_, err = tx.Exec(ctx, `SELECT pg_notify('policy_changed', $1)`, policyID)
-	if err != nil {
-		return oops.Code("POLICY_UPDATE_FAILED").With("name", p.Name).With("operation", "notify").Wrap(err)
-	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return oops.Code("POLICY_UPDATE_FAILED").With("name", p.Name).With("operation", "commit").Wrap(err)
+	}
+
+	if s.onMutate != nil {
+		s.onMutate(ctx)
 	}
 
 	p.ID = policyID
@@ -250,7 +256,6 @@ func (s *PostgresStore) Update(ctx context.Context, p *StoredPolicy) error {
 }
 
 // Delete removes a policy by name. CASCADE removes version history.
-// pg_notify is sent in the same transaction.
 func (s *PostgresStore) Delete(ctx context.Context, name string) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -272,13 +277,12 @@ func (s *PostgresStore) Delete(ctx context.Context, name string) error {
 		return oops.Code("POLICY_DELETE_FAILED").With("name", name).Wrap(err)
 	}
 
-	_, err = tx.Exec(ctx, `SELECT pg_notify('policy_changed', $1)`, policyID)
-	if err != nil {
-		return oops.Code("POLICY_DELETE_FAILED").With("name", name).With("operation", "notify").Wrap(err)
-	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return oops.Code("POLICY_DELETE_FAILED").With("name", name).With("operation", "commit").Wrap(err)
+	}
+
+	if s.onMutate != nil {
+		s.onMutate(ctx)
 	}
 	return nil
 }
@@ -317,15 +321,12 @@ func (s *PostgresStore) DeleteBySource(ctx context.Context, source, namePrefix s
 		return 0, oops.In("policy_store").With("source", source).With("prefix", namePrefix).Wrap(err)
 	}
 
-	if result.RowsAffected() > 0 {
-		_, err = tx.Exec(ctx, `SELECT pg_notify('policy_changed', $1)`, namePrefix)
-		if err != nil {
-			return 0, oops.In("policy_store").Wrap(err)
-		}
-	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return 0, oops.In("policy_store").Wrap(err)
+	}
+
+	if result.RowsAffected() > 0 && s.onMutate != nil {
+		s.onMutate(ctx)
 	}
 
 	return result.RowsAffected(), nil
@@ -362,14 +363,12 @@ func (s *PostgresStore) ReplaceBySource(ctx context.Context, source, namePrefix 
 		}
 	}
 
-	// Always notify — a replace inherently changes policy state (delete + insert)
-	_, err = tx.Exec(ctx, `SELECT pg_notify('policy_changed', $1)`, namePrefix)
-	if err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return oops.In("policy_store").Wrap(err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return oops.In("policy_store").Wrap(err)
+	if s.onMutate != nil {
+		s.onMutate(ctx)
 	}
 	return nil
 }
@@ -398,15 +397,12 @@ func (s *PostgresStore) CreateBatch(ctx context.Context, policies []*StoredPolic
 		}
 	}
 
-	if len(policies) > 0 {
-		_, err = tx.Exec(ctx, `SELECT pg_notify('policy_changed', $1)`, policies[0].Source)
-		if err != nil {
-			return oops.In("policy_store").Wrap(err)
-		}
-	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return oops.In("policy_store").Wrap(err)
+	}
+
+	if s.onMutate != nil {
+		s.onMutate(ctx)
 	}
 	return nil
 }
@@ -444,4 +440,21 @@ func (s *PostgresStore) List(ctx context.Context, opts ListOptions) ([]*StoredPo
 		return nil, oops.With("operation", "list policies").Wrap(err)
 	}
 	return scanPolicies(rows)
+}
+
+// LatestPolicyVersion returns the most recent updated_at and the total policy count
+// from access_policies. Tracking both allows the poller to detect deletions
+// (which may not change MAX(updated_at)).
+// Returns zero time and count 0 if no policies exist.
+func (s *PostgresStore) LatestPolicyVersion(ctx context.Context) (time.Time, int64, error) {
+	var ts *time.Time
+	var count int64
+	err := s.pool.QueryRow(ctx, `SELECT MAX(updated_at), COUNT(*) FROM access_policies`).Scan(&ts, &count)
+	if err != nil {
+		return time.Time{}, 0, fmt.Errorf("latest policy version: %w", err)
+	}
+	if ts == nil {
+		return time.Time{}, count, nil
+	}
+	return *ts, count, nil
 }

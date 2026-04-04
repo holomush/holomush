@@ -6,70 +6,37 @@ package main
 import (
 	"context"
 	cryptotls "crypto/tls"
+	"fmt"
 	"log/slog"
-	"net"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
-	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/spf13/cobra"
-	"go.opentelemetry.io/otel"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/keepalive"
 
-	"github.com/holomush/holomush/internal/access/policy"
-	"github.com/holomush/holomush/internal/access/policy/audit"
-	policystore "github.com/holomush/holomush/internal/access/policy/store"
-	"github.com/holomush/holomush/internal/access/policy/types"
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
-	"github.com/holomush/holomush/internal/auth"
-	authpostgres "github.com/holomush/holomush/internal/auth/postgres"
+	authsetup "github.com/holomush/holomush/internal/auth/setup"
 	"github.com/holomush/holomush/internal/bootstrap"
+	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/config"
-	"github.com/holomush/holomush/internal/content"
-	"github.com/holomush/holomush/internal/control"
 	"github.com/holomush/holomush/internal/core"
-	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/logging"
-	"github.com/holomush/holomush/internal/naming"
-	"github.com/holomush/holomush/internal/observability"
-	plugins "github.com/holomush/holomush/internal/plugin"
-	"github.com/holomush/holomush/internal/plugin/hostfunc"
-	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
-	"github.com/holomush/holomush/internal/session"
+	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
+	sessionsetup "github.com/holomush/holomush/internal/session/setup"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telemetry"
-	"github.com/holomush/holomush/internal/telnet"
 	tlscerts "github.com/holomush/holomush/internal/tls"
-	"github.com/holomush/holomush/internal/world"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
+	worldsetup "github.com/holomush/holomush/internal/world/setup"
 	"github.com/holomush/holomush/internal/xdg"
-	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
-	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
-	corealiases "github.com/holomush/holomush/plugins/core-aliases"
-	corebuilding "github.com/holomush/holomush/plugins/core-building"
-	"github.com/holomush/holomush/plugins/core-communication"
-	corehelp "github.com/holomush/holomush/plugins/core-help"
-	coreobjects "github.com/holomush/holomush/plugins/core-objects"
 )
-
-// bootstrapTransactor adapts world.Transactor (InTransaction) to the
-// bootstrap.Transactor interface (WithTx).
-type bootstrapTransactor struct {
-	inner world.Transactor
-}
-
-func (b *bootstrapTransactor) WithTx(ctx context.Context, fn func(ctx context.Context) error) error {
-	return b.inner.InTransaction(ctx, fn)
-}
 
 // coreConfig holds configuration for the core command.
 type coreConfig struct {
@@ -148,65 +115,20 @@ manages plugins, and handles game state.`,
 
 // runCoreWithDeps starts the core process with injectable dependencies.
 // If deps is nil, default implementations are used.
+// codecov:ignore — tested by integration and E2E tests
 func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.GameConfig, cmd *cobra.Command, deps *CoreDeps) error {
 	if deps == nil {
 		deps = &CoreDeps{}
 	}
 
-	// Parse guest start location if provided via config; otherwise resolved after bootstrap.
-	var startLocationID ulid.ULID
-	startLocationStr := gameConfig.GuestStartLocation
-	if startLocationStr != "" {
-		var parseErr error
-		startLocationID, parseErr = ulid.Parse(startLocationStr)
-		if parseErr != nil {
-			return oops.Code("INVALID_START_LOCATION").With("value", startLocationStr).Wrap(parseErr)
-		}
-	}
-
-	// Set up default factories
-	if deps.EventStoreFactory == nil {
-		deps.EventStoreFactory = func(ctx context.Context, url string) (EventStore, error) {
-			return store.NewPostgresEventStore(ctx, url)
-		}
-	}
-	if deps.TLSCertEnsurer == nil {
-		deps.TLSCertEnsurer = ensureTLSCerts
-	}
-	if deps.ControlTLSLoader == nil {
-		deps.ControlTLSLoader = control.LoadControlServerTLS
-	}
-	if deps.ControlServerFactory == nil {
-		deps.ControlServerFactory = func(component string, shutdownFunc control.ShutdownFunc) (ControlServer, error) {
-			return control.NewGRPCServer(component, shutdownFunc)
-		}
-	}
-	if deps.ObservabilityServerFactory == nil {
-		deps.ObservabilityServerFactory = func(addr string, readinessChecker observability.ReadinessChecker) ObservabilityServer {
-			return observability.NewServer(addr, readinessChecker)
-		}
-	}
-	if deps.CertsDirGetter == nil {
-		deps.CertsDirGetter = xdg.CertsDir
-	}
-	if deps.DatabaseURLGetter == nil {
-		deps.DatabaseURLGetter = func() string {
-			return os.Getenv("DATABASE_URL")
-		}
-	}
-	if deps.MigratorFactory == nil {
-		deps.MigratorFactory = func(url string) (bootstrap.AutoMigrator, error) {
-			return store.NewMigrator(url)
-		}
-	}
-	if deps.AutoMigrateGetter == nil {
-		deps.AutoMigrateGetter = parseAutoMigrate
-	}
+	// Apply defaults for injectable infrastructure dependencies.
+	deps.applyDefaults()
 
 	if err := cfg.Validate(); err != nil {
 		return oops.Code("CONFIG_INVALID").With("operation", "validate configuration").Wrap(err)
 	}
 
+	// --- 1. Logging + telemetry ---
 	level, err := resolveLogLevel(cmd)
 	if err != nil {
 		return err
@@ -230,560 +152,179 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		"log_format", cfg.LogFormat,
 	)
 
+	// --- 2. Database URL + schema migration ---
 	databaseURL := deps.DatabaseURLGetter()
 	if databaseURL == "" {
 		return oops.Code("CONFIG_INVALID").Errorf("DATABASE_URL environment variable is required")
 	}
 
-	// Run schema migration before any DB queries (must complete before event store init).
 	migrationBoot := bootstrap.NewMigrationBootstrapper(databaseURL, deps.MigratorFactory, deps.AutoMigrateGetter())
 	if migErr := migrationBoot.Bootstrap(ctx, nil, ""); migErr != nil {
 		return migErr
 	}
 
-	eventStore, err := deps.EventStoreFactory(ctx, databaseURL)
-	if err != nil {
-		return oops.Code("DB_CONNECT_FAILED").With("operation", "connect to database").Wrap(err)
+	// --- 3. Database subsystem (started early for gameID) ---
+	// The DB subsystem must start before TLS cert generation because the gameID
+	// (from InitGameID) is embedded in the CA certificate on first boot.
+	dbSub := store.NewSubsystem(store.SubsystemConfig{
+		DatabaseURL: databaseURL,
+	})
+	if startErr := dbSub.Start(ctx); startErr != nil {
+		return startErr
 	}
-	defer eventStore.Close()
+	// DB shutdown is handled by orch.StopAll (step 8) — no explicit defer needed here.
 
-	slog.Info("connected to database")
-
-	// Set up default policy bootstrapper now that we have the event store.
-	// This is late-bound because it needs the database connection pool.
-	// Tests MUST provide their own PolicyBootstrapper (typically a no-op).
-	if deps.PolicyBootstrapper == nil {
-		realStore, ok := eventStore.(*store.PostgresEventStore)
-		if !ok {
-			return oops.Code("BOOTSTRAP_FAILED").Errorf("seed policy bootstrap requires PostgresEventStore (ADR #92)")
-		}
-		pool := realStore.Pool()
-		if pool == nil {
-			return oops.Code("BOOTSTRAP_FAILED").Errorf("seed policy bootstrap requires database connection pool (ADR #92)")
-		}
-		deps.PolicyBootstrapper = func(ctx context.Context, skipSeedMigrations bool) error {
-			partitions := audit.NewPostgresPartitionCreator(pool)
-			ps := policystore.NewPostgresStore(pool)
-			schema := types.NewAttributeSchema()
-			compiler := policy.NewCompiler(schema)
-			opts := policy.BootstrapOptions{SkipSeedMigrations: skipSeedMigrations}
-			return policy.Bootstrap(ctx, partitions, ps, compiler, slog.Default(), opts)
-		}
-	}
-
-	// Initialize or get game_id
 	gameID := cfg.GameID
 	if gameID == "" {
-		gameID, err = eventStore.InitGameID(ctx)
-		if err != nil {
-			return oops.Code("GAME_ID_INIT_FAILED").With("operation", "initialize game ID").Wrap(err)
-		}
+		gameID = dbSub.GameID()
 	}
-
 	slog.Info("game ID initialized", "game_id", gameID)
 
-	// Create the bootstrap runner. Migration ran above (schema must exist before
-	// any DB queries). Remaining bootstrappers are registered as their
-	// dependencies become available, then RunAll executes them in priority order.
-	bootstrapRunner := plugins.NewBootstrapRunner(slog.Default())
-
-	// Register policy bootstrapper (priority 200).
-	bootstrapRunner.Register(bootstrap.NewPolicyBootstrapper(deps.PolicyBootstrapper, cfg.SkipSeedMigrations))
-
-	// Build ABAC engine stack (requires PostgresEventStore for pool access).
-	// In test mode with mock stores, ABAC wiring is skipped.
-	var worldService *world.Service           // hoisted so it's available to CoreServer constructor
-	var policyEngine types.AccessPolicyEngine // hoisted for command dispatcher wiring
-	// Auth service variables hoisted so they're available in the CoreServer constructor block.
-	var authService *auth.Service
-	var resetService *auth.PasswordResetService
-	var characterService *auth.CharacterService
-	var authPlayerRepo *authpostgres.PlayerRepository
-	var authPlayerSessionRepo *store.PostgresPlayerSessionStore
-	var authCharRepo *authCharRepoAdapter
-	var authResetRepo *authpostgres.PasswordResetRepository
-	var authHasher auth.PasswordHasher
-	var sessionStore *store.PostgresSessionStore // hoisted for hostfunc + gRPC wiring
-	var pluginManager *plugins.Manager           // hoisted for dispatcher wiring
-	var serviceProxy *plugins.ServiceProxyImpl   // hoisted for late-binding after command stack init
-	realStoreForABAC, hasPool := eventStore.(*store.PostgresEventStore)
-	if !hasPool {
-		// In production, PostgresEventStore always has a pool. This branch
-		// only triggers in tests with mock stores. Log at Error to surface
-		// if this ever happens unexpectedly in production.
-		slog.Error("ABAC stack not initialized: event store does not expose a connection pool")
-
-		// Run policy bootstrap only (admin + alias require the pool).
-		if runErr := bootstrapRunner.RunAll(ctx); runErr != nil {
-			return oops.Code("BOOTSTRAP_FAILED").With("operation", "run bootstrap plugins").Wrap(runErr)
-		}
-	} else {
-		abacPool := realStoreForABAC.Pool()
-
-		roleStore := store.NewPostgresRoleStore(abacPool)
-		abacStack, abacErr := abacsetup.BuildABACStack(ctx, abacsetup.ABACConfig{
-			Pool:          abacPool,
-			CharacterRepo: worldpostgres.NewCharacterRepository(abacPool),
-			RoleStore:     roleStore,
-			AuditMode:     audit.ModeDenialsOnly,
-		})
-		if abacErr != nil {
-			return oops.Code("ABAC_SETUP_FAILED").Wrap(abacErr)
-		}
-		defer func() {
-			if closeErr := abacStack.Close(); closeErr != nil {
-				slog.Warn("error closing ABAC stack", "error", closeErr)
-			}
-		}()
-		policyEngine = abacStack.Engine
-		slog.Info("ABAC engine stack initialized")
-
-		// Start live policy cache invalidation (dedicated context to avoid race with later ctx reassignment)
-		listenerCtx, listenerCancel := context.WithCancel(ctx)
-		defer listenerCancel()
-		pgListener := policy.NewPgListener(databaseURL)
-		go func() {
-			if listenErr := abacStack.Cache.StartWithListener(listenerCtx, pgListener); listenErr != nil {
-				slog.Error("policy cache listener failed", "error", listenErr)
-			}
-		}()
-
-		// Build world.Service with ABAC engine
-		worldService = world.NewService(world.ServiceConfig{
-			LocationRepo:  worldpostgres.NewLocationRepository(abacPool),
-			ExitRepo:      worldpostgres.NewExitRepository(abacPool),
-			ObjectRepo:    worldpostgres.NewObjectRepository(abacPool),
-			SceneRepo:     worldpostgres.NewSceneRepository(abacPool),
-			CharacterRepo: worldpostgres.NewCharacterRepository(abacPool),
-			PropertyRepo:  worldpostgres.NewPropertyRepository(abacPool),
-			Engine:        abacStack.Engine,
-			Transactor:    worldpostgres.NewTransactor(abacPool),
-		})
-
-		// Wire auth services for two-phase login
-		authPlayerRepo = authpostgres.NewPlayerRepository(abacPool)
-		authResetRepo = authpostgres.NewPasswordResetRepository(abacPool)
-		authPlayerSessionRepo = store.NewPostgresPlayerSessionStore(abacPool)
-		authHasher = auth.NewArgon2idHasher()
-
-		var authErr error
-		authService, authErr = auth.NewAuthServiceWithLogger(authPlayerRepo, authPlayerSessionRepo, authHasher, slog.Default())
-		if authErr != nil {
-			return oops.Code("AUTH_SETUP_FAILED").Wrap(authErr)
-		}
-
-		var resetErr error
-		resetService, resetErr = auth.NewPasswordResetServiceWithLogger(authPlayerRepo, authResetRepo, authPlayerSessionRepo, authHasher, slog.Default())
-		if resetErr != nil {
-			return oops.Code("AUTH_SETUP_FAILED").Wrap(resetErr)
-		}
-
-		authCharRepo = &authCharRepoAdapter{
-			pool:     abacPool,
-			charRepo: worldpostgres.NewCharacterRepository(abacPool),
-		}
-		authLocRepo := &authLocRepoAdapter{
-			startLocationID: &startLocationID,
-			locRepo:         worldpostgres.NewLocationRepository(abacPool),
-		}
-
-		var charErr error
-		characterService, charErr = auth.NewCharacterService(authCharRepo, authLocRepo)
-		if charErr != nil {
-			return oops.Code("AUTH_SETUP_FAILED").Wrap(charErr)
-		}
-
-		// Register admin bootstrapper (priority 400).
-		bootstrapRunner.Register(bootstrap.NewAdminBootstrapper(bootstrap.SeedAdminDeps{
-			PlayerRepo:  authPlayerRepo,
-			CharService: characterService,
-			RoleStore:   roleStore,
-			Hasher:      authHasher,
-			NameTheme:   naming.NewStarTheme(),
-			Transactor:  &bootstrapTransactor{inner: worldpostgres.NewTransactor(abacPool)},
-		}))
-
-		// Create session store early so plugins can access session functions
-		sessionStore = store.NewPostgresSessionStore(abacPool)
-
-		// Build plugin stack
-		var pluginsBaseDir string
-		if cfg.DataDir != "" {
-			pluginsBaseDir = cfg.DataDir
-		} else {
-			var pluginsDirErr error
-			pluginsBaseDir, pluginsDirErr = xdg.DataDir()
-			if pluginsDirErr != nil {
-				return oops.Code("PLUGINS_DIR_FAILED").With("operation", "get plugins directory").Wrap(pluginsDirErr)
-			}
-		}
-		pluginsDir := filepath.Join(pluginsBaseDir, "plugins")
-
-		hostFuncs := hostfunc.New(nil, // KV store not yet available
-			hostfunc.WithEngine(abacStack.Engine),
-			hostfunc.WithWorldService(worldService),
-			hostfunc.WithSessionAccess(sessionStore),
-		)
-		luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
-
-		// Create ServiceProxy and LocalPluginHost for in-process core plugins
-		var proxyErr error
-		serviceProxy, proxyErr = plugins.NewServiceProxy(plugins.ServiceProxyConfig{
-			World:    worldService,
-			Sessions: sessionStore,
-			Events:   realStoreForABAC,
-		})
-		if proxyErr != nil {
-			return oops.Code("SERVICE_PROXY_FAILED").Wrap(proxyErr)
-		}
-		// Wrap service proxy with OTel instrumentation (uses global providers,
-		// which are noop until a real exporter is registered).
-		instrumentedProxy, proxyMWErr := plugins.NewServiceProxyMiddleware(
-			serviceProxy, otel.GetTracerProvider(), otel.GetMeterProvider(),
-		)
-		if proxyMWErr != nil {
-			return oops.Code("SERVICE_PROXY_MW_FAILED").Wrap(proxyMWErr)
-		}
-		localHost := plugins.NewLocalPluginHost(instrumentedProxy)
-
-		// Register in-process Go handlers for core plugins (per spec: plugin-first
-		// command architecture, Chunk 3 Step 11 of each migration task).
-		localHost.RegisterHandler("core-aliases", &corealiases.Handler{}, nil)
-		localHost.RegisterHandler("core-building", &corebuilding.Handler{}, nil)
-		localHost.RegisterHandler("core-communication", communication.NewHandler(), nil)
-		localHost.RegisterHandler("core-help", &corehelp.Handler{}, nil)
-		localHost.RegisterHandler("core-objects", &coreobjects.Handler{}, nil)
-
-		// Wrap local host with OTel instrumentation.
-		instrumentedHost, hostMWErr := plugins.NewHostMiddleware(
-			localHost, otel.GetTracerProvider(), otel.GetMeterProvider(),
-		)
-		if hostMWErr != nil {
-			return oops.Code("HOST_MW_FAILED").Wrap(hostMWErr)
-		}
-
-		// Wrap Lua host with OTel instrumentation (same as core host).
-		instrumentedLuaHost, luaMWErr := plugins.NewHostMiddleware(
-			luaHost, otel.GetTracerProvider(), otel.GetMeterProvider(),
-		)
-		if luaMWErr != nil {
-			return oops.Code("LUA_HOST_MW_FAILED").Wrap(luaMWErr)
-		}
-
-		pluginManager = plugins.NewManager(pluginsDir,
-			plugins.WithLuaHost(instrumentedLuaHost),
-			plugins.WithPolicyInstaller(abacStack.PolicyInstaller),
-		)
-		pluginManager.RegisterHost(plugins.TypeCore, instrumentedHost)
-
-		// Complete circular dependency: set plugin registry
-		abacStack.PluginProvider.SetRegistry(pluginManager)
-
-		// Load all discovered plugins
-		if loadErr := pluginManager.LoadAll(ctx); loadErr != nil {
-			slog.Error("failed to load plugins", "error", loadErr)
-		}
-		defer func() {
-			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer shutdownCancel()
-			if closeErr := pluginManager.Close(shutdownCtx); closeErr != nil {
-				slog.Warn("error closing plugin manager", "error", closeErr)
-			}
-		}()
-		slog.Info("plugin stack initialized", "plugins_dir", pluginsDir)
-	} // end ABAC stack wiring (hasPool)
-
+	// --- 4. TLS certificates ---
 	certsDir, err := deps.CertsDirGetter()
 	if err != nil {
 		return oops.Code("CERTS_DIR_FAILED").With("operation", "get certs directory").Wrap(err)
 	}
 
-	// Generate or load TLS certificates
 	tlsConfig, err := deps.TLSCertEnsurer(certsDir, gameID)
 	if err != nil {
 		return oops.Code("TLS_SETUP_FAILED").With("operation", "set up TLS").With("certs_dir", certsDir).Wrap(err)
 	}
-
 	slog.Info("TLS certificates ready", "certs_dir", certsDir)
 
-	// Parse session configuration durations (apply defaults for empty values)
-	if cfg.SessionTTL == "" {
-		cfg.SessionTTL = "30m"
-	}
-	sessionTTL, err := time.ParseDuration(cfg.SessionTTL)
+	// --- 5. Parse session configuration ---
+	sessionTTL, reaperInterval, err := parseSessionConfig(cfg)
 	if err != nil {
-		return oops.Code("CONFIG_INVALID").With("field", "session_ttl").Wrap(err)
-	}
-	if cfg.SessionReaperInterval == "" {
-		cfg.SessionReaperInterval = "30s"
-	}
-	reaperInterval, err := time.ParseDuration(cfg.SessionReaperInterval)
-	if err != nil {
-		return oops.Code("CONFIG_INVALID").With("field", "session_reaper_interval").Wrap(err)
-	}
-	if cfg.SessionMaxHistory <= 0 {
-		cfg.SessionMaxHistory = 500
+		return err
 	}
 
-	// For testing, we need the event store to be *store.PostgresEventStore
-	// to pass to core.NewEngine. In production, this is always the case.
-	// In tests with mocks, we skip the gRPC server creation.
-	var grpcServer *grpc.Server
-	var netListener net.Listener
-	var sessionReaper *session.Reaper
+	// --- 6. ReadinessRegistry + observability ---
+	registry := lifecycle.NewReadinessRegistry()
+	startupComplete := &atomic.Bool{}
+	obsReadiness := func() bool {
+		return startupComplete.Load() && registry.AllReady()
+	}
 
-	// Only create gRPC server if we have a real event store
-	if realStore, ok := eventStore.(*store.PostgresEventStore); ok {
-		engine := core.NewEngine(realStore)
-
-		// Create gRPC server
-		creds := credentials.NewTLS(tlsConfig)
-		grpcServer = grpc.NewServer(
-			grpc.Creds(creds),
-			grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-				MinTime:             10 * time.Second,
-				PermitWithoutStream: true,
-			}),
-		)
-
-		// guestAuth is created after bootstrap resolves startLocationID (see below).
-
-		// Session store was created earlier (in the ABAC stack block) — reuse it here.
-
-		// Build unified command dispatcher with alias dependencies
-		cmdRegistry := command.NewRegistry()
-		handlers.RegisterAll(cmdRegistry)
-		handlers.RegisterAdmin(cmdRegistry, handlers.AdminDeps{
-			PlayerRepo:     authPlayerRepo,
-			Hasher:         authHasher,
-			PlayerSessions: authPlayerSessionRepo,
-			ResetRepo:      authResetRepo,
-			CharLister:     authCharRepo,
-		})
-		aliasRepo := store.NewPostgresAliasRepository(realStore.Pool())
-		aliasCache := command.NewAliasCache()
-
-		// Register alias bootstrapper (priority 500).
-		bootstrapRunner.Register(bootstrap.NewAliasBootstrapper(aliasRepo, aliasCache))
-
-		// Register setting bootstrapper (priority 300) if a matching setting plugin is discovered.
-		if cfg.Setting != "" && pluginManager != nil {
-			discovered, discoverErr := pluginManager.Discover(ctx)
-			if discoverErr != nil {
-				slog.Warn("failed to discover setting plugins", "error", discoverErr)
-			} else {
-				var settingPlugin *plugins.DiscoveredPlugin
-				for _, dp := range discovered {
-					if dp.Manifest.Type == plugins.TypeSetting && dp.Manifest.Name == cfg.Setting {
-						settingPlugin = dp
-						break
-					}
-				}
-				if settingPlugin == nil {
-					// If no active_setting has been recorded yet, this is first boot (or reset) and
-					// the missing plugin is a fatal configuration error — the world cannot be seeded.
-					// On subsequent boots (active_setting already persisted), a missing plugin is
-					// tolerable: the world data already exists, so log a warning and continue.
-					metadataStore := bootstrap.NewPostgresMetadataStore(realStore.Pool())
-					_, settingRecorded, metaErr := metadataStore.Get(ctx, "active_setting")
-					if metaErr != nil {
-						return oops.Code("BOOTSTRAP_FAILED").
-							With("setting", cfg.Setting).
-							With("operation", "check active_setting metadata").
-							Wrap(metaErr)
-					}
-					if !settingRecorded {
-						return oops.Code("BOOTSTRAP_FAILED").
-							With("setting", cfg.Setting).
-							New("setting plugin not found and no active_setting recorded; cannot bootstrap world on first boot")
-					}
-					slog.Warn("setting plugin not found, skipping setting bootstrap (world already seeded)", "setting", cfg.Setting)
-				} else {
-					contentStore := content.NewPostgresStore(realStore.Pool())
-					metadataStore := bootstrap.NewPostgresMetadataStore(realStore.Pool())
-					bootstrapRunner.Register(bootstrap.NewSettingBootstrapper(bootstrap.SettingBootstrapperOpts{
-						ContentStore:  contentStore,
-						WorldService:  worldService,
-						MetadataStore: metadataStore,
-						SettingName:   cfg.Setting,
-						ResetSetting:  cfg.ResetSetting,
-						Manifest:      settingPlugin.Manifest,
-						PluginDir:     settingPlugin.Dir,
-						Logger:        slog.Default(),
-					}))
-					slog.Info("setting bootstrapper registered", "setting", cfg.Setting)
-				}
-			}
+	var obsServer ObservabilityServer
+	if cfg.MetricsAddr != "" {
+		obsServer = deps.ObservabilityServerFactory(cfg.MetricsAddr, obsReadiness)
+		obsServer.MustRegister(command.CommandExecutions, command.CommandDuration, command.AliasExpansions)
+		obsErrChan, obsErr := obsServer.Start()
+		if obsErr != nil {
+			return oops.Code("OBSERVABILITY_START_FAILED").With("addr", cfg.MetricsAddr).Wrap(obsErr)
 		}
-
-		// Run all bootstrap plugins in priority order: policy (200) → setting (300) → admin (400) → alias (500).
-		// Migration (100) already ran directly above before DB connection was established.
-		if runErr := bootstrapRunner.RunAll(ctx); runErr != nil {
-			return oops.Code("BOOTSTRAP_FAILED").With("operation", "run bootstrap plugins").Wrap(runErr)
-		}
-
-		// Resolve starting location from bootstrap metadata if not explicitly configured.
-		// The setting bootstrapper records starting_location_id after world seeding.
-		if startLocationID.IsZero() {
-			metadataStore := bootstrap.NewPostgresMetadataStore(realStore.Pool())
-			locIDStr, found, metaErr := metadataStore.Get(ctx, "starting_location_id")
-			if metaErr != nil {
-				return oops.Code("START_LOCATION_FAILED").Wrap(metaErr)
-			}
-			if !found {
-				return oops.Code("START_LOCATION_NOT_FOUND").
-					Hint("set guest-start-location in config or add starting_location to the setting plugin manifest").
-					New("no starting_location_id in bootstrap metadata")
-			}
-			parsed, parseErr := ulid.Parse(locIDStr)
-			if parseErr != nil {
-				return oops.Code("START_LOCATION_INVALID").With("value", locIDStr).Wrap(parseErr)
-			}
-			startLocationID = parsed
-			slog.Info("resolved starting location from bootstrap metadata", "id", locIDStr)
-		}
-
-		// Create guest authenticator now that startLocationID is resolved.
-		guestAuth := telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocationID)
-
-		// Create guest service for gRPC-based guest login (web client).
-		guestService, guestSvcErr := auth.NewGuestService(
-			guestAuth,
-			authPlayerRepo,
-			authCharRepo,
-			authPlayerSessionRepo,
-		)
-		if guestSvcErr != nil {
-			return oops.Code("GUEST_SERVICE_FAILED").Wrap(guestSvcErr)
-		}
-
-		// Complete the ServiceProxy with late-bound dependencies so core plugins
-		// can access aliases, the command registry, and the starting location.
-		if serviceProxy != nil {
-			serviceProxy.SetLateBindings(plugins.LateBindingsConfig{
-				AliasWriter:     aliasRepo,
-				AliasCache:      aliasCache,
-				CommandRegistry: cmdRegistry,
-				StartingLocID:   startLocationID.String(),
-			})
-		}
-
-		// Register plugin-provided commands into the command registry so the
-		// dispatcher can route them to the plugin deliverer.
-		if pluginManager != nil {
-			pluginManager.RegisterPluginCommands(cmdRegistry)
-		}
-
-		// Remove disabled commands from the registry. This runs after all
-		// registrations (built-in + plugin) so game configs can replace any
-		// built-in command with a plugin alternative.
-		for _, name := range gameConfig.DisabledCommands {
-			if unregErr := cmdRegistry.Unregister(name); unregErr != nil {
-				slog.Warn("disabled command not found in registry", "command", name)
-			} else {
-				slog.Warn("disabled built-in command", "command", name)
-			}
-		}
-
-		cmdServices, cmdSvcErr := command.NewServices(command.ServicesConfig{
-			World:              worldService,
-			Session:            sessionStore,
-			Engine:             policyEngine,
-			Events:             realStore,
-			AliasCache:         aliasCache,
-			AliasRepo:          aliasRepo,
-			Registry:           cmdRegistry,
-			StartingLocationID: startLocationID,
-		})
-		if cmdSvcErr != nil {
-			return oops.Code("COMMAND_SERVICES_FAILED").Wrap(cmdSvcErr)
-		}
-		cmdDispatcher, cmdDispErr := command.NewDispatcher(cmdRegistry, policyEngine,
-			command.WithAliasCache(aliasCache),
-			command.WithPluginDeliverer(pluginManager),
-		)
-		if cmdDispErr != nil {
-			return oops.Code("COMMAND_DISPATCHER_FAILED").Wrap(cmdDispErr)
-		}
-
-		coreServer := holoGRPC.NewCoreServer(engine, sessionStore, cmdDispatcher, cmdServices,
-			holoGRPC.WithAuthenticator(guestAuth),
-			holoGRPC.WithEventStore(realStore),
-			holoGRPC.WithWorldQuerier(worldService),
-			holoGRPC.WithAuthService(authService),
-			holoGRPC.WithResetService(resetService),
-			holoGRPC.WithCharacterService(characterService),
-			holoGRPC.WithPlayerSessionRepo(authPlayerSessionRepo),
-			holoGRPC.WithPlayerRepo(authPlayerRepo),
-			holoGRPC.WithCharacterRepo(authCharRepo),
-			holoGRPC.WithSessionDefaults(holoGRPC.SessionDefaults{
-				TTL:        sessionTTL,
-				MaxHistory: cfg.SessionMaxHistory,
-			}),
-			holoGRPC.WithDisconnectHook(func(info session.Info) {
-				if info.IsGuest {
-					guestAuth.ReleaseGuest(info.CharacterName)
-				}
-			}),
-			holoGRPC.WithGuestService(guestService),
-		)
-		corev1.RegisterCoreServiceServer(grpcServer, coreServer)
-
-		contentStore := content.NewPostgresStore(realStore.Pool())
-		contentv1.RegisterContentServiceServer(grpcServer, holoGRPC.NewContentServiceServer(contentStore))
-
-		// Start session reaper
-		sessionReaper = session.NewReaper(sessionStore, session.ReaperConfig{
-			Interval: reaperInterval,
-			OnExpired: func(info *session.Info) {
-				// Emit leave event
-				char := core.CharacterRef{
-					ID: info.CharacterID, Name: info.CharacterName, LocationID: info.LocationID,
-				}
-				if dcErr := engine.HandleDisconnect(ctx, char, "session expired"); dcErr != nil {
-					slog.Warn("reaper: leave event failed",
-						"session_id", info.ID,
-						"error", dcErr,
-					)
-				}
-				// Release guest character
-				if info.IsGuest {
-					guestAuth.ReleaseGuest(info.CharacterName)
-				}
-			},
-		})
-
-		// Start gRPC listener
-		netListener, err = net.Listen("tcp", cfg.GRPCAddr)
-		if err != nil {
-			return oops.Code("LISTEN_FAILED").With("operation", "listen").With("addr", cfg.GRPCAddr).Wrap(err)
-		}
+		slog.Info("observability server started", "addr", obsServer.Addr())
 		defer func() {
-			if closeErr := netListener.Close(); closeErr != nil {
-				slog.Debug("error closing gRPC listener", "error", closeErr)
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if stopErr := obsServer.Stop(shutdownCtx); stopErr != nil {
+				slog.Warn("error stopping observability server", "error", stopErr)
 			}
 		}()
-
-		slog.Info("gRPC server listening", "addr", cfg.GRPCAddr)
+		// Monitor in background — will be cancelled when context ends.
+		obsCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		go monitorServerErrors(obsCtx, cancel, obsErrChan, "observability")
 	}
 
-	// Set up graceful shutdown
+	// --- 7. Subsystem construction (config only, no live resources) ---
+	abacSub := abacsetup.NewABACSubsystem(abacsetup.ABACSubsystemConfig{
+		DB:       dbSub,
+		Registry: registry,
+	})
+
+	authSub := authsetup.NewAuthSubsystem(authsetup.AuthSubsystemConfig{
+		DB: dbSub,
+	})
+
+	worldSub := worldsetup.NewWorldSubsystem(worldsetup.WorldSubsystemConfig{
+		DB:   dbSub,
+		ABAC: abacSub,
+	})
+
+	sessionSub := sessionsetup.NewSessionSubsystem(sessionsetup.SessionSubsystemConfig{
+		DB: dbSub,
+	})
+
+	pluginSub := pluginsetup.NewPluginSubsystem(pluginsetup.PluginSubsystemConfig{
+		DataDir:    cfg.DataDir,
+		ABAC:       abacSub,
+		PolicyInst: abacSub,
+		PluginProv: abacSub,
+		World:      worldSub,
+		Sessions:   &sessionBridge{sub: sessionSub},
+		Events:     &eventStoreBridge{db: dbSub},
+		AdminDeps:  &adminDepsBridge{auth: authSub, db: dbSub},
+	})
+
+	bootstrapSub := bootstrapsetup.NewBootstrapSubsystem(bootstrapsetup.BootstrapSubsystemConfig{
+		DB:                 dbSub,
+		ABAC:               abacSub,
+		World:              worldSub,
+		WorldTx:            worldSub,
+		Plugins:            pluginSub,
+		PlayerRepos:        authSub,
+		Hashers:            authSub,
+		Setting:            cfg.Setting,
+		ResetSetting:       cfg.ResetSetting,
+		SkipSeedMigrations: cfg.SkipSeedMigrations,
+		GuestStartLocation: gameConfig.GuestStartLocation,
+	})
+
+	grpcSub := newGRPCSubsystem(grpcSubsystemConfig{
+		DB:             dbSub,
+		ABAC:           abacSub,
+		Auth:           authSub,
+		World:          worldSub,
+		Plugins:        pluginSub,
+		Sessions:       sessionSub,
+		Bootstrap:      bootstrapSub,
+		GRPCAddr:       cfg.GRPCAddr,
+		TLSConfig:      tlsConfig,
+		SessionTTL:     sessionTTL,
+		ReaperInterval: reaperInterval,
+		MaxHistory:     cfg.SessionMaxHistory,
+		GameConfig:     gameConfig,
+	})
+
+	// --- 8. Orchestrator: register + start ---
+	// The database subsystem was pre-started (step 3) because the gameID must be
+	// available before TLS cert generation. Its Start() is idempotent, so the
+	// orchestrator will skip reconnection. It remains registered so other subsystems
+	// resolve their SubsystemDatabase dependency and so StopAll shuts it down last.
+	orch := lifecycle.NewOrchestrator()
+	for _, sub := range []lifecycle.Subsystem{
+		dbSub, abacSub, authSub, worldSub,
+		sessionSub, pluginSub, bootstrapSub, grpcSub,
+	} {
+		orch.Register(sub)
+	}
+
+	if orchErr := orch.StartAll(ctx); orchErr != nil {
+		return orchErr
+	}
+	defer orch.StopAll(context.Background())
+
+	// --- 9. Readiness gate ---
+	readinessCtx, readinessCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer readinessCancel()
+	if readyErr := registry.WaitReady(readinessCtx); readyErr != nil {
+		for id, status := range registry.Status() {
+			if !status.Tier.IsReady() {
+				slog.Error("subsystem not ready",
+					"subsystem", id.String(),
+					"tier", status.Tier.String(),
+				)
+			}
+		}
+		return fmt.Errorf("startup timeout: %w", readyErr)
+	}
+	startupComplete.Store(true)
+
+	// --- 10. Control server ---
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Start session reaper goroutine (if created)
-	if sessionReaper != nil {
-		go sessionReaper.Run(ctx)
-	}
-
-	// Start guest reaper (cleans up idle guest players and their data).
-	guestReaper := auth.NewGuestReaper(auth.GuestReaperConfig{
-		Interval: 1 * time.Minute,
-		IdleTTL:  10 * time.Minute,
-	}, authPlayerRepo, authPlayerRepo)
-	go guestReaper.Run(ctx)
-
-	// Start control gRPC server (always enabled)
 	controlTLSConfig, tlsErr := deps.ControlTLSLoader(certsDir, "core")
 	if tlsErr != nil {
 		return oops.Code("CONTROL_TLS_FAILED").With("operation", "load control TLS config").With("component", "core").Wrap(tlsErr)
@@ -795,49 +336,15 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	}
 	controlErrChan, err := controlGRPCServer.Start(cfg.ControlAddr, controlTLSConfig)
 	if err != nil {
-		return oops.Code("CONTROL_SERVER_START_FAILED").With("operation", "start control gRPC server").With("addr", cfg.ControlAddr).Wrap(err)
+		return oops.Code("CONTROL_SERVER_START_FAILED").With("addr", cfg.ControlAddr).Wrap(err)
 	}
-	// Monitor control server errors in background - cancel context on error
 	go monitorServerErrors(ctx, cancel, controlErrChan, "control-grpc")
-
 	slog.Info("control gRPC server started", "addr", cfg.ControlAddr)
 
-	// Start observability server if configured
-	var obsServer ObservabilityServer
-	if cfg.MetricsAddr != "" {
-		// For core, we're ready once we reach this point (database is connected,
-		// listener is bound, core components initialized)
-		obsServer = deps.ObservabilityServerFactory(cfg.MetricsAddr, func() bool { return true })
-		// Register command package metrics with the observability server
-		obsServer.MustRegister(command.CommandExecutions, command.CommandDuration, command.AliasExpansions)
-		obsErrChan, err := obsServer.Start()
-		if err != nil {
-			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer shutdownCancel()
-			if stopErr := controlGRPCServer.Stop(shutdownCtx); stopErr != nil {
-				slog.Warn("failed to stop control gRPC server during cleanup", "error", stopErr)
-			}
-			return oops.Code("OBSERVABILITY_START_FAILED").With("operation", "start observability server").With("addr", cfg.MetricsAddr).Wrap(err)
-		}
-		// Monitor observability server errors - cancel context on error
-		go monitorServerErrors(ctx, cancel, obsErrChan, "observability")
-		slog.Info("observability server started", "addr", obsServer.Addr())
-	}
-
-	// Handle signals
+	// --- 11. Signal handling ---
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigChan)
-
-	// Start gRPC server in goroutine (only if we have one)
-	errChan := make(chan error, 1)
-	if grpcServer != nil && netListener != nil {
-		go func() {
-			if serveErr := grpcServer.Serve(netListener); serveErr != nil {
-				errChan <- serveErr
-			}
-		}()
-	}
 
 	cmd.Println("Core process started")
 	slog.Info("core process ready",
@@ -845,46 +352,107 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		"grpc_addr", cfg.GRPCAddr,
 	)
 
-	// Wait for shutdown signal or error
 	select {
 	case sig := <-sigChan:
 		slog.Info("received shutdown signal", "signal", sig)
-	case err := <-errChan:
-		return oops.Code("GRPC_SERVER_ERROR").With("operation", "serve gRPC").Wrap(err)
 	case <-ctx.Done():
 		slog.Info("context cancelled, shutting down")
 	}
 
-	// Graceful shutdown
+	// --- 12. Graceful shutdown ---
 	slog.Info("shutting down...")
 
-	// Stop accepting new connections
-	if grpcServer != nil {
-		grpcServer.GracefulStop()
-	}
-
-	// Stop servers
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 
-	if obsServer != nil {
-		if err := obsServer.Stop(shutdownCtx); err != nil {
-			slog.Warn("error stopping observability server", "error", err)
-		}
-	}
-
-	// Stop control gRPC server
 	if err := controlGRPCServer.Stop(shutdownCtx); err != nil {
 		slog.Warn("error stopping control gRPC server", "error", err)
 	}
+
+	// Subsystem shutdown handled by deferred orch.StopAll above.
 
 	slog.Info("shutdown complete")
 	return nil
 }
 
+// parseSessionConfig extracts and validates session TTL and reaper interval from config.
+func parseSessionConfig(cfg *coreConfig) (sessionTTL, reaperInterval time.Duration, err error) {
+	if cfg.SessionTTL == "" {
+		cfg.SessionTTL = "30m"
+	}
+	sessionTTL, err = time.ParseDuration(cfg.SessionTTL)
+	if err != nil {
+		return 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_ttl").Wrap(err)
+	}
+
+	if cfg.SessionReaperInterval == "" {
+		cfg.SessionReaperInterval = "30s"
+	}
+	reaperInterval, err = time.ParseDuration(cfg.SessionReaperInterval)
+	if err != nil {
+		return 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_reaper_interval").Wrap(err)
+	}
+
+	if sessionTTL <= 0 {
+		return 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_ttl").Errorf("session TTL must be positive")
+	}
+	if reaperInterval <= 0 {
+		return 0, 0, oops.Code("CONFIG_INVALID").With("field", "session_reaper_interval").Errorf("reaper interval must be positive")
+	}
+
+	if cfg.SessionMaxHistory <= 0 {
+		cfg.SessionMaxHistory = 500
+	}
+
+	return sessionTTL, reaperInterval, nil
+}
+
+// --- Subsystem bridge adapters ---
+//
+// These thin adapters bridge subsystem accessor methods to the provider
+// interfaces expected by other subsystems. They exist because Go interfaces
+// require exact method signatures, and subsystem accessors return concrete
+// types rather than interfaces. The adapters are constructed before Start()
+// is called; the underlying subsystem methods are only invoked after the
+// orchestrator starts the dependency.
+
+// sessionBridge adapts SessionSubsystem to pluginsetup.SessionProvider.
+type sessionBridge struct {
+	sub *sessionsetup.SessionSubsystem
+}
+
+func (b *sessionBridge) SessionStore() pluginsetup.SessionAccess {
+	return b.sub.Store()
+}
+
+// eventStoreBridge adapts DatabaseSubsystem to pluginsetup.EventStoreProvider.
+type eventStoreBridge struct {
+	db *store.DatabaseSubsystem
+}
+
+func (b *eventStoreBridge) EventStore() core.EventStore {
+	return b.db.EventStore()
+}
+
+// adminDepsBridge adapts auth subsystem + database subsystem to pluginsetup.AdminDepsProvider.
+type adminDepsBridge struct {
+	auth *authsetup.AuthSubsystem
+	db   *store.DatabaseSubsystem
+}
+
+func (b *adminDepsBridge) AdminDeps() handlers.AdminDeps {
+	pool := b.db.Pool()
+	return handlers.AdminDeps{
+		PlayerRepo:     b.auth.PlayerRepo(),
+		Hasher:         b.auth.Hasher(),
+		PlayerSessions: b.auth.PlayerSessionStore(),
+		ResetRepo:      b.auth.ResetRepo(),
+		CharLister:     bootstrapsetup.NewCharRepoAdapter(pool, worldpostgres.NewCharacterRepository(pool)),
+	}
+}
+
 // ensureTLSCerts generates or loads TLS certificates.
 func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
-	// Check if certificate files exist
 	certPath := certsDir + "/core.crt"
 	keyPath := certsDir + "/core.key"
 	caPath := certsDir + "/root-ca.crt"
@@ -893,9 +461,6 @@ func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 	keyExists := fileExists(keyPath)
 	caExists := fileExists(caPath)
 
-	// If any certificate files exist, try to load them
-	// If loading fails (corruption, permission issues, etc.), return the error
-	// rather than silently regenerating certificates
 	if certExists || keyExists || caExists {
 		existingConfig, err := tlscerts.LoadServerTLS(certsDir, "core")
 		if err != nil {
@@ -904,33 +469,27 @@ func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 		return existingConfig, nil
 	}
 
-	// No certificate files exist, generate new ones
 	slog.Info("generating TLS certificates", "certs_dir", certsDir)
 
-	// Ensure directory exists
 	if err := xdg.EnsureDir(certsDir); err != nil {
 		return nil, oops.Code("CERTS_DIR_CREATE_FAILED").With("operation", "create certs directory").With("certs_dir", certsDir).Wrap(err)
 	}
 
-	// Generate CA
 	ca, err := tlscerts.GenerateCA(gameID)
 	if err != nil {
 		return nil, oops.Code("CA_GENERATE_FAILED").With("operation", "generate CA").With("game_id", gameID).Wrap(err)
 	}
 
-	// Generate server certificate
 	serverCert, err := tlscerts.GenerateServerCert(ca, gameID, "core")
 	if err != nil {
 		return nil, oops.Code("SERVER_CERT_GENERATE_FAILED").With("operation", "generate server certificate").With("component", "core").Wrap(err)
 	}
 
-	// Save certificates
 	err = tlscerts.SaveCertificates(certsDir, ca, serverCert)
 	if err != nil {
 		return nil, oops.Code("CERTS_SAVE_FAILED").With("operation", "save certificates").With("certs_dir", certsDir).Wrap(err)
 	}
 
-	// Generate gateway client certificate
 	gatewayCert, err := tlscerts.GenerateClientCert(ca, "gateway")
 	if err != nil {
 		return nil, oops.Code("CLIENT_CERT_GENERATE_FAILED").With("operation", "generate gateway certificate").With("component", "gateway").Wrap(err)
@@ -943,7 +502,6 @@ func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 
 	slog.Info("TLS certificates generated")
 
-	// Load the newly generated certificates
 	tlsConfig, err := tlscerts.LoadServerTLS(certsDir, "core")
 	if err != nil {
 		return nil, oops.Code("TLS_LOAD_FAILED").With("operation", "load generated certificates").With("certs_dir", certsDir).Wrap(err)
@@ -960,13 +518,10 @@ func fileExists(path string) bool {
 }
 
 // monitorServerErrors monitors a server's error channel and cancels the context on error.
-// This ensures that server failures trigger graceful shutdown of the entire process.
-// It exits when either an error is received, the channel is closed, or the context is cancelled.
 func monitorServerErrors(ctx context.Context, cancel context.CancelFunc, errCh <-chan error, serverName string) {
 	select {
 	case err, ok := <-errCh:
 		if !ok {
-			// Channel closed, server stopped gracefully
 			return
 		}
 		if err != nil {
@@ -977,12 +532,10 @@ func monitorServerErrors(ctx context.Context, cancel context.CancelFunc, errCh <
 			cancel()
 		}
 	case <-ctx.Done():
-		// Context cancelled, exit monitoring
 	}
 }
 
 // runAutoMigration runs database migrations using the provided factory.
-// It logs the migration status and ensures the migrator is closed.
 // Used by auto-migration unit/integration tests; production code uses MigrationBootstrapper.
 //
 //nolint:unparam // databaseURL varies in integration tests (connStr from testcontainers)
@@ -1009,25 +562,20 @@ func runAutoMigration(databaseURL string, factory func(string) (bootstrap.AutoMi
 
 // parseAutoMigrate reads the HOLOMUSH_DB_AUTO_MIGRATE environment variable.
 // Returns true (auto-migrate enabled) if the variable is not set, empty, or not explicitly "false" or "0".
-// Whitespace-only values are treated as empty (not set).
-// Logs a warning for unrecognized values to help catch typos.
 func parseAutoMigrate() bool {
 	val := strings.TrimSpace(os.Getenv("HOLOMUSH_DB_AUTO_MIGRATE"))
 	if val == "" {
-		return true // Default: auto-migration enabled
+		return true
 	}
 
-	// Check for explicit false values (case-insensitive)
 	if strings.EqualFold(val, "false") || val == "0" {
 		return false
 	}
 
-	// Check for explicit true values (case-insensitive)
 	if strings.EqualFold(val, "true") || val == "1" {
 		return true
 	}
 
-	// Unrecognized value - warn and default to true for safety
 	slog.Warn("unrecognized HOLOMUSH_DB_AUTO_MIGRATE value, defaulting to true",
 		"value", val,
 		"valid_values", "true, false, 1, 0")

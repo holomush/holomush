@@ -17,7 +17,6 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
-	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // --- Mock PolicyStore ---
@@ -55,17 +54,6 @@ func (m *mockPolicyStore) ReplaceBySource(_ context.Context, _, _ string, _ []*s
 
 func (m *mockPolicyStore) List(_ context.Context, _ store.ListOptions) ([]*store.StoredPolicy, error) {
 	return nil, nil
-}
-
-// --- Mock Listener ---
-
-type mockListener struct {
-	ch  chan string
-	err error
-}
-
-func (m *mockListener) Listen(_ context.Context) (<-chan string, error) {
-	return m.ch, m.err
 }
 
 // --- Test helpers ---
@@ -204,115 +192,6 @@ func TestCacheSnapshotIsSafeConcurrently(t *testing.T) {
 	wg.Wait()
 }
 
-func TestCacheStaleness(t *testing.T) {
-	ms := &mockPolicyStore{policies: testPolicies()}
-	compiler := testCompiler()
-	threshold := 50 * time.Millisecond
-	cache := NewCache(ms, compiler, WithStalenessThreshold(threshold))
-
-	// Before any reload, cache is stale.
-	assert.True(t, cache.IsStale(), "cache should be stale before first reload")
-
-	// After reload, cache is fresh.
-	require.NoError(t, cache.Reload(context.Background()))
-	assert.False(t, cache.IsStale(), "cache should be fresh immediately after reload")
-
-	// Wait for staleness threshold to pass.
-	time.Sleep(threshold + 10*time.Millisecond)
-	assert.True(t, cache.IsStale(), "cache should be stale after threshold")
-}
-
-func TestCacheStalenessFailsClosedWhenStale(t *testing.T) {
-	ms := &mockPolicyStore{policies: testPolicies()}
-	compiler := testCompiler()
-	threshold := 50 * time.Millisecond
-	cache := NewCache(ms, compiler, WithStalenessThreshold(threshold))
-
-	// Load policies.
-	require.NoError(t, cache.Reload(context.Background()))
-
-	// Wait for staleness.
-	time.Sleep(threshold + 10*time.Millisecond)
-	require.True(t, cache.IsStale())
-
-	// When stale, callers should treat the cache as unreliable and default deny.
-	// The cache itself returns a snapshot, but IsStale() signals fail-closed.
-	snap := cache.Snapshot()
-	assert.NotNil(t, snap, "snapshot should still be returned even when stale")
-	assert.True(t, cache.IsStale(), "IsStale should remain true until next reload")
-
-	// After a fresh reload, staleness clears.
-	require.NoError(t, cache.Reload(context.Background()))
-	assert.False(t, cache.IsStale())
-}
-
-func TestCacheGracefulShutdown(t *testing.T) {
-	ch := make(chan string, 1)
-	listener := &mockListener{ch: ch}
-
-	ms := &mockPolicyStore{policies: testPolicies()}
-	compiler := testCompiler()
-	cache := NewCache(ms, compiler)
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Start the background listener.
-	err := cache.StartWithListener(ctx, listener)
-	require.NoError(t, err)
-
-	// Give the goroutine a moment to start.
-	time.Sleep(20 * time.Millisecond)
-
-	// Cancel the context — goroutine should exit cleanly.
-	cancel()
-
-	// Wait for the goroutine to finish (with timeout).
-	done := make(chan struct{})
-	go func() {
-		cache.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		// Goroutine exited cleanly.
-	case <-time.After(2 * time.Second):
-		t.Fatal("goroutine did not exit within timeout after context cancellation")
-	}
-}
-
-func TestCacheListenNotifyTriggersReload(t *testing.T) {
-	ch := make(chan string, 1)
-	listener := &mockListener{ch: ch}
-
-	ms := &mockPolicyStore{policies: testPolicies()}
-	compiler := testCompiler()
-	cache := NewCache(ms, compiler)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Initial reload so we have a baseline.
-	require.NoError(t, cache.Reload(context.Background()))
-	assert.Equal(t, int64(1), ms.calls.Load())
-
-	// Start listener.
-	err := cache.StartWithListener(ctx, listener)
-	require.NoError(t, err)
-
-	// Send a notification.
-	ch <- "policy_changed"
-
-	// Wait for the reload to happen.
-	require.Eventually(t, func() bool {
-		return ms.calls.Load() >= 2
-	}, 2*time.Second, 10*time.Millisecond,
-		"store should be called again after NOTIFY")
-
-	cancel()
-	cache.Wait()
-}
-
 func TestCacheReloadUpdatesMetric(t *testing.T) {
 	ms := &mockPolicyStore{policies: testPolicies()}
 	compiler := testCompiler()
@@ -353,22 +232,32 @@ func TestSnapshotIsImmutable(t *testing.T) {
 	}
 }
 
-func TestCacheOptionWithStalenessThreshold(t *testing.T) {
-	ms := &mockPolicyStore{policies: testPolicies()}
-	compiler := testCompiler()
-
-	// Very long threshold — should not be stale after reload.
-	cache := NewCache(ms, compiler, WithStalenessThreshold(1*time.Hour))
-	require.NoError(t, cache.Reload(context.Background()))
-	assert.False(t, cache.IsStale())
-}
-
-func TestCacheStartReturnsNotImplementedError(t *testing.T) {
-	ms := &mockPolicyStore{policies: testPolicies()}
+func TestCacheInvalidateTriggersReload(t *testing.T) {
+	dslText := `permit(principal, action, resource);`
+	ms := &mockPolicyStore{
+		policies: []*store.StoredPolicy{
+			{ID: "p1", Name: "test-policy", DSLText: dslText, Enabled: true},
+		},
+	}
 	compiler := testCompiler()
 	cache := NewCache(ms, compiler)
 
-	err := cache.Start(context.Background(), "postgres://localhost:5432/test")
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "CACHE_START_NOT_IMPLEMENTED")
+	// Initial load
+	require.NoError(t, cache.Reload(context.Background()))
+	snap1 := cache.Snapshot()
+	require.Len(t, snap1.Policies, 1)
+
+	// Add a second policy
+	ms.policies = append(ms.policies, &store.StoredPolicy{
+		ID: "p2", Name: "test-policy-2", DSLText: dslText, Enabled: true,
+	})
+
+	// Invalidate triggers reload
+	err := cache.Invalidate(context.Background())
+	require.NoError(t, err)
+
+	snap2 := cache.Snapshot()
+	assert.Len(t, snap2.Policies, 2)
+	assert.False(t, snap2.CreatedAt.Before(snap1.CreatedAt),
+		"snap2.CreatedAt should not be before snap1.CreatedAt")
 }

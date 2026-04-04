@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -18,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/audit"
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/world"
@@ -27,6 +29,8 @@ import (
 type ABACStack struct {
 	Engine          types.AccessPolicyEngine
 	Cache           *policy.Cache
+	Poller          *policy.Poller
+	HealthTracker   *lifecycle.HealthTracker
 	PolicyStore     *policystore.PostgresStore
 	Resolver        *attribute.Resolver
 	AuditLogger     *audit.Logger
@@ -60,6 +64,7 @@ type ABACConfig struct {
 }
 
 // BuildABACStack constructs all ABAC components in the correct dependency order.
+// codecov:ignore — tested by integration and E2E tests
 func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 	eb := oops.In("abac_setup")
 
@@ -130,12 +135,58 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 	// 16. Engine
 	engine := policy.NewEngine(resolver, cache, sessionRes, auditLogger)
 
-	// 17. Policy installer
+	// 17. Health tracker for policy cache
+	healthTracker := lifecycle.NewHealthTracker(lifecycle.TrackerConfig{
+		SubsystemName: "abac.policy-cache",
+		GracePeriod:   60 * time.Second,
+		MaxFailures:   30,
+		OnTierChange: func(from, to lifecycle.HealthTier) {
+			eng := engine
+			switch {
+			case to == lifecycle.HealthDead:
+				eng.EnterDegradedMode("policy cache dead — initiating shutdown")
+				slog.Error("ABAC policy cache dead — initiating graceful shutdown")
+			case to >= lifecycle.HealthStale:
+				eng.EnterDegradedMode("policy cache " + to.String())
+			case to == lifecycle.HealthWarm && from >= lifecycle.HealthStale:
+				eng.ClearDegradedMode()
+			}
+		},
+	})
+
+	// 18. Wire store → cache invalidation (fast path).
+	// Use a detached context so invalidation isn't cancelled if the request context expires.
+	ps.SetOnMutate(func(_ context.Context) {
+		invalidateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := cache.Invalidate(invalidateCtx); err != nil {
+			slog.Error("cache invalidation after store mutation failed",
+				"error", err)
+			healthTracker.RecordFailure("invalidation failed: " + err.Error())
+		} else {
+			healthTracker.RecordSuccess()
+		}
+	})
+
+	// 19. Create poller (safety net)
+	poller, pollerErr := policy.NewPoller(policy.PollerConfig{
+		Querier:  ps,
+		Reloader: cache,
+		Tracker:  healthTracker,
+		Interval: 10 * time.Second,
+	})
+	if pollerErr != nil {
+		return nil, eb.Wrapf(pollerErr, "create policy poller")
+	}
+
+	// 20. Policy installer
 	installer := plugins.NewPolicyInstaller(ps)
 
 	return &ABACStack{
 		Engine:          engine,
 		Cache:           cache,
+		Poller:          poller,
+		HealthTracker:   healthTracker,
 		PolicyStore:     ps,
 		Resolver:        resolver,
 		AuditLogger:     auditLogger,

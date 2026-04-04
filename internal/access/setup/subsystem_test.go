@@ -1,0 +1,33 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+package setup_test
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/holomush/holomush/internal/access/setup"
+	"github.com/holomush/holomush/internal/lifecycle"
+)
+
+func TestABACSubsystemIDReturnsABAC(t *testing.T) {
+	sub := setup.NewABACSubsystem(setup.ABACSubsystemConfig{})
+	assert.Equal(t, lifecycle.SubsystemABAC, sub.ID())
+}
+
+func TestABACSubsystemDependsOnDatabase(t *testing.T) {
+	sub := setup.NewABACSubsystem(setup.ABACSubsystemConfig{})
+	assert.Equal(t, []lifecycle.SubsystemID{lifecycle.SubsystemDatabase}, sub.DependsOn())
+}
+
+func TestABACSubsystemEnginePanicsBeforeStart(t *testing.T) {
+	sub := setup.NewABACSubsystem(setup.ABACSubsystemConfig{})
+	assert.Panics(t, func() { sub.Engine() })
+}
+
+func TestABACSubsystemImplementsSubsystem(_ *testing.T) {
+	sub := setup.NewABACSubsystem(setup.ABACSubsystemConfig{})
+	var _ lifecycle.Subsystem = sub
+}

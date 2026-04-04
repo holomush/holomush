@@ -98,4 +98,3 @@ func (m *mockHostFunctionsServer) KVDelete(_ context.Context, _ *pluginv1.KVDele
 func (m *mockHostFunctionsServer) Log(_ context.Context, _ *pluginv1.LogRequest) (*pluginv1.LogResponse, error) {
 	return &pluginv1.LogResponse{}, nil
 }
-

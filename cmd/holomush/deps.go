@@ -7,6 +7,7 @@ import (
 	"context"
 	cryptotls "crypto/tls"
 	"net"
+	"os"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -15,6 +16,8 @@ import (
 	"github.com/holomush/holomush/internal/control"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
+	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/internal/xdg"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
@@ -44,10 +47,6 @@ type CommonDeps struct {
 type CoreDeps struct {
 	CommonDeps
 
-	// EventStoreFactory creates an event store from a database URL.
-	// Default: store.NewPostgresEventStore
-	EventStoreFactory func(ctx context.Context, url string) (EventStore, error)
-
 	// TLSCertEnsurer generates or loads TLS certificates.
 	// Default: ensureTLSCerts
 	TLSCertEnsurer func(certsDir, gameID string) (*cryptotls.Config, error)
@@ -63,12 +62,42 @@ type CoreDeps struct {
 	// AutoMigrateGetter returns whether auto-migration is enabled.
 	// Default: parseAutoMigrate (reads HOLOMUSH_DB_AUTO_MIGRATE env var)
 	AutoMigrateGetter func() bool
+}
 
-	// PolicyBootstrapper seeds policies and creates audit log partitions.
-	// Default: extracts pool from event store, runs policy.Bootstrap().
-	// Fatal if nil and event store does not expose a connection pool (ADR #92).
-	// Tests MUST set this to a no-op to avoid requiring a real database.
-	PolicyBootstrapper func(ctx context.Context, skipSeedMigrations bool) error
+// applyDefaults fills nil fields with their default implementations.
+func (d *CoreDeps) applyDefaults() {
+	if d.TLSCertEnsurer == nil {
+		d.TLSCertEnsurer = ensureTLSCerts
+	}
+	if d.ControlTLSLoader == nil {
+		d.ControlTLSLoader = control.LoadControlServerTLS
+	}
+	if d.ControlServerFactory == nil {
+		d.ControlServerFactory = func(component string, shutdownFunc control.ShutdownFunc) (ControlServer, error) {
+			return control.NewGRPCServer(component, shutdownFunc)
+		}
+	}
+	if d.ObservabilityServerFactory == nil {
+		d.ObservabilityServerFactory = func(addr string, readinessChecker observability.ReadinessChecker) ObservabilityServer {
+			return observability.NewServer(addr, readinessChecker)
+		}
+	}
+	if d.CertsDirGetter == nil {
+		d.CertsDirGetter = xdg.CertsDir
+	}
+	if d.DatabaseURLGetter == nil {
+		d.DatabaseURLGetter = func() string {
+			return os.Getenv("DATABASE_URL")
+		}
+	}
+	if d.MigratorFactory == nil {
+		d.MigratorFactory = func(url string) (bootstrap.AutoMigrator, error) {
+			return store.NewMigrator(url)
+		}
+	}
+	if d.AutoMigrateGetter == nil {
+		d.AutoMigrateGetter = parseAutoMigrate
+	}
 }
 
 // GatewayDeps contains injectable dependencies for the gateway command.
@@ -97,12 +126,6 @@ type GatewayDeps struct {
 	// ListenerFactory creates a network listener.
 	// Default: net.Listen
 	ListenerFactory func(network, address string) (net.Listener, error)
-}
-
-// EventStore interface wraps the methods used by core from store.PostgresEventStore.
-type EventStore interface {
-	Close()
-	InitGameID(ctx context.Context) (string, error)
 }
 
 // ControlServer interface wraps the methods used from control.GRPCServer.

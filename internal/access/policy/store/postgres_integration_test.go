@@ -441,20 +441,15 @@ var _ = Describe("PostgresStore", func() {
 		})
 	})
 
-	Describe("pg_notify", func() {
-		It("sends notification on create", func() {
+	Describe("onMutate callback", func() {
+		It("fires on create", func() {
 			ctx := context.Background()
-
-			// Acquire a connection to listen for notifications.
-			conn, err := pool.Acquire(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			defer conn.Release()
-
-			_, err = conn.Exec(ctx, "LISTEN policy_changed")
-			Expect(err).NotTo(HaveOccurred())
+			calls := 0
+			ps.SetOnMutate(func(_ context.Context) { calls++ })
+			defer ps.SetOnMutate(nil)
 
 			p := &store.StoredPolicy{
-				Name:        "notify-create",
+				Name:        "mutate-create",
 				Effect:      types.PolicyEffectPermit,
 				Source:      "admin",
 				DSLText:     "permit(principal, action, resource);",
@@ -463,21 +458,14 @@ var _ = Describe("PostgresStore", func() {
 				CreatedBy:   "system",
 			}
 			Expect(ps.Create(ctx, p)).To(Succeed())
-
-			notifyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			defer cancel()
-
-			notification, err := conn.Conn().WaitForNotification(notifyCtx)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(notification.Channel).To(Equal("policy_changed"))
-			Expect(notification.Payload).To(Equal(p.ID))
+			Expect(calls).To(Equal(1))
 		})
 
-		It("sends notification on update", func() {
+		It("fires on update", func() {
 			ctx := context.Background()
 
 			p := &store.StoredPolicy{
-				Name:        "notify-update",
+				Name:        "mutate-update",
 				Effect:      types.PolicyEffectPermit,
 				Source:      "admin",
 				DSLText:     "permit(principal, action, resource);",
@@ -487,39 +475,22 @@ var _ = Describe("PostgresStore", func() {
 			}
 			Expect(ps.Create(ctx, p)).To(Succeed())
 
-			conn, err := pool.Acquire(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			defer conn.Release()
-
-			_, err = conn.Exec(ctx, "LISTEN policy_changed")
-			Expect(err).NotTo(HaveOccurred())
+			calls := 0
+			ps.SetOnMutate(func(_ context.Context) { calls++ })
+			defer ps.SetOnMutate(nil)
 
 			p.DSLText = "permit(principal, action, resource) when { true };"
 			p.CompiledAST = sampleAST()
 			p.CreatedBy = "system"
 			Expect(ps.Update(ctx, p)).To(Succeed())
-
-			notifyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			defer cancel()
-
-			notification, err := conn.Conn().WaitForNotification(notifyCtx)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(notification.Channel).To(Equal("policy_changed"))
-			Expect(notification.Payload).To(Equal(p.ID))
+			Expect(calls).To(Equal(1))
 		})
 
-		It("sends notification on delete", func() {
+		It("fires on delete", func() {
 			ctx := context.Background()
 
-			conn, err := pool.Acquire(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			defer conn.Release()
-
-			_, err = conn.Exec(ctx, "LISTEN policy_changed")
-			Expect(err).NotTo(HaveOccurred())
-
 			p := &store.StoredPolicy{
-				Name:        "notify-delete",
+				Name:        "mutate-delete",
 				Effect:      types.PolicyEffectPermit,
 				Source:      "admin",
 				DSLText:     "permit(principal, action, resource);",
@@ -528,23 +499,13 @@ var _ = Describe("PostgresStore", func() {
 				CreatedBy:   "system",
 			}
 			Expect(ps.Create(ctx, p)).To(Succeed())
-			policyID := p.ID
 
-			// Drain the notification from the Create operation.
-			drainCtx, drainCancel := context.WithTimeout(ctx, 1*time.Second)
-			_, drainErr := conn.Conn().WaitForNotification(drainCtx)
-			drainCancel()
-			Expect(drainErr).NotTo(HaveOccurred())
+			calls := 0
+			ps.SetOnMutate(func(_ context.Context) { calls++ })
+			defer ps.SetOnMutate(nil)
 
-			Expect(ps.Delete(ctx, "notify-delete")).To(Succeed())
-
-			notifyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			defer cancel()
-
-			notification, err := conn.Conn().WaitForNotification(notifyCtx)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(notification.Channel).To(Equal("policy_changed"))
-			Expect(notification.Payload).To(Equal(policyID))
+			Expect(ps.Delete(ctx, "mutate-delete")).To(Succeed())
+			Expect(calls).To(Equal(1))
 		})
 	})
 })

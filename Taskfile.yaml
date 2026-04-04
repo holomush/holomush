@@ -89,7 +89,8 @@ tasks:
     desc: Run Playwright E2E tests in Docker
     deps: ['docker:build']
     cmds:
-      - defer: docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml down
+      - rm -rf web/test-results
+      - defer: docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml down -v
       - cmd: |
           set +e
           docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml run --rm playwright npx playwright test {{.CLI_ARGS}}
