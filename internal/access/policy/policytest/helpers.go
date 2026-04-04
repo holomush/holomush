@@ -130,8 +130,10 @@ func (e *InfraFailureEngine) Evaluate(_ context.Context, _ types.AccessRequest) 
 	return types.NewDecision(types.EffectDefaultDeny, e.reason, e.policyID), nil
 }
 
-// CanPerformAction returns false with an error wrapping the reason, simulating
-// an infrastructure failure during capability pre-flight checks.
+// CanPerformAction returns (false, error) for infra failures. This differs from
+// Evaluate which signals infra failure via Decision.IsInfraFailure(). The
+// asymmetry is intentional: CanPerformAction uses (bool, error) where error IS
+// the infra failure signal, while Evaluate uses the richer Decision type.
 func (e *InfraFailureEngine) CanPerformAction(_ context.Context, _, _, _, _ string) (bool, error) {
 	return false, oops.Code(e.policyID).Errorf("%s", e.reason)
 }

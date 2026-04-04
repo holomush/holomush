@@ -8,6 +8,7 @@ import (
 
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/world"
 )
@@ -28,6 +29,19 @@ func TestErrPermissionDenied(t *testing.T) {
 	assert.Equal(t, "PERMISSION_DENIED", oopsErr.Code())
 	assert.Equal(t, "boot", oopsErr.Context()["command"])
 	assert.Equal(t, "admin:boot", oopsErr.Context()["capability"])
+}
+
+func TestErrInsufficientCapability(t *testing.T) {
+	cap := Capability{Action: "emit", Resource: "stream", Scope: ScopeLocal}
+	err := ErrInsufficientCapability("say", cap)
+
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, CodePermissionDenied, oopsErr.Code())
+	assert.Equal(t, "say", oopsErr.Context()["command"])
+	assert.Equal(t, "emit", oopsErr.Context()["required_action"])
+	assert.Equal(t, "stream", oopsErr.Context()["required_resource"])
+	assert.Contains(t, err.Error(), "insufficient capability")
 }
 
 func TestErrInvalidArgs(t *testing.T) {

@@ -6,6 +6,10 @@ version: 1.0.0
 type: core
 commands:
   - name: say
+    capabilities:
+      - action: emit
+        resource: stream
+        scope: local
     help: "Say something to the location"
     usage: "say <message>"
     helpText: |
@@ -23,6 +27,10 @@ commands:
       - `say How are you?`
 
   - name: pose
+    capabilities:
+      - action: emit
+        resource: stream
+        scope: local
     help: "Perform an action"
     usage: "pose <action>"
     helpText: |

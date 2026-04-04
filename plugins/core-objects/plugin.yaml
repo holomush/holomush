@@ -6,6 +6,10 @@ version: 0.1.0
 type: core
 commands:
   - name: describe
+    capabilities:
+      - action: write
+        resource: object
+        scope: local
     help: "Set a description"
     usage: "describe me <text> | describe here <text> | describe <target>=<text>"
     helpText: |
@@ -25,9 +29,17 @@ commands:
       - `describe here A dusty chamber lit by a single torch.`
       - `describe #01ABCDEF=A gleaming blade.`
   - name: desc
+    capabilities:
+      - action: write
+        resource: object
+        scope: local
     help: "Set a description (alias for describe)"
     usage: "desc me <text>"
   - name: examine
+    capabilities:
+      - action: read
+        resource: object
+        scope: local
     help: "Inspect an object, location, or character"
     usage: "examine [target]"
     helpText: |
