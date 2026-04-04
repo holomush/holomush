@@ -294,6 +294,41 @@ breakage that unit tests miss.
 - Integration tests in `*_integration_test.go`
 - Use build tags for integration tests: `//go:build integration`
 
+### Test Naming
+
+Test names MUST be sentences that communicate behavior. Follow the ACE
+framework: **Action** (what), **Condition** (when/given), **Expectation**
+(then/result).
+
+Reference: [Test Names Should Be Sentences](https://bitfieldconsulting.com/posts/test-names)
+
+**Functions without subtests** — the function name itself is the sentence:
+
+| Pattern | Example |
+| ------- | ------- |
+| Good | `TestConfigDirUsesXDGEnvVarWhenSet` |
+| Good | `TestEnsureDirFailsWhenParentIsAFile` |
+| Bad | `TestConfigDir_EnvVar` |
+| Bad | `TestEnsureDir_Error` |
+
+**Functions with subtests** — parent name identifies the unit under test,
+subtest names carry the sentence:
+
+```go
+func TestHashPassword(t *testing.T) {
+    t.Run("produces valid argon2id hash", func(t *testing.T) { ... })
+    t.Run("rejects empty password", func(t *testing.T) { ... })
+}
+```
+
+| Requirement | Description |
+| ----------- | ----------- |
+| **MUST** follow ACE | Every test name communicates action, condition, and expectation |
+| **MUST** use PascalCase | Top-level function names: `TestConfigDirFallsBackToHomeDotConfig` |
+| **SHOULD NOT** use underscores | Exception: `TestType_Method` with subtests (e.g., `TestEngine_Evaluate`) |
+| **MUST** use lowercase subtests | Subtest strings: `"returns ErrNotFound for missing character"` |
+| **MUST NOT** use vague names | No `"success"`, `"error case"`, `"test 1"` |
+
 ### Table-Driven Tests
 
 ```go
@@ -303,15 +338,13 @@ func TestEventType_String(t *testing.T) {
         input    EventType
         expected string
     }{
-        {"say event", EventTypeSay, "say"},
-        {"pose event", EventTypePose, "pose"},
+        {"returns say for EventTypeSay", EventTypeSay, "say"},
+        {"returns pose for EventTypePose", EventTypePose, "pose"},
     }
 
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            if got := tt.input.String(); got != tt.expected {
-                t.Errorf("got %q, want %q", got, tt.expected)
-            }
+            assert.Equal(t, tt.expected, tt.input.String())
         })
     }
 }
@@ -348,6 +381,16 @@ assert.Error(t, err)
 // Contains
 assert.Contains(t, slice, element)
 ```
+
+### Test Quality
+
+| Requirement | Description |
+| ----------- | ----------- |
+| **MUST** test both paths | Every exported function needs at least one positive and one negative test |
+| **MUST** assert behavior | No zero-assertion "don't panic" tests |
+| **MUST** focus each test | One behavior per test/subtest — if it needs "and," split it |
+| **SHOULD** use error codes | Prefer `errutil.AssertErrorCode` or `assert.ErrorIs` over string matching |
+| **MUST** use `require` for preconditions | `require.NoError` for setup, `assert.*` for the check under test |
 
 ### Mocking with Mockery
 
