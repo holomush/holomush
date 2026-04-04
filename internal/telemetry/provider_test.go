@@ -15,7 +15,7 @@ import (
 	"github.com/holomush/holomush/internal/telemetry"
 )
 
-func TestInit_NoEndpoint(t *testing.T) {
+func TestInitReturnsNoopProviderWhenEndpointIsEmpty(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 	shutdown, err := telemetry.Init(context.Background(), "test-svc", "1.0.0")
 	require.NoError(t, err)
@@ -23,7 +23,7 @@ func TestInit_NoEndpoint(t *testing.T) {
 	require.NoError(t, shutdown(context.Background()))
 }
 
-func TestInit_WithEndpoint(t *testing.T) {
+func TestInitReturnsOTLPProviderWhenEndpointIsSet(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://192.0.2.1:4317")
 	shutdown, err := telemetry.Init(context.Background(), "test-svc", "1.0.0")
 	require.NoError(t, err)

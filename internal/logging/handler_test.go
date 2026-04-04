@@ -15,7 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-func TestSetup_JSONFormat(t *testing.T) {
+func TestSetupReturnsJSONHandlerWhenFormatIsJSON(t *testing.T) {
 	var buf bytes.Buffer
 	logger := Setup("core", "1.0.0", "json", &buf, slog.LevelDebug)
 
@@ -32,7 +32,7 @@ func TestSetup_JSONFormat(t *testing.T) {
 	assert.Contains(t, entry, "level", "level field missing")
 }
 
-func TestSetup_TextFormat(t *testing.T) {
+func TestSetupReturnsTextHandlerWhenFormatIsText(t *testing.T) {
 	var buf bytes.Buffer
 	logger := Setup("gateway", "1.0.0", "text", &buf, slog.LevelDebug)
 
@@ -43,7 +43,7 @@ func TestSetup_TextFormat(t *testing.T) {
 	assert.Contains(t, output, "gateway", "Output missing service")
 }
 
-func TestHandler_TraceContext(t *testing.T) {
+func TestHandlerIncludesTraceFieldsWhenSpanContextPresent(t *testing.T) {
 	var buf bytes.Buffer
 	logger := Setup("core", "1.0.0", "json", &buf, slog.LevelDebug)
 
@@ -66,7 +66,7 @@ func TestHandler_TraceContext(t *testing.T) {
 	assert.Equal(t, "00f067aa0ba902b7", entry["span_id"])
 }
 
-func TestHandler_NoTraceContext(t *testing.T) {
+func TestHandlerOmitsTraceFieldsWhenSpanContextAbsent(t *testing.T) {
 	var buf bytes.Buffer
 	logger := Setup("core", "1.0.0", "json", &buf, slog.LevelDebug)
 
@@ -85,7 +85,7 @@ func TestHandler_NoTraceContext(t *testing.T) {
 	}
 }
 
-func TestSetup_DefaultFormat(t *testing.T) {
+func TestSetupDefaultsToJSONFormat(t *testing.T) {
 	var buf bytes.Buffer
 	logger := Setup("core", "1.0.0", "", &buf, slog.LevelDebug)
 
@@ -97,7 +97,7 @@ func TestSetup_DefaultFormat(t *testing.T) {
 	require.NoError(t, err, "Default format should be JSON")
 }
 
-func TestSetDefault(t *testing.T) {
+func TestSetDefaultSetsGlobalLogger(t *testing.T) {
 	// Capture original default logger
 	original := slog.Default()
 	defer slog.SetDefault(original)
