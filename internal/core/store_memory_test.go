@@ -205,6 +205,26 @@ func TestMemoryEventStoreSubscribeDoesNotNotifyForOtherStreams(t *testing.T) {
 	}
 }
 
+func TestMemoryEventStoreReplayZeroLimitReturnsEmpty(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	// Append an event so the stream is non-empty
+	event := Event{
+		ID:        NewULID(),
+		Stream:    "location:test",
+		Type:      EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     Actor{Kind: ActorCharacter, ID: "char1"},
+		Payload:   []byte(`{}`),
+	}
+	require.NoError(t, store.Append(ctx, event))
+
+	events, err := store.Replay(ctx, "location:test", ulid.ULID{}, 0)
+	require.NoError(t, err)
+	assert.Empty(t, events, "zero limit should return empty slice")
+}
+
 func TestMemoryEventStoreSubscribeClosesChannelOnContextCancel(t *testing.T) {
 	store := NewMemoryEventStore()
 	ctx, cancel := context.WithCancel(context.Background())

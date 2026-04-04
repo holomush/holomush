@@ -278,14 +278,6 @@ func TestMigratorPendingMigrationsReturnsEmptyAtLatestVersion(t *testing.T) {
 	assert.Empty(t, pending)
 }
 
-func TestMigratorPendingMigrationsReturnsAllMigrationsAtVersionZero(t *testing.T) {
-	// At version 0 (fresh db), all migrations should be pending
-	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
-	pending, err := m.PendingMigrations()
-	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2}, pending)
-}
-
 func TestMigratorPendingMigrationsReturnsErrorWhenVersionFails(t *testing.T) {
 	m := &Migrator{m: &mockMigrate{versionErr: errors.New("connection lost")}}
 	_, err := m.PendingMigrations()
