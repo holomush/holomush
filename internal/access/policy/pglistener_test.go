@@ -14,11 +14,11 @@ import (
 	"github.com/holomush/holomush/internal/access/policy"
 )
 
-func TestPgListener_ImplementsInterface(_ *testing.T) {
+func TestPgListenerImplementsInterface(_ *testing.T) {
 	var _ policy.Listener = (*policy.PgListener)(nil)
 }
 
-func TestPgListener_CancelsOnContextDone(t *testing.T) {
+func TestPgListenerCancelsOnContextDone(t *testing.T) {
 	listener := policy.NewPgListener("postgres://invalid:5432/nonexistent")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)

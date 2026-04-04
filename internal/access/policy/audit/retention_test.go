@@ -98,7 +98,7 @@ func TestDefaultRetentionConfig(t *testing.T) {
 	assert.Equal(t, 24*time.Hour, cfg.PurgeInterval, "default purge interval should be 24 hours")
 }
 
-func TestRetentionWorker_RunOnce_HappyPath(t *testing.T) {
+func TestRetentionWorkerRunOnceHappyPath(t *testing.T) {
 	cfg := RetentionConfig{
 		RetainDenials: 90 * 24 * time.Hour,
 		RetainAllows:  7 * 24 * time.Hour,
@@ -137,7 +137,7 @@ func TestRetentionWorker_RunOnce_HappyPath(t *testing.T) {
 	assert.Equal(t, 7*24*time.Hour, mock.lastDropGracePeriod, "drop grace period should be 7 days")
 }
 
-func TestRetentionWorker_RunOnce_EnsurePartitionsError(t *testing.T) {
+func TestRetentionWorkerRunOnceEnsurePartitionsError(t *testing.T) {
 	cfg := DefaultRetentionConfig()
 	mock := &mockPartitionManager{
 		ensureErr:          fmt.Errorf("database error"),
@@ -161,7 +161,7 @@ func TestRetentionWorker_RunOnce_EnsurePartitionsError(t *testing.T) {
 	assert.Equal(t, 1, drop, "drop should still be attempted after ensure fails")
 }
 
-func TestRetentionWorker_RunOnce_PurgeExpiredAllows(t *testing.T) {
+func TestRetentionWorkerRunOncePurgesExpiredAllows(t *testing.T) {
 	cfg := RetentionConfig{
 		RetainDenials: 90 * 24 * time.Hour,
 		RetainAllows:  14 * 24 * time.Hour, // 2 weeks
@@ -184,7 +184,7 @@ func TestRetentionWorker_RunOnce_PurgeExpiredAllows(t *testing.T) {
 	assert.Equal(t, expectedCutoff, mock.lastPurgeTime)
 }
 
-func TestRetentionWorker_RunOnce_DetachExpiredPartitions(t *testing.T) {
+func TestRetentionWorkerRunOnceDetachesExpiredPartitions(t *testing.T) {
 	cfg := RetentionConfig{
 		RetainDenials: 60 * 24 * time.Hour, // 60 days
 		RetainAllows:  7 * 24 * time.Hour,
@@ -207,7 +207,7 @@ func TestRetentionWorker_RunOnce_DetachExpiredPartitions(t *testing.T) {
 	assert.Equal(t, expectedCutoff, mock.lastDetachTime)
 }
 
-func TestRetentionWorker_StartStop_Lifecycle(t *testing.T) {
+func TestRetentionWorkerStartStopLifecycle(t *testing.T) {
 	cfg := RetentionConfig{
 		RetainDenials: 90 * 24 * time.Hour,
 		RetainAllows:  7 * 24 * time.Hour,
@@ -240,7 +240,7 @@ func TestRetentionWorker_StartStop_Lifecycle(t *testing.T) {
 	assert.GreaterOrEqual(t, drop, 2, "should run at least 2 cycles")
 }
 
-func TestRetentionWorker_HealthCheck_Delegation(t *testing.T) {
+func TestRetentionWorkerHealthCheckDelegation(t *testing.T) {
 	cfg := DefaultRetentionConfig()
 	mock := &mockPartitionManager{
 		healthErr: fmt.Errorf("partition missing"),
@@ -256,7 +256,7 @@ func TestRetentionWorker_HealthCheck_Delegation(t *testing.T) {
 	assert.Equal(t, 1, health, "HealthCheck should delegate to manager")
 }
 
-func TestRetentionWorker_RunOnce_AllErrorsCombined(t *testing.T) {
+func TestRetentionWorkerRunOnceAllErrorsCombined(t *testing.T) {
 	cfg := DefaultRetentionConfig()
 	mock := &mockPartitionManager{
 		ensureErr: fmt.Errorf("ensure failed"),
@@ -283,7 +283,7 @@ func TestRetentionWorker_RunOnce_AllErrorsCombined(t *testing.T) {
 	assert.Equal(t, 1, drop)
 }
 
-func TestRetentionWorker_StartStop_GracefulShutdown(t *testing.T) {
+func TestRetentionWorkerStartStopGracefulShutdown(t *testing.T) {
 	cfg := RetentionConfig{
 		RetainDenials: 90 * 24 * time.Hour,
 		RetainAllows:  7 * 24 * time.Hour,

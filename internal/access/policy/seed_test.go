@@ -11,27 +11,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSeedPolicies_Count(t *testing.T) {
+func TestSeedPoliciesCount(t *testing.T) {
 	seeds := SeedPolicies()
 	// 26 permit + 1 forbid = 27 total (18 base + 5 gap-fill from T22b + 2 phase-2 commands + 2 system bootstrap)
 	assert.Len(t, seeds, 27, "expected 27 seed policies (26 permit, 1 forbid)")
 }
 
-func TestSeedPolicies_AllNamesHaveSeedPrefix(t *testing.T) {
+func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
 	for _, s := range SeedPolicies() {
 		assert.True(t, strings.HasPrefix(s.Name, "seed:"),
 			"seed policy %q must start with seed: prefix", s.Name)
 	}
 }
 
-func TestSeedPolicies_AllHavePositiveSeedVersion(t *testing.T) {
+func TestSeedPoliciesAllHavePositiveSeedVersion(t *testing.T) {
 	for _, s := range SeedPolicies() {
 		assert.GreaterOrEqual(t, s.SeedVersion, 1,
 			"seed policy %q must have SeedVersion >= 1", s.Name)
 	}
 }
 
-func TestSeedPolicies_NoDuplicateNames(t *testing.T) {
+func TestSeedPoliciesNoDuplicateNames(t *testing.T) {
 	seen := make(map[string]bool)
 	for _, s := range SeedPolicies() {
 		assert.False(t, seen[s.Name],
@@ -40,7 +40,7 @@ func TestSeedPolicies_NoDuplicateNames(t *testing.T) {
 	}
 }
 
-func TestSeedPolicies_AllHaveDescriptions(t *testing.T) {
+func TestSeedPoliciesAllHaveDescriptions(t *testing.T) {
 	for _, s := range SeedPolicies() {
 		assert.NotEmpty(t, s.Description,
 			"seed policy %q must have a description", s.Name)
@@ -58,7 +58,7 @@ func TestSeedPolicies_AllCompileWithoutError(t *testing.T) {
 	}
 }
 
-func TestSeedPolicies_EffectDistribution(t *testing.T) {
+func TestSeedPoliciesEffectDistribution(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	var permitCount, forbidCount int
 	for _, s := range SeedPolicies() {
@@ -75,7 +75,7 @@ func TestSeedPolicies_EffectDistribution(t *testing.T) {
 	assert.Equal(t, 1, forbidCount, "expected 1 forbid policy")
 }
 
-func TestSeedPolicies_ExpectedNames(t *testing.T) {
+func TestSeedPoliciesExpectedNames(t *testing.T) {
 	expectedNames := []string{
 		// Base policies (T22)
 		"seed:player-self-access",
@@ -118,7 +118,7 @@ func TestSeedPolicies_ExpectedNames(t *testing.T) {
 	assert.ElementsMatch(t, expectedNames, seedNames)
 }
 
-func TestSeedPolicies_ForbidPoliciesAreExpected(t *testing.T) {
+func TestSeedPoliciesForbidPoliciesAreExpected(t *testing.T) {
 	expectedForbids := map[string]bool{
 		"seed:property-restricted-excluded": true,
 	}
@@ -135,7 +135,7 @@ func TestSeedPolicies_ForbidPoliciesAreExpected(t *testing.T) {
 
 // T22b gap-specific tests
 
-func TestSeedPolicies_G1_PlayerExitRead(t *testing.T) {
+func TestSeedPoliciesPlayerExitReadPolicyExists(t *testing.T) {
 	seeds := SeedPolicies()
 	var found bool
 	for _, s := range seeds {
@@ -153,7 +153,7 @@ func TestSeedPolicies_G1_PlayerExitRead(t *testing.T) {
 	assert.True(t, found, "seed:player-exit-read policy must exist (G1)")
 }
 
-func TestSeedPolicies_G2_BuilderExitWrite(t *testing.T) {
+func TestSeedPoliciesBuilderExitWritePolicyExists(t *testing.T) {
 	seeds := SeedPolicies()
 	var found bool
 	for _, s := range seeds {
@@ -172,7 +172,7 @@ func TestSeedPolicies_G2_BuilderExitWrite(t *testing.T) {
 	assert.True(t, found, "seed:builder-exit-write policy must exist (G2)")
 }
 
-func TestSeedPolicies_G3_PlayerLocationListCharacters(t *testing.T) {
+func TestSeedPoliciesPlayerLocationListCharactersPolicyExists(t *testing.T) {
 	seeds := SeedPolicies()
 	var found bool
 	for _, s := range seeds {
@@ -190,7 +190,7 @@ func TestSeedPolicies_G3_PlayerLocationListCharacters(t *testing.T) {
 	assert.True(t, found, "seed:player-location-list-characters policy must exist (G3)")
 }
 
-func TestSeedPolicies_G4_ScenePolicies(t *testing.T) {
+func TestSeedPoliciesScenePoliciesExist(t *testing.T) {
 	seeds := SeedPolicies()
 	var participantFound, readFound bool
 	compiler := NewCompiler(emptySchema())
@@ -220,7 +220,7 @@ func TestSeedPolicies_G4_ScenePolicies(t *testing.T) {
 
 // Phase-2 command policy tests
 
-func TestSeedPolicies_PlayerTeleport(t *testing.T) {
+func TestSeedPoliciesPlayerTeleportPolicyExists(t *testing.T) {
 	seeds := SeedPolicies()
 	var found bool
 	for _, s := range seeds {
@@ -241,7 +241,7 @@ func TestSeedPolicies_PlayerTeleport(t *testing.T) {
 	assert.True(t, found, "seed:player-teleport policy must exist")
 }
 
-func TestSeedPolicies_PemitStoryteller(t *testing.T) {
+func TestSeedPoliciesPemitStorytellerPolicyExists(t *testing.T) {
 	seeds := SeedPolicies()
 	var found bool
 	for _, s := range seeds {

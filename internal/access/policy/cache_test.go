@@ -103,7 +103,7 @@ func newTestGauge() prometheus.Gauge {
 
 // --- Tests ---
 
-func TestCache_Reload(t *testing.T) {
+func TestCacheReload(t *testing.T) {
 	ms := &mockPolicyStore{policies: testPolicies()}
 	compiler := testCompiler()
 	cache := NewCache(ms, compiler)
@@ -130,7 +130,7 @@ func TestCache_Reload(t *testing.T) {
 	assert.Equal(t, int64(1), ms.calls.Load())
 }
 
-func TestCache_Reload_CompilationError(t *testing.T) {
+func TestCacheReloadFailsOnCompilationError(t *testing.T) {
 	ms := &mockPolicyStore{
 		policies: []*store.StoredPolicy{
 			{
@@ -153,7 +153,7 @@ func TestCache_Reload_CompilationError(t *testing.T) {
 	assert.Empty(t, snap.Policies)
 }
 
-func TestCache_Reload_StoreError(t *testing.T) {
+func TestCacheReloadFailsOnStoreError(t *testing.T) {
 	ms := &mockPolicyStore{
 		err: assert.AnError,
 	}
@@ -164,7 +164,7 @@ func TestCache_Reload_StoreError(t *testing.T) {
 	assert.Error(t, err, "reload should propagate store errors")
 }
 
-func TestCache_Snapshot_Concurrent(t *testing.T) {
+func TestCacheSnapshotIsSafeConcurrently(t *testing.T) {
 	ms := &mockPolicyStore{policies: testPolicies()}
 	compiler := testCompiler()
 	cache := NewCache(ms, compiler)
@@ -204,7 +204,7 @@ func TestCache_Snapshot_Concurrent(t *testing.T) {
 	wg.Wait()
 }
 
-func TestCache_Staleness(t *testing.T) {
+func TestCacheStaleness(t *testing.T) {
 	ms := &mockPolicyStore{policies: testPolicies()}
 	compiler := testCompiler()
 	threshold := 50 * time.Millisecond
@@ -222,7 +222,7 @@ func TestCache_Staleness(t *testing.T) {
 	assert.True(t, cache.IsStale(), "cache should be stale after threshold")
 }
 
-func TestCache_Staleness_FailClosed(t *testing.T) {
+func TestCacheStalenessFailsClosedWhenStale(t *testing.T) {
 	ms := &mockPolicyStore{policies: testPolicies()}
 	compiler := testCompiler()
 	threshold := 50 * time.Millisecond
@@ -246,7 +246,7 @@ func TestCache_Staleness_FailClosed(t *testing.T) {
 	assert.False(t, cache.IsStale())
 }
 
-func TestCache_GracefulShutdown(t *testing.T) {
+func TestCacheGracefulShutdown(t *testing.T) {
 	ch := make(chan string, 1)
 	listener := &mockListener{ch: ch}
 
@@ -281,7 +281,7 @@ func TestCache_GracefulShutdown(t *testing.T) {
 	}
 }
 
-func TestCache_ListenNotify_TriggersReload(t *testing.T) {
+func TestCacheListenNotifyTriggersReload(t *testing.T) {
 	ch := make(chan string, 1)
 	listener := &mockListener{ch: ch}
 
@@ -313,7 +313,7 @@ func TestCache_ListenNotify_TriggersReload(t *testing.T) {
 	cache.Wait()
 }
 
-func TestCache_ReloadMetric(t *testing.T) {
+func TestCacheReloadUpdatesMetric(t *testing.T) {
 	ms := &mockPolicyStore{policies: testPolicies()}
 	compiler := testCompiler()
 	gauge := newTestGauge()
@@ -332,7 +332,7 @@ func TestCache_ReloadMetric(t *testing.T) {
 	assert.LessOrEqual(t, val, float64(after), "gauge should be <= reload end time")
 }
 
-func TestSnapshot_Immutable(t *testing.T) {
+func TestSnapshotIsImmutable(t *testing.T) {
 	ms := &mockPolicyStore{policies: testPolicies()}
 	compiler := testCompiler()
 	cache := NewCache(ms, compiler)
@@ -353,7 +353,7 @@ func TestSnapshot_Immutable(t *testing.T) {
 	}
 }
 
-func TestCacheOption_WithStalenessThreshold(t *testing.T) {
+func TestCacheOptionWithStalenessThreshold(t *testing.T) {
 	ms := &mockPolicyStore{policies: testPolicies()}
 	compiler := testCompiler()
 
@@ -363,7 +363,7 @@ func TestCacheOption_WithStalenessThreshold(t *testing.T) {
 	assert.False(t, cache.IsStale())
 }
 
-func TestCache_Start_ReturnsNotImplemented(t *testing.T) {
+func TestCacheStartReturnsNotImplementedError(t *testing.T) {
 	ms := &mockPolicyStore{policies: testPolicies()}
 	compiler := testCompiler()
 	cache := NewCache(ms, compiler)

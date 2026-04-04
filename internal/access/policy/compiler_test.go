@@ -32,7 +32,7 @@ func emptySchema() *types.AttributeSchema {
 
 // --- JSON round-trip (serialization test — written first per risk note) ---
 
-func TestCompiledPolicy_JSONRoundTrip(t *testing.T) {
+func TestCompiledPolicyJSONRoundTrip(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	policy, warnings, err := compiler.Compile(`permit(principal, action, resource) when { resource.owner == principal.id };`)
 	require.NoError(t, err)
@@ -55,7 +55,7 @@ func TestCompiledPolicy_JSONRoundTrip(t *testing.T) {
 
 // --- Valid compilation ---
 
-func TestCompile_SimplePermitPolicy(t *testing.T) {
+func TestCompileSimplePermitPolicy(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	policy, warnings, err := compiler.Compile(`permit(principal, action, resource);`)
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestCompile_SimplePermitPolicy(t *testing.T) {
 	assert.Contains(t, policy.DSLText, "permit")
 }
 
-func TestCompile_ForbidPolicy(t *testing.T) {
+func TestCompileForbidPolicy(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	policy, warnings, err := compiler.Compile(`forbid(principal, action, resource);`)
 	require.NoError(t, err)
@@ -79,7 +79,7 @@ func TestCompile_ForbidPolicy(t *testing.T) {
 	assert.Equal(t, types.PolicyEffectForbid, policy.Effect)
 }
 
-func TestCompile_PolicyWithConditions(t *testing.T) {
+func TestCompilePolicyWithConditions(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	policy, warnings, err := compiler.Compile(`permit(principal, action, resource) when { resource.owner == principal.id };`)
 	require.NoError(t, err)
@@ -89,7 +89,7 @@ func TestCompile_PolicyWithConditions(t *testing.T) {
 	assert.NotNil(t, policy.Conditions)
 }
 
-func TestCompile_MultipleActions(t *testing.T) {
+func TestCompileMultipleActions(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	policy, warnings, err := compiler.Compile(`permit(principal, action in ["read", "write"], resource);`)
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ func TestCompile_MultipleActions(t *testing.T) {
 	assert.Equal(t, []string{"read", "write"}, policy.Target.ActionList)
 }
 
-func TestCompile_ResourceEquality(t *testing.T) {
+func TestCompileResourceEquality(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	policy, warnings, err := compiler.Compile(`permit(principal, action, resource == "location:01ABC");`)
 	require.NoError(t, err)
@@ -110,7 +110,7 @@ func TestCompile_ResourceEquality(t *testing.T) {
 	assert.Equal(t, "location:01ABC", *policy.Target.ResourceExact)
 }
 
-func TestCompile_PrincipalType(t *testing.T) {
+func TestCompilePrincipalType(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	policy, warnings, err := compiler.Compile(`permit(principal is character, action, resource);`)
 	require.NoError(t, err)
@@ -120,7 +120,7 @@ func TestCompile_PrincipalType(t *testing.T) {
 	assert.Equal(t, "character", *policy.Target.PrincipalType)
 }
 
-func TestCompile_ResourceType(t *testing.T) {
+func TestCompileResourceType(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	policy, warnings, err := compiler.Compile(`permit(principal, action, resource is location);`)
 	require.NoError(t, err)
@@ -131,7 +131,7 @@ func TestCompile_ResourceType(t *testing.T) {
 	assert.Nil(t, policy.Target.ResourceExact)
 }
 
-func TestCompile_WildcardAllTargets(t *testing.T) {
+func TestCompileWildcardAllTargets(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	policy, warnings, err := compiler.Compile(`permit(principal, action, resource);`)
 	require.NoError(t, err)
@@ -145,19 +145,19 @@ func TestCompile_WildcardAllTargets(t *testing.T) {
 
 // --- Validation errors ---
 
-func TestCompile_EmptyDSL(t *testing.T) {
+func TestCompileEmptyDSLFails(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	_, _, err := compiler.Compile("")
 	assert.Error(t, err)
 }
 
-func TestCompile_InvalidDSL(t *testing.T) {
+func TestCompileInvalidDSLFails(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	_, _, err := compiler.Compile("not a valid policy")
 	assert.Error(t, err)
 }
 
-func TestCompile_UnregisteredActionAttribute(t *testing.T) {
+func TestCompileUnregisteredActionAttributeFails(t *testing.T) {
 	schema := schemaWith(map[string]map[string]types.AttrType{
 		"action": {
 			"name": types.AttrTypeString,
@@ -178,7 +178,7 @@ func TestCompile_UnregisteredActionAttribute(t *testing.T) {
 
 // --- Validation warnings ---
 
-func TestCompile_UnknownAttributeInRegisteredNamespace(t *testing.T) {
+func TestCompileUnknownAttributeInRegisteredNamespaceWarns(t *testing.T) {
 	schema := schemaWith(map[string]map[string]types.AttrType{
 		"resource": {
 			"owner": types.AttrTypeString,
@@ -194,7 +194,7 @@ func TestCompile_UnknownAttributeInRegisteredNamespace(t *testing.T) {
 	assert.Contains(t, warnings[0].Message, "resource.bogus")
 }
 
-func TestCompile_UnregisteredNamespaceSkipsValidation(t *testing.T) {
+func TestCompileUnregisteredNamespaceSkipsValidation(t *testing.T) {
 	// principal namespace not registered — attributes should not produce warnings
 	schema := schemaWith(map[string]map[string]types.AttrType{
 		"resource": {
@@ -209,7 +209,7 @@ func TestCompile_UnregisteredNamespaceSkipsValidation(t *testing.T) {
 	assert.Empty(t, warnings)
 }
 
-func TestCompile_UnreachableCondition(t *testing.T) {
+func TestCompileUnreachableConditionWarns(t *testing.T) {
 	// NOTE: The parser has a known issue where @('true'|'false') on *bool
 	// always captures as true, regardless of the actual token. This means
 	falseStr := "false"
@@ -241,7 +241,7 @@ func TestCompile_UnreachableCondition(t *testing.T) {
 
 func strPtr(s string) *string { return &s }
 
-func TestCompile_AlwaysTrueCondition(t *testing.T) {
+func TestCompileAlwaysTrueConditionWarns(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	policy, warnings, err := compiler.Compile(`permit(principal, action, resource) when { true };`)
 	require.NoError(t, err)
@@ -260,7 +260,7 @@ func TestCompile_AlwaysTrueCondition(t *testing.T) {
 
 // --- Glob pre-compilation ---
 
-func TestCompile_GlobCachePopulated(t *testing.T) {
+func TestCompileGlobCachePopulated(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	policy, warnings, err := compiler.Compile(`permit(principal, action, resource) when { resource.id like "location:*" };`)
 	require.NoError(t, err)
@@ -271,28 +271,28 @@ func TestCompile_GlobCachePopulated(t *testing.T) {
 	assert.True(t, exists, "expected GlobCache to contain 'location:*'")
 }
 
-func TestCompile_GlobPatternWithBrackets(t *testing.T) {
+func TestCompileGlobPatternWithBracketsRejected(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	_, _, err := compiler.Compile(`permit(principal, action, resource) when { resource.id like "loc[a-z]tion:*" };`)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "bracket")
 }
 
-func TestCompile_GlobPatternWithBraces(t *testing.T) {
+func TestCompileGlobPatternWithBracesRejected(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	_, _, err := compiler.Compile(`permit(principal, action, resource) when { resource.id like "loc{a,b}tion:*" };`)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "brace")
 }
 
-func TestCompile_GlobPatternGlobstar(t *testing.T) {
+func TestCompileGlobPatternGlobstarRejected(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	_, _, err := compiler.Compile(`permit(principal, action, resource) when { resource.id like "location:**" };`)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "globstar")
 }
 
-func TestCompile_GlobPatternTooLong(t *testing.T) {
+func TestCompileGlobPatternTooLongRejected(t *testing.T) {
 	longPattern := strings.Repeat("a", 101)
 	dslText := `permit(principal, action, resource) when { resource.id like "` + longPattern + `" };`
 	compiler := NewCompiler(emptySchema())
@@ -301,7 +301,7 @@ func TestCompile_GlobPatternTooLong(t *testing.T) {
 	assert.Contains(t, err.Error(), "length")
 }
 
-func TestCompile_GlobPatternTooManyWildcards(t *testing.T) {
+func TestCompileGlobPatternTooManyWildcardsRejected(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	_, _, err := compiler.Compile(`permit(principal, action, resource) when { resource.id like "a*b*c*d*e*f*" };`)
 	assert.Error(t, err)
@@ -310,7 +310,7 @@ func TestCompile_GlobPatternTooManyWildcards(t *testing.T) {
 
 // --- Concurrency safety ---
 
-func TestCompile_ConcurrentSafety(t *testing.T) {
+func TestCompileIsConcurrentlySafe(t *testing.T) {
 	compiler := NewCompiler(emptySchema())
 	const goroutines = 10
 
@@ -333,7 +333,7 @@ func TestCompile_ConcurrentSafety(t *testing.T) {
 
 // --- DSLText preserved ---
 
-func TestCompile_DSLTextPreserved(t *testing.T) {
+func TestCompileDSLTextPreserved(t *testing.T) {
 	dslText := `permit(principal is character, action in ["read"], resource is location) when { resource.owner == principal.id };`
 	compiler := NewCompiler(emptySchema())
 	policy, _, err := compiler.Compile(dslText)
@@ -343,7 +343,7 @@ func TestCompile_DSLTextPreserved(t *testing.T) {
 
 // --- Attribute validation in various condition types ---
 
-func TestCompile_ValidatesAttributesInHasCondition(t *testing.T) {
+func TestCompileValidatesAttributesInHasCondition(t *testing.T) {
 	schema := schemaWith(map[string]map[string]types.AttrType{
 		"resource": {
 			"owner": types.AttrTypeString,
@@ -359,7 +359,7 @@ func TestCompile_ValidatesAttributesInHasCondition(t *testing.T) {
 	assert.Contains(t, warnings[0].Message, "resource.bogus")
 }
 
-func TestCompile_ValidatesAttributesInLikeCondition(t *testing.T) {
+func TestCompileValidatesAttributesInLikeCondition(t *testing.T) {
 	schema := schemaWith(map[string]map[string]types.AttrType{
 		"action": {
 			"name": types.AttrTypeString,
@@ -373,7 +373,7 @@ func TestCompile_ValidatesAttributesInLikeCondition(t *testing.T) {
 	assert.Contains(t, err.Error(), "action.bogus")
 }
 
-func TestCompile_ValidatesAttributesInContainsCondition(t *testing.T) {
+func TestCompileValidatesAttributesInContainsCondition(t *testing.T) {
 	schema := schemaWith(map[string]map[string]types.AttrType{
 		"resource": {
 			"tags": types.AttrTypeStringList,
@@ -389,7 +389,7 @@ func TestCompile_ValidatesAttributesInContainsCondition(t *testing.T) {
 	assert.Contains(t, warnings[0].Message, "resource.bogus")
 }
 
-func TestCompile_ValidatesFullDottedPath(t *testing.T) {
+func TestCompileValidatesFullDottedPath(t *testing.T) {
 	schema := schemaWith(map[string]map[string]types.AttrType{
 		"resource": {
 			"metadata.owner": types.AttrTypeString,

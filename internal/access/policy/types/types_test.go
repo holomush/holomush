@@ -29,12 +29,12 @@ func TestEffect_String(t *testing.T) {
 	}
 }
 
-func TestEffect_String_NegativeValue(t *testing.T) {
+func TestEffectStringNegativeValue(t *testing.T) {
 	assert.Equal(t, "unknown(-1)", Effect(-1).String())
 	assert.Equal(t, "unknown(-42)", Effect(-42).String())
 }
 
-func TestAttrType_String_NegativeValue(t *testing.T) {
+func TestAttrTypeStringNegativeValue(t *testing.T) {
 	assert.Equal(t, "unknown(-1)", AttrType(-1).String())
 	assert.Equal(t, "unknown(-42)", AttrType(-42).String())
 }
@@ -193,7 +193,7 @@ func TestParsePolicyEffect(t *testing.T) {
 	}
 }
 
-func TestDecision_ZeroValue_DeniesAccess(t *testing.T) {
+func TestDecisionZeroValueDeniesAccess(t *testing.T) {
 	// The zero value of Decision must deny access (fail-closed).
 	// This is critical for safety: if code uses Decision{} as a fallback
 	// or returns it from an error path, access must be denied.
@@ -207,7 +207,7 @@ func TestDecision_ZeroValue_DeniesAccess(t *testing.T) {
 	assert.NoError(t, d.Validate(), "zero-value Decision should be internally consistent")
 }
 
-func TestAccessRequest_Fields(t *testing.T) {
+func TestAccessRequestFields(t *testing.T) {
 	req := AccessRequest{
 		Subject:  "character:01ABC",
 		Action:   "read",
@@ -218,7 +218,7 @@ func TestAccessRequest_Fields(t *testing.T) {
 	assert.Equal(t, "location:01XYZ", req.Resource)
 }
 
-func TestNewAccessRequest_Valid(t *testing.T) {
+func TestNewAccessRequestValid(t *testing.T) {
 	req, err := NewAccessRequest("character:01ABC", "read", "location:01XYZ")
 	require.NoError(t, err)
 	assert.Equal(t, "character:01ABC", req.Subject)
@@ -262,7 +262,7 @@ func TestAttributeBags_Initialization(t *testing.T) {
 	assert.Empty(t, bags.Environment)
 }
 
-func TestPolicyMatch_Fields(t *testing.T) {
+func TestPolicyMatchFields(t *testing.T) {
 	pm := PolicyMatch{
 		PolicyID:      "pol-123",
 		PolicyName:    "allow-read",
@@ -295,14 +295,14 @@ func TestAttrType_String(t *testing.T) {
 	}
 }
 
-func TestPolicySource_Constants(t *testing.T) {
+func TestPolicySourceConstants(t *testing.T) {
 	assert.Equal(t, PolicySource("seed"), PolicySourceSeed)
 	assert.Equal(t, PolicySource("lock"), PolicySourceLock)
 	assert.Equal(t, PolicySource("admin"), PolicySourceAdmin)
 	assert.Equal(t, PolicySource("plugin"), PolicySourcePlugin)
 }
 
-func TestPropertyVisibility_Constants(t *testing.T) {
+func TestPropertyVisibilityConstants(t *testing.T) {
 	assert.Equal(t, PropertyVisibility("public"), PropertyVisibilityPublic)
 	assert.Equal(t, PropertyVisibility("private"), PropertyVisibilityPrivate)
 	assert.Equal(t, PropertyVisibility("restricted"), PropertyVisibilityRestricted)
@@ -310,13 +310,13 @@ func TestPropertyVisibility_Constants(t *testing.T) {
 	assert.Equal(t, PropertyVisibility("admin"), PropertyVisibilityAdmin)
 }
 
-func TestEntityType_Constants(t *testing.T) {
+func TestEntityTypeConstants(t *testing.T) {
 	assert.Equal(t, EntityType("character"), EntityTypeCharacter)
 	assert.Equal(t, EntityType("location"), EntityTypeLocation)
 	assert.Equal(t, EntityType("object"), EntityTypeObject)
 }
 
-func TestAttributeSchema_NewEmpty(t *testing.T) {
+func TestAttributeSchemaNewEmpty(t *testing.T) {
 	schema := NewAttributeSchema()
 	require.NotNil(t, schema)
 	assert.Empty(t, schema.namespaces)

@@ -78,7 +78,7 @@ func (m *mockWriter) isClosed() bool {
 	return m.closed
 }
 
-func TestAuditLogger_MinimalMode_Allow_NotLogged(t *testing.T) {
+func TestAuditLoggerMinimalModeAllowNotLogged(t *testing.T) {
 	writer := &mockWriter{}
 	logger := NewLogger(ModeMinimal, writer, "")
 	defer logger.Close()
@@ -103,7 +103,7 @@ func TestAuditLogger_MinimalMode_Allow_NotLogged(t *testing.T) {
 	assert.Empty(t, writer.getAsyncWrites())
 }
 
-func TestAuditLogger_MinimalMode_Deny_LoggedSync(t *testing.T) {
+func TestAuditLoggerMinimalModeDenyLoggedSync(t *testing.T) {
 	writer := &mockWriter{}
 	logger := NewLogger(ModeMinimal, writer, "")
 	defer logger.Close()
@@ -130,7 +130,7 @@ func TestAuditLogger_MinimalMode_Deny_LoggedSync(t *testing.T) {
 	assert.Empty(t, writer.getAsyncWrites())
 }
 
-func TestAuditLogger_MinimalMode_SystemBypass_LoggedSync(t *testing.T) {
+func TestAuditLoggerMinimalModeSystemBypassLoggedSync(t *testing.T) {
 	writer := &mockWriter{}
 	logger := NewLogger(ModeMinimal, writer, "")
 	defer logger.Close()
@@ -158,7 +158,7 @@ func TestAuditLogger_MinimalMode_SystemBypass_LoggedSync(t *testing.T) {
 	assert.Empty(t, writer.getAsyncWrites())
 }
 
-func TestAuditLogger_DenialsOnlyMode_Allow_NotLogged(t *testing.T) {
+func TestAuditLoggerDenialsOnlyModeAllowNotLogged(t *testing.T) {
 	writer := &mockWriter{}
 	logger := NewLogger(ModeDenialsOnly, writer, "")
 	defer logger.Close()
@@ -183,7 +183,7 @@ func TestAuditLogger_DenialsOnlyMode_Allow_NotLogged(t *testing.T) {
 	assert.Empty(t, writer.getAsyncWrites())
 }
 
-func TestAuditLogger_DenialsOnlyMode_Deny_LoggedSync(t *testing.T) {
+func TestAuditLoggerDenialsOnlyModeDenyLoggedSync(t *testing.T) {
 	writer := &mockWriter{}
 	logger := NewLogger(ModeDenialsOnly, writer, "")
 	defer logger.Close()
@@ -208,7 +208,7 @@ func TestAuditLogger_DenialsOnlyMode_Deny_LoggedSync(t *testing.T) {
 	assert.Equal(t, entry.Effect, syncWrites[0].Effect)
 }
 
-func TestAuditLogger_AllMode_Allow_LoggedAsync(t *testing.T) {
+func TestAuditLoggerAllModeAllowLoggedAsync(t *testing.T) {
 	writer := &mockWriter{}
 	logger := NewLogger(ModeAll, writer, "")
 	defer logger.Close()
@@ -235,7 +235,7 @@ func TestAuditLogger_AllMode_Allow_LoggedAsync(t *testing.T) {
 	assert.Empty(t, writer.getSyncWrites())
 }
 
-func TestAuditLogger_AllMode_Deny_LoggedSync(t *testing.T) {
+func TestAuditLoggerAllModeDenyLoggedSync(t *testing.T) {
 	writer := &mockWriter{}
 	logger := NewLogger(ModeAll, writer, "")
 	defer logger.Close()
@@ -261,7 +261,7 @@ func TestAuditLogger_AllMode_Deny_LoggedSync(t *testing.T) {
 	assert.Empty(t, writer.getAsyncWrites())
 }
 
-func TestAuditLogger_SyncWriteFailure_WALFallback(t *testing.T) {
+func TestAuditLoggerSyncWriteFailureFallsBackToWAL(t *testing.T) {
 	tmpDir := t.TempDir()
 	walPath := filepath.Join(tmpDir, "audit-wal.jsonl")
 
@@ -291,7 +291,7 @@ func TestAuditLogger_SyncWriteFailure_WALFallback(t *testing.T) {
 	assert.Contains(t, string(data), "deny-delete")
 }
 
-func TestAuditLogger_ReplayWAL(t *testing.T) {
+func TestAuditLoggerReplayWAL(t *testing.T) {
 	tmpDir := t.TempDir()
 	walPath := filepath.Join(tmpDir, "audit-wal.jsonl")
 
@@ -346,7 +346,7 @@ func TestAuditLogger_ReplayWAL(t *testing.T) {
 	assert.Empty(t, data)
 }
 
-func TestAuditLogger_BothDBAndWALFail_EntryDropped(t *testing.T) {
+func TestAuditLoggerBothDBAndWALFailEntryDropped(t *testing.T) {
 	tmpDir := t.TempDir()
 	// Create invalid WAL path (directory instead of file)
 	walPath := filepath.Join(tmpDir, "invalid-dir")
@@ -385,7 +385,7 @@ func TestAuditLogger_BothDBAndWALFail_EntryDropped(t *testing.T) {
 	assert.Empty(t, writer.getAsyncWrites(), "DB writer should have no successful async writes")
 }
 
-func TestAuditLogger_GracefulShutdown_FlushesBuffered(t *testing.T) {
+func TestAuditLoggerGracefulShutdownFlushesBuffered(t *testing.T) {
 	writer := &mockWriter{}
 	logger := NewLogger(ModeAll, writer, "")
 
@@ -414,7 +414,7 @@ func TestAuditLogger_GracefulShutdown_FlushesBuffered(t *testing.T) {
 	assert.True(t, writer.isClosed())
 }
 
-func TestAuditLogger_EntryContainsAllFields(t *testing.T) {
+func TestAuditLoggerEntryContainsAllFields(t *testing.T) {
 	writer := &mockWriter{}
 	logger := NewLogger(ModeAll, writer, "")
 	defer logger.Close()
@@ -481,7 +481,7 @@ func (s *selectiveFailWriter) getSyncWrites() []Entry {
 	return append([]Entry{}, s.syncWrites...)
 }
 
-func TestAuditLogger_ReplayWAL_PartialFailure(t *testing.T) {
+func TestAuditLoggerReplayWALPartialFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	walPath := filepath.Join(tmpDir, "audit-wal.jsonl")
 
@@ -529,7 +529,7 @@ func TestAuditLogger_ReplayWAL_PartialFailure(t *testing.T) {
 	assert.Len(t, syncWrites, 2)
 }
 
-func TestAuditLogger_ReplayWAL_AllFail(t *testing.T) {
+func TestAuditLoggerReplayWALAllFail(t *testing.T) {
 	tmpDir := t.TempDir()
 	walPath := filepath.Join(tmpDir, "audit-wal.jsonl")
 
@@ -566,7 +566,7 @@ func TestAuditLogger_ReplayWAL_AllFail(t *testing.T) {
 	assert.Len(t, lines, 2, "WAL should contain all failed entries")
 }
 
-func TestPartialReplayError_ErrorFormat(t *testing.T) {
+func TestPartialReplayErrorFormat(t *testing.T) {
 	err := &PartialReplayError{
 		FailedCount:   3,
 		ReplayedCount: 7,
@@ -579,7 +579,7 @@ func TestPartialReplayError_ErrorFormat(t *testing.T) {
 	assert.Contains(t, msg, "10", "Error() should contain total count")
 }
 
-func TestRecordEngineAuditFailure_IncrementsCounter(t *testing.T) {
+func TestRecordEngineAuditFailureIncrementsCounter(t *testing.T) {
 	before := promtestutil.ToFloat64(engineAuditFailuresCounter)
 
 	RecordEngineAuditFailure()

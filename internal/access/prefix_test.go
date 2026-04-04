@@ -188,7 +188,7 @@ func TestCharacterSubject(t *testing.T) {
 	}
 }
 
-func TestCharacterSubject_EmptyID_Panics(t *testing.T) {
+func TestCharacterSubjectPanicsOnEmptyID(t *testing.T) {
 	assert.PanicsWithValue(t, "access.CharacterSubject: empty charID would bypass access control", func() {
 		access.CharacterSubject("")
 	})
@@ -220,7 +220,7 @@ func TestLocationResource(t *testing.T) {
 	}
 }
 
-func TestLocationResource_EmptyID_Panics(t *testing.T) {
+func TestLocationResourcePanicsOnEmptyID(t *testing.T) {
 	assert.PanicsWithValue(t, "access.LocationResource: empty locationID would create invalid resource reference", func() {
 		access.LocationResource("")
 	})
@@ -252,7 +252,7 @@ func TestExitResource(t *testing.T) {
 	}
 }
 
-func TestExitResource_EmptyID_Panics(t *testing.T) {
+func TestExitResourcePanicsOnEmptyID(t *testing.T) {
 	assert.PanicsWithValue(t, "access.ExitResource: empty exitID would create invalid resource reference", func() {
 		access.ExitResource("")
 	})
@@ -284,7 +284,7 @@ func TestObjectResource(t *testing.T) {
 	}
 }
 
-func TestObjectResource_EmptyID_Panics(t *testing.T) {
+func TestObjectResourcePanicsOnEmptyID(t *testing.T) {
 	assert.PanicsWithValue(t, "access.ObjectResource: empty objectID would create invalid resource reference", func() {
 		access.ObjectResource("")
 	})
@@ -316,7 +316,7 @@ func TestSceneResource(t *testing.T) {
 	}
 }
 
-func TestSceneResource_EmptyID_Panics(t *testing.T) {
+func TestSceneResourcePanicsOnEmptyID(t *testing.T) {
 	assert.PanicsWithValue(t, "access.SceneResource: empty sceneID would create invalid resource reference", func() {
 		access.SceneResource("")
 	})
@@ -348,7 +348,7 @@ func TestCommandResource(t *testing.T) {
 	}
 }
 
-func TestCommandResource_EmptyName_Panics(t *testing.T) {
+func TestCommandResourcePanicsOnEmptyName(t *testing.T) {
 	assert.PanicsWithValue(t, "access.CommandResource: empty commandName would create invalid resource reference", func() {
 		access.CommandResource("")
 	})
@@ -380,7 +380,7 @@ func TestCharacterResource(t *testing.T) {
 	}
 }
 
-func TestCharacterResource_EmptyID_Panics(t *testing.T) {
+func TestCharacterResourcePanicsOnEmptyID(t *testing.T) {
 	assert.PanicsWithValue(t, "access.CharacterResource: empty charID would create invalid resource reference", func() {
 		access.CharacterResource("")
 	})
@@ -412,7 +412,7 @@ func TestPropertyResource(t *testing.T) {
 	}
 }
 
-func TestPropertyResource_EmptyPath_Panics(t *testing.T) {
+func TestPropertyResourcePanicsOnEmptyPath(t *testing.T) {
 	assert.PanicsWithValue(t, "access.PropertyResource: empty propPath would create invalid resource reference", func() {
 		access.PropertyResource("")
 	})
@@ -444,7 +444,7 @@ func TestStreamResource(t *testing.T) {
 	}
 }
 
-func TestStreamResource_EmptyID_Panics(t *testing.T) {
+func TestStreamResourcePanicsOnEmptyID(t *testing.T) {
 	assert.PanicsWithValue(t, "access.StreamResource: empty streamID would create invalid resource reference", func() {
 		access.StreamResource("")
 	})
@@ -455,7 +455,7 @@ func TestPluginSubject(t *testing.T) {
 	assert.Equal(t, "plugin:building", access.PluginSubject("building"))
 }
 
-func TestPluginSubject_EmptyName_Panics(t *testing.T) {
+func TestPluginSubjectPanicsOnEmptyName(t *testing.T) {
 	assert.PanicsWithValue(t, "access.PluginSubject: empty name would bypass access control", func() {
 		access.PluginSubject("")
 	})
@@ -466,13 +466,13 @@ func TestKVResource(t *testing.T) {
 	assert.Equal(t, "kv:building:room-count", access.KVResource("building", "room-count"))
 }
 
-func TestKVResource_EmptyNamespace_Panics(t *testing.T) {
+func TestKVResourcePanicsOnEmptyNamespace(t *testing.T) {
 	assert.PanicsWithValue(t, "access.KVResource: empty namespace would bypass access control", func() {
 		access.KVResource("", "key")
 	})
 }
 
-func TestKVResource_EmptyKey_Panics(t *testing.T) {
+func TestKVResourcePanicsOnEmptyKey(t *testing.T) {
 	assert.PanicsWithValue(t, "access.KVResource: empty key would bypass access control", func() {
 		access.KVResource("ns", "")
 	})
