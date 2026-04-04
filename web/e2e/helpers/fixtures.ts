@@ -33,10 +33,33 @@ export async function getClientCharacterName(page: Page): Promise<string | null>
 }
 
 /**
- * Extended test fixture that tears down the DB pool after all tests.
- * Import `test` and `expect` from this module instead of @playwright/test.
+ * Extended test fixture that captures browser console logs and tears down the
+ * DB pool after all tests. Import `test` and `expect` from this module instead
+ * of @playwright/test.
  */
-export const test = base.extend({});
+export const test = base.extend<{ _consoleCapture: void }>({
+  _consoleCapture: [
+    async ({ page }, use, testInfo) => {
+      const logs: string[] = [];
+      page.on('console', (msg) => {
+        logs.push(`[${msg.type()}] ${msg.text()}`);
+      });
+      page.on('pageerror', (err) => {
+        logs.push(`[error] ${err.message}`);
+      });
+
+      await use();
+
+      if (logs.length > 0) {
+        await testInfo.attach('browser-console-logs', {
+          body: logs.join('\n'),
+          contentType: 'text/plain',
+        });
+      }
+    },
+    { auto: true },
+  ],
+});
 
 // Close the shared pool after all workers finish.
 base.afterAll(async () => {
