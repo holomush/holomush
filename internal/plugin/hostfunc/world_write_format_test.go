@@ -1,8 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
 package hostfunc
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestFormatAllowedEntityTypes(t *testing.T) {
 	tests := []struct {
@@ -34,9 +39,8 @@ func TestFormatAllowedEntityTypes(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := formatAllowedEntityTypes(test.allowed); got != test.expected {
-				t.Fatalf("expected %q, got %q", test.expected, got)
-			}
+			got := formatAllowedEntityTypes(test.allowed)
+			assert.Equal(t, test.expected, got)
 		})
 	}
 }
