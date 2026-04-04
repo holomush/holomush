@@ -107,7 +107,7 @@ func TestDispatcher_Dispatch(t *testing.T) {
 
 	// Grant: Layer 1 (command execution) + Layer 2 (capability pre-flight)
 	charID := ulid.Make()
-	mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "command:echo")
+	mockAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "echo")
 	mockAccess.Grant(access.SubjectCharacter+charID.String(), "read", "object")
 
 	dispatcher, err := NewDispatcher(reg, mockAccess)
@@ -394,7 +394,7 @@ func TestDispatcher_MultipleCapabilities(t *testing.T) {
 	subject := access.CharacterSubject(charID.String())
 
 	// Grant Layer 1 (command execution)
-	mockAccess.Grant(subject, "execute", "command:dangerous")
+	mockAccess.GrantCommandExecution(subject, "dangerous")
 	// Grant only one capability action (admin) — missing "delete" for Layer 2
 	mockAccess.Grant(subject, "admin", "server")
 
@@ -742,7 +742,7 @@ func TestDispatcher_WithAliasCache_SystemAliasExpanded(t *testing.T) {
 	require.NoError(t, err)
 
 	charID := ulid.Make()
-	mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "command:look")
+	mockAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "look")
 
 	var output bytes.Buffer
 	exec := NewTestExecution(CommandExecutionConfig{
@@ -785,7 +785,7 @@ func TestDispatcher_WithAliasCache_PlayerAliasExpanded(t *testing.T) {
 	dispatcher, err := NewDispatcher(reg, mockAccess, WithAliasCache(cache))
 	require.NoError(t, err)
 
-	mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "command:say")
+	mockAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "say")
 
 	var output bytes.Buffer
 	exec := NewTestExecution(CommandExecutionConfig{
@@ -832,7 +832,7 @@ func TestDispatcher_WithAliasCache_PlayerAliasOverridesSystem(t *testing.T) {
 	dispatcher, err := NewDispatcher(reg, mockAccess, WithAliasCache(cache))
 	require.NoError(t, err)
 
-	mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "command:say")
+	mockAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "say")
 
 	var output bytes.Buffer
 	exec := NewTestExecution(CommandExecutionConfig{
@@ -873,7 +873,7 @@ func TestDispatcher_WithAliasCache_AliasWithExtraArgs(t *testing.T) {
 	require.NoError(t, err)
 
 	charID := ulid.Make()
-	mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "command:say")
+	mockAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "say")
 
 	var output bytes.Buffer
 	exec := NewTestExecution(CommandExecutionConfig{
@@ -950,7 +950,7 @@ func TestDispatcher_ContextCancellation(t *testing.T) {
 	require.NoError(t, err)
 
 	charID := ulid.Make()
-	mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "command:slow")
+	mockAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "slow")
 
 	var output bytes.Buffer
 	exec := NewTestExecution(CommandExecutionConfig{
@@ -1011,7 +1011,7 @@ func TestDispatcher_ContextAlreadyCancelled(t *testing.T) {
 	require.NoError(t, err)
 
 	charID := ulid.Make()
-	mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "command:check")
+	mockAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "check")
 
 	var output bytes.Buffer
 	exec := NewTestExecution(CommandExecutionConfig{
@@ -1135,7 +1135,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 		sessionID := ulid.Make()
 
 		// Grant Layer 1 command execution (no bypass grant — rate limiting should apply)
-		mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "command:test")
+		mockAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "test")
 
 		// First two commands should succeed
 		for i := 0; i < 2; i++ {
@@ -1195,8 +1195,8 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 		session2 := ulid.Make()
 
 		// Grant Layer 1 for both characters (no bypass grant)
-		mockAccess.Grant(access.SubjectCharacter+char1.String(), "execute", "command:test")
-		mockAccess.Grant(access.SubjectCharacter+char2.String(), "execute", "command:test")
+		mockAccess.GrantCommandExecution(access.SubjectCharacter+char1.String(), "test")
+		mockAccess.GrantCommandExecution(access.SubjectCharacter+char2.String(), "test")
 
 		// Session 1 uses its token
 		exec1 := NewTestExecution(CommandExecutionConfig{
@@ -1254,7 +1254,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 		sessionID := ulid.Make()
 
 		// Grant Layer 1 (command execution) and bypass capability
-		mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "command:test")
+		mockAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "test")
 		mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", CapabilityRateLimitBypass)
 
 		// Should be able to execute many commands despite rate limit
@@ -1307,7 +1307,7 @@ func TestDispatcher_WithRateLimiter(t *testing.T) {
 		playerID := ulid.Make()
 
 		// Grant Layer 1 command execution (no bypass grant)
-		mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "command:look")
+		mockAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "look")
 
 		// Use alias - should succeed (alias resolved, command executed)
 		exec := NewTestExecution(CommandExecutionConfig{
@@ -1350,7 +1350,7 @@ func TestDispatcher_InvokedAs(t *testing.T) {
 	charID := ulid.Make()
 	playerID := ulid.Make()
 	// Layer 1: command execution grant
-	mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "command:pose")
+	mockAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "pose")
 	// Layer 2: capability pre-flight grant
 	mockAccess.Grant(access.SubjectCharacter+charID.String(), "emit", "stream")
 
@@ -1448,7 +1448,7 @@ func TestDispatcher_MetricsIntegration(t *testing.T) {
 
 	t.Run("records success metric", func(t *testing.T) {
 		charID := ulid.Make()
-		mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "command:metrics_success")
+		mockAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "metrics_success")
 		exec := NewTestExecution(CommandExecutionConfig{
 			CharacterID: charID,
 			Output:      &bytes.Buffer{},
@@ -1460,7 +1460,7 @@ func TestDispatcher_MetricsIntegration(t *testing.T) {
 
 	t.Run("records error metric", func(t *testing.T) {
 		charID := ulid.Make()
-		mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "command:metrics_failing")
+		mockAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "metrics_failing")
 		exec := NewTestExecution(CommandExecutionConfig{
 			CharacterID: charID,
 			Output:      &bytes.Buffer{},
@@ -1545,7 +1545,7 @@ func TestDispatcher_AliasMetrics(t *testing.T) {
 
 	// Use the alias
 	charID := ulid.Make()
-	mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "command:look")
+	mockAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "look")
 	exec := NewTestExecution(CommandExecutionConfig{
 		CharacterID: charID,
 		PlayerID:    ulid.Make(),
@@ -1686,7 +1686,7 @@ func TestDispatcher_RateLimitMetrics(t *testing.T) {
 	sessionID := ulid.Make()
 
 	// Grant Layer 1 command execution (no bypass grant — rate limiting should apply)
-	mockAccess.Grant(access.SubjectCharacter+charID.String(), "execute", "command:ratelimit_test")
+	mockAccess.GrantCommandExecution(access.SubjectCharacter+charID.String(), "ratelimit_test")
 
 	// Get baselines
 	// Note: rate-limited commands have empty source because rate limiting

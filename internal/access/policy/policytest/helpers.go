@@ -51,6 +51,15 @@ func (g *GrantEngine) Grant(subject, action, resource string) {
 	g.grants[subject+"\x00"+action+"\x00"+resource] = true
 }
 
+// GrantCommandExecution grants Layer 1 command execution for the named
+// commands. This is the standard grant needed for any dispatched command
+// in the two-layer authorization model.
+func (g *GrantEngine) GrantCommandExecution(subject string, commands ...string) {
+	for _, cmd := range commands {
+		g.Grant(subject, "execute", "command:"+cmd)
+	}
+}
+
 // Evaluate implements types.AccessPolicyEngine.
 func (g *GrantEngine) Evaluate(_ context.Context, req types.AccessRequest) (types.Decision, error) {
 	key := req.Subject + "\x00" + req.Action + "\x00" + req.Resource
@@ -61,13 +70,16 @@ func (g *GrantEngine) Evaluate(_ context.Context, req types.AccessRequest) (type
 }
 
 // CanPerformAction implements types.AccessPolicyEngine.
-// Returns true if any grant matches subject+action (resource type is not checked —
-// type-level pre-flight ignores the specific resource instance, consistent with the
-// spec's coarse capability check intent).
-func (g *GrantEngine) CanPerformAction(_ context.Context, subject, action, _, _ string) (bool, error) {
+// Returns true if any grant matches subject+action+resourceType.
+// The resource in a grant can be either a bare type ("stream") or a
+// typed ID ("stream:01ABC"); both match the type-level pre-flight.
+func (g *GrantEngine) CanPerformAction(_ context.Context, subject, action, resourceType, _ string) (bool, error) {
 	for key := range g.grants {
 		parts := strings.SplitN(key, "\x00", 3)
-		if len(parts) == 3 && parts[0] == subject && parts[1] == action {
+		if len(parts) == 3 &&
+			parts[0] == subject &&
+			parts[1] == action &&
+			(parts[2] == resourceType || strings.HasPrefix(parts[2], resourceType+":")) {
 			return true, nil
 		}
 	}
