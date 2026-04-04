@@ -209,6 +209,11 @@ tasks:
     sources:
       - web/package.json
       - web/pnpm-lock.yaml
+    preconditions:
+      - sh: command -v pnpm
+        msg: "pnpm not found. Install with: npm install -g pnpm"
+    status:
+      - test -d node_modules/.pnpm
 
   web:generate:
     desc: Generate TypeScript ConnectRPC clients from proto
@@ -530,3 +535,5 @@ tasks:
       - rm -rf dist/
       - rm -f {{.BINARY_NAME}}
       - rm -f coverage.out coverage.html
+      - rm -rf web/build
+      - rm -rf internal/web/dist
