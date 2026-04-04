@@ -74,14 +74,6 @@ commands:
       - `page How's it going?` - Pages last-paged character
       - `page Alex=:waves hello.` - Pose-page
 
-  - name: p
-    capabilities:
-      - action: emit
-        resource: stream
-        scope: local
-    help: "Send a private message (alias for page)"
-    usage: "p <name>=<message>"
-
   - name: whisper
     capabilities:
       - action: emit
@@ -105,10 +97,6 @@ commands:
 
       - `whisper Alex=Let's get out of here`
       - `whisper Alex=:nods meaningfully.`
-
-  - name: w
-    help: "Whisper to last whispered target"
-    usage: "w <message>"
 
   - name: ooc
     help: "Say or pose something out of character"

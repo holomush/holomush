@@ -339,7 +339,7 @@ func TestWhisperHandler_ShortForm(t *testing.T) {
 	proxy.On("SetLastWhispered", mock.Anything, "sess-1", "Alex").Return(nil)
 
 	resp, err := h.HandleCommand(context.Background(), pluginsdk.CommandRequest{
-		Command:       "w",
+		Command:       "whisper",
 		Args:          "quick message",
 		CharacterName: "Sean",
 		LocationID:    "loc-1",

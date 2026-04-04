@@ -28,13 +28,6 @@ commands:
       - `describe me A tall figure in a dark cloak.`
       - `describe here A dusty chamber lit by a single torch.`
       - `describe #01ABCDEF=A gleaming blade.`
-  - name: desc
-    capabilities:
-      - action: write
-        resource: object
-        scope: local
-    help: "Set a description (alias for describe)"
-    usage: "desc me <text>"
   - name: examine
     capabilities:
       - action: read
