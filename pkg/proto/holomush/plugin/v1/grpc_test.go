@@ -7,8 +7,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
@@ -101,9 +99,3 @@ func (m *mockHostFunctionsServer) Log(_ context.Context, _ *pluginv1.LogRequest)
 	return &pluginv1.LogResponse{}, nil
 }
 
-// TestClientInterfaces verifies gRPC client interfaces exist.
-func TestClientInterfaces(t *testing.T) {
-	// These are type assertions that will fail at compile time if interfaces don't exist
-	assert.Nil(t, (pluginv1.PluginServiceClient)(nil))
-	assert.Nil(t, (pluginv1.HostFunctionsServiceClient)(nil))
-}

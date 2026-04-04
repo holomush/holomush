@@ -12,7 +12,7 @@ import (
 	luavm "github.com/yuin/gopher-lua"
 )
 
-// TestNewState_LibraryLoadError tests the error path when a library fails to load.
+// TestNewStateLibraryLoadError tests the error path when a library fails to load.
 func TestNewStateLibraryLoadError(t *testing.T) {
 	// Create a library loader that always errors
 	failingLoader := func(L *luavm.LState) int {

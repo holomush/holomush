@@ -338,8 +338,8 @@ func TestEventType_String(t *testing.T) {
         input    EventType
         expected string
     }{
-        {"returns say for EventTypeSay", EventTypeSay, "say"},
-        {"returns pose for EventTypePose", EventTypePose, "pose"},
+        {"returns say for event type say", EventTypeSay, "say"},
+        {"returns pose for event type pose", EventTypePose, "pose"},
     }
 
     for _, tt := range tests {

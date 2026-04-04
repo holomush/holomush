@@ -34,7 +34,7 @@ func TestStatus_String(t *testing.T) {
 	assert.Equal(t, "expired", StatusExpired.String())
 }
 
-func TestInfo_IsDetachable(t *testing.T) {
+func TestInfo_IsActive(t *testing.T) {
 	info := &Info{Status: StatusActive}
 	assert.True(t, info.IsActive())
 

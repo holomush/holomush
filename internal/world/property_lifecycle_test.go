@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/holomush/holomush/pkg/errutil"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,7 +46,7 @@ func TestOrphanDetector_Construction(t *testing.T) {
 	require.NotNil(t, detector)
 }
 
-func TestOrphanDetectorStartupCheckLogsErrorAboveThreshold(t *testing.T) {
+func TestOrphanDetectorStartupCheckSucceedsAboveThreshold(t *testing.T) {
 	detector := NewOrphanDetector(OrphanConfig{Threshold: 100, GracePeriod: 24 * time.Hour, Interval: time.Hour})
 	detector.SetFinder(&mockOrphanFinder{countResult: 150})
 	err := detector.StartupCheck(context.Background())
@@ -96,6 +98,7 @@ func TestOrphanDetectorStartupCheckCountError(t *testing.T) {
 	err := detector.StartupCheck(context.Background())
 	require.Error(t, err)
 	assert.ErrorIs(t, err, countErr)
+	errutil.AssertErrorCode(t, err, "ORPHAN_STARTUP_CHECK_FAILED")
 }
 
 func TestOrphanDetectorRunCleanupNilFinderDoesNothing(t *testing.T) {

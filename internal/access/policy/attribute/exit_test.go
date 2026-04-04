@@ -15,6 +15,16 @@ import (
 
 func TestExitProviderContract(t *testing.T) {
 	assertProviderContract(t, NewExitProvider())
+
+	t.Run("namespace is exit", func(t *testing.T) {
+		assert.Equal(t, "exit", NewExitProvider().Namespace())
+	})
+
+	t.Run("resolve subject for exit IDs returns nil", func(t *testing.T) {
+		attrs, err := NewExitProvider().ResolveSubject(context.Background(), "exit:01XYZ")
+		require.NoError(t, err)
+		assert.Nil(t, attrs)
+	})
 }
 
 func TestExitProvider_ResolveResource(t *testing.T) {
