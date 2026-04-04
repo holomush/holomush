@@ -152,46 +152,63 @@ func TestHomeDirFallsBackToOsUserHomeDirWhenHOMEUnset(t *testing.T) {
 	assert.NotEmpty(t, got, "homeDir() returned empty string")
 }
 
-func TestConfigDirHandlesHomeDirErrorWhenBothEnvVarsUnset(t *testing.T) {
-	// Clear both HOME and XDG_CONFIG_HOME, then break os.UserHomeDir
-	// by setting HOME to empty on systems that require it
+func TestConfigDirReturnsErrorOrValidPathWhenBothEnvVarsUnset(t *testing.T) {
 	t.Setenv("HOME", "")
 	t.Setenv("XDG_CONFIG_HOME", "")
 
-	// On most test systems, os.UserHomeDir will still work
-	// So we just verify the function doesn't panic
-	_, _ = ConfigDir()
+	dir, err := ConfigDir()
+	if err != nil {
+		assert.Empty(t, dir, "ConfigDir() returned non-empty string with error")
+	} else {
+		assert.NotEmpty(t, dir, "ConfigDir() returned empty string without error")
+	}
 }
 
-func TestDataDirHandlesHomeDirErrorWhenBothEnvVarsUnset(t *testing.T) {
+func TestDataDirReturnsErrorOrValidPathWhenBothEnvVarsUnset(t *testing.T) {
 	t.Setenv("HOME", "")
 	t.Setenv("XDG_DATA_HOME", "")
 
-	// Verify the function doesn't panic
-	_, _ = DataDir()
+	dir, err := DataDir()
+	if err != nil {
+		assert.Empty(t, dir, "DataDir() returned non-empty string with error")
+	} else {
+		assert.NotEmpty(t, dir, "DataDir() returned empty string without error")
+	}
 }
 
-func TestStateDirHandlesHomeDirErrorWhenBothEnvVarsUnset(t *testing.T) {
+func TestStateDirReturnsErrorOrValidPathWhenBothEnvVarsUnset(t *testing.T) {
 	t.Setenv("HOME", "")
 	t.Setenv("XDG_STATE_HOME", "")
 
-	// Verify the function doesn't panic
-	_, _ = StateDir()
+	dir, err := StateDir()
+	if err != nil {
+		assert.Empty(t, dir, "StateDir() returned non-empty string with error")
+	} else {
+		assert.NotEmpty(t, dir, "StateDir() returned empty string without error")
+	}
 }
 
-func TestRuntimeDirHandlesStateDirErrorWhenAllEnvVarsUnset(t *testing.T) {
+func TestRuntimeDirReturnsErrorOrValidPathWhenAllEnvVarsUnset(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", "")
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("HOME", "")
 
-	// Verify the function doesn't panic
-	_, _ = RuntimeDir()
+	dir, err := RuntimeDir()
+	if err != nil {
+		assert.Empty(t, dir, "RuntimeDir() returned non-empty string with error")
+	} else {
+		assert.NotEmpty(t, dir, "RuntimeDir() returned empty string without error")
+	}
 }
 
-func TestCertsDirHandlesConfigDirErrorWhenBothEnvVarsUnset(t *testing.T) {
+func TestCertsDirReturnsErrorOrValidPathWhenBothEnvVarsUnset(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", "")
 
-	// Verify the function doesn't panic
-	_, _ = CertsDir()
+	dir, err := CertsDir()
+	if err != nil {
+		assert.Empty(t, dir, "CertsDir() returned non-empty string with error")
+	} else {
+		assert.NotEmpty(t, dir, "CertsDir() returned empty string without error")
+	}
 }

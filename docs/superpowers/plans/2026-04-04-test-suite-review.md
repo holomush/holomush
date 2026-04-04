@@ -80,110 +80,21 @@ task test:e2e
 This task adds the naming convention and quality standards to CLAUDE.md so all
 subsequent work (and future development) follows the rules.
 
-- [ ] **Step 1: Add Test Naming section after line 295 (Test Files)**
+See the spec for full content of each section:
+`docs/superpowers/specs/2026-04-04-test-suite-review-design.md`
 
-Insert this new section between "Test Files" and "Table-Driven Tests":
+- [ ] **Step 1:** Add "Test Naming" section (after "Test Files", before "Table-Driven Tests") —
+    ACE framework, good/bad examples table, subtest example, requirements table.
 
-```markdown
-### Test Naming
+- [ ] **Step 2:** Update "Table-Driven Tests" example — sentence-style subtest names,
+    testify assertions instead of `t.Errorf`.
 
-Test names MUST be sentences that communicate behavior. Follow the ACE
-framework: **Action** (what), **Condition** (when/given), **Expectation**
-(then/result).
+- [ ] **Step 3:** Add "Test Quality" section (after "Assertions", before "Mocking with Mockery") —
+    five requirements covering both-path testing, assertion quality, focus, error codes.
 
-Reference: [Test Names Should Be Sentences](https://bitfieldconsulting.com/posts/test-names)
+- [ ] **Step 4:** Run `task fmt` to verify formatting.
 
-**Functions without subtests** — the function name itself is the sentence:
-
-| Pattern | Example |
-| ------- | ------- |
-| Good | `TestConfigDirUsesXDGEnvVarWhenSet` |
-| Good | `TestEnsureDirFailsWhenParentIsAFile` |
-| Bad | `TestConfigDir_EnvVar` |
-| Bad | `TestEnsureDir_Error` |
-
-**Functions with subtests** — parent name identifies the unit under test,
-subtest names carry the sentence:
-
-```go
-func TestHashPassword(t *testing.T) {
-    t.Run("produces valid argon2id hash", func(t *testing.T) { ... })
-    t.Run("rejects empty password", func(t *testing.T) { ... })
-}
-```
-```
-
-| Requirement | Description |
-| ----------- | ----------- |
-| **MUST** follow ACE | Every test name communicates action, condition, and expectation |
-| **MUST** use PascalCase | Top-level function names: `TestConfigDirFallsBackToHomeDotConfig` |
-| **SHOULD NOT** use underscores | Exception: `TestType_Method` with subtests (e.g., `TestEngine_Evaluate`) |
-| **MUST** use lowercase subtests | Subtest strings: `"returns ErrNotFound for missing character"` |
-| **MUST NOT** use vague names | No `"success"`, `"error case"`, `"test 1"` |
-
-```text
-
-- [ ] **Step 2: Update Table-Driven Tests example to follow naming convention**
-
-Replace the existing example at lines 299-317 with:
-
-```markdown
-### Table-Driven Tests
-
-```go
-func TestEventType_String(t *testing.T) {
-    tests := []struct {
-        name     string
-        input    EventType
-        expected string
-    }{
-        {"returns say for EventTypeSay", EventTypeSay, "say"},
-        {"returns pose for EventTypePose", EventTypePose, "pose"},
-    }
-
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            assert.Equal(t, tt.expected, tt.input.String())
-        })
-    }
-}
-```
-
-
-```text
-
-- [ ] **Step 3: Add Test Quality section after Assertions (after line 350)**
-
-```markdown
-### Test Quality
-
-| Requirement | Description |
-| ----------- | ----------- |
-| **MUST** test both paths | Every exported function needs at least one positive and one negative test |
-| **MUST** assert behavior | No zero-assertion "don't panic" tests |
-| **MUST** focus each test | One behavior per test/subtest — if it needs "and," split it |
-| **SHOULD** use error codes | Prefer `errutil.AssertErrorCode` or `assert.ErrorIs` over string matching |
-| **MUST** use `require` for preconditions | `require.NoError` for setup, `assert.*` for the check under test |
-```
-
-- [ ] **Step 4: Run format check**
-
-```bash
-task fmt
-```
-
-- [ ] **Step 5: Commit CLAUDE.md changes**
-
-```bash
-jj --no-pager describe -m "docs: add test naming and quality standards to CLAUDE.md
-
-Add ACE framework naming convention, test quality requirements, and
-updated table-driven test examples to the Testing section.
-
-Reference: https://bitfieldconsulting.com/posts/test-names
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
-```
+- [ ] **Step 5:** Commit with jj: `docs: add test naming and quality standards to CLAUDE.md`
 
 ---
 

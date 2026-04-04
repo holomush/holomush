@@ -162,6 +162,13 @@ func TestServerReadinessReturns200WhenCheckerIsNil(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "expected status 200 with nil checker")
 }
 
+func TestServerStartFailsWithInvalidAddress(t *testing.T) {
+	server := NewServer("not-a-valid-address:99999", nil)
+
+	_, err := server.Start()
+	assert.Error(t, err, "expected error when starting server with invalid address")
+}
+
 func TestServerStartFailsWhenAlreadyRunning(t *testing.T) {
 	server := NewServer("127.0.0.1:0", nil)
 
