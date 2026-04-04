@@ -2024,3 +2024,140 @@ func TestEngine_CanPerformAction_ExactResourcePolicySkipped(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, allowed, "exact-resource policies should be skipped in type-level pre-flight")
 }
+
+func TestEngine_CanPerformAction_InvalidSubjectFormat(t *testing.T) {
+	tests := []struct {
+		name    string
+		subject string
+	}{
+		{"no colon", "badsubject"},
+		{"empty type", ":01ABC"},
+		{"empty id", "character:"},
+		{"whitespace type", " :01ABC"},
+		{"whitespace id", "character: "},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine, _ := createTestEngine(t, &mockSessionResolver{})
+			allowed, err := engine.CanPerformAction(context.Background(), tt.subject, "write", "location", "")
+			require.Error(t, err)
+			assert.False(t, allowed, "invalid subject format should return false")
+
+			oopsErr, ok := oops.AsOops(err)
+			require.True(t, ok)
+			assert.Equal(t, "INVALID_ENTITY_REF", oopsErr.Code())
+		})
+	}
+}
+
+func TestEngine_CanPerformAction_AttributeResolutionError(t *testing.T) {
+	// A failing attribute provider should cause CanPerformAction to fail closed
+	// and return (false, nil) — no error propagated.
+	failingProvider := &failingAttributeProvider{
+		namespace: "character",
+		err:       errors.New("database connection failed"),
+	}
+
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+	require.NoError(t, resolver.RegisterProvider(failingProvider))
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() { _ = auditLogger.Close() })
+
+	cache := NewCache(nil, nil)
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err, "attribute resolution error should not propagate — (false, nil) is the contract")
+	assert.False(t, allowed, "should fail closed on attribute resolution error")
+}
+
+func TestEngine_CanPerformAction_PrincipalTypeMismatch(t *testing.T) {
+	// Policy targets "plugin" principal but subject is "character"
+	dslText := `permit(principal is plugin, action in ["write"], resource is location);`
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "character subject should not match plugin-only policy")
+}
+
+func TestEngine_CanPerformAction_ActionMismatch(t *testing.T) {
+	// Policy only permits "read" but we're checking "delete"
+	dslText := `permit(principal is character, action in ["read"], resource is location);`
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "delete", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "delete should not match read-only policy")
+}
+
+func TestEngine_CanPerformAction_ResourceTypeMismatch(t *testing.T) {
+	// Policy targets "exit" resource but we're checking "location"
+	dslText := `permit(principal is character, action in ["write"], resource is exit);`
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "location should not match exit-only policy")
+}
+
+func TestEngine_CanPerformAction_NilCompiledPolicySkipped(t *testing.T) {
+	// A policy with Compiled == nil should be silently skipped
+	registry := attribute.NewSchemaRegistry()
+	resolver := attribute.NewResolver(registry)
+
+	mockWriter := &mockAuditWriter{}
+	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
+	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
+	t.Cleanup(func() { _ = auditLogger.Close() })
+
+	cache := NewCache(nil, nil)
+	cache.mu.Lock()
+	cache.snapshot = &Snapshot{
+		Policies: []CachedPolicy{
+			{ID: "nil-compiled", Name: "broken", Compiled: nil},
+		},
+		CreatedAt: time.Now(),
+	}
+	cache.mu.Unlock()
+	cache.lastUpdate.Store(time.Now().UnixNano())
+
+	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "nil-compiled policy should be skipped, resulting in default deny")
+}
+
+func TestEngine_CanPerformAction_ConditionUnsatisfied(t *testing.T) {
+	// Permit policy exists but condition is not met
+	dslText := `permit(principal is character, action in ["write"], resource is location) when { "admin" in principal.character.roles };`
+
+	provider := &mockAttributeProvider{
+		namespace:  "character",
+		subjectMap: map[string]any{"roles": []string{"player"}}, // not admin
+	}
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{provider})
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "write", "location", "")
+	require.NoError(t, err)
+	assert.False(t, allowed, "unsatisfied condition should result in default deny")
+}
+
+func TestEngine_OnPolicyCorruption_UnknownEffect(t *testing.T) {
+	// Exercise the default branch in OnPolicyCorruption
+	engine, _ := createTestEngine(t, nil)
+	engine.OnPolicyCorruption("policy-789", types.PolicyEffect("bogus"))
+	assert.True(t, engine.IsDegraded(), "unknown effect type should trigger degraded mode")
+}

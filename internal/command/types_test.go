@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -610,6 +611,96 @@ func TestCapability_EffectiveScope(t *testing.T) {
 	assert.Equal(t, ScopeSelf, Capability{Action: "read", Resource: "character"}.EffectiveScope())
 	assert.Equal(t, ScopeLocal, Capability{Action: "read", Resource: "location", Scope: ScopeLocal}.EffectiveScope())
 	assert.Equal(t, ScopeGlobal, Capability{Action: "emit", Resource: "stream", Scope: ScopeGlobal}.EffectiveScope())
+}
+
+func TestNewCommandEntry_InvalidCapability_ReturnsError(t *testing.T) {
+	handler := func(_ context.Context, _ *CommandExecution) error { return nil }
+
+	tests := []struct {
+		name string
+		caps []Capability
+		want string
+	}{
+		{
+			name: "unknown action",
+			caps: []Capability{{Action: "destroy", Resource: "location"}},
+			want: "action",
+		},
+		{
+			name: "unknown resource",
+			caps: []Capability{{Action: "read", Resource: "spaceship"}},
+			want: "resource",
+		},
+		{
+			name: "invalid scope",
+			caps: []Capability{{Action: "read", Resource: "location", Scope: "everywhere"}},
+			want: "scope",
+		},
+		{
+			name: "second capability invalid",
+			caps: []Capability{
+				{Action: "read", Resource: "location"},
+				{Action: "write", Resource: "bogus"},
+			},
+			want: "resource",
+		},
+		{
+			name: "empty action",
+			caps: []Capability{{Action: "", Resource: "location"}},
+			want: "action",
+		},
+		{
+			name: "empty resource",
+			caps: []Capability{{Action: "read", Resource: ""}},
+			want: "resource",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewCommandEntry(CommandEntryConfig{
+				Name:         "test",
+				Handler:      handler,
+				Capabilities: tt.caps,
+			})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.want)
+
+			oopsErr, ok := oops.AsOops(err)
+			require.True(t, ok)
+			assert.Equal(t, "INVALID_CAPABILITY", oopsErr.Code())
+		})
+	}
+}
+
+func TestNewCommandEntry_ValidCapabilities_Succeeds(t *testing.T) {
+	handler := func(_ context.Context, _ *CommandExecution) error { return nil }
+
+	entry, err := NewCommandEntry(CommandEntryConfig{
+		Name:    "teleport",
+		Handler: handler,
+		Capabilities: []Capability{
+			{Action: "write", Resource: "location", Scope: ScopeGlobal},
+			{Action: "enter", Resource: "location", Scope: ScopeGlobal},
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "teleport", entry.Name)
+	assert.Len(t, entry.GetCapabilities(), 2)
+}
+
+func TestNewCommandEntry_PluginName_WithCapabilities(t *testing.T) {
+	entry, err := NewCommandEntry(CommandEntryConfig{
+		Name:       "dig",
+		PluginName: "core-building",
+		Capabilities: []Capability{
+			{Action: "write", Resource: "exit"},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "core-building", entry.PluginName())
+	assert.Len(t, entry.GetCapabilities(), 1)
 }
 
 func TestServices_BroadcastSystemMessage_CreatesCorrectEvent(t *testing.T) {

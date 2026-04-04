@@ -1415,6 +1415,84 @@ lua-plugin:
 	assert.True(t, strings.Contains(err.Error(), "lua") || strings.Contains(err.Error(), "setting"))
 }
 
+func TestCommandSpec_Validate_InvalidCapability(t *testing.T) {
+	tests := []struct {
+		name   string
+		cmd    plugins.CommandSpec
+		errMsg string
+	}{
+		{
+			name: "invalid action in capability",
+			cmd: plugins.CommandSpec{
+				Name:         "teleport",
+				Capabilities: []command.Capability{{Action: "destroy", Resource: "location"}},
+			},
+			errMsg: "action",
+		},
+		{
+			name: "invalid resource in capability",
+			cmd: plugins.CommandSpec{
+				Name:         "teleport",
+				Capabilities: []command.Capability{{Action: "write", Resource: "spaceship"}},
+			},
+			errMsg: "resource",
+		},
+		{
+			name: "invalid scope in capability",
+			cmd: plugins.CommandSpec{
+				Name:         "teleport",
+				Capabilities: []command.Capability{{Action: "write", Resource: "location", Scope: "everywhere"}},
+			},
+			errMsg: "scope",
+		},
+		{
+			name: "empty action in capability",
+			cmd: plugins.CommandSpec{
+				Name:         "teleport",
+				Capabilities: []command.Capability{{Action: "", Resource: "location"}},
+			},
+			errMsg: "action",
+		},
+		{
+			name: "second capability invalid",
+			cmd: plugins.CommandSpec{
+				Name: "admin",
+				Capabilities: []command.Capability{
+					{Action: "write", Resource: "location", Scope: command.ScopeGlobal},
+					{Action: "read", Resource: "bogus"},
+				},
+			},
+			errMsg: "resource",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cmd.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.errMsg)
+		})
+	}
+}
+
+func TestParseManifest_CommandWithInvalidCapability(t *testing.T) {
+	yamlData := `
+name: test
+version: 1.0.0
+type: lua
+commands:
+  - name: teleport
+    capabilities:
+      - action: destroy
+        resource: location
+lua-plugin:
+  entry: main.lua
+`
+	_, err := plugins.ParseManifest([]byte(yamlData))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "action")
+}
+
 func TestParseManifest_SettingPlugin_WithBinaryPlugin(t *testing.T) {
 	yaml := `
 name: my-setting

@@ -134,24 +134,24 @@ func CheckCommandExecution(ctx context.Context, engine types.AccessPolicyEngine,
 
 // CheckCapabilityPreFlight evaluates Layer 2: does the subject have the class of permissions?
 func CheckCapabilityPreFlight(ctx context.Context, engine types.AccessPolicyEngine, subject, cmdName string, caps []Capability) error {
-	for _, cap := range caps {
-		allowed, err := engine.CanPerformAction(ctx, subject, cap.Action, cap.Resource, cap.EffectiveScope())
+	for _, capability := range caps {
+		allowed, err := engine.CanPerformAction(ctx, subject, capability.Action, capability.Resource, capability.EffectiveScope())
 		if err != nil {
 			errutil.LogErrorContext(ctx, cmdName+" capability pre-flight error",
-				err, "subject", subject, "action", cap.Action, "resource", cap.Resource)
+				err, "subject", subject, "action", capability.Action, "resource", capability.Resource)
 			return oops.Code(CodeAccessEvaluationFailed).
 				With("command", cmdName).
-				With("action", cap.Action).
-				With("resource", cap.Resource).
+				With("action", capability.Action).
+				With("resource", capability.Resource).
 				Wrap(err)
 		}
 		if !allowed {
 			slog.DebugContext(ctx, cmdName+" capability pre-flight denied",
 				"subject", subject,
-				"action", cap.Action,
-				"resource", cap.Resource,
-				"scope", cap.EffectiveScope())
-			return ErrInsufficientCapability(cmdName, cap)
+				"action", capability.Action,
+				"resource", capability.Resource,
+				"scope", capability.EffectiveScope())
+			return ErrInsufficientCapability(cmdName, capability)
 		}
 	}
 	return nil

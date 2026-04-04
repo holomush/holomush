@@ -75,13 +75,13 @@ func ErrPermissionDenied(cmd, capability string) error {
 }
 
 // ErrInsufficientCapability creates an error for capability pre-flight failures.
-func ErrInsufficientCapability(cmdName string, cap Capability) error {
+func ErrInsufficientCapability(cmdName string, capability Capability) error {
 	return oops.Code(CodePermissionDenied).
 		With("command", cmdName).
-		With("required_action", cap.Action).
-		With("required_resource", cap.Resource).
-		With("required_scope", cap.EffectiveScope()).
-		Errorf("insufficient capability: command %s requires %s on %s", cmdName, cap.Action, cap.Resource)
+		With("required_action", capability.Action).
+		With("required_resource", capability.Resource).
+		With("required_scope", capability.EffectiveScope()).
+		Errorf("insufficient capability: command %s requires %s on %s", cmdName, capability.Action, capability.Resource)
 }
 
 // ErrInvalidArgs creates an error for invalid arguments.
