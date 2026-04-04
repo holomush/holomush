@@ -3,14 +3,27 @@
 
 package world
 
-import "testing"
+import (
+	"testing"
 
-// TestServiceImplementsMutator verifies that Service implements the Mutator interface.
-// This is a compile-time check to ensure the interface contract is maintained.
-func TestServiceImplementsMutator(t *testing.T) {
-	t.Helper()
-	// This test exists to verify the interface at test time.
-	// The actual compile-time check is in mutator.go via:
-	// var _ Mutator = (*Service)(nil)
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/internal/access/policy/policytest"
+)
+
+// TestServiceImplementsMutator is a compile-time check (also enforced in mutator.go).
+func TestServiceImplementsMutator(_ *testing.T) {
 	var _ Mutator = (*Service)(nil)
+}
+
+// TestMutator_NewServiceReturnsMutator verifies that NewService returns a value
+// that satisfies the Mutator interface and is non-nil.
+func TestMutator_NewServiceReturnsMutator(t *testing.T) {
+	engine := policytest.NewGrantEngine()
+	svc := NewService(ServiceConfig{Engine: engine})
+	require.NotNil(t, svc)
+
+	var m Mutator = svc
+	assert.NotNil(t, m)
 }
