@@ -84,9 +84,13 @@ tasks:
     desc: Run Playwright E2E tests in Docker
     deps: ['docker:build']
     cmds:
-      - docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml run --rm playwright npx playwright test --reporter=line
-        {{.CLI_ARGS}}
       - defer: docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml down
+      - cmd: |
+          set +e
+          docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml run --rm playwright npx playwright test {{.CLI_ARGS}}
+          E2E_EXIT=$?
+          ./scripts/e2e-summary.sh
+          exit $E2E_EXIT
 
   test:e2e:cover:
     desc: Run E2E tests with binary coverage instrumentation
@@ -94,11 +98,17 @@ tasks:
     cmds:
       - mkdir -p .coverdata/core .coverdata/gateway
       - defer: {docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml -f compose.e2e.cover.yaml down -v; rm -rf .coverdata;: ''}
-      - >-
-        E2E_EXIT=0; docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml -f compose.e2e.cover.yaml run --rm
-        playwright npx playwright test --reporter=line {{.CLI_ARGS}} || E2E_EXIT=$?; docker compose -p holomush-e2e -f compose.yaml
-        -f compose.e2e.yaml -f compose.e2e.cover.yaml stop core gateway; go tool covdata textfmt -i=.coverdata/core,.coverdata/gateway
-        -o coverage-e2e.out; echo "E2E coverage written to coverage-e2e.out"; exit $E2E_EXIT #magic___^_^___line
+      - cmd: |
+          set +e
+          E2E_EXIT=0
+          docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml -f compose.e2e.cover.yaml run --rm \
+            playwright npx playwright test {{.CLI_ARGS}} || E2E_EXIT=$?
+          docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml -f compose.e2e.cover.yaml stop core gateway
+          go tool covdata textfmt -i=.coverdata/core,.coverdata/gateway -o coverage-e2e.out
+          echo "E2E coverage written to coverage-e2e.out"
+          ./scripts/e2e-summary.sh
+          exit $E2E_EXIT
+
   test:bench:
     desc: Run benchmarks
     cmds:
