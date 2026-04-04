@@ -294,7 +294,7 @@ func TestCharacter_SetLocationID(t *testing.T) {
 	}
 }
 
-func TestCharacter_SetLocationID_UpdatesField(t *testing.T) {
+func TestCharacterSetLocationIDUpdatesField(t *testing.T) {
 	char, err := world.NewCharacter(ulid.Make(), "TestChar")
 	require.NoError(t, err)
 	assert.Nil(t, char.LocationID, "LocationID should be nil initially")

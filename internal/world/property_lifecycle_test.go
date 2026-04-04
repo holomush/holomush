@@ -43,21 +43,21 @@ func TestOrphanDetector_Construction(t *testing.T) {
 	require.NotNil(t, detector)
 }
 
-func TestOrphanDetector_StartupCheck_LogsErrorAboveThreshold(t *testing.T) {
+func TestOrphanDetectorStartupCheckLogsErrorAboveThreshold(t *testing.T) {
 	detector := NewOrphanDetector(OrphanConfig{Threshold: 100, GracePeriod: 24 * time.Hour, Interval: time.Hour})
 	detector.SetFinder(&mockOrphanFinder{countResult: 150})
 	err := detector.StartupCheck(context.Background())
 	require.NoError(t, err)
 }
 
-func TestOrphanDetector_StartupCheck_NoErrorBelowThreshold(t *testing.T) {
+func TestOrphanDetectorStartupCheckNoErrorBelowThreshold(t *testing.T) {
 	detector := NewOrphanDetector(OrphanConfig{Threshold: 100, GracePeriod: 24 * time.Hour, Interval: time.Hour})
 	detector.SetFinder(&mockOrphanFinder{countResult: 5})
 	err := detector.StartupCheck(context.Background())
 	require.NoError(t, err)
 }
 
-func TestOrphanDetector_Cleanup_WarnsFirstThenDeletes(t *testing.T) {
+func TestOrphanDetectorCleanupWarnsFirstThenDeletes(t *testing.T) {
 	finder := &mockOrphanFinder{countResult: 5, deleteResult: 3}
 	detector := NewOrphanDetector(OrphanConfig{Threshold: 100, GracePeriod: 24 * time.Hour, Interval: time.Hour})
 	detector.SetFinder(finder)
@@ -70,7 +70,7 @@ func TestOrphanDetector_Cleanup_WarnsFirstThenDeletes(t *testing.T) {
 	assert.Equal(t, 24*time.Hour, finder.deleteOlderThan)
 }
 
-func TestOrphanDetector_Cleanup_NoOrphans_NoDeletion(t *testing.T) {
+func TestOrphanDetectorCleanupNoOrphansNoDeletion(t *testing.T) {
 	finder := &mockOrphanFinder{countResult: 0}
 	detector := NewOrphanDetector(OrphanConfig{Threshold: 100, GracePeriod: 24 * time.Hour, Interval: time.Hour})
 	detector.SetFinder(finder)

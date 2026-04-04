@@ -1329,7 +1329,7 @@ func TestWorldService_ListSceneParticipants(t *testing.T) {
 
 // --- Input Validation Tests ---
 
-func TestWorldService_CreateLocation_Validation(t *testing.T) {
+func TestWorldService_CreateLocationValidation(t *testing.T) {
 	ctx := context.Background()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 
@@ -1388,7 +1388,7 @@ func TestWorldService_CreateLocation_Validation(t *testing.T) {
 	})
 }
 
-func TestWorldService_CreateExit_Validation(t *testing.T) {
+func TestWorldService_CreateExitValidation(t *testing.T) {
 	ctx := context.Background()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 	fromLocID := ulid.Make()
@@ -1420,7 +1420,7 @@ func TestWorldService_CreateExit_Validation(t *testing.T) {
 	})
 }
 
-func TestWorldService_CreateObject_Validation(t *testing.T) {
+func TestWorldService_CreateObjectValidation(t *testing.T) {
 	ctx := context.Background()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 
@@ -1468,7 +1468,7 @@ func TestWorldService_CreateObject_Validation(t *testing.T) {
 	})
 }
 
-func TestWorldService_AddSceneParticipant_Validation(t *testing.T) {
+func TestWorldService_AddSceneParticipantValidation(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
@@ -1493,7 +1493,7 @@ func TestWorldService_AddSceneParticipant_Validation(t *testing.T) {
 
 // --- Repository Error Propagation Tests ---
 
-func TestWorldService_GetLocation_ErrorPropagation(t *testing.T) {
+func TestWorldService_GetLocationErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
 	subjectID := access.CharacterSubject(ulid.Make().String())
@@ -1517,7 +1517,7 @@ func TestWorldService_GetLocation_ErrorPropagation(t *testing.T) {
 	})
 }
 
-func TestWorldService_CreateLocation_ErrorPropagation(t *testing.T) {
+func TestWorldService_CreateLocationErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 
@@ -1544,7 +1544,7 @@ func TestWorldService_CreateLocation_ErrorPropagation(t *testing.T) {
 	})
 }
 
-func TestWorldService_GetExit_ErrorPropagation(t *testing.T) {
+func TestWorldService_GetExitErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
 	subjectID := access.CharacterSubject(ulid.Make().String())
@@ -1568,7 +1568,7 @@ func TestWorldService_GetExit_ErrorPropagation(t *testing.T) {
 	})
 }
 
-func TestWorldService_CreateExit_ErrorPropagation(t *testing.T) {
+func TestWorldService_CreateExitErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 	fromLocID := ulid.Make()
@@ -1599,7 +1599,7 @@ func TestWorldService_CreateExit_ErrorPropagation(t *testing.T) {
 	})
 }
 
-func TestWorldService_GetObject_ErrorPropagation(t *testing.T) {
+func TestWorldService_GetObjectErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
 	subjectID := access.CharacterSubject(ulid.Make().String())
@@ -1623,7 +1623,7 @@ func TestWorldService_GetObject_ErrorPropagation(t *testing.T) {
 	})
 }
 
-func TestWorldService_CreateObject_ErrorPropagation(t *testing.T) {
+func TestWorldService_CreateObjectErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 	locationID := ulid.Make()
@@ -1651,7 +1651,7 @@ func TestWorldService_CreateObject_ErrorPropagation(t *testing.T) {
 
 // --- Scene Repository Error Propagation Tests ---
 
-func TestWorldService_AddSceneParticipant_ErrorPropagation(t *testing.T) {
+func TestWorldService_AddSceneParticipantErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
@@ -1675,7 +1675,7 @@ func TestWorldService_AddSceneParticipant_ErrorPropagation(t *testing.T) {
 	})
 }
 
-func TestWorldService_RemoveSceneParticipant_ErrorPropagation(t *testing.T) {
+func TestWorldService_RemoveSceneParticipantErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	charID := ulid.Make()
@@ -1699,7 +1699,7 @@ func TestWorldService_RemoveSceneParticipant_ErrorPropagation(t *testing.T) {
 	})
 }
 
-func TestWorldService_ListSceneParticipants_ErrorPropagation(t *testing.T) {
+func TestWorldService_ListSceneParticipantsErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	sceneID := ulid.Make()
 	subjectID := access.CharacterSubject(ulid.Make().String())
@@ -1725,7 +1725,7 @@ func TestWorldService_ListSceneParticipants_ErrorPropagation(t *testing.T) {
 
 // --- DeleteExit Severe Cleanup Test ---
 
-func TestWorldService_DeleteExit_SevereCleanup(t *testing.T) {
+func TestWorldService_DeleteExitSevereCleanup(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
 	subjectID := access.CharacterSubject(ulid.Make().String())
@@ -1904,7 +1904,7 @@ func TestWorldService_GetExitsByLocation(t *testing.T) {
 
 // --- Update Method Validation Tests ---
 
-func TestWorldService_UpdateLocation_Validation(t *testing.T) {
+func TestWorldService_UpdateLocationValidation(t *testing.T) {
 	ctx := context.Background()
 	locID := ulid.Make()
 	subjectID := access.CharacterSubject(ulid.Make().String())
@@ -1957,7 +1957,7 @@ func TestWorldService_UpdateLocation_Validation(t *testing.T) {
 	})
 }
 
-func TestWorldService_UpdateExit_Validation(t *testing.T) {
+func TestWorldService_UpdateExitValidation(t *testing.T) {
 	ctx := context.Background()
 	exitID := ulid.Make()
 	subjectID := access.CharacterSubject(ulid.Make().String())
@@ -2033,7 +2033,7 @@ func TestWorldService_UpdateExit_Validation(t *testing.T) {
 	})
 }
 
-func TestWorldService_UpdateObject_Validation(t *testing.T) {
+func TestWorldService_UpdateObjectValidation(t *testing.T) {
 	ctx := context.Background()
 	objID := ulid.Make()
 	subjectID := access.CharacterSubject(ulid.Make().String())
@@ -2086,7 +2086,7 @@ func TestWorldService_UpdateObject_Validation(t *testing.T) {
 
 // --- Create Method Extended Validation Tests ---
 
-func TestWorldService_CreateLocation_TypeValidation(t *testing.T) {
+func TestWorldService_CreateLocationTypeValidation(t *testing.T) {
 	ctx := context.Background()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 
@@ -2112,7 +2112,7 @@ func TestWorldService_CreateLocation_TypeValidation(t *testing.T) {
 	})
 }
 
-func TestWorldService_CreateExit_VisibilityValidation(t *testing.T) {
+func TestWorldService_CreateExitVisibilityValidation(t *testing.T) {
 	ctx := context.Background()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 	fromLocID := ulid.Make()
@@ -2225,7 +2225,7 @@ func TestWorldService_CreateExit_VisibilityValidation(t *testing.T) {
 	})
 }
 
-func TestWorldService_UpdateExit_LockDataValidation(t *testing.T) {
+func TestWorldService_UpdateExitLockDataValidation(t *testing.T) {
 	ctx := context.Background()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 	exitID := ulid.Make()
@@ -2286,7 +2286,7 @@ func TestWorldService_UpdateExit_LockDataValidation(t *testing.T) {
 	})
 }
 
-func TestWorldService_CreateExit_ValidationBypass(t *testing.T) {
+func TestWorldService_CreateExitValidationBypass(t *testing.T) {
 	ctx := context.Background()
 	subjectID := access.CharacterSubject(ulid.Make().String())
 	fromLocID := ulid.Make()
