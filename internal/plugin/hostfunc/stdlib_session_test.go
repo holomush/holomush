@@ -152,7 +152,7 @@ const (
 // holo.session.find_by_name()
 // =============================================================================
 
-func TestSessionFindByName_Found(t *testing.T) {
+func TestSessionFindByNameFound(t *testing.T) {
 	info := makeSessionInfo(testCharID1, "Alice", testLocID1)
 	sa := newMockSessionAccess(info)
 	L := newLuaStateWithSession(t, sa)
@@ -170,7 +170,7 @@ func TestSessionFindByName_Found(t *testing.T) {
 	assert.Equal(t, testLocID1, tbl.RawGetString("location_id").String())
 }
 
-func TestSessionFindByName_CaseInsensitive(t *testing.T) {
+func TestSessionFindByNameCaseInsensitive(t *testing.T) {
 	info := makeSessionInfo(testCharID2, "Bob", testLocID1)
 	sa := newMockSessionAccess(info)
 	L := newLuaStateWithSession(t, sa)
@@ -186,7 +186,7 @@ func TestSessionFindByName_CaseInsensitive(t *testing.T) {
 	assert.Equal(t, "Bob", tbl.RawGetString("character_name").String())
 }
 
-func TestSessionFindByName_NotFound(t *testing.T) {
+func TestSessionFindByNameNotFound(t *testing.T) {
 	sa := newMockSessionAccess()
 	L := newLuaStateWithSession(t, sa)
 	defer L.Close()
@@ -198,7 +198,7 @@ func TestSessionFindByName_NotFound(t *testing.T) {
 	assert.Equal(t, lua.LTNil, result.Type(), "find_by_name should return nil for missing session")
 }
 
-func TestSessionFindByName_StoreError(t *testing.T) {
+func TestSessionFindByNameStoreError(t *testing.T) {
 	sa := newMockSessionAccess()
 	sa.updateLastWhisperedFn = nil // doesn't apply here, test find returning error
 	// Override FindByCharacterName to return an error via a session that panics — instead, build a
@@ -223,7 +223,7 @@ func TestSessionFindByName_StoreError(t *testing.T) {
 // holo.session.set_last_whispered()
 // =============================================================================
 
-func TestSessionSetLastWhispered_CallsUpdate(t *testing.T) {
+func TestSessionSetLastWhisperedCallsUpdate(t *testing.T) {
 	sa := newMockSessionAccess()
 	L := newLuaStateWithSession(t, sa)
 	defer L.Close()
@@ -238,7 +238,7 @@ func TestSessionSetLastWhispered_CallsUpdate(t *testing.T) {
 	assert.Equal(t, "Alice", call.Name)
 }
 
-func TestSessionSetLastWhispered_StoreError_NoLuaError(t *testing.T) {
+func TestSessionSetLastWhisperedStoreErrorNoLuaError(t *testing.T) {
 	// Even if UpdateLastWhispered returns an error, the Lua call should not raise an error.
 	sa := newMockSessionAccess()
 	sa.updateLastWhisperedFn = func(_ context.Context, _, _ string) error {

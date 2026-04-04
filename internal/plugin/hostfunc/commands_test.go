@@ -47,7 +47,7 @@ func (m *mockCommandRegistry) Get(name string) (command.CommandEntry, bool) {
 	return command.CommandEntry{}, false
 }
 
-func TestListCommands_ReturnsAllCommands(t *testing.T) {
+func TestListCommandsReturnsAllCommands(t *testing.T) {
 	// Given: a registry with commands (no capabilities required)
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -108,7 +108,7 @@ func TestListCommands_ReturnsAllCommands(t *testing.T) {
 	assert.True(t, sayFound, "expected 'say' command in results")
 }
 
-func TestListCommands_NoRegistry(t *testing.T) {
+func TestListCommandsNoRegistry(t *testing.T) {
 	// Given: no command registry configured (but access control is available)
 
 	charID := ulid.Make()
@@ -132,7 +132,7 @@ func TestListCommands_NoRegistry(t *testing.T) {
 	assert.Contains(t, errVal.String(), "command registry not available")
 }
 
-func TestGetCommandHelp_ReturnsCommandDetails(t *testing.T) {
+func TestGetCommandHelpReturnsCommandDetails(t *testing.T) {
 	// Given: a registry with a command that has detailed help
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -191,7 +191,7 @@ func TestGetCommandHelp_ReturnsCommandDetails(t *testing.T) {
 	assert.Equal(t, "local", L.GetField(capEntryTbl, "scope").String())
 }
 
-func TestGetCommandHelp_CommandNotFound(t *testing.T) {
+func TestGetCommandHelpCommandNotFound(t *testing.T) {
 	// Given: an empty registry
 	charID := ulid.Make()
 	registry := &mockCommandRegistry{commands: []command.CommandEntry{}}
@@ -217,7 +217,7 @@ func TestGetCommandHelp_CommandNotFound(t *testing.T) {
 	assert.Contains(t, errVal.String(), "command not found")
 }
 
-func TestGetCommandHelp_NoRegistry(t *testing.T) {
+func TestGetCommandHelpNoRegistry(t *testing.T) {
 	// Given: no command registry configured
 	charID := ulid.Make()
 
@@ -239,7 +239,7 @@ func TestGetCommandHelp_NoRegistry(t *testing.T) {
 	assert.Contains(t, errVal.String(), "command registry not available")
 }
 
-func TestGetCommandHelp_EmptyCommandName(t *testing.T) {
+func TestGetCommandHelpEmptyCommandName(t *testing.T) {
 	// Given: a valid setup
 	charID := ulid.Make()
 	registry := &mockCommandRegistry{commands: []command.CommandEntry{}}
@@ -258,7 +258,7 @@ func TestGetCommandHelp_EmptyCommandName(t *testing.T) {
 	assert.Contains(t, err.Error(), "command name cannot be empty")
 }
 
-func TestListCommands_FiltersCommandsByCharacterCapabilities(t *testing.T) {
+func TestListCommandsFiltersCommandsByCharacterCapabilities(t *testing.T) {
 	// Given: a registry with commands having different capabilities
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -317,7 +317,7 @@ func TestListCommands_FiltersCommandsByCharacterCapabilities(t *testing.T) {
 	assert.Len(t, names, 2)
 }
 
-func TestListCommands_EmptyCapabilitiesAlwaysIncluded(t *testing.T) {
+func TestListCommandsEmptyCapabilitiesAlwaysIncluded(t *testing.T) {
 	// Given: commands with empty capabilities slice (not nil)
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -357,7 +357,7 @@ func TestListCommands_EmptyCapabilitiesAlwaysIncluded(t *testing.T) {
 	assert.Equal(t, 2, count)
 }
 
-func TestListCommands_RequiresAllCapabilities_ANDLogic(t *testing.T) {
+func TestListCommandsRequiresAllCapabilitiesANDLogic(t *testing.T) {
 	// Given: a command requiring multiple capabilities (AND logic)
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -399,7 +399,7 @@ func TestListCommands_RequiresAllCapabilities_ANDLogic(t *testing.T) {
 	assert.Equal(t, 0, count, "command requiring multiple capabilities should not appear when only one is granted")
 }
 
-func TestListCommands_WithAllCapabilitiesGranted(t *testing.T) {
+func TestListCommandsWithAllCapabilitiesGranted(t *testing.T) {
 	// Given: a command requiring multiple capabilities
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -442,7 +442,7 @@ func TestListCommands_WithAllCapabilitiesGranted(t *testing.T) {
 	assert.Equal(t, 1, count)
 }
 
-func TestListCommands_EngineError_HidesCapabilityCommands(t *testing.T) {
+func TestListCommandsEngineErrorHidesCapabilityCommands(t *testing.T) {
 	// Given: commands with capabilities and an engine that always errors
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -492,7 +492,7 @@ func TestListCommands_EngineError_HidesCapabilityCommands(t *testing.T) {
 	assert.Len(t, names, 1)
 }
 
-func TestListCommands_CircuitBreakerTripsAfterThreeErrors(t *testing.T) {
+func TestListCommandsCircuitBreakerTripsAfterThreeErrors(t *testing.T) {
 	// Given: 6 commands each requiring a capability, and an engine that always errors.
 	// The circuit breaker should trip after exactly 3 errors, leaving remaining commands
 	// unqueried. This verifies the maxEngineErrors=3 threshold behavior.
@@ -561,7 +561,7 @@ func TestListCommands_CircuitBreakerTripsAfterThreeErrors(t *testing.T) {
 		"log should show exactly 3 engine failures before tripping")
 }
 
-func TestListCommands_InvalidCharacterID(t *testing.T) {
+func TestListCommandsInvalidCharacterID(t *testing.T) {
 	// Given: valid setup
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -586,7 +586,7 @@ func TestListCommands_InvalidCharacterID(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid character ID")
 }
 
-func TestListCommands_EmptyCharacterID(t *testing.T) {
+func TestListCommandsEmptyCharacterID(t *testing.T) {
 	// Given: valid setup
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -611,7 +611,7 @@ func TestListCommands_EmptyCharacterID(t *testing.T) {
 	assert.Contains(t, err.Error(), "character ID cannot be empty")
 }
 
-func TestListCommands_NoEngineConfigured(t *testing.T) {
+func TestListCommandsNoEngineConfigured(t *testing.T) {
 	// Given: no AccessPolicyEngine configured (nil)
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -642,7 +642,7 @@ func TestListCommands_NoEngineConfigured(t *testing.T) {
 
 // AccessRequest Verification Tests (PR #88 Priority 1)
 
-func TestListCommands_VerifiesAccessRequest(t *testing.T) {
+func TestListCommandsVerifiesAccessRequest(t *testing.T) {
 	// Given: a registry with a command requiring capabilities
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -689,7 +689,7 @@ func TestListCommands_VerifiesAccessRequest(t *testing.T) {
 	assert.Equal(t, "server", capturedResource, "resource should match capability")
 }
 
-func TestListCommands_EvaluateError_LogsErrorWithContext(t *testing.T) {
+func TestListCommandsEvaluateErrorLogsErrorWithContext(t *testing.T) {
 	// Given: a registry with a command requiring capabilities
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -744,7 +744,7 @@ func TestListCommands_EvaluateError_LogsErrorWithContext(t *testing.T) {
 	assert.Contains(t, logOutput, "policy store unavailable", "log should contain error message")
 }
 
-func TestListCommands_ExplicitDeny_FiltersCommands(t *testing.T) {
+func TestListCommandsExplicitDenyFiltersCommands(t *testing.T) {
 	// Given: a registry with commands requiring capabilities
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -799,7 +799,7 @@ func TestListCommands_ExplicitDeny_FiltersCommands(t *testing.T) {
 	assert.Len(t, names, 1, "only commands without capability requirements should be included")
 }
 
-func TestListCommands_InfraFailure_SetsIncompleteTrue(t *testing.T) {
+func TestListCommandsInfraFailureSetsIncompleteTrue(t *testing.T) {
 	// Given: commands with capabilities and an engine that returns infra failure decisions
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -851,7 +851,7 @@ func TestListCommands_InfraFailure_SetsIncompleteTrue(t *testing.T) {
 	assert.Equal(t, lua.LTrue, incomplete, "incomplete should be true when infra failure occurs")
 }
 
-func TestListCommands_ThreadsLuaContext(t *testing.T) {
+func TestListCommandsThreadsLuaContext(t *testing.T) {
 	// Given: a registry with a command requiring capabilities
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -902,7 +902,7 @@ func TestListCommands_ThreadsLuaContext(t *testing.T) {
 	assert.Equal(t, "test-value", capturedCtx.Value(testKey), "context should preserve values from L.Context()")
 }
 
-func TestListCommands_FallsBackToBackgroundContext(t *testing.T) {
+func TestListCommandsFallsBackToBackgroundContext(t *testing.T) {
 	// Given: a registry with a command requiring capabilities
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -951,7 +951,7 @@ func TestListCommands_FallsBackToBackgroundContext(t *testing.T) {
 
 // F4: Incomplete metadata tests
 
-func TestListCommands_IncompleteField_FalseWhenNoErrors(t *testing.T) {
+func TestListCommandsIncompleteFieldFalseWhenNoErrors(t *testing.T) {
 	// Given: a registry with commands and an engine that succeeds
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -1000,7 +1000,7 @@ func TestListCommands_IncompleteField_FalseWhenNoErrors(t *testing.T) {
 	assert.Equal(t, 2, count, "both commands should be included")
 }
 
-func TestListCommands_IncompleteField_TrueWhenEngineErrors(t *testing.T) {
+func TestListCommandsIncompleteFieldTrueWhenEngineErrors(t *testing.T) {
 	// Given: a registry with commands and an engine that always errors
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -1053,7 +1053,7 @@ func TestListCommands_IncompleteField_TrueWhenEngineErrors(t *testing.T) {
 	assert.Len(t, names, 1)
 }
 
-func TestListCommands_IncompleteField_TrueWhenPartialErrors(t *testing.T) {
+func TestListCommandsIncompleteFieldTrueWhenPartialErrors(t *testing.T) {
 	// Given: a registry with multiple commands and an engine that errors for some
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -1122,7 +1122,7 @@ func TestListCommands_IncompleteField_TrueWhenPartialErrors(t *testing.T) {
 	assert.NotContains(t, names, "boot")
 }
 
-func TestListCommands_ReturnsErrorWhenEngineErrors(t *testing.T) {
+func TestListCommandsReturnsErrorWhenEngineErrors(t *testing.T) {
 	// Given: a registry with commands and an engine that always errors
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -1180,7 +1180,7 @@ func TestListCommands_ReturnsErrorWhenEngineErrors(t *testing.T) {
 	assert.Len(t, names, 1)
 }
 
-func TestGetCommandHelp_AccessDenied(t *testing.T) {
+func TestGetCommandHelpAccessDenied(t *testing.T) {
 	// Given: a command with capabilities and an engine that denies access
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -1218,7 +1218,7 @@ func TestGetCommandHelp_AccessDenied(t *testing.T) {
 	assert.Contains(t, errVal.String(), "access denied")
 }
 
-func TestGetCommandHelp_NoCapabilities_NoCheck(t *testing.T) {
+func TestGetCommandHelpNoCapabilitiesNoCheck(t *testing.T) {
 	// Given: a command WITHOUT capabilities — engine denies all, but help should still be returned
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
@@ -1255,7 +1255,7 @@ func TestGetCommandHelp_NoCapabilities_NoCheck(t *testing.T) {
 	assert.Equal(t, lua.LNil, errVal)
 }
 
-func TestGetCommandHelp_NilEngine_FailsClosed(t *testing.T) {
+func TestGetCommandHelpNilEngineFailsClosed(t *testing.T) {
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
 			command.NewTestEntry(command.CommandEntryConfig{
@@ -1275,7 +1275,7 @@ func TestGetCommandHelp_NilEngine_FailsClosed(t *testing.T) {
 	assert.Contains(t, L.GetGlobal("err").String(), "access engine not available")
 }
 
-func TestGetCommandHelp_EngineError_ReturnsCheckFailed(t *testing.T) {
+func TestGetCommandHelpEngineErrorReturnsCheckFailed(t *testing.T) {
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{
 			command.NewTestEntry(command.CommandEntryConfig{
@@ -1296,7 +1296,7 @@ func TestGetCommandHelp_EngineError_ReturnsCheckFailed(t *testing.T) {
 	assert.Contains(t, L.GetGlobal("err").String(), "access check failed")
 }
 
-func TestListCommands_NoErrorWhenEngineSucceeds(t *testing.T) {
+func TestListCommandsNoErrorWhenEngineSucceeds(t *testing.T) {
 	// Given: a registry with commands and an engine that succeeds
 	registry := &mockCommandRegistry{
 		commands: []command.CommandEntry{

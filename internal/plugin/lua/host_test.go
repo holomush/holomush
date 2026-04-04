@@ -34,7 +34,7 @@ func closeHost(t *testing.T, host *pluginlua.Host) {
 	require.NoError(t, err, "Close() failed")
 }
 
-func TestLuaHost_Load(t *testing.T) {
+func TestLuaHostLoad(t *testing.T) {
 	dir := t.TempDir()
 
 	mainLua := `
@@ -64,7 +64,7 @@ end
 	assert.Equal(t, "test-plugin", plugins[0])
 }
 
-func TestLuaHost_DeliverEvent_ReturnsEmitEvents(t *testing.T) {
+func TestLuaHostDeliverEventReturnsEmitEvents(t *testing.T) {
 	dir := t.TempDir()
 
 	mainLua := `
@@ -116,7 +116,7 @@ end
 	assert.Contains(t, emits[0].Payload, "Echo:")
 }
 
-func TestLuaHost_DeliverEvent_NoHandler(t *testing.T) {
+func TestLuaHostDeliverEventNoHandler(t *testing.T) {
 	dir := t.TempDir()
 
 	// Plugin without on_event function
@@ -141,7 +141,7 @@ func TestLuaHost_DeliverEvent_NoHandler(t *testing.T) {
 	assert.Empty(t, emits, "expected no emits for plugin without handler")
 }
 
-func TestLuaHost_DeliverEvent_NoHandler_LogsDebug(t *testing.T) {
+func TestLuaHostDeliverEventNoHandlerLogsDebug(t *testing.T) {
 	dir := t.TempDir()
 
 	// Plugin without on_event or on_command function
@@ -178,7 +178,7 @@ func TestLuaHost_DeliverEvent_NoHandler_LogsDebug(t *testing.T) {
 	assert.Contains(t, logOutput, "no-handler-plugin", "expected plugin name in debug log")
 }
 
-func TestLuaHost_Unload(t *testing.T) {
+func TestLuaHostUnload(t *testing.T) {
 	dir := t.TempDir()
 
 	writeMainLua(t, dir, `function on_event(event) return nil end`)
@@ -202,7 +202,7 @@ func TestLuaHost_Unload(t *testing.T) {
 	assert.Empty(t, host.Plugins(), "expected 0 plugins after unload")
 }
 
-func TestLuaHost_Unload_NotFound(t *testing.T) {
+func TestLuaHostUnloadNotFound(t *testing.T) {
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
@@ -210,7 +210,7 @@ func TestLuaHost_Unload_NotFound(t *testing.T) {
 	assert.Error(t, err, "expected error when unloading nonexistent plugin")
 }
 
-func TestLuaHost_DeliverEvent_NotLoaded(t *testing.T) {
+func TestLuaHostDeliverEventNotLoaded(t *testing.T) {
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
@@ -219,7 +219,7 @@ func TestLuaHost_DeliverEvent_NotLoaded(t *testing.T) {
 	assert.Error(t, err, "expected error when delivering to nonexistent plugin")
 }
 
-func TestLuaHost_Load_SyntaxError(t *testing.T) {
+func TestLuaHostLoadSyntaxError(t *testing.T) {
 	dir := t.TempDir()
 
 	// Invalid Lua syntax
@@ -239,7 +239,7 @@ func TestLuaHost_Load_SyntaxError(t *testing.T) {
 	assert.Error(t, err, "expected error when loading plugin with syntax error")
 }
 
-func TestLuaHost_Load_MissingFile(t *testing.T) {
+func TestLuaHostLoadMissingFile(t *testing.T) {
 	dir := t.TempDir()
 
 	host := pluginlua.NewHost()
@@ -256,7 +256,7 @@ func TestLuaHost_Load_MissingFile(t *testing.T) {
 	assert.Error(t, err, "expected error when loading plugin with missing file")
 }
 
-func TestLuaHost_Close(t *testing.T) {
+func TestLuaHostClose(t *testing.T) {
 	dir := t.TempDir()
 
 	writeMainLua(t, dir, `function on_event(event) return nil end`)
@@ -281,7 +281,7 @@ func TestLuaHost_Close(t *testing.T) {
 	assert.Error(t, err, "expected error when loading after close")
 }
 
-func TestLuaHost_DeliverEvent_RuntimeError(t *testing.T) {
+func TestLuaHostDeliverEventRuntimeError(t *testing.T) {
 	dir := t.TempDir()
 
 	// Plugin that throws a runtime error
@@ -467,7 +467,7 @@ end
 	}
 }
 
-func TestLuaHost_DeliverEvent_MalformedEmitEvents(t *testing.T) {
+func TestLuaHostDeliverEventMalformedEmitEvents(t *testing.T) {
 	dir := t.TempDir()
 
 	// Plugin that returns a mix of valid and invalid emit events
@@ -513,7 +513,7 @@ end
 	assert.Equal(t, "valid:2", emits[1].Stream)
 }
 
-func TestLuaHost_DeliverEvent_AfterClose(t *testing.T) {
+func TestLuaHostDeliverEventAfterClose(t *testing.T) {
 	dir := t.TempDir()
 
 	writeMainLua(t, dir, `function on_event(event) return nil end`)
@@ -539,7 +539,7 @@ func TestLuaHost_DeliverEvent_AfterClose(t *testing.T) {
 	assert.Error(t, err, "expected error when delivering after close")
 }
 
-func TestLuaHost_DeliverEvent_AllFields(t *testing.T) {
+func TestLuaHostDeliverEventAllFields(t *testing.T) {
 	dir := t.TempDir()
 
 	// Plugin that verifies all event fields are accessible
@@ -587,7 +587,7 @@ end
 	assert.Equal(t, expected, emits[0].Payload)
 }
 
-func TestLuaHost_WithHostFunctions(t *testing.T) {
+func TestLuaHostWithHostFunctions(t *testing.T) {
 	dir := t.TempDir()
 
 	mainLua := `
@@ -633,7 +633,7 @@ end
 	}
 }
 
-func TestLuaHost_NewHostWithFunctions_NilPanics(t *testing.T) {
+func TestLuaHostNewHostWithFunctionsNilPanics(t *testing.T) {
 	defer func() {
 		r := recover()
 		require.NotNil(t, r, "expected panic when hostFuncs is nil")
@@ -646,7 +646,7 @@ func TestLuaHost_NewHostWithFunctions_NilPanics(t *testing.T) {
 	_ = pluginlua.NewHostWithFunctions(nil)
 }
 
-func TestLuaHost_DeliverEvent_OnCommand_CommandEvent(t *testing.T) {
+func TestLuaHostDeliverEventOnCommandCommandEvent(t *testing.T) {
 	dir := t.TempDir()
 
 	// Plugin with on_command handler that echoes context fields
@@ -698,7 +698,7 @@ end
 	assert.Equal(t, "location:01LOC", emits[0].Stream)
 }
 
-func TestLuaHost_DeliverEvent_OnCommand_FallbackToOnEvent(t *testing.T) {
+func TestLuaHostDeliverEventOnCommandFallbackToOnEvent(t *testing.T) {
 	dir := t.TempDir()
 
 	// Plugin with only on_event (no on_command)
@@ -745,7 +745,7 @@ end
 	assert.Equal(t, "fell_back_to_on_event", emits[0].Payload)
 }
 
-func TestLuaHost_DeliverEvent_OnCommand_NonCommandEventUsesOnEvent(t *testing.T) {
+func TestLuaHostDeliverEventOnCommandNonCommandEventUsesOnEvent(t *testing.T) {
 	dir := t.TempDir()
 
 	// Plugin with both on_command and on_event
@@ -798,7 +798,7 @@ end
 	assert.Equal(t, "on_event_called", emits[0].Payload)
 }
 
-func TestLuaHost_DeliverEvent_OnCommand_EmptyArgs(t *testing.T) {
+func TestLuaHostDeliverEventOnCommandEmptyArgs(t *testing.T) {
 	dir := t.TempDir()
 
 	mainLua := `
@@ -843,7 +843,7 @@ end
 	assert.Equal(t, "args=EMPTY", emits[0].Payload)
 }
 
-func TestLuaHost_DeliverEvent_OnCommand_InvalidPayload(t *testing.T) {
+func TestLuaHostDeliverEventOnCommandInvalidPayload(t *testing.T) {
 	dir := t.TempDir()
 
 	mainLua := `
@@ -886,7 +886,7 @@ end
 	assert.Equal(t, "name=", emits[0].Payload)
 }
 
-func TestLuaHost_DeliverEvent_MalformedEmitEvents_WarnsOnNonTableEntry(t *testing.T) {
+func TestLuaHostDeliverEventMalformedEmitEventsWarnsOnNonTableEntry(t *testing.T) {
 	dir := t.TempDir()
 
 	// Plugin returns an array with non-table entries
@@ -940,7 +940,7 @@ end
 	assert.Contains(t, logOutput, "string", "expected type name in warning")
 }
 
-func TestLuaHost_DeliverEvent_MalformedEmitEvents_WarnsOnMissingStream(t *testing.T) {
+func TestLuaHostDeliverEventMalformedEmitEventsWarnsOnMissingStream(t *testing.T) {
 	dir := t.TempDir()
 
 	// Plugin returns event without stream field
@@ -995,7 +995,7 @@ end
 	assert.Contains(t, logOutput, "warn-missing-stream", "expected plugin name in warning")
 }
 
-func TestLuaHost_DeliverEvent_MalformedEmitEvents_WarnsOnMissingType(t *testing.T) {
+func TestLuaHostDeliverEventMalformedEmitEventsWarnsOnMissingType(t *testing.T) {
 	dir := t.TempDir()
 
 	// Plugin returns event without type field
@@ -1050,7 +1050,7 @@ end
 	assert.Contains(t, logOutput, "warn-missing-type", "expected plugin name in warning")
 }
 
-func TestLuaHost_DeliverEvent_ValidationErrorsLogged(t *testing.T) {
+func TestLuaHostDeliverEventValidationErrorsLogged(t *testing.T) {
 	dir := t.TempDir()
 
 	// Plugin with multiple validation failures
@@ -1117,7 +1117,7 @@ end
 	assert.Contains(t, logOutput, "entry[4]", "expected entry 4 error")
 }
 
-func TestLuaHost_DeliverCommand_StringReturn(t *testing.T) {
+func TestLuaHostDeliverCommandStringReturn(t *testing.T) {
 	dir := t.TempDir()
 
 	writeMainLua(t, dir, `
@@ -1154,7 +1154,7 @@ end
 	assert.Equal(t, "Hello from say Hello everyone!", resp.Output)
 }
 
-func TestLuaHost_DeliverCommand_TableReturn(t *testing.T) {
+func TestLuaHostDeliverCommandTableReturn(t *testing.T) {
 	dir := t.TempDir()
 
 	writeMainLua(t, dir, `
@@ -1205,7 +1205,7 @@ end
 	assert.Equal(t, "Hello!", resp.Events[0].Payload)
 }
 
-func TestLuaHost_DeliverCommand_PluginNotFound(t *testing.T) {
+func TestLuaHostDeliverCommandPluginNotFound(t *testing.T) {
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
@@ -1216,7 +1216,7 @@ func TestLuaHost_DeliverCommand_PluginNotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "plugin not loaded")
 }
 
-func TestLuaHost_DeliverCommand_NoHandler(t *testing.T) {
+func TestLuaHostDeliverCommandNoHandler(t *testing.T) {
 	dir := t.TempDir()
 
 	writeMainLua(t, dir, `x = 1`)
@@ -1243,7 +1243,7 @@ func TestLuaHost_DeliverCommand_NoHandler(t *testing.T) {
 	assert.Empty(t, resp.Output)
 }
 
-func TestLuaHost_DeliverCommand_AfterClose(t *testing.T) {
+func TestLuaHostDeliverCommandAfterClose(t *testing.T) {
 	dir := t.TempDir()
 
 	writeMainLua(t, dir, `function on_command(ctx) return "ok" end`)
@@ -1270,7 +1270,7 @@ func TestLuaHost_DeliverCommand_AfterClose(t *testing.T) {
 	assert.Contains(t, err.Error(), "host is closed")
 }
 
-func TestLuaHost_DeliverCommand_NilReturn(t *testing.T) {
+func TestLuaHostDeliverCommandNilReturn(t *testing.T) {
 	dir := t.TempDir()
 
 	writeMainLua(t, dir, `
@@ -1301,7 +1301,7 @@ end
 	assert.Empty(t, resp.Output)
 }
 
-func TestLuaHost_DeliverCommand_ErrorStatus(t *testing.T) {
+func TestLuaHostDeliverCommandErrorStatus(t *testing.T) {
 	dir := t.TempDir()
 
 	writeMainLua(t, dir, `
@@ -1395,7 +1395,7 @@ func TestLuaHost_DeliverCommand_FailureModes(t *testing.T) {
 	}
 }
 
-func TestLuaHost_DeliverCommand_AllContextFields(t *testing.T) {
+func TestLuaHostDeliverCommandAllContextFields(t *testing.T) {
 	dir := t.TempDir()
 
 	writeMainLua(t, dir, `
@@ -1435,7 +1435,7 @@ end
 	assert.Equal(t, "say|Hello!|01CHAR|Alice|01LOC|01SESS|01PLAYER|;", resp.Output)
 }
 
-func TestLuaHost_DeliverCommand_WithHostFunctions(t *testing.T) {
+func TestLuaHostDeliverCommandWithHostFunctions(t *testing.T) {
 	dir := t.TempDir()
 
 	writeMainLua(t, dir, `

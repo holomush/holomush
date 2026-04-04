@@ -13,7 +13,7 @@ import (
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 )
 
-func TestStateFactory_NewState_LoadsSafeLibraries(t *testing.T) {
+func TestStateFactoryNewStateLoadsSafeLibraries(t *testing.T) {
 	factory := pluginlua.NewStateFactory()
 	L, err := factory.NewState(context.Background())
 	require.NoError(t, err, "NewState() failed")
@@ -26,7 +26,7 @@ func TestStateFactory_NewState_LoadsSafeLibraries(t *testing.T) {
 	}
 }
 
-func TestStateFactory_NewState_BlocksUnsafeLibraries(t *testing.T) {
+func TestStateFactoryNewStateBlocksUnsafeLibraries(t *testing.T) {
 	factory := pluginlua.NewStateFactory()
 	L, err := factory.NewState(context.Background())
 	require.NoError(t, err, "NewState() failed")
@@ -39,7 +39,7 @@ func TestStateFactory_NewState_BlocksUnsafeLibraries(t *testing.T) {
 	}
 }
 
-func TestStateFactory_NewState_CanExecuteLua(t *testing.T) {
+func TestStateFactoryNewStateCanExecuteLua(t *testing.T) {
 	factory := pluginlua.NewStateFactory()
 	L, err := factory.NewState(context.Background())
 	require.NoError(t, err, "NewState() failed")
@@ -52,7 +52,7 @@ func TestStateFactory_NewState_CanExecuteLua(t *testing.T) {
 	assert.Equal(t, "2", result.String())
 }
 
-func TestStateFactory_NewState_CanUseStringLibrary(t *testing.T) {
+func TestStateFactoryNewStateCanUseStringLibrary(t *testing.T) {
 	factory := pluginlua.NewStateFactory()
 	L, err := factory.NewState(context.Background())
 	require.NoError(t, err, "NewState() failed")
@@ -65,7 +65,7 @@ func TestStateFactory_NewState_CanUseStringLibrary(t *testing.T) {
 	assert.Equal(t, "HELLO", result.String())
 }
 
-func TestStateFactory_NewState_CanUseTableLibrary(t *testing.T) {
+func TestStateFactoryNewStateCanUseTableLibrary(t *testing.T) {
 	factory := pluginlua.NewStateFactory()
 	L, err := factory.NewState(context.Background())
 	require.NoError(t, err, "NewState() failed")
@@ -82,7 +82,7 @@ func TestStateFactory_NewState_CanUseTableLibrary(t *testing.T) {
 	assert.Equal(t, "1", result.String())
 }
 
-func TestStateFactory_NewState_CanUseMathLibrary(t *testing.T) {
+func TestStateFactoryNewStateCanUseMathLibrary(t *testing.T) {
 	factory := pluginlua.NewStateFactory()
 	L, err := factory.NewState(context.Background())
 	require.NoError(t, err, "NewState() failed")
@@ -95,7 +95,7 @@ func TestStateFactory_NewState_CanUseMathLibrary(t *testing.T) {
 	assert.Equal(t, "42", result.String())
 }
 
-func TestStateFactory_NewState_StateClose(t *testing.T) {
+func TestStateFactoryNewStateStateClose(t *testing.T) {
 	factory := pluginlua.NewStateFactory()
 	L, err := factory.NewState(context.Background())
 	require.NoError(t, err, "NewState() failed")
@@ -104,7 +104,7 @@ func TestStateFactory_NewState_StateClose(t *testing.T) {
 	L.Close()
 }
 
-func TestStateFactory_NewState_MultipleStates(t *testing.T) {
+func TestStateFactoryNewStateMultipleStates(t *testing.T) {
 	factory := pluginlua.NewStateFactory()
 
 	// Create multiple states - they should be independent
@@ -124,7 +124,7 @@ func TestStateFactory_NewState_MultipleStates(t *testing.T) {
 	assert.Equal(t, "nil", L2.GetGlobal("foo").Type().String(), "states should be independent - L2 should not have L1's variable")
 }
 
-func TestStateFactory_NewState_BlocksFilesystemFunctions(t *testing.T) {
+func TestStateFactoryNewStateBlocksFilesystemFunctions(t *testing.T) {
 	factory := pluginlua.NewStateFactory()
 	L, err := factory.NewState(context.Background())
 	require.NoError(t, err, "NewState() failed")

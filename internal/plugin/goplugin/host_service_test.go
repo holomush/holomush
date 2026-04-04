@@ -257,7 +257,7 @@ func TestPluginHostService_EmitEvent(t *testing.T) {
 	}
 }
 
-func TestPluginHostService_Log(t *testing.T) {
+func TestPluginHostServiceLog(t *testing.T) {
 	proxy := &mockServiceProxy{}
 	svc := NewPluginHostService(proxy, slog.Default())
 
@@ -369,7 +369,7 @@ func TestPluginHostService_KVDelete(t *testing.T) {
 	}
 }
 
-func TestNewPluginHostService_NilLogger(t *testing.T) {
+func TestNewPluginHostServiceNilLogger(t *testing.T) {
 	proxy := &mockServiceProxy{}
 	svc := NewPluginHostService(proxy, nil)
 	assert.NotNil(t, svc)

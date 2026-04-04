@@ -14,7 +14,7 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 )
 
-func TestValidateSchema_ValidLuaManifest(t *testing.T) {
+func TestValidateSchemaValidLuaManifest(t *testing.T) {
 	yaml := `
 name: echo-bot
 version: 1.0.0
@@ -29,7 +29,7 @@ lua-plugin:
 	assert.NoError(t, err)
 }
 
-func TestValidateSchema_ValidBinaryManifest(t *testing.T) {
+func TestValidateSchemaValidBinaryManifest(t *testing.T) {
 	yaml := `
 name: combat-system
 version: 2.1.0
@@ -43,7 +43,7 @@ binary-plugin:
 	assert.NoError(t, err)
 }
 
-func TestValidateSchema_NameTooLong(t *testing.T) {
+func TestValidateSchemaNameTooLong(t *testing.T) {
 	// 65 characters - one over the 64 char limit (boundary test)
 	yaml := `
 name: a2345678901234567890123456789012345678901234567890123456789012345
@@ -56,7 +56,7 @@ lua-plugin:
 	assert.Error(t, err, "ValidateSchema() expected error for name exceeding 64 chars")
 }
 
-func TestValidateSchema_NameExactlyMaxLength(t *testing.T) {
+func TestValidateSchemaNameExactlyMaxLength(t *testing.T) {
 	// Exactly 64 characters - should be valid (boundary test)
 	yaml := `
 name: a234567890123456789012345678901234567890123456789012345678901234
@@ -186,7 +186,7 @@ lua-plugin:
 	}
 }
 
-func TestValidateSchema_InvalidType(t *testing.T) {
+func TestValidateSchemaInvalidType(t *testing.T) {
 	yaml := `
 name: test
 version: 1.0.0
@@ -298,7 +298,7 @@ func TestFormatSchemaError(t *testing.T) {
 	}
 }
 
-func TestValidateSchema_InvalidYAML(t *testing.T) {
+func TestValidateSchemaInvalidYAML(t *testing.T) {
 	yaml := `name: test
 version: 1.0.0
 type: [invalid`
@@ -306,7 +306,7 @@ type: [invalid`
 	assert.Error(t, err, "ValidateSchema() expected error for invalid YAML")
 }
 
-func TestValidateSchema_WithEngineField(t *testing.T) {
+func TestValidateSchemaWithEngineField(t *testing.T) {
 	yaml := `
 name: test-plugin
 version: 1.0.0
@@ -319,7 +319,7 @@ lua-plugin:
 	assert.NoError(t, err, "ValidateSchema() for manifest with engine field")
 }
 
-func TestValidateSchema_WithDependenciesField(t *testing.T) {
+func TestValidateSchemaWithDependenciesField(t *testing.T) {
 	yaml := `
 name: test-plugin
 version: 1.0.0
@@ -334,7 +334,7 @@ lua-plugin:
 	assert.NoError(t, err, "ValidateSchema() for manifest with dependencies field")
 }
 
-func TestValidateSchema_WithAllOptionalFields(t *testing.T) {
+func TestValidateSchemaWithAllOptionalFields(t *testing.T) {
 	yaml := `
 name: full-plugin
 version: 1.0.0
@@ -356,7 +356,7 @@ lua-plugin:
 	assert.NoError(t, err, "ValidateSchema() for manifest with all optional fields")
 }
 
-func TestGenerateSchema_ContainsRequiredFields(t *testing.T) {
+func TestGenerateSchemaContainsRequiredFields(t *testing.T) {
 	schema, err := plugins.GenerateSchema()
 	require.NoError(t, err)
 
@@ -395,7 +395,7 @@ lua-plugin:
 	}
 }
 
-func TestValidateSchema_Policies(t *testing.T) {
+func TestValidateSchemaPolicies(t *testing.T) {
 	yaml := `
 name: test
 version: 1.0.0
@@ -420,7 +420,7 @@ lua-plugin:
 	assert.NoError(t, err)
 }
 
-func TestValidateSchema_Events(t *testing.T) {
+func TestValidateSchemaEvents(t *testing.T) {
 	yaml := `
 name: test
 version: 1.0.0
@@ -438,7 +438,7 @@ lua-plugin:
 	assert.NoError(t, err)
 }
 
-func TestGetSchemaID_Format(t *testing.T) {
+func TestGetSchemaIDFormat(t *testing.T) {
 	id := plugins.GetSchemaID()
 
 	// Should be a URI-like string

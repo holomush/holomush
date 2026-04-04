@@ -10,7 +10,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 )
 
-func TestSharedRegistry_DefaultsSharedWithCommand(t *testing.T) {
+func TestSharedRegistryDefaultsSharedWithCommand(t *testing.T) {
 	funcs := New(nil)
 	services := command.NewTestServices(command.ServicesConfig{})
 

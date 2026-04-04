@@ -53,7 +53,7 @@ func coreManifest(name string) *plugins.Manifest {
 
 // --- Tests ---
 
-func TestLocalPluginHost_DeliverCommand(t *testing.T) {
+func TestLocalPluginHostDeliverCommand(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-say", &echoCommandHandler{}, nil)
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-say"), ""))
@@ -66,7 +66,7 @@ func TestLocalPluginHost_DeliverCommand(t *testing.T) {
 	assert.Equal(t, "echo: hello world", resp.Output)
 }
 
-func TestLocalPluginHost_DeliverEvent(t *testing.T) {
+func TestLocalPluginHostDeliverEvent(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-notify", nil, &echoEventHandler{})
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-notify"), ""))
@@ -82,7 +82,7 @@ func TestLocalPluginHost_DeliverEvent(t *testing.T) {
 	assert.Equal(t, pluginsdk.EventTypeSay, emits[0].Type)
 }
 
-func TestLocalPluginHost_DeliverCommand_NoHandler(t *testing.T) {
+func TestLocalPluginHostDeliverCommandNoHandler(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-notify", nil, &echoEventHandler{})
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-notify"), ""))
@@ -92,7 +92,7 @@ func TestLocalPluginHost_DeliverCommand_NoHandler(t *testing.T) {
 	assert.ErrorIs(t, err, plugins.ErrNoCommandHandler)
 }
 
-func TestLocalPluginHost_DeliverEvent_NoHandler(t *testing.T) {
+func TestLocalPluginHostDeliverEventNoHandler(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-say", &echoCommandHandler{}, nil)
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-say"), ""))
@@ -102,7 +102,7 @@ func TestLocalPluginHost_DeliverEvent_NoHandler(t *testing.T) {
 	assert.ErrorIs(t, err, plugins.ErrNoEventHandler)
 }
 
-func TestLocalPluginHost_Load_NonCoreManifest(t *testing.T) {
+func TestLocalPluginHostLoadNonCoreManifest(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 
 	m := &plugins.Manifest{
@@ -118,7 +118,7 @@ func TestLocalPluginHost_Load_NonCoreManifest(t *testing.T) {
 	assert.Contains(t, err.Error(), "only accepts core plugins")
 }
 
-func TestLocalPluginHost_Load_NoRegisteredHandler(t *testing.T) {
+func TestLocalPluginHostLoadNoRegisteredHandler(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 
 	err := host.Load(context.Background(), coreManifest("unknown-plugin"), "")
@@ -126,14 +126,14 @@ func TestLocalPluginHost_Load_NoRegisteredHandler(t *testing.T) {
 	assert.ErrorIs(t, err, plugins.ErrHandlerNotRegistered)
 }
 
-func TestLocalPluginHost_Load_NilManifest(t *testing.T) {
+func TestLocalPluginHostLoadNilManifest(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	err := host.Load(context.Background(), nil, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "manifest cannot be nil")
 }
 
-func TestLocalPluginHost_Load_Duplicate(t *testing.T) {
+func TestLocalPluginHostLoadDuplicate(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-say", &echoCommandHandler{}, nil)
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-say"), ""))
@@ -143,7 +143,7 @@ func TestLocalPluginHost_Load_Duplicate(t *testing.T) {
 	assert.Contains(t, err.Error(), "already loaded")
 }
 
-func TestLocalPluginHost_Unload(t *testing.T) {
+func TestLocalPluginHostUnload(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-say", &echoCommandHandler{}, nil)
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-say"), ""))
@@ -157,14 +157,14 @@ func TestLocalPluginHost_Unload(t *testing.T) {
 	assert.ErrorIs(t, err, plugins.ErrPluginNotLoaded)
 }
 
-func TestLocalPluginHost_Unload_NotLoaded(t *testing.T) {
+func TestLocalPluginHostUnloadNotLoaded(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	err := host.Unload(context.Background(), "nonexistent")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, plugins.ErrPluginNotLoaded)
 }
 
-func TestLocalPluginHost_Plugins(t *testing.T) {
+func TestLocalPluginHostPlugins(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-a", &echoCommandHandler{}, nil)
 	host.RegisterHandler("core-b", nil, &echoEventHandler{})
@@ -177,7 +177,7 @@ func TestLocalPluginHost_Plugins(t *testing.T) {
 	assert.Contains(t, names, "core-b")
 }
 
-func TestLocalPluginHost_Close(t *testing.T) {
+func TestLocalPluginHostClose(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-say", &echoCommandHandler{}, nil)
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-say"), ""))
@@ -204,27 +204,27 @@ func TestLocalPluginHost_Close(t *testing.T) {
 	assert.Nil(t, host.Plugins())
 }
 
-func TestLocalPluginHost_Close_Idempotent(t *testing.T) {
+func TestLocalPluginHostCloseIdempotent(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	require.NoError(t, host.Close(context.Background()))
 	require.NoError(t, host.Close(context.Background()))
 }
 
-func TestLocalPluginHost_DeliverCommand_NotLoaded(t *testing.T) {
+func TestLocalPluginHostDeliverCommandNotLoaded(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	_, err := host.DeliverCommand(context.Background(), "missing", pluginsdk.CommandRequest{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, plugins.ErrPluginNotLoaded)
 }
 
-func TestLocalPluginHost_DeliverEvent_NotLoaded(t *testing.T) {
+func TestLocalPluginHostDeliverEventNotLoaded(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	_, err := host.DeliverEvent(context.Background(), "missing", pluginsdk.Event{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, plugins.ErrPluginNotLoaded)
 }
 
-func TestLocalPluginHost_HandlerError_Propagated(t *testing.T) {
+func TestLocalPluginHostHandlerErrorPropagated(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-fail", &failingCommandHandler{}, nil)
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-fail"), ""))
@@ -234,7 +234,7 @@ func TestLocalPluginHost_HandlerError_Propagated(t *testing.T) {
 	assert.Contains(t, err.Error(), "handler error")
 }
 
-func TestLocalPluginHost_ConcurrentAccess(t *testing.T) {
+func TestLocalPluginHostConcurrentAccess(t *testing.T) {
 	host := plugins.NewLocalPluginHost(pluginmocks.NewMockServiceProxy(t))
 	host.RegisterHandler("core-say", &echoCommandHandler{}, &echoEventHandler{})
 	require.NoError(t, host.Load(context.Background(), coreManifest("core-say"), ""))

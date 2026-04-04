@@ -64,7 +64,7 @@ func (h *otelTestHarness) shutdown(t *testing.T) {
 
 // --- HostMiddleware tests ---
 
-func TestHostMiddleware_DeliverCommand_Success(t *testing.T) {
+func TestHostMiddlewareDeliverCommandSuccess(t *testing.T) {
 	h := newOTelTestHarness()
 	defer h.shutdown(t)
 
@@ -97,7 +97,7 @@ func TestHostMiddleware_DeliverCommand_Success(t *testing.T) {
 	assertCounterValue(t, rm, "plugin_events_emitted_total", 1)
 }
 
-func TestHostMiddleware_DeliverCommand_Error(t *testing.T) {
+func TestHostMiddlewareDeliverCommandError(t *testing.T) {
 	h := newOTelTestHarness()
 	defer h.shutdown(t)
 
@@ -121,7 +121,7 @@ func TestHostMiddleware_DeliverCommand_Error(t *testing.T) {
 	assertCounterValue(t, rm, "plugin_errors_total", 1)
 }
 
-func TestHostMiddleware_DeliverEvent_Success(t *testing.T) {
+func TestHostMiddlewareDeliverEventSuccess(t *testing.T) {
 	h := newOTelTestHarness()
 	defer h.shutdown(t)
 
@@ -153,7 +153,7 @@ func TestHostMiddleware_DeliverEvent_Success(t *testing.T) {
 	assertCounterValue(t, rm, "plugin_events_emitted_total", 2)
 }
 
-func TestHostMiddleware_DeliverEvent_Error(t *testing.T) {
+func TestHostMiddlewareDeliverEventError(t *testing.T) {
 	h := newOTelTestHarness()
 	defer h.shutdown(t)
 
@@ -173,7 +173,7 @@ func TestHostMiddleware_DeliverEvent_Error(t *testing.T) {
 	assertCounterValue(t, rm, "plugin_event_errors_total", 1)
 }
 
-func TestHostMiddleware_Passthrough(t *testing.T) {
+func TestHostMiddlewarePassthrough(t *testing.T) {
 	h := newOTelTestHarness()
 	defer h.shutdown(t)
 
@@ -194,7 +194,7 @@ func TestHostMiddleware_Passthrough(t *testing.T) {
 
 // --- ServiceProxyMiddleware tests ---
 
-func TestServiceProxyMiddleware_QueryLocation(t *testing.T) {
+func TestServiceProxyMiddlewareQueryLocation(t *testing.T) {
 	h := newOTelTestHarness()
 	defer h.shutdown(t)
 
@@ -220,7 +220,7 @@ func TestServiceProxyMiddleware_QueryLocation(t *testing.T) {
 	assertCounterValue(t, rm, "plugin_service_calls_total", 1)
 }
 
-func TestServiceProxyMiddleware_Error(t *testing.T) {
+func TestServiceProxyMiddlewareError(t *testing.T) {
 	h := newOTelTestHarness()
 	defer h.shutdown(t)
 
@@ -243,7 +243,7 @@ func TestServiceProxyMiddleware_Error(t *testing.T) {
 	assertCounterValue(t, rm, "plugin_service_errors_total", 1)
 }
 
-func TestServiceProxyMiddleware_MultipleOperations(t *testing.T) {
+func TestServiceProxyMiddlewareMultipleOperations(t *testing.T) {
 	h := newOTelTestHarness()
 	defer h.shutdown(t)
 
