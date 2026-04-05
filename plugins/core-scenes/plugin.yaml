@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: core-scenes
+version: 1.0.0
+type: binary
+
+requires:
+  - holomush.world.v1.WorldService
+
+provides:
+  - holomush.scene.v1.SceneService
+
+storage: postgres
+
+binary-plugin:
+  executable: core-scenes
+
+commands:
+  - name: scene
+    capabilities:
+      - action: write
+        resource: scene
+        scope: local
+    help: "Manage RP scenes"
+    usage: "scene <subcommand> [args]"
+
+  - name: scenes
+    help: "Browse open scenes"
+    usage: "scenes [--tags tag1,tag2]"
