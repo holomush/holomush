@@ -8,7 +8,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServiceQueryCharacterRequest, PluginHostServiceQueryCharacterResponse, PluginHostServiceQueryLocationCharactersRequest, PluginHostServiceQueryLocationCharactersResponse, PluginHostServiceQueryLocationRequest, PluginHostServiceQueryLocationResponse } from "./plugin_pb.js";
+import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse } from "./plugin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -60,46 +60,13 @@ export const PluginService = {
 
 /**
  * PluginHostService runs in the host process, allowing binary plugins
- * to call back for world queries, KV storage, and session operations.
+ * to call back for event emission, logging, and KV storage.
  *
  * @generated from service holomush.plugin.v1.PluginHostService
  */
 export const PluginHostService = {
   typeName: "holomush.plugin.v1.PluginHostService",
   methods: {
-    /**
-     * QueryLocation retrieves a location by ID.
-     *
-     * @generated from rpc holomush.plugin.v1.PluginHostService.QueryLocation
-     */
-    queryLocation: {
-      name: "QueryLocation",
-      I: PluginHostServiceQueryLocationRequest,
-      O: PluginHostServiceQueryLocationResponse,
-      kind: MethodKind.Unary,
-    },
-    /**
-     * QueryCharacter retrieves a character by ID.
-     *
-     * @generated from rpc holomush.plugin.v1.PluginHostService.QueryCharacter
-     */
-    queryCharacter: {
-      name: "QueryCharacter",
-      I: PluginHostServiceQueryCharacterRequest,
-      O: PluginHostServiceQueryCharacterResponse,
-      kind: MethodKind.Unary,
-    },
-    /**
-     * QueryLocationCharacters returns all characters present at a location.
-     *
-     * @generated from rpc holomush.plugin.v1.PluginHostService.QueryLocationCharacters
-     */
-    queryLocationCharacters: {
-      name: "QueryLocationCharacters",
-      I: PluginHostServiceQueryLocationCharactersRequest,
-      O: PluginHostServiceQueryLocationCharactersResponse,
-      kind: MethodKind.Unary,
-    },
     /**
      * EmitEvent publishes an event to a stream.
      *

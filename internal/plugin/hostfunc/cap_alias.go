@@ -19,7 +19,7 @@ type AliasEntry struct {
 
 // AliasAccess is the narrow interface required by AliasCapability.
 // It covers the alias operations needed by the capability module without
-// exposing the full ServiceProxy surface.
+// exposing the full host service surface.
 type AliasAccess interface {
 	// SetPlayerAlias creates or updates a player alias.
 	SetPlayerAlias(ctx context.Context, playerID, alias, command string) error

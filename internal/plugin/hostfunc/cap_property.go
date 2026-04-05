@@ -10,7 +10,7 @@ import (
 )
 
 // PropertyInfo carries a single property entry for use within the hostfunc package.
-// It mirrors the property types used by ServiceProxy to avoid cross-package coupling
+// It mirrors the property types used by the host service to avoid cross-package coupling
 // in the narrow-interface layer.
 type PropertyInfo struct {
 	Name       string
@@ -22,7 +22,7 @@ type PropertyInfo struct {
 
 // PropertyAccess is the narrow interface required by PropertyCapability.
 // It covers the property operations needed by the capability module without
-// exposing the full ServiceProxy surface.
+// exposing the full host service surface.
 type PropertyAccess interface {
 	// ListPropertiesByParent returns all properties owned by a parent entity.
 	ListPropertiesByParent(ctx context.Context, subjectID, parentType, parentID string) ([]PropertyInfo, error)

@@ -23,7 +23,7 @@ type SessionInfo struct {
 
 // SessionAccess is the narrow interface required by SessionCapability.
 // It covers the session operations needed by the capability module without
-// exposing the full session.Access or ServiceProxy surface.
+// exposing the full session or host service surface.
 type SessionAccess interface {
 	// FindSessionByName returns the active session for a character by name (case-insensitive).
 	// Returns nil, nil when no session is found.

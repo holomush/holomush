@@ -23,7 +23,6 @@ const (
 )
 
 // CommandRequest carries context for a plugin command invocation.
-// Service access comes through the ServiceProxy, not this struct.
 type CommandRequest struct {
 	Command       string // parsed command name: "say", "dig"
 	Args          string // everything after the command name
