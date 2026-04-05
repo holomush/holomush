@@ -2041,6 +2041,7 @@ Task 10 + Task 11 → Task 12 (E2E) → Task 13 (Full suite)
 ```
 
 **Parallelizable groups:**
+
 - Tasks 1-3 (WorldService path) can run in parallel with Tasks 4-6 (injection path) and Tasks 7-9 (scene data path)
 - Task 10 depends on 5, 7-9
 - Task 11 depends on 3, 4, 6

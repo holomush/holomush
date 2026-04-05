@@ -27,8 +27,8 @@ func NewCapabilityRegistry() *CapabilityRegistry {
 }
 
 // Register associates a proto service name with a capability module.
-func (r *CapabilityRegistry) Register(serviceName string, cap Capability) {
-	r.modules[serviceName] = cap
+func (r *CapabilityRegistry) Register(serviceName string, capModule Capability) {
+	r.modules[serviceName] = capModule
 }
 
 // Get returns the capability for a service name, or nil.
@@ -39,10 +39,10 @@ func (r *CapabilityRegistry) Get(serviceName string) Capability {
 // InjectRequired registers capability modules into the Lua state
 // for each service in the requires list. Unknown services are silently
 // skipped — the plugin manager validates requires before loading.
-func (r *CapabilityRegistry) InjectRequired(L *lua.LState, requires []string, pluginName string) {
+func (r *CapabilityRegistry) InjectRequired(L *lua.LState, requires []string, pluginName string) { //nolint:gocritic // L is conventional gopher-lua parameter name
 	for _, svc := range requires {
-		if cap, ok := r.modules[svc]; ok {
-			cap.Register(L, pluginName)
+		if capModule, ok := r.modules[svc]; ok {
+			capModule.Register(L, pluginName)
 		}
 	}
 }

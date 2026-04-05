@@ -17,6 +17,7 @@
 ## Scope
 
 ### In scope
+
 1. Delete dead ServiceProxy layer: interface, impl, scoped wrapper, OTel wrapper, mock, tests
 2. Delete dead LocalPluginHost and tests
 3. Delete dead old BinaryPluginHost (not goplugin.Host) and tests
@@ -27,6 +28,7 @@
 8. Fix resulting lint issues
 
 ### Out of scope (future work)
+
 - Proto code generator for Lua bindings (needs its own design)
 - Dynamic plugin reload (needs design for in-flight request handling)
 - Full admin command set (reload/disable/enable need dynamic reload)
@@ -93,6 +95,7 @@ Remove the dead ServiceProxy interface, implementation, wrappers, and all tests.
 Run: `cd /Volumes/Code/github.com/holomush/holomush_worktrees/plugin-arch && rg 'ServiceProxy' --type go -l | grep -v _test.go | grep -v mock_ | grep -v parity | grep -v local_host | grep -v scoped_proxy | grep -v otel_service | grep -v binary_host`
 
 Verify the only production references are:
+
 - `service_proxy.go` (the interface itself)
 - `service_proxy_impl.go` (the implementation)
 - `setup/subsystem.go` (creates it — will be cleaned in Task 3)
@@ -169,6 +172,7 @@ rm internal/plugin/parity_test.go
 ```
 
 If `otel_middleware_test.go` only tests dead code, also delete it:
+
 ```bash
 rm internal/plugin/otel_middleware_test.go
 ```
@@ -200,6 +204,7 @@ Clean up the subsystem and server code that creates and wires the now-deleted Se
 - [ ] **Step 1: Read current subsystem.go to identify ServiceProxy references**
 
 In `internal/plugin/setup/subsystem.go`, find:
+
 - The `proxy` field on `PluginSubsystem` struct
 - The `NewServiceProxy()` call in `Start()`
 - The `ServiceProxy()` accessor method
@@ -210,11 +215,13 @@ In `internal/plugin/setup/subsystem.go`, find:
 - [ ] **Step 2: Remove proxy field, creation, and accessor**
 
 Remove from `PluginSubsystem`:
+
 ```go
 proxy *plugins.ServiceProxyImpl  // DELETE this field
 ```
 
 Remove from `Start()`:
+
 ```go
 // DELETE this block:
 proxy, proxyErr := plugins.NewServiceProxy(plugins.ServiceProxyConfig{...})
@@ -231,11 +238,13 @@ Remove `EventStoreProvider` if only used by ServiceProxy.
 - [ ] **Step 3: Remove from sub_grpc.go**
 
 Remove:
+
 ```go
 serviceProxy := s.cfg.Plugins.ServiceProxy()  // DELETE
 ```
 
 Remove:
+
 ```go
 serviceProxy.SetLateBindings(plugins.LateBindingsConfig{...})  // DELETE entire block
 ```
@@ -279,6 +288,7 @@ Binary plugins now use WorldService directly. Remove the duplicate world-query R
 - [ ] **Step 1: Remove world-query RPCs and messages from plugin.proto**
 
 In `api/proto/holomush/plugin/v1/plugin.proto`, delete:
+
 - `rpc QueryLocation(...)` from `PluginHostService`
 - `rpc QueryCharacter(...)` from `PluginHostService`
 - `rpc QueryLocationCharacters(...)` from `PluginHostService`
@@ -297,6 +307,7 @@ Run: `task proto`
 Remove the `QueryLocation`, `QueryCharacter`, `QueryLocationCharacters` methods and the `characterResultToProto` helper.
 
 Update `PluginHostService` to no longer depend on `ServiceProxy` — it only needs:
+
 - `EmitEvent` → needs an event emitter (could be `core.EventStore.Append` or a narrow interface)
 - `Log` → logger
 - `KV*` → KV store
@@ -313,6 +324,7 @@ type PluginHostService struct {
 ```
 
 Where `EventEmitter` is:
+
 ```go
 type EventEmitter interface {
     EmitEvent(ctx context.Context, stream, eventType string, payload []byte) error
@@ -369,7 +381,8 @@ func TestPluginListCommandReturnsLoadedPlugins(t *testing.T) {
 - [ ] **Step 3: Implement plugin list**
 
 The `plugin list` command should output:
-```
+
+```text
 Loaded plugins:
   core-communication  lua      1.0.0  ✓ healthy
   core-building       lua      1.0.0  ✓ healthy
@@ -390,7 +403,8 @@ func TestPluginInfoCommandReturnsPluginDetails(t *testing.T) {
 - [ ] **Step 5: Implement plugin info**
 
 The `plugin info <name>` command should output:
-```
+
+```text
 Plugin: core-scenes
 Version: 1.0.0
 Type: binary

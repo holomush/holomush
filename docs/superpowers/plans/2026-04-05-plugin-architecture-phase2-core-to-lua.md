@@ -405,6 +405,7 @@ Test that the module registers the expected functions in the Lua namespace.
 - [ ] **Step 2: Implement session capability module**
 
 The module wraps `plugins.SessionAccess` (from `internal/plugin/service_proxy.go`) and registers functions like:
+
 - `session.find_by_name(name)` → `{character_id, character_name, location_id, last_whispered}`
 - `session.list_active()` → array of session objects
 - `session.broadcast(message)` → nil
@@ -429,6 +430,7 @@ Adds missing alias hostfunc bindings.
 - [ ] **Step 2: Implement alias capability module**
 
 Functions:
+
 - `alias.set_player(player_id, alias, command)` → nil/error
 - `alias.delete_player(player_id, alias)` → nil/error
 - `alias.list_player(player_id)` → array of `{alias, command}`
@@ -455,6 +457,7 @@ Adds missing property hostfunc bindings.
 - [ ] **Step 2: Implement property capability module**
 
 Functions:
+
 - `property.list_by_parent(subject_id, parent_type, parent_id)` → array of `{name, value, visibility}`
 - `property.find_by_prefix(prefix)` → array of property definitions
 - `property.update_character_description(subject_id, character_id, description)` → nil/error
@@ -477,6 +480,7 @@ Adds missing world query bindings.
 - [ ] **Step 2: Implement world query capability module**
 
 Functions:
+
 - `world.get_objects_by_location(subject_id, location_id)` → array of objects
 - `world.get_characters_by_location(subject_id, location_id)` → array of characters
 
@@ -551,9 +555,11 @@ Remove `plugins/core-help/plugin.go`.
 - [ ] **Step 4: Remove RegisterHandler call from subsystem setup**
 
 In `internal/plugin/setup/subsystem.go`, remove:
+
 ```go
 localHost.RegisterHandler("core-help", &corehelp.Handler{}, nil)
 ```
+
 And the `corehelp` import.
 
 - [ ] **Step 5: Run E2E tests to verify help command still works**

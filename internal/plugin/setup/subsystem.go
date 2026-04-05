@@ -149,7 +149,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		Conn:       worldConn,
 		PluginType: plugins.TypeServerInternal(),
 	}); regErr != nil {
-		_ = worldConn.Close()
+		_ = worldConn.Close() //nolint:errcheck // best-effort cleanup on registration failure
 		return oops.Code("WORLD_SERVICE_REGISTER_FAILED").Wrap(regErr)
 	}
 

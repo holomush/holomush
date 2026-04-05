@@ -1700,6 +1700,7 @@ Use `WithServiceRegistry(registry)` when creating the Manager.
 - [ ] **Step 4: Remove explicit core plugin handler registration**
 
 Remove the lines:
+
 ```go
 localHost.RegisterHandler("core-aliases", &corealiases.Handler{}, nil)
 localHost.RegisterHandler("core-building", &corebuilding.Handler{}, nil)

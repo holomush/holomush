@@ -33,7 +33,7 @@ func NewInProcessConn(srv *grpc.Server) (*InProcessConn, error) {
 		// Serve returns when the server is stopped. Ignore the error — it is
 		// always non-nil (typically "use of closed network connection") after
 		// lis.Close().
-		_ = srv.Serve(lis)
+		_ = srv.Serve(lis) //nolint:errcheck // always non-nil after lis.Close(); no meaningful action
 	}()
 
 	dialer := func(ctx context.Context, _ string) (net.Conn, error) {
@@ -46,7 +46,7 @@ func NewInProcessConn(srv *grpc.Server) (*InProcessConn, error) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()), //nosemgrep: go.grpc.tls.grpc-client-new-insecure-connection.grpc-client-new-insecure-connection
 	)
 	if err != nil {
-		_ = lis.Close()
+		_ = lis.Close() //nolint:errcheck // best-effort cleanup on dial failure
 		return nil, oops.Wrap(err)
 	}
 
@@ -55,12 +55,12 @@ func NewInProcessConn(srv *grpc.Server) (*InProcessConn, error) {
 
 // Invoke delegates to the underlying ClientConn, satisfying grpc.ClientConnInterface.
 func (c *InProcessConn) Invoke(ctx context.Context, method string, args, reply any, opts ...grpc.CallOption) error {
-	return c.conn.Invoke(ctx, method, args, reply, opts...)
+	return c.conn.Invoke(ctx, method, args, reply, opts...) //nolint:wrapcheck // pass-through delegation to underlying ClientConn
 }
 
 // NewStream delegates to the underlying ClientConn, satisfying grpc.ClientConnInterface.
 func (c *InProcessConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-	return c.conn.NewStream(ctx, desc, method, opts...)
+	return c.conn.NewStream(ctx, desc, method, opts...) //nolint:wrapcheck // pass-through delegation to underlying ClientConn
 }
 
 // Close shuts down the client connection and the in-memory listener.

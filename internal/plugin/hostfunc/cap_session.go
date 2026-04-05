@@ -59,7 +59,7 @@ func (c *SessionCapability) Namespace() string {
 }
 
 // Register injects the session.* functions into the Lua state as a global table.
-func (c *SessionCapability) Register(L *lua.LState, pluginName string) {
+func (c *SessionCapability) Register(L *lua.LState, pluginName string) { //nolint:gocritic // L is conventional gopher-lua parameter name
 	tbl := L.NewTable()
 	L.SetField(tbl, "find_by_name", L.NewFunction(c.findByNameFn(pluginName)))
 	L.SetField(tbl, "set_last_whispered", L.NewFunction(c.setLastWhisperedFn(pluginName)))
@@ -202,7 +202,7 @@ func (c *SessionCapability) disconnectFn(pluginName string) lua.LGFunction {
 }
 
 // luaContext returns the context from the Lua state, falling back to Background.
-func luaContext(L *lua.LState) context.Context {
+func luaContext(L *lua.LState) context.Context { //nolint:gocritic // L is conventional gopher-lua parameter name
 	if ctx := L.Context(); ctx != nil {
 		return ctx
 	}

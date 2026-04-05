@@ -64,7 +64,7 @@ func (c *WorldQueryCapability) Namespace() string {
 }
 
 // Register injects the world_ext.* functions into the Lua state as a global table.
-func (c *WorldQueryCapability) Register(L *lua.LState, pluginName string) {
+func (c *WorldQueryCapability) Register(L *lua.LState, pluginName string) { //nolint:gocritic // L is conventional gopher-lua parameter name
 	tbl := L.NewTable()
 	L.SetField(tbl, "get_objects_by_location", L.NewFunction(c.getObjectsByLocationFn(pluginName)))
 	L.SetField(tbl, "get_characters_by_location", L.NewFunction(c.getCharactersByLocationFn(pluginName)))

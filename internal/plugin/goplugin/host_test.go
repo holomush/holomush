@@ -1257,6 +1257,6 @@ func TestPluginConnReturnsErrorWhenNoConnection(t *testing.T) {
 	assert.Contains(t, err.Error(), "no gRPC connection")
 }
 
-func TestHostImplementsServiceConnProvider(t *testing.T) {
+func TestHostImplementsServiceConnProvider(_ *testing.T) {
 	var _ plugins.ServiceConnProvider = (*Host)(nil)
 }

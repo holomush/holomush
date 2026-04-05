@@ -54,7 +54,7 @@ func (c *PropertyCapability) Namespace() string {
 }
 
 // Register injects the property.* functions into the Lua state as a global table.
-func (c *PropertyCapability) Register(L *lua.LState, pluginName string) {
+func (c *PropertyCapability) Register(L *lua.LState, pluginName string) { //nolint:gocritic // L is conventional gopher-lua parameter name
 	tbl := L.NewTable()
 	L.SetField(tbl, "list_by_parent", L.NewFunction(c.listByParentFn(pluginName)))
 	L.SetField(tbl, "find_by_prefix", L.NewFunction(c.findByPrefixFn(pluginName)))

@@ -29,6 +29,7 @@ const (
 // StorageType declares the persistence tier a plugin requires.
 type StorageType string
 
+// Storage type constants declare the persistence tier a plugin requires.
 const (
 	StorageKV       StorageType = "kv"       // KV store only (default)
 	StoragePostgres StorageType = "postgres" // schema-isolated PostgreSQL

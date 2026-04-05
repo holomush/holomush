@@ -56,10 +56,10 @@ func (m *mockWorldQueryAccess) GetCharactersByLocation(_ context.Context, subjec
 
 func newCapWorldQueryState(t *testing.T, wq hostfunc.WorldQueryAccess) *lua.LState {
 	t.Helper()
-	cap := hostfunc.NewWorldQueryCapability(wq)
+	worldCap := hostfunc.NewWorldQueryCapability(wq)
 	L := lua.NewState()
 	t.Cleanup(func() { L.Close() })
-	cap.Register(L, "test-plugin")
+	worldCap.Register(L, "test-plugin")
 	return L
 }
 
@@ -68,8 +68,8 @@ func newCapWorldQueryState(t *testing.T, wq hostfunc.WorldQueryAccess) *lua.LSta
 // =============================================================================
 
 func TestWorldQueryCapabilityNamespaceReturnsWorldExt(t *testing.T) {
-	cap := hostfunc.NewWorldQueryCapability(nil)
-	assert.Equal(t, "world_ext", cap.Namespace())
+	worldCap := hostfunc.NewWorldQueryCapability(nil)
+	assert.Equal(t, "world_ext", worldCap.Namespace())
 }
 
 // =============================================================================

@@ -29,10 +29,10 @@ func (p *GRPCServiceProxy) Handler() grpc.ServerOption {
 	return grpc.UnknownServiceHandler(p.streamHandler)
 }
 
-func (p *GRPCServiceProxy) streamHandler(srv interface{}, stream grpc.ServerStream) error {
+func (p *GRPCServiceProxy) streamHandler(_ interface{}, stream grpc.ServerStream) error {
 	method, ok := grpc.MethodFromServerStream(stream)
 	if !ok {
-		return status.Error(codes.Internal, "failed to get method from stream")
+		return status.Error(codes.Internal, "failed to get method from stream") //nolint:wrapcheck // transparent gRPC proxy returns status errors directly
 	}
 
 	serviceName := extractServiceName(method)
@@ -86,7 +86,7 @@ func proxyStreams(srv grpc.ServerStream, cli grpc.ClientStream) error {
 		for {
 			msg := &rawMessage{}
 			if err := srv.RecvMsg(msg); err != nil {
-				_ = cli.CloseSend()
+				_ = cli.CloseSend() //nolint:errcheck // best-effort close on proxy teardown
 				errCh <- nil // EOF or error from client side
 				return
 			}
@@ -102,11 +102,11 @@ func proxyStreams(srv grpc.ServerStream, cli grpc.ClientStream) error {
 		msg := &rawMessage{}
 		if err := cli.RecvMsg(msg); err != nil {
 			<-errCh
-			return err // includes io.EOF which signals normal completion
+			return err //nolint:wrapcheck // transparent gRPC proxy forwards errors as-is
 		}
 		if err := srv.SendMsg(msg); err != nil {
 			<-errCh
-			return err
+			return err //nolint:wrapcheck // transparent gRPC proxy forwards errors as-is
 		}
 	}
 }

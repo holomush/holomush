@@ -64,7 +64,7 @@ func (c *AliasCapability) Namespace() string {
 }
 
 // Register injects the alias.* functions into the Lua state as a global table.
-func (c *AliasCapability) Register(L *lua.LState, pluginName string) {
+func (c *AliasCapability) Register(L *lua.LState, pluginName string) { //nolint:gocritic // L is conventional gopher-lua parameter name
 	tbl := L.NewTable()
 	L.SetField(tbl, "set_player", L.NewFunction(c.setPlayerFn(pluginName)))
 	L.SetField(tbl, "delete_player", L.NewFunction(c.deletePlayerFn(pluginName)))

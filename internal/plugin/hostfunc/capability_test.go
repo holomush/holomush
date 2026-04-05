@@ -44,7 +44,7 @@ func TestCapabilityRegistry(t *testing.T) {
 		assert.Equal(t, lua.LNil, L.GetGlobal("b"))
 	})
 
-	t.Run("skips unknown services without error", func(t *testing.T) {
+	t.Run("skips unknown services without error", func(_ *testing.T) {
 		reg := NewCapabilityRegistry()
 
 		L := lua.NewState()

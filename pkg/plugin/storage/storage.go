@@ -107,6 +107,6 @@ func parseMigrationVersion(name string) int {
 		return 0
 	}
 	var v int
-	_, _ = fmt.Sscanf(parts[0], "%d", &v)
+	_, _ = fmt.Sscanf(parts[0], "%d", &v) //nolint:errcheck // parse failure leaves v=0, which is the desired fallback
 	return v
 }

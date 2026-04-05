@@ -107,10 +107,10 @@ func (m *mockAliasAccess) ListSystemAliases(_ context.Context) ([]hostfunc.Alias
 
 func newCapAliasState(t *testing.T, aa hostfunc.AliasAccess) *lua.LState {
 	t.Helper()
-	cap := hostfunc.NewAliasCapability(aa)
+	aliasCap := hostfunc.NewAliasCapability(aa)
 	L := lua.NewState()
 	t.Cleanup(func() { L.Close() })
-	cap.Register(L, "test-plugin")
+	aliasCap.Register(L, "test-plugin")
 	return L
 }
 
@@ -119,8 +119,8 @@ func newCapAliasState(t *testing.T, aa hostfunc.AliasAccess) *lua.LState {
 // =============================================================================
 
 func TestAliasCapabilityNamespaceReturnsAlias(t *testing.T) {
-	cap := hostfunc.NewAliasCapability(nil)
-	assert.Equal(t, "alias", cap.Namespace())
+	aliasCap := hostfunc.NewAliasCapability(nil)
+	assert.Equal(t, "alias", aliasCap.Namespace())
 }
 
 // =============================================================================

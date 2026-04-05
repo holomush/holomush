@@ -80,10 +80,10 @@ func (m *mockPropertyAccess) UpdateCharacterDescription(_ context.Context, subje
 
 func newCapPropertyState(t *testing.T, pa hostfunc.PropertyAccess) *lua.LState {
 	t.Helper()
-	cap := hostfunc.NewPropertyCapability(pa)
+	propCap := hostfunc.NewPropertyCapability(pa)
 	L := lua.NewState()
 	t.Cleanup(func() { L.Close() })
-	cap.Register(L, "test-plugin")
+	propCap.Register(L, "test-plugin")
 	return L
 }
 
@@ -92,8 +92,8 @@ func newCapPropertyState(t *testing.T, pa hostfunc.PropertyAccess) *lua.LState {
 // =============================================================================
 
 func TestPropertyCapabilityNamespaceReturnsProperty(t *testing.T) {
-	cap := hostfunc.NewPropertyCapability(nil)
-	assert.Equal(t, "property", cap.Namespace())
+	propCap := hostfunc.NewPropertyCapability(nil)
+	assert.Equal(t, "property", propCap.Namespace())
 }
 
 // =============================================================================

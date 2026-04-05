@@ -78,10 +78,10 @@ func (m *mockCapSessionAccess) DisconnectSession(_ context.Context, sessionID, r
 
 func newCapSessionState(t *testing.T, sa hostfunc.SessionAccess) *lua.LState {
 	t.Helper()
-	cap := hostfunc.NewSessionCapability(sa)
+	sessCap := hostfunc.NewSessionCapability(sa)
 	L := lua.NewState()
 	t.Cleanup(func() { L.Close() })
-	cap.Register(L, "test-plugin")
+	sessCap.Register(L, "test-plugin")
 	return L
 }
 
@@ -90,8 +90,8 @@ func newCapSessionState(t *testing.T, sa hostfunc.SessionAccess) *lua.LState {
 // =============================================================================
 
 func TestSessionCapabilityNamespaceReturnsSession(t *testing.T) {
-	cap := hostfunc.NewSessionCapability(nil)
-	assert.Equal(t, "session", cap.Namespace())
+	sessCap := hostfunc.NewSessionCapability(nil)
+	assert.Equal(t, "session", sessCap.Namespace())
 }
 
 // =============================================================================
