@@ -16,9 +16,9 @@ import (
 )
 
 // scenePlugin implements Handler, CommandHandler, and ServiceProvider for the
-// core-scenes binary plugin. It is created uninitialised in main(); the host
-// calls Init via gRPC to supply the database connection string before any
-// game traffic arrives.
+// core-scenes binary plugin. The service field is pre-allocated in main() so
+// that RegisterServices (called during gRPC server setup, before Init) has a
+// valid receiver. Init wires the store into both scenePlugin and the service.
 type scenePlugin struct {
 	store   *SceneStore
 	service *SceneServiceImpl
@@ -61,7 +61,7 @@ func (p *scenePlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig) 
 	}
 
 	p.store = store
-	p.service = NewSceneServiceImpl(store)
+	p.service.store = store
 
 	slog.Info("core-scenes plugin initialised",
 		"storage", "postgres",
@@ -70,7 +70,9 @@ func (p *scenePlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig) 
 }
 
 func main() {
-	plugin := &scenePlugin{}
+	plugin := &scenePlugin{
+		service: &SceneServiceImpl{},
+	}
 
 	pluginsdk.ServeWithServices(
 		&pluginsdk.ServeConfig{Handler: plugin},

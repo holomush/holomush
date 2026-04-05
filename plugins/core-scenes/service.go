@@ -82,6 +82,15 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		poseOrder = poseOrderFree
 	}
 
+	contentWarnings := req.GetContentWarnings()
+	if contentWarnings == nil {
+		contentWarnings = []string{}
+	}
+	tags := req.GetTags()
+	if tags == nil {
+		tags = []string{}
+	}
+
 	row := &SceneRow{
 		ID:              sceneID,
 		Title:           req.GetTitle(),
@@ -91,8 +100,8 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		State:           stateActive,
 		PoseOrder:       poseOrder,
 		Visibility:      visibility,
-		ContentWarnings: req.GetContentWarnings(),
-		Tags:            req.GetTags(),
+		ContentWarnings: contentWarnings,
+		Tags:            tags,
 		CreatedAt:       now,
 	}
 
