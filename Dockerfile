@@ -19,6 +19,9 @@ COPY holomush .
 # Copy plugins so bootstrap can discover setting/core plugins
 COPY --chown=holomush:holomush plugins/ /home/holomush/.local/share/holomush/plugins/
 
+# Copy compiled binary plugins (overwrites plugin dirs with compiled binaries + manifests)
+COPY --chown=holomush:holomush build/plugins/ /home/holomush/.local/share/holomush/plugins/
+
 # Expose ports
 # Telnet
 EXPOSE 4201

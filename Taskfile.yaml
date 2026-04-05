@@ -142,16 +142,26 @@ tasks:
     cmds:
       - go build -o {{.BINARY_NAME}} {{.MAIN_PKG}}
 
+  plugin:build-all:
+    desc: Discover and compile all binary plugins for linux/amd64
+    cmds:
+      - ./scripts/build-plugins.sh
+
+  plugin:build:
+    desc: Build a single binary plugin (pass name after --)
+    cmds:
+      - ./scripts/build-plugins.sh {{.CLI_ARGS}}
+
   docker:build:
     desc: Build Docker image from locally-compiled Linux binary
-    deps: ['web:embed']
+    deps: ['web:embed', 'plugin:build-all']
     cmds:
       - CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o holomush {{.MAIN_PKG}}
       - docker build -t holomush .
 
   docker:build:cover:
     desc: Build Docker image with coverage instrumentation
-    deps: ['web:embed']
+    deps: ['web:embed', 'plugin:build-all']
     cmds:
       - CGO_ENABLED=0 GOOS=linux go build -cover -o holomush {{.MAIN_PKG}}
       - docker build -t holomush .
@@ -407,6 +417,8 @@ tasks:
           fi
       - echo "▸ Checking license headers..."
       - task: license:check
+      - echo "▸ Building binary plugins..."
+      - task: plugin:build-all
       - echo "▸ Running linters..."
       - task: lint
       - echo "▸ Checking formatting..."
@@ -534,6 +546,7 @@ tasks:
     desc: Clean build artifacts
     cmds:
       - rm -rf dist/
+      - rm -rf build/
       - rm -f {{.BINARY_NAME}}
       - rm -f coverage.out coverage.html
       - rm -rf web/build
