@@ -1,0 +1,133 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.scene.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/scene/v1;scenev1";
+
+service SceneService {
+  rpc ListScenes(ListScenesRequest) returns (ListScenesResponse);
+  rpc GetScene(GetSceneRequest) returns (GetSceneResponse);
+  rpc CreateScene(CreateSceneRequest) returns (CreateSceneResponse);
+  rpc EndScene(EndSceneRequest) returns (EndSceneResponse);
+  rpc JoinScene(JoinSceneRequest) returns (JoinSceneResponse);
+  rpc LeaveScene(LeaveSceneRequest) returns (LeaveSceneResponse);
+  rpc InviteToScene(InviteToSceneRequest) returns (InviteToSceneResponse);
+  rpc CastPublishVote(CastPublishVoteRequest) returns (CastPublishVoteResponse);
+  rpc GetPoseOrder(GetPoseOrderRequest) returns (GetPoseOrderResponse);
+}
+
+message SceneInfo {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  string location_id = 4;
+  string owner_id = 5;
+  string state = 6;
+  string pose_order_mode = 7;
+  repeated string content_warnings = 8;
+  repeated string tags = 9;
+  string visibility = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp ended_at = 12;
+  repeated ParticipantInfo participants = 13;
+}
+
+message ParticipantInfo {
+  string character_id = 1;
+  string character_name = 2;
+  string role = 3;
+  google.protobuf.Timestamp joined_at = 4;
+}
+
+message ListScenesRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+  repeated string tags = 3;
+}
+
+message ListScenesResponse {
+  repeated SceneInfo scenes = 1;
+}
+
+message GetSceneRequest {
+  string session_id = 1;
+  string scene_id = 2;
+}
+
+message GetSceneResponse {
+  SceneInfo scene = 1;
+}
+
+message CreateSceneRequest {
+  string session_id = 1;
+  string title = 2;
+  string description = 3;
+  string location_id = 4;
+  string visibility = 5;
+  string pose_order_mode = 6;
+  repeated string tags = 7;
+  repeated string content_warnings = 8;
+}
+
+message CreateSceneResponse {
+  SceneInfo scene = 1;
+}
+
+message EndSceneRequest {
+  string session_id = 1;
+  string scene_id = 2;
+}
+
+message EndSceneResponse {}
+
+message JoinSceneRequest {
+  string session_id = 1;
+  string scene_id = 2;
+}
+
+message JoinSceneResponse {}
+
+message LeaveSceneRequest {
+  string session_id = 1;
+  string scene_id = 2;
+}
+
+message LeaveSceneResponse {}
+
+message InviteToSceneRequest {
+  string session_id = 1;
+  string scene_id = 2;
+  string character_id = 3;
+}
+
+message InviteToSceneResponse {}
+
+message CastPublishVoteRequest {
+  string session_id = 1;
+  string scene_id = 2;
+  bool vote = 3;
+}
+
+message CastPublishVoteResponse {}
+
+message GetPoseOrderRequest {
+  string session_id = 1;
+  string scene_id = 2;
+}
+
+message PoseOrderEntry {
+  string character_id = 1;
+  string character_name = 2;
+  google.protobuf.Timestamp last_posed_at = 3;
+  bool is_eligible = 4;
+}
+
+message GetPoseOrderResponse {
+  string mode = 1;
+  repeated PoseOrderEntry entries = 2;
+}
