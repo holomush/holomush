@@ -67,12 +67,22 @@ func (f *DefaultClientFactory) NewClient(execPath string) PluginClient {
 	})
 }
 
+// HostOption configures a Host during construction.
+type HostOption func(*Host)
+
+// WithSchemaProvisioner configures the host to provision per-plugin Postgres
+// schemas for binary plugins that declare storage: postgres.
+func WithSchemaProvisioner(p *plugins.SchemaProvisioner) HostOption {
+	return func(h *Host) { h.schemaProvisioner = p }
+}
+
 // Host manages binary plugins via HashiCorp go-plugins.
 type Host struct {
-	clientFactory ClientFactory
-	plugins       map[string]*loadedPlugin
-	mu            sync.RWMutex
-	closed        bool
+	clientFactory     ClientFactory
+	schemaProvisioner *plugins.SchemaProvisioner
+	plugins           map[string]*loadedPlugin
+	mu                sync.RWMutex
+	closed            bool
 }
 
 // loadedPlugin holds state for a single loaded binary plugin.
@@ -83,20 +93,24 @@ type loadedPlugin struct {
 }
 
 // NewHost creates a new binary plugin host.
-func NewHost() *Host {
-	return NewHostWithFactory(&DefaultClientFactory{})
+func NewHost(opts ...HostOption) *Host {
+	return NewHostWithFactory(&DefaultClientFactory{}, opts...)
 }
 
 // NewHostWithFactory creates a host with a custom client factory (for testing).
 // Panics if factory is nil.
-func NewHostWithFactory(factory ClientFactory) *Host {
+func NewHostWithFactory(factory ClientFactory, opts ...HostOption) *Host {
 	if factory == nil {
 		panic("goplugin: factory cannot be nil")
 	}
-	return &Host{
+	h := &Host{
 		clientFactory: factory,
 		plugins:       make(map[string]*loadedPlugin),
 	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 // Load initializes a plugin from its manifest.
@@ -178,6 +192,27 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 	if !ok {
 		client.Kill()
 		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").New("plugin does not implement PluginClient")
+	}
+
+	// Call Init on plugins that need service injection (storage or requires).
+	if len(manifest.Requires) > 0 || manifest.Storage == plugins.StoragePostgres {
+		initReq := &pluginv1.InitRequest{
+			Config: &pluginv1.ServiceConfig{},
+		}
+
+		if manifest.Storage == plugins.StoragePostgres && h.schemaProvisioner != nil {
+			connStr, provErr := h.schemaProvisioner.ProvisionSchema(ctx, manifest.Name)
+			if provErr != nil {
+				client.Kill()
+				return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "provision_schema").Wrap(provErr)
+			}
+			initReq.Config.ConnectionString = connStr
+		}
+
+		if _, initErr := pluginClient.Init(ctx, initReq); initErr != nil {
+			client.Kill()
+			return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "init").Wrap(initErr)
+		}
 	}
 
 	h.plugins[manifest.Name] = &loadedPlugin{
