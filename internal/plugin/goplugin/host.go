@@ -61,10 +61,14 @@ type DefaultClientFactory struct{}
 
 // NewClient creates a real go-plugin client.
 func (f *DefaultClientFactory) NewClient(execPath string) PluginClient {
+	cmd := exec.Command(execPath) // #nosec G204 -- nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command -- execPath resolved from plugin manifest; manifests validated during discovery (symlink-resolved, path-contained, executable-checked)
+	cmd.Env = []string{
+		"PATH=" + os.Getenv("PATH"),
+	}
 	return hashiplug.NewClient(&hashiplug.ClientConfig{
 		HandshakeConfig:  HandshakeConfig,
 		Plugins:          PluginMap,
-		Cmd:              exec.Command(execPath), // #nosec G204 -- execPath resolved from plugin manifest; manifests validated during discovery
+		Cmd:              cmd,
 		AllowedProtocols: []hashiplug.Protocol{hashiplug.ProtocolGRPC},
 	})
 }
