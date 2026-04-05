@@ -404,3 +404,52 @@ func TestManagerIsPluginLoaded(t *testing.T) {
 	m := plugins.NewManager("/nonexistent")
 	assert.False(t, m.IsPluginLoaded("echo-bot"), "no plugins loaded yet")
 }
+
+func TestManagerWithServiceRegistryReturnsConfiguredRegistry(t *testing.T) {
+	reg := plugins.NewServiceRegistry()
+	m := plugins.NewManager("/nonexistent", plugins.WithServiceRegistry(reg))
+	assert.Same(t, reg, m.Registry(), "Registry() should return the configured service registry")
+}
+
+func TestManagerRegistryReturnsNilWhenNotConfigured(t *testing.T) {
+	m := plugins.NewManager("/nonexistent")
+	assert.Nil(t, m.Registry(), "Registry() should return nil when no registry is configured")
+}
+
+func TestManagerLoadAllUsesDAGWhenRegistryConfigured(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	// Server pre-registers a service. A Lua consumer plugin requires it.
+	// The registry exposes the service name so DAG resolution can satisfy the
+	// Requires declaration without a plugin-to-plugin edge.
+	consumerDir := filepath.Join(pluginsDir, "consumer")
+	mkdirAll(t, consumerDir)
+	writeFile(t, filepath.Join(consumerDir, "plugin.yaml"), []byte(`name: consumer
+version: 1.0.0
+type: lua
+requires:
+  - holomush.test.v1.ServerService
+lua-plugin:
+  entry: main.lua`))
+	writeFile(t, filepath.Join(consumerDir, "main.lua"), []byte("function on_event(e) end"))
+
+	// Register the service as a server-internal service in the registry.
+	reg := plugins.NewServiceRegistry()
+	require.NoError(t, reg.Register(plugins.RegisteredService{
+		Name:       "holomush.test.v1.ServerService",
+		PluginName: "",
+		PluginType: "",
+	}))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithServiceRegistry(reg))
+	err := mgr.LoadAll(context.Background())
+	require.NoError(t, err, "LoadAll() with DAG resolution should succeed")
+
+	loaded := mgr.ListPlugins()
+	assert.Len(t, loaded, 1, "consumer plugin should be loaded")
+	assert.Contains(t, loaded, "consumer")
+}

@@ -24,6 +24,7 @@ type Manager struct {
 	hosts           map[Type]Host   // host registry keyed by plugin type
 	pluginHosts     map[string]Host // maps plugin name → owning host
 	policyInstaller PluginPolicyInstaller
+	registry        *ServiceRegistry // optional, enables DAG resolution
 	loaded          map[string]*DiscoveredPlugin
 	mu              sync.RWMutex
 }
@@ -43,6 +44,19 @@ func WithPolicyInstaller(pi PluginPolicyInstaller) ManagerOption {
 	return func(m *Manager) {
 		m.policyInstaller = pi
 	}
+}
+
+// WithServiceRegistry configures the manager to use DAG-based dependency
+// resolution via the provided service registry.
+func WithServiceRegistry(reg *ServiceRegistry) ManagerOption {
+	return func(m *Manager) {
+		m.registry = reg
+	}
+}
+
+// Registry returns the service registry, or nil if not configured.
+func (m *Manager) Registry() *ServiceRegistry {
+	return m.registry
 }
 
 // NewManager creates a plugin manager.
@@ -156,6 +170,11 @@ func (m *Manager) Discover(_ context.Context) ([]*DiscoveredPlugin, error) {
 // LoadAll discovers and loads all plugins in the plugins directory.
 // Invalid plugins are logged and skipped.
 //
+// When a ServiceRegistry is configured (via WithServiceRegistry), LoadAll uses
+// DAG-based dependency resolution to determine load order. If resolution fails
+// (e.g. circular dependency or unsatisfied requires), it falls back to priority
+// sort and logs a warning.
+//
 // Design: LoadAll uses graceful degradation - individual plugin failures are
 // logged as warnings but don't fail the entire load. This allows the server to
 // start even if some plugins have issues. Callers who need strict loading should
@@ -166,12 +185,9 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 		return err
 	}
 
-	// Sort by load priority (lower values load first).
-	sort.Slice(discovered, func(i, j int) bool {
-		return discovered[i].Manifest.EffectivePriority() < discovered[j].Manifest.EffectivePriority()
-	})
+	ordered := m.resolveLoadOrder(discovered)
 
-	for _, dp := range discovered {
+	for _, dp := range ordered {
 		if err := m.loadPlugin(ctx, dp); err != nil {
 			slog.Error("failed to load plugin",
 				"plugin", dp.Manifest.Name,
@@ -182,6 +198,32 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// resolveLoadOrder returns plugins in the order they should be loaded.
+// When a registry is configured, it uses DAG-based dependency resolution.
+// Falls back to priority sort if DAG resolution fails or no registry is set.
+func (m *Manager) resolveLoadOrder(discovered []*DiscoveredPlugin) []*DiscoveredPlugin {
+	if m.registry != nil {
+		serverServices := m.registry.List()
+		serverServiceNames := make([]string, 0, len(serverServices))
+		for _, svc := range serverServices {
+			serverServiceNames = append(serverServiceNames, svc.Name)
+		}
+
+		ordered, err := ResolveDependencyOrder(discovered, serverServiceNames)
+		if err == nil {
+			return ordered
+		}
+		slog.Warn("DAG dependency resolution failed, falling back to priority sort",
+			"error", err)
+	}
+
+	// Default: sort by load priority (lower values load first).
+	sort.Slice(discovered, func(i, j int) bool {
+		return discovered[i].Manifest.EffectivePriority() < discovered[j].Manifest.EffectivePriority()
+	})
+	return discovered
 }
 
 // loadPlugin loads a single discovered plugin.
