@@ -114,7 +114,7 @@ var validActions = map[string]bool{
 var validResourceTypes = map[string]bool{
 	"character": true, "location": true, "exit": true, "object": true,
 	"stream": true, "property": true, "scene": true, "command": true,
-	"server": true, "alias": true, "player": true,
+	"server": true, "alias": true, "player": true, "plugin": true,
 }
 
 // validScopes lists the known scope values.
