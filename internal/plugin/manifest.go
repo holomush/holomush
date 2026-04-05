@@ -27,6 +27,14 @@ const (
 	TypeSetting Type = "setting"
 )
 
+// StorageType declares the persistence tier a plugin requires.
+type StorageType string
+
+const (
+	StorageKV       StorageType = "kv"       // KV store only (default)
+	StoragePostgres StorageType = "postgres" // schema-isolated PostgreSQL
+)
+
 // LoadPriority determines plugin load order. Lower values load first.
 type LoadPriority int
 
@@ -60,6 +68,11 @@ type Manifest struct {
 	// Deprecated: capabilities field is no longer supported. Use policies instead.
 	// This field exists only to detect old-format manifests and produce a clear error.
 	Capabilities []string `yaml:"capabilities,omitempty" json:"-" jsonschema:"-"`
+
+	// Service contract declarations
+	Requires []string    `yaml:"requires,omitempty" json:"requires,omitempty"`
+	Provides []string    `yaml:"provides,omitempty" json:"provides,omitempty"`
+	Storage  StorageType `yaml:"storage,omitempty" json:"storage,omitempty"`
 }
 
 // EffectivePriority returns the manifest's load priority, applying a
@@ -278,6 +291,25 @@ func (m *Manifest) Validate() error {
 			return oops.In("manifest").With("plugin", m.Name).With("command", m.Commands[i].Name).New("duplicate command name")
 		}
 		seenCommands[m.Commands[i].Name] = true
+	}
+
+	// Validate provides — only binary plugins can provide services.
+	if len(m.Provides) > 0 && m.Type != TypeBinary {
+		return oops.Code("INVALID_PROVIDES").
+			With("plugin", m.Name).
+			Errorf("only binary plugins can provide services")
+	}
+
+	// Validate storage — postgres only for binary plugins.
+	if m.Storage == StoragePostgres && m.Type != TypeBinary {
+		return oops.Code("INVALID_STORAGE").
+			With("plugin", m.Name).
+			Errorf("postgres storage is only available for binary plugins")
+	}
+
+	// Default storage to KV if not specified.
+	if m.Storage == "" {
+		m.Storage = StorageKV
 	}
 
 	return nil

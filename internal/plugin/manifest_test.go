@@ -1509,3 +1509,112 @@ binary-plugin:
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "binary") || strings.Contains(err.Error(), "setting"))
 }
+
+func TestManifestRequiresProvides(t *testing.T) {
+	t.Run("parses requires and provides fields", func(t *testing.T) {
+		data := []byte(`
+name: test-plugin
+version: 1.0.0
+type: binary
+requires:
+  - holomush.world.v1.WorldService
+provides:
+  - holomush.scene.v1.SceneService
+binary-plugin:
+  executable: ./plugin
+commands:
+  - name: test
+    help: test command
+`)
+		m, err := plugins.ParseManifest(data)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"holomush.world.v1.WorldService"}, m.Requires)
+		assert.Equal(t, []string{"holomush.scene.v1.SceneService"}, m.Provides)
+	})
+
+	t.Run("rejects provides on lua plugins", func(t *testing.T) {
+		data := []byte(`
+name: test-plugin
+version: 1.0.0
+type: lua
+provides:
+  - holomush.scene.v1.SceneService
+lua-plugin:
+  entry: main.lua
+commands:
+  - name: test
+    help: test command
+`)
+		_, err := plugins.ParseManifest(data)
+		assert.Error(t, err)
+	})
+
+	t.Run("allows requires on lua plugins", func(t *testing.T) {
+		data := []byte(`
+name: test-plugin
+version: 1.0.0
+type: lua
+requires:
+  - holomush.world.v1.WorldService
+lua-plugin:
+  entry: main.lua
+commands:
+  - name: test
+    help: test command
+`)
+		m, err := plugins.ParseManifest(data)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"holomush.world.v1.WorldService"}, m.Requires)
+	})
+}
+
+func TestManifestStorage(t *testing.T) {
+	t.Run("parses storage field for binary plugins", func(t *testing.T) {
+		data := []byte(`
+name: test-plugin
+version: 1.0.0
+type: binary
+storage: postgres
+binary-plugin:
+  executable: ./plugin
+commands:
+  - name: test
+    help: test command
+`)
+		m, err := plugins.ParseManifest(data)
+		require.NoError(t, err)
+		assert.Equal(t, plugins.StoragePostgres, m.Storage)
+	})
+
+	t.Run("defaults storage to kv when not specified", func(t *testing.T) {
+		data := []byte(`
+name: test-plugin
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: ./plugin
+commands:
+  - name: test
+    help: test command
+`)
+		m, err := plugins.ParseManifest(data)
+		require.NoError(t, err)
+		assert.Equal(t, plugins.StorageKV, m.Storage)
+	})
+
+	t.Run("rejects postgres storage on lua plugins", func(t *testing.T) {
+		data := []byte(`
+name: test-plugin
+version: 1.0.0
+type: lua
+storage: postgres
+lua-plugin:
+  entry: main.lua
+commands:
+  - name: test
+    help: test command
+`)
+		_, err := plugins.ParseManifest(data)
+		assert.Error(t, err)
+	})
+}
