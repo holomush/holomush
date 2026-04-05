@@ -82,6 +82,153 @@ func (CommandStatus) EnumDescriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{0}
 }
 
+// ServiceConfig carries initialization data from the host to the plugin.
+type ServiceConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// PostgreSQL connection string (provided when the plugin declares storage: postgres).
+	ConnectionString string `protobuf:"bytes,1,opt,name=connection_string,json=connectionString,proto3" json:"connection_string,omitempty"`
+	// Addresses of required services, keyed by service name (future use).
+	RequiredServices map[string]string `protobuf:"bytes,2,rep,name=required_services,json=requiredServices,proto3" json:"required_services,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ServiceConfig) Reset() {
+	*x = ServiceConfig{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServiceConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServiceConfig) ProtoMessage() {}
+
+func (x *ServiceConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServiceConfig.ProtoReflect.Descriptor instead.
+func (*ServiceConfig) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ServiceConfig) GetConnectionString() string {
+	if x != nil {
+		return x.ConnectionString
+	}
+	return ""
+}
+
+func (x *ServiceConfig) GetRequiredServices() map[string]string {
+	if x != nil {
+		return x.RequiredServices
+	}
+	return nil
+}
+
+// InitRequest is sent by the host after connecting to the plugin process.
+type InitRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Service configuration for the plugin.
+	Config        *ServiceConfig `protobuf:"bytes,1,opt,name=config,proto3" json:"config,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InitRequest) Reset() {
+	*x = InitRequest{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InitRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InitRequest) ProtoMessage() {}
+
+func (x *InitRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InitRequest.ProtoReflect.Descriptor instead.
+func (*InitRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *InitRequest) GetConfig() *ServiceConfig {
+	if x != nil {
+		return x.Config
+	}
+	return nil
+}
+
+// InitResponse is returned by the plugin after initialization.
+type InitResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// gRPC service names this plugin provides on the go-plugin transport.
+	ProvidedServices []string `protobuf:"bytes,1,rep,name=provided_services,json=providedServices,proto3" json:"provided_services,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *InitResponse) Reset() {
+	*x = InitResponse{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InitResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InitResponse) ProtoMessage() {}
+
+func (x *InitResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InitResponse.ProtoReflect.Descriptor instead.
+func (*InitResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *InitResponse) GetProvidedServices() []string {
+	if x != nil {
+		return x.ProvidedServices
+	}
+	return nil
+}
+
 // Event represents a game event delivered to plugins.
 // Compatible with pkg/plugin.Event but uses protobuf types.
 type Event struct {
@@ -107,7 +254,7 @@ type Event struct {
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[0]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -119,7 +266,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[0]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -132,7 +279,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{0}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Event) GetId() string {
@@ -200,7 +347,7 @@ type EmitEvent struct {
 
 func (x *EmitEvent) Reset() {
 	*x = EmitEvent{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[1]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -212,7 +359,7 @@ func (x *EmitEvent) String() string {
 func (*EmitEvent) ProtoMessage() {}
 
 func (x *EmitEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[1]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -225,7 +372,7 @@ func (x *EmitEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EmitEvent.ProtoReflect.Descriptor instead.
 func (*EmitEvent) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{1}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *EmitEvent) GetStream() string {
@@ -260,7 +407,7 @@ type HandleEventRequest struct {
 
 func (x *HandleEventRequest) Reset() {
 	*x = HandleEventRequest{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[2]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -272,7 +419,7 @@ func (x *HandleEventRequest) String() string {
 func (*HandleEventRequest) ProtoMessage() {}
 
 func (x *HandleEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[2]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -285,7 +432,7 @@ func (x *HandleEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HandleEventRequest.ProtoReflect.Descriptor instead.
 func (*HandleEventRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{2}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *HandleEventRequest) GetEvent() *Event {
@@ -306,7 +453,7 @@ type HandleEventResponse struct {
 
 func (x *HandleEventResponse) Reset() {
 	*x = HandleEventResponse{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[3]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -318,7 +465,7 @@ func (x *HandleEventResponse) String() string {
 func (*HandleEventResponse) ProtoMessage() {}
 
 func (x *HandleEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[3]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -331,7 +478,7 @@ func (x *HandleEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HandleEventResponse.ProtoReflect.Descriptor instead.
 func (*HandleEventResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{3}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *HandleEventResponse) GetEmitEvents() []*EmitEvent {
@@ -366,7 +513,7 @@ type CommandRequest struct {
 
 func (x *CommandRequest) Reset() {
 	*x = CommandRequest{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[4]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -378,7 +525,7 @@ func (x *CommandRequest) String() string {
 func (*CommandRequest) ProtoMessage() {}
 
 func (x *CommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[4]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -391,7 +538,7 @@ func (x *CommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandRequest.ProtoReflect.Descriptor instead.
 func (*CommandRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{4}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CommandRequest) GetCommand() string {
@@ -465,7 +612,7 @@ type CommandResponse struct {
 
 func (x *CommandResponse) Reset() {
 	*x = CommandResponse{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[5]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -477,7 +624,7 @@ func (x *CommandResponse) String() string {
 func (*CommandResponse) ProtoMessage() {}
 
 func (x *CommandResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[5]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -490,7 +637,7 @@ func (x *CommandResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandResponse.ProtoReflect.Descriptor instead.
 func (*CommandResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{5}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CommandResponse) GetStatus() CommandStatus {
@@ -525,7 +672,7 @@ type HandleCommandRequest struct {
 
 func (x *HandleCommandRequest) Reset() {
 	*x = HandleCommandRequest{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[6]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -537,7 +684,7 @@ func (x *HandleCommandRequest) String() string {
 func (*HandleCommandRequest) ProtoMessage() {}
 
 func (x *HandleCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[6]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -550,7 +697,7 @@ func (x *HandleCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HandleCommandRequest.ProtoReflect.Descriptor instead.
 func (*HandleCommandRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{6}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *HandleCommandRequest) GetCommand() *CommandRequest {
@@ -571,7 +718,7 @@ type HandleCommandResponse struct {
 
 func (x *HandleCommandResponse) Reset() {
 	*x = HandleCommandResponse{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[7]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -583,7 +730,7 @@ func (x *HandleCommandResponse) String() string {
 func (*HandleCommandResponse) ProtoMessage() {}
 
 func (x *HandleCommandResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[7]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -596,7 +743,7 @@ func (x *HandleCommandResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HandleCommandResponse.ProtoReflect.Descriptor instead.
 func (*HandleCommandResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{7}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *HandleCommandResponse) GetResponse() *CommandResponse {
@@ -620,7 +767,7 @@ type PluginHostServiceLocationInfo struct {
 
 func (x *PluginHostServiceLocationInfo) Reset() {
 	*x = PluginHostServiceLocationInfo{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[8]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -632,7 +779,7 @@ func (x *PluginHostServiceLocationInfo) String() string {
 func (*PluginHostServiceLocationInfo) ProtoMessage() {}
 
 func (x *PluginHostServiceLocationInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[8]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -645,7 +792,7 @@ func (x *PluginHostServiceLocationInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginHostServiceLocationInfo.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceLocationInfo) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{8}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *PluginHostServiceLocationInfo) GetId() string {
@@ -697,7 +844,7 @@ type PluginHostServiceCharacterInfo struct {
 
 func (x *PluginHostServiceCharacterInfo) Reset() {
 	*x = PluginHostServiceCharacterInfo{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[9]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -709,7 +856,7 @@ func (x *PluginHostServiceCharacterInfo) String() string {
 func (*PluginHostServiceCharacterInfo) ProtoMessage() {}
 
 func (x *PluginHostServiceCharacterInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[9]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -722,7 +869,7 @@ func (x *PluginHostServiceCharacterInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginHostServiceCharacterInfo.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceCharacterInfo) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{9}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *PluginHostServiceCharacterInfo) GetId() string {
@@ -770,7 +917,7 @@ type PluginHostServiceQueryLocationRequest struct {
 
 func (x *PluginHostServiceQueryLocationRequest) Reset() {
 	*x = PluginHostServiceQueryLocationRequest{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[10]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -782,7 +929,7 @@ func (x *PluginHostServiceQueryLocationRequest) String() string {
 func (*PluginHostServiceQueryLocationRequest) ProtoMessage() {}
 
 func (x *PluginHostServiceQueryLocationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[10]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -795,7 +942,7 @@ func (x *PluginHostServiceQueryLocationRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use PluginHostServiceQueryLocationRequest.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceQueryLocationRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{10}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *PluginHostServiceQueryLocationRequest) GetSubjectId() string {
@@ -821,7 +968,7 @@ type PluginHostServiceQueryLocationResponse struct {
 
 func (x *PluginHostServiceQueryLocationResponse) Reset() {
 	*x = PluginHostServiceQueryLocationResponse{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[11]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -833,7 +980,7 @@ func (x *PluginHostServiceQueryLocationResponse) String() string {
 func (*PluginHostServiceQueryLocationResponse) ProtoMessage() {}
 
 func (x *PluginHostServiceQueryLocationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[11]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -846,7 +993,7 @@ func (x *PluginHostServiceQueryLocationResponse) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use PluginHostServiceQueryLocationResponse.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceQueryLocationResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{11}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *PluginHostServiceQueryLocationResponse) GetLocation() *PluginHostServiceLocationInfo {
@@ -866,7 +1013,7 @@ type PluginHostServiceQueryCharacterRequest struct {
 
 func (x *PluginHostServiceQueryCharacterRequest) Reset() {
 	*x = PluginHostServiceQueryCharacterRequest{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[12]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -878,7 +1025,7 @@ func (x *PluginHostServiceQueryCharacterRequest) String() string {
 func (*PluginHostServiceQueryCharacterRequest) ProtoMessage() {}
 
 func (x *PluginHostServiceQueryCharacterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[12]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -891,7 +1038,7 @@ func (x *PluginHostServiceQueryCharacterRequest) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use PluginHostServiceQueryCharacterRequest.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceQueryCharacterRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{12}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *PluginHostServiceQueryCharacterRequest) GetSubjectId() string {
@@ -917,7 +1064,7 @@ type PluginHostServiceQueryCharacterResponse struct {
 
 func (x *PluginHostServiceQueryCharacterResponse) Reset() {
 	*x = PluginHostServiceQueryCharacterResponse{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[13]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -929,7 +1076,7 @@ func (x *PluginHostServiceQueryCharacterResponse) String() string {
 func (*PluginHostServiceQueryCharacterResponse) ProtoMessage() {}
 
 func (x *PluginHostServiceQueryCharacterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[13]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -942,7 +1089,7 @@ func (x *PluginHostServiceQueryCharacterResponse) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use PluginHostServiceQueryCharacterResponse.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceQueryCharacterResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{13}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *PluginHostServiceQueryCharacterResponse) GetCharacter() *PluginHostServiceCharacterInfo {
@@ -962,7 +1109,7 @@ type PluginHostServiceQueryLocationCharactersRequest struct {
 
 func (x *PluginHostServiceQueryLocationCharactersRequest) Reset() {
 	*x = PluginHostServiceQueryLocationCharactersRequest{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[14]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -974,7 +1121,7 @@ func (x *PluginHostServiceQueryLocationCharactersRequest) String() string {
 func (*PluginHostServiceQueryLocationCharactersRequest) ProtoMessage() {}
 
 func (x *PluginHostServiceQueryLocationCharactersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[14]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -987,7 +1134,7 @@ func (x *PluginHostServiceQueryLocationCharactersRequest) ProtoReflect() protore
 
 // Deprecated: Use PluginHostServiceQueryLocationCharactersRequest.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceQueryLocationCharactersRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{14}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *PluginHostServiceQueryLocationCharactersRequest) GetSubjectId() string {
@@ -1013,7 +1160,7 @@ type PluginHostServiceQueryLocationCharactersResponse struct {
 
 func (x *PluginHostServiceQueryLocationCharactersResponse) Reset() {
 	*x = PluginHostServiceQueryLocationCharactersResponse{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[15]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1025,7 +1172,7 @@ func (x *PluginHostServiceQueryLocationCharactersResponse) String() string {
 func (*PluginHostServiceQueryLocationCharactersResponse) ProtoMessage() {}
 
 func (x *PluginHostServiceQueryLocationCharactersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[15]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1038,7 +1185,7 @@ func (x *PluginHostServiceQueryLocationCharactersResponse) ProtoReflect() protor
 
 // Deprecated: Use PluginHostServiceQueryLocationCharactersResponse.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceQueryLocationCharactersResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{15}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *PluginHostServiceQueryLocationCharactersResponse) GetCharacters() []*PluginHostServiceCharacterInfo {
@@ -1059,7 +1206,7 @@ type PluginHostServiceEmitEventRequest struct {
 
 func (x *PluginHostServiceEmitEventRequest) Reset() {
 	*x = PluginHostServiceEmitEventRequest{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[16]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1071,7 +1218,7 @@ func (x *PluginHostServiceEmitEventRequest) String() string {
 func (*PluginHostServiceEmitEventRequest) ProtoMessage() {}
 
 func (x *PluginHostServiceEmitEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[16]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1084,7 +1231,7 @@ func (x *PluginHostServiceEmitEventRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use PluginHostServiceEmitEventRequest.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceEmitEventRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{16}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *PluginHostServiceEmitEventRequest) GetStream() string {
@@ -1116,7 +1263,7 @@ type PluginHostServiceEmitEventResponse struct {
 
 func (x *PluginHostServiceEmitEventResponse) Reset() {
 	*x = PluginHostServiceEmitEventResponse{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[17]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1128,7 +1275,7 @@ func (x *PluginHostServiceEmitEventResponse) String() string {
 func (*PluginHostServiceEmitEventResponse) ProtoMessage() {}
 
 func (x *PluginHostServiceEmitEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[17]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1141,7 +1288,7 @@ func (x *PluginHostServiceEmitEventResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use PluginHostServiceEmitEventResponse.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceEmitEventResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{17}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{20}
 }
 
 type PluginHostServiceLogRequest struct {
@@ -1154,7 +1301,7 @@ type PluginHostServiceLogRequest struct {
 
 func (x *PluginHostServiceLogRequest) Reset() {
 	*x = PluginHostServiceLogRequest{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[18]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1166,7 +1313,7 @@ func (x *PluginHostServiceLogRequest) String() string {
 func (*PluginHostServiceLogRequest) ProtoMessage() {}
 
 func (x *PluginHostServiceLogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[18]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1179,7 +1326,7 @@ func (x *PluginHostServiceLogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginHostServiceLogRequest.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceLogRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{18}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *PluginHostServiceLogRequest) GetLevel() string {
@@ -1204,7 +1351,7 @@ type PluginHostServiceLogResponse struct {
 
 func (x *PluginHostServiceLogResponse) Reset() {
 	*x = PluginHostServiceLogResponse{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[19]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1216,7 +1363,7 @@ func (x *PluginHostServiceLogResponse) String() string {
 func (*PluginHostServiceLogResponse) ProtoMessage() {}
 
 func (x *PluginHostServiceLogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[19]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1229,7 +1376,7 @@ func (x *PluginHostServiceLogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginHostServiceLogResponse.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceLogResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{19}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{22}
 }
 
 type PluginHostServiceKVGetRequest struct {
@@ -1242,7 +1389,7 @@ type PluginHostServiceKVGetRequest struct {
 
 func (x *PluginHostServiceKVGetRequest) Reset() {
 	*x = PluginHostServiceKVGetRequest{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[20]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1254,7 +1401,7 @@ func (x *PluginHostServiceKVGetRequest) String() string {
 func (*PluginHostServiceKVGetRequest) ProtoMessage() {}
 
 func (x *PluginHostServiceKVGetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[20]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1267,7 +1414,7 @@ func (x *PluginHostServiceKVGetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginHostServiceKVGetRequest.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceKVGetRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{20}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *PluginHostServiceKVGetRequest) GetPluginName() string {
@@ -1294,7 +1441,7 @@ type PluginHostServiceKVGetResponse struct {
 
 func (x *PluginHostServiceKVGetResponse) Reset() {
 	*x = PluginHostServiceKVGetResponse{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[21]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1306,7 +1453,7 @@ func (x *PluginHostServiceKVGetResponse) String() string {
 func (*PluginHostServiceKVGetResponse) ProtoMessage() {}
 
 func (x *PluginHostServiceKVGetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[21]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1319,7 +1466,7 @@ func (x *PluginHostServiceKVGetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginHostServiceKVGetResponse.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceKVGetResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{21}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *PluginHostServiceKVGetResponse) GetValue() string {
@@ -1347,7 +1494,7 @@ type PluginHostServiceKVSetRequest struct {
 
 func (x *PluginHostServiceKVSetRequest) Reset() {
 	*x = PluginHostServiceKVSetRequest{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[22]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1359,7 +1506,7 @@ func (x *PluginHostServiceKVSetRequest) String() string {
 func (*PluginHostServiceKVSetRequest) ProtoMessage() {}
 
 func (x *PluginHostServiceKVSetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[22]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1372,7 +1519,7 @@ func (x *PluginHostServiceKVSetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginHostServiceKVSetRequest.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceKVSetRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{22}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *PluginHostServiceKVSetRequest) GetPluginName() string {
@@ -1404,7 +1551,7 @@ type PluginHostServiceKVSetResponse struct {
 
 func (x *PluginHostServiceKVSetResponse) Reset() {
 	*x = PluginHostServiceKVSetResponse{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[23]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1416,7 +1563,7 @@ func (x *PluginHostServiceKVSetResponse) String() string {
 func (*PluginHostServiceKVSetResponse) ProtoMessage() {}
 
 func (x *PluginHostServiceKVSetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[23]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1429,7 +1576,7 @@ func (x *PluginHostServiceKVSetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginHostServiceKVSetResponse.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceKVSetResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{23}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{26}
 }
 
 type PluginHostServiceKVDeleteRequest struct {
@@ -1442,7 +1589,7 @@ type PluginHostServiceKVDeleteRequest struct {
 
 func (x *PluginHostServiceKVDeleteRequest) Reset() {
 	*x = PluginHostServiceKVDeleteRequest{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[24]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1454,7 +1601,7 @@ func (x *PluginHostServiceKVDeleteRequest) String() string {
 func (*PluginHostServiceKVDeleteRequest) ProtoMessage() {}
 
 func (x *PluginHostServiceKVDeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[24]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1467,7 +1614,7 @@ func (x *PluginHostServiceKVDeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginHostServiceKVDeleteRequest.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceKVDeleteRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{24}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *PluginHostServiceKVDeleteRequest) GetPluginName() string {
@@ -1492,7 +1639,7 @@ type PluginHostServiceKVDeleteResponse struct {
 
 func (x *PluginHostServiceKVDeleteResponse) Reset() {
 	*x = PluginHostServiceKVDeleteResponse{}
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[25]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1504,7 +1651,7 @@ func (x *PluginHostServiceKVDeleteResponse) String() string {
 func (*PluginHostServiceKVDeleteResponse) ProtoMessage() {}
 
 func (x *PluginHostServiceKVDeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[25]
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1517,14 +1664,24 @@ func (x *PluginHostServiceKVDeleteResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use PluginHostServiceKVDeleteResponse.ProtoReflect.Descriptor instead.
 func (*PluginHostServiceKVDeleteResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{25}
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{28}
 }
 
 var File_holomush_plugin_v1_plugin_proto protoreflect.FileDescriptor
 
 const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
-	"\x1fholomush/plugin/v1/plugin.proto\x12\x12holomush.plugin.v1\"\xb5\x01\n" +
+	"\x1fholomush/plugin/v1/plugin.proto\x12\x12holomush.plugin.v1\"\xe7\x01\n" +
+	"\rServiceConfig\x12+\n" +
+	"\x11connection_string\x18\x01 \x01(\tR\x10connectionString\x12d\n" +
+	"\x11required_services\x18\x02 \x03(\v27.holomush.plugin.v1.ServiceConfig.RequiredServicesEntryR\x10requiredServices\x1aC\n" +
+	"\x15RequiredServicesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"H\n" +
+	"\vInitRequest\x129\n" +
+	"\x06config\x18\x01 \x01(\v2!.holomush.plugin.v1.ServiceConfigR\x06config\";\n" +
+	"\fInitResponse\x12+\n" +
+	"\x11provided_services\x18\x01 \x03(\tR\x10providedServices\"\xb5\x01\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06stream\x18\x02 \x01(\tR\x06stream\x12\x12\n" +
@@ -1630,8 +1787,9 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x11COMMAND_STATUS_OK\x10\x01\x12\x18\n" +
 	"\x14COMMAND_STATUS_ERROR\x10\x02\x12\x1a\n" +
 	"\x16COMMAND_STATUS_FAILURE\x10\x03\x12\x18\n" +
-	"\x14COMMAND_STATUS_FATAL\x10\x042\xd5\x01\n" +
-	"\rPluginService\x12^\n" +
+	"\x14COMMAND_STATUS_FATAL\x10\x042\xa0\x02\n" +
+	"\rPluginService\x12I\n" +
+	"\x04Init\x12\x1f.holomush.plugin.v1.InitRequest\x1a .holomush.plugin.v1.InitResponse\x12^\n" +
 	"\vHandleEvent\x12&.holomush.plugin.v1.HandleEventRequest\x1a'.holomush.plugin.v1.HandleEventResponse\x12d\n" +
 	"\rHandleCommand\x12(.holomush.plugin.v1.HandleCommandRequest\x1a).holomush.plugin.v1.HandleCommandResponse2\x8e\b\n" +
 	"\x11PluginHostService\x12\x86\x01\n" +
@@ -1658,71 +1816,79 @@ func file_holomush_plugin_v1_plugin_proto_rawDescGZIP() []byte {
 }
 
 var file_holomush_plugin_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_holomush_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_holomush_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_holomush_plugin_v1_plugin_proto_goTypes = []any{
 	(CommandStatus)(0),                                       // 0: holomush.plugin.v1.CommandStatus
-	(*Event)(nil),                                            // 1: holomush.plugin.v1.Event
-	(*EmitEvent)(nil),                                        // 2: holomush.plugin.v1.EmitEvent
-	(*HandleEventRequest)(nil),                               // 3: holomush.plugin.v1.HandleEventRequest
-	(*HandleEventResponse)(nil),                              // 4: holomush.plugin.v1.HandleEventResponse
-	(*CommandRequest)(nil),                                   // 5: holomush.plugin.v1.CommandRequest
-	(*CommandResponse)(nil),                                  // 6: holomush.plugin.v1.CommandResponse
-	(*HandleCommandRequest)(nil),                             // 7: holomush.plugin.v1.HandleCommandRequest
-	(*HandleCommandResponse)(nil),                            // 8: holomush.plugin.v1.HandleCommandResponse
-	(*PluginHostServiceLocationInfo)(nil),                    // 9: holomush.plugin.v1.PluginHostServiceLocationInfo
-	(*PluginHostServiceCharacterInfo)(nil),                   // 10: holomush.plugin.v1.PluginHostServiceCharacterInfo
-	(*PluginHostServiceQueryLocationRequest)(nil),            // 11: holomush.plugin.v1.PluginHostServiceQueryLocationRequest
-	(*PluginHostServiceQueryLocationResponse)(nil),           // 12: holomush.plugin.v1.PluginHostServiceQueryLocationResponse
-	(*PluginHostServiceQueryCharacterRequest)(nil),           // 13: holomush.plugin.v1.PluginHostServiceQueryCharacterRequest
-	(*PluginHostServiceQueryCharacterResponse)(nil),          // 14: holomush.plugin.v1.PluginHostServiceQueryCharacterResponse
-	(*PluginHostServiceQueryLocationCharactersRequest)(nil),  // 15: holomush.plugin.v1.PluginHostServiceQueryLocationCharactersRequest
-	(*PluginHostServiceQueryLocationCharactersResponse)(nil), // 16: holomush.plugin.v1.PluginHostServiceQueryLocationCharactersResponse
-	(*PluginHostServiceEmitEventRequest)(nil),                // 17: holomush.plugin.v1.PluginHostServiceEmitEventRequest
-	(*PluginHostServiceEmitEventResponse)(nil),               // 18: holomush.plugin.v1.PluginHostServiceEmitEventResponse
-	(*PluginHostServiceLogRequest)(nil),                      // 19: holomush.plugin.v1.PluginHostServiceLogRequest
-	(*PluginHostServiceLogResponse)(nil),                     // 20: holomush.plugin.v1.PluginHostServiceLogResponse
-	(*PluginHostServiceKVGetRequest)(nil),                    // 21: holomush.plugin.v1.PluginHostServiceKVGetRequest
-	(*PluginHostServiceKVGetResponse)(nil),                   // 22: holomush.plugin.v1.PluginHostServiceKVGetResponse
-	(*PluginHostServiceKVSetRequest)(nil),                    // 23: holomush.plugin.v1.PluginHostServiceKVSetRequest
-	(*PluginHostServiceKVSetResponse)(nil),                   // 24: holomush.plugin.v1.PluginHostServiceKVSetResponse
-	(*PluginHostServiceKVDeleteRequest)(nil),                 // 25: holomush.plugin.v1.PluginHostServiceKVDeleteRequest
-	(*PluginHostServiceKVDeleteResponse)(nil),                // 26: holomush.plugin.v1.PluginHostServiceKVDeleteResponse
+	(*ServiceConfig)(nil),                                    // 1: holomush.plugin.v1.ServiceConfig
+	(*InitRequest)(nil),                                      // 2: holomush.plugin.v1.InitRequest
+	(*InitResponse)(nil),                                     // 3: holomush.plugin.v1.InitResponse
+	(*Event)(nil),                                            // 4: holomush.plugin.v1.Event
+	(*EmitEvent)(nil),                                        // 5: holomush.plugin.v1.EmitEvent
+	(*HandleEventRequest)(nil),                               // 6: holomush.plugin.v1.HandleEventRequest
+	(*HandleEventResponse)(nil),                              // 7: holomush.plugin.v1.HandleEventResponse
+	(*CommandRequest)(nil),                                   // 8: holomush.plugin.v1.CommandRequest
+	(*CommandResponse)(nil),                                  // 9: holomush.plugin.v1.CommandResponse
+	(*HandleCommandRequest)(nil),                             // 10: holomush.plugin.v1.HandleCommandRequest
+	(*HandleCommandResponse)(nil),                            // 11: holomush.plugin.v1.HandleCommandResponse
+	(*PluginHostServiceLocationInfo)(nil),                    // 12: holomush.plugin.v1.PluginHostServiceLocationInfo
+	(*PluginHostServiceCharacterInfo)(nil),                   // 13: holomush.plugin.v1.PluginHostServiceCharacterInfo
+	(*PluginHostServiceQueryLocationRequest)(nil),            // 14: holomush.plugin.v1.PluginHostServiceQueryLocationRequest
+	(*PluginHostServiceQueryLocationResponse)(nil),           // 15: holomush.plugin.v1.PluginHostServiceQueryLocationResponse
+	(*PluginHostServiceQueryCharacterRequest)(nil),           // 16: holomush.plugin.v1.PluginHostServiceQueryCharacterRequest
+	(*PluginHostServiceQueryCharacterResponse)(nil),          // 17: holomush.plugin.v1.PluginHostServiceQueryCharacterResponse
+	(*PluginHostServiceQueryLocationCharactersRequest)(nil),  // 18: holomush.plugin.v1.PluginHostServiceQueryLocationCharactersRequest
+	(*PluginHostServiceQueryLocationCharactersResponse)(nil), // 19: holomush.plugin.v1.PluginHostServiceQueryLocationCharactersResponse
+	(*PluginHostServiceEmitEventRequest)(nil),                // 20: holomush.plugin.v1.PluginHostServiceEmitEventRequest
+	(*PluginHostServiceEmitEventResponse)(nil),               // 21: holomush.plugin.v1.PluginHostServiceEmitEventResponse
+	(*PluginHostServiceLogRequest)(nil),                      // 22: holomush.plugin.v1.PluginHostServiceLogRequest
+	(*PluginHostServiceLogResponse)(nil),                     // 23: holomush.plugin.v1.PluginHostServiceLogResponse
+	(*PluginHostServiceKVGetRequest)(nil),                    // 24: holomush.plugin.v1.PluginHostServiceKVGetRequest
+	(*PluginHostServiceKVGetResponse)(nil),                   // 25: holomush.plugin.v1.PluginHostServiceKVGetResponse
+	(*PluginHostServiceKVSetRequest)(nil),                    // 26: holomush.plugin.v1.PluginHostServiceKVSetRequest
+	(*PluginHostServiceKVSetResponse)(nil),                   // 27: holomush.plugin.v1.PluginHostServiceKVSetResponse
+	(*PluginHostServiceKVDeleteRequest)(nil),                 // 28: holomush.plugin.v1.PluginHostServiceKVDeleteRequest
+	(*PluginHostServiceKVDeleteResponse)(nil),                // 29: holomush.plugin.v1.PluginHostServiceKVDeleteResponse
+	nil, // 30: holomush.plugin.v1.ServiceConfig.RequiredServicesEntry
 }
 var file_holomush_plugin_v1_plugin_proto_depIdxs = []int32{
-	1,  // 0: holomush.plugin.v1.HandleEventRequest.event:type_name -> holomush.plugin.v1.Event
-	2,  // 1: holomush.plugin.v1.HandleEventResponse.emit_events:type_name -> holomush.plugin.v1.EmitEvent
-	0,  // 2: holomush.plugin.v1.CommandResponse.status:type_name -> holomush.plugin.v1.CommandStatus
-	2,  // 3: holomush.plugin.v1.CommandResponse.events:type_name -> holomush.plugin.v1.EmitEvent
-	5,  // 4: holomush.plugin.v1.HandleCommandRequest.command:type_name -> holomush.plugin.v1.CommandRequest
-	6,  // 5: holomush.plugin.v1.HandleCommandResponse.response:type_name -> holomush.plugin.v1.CommandResponse
-	9,  // 6: holomush.plugin.v1.PluginHostServiceQueryLocationResponse.location:type_name -> holomush.plugin.v1.PluginHostServiceLocationInfo
-	10, // 7: holomush.plugin.v1.PluginHostServiceQueryCharacterResponse.character:type_name -> holomush.plugin.v1.PluginHostServiceCharacterInfo
-	10, // 8: holomush.plugin.v1.PluginHostServiceQueryLocationCharactersResponse.characters:type_name -> holomush.plugin.v1.PluginHostServiceCharacterInfo
-	3,  // 9: holomush.plugin.v1.PluginService.HandleEvent:input_type -> holomush.plugin.v1.HandleEventRequest
-	7,  // 10: holomush.plugin.v1.PluginService.HandleCommand:input_type -> holomush.plugin.v1.HandleCommandRequest
-	11, // 11: holomush.plugin.v1.PluginHostService.QueryLocation:input_type -> holomush.plugin.v1.PluginHostServiceQueryLocationRequest
-	13, // 12: holomush.plugin.v1.PluginHostService.QueryCharacter:input_type -> holomush.plugin.v1.PluginHostServiceQueryCharacterRequest
-	15, // 13: holomush.plugin.v1.PluginHostService.QueryLocationCharacters:input_type -> holomush.plugin.v1.PluginHostServiceQueryLocationCharactersRequest
-	17, // 14: holomush.plugin.v1.PluginHostService.EmitEvent:input_type -> holomush.plugin.v1.PluginHostServiceEmitEventRequest
-	19, // 15: holomush.plugin.v1.PluginHostService.Log:input_type -> holomush.plugin.v1.PluginHostServiceLogRequest
-	21, // 16: holomush.plugin.v1.PluginHostService.KVGet:input_type -> holomush.plugin.v1.PluginHostServiceKVGetRequest
-	23, // 17: holomush.plugin.v1.PluginHostService.KVSet:input_type -> holomush.plugin.v1.PluginHostServiceKVSetRequest
-	25, // 18: holomush.plugin.v1.PluginHostService.KVDelete:input_type -> holomush.plugin.v1.PluginHostServiceKVDeleteRequest
-	4,  // 19: holomush.plugin.v1.PluginService.HandleEvent:output_type -> holomush.plugin.v1.HandleEventResponse
-	8,  // 20: holomush.plugin.v1.PluginService.HandleCommand:output_type -> holomush.plugin.v1.HandleCommandResponse
-	12, // 21: holomush.plugin.v1.PluginHostService.QueryLocation:output_type -> holomush.plugin.v1.PluginHostServiceQueryLocationResponse
-	14, // 22: holomush.plugin.v1.PluginHostService.QueryCharacter:output_type -> holomush.plugin.v1.PluginHostServiceQueryCharacterResponse
-	16, // 23: holomush.plugin.v1.PluginHostService.QueryLocationCharacters:output_type -> holomush.plugin.v1.PluginHostServiceQueryLocationCharactersResponse
-	18, // 24: holomush.plugin.v1.PluginHostService.EmitEvent:output_type -> holomush.plugin.v1.PluginHostServiceEmitEventResponse
-	20, // 25: holomush.plugin.v1.PluginHostService.Log:output_type -> holomush.plugin.v1.PluginHostServiceLogResponse
-	22, // 26: holomush.plugin.v1.PluginHostService.KVGet:output_type -> holomush.plugin.v1.PluginHostServiceKVGetResponse
-	24, // 27: holomush.plugin.v1.PluginHostService.KVSet:output_type -> holomush.plugin.v1.PluginHostServiceKVSetResponse
-	26, // 28: holomush.plugin.v1.PluginHostService.KVDelete:output_type -> holomush.plugin.v1.PluginHostServiceKVDeleteResponse
-	19, // [19:29] is the sub-list for method output_type
-	9,  // [9:19] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	30, // 0: holomush.plugin.v1.ServiceConfig.required_services:type_name -> holomush.plugin.v1.ServiceConfig.RequiredServicesEntry
+	1,  // 1: holomush.plugin.v1.InitRequest.config:type_name -> holomush.plugin.v1.ServiceConfig
+	4,  // 2: holomush.plugin.v1.HandleEventRequest.event:type_name -> holomush.plugin.v1.Event
+	5,  // 3: holomush.plugin.v1.HandleEventResponse.emit_events:type_name -> holomush.plugin.v1.EmitEvent
+	0,  // 4: holomush.plugin.v1.CommandResponse.status:type_name -> holomush.plugin.v1.CommandStatus
+	5,  // 5: holomush.plugin.v1.CommandResponse.events:type_name -> holomush.plugin.v1.EmitEvent
+	8,  // 6: holomush.plugin.v1.HandleCommandRequest.command:type_name -> holomush.plugin.v1.CommandRequest
+	9,  // 7: holomush.plugin.v1.HandleCommandResponse.response:type_name -> holomush.plugin.v1.CommandResponse
+	12, // 8: holomush.plugin.v1.PluginHostServiceQueryLocationResponse.location:type_name -> holomush.plugin.v1.PluginHostServiceLocationInfo
+	13, // 9: holomush.plugin.v1.PluginHostServiceQueryCharacterResponse.character:type_name -> holomush.plugin.v1.PluginHostServiceCharacterInfo
+	13, // 10: holomush.plugin.v1.PluginHostServiceQueryLocationCharactersResponse.characters:type_name -> holomush.plugin.v1.PluginHostServiceCharacterInfo
+	2,  // 11: holomush.plugin.v1.PluginService.Init:input_type -> holomush.plugin.v1.InitRequest
+	6,  // 12: holomush.plugin.v1.PluginService.HandleEvent:input_type -> holomush.plugin.v1.HandleEventRequest
+	10, // 13: holomush.plugin.v1.PluginService.HandleCommand:input_type -> holomush.plugin.v1.HandleCommandRequest
+	14, // 14: holomush.plugin.v1.PluginHostService.QueryLocation:input_type -> holomush.plugin.v1.PluginHostServiceQueryLocationRequest
+	16, // 15: holomush.plugin.v1.PluginHostService.QueryCharacter:input_type -> holomush.plugin.v1.PluginHostServiceQueryCharacterRequest
+	18, // 16: holomush.plugin.v1.PluginHostService.QueryLocationCharacters:input_type -> holomush.plugin.v1.PluginHostServiceQueryLocationCharactersRequest
+	20, // 17: holomush.plugin.v1.PluginHostService.EmitEvent:input_type -> holomush.plugin.v1.PluginHostServiceEmitEventRequest
+	22, // 18: holomush.plugin.v1.PluginHostService.Log:input_type -> holomush.plugin.v1.PluginHostServiceLogRequest
+	24, // 19: holomush.plugin.v1.PluginHostService.KVGet:input_type -> holomush.plugin.v1.PluginHostServiceKVGetRequest
+	26, // 20: holomush.plugin.v1.PluginHostService.KVSet:input_type -> holomush.plugin.v1.PluginHostServiceKVSetRequest
+	28, // 21: holomush.plugin.v1.PluginHostService.KVDelete:input_type -> holomush.plugin.v1.PluginHostServiceKVDeleteRequest
+	3,  // 22: holomush.plugin.v1.PluginService.Init:output_type -> holomush.plugin.v1.InitResponse
+	7,  // 23: holomush.plugin.v1.PluginService.HandleEvent:output_type -> holomush.plugin.v1.HandleEventResponse
+	11, // 24: holomush.plugin.v1.PluginService.HandleCommand:output_type -> holomush.plugin.v1.HandleCommandResponse
+	15, // 25: holomush.plugin.v1.PluginHostService.QueryLocation:output_type -> holomush.plugin.v1.PluginHostServiceQueryLocationResponse
+	17, // 26: holomush.plugin.v1.PluginHostService.QueryCharacter:output_type -> holomush.plugin.v1.PluginHostServiceQueryCharacterResponse
+	19, // 27: holomush.plugin.v1.PluginHostService.QueryLocationCharacters:output_type -> holomush.plugin.v1.PluginHostServiceQueryLocationCharactersResponse
+	21, // 28: holomush.plugin.v1.PluginHostService.EmitEvent:output_type -> holomush.plugin.v1.PluginHostServiceEmitEventResponse
+	23, // 29: holomush.plugin.v1.PluginHostService.Log:output_type -> holomush.plugin.v1.PluginHostServiceLogResponse
+	25, // 30: holomush.plugin.v1.PluginHostService.KVGet:output_type -> holomush.plugin.v1.PluginHostServiceKVGetResponse
+	27, // 31: holomush.plugin.v1.PluginHostService.KVSet:output_type -> holomush.plugin.v1.PluginHostServiceKVSetResponse
+	29, // 32: holomush.plugin.v1.PluginHostService.KVDelete:output_type -> holomush.plugin.v1.PluginHostServiceKVDeleteResponse
+	22, // [22:33] is the sub-list for method output_type
+	11, // [11:22] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_holomush_plugin_v1_plugin_proto_init() }
@@ -1736,7 +1902,7 @@ func file_holomush_plugin_v1_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_plugin_v1_plugin_proto_rawDesc), len(file_holomush_plugin_v1_plugin_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   26,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

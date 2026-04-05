@@ -114,8 +114,21 @@ func (p *grpcPlugin) GRPCClient(_ context.Context, _ *hashiplug.GRPCBroker, _ *g
 // pluginServerAdapter adapts Handler (and optionally CommandHandler) to pluginv1.PluginServiceServer.
 type pluginServerAdapter struct {
 	pluginv1.UnimplementedPluginServiceServer
-	handler    Handler
-	cmdHandler CommandHandler // nil if handler does not implement CommandHandler
+	handler         Handler
+	cmdHandler      CommandHandler  // nil if handler does not implement CommandHandler
+	serviceProvider ServiceProvider // nil if plugin does not provide services
+}
+
+// Init implements pluginv1.PluginServiceServer. When a ServiceProvider is set,
+// it delegates to the provider's Init; otherwise it returns an empty response.
+func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitRequest) (*pluginv1.InitResponse, error) {
+	if a.serviceProvider == nil {
+		return &pluginv1.InitResponse{}, nil
+	}
+	if err := a.serviceProvider.Init(ctx, req.GetConfig()); err != nil {
+		return nil, oops.With("phase", "init").Wrap(err)
+	}
+	return &pluginv1.InitResponse{}, nil
 }
 
 // HandleEvent implements pluginv1.PluginServiceServer.

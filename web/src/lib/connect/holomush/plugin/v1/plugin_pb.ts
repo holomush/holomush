@@ -15,7 +15,77 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/plugin/v1/plugin.proto.
  */
 export const file_holomush_plugin_v1_plugin: GenFile = /*@__PURE__*/
-  fileDesc("Ch9ob2xvbXVzaC9wbHVnaW4vdjEvcGx1Z2luLnByb3RvEhJob2xvbXVzaC5wbHVnaW4udjEiewoFRXZlbnQSCgoCaWQYASABKAkSDgoGc3RyZWFtGAIgASgJEgwKBHR5cGUYAyABKAkSEQoJdGltZXN0YW1wGAQgASgDEhIKCmFjdG9yX2tpbmQYBSABKAkSEAoIYWN0b3JfaWQYBiABKAkSDwoHcGF5bG9hZBgHIAEoCSI6CglFbWl0RXZlbnQSDgoGc3RyZWFtGAEgASgJEgwKBHR5cGUYAiABKAkSDwoHcGF5bG9hZBgDIAEoCSI+ChJIYW5kbGVFdmVudFJlcXVlc3QSKAoFZXZlbnQYASABKAsyGS5ob2xvbXVzaC5wbHVnaW4udjEuRXZlbnQiSQoTSGFuZGxlRXZlbnRSZXNwb25zZRIyCgtlbWl0X2V2ZW50cxgBIAMoCzIdLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnQirAEKDkNvbW1hbmRSZXF1ZXN0Eg8KB2NvbW1hbmQYASABKAkSDAoEYXJncxgCIAEoCRIRCglyYXdfaW5wdXQYAyABKAkSFAoMY2hhcmFjdGVyX2lkGAQgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAUgASgJEhMKC2xvY2F0aW9uX2lkGAYgASgJEhIKCnNlc3Npb25faWQYByABKAkSEQoJcGxheWVyX2lkGAggASgJIoMBCg9Db21tYW5kUmVzcG9uc2USMQoGc3RhdHVzGAEgASgOMiEuaG9sb211c2gucGx1Z2luLnYxLkNvbW1hbmRTdGF0dXMSDgoGb3V0cHV0GAIgASgJEi0KBmV2ZW50cxgDIAMoCzIdLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnQiSwoUSGFuZGxlQ29tbWFuZFJlcXVlc3QSMwoHY29tbWFuZBgBIAEoCzIiLmhvbG9tdXNoLnBsdWdpbi52MS5Db21tYW5kUmVxdWVzdCJOChVIYW5kbGVDb21tYW5kUmVzcG9uc2USNQoIcmVzcG9uc2UYASABKAsyIy5ob2xvbXVzaC5wbHVnaW4udjEuQ29tbWFuZFJlc3BvbnNlIm4KHVBsdWdpbkhvc3RTZXJ2aWNlTG9jYXRpb25JbmZvEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSDAoEdHlwZRgEIAEoCRIQCghvd25lcl9pZBgFIAEoCSJ3Ch5QbHVnaW5Ib3N0U2VydmljZUNoYXJhY3RlckluZm8SCgoCaWQYASABKAkSEQoJcGxheWVyX2lkGAIgASgJEgwKBG5hbWUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSEwoLbG9jYXRpb25faWQYBSABKAkiUAolUGx1Z2luSG9zdFNlcnZpY2VRdWVyeUxvY2F0aW9uUmVxdWVzdBISCgpzdWJqZWN0X2lkGAEgASgJEhMKC2xvY2F0aW9uX2lkGAIgASgJIm0KJlBsdWdpbkhvc3RTZXJ2aWNlUXVlcnlMb2NhdGlvblJlc3BvbnNlEkMKCGxvY2F0aW9uGAEgASgLMjEuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlTG9jYXRpb25JbmZvIlIKJlBsdWdpbkhvc3RTZXJ2aWNlUXVlcnlDaGFyYWN0ZXJSZXF1ZXN0EhIKCnN1YmplY3RfaWQYASABKAkSFAoMY2hhcmFjdGVyX2lkGAIgASgJInAKJ1BsdWdpbkhvc3RTZXJ2aWNlUXVlcnlDaGFyYWN0ZXJSZXNwb25zZRJFCgljaGFyYWN0ZXIYASABKAsyMi5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VDaGFyYWN0ZXJJbmZvIloKL1BsdWdpbkhvc3RTZXJ2aWNlUXVlcnlMb2NhdGlvbkNoYXJhY3RlcnNSZXF1ZXN0EhIKCnN1YmplY3RfaWQYASABKAkSEwoLbG9jYXRpb25faWQYAiABKAkiegowUGx1Z2luSG9zdFNlcnZpY2VRdWVyeUxvY2F0aW9uQ2hhcmFjdGVyc1Jlc3BvbnNlEkYKCmNoYXJhY3RlcnMYASADKAsyMi5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VDaGFyYWN0ZXJJbmZvIlgKIVBsdWdpbkhvc3RTZXJ2aWNlRW1pdEV2ZW50UmVxdWVzdBIOCgZzdHJlYW0YASABKAkSEgoKZXZlbnRfdHlwZRgCIAEoCRIPCgdwYXlsb2FkGAMgASgMIiQKIlBsdWdpbkhvc3RTZXJ2aWNlRW1pdEV2ZW50UmVzcG9uc2UiPQobUGx1Z2luSG9zdFNlcnZpY2VMb2dSZXF1ZXN0Eg0KBWxldmVsGAEgASgJEg8KB21lc3NhZ2UYAiABKAkiHgocUGx1Z2luSG9zdFNlcnZpY2VMb2dSZXNwb25zZSJBCh1QbHVnaW5Ib3N0U2VydmljZUtWR2V0UmVxdWVzdBITCgtwbHVnaW5fbmFtZRgBIAEoCRILCgNrZXkYAiABKAkiPgoeUGx1Z2luSG9zdFNlcnZpY2VLVkdldFJlc3BvbnNlEg0KBXZhbHVlGAEgASgJEg0KBWZvdW5kGAIgASgIIlAKHVBsdWdpbkhvc3RTZXJ2aWNlS1ZTZXRSZXF1ZXN0EhMKC3BsdWdpbl9uYW1lGAEgASgJEgsKA2tleRgCIAEoCRINCgV2YWx1ZRgDIAEoCSIgCh5QbHVnaW5Ib3N0U2VydmljZUtWU2V0UmVzcG9uc2UiRAogUGx1Z2luSG9zdFNlcnZpY2VLVkRlbGV0ZVJlcXVlc3QSEwoLcGx1Z2luX25hbWUYASABKAkSCwoDa2V5GAIgASgJIiMKIVBsdWdpbkhvc3RTZXJ2aWNlS1ZEZWxldGVSZXNwb25zZSqWAQoNQ29tbWFuZFN0YXR1cxIeChpDT01NQU5EX1NUQVRVU19VTlNQRUNJRklFRBAAEhUKEUNPTU1BTkRfU1RBVFVTX09LEAESGAoUQ09NTUFORF9TVEFUVVNfRVJST1IQAhIaChZDT01NQU5EX1NUQVRVU19GQUlMVVJFEAMSGAoUQ09NTUFORF9TVEFUVVNfRkFUQUwQBDLVAQoNUGx1Z2luU2VydmljZRJeCgtIYW5kbGVFdmVudBImLmhvbG9tdXNoLnBsdWdpbi52MS5IYW5kbGVFdmVudFJlcXVlc3QaJy5ob2xvbXVzaC5wbHVnaW4udjEuSGFuZGxlRXZlbnRSZXNwb25zZRJkCg1IYW5kbGVDb21tYW5kEiguaG9sb211c2gucGx1Z2luLnYxLkhhbmRsZUNvbW1hbmRSZXF1ZXN0GikuaG9sb211c2gucGx1Z2luLnYxLkhhbmRsZUNvbW1hbmRSZXNwb25zZTKOCAoRUGx1Z2luSG9zdFNlcnZpY2UShgEKDVF1ZXJ5TG9jYXRpb24SOS5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VRdWVyeUxvY2F0aW9uUmVxdWVzdBo6LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZVF1ZXJ5TG9jYXRpb25SZXNwb25zZRKJAQoOUXVlcnlDaGFyYWN0ZXISOi5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VRdWVyeUNoYXJhY3RlclJlcXVlc3QaOy5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VRdWVyeUNoYXJhY3RlclJlc3BvbnNlEqQBChdRdWVyeUxvY2F0aW9uQ2hhcmFjdGVycxJDLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZVF1ZXJ5TG9jYXRpb25DaGFyYWN0ZXJzUmVxdWVzdBpELmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZVF1ZXJ5TG9jYXRpb25DaGFyYWN0ZXJzUmVzcG9uc2USegoJRW1pdEV2ZW50EjUuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlRW1pdEV2ZW50UmVxdWVzdBo2LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUVtaXRFdmVudFJlc3BvbnNlEmgKA0xvZxIvLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUxvZ1JlcXVlc3QaMC5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VMb2dSZXNwb25zZRJuCgVLVkdldBIxLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUtWR2V0UmVxdWVzdBoyLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUtWR2V0UmVzcG9uc2USbgoFS1ZTZXQSMS5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VLVlNldFJlcXVlc3QaMi5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VLVlNldFJlc3BvbnNlEncKCEtWRGVsZXRlEjQuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlS1ZEZWxldGVSZXF1ZXN0GjUuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlS1ZEZWxldGVSZXNwb25zZUJEWkJnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC9wbHVnaW4vdjE7cGx1Z2ludjFiBnByb3RvMw");
+  fileDesc("Ch9ob2xvbXVzaC9wbHVnaW4vdjEvcGx1Z2luLnByb3RvEhJob2xvbXVzaC5wbHVnaW4udjEitwEKDVNlcnZpY2VDb25maWcSGQoRY29ubmVjdGlvbl9zdHJpbmcYASABKAkSUgoRcmVxdWlyZWRfc2VydmljZXMYAiADKAsyNy5ob2xvbXVzaC5wbHVnaW4udjEuU2VydmljZUNvbmZpZy5SZXF1aXJlZFNlcnZpY2VzRW50cnkaNwoVUmVxdWlyZWRTZXJ2aWNlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiQAoLSW5pdFJlcXVlc3QSMQoGY29uZmlnGAEgASgLMiEuaG9sb211c2gucGx1Z2luLnYxLlNlcnZpY2VDb25maWciKQoMSW5pdFJlc3BvbnNlEhkKEXByb3ZpZGVkX3NlcnZpY2VzGAEgAygJInsKBUV2ZW50EgoKAmlkGAEgASgJEg4KBnN0cmVhbRgCIAEoCRIMCgR0eXBlGAMgASgJEhEKCXRpbWVzdGFtcBgEIAEoAxISCgphY3Rvcl9raW5kGAUgASgJEhAKCGFjdG9yX2lkGAYgASgJEg8KB3BheWxvYWQYByABKAkiOgoJRW1pdEV2ZW50Eg4KBnN0cmVhbRgBIAEoCRIMCgR0eXBlGAIgASgJEg8KB3BheWxvYWQYAyABKAkiPgoSSGFuZGxlRXZlbnRSZXF1ZXN0EigKBWV2ZW50GAEgASgLMhkuaG9sb211c2gucGx1Z2luLnYxLkV2ZW50IkkKE0hhbmRsZUV2ZW50UmVzcG9uc2USMgoLZW1pdF9ldmVudHMYASADKAsyHS5ob2xvbXVzaC5wbHVnaW4udjEuRW1pdEV2ZW50IqwBCg5Db21tYW5kUmVxdWVzdBIPCgdjb21tYW5kGAEgASgJEgwKBGFyZ3MYAiABKAkSEQoJcmF3X2lucHV0GAMgASgJEhQKDGNoYXJhY3Rlcl9pZBgEIAEoCRIWCg5jaGFyYWN0ZXJfbmFtZRgFIAEoCRITCgtsb2NhdGlvbl9pZBgGIAEoCRISCgpzZXNzaW9uX2lkGAcgASgJEhEKCXBsYXllcl9pZBgIIAEoCSKDAQoPQ29tbWFuZFJlc3BvbnNlEjEKBnN0YXR1cxgBIAEoDjIhLmhvbG9tdXNoLnBsdWdpbi52MS5Db21tYW5kU3RhdHVzEg4KBm91dHB1dBgCIAEoCRItCgZldmVudHMYAyADKAsyHS5ob2xvbXVzaC5wbHVnaW4udjEuRW1pdEV2ZW50IksKFEhhbmRsZUNvbW1hbmRSZXF1ZXN0EjMKB2NvbW1hbmQYASABKAsyIi5ob2xvbXVzaC5wbHVnaW4udjEuQ29tbWFuZFJlcXVlc3QiTgoVSGFuZGxlQ29tbWFuZFJlc3BvbnNlEjUKCHJlc3BvbnNlGAEgASgLMiMuaG9sb211c2gucGx1Z2luLnYxLkNvbW1hbmRSZXNwb25zZSJuCh1QbHVnaW5Ib3N0U2VydmljZUxvY2F0aW9uSW5mbxIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEgwKBHR5cGUYBCABKAkSEAoIb3duZXJfaWQYBSABKAkidwoeUGx1Z2luSG9zdFNlcnZpY2VDaGFyYWN0ZXJJbmZvEgoKAmlkGAEgASgJEhEKCXBsYXllcl9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEhMKC2xvY2F0aW9uX2lkGAUgASgJIlAKJVBsdWdpbkhvc3RTZXJ2aWNlUXVlcnlMb2NhdGlvblJlcXVlc3QSEgoKc3ViamVjdF9pZBgBIAEoCRITCgtsb2NhdGlvbl9pZBgCIAEoCSJtCiZQbHVnaW5Ib3N0U2VydmljZVF1ZXJ5TG9jYXRpb25SZXNwb25zZRJDCghsb2NhdGlvbhgBIAEoCzIxLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUxvY2F0aW9uSW5mbyJSCiZQbHVnaW5Ib3N0U2VydmljZVF1ZXJ5Q2hhcmFjdGVyUmVxdWVzdBISCgpzdWJqZWN0X2lkGAEgASgJEhQKDGNoYXJhY3Rlcl9pZBgCIAEoCSJwCidQbHVnaW5Ib3N0U2VydmljZVF1ZXJ5Q2hhcmFjdGVyUmVzcG9uc2USRQoJY2hhcmFjdGVyGAEgASgLMjIuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlQ2hhcmFjdGVySW5mbyJaCi9QbHVnaW5Ib3N0U2VydmljZVF1ZXJ5TG9jYXRpb25DaGFyYWN0ZXJzUmVxdWVzdBISCgpzdWJqZWN0X2lkGAEgASgJEhMKC2xvY2F0aW9uX2lkGAIgASgJInoKMFBsdWdpbkhvc3RTZXJ2aWNlUXVlcnlMb2NhdGlvbkNoYXJhY3RlcnNSZXNwb25zZRJGCgpjaGFyYWN0ZXJzGAEgAygLMjIuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlQ2hhcmFjdGVySW5mbyJYCiFQbHVnaW5Ib3N0U2VydmljZUVtaXRFdmVudFJlcXVlc3QSDgoGc3RyZWFtGAEgASgJEhIKCmV2ZW50X3R5cGUYAiABKAkSDwoHcGF5bG9hZBgDIAEoDCIkCiJQbHVnaW5Ib3N0U2VydmljZUVtaXRFdmVudFJlc3BvbnNlIj0KG1BsdWdpbkhvc3RTZXJ2aWNlTG9nUmVxdWVzdBINCgVsZXZlbBgBIAEoCRIPCgdtZXNzYWdlGAIgASgJIh4KHFBsdWdpbkhvc3RTZXJ2aWNlTG9nUmVzcG9uc2UiQQodUGx1Z2luSG9zdFNlcnZpY2VLVkdldFJlcXVlc3QSEwoLcGx1Z2luX25hbWUYASABKAkSCwoDa2V5GAIgASgJIj4KHlBsdWdpbkhvc3RTZXJ2aWNlS1ZHZXRSZXNwb25zZRINCgV2YWx1ZRgBIAEoCRINCgVmb3VuZBgCIAEoCCJQCh1QbHVnaW5Ib3N0U2VydmljZUtWU2V0UmVxdWVzdBITCgtwbHVnaW5fbmFtZRgBIAEoCRILCgNrZXkYAiABKAkSDQoFdmFsdWUYAyABKAkiIAoeUGx1Z2luSG9zdFNlcnZpY2VLVlNldFJlc3BvbnNlIkQKIFBsdWdpbkhvc3RTZXJ2aWNlS1ZEZWxldGVSZXF1ZXN0EhMKC3BsdWdpbl9uYW1lGAEgASgJEgsKA2tleRgCIAEoCSIjCiFQbHVnaW5Ib3N0U2VydmljZUtWRGVsZXRlUmVzcG9uc2UqlgEKDUNvbW1hbmRTdGF0dXMSHgoaQ09NTUFORF9TVEFUVVNfVU5TUEVDSUZJRUQQABIVChFDT01NQU5EX1NUQVRVU19PSxABEhgKFENPTU1BTkRfU1RBVFVTX0VSUk9SEAISGgoWQ09NTUFORF9TVEFUVVNfRkFJTFVSRRADEhgKFENPTU1BTkRfU1RBVFVTX0ZBVEFMEAQyoAIKDVBsdWdpblNlcnZpY2USSQoESW5pdBIfLmhvbG9tdXNoLnBsdWdpbi52MS5Jbml0UmVxdWVzdBogLmhvbG9tdXNoLnBsdWdpbi52MS5Jbml0UmVzcG9uc2USXgoLSGFuZGxlRXZlbnQSJi5ob2xvbXVzaC5wbHVnaW4udjEuSGFuZGxlRXZlbnRSZXF1ZXN0GicuaG9sb211c2gucGx1Z2luLnYxLkhhbmRsZUV2ZW50UmVzcG9uc2USZAoNSGFuZGxlQ29tbWFuZBIoLmhvbG9tdXNoLnBsdWdpbi52MS5IYW5kbGVDb21tYW5kUmVxdWVzdBopLmhvbG9tdXNoLnBsdWdpbi52MS5IYW5kbGVDb21tYW5kUmVzcG9uc2UyjggKEVBsdWdpbkhvc3RTZXJ2aWNlEoYBCg1RdWVyeUxvY2F0aW9uEjkuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlUXVlcnlMb2NhdGlvblJlcXVlc3QaOi5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VRdWVyeUxvY2F0aW9uUmVzcG9uc2USiQEKDlF1ZXJ5Q2hhcmFjdGVyEjouaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlUXVlcnlDaGFyYWN0ZXJSZXF1ZXN0GjsuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlUXVlcnlDaGFyYWN0ZXJSZXNwb25zZRKkAQoXUXVlcnlMb2NhdGlvbkNoYXJhY3RlcnMSQy5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VRdWVyeUxvY2F0aW9uQ2hhcmFjdGVyc1JlcXVlc3QaRC5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VRdWVyeUxvY2F0aW9uQ2hhcmFjdGVyc1Jlc3BvbnNlEnoKCUVtaXRFdmVudBI1LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUVtaXRFdmVudFJlcXVlc3QaNi5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VFbWl0RXZlbnRSZXNwb25zZRJoCgNMb2cSLy5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VMb2dSZXF1ZXN0GjAuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlTG9nUmVzcG9uc2USbgoFS1ZHZXQSMS5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VLVkdldFJlcXVlc3QaMi5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VLVkdldFJlc3BvbnNlEm4KBUtWU2V0EjEuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlS1ZTZXRSZXF1ZXN0GjIuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlS1ZTZXRSZXNwb25zZRJ3CghLVkRlbGV0ZRI0LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUtWRGVsZXRlUmVxdWVzdBo1LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUtWRGVsZXRlUmVzcG9uc2VCRFpCZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvcGx1Z2luL3YxO3BsdWdpbnYxYgZwcm90bzM");
+
+/**
+ * ServiceConfig carries initialization data from the host to the plugin.
+ *
+ * @generated from message holomush.plugin.v1.ServiceConfig
+ */
+export type ServiceConfig = Message<"holomush.plugin.v1.ServiceConfig"> & {
+  /**
+   * PostgreSQL connection string (provided when the plugin declares storage: postgres).
+   *
+   * @generated from field: string connection_string = 1;
+   */
+  connectionString: string;
+
+  /**
+   * Addresses of required services, keyed by service name (future use).
+   *
+   * @generated from field: map<string, string> required_services = 2;
+   */
+  requiredServices: { [key: string]: string };
+};
+
+/**
+ * Describes the message holomush.plugin.v1.ServiceConfig.
+ * Use `create(ServiceConfigSchema)` to create a new message.
+ */
+export const ServiceConfigSchema: GenMessage<ServiceConfig> = /*@__PURE__*/
+  messageDesc(file_holomush_plugin_v1_plugin, 0);
+
+/**
+ * InitRequest is sent by the host after connecting to the plugin process.
+ *
+ * @generated from message holomush.plugin.v1.InitRequest
+ */
+export type InitRequest = Message<"holomush.plugin.v1.InitRequest"> & {
+  /**
+   * Service configuration for the plugin.
+   *
+   * @generated from field: holomush.plugin.v1.ServiceConfig config = 1;
+   */
+  config?: ServiceConfig;
+};
+
+/**
+ * Describes the message holomush.plugin.v1.InitRequest.
+ * Use `create(InitRequestSchema)` to create a new message.
+ */
+export const InitRequestSchema: GenMessage<InitRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_plugin_v1_plugin, 1);
+
+/**
+ * InitResponse is returned by the plugin after initialization.
+ *
+ * @generated from message holomush.plugin.v1.InitResponse
+ */
+export type InitResponse = Message<"holomush.plugin.v1.InitResponse"> & {
+  /**
+   * gRPC service names this plugin provides on the go-plugin transport.
+   *
+   * @generated from field: repeated string provided_services = 1;
+   */
+  providedServices: string[];
+};
+
+/**
+ * Describes the message holomush.plugin.v1.InitResponse.
+ * Use `create(InitResponseSchema)` to create a new message.
+ */
+export const InitResponseSchema: GenMessage<InitResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_plugin_v1_plugin, 2);
 
 /**
  * Event represents a game event delivered to plugins.
@@ -80,7 +150,7 @@ export type Event = Message<"holomush.plugin.v1.Event"> & {
  * Use `create(EventSchema)` to create a new message.
  */
 export const EventSchema: GenMessage<Event> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 0);
+  messageDesc(file_holomush_plugin_v1_plugin, 3);
 
 /**
  * EmitEvent represents an event that a plugin wants to emit.
@@ -116,7 +186,7 @@ export type EmitEvent = Message<"holomush.plugin.v1.EmitEvent"> & {
  * Use `create(EmitEventSchema)` to create a new message.
  */
 export const EmitEventSchema: GenMessage<EmitEvent> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 1);
+  messageDesc(file_holomush_plugin_v1_plugin, 4);
 
 /**
  * HandleEventRequest wraps an event for delivery to the plugin.
@@ -137,7 +207,7 @@ export type HandleEventRequest = Message<"holomush.plugin.v1.HandleEventRequest"
  * Use `create(HandleEventRequestSchema)` to create a new message.
  */
 export const HandleEventRequestSchema: GenMessage<HandleEventRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 2);
+  messageDesc(file_holomush_plugin_v1_plugin, 5);
 
 /**
  * HandleEventResponse contains any events the plugin wants to emit.
@@ -158,7 +228,7 @@ export type HandleEventResponse = Message<"holomush.plugin.v1.HandleEventRespons
  * Use `create(HandleEventResponseSchema)` to create a new message.
  */
 export const HandleEventResponseSchema: GenMessage<HandleEventResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 3);
+  messageDesc(file_holomush_plugin_v1_plugin, 6);
 
 /**
  * CommandRequest carries context for a plugin command invocation.
@@ -228,7 +298,7 @@ export type CommandRequest = Message<"holomush.plugin.v1.CommandRequest"> & {
  * Use `create(CommandRequestSchema)` to create a new message.
  */
 export const CommandRequestSchema: GenMessage<CommandRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 4);
+  messageDesc(file_holomush_plugin_v1_plugin, 7);
 
 /**
  * CommandResponse carries the result of a plugin command execution.
@@ -263,7 +333,7 @@ export type CommandResponse = Message<"holomush.plugin.v1.CommandResponse"> & {
  * Use `create(CommandResponseSchema)` to create a new message.
  */
 export const CommandResponseSchema: GenMessage<CommandResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 5);
+  messageDesc(file_holomush_plugin_v1_plugin, 8);
 
 /**
  * HandleCommandRequest wraps a command for delivery to the plugin.
@@ -284,7 +354,7 @@ export type HandleCommandRequest = Message<"holomush.plugin.v1.HandleCommandRequ
  * Use `create(HandleCommandRequestSchema)` to create a new message.
  */
 export const HandleCommandRequestSchema: GenMessage<HandleCommandRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 6);
+  messageDesc(file_holomush_plugin_v1_plugin, 9);
 
 /**
  * HandleCommandResponse wraps the command result from the plugin.
@@ -305,7 +375,7 @@ export type HandleCommandResponse = Message<"holomush.plugin.v1.HandleCommandRes
  * Use `create(HandleCommandResponseSchema)` to create a new message.
  */
 export const HandleCommandResponseSchema: GenMessage<HandleCommandResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 7);
+  messageDesc(file_holomush_plugin_v1_plugin, 10);
 
 /**
  * PluginHostServiceLocationInfo contains basic location information.
@@ -344,7 +414,7 @@ export type PluginHostServiceLocationInfo = Message<"holomush.plugin.v1.PluginHo
  * Use `create(PluginHostServiceLocationInfoSchema)` to create a new message.
  */
 export const PluginHostServiceLocationInfoSchema: GenMessage<PluginHostServiceLocationInfo> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 8);
+  messageDesc(file_holomush_plugin_v1_plugin, 11);
 
 /**
  * PluginHostServiceCharacterInfo contains basic character information.
@@ -383,7 +453,7 @@ export type PluginHostServiceCharacterInfo = Message<"holomush.plugin.v1.PluginH
  * Use `create(PluginHostServiceCharacterInfoSchema)` to create a new message.
  */
 export const PluginHostServiceCharacterInfoSchema: GenMessage<PluginHostServiceCharacterInfo> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 9);
+  messageDesc(file_holomush_plugin_v1_plugin, 12);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceQueryLocationRequest
@@ -405,7 +475,7 @@ export type PluginHostServiceQueryLocationRequest = Message<"holomush.plugin.v1.
  * Use `create(PluginHostServiceQueryLocationRequestSchema)` to create a new message.
  */
 export const PluginHostServiceQueryLocationRequestSchema: GenMessage<PluginHostServiceQueryLocationRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 10);
+  messageDesc(file_holomush_plugin_v1_plugin, 13);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceQueryLocationResponse
@@ -422,7 +492,7 @@ export type PluginHostServiceQueryLocationResponse = Message<"holomush.plugin.v1
  * Use `create(PluginHostServiceQueryLocationResponseSchema)` to create a new message.
  */
 export const PluginHostServiceQueryLocationResponseSchema: GenMessage<PluginHostServiceQueryLocationResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 11);
+  messageDesc(file_holomush_plugin_v1_plugin, 14);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceQueryCharacterRequest
@@ -444,7 +514,7 @@ export type PluginHostServiceQueryCharacterRequest = Message<"holomush.plugin.v1
  * Use `create(PluginHostServiceQueryCharacterRequestSchema)` to create a new message.
  */
 export const PluginHostServiceQueryCharacterRequestSchema: GenMessage<PluginHostServiceQueryCharacterRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 12);
+  messageDesc(file_holomush_plugin_v1_plugin, 15);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceQueryCharacterResponse
@@ -461,7 +531,7 @@ export type PluginHostServiceQueryCharacterResponse = Message<"holomush.plugin.v
  * Use `create(PluginHostServiceQueryCharacterResponseSchema)` to create a new message.
  */
 export const PluginHostServiceQueryCharacterResponseSchema: GenMessage<PluginHostServiceQueryCharacterResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 13);
+  messageDesc(file_holomush_plugin_v1_plugin, 16);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceQueryLocationCharactersRequest
@@ -483,7 +553,7 @@ export type PluginHostServiceQueryLocationCharactersRequest = Message<"holomush.
  * Use `create(PluginHostServiceQueryLocationCharactersRequestSchema)` to create a new message.
  */
 export const PluginHostServiceQueryLocationCharactersRequestSchema: GenMessage<PluginHostServiceQueryLocationCharactersRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 14);
+  messageDesc(file_holomush_plugin_v1_plugin, 17);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceQueryLocationCharactersResponse
@@ -500,7 +570,7 @@ export type PluginHostServiceQueryLocationCharactersResponse = Message<"holomush
  * Use `create(PluginHostServiceQueryLocationCharactersResponseSchema)` to create a new message.
  */
 export const PluginHostServiceQueryLocationCharactersResponseSchema: GenMessage<PluginHostServiceQueryLocationCharactersResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 15);
+  messageDesc(file_holomush_plugin_v1_plugin, 18);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceEmitEventRequest
@@ -527,7 +597,7 @@ export type PluginHostServiceEmitEventRequest = Message<"holomush.plugin.v1.Plug
  * Use `create(PluginHostServiceEmitEventRequestSchema)` to create a new message.
  */
 export const PluginHostServiceEmitEventRequestSchema: GenMessage<PluginHostServiceEmitEventRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 16);
+  messageDesc(file_holomush_plugin_v1_plugin, 19);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceEmitEventResponse
@@ -540,7 +610,7 @@ export type PluginHostServiceEmitEventResponse = Message<"holomush.plugin.v1.Plu
  * Use `create(PluginHostServiceEmitEventResponseSchema)` to create a new message.
  */
 export const PluginHostServiceEmitEventResponseSchema: GenMessage<PluginHostServiceEmitEventResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 17);
+  messageDesc(file_holomush_plugin_v1_plugin, 20);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceLogRequest
@@ -562,7 +632,7 @@ export type PluginHostServiceLogRequest = Message<"holomush.plugin.v1.PluginHost
  * Use `create(PluginHostServiceLogRequestSchema)` to create a new message.
  */
 export const PluginHostServiceLogRequestSchema: GenMessage<PluginHostServiceLogRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 18);
+  messageDesc(file_holomush_plugin_v1_plugin, 21);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceLogResponse
@@ -575,7 +645,7 @@ export type PluginHostServiceLogResponse = Message<"holomush.plugin.v1.PluginHos
  * Use `create(PluginHostServiceLogResponseSchema)` to create a new message.
  */
 export const PluginHostServiceLogResponseSchema: GenMessage<PluginHostServiceLogResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 19);
+  messageDesc(file_holomush_plugin_v1_plugin, 22);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceKVGetRequest
@@ -597,7 +667,7 @@ export type PluginHostServiceKVGetRequest = Message<"holomush.plugin.v1.PluginHo
  * Use `create(PluginHostServiceKVGetRequestSchema)` to create a new message.
  */
 export const PluginHostServiceKVGetRequestSchema: GenMessage<PluginHostServiceKVGetRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 20);
+  messageDesc(file_holomush_plugin_v1_plugin, 23);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceKVGetResponse
@@ -619,7 +689,7 @@ export type PluginHostServiceKVGetResponse = Message<"holomush.plugin.v1.PluginH
  * Use `create(PluginHostServiceKVGetResponseSchema)` to create a new message.
  */
 export const PluginHostServiceKVGetResponseSchema: GenMessage<PluginHostServiceKVGetResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 21);
+  messageDesc(file_holomush_plugin_v1_plugin, 24);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceKVSetRequest
@@ -646,7 +716,7 @@ export type PluginHostServiceKVSetRequest = Message<"holomush.plugin.v1.PluginHo
  * Use `create(PluginHostServiceKVSetRequestSchema)` to create a new message.
  */
 export const PluginHostServiceKVSetRequestSchema: GenMessage<PluginHostServiceKVSetRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 22);
+  messageDesc(file_holomush_plugin_v1_plugin, 25);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceKVSetResponse
@@ -659,7 +729,7 @@ export type PluginHostServiceKVSetResponse = Message<"holomush.plugin.v1.PluginH
  * Use `create(PluginHostServiceKVSetResponseSchema)` to create a new message.
  */
 export const PluginHostServiceKVSetResponseSchema: GenMessage<PluginHostServiceKVSetResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 23);
+  messageDesc(file_holomush_plugin_v1_plugin, 26);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceKVDeleteRequest
@@ -681,7 +751,7 @@ export type PluginHostServiceKVDeleteRequest = Message<"holomush.plugin.v1.Plugi
  * Use `create(PluginHostServiceKVDeleteRequestSchema)` to create a new message.
  */
 export const PluginHostServiceKVDeleteRequestSchema: GenMessage<PluginHostServiceKVDeleteRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 24);
+  messageDesc(file_holomush_plugin_v1_plugin, 27);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceKVDeleteResponse
@@ -694,7 +764,7 @@ export type PluginHostServiceKVDeleteResponse = Message<"holomush.plugin.v1.Plug
  * Use `create(PluginHostServiceKVDeleteResponseSchema)` to create a new message.
  */
 export const PluginHostServiceKVDeleteResponseSchema: GenMessage<PluginHostServiceKVDeleteResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 25);
+  messageDesc(file_holomush_plugin_v1_plugin, 28);
 
 /**
  * CommandStatus maps to pkg/plugin.CommandStatus values.
@@ -741,6 +811,18 @@ export const CommandStatusSchema: GenEnum<CommandStatus> = /*@__PURE__*/
  * @generated from service holomush.plugin.v1.PluginService
  */
 export const PluginService: GenService<{
+  /**
+   * Init is called by the host after connection, providing service configuration
+   * (DB connection string, required service addresses, etc.) and receiving
+   * the list of gRPC services the plugin provides.
+   *
+   * @generated from rpc holomush.plugin.v1.PluginService.Init
+   */
+  init: {
+    methodKind: "unary";
+    input: typeof InitRequestSchema;
+    output: typeof InitResponseSchema;
+  },
   /**
    * HandleEvent delivers an event to the plugin and receives any response events.
    *

@@ -24,6 +24,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	PluginService_Init_FullMethodName          = "/holomush.plugin.v1.PluginService/Init"
 	PluginService_HandleEvent_FullMethodName   = "/holomush.plugin.v1.PluginService/HandleEvent"
 	PluginService_HandleCommand_FullMethodName = "/holomush.plugin.v1.PluginService/HandleCommand"
 )
@@ -35,6 +36,10 @@ const (
 // PluginService is called by the go-plugin host to send events and commands to binary plugins.
 // This service is implemented by the plugin (the gRPC server runs in the plugin process).
 type PluginServiceClient interface {
+	// Init is called by the host after connection, providing service configuration
+	// (DB connection string, required service addresses, etc.) and receiving
+	// the list of gRPC services the plugin provides.
+	Init(ctx context.Context, in *InitRequest, opts ...grpc.CallOption) (*InitResponse, error)
 	// HandleEvent delivers an event to the plugin and receives any response events.
 	HandleEvent(ctx context.Context, in *HandleEventRequest, opts ...grpc.CallOption) (*HandleEventResponse, error)
 	// HandleCommand delivers a command to the plugin.
@@ -47,6 +52,16 @@ type pluginServiceClient struct {
 
 func NewPluginServiceClient(cc grpc.ClientConnInterface) PluginServiceClient {
 	return &pluginServiceClient{cc}
+}
+
+func (c *pluginServiceClient) Init(ctx context.Context, in *InitRequest, opts ...grpc.CallOption) (*InitResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(InitResponse)
+	err := c.cc.Invoke(ctx, PluginService_Init_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *pluginServiceClient) HandleEvent(ctx context.Context, in *HandleEventRequest, opts ...grpc.CallOption) (*HandleEventResponse, error) {
@@ -76,6 +91,10 @@ func (c *pluginServiceClient) HandleCommand(ctx context.Context, in *HandleComma
 // PluginService is called by the go-plugin host to send events and commands to binary plugins.
 // This service is implemented by the plugin (the gRPC server runs in the plugin process).
 type PluginServiceServer interface {
+	// Init is called by the host after connection, providing service configuration
+	// (DB connection string, required service addresses, etc.) and receiving
+	// the list of gRPC services the plugin provides.
+	Init(context.Context, *InitRequest) (*InitResponse, error)
 	// HandleEvent delivers an event to the plugin and receives any response events.
 	HandleEvent(context.Context, *HandleEventRequest) (*HandleEventResponse, error)
 	// HandleCommand delivers a command to the plugin.
@@ -90,6 +109,9 @@ type PluginServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedPluginServiceServer struct{}
 
+func (UnimplementedPluginServiceServer) Init(context.Context, *InitRequest) (*InitResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Init not implemented")
+}
 func (UnimplementedPluginServiceServer) HandleEvent(context.Context, *HandleEventRequest) (*HandleEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method HandleEvent not implemented")
 }
@@ -115,6 +137,24 @@ func RegisterPluginServiceServer(s grpc.ServiceRegistrar, srv PluginServiceServe
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&PluginService_ServiceDesc, srv)
+}
+
+func _PluginService_Init_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InitRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).Init(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_Init_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).Init(ctx, req.(*InitRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _PluginService_HandleEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -160,6 +200,10 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "holomush.plugin.v1.PluginService",
 	HandlerType: (*PluginServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Init",
+			Handler:    _PluginService_Init_Handler,
+		},
 		{
 			MethodName: "HandleEvent",
 			Handler:    _PluginService_HandleEvent_Handler,

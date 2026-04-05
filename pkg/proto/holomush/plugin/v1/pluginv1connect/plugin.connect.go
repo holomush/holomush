@@ -40,6 +40,8 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// PluginServiceInitProcedure is the fully-qualified name of the PluginService's Init RPC.
+	PluginServiceInitProcedure = "/holomush.plugin.v1.PluginService/Init"
 	// PluginServiceHandleEventProcedure is the fully-qualified name of the PluginService's HandleEvent
 	// RPC.
 	PluginServiceHandleEventProcedure = "/holomush.plugin.v1.PluginService/HandleEvent"
@@ -71,6 +73,10 @@ const (
 
 // PluginServiceClient is a client for the holomush.plugin.v1.PluginService service.
 type PluginServiceClient interface {
+	// Init is called by the host after connection, providing service configuration
+	// (DB connection string, required service addresses, etc.) and receiving
+	// the list of gRPC services the plugin provides.
+	Init(context.Context, *connect.Request[v1.InitRequest]) (*connect.Response[v1.InitResponse], error)
 	// HandleEvent delivers an event to the plugin and receives any response events.
 	HandleEvent(context.Context, *connect.Request[v1.HandleEventRequest]) (*connect.Response[v1.HandleEventResponse], error)
 	// HandleCommand delivers a command to the plugin.
@@ -88,6 +94,12 @@ func NewPluginServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 	baseURL = strings.TrimRight(baseURL, "/")
 	pluginServiceMethods := v1.File_holomush_plugin_v1_plugin_proto.Services().ByName("PluginService").Methods()
 	return &pluginServiceClient{
+		init: connect.NewClient[v1.InitRequest, v1.InitResponse](
+			httpClient,
+			baseURL+PluginServiceInitProcedure,
+			connect.WithSchema(pluginServiceMethods.ByName("Init")),
+			connect.WithClientOptions(opts...),
+		),
 		handleEvent: connect.NewClient[v1.HandleEventRequest, v1.HandleEventResponse](
 			httpClient,
 			baseURL+PluginServiceHandleEventProcedure,
@@ -105,8 +117,14 @@ func NewPluginServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // pluginServiceClient implements PluginServiceClient.
 type pluginServiceClient struct {
+	init          *connect.Client[v1.InitRequest, v1.InitResponse]
 	handleEvent   *connect.Client[v1.HandleEventRequest, v1.HandleEventResponse]
 	handleCommand *connect.Client[v1.HandleCommandRequest, v1.HandleCommandResponse]
+}
+
+// Init calls holomush.plugin.v1.PluginService.Init.
+func (c *pluginServiceClient) Init(ctx context.Context, req *connect.Request[v1.InitRequest]) (*connect.Response[v1.InitResponse], error) {
+	return c.init.CallUnary(ctx, req)
 }
 
 // HandleEvent calls holomush.plugin.v1.PluginService.HandleEvent.
@@ -121,6 +139,10 @@ func (c *pluginServiceClient) HandleCommand(ctx context.Context, req *connect.Re
 
 // PluginServiceHandler is an implementation of the holomush.plugin.v1.PluginService service.
 type PluginServiceHandler interface {
+	// Init is called by the host after connection, providing service configuration
+	// (DB connection string, required service addresses, etc.) and receiving
+	// the list of gRPC services the plugin provides.
+	Init(context.Context, *connect.Request[v1.InitRequest]) (*connect.Response[v1.InitResponse], error)
 	// HandleEvent delivers an event to the plugin and receives any response events.
 	HandleEvent(context.Context, *connect.Request[v1.HandleEventRequest]) (*connect.Response[v1.HandleEventResponse], error)
 	// HandleCommand delivers a command to the plugin.
@@ -134,6 +156,12 @@ type PluginServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewPluginServiceHandler(svc PluginServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	pluginServiceMethods := v1.File_holomush_plugin_v1_plugin_proto.Services().ByName("PluginService").Methods()
+	pluginServiceInitHandler := connect.NewUnaryHandler(
+		PluginServiceInitProcedure,
+		svc.Init,
+		connect.WithSchema(pluginServiceMethods.ByName("Init")),
+		connect.WithHandlerOptions(opts...),
+	)
 	pluginServiceHandleEventHandler := connect.NewUnaryHandler(
 		PluginServiceHandleEventProcedure,
 		svc.HandleEvent,
@@ -148,6 +176,8 @@ func NewPluginServiceHandler(svc PluginServiceHandler, opts ...connect.HandlerOp
 	)
 	return "/holomush.plugin.v1.PluginService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case PluginServiceInitProcedure:
+			pluginServiceInitHandler.ServeHTTP(w, r)
 		case PluginServiceHandleEventProcedure:
 			pluginServiceHandleEventHandler.ServeHTTP(w, r)
 		case PluginServiceHandleCommandProcedure:
@@ -160,6 +190,10 @@ func NewPluginServiceHandler(svc PluginServiceHandler, opts ...connect.HandlerOp
 
 // UnimplementedPluginServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedPluginServiceHandler struct{}
+
+func (UnimplementedPluginServiceHandler) Init(context.Context, *connect.Request[v1.InitRequest]) (*connect.Response[v1.InitResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginService.Init is not implemented"))
+}
 
 func (UnimplementedPluginServiceHandler) HandleEvent(context.Context, *connect.Request[v1.HandleEventRequest]) (*connect.Response[v1.HandleEventResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginService.HandleEvent is not implemented"))

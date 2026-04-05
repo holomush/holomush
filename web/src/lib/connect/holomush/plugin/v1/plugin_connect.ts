@@ -8,7 +8,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServiceQueryCharacterRequest, PluginHostServiceQueryCharacterResponse, PluginHostServiceQueryLocationCharactersRequest, PluginHostServiceQueryLocationCharactersResponse, PluginHostServiceQueryLocationRequest, PluginHostServiceQueryLocationResponse } from "./plugin_pb.js";
+import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServiceQueryCharacterRequest, PluginHostServiceQueryCharacterResponse, PluginHostServiceQueryLocationCharactersRequest, PluginHostServiceQueryLocationCharactersResponse, PluginHostServiceQueryLocationRequest, PluginHostServiceQueryLocationResponse } from "./plugin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -20,6 +20,19 @@ import { MethodKind } from "@bufbuild/protobuf";
 export const PluginService = {
   typeName: "holomush.plugin.v1.PluginService",
   methods: {
+    /**
+     * Init is called by the host after connection, providing service configuration
+     * (DB connection string, required service addresses, etc.) and receiving
+     * the list of gRPC services the plugin provides.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginService.Init
+     */
+    init: {
+      name: "Init",
+      I: InitRequest,
+      O: InitResponse,
+      kind: MethodKind.Unary,
+    },
     /**
      * HandleEvent delivers an event to the plugin and receives any response events.
      *
