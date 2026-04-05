@@ -20,7 +20,11 @@ import (
 //
 // luaFunction uses the form "namespace.function" for namespaced functions:
 //   - "holomush.query_location"  -> registered on the holomush global table
-//   - "holo.session.find_by_name" -> registered on the holo.session table
+//   - "holo.session.find_by_name" -> registered on the holo.session table (legacy stdlib)
+//   - "session.find_by_name"     -> registered on the session capability table
+//   - "alias.set_player"         -> registered on the alias capability table
+//   - "property.list_by_parent"  -> registered on the property capability table
+//   - "world_ext.get_objects_by_location" -> registered on the world_ext capability table
 //   - "holo.emit.location"      -> registered on the holo.emit table
 //   - "holo.fmt.bold"           -> registered on the holo.fmt table
 //
@@ -45,10 +49,10 @@ var parityTable = []parityEntry{
 	{"QueryLocationCharacters", "holomush.query_location_characters", "QueryLocationCharacters"},
 	{"QueryObject", "holomush.query_object", ""},
 	{"FindLocation", "holomush.find_location", ""},
-	{"GetCharactersByLocation", "", ""},    // TODO: no Lua equivalent yet (query_location_characters covers the use case differently)
-	{"GetObjectsByLocation", "", ""},       // TODO: no Lua equivalent yet
+	{"GetCharactersByLocation", "world_ext.get_characters_by_location", ""}, // WorldQueryCapability (requires world_ext)
+	{"GetObjectsByLocation", "world_ext.get_objects_by_location", ""},       // WorldQueryCapability (requires world_ext)
 	{"UpdateLocation", "", ""},             // TODO: no Lua equivalent yet (set_property covers name/description)
-	{"UpdateCharacterDescription", "", ""}, // TODO: no Lua equivalent yet (set_property covers description)
+	{"UpdateCharacterDescription", "property.update_character_description", ""}, // PropertyCapability (requires property)
 
 	// --- World write ---
 	{"CreateLocation", "holomush.create_location", ""},
@@ -58,8 +62,8 @@ var parityTable = []parityEntry{
 	// --- Properties ---
 	{"SetProperty", "holomush.set_property", ""},
 	{"GetProperty", "holomush.get_property", ""},
-	{"FindPropertyByPrefix", "", ""},   // TODO: no Lua equivalent yet
-	{"ListPropertiesByParent", "", ""}, // TODO: no Lua equivalent yet
+	{"FindPropertyByPrefix", "property.find_by_prefix", ""},   // PropertyCapability (requires property)
+	{"ListPropertiesByParent", "property.list_by_parent", ""}, // PropertyCapability (requires property)
 
 	// --- Plugin KV ---
 	{"KVGet", "holomush.kv_get", "KVGet"},
@@ -67,21 +71,24 @@ var parityTable = []parityEntry{
 	{"KVDelete", "holomush.kv_delete", "KVDelete"},
 
 	// --- Session ---
-	{"FindSessionByName", "holo.session.find_by_name", ""},
-	{"SetLastWhispered", "holo.session.set_last_whispered", ""},
-	{"DisconnectSession", "", ""},      // TODO: no Lua equivalent yet
-	{"ListActiveSessions", "", ""},     // TODO: no Lua equivalent yet
-	{"BroadcastSystemMessage", "", ""}, // TODO: no Lua equivalent yet
-	{"UpdateActivity", "", ""},         // TODO: no Lua equivalent yet
+	// session.* functions are registered by SessionCapability (requires "session" capability).
+	// holo.session.find_by_name and holo.session.set_last_whispered are legacy stdlib aliases
+	// that remain registered for backward compatibility; see allLuaFunctions/luaOnlyFuncs.
+	{"FindSessionByName", "session.find_by_name", ""},
+	{"SetLastWhispered", "session.set_last_whispered", ""},
+	{"DisconnectSession", "session.disconnect", ""},     // SessionCapability (requires session)
+	{"ListActiveSessions", "session.list_active", ""},   // SessionCapability (requires session)
+	{"BroadcastSystemMessage", "session.broadcast", ""}, // SessionCapability (requires session)
+	{"UpdateActivity", "", ""},                          // TODO: no Lua equivalent yet
 
 	// --- Aliases ---
-	{"SetPlayerAlias", "", ""},    // TODO: no Lua equivalent yet
-	{"DeletePlayerAlias", "", ""}, // TODO: no Lua equivalent yet
-	{"ListPlayerAliases", "", ""}, // TODO: no Lua equivalent yet
-	{"SetSystemAlias", "", ""},    // TODO: no Lua equivalent yet
-	{"DeleteSystemAlias", "", ""}, // TODO: no Lua equivalent yet
-	{"ListSystemAliases", "", ""}, // TODO: no Lua equivalent yet
-	{"CheckAliasShadow", "", ""},  // TODO: no Lua equivalent yet
+	{"SetPlayerAlias", "alias.set_player", ""},    // AliasCapability (requires alias)
+	{"DeletePlayerAlias", "alias.delete_player", ""}, // AliasCapability (requires alias)
+	{"ListPlayerAliases", "alias.list_player", ""}, // AliasCapability (requires alias)
+	{"SetSystemAlias", "alias.set_system", ""},    // AliasCapability (requires alias)
+	{"DeleteSystemAlias", "alias.delete_system", ""}, // AliasCapability (requires alias)
+	{"ListSystemAliases", "alias.list_system", ""}, // AliasCapability (requires alias)
+	{"CheckAliasShadow", "alias.check_shadow", ""},  // AliasCapability (requires alias)
 
 	// --- Commands ---
 	{"ListCommands", "holomush.list_commands", ""},
@@ -127,9 +134,34 @@ func allLuaFunctions() map[string]bool {
 		"holomush.list_commands":             true,
 		"holomush.get_command_help":          true,
 
-		// holo.session.* namespace (from RegisterSessionFuncs)
+		// holo.session.* namespace (from RegisterSessionFuncs — legacy stdlib, always available)
 		"holo.session.find_by_name":       true,
 		"holo.session.set_last_whispered": true,
+
+		// session.* namespace (from SessionCapability — requires "session" capability)
+		"session.find_by_name":       true,
+		"session.set_last_whispered": true,
+		"session.list_active":        true,
+		"session.broadcast":          true,
+		"session.disconnect":         true,
+
+		// alias.* namespace (from AliasCapability — requires "alias" capability)
+		"alias.set_player":    true,
+		"alias.delete_player": true,
+		"alias.list_player":   true,
+		"alias.check_shadow":  true,
+		"alias.set_system":    true,
+		"alias.delete_system": true,
+		"alias.list_system":   true,
+
+		// property.* namespace (from PropertyCapability — requires "property" capability)
+		"property.list_by_parent":               true,
+		"property.find_by_prefix":               true,
+		"property.update_character_description": true,
+
+		// world_ext.* namespace (from WorldQueryCapability — requires "world_ext" capability)
+		"world_ext.get_objects_by_location":    true,
+		"world_ext.get_characters_by_location": true,
 
 		// holo.fmt.* namespace (from RegisterStdlib) — not ServiceProxy methods
 		"holo.fmt.bold":      true,
@@ -223,7 +255,8 @@ func TestParityTableLuaFunctionsExist(t *testing.T) {
 // TestAllRegisteredLuaFunctionsAccountedFor verifies that every registered Lua
 // function that maps to a ServiceProxy method is documented in the parity table.
 // Lua functions without ServiceProxy equivalents (holo.fmt.*, holo.emit.*,
-// holomush.new_request_id) are allowed as they serve SDK/utility purposes.
+// holomush.new_request_id, holo.session.* legacy aliases) are allowed as they
+// serve SDK/utility purposes or provide backward-compatible aliases.
 func TestAllRegisteredLuaFunctionsAccountedFor(t *testing.T) {
 	// Build set of Lua functions referenced in the parity table
 	tableLuaFuncs := make(map[string]bool, len(parityTable))
@@ -234,7 +267,8 @@ func TestAllRegisteredLuaFunctionsAccountedFor(t *testing.T) {
 	}
 
 	// These Lua functions intentionally have no ServiceProxy equivalent.
-	// They are SDK utilities or use a different abstraction.
+	// They are SDK utilities, use a different abstraction, or are legacy aliases
+	// superseded by capability module equivalents.
 	luaOnlyFuncs := map[string]bool{
 		"holomush.new_request_id": true, // utility, not a service call
 		"holo.fmt.bold":           true, // formatting SDK
@@ -252,6 +286,10 @@ func TestAllRegisteredLuaFunctionsAccountedFor(t *testing.T) {
 		"holo.emit.character":     true,
 		"holo.emit.global":        true,
 		"holo.emit.flush":         true,
+		// Legacy stdlib session functions — superseded by SessionCapability (session.*).
+		// Kept for backward compatibility with existing plugins that use holo.session.*.
+		"holo.session.find_by_name":       true,
+		"holo.session.set_last_whispered": true,
 	}
 
 	for funcName := range allLuaFunctions() {
