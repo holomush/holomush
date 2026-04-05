@@ -35,7 +35,7 @@ func setupCommunicationTest() (*communicationFixture, error) {
 	if err != nil {
 		return nil, err
 	}
-	commDir := filepath.Join(pluginsDir, "communication")
+	commDir := filepath.Join(pluginsDir, "core-communication")
 
 	if _, statErr := os.Stat(commDir); os.IsNotExist(statErr) {
 		return nil, statErr
@@ -55,7 +55,7 @@ func setupCommunicationTest() (*communicationFixture, error) {
 
 	var commPlugin *plugins.DiscoveredPlugin
 	for _, dp := range discovered {
-		if dp.Manifest.Name == "communication" {
+		if dp.Manifest.Name == "core-communication" {
 			commPlugin = dp
 			break
 		}
@@ -165,7 +165,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 					Payload:   `{"name":"say","args":"Hello everyone!","character_name":"Alice","location_id":"loc456"}`,
 				}
 
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				Expect(emits[0].Stream).To(Equal("location:loc456"))
@@ -188,7 +188,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 					Payload:   `{"name":"say","args":"","character_name":"Alice","location_id":"loc456","character_id":"char123"}`,
 				}
 
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				Expect(emits[0].Stream).To(Equal("character:char123"))
@@ -212,7 +212,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 					Payload:   `{"name":"pose","args":"waves hello.","character_name":"Bob","location_id":"loc456"}`,
 				}
 
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				Expect(emits[0].Stream).To(Equal("location:loc456"))
@@ -235,7 +235,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 					Payload:   `{"name":"pose","args":":smiles warmly.","character_name":"Bob","location_id":"loc456"}`,
 				}
 
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				// : variant should still include space (same as regular pose)
@@ -256,7 +256,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 					Payload:   `{"name":"pose","args":";'s eyes widen.","character_name":"Bob","location_id":"loc456"}`,
 				}
 
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				// ; variant should NOT include space (for possessives like 's)
@@ -278,7 +278,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 					Payload:   `{"name":"pose","args":"'s sword gleams.","character_name":"Conan","location_id":"loc456","invoked_as":";"}`,
 				}
 
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				// ; prefix alias means no space between name and action
@@ -297,7 +297,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 					Payload:   `{"name":"pose","args":"draws their blade.","character_name":"Conan","location_id":"loc456","invoked_as":":"}`,
 				}
 
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				// : prefix alias means space between name and action
@@ -318,7 +318,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 					Payload:   `{"name":"pose","args":"","character_name":"Bob","location_id":"loc456","character_id":"char123"}`,
 				}
 
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				Expect(emits[0].Stream).To(Equal("character:char123"))
@@ -340,7 +340,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 					Payload:   `{"name":"pose","args":":","character_name":"Bob","location_id":"loc456","character_id":"char123"}`,
 				}
 
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				Expect(emits[0].Stream).To(Equal("character:char123"))
@@ -360,7 +360,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 					Payload:   `{"name":"pose","args":";","character_name":"Bob","location_id":"loc456","character_id":"char123"}`,
 				}
 
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				Expect(emits[0].Stream).To(Equal("character:char123"))
@@ -384,7 +384,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 					Payload:   `{"name":"emit","args":"The room shakes!","character_name":"Admin","location_id":"loc456"}`,
 				}
 
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				Expect(emits[0].Stream).To(Equal("location:loc456"))
@@ -406,7 +406,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 					Payload:   `{"name":"emit","args":"","character_name":"Admin","location_id":"loc456","character_id":"char123"}`,
 				}
 
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				Expect(emits[0].Stream).To(Equal("character:char123"))
@@ -430,7 +430,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 					Payload:   `{"message":"Hello"}`,
 				}
 
-				emits, err := fixture.LuaHost.DeliverEvent(ctx, "communication", event)
+				emits, err := fixture.LuaHost.DeliverEvent(ctx, "core-communication", event)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(BeEmpty())
 			})
