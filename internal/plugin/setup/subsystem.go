@@ -20,7 +20,6 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
@@ -54,24 +53,9 @@ type WorldServiceProvider interface {
 	Service() *world.Service
 }
 
-// SessionAccess combines the session interfaces required by both the hostfunc
-// bridge (session.Access) and the service proxy (plugins.SessionAccess).
-// The session subsystem's PostgresSessionStore satisfies this interface.
-type SessionAccess interface {
-	session.Access
-	Delete(ctx context.Context, id string, reason string) error
-}
-
-// SessionProvider provides session access for host functions and the service
-// proxy. The returned value must satisfy both session.Access and
-// plugins.SessionAccess.
+// SessionProvider provides session access for host functions.
 type SessionProvider interface {
-	SessionStore() SessionAccess
-}
-
-// EventStoreProvider provides the event store for the service proxy.
-type EventStoreProvider interface {
-	EventStore() core.EventStore
+	SessionStore() session.Access
 }
 
 // AdminDepsProvider provides the dependencies needed for admin command
@@ -89,7 +73,6 @@ type PluginSubsystemConfig struct {
 	PluginProv       PluginProviderSetter
 	World            WorldServiceProvider
 	Sessions         SessionProvider
-	Events           EventStoreProvider
 	AdminDeps        AdminDepsProvider
 }
 
@@ -99,7 +82,6 @@ type PluginSubsystem struct {
 	cfg              PluginSubsystemConfig
 	manager          *plugins.Manager
 	cmdRegistry      *command.Registry
-	proxy            *plugins.ServiceProxyImpl
 	registry         *plugins.ServiceRegistry
 	worldConn        *plugins.InProcessConn
 	schemaProvisioner *plugins.SchemaProvisioner
@@ -170,17 +152,6 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		_ = worldConn.Close()
 		return oops.Code("WORLD_SERVICE_REGISTER_FAILED").Wrap(regErr)
 	}
-
-	// Create ServiceProxy for the Lua host function bridge.
-	proxy, proxyErr := plugins.NewServiceProxy(plugins.ServiceProxyConfig{
-		World:    s.cfg.World.Service(),
-		Sessions: sessionStore,
-		Events:   s.cfg.Events.EventStore(),
-	})
-	if proxyErr != nil {
-		return oops.Code("SERVICE_PROXY_FAILED").Wrap(proxyErr)
-	}
-	s.proxy = proxy
 
 	// 5. (core plugins have all been migrated to Lua — no in-process host needed)
 
@@ -275,15 +246,6 @@ func (s *PluginSubsystem) CommandRegistry() *command.Registry {
 		panic("plugin/setup: CommandRegistry() called before Start()")
 	}
 	return s.cmdRegistry
-}
-
-// ServiceProxy returns the ServiceProxyImpl for late-binding configuration.
-// Panics if called before Start().
-func (s *PluginSubsystem) ServiceProxy() *plugins.ServiceProxyImpl {
-	if s.proxy == nil {
-		panic("plugin/setup: ServiceProxy() called before Start()")
-	}
-	return s.proxy
 }
 
 // ServiceRegistry returns the ServiceRegistry. Panics if called before Start().

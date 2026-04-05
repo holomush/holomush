@@ -25,10 +25,10 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/config"
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/logging"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
+	"github.com/holomush/holomush/internal/session"
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telemetry"
@@ -256,7 +256,6 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		PluginProv:      abacSub,
 		World:           worldSub,
 		Sessions:        &sessionBridge{sub: sessionSub},
-		Events:          &eventStoreBridge{db: dbSub},
 		AdminDeps:       &adminDepsBridge{auth: authSub, db: dbSub},
 	})
 
@@ -426,17 +425,8 @@ type sessionBridge struct {
 	sub *sessionsetup.SessionSubsystem
 }
 
-func (b *sessionBridge) SessionStore() pluginsetup.SessionAccess {
+func (b *sessionBridge) SessionStore() session.Access {
 	return b.sub.Store()
-}
-
-// eventStoreBridge adapts DatabaseSubsystem to pluginsetup.EventStoreProvider.
-type eventStoreBridge struct {
-	db *store.DatabaseSubsystem
-}
-
-func (b *eventStoreBridge) EventStore() core.EventStore {
-	return b.db.EventStore()
 }
 
 // adminDepsBridge adapts auth subsystem + database subsystem to pluginsetup.AdminDepsProvider.

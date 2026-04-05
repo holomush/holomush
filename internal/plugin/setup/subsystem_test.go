@@ -37,11 +37,6 @@ func TestPluginSubsystemCommandRegistryPanicsBeforeStart(t *testing.T) {
 	assert.Panics(t, func() { sub.CommandRegistry() })
 }
 
-func TestPluginSubsystemServiceProxyPanicsBeforeStart(t *testing.T) {
-	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
-	assert.Panics(t, func() { sub.ServiceProxy() })
-}
-
 func TestPluginSubsystemImplementsSubsystem(_ *testing.T) {
 	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
 	var _ lifecycle.Subsystem = sub
