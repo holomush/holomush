@@ -43,6 +43,7 @@ type Functions struct {
 	engine           types.AccessPolicyEngine
 	propertyRegistry *property.Registry
 	sessionAccess    session.Access
+	capabilities     *CapabilityRegistry
 }
 
 // Option configures Functions.
@@ -72,6 +73,14 @@ func WithSessionAccess(sa session.Access) Option {
 	}
 }
 
+// WithCapabilities sets the capability registry for requires-based Lua function injection.
+// When set, Register injects capability modules declared in the plugin's manifest requires list.
+func WithCapabilities(reg *CapabilityRegistry) Option {
+	return func(f *Functions) {
+		f.capabilities = reg
+	}
+}
+
 // New creates host functions with dependencies.
 // KVStore may be nil; KV functions will return errors if called.
 func New(kv KVStore, opts ...Option) *Functions {
@@ -88,7 +97,11 @@ func New(kv KVStore, opts ...Option) *Functions {
 }
 
 // Register adds host functions to a Lua state.
-func (f *Functions) Register(ls *lua.LState, pluginName string) {
+// The optional requires parameter lists proto service names from the plugin manifest;
+// matching capability modules are injected into the Lua state. Plugins without
+// requires declarations call Register with no requires argument — this is a no-op
+// for capability injection and is always safe.
+func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...string) {
 	// Register the holo.* stdlib (fmt, emit namespaces)
 	RegisterStdlib(ls)
 
@@ -132,6 +145,11 @@ func (f *Functions) Register(ls *lua.LState, pluginName string) {
 	ls.SetField(mod, "get_command_help", ls.NewFunction(f.getCommandHelpFn(pluginName)))
 
 	ls.SetGlobal("holomush", mod)
+
+	// Inject capability modules for declared requires.
+	if f.capabilities != nil && len(requires) > 0 {
+		f.capabilities.InjectRequired(ls, requires, pluginName)
+	}
 }
 
 func (f *Functions) logFn(pluginName string) lua.LGFunction {

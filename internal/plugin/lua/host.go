@@ -123,6 +123,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_event").New("plugin not loaded")
 	}
 	code := p.code
+	requires := p.manifest.Requires
 	h.mu.RUnlock()
 
 	// Create fresh state for this event
@@ -137,7 +138,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 
 	// Register host functions if available
 	if h.hostFuncs != nil {
-		h.hostFuncs.Register(L, name)
+		h.hostFuncs.Register(L, name, requires...)
 	}
 
 	// Load plugin code
@@ -204,6 +205,7 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 		return nil, oops.In("lua").With("plugin", name).With("operation", "deliver_command").New("plugin not loaded")
 	}
 	code := p.code
+	requires := p.manifest.Requires
 	h.mu.RUnlock()
 
 	L, err := h.factory.NewState(ctx)
@@ -215,7 +217,7 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 	L.SetContext(ctx)
 
 	if h.hostFuncs != nil {
-		h.hostFuncs.Register(L, name)
+		h.hostFuncs.Register(L, name, requires...)
 	}
 
 	if err := L.DoString(code); err != nil {

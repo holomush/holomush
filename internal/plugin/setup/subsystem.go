@@ -137,11 +137,19 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 
 	sessionStore := s.cfg.Sessions.SessionStore()
 
-	// 2. Create hostfunc bridge.
+	// 2. Create capability registry for requires-based Lua function injection.
+	// Capability modules will be registered here as their service dependencies
+	// become available. The registry is wired into the hostfunc bridge so that
+	// any capabilities registered before or after New() will be injected at
+	// plugin delivery time.
+	capRegistry := hostfunc.NewCapabilityRegistry()
+
+	// Create hostfunc bridge.
 	hostFuncs := hostfunc.New(nil, // KV store not yet available
 		hostfunc.WithEngine(s.cfg.ABAC.Engine()),
 		hostfunc.WithWorldService(s.cfg.World.Service()),
 		hostfunc.WithSessionAccess(sessionStore),
+		hostfunc.WithCapabilities(capRegistry),
 	)
 
 	// 3. Create Lua host.
