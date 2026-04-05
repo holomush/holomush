@@ -16,6 +16,11 @@ import (
 	"github.com/holomush/holomush/internal/world"
 )
 
+// kvErrCtx is a helper that builds a PluginErrorContext for KV operation tests.
+func kvErrCtx(pluginName, operation, key string) PluginErrorContext {
+	return PluginErrorContext{Plugin: pluginName, Operation: operation, Subject: "key", SubjectID: key}
+}
+
 func TestSanitizeKVErrorForPlugin(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -71,7 +76,7 @@ func TestSanitizeKVErrorForPlugin(t *testing.T) {
 			slog.SetDefault(slog.New(handler))
 			defer slog.SetDefault(origLogger)
 
-			result := sanitizeKVErrorForPlugin("test-plugin", "get", "test-key", tt.inputErr)
+			result := SanitizeErrorForPlugin(kvErrCtx("test-plugin", "get", "test-key"), tt.inputErr)
 
 			assert.Contains(t, result, tt.wantContains)
 			if tt.wantNotContain != "" {
@@ -90,8 +95,8 @@ func TestSanitizeKVErrorForPlugin(t *testing.T) {
 func TestSanitizeKVErrorForPluginCorrelationIDUnique(t *testing.T) {
 	// Each call should produce a unique correlation ID
 	err := errors.New("internal failure")
-	msg1 := sanitizeKVErrorForPlugin("plugin", "get", "key", err)
-	msg2 := sanitizeKVErrorForPlugin("plugin", "get", "key", err)
+	msg1 := SanitizeErrorForPlugin(kvErrCtx("plugin", "get", "key"), err)
+	msg2 := SanitizeErrorForPlugin(kvErrCtx("plugin", "get", "key"), err)
 
 	assert.NotEqual(t, msg1, msg2, "each error should have a unique correlation ID")
 	assert.Contains(t, msg1, "internal error (ref: ")
@@ -106,7 +111,7 @@ func TestSanitizeKVErrorForPluginLogsFullContext(t *testing.T) {
 	defer slog.SetDefault(origLogger)
 
 	dbErr := errors.New("pq: connection refused to 10.0.0.5:5432")
-	sanitizeKVErrorForPlugin("my-plugin", "set", "user-pref", dbErr)
+	SanitizeErrorForPlugin(kvErrCtx("my-plugin", "set", "user-pref"), dbErr)
 
 	logOutput := buf.String()
 	assert.Contains(t, logOutput, "my-plugin", "log should include plugin name")
