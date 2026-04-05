@@ -1,0 +1,16 @@
+{
+  "target": "PR #192 plugin-arch: proto-first plugin architecture rework (49 commits, 4 phases)",
+  "status": "in_progress",
+  "flags": {
+    "security_focus": false,
+    "performance_critical": false,
+    "strict_mode": false,
+    "framework": "go-grpc-hashicorp-go-plugin"
+  },
+  "current_step": 0,
+  "current_phase": 0,
+  "completed_steps": [],
+  "files_created": [],
+  "started_at": "2026-04-05T21:00:00Z",
+  "last_updated": "2026-04-05T21:00:00Z"
+}
