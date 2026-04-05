@@ -1,0 +1,132 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+// Package setup provides the auth subsystem lifecycle wrapper.
+package setup
+
+import (
+	"context"
+	"log/slog"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/auth"
+	authpostgres "github.com/holomush/holomush/internal/auth/postgres"
+	"github.com/holomush/holomush/internal/lifecycle"
+	"github.com/holomush/holomush/internal/store"
+)
+
+// PoolProvider provides a database connection pool. Implemented by the
+// database subsystem without requiring a direct import.
+type PoolProvider interface {
+	Pool() *pgxpool.Pool
+}
+
+// AuthSubsystemConfig configures the auth subsystem.
+type AuthSubsystemConfig struct {
+	DB PoolProvider
+}
+
+// AuthSubsystem manages authentication services and repositories.
+type AuthSubsystem struct {
+	cfg                AuthSubsystemConfig
+	playerRepo         *authpostgres.PlayerRepository
+	resetRepo          *authpostgres.PasswordResetRepository
+	playerSessionStore *store.PostgresPlayerSessionStore
+	hasher             auth.PasswordHasher
+	authService        *auth.Service
+	resetService       *auth.PasswordResetService
+}
+
+// NewAuthSubsystem creates an AuthSubsystem configured with cfg.
+// It does not allocate live resources; Start must be called to initialize repositories, stores, the password hasher, and services.
+func NewAuthSubsystem(cfg AuthSubsystemConfig) *AuthSubsystem {
+	return &AuthSubsystem{cfg: cfg}
+}
+
+// ID returns SubsystemAuth.
+func (s *AuthSubsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemAuth }
+
+// DependsOn returns [SubsystemDatabase].
+func (s *AuthSubsystem) DependsOn() []lifecycle.SubsystemID {
+	return []lifecycle.SubsystemID{lifecycle.SubsystemDatabase}
+}
+
+// Start creates auth repositories, hasher, and services.
+// codecov:ignore — tested by integration and E2E tests
+func (s *AuthSubsystem) Start(_ context.Context) error {
+	pool := s.cfg.DB.Pool()
+
+	s.playerRepo = authpostgres.NewPlayerRepository(pool)
+	s.resetRepo = authpostgres.NewPasswordResetRepository(pool)
+	s.playerSessionStore = store.NewPostgresPlayerSessionStore(pool)
+	s.hasher = auth.NewArgon2idHasher()
+
+	authSvc, err := auth.NewAuthServiceWithLogger(s.playerRepo, s.playerSessionStore, s.hasher, slog.Default())
+	if err != nil {
+		return oops.Code("AUTH_SETUP_FAILED").Wrap(err)
+	}
+	s.authService = authSvc
+
+	resetSvc, err := auth.NewPasswordResetServiceWithLogger(s.playerRepo, s.resetRepo, s.playerSessionStore, s.hasher, slog.Default())
+	if err != nil {
+		return oops.Code("AUTH_SETUP_FAILED").Wrap(err)
+	}
+	s.resetService = resetSvc
+
+	slog.Info("auth subsystem started")
+	return nil
+}
+
+// Stop is a no-op — auth services are stateless after init.
+// codecov:ignore — tested by integration and E2E tests
+func (s *AuthSubsystem) Stop(_ context.Context) error { return nil }
+
+// PlayerRepo returns the player repository. Panics if called before Start().
+func (s *AuthSubsystem) PlayerRepo() auth.PlayerRepository {
+	if s.playerRepo == nil {
+		panic("auth/setup: PlayerRepo() called before Start()")
+	}
+	return s.playerRepo
+}
+
+// ResetRepo returns the password reset repository. Panics if called before Start().
+func (s *AuthSubsystem) ResetRepo() *authpostgres.PasswordResetRepository {
+	if s.resetRepo == nil {
+		panic("auth/setup: ResetRepo() called before Start()")
+	}
+	return s.resetRepo
+}
+
+// PlayerSessionStore returns the player session store. Panics if called before Start().
+func (s *AuthSubsystem) PlayerSessionStore() *store.PostgresPlayerSessionStore {
+	if s.playerSessionStore == nil {
+		panic("auth/setup: PlayerSessionStore() called before Start()")
+	}
+	return s.playerSessionStore
+}
+
+// Hasher returns the password hasher. Panics if called before Start().
+func (s *AuthSubsystem) Hasher() auth.PasswordHasher {
+	if s.hasher == nil {
+		panic("auth/setup: Hasher() called before Start()")
+	}
+	return s.hasher
+}
+
+// AuthService returns the authentication service. Panics if called before Start().
+func (s *AuthSubsystem) AuthService() *auth.Service {
+	if s.authService == nil {
+		panic("auth/setup: AuthService() called before Start()")
+	}
+	return s.authService
+}
+
+// ResetService returns the password reset service. Panics if called before Start().
+func (s *AuthSubsystem) ResetService() *auth.PasswordResetService {
+	if s.resetService == nil {
+		panic("auth/setup: ResetService() called before Start()")
+	}
+	return s.resetService
+}

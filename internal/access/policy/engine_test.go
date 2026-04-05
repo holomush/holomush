@@ -82,7 +82,6 @@ func createTestEngine(t *testing.T, sessionResolver SessionResolver) (*Engine, *
 	})
 
 	cache := NewCache(nil, nil)
-	cache.lastUpdate.Store(time.Now().UnixNano()) // mark non-stale for tests
 
 	engine := NewEngine(resolver, cache, sessionResolver, auditLogger)
 	return engine, mockWriter
@@ -301,35 +300,6 @@ func TestEngineNonSystemNonSession(t *testing.T) {
 	assert.Equal(t, "no applicable policies", decision.Reason())
 	assert.Equal(t, "", decision.PolicyID())
 	assert.NotNil(t, decision.Attributes(), "attributes should be populated")
-}
-
-func TestEngineStaleCacheDefaultDeny(t *testing.T) {
-	registry := attribute.NewSchemaRegistry()
-	resolver := attribute.NewResolver(registry)
-
-	mockWriter := &mockAuditWriter{}
-	walPath := filepath.Join(t.TempDir(), "test-wal.jsonl")
-	auditLogger := audit.NewLogger(audit.ModeAll, mockWriter, walPath)
-	t.Cleanup(func() {
-		_ = auditLogger.Close()
-	})
-
-	// Cache with lastUpdate = 0 (never reloaded → stale)
-	cache := NewCache(nil, nil)
-	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
-
-	req := types.AccessRequest{
-		Subject:  "character:01ABC",
-		Action:   "read",
-		Resource: "location:01XYZ",
-	}
-
-	decision, err := engine.Evaluate(context.Background(), req)
-	require.NoError(t, err)
-
-	assert.Equal(t, types.EffectDefaultDeny, decision.Effect())
-	assert.Equal(t, "policy cache stale", decision.Reason())
-	assert.False(t, decision.IsAllowed())
 }
 
 func TestEngine_AllDecisionsValidate(t *testing.T) {
@@ -860,7 +830,6 @@ func TestEngineEvaluateAttributeResolutionError(t *testing.T) {
 	t.Cleanup(func() { _ = auditLogger.Close() })
 
 	cache := NewCache(nil, nil)
-	cache.lastUpdate.Store(time.Now().UnixNano())
 
 	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
 
@@ -956,7 +925,6 @@ func createTestEngineWithPolicies(t *testing.T, dslTexts []string, providers []a
 		CreatedAt: time.Now(),
 	}
 	cache.mu.Unlock()
-	cache.lastUpdate.Store(time.Now().UnixNano())
 
 	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
 	return engine
@@ -1396,7 +1364,6 @@ func createTestEngineWithMode(t *testing.T, dslTexts []string, providers []attri
 		CreatedAt: time.Now(),
 	}
 	cache.mu.Unlock()
-	cache.lastUpdate.Store(time.Now().UnixNano())
 
 	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
 	return engine, mockWriter
@@ -1617,7 +1584,6 @@ func TestEngineEndToEndSessionResolution(t *testing.T) {
 		CreatedAt: time.Now(),
 	}
 	cache.mu.Unlock()
-	cache.lastUpdate.Store(time.Now().UnixNano())
 
 	// Session resolver that resolves session to character
 	sessionResolver := &mockSessionResolver{
@@ -1686,7 +1652,6 @@ func TestEngineResolverErrorFailsClosed(t *testing.T) {
 	t.Cleanup(func() { _ = auditLogger.Close() })
 
 	cache := NewCache(nil, nil)
-	cache.lastUpdate.Store(time.Now().UnixNano())
 
 	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
 
@@ -1743,7 +1708,6 @@ func TestEngineResolverPartialBagsDiscardedOnError(t *testing.T) {
 	t.Cleanup(func() { _ = auditLogger.Close() })
 
 	cache := NewCache(nil, nil)
-	cache.lastUpdate.Store(time.Now().UnixNano())
 
 	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
 
@@ -1789,7 +1753,6 @@ func TestEngineEnvironmentResolverErrorFailsClosed(t *testing.T) {
 	t.Cleanup(func() { _ = auditLogger.Close() })
 
 	cache := NewCache(nil, nil)
-	cache.lastUpdate.Store(time.Now().UnixNano())
 
 	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
 
@@ -1835,7 +1798,6 @@ func TestEngineResolverPanicFailsClosed(t *testing.T) {
 	t.Cleanup(func() { _ = auditLogger.Close() })
 
 	cache := NewCache(nil, nil)
-	cache.lastUpdate.Store(time.Now().UnixNano())
 
 	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
 
@@ -2070,7 +2032,6 @@ func TestEngineCanPerformActionAttributeResolutionError(t *testing.T) {
 	t.Cleanup(func() { _ = auditLogger.Close() })
 
 	cache := NewCache(nil, nil)
-	cache.lastUpdate.Store(time.Now().UnixNano())
 
 	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
 
@@ -2132,7 +2093,6 @@ func TestEngineCanPerformActionNilCompiledPolicySkipped(t *testing.T) {
 		CreatedAt: time.Now(),
 	}
 	cache.mu.Unlock()
-	cache.lastUpdate.Store(time.Now().UnixNano())
 
 	engine := NewEngine(resolver, cache, &mockSessionResolver{}, auditLogger)
 

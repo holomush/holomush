@@ -128,7 +128,6 @@ func createBenchEngine(b *testing.B, dslTexts []string, attrs map[string]any) *E
 		CreatedAt: time.Now(),
 	}
 	cache.mu.Unlock()
-	cache.lastUpdate.Store(time.Now().UnixNano())
 
 	engine := NewEngine(resolver, cache, &noopSessionResolver{}, auditLogger)
 	return engine

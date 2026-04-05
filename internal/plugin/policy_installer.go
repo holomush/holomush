@@ -95,12 +95,13 @@ func compilePolicies(pluginName string, policies []ManifestPolicy) ([]*store.Sto
 
 // InstallPluginPolicies compiles each manifest policy via the DSL compiler,
 // validates that the principal type is "plugin", and persists the policies.
+// This is idempotent — existing policies for the plugin are replaced.
 func (pi *PolicyInstaller) InstallPluginPolicies(ctx context.Context, pluginName string, policies []ManifestPolicy) error {
 	compiled, err := compilePolicies(pluginName, policies)
 	if err != nil {
 		return err
 	}
-	if err := pi.store.CreateBatch(ctx, compiled); err != nil {
+	if err := pi.store.ReplaceBySource(ctx, "plugin", "plugin:"+pluginName+":", compiled); err != nil {
 		return oops.With("plugin", pluginName).Wrapf(err, "installing plugin policies")
 	}
 	return nil

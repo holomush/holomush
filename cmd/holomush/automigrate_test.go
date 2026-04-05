@@ -61,9 +61,6 @@ func TestAutoMigrate_RunsByDefault(t *testing.T) {
 				return &mockObservabilityServer{}
 			},
 		},
-		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
-			return &mockEventStore{}, nil
-		},
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return testTLSConfig(), nil
 		},
@@ -76,7 +73,6 @@ func TestAutoMigrate_RunsByDefault(t *testing.T) {
 		AutoMigrateGetter: func() bool {
 			return true // Default behavior
 		},
-		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cfg := &coreConfig{
@@ -119,9 +115,6 @@ func TestAutoMigrate_DisabledWhenEnvVarFalse(t *testing.T) {
 				return &mockObservabilityServer{}
 			},
 		},
-		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
-			return &mockEventStore{}, nil
-		},
 		TLSCertEnsurer: func(_, _ string) (*cryptotls.Config, error) {
 			return testTLSConfig(), nil
 		},
@@ -134,7 +127,6 @@ func TestAutoMigrate_DisabledWhenEnvVarFalse(t *testing.T) {
 		AutoMigrateGetter: func() bool {
 			return false // Explicitly disabled
 		},
-		PolicyBootstrapper: noOpBootstrapper,
 	}
 
 	cfg := &coreConfig{
@@ -166,9 +158,6 @@ func TestAutoMigrate_ErrorSurfaced(t *testing.T) {
 			CertsDirGetter: func() (string, error) {
 				return t.TempDir(), nil
 			},
-		},
-		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
-			return &mockEventStore{}, nil
 		},
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
@@ -205,9 +194,6 @@ func TestAutoMigrate_MigratorCreationError(t *testing.T) {
 			CertsDirGetter: func() (string, error) {
 				return t.TempDir(), nil
 			},
-		},
-		EventStoreFactory: func(_ context.Context, _ string) (EventStore, error) {
-			return &mockEventStore{}, nil
 		},
 		DatabaseURLGetter: func() string {
 			return "postgres://test:test@localhost/test"
