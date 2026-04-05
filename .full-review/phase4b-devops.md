@@ -16,6 +16,7 @@
 **Evidence**: `.github/workflows/ci.yaml` build job (line 258): `task build` which expands to `go build -o holomush ./cmd/holomush`. No step runs `go build ./plugins/core-scenes/`. Unit tests for `plugins/core-scenes/` (service_test.go, store_test.go) exist but are integration-style tests that likely require a DB — unclear if `task test` (which runs `./...`) even reaches them since there's no `go.mod` in that directory indicating they compile against the root module.
 
 **Recommendation**:
+
 1. Add `task plugin:build` that cross-compiles binary plugins for linux/amd64.
 2. Add a CI step that verifies binary plugins compile: `go build ./plugins/core-scenes/`.
 3. Ensure `task pr-prep` includes plugin compilation verification.
@@ -30,6 +31,7 @@
 **Evidence**: `Taskfile.yaml` lines 147-150 (`docker:build`) and `Dockerfile` line 20 (`COPY --chown=holomush:holomush plugins/ ...`). The `plugin.yaml` declares `executable: core-scenes` but no build step produces that binary.
 
 **Recommendation**: Extend `docker:build` to compile binary plugins before the Docker build:
+
 ```yaml
 - CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o plugins/core-scenes/core-scenes ./plugins/core-scenes/
 - CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o holomush ./cmd/holomush
@@ -57,6 +59,7 @@
 **Evidence**: `Taskfile.yaml` lines 394-420 (`pr-prep`). The `generate:schema` check is present but there is no `buf generate` + diff check. The `buf.yml` CI workflow only runs on proto file changes (path filter), not on every PR.
 
 **Recommendation**: Add a proto freshness check to `pr-prep`:
+
 ```yaml
 - echo "Verifying proto codegen is current..."
 - task: proto
@@ -117,6 +120,7 @@
 **Evidence**: Full review of `Taskfile.yaml` — no task mentions `plugin` in any build/run context. The `task dev` workflow builds via `task docker:build` which also lacks plugin compilation.
 
 **Recommendation**: Add plugin-related tasks:
+
 ```yaml
 plugin:build:
   desc: Build all binary plugins for the current platform

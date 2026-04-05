@@ -15,13 +15,13 @@ Reviewer focus: latency overhead in new call paths, serialization cost, database
 
 Every Lua plugin that calls `holomush.query_location()`, `holomush.query_character()`, etc. now traverses this path:
 
-```
+```text
 Lua hostfunc -> Go world.Service call (direct, in-process)
 ```
 
 However, the WorldService is *also* registered as an InProcessConn for binary plugins:
 
-```
+```text
 Binary plugin -> gRPC marshal -> bufconn -> gRPC unmarshal -> GRPCServer -> world.Service -> marshal response -> bufconn -> unmarshal response
 ```
 
@@ -61,6 +61,7 @@ The binary plugin path pays a full proto marshal/unmarshal round-trip even thoug
 The `rawMessage` type avoids deserialization -- bytes pass through as-is. This is the standard gRPC proxy pattern and is efficient for the bytes themselves.
 
 **Overhead per call:**
+
 - 1 goroutine allocation (~2-4KB stack)
 - 2 `rawMessage` allocations (reuses the byte slices from gRPC)
 - 1 channel read on `errCh`
@@ -141,6 +142,7 @@ On a 4-core machine, pgxpool defaults to `max_conns = 4 * num_cpu = 16` per pool
 PostgreSQL default `max_connections = 100`. After accounting for superuser reserved connections (3) and system processes, ~48 connections from pools alone consumes half the budget.
 
 **Additional concerns:**
+
 - The SchemaProvisioner pool stays open for the entire server lifetime but is only used during plugin startup (schema creation). It holds connections idle indefinitely.
 - Each future binary plugin with `storage: postgres` will open another pool via `storage.Connect()`.
 - The scene plugin's pool connection string is scoped to its schema (`search_path=plugin_core_scenes`) but uses the same PostgreSQL server.
@@ -174,6 +176,7 @@ func (r *ServiceRegistry) Resolve(name string) (*RegisteredService, error) {
 ```
 
 **Contention profile:**
+
 - Read path (Resolve): called per proxied gRPC request. Multiple readers can proceed concurrently.
 - Write path (Register/Deregister): called only during plugin load/unload (startup and admin commands). Extremely rare.
 
@@ -203,6 +206,7 @@ This allocates a new `RegisteredService` on every call (escapes to heap). Since 
 `ResolveDependencyOrder` implements Kahn's algorithm. Called from `Manager.resolveLoadOrder()` which is called from `LoadAll()`.
 
 **When is it called?**
+
 - Once at startup during `LoadAll()`.
 - NOT during dynamic reload (no hot-reload mechanism exists).
 
@@ -224,12 +228,14 @@ This allocates a new `RegisteredService` on every call (escapes to heap). Since 
 ### 7a: N+1 Query in GetScene and CreateScene
 
 `GetScene` RPC (service.go:91-108) executes:
+
 1. `store.GetScene(ctx, id)` -- 1 query
 2. `store.ListParticipants(ctx, id)` -- 1 query
 
 This is 2 queries per GetScene, not N+1. Acceptable.
 
 `CreateScene` RPC (service.go:32-88) executes:
+
 1. `store.CreateScene()` -- 1 INSERT
 2. `store.AddParticipant()` -- 1 UPSERT
 3. `store.ListParticipants()` -- 1 SELECT
@@ -239,6 +245,7 @@ This is 2 queries per GetScene, not N+1. Acceptable.
 ### 7b: N+1 in CastPublishVote
 
 `CastPublishVote` (service.go:242-273):
+
 1. `store.ListParticipants(ctx, sceneID)` -- fetches ALL participants
 2. Linear scan to find the voter
 3. `store.AddParticipant(ctx, found)` -- upsert the vote
@@ -246,6 +253,7 @@ This is 2 queries per GetScene, not N+1. Acceptable.
 This fetches all participants just to update one. With 20 participants in a scene, it returns 20 rows to find 1.
 
 **Fix:** Add a `GetParticipant(ctx, sceneID, characterID)` method that queries by the composite primary key directly:
+
 ```sql
 SELECT ... FROM scene_participants WHERE scene_id = $1 AND character_id = $2
 ```
@@ -253,6 +261,7 @@ SELECT ... FROM scene_participants WHERE scene_id = $1 AND character_id = $2
 ### 7c: Dynamic Query Building in ListScenes
 
 `ListScenes` (store.go:210-259) builds SQL dynamically with string concatenation:
+
 ```go
 query += " AND state = $" + itoa(argIdx)
 ```
@@ -272,6 +281,7 @@ However, scene tables are expected to be small (hundreds to low thousands of row
 `CreateScene` and `CastPublishVote` perform multiple writes without a transaction. If the server crashes between writes, data is inconsistent. pgx supports `pool.Begin()` for this.
 
 **Recommendation:**
+
 - P2: Add `GetParticipant` to eliminate the ListParticipants fetch in CastPublishVote
 - P3: Wrap multi-write operations in transactions
 - P3: Consider composite index on `(visibility, created_at DESC)` if ListScenes becomes a hot path

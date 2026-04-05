@@ -282,6 +282,7 @@ The implementation is well-designed and explicitly addresses symlink-based escap
 **Assessment.** The path traversal validation is well-implemented. The `#nosec G204` annotation on line 67 is justified given the validation chain. The residual TOCTOU risk is theoretical and requires pre-existing local access.
 
 **Remediation.** No immediate action required. For defense in depth when third-party plugins are supported, consider:
+
 - Opening the file descriptor during validation and passing the fd to exec (eliminates TOCTOU entirely)
 - Verifying a cryptographic hash of the executable against the manifest
 

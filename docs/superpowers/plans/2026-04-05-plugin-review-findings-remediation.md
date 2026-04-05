@@ -72,6 +72,7 @@ const (
 ```
 
 Then replace all string literals throughout the file:
+
 - `"active"` → `stateActive`
 - `"paused"` → `statePaused`
 - `"ended"` → `stateEnded`
@@ -122,16 +123,20 @@ if limit > maxListLimit {
 - [ ] **Step 5: Replace internal/idgen import with oklog/ulid/v2**
 
 In the imports, replace:
+
 ```go
 "github.com/holomush/holomush/internal/idgen"
 ```
+
 with:
+
 ```go
 "crypto/rand"
 "github.com/oklog/ulid/v2"
 ```
 
 In `CreateScene`, replace `idgen.New().String()` with:
+
 ```go
 sceneID := ulid.MustNew(ulid.Now(), rand.Reader).String()
 ```
@@ -160,10 +165,13 @@ Add `"log/slog"` and `"strings"` to imports.
 - [ ] **Step 7: Fix errors.Is in store.go**
 
 In `plugins/core-scenes/store.go`, replace all occurrences of:
+
 ```go
 if err == pgx.ErrNoRows {
 ```
+
 with:
+
 ```go
 if errors.Is(err, pgx.ErrNoRows) {
 ```
@@ -266,6 +274,7 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool, migrations embed.FS)
 - [ ] **Step 2: Delete duplicated code from scene store**
 
 In `plugins/core-scenes/store.go`:
+
 - Delete the `runMigrationsFromFS` function entirely
 - Delete the `parseMigrationVersion` function
 - Delete the `itoa` function (if still present)
@@ -654,7 +663,7 @@ This copies Lua plugin directories first (they have `main.lua` + `plugin.yaml`),
 
 Append to `.gitignore`:
 
-```
+```text
 # Compiled binary plugins
 build/
 ```
@@ -698,6 +707,7 @@ Read `CLAUDE.md` and identify sections referencing ServiceProxy, LocalPluginHost
 - [ ] **Step 2: Update CLAUDE.md**
 
 Key changes:
+
 - Remove any references to `ServiceProxy`, `ServiceProxyImpl`, `ScopedProxy`
 - Remove any references to `LocalPluginHost`, `type: core`
 - Update the directory structure to include `build/plugins/`, `scripts/build-plugins.sh`

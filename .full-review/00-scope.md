@@ -16,6 +16,7 @@ Design spec: `docs/superpowers/specs/2026-04-05-plugin-architecture-rework-desig
 ## Key Files (non-generated, non-deleted)
 
 ### New infrastructure (Phase 1)
+
 - `internal/plugin/registry.go` + test — ServiceRegistry
 - `internal/plugin/registered_service.go` + test — RegisteredService type
 - `internal/plugin/dependency.go` + test — DAG resolution
@@ -25,6 +26,7 @@ Design spec: `docs/superpowers/specs/2026-04-05-plugin-architecture-rework-desig
 - `internal/plugin/host.go` — Host interface + ServiceConnProvider
 
 ### Hostfunc capability modules (Phase 2)
+
 - `internal/plugin/hostfunc/capability.go` + test — CapabilityRegistry
 - `internal/plugin/hostfunc/cap_alias.go` + test
 - `internal/plugin/hostfunc/cap_property.go` + test
@@ -36,6 +38,7 @@ Design spec: `docs/superpowers/specs/2026-04-05-plugin-architecture-rework-desig
 - `internal/plugin/hostfunc/world_write.go` — World mutation hostfuncs
 
 ### Lua plugin rewrites (Phase 2)
+
 - `plugins/core-communication/main.lua` + plugin.yaml
 - `plugins/core-building/main.lua` + plugin.yaml
 - `plugins/core-objects/main.lua` + plugin.yaml
@@ -43,6 +46,7 @@ Design spec: `docs/superpowers/specs/2026-04-05-plugin-architecture-rework-desig
 - `plugins/core-help/main.lua` + plugin.yaml
 
 ### Scene binary plugin (Phase 3)
+
 - `api/proto/holomush/world/v1/world.proto` — WorldService contract
 - `api/proto/holomush/scene/v1/scene.proto` — SceneService contract
 - `internal/world/grpc_server.go` + test — WorldService gRPC adapter
@@ -57,6 +61,7 @@ Design spec: `docs/superpowers/specs/2026-04-05-plugin-architecture-rework-desig
 - `plugins/core-scenes/migrations/` — SQL schema
 
 ### Modified existing files
+
 - `internal/plugin/manifest.go` — Added Requires, Provides, Storage fields
 - `internal/plugin/manager.go` — DAG resolution, service registration
 - `internal/plugin/setup/subsystem.go` — WorldService registration, schema provisioner, proxy wiring
@@ -67,6 +72,7 @@ Design spec: `docs/superpowers/specs/2026-04-05-plugin-architecture-rework-desig
 - `api/proto/holomush/plugin/v1/plugin.proto` — Init RPC, ServiceConfig, removed world-query RPCs
 
 ### Deleted files (Phase 4)
+
 - `internal/plugin/service_proxy.go` + impl + tests + mock
 - `internal/plugin/scoped_proxy.go`
 - `internal/plugin/otel_service_proxy.go`

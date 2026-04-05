@@ -69,6 +69,7 @@ When ABAC policy installation fails, `loadPlugin` correctly calls `host.Unload` 
 The current code logs errors for service registration failures but continues. If service registration is truly best-effort, this is documented behavior. But if a partially-registered plugin is problematic, this needs cleanup.
 
 **Recommendation:** Either:
+
 - (a) Add rollback logic to deregister any successfully registered services before returning error, or
 - (b) Document explicitly that partial service registration is acceptable and explain why (the log-and-continue pattern already suggests this is intentional, but it should be documented)
 
@@ -79,12 +80,14 @@ Note: The code currently does not return an error for registration failures at a
 ### CQ-04 [Medium] Capability module Lua function pattern is highly repetitive
 
 **Files:**
+
 - `internal/plugin/hostfunc/cap_alias.go` (7 functions, ~180 lines)
 - `internal/plugin/hostfunc/cap_property.go` (3 functions, ~90 lines)
 - `internal/plugin/hostfunc/cap_session.go` (5 functions, ~130 lines)
 - `internal/plugin/hostfunc/cap_world_query.go` (2 functions, ~70 lines)
 
 Each Lua-bound function follows an identical pattern:
+
 1. Extract arguments from Lua state
 2. Get context via `luaContext(L)`
 3. Call Go interface method
@@ -241,6 +244,7 @@ The method holds the mutex for its entire duration, so truly concurrent access w
 **File:** `internal/plugin/hostfunc/adapter.go:74-164`
 
 The four retrieval methods (`GetLocation`, `GetCharacter`, `GetCharactersByLocation`, `GetObject`) each follow an identical pattern:
+
 1. Call service method
 2. If error, wrap with PLUGIN_QUERY_FAILED
 3. If nil result, log warning and return ErrNotFound wrapped
@@ -371,6 +375,7 @@ Or if staff should also be able to end scenes, add a role check. This is noted a
 `CapabilityRegistry` uses a plain `map[string]Capability` with no synchronization. Currently, capabilities are registered during startup before any concurrent access, so this is safe. However, the type is exported and nothing prevents concurrent use.
 
 **Recommendation:** Either:
+
 - Add a `sync.RWMutex` for thread safety, or
 - Document that the registry is not thread-safe and must be fully populated before first use
 

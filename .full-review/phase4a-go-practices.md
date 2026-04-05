@@ -12,6 +12,7 @@ PR #192 -- Proto-first plugin architecture rework
 `ServiceRegistry.Resolve` copies the `RegisteredService` out of the map, then returns a pointer to that local copy. The caller receives a pointer that is detached from the registry. Mutations to the returned `*RegisteredService` will not affect the registry, and the `Health` field (an interface pointer) may create confusing semantics -- callers might expect the returned service to reflect registry state.
 
 **Current:**
+
 ```go
 func (r *ServiceRegistry) Resolve(name string) (*RegisteredService, error) {
     r.mu.RLock()
@@ -45,11 +46,13 @@ The `(value, bool)` signature is also more idiomatic for lookups than `(*T, erro
 Direct equality comparison misses wrapped errors. The rest of the codebase uses `errors.Is`.
 
 **Current:**
+
 ```go
 if err == pgx.ErrNoRows {
 ```
 
 **Recommended:**
+
 ```go
 if errors.Is(err, pgx.ErrNoRows) {
 ```
@@ -64,12 +67,14 @@ if errors.Is(err, pgx.ErrNoRows) {
 Every other file in the codebase that inspects oops error codes uses the pattern `code, ok := oopsErr.Code().(string)` with a safety check. The scene plugin's `mapStoreError` switches on `oopsErr.Code()` directly, which compares `any` values. This works because oops stores string codes as `string`, but it is inconsistent and fragile.
 
 **Current:**
+
 ```go
 switch oopsErr.Code() {
 case "SCENE_NOT_FOUND":
 ```
 
 **Recommended:** Follow the project pattern:
+
 ```go
 code, ok := oopsErr.Code().(string)
 if !ok {
@@ -89,6 +94,7 @@ case "SCENE_NOT_FOUND":
 `NewInProcessConn` starts a goroutine running `srv.Serve(lis)`, but `Close()` only closes the client connection and listener. The gRPC server itself is never stopped via `srv.GracefulStop()` or `srv.Stop()`. While `lis.Close()` will cause `srv.Serve` to return, the server still holds resources (registered services, internal state). The `*grpc.Server` should be retained and stopped on `Close()`.
 
 **Recommended:**
+
 ```go
 type InProcessConn struct {
     conn     *grpc.ClientConn
@@ -114,6 +120,7 @@ func (c *InProcessConn) Close() error {
 The project is on Go 1.25 but uses the legacy `sort` package in new code. The `slices` package (stable since Go 1.21) provides `slices.SortFunc` and `slices.Sort` with better type safety and no boxing of comparison functions.
 
 **Current:**
+
 ```go
 sort.Slice(discovered, func(i, j int) bool {
     return discovered[i].Manifest.EffectivePriority() < discovered[j].Manifest.EffectivePriority()
@@ -122,6 +129,7 @@ sort.Strings(names)
 ```
 
 **Recommended:**
+
 ```go
 slices.SortFunc(discovered, func(a, b *DiscoveredPlugin) int {
     return cmp.Compare(a.Manifest.EffectivePriority(), b.Manifest.EffectivePriority())
@@ -139,11 +147,13 @@ slices.Sort(names)
 Go 1.18+ introduced `any` as an alias for `interface{}`. New code should prefer the shorter form for readability. The `streamHandler` signature uses `_ interface{}` and `GRPCClient` returns `(interface{}, error)`.
 
 **Current:**
+
 ```go
 func (p *GRPCServiceProxy) streamHandler(_ interface{}, stream grpc.ServerStream) error {
 ```
 
 **Recommended:**
+
 ```go
 func (p *GRPCServiceProxy) streamHandler(_ any, stream grpc.ServerStream) error {
 ```
@@ -256,11 +266,13 @@ Error codes like `"SCENE_NOT_FOUND"`, `"SCENE_CREATE_FAILED"`, etc. appear as st
 `pluginSchemaName` converts plugin names to schema names (e.g., `core-scenes` becomes `plugin_core_scenes`), but the resulting name is interpolated directly into DDL without quoting. While the current naming pattern produces safe identifiers, this is fragile -- if a plugin name ever produces a Postgres reserved word or unexpected character, the DDL will break or worse.
 
 **Current:**
+
 ```go
 ddl := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schemaName)
 ```
 
 **Recommended:**
+
 ```go
 ddl := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %q", schemaName)
 ```

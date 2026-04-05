@@ -67,6 +67,7 @@ The plugin guide's manifest table (lines 44-51) lists `name`, `version`, `type`,
 The binary plugin example (lines 186-199) shows a minimal manifest without these fields. The actual `core-scenes/plugin.yaml` is the only living example that uses all three, but it is not referenced.
 
 **Recommendation:** Add a "Service Contracts" section after "ABAC Policies" covering:
+
 - `requires: []` -- list of fully qualified proto service names the plugin consumes
 - `provides: []` -- list of proto service names the plugin implements (binary only)
 - `storage: kv|postgres` -- storage tier (postgres requires binary type)
@@ -90,6 +91,7 @@ The manifest table does not include `commands`. The `commands` field with its `c
 The binary plugin section shows only the `Handler` interface (`HandleEvent`). The new `ServiceProvider` interface (`RegisterServices` + `Init`) and `ServeWithServices` entry point are not documented. A plugin author wanting to build a service-providing binary plugin has no guide.
 
 **Recommendation:** Add a "Service-Providing Binary Plugins" section after the basic binary example, showing:
+
 1. `ServiceProvider` interface and its two methods
 2. `pluginsdk.ServeWithServices()` as the entry point
 3. `Init` receiving `ServiceConfig` with connection string
@@ -179,6 +181,7 @@ Several sections are stale or incomplete:
 No stale references to `ServiceProxy`, `LocalPluginHost`, or `type:core` were found (those were already cleaned up).
 
 **Recommendation:** Update CLAUDE.md:
+
 - Expand the plugin directory description to include registry, capabilities, goplugin, schema provisioner
 - Change `plugins/` description to "Lua and binary plugins"
 - Add `pkg/plugin/storage/` to the tree
@@ -199,6 +202,7 @@ No stale references to `ServiceProxy`, `LocalPluginHost`, or `type:core` were fo
 Compare with `world.proto:30-41` where every field of `LocationInfo` has a comment.
 
 **Recommendation:** Add per-field comments to all `scene.proto` messages, matching the standard set by `world.proto`. Specifically document:
+
 - Valid `state` values (open, closed, etc.)
 - Valid `visibility` values
 - Valid `pose_order_mode` values
@@ -226,6 +230,7 @@ The `SceneService` service definition lists 9 RPCs with no comments. `WorldServi
 The `pkg/plugin/storage` package provides `Connect`, `RunMigrations`, and `ParseSchemaFromConnString`. These are the primary APIs a binary plugin author uses for database access. None are documented in the plugin guide.
 
 A plugin author would need to:
+
 1. Know that `storage: postgres` in their manifest triggers schema provisioning
 2. Know that `Init(ctx, config)` receives the connection string in `config.ConnectionString`
 3. Know to embed migrations and call `storage.RunMigrations`
@@ -243,6 +248,7 @@ A plugin author would need to:
 **File:** `site/docs/operating/` (missing content)
 
 Operators have no documentation covering:
+
 - Plugin discovery: where plugins are found, auto-discovery behavior
 - Schema provisioning: what happens to the database when a `storage: postgres` plugin loads
 - Connection pool implications: 3 independent `pgxpool.Pool` instances (core, provisioner, per-plugin) noted in PERF-4

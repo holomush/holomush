@@ -73,6 +73,7 @@ The `internal/plugin/hostfunc/adapter.go` does import `internal/world` types dir
 ### 2.2 `pkg/plugin/` public SDK
 
 **Clean and minimal.** The public API surface is:
+
 - `ServeWithServices(config, provider)` -- entry point for binary plugins
 - `ServiceProvider` interface -- `RegisterServices` + `Init`
 - `ServeConfig`, `Handler`, `CommandHandler` -- existing SDK types
@@ -90,16 +91,18 @@ This is the right level of abstraction. Plugin authors see exactly what they nee
 
 `plugins/core-scenes/service.go:15` imports `github.com/holomush/holomush/internal/idgen`. This violates the fundamental boundary that plugins (which live in `plugins/` and will become out-of-tree packages) must only import `pkg/` (public API).
 
-```
+```text
 plugins/core-scenes/service.go:15:	"github.com/holomush/holomush/internal/idgen"
 ```
 
 This works today because `core-scenes` is in the same Go module, but it creates a structural dependency that:
+
 1. Prevents `core-scenes` from being extracted to its own module
 2. Violates D5's spirit of plugin isolation
 3. Sets a bad precedent for future binary plugins
 
 **Recommendation:** Either:
+
 - Move `idgen.New()` to `pkg/plugin/idgen` (a thin wrapper around ULID generation), or
 - Use `github.com/oklog/ulid/v2` directly in the plugin (it is already a transitive dependency), or
 - Add ID generation to the plugin SDK
@@ -112,7 +115,7 @@ This works today because `core-scenes` is in the same Go module, but it creates 
 
 **None found.** The dependency flow is strictly:
 
-```
+```text
 cmd/holomush/ -> internal/plugin/setup/ -> internal/plugin/ -> pkg/plugin/
                                         -> internal/plugin/goplugin/
                                         -> internal/plugin/hostfunc/
@@ -123,6 +126,7 @@ plugins/core-scenes/ -> pkg/plugin/ (+ internal/idgen violation noted above)
 ### 3.2 `plugins/core-scenes/` import boundary
 
 Aside from the `internal/idgen` violation (F-02), imports are correct:
+
 - `pkg/plugin` -- SDK types
 - `pkg/proto/holomush/plugin/v1` -- plugin protocol
 - `pkg/proto/holomush/scene/v1` -- service contract
@@ -162,6 +166,7 @@ The `grpcServicePlugin.GRPCServer()` method registers both `PluginServiceServer`
 ### 4.4 Init RPC handshake
 
 **Appropriate pattern.** The Init RPC sends `ServiceConfig` (connection string + required service addresses) after the go-plugin connection is established. This is the right sequence because:
+
 1. go-plugin handshake establishes the gRPC transport
 2. Init RPC passes configuration that depends on runtime state (DB connection, service addresses)
 3. The plugin can fail initialization cleanly and report errors back
@@ -234,6 +239,7 @@ Each capability defines its own narrow access interface (`SessionAccess`, `Alias
 ### 6.2 Binary plugin path for scenes
 
 **Justified.** The scene plugin requires:
+
 - Its own PostgreSQL schema with 4 tables
 - Complex domain logic (state machines, participant management, voting)
 - A proto service contract other consumers will call
@@ -266,6 +272,7 @@ Total new infrastructure: approximately 584 lines. This is lean for what it deli
 `plugins/core-scenes/store.go` contains `runMigrationsFromFS()` (lines 88-133) which is a near-copy of `pkg/plugin/storage.RunMigrations()`. The duplication exists because `storage.RunMigrations` takes `embed.FS` but the scene plugin needs `fs.FS` (after `fs.Sub` to strip the `migrations/` prefix).
 
 Both implementations:
+
 - Create the `plugin_migrations` table
 - Query the current version
 - Iterate `.up.sql` files
