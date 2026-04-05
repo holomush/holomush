@@ -82,6 +82,8 @@ tasks:
   test:int:
     desc: Run integration tests (needs Docker for testcontainers)
     cmds:
+      - echo "▸ Building binary plugins for host platform..."
+      - GOOS={{OS}} GOARCH={{ARCH}} ./scripts/build-plugins.sh
       - gotestsum --format pkgname -- -race -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic ./internal/content/
         ./internal/store/ ./test/integration/...
 
@@ -143,7 +145,7 @@ tasks:
       - go build -o {{.BINARY_NAME}} {{.MAIN_PKG}}
 
   plugin:build-all:
-    desc: Discover and compile all binary plugins for linux/amd64
+    desc: Discover and compile all binary plugins (host + linux/amd64 + linux/arm64)
     cmds:
       - ./scripts/build-plugins.sh
 
@@ -157,7 +159,7 @@ tasks:
     deps: ['web:embed', 'plugin:build-all']
     cmds:
       - CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o holomush {{.MAIN_PKG}}
-      - docker build -t holomush .
+      - docker build --build-arg TARGETARCH=$(go env GOARCH) -t holomush .
 
   docker:build:cover:
     desc: Build Docker image with coverage instrumentation

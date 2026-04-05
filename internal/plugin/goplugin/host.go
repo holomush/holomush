@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -150,7 +151,14 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").New("not a binary plugin")
 	}
 
-	execPath := filepath.Join(dir, manifest.BinaryPlugin.Executable)
+	// Resolve the binary path. Check platform-specific subdirectory first
+	// (e.g., linux-amd64/core-scenes), fall back to direct path for backward
+	// compatibility (e.g., core-scenes).
+	platformDir := runtime.GOOS + "-" + runtime.GOARCH
+	execPath := filepath.Join(dir, platformDir, manifest.BinaryPlugin.Executable)
+	if _, statErr := os.Stat(execPath); os.IsNotExist(statErr) {
+		execPath = filepath.Join(dir, manifest.BinaryPlugin.Executable)
+	}
 
 	// Verify resolved path is within the plugin directory (prevent path traversal)
 	// Use EvalSymlinks to resolve symlinks and prevent symlink-based escapes

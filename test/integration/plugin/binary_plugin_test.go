@@ -38,10 +38,12 @@ func pluginBinaryDir() string {
 }
 
 // coreScenesBinaryPath returns the path to the core-scenes binary and its plugin dir.
-// Returns (pluginDir, binaryPath).
+// Returns (pluginDir, binaryPath). The binary lives under a platform-specific
+// subdirectory: <pluginDir>/<os>-<arch>/<executable>.
 func coreScenesBinaryPath() (string, string) {
 	dir := filepath.Join(pluginBinaryDir(), "core-scenes")
-	return dir, filepath.Join(dir, "core-scenes")
+	platformDir := runtime.GOOS + "-" + runtime.GOARCH
+	return dir, filepath.Join(dir, platformDir, "core-scenes")
 }
 
 var _ = Describe("Binary Plugin Lifecycle", func() {
