@@ -24,14 +24,8 @@ service PluginService {
 }
 
 // PluginHostService runs in the host process, allowing binary plugins
-// to call back for world queries, KV storage, and session operations.
+// to call back for event emission, logging, and KV storage.
 service PluginHostService {
-  // QueryLocation retrieves a location by ID.
-  rpc QueryLocation(PluginHostServiceQueryLocationRequest) returns (PluginHostServiceQueryLocationResponse);
-  // QueryCharacter retrieves a character by ID.
-  rpc QueryCharacter(PluginHostServiceQueryCharacterRequest) returns (PluginHostServiceQueryCharacterResponse);
-  // QueryLocationCharacters returns all characters present at a location.
-  rpc QueryLocationCharacters(PluginHostServiceQueryLocationCharactersRequest) returns (PluginHostServiceQueryLocationCharactersResponse);
   // EmitEvent publishes an event to a stream.
   rpc EmitEvent(PluginHostServiceEmitEventRequest) returns (PluginHostServiceEmitEventResponse);
   // Log writes a log message through the host's logging system.
@@ -159,52 +153,6 @@ message HandleCommandResponse {
 }
 
 // --- PluginHostService messages ---
-// Prefixed with PluginHostService to avoid collisions with hostfunc.proto types.
-
-// PluginHostServiceLocationInfo contains basic location information.
-message PluginHostServiceLocationInfo {
-  string id = 1;
-  string name = 2;
-  string description = 3;
-  string type = 4;
-  string owner_id = 5;
-}
-
-// PluginHostServiceCharacterInfo contains basic character information.
-message PluginHostServiceCharacterInfo {
-  string id = 1;
-  string player_id = 2;
-  string name = 3;
-  string description = 4;
-  string location_id = 5;
-}
-
-message PluginHostServiceQueryLocationRequest {
-  string subject_id = 1;
-  string location_id = 2;
-}
-
-message PluginHostServiceQueryLocationResponse {
-  PluginHostServiceLocationInfo location = 1;
-}
-
-message PluginHostServiceQueryCharacterRequest {
-  string subject_id = 1;
-  string character_id = 2;
-}
-
-message PluginHostServiceQueryCharacterResponse {
-  PluginHostServiceCharacterInfo character = 1;
-}
-
-message PluginHostServiceQueryLocationCharactersRequest {
-  string subject_id = 1;
-  string location_id = 2;
-}
-
-message PluginHostServiceQueryLocationCharactersResponse {
-  repeated PluginHostServiceCharacterInfo characters = 1;
-}
 
 message PluginHostServiceEmitEventRequest {
   string stream = 1;

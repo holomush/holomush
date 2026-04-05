@@ -218,14 +218,11 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	PluginHostService_QueryLocation_FullMethodName           = "/holomush.plugin.v1.PluginHostService/QueryLocation"
-	PluginHostService_QueryCharacter_FullMethodName          = "/holomush.plugin.v1.PluginHostService/QueryCharacter"
-	PluginHostService_QueryLocationCharacters_FullMethodName = "/holomush.plugin.v1.PluginHostService/QueryLocationCharacters"
-	PluginHostService_EmitEvent_FullMethodName               = "/holomush.plugin.v1.PluginHostService/EmitEvent"
-	PluginHostService_Log_FullMethodName                     = "/holomush.plugin.v1.PluginHostService/Log"
-	PluginHostService_KVGet_FullMethodName                   = "/holomush.plugin.v1.PluginHostService/KVGet"
-	PluginHostService_KVSet_FullMethodName                   = "/holomush.plugin.v1.PluginHostService/KVSet"
-	PluginHostService_KVDelete_FullMethodName                = "/holomush.plugin.v1.PluginHostService/KVDelete"
+	PluginHostService_EmitEvent_FullMethodName = "/holomush.plugin.v1.PluginHostService/EmitEvent"
+	PluginHostService_Log_FullMethodName       = "/holomush.plugin.v1.PluginHostService/Log"
+	PluginHostService_KVGet_FullMethodName     = "/holomush.plugin.v1.PluginHostService/KVGet"
+	PluginHostService_KVSet_FullMethodName     = "/holomush.plugin.v1.PluginHostService/KVSet"
+	PluginHostService_KVDelete_FullMethodName  = "/holomush.plugin.v1.PluginHostService/KVDelete"
 )
 
 // PluginHostServiceClient is the client API for PluginHostService service.
@@ -233,14 +230,8 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // PluginHostService runs in the host process, allowing binary plugins
-// to call back for world queries, KV storage, and session operations.
+// to call back for event emission, logging, and KV storage.
 type PluginHostServiceClient interface {
-	// QueryLocation retrieves a location by ID.
-	QueryLocation(ctx context.Context, in *PluginHostServiceQueryLocationRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryLocationResponse, error)
-	// QueryCharacter retrieves a character by ID.
-	QueryCharacter(ctx context.Context, in *PluginHostServiceQueryCharacterRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryCharacterResponse, error)
-	// QueryLocationCharacters returns all characters present at a location.
-	QueryLocationCharacters(ctx context.Context, in *PluginHostServiceQueryLocationCharactersRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryLocationCharactersResponse, error)
 	// EmitEvent publishes an event to a stream.
 	EmitEvent(ctx context.Context, in *PluginHostServiceEmitEventRequest, opts ...grpc.CallOption) (*PluginHostServiceEmitEventResponse, error)
 	// Log writes a log message through the host's logging system.
@@ -259,36 +250,6 @@ type pluginHostServiceClient struct {
 
 func NewPluginHostServiceClient(cc grpc.ClientConnInterface) PluginHostServiceClient {
 	return &pluginHostServiceClient{cc}
-}
-
-func (c *pluginHostServiceClient) QueryLocation(ctx context.Context, in *PluginHostServiceQueryLocationRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryLocationResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(PluginHostServiceQueryLocationResponse)
-	err := c.cc.Invoke(ctx, PluginHostService_QueryLocation_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *pluginHostServiceClient) QueryCharacter(ctx context.Context, in *PluginHostServiceQueryCharacterRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryCharacterResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(PluginHostServiceQueryCharacterResponse)
-	err := c.cc.Invoke(ctx, PluginHostService_QueryCharacter_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *pluginHostServiceClient) QueryLocationCharacters(ctx context.Context, in *PluginHostServiceQueryLocationCharactersRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryLocationCharactersResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(PluginHostServiceQueryLocationCharactersResponse)
-	err := c.cc.Invoke(ctx, PluginHostService_QueryLocationCharacters_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *pluginHostServiceClient) EmitEvent(ctx context.Context, in *PluginHostServiceEmitEventRequest, opts ...grpc.CallOption) (*PluginHostServiceEmitEventResponse, error) {
@@ -346,14 +307,8 @@ func (c *pluginHostServiceClient) KVDelete(ctx context.Context, in *PluginHostSe
 // for forward compatibility.
 //
 // PluginHostService runs in the host process, allowing binary plugins
-// to call back for world queries, KV storage, and session operations.
+// to call back for event emission, logging, and KV storage.
 type PluginHostServiceServer interface {
-	// QueryLocation retrieves a location by ID.
-	QueryLocation(context.Context, *PluginHostServiceQueryLocationRequest) (*PluginHostServiceQueryLocationResponse, error)
-	// QueryCharacter retrieves a character by ID.
-	QueryCharacter(context.Context, *PluginHostServiceQueryCharacterRequest) (*PluginHostServiceQueryCharacterResponse, error)
-	// QueryLocationCharacters returns all characters present at a location.
-	QueryLocationCharacters(context.Context, *PluginHostServiceQueryLocationCharactersRequest) (*PluginHostServiceQueryLocationCharactersResponse, error)
 	// EmitEvent publishes an event to a stream.
 	EmitEvent(context.Context, *PluginHostServiceEmitEventRequest) (*PluginHostServiceEmitEventResponse, error)
 	// Log writes a log message through the host's logging system.
@@ -374,15 +329,6 @@ type PluginHostServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedPluginHostServiceServer struct{}
 
-func (UnimplementedPluginHostServiceServer) QueryLocation(context.Context, *PluginHostServiceQueryLocationRequest) (*PluginHostServiceQueryLocationResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method QueryLocation not implemented")
-}
-func (UnimplementedPluginHostServiceServer) QueryCharacter(context.Context, *PluginHostServiceQueryCharacterRequest) (*PluginHostServiceQueryCharacterResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method QueryCharacter not implemented")
-}
-func (UnimplementedPluginHostServiceServer) QueryLocationCharacters(context.Context, *PluginHostServiceQueryLocationCharactersRequest) (*PluginHostServiceQueryLocationCharactersResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method QueryLocationCharacters not implemented")
-}
 func (UnimplementedPluginHostServiceServer) EmitEvent(context.Context, *PluginHostServiceEmitEventRequest) (*PluginHostServiceEmitEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EmitEvent not implemented")
 }
@@ -417,60 +363,6 @@ func RegisterPluginHostServiceServer(s grpc.ServiceRegistrar, srv PluginHostServ
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&PluginHostService_ServiceDesc, srv)
-}
-
-func _PluginHostService_QueryLocation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PluginHostServiceQueryLocationRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(PluginHostServiceServer).QueryLocation(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: PluginHostService_QueryLocation_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginHostServiceServer).QueryLocation(ctx, req.(*PluginHostServiceQueryLocationRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _PluginHostService_QueryCharacter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PluginHostServiceQueryCharacterRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(PluginHostServiceServer).QueryCharacter(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: PluginHostService_QueryCharacter_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginHostServiceServer).QueryCharacter(ctx, req.(*PluginHostServiceQueryCharacterRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _PluginHostService_QueryLocationCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PluginHostServiceQueryLocationCharactersRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(PluginHostServiceServer).QueryLocationCharacters(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: PluginHostService_QueryLocationCharacters_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginHostServiceServer).QueryLocationCharacters(ctx, req.(*PluginHostServiceQueryLocationCharactersRequest))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _PluginHostService_EmitEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -570,18 +462,6 @@ var PluginHostService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "holomush.plugin.v1.PluginHostService",
 	HandlerType: (*PluginHostServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "QueryLocation",
-			Handler:    _PluginHostService_QueryLocation_Handler,
-		},
-		{
-			MethodName: "QueryCharacter",
-			Handler:    _PluginHostService_QueryCharacter_Handler,
-		},
-		{
-			MethodName: "QueryLocationCharacters",
-			Handler:    _PluginHostService_QueryLocationCharacters_Handler,
-		},
 		{
 			MethodName: "EmitEvent",
 			Handler:    _PluginHostService_EmitEvent_Handler,
