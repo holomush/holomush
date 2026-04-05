@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"strings"
@@ -174,7 +175,7 @@ func (s *SceneStore) GetScene(ctx context.Context, id string) (*SceneRow, error)
 		&row.ContentWarnings, &row.Tags, &row.CreatedAt, &row.EndedAt, &row.ArchivedAt,
 	)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.Code("SCENE_NOT_FOUND").With("scene_id", id).Wrap(err)
 		}
 		return nil, oops.Code("SCENE_GET_FAILED").With("scene_id", id).Wrap(err)

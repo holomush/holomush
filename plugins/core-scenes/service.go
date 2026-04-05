@@ -5,15 +5,48 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"log/slog"
+	"strings"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/holomush/holomush/internal/idgen"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
+)
+
+// Scene state constants.
+const (
+	stateActive = "active"
+	statePaused = "paused"
+	stateEnded  = "ended"
+)
+
+// Visibility constants.
+const (
+	visibilityOpen = "open"
+)
+
+// Participant role constants.
+const (
+	roleOwner   = "owner"
+	roleMember  = "member"
+	roleInvited = "invited"
+)
+
+// Pose order constants.
+const (
+	poseOrderFree = "free"
+)
+
+// List pagination limits.
+const (
+	maxListLimit     = 200
+	defaultListLimit = 50
 )
 
 // SceneServiceImpl implements scenev1.SceneServiceServer backed by SceneStore.
@@ -38,15 +71,15 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 	}
 
 	now := time.Now().UTC()
-	sceneID := idgen.New().String()
+	sceneID := ulid.MustNew(ulid.Now(), rand.Reader).String()
 
 	visibility := req.GetVisibility()
 	if visibility == "" {
-		visibility = "open"
+		visibility = visibilityOpen
 	}
 	poseOrder := req.GetPoseOrderMode()
 	if poseOrder == "" {
-		poseOrder = "free"
+		poseOrder = poseOrderFree
 	}
 
 	row := &SceneRow{
@@ -55,7 +88,7 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		Description:     req.GetDescription(),
 		LocationID:      nilIfEmpty(req.GetLocationId()),
 		OwnerID:         req.GetSessionId(),
-		State:           "active",
+		State:           stateActive,
 		PoseOrder:       poseOrder,
 		Visibility:      visibility,
 		ContentWarnings: req.GetContentWarnings(),
@@ -70,7 +103,7 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 	ownerParticipant := &ParticipantRow{
 		SceneID:     sceneID,
 		CharacterID: req.GetSessionId(),
-		Role:        "owner",
+		Role:        roleOwner,
 		JoinedAt:    now,
 	}
 	if err := s.store.AddParticipant(ctx, ownerParticipant); err != nil {
@@ -112,14 +145,17 @@ func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRe
 func (s *SceneServiceImpl) ListScenes(ctx context.Context, req *scenev1.ListScenesRequest) (*scenev1.ListScenesResponse, error) {
 	limit := int(req.GetLimit())
 	if limit <= 0 {
-		limit = 50
+		limit = defaultListLimit
+	}
+	if limit > maxListLimit {
+		limit = maxListLimit
 	}
 	offset := int(req.GetOffset())
 	if offset < 0 {
 		offset = 0
 	}
 
-	openVis := "open"
+	openVis := visibilityOpen
 	scenes, err := s.store.ListScenes(ctx, nil, &openVis, limit, offset)
 	if err != nil {
 		return nil, mapStoreError(err, "list_scenes")
@@ -148,12 +184,16 @@ func (s *SceneServiceImpl) EndScene(ctx context.Context, req *scenev1.EndSceneRe
 		return nil, mapStoreError(err, "get_scene")
 	}
 
-	if scene.State != "active" && scene.State != "paused" {
+	if scene.OwnerID != req.GetSessionId() {
+		return nil, status.Errorf(codes.PermissionDenied, "only the scene owner can end a scene")
+	}
+
+	if scene.State != stateActive && scene.State != statePaused {
 		return nil, status.Errorf(codes.FailedPrecondition, "scene must be active or paused to end, current state: %s", scene.State)
 	}
 
 	now := time.Now().UTC()
-	scene.State = "ended"
+	scene.State = stateEnded
 	scene.EndedAt = &now
 
 	if err := s.store.UpdateScene(ctx, scene); err != nil {
@@ -177,17 +217,17 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 		return nil, mapStoreError(err, "get_scene")
 	}
 
-	if scene.State != "active" {
+	if scene.State != stateActive {
 		return nil, status.Errorf(codes.FailedPrecondition, "scene must be active to join, current state: %s", scene.State)
 	}
-	if scene.Visibility != "open" {
+	if scene.Visibility != visibilityOpen {
 		return nil, status.Errorf(codes.PermissionDenied, "scene is not open for joining")
 	}
 
 	participant := &ParticipantRow{
 		SceneID:     req.GetSceneId(),
 		CharacterID: req.GetSessionId(),
-		Role:        "member",
+		Role:        roleMember,
 		JoinedAt:    time.Now().UTC(),
 	}
 	if err := s.store.AddParticipant(ctx, participant); err != nil {
@@ -225,10 +265,18 @@ func (s *SceneServiceImpl) InviteToScene(ctx context.Context, req *scenev1.Invit
 		return nil, status.Errorf(codes.InvalidArgument, "character_id is required")
 	}
 
+	scene, err := s.store.GetScene(ctx, req.GetSceneId())
+	if err != nil {
+		return nil, mapStoreError(err, "get_scene")
+	}
+	if scene.OwnerID != req.GetSessionId() {
+		return nil, status.Errorf(codes.PermissionDenied, "only the scene owner can invite participants")
+	}
+
 	participant := &ParticipantRow{
 		SceneID:     req.GetSceneId(),
 		CharacterID: req.GetCharacterId(),
-		Role:        "invited",
+		Role:        roleInvited,
 		JoinedAt:    time.Now().UTC(),
 	}
 	if err := s.store.AddParticipant(ctx, participant); err != nil {
@@ -351,21 +399,14 @@ func mapStoreError(err error, operation string) error {
 	if err == nil {
 		return nil
 	}
-	if oopsErr, ok := oops.AsOops(err); ok {
-		switch oopsErr.Code() {
-		case "SCENE_NOT_FOUND":
-			return status.Errorf(codes.NotFound, "scene not found")
-		case "SCENE_CREATE_FAILED":
-			return status.Errorf(codes.Internal, "failed to create scene")
-		case "SCENE_UPDATE_FAILED":
-			return status.Errorf(codes.Internal, "failed to update scene")
-		case "SCENE_ADD_PARTICIPANT_FAILED":
-			return status.Errorf(codes.Internal, "failed to add participant")
-		case "SCENE_REMOVE_PARTICIPANT_FAILED":
-			return status.Errorf(codes.Internal, "failed to remove participant")
-		case "SCENE_LIST_FAILED":
-			return status.Errorf(codes.Internal, "failed to list scenes")
+	oopsErr, ok := oops.AsOops(err)
+	if ok {
+		if code, isStr := oopsErr.Code().(string); isStr {
+			if strings.HasSuffix(code, "_NOT_FOUND") {
+				return status.Errorf(codes.NotFound, "%s: not found", operation)
+			}
 		}
 	}
-	return status.Errorf(codes.Internal, "%s failed: %v", operation, err)
+	slog.Error("store operation failed", "operation", operation, "error", err)
+	return status.Errorf(codes.Internal, "%s failed", operation)
 }
