@@ -1,0 +1,124 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+package plugins
+
+import (
+	"strings"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+// GRPCServiceProxy forwards gRPC calls for plugin-provided services
+// to the service registry. Install as a grpc.UnknownServiceHandler.
+type GRPCServiceProxy struct {
+	registry *ServiceRegistry
+}
+
+// NewGRPCServiceProxy creates a proxy that routes unknown gRPC methods
+// to plugin-provided services via the registry.
+func NewGRPCServiceProxy(registry *ServiceRegistry) *GRPCServiceProxy {
+	return &GRPCServiceProxy{registry: registry}
+}
+
+// Handler returns a grpc.ServerOption that installs this proxy as the
+// unknown service handler on a gRPC server.
+func (p *GRPCServiceProxy) Handler() grpc.ServerOption {
+	return grpc.UnknownServiceHandler(p.streamHandler)
+}
+
+func (p *GRPCServiceProxy) streamHandler(srv interface{}, stream grpc.ServerStream) error {
+	method, ok := grpc.MethodFromServerStream(stream)
+	if !ok {
+		return status.Error(codes.Internal, "failed to get method from stream")
+	}
+
+	serviceName := extractServiceName(method)
+	if serviceName == "" {
+		return status.Errorf(codes.Unimplemented, "unknown method %s", method)
+	}
+
+	svc, err := p.registry.Resolve(serviceName)
+	if err != nil {
+		return status.Errorf(codes.Unimplemented, "unknown service %s", serviceName)
+	}
+
+	if svc.Conn == nil {
+		return status.Errorf(codes.Unavailable, "service %s has no connection", serviceName)
+	}
+
+	if svc.Health != nil && !svc.Health.Healthy() {
+		return status.Errorf(codes.Unavailable, "service %s is unhealthy", serviceName)
+	}
+
+	// Forward the unary or streaming call to the plugin
+	clientStream, streamErr := svc.Conn.NewStream(
+		stream.Context(),
+		&grpc.StreamDesc{ServerStreams: true, ClientStreams: true},
+		method,
+	)
+	if streamErr != nil {
+		return status.Errorf(codes.Internal, "failed to create stream to %s: %v", serviceName, streamErr)
+	}
+
+	return proxyStreams(stream, clientStream)
+}
+
+// extractServiceName extracts "package.Service" from "/package.Service/Method".
+func extractServiceName(fullMethod string) string {
+	if !strings.HasPrefix(fullMethod, "/") {
+		return ""
+	}
+	parts := strings.SplitN(fullMethod[1:], "/", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+	return parts[0]
+}
+
+// proxyStreams bidirectionally proxies between a server stream and client stream.
+func proxyStreams(srv grpc.ServerStream, cli grpc.ClientStream) error {
+	// Forward client→server (request) in a goroutine
+	errCh := make(chan error, 1)
+	go func() {
+		for {
+			msg := &rawMessage{}
+			if err := srv.RecvMsg(msg); err != nil {
+				_ = cli.CloseSend()
+				errCh <- nil // EOF or error from client side
+				return
+			}
+			if err := cli.SendMsg(msg); err != nil {
+				errCh <- err
+				return
+			}
+		}
+	}()
+
+	// Forward server→client (response) in main goroutine
+	for {
+		msg := &rawMessage{}
+		if err := cli.RecvMsg(msg); err != nil {
+			<-errCh
+			return err // includes io.EOF which signals normal completion
+		}
+		if err := srv.SendMsg(msg); err != nil {
+			<-errCh
+			return err
+		}
+	}
+}
+
+// rawMessage is a pass-through protobuf message for gRPC proxying.
+// It stores raw bytes without deserialization.
+type rawMessage struct {
+	data []byte
+}
+
+func (m *rawMessage) Marshal() ([]byte, error) { return m.data, nil }
+func (m *rawMessage) Unmarshal(b []byte) error { m.data = b; return nil }
+func (m *rawMessage) ProtoMessage()            {}
+func (m *rawMessage) Reset()                   { m.data = nil }
+func (m *rawMessage) String() string           { return string(m.data) }
