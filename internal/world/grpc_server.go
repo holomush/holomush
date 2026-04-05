@@ -5,6 +5,7 @@ package world
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/oklog/ulid/v2"
@@ -149,22 +150,26 @@ func exitToProto(e *Exit) *worldv1.ExitInfo {
 }
 
 // mapWorldError converts oops-coded domain errors to gRPC status errors.
+// It never leaks internal error details (oops context, stack traces) to callers.
 func mapWorldError(err error) error {
 	oopsErr, ok := oops.AsOops(err)
 	if !ok {
-		return status.Errorf(codes.Internal, "%v", err)
+		slog.Error("world service error", "error", err)
+		return status.Errorf(codes.Internal, "internal error")
 	}
 
 	code, ok2 := oopsErr.Code().(string)
 	if !ok2 {
-		return status.Errorf(codes.Internal, "%v", err)
+		slog.Error("world service error (no code)", "error", err)
+		return status.Errorf(codes.Internal, "internal error")
 	}
 	switch {
 	case strings.HasSuffix(code, "_NOT_FOUND"):
-		return status.Errorf(codes.NotFound, "%v", err)
+		return status.Errorf(codes.NotFound, "not found")
 	case strings.HasSuffix(code, "_ACCESS_DENIED"):
-		return status.Errorf(codes.PermissionDenied, "%v", err)
+		return status.Errorf(codes.PermissionDenied, "access denied")
 	default:
-		return status.Errorf(codes.Internal, "%v", err)
+		slog.Error("world service error", "code", code, "error", err)
+		return status.Errorf(codes.Internal, "internal error")
 	}
 }

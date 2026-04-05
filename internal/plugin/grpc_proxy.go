@@ -4,6 +4,7 @@
 package plugins
 
 import (
+	"log/slog"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -60,7 +61,8 @@ func (p *GRPCServiceProxy) streamHandler(_ interface{}, stream grpc.ServerStream
 		method,
 	)
 	if streamErr != nil {
-		return status.Errorf(codes.Internal, "failed to create stream to %s: %v", serviceName, streamErr)
+		slog.Error("failed to create proxy stream", "service", serviceName, "error", streamErr)
+		return status.Errorf(codes.Internal, "service temporarily unavailable")
 	}
 
 	return proxyStreams(stream, clientStream)
