@@ -3,7 +3,12 @@
 
 name: core-objects
 version: 0.1.0
-type: core
+type: lua
+lua-plugin:
+  entry: main.lua
+requires:
+  - holomush.property.v1.PropertyService
+  - holomush.world.v1.WorldQueryService
 commands:
   - name: describe
     capabilities:
