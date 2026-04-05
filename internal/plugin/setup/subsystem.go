@@ -29,7 +29,6 @@ import (
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/xdg"
-	corealiases "github.com/holomush/holomush/plugins/core-aliases"
 )
 
 // shutdownTimeout is the maximum time to wait for plugin manager shutdown.
@@ -174,8 +173,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	}
 	localHost := plugins.NewLocalPluginHost(instrumentedProxy)
 
-	// 5. Register in-process Go handlers for core plugins.
-	localHost.RegisterHandler("core-aliases", &corealiases.Handler{}, nil)
+	// 5. (core-aliases migrated to Lua — no in-process handler needed)
 
 	// 6. Wrap hosts with OTel instrumentation.
 	instrumentedHost, hostMWErr := plugins.NewHostMiddleware(
