@@ -17,23 +17,23 @@ import (
 )
 
 // Compile-time interface check.
-var _ worldv1.WorldServiceServer = (*WorldServiceServer)(nil)
+var _ worldv1.WorldServiceServer = (*GRPCServer)(nil)
 
-// WorldServiceServer adapts world.Service to the WorldService gRPC contract.
+// GRPCServer adapts world.Service to the WorldService gRPC contract.
 // It is intended to be registered on an in-process gRPC server so binary
 // plugins can query the world model via InProcessConn.
-type WorldServiceServer struct {
+type GRPCServer struct {
 	worldv1.UnimplementedWorldServiceServer
 	svc *Service
 }
 
-// NewWorldServiceServer creates a WorldServiceServer backed by the given Service.
-func NewWorldServiceServer(svc *Service) *WorldServiceServer {
-	return &WorldServiceServer{svc: svc}
+// NewGRPCServer creates a GRPCServer backed by the given Service.
+func NewGRPCServer(svc *Service) *GRPCServer {
+	return &GRPCServer{svc: svc}
 }
 
 // GetLocation retrieves a location by ID.
-func (s *WorldServiceServer) GetLocation(ctx context.Context, req *worldv1.GetLocationRequest) (*worldv1.GetLocationResponse, error) {
+func (s *GRPCServer) GetLocation(ctx context.Context, req *worldv1.GetLocationRequest) (*worldv1.GetLocationResponse, error) {
 	locID, err := ulid.ParseStrict(req.GetLocationId())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid location_id: %v", err)
@@ -51,7 +51,7 @@ func (s *WorldServiceServer) GetLocation(ctx context.Context, req *worldv1.GetLo
 }
 
 // GetCharacter retrieves a character by ID.
-func (s *WorldServiceServer) GetCharacter(ctx context.Context, req *worldv1.GetCharacterRequest) (*worldv1.GetCharacterResponse, error) {
+func (s *GRPCServer) GetCharacter(ctx context.Context, req *worldv1.GetCharacterRequest) (*worldv1.GetCharacterResponse, error) {
 	charID, err := ulid.ParseStrict(req.GetCharacterId())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid character_id: %v", err)
@@ -69,7 +69,7 @@ func (s *WorldServiceServer) GetCharacter(ctx context.Context, req *worldv1.GetC
 }
 
 // ListCharactersAtLocation returns all characters at a location.
-func (s *WorldServiceServer) ListCharactersAtLocation(ctx context.Context, req *worldv1.ListCharactersAtLocationRequest) (*worldv1.ListCharactersAtLocationResponse, error) {
+func (s *GRPCServer) ListCharactersAtLocation(ctx context.Context, req *worldv1.ListCharactersAtLocationRequest) (*worldv1.ListCharactersAtLocationResponse, error) {
 	locID, err := ulid.ParseStrict(req.GetLocationId())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid location_id: %v", err)
@@ -90,7 +90,7 @@ func (s *WorldServiceServer) ListCharactersAtLocation(ctx context.Context, req *
 }
 
 // ListExits returns all exits from a location.
-func (s *WorldServiceServer) ListExits(ctx context.Context, req *worldv1.ListExitsRequest) (*worldv1.ListExitsResponse, error) {
+func (s *GRPCServer) ListExits(ctx context.Context, req *worldv1.ListExitsRequest) (*worldv1.ListExitsResponse, error) {
 	locID, err := ulid.ParseStrict(req.GetLocationId())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid location_id: %v", err)
@@ -155,7 +155,10 @@ func mapWorldError(err error) error {
 		return status.Errorf(codes.Internal, "%v", err)
 	}
 
-	code, _ := oopsErr.Code().(string)
+	code, ok2 := oopsErr.Code().(string)
+	if !ok2 {
+		return status.Errorf(codes.Internal, "%v", err)
+	}
 	switch {
 	case strings.HasSuffix(code, "_NOT_FOUND"):
 		return status.Errorf(codes.NotFound, "%v", err)

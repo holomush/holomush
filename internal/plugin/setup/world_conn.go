@@ -4,6 +4,8 @@
 package setup
 
 import (
+	"fmt"
+
 	"google.golang.org/grpc"
 
 	plugins "github.com/holomush/holomush/internal/plugin"
@@ -16,6 +18,10 @@ import (
 // for registering in the service registry as a server-internal service.
 func newWorldInProcessConn(svc *world.Service) (*plugins.InProcessConn, error) {
 	srv := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-memory bufconn only
-	worldv1.RegisterWorldServiceServer(srv, world.NewWorldServiceServer(svc))
-	return plugins.NewInProcessConn(srv)
+	worldv1.RegisterWorldServiceServer(srv, world.NewGRPCServer(svc))
+	conn, err := plugins.NewInProcessConn(srv)
+	if err != nil {
+		return nil, fmt.Errorf("world in-process conn: %w", err)
+	}
+	return conn, nil
 }

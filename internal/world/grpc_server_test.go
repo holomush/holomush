@@ -28,8 +28,8 @@ import (
 func startWorldServer(t *testing.T, svc *world.Service) worldv1.WorldServiceClient {
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
-	srv := grpc.NewServer() //nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
-	worldv1.RegisterWorldServiceServer(srv, world.NewWorldServiceServer(svc))
+	srv := grpc.NewServer() //nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-memory bufconn for tests
+	worldv1.RegisterWorldServiceServer(srv, world.NewGRPCServer(svc))
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(func() { srv.Stop(); _ = lis.Close() })
 
