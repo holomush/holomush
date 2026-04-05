@@ -407,6 +407,40 @@ func TestManagerIsPluginLoaded(t *testing.T) {
 	assert.False(t, m.IsPluginLoaded("echo-bot"), "no plugins loaded yet")
 }
 
+func TestManagerGetLoadedPluginReturnsFalseWhenNotLoaded(t *testing.T) {
+	m := plugins.NewManager("/nonexistent")
+	dp, ok := m.GetLoadedPlugin("nonexistent")
+	assert.False(t, ok, "should return false for unloaded plugin")
+	assert.Nil(t, dp, "should return nil for unloaded plugin")
+}
+
+func TestManagerGetLoadedPluginReturnsPluginAfterLoad(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+	echoDir := filepath.Join(pluginsDir, "echo-bot")
+	mkdirAll(t, echoDir)
+
+	writeFile(t, filepath.Join(echoDir, "plugin.yaml"), []byte(`
+name: echo-bot
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`))
+	writeFile(t, filepath.Join(echoDir, "main.lua"), []byte("function on_event(e) end"))
+
+	host := pluginlua.NewHost()
+	m := plugins.NewManager(pluginsDir, plugins.WithLuaHost(host))
+	require.NoError(t, m.LoadAll(context.Background()))
+
+	dp, ok := m.GetLoadedPlugin("echo-bot")
+	require.True(t, ok, "should find loaded plugin")
+	assert.Equal(t, "echo-bot", dp.Manifest.Name)
+	assert.Equal(t, "1.0.0", dp.Manifest.Version)
+
+	require.NoError(t, m.Close(context.Background()))
+}
+
 func TestManagerWithServiceRegistryReturnsConfiguredRegistry(t *testing.T) {
 	reg := plugins.NewServiceRegistry()
 	m := plugins.NewManager("/nonexistent", plugins.WithServiceRegistry(reg))

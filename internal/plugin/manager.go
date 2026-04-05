@@ -385,6 +385,15 @@ func (m *Manager) IsPluginLoaded(name string) bool {
 	return ok
 }
 
+// GetLoadedPlugin returns the discovered plugin info for the named plugin.
+// Returns nil and false if the plugin is not loaded.
+func (m *Manager) GetLoadedPlugin(name string) (*DiscoveredPlugin, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	dp, ok := m.loaded[name]
+	return dp, ok
+}
+
 // RegisterPluginCommands iterates all loaded plugins and registers their
 // manifest-declared commands into the given command registry. This ensures
 // the dispatcher can route plugin-backed commands via registry.Get().

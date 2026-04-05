@@ -56,6 +56,31 @@ Reset a player's password. Generates a random password if none provided.
 Requires write access to the player resource at global scope.`,
 		Source: "core",
 	})
+
+	if deps.PluginLister != nil {
+		mustRegister(command.CommandEntryConfig{
+			Name:    "plugin",
+			Handler: NewPluginHandler(deps.PluginLister),
+			Capabilities: []command.Capability{
+				{Action: "read", Resource: "plugin", Scope: command.ScopeGlobal},
+			},
+			Help:  "Manage and inspect loaded plugins",
+			Usage: "plugin list | plugin info <name>",
+			HelpText: `## Plugin
+
+Inspect loaded plugins.
+
+### Usage
+
+- ` + "`plugin list`" + ` - List all loaded plugins with name, type, and version
+- ` + "`plugin info <name>`" + ` - Show detailed info for a specific plugin
+
+### Capabilities
+
+Requires read access to the plugin resource at global scope.`,
+			Source: "core",
+		})
+	}
 }
 
 // RegisterAll registers the compiled-in command handlers with the registry.

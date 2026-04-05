@@ -201,7 +201,9 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	// 10. Create command registry, register built-in + admin handlers.
 	s.cmdRegistry = command.NewRegistry()
 	handlers.RegisterAll(s.cmdRegistry)
-	handlers.RegisterAdmin(s.cmdRegistry, s.cfg.AdminDeps.AdminDeps())
+	adminDeps := s.cfg.AdminDeps.AdminDeps()
+	adminDeps.PluginLister = s.manager
+	handlers.RegisterAdmin(s.cmdRegistry, adminDeps)
 
 	// Register plugin-provided commands.
 	s.manager.RegisterPluginCommands(s.cmdRegistry)
