@@ -117,6 +117,11 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	engine := core.NewEngine(eventStore)
 
 	// 2. Create gRPC server with TLS credentials.
+	// Install GRPCServiceProxy as UnknownServiceHandler so plugin-provided
+	// gRPC services are automatically forwarded through the service registry.
+	serviceRegistry := s.cfg.Plugins.ServiceRegistry()
+	grpcProxy := plugins.NewGRPCServiceProxy(serviceRegistry)
+
 	creds := credentials.NewTLS(s.cfg.TLSConfig)
 	s.grpcServer = grpc.NewServer(
 		grpc.Creds(creds),
@@ -124,6 +129,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 			MinTime:             10 * time.Second,
 			PermitWithoutStream: true,
 		}),
+		grpcProxy.Handler(),
 	)
 
 	// 3. Create guest authenticator (using start location from bootstrap).

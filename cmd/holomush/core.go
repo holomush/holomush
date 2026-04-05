@@ -249,14 +249,15 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	})
 
 	pluginSub := pluginsetup.NewPluginSubsystem(pluginsetup.PluginSubsystemConfig{
-		DataDir:    cfg.DataDir,
-		ABAC:       abacSub,
-		PolicyInst: abacSub,
-		PluginProv: abacSub,
-		World:      worldSub,
-		Sessions:   &sessionBridge{sub: sessionSub},
-		Events:     &eventStoreBridge{db: dbSub},
-		AdminDeps:  &adminDepsBridge{auth: authSub, db: dbSub},
+		DataDir:         cfg.DataDir,
+		DatabaseConnStr: databaseURL,
+		ABAC:            abacSub,
+		PolicyInst:      abacSub,
+		PluginProv:      abacSub,
+		World:           worldSub,
+		Sessions:        &sessionBridge{sub: sessionSub},
+		Events:          &eventStoreBridge{db: dbSub},
+		AdminDeps:       &adminDepsBridge{auth: authSub, db: dbSub},
 	})
 
 	bootstrapSub := bootstrapsetup.NewBootstrapSubsystem(bootstrapsetup.BootstrapSubsystemConfig{

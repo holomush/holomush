@@ -82,25 +82,27 @@ type AdminDepsProvider interface {
 
 // PluginSubsystemConfig configures the plugin subsystem.
 type PluginSubsystemConfig struct {
-	DataDir    string
-	ABAC       EngineProvider
-	PolicyInst PolicyInstallerProvider
-	PluginProv PluginProviderSetter
-	World      WorldServiceProvider
-	Sessions   SessionProvider
-	Events     EventStoreProvider
-	AdminDeps  AdminDepsProvider
+	DataDir          string
+	DatabaseConnStr  string // PostgreSQL connection string for schema provisioning
+	ABAC             EngineProvider
+	PolicyInst       PolicyInstallerProvider
+	PluginProv       PluginProviderSetter
+	World            WorldServiceProvider
+	Sessions         SessionProvider
+	Events           EventStoreProvider
+	AdminDeps        AdminDepsProvider
 }
 
 // PluginSubsystem manages the plugin Manager, Lua host, core plugin
 // registration, and the command registry.
 type PluginSubsystem struct {
-	cfg         PluginSubsystemConfig
-	manager     *plugins.Manager
-	cmdRegistry *command.Registry
-	proxy       *plugins.ServiceProxyImpl
-	registry    *plugins.ServiceRegistry
-	worldConn   *plugins.InProcessConn
+	cfg              PluginSubsystemConfig
+	manager          *plugins.Manager
+	cmdRegistry      *command.Registry
+	proxy            *plugins.ServiceProxyImpl
+	registry         *plugins.ServiceRegistry
+	worldConn        *plugins.InProcessConn
+	schemaProvisioner *plugins.SchemaProvisioner
 }
 
 // NewPluginSubsystem creates a plugin subsystem configured with cfg.
@@ -190,8 +192,18 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		return oops.Code("LUA_HOST_MW_FAILED").Wrap(luaMWErr)
 	}
 
+	// Create schema provisioner for binary plugins with postgres storage.
+	var schemaProvisioner *plugins.SchemaProvisioner
+	if s.cfg.DatabaseConnStr != "" {
+		schemaProvisioner = plugins.NewSchemaProvisioner(s.cfg.DatabaseConnStr)
+		if spErr := schemaProvisioner.Init(ctx); spErr != nil {
+			return oops.Code("SCHEMA_PROVISIONER_INIT_FAILED").Wrap(spErr)
+		}
+		s.schemaProvisioner = schemaProvisioner
+	}
+
 	// Create binary plugin host (subprocess plugins via hashicorp/go-plugin).
-	binaryHost := goplugin.NewHost()
+	binaryHost := goplugin.NewHost(goplugin.WithSchemaProvisioner(schemaProvisioner))
 	instrumentedBinaryHost, binaryMWErr := plugins.NewHostMiddleware(
 		binaryHost, otel.GetTracerProvider(), otel.GetMeterProvider(),
 	)
@@ -242,6 +254,9 @@ func (s *PluginSubsystem) Stop(_ context.Context) error {
 		if err := s.worldConn.Close(); err != nil {
 			slog.Warn("error closing world in-process connection", "error", err)
 		}
+	}
+	if s.schemaProvisioner != nil {
+		s.schemaProvisioner.Close()
 	}
 	return nil
 }
