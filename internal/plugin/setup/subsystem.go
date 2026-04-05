@@ -153,7 +153,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	// 4. Create service registry for proto service resolution.
 	s.registry = plugins.NewServiceRegistry()
 
-	// Create ServiceProxy and LocalPluginHost for in-process core plugins.
+	// Create ServiceProxy for the Lua host function bridge.
 	proxy, proxyErr := plugins.NewServiceProxy(plugins.ServiceProxyConfig{
 		World:    s.cfg.World.Service(),
 		Sessions: sessionStore,
@@ -164,25 +164,9 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	}
 	s.proxy = proxy
 
-	// Wrap service proxy with OTel instrumentation.
-	instrumentedProxy, proxyMWErr := plugins.NewServiceProxyMiddleware(
-		proxy, otel.GetTracerProvider(), otel.GetMeterProvider(),
-	)
-	if proxyMWErr != nil {
-		return oops.Code("SERVICE_PROXY_MW_FAILED").Wrap(proxyMWErr)
-	}
-	localHost := plugins.NewLocalPluginHost(instrumentedProxy)
-
-	// 5. (core-aliases migrated to Lua — no in-process handler needed)
+	// 5. (core plugins have all been migrated to Lua — no in-process host needed)
 
 	// 6. Wrap hosts with OTel instrumentation.
-	instrumentedHost, hostMWErr := plugins.NewHostMiddleware(
-		localHost, otel.GetTracerProvider(), otel.GetMeterProvider(),
-	)
-	if hostMWErr != nil {
-		return oops.Code("HOST_MW_FAILED").Wrap(hostMWErr)
-	}
-
 	instrumentedLuaHost, luaMWErr := plugins.NewHostMiddleware(
 		luaHost, otel.GetTracerProvider(), otel.GetMeterProvider(),
 	)
@@ -205,7 +189,6 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		plugins.WithPolicyInstaller(s.cfg.PolicyInst.PolicyInstaller()),
 		plugins.WithServiceRegistry(s.registry),
 	)
-	s.manager.RegisterHost(plugins.TypeCore, instrumentedHost)
 	s.manager.RegisterHost(plugins.TypeBinary, instrumentedBinaryHost)
 
 	// 8. Set ABAC plugin provider registry.

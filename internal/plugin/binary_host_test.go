@@ -72,11 +72,11 @@ func binaryManifest(name string) *plugins.Manifest {
 func TestBinaryPluginHostRejectsNonBinaryType(t *testing.T) {
 	host := newTestBinaryHost()
 	manifest := &plugins.Manifest{
-		Name:    "core-say",
+		Name:    "say-plugin",
 		Version: "1.0.0",
-		Type:    plugins.TypeCore,
-		Commands: []plugins.CommandSpec{
-			{Name: "say"},
+		Type:    plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{
+			Entry: "main.lua",
 		},
 	}
 

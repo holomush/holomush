@@ -1191,41 +1191,6 @@ lua-plugin:
 	}
 }
 
-func TestParseManifestCorePlugin(t *testing.T) {
-	yaml := `
-name: core-say
-version: 1.0.0
-type: core
-commands:
-  - name: say
-    help: Send a message
-`
-	m, err := plugins.ParseManifest([]byte(yaml))
-	require.NoError(t, err)
-
-	assert.Equal(t, "core-say", m.Name)
-	assert.Equal(t, plugins.TypeCore, m.Type)
-	assert.Nil(t, m.LuaPlugin)
-	assert.Nil(t, m.BinaryPlugin)
-	assert.Len(t, m.Commands, 1)
-}
-
-func TestParseManifestCorePluginNoLuaOrBinaryRequired(t *testing.T) {
-	yaml := `
-name: core-look
-version: 1.0.0
-type: core
-commands:
-  - name: look
-    help: Look around
-`
-	m, err := plugins.ParseManifest([]byte(yaml))
-	require.NoError(t, err)
-	assert.Equal(t, plugins.TypeCore, m.Type)
-	assert.Nil(t, m.LuaPlugin)
-	assert.Nil(t, m.BinaryPlugin)
-}
-
 func TestManifest_LoadPriority(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -1234,31 +1199,6 @@ func TestManifest_LoadPriority(t *testing.T) {
 		wantErrMsg       string
 		wantLoadPriority int
 	}{
-		{
-			name: "core plugin with load_priority -1000",
-			yaml: `
-name: core-say
-version: 1.0.0
-type: core
-priority: -1000
-commands:
-  - name: say
-    help: Send a message
-`,
-			wantLoadPriority: -1000,
-		},
-		{
-			name: "core plugin with load_priority 0 (default)",
-			yaml: `
-name: core-say
-version: 1.0.0
-type: core
-commands:
-  - name: say
-    help: Send a message
-`,
-			wantLoadPriority: 0,
-		},
 		{
 			name: "lua plugin with load_priority -999 is allowed",
 			yaml: `

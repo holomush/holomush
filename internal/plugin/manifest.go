@@ -21,7 +21,6 @@ type Type string
 
 // Plugin types supported by the system.
 const (
-	TypeCore    Type = "core"
 	TypeLua     Type = "lua"
 	TypeBinary  Type = "binary"
 	TypeSetting Type = "setting"
@@ -40,7 +39,6 @@ type LoadPriority int
 
 // Standard load priorities.
 const (
-	LoadPriorityCore    LoadPriority = 0   // core plugins load first
 	LoadPriorityDefault LoadPriority = 100 // default for user plugins
 )
 
@@ -54,7 +52,7 @@ type ManifestPolicy struct {
 type Manifest struct {
 	Name         string            `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=64,pattern=^[a-z](-?[a-z0-9])*$"`
 	Version      string            `yaml:"version" json:"version" jsonschema:"required,minLength=1"`
-	Type         Type              `yaml:"type" json:"type" jsonschema:"required,enum=core,enum=lua,enum=binary,enum=setting"`
+	Type         Type              `yaml:"type" json:"type" jsonschema:"required,enum=lua,enum=binary,enum=setting"`
 	Engine       string            `yaml:"engine,omitempty" json:"engine,omitempty" jsonschema:"description=HoloMUSH version constraint (e.g. >= 2.0.0)"`
 	Dependencies map[string]string `yaml:"dependencies,omitempty" json:"dependencies,omitempty" jsonschema:"description=Plugin dependencies with version constraints"`
 	Events       []string          `yaml:"events,omitempty" json:"events,omitempty"`
@@ -75,16 +73,11 @@ type Manifest struct {
 	Storage  StorageType `yaml:"storage,omitempty" json:"storage,omitempty"`
 }
 
-// EffectivePriority returns the manifest's load priority, applying a
-// type-appropriate default when the priority is not explicitly set.
-// Core plugins default to LoadPriorityCore (0); all others default to
-// LoadPriorityDefault (100).
+// EffectivePriority returns the manifest's load priority, applying
+// LoadPriorityDefault (100) when the priority is not explicitly set.
 func (m *Manifest) EffectivePriority() LoadPriority {
 	if m.Priority != nil {
 		return *m.Priority
-	}
-	if m.Type == TypeCore {
-		return LoadPriorityCore
 	}
 	return LoadPriorityDefault
 }
@@ -215,12 +208,6 @@ func (m *Manifest) Validate() error {
 	}
 
 	switch m.Type {
-	case TypeCore:
-		// Core plugins have no external entry point — they are wired in-process.
-		// Commands are required since core plugins exist to provide command handlers.
-		if len(m.Commands) == 0 {
-			return oops.In("manifest").With("name", m.Name).New("core plugins must declare at least one command")
-		}
 	case TypeLua:
 		if m.LuaPlugin == nil {
 			return oops.In("manifest").With("name", m.Name).New("lua-plugin is required when type is lua")
@@ -258,11 +245,11 @@ func (m *Manifest) Validate() error {
 			return oops.In("manifest").With("name", m.Name).New("setting plugins must not specify binary-plugin")
 		}
 	default:
-		return oops.In("manifest").With("name", m.Name).With("type", m.Type).New("type must be 'core', 'lua', 'binary', or 'setting'")
+		return oops.In("manifest").With("name", m.Name).With("type", m.Type).New("type must be 'lua', 'binary', or 'setting'")
 	}
 
-	// Validate load priority: priorities below -999 are reserved for core plugins.
-	if m.Type != TypeCore && m.Priority != nil && int(*m.Priority) < -999 {
+	// Validate load priority: priorities below -999 are reserved (historically for core plugins).
+	if m.Priority != nil && int(*m.Priority) < -999 {
 		return oops.In("manifest").With("name", m.Name).
 			With("priority", *m.Priority).
 			New("load_priority < -999 is reserved for core plugins")

@@ -19,8 +19,6 @@ var (
 	ErrHostClosed = errors.New("host is closed")
 	// ErrPluginNotLoaded is returned when operating on a plugin that isn't loaded.
 	ErrPluginNotLoaded = errors.New("plugin not loaded")
-	// ErrHandlerNotRegistered is returned when Load is called without a pre-registered handler.
-	ErrHandlerNotRegistered = errors.New("handler not registered")
 	// ErrNoCommandHandler is returned when DeliverCommand is called on a plugin without a command handler.
 	ErrNoCommandHandler = errors.New("plugin has no command handler")
 	// ErrNoEventHandler is returned when DeliverEvent is called on a plugin without an event handler.
@@ -47,52 +45,29 @@ type localPlugin struct {
 	eventHandler   LocalEventHandler   // may be nil
 }
 
-// localRegistration holds pre-registered handlers before Load is called.
-type localRegistration struct {
-	commandHandler LocalCommandHandler
-	eventHandler   LocalEventHandler
-}
-
 // LocalPluginHost manages in-process Go plugins that implement the Host interface.
-// Core commands register Go handlers that are called directly with zero transport overhead.
+// It serves as a general-purpose in-process host for plugins whose handlers are
+// wired programmatically rather than loaded from an external runtime.
 type LocalPluginHost struct {
-	mu            sync.RWMutex
-	plugins       map[string]*localPlugin
-	registrations map[string]*localRegistration
-	proxy         ServiceProxy
-	closed        bool
+	mu      sync.RWMutex
+	plugins map[string]*localPlugin
+	proxy   ServiceProxy
+	closed  bool
 }
 
 // NewLocalPluginHost creates a new LocalPluginHost with the given service proxy.
 func NewLocalPluginHost(proxy ServiceProxy) *LocalPluginHost {
 	return &LocalPluginHost{
-		plugins:       make(map[string]*localPlugin),
-		registrations: make(map[string]*localRegistration),
-		proxy:         proxy,
+		plugins: make(map[string]*localPlugin),
+		proxy:   proxy,
 	}
 }
 
-// RegisterHandler pre-registers command and/or event handlers for a plugin name.
-// This must be called before Load. At least one of cmd or evt must be non-nil.
-func (h *LocalPluginHost) RegisterHandler(name string, cmd LocalCommandHandler, evt LocalEventHandler) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	h.registrations[name] = &localRegistration{
-		commandHandler: cmd,
-		eventHandler:   evt,
-	}
-}
-
-// Load validates the manifest is type "core" and associates pre-registered handlers.
+// Load registers the plugin manifest. The plugin is loaded with nil handlers;
+// use the returned host to wire handlers via direct method calls if needed.
 func (h *LocalPluginHost) Load(_ context.Context, manifest *Manifest, _ string) error {
 	if manifest == nil {
 		return oops.In("local").With("operation", "load").New("manifest cannot be nil")
-	}
-
-	if manifest.Type != TypeCore {
-		return oops.In("local").With("plugin", manifest.Name).With("type", manifest.Type).
-			With("operation", "load").New("LocalPluginHost only accepts core plugins")
 	}
 
 	h.mu.Lock()
@@ -106,15 +81,8 @@ func (h *LocalPluginHost) Load(_ context.Context, manifest *Manifest, _ string) 
 		return oops.In("local").With("plugin", manifest.Name).With("operation", "load").New("plugin already loaded")
 	}
 
-	reg, ok := h.registrations[manifest.Name]
-	if !ok {
-		return oops.In("local").With("plugin", manifest.Name).With("operation", "load").Wrap(ErrHandlerNotRegistered)
-	}
-
 	h.plugins[manifest.Name] = &localPlugin{
-		manifest:       manifest,
-		commandHandler: reg.commandHandler,
-		eventHandler:   reg.eventHandler,
+		manifest: manifest,
 	}
 
 	return nil

@@ -236,13 +236,6 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin) error {
 	// For backward compatibility, TypeLua falls back to the dedicated luaHost field.
 	var host Host
 	switch dp.Manifest.Type {
-	case TypeCore:
-		host = m.hosts[TypeCore]
-		if host == nil {
-			slog.Warn("no core host registered, skipping core plugin",
-				"plugin", dp.Manifest.Name)
-			return nil
-		}
 	case TypeLua:
 		host = m.hosts[TypeLua]
 		if host == nil {
