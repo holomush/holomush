@@ -8,6 +8,7 @@ package lifecycle
 
 import "strconv"
 
+// An "invalid array index" compiler error indicates those constants have changed; re-run the stringer tool to regenerate the table.
 func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.

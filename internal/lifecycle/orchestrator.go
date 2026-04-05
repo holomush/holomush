@@ -21,7 +21,8 @@ type Orchestrator struct {
 	startOrder []SubsystemID // populated by StartAll
 }
 
-// NewOrchestrator creates an empty Orchestrator.
+// NewOrchestrator returns a new Orchestrator initialized with an empty subsystem registry.
+// The returned Orchestrator has an empty subsystems map and a nil startOrder.
 func NewOrchestrator() *Orchestrator {
 	return &Orchestrator{
 		subsystems: make(map[SubsystemID]Subsystem),

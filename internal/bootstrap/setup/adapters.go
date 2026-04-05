@@ -28,7 +28,7 @@ type CharRepoAdapter struct {
 	charRepo *worldpostgres.CharacterRepository
 }
 
-// NewCharRepoAdapter creates a CharRepoAdapter from a pool and character repository.
+// NewCharRepoAdapter constructs a CharRepoAdapter using the provided PostgreSQL pool and character repository.
 func NewCharRepoAdapter(pool *pgxpool.Pool, charRepo *worldpostgres.CharacterRepository) *CharRepoAdapter {
 	return &CharRepoAdapter{pool: pool, charRepo: charRepo}
 }
@@ -121,7 +121,7 @@ type LocRepoAdapter struct {
 }
 
 // NewLocRepoAdapter creates a LocRepoAdapter from a starting location ID pointer
-// and a location repository.
+// location ID and a worldpostgres.LocationRepository used to fetch locations.
 func NewLocRepoAdapter(startLocationID *ulid.ULID, locRepo *worldpostgres.LocationRepository) *LocRepoAdapter {
 	return &LocRepoAdapter{startLocationID: startLocationID, locRepo: locRepo}
 }

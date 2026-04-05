@@ -52,7 +52,8 @@ var (
 )
 
 // RegisterPollerMetrics registers poller metrics with the given Prometheus registry.
-// Duplicate registrations are silently ignored (safe for tests and re-init).
+// RegisterPollerMetrics registers Prometheus collectors used by the policy poller.
+// It registers pollerPollsTotal, pollerChangesDetected, and pollerErrorsTotal with reg; if a collector is already registered the error is ignored, but any other registration error causes a panic.
 func RegisterPollerMetrics(reg prometheus.Registerer) {
 	for _, c := range []prometheus.Collector{pollerPollsTotal, pollerChangesDetected, pollerErrorsTotal} {
 		if err := reg.Register(c); err != nil {
@@ -64,7 +65,7 @@ func RegisterPollerMetrics(reg prometheus.Registerer) {
 	}
 }
 
-// isAlreadyRegistered returns true if the error is a prometheus.AlreadyRegisteredError.
+// isAlreadyRegistered reports whether err is a prometheus.AlreadyRegisteredError.
 func isAlreadyRegistered(err error) bool {
 	var are prometheus.AlreadyRegisteredError
 	return errors.As(err, &are)
@@ -80,7 +81,12 @@ type Poller struct {
 }
 
 // NewPoller creates a new Poller. Returns an error if required dependencies
-// (Querier, Reloader, Tracker) are nil.
+// NewPoller constructs a Poller configured with the provided PollerConfig.
+// 
+// NewPoller returns an error if any of cfg.Querier, cfg.Reloader, or cfg.Tracker is nil.
+// If cfg.Interval is zero or negative it is normalized to 10 seconds. On success it
+// returns a *Poller with the configuration copied and tracking fields left at their
+// zero values (e.g., not initialized).
 func NewPoller(cfg PollerConfig) (*Poller, error) {
 	if cfg.Querier == nil {
 		return nil, fmt.Errorf("policy poller: Querier is required")

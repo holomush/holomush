@@ -8,6 +8,9 @@ package lifecycle
 
 import "strconv"
 
+// _ verifies that the HealthTier constants have the expected numeric ordinals at compile time.
+// If those constants change the assignments below produce an "invalid array index" compiler error;
+// re-run the stringer tool to regenerate the numeric checks.
 func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.

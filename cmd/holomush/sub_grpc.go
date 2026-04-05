@@ -69,7 +69,8 @@ type grpcSubsystem struct {
 	sessionReaper *session.Reaper
 }
 
-// newGRPCSubsystem creates a gRPC subsystem. No live resources are allocated.
+// newGRPCSubsystem returns a configured grpcSubsystem for the provided configuration.
+// It does not allocate or start any runtime resources; Start must be called to initialize and run the subsystem.
 func newGRPCSubsystem(cfg grpcSubsystemConfig) *grpcSubsystem {
 	return &grpcSubsystem{cfg: cfg}
 }

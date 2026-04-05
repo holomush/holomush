@@ -64,7 +64,13 @@ type ABACConfig struct {
 }
 
 // BuildABACStack constructs all ABAC components in the correct dependency order.
-// codecov:ignore — tested by integration and E2E tests
+// BuildABACStack constructs and wires the ABAC subsystem components using the provided configuration.
+// 
+// It initializes and connects the policy store, policy cache (with an initial reload), attribute
+// resolver and providers (character, command, plugin), policy engine, audit logger and writer,
+// a health tracker for the policy cache, a background poller, and a policy installer. If
+// cfg.AuditMode is empty it defaults to denials-only. Returns an initialized *ABACStack or an
+// error if any required initialization step fails.
 func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 	eb := oops.In("abac_setup")
 

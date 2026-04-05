@@ -38,7 +38,10 @@ type HealthTracker struct {
 	staleFailures int       // consecutive failures while stale
 }
 
-// NewHealthTracker creates a HealthTracker starting in Warm state.
+// NewHealthTracker creates a HealthTracker configured by cfg.
+// If cfg.GracePeriod is zero it defaults to 60s; if cfg.MaxFailures is <= 0 it defaults to 30.
+// The tracker starts in the HealthWarm tier with reason "initialized" and the current time as the since timestamp.
+// If cfg.SubsystemName is non-empty the corresponding health metric gauge is initialized to the warm tier.
 func NewHealthTracker(cfg TrackerConfig) *HealthTracker {
 	if cfg.GracePeriod == 0 {
 		cfg.GracePeriod = 60 * time.Second

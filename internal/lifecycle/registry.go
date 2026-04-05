@@ -17,7 +17,7 @@ type ReadinessRegistry struct {
 	reporters map[SubsystemID]HealthReporter
 }
 
-// NewReadinessRegistry creates an empty registry.
+// NewReadinessRegistry returns a pointer to a ReadinessRegistry with its reporters map initialized empty.
 func NewReadinessRegistry() *ReadinessRegistry {
 	return &ReadinessRegistry{
 		reporters: make(map[SubsystemID]HealthReporter),

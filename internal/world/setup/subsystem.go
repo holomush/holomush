@@ -41,7 +41,8 @@ type WorldSubsystem struct {
 	transactor world.Transactor
 }
 
-// NewWorldSubsystem creates a world subsystem. No live resources are allocated.
+// NewWorldSubsystem creates a WorldSubsystem using the provided WorldSubsystemConfig.
+// It does not allocate or start any runtime resources; call Start to initialize the service and transactor.
 func NewWorldSubsystem(cfg WorldSubsystemConfig) *WorldSubsystem {
 	return &WorldSubsystem{cfg: cfg}
 }
