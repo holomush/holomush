@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: Apache-2.0
+-- Copyright 2026 HoloMUSH Contributors
+
 DROP INDEX IF EXISTS idx_scene_logs_scene;
 DROP INDEX IF EXISTS idx_scene_participants_character;
 DROP INDEX IF EXISTS idx_scenes_location;

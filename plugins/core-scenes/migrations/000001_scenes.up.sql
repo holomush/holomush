@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: Apache-2.0
+-- Copyright 2026 HoloMUSH Contributors
+
 CREATE TABLE IF NOT EXISTS scenes (
     id               TEXT        PRIMARY KEY,
     title            TEXT        NOT NULL,
