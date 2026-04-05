@@ -3,8 +3,10 @@
 
 name: core-building
 version: 1.0.0
-type: core
+type: lua
 load_priority: -1000
+lua-plugin:
+  entry: main.lua
 commands:
   - name: dig
     capabilities:

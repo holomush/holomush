@@ -30,7 +30,6 @@ import (
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/xdg"
 	corealiases "github.com/holomush/holomush/plugins/core-aliases"
-	corebuilding "github.com/holomush/holomush/plugins/core-building"
 	"github.com/holomush/holomush/plugins/core-communication"
 	coreobjects "github.com/holomush/holomush/plugins/core-objects"
 )
@@ -179,7 +178,6 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 
 	// 5. Register in-process Go handlers for core plugins.
 	localHost.RegisterHandler("core-aliases", &corealiases.Handler{}, nil)
-	localHost.RegisterHandler("core-building", &corebuilding.Handler{}, nil)
 	localHost.RegisterHandler("core-communication", communication.NewHandler(), nil)
 	localHost.RegisterHandler("core-objects", &coreobjects.Handler{}, nil)
 
