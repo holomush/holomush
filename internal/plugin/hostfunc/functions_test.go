@@ -22,19 +22,6 @@ import (
 	"github.com/holomush/holomush/internal/world"
 )
 
-func TestWithWorldQuerierPanicsWithHelpfulMessage(t *testing.T) {
-	defer func() {
-		r := recover()
-		require.NotNil(t, r, "expected panic for WithWorldQuerier")
-		require.Contains(t, r.(string), "WithWorldQuerier", "panic message should mention WithWorldQuerier")
-		require.Contains(t, r.(string), "WithWorldService", "panic message should direct to WithWorldService")
-		require.Contains(t, r.(string), "WorldMutator", "panic message should mention WorldMutator")
-	}()
-
-	// This should panic immediately when creating the option
-	_ = hostfunc.WithWorldQuerier(nil)
-}
-
 func TestWithWorldServiceAcceptsWorldMutator(t *testing.T) {
 	// This test verifies that WithWorldService accepts a WorldMutator at construction time
 	// The compile-time type check ensures only WorldMutator implementations can be passed

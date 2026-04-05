@@ -72,26 +72,6 @@ func WithSessionAccess(sa session.Access) Option {
 	}
 }
 
-// WithWorldQuerier is no longer supported and has been removed.
-//
-// Deprecated: WithWorldQuerier was removed because WorldQuerier and WorldMutator
-// have incompatible method signatures. Use [WithWorldService] instead, which
-// requires a WorldMutator (which includes all read and write operations).
-//
-// Migration example:
-//
-//	// Before: WithWorldQuerier(querier)
-//	// After:  WithWorldService(service) // service must implement WorldMutator
-//
-// This function always panics to fail fast at startup. Update your code to use
-// WithWorldService with a service that implements the WorldMutator interface.
-func WithWorldQuerier(_ WorldQuerier) Option {
-	panic("hostfunc.WithWorldQuerier: this function has been removed. " +
-		"Use WithWorldService instead with a service that implements WorldMutator. " +
-		"WorldMutator includes all read methods (GetLocation, GetCharacter, etc.) " +
-		"plus write methods (CreateLocation, UpdateLocation, etc.).")
-}
-
 // New creates host functions with dependencies.
 // KVStore may be nil; KV functions will return errors if called.
 func New(kv KVStore, opts ...Option) *Functions {

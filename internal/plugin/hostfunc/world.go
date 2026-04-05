@@ -8,26 +8,10 @@ import (
 	"errors"
 	"log/slog"
 
-	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/internal/world"
 )
-
-// WorldQuerier provides read access to world data.
-type WorldQuerier interface {
-	// GetLocation retrieves a location by ID.
-	GetLocation(ctx context.Context, id ulid.ULID) (*world.Location, error)
-
-	// GetCharacter retrieves a character by ID.
-	GetCharacter(ctx context.Context, id ulid.ULID) (*world.Character, error)
-
-	// GetCharactersByLocation retrieves characters at a location with pagination.
-	GetCharactersByLocation(ctx context.Context, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error)
-
-	// GetObject retrieves an object by ID.
-	GetObject(ctx context.Context, id ulid.ULID) (*world.Object, error)
-}
 
 // queryLocationFn returns a Lua function that queries location information.
 func (f *Functions) queryLocationFn(pluginName string) lua.LGFunction {
