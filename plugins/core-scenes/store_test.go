@@ -100,25 +100,6 @@ func TestParticipantRowDefaultsNilForOptionalFields(t *testing.T) {
 	assert.Nil(t, row.PublishVote)
 }
 
-func TestParseMigrationVersionExtractsNumericPrefix(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected int
-	}{
-		{"parses six-digit prefix", "000001_scenes.up.sql", 1},
-		{"parses higher version", "000012_add_column.up.sql", 12},
-		{"returns zero for missing prefix", "no_version.sql", 0},
-		{"returns zero for empty string", "", 0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, parseMigrationVersion(tt.input))
-		})
-	}
-}
-
 func TestItoaConvertsIntsToStrings(t *testing.T) {
 	tests := []struct {
 		name     string

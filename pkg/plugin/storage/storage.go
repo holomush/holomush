@@ -9,6 +9,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"sort"
 	"strings"
@@ -34,6 +35,13 @@ func Connect(ctx context.Context, connString string) (*pgxpool.Pool, error) {
 // Migrations MUST be named sequentially: 000001_name.up.sql, 000002_name.up.sql.
 // Only .up.sql files are executed. Tracks applied migrations in plugin_migrations table.
 func RunMigrations(ctx context.Context, pool *pgxpool.Pool, migrations embed.FS) error {
+	return RunMigrationsFS(ctx, pool, migrations)
+}
+
+// RunMigrationsFS is like RunMigrations but accepts any fs.FS.
+// This is useful when the migration files are nested inside an embed.FS
+// and need to be extracted with fs.Sub before running.
+func RunMigrationsFS(ctx context.Context, pool *pgxpool.Pool, migrations fs.FS) error {
 	_, err := pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS plugin_migrations (
 			version INTEGER PRIMARY KEY,
@@ -51,7 +59,7 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool, migrations embed.FS)
 		return oops.Code("PLUGIN_MIGRATION_VERSION_FAILED").Wrap(err)
 	}
 
-	entries, err := migrations.ReadDir(".")
+	entries, err := fs.ReadDir(migrations, ".")
 	if err != nil {
 		return oops.Code("PLUGIN_MIGRATION_READ_FAILED").Wrap(err)
 	}
@@ -69,7 +77,7 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool, migrations embed.FS)
 		if version <= currentVersion {
 			continue
 		}
-		sql, readErr := migrations.ReadFile(name)
+		sql, readErr := fs.ReadFile(migrations, name)
 		if readErr != nil {
 			return oops.Code("PLUGIN_MIGRATION_READ_FAILED").With("file", name).Wrap(readErr)
 		}

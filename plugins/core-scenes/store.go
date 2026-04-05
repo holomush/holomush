@@ -7,9 +7,7 @@ import (
 	"context"
 	"embed"
 	"errors"
-	"fmt"
 	"io/fs"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -63,75 +61,17 @@ func NewSceneStore(ctx context.Context, connString string) (*SceneStore, error) 
 		return nil, oops.Code("SCENE_CREATE_FAILED").Wrap(err)
 	}
 
-	if err := runPluginMigrations(ctx, pool); err != nil {
+	sub, err := fs.Sub(migrationsFS, "migrations")
+	if err != nil {
 		pool.Close()
-		return nil, oops.Code("SCENE_CREATE_FAILED").Wrap(err)
+		return nil, oops.Code("SCENE_STORE_INIT_FAILED").Wrap(err)
+	}
+	if err := storage.RunMigrationsFS(ctx, pool, sub); err != nil {
+		pool.Close()
+		return nil, err
 	}
 
 	return &SceneStore{pool: pool}, nil
-}
-
-// runPluginMigrations extracts the migrations subdirectory from the embed FS
-// and delegates to the plugin storage SDK.
-// storage.RunMigrations expects files at the FS root, but //go:embed nests
-// them under migrations/, so we use fs.Sub to strip the prefix.
-func runPluginMigrations(ctx context.Context, pool *pgxpool.Pool) error {
-	sub, err := fs.Sub(migrationsFS, "migrations")
-	if err != nil {
-		return oops.Code("SCENE_CREATE_FAILED").
-			With("detail", "failed to open migrations sub-FS").Wrap(err)
-	}
-	return runMigrationsFromFS(ctx, pool, sub)
-}
-
-// runMigrationsFromFS mirrors storage.RunMigrations but accepts fs.FS instead
-// of embed.FS, enabling the fs.Sub workaround for nested embeds.
-func runMigrationsFromFS(ctx context.Context, pool *pgxpool.Pool, migrations fs.FS) error {
-	_, err := pool.Exec(ctx, `
-		CREATE TABLE IF NOT EXISTS plugin_migrations (
-			version INTEGER PRIMARY KEY,
-			name    TEXT NOT NULL,
-			applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-		)
-	`)
-	if err != nil {
-		return oops.Code("PLUGIN_MIGRATION_TABLE_FAILED").Wrap(err)
-	}
-
-	var currentVersion int
-	err = pool.QueryRow(ctx, "SELECT COALESCE(MAX(version), 0) FROM plugin_migrations").Scan(&currentVersion)
-	if err != nil {
-		return oops.Code("PLUGIN_MIGRATION_VERSION_FAILED").Wrap(err)
-	}
-
-	entries, err := fs.ReadDir(migrations, ".")
-	if err != nil {
-		return oops.Code("PLUGIN_MIGRATION_READ_FAILED").Wrap(err)
-	}
-
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		version := parseMigrationVersion(e.Name())
-		if version <= currentVersion {
-			continue
-		}
-		sql, readErr := fs.ReadFile(migrations, e.Name())
-		if readErr != nil {
-			return oops.Code("PLUGIN_MIGRATION_READ_FAILED").With("file", e.Name()).Wrap(readErr)
-		}
-		if _, execErr := pool.Exec(ctx, string(sql)); execErr != nil {
-			return oops.Code("PLUGIN_MIGRATION_EXEC_FAILED").With("file", e.Name()).Wrap(execErr)
-		}
-		if _, trackErr := pool.Exec(ctx,
-			"INSERT INTO plugin_migrations (version, name) VALUES ($1, $2)",
-			version, e.Name(),
-		); trackErr != nil {
-			return oops.Code("PLUGIN_MIGRATION_TRACK_FAILED").With("file", e.Name()).Wrap(trackErr)
-		}
-	}
-	return nil
 }
 
 // Close releases the database connection pool.
@@ -322,17 +262,6 @@ func (s *SceneStore) ListParticipants(ctx context.Context, sceneID string) ([]*P
 		return nil, oops.Code("SCENE_LIST_FAILED").With("scene_id", sceneID).Wrap(rows.Err())
 	}
 	return result, nil
-}
-
-// parseMigrationVersion extracts the numeric prefix from a migration filename.
-func parseMigrationVersion(name string) int {
-	parts := strings.SplitN(name, "_", 2)
-	if len(parts) == 0 {
-		return 0
-	}
-	var v int
-	_, _ = fmt.Sscanf(parts[0], "%d", &v)
-	return v
 }
 
 // itoa converts an int to its decimal string representation.
