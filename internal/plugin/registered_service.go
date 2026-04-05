@@ -32,6 +32,9 @@ type RegisteredService struct {
 	Health HealthReporter
 }
 
+// TypeServerInternal returns the Type value for server-internal services.
+func TypeServerInternal() Type { return typeServerInternal }
+
 // IsServerInternal returns true if this service is provided by the server, not a plugin.
 func (s *RegisteredService) IsServerInternal() bool {
 	return s.PluginType == typeServerInternal

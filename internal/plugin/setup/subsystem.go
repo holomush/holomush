@@ -100,6 +100,7 @@ type PluginSubsystem struct {
 	cmdRegistry *command.Registry
 	proxy       *plugins.ServiceProxyImpl
 	registry    *plugins.ServiceRegistry
+	worldConn   *plugins.InProcessConn
 }
 
 // NewPluginSubsystem creates a plugin subsystem configured with cfg.
@@ -152,6 +153,21 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 
 	// 4. Create service registry for proto service resolution.
 	s.registry = plugins.NewServiceRegistry()
+
+	// 4a. Register WorldService as a server-internal service.
+	worldConn, worldConnErr := newWorldInProcessConn(s.cfg.World.Service())
+	if worldConnErr != nil {
+		return oops.Code("WORLD_INPROCESS_CONN_FAILED").Wrap(worldConnErr)
+	}
+	s.worldConn = worldConn
+	if regErr := s.registry.Register(plugins.RegisteredService{
+		Name:       "holomush.world.v1.WorldService",
+		Conn:       worldConn,
+		PluginType: plugins.TypeServerInternal(),
+	}); regErr != nil {
+		_ = worldConn.Close()
+		return oops.Code("WORLD_SERVICE_REGISTER_FAILED").Wrap(regErr)
+	}
 
 	// Create ServiceProxy for the Lua host function bridge.
 	proxy, proxyErr := plugins.NewServiceProxy(plugins.ServiceProxyConfig{
@@ -211,7 +227,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop shuts down the plugin manager.
+// Stop shuts down the plugin manager and server-internal connections.
 // codecov:ignore — tested by integration and E2E tests
 func (s *PluginSubsystem) Stop(_ context.Context) error {
 	if s.manager == nil {
@@ -221,6 +237,11 @@ func (s *PluginSubsystem) Stop(_ context.Context) error {
 	defer cancel()
 	if err := s.manager.Close(shutdownCtx); err != nil {
 		slog.Warn("error closing plugin manager", "error", err)
+	}
+	if s.worldConn != nil {
+		if err := s.worldConn.Close(); err != nil {
+			slog.Warn("error closing world in-process connection", "error", err)
+		}
 	}
 	return nil
 }
