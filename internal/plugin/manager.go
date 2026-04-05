@@ -286,6 +286,32 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin) error {
 		}
 	}
 
+	// Register plugin-provided services in the service registry.
+	if m.registry != nil && len(dp.Manifest.Provides) > 0 {
+		if connProvider, ok := host.(ServiceConnProvider); ok {
+			conn, connErr := connProvider.PluginConn(dp.Manifest.Name)
+			if connErr != nil {
+				slog.Error("failed to get plugin connection for service registration",
+					"plugin", dp.Manifest.Name, "error", connErr)
+			} else {
+				for _, svcName := range dp.Manifest.Provides {
+					regErr := m.registry.Register(RegisteredService{
+						Name:       svcName,
+						Conn:       conn,
+						PluginName: dp.Manifest.Name,
+						PluginType: dp.Manifest.Type,
+					})
+					if regErr != nil {
+						slog.Error("failed to register plugin service",
+							"plugin", dp.Manifest.Name,
+							"service", svcName,
+							"error", regErr)
+					}
+				}
+			}
+		}
+	}
+
 	m.mu.Lock()
 	m.loaded[dp.Manifest.Name] = dp
 	m.pluginHosts[dp.Manifest.Name] = host

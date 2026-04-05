@@ -27,10 +27,13 @@ func createTempExecutable(path string) error {
 }
 
 // mockClientProtocol implements hashiplug.ClientProtocol for testing.
+// It also implements the Conn() accessor so goplugin.Host.Load can capture
+// the gRPC connection for service registration.
 type mockClientProtocol struct {
 	pluginClient pluginv1.PluginServiceClient
 	dispenseErr  error
 	rawDispense  interface{} // If set, return this instead of pluginClient
+	conn         grpc.ClientConnInterface
 }
 
 func (m *mockClientProtocol) Close() error { return nil }
@@ -43,7 +46,8 @@ func (m *mockClientProtocol) Dispense(_ string) (interface{}, error) {
 	}
 	return m.pluginClient, nil
 }
-func (m *mockClientProtocol) Ping() error { return nil }
+func (m *mockClientProtocol) Ping() error                       { return nil }
+func (m *mockClientProtocol) Conn() grpc.ClientConnInterface    { return m.conn }
 
 // mockPluginClient implements PluginClient for testing.
 type mockPluginClient struct {
@@ -1173,4 +1177,86 @@ func TestWithSchemaProvisionerOptionSetsField(t *testing.T) {
 	host := NewHostWithFactory(factory, WithSchemaProvisioner(provisioner))
 
 	assert.NotNil(t, host.schemaProvisioner, "expected schemaProvisioner to be set by option")
+}
+
+// stubClientConn is a minimal grpc.ClientConnInterface for testing.
+type stubClientConn struct {
+	grpc.ClientConnInterface
+}
+
+func TestPluginConnReturnsConnectionForLoadedPlugin(t *testing.T) {
+	tmpDir := t.TempDir()
+	require.NoError(t, createTempExecutable(filepath.Join(tmpDir, "test-plugin")))
+
+	fakeConn := &stubClientConn{}
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient, conn: fakeConn},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	host := NewHostWithFactory(factory)
+
+	manifest := &plugins.Manifest{
+		Name:    "test-plugin",
+		Version: "1.0.0",
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "test-plugin",
+		},
+	}
+
+	require.NoError(t, host.Load(context.Background(), manifest, tmpDir))
+
+	conn, err := host.PluginConn("test-plugin")
+	require.NoError(t, err)
+	assert.Same(t, fakeConn, conn, "expected the same connection that was set on the mock protocol")
+}
+
+func TestPluginConnReturnsErrorForUnknownPlugin(t *testing.T) {
+	host := NewHost()
+
+	_, err := host.PluginConn("nonexistent")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrPluginNotLoaded)
+}
+
+func TestPluginConnReturnsErrorAfterClose(t *testing.T) {
+	host := NewHost()
+	require.NoError(t, host.Close(context.Background()))
+
+	_, err := host.PluginConn("any")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrHostClosed)
+}
+
+func TestPluginConnReturnsErrorWhenNoConnection(t *testing.T) {
+	tmpDir := t.TempDir()
+	require.NoError(t, createTempExecutable(filepath.Join(tmpDir, "test-plugin")))
+
+	// Protocol without a Conn() — nil conn field.
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient, conn: nil},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	host := NewHostWithFactory(factory)
+
+	manifest := &plugins.Manifest{
+		Name:    "test-plugin",
+		Version: "1.0.0",
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "test-plugin",
+		},
+	}
+
+	require.NoError(t, host.Load(context.Background(), manifest, tmpDir))
+
+	_, err := host.PluginConn("test-plugin")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no gRPC connection")
+}
+
+func TestHostImplementsServiceConnProvider(t *testing.T) {
+	var _ plugins.ServiceConnProvider = (*Host)(nil)
 }

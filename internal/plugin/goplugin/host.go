@@ -18,6 +18,7 @@ import (
 
 	hashiplug "github.com/hashicorp/go-plugin"
 	"github.com/samber/oops"
+	"google.golang.org/grpc"
 
 	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -37,8 +38,9 @@ var (
 	ErrPluginAlreadyLoaded = errors.New("plugin already loaded")
 )
 
-// Compile-time interface check.
+// Compile-time interface checks.
 var _ plugins.Host = (*Host)(nil)
+var _ plugins.ServiceConnProvider = (*Host)(nil)
 
 // PluginClient wraps go-plugin client for testability.
 type PluginClient interface {
@@ -90,6 +92,7 @@ type loadedPlugin struct {
 	manifest *plugins.Manifest
 	client   PluginClient
 	plugin   pluginv1.PluginServiceClient
+	conn     grpc.ClientConnInterface // underlying gRPC conn to the plugin process
 }
 
 // NewHost creates a new binary plugin host.
@@ -182,6 +185,18 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "connect").Wrap(err)
 	}
 
+	// Capture the underlying gRPC connection for service registration.
+	// The concrete type behind ClientProtocol is *hashiplug.GRPCClient which
+	// exposes a public Conn field. We also accept any type implementing a
+	// Conn() accessor (used by test mocks).
+	var pluginConn grpc.ClientConnInterface
+	switch c := rpcClient.(type) {
+	case *hashiplug.GRPCClient:
+		pluginConn = c.Conn
+	case interface{ Conn() grpc.ClientConnInterface }:
+		pluginConn = c.Conn()
+	}
+
 	raw, err := rpcClient.Dispense("plugin")
 	if err != nil {
 		client.Kill()
@@ -219,6 +234,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		manifest: manifest,
 		client:   client,
 		plugin:   pluginClient,
+		conn:     pluginConn,
 	}
 
 	return nil
@@ -378,6 +394,29 @@ func protoCommandStatusToSDK(s pluginv1.CommandStatus) pluginsdk.CommandStatus {
 	default:
 		return pluginsdk.CommandOK
 	}
+}
+
+// PluginConn returns the gRPC client connection for the named plugin.
+// This enables the manager to register plugin-provided services in the
+// ServiceRegistry after loading.
+func (h *Host) PluginConn(name string) (grpc.ClientConnInterface, error) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if h.closed {
+		return nil, ErrHostClosed
+	}
+
+	p, ok := h.plugins[name]
+	if !ok {
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "plugin_conn").Wrap(ErrPluginNotLoaded)
+	}
+
+	if p.conn == nil {
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "plugin_conn").New("plugin has no gRPC connection")
+	}
+
+	return p.conn, nil
 }
 
 // Plugins returns names of all loaded plugins.
