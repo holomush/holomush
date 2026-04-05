@@ -92,8 +92,8 @@ func scanPolicies(rows pgx.Rows) ([]*StoredPolicy, error) {
 	return policies, nil
 }
 
-// ValidateGrammarVersion checks that compiled_ast contains a numeric grammar_version field
-// with value >= 1, as required by spec (02-policy-dsl.md). This ensures forward-compatible AST evolution.
+// ValidateGrammarVersion checks that compiled_ast contains a numeric grammar_version
+// field with value >= 1, as required by spec (02-policy-dsl.md).
 func ValidateGrammarVersion(ast json.RawMessage) error {
 	if len(ast) == 0 {
 		return oops.Code("POLICY_INVALID_AST").Errorf("compiled_ast is required (spec: 02-policy-dsl.md, 05-storage-audit.md)")

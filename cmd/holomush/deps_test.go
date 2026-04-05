@@ -775,3 +775,64 @@ func TestRunGatewayWithDeps_WithObservability(t *testing.T) {
 		t.Fatal("runGatewayWithDeps() did not return within timeout")
 	}
 }
+
+// TestCoreDepsApplyDefaultsSetsAllNilFields verifies that nil dependency fields
+// are populated with non-nil default implementations.
+func TestCoreDepsApplyDefaultsSetsAllNilFields(t *testing.T) {
+	d := &CoreDeps{}
+
+	d.applyDefaults()
+
+	assert.NotNil(t, d.TLSCertEnsurer)
+	assert.NotNil(t, d.ControlTLSLoader)
+	assert.NotNil(t, d.ControlServerFactory)
+	assert.NotNil(t, d.ObservabilityServerFactory)
+	assert.NotNil(t, d.CertsDirGetter)
+	assert.NotNil(t, d.DatabaseURLGetter)
+	assert.NotNil(t, d.MigratorFactory)
+	assert.NotNil(t, d.AutoMigrateGetter)
+}
+
+// TestCoreDepsApplyDefaultsPreservesNonNilFields verifies that custom dependency
+// functions provided by the caller are not overwritten by applyDefaults.
+func TestCoreDepsApplyDefaultsPreservesNonNilFields(t *testing.T) {
+	sentinel := "custom-impl"
+	customGetter := func() string { return sentinel }
+
+	d := &CoreDeps{
+		DatabaseURLGetter: customGetter,
+	}
+
+	d.applyDefaults()
+
+	require.NotNil(t, d.DatabaseURLGetter)
+	assert.Equal(t, sentinel, d.DatabaseURLGetter())
+}
+
+// TestCoreDepsApplyDefaultsIsIdempotent verifies that calling applyDefaults
+// twice in succession does not panic or overwrite previously set defaults.
+func TestCoreDepsApplyDefaultsIsIdempotent(t *testing.T) {
+	d := &CoreDeps{}
+
+	d.applyDefaults()
+	first := d.DatabaseURLGetter
+
+	d.applyDefaults()
+	second := d.DatabaseURLGetter
+
+	// Both should be non-nil; the second call must not have replaced them.
+	assert.NotNil(t, first)
+	assert.NotNil(t, second)
+}
+
+// TestCoreDepsApplyDefaultsDatabaseURLReadsEnv verifies that the default
+// DatabaseURLGetter reads from the DATABASE_URL environment variable.
+func TestCoreDepsApplyDefaultsDatabaseURLReadsEnv(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test:pass@localhost/mydb")
+
+	d := &CoreDeps{}
+	d.applyDefaults()
+
+	got := d.DatabaseURLGetter()
+	assert.Equal(t, "postgres://test:pass@localhost/mydb", got)
+}

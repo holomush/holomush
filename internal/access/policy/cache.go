@@ -35,7 +35,8 @@ type cacheConfig struct {
 	lastUpdateGauge prometheus.Gauge
 }
 
-// WithLastUpdateGauge sets the Prometheus gauge to record the last successful reload timestamp.
+// WithLastUpdateGauge returns a CacheOption that sets the cache's last-update Prometheus gauge.
+// If non-nil, the cache will set this gauge to the Unix timestamp of the last successful reload.
 func WithLastUpdateGauge(g prometheus.Gauge) CacheOption {
 	return func(c *cacheConfig) {
 		c.lastUpdateGauge = g
@@ -54,7 +55,8 @@ type Cache struct {
 }
 
 // NewCache creates a Cache with the given store, compiler, and options.
-// Call Reload to populate the cache before first use.
+// The cache is not populated on construction; call Reload (or Invalidate) to
+// load policies before first use.
 func NewCache(s store.PolicyStore, compiler *Compiler, opts ...CacheOption) *Cache {
 	var cfg cacheConfig
 	for _, opt := range opts {

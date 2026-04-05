@@ -63,7 +63,10 @@ type ABACConfig struct {
 	AuditMode     audit.Mode
 }
 
-// BuildABACStack constructs all ABAC components in the correct dependency order.
+// BuildABACStack constructs and wires all ABAC components in the correct dependency order:
+// policy store, cache (with initial reload), attribute resolver and providers, policy engine,
+// audit logger, health tracker, poller, and policy installer. If cfg.AuditMode is empty it
+// defaults to denials-only.
 // codecov:ignore — tested by integration and E2E tests
 func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 	eb := oops.In("abac_setup")

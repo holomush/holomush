@@ -30,7 +30,8 @@ type DatabaseSubsystem struct {
 	gameID     string
 }
 
-// NewSubsystem creates a database subsystem. No live resources are allocated.
+// NewSubsystem creates a DatabaseSubsystem configured with cfg.
+// It does not allocate connections or other live resources; Start must be called to initialize the event store, connection pool, and game ID.
 func NewSubsystem(cfg SubsystemConfig) *DatabaseSubsystem {
 	return &DatabaseSubsystem{cfg: cfg}
 }

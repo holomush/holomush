@@ -105,7 +105,8 @@ type PluginSubsystem struct {
 	proxy       *plugins.ServiceProxyImpl
 }
 
-// NewPluginSubsystem creates a plugin subsystem. No live resources are allocated.
+// NewPluginSubsystem creates a plugin subsystem configured with cfg.
+// The returned subsystem holds configuration only and does not allocate or start any runtime resources.
 func NewPluginSubsystem(cfg PluginSubsystemConfig) *PluginSubsystem {
 	return &PluginSubsystem{cfg: cfg}
 }

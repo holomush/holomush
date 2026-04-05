@@ -107,7 +107,13 @@ type BootstrapSubsystem struct {
 	started         bool
 }
 
-// NewBootstrapSubsystem creates a bootstrap subsystem. No live resources are allocated.
+// NewBootstrapSubsystem creates a BootstrapSubsystem configured by cfg.
+// The subsystem performs no resource allocation until Start is called.
+//
+// The cfg parameter supplies lazy providers and bootstrap options: database pool,
+// ABAC policy store, world service and transactor, plugin manager, player
+// repository and password hasher providers, optional setting plugin name and
+// reset flag, SkipSeedMigrations, and an optional GuestStartLocation ULID string.
 func NewBootstrapSubsystem(cfg BootstrapSubsystemConfig) *BootstrapSubsystem {
 	return &BootstrapSubsystem{cfg: cfg}
 }

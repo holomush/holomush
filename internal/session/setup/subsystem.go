@@ -34,7 +34,8 @@ type SessionSubsystem struct {
 	sessionStore *store.PostgresSessionStore
 }
 
-// NewSessionSubsystem creates a session subsystem. No live resources are allocated.
+// NewSessionSubsystem constructs a SessionSubsystem configured with the provided SessionSubsystemConfig.
+// It does not allocate or start any live resources; Start must be called to initialize the session store.
 func NewSessionSubsystem(cfg SessionSubsystemConfig) *SessionSubsystem {
 	return &SessionSubsystem{cfg: cfg}
 }

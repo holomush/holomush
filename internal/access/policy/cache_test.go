@@ -261,3 +261,74 @@ func TestCacheInvalidateTriggersReload(t *testing.T) {
 	assert.False(t, snap2.CreatedAt.Before(snap1.CreatedAt),
 		"snap2.CreatedAt should not be before snap1.CreatedAt")
 }
+
+// TestCacheInvalidatePropagatesStoreError verifies that a store error returned
+// during Invalidate is forwarded to the caller.
+func TestCacheInvalidatePropagatesStoreError(t *testing.T) {
+	ms := &mockPolicyStore{err: assert.AnError}
+	compiler := testCompiler()
+	cache := NewCache(ms, compiler)
+
+	err := cache.Invalidate(context.Background())
+
+	assert.Error(t, err)
+}
+
+// TestCacheInvalidatePreservesSnapshotOnError verifies that a failed Invalidate
+// does not corrupt the existing snapshot.
+func TestCacheInvalidatePreservesSnapshotOnError(t *testing.T) {
+	dslText := `permit(principal, action, resource);`
+	ms := &mockPolicyStore{
+		policies: []*store.StoredPolicy{
+			{ID: "p1", Name: "test-policy", DSLText: dslText, Enabled: true},
+		},
+	}
+	compiler := testCompiler()
+	cache := NewCache(ms, compiler)
+
+	// Load a valid snapshot first.
+	require.NoError(t, cache.Reload(context.Background()))
+	snapBefore := cache.Snapshot()
+	require.Len(t, snapBefore.Policies, 1)
+
+	// Now cause the store to return an error.
+	ms.err = assert.AnError
+
+	err := cache.Invalidate(context.Background())
+	assert.Error(t, err)
+
+	// Snapshot should still contain the original policy.
+	snapAfter := cache.Snapshot()
+	assert.Len(t, snapAfter.Policies, 1, "failed Invalidate must not corrupt snapshot")
+	assert.Equal(t, "p1", snapAfter.Policies[0].ID)
+}
+
+// TestCacheInvalidateConcurrentSafe verifies that concurrent Invalidate calls
+// do not race or corrupt the snapshot.
+func TestCacheInvalidateConcurrentSafe(t *testing.T) {
+	dslText := `permit(principal, action, resource);`
+	ms := &mockPolicyStore{
+		policies: []*store.StoredPolicy{
+			{ID: "p1", Name: "test-policy", DSLText: dslText, Enabled: true},
+		},
+	}
+	compiler := testCompiler()
+	cache := NewCache(ms, compiler)
+
+	require.NoError(t, cache.Reload(context.Background()))
+
+	const goroutines = 20
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			_ = cache.Invalidate(context.Background())
+			snap := cache.Snapshot()
+			assert.NotNil(t, snap)
+		}()
+	}
+
+	wg.Wait()
+}

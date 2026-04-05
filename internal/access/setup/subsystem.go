@@ -41,6 +41,7 @@ type ABACSubsystem struct {
 }
 
 // NewABACSubsystem creates an ABAC subsystem. No live resources are allocated.
+// If cfg.AuditMode is empty, it defaults to audit.ModeDenialsOnly.
 func NewABACSubsystem(cfg ABACSubsystemConfig) *ABACSubsystem {
 	if cfg.AuditMode == "" {
 		cfg.AuditMode = audit.ModeDenialsOnly

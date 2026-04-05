@@ -27,8 +27,8 @@ var (
 	})
 )
 
-// RegisterMetrics registers lifecycle metrics with the given Prometheus registry.
-// Duplicate registrations are silently ignored (safe for tests and re-init).
+// RegisterMetrics registers lifecycle Prometheus collectors with reg.
+// Duplicate registrations are silently ignored; other registration errors panic.
 func RegisterMetrics(reg prometheus.Registerer) {
 	for _, c := range []prometheus.Collector{healthTierGauge, healthTransitionsTotal, startupDuration} {
 		if err := reg.Register(c); err != nil {

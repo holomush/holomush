@@ -39,7 +39,8 @@ type AuthSubsystem struct {
 	resetService       *auth.PasswordResetService
 }
 
-// NewAuthSubsystem creates an auth subsystem. No live resources are allocated.
+// NewAuthSubsystem creates an AuthSubsystem configured with cfg.
+// It does not allocate live resources; Start must be called to initialize repositories, stores, the password hasher, and services.
 func NewAuthSubsystem(cfg AuthSubsystemConfig) *AuthSubsystem {
 	return &AuthSubsystem{cfg: cfg}
 }

@@ -113,8 +113,10 @@ manages plugins, and handles game state.`,
 	return cmd
 }
 
-// runCoreWithDeps starts the core process with injectable dependencies.
-// If deps is nil, default implementations are used.
+// runCoreWithDeps starts and runs the core process using the provided configuration and injectable dependencies.
+// It validates configuration, initializes logging and telemetry, ensures database migrations and TLS certificates,
+// constructs and starts subsystems under an orchestrator, optionally starts observability, launches the control gRPC server,
+// waits for readiness, handles OS signals and context cancellation, and performs a graceful shutdown.
 // codecov:ignore — tested by integration and E2E tests
 func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.GameConfig, cmd *cobra.Command, deps *CoreDeps) error {
 	if deps == nil {
@@ -375,7 +377,9 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	return nil
 }
 
-// parseSessionConfig extracts and validates session TTL and reaper interval from config.
+// parseSessionConfig parses and validates session TTL and reaper interval from cfg,
+// applying defaults when values are empty. Returns an error if parsing fails or
+// either duration is not positive.
 func parseSessionConfig(cfg *coreConfig) (sessionTTL, reaperInterval time.Duration, err error) {
 	if cfg.SessionTTL == "" {
 		cfg.SessionTTL = "30m"
@@ -451,7 +455,15 @@ func (b *adminDepsBridge) AdminDeps() handlers.AdminDeps {
 	}
 }
 
-// ensureTLSCerts generates or loads TLS certificates.
+// ensureTLSCerts ensures server and CA/client TLS certificates exist for the core
+// component and returns a loaded server TLS configuration.
+//
+// If any of the expected files (`core.crt`, `core.key`, `root-ca.crt`) are already
+// present in certsDir, the existing server TLS configuration is loaded and returned.
+// Otherwise the function creates certsDir, generates a CA and server certificate for
+// `core`, generates a gateway client certificate, saves all artifacts, and then loads
+// and returns the resulting server TLS configuration. Returns a coded error if any
+// step (directory creation, certificate generation, saving, or loading) fails.
 func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 	certPath := certsDir + "/core.crt"
 	keyPath := certsDir + "/core.key"
@@ -509,15 +521,17 @@ func ensureTLSCerts(certsDir, gameID string) (*cryptotls.Config, error) {
 	return tlsConfig, nil
 }
 
-// fileExists returns true if the file exists, false otherwise.
-// Permission errors are treated as "file exists" to avoid silently
+// fileExists reports whether the file at path exists or should be treated as
+// existing. Permission errors are treated as "exists" to avoid silently
 // overwriting files we can't read.
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil || !os.IsNotExist(err)
 }
 
-// monitorServerErrors monitors a server's error channel and cancels the context on error.
+// monitorServerErrors watches errCh and cancels the provided context when a non-nil error is received.
+// It logs the error with the given serverName before calling cancel. The function returns if errCh is closed
+// or if ctx is done.
 func monitorServerErrors(ctx context.Context, cancel context.CancelFunc, errCh <-chan error, serverName string) {
 	select {
 	case err, ok := <-errCh:
@@ -560,8 +574,8 @@ func runAutoMigration(databaseURL string, factory func(string) (bootstrap.AutoMi
 	return nil
 }
 
-// parseAutoMigrate reads the HOLOMUSH_DB_AUTO_MIGRATE environment variable.
-// Returns true (auto-migrate enabled) if the variable is not set, empty, or not explicitly "false" or "0".
+// parseAutoMigrate reads the HOLOMUSH_DB_AUTO_MIGRATE environment variable
+// and defaults to enabling auto-migration.
 func parseAutoMigrate() bool {
 	val := strings.TrimSpace(os.Getenv("HOLOMUSH_DB_AUTO_MIGRATE"))
 	if val == "" {
