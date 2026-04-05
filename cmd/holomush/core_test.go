@@ -966,6 +966,104 @@ func TestCoreCommand_ConfigFileLoading(t *testing.T) {
 	assert.Equal(t, "text", cfg.LogFormat)
 }
 
+// TestParseSessionConfig_Defaults verifies that empty fields are set to their defaults.
+func TestParseSessionConfig_Defaults(t *testing.T) {
+	cfg := &coreConfig{
+		SessionTTL:            "",
+		SessionReaperInterval: "",
+		SessionMaxHistory:     0,
+	}
+	ttl, reaper, err := parseSessionConfig(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, 30*time.Minute, ttl)
+	assert.Equal(t, 30*time.Second, reaper)
+	assert.Equal(t, 500, cfg.SessionMaxHistory)
+}
+
+// TestParseSessionConfig_ExplicitValues verifies that explicitly set values are used.
+func TestParseSessionConfig_ExplicitValues(t *testing.T) {
+	cfg := &coreConfig{
+		SessionTTL:            "1h",
+		SessionReaperInterval: "5m",
+		SessionMaxHistory:     100,
+	}
+	ttl, reaper, err := parseSessionConfig(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, time.Hour, ttl)
+	assert.Equal(t, 5*time.Minute, reaper)
+	assert.Equal(t, 100, cfg.SessionMaxHistory)
+}
+
+// TestParseSessionConfig_InvalidTTL verifies that a malformed TTL is rejected.
+func TestParseSessionConfig_InvalidTTL(t *testing.T) {
+	cfg := &coreConfig{
+		SessionTTL:            "not-a-duration",
+		SessionReaperInterval: "30s",
+	}
+	_, _, err := parseSessionConfig(cfg)
+	require.Error(t, err)
+	// oops wraps the go stdlib time.ParseDuration error; check for the malformed value.
+	assert.Contains(t, err.Error(), "not-a-duration")
+}
+
+// TestParseSessionConfig_InvalidReaperInterval verifies that a malformed reaper interval is rejected.
+func TestParseSessionConfig_InvalidReaperInterval(t *testing.T) {
+	cfg := &coreConfig{
+		SessionTTL:            "30m",
+		SessionReaperInterval: "not-a-duration",
+	}
+	_, _, err := parseSessionConfig(cfg)
+	require.Error(t, err)
+	// oops wraps the go stdlib time.ParseDuration error; check for the malformed value.
+	assert.Contains(t, err.Error(), "not-a-duration")
+}
+
+// TestParseSessionConfig_ZeroTTL verifies that a zero or negative TTL is rejected.
+func TestParseSessionConfig_ZeroTTL(t *testing.T) {
+	cfg := &coreConfig{
+		SessionTTL:            "0s",
+		SessionReaperInterval: "30s",
+	}
+	_, _, err := parseSessionConfig(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "positive")
+}
+
+// TestParseSessionConfig_ZeroReaperInterval verifies that a zero or negative reaper interval is rejected.
+func TestParseSessionConfig_ZeroReaperInterval(t *testing.T) {
+	cfg := &coreConfig{
+		SessionTTL:            "30m",
+		SessionReaperInterval: "0s",
+	}
+	_, _, err := parseSessionConfig(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "positive")
+}
+
+// TestParseSessionConfig_MaxHistoryDefaultsTo500WhenNegative verifies that negative max history is reset.
+func TestParseSessionConfig_MaxHistoryDefaultsTo500WhenNegative(t *testing.T) {
+	cfg := &coreConfig{
+		SessionTTL:            "30m",
+		SessionReaperInterval: "30s",
+		SessionMaxHistory:     -1,
+	}
+	_, _, err := parseSessionConfig(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, 500, cfg.SessionMaxHistory)
+}
+
+// TestParseSessionConfig_PositiveMaxHistoryPreserved verifies that positive max history is kept.
+func TestParseSessionConfig_PositiveMaxHistoryPreserved(t *testing.T) {
+	cfg := &coreConfig{
+		SessionTTL:            "30m",
+		SessionReaperInterval: "30s",
+		SessionMaxHistory:     250,
+	}
+	_, _, err := parseSessionConfig(cfg)
+	require.NoError(t, err)
+	assert.Equal(t, 250, cfg.SessionMaxHistory)
+}
+
 // TestResolveLogLevel verifies that resolveLogLevel correctly resolves log level
 // from the flag, LOG_LEVEL env var, and default.
 func TestResolveLogLevel(t *testing.T) {
