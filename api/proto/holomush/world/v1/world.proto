@@ -1,0 +1,119 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.world.v1;
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/world/v1;worldv1";
+
+// WorldService exposes read-only world model queries for binary plugins.
+// Each RPC mirrors a method on internal/world.Service, accepting a subject_id
+// for access-control enforcement on the server side.
+service WorldService {
+  // GetLocation retrieves a single location by ID.
+  rpc GetLocation(GetLocationRequest) returns (GetLocationResponse);
+
+  // GetCharacter retrieves a single character by ID.
+  rpc GetCharacter(GetCharacterRequest) returns (GetCharacterResponse);
+
+  // ListCharactersAtLocation returns all characters present at a location.
+  rpc ListCharactersAtLocation(ListCharactersAtLocationRequest) returns (ListCharactersAtLocationResponse);
+
+  // ListExits returns all exits originating from a location.
+  rpc ListExits(ListExitsRequest) returns (ListExitsResponse);
+}
+
+// --- Canonical resource messages ---
+
+// LocationInfo describes a location in the world.
+message LocationInfo {
+  // ULID of the location.
+  string id = 1;
+  // Display name.
+  string name = 2;
+  // Prose description shown to characters in the location.
+  string description = 3;
+  // Location type: "persistent", "scene", or "instance".
+  string type = 4;
+  // ULID of the owning player (empty if unowned).
+  string owner_id = 5;
+}
+
+// CharacterInfo describes a character in the world.
+message CharacterInfo {
+  // ULID of the character.
+  string id = 1;
+  // ULID of the owning player account.
+  string player_id = 2;
+  // Display name.
+  string name = 3;
+  // Prose description.
+  string description = 4;
+  // ULID of the character's current location (empty if not in world).
+  string location_id = 5;
+}
+
+// ExitInfo describes a directional connection between two locations.
+message ExitInfo {
+  // ULID of the exit.
+  string id = 1;
+  // Display name (e.g., "north", "door").
+  string name = 2;
+  // ULID of the origin location.
+  string from_location_id = 3;
+  // ULID of the destination location.
+  string to_location_id = 4;
+  // Whether the exit has a return path.
+  bool bidirectional = 5;
+  // Return direction name (e.g., "south") when bidirectional.
+  string return_name = 6;
+  // Whether the exit is currently locked.
+  bool locked = 7;
+}
+
+// --- Request/Response messages ---
+
+message GetLocationRequest {
+  // ULID of the character performing the query (for access control).
+  string subject_id = 1;
+  // ULID of the location to retrieve.
+  string location_id = 2;
+}
+
+message GetLocationResponse {
+  LocationInfo location = 1;
+}
+
+message GetCharacterRequest {
+  // ULID of the character performing the query (for access control).
+  string subject_id = 1;
+  // ULID of the character to retrieve.
+  string character_id = 2;
+}
+
+message GetCharacterResponse {
+  CharacterInfo character = 1;
+}
+
+message ListCharactersAtLocationRequest {
+  // ULID of the character performing the query (for access control).
+  string subject_id = 1;
+  // ULID of the location to list characters from.
+  string location_id = 2;
+}
+
+message ListCharactersAtLocationResponse {
+  repeated CharacterInfo characters = 1;
+}
+
+message ListExitsRequest {
+  // ULID of the character performing the query (for access control).
+  string subject_id = 1;
+  // ULID of the location to list exits from.
+  string location_id = 2;
+}
+
+message ListExitsResponse {
+  repeated ExitInfo exits = 1;
+}
