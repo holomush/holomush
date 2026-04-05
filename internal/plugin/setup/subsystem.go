@@ -32,7 +32,6 @@ import (
 	corealiases "github.com/holomush/holomush/plugins/core-aliases"
 	corebuilding "github.com/holomush/holomush/plugins/core-building"
 	"github.com/holomush/holomush/plugins/core-communication"
-	corehelp "github.com/holomush/holomush/plugins/core-help"
 	coreobjects "github.com/holomush/holomush/plugins/core-objects"
 )
 
@@ -182,7 +181,6 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	localHost.RegisterHandler("core-aliases", &corealiases.Handler{}, nil)
 	localHost.RegisterHandler("core-building", &corebuilding.Handler{}, nil)
 	localHost.RegisterHandler("core-communication", communication.NewHandler(), nil)
-	localHost.RegisterHandler("core-help", &corehelp.Handler{}, nil)
 	localHost.RegisterHandler("core-objects", &coreobjects.Handler{}, nil)
 
 	// 6. Wrap hosts with OTel instrumentation.
