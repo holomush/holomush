@@ -23,6 +23,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/goplugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/session"
@@ -103,6 +104,7 @@ type PluginSubsystem struct {
 	manager     *plugins.Manager
 	cmdRegistry *command.Registry
 	proxy       *plugins.ServiceProxyImpl
+	registry    *plugins.ServiceRegistry
 }
 
 // NewPluginSubsystem creates a plugin subsystem configured with cfg.
@@ -145,7 +147,10 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	// 3. Create Lua host.
 	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
 
-	// 4. Create ServiceProxy and LocalPluginHost for in-process core plugins.
+	// 4. Create service registry for proto service resolution.
+	s.registry = plugins.NewServiceRegistry()
+
+	// Create ServiceProxy and LocalPluginHost for in-process core plugins.
 	proxy, proxyErr := plugins.NewServiceProxy(plugins.ServiceProxyConfig{
 		World:    s.cfg.World.Service(),
 		Sessions: sessionStore,
@@ -187,12 +192,23 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		return oops.Code("LUA_HOST_MW_FAILED").Wrap(luaMWErr)
 	}
 
+	// Create binary plugin host (subprocess plugins via hashicorp/go-plugin).
+	binaryHost := goplugin.NewHost()
+	instrumentedBinaryHost, binaryMWErr := plugins.NewHostMiddleware(
+		binaryHost, otel.GetTracerProvider(), otel.GetMeterProvider(),
+	)
+	if binaryMWErr != nil {
+		return oops.Code("BINARY_HOST_MW_FAILED").Wrap(binaryMWErr)
+	}
+
 	// 7. Create Manager, register hosts.
 	s.manager = plugins.NewManager(pluginsDir,
 		plugins.WithLuaHost(instrumentedLuaHost),
 		plugins.WithPolicyInstaller(s.cfg.PolicyInst.PolicyInstaller()),
+		plugins.WithServiceRegistry(s.registry),
 	)
 	s.manager.RegisterHost(plugins.TypeCore, instrumentedHost)
+	s.manager.RegisterHost(plugins.TypeBinary, instrumentedBinaryHost)
 
 	// 8. Set ABAC plugin provider registry.
 	s.cfg.PluginProv.PluginProvider().SetRegistry(s.manager)
@@ -251,6 +267,14 @@ func (s *PluginSubsystem) ServiceProxy() *plugins.ServiceProxyImpl {
 		panic("plugin/setup: ServiceProxy() called before Start()")
 	}
 	return s.proxy
+}
+
+// ServiceRegistry returns the ServiceRegistry. Panics if called before Start().
+func (s *PluginSubsystem) ServiceRegistry() *plugins.ServiceRegistry {
+	if s.registry == nil {
+		panic("plugin/setup: ServiceRegistry() called before Start()")
+	}
+	return s.registry
 }
 
 func (s *PluginSubsystem) resolvePluginsDir() (string, error) {
