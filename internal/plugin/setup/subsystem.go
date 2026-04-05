@@ -30,7 +30,6 @@ import (
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/xdg"
 	corealiases "github.com/holomush/holomush/plugins/core-aliases"
-	"github.com/holomush/holomush/plugins/core-communication"
 )
 
 // shutdownTimeout is the maximum time to wait for plugin manager shutdown.
@@ -177,7 +176,6 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 
 	// 5. Register in-process Go handlers for core plugins.
 	localHost.RegisterHandler("core-aliases", &corealiases.Handler{}, nil)
-	localHost.RegisterHandler("core-communication", communication.NewHandler(), nil)
 
 	// 6. Wrap hosts with OTel instrumentation.
 	instrumentedHost, hostMWErr := plugins.NewHostMiddleware(
