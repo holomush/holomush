@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
 )
@@ -46,7 +47,8 @@ func (sp *SchemaProvisioner) Init(ctx context.Context) error {
 func (sp *SchemaProvisioner) ProvisionSchema(ctx context.Context, pluginName string) (string, error) {
 	schemaName := pluginSchemaName(pluginName)
 
-	ddl := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schemaName)
+	identifier := pgx.Identifier{schemaName}
+	ddl := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", identifier.Sanitize())
 	if _, err := sp.pool.Exec(ctx, ddl); err != nil {
 		return "", oops.Code("SCHEMA_CREATE_FAILED").
 			With("plugin", pluginName).

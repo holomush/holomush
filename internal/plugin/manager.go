@@ -353,16 +353,17 @@ func (m *Manager) Close(ctx context.Context) error {
 		}
 	}
 
-	// Clear loaded maps first to ensure consistent state even if close fails.
-	m.loaded = make(map[string]*DiscoveredPlugin)
-	m.pluginHosts = make(map[string]Host)
-
-	// Close all registered hosts.
+	// Close all registered hosts before clearing maps so that hosts can
+	// still reference loaded state during shutdown.
 	for hostType, host := range m.hosts {
 		if err := host.Close(ctx); err != nil {
 			slog.Error("failed to close host", "type", hostType, "error", err)
 		}
 	}
+
+	// Clear loaded maps after hosts are closed.
+	m.loaded = make(map[string]*DiscoveredPlugin)
+	m.pluginHosts = make(map[string]Host)
 
 	// Close legacy luaHost if not already in the hosts map.
 	if m.luaHost != nil {

@@ -22,6 +22,7 @@ const inProcessBufSize = 1 << 20 // 1 MiB
 type InProcessConn struct {
 	conn     *grpc.ClientConn
 	listener *bufconn.Listener
+	server   *grpc.Server
 }
 
 // NewInProcessConn starts srv on an in-memory bufconn listener and returns a
@@ -50,7 +51,7 @@ func NewInProcessConn(srv *grpc.Server) (*InProcessConn, error) {
 		return nil, oops.Wrap(err)
 	}
 
-	return &InProcessConn{conn: conn, listener: lis}, nil
+	return &InProcessConn{conn: conn, listener: lis, server: srv}, nil
 }
 
 // Invoke delegates to the underlying ClientConn, satisfying grpc.ClientConnInterface.
@@ -63,8 +64,10 @@ func (c *InProcessConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, me
 	return c.conn.NewStream(ctx, desc, method, opts...) //nolint:wrapcheck // pass-through delegation to underlying ClientConn
 }
 
-// Close shuts down the client connection and the in-memory listener.
+// Close gracefully stops the gRPC server, then shuts down the client
+// connection and the in-memory listener.
 func (c *InProcessConn) Close() error {
+	c.server.Stop()
 	connErr := c.conn.Close()
 	lisErr := c.listener.Close()
 	if connErr != nil {
