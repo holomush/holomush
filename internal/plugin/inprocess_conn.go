@@ -1,0 +1,77 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+package plugins
+
+import (
+	"context"
+	"net"
+
+	"github.com/samber/oops"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/test/bufconn"
+)
+
+const inProcessBufSize = 1 << 20 // 1 MiB
+
+// InProcessConn wraps a gRPC server as a grpc.ClientConnInterface using an
+// in-memory bufconn listener. This allows server-internal services to be
+// registered in the service registry using the same interface as
+// plugin-provided services, without requiring a real network connection.
+type InProcessConn struct {
+	conn     *grpc.ClientConn
+	listener *bufconn.Listener
+}
+
+// NewInProcessConn starts srv on an in-memory bufconn listener and returns a
+// client connection to it. The caller must call Close when done.
+func NewInProcessConn(srv *grpc.Server) (*InProcessConn, error) {
+	lis := bufconn.Listen(inProcessBufSize)
+
+	go func() {
+		// Serve returns when the server is stopped. Ignore the error — it is
+		// always non-nil (typically "use of closed network connection") after
+		// lis.Close().
+		_ = srv.Serve(lis)
+	}()
+
+	dialer := func(ctx context.Context, _ string) (net.Conn, error) {
+		return lis.DialContext(ctx)
+	}
+
+	conn, err := grpc.NewClient(
+		"passthrough:///bufconn",
+		grpc.WithContextDialer(dialer),
+		grpc.WithTransportCredentials(insecure.NewCredentials()), //nosemgrep: go.grpc.tls.grpc-client-new-insecure-connection.grpc-client-new-insecure-connection
+	)
+	if err != nil {
+		_ = lis.Close()
+		return nil, oops.Wrap(err)
+	}
+
+	return &InProcessConn{conn: conn, listener: lis}, nil
+}
+
+// Invoke delegates to the underlying ClientConn, satisfying grpc.ClientConnInterface.
+func (c *InProcessConn) Invoke(ctx context.Context, method string, args, reply any, opts ...grpc.CallOption) error {
+	return c.conn.Invoke(ctx, method, args, reply, opts...)
+}
+
+// NewStream delegates to the underlying ClientConn, satisfying grpc.ClientConnInterface.
+func (c *InProcessConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	return c.conn.NewStream(ctx, desc, method, opts...)
+}
+
+// Close shuts down the client connection and the in-memory listener.
+func (c *InProcessConn) Close() error {
+	connErr := c.conn.Close()
+	lisErr := c.listener.Close()
+	if connErr != nil {
+		return oops.Wrap(connErr)
+	}
+	if lisErr != nil {
+		return oops.Wrap(lisErr)
+	}
+	return nil
+}
