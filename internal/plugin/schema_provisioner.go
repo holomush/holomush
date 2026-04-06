@@ -5,6 +5,8 @@ package plugins
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -58,7 +60,14 @@ func (sp *SchemaProvisioner) ProvisionSchema(ctx context.Context, pluginName str
 
 	slog.Info("provisioned plugin schema", "plugin", pluginName, "schema", schemaName)
 
-	connStr, err := scopedConnString(sp.baseConnString, schemaName)
+	roleName := pluginRoleName(pluginName)
+	password, err := generatePassword()
+	if err != nil {
+		return "", oops.Code("SCHEMA_CONNSTRING_FAILED").
+			With("plugin", pluginName).
+			Wrap(err)
+	}
+	connStr, err := pluginConnString(sp.baseConnString, schemaName, roleName, password)
 	if err != nil {
 		return "", oops.Code("SCHEMA_CONNSTRING_FAILED").
 			With("plugin", pluginName).
@@ -80,13 +89,32 @@ func pluginSchemaName(name string) string {
 	return "plugin_" + strings.ReplaceAll(name, "-", "_")
 }
 
-// scopedConnString returns a copy of baseConnString with search_path set to
-// the given schema name.
-func scopedConnString(baseConnString, schemaName string) (string, error) {
+// pluginRoleName converts a plugin name to a PostgreSQL role name.
+// Uses the same sanitization as pluginSchemaName but with the
+// "holomush_plugin_" prefix for role namespace isolation.
+func pluginRoleName(name string) string {
+	return "holomush_plugin_" + strings.ReplaceAll(name, "-", "_")
+}
+
+// generatePassword returns 32 bytes (256 bits) of cryptographic randomness,
+// base64url-encoded without padding. The charset (A-Za-z0-9-_) is safe for
+// inclusion in PostgreSQL password literals without escaping.
+func generatePassword() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", oops.Code("PASSWORD_GENERATION_FAILED").Wrap(err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// pluginConnString builds a connection string with plugin-specific credentials
+// and search_path. Replaces user, password, and search_path in the base URL.
+func pluginConnString(baseConnString, schemaName, roleName, password string) (string, error) {
 	u, err := url.Parse(baseConnString)
 	if err != nil {
 		return "", oops.Code("SCHEMA_CONNSTRING_PARSE_FAILED").Wrap(err)
 	}
+	u.User = url.UserPassword(roleName, password)
 	q := u.Query()
 	q.Set("search_path", schemaName)
 	u.RawQuery = q.Encode()

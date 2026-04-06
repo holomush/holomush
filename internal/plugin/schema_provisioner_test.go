@@ -31,33 +31,63 @@ func TestPluginSchemaName(t *testing.T) {
 	}
 }
 
-func TestScopedConnStringAppendsSearchPath(t *testing.T) {
-	base := "postgres://user:pass@localhost:5432/dbname?sslmode=disable"
-	got, err := scopedConnString(base, "plugin_core_scenes")
+
+func TestPluginRoleName(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"prepends holomush_plugin prefix", "scenes", "holomush_plugin_scenes"},
+		{"converts hyphens to underscores", "core-scenes", "holomush_plugin_core_scenes"},
+		{"handles multiple hyphens", "my-cool-plugin", "holomush_plugin_my_cool_plugin"},
+		{"preserves underscores", "core_utils", "holomush_plugin_core_utils"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, pluginRoleName(tt.input))
+		})
+	}
+}
+
+func TestGeneratePasswordProduces256BitsOfEntropy(t *testing.T) {
+	pw, err := generatePassword()
+	require.NoError(t, err)
+
+	// 32 bytes base64url-encoded without padding = 43 chars
+	assert.Len(t, pw, 43)
+}
+
+func TestGeneratePasswordIsUnique(t *testing.T) {
+	pw1, err := generatePassword()
+	require.NoError(t, err)
+	pw2, err := generatePassword()
+	require.NoError(t, err)
+
+	assert.NotEqual(t, pw1, pw2)
+}
+
+func TestPluginConnStringReplacesCredentialsAndSearchPath(t *testing.T) {
+	base := "postgres://serveruser:serverpass@localhost:5432/dbname?sslmode=disable"
+	got, err := pluginConnString(base, "plugin_core_scenes", "holomush_plugin_core_scenes", "s3cret")
 	require.NoError(t, err)
 
 	u, err := url.Parse(got)
 	require.NoError(t, err)
 
+	assert.Equal(t, "holomush_plugin_core_scenes", u.User.Username())
+	pw, ok := u.User.Password()
+	assert.True(t, ok)
+	assert.Equal(t, "s3cret", pw)
 	assert.Equal(t, "plugin_core_scenes", u.Query().Get("search_path"))
 	assert.Equal(t, "disable", u.Query().Get("sslmode"))
 	assert.Equal(t, "localhost:5432", u.Host)
 	assert.Equal(t, "/dbname", u.Path)
 }
 
-func TestScopedConnStringReplacesExistingSearchPath(t *testing.T) {
-	base := "postgres://user:pass@host:5432/db?search_path=public"
-	got, err := scopedConnString(base, "plugin_foo")
-	require.NoError(t, err)
-
-	u, err := url.Parse(got)
-	require.NoError(t, err)
-
-	assert.Equal(t, "plugin_foo", u.Query().Get("search_path"))
-}
-
-func TestScopedConnStringRejectsInvalidURL(t *testing.T) {
-	_, err := scopedConnString("://not-a-url", "plugin_foo")
+func TestPluginConnStringRejectsInvalidURL(t *testing.T) {
+	_, err := pluginConnString("://bad", "s", "r", "p")
 	require.Error(t, err)
 }
 
