@@ -39,13 +39,14 @@ type CharacterLister interface {
 	ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*world.Character, error)
 }
 
-// AdminDeps holds the dependencies injected into the reset password handler.
+// AdminDeps holds the dependencies injected into admin command handlers.
 type AdminDeps struct {
 	PlayerRepo     auth.PlayerRepository
 	Hasher         auth.PasswordHasher
 	PlayerSessions auth.PlayerSessionRepository
 	ResetRepo      auth.PasswordResetRepository
 	CharLister     CharacterLister
+	PluginLister   PluginLister // optional: nil disables plugin admin commands
 }
 
 type resetArgs struct {

@@ -20,19 +20,15 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/goplugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/session"
+	tlscerts "github.com/holomush/holomush/internal/tls"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/xdg"
-	corealiases "github.com/holomush/holomush/plugins/core-aliases"
-	corebuilding "github.com/holomush/holomush/plugins/core-building"
-	"github.com/holomush/holomush/plugins/core-communication"
-	corehelp "github.com/holomush/holomush/plugins/core-help"
-	coreobjects "github.com/holomush/holomush/plugins/core-objects"
 )
 
 // shutdownTimeout is the maximum time to wait for plugin manager shutdown.
@@ -58,24 +54,9 @@ type WorldServiceProvider interface {
 	Service() *world.Service
 }
 
-// SessionAccess combines the session interfaces required by both the hostfunc
-// bridge (session.Access) and the service proxy (plugins.SessionAccess).
-// The session subsystem's PostgresSessionStore satisfies this interface.
-type SessionAccess interface {
-	session.Access
-	Delete(ctx context.Context, id string, reason string) error
-}
-
-// SessionProvider provides session access for host functions and the service
-// proxy. The returned value must satisfy both session.Access and
-// plugins.SessionAccess.
+// SessionProvider provides session access for host functions.
 type SessionProvider interface {
-	SessionStore() SessionAccess
-}
-
-// EventStoreProvider provides the event store for the service proxy.
-type EventStoreProvider interface {
-	EventStore() core.EventStore
+	SessionStore() session.Access
 }
 
 // AdminDepsProvider provides the dependencies needed for admin command
@@ -86,23 +67,29 @@ type AdminDepsProvider interface {
 
 // PluginSubsystemConfig configures the plugin subsystem.
 type PluginSubsystemConfig struct {
-	DataDir    string
-	ABAC       EngineProvider
-	PolicyInst PolicyInstallerProvider
-	PluginProv PluginProviderSetter
-	World      WorldServiceProvider
-	Sessions   SessionProvider
-	Events     EventStoreProvider
-	AdminDeps  AdminDepsProvider
+	DataDir         string
+	DatabaseConnStr string // PostgreSQL connection string for schema provisioning
+	CertsDir        string // path to game certs directory (for loading CA)
+	GameID          string // game ID for cert SANs
+	ABAC            EngineProvider
+	PolicyInst      PolicyInstallerProvider
+	PluginProv      PluginProviderSetter
+	World           WorldServiceProvider
+	Sessions        SessionProvider
+	AdminDeps       AdminDepsProvider
+	Registry        *lifecycle.ReadinessRegistry
 }
 
 // PluginSubsystem manages the plugin Manager, Lua host, core plugin
 // registration, and the command registry.
 type PluginSubsystem struct {
-	cfg         PluginSubsystemConfig
-	manager     *plugins.Manager
-	cmdRegistry *command.Registry
-	proxy       *plugins.ServiceProxyImpl
+	cfg               PluginSubsystemConfig
+	manager           *plugins.Manager
+	cmdRegistry       *command.Registry
+	registry          *plugins.ServiceRegistry
+	worldConn         *plugins.InProcessConn
+	schemaProvisioner *plugins.SchemaProvisioner
+	health            *lifecycle.HealthTracker
 }
 
 // NewPluginSubsystem creates a plugin subsystem configured with cfg.
@@ -135,64 +122,108 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 
 	sessionStore := s.cfg.Sessions.SessionStore()
 
-	// 2. Create hostfunc bridge.
+	// 2. Create capability registry for requires-based Lua function injection.
+	// Capability modules will be registered here as their service dependencies
+	// become available. The registry is wired into the hostfunc bridge so that
+	// any capabilities registered before or after New() will be injected at
+	// plugin delivery time.
+	capRegistry := hostfunc.NewCapabilityRegistry()
+
+	// Create hostfunc bridge.
 	hostFuncs := hostfunc.New(nil, // KV store not yet available
 		hostfunc.WithEngine(s.cfg.ABAC.Engine()),
 		hostfunc.WithWorldService(s.cfg.World.Service()),
 		hostfunc.WithSessionAccess(sessionStore),
+		hostfunc.WithCapabilities(capRegistry),
 	)
 
 	// 3. Create Lua host.
 	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
 
-	// 4. Create ServiceProxy and LocalPluginHost for in-process core plugins.
-	proxy, proxyErr := plugins.NewServiceProxy(plugins.ServiceProxyConfig{
-		World:    s.cfg.World.Service(),
-		Sessions: sessionStore,
-		Events:   s.cfg.Events.EventStore(),
-	})
-	if proxyErr != nil {
-		return oops.Code("SERVICE_PROXY_FAILED").Wrap(proxyErr)
-	}
-	s.proxy = proxy
+	// 4. Create service registry for proto service resolution.
+	s.registry = plugins.NewServiceRegistry()
 
-	// Wrap service proxy with OTel instrumentation.
-	instrumentedProxy, proxyMWErr := plugins.NewServiceProxyMiddleware(
-		proxy, otel.GetTracerProvider(), otel.GetMeterProvider(),
-	)
-	if proxyMWErr != nil {
-		return oops.Code("SERVICE_PROXY_MW_FAILED").Wrap(proxyMWErr)
+	// 4a. Register WorldService as a server-internal service.
+	worldConn, worldConnErr := newWorldInProcessConn(s.cfg.World.Service())
+	if worldConnErr != nil {
+		return oops.Code("WORLD_INPROCESS_CONN_FAILED").Wrap(worldConnErr)
 	}
-	localHost := plugins.NewLocalPluginHost(instrumentedProxy)
+	s.worldConn = worldConn
 
-	// 5. Register in-process Go handlers for core plugins.
-	localHost.RegisterHandler("core-aliases", &corealiases.Handler{}, nil)
-	localHost.RegisterHandler("core-building", &corebuilding.Handler{}, nil)
-	localHost.RegisterHandler("core-communication", communication.NewHandler(), nil)
-	localHost.RegisterHandler("core-help", &corehelp.Handler{}, nil)
-	localHost.RegisterHandler("core-objects", &coreobjects.Handler{}, nil)
+	// cleanupOnError closes partially initialized resources when startup fails.
+	cleanupOnError := func() {
+		if s.schemaProvisioner != nil {
+			s.schemaProvisioner.Close()
+			s.schemaProvisioner = nil
+		}
+		_ = s.worldConn.Close() //nolint:errcheck // best-effort cleanup
+		s.worldConn = nil
+	}
+
+	if regErr := s.registry.Register(plugins.RegisteredService{
+		Name:       "holomush.world.v1.WorldService",
+		Conn:       worldConn,
+		PluginType: plugins.TypeServerInternal(),
+	}); regErr != nil {
+		cleanupOnError()
+		return oops.Code("WORLD_SERVICE_REGISTER_FAILED").Wrap(regErr)
+	}
+
+	// 5. (core plugins have all been migrated to Lua — no in-process host needed)
 
 	// 6. Wrap hosts with OTel instrumentation.
-	instrumentedHost, hostMWErr := plugins.NewHostMiddleware(
-		localHost, otel.GetTracerProvider(), otel.GetMeterProvider(),
-	)
-	if hostMWErr != nil {
-		return oops.Code("HOST_MW_FAILED").Wrap(hostMWErr)
-	}
-
 	instrumentedLuaHost, luaMWErr := plugins.NewHostMiddleware(
 		luaHost, otel.GetTracerProvider(), otel.GetMeterProvider(),
 	)
 	if luaMWErr != nil {
+		cleanupOnError()
 		return oops.Code("LUA_HOST_MW_FAILED").Wrap(luaMWErr)
+	}
+
+	// Create schema provisioner for binary plugins with postgres storage.
+	var schemaProvisioner *plugins.SchemaProvisioner
+	if s.cfg.DatabaseConnStr != "" {
+		schemaProvisioner = plugins.NewSchemaProvisioner(s.cfg.DatabaseConnStr)
+		if spErr := schemaProvisioner.Init(ctx); spErr != nil {
+			cleanupOnError()
+			return oops.Code("SCHEMA_PROVISIONER_INIT_FAILED").Wrap(spErr)
+		}
+		s.schemaProvisioner = schemaProvisioner
+	}
+
+	// Create binary plugin host (subprocess plugins via hashicorp/go-plugin).
+	var hostOpts []goplugin.HostOption
+	hostOpts = append(hostOpts,
+		goplugin.WithSchemaProvisioner(schemaProvisioner),
+		goplugin.WithServiceRegistry(s.registry),
+	)
+
+	if s.cfg.CertsDir != "" {
+		ca, caErr := tlscerts.LoadCA(s.cfg.CertsDir)
+		if caErr != nil {
+			slog.Warn("plugin mTLS disabled: could not load CA", "error", caErr)
+		} else {
+			hostOpts = append(hostOpts, goplugin.WithCA(ca, s.cfg.GameID))
+			slog.Info("plugin mTLS enabled", "certs_dir", s.cfg.CertsDir)
+		}
+	}
+
+	binaryHost := goplugin.NewHost(hostOpts...)
+	instrumentedBinaryHost, binaryMWErr := plugins.NewHostMiddleware(
+		binaryHost, otel.GetTracerProvider(), otel.GetMeterProvider(),
+	)
+	if binaryMWErr != nil {
+		cleanupOnError()
+		return oops.Code("BINARY_HOST_MW_FAILED").Wrap(binaryMWErr)
 	}
 
 	// 7. Create Manager, register hosts.
 	s.manager = plugins.NewManager(pluginsDir,
 		plugins.WithLuaHost(instrumentedLuaHost),
 		plugins.WithPolicyInstaller(s.cfg.PolicyInst.PolicyInstaller()),
+		plugins.WithServiceRegistry(s.registry),
 	)
-	s.manager.RegisterHost(plugins.TypeCore, instrumentedHost)
+	s.manager.RegisterHost(plugins.TypeBinary, instrumentedBinaryHost)
 
 	// 8. Set ABAC plugin provider registry.
 	s.cfg.PluginProv.PluginProvider().SetRegistry(s.manager)
@@ -202,10 +233,26 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		slog.Error("failed to load plugins", "error", loadErr)
 	}
 
-	// 10. Create command registry, register built-in + admin handlers.
+	// Close the schema provisioner pool — it's only needed during plugin loading.
+	// Individual plugin pools remain open for runtime queries.
+	if s.schemaProvisioner != nil {
+		s.schemaProvisioner.Close()
+	}
+
+	// 10. Initialize health tracker and register with readiness registry.
+	s.health = lifecycle.NewHealthTracker(lifecycle.TrackerConfig{
+		SubsystemName: lifecycle.SubsystemPlugins.String(),
+	})
+	if s.cfg.Registry != nil {
+		s.cfg.Registry.Register(lifecycle.SubsystemPlugins, s)
+	}
+
+	// 11. Create command registry, register built-in + admin handlers.
 	s.cmdRegistry = command.NewRegistry()
 	handlers.RegisterAll(s.cmdRegistry)
-	handlers.RegisterAdmin(s.cmdRegistry, s.cfg.AdminDeps.AdminDeps())
+	adminDeps := s.cfg.AdminDeps.AdminDeps()
+	adminDeps.PluginLister = s.manager
+	handlers.RegisterAdmin(s.cmdRegistry, adminDeps)
 
 	// Register plugin-provided commands.
 	s.manager.RegisterPluginCommands(s.cmdRegistry)
@@ -214,7 +261,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop shuts down the plugin manager.
+// Stop shuts down the plugin manager and server-internal connections.
 // codecov:ignore — tested by integration and E2E tests
 func (s *PluginSubsystem) Stop(_ context.Context) error {
 	if s.manager == nil {
@@ -224,6 +271,14 @@ func (s *PluginSubsystem) Stop(_ context.Context) error {
 	defer cancel()
 	if err := s.manager.Close(shutdownCtx); err != nil {
 		slog.Warn("error closing plugin manager", "error", err)
+	}
+	if s.worldConn != nil {
+		if err := s.worldConn.Close(); err != nil {
+			slog.Warn("error closing world in-process connection", "error", err)
+		}
+	}
+	if s.schemaProvisioner != nil {
+		s.schemaProvisioner.Close()
 	}
 	return nil
 }
@@ -244,13 +299,25 @@ func (s *PluginSubsystem) CommandRegistry() *command.Registry {
 	return s.cmdRegistry
 }
 
-// ServiceProxy returns the ServiceProxyImpl for late-binding configuration.
-// Panics if called before Start().
-func (s *PluginSubsystem) ServiceProxy() *plugins.ServiceProxyImpl {
-	if s.proxy == nil {
-		panic("plugin/setup: ServiceProxy() called before Start()")
+// ServiceRegistry returns the ServiceRegistry. Panics if called before Start().
+func (s *PluginSubsystem) ServiceRegistry() *plugins.ServiceRegistry {
+	if s.registry == nil {
+		panic("plugin/setup: ServiceRegistry() called before Start()")
 	}
-	return s.proxy
+	return s.registry
+}
+
+// HealthStatus reports the plugin subsystem's health tier.
+// Returns Dead with reason if the subsystem has not been started.
+func (s *PluginSubsystem) HealthStatus() lifecycle.HealthStatus {
+	if s.health == nil {
+		return lifecycle.HealthStatus{
+			Tier:   lifecycle.HealthDead,
+			Reason: "not started",
+			Since:  time.Time{},
+		}
+	}
+	return s.health.HealthStatus()
 }
 
 func (s *PluginSubsystem) resolvePluginsDir() (string, error) {

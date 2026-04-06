@@ -40,21 +40,14 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// PluginServiceInitProcedure is the fully-qualified name of the PluginService's Init RPC.
+	PluginServiceInitProcedure = "/holomush.plugin.v1.PluginService/Init"
 	// PluginServiceHandleEventProcedure is the fully-qualified name of the PluginService's HandleEvent
 	// RPC.
 	PluginServiceHandleEventProcedure = "/holomush.plugin.v1.PluginService/HandleEvent"
 	// PluginServiceHandleCommandProcedure is the fully-qualified name of the PluginService's
 	// HandleCommand RPC.
 	PluginServiceHandleCommandProcedure = "/holomush.plugin.v1.PluginService/HandleCommand"
-	// PluginHostServiceQueryLocationProcedure is the fully-qualified name of the PluginHostService's
-	// QueryLocation RPC.
-	PluginHostServiceQueryLocationProcedure = "/holomush.plugin.v1.PluginHostService/QueryLocation"
-	// PluginHostServiceQueryCharacterProcedure is the fully-qualified name of the PluginHostService's
-	// QueryCharacter RPC.
-	PluginHostServiceQueryCharacterProcedure = "/holomush.plugin.v1.PluginHostService/QueryCharacter"
-	// PluginHostServiceQueryLocationCharactersProcedure is the fully-qualified name of the
-	// PluginHostService's QueryLocationCharacters RPC.
-	PluginHostServiceQueryLocationCharactersProcedure = "/holomush.plugin.v1.PluginHostService/QueryLocationCharacters"
 	// PluginHostServiceEmitEventProcedure is the fully-qualified name of the PluginHostService's
 	// EmitEvent RPC.
 	PluginHostServiceEmitEventProcedure = "/holomush.plugin.v1.PluginHostService/EmitEvent"
@@ -71,6 +64,10 @@ const (
 
 // PluginServiceClient is a client for the holomush.plugin.v1.PluginService service.
 type PluginServiceClient interface {
+	// Init is called by the host after connection, providing service configuration
+	// (DB connection string, required service addresses, etc.) and receiving
+	// the list of gRPC services the plugin provides.
+	Init(context.Context, *connect.Request[v1.InitRequest]) (*connect.Response[v1.InitResponse], error)
 	// HandleEvent delivers an event to the plugin and receives any response events.
 	HandleEvent(context.Context, *connect.Request[v1.HandleEventRequest]) (*connect.Response[v1.HandleEventResponse], error)
 	// HandleCommand delivers a command to the plugin.
@@ -88,6 +85,12 @@ func NewPluginServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 	baseURL = strings.TrimRight(baseURL, "/")
 	pluginServiceMethods := v1.File_holomush_plugin_v1_plugin_proto.Services().ByName("PluginService").Methods()
 	return &pluginServiceClient{
+		init: connect.NewClient[v1.InitRequest, v1.InitResponse](
+			httpClient,
+			baseURL+PluginServiceInitProcedure,
+			connect.WithSchema(pluginServiceMethods.ByName("Init")),
+			connect.WithClientOptions(opts...),
+		),
 		handleEvent: connect.NewClient[v1.HandleEventRequest, v1.HandleEventResponse](
 			httpClient,
 			baseURL+PluginServiceHandleEventProcedure,
@@ -105,8 +108,14 @@ func NewPluginServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // pluginServiceClient implements PluginServiceClient.
 type pluginServiceClient struct {
+	init          *connect.Client[v1.InitRequest, v1.InitResponse]
 	handleEvent   *connect.Client[v1.HandleEventRequest, v1.HandleEventResponse]
 	handleCommand *connect.Client[v1.HandleCommandRequest, v1.HandleCommandResponse]
+}
+
+// Init calls holomush.plugin.v1.PluginService.Init.
+func (c *pluginServiceClient) Init(ctx context.Context, req *connect.Request[v1.InitRequest]) (*connect.Response[v1.InitResponse], error) {
+	return c.init.CallUnary(ctx, req)
 }
 
 // HandleEvent calls holomush.plugin.v1.PluginService.HandleEvent.
@@ -121,6 +130,10 @@ func (c *pluginServiceClient) HandleCommand(ctx context.Context, req *connect.Re
 
 // PluginServiceHandler is an implementation of the holomush.plugin.v1.PluginService service.
 type PluginServiceHandler interface {
+	// Init is called by the host after connection, providing service configuration
+	// (DB connection string, required service addresses, etc.) and receiving
+	// the list of gRPC services the plugin provides.
+	Init(context.Context, *connect.Request[v1.InitRequest]) (*connect.Response[v1.InitResponse], error)
 	// HandleEvent delivers an event to the plugin and receives any response events.
 	HandleEvent(context.Context, *connect.Request[v1.HandleEventRequest]) (*connect.Response[v1.HandleEventResponse], error)
 	// HandleCommand delivers a command to the plugin.
@@ -134,6 +147,12 @@ type PluginServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewPluginServiceHandler(svc PluginServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	pluginServiceMethods := v1.File_holomush_plugin_v1_plugin_proto.Services().ByName("PluginService").Methods()
+	pluginServiceInitHandler := connect.NewUnaryHandler(
+		PluginServiceInitProcedure,
+		svc.Init,
+		connect.WithSchema(pluginServiceMethods.ByName("Init")),
+		connect.WithHandlerOptions(opts...),
+	)
 	pluginServiceHandleEventHandler := connect.NewUnaryHandler(
 		PluginServiceHandleEventProcedure,
 		svc.HandleEvent,
@@ -148,6 +167,8 @@ func NewPluginServiceHandler(svc PluginServiceHandler, opts ...connect.HandlerOp
 	)
 	return "/holomush.plugin.v1.PluginService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case PluginServiceInitProcedure:
+			pluginServiceInitHandler.ServeHTTP(w, r)
 		case PluginServiceHandleEventProcedure:
 			pluginServiceHandleEventHandler.ServeHTTP(w, r)
 		case PluginServiceHandleCommandProcedure:
@@ -161,6 +182,10 @@ func NewPluginServiceHandler(svc PluginServiceHandler, opts ...connect.HandlerOp
 // UnimplementedPluginServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedPluginServiceHandler struct{}
 
+func (UnimplementedPluginServiceHandler) Init(context.Context, *connect.Request[v1.InitRequest]) (*connect.Response[v1.InitResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginService.Init is not implemented"))
+}
+
 func (UnimplementedPluginServiceHandler) HandleEvent(context.Context, *connect.Request[v1.HandleEventRequest]) (*connect.Response[v1.HandleEventResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginService.HandleEvent is not implemented"))
 }
@@ -171,12 +196,6 @@ func (UnimplementedPluginServiceHandler) HandleCommand(context.Context, *connect
 
 // PluginHostServiceClient is a client for the holomush.plugin.v1.PluginHostService service.
 type PluginHostServiceClient interface {
-	// QueryLocation retrieves a location by ID.
-	QueryLocation(context.Context, *connect.Request[v1.PluginHostServiceQueryLocationRequest]) (*connect.Response[v1.PluginHostServiceQueryLocationResponse], error)
-	// QueryCharacter retrieves a character by ID.
-	QueryCharacter(context.Context, *connect.Request[v1.PluginHostServiceQueryCharacterRequest]) (*connect.Response[v1.PluginHostServiceQueryCharacterResponse], error)
-	// QueryLocationCharacters returns all characters present at a location.
-	QueryLocationCharacters(context.Context, *connect.Request[v1.PluginHostServiceQueryLocationCharactersRequest]) (*connect.Response[v1.PluginHostServiceQueryLocationCharactersResponse], error)
 	// EmitEvent publishes an event to a stream.
 	EmitEvent(context.Context, *connect.Request[v1.PluginHostServiceEmitEventRequest]) (*connect.Response[v1.PluginHostServiceEmitEventResponse], error)
 	// Log writes a log message through the host's logging system.
@@ -200,24 +219,6 @@ func NewPluginHostServiceClient(httpClient connect.HTTPClient, baseURL string, o
 	baseURL = strings.TrimRight(baseURL, "/")
 	pluginHostServiceMethods := v1.File_holomush_plugin_v1_plugin_proto.Services().ByName("PluginHostService").Methods()
 	return &pluginHostServiceClient{
-		queryLocation: connect.NewClient[v1.PluginHostServiceQueryLocationRequest, v1.PluginHostServiceQueryLocationResponse](
-			httpClient,
-			baseURL+PluginHostServiceQueryLocationProcedure,
-			connect.WithSchema(pluginHostServiceMethods.ByName("QueryLocation")),
-			connect.WithClientOptions(opts...),
-		),
-		queryCharacter: connect.NewClient[v1.PluginHostServiceQueryCharacterRequest, v1.PluginHostServiceQueryCharacterResponse](
-			httpClient,
-			baseURL+PluginHostServiceQueryCharacterProcedure,
-			connect.WithSchema(pluginHostServiceMethods.ByName("QueryCharacter")),
-			connect.WithClientOptions(opts...),
-		),
-		queryLocationCharacters: connect.NewClient[v1.PluginHostServiceQueryLocationCharactersRequest, v1.PluginHostServiceQueryLocationCharactersResponse](
-			httpClient,
-			baseURL+PluginHostServiceQueryLocationCharactersProcedure,
-			connect.WithSchema(pluginHostServiceMethods.ByName("QueryLocationCharacters")),
-			connect.WithClientOptions(opts...),
-		),
 		emitEvent: connect.NewClient[v1.PluginHostServiceEmitEventRequest, v1.PluginHostServiceEmitEventResponse](
 			httpClient,
 			baseURL+PluginHostServiceEmitEventProcedure,
@@ -253,29 +254,11 @@ func NewPluginHostServiceClient(httpClient connect.HTTPClient, baseURL string, o
 
 // pluginHostServiceClient implements PluginHostServiceClient.
 type pluginHostServiceClient struct {
-	queryLocation           *connect.Client[v1.PluginHostServiceQueryLocationRequest, v1.PluginHostServiceQueryLocationResponse]
-	queryCharacter          *connect.Client[v1.PluginHostServiceQueryCharacterRequest, v1.PluginHostServiceQueryCharacterResponse]
-	queryLocationCharacters *connect.Client[v1.PluginHostServiceQueryLocationCharactersRequest, v1.PluginHostServiceQueryLocationCharactersResponse]
-	emitEvent               *connect.Client[v1.PluginHostServiceEmitEventRequest, v1.PluginHostServiceEmitEventResponse]
-	log                     *connect.Client[v1.PluginHostServiceLogRequest, v1.PluginHostServiceLogResponse]
-	kVGet                   *connect.Client[v1.PluginHostServiceKVGetRequest, v1.PluginHostServiceKVGetResponse]
-	kVSet                   *connect.Client[v1.PluginHostServiceKVSetRequest, v1.PluginHostServiceKVSetResponse]
-	kVDelete                *connect.Client[v1.PluginHostServiceKVDeleteRequest, v1.PluginHostServiceKVDeleteResponse]
-}
-
-// QueryLocation calls holomush.plugin.v1.PluginHostService.QueryLocation.
-func (c *pluginHostServiceClient) QueryLocation(ctx context.Context, req *connect.Request[v1.PluginHostServiceQueryLocationRequest]) (*connect.Response[v1.PluginHostServiceQueryLocationResponse], error) {
-	return c.queryLocation.CallUnary(ctx, req)
-}
-
-// QueryCharacter calls holomush.plugin.v1.PluginHostService.QueryCharacter.
-func (c *pluginHostServiceClient) QueryCharacter(ctx context.Context, req *connect.Request[v1.PluginHostServiceQueryCharacterRequest]) (*connect.Response[v1.PluginHostServiceQueryCharacterResponse], error) {
-	return c.queryCharacter.CallUnary(ctx, req)
-}
-
-// QueryLocationCharacters calls holomush.plugin.v1.PluginHostService.QueryLocationCharacters.
-func (c *pluginHostServiceClient) QueryLocationCharacters(ctx context.Context, req *connect.Request[v1.PluginHostServiceQueryLocationCharactersRequest]) (*connect.Response[v1.PluginHostServiceQueryLocationCharactersResponse], error) {
-	return c.queryLocationCharacters.CallUnary(ctx, req)
+	emitEvent *connect.Client[v1.PluginHostServiceEmitEventRequest, v1.PluginHostServiceEmitEventResponse]
+	log       *connect.Client[v1.PluginHostServiceLogRequest, v1.PluginHostServiceLogResponse]
+	kVGet     *connect.Client[v1.PluginHostServiceKVGetRequest, v1.PluginHostServiceKVGetResponse]
+	kVSet     *connect.Client[v1.PluginHostServiceKVSetRequest, v1.PluginHostServiceKVSetResponse]
+	kVDelete  *connect.Client[v1.PluginHostServiceKVDeleteRequest, v1.PluginHostServiceKVDeleteResponse]
 }
 
 // EmitEvent calls holomush.plugin.v1.PluginHostService.EmitEvent.
@@ -306,12 +289,6 @@ func (c *pluginHostServiceClient) KVDelete(ctx context.Context, req *connect.Req
 // PluginHostServiceHandler is an implementation of the holomush.plugin.v1.PluginHostService
 // service.
 type PluginHostServiceHandler interface {
-	// QueryLocation retrieves a location by ID.
-	QueryLocation(context.Context, *connect.Request[v1.PluginHostServiceQueryLocationRequest]) (*connect.Response[v1.PluginHostServiceQueryLocationResponse], error)
-	// QueryCharacter retrieves a character by ID.
-	QueryCharacter(context.Context, *connect.Request[v1.PluginHostServiceQueryCharacterRequest]) (*connect.Response[v1.PluginHostServiceQueryCharacterResponse], error)
-	// QueryLocationCharacters returns all characters present at a location.
-	QueryLocationCharacters(context.Context, *connect.Request[v1.PluginHostServiceQueryLocationCharactersRequest]) (*connect.Response[v1.PluginHostServiceQueryLocationCharactersResponse], error)
 	// EmitEvent publishes an event to a stream.
 	EmitEvent(context.Context, *connect.Request[v1.PluginHostServiceEmitEventRequest]) (*connect.Response[v1.PluginHostServiceEmitEventResponse], error)
 	// Log writes a log message through the host's logging system.
@@ -331,24 +308,6 @@ type PluginHostServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	pluginHostServiceMethods := v1.File_holomush_plugin_v1_plugin_proto.Services().ByName("PluginHostService").Methods()
-	pluginHostServiceQueryLocationHandler := connect.NewUnaryHandler(
-		PluginHostServiceQueryLocationProcedure,
-		svc.QueryLocation,
-		connect.WithSchema(pluginHostServiceMethods.ByName("QueryLocation")),
-		connect.WithHandlerOptions(opts...),
-	)
-	pluginHostServiceQueryCharacterHandler := connect.NewUnaryHandler(
-		PluginHostServiceQueryCharacterProcedure,
-		svc.QueryCharacter,
-		connect.WithSchema(pluginHostServiceMethods.ByName("QueryCharacter")),
-		connect.WithHandlerOptions(opts...),
-	)
-	pluginHostServiceQueryLocationCharactersHandler := connect.NewUnaryHandler(
-		PluginHostServiceQueryLocationCharactersProcedure,
-		svc.QueryLocationCharacters,
-		connect.WithSchema(pluginHostServiceMethods.ByName("QueryLocationCharacters")),
-		connect.WithHandlerOptions(opts...),
-	)
 	pluginHostServiceEmitEventHandler := connect.NewUnaryHandler(
 		PluginHostServiceEmitEventProcedure,
 		svc.EmitEvent,
@@ -381,12 +340,6 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 	)
 	return "/holomush.plugin.v1.PluginHostService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case PluginHostServiceQueryLocationProcedure:
-			pluginHostServiceQueryLocationHandler.ServeHTTP(w, r)
-		case PluginHostServiceQueryCharacterProcedure:
-			pluginHostServiceQueryCharacterHandler.ServeHTTP(w, r)
-		case PluginHostServiceQueryLocationCharactersProcedure:
-			pluginHostServiceQueryLocationCharactersHandler.ServeHTTP(w, r)
 		case PluginHostServiceEmitEventProcedure:
 			pluginHostServiceEmitEventHandler.ServeHTTP(w, r)
 		case PluginHostServiceLogProcedure:
@@ -405,18 +358,6 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 
 // UnimplementedPluginHostServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedPluginHostServiceHandler struct{}
-
-func (UnimplementedPluginHostServiceHandler) QueryLocation(context.Context, *connect.Request[v1.PluginHostServiceQueryLocationRequest]) (*connect.Response[v1.PluginHostServiceQueryLocationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.QueryLocation is not implemented"))
-}
-
-func (UnimplementedPluginHostServiceHandler) QueryCharacter(context.Context, *connect.Request[v1.PluginHostServiceQueryCharacterRequest]) (*connect.Response[v1.PluginHostServiceQueryCharacterResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.QueryCharacter is not implemented"))
-}
-
-func (UnimplementedPluginHostServiceHandler) QueryLocationCharacters(context.Context, *connect.Request[v1.PluginHostServiceQueryLocationCharactersRequest]) (*connect.Response[v1.PluginHostServiceQueryLocationCharactersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.QueryLocationCharacters is not implemented"))
-}
 
 func (UnimplementedPluginHostServiceHandler) EmitEvent(context.Context, *connect.Request[v1.PluginHostServiceEmitEventRequest]) (*connect.Response[v1.PluginHostServiceEmitEventResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.EmitEvent is not implemented"))

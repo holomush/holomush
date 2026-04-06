@@ -8,6 +8,7 @@ import (
 	"context"
 
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	"google.golang.org/grpc"
 )
 
 // Host manages a specific plugin runtime type.
@@ -29,4 +30,13 @@ type Host interface {
 
 	// Close shuts down the host and all plugins.
 	Close(ctx context.Context) error
+}
+
+// ServiceConnProvider is an optional interface that Host implementations
+// may implement to expose the underlying gRPC connection for a loaded plugin.
+// Binary plugin hosts implement this so the manager can register plugin-provided
+// services in the ServiceRegistry after loading.
+type ServiceConnProvider interface {
+	// PluginConn returns the gRPC client connection for the named plugin.
+	PluginConn(name string) (grpc.ClientConnInterface, error)
 }

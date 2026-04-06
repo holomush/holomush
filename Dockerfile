@@ -19,6 +19,11 @@ COPY holomush .
 # Copy plugins so bootstrap can discover setting/core plugins
 COPY --chown=holomush:holomush plugins/ /home/holomush/.local/share/holomush/plugins/
 
+# Copy all compiled binary plugin architectures.
+# Each binary plugin has linux-amd64/ and linux-arm64/ subdirectories.
+# The plugin loader resolves the correct binary for the host arch at runtime.
+COPY --chown=holomush:holomush build/plugins/ /home/holomush/.local/share/holomush/plugins/
+
 # Expose ports
 # Telnet
 EXPOSE 4201

@@ -1191,41 +1191,6 @@ lua-plugin:
 	}
 }
 
-func TestParseManifestCorePlugin(t *testing.T) {
-	yaml := `
-name: core-say
-version: 1.0.0
-type: core
-commands:
-  - name: say
-    help: Send a message
-`
-	m, err := plugins.ParseManifest([]byte(yaml))
-	require.NoError(t, err)
-
-	assert.Equal(t, "core-say", m.Name)
-	assert.Equal(t, plugins.TypeCore, m.Type)
-	assert.Nil(t, m.LuaPlugin)
-	assert.Nil(t, m.BinaryPlugin)
-	assert.Len(t, m.Commands, 1)
-}
-
-func TestParseManifestCorePluginNoLuaOrBinaryRequired(t *testing.T) {
-	yaml := `
-name: core-look
-version: 1.0.0
-type: core
-commands:
-  - name: look
-    help: Look around
-`
-	m, err := plugins.ParseManifest([]byte(yaml))
-	require.NoError(t, err)
-	assert.Equal(t, plugins.TypeCore, m.Type)
-	assert.Nil(t, m.LuaPlugin)
-	assert.Nil(t, m.BinaryPlugin)
-}
-
 func TestManifest_LoadPriority(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -1234,31 +1199,6 @@ func TestManifest_LoadPriority(t *testing.T) {
 		wantErrMsg       string
 		wantLoadPriority int
 	}{
-		{
-			name: "core plugin with load_priority -1000",
-			yaml: `
-name: core-say
-version: 1.0.0
-type: core
-priority: -1000
-commands:
-  - name: say
-    help: Send a message
-`,
-			wantLoadPriority: -1000,
-		},
-		{
-			name: "core plugin with load_priority 0 (default)",
-			yaml: `
-name: core-say
-version: 1.0.0
-type: core
-commands:
-  - name: say
-    help: Send a message
-`,
-			wantLoadPriority: 0,
-		},
 		{
 			name: "lua plugin with load_priority -999 is allowed",
 			yaml: `
@@ -1508,4 +1448,113 @@ binary-plugin:
 	_, err := plugins.ParseManifest([]byte(yaml))
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "binary") || strings.Contains(err.Error(), "setting"))
+}
+
+func TestManifestRequiresProvides(t *testing.T) {
+	t.Run("parses requires and provides fields", func(t *testing.T) {
+		data := []byte(`
+name: test-plugin
+version: 1.0.0
+type: binary
+requires:
+  - holomush.world.v1.WorldService
+provides:
+  - holomush.scene.v1.SceneService
+binary-plugin:
+  executable: ./plugin
+commands:
+  - name: test
+    help: test command
+`)
+		m, err := plugins.ParseManifest(data)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"holomush.world.v1.WorldService"}, m.Requires)
+		assert.Equal(t, []string{"holomush.scene.v1.SceneService"}, m.Provides)
+	})
+
+	t.Run("rejects provides on lua plugins", func(t *testing.T) {
+		data := []byte(`
+name: test-plugin
+version: 1.0.0
+type: lua
+provides:
+  - holomush.scene.v1.SceneService
+lua-plugin:
+  entry: main.lua
+commands:
+  - name: test
+    help: test command
+`)
+		_, err := plugins.ParseManifest(data)
+		assert.Error(t, err)
+	})
+
+	t.Run("allows requires on lua plugins", func(t *testing.T) {
+		data := []byte(`
+name: test-plugin
+version: 1.0.0
+type: lua
+requires:
+  - holomush.world.v1.WorldService
+lua-plugin:
+  entry: main.lua
+commands:
+  - name: test
+    help: test command
+`)
+		m, err := plugins.ParseManifest(data)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"holomush.world.v1.WorldService"}, m.Requires)
+	})
+}
+
+func TestManifestStorage(t *testing.T) {
+	t.Run("parses storage field for binary plugins", func(t *testing.T) {
+		data := []byte(`
+name: test-plugin
+version: 1.0.0
+type: binary
+storage: postgres
+binary-plugin:
+  executable: ./plugin
+commands:
+  - name: test
+    help: test command
+`)
+		m, err := plugins.ParseManifest(data)
+		require.NoError(t, err)
+		assert.Equal(t, plugins.StoragePostgres, m.Storage)
+	})
+
+	t.Run("defaults storage to kv when not specified", func(t *testing.T) {
+		data := []byte(`
+name: test-plugin
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: ./plugin
+commands:
+  - name: test
+    help: test command
+`)
+		m, err := plugins.ParseManifest(data)
+		require.NoError(t, err)
+		assert.Equal(t, plugins.StorageKV, m.Storage)
+	})
+
+	t.Run("rejects postgres storage on lua plugins", func(t *testing.T) {
+		data := []byte(`
+name: test-plugin
+version: 1.0.0
+type: lua
+storage: postgres
+lua-plugin:
+  entry: main.lua
+commands:
+  - name: test
+    help: test command
+`)
+		_, err := plugins.ParseManifest(data)
+		assert.Error(t, err)
+	})
 }

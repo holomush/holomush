@@ -7,19 +7,25 @@ package goplugin
 
 import (
 	"context"
+	cryptotls "crypto/tls"
+	"crypto/x509"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	hashiplug "github.com/hashicorp/go-plugin"
 	"github.com/samber/oops"
+	"google.golang.org/grpc"
 
 	plugins "github.com/holomush/holomush/internal/plugin"
+	tlscerts "github.com/holomush/holomush/internal/tls"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -37,8 +43,11 @@ var (
 	ErrPluginAlreadyLoaded = errors.New("plugin already loaded")
 )
 
-// Compile-time interface check.
-var _ plugins.Host = (*Host)(nil)
+// Compile-time interface checks.
+var (
+	_ plugins.Host                = (*Host)(nil)
+	_ plugins.ServiceConnProvider = (*Host)(nil)
+)
 
 // PluginClient wraps go-plugin client for testability.
 type PluginClient interface {
@@ -59,20 +68,52 @@ type DefaultClientFactory struct{}
 
 // NewClient creates a real go-plugin client.
 func (f *DefaultClientFactory) NewClient(execPath string) PluginClient {
+	cmd := exec.Command(execPath) // #nosec G204 -- nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command -- execPath resolved from plugin manifest; manifests validated during discovery (symlink-resolved, path-contained, executable-checked)
+	cmd.Env = []string{
+		"PATH=" + os.Getenv("PATH"),
+	}
 	return hashiplug.NewClient(&hashiplug.ClientConfig{
 		HandshakeConfig:  HandshakeConfig,
 		Plugins:          PluginMap,
-		Cmd:              exec.Command(execPath), // #nosec G204 -- execPath resolved from plugin manifest; manifests validated during discovery
+		Cmd:              cmd,
 		AllowedProtocols: []hashiplug.Protocol{hashiplug.ProtocolGRPC},
 	})
 }
 
+// HostOption configures a Host during construction.
+type HostOption func(*Host)
+
+// WithSchemaProvisioner configures the host to provision per-plugin Postgres
+// schemas for binary plugins that declare storage: postgres.
+func WithSchemaProvisioner(p *plugins.SchemaProvisioner) HostOption {
+	return func(h *Host) { h.schemaProvisioner = p }
+}
+
+// WithCA configures the host to use the given CA for mTLS with plugins.
+// A host client cert is generated at construction time.
+func WithCA(ca *tlscerts.CA, gameID string) HostOption {
+	return func(h *Host) {
+		h.ca = ca
+		h.gameID = gameID
+	}
+}
+
+// WithServiceRegistry configures the host to register plugin-provided services.
+func WithServiceRegistry(r *plugins.ServiceRegistry) HostOption {
+	return func(h *Host) { h.registry = r }
+}
+
 // Host manages binary plugins via HashiCorp go-plugins.
 type Host struct {
-	clientFactory ClientFactory
-	plugins       map[string]*loadedPlugin
-	mu            sync.RWMutex
-	closed        bool
+	clientFactory     ClientFactory
+	schemaProvisioner *plugins.SchemaProvisioner
+	registry          *plugins.ServiceRegistry
+	ca                *tlscerts.CA
+	gameID            string
+	hostClientCert    *tlscerts.ClientCert
+	plugins           map[string]*loadedPlugin
+	mu                sync.RWMutex
+	closed            bool
 }
 
 // loadedPlugin holds state for a single loaded binary plugin.
@@ -80,23 +121,37 @@ type loadedPlugin struct {
 	manifest *plugins.Manifest
 	client   PluginClient
 	plugin   pluginv1.PluginServiceClient
+	conn     grpc.ClientConnInterface   // underlying gRPC conn to the plugin process
+	certDir  string                     // temp cert directory, cleaned up on unload
+	broker   *hashiplug.GRPCBroker      // broker for service injection, nil if factory-mocked
 }
 
 // NewHost creates a new binary plugin host.
-func NewHost() *Host {
-	return NewHostWithFactory(&DefaultClientFactory{})
+func NewHost(opts ...HostOption) *Host {
+	return NewHostWithFactory(&DefaultClientFactory{}, opts...)
 }
 
 // NewHostWithFactory creates a host with a custom client factory (for testing).
 // Panics if factory is nil.
-func NewHostWithFactory(factory ClientFactory) *Host {
+func NewHostWithFactory(factory ClientFactory, opts ...HostOption) *Host {
 	if factory == nil {
 		panic("goplugin: factory cannot be nil")
 	}
-	return &Host{
+	h := &Host{
 		clientFactory: factory,
 		plugins:       make(map[string]*loadedPlugin),
 	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	if h.ca != nil {
+		cert, certErr := tlscerts.GenerateClientCert(h.ca, "plugin-host")
+		if certErr != nil {
+			panic("goplugin: failed to generate host client cert: " + certErr.Error())
+		}
+		h.hostClientCert = cert
+	}
+	return h
 }
 
 // Load initializes a plugin from its manifest.
@@ -129,7 +184,14 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").New("not a binary plugin")
 	}
 
-	execPath := filepath.Join(dir, manifest.BinaryPlugin.Executable)
+	// Resolve the binary path. Check platform-specific subdirectory first
+	// (e.g., linux-amd64/core-scenes), fall back to direct path for backward
+	// compatibility (e.g., core-scenes).
+	platformDir := runtime.GOOS + "-" + runtime.GOARCH
+	execPath := filepath.Join(dir, platformDir, manifest.BinaryPlugin.Executable)
+	if _, statErr := os.Stat(execPath); os.IsNotExist(statErr) {
+		execPath = filepath.Join(dir, manifest.BinaryPlugin.Executable)
+	}
 
 	// Verify resolved path is within the plugin directory (prevent path traversal)
 	// Use EvalSymlinks to resolve symlinks and prevent symlink-based escapes
@@ -160,12 +222,83 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").With("path", realExec).New("plugin executable not executable")
 	}
 
-	client := h.clientFactory.NewClient(realExec)
+	// Generate per-plugin mTLS certificates when a CA is configured.
+	var pluginCertEnv []string
+	var hostTLSConfig *cryptotls.Config
+	var certDir string
+
+	if h.ca != nil {
+		serverCert, certErr := tlscerts.GenerateServerCert(h.ca, h.gameID, "plugin-"+manifest.Name)
+		if certErr != nil {
+			return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "generate_cert").Wrap(certErr)
+		}
+
+		tmpCertDir, tmpErr := os.MkdirTemp("", "holomush-plugin-certs-*")
+		if tmpErr != nil {
+			return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "cert_tmpdir").Wrap(tmpErr)
+		}
+		certDir = tmpCertDir
+
+		if saveErr := tlscerts.SaveCertificates(tmpCertDir, h.ca, serverCert); saveErr != nil {
+			_ = os.RemoveAll(tmpCertDir) //nolint:errcheck // best-effort cleanup
+			return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "save_cert").Wrap(saveErr)
+		}
+
+		pluginCertEnv = []string{
+			"HOLOMUSH_PLUGIN_CERT=" + filepath.Join(tmpCertDir, "plugin-"+manifest.Name+".crt"),
+			"HOLOMUSH_PLUGIN_KEY=" + filepath.Join(tmpCertDir, "plugin-"+manifest.Name+".key"),
+			"HOLOMUSH_CA_CERT=" + filepath.Join(tmpCertDir, "root-ca.crt"),
+		}
+
+		hostTLSConfig = buildHostTLSConfig(h.ca, h.hostClientCert, manifest.Name)
+	}
+
+	// Create a per-plugin GRPCPlugin instance to capture the GRPCBroker
+	// from the go-plugin handshake. This enables service injection via broker
+	// proxies for plugins that declare required services.
+	grpcPlugin := &GRPCPlugin{}
+	pluginMap := map[string]hashiplug.Plugin{"plugin": grpcPlugin}
+
+	// Create the plugin client. In production (DefaultClientFactory), we create
+	// the client directly to use the per-plugin GRPCPlugin (for broker capture).
+	// Test mocks use the factory path (no broker needed).
+	var client PluginClient
+	switch h.clientFactory.(type) {
+	case *DefaultClientFactory:
+		cmd := exec.Command(realExec) // #nosec G204 -- nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command, go.grpc.command-injection.grpc-command-injection.grpc-http-command-injection-taint -- realExec resolved from plugin manifest; manifests validated during discovery (symlink-resolved, path-contained, executable-checked)
+		cmd.Env = append([]string{"PATH=" + os.Getenv("PATH")}, pluginCertEnv...)
+		clientConfig := &hashiplug.ClientConfig{
+			HandshakeConfig:  HandshakeConfig,
+			Plugins:          pluginMap,
+			Cmd:              cmd,
+			AllowedProtocols: []hashiplug.Protocol{hashiplug.ProtocolGRPC},
+		}
+		if hostTLSConfig != nil {
+			clientConfig.TLSConfig = hostTLSConfig
+		}
+		client = hashiplug.NewClient(clientConfig)
+	default:
+		client = h.clientFactory.NewClient(realExec)
+	}
 
 	rpcClient, err := client.Client()
 	if err != nil {
 		client.Kill()
 		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "connect").Wrap(err)
+	}
+
+	// Capture the underlying gRPC connection for service registration.
+	// The concrete type behind ClientProtocol is *hashiplug.GRPCClient which
+	// exposes a public Conn field. We also accept any type implementing a
+	// Conn() accessor (used by test mocks).
+	var pluginConn grpc.ClientConnInterface
+	switch c := rpcClient.(type) {
+	case *hashiplug.GRPCClient:
+		pluginConn = c.Conn
+	case interface {
+		Conn() grpc.ClientConnInterface
+	}:
+		pluginConn = c.Conn()
 	}
 
 	raw, err := rpcClient.Dispense("plugin")
@@ -180,10 +313,75 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").New("plugin does not implement PluginClient")
 	}
 
+	// Start broker proxies for required services. Each required service gets
+	// a broker ID that the plugin can use to dial back to the host.
+	requiredServices := make(map[string]string)
+	if len(manifest.Requires) > 0 && grpcPlugin.broker != nil && h.registry != nil {
+		var nextBrokerID uint32 = 1
+		for _, svcName := range manifest.Requires {
+			svc, resolveErr := h.registry.Resolve(svcName)
+			if resolveErr != nil {
+				client.Kill()
+				if certDir != "" {
+					_ = os.RemoveAll(certDir) //nolint:errcheck // best-effort cleanup
+				}
+				return oops.Code("PLUGIN_SERVICE_NOT_FOUND").
+					With("plugin", manifest.Name).
+					With("service", svcName).
+					Wrap(resolveErr)
+			}
+
+			brokerID := nextBrokerID
+			nextBrokerID++
+
+			proxyFactory := NewBrokerProxy(svc.Conn, manifest.Name)
+			go grpcPlugin.broker.AcceptAndServe(brokerID, proxyFactory)
+
+			requiredServices[svcName] = fmt.Sprintf("broker:%d", brokerID)
+			slog.Info("started broker proxy for required service",
+				"plugin", manifest.Name,
+				"service", svcName,
+				"broker_id", brokerID,
+			)
+		}
+	}
+
+	// Call Init on plugins that need service injection (storage or requires).
+	if len(manifest.Requires) > 0 || manifest.Storage == plugins.StoragePostgres {
+		initReq := &pluginv1.InitRequest{
+			Config: &pluginv1.ServiceConfig{
+				RequiredServices: requiredServices,
+			},
+		}
+
+		if manifest.Storage == plugins.StoragePostgres && h.schemaProvisioner != nil {
+			connStr, provErr := h.schemaProvisioner.ProvisionSchema(ctx, manifest.Name)
+			if provErr != nil {
+				client.Kill()
+				if certDir != "" {
+					_ = os.RemoveAll(certDir) //nolint:errcheck // best-effort cleanup
+				}
+				return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "provision_schema").Wrap(provErr)
+			}
+			initReq.Config.ConnectionString = connStr
+		}
+
+		if _, initErr := pluginClient.Init(ctx, initReq); initErr != nil {
+			client.Kill()
+			if certDir != "" {
+				_ = os.RemoveAll(certDir) //nolint:errcheck // best-effort cleanup
+			}
+			return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "init").Wrap(initErr)
+		}
+	}
+
 	h.plugins[manifest.Name] = &loadedPlugin{
 		manifest: manifest,
 		client:   client,
 		plugin:   pluginClient,
+		conn:     pluginConn,
+		certDir:  certDir,
+		broker:   grpcPlugin.broker,
 	}
 
 	return nil
@@ -205,6 +403,10 @@ func (h *Host) Unload(_ context.Context, name string) error {
 
 	if p.client != nil {
 		p.client.Kill()
+	}
+
+	if p.certDir != "" {
+		_ = os.RemoveAll(p.certDir) //nolint:errcheck // best-effort cleanup
 	}
 
 	delete(h.plugins, name)
@@ -345,6 +547,29 @@ func protoCommandStatusToSDK(s pluginv1.CommandStatus) pluginsdk.CommandStatus {
 	}
 }
 
+// PluginConn returns the gRPC client connection for the named plugin.
+// This enables the manager to register plugin-provided services in the
+// ServiceRegistry after loading.
+func (h *Host) PluginConn(name string) (grpc.ClientConnInterface, error) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if h.closed {
+		return nil, ErrHostClosed
+	}
+
+	p, ok := h.plugins[name]
+	if !ok {
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "plugin_conn").Wrap(ErrPluginNotLoaded)
+	}
+
+	if p.conn == nil {
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "plugin_conn").New("plugin has no gRPC connection")
+	}
+
+	return p.conn, nil
+}
+
 // Plugins returns names of all loaded plugins.
 func (h *Host) Plugins() []string {
 	h.mu.RLock()
@@ -374,9 +599,32 @@ func (h *Host) Close(_ context.Context) error {
 		if p.client != nil {
 			p.client.Kill()
 		}
+		if p.certDir != "" {
+			_ = os.RemoveAll(p.certDir) //nolint:errcheck // best-effort cleanup
+		}
 	}
 
 	h.closed = true
 	clear(h.plugins)
 	return nil
+}
+
+// buildHostTLSConfig creates a TLS config for the host to connect to a plugin
+// as a gRPC client with mTLS. The host presents its client cert and verifies
+// the plugin's server cert against the CA.
+func buildHostTLSConfig(ca *tlscerts.CA, clientCert *tlscerts.ClientCert, pluginName string) *cryptotls.Config {
+	caPool := x509.NewCertPool()
+	caPool.AddCert(ca.Certificate)
+
+	clientTLSCert := cryptotls.Certificate{
+		Certificate: [][]byte{clientCert.Certificate.Raw},
+		PrivateKey:  clientCert.PrivateKey,
+	}
+
+	return &cryptotls.Config{
+		Certificates: []cryptotls.Certificate{clientTLSCert},
+		RootCAs:      caPool,
+		ServerName:   "holomush-plugin-" + pluginName,
+		MinVersion:   cryptotls.VersionTLS13,
+	}
 }

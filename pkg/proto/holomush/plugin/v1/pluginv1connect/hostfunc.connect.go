@@ -41,15 +41,15 @@ const (
 	// HostFunctionsServiceEmitEventProcedure is the fully-qualified name of the HostFunctionsService's
 	// EmitEvent RPC.
 	HostFunctionsServiceEmitEventProcedure = "/holomush.plugin.v1.HostFunctionsService/EmitEvent"
-	// HostFunctionsServiceQueryRoomProcedure is the fully-qualified name of the HostFunctionsService's
-	// QueryRoom RPC.
-	HostFunctionsServiceQueryRoomProcedure = "/holomush.plugin.v1.HostFunctionsService/QueryRoom"
+	// HostFunctionsServiceQueryLocationProcedure is the fully-qualified name of the
+	// HostFunctionsService's QueryLocation RPC.
+	HostFunctionsServiceQueryLocationProcedure = "/holomush.plugin.v1.HostFunctionsService/QueryLocation"
 	// HostFunctionsServiceQueryCharacterProcedure is the fully-qualified name of the
 	// HostFunctionsService's QueryCharacter RPC.
 	HostFunctionsServiceQueryCharacterProcedure = "/holomush.plugin.v1.HostFunctionsService/QueryCharacter"
-	// HostFunctionsServiceQueryRoomCharactersProcedure is the fully-qualified name of the
-	// HostFunctionsService's QueryRoomCharacters RPC.
-	HostFunctionsServiceQueryRoomCharactersProcedure = "/holomush.plugin.v1.HostFunctionsService/QueryRoomCharacters"
+	// HostFunctionsServiceQueryLocationCharactersProcedure is the fully-qualified name of the
+	// HostFunctionsService's QueryLocationCharacters RPC.
+	HostFunctionsServiceQueryLocationCharactersProcedure = "/holomush.plugin.v1.HostFunctionsService/QueryLocationCharacters"
 	// HostFunctionsServiceKVGetProcedure is the fully-qualified name of the HostFunctionsService's
 	// KVGet RPC.
 	HostFunctionsServiceKVGetProcedure = "/holomush.plugin.v1.HostFunctionsService/KVGet"
@@ -74,12 +74,12 @@ const (
 type HostFunctionsServiceClient interface {
 	// EmitEvent publishes an event to a stream.
 	EmitEvent(context.Context, *connect.Request[v1.EmitEventRequest]) (*connect.Response[v1.EmitEventResponse], error)
-	// QueryRoom retrieves information about a room.
-	QueryRoom(context.Context, *connect.Request[v1.QueryRoomRequest]) (*connect.Response[v1.QueryRoomResponse], error)
+	// QueryLocation retrieves information about a location.
+	QueryLocation(context.Context, *connect.Request[v1.QueryLocationRequest]) (*connect.Response[v1.QueryLocationResponse], error)
 	// QueryCharacter retrieves information about a character.
 	QueryCharacter(context.Context, *connect.Request[v1.QueryCharacterRequest]) (*connect.Response[v1.QueryCharacterResponse], error)
-	// QueryRoomCharacters retrieves all characters in a room.
-	QueryRoomCharacters(context.Context, *connect.Request[v1.QueryRoomCharactersRequest]) (*connect.Response[v1.QueryRoomCharactersResponse], error)
+	// QueryLocationCharacters retrieves all characters in a location.
+	QueryLocationCharacters(context.Context, *connect.Request[v1.QueryLocationCharactersRequest]) (*connect.Response[v1.QueryLocationCharactersResponse], error)
 	// KVGet retrieves a value from the plugin's key-value store.
 	KVGet(context.Context, *connect.Request[v1.KVGetRequest]) (*connect.Response[v1.KVGetResponse], error)
 	// KVSet stores a value in the plugin's key-value store.
@@ -113,10 +113,10 @@ func NewHostFunctionsServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(hostFunctionsServiceMethods.ByName("EmitEvent")),
 			connect.WithClientOptions(opts...),
 		),
-		queryRoom: connect.NewClient[v1.QueryRoomRequest, v1.QueryRoomResponse](
+		queryLocation: connect.NewClient[v1.QueryLocationRequest, v1.QueryLocationResponse](
 			httpClient,
-			baseURL+HostFunctionsServiceQueryRoomProcedure,
-			connect.WithSchema(hostFunctionsServiceMethods.ByName("QueryRoom")),
+			baseURL+HostFunctionsServiceQueryLocationProcedure,
+			connect.WithSchema(hostFunctionsServiceMethods.ByName("QueryLocation")),
 			connect.WithClientOptions(opts...),
 		),
 		queryCharacter: connect.NewClient[v1.QueryCharacterRequest, v1.QueryCharacterResponse](
@@ -125,10 +125,10 @@ func NewHostFunctionsServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(hostFunctionsServiceMethods.ByName("QueryCharacter")),
 			connect.WithClientOptions(opts...),
 		),
-		queryRoomCharacters: connect.NewClient[v1.QueryRoomCharactersRequest, v1.QueryRoomCharactersResponse](
+		queryLocationCharacters: connect.NewClient[v1.QueryLocationCharactersRequest, v1.QueryLocationCharactersResponse](
 			httpClient,
-			baseURL+HostFunctionsServiceQueryRoomCharactersProcedure,
-			connect.WithSchema(hostFunctionsServiceMethods.ByName("QueryRoomCharacters")),
+			baseURL+HostFunctionsServiceQueryLocationCharactersProcedure,
+			connect.WithSchema(hostFunctionsServiceMethods.ByName("QueryLocationCharacters")),
 			connect.WithClientOptions(opts...),
 		),
 		kVGet: connect.NewClient[v1.KVGetRequest, v1.KVGetResponse](
@@ -172,16 +172,16 @@ func NewHostFunctionsServiceClient(httpClient connect.HTTPClient, baseURL string
 
 // hostFunctionsServiceClient implements HostFunctionsServiceClient.
 type hostFunctionsServiceClient struct {
-	emitEvent           *connect.Client[v1.EmitEventRequest, v1.EmitEventResponse]
-	queryRoom           *connect.Client[v1.QueryRoomRequest, v1.QueryRoomResponse]
-	queryCharacter      *connect.Client[v1.QueryCharacterRequest, v1.QueryCharacterResponse]
-	queryRoomCharacters *connect.Client[v1.QueryRoomCharactersRequest, v1.QueryRoomCharactersResponse]
-	kVGet               *connect.Client[v1.KVGetRequest, v1.KVGetResponse]
-	kVSet               *connect.Client[v1.KVSetRequest, v1.KVSetResponse]
-	kVDelete            *connect.Client[v1.KVDeleteRequest, v1.KVDeleteResponse]
-	log                 *connect.Client[v1.LogRequest, v1.LogResponse]
-	listCommands        *connect.Client[v1.ListCommandsRequest, v1.ListCommandsResponse]
-	getCommandHelp      *connect.Client[v1.GetCommandHelpRequest, v1.GetCommandHelpResponse]
+	emitEvent               *connect.Client[v1.EmitEventRequest, v1.EmitEventResponse]
+	queryLocation           *connect.Client[v1.QueryLocationRequest, v1.QueryLocationResponse]
+	queryCharacter          *connect.Client[v1.QueryCharacterRequest, v1.QueryCharacterResponse]
+	queryLocationCharacters *connect.Client[v1.QueryLocationCharactersRequest, v1.QueryLocationCharactersResponse]
+	kVGet                   *connect.Client[v1.KVGetRequest, v1.KVGetResponse]
+	kVSet                   *connect.Client[v1.KVSetRequest, v1.KVSetResponse]
+	kVDelete                *connect.Client[v1.KVDeleteRequest, v1.KVDeleteResponse]
+	log                     *connect.Client[v1.LogRequest, v1.LogResponse]
+	listCommands            *connect.Client[v1.ListCommandsRequest, v1.ListCommandsResponse]
+	getCommandHelp          *connect.Client[v1.GetCommandHelpRequest, v1.GetCommandHelpResponse]
 }
 
 // EmitEvent calls holomush.plugin.v1.HostFunctionsService.EmitEvent.
@@ -189,9 +189,9 @@ func (c *hostFunctionsServiceClient) EmitEvent(ctx context.Context, req *connect
 	return c.emitEvent.CallUnary(ctx, req)
 }
 
-// QueryRoom calls holomush.plugin.v1.HostFunctionsService.QueryRoom.
-func (c *hostFunctionsServiceClient) QueryRoom(ctx context.Context, req *connect.Request[v1.QueryRoomRequest]) (*connect.Response[v1.QueryRoomResponse], error) {
-	return c.queryRoom.CallUnary(ctx, req)
+// QueryLocation calls holomush.plugin.v1.HostFunctionsService.QueryLocation.
+func (c *hostFunctionsServiceClient) QueryLocation(ctx context.Context, req *connect.Request[v1.QueryLocationRequest]) (*connect.Response[v1.QueryLocationResponse], error) {
+	return c.queryLocation.CallUnary(ctx, req)
 }
 
 // QueryCharacter calls holomush.plugin.v1.HostFunctionsService.QueryCharacter.
@@ -199,9 +199,9 @@ func (c *hostFunctionsServiceClient) QueryCharacter(ctx context.Context, req *co
 	return c.queryCharacter.CallUnary(ctx, req)
 }
 
-// QueryRoomCharacters calls holomush.plugin.v1.HostFunctionsService.QueryRoomCharacters.
-func (c *hostFunctionsServiceClient) QueryRoomCharacters(ctx context.Context, req *connect.Request[v1.QueryRoomCharactersRequest]) (*connect.Response[v1.QueryRoomCharactersResponse], error) {
-	return c.queryRoomCharacters.CallUnary(ctx, req)
+// QueryLocationCharacters calls holomush.plugin.v1.HostFunctionsService.QueryLocationCharacters.
+func (c *hostFunctionsServiceClient) QueryLocationCharacters(ctx context.Context, req *connect.Request[v1.QueryLocationCharactersRequest]) (*connect.Response[v1.QueryLocationCharactersResponse], error) {
+	return c.queryLocationCharacters.CallUnary(ctx, req)
 }
 
 // KVGet calls holomush.plugin.v1.HostFunctionsService.KVGet.
@@ -239,12 +239,12 @@ func (c *hostFunctionsServiceClient) GetCommandHelp(ctx context.Context, req *co
 type HostFunctionsServiceHandler interface {
 	// EmitEvent publishes an event to a stream.
 	EmitEvent(context.Context, *connect.Request[v1.EmitEventRequest]) (*connect.Response[v1.EmitEventResponse], error)
-	// QueryRoom retrieves information about a room.
-	QueryRoom(context.Context, *connect.Request[v1.QueryRoomRequest]) (*connect.Response[v1.QueryRoomResponse], error)
+	// QueryLocation retrieves information about a location.
+	QueryLocation(context.Context, *connect.Request[v1.QueryLocationRequest]) (*connect.Response[v1.QueryLocationResponse], error)
 	// QueryCharacter retrieves information about a character.
 	QueryCharacter(context.Context, *connect.Request[v1.QueryCharacterRequest]) (*connect.Response[v1.QueryCharacterResponse], error)
-	// QueryRoomCharacters retrieves all characters in a room.
-	QueryRoomCharacters(context.Context, *connect.Request[v1.QueryRoomCharactersRequest]) (*connect.Response[v1.QueryRoomCharactersResponse], error)
+	// QueryLocationCharacters retrieves all characters in a location.
+	QueryLocationCharacters(context.Context, *connect.Request[v1.QueryLocationCharactersRequest]) (*connect.Response[v1.QueryLocationCharactersResponse], error)
 	// KVGet retrieves a value from the plugin's key-value store.
 	KVGet(context.Context, *connect.Request[v1.KVGetRequest]) (*connect.Response[v1.KVGetResponse], error)
 	// KVSet stores a value in the plugin's key-value store.
@@ -274,10 +274,10 @@ func NewHostFunctionsServiceHandler(svc HostFunctionsServiceHandler, opts ...con
 		connect.WithSchema(hostFunctionsServiceMethods.ByName("EmitEvent")),
 		connect.WithHandlerOptions(opts...),
 	)
-	hostFunctionsServiceQueryRoomHandler := connect.NewUnaryHandler(
-		HostFunctionsServiceQueryRoomProcedure,
-		svc.QueryRoom,
-		connect.WithSchema(hostFunctionsServiceMethods.ByName("QueryRoom")),
+	hostFunctionsServiceQueryLocationHandler := connect.NewUnaryHandler(
+		HostFunctionsServiceQueryLocationProcedure,
+		svc.QueryLocation,
+		connect.WithSchema(hostFunctionsServiceMethods.ByName("QueryLocation")),
 		connect.WithHandlerOptions(opts...),
 	)
 	hostFunctionsServiceQueryCharacterHandler := connect.NewUnaryHandler(
@@ -286,10 +286,10 @@ func NewHostFunctionsServiceHandler(svc HostFunctionsServiceHandler, opts ...con
 		connect.WithSchema(hostFunctionsServiceMethods.ByName("QueryCharacter")),
 		connect.WithHandlerOptions(opts...),
 	)
-	hostFunctionsServiceQueryRoomCharactersHandler := connect.NewUnaryHandler(
-		HostFunctionsServiceQueryRoomCharactersProcedure,
-		svc.QueryRoomCharacters,
-		connect.WithSchema(hostFunctionsServiceMethods.ByName("QueryRoomCharacters")),
+	hostFunctionsServiceQueryLocationCharactersHandler := connect.NewUnaryHandler(
+		HostFunctionsServiceQueryLocationCharactersProcedure,
+		svc.QueryLocationCharacters,
+		connect.WithSchema(hostFunctionsServiceMethods.ByName("QueryLocationCharacters")),
 		connect.WithHandlerOptions(opts...),
 	)
 	hostFunctionsServiceKVGetHandler := connect.NewUnaryHandler(
@@ -332,12 +332,12 @@ func NewHostFunctionsServiceHandler(svc HostFunctionsServiceHandler, opts ...con
 		switch r.URL.Path {
 		case HostFunctionsServiceEmitEventProcedure:
 			hostFunctionsServiceEmitEventHandler.ServeHTTP(w, r)
-		case HostFunctionsServiceQueryRoomProcedure:
-			hostFunctionsServiceQueryRoomHandler.ServeHTTP(w, r)
+		case HostFunctionsServiceQueryLocationProcedure:
+			hostFunctionsServiceQueryLocationHandler.ServeHTTP(w, r)
 		case HostFunctionsServiceQueryCharacterProcedure:
 			hostFunctionsServiceQueryCharacterHandler.ServeHTTP(w, r)
-		case HostFunctionsServiceQueryRoomCharactersProcedure:
-			hostFunctionsServiceQueryRoomCharactersHandler.ServeHTTP(w, r)
+		case HostFunctionsServiceQueryLocationCharactersProcedure:
+			hostFunctionsServiceQueryLocationCharactersHandler.ServeHTTP(w, r)
 		case HostFunctionsServiceKVGetProcedure:
 			hostFunctionsServiceKVGetHandler.ServeHTTP(w, r)
 		case HostFunctionsServiceKVSetProcedure:
@@ -363,16 +363,16 @@ func (UnimplementedHostFunctionsServiceHandler) EmitEvent(context.Context, *conn
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.EmitEvent is not implemented"))
 }
 
-func (UnimplementedHostFunctionsServiceHandler) QueryRoom(context.Context, *connect.Request[v1.QueryRoomRequest]) (*connect.Response[v1.QueryRoomResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.QueryRoom is not implemented"))
+func (UnimplementedHostFunctionsServiceHandler) QueryLocation(context.Context, *connect.Request[v1.QueryLocationRequest]) (*connect.Response[v1.QueryLocationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.QueryLocation is not implemented"))
 }
 
 func (UnimplementedHostFunctionsServiceHandler) QueryCharacter(context.Context, *connect.Request[v1.QueryCharacterRequest]) (*connect.Response[v1.QueryCharacterResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.QueryCharacter is not implemented"))
 }
 
-func (UnimplementedHostFunctionsServiceHandler) QueryRoomCharacters(context.Context, *connect.Request[v1.QueryRoomCharactersRequest]) (*connect.Response[v1.QueryRoomCharactersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.QueryRoomCharacters is not implemented"))
+func (UnimplementedHostFunctionsServiceHandler) QueryLocationCharacters(context.Context, *connect.Request[v1.QueryLocationCharactersRequest]) (*connect.Response[v1.QueryLocationCharactersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.QueryLocationCharacters is not implemented"))
 }
 
 func (UnimplementedHostFunctionsServiceHandler) KVGet(context.Context, *connect.Request[v1.KVGetRequest]) (*connect.Response[v1.KVGetResponse], error) {

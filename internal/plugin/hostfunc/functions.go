@@ -11,8 +11,6 @@ package hostfunc
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -23,7 +21,6 @@ import (
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/session"
-	"github.com/holomush/holomush/internal/world"
 )
 
 // defaultPluginQueryTimeout is the timeout for plugin host function operations
@@ -46,6 +43,7 @@ type Functions struct {
 	engine           types.AccessPolicyEngine
 	propertyRegistry *property.Registry
 	sessionAccess    session.Access
+	capabilities     *CapabilityRegistry
 }
 
 // Option configures Functions.
@@ -75,24 +73,12 @@ func WithSessionAccess(sa session.Access) Option {
 	}
 }
 
-// WithWorldQuerier is no longer supported and has been removed.
-//
-// Deprecated: WithWorldQuerier was removed because WorldQuerier and WorldMutator
-// have incompatible method signatures. Use [WithWorldService] instead, which
-// requires a WorldMutator (which includes all read and write operations).
-//
-// Migration example:
-//
-//	// Before: WithWorldQuerier(querier)
-//	// After:  WithWorldService(service) // service must implement WorldMutator
-//
-// This function always panics to fail fast at startup. Update your code to use
-// WithWorldService with a service that implements the WorldMutator interface.
-func WithWorldQuerier(_ WorldQuerier) Option {
-	panic("hostfunc.WithWorldQuerier: this function has been removed. " +
-		"Use WithWorldService instead with a service that implements WorldMutator. " +
-		"WorldMutator includes all read methods (GetLocation, GetCharacter, etc.) " +
-		"plus write methods (CreateLocation, UpdateLocation, etc.).")
+// WithCapabilities sets the capability registry for requires-based Lua function injection.
+// When set, Register injects capability modules declared in the plugin's manifest requires list.
+func WithCapabilities(reg *CapabilityRegistry) Option {
+	return func(f *Functions) {
+		f.capabilities = reg
+	}
 }
 
 // New creates host functions with dependencies.
@@ -111,7 +97,11 @@ func New(kv KVStore, opts ...Option) *Functions {
 }
 
 // Register adds host functions to a Lua state.
-func (f *Functions) Register(ls *lua.LState, pluginName string) {
+// The optional requires parameter lists proto service names from the plugin manifest;
+// matching capability modules are injected into the Lua state. Plugins without
+// requires declarations call Register with no requires argument — this is a no-op
+// for capability injection and is always safe.
+func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...string) {
 	// Register the holo.* stdlib (fmt, emit namespaces)
 	RegisterStdlib(ls)
 
@@ -155,6 +145,11 @@ func (f *Functions) Register(ls *lua.LState, pluginName string) {
 	ls.SetField(mod, "get_command_help", ls.NewFunction(f.getCommandHelpFn(pluginName)))
 
 	ls.SetGlobal("holomush", mod)
+
+	// Inject capability modules for declared requires.
+	if f.capabilities != nil && len(requires) > 0 {
+		f.capabilities.InjectRequired(ls, requires, pluginName)
+	}
 }
 
 func (f *Functions) logFn(pluginName string) lua.LGFunction {
@@ -190,37 +185,6 @@ func (f *Functions) newRequestIDFn() lua.LGFunction {
 		L.Push(lua.LString(reqID.String()))
 		return 1
 	}
-}
-
-// sanitizeKVErrorForPlugin converts internal KV errors to safe messages for plugins.
-// It handles known error types (timeouts, not-found) with specific messages, and logs
-// internal errors at ERROR level for operators while returning a generic message with
-// a correlation ID to the plugin. This prevents leaking database internals to Lua code.
-func sanitizeKVErrorForPlugin(pluginName, operation, key string, err error) string {
-	if errors.Is(err, context.DeadlineExceeded) {
-		slog.Warn("plugin KV operation timed out",
-			"plugin", pluginName,
-			"operation", operation,
-			"key", key)
-		return "operation timed out"
-	}
-	if errors.Is(err, world.ErrNotFound) {
-		return "key not found"
-	}
-	if errors.Is(err, world.ErrPermissionDenied) {
-		return "access denied"
-	}
-
-	// Generate correlation ID for this error instance.
-	errorID := idgen.New().String()
-
-	slog.Error("internal error in plugin KV operation",
-		"error_id", errorID,
-		"plugin", pluginName,
-		"operation", operation,
-		"key", key,
-		"error", err)
-	return fmt.Sprintf("internal error (ref: %s)", errorID)
 }
 
 // checkKVAccess evaluates ABAC for a KV operation. Returns an error string
@@ -291,7 +255,7 @@ func (f *Functions) kvGetFn(pluginName string) lua.LGFunction {
 		value, err := f.kvStore.Get(ctx, pluginName, key)
 		if err != nil {
 			L.Push(lua.LNil)
-			L.Push(lua.LString(sanitizeKVErrorForPlugin(pluginName, "get", key, err)))
+			L.Push(lua.LString(SanitizeErrorForPlugin(PluginErrorContext{Plugin: pluginName, Operation: "get", Subject: "key", SubjectID: key}, err)))
 			return 2
 		}
 
@@ -336,7 +300,7 @@ func (f *Functions) kvSetFn(pluginName string) lua.LGFunction {
 
 		if err := f.kvStore.Set(ctx, pluginName, key, []byte(value)); err != nil {
 			L.Push(lua.LNil)
-			L.Push(lua.LString(sanitizeKVErrorForPlugin(pluginName, "set", key, err)))
+			L.Push(lua.LString(SanitizeErrorForPlugin(PluginErrorContext{Plugin: pluginName, Operation: "set", Subject: "key", SubjectID: key}, err)))
 			return 2
 		}
 
@@ -374,7 +338,7 @@ func (f *Functions) kvDeleteFn(pluginName string) lua.LGFunction {
 
 		if err := f.kvStore.Delete(ctx, pluginName, key); err != nil {
 			L.Push(lua.LNil)
-			L.Push(lua.LString(sanitizeKVErrorForPlugin(pluginName, "delete", key, err)))
+			L.Push(lua.LString(SanitizeErrorForPlugin(PluginErrorContext{Plugin: pluginName, Operation: "delete", Subject: "key", SubjectID: key}, err)))
 			return 2
 		}
 

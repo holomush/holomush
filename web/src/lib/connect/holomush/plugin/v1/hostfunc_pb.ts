@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/plugin/v1/hostfunc.proto.
  */
 export const file_holomush_plugin_v1_hostfunc: GenFile = /*@__PURE__*/
-  fileDesc("CiFob2xvbXVzaC9wbHVnaW4vdjEvaG9zdGZ1bmMucHJvdG8SEmhvbG9tdXNoLnBsdWdpbi52MSJAChBFbWl0RXZlbnRSZXF1ZXN0EiwKBWV2ZW50GAEgASgLMh0uaG9sb211c2gucGx1Z2luLnYxLkVtaXRFdmVudCIzChFFbWl0RXZlbnRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJIiMKEFF1ZXJ5Um9vbVJlcXVlc3QSDwoHcm9vbV9pZBgBIAEoCSJOChFRdWVyeVJvb21SZXNwb25zZRIqCgRyb29tGAEgASgLMhwuaG9sb211c2gucGx1Z2luLnYxLlJvb21JbmZvEg0KBWVycm9yGAIgASgJIjkKCFJvb21JbmZvEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkiLQoVUXVlcnlDaGFyYWN0ZXJSZXF1ZXN0EhQKDGNoYXJhY3Rlcl9pZBgBIAEoCSJdChZRdWVyeUNoYXJhY3RlclJlc3BvbnNlEjQKCWNoYXJhY3RlchgBIAEoCzIhLmhvbG9tdXNoLnBsdWdpbi52MS5DaGFyYWN0ZXJJbmZvEg0KBWVycm9yGAIgASgJIikKDUNoYXJhY3RlckluZm8SCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCSItChpRdWVyeVJvb21DaGFyYWN0ZXJzUmVxdWVzdBIPCgdyb29tX2lkGAEgASgJImMKG1F1ZXJ5Um9vbUNoYXJhY3RlcnNSZXNwb25zZRI1CgpjaGFyYWN0ZXJzGAEgAygLMiEuaG9sb211c2gucGx1Z2luLnYxLkNoYXJhY3RlckluZm8SDQoFZXJyb3IYAiABKAkiGwoMS1ZHZXRSZXF1ZXN0EgsKA2tleRgBIAEoCSI8Cg1LVkdldFJlc3BvbnNlEg0KBXZhbHVlGAEgASgMEg0KBWZvdW5kGAIgASgIEg0KBWVycm9yGAMgASgJIioKDEtWU2V0UmVxdWVzdBILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAwiLwoNS1ZTZXRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJIh4KD0tWRGVsZXRlUmVxdWVzdBILCgNrZXkYASABKAkiMgoQS1ZEZWxldGVSZXNwb25zZRIPCgdkZWxldGVkGAEgASgIEg0KBWVycm9yGAIgASgJIrUBCgpMb2dSZXF1ZXN0EisKBWxldmVsGAEgASgOMhwuaG9sb211c2gucGx1Z2luLnYxLkxvZ0xldmVsEg8KB21lc3NhZ2UYAiABKAkSOgoGZmllbGRzGAMgAygLMiouaG9sb211c2gucGx1Z2luLnYxLkxvZ1JlcXVlc3QuRmllbGRzRW50cnkaLQoLRmllbGRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASINCgtMb2dSZXNwb25zZSIrChNMaXN0Q29tbWFuZHNSZXF1ZXN0EhQKDGNoYXJhY3Rlcl9pZBgBIAEoCSJYChRMaXN0Q29tbWFuZHNSZXNwb25zZRIxCghjb21tYW5kcxgBIAMoCzIfLmhvbG9tdXNoLnBsdWdpbi52MS5Db21tYW5kSW5mbxINCgVlcnJvchgCIAEoCSJICgtDb21tYW5kSW5mbxIMCgRuYW1lGAEgASgJEgwKBGhlbHAYAiABKAkSDQoFdXNhZ2UYAyABKAkSDgoGc291cmNlGAQgASgJIi0KFUdldENvbW1hbmRIZWxwUmVxdWVzdBIUCgxjb21tYW5kX25hbWUYASABKAkiXQoWR2V0Q29tbWFuZEhlbHBSZXNwb25zZRI0Cgdjb21tYW5kGAEgASgLMiMuaG9sb211c2gucGx1Z2luLnYxLkNvbW1hbmRIZWxwSW5mbxINCgVlcnJvchgCIAEoCSJ1Cg9Db21tYW5kSGVscEluZm8SDAoEbmFtZRgBIAEoCRIMCgRoZWxwGAIgASgJEg0KBXVzYWdlGAMgASgJEhEKCWhlbHBfdGV4dBgEIAEoCRIUCgxjYXBhYmlsaXRpZXMYBSADKAkSDgoGc291cmNlGAYgASgJKncKCExvZ0xldmVsEhkKFUxPR19MRVZFTF9VTlNQRUNJRklFRBAAEhMKD0xPR19MRVZFTF9ERUJVRxABEhIKDkxPR19MRVZFTF9JTkZPEAISEgoOTE9HX0xFVkVMX1dBUk4QAxITCg9MT0dfTEVWRUxfRVJST1IQBDKyBwoUSG9zdEZ1bmN0aW9uc1NlcnZpY2USWAoJRW1pdEV2ZW50EiQuaG9sb211c2gucGx1Z2luLnYxLkVtaXRFdmVudFJlcXVlc3QaJS5ob2xvbXVzaC5wbHVnaW4udjEuRW1pdEV2ZW50UmVzcG9uc2USWAoJUXVlcnlSb29tEiQuaG9sb211c2gucGx1Z2luLnYxLlF1ZXJ5Um9vbVJlcXVlc3QaJS5ob2xvbXVzaC5wbHVnaW4udjEuUXVlcnlSb29tUmVzcG9uc2USZwoOUXVlcnlDaGFyYWN0ZXISKS5ob2xvbXVzaC5wbHVnaW4udjEuUXVlcnlDaGFyYWN0ZXJSZXF1ZXN0GiouaG9sb211c2gucGx1Z2luLnYxLlF1ZXJ5Q2hhcmFjdGVyUmVzcG9uc2USdgoTUXVlcnlSb29tQ2hhcmFjdGVycxIuLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeVJvb21DaGFyYWN0ZXJzUmVxdWVzdBovLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeVJvb21DaGFyYWN0ZXJzUmVzcG9uc2USTAoFS1ZHZXQSIC5ob2xvbXVzaC5wbHVnaW4udjEuS1ZHZXRSZXF1ZXN0GiEuaG9sb211c2gucGx1Z2luLnYxLktWR2V0UmVzcG9uc2USTAoFS1ZTZXQSIC5ob2xvbXVzaC5wbHVnaW4udjEuS1ZTZXRSZXF1ZXN0GiEuaG9sb211c2gucGx1Z2luLnYxLktWU2V0UmVzcG9uc2USVQoIS1ZEZWxldGUSIy5ob2xvbXVzaC5wbHVnaW4udjEuS1ZEZWxldGVSZXF1ZXN0GiQuaG9sb211c2gucGx1Z2luLnYxLktWRGVsZXRlUmVzcG9uc2USRgoDTG9nEh4uaG9sb211c2gucGx1Z2luLnYxLkxvZ1JlcXVlc3QaHy5ob2xvbXVzaC5wbHVnaW4udjEuTG9nUmVzcG9uc2USYQoMTGlzdENvbW1hbmRzEicuaG9sb211c2gucGx1Z2luLnYxLkxpc3RDb21tYW5kc1JlcXVlc3QaKC5ob2xvbXVzaC5wbHVnaW4udjEuTGlzdENvbW1hbmRzUmVzcG9uc2USZwoOR2V0Q29tbWFuZEhlbHASKS5ob2xvbXVzaC5wbHVnaW4udjEuR2V0Q29tbWFuZEhlbHBSZXF1ZXN0GiouaG9sb211c2gucGx1Z2luLnYxLkdldENvbW1hbmRIZWxwUmVzcG9uc2VCRFpCZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvcGx1Z2luL3YxO3BsdWdpbnYxYgZwcm90bzM", [file_holomush_plugin_v1_plugin]);
+  fileDesc("CiFob2xvbXVzaC9wbHVnaW4vdjEvaG9zdGZ1bmMucHJvdG8SEmhvbG9tdXNoLnBsdWdpbi52MSJAChBFbWl0RXZlbnRSZXF1ZXN0EiwKBWV2ZW50GAEgASgLMh0uaG9sb211c2gucGx1Z2luLnYxLkVtaXRFdmVudCIzChFFbWl0RXZlbnRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJIisKFFF1ZXJ5TG9jYXRpb25SZXF1ZXN0EhMKC2xvY2F0aW9uX2lkGAEgASgJIloKFVF1ZXJ5TG9jYXRpb25SZXNwb25zZRIyCghsb2NhdGlvbhgBIAEoCzIgLmhvbG9tdXNoLnBsdWdpbi52MS5Mb2NhdGlvbkluZm8SDQoFZXJyb3IYAiABKAkiPQoMTG9jYXRpb25JbmZvEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkiLQoVUXVlcnlDaGFyYWN0ZXJSZXF1ZXN0EhQKDGNoYXJhY3Rlcl9pZBgBIAEoCSJdChZRdWVyeUNoYXJhY3RlclJlc3BvbnNlEjQKCWNoYXJhY3RlchgBIAEoCzIhLmhvbG9tdXNoLnBsdWdpbi52MS5DaGFyYWN0ZXJJbmZvEg0KBWVycm9yGAIgASgJIikKDUNoYXJhY3RlckluZm8SCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCSI1Ch5RdWVyeUxvY2F0aW9uQ2hhcmFjdGVyc1JlcXVlc3QSEwoLbG9jYXRpb25faWQYASABKAkiZwofUXVlcnlMb2NhdGlvbkNoYXJhY3RlcnNSZXNwb25zZRI1CgpjaGFyYWN0ZXJzGAEgAygLMiEuaG9sb211c2gucGx1Z2luLnYxLkNoYXJhY3RlckluZm8SDQoFZXJyb3IYAiABKAkiGwoMS1ZHZXRSZXF1ZXN0EgsKA2tleRgBIAEoCSI8Cg1LVkdldFJlc3BvbnNlEg0KBXZhbHVlGAEgASgMEg0KBWZvdW5kGAIgASgIEg0KBWVycm9yGAMgASgJIioKDEtWU2V0UmVxdWVzdBILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAwiLwoNS1ZTZXRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJIh4KD0tWRGVsZXRlUmVxdWVzdBILCgNrZXkYASABKAkiMgoQS1ZEZWxldGVSZXNwb25zZRIPCgdkZWxldGVkGAEgASgIEg0KBWVycm9yGAIgASgJIrUBCgpMb2dSZXF1ZXN0EisKBWxldmVsGAEgASgOMhwuaG9sb211c2gucGx1Z2luLnYxLkxvZ0xldmVsEg8KB21lc3NhZ2UYAiABKAkSOgoGZmllbGRzGAMgAygLMiouaG9sb211c2gucGx1Z2luLnYxLkxvZ1JlcXVlc3QuRmllbGRzRW50cnkaLQoLRmllbGRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASINCgtMb2dSZXNwb25zZSIrChNMaXN0Q29tbWFuZHNSZXF1ZXN0EhQKDGNoYXJhY3Rlcl9pZBgBIAEoCSJYChRMaXN0Q29tbWFuZHNSZXNwb25zZRIxCghjb21tYW5kcxgBIAMoCzIfLmhvbG9tdXNoLnBsdWdpbi52MS5Db21tYW5kSW5mbxINCgVlcnJvchgCIAEoCSJICgtDb21tYW5kSW5mbxIMCgRuYW1lGAEgASgJEgwKBGhlbHAYAiABKAkSDQoFdXNhZ2UYAyABKAkSDgoGc291cmNlGAQgASgJIi0KFUdldENvbW1hbmRIZWxwUmVxdWVzdBIUCgxjb21tYW5kX25hbWUYASABKAkiXQoWR2V0Q29tbWFuZEhlbHBSZXNwb25zZRI0Cgdjb21tYW5kGAEgASgLMiMuaG9sb211c2gucGx1Z2luLnYxLkNvbW1hbmRIZWxwSW5mbxINCgVlcnJvchgCIAEoCSJ1Cg9Db21tYW5kSGVscEluZm8SDAoEbmFtZRgBIAEoCRIMCgRoZWxwGAIgASgJEg0KBXVzYWdlGAMgASgJEhEKCWhlbHBfdGV4dBgEIAEoCRIUCgxjYXBhYmlsaXRpZXMYBSADKAkSDgoGc291cmNlGAYgASgJKncKCExvZ0xldmVsEhkKFUxPR19MRVZFTF9VTlNQRUNJRklFRBAAEhMKD0xPR19MRVZFTF9ERUJVRxABEhIKDkxPR19MRVZFTF9JTkZPEAISEgoOTE9HX0xFVkVMX1dBUk4QAxITCg9MT0dfTEVWRUxfRVJST1IQBDLLBwoUSG9zdEZ1bmN0aW9uc1NlcnZpY2USWAoJRW1pdEV2ZW50EiQuaG9sb211c2gucGx1Z2luLnYxLkVtaXRFdmVudFJlcXVlc3QaJS5ob2xvbXVzaC5wbHVnaW4udjEuRW1pdEV2ZW50UmVzcG9uc2USZAoNUXVlcnlMb2NhdGlvbhIoLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeUxvY2F0aW9uUmVxdWVzdBopLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeUxvY2F0aW9uUmVzcG9uc2USZwoOUXVlcnlDaGFyYWN0ZXISKS5ob2xvbXVzaC5wbHVnaW4udjEuUXVlcnlDaGFyYWN0ZXJSZXF1ZXN0GiouaG9sb211c2gucGx1Z2luLnYxLlF1ZXJ5Q2hhcmFjdGVyUmVzcG9uc2USggEKF1F1ZXJ5TG9jYXRpb25DaGFyYWN0ZXJzEjIuaG9sb211c2gucGx1Z2luLnYxLlF1ZXJ5TG9jYXRpb25DaGFyYWN0ZXJzUmVxdWVzdBozLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeUxvY2F0aW9uQ2hhcmFjdGVyc1Jlc3BvbnNlEkwKBUtWR2V0EiAuaG9sb211c2gucGx1Z2luLnYxLktWR2V0UmVxdWVzdBohLmhvbG9tdXNoLnBsdWdpbi52MS5LVkdldFJlc3BvbnNlEkwKBUtWU2V0EiAuaG9sb211c2gucGx1Z2luLnYxLktWU2V0UmVxdWVzdBohLmhvbG9tdXNoLnBsdWdpbi52MS5LVlNldFJlc3BvbnNlElUKCEtWRGVsZXRlEiMuaG9sb211c2gucGx1Z2luLnYxLktWRGVsZXRlUmVxdWVzdBokLmhvbG9tdXNoLnBsdWdpbi52MS5LVkRlbGV0ZVJlc3BvbnNlEkYKA0xvZxIeLmhvbG9tdXNoLnBsdWdpbi52MS5Mb2dSZXF1ZXN0Gh8uaG9sb211c2gucGx1Z2luLnYxLkxvZ1Jlc3BvbnNlEmEKDExpc3RDb21tYW5kcxInLmhvbG9tdXNoLnBsdWdpbi52MS5MaXN0Q29tbWFuZHNSZXF1ZXN0GiguaG9sb211c2gucGx1Z2luLnYxLkxpc3RDb21tYW5kc1Jlc3BvbnNlEmcKDkdldENvbW1hbmRIZWxwEikuaG9sb211c2gucGx1Z2luLnYxLkdldENvbW1hbmRIZWxwUmVxdWVzdBoqLmhvbG9tdXNoLnBsdWdpbi52MS5HZXRDb21tYW5kSGVscFJlc3BvbnNlQkRaQmdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3BsdWdpbi92MTtwbHVnaW52MWIGcHJvdG8z", [file_holomush_plugin_v1_plugin]);
 
 /**
  * EmitEventRequest wraps an event for emission by the host.
@@ -69,38 +69,38 @@ export const EmitEventResponseSchema: GenMessage<EmitEventResponse> = /*@__PURE_
   messageDesc(file_holomush_plugin_v1_hostfunc, 1);
 
 /**
- * QueryRoomRequest requests information about a room.
+ * QueryLocationRequest requests information about a location.
  *
- * @generated from message holomush.plugin.v1.QueryRoomRequest
+ * @generated from message holomush.plugin.v1.QueryLocationRequest
  */
-export type QueryRoomRequest = Message<"holomush.plugin.v1.QueryRoomRequest"> & {
+export type QueryLocationRequest = Message<"holomush.plugin.v1.QueryLocationRequest"> & {
   /**
-   * Room identifier.
+   * Location identifier.
    *
-   * @generated from field: string room_id = 1;
+   * @generated from field: string location_id = 1;
    */
-  roomId: string;
+  locationId: string;
 };
 
 /**
- * Describes the message holomush.plugin.v1.QueryRoomRequest.
- * Use `create(QueryRoomRequestSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.QueryLocationRequest.
+ * Use `create(QueryLocationRequestSchema)` to create a new message.
  */
-export const QueryRoomRequestSchema: GenMessage<QueryRoomRequest> = /*@__PURE__*/
+export const QueryLocationRequestSchema: GenMessage<QueryLocationRequest> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 2);
 
 /**
- * QueryRoomResponse contains room information.
+ * QueryLocationResponse contains location information.
  *
- * @generated from message holomush.plugin.v1.QueryRoomResponse
+ * @generated from message holomush.plugin.v1.QueryLocationResponse
  */
-export type QueryRoomResponse = Message<"holomush.plugin.v1.QueryRoomResponse"> & {
+export type QueryLocationResponse = Message<"holomush.plugin.v1.QueryLocationResponse"> & {
   /**
-   * Room information (nil if not found).
+   * Location information (nil if not found).
    *
-   * @generated from field: holomush.plugin.v1.RoomInfo room = 1;
+   * @generated from field: holomush.plugin.v1.LocationInfo location = 1;
    */
-  room?: RoomInfo;
+  location?: LocationInfo;
 
   /**
    * Error message if query failed.
@@ -111,34 +111,34 @@ export type QueryRoomResponse = Message<"holomush.plugin.v1.QueryRoomResponse"> 
 };
 
 /**
- * Describes the message holomush.plugin.v1.QueryRoomResponse.
- * Use `create(QueryRoomResponseSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.QueryLocationResponse.
+ * Use `create(QueryLocationResponseSchema)` to create a new message.
  */
-export const QueryRoomResponseSchema: GenMessage<QueryRoomResponse> = /*@__PURE__*/
+export const QueryLocationResponseSchema: GenMessage<QueryLocationResponse> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 3);
 
 /**
- * RoomInfo contains basic room information.
+ * LocationInfo contains basic location information.
  *
- * @generated from message holomush.plugin.v1.RoomInfo
+ * @generated from message holomush.plugin.v1.LocationInfo
  */
-export type RoomInfo = Message<"holomush.plugin.v1.RoomInfo"> & {
+export type LocationInfo = Message<"holomush.plugin.v1.LocationInfo"> & {
   /**
-   * Room identifier.
+   * Location identifier.
    *
    * @generated from field: string id = 1;
    */
   id: string;
 
   /**
-   * Room name/title.
+   * Location name/title.
    *
    * @generated from field: string name = 2;
    */
   name: string;
 
   /**
-   * Room description.
+   * Location description.
    *
    * @generated from field: string description = 3;
    */
@@ -146,10 +146,10 @@ export type RoomInfo = Message<"holomush.plugin.v1.RoomInfo"> & {
 };
 
 /**
- * Describes the message holomush.plugin.v1.RoomInfo.
- * Use `create(RoomInfoSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.LocationInfo.
+ * Use `create(LocationInfoSchema)` to create a new message.
  */
-export const RoomInfoSchema: GenMessage<RoomInfo> = /*@__PURE__*/
+export const LocationInfoSchema: GenMessage<LocationInfo> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 4);
 
 /**
@@ -230,34 +230,34 @@ export const CharacterInfoSchema: GenMessage<CharacterInfo> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 7);
 
 /**
- * QueryRoomCharactersRequest requests all characters in a room.
+ * QueryLocationCharactersRequest requests all characters in a location.
  *
- * @generated from message holomush.plugin.v1.QueryRoomCharactersRequest
+ * @generated from message holomush.plugin.v1.QueryLocationCharactersRequest
  */
-export type QueryRoomCharactersRequest = Message<"holomush.plugin.v1.QueryRoomCharactersRequest"> & {
+export type QueryLocationCharactersRequest = Message<"holomush.plugin.v1.QueryLocationCharactersRequest"> & {
   /**
-   * Room identifier.
+   * Location identifier.
    *
-   * @generated from field: string room_id = 1;
+   * @generated from field: string location_id = 1;
    */
-  roomId: string;
+  locationId: string;
 };
 
 /**
- * Describes the message holomush.plugin.v1.QueryRoomCharactersRequest.
- * Use `create(QueryRoomCharactersRequestSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.QueryLocationCharactersRequest.
+ * Use `create(QueryLocationCharactersRequestSchema)` to create a new message.
  */
-export const QueryRoomCharactersRequestSchema: GenMessage<QueryRoomCharactersRequest> = /*@__PURE__*/
+export const QueryLocationCharactersRequestSchema: GenMessage<QueryLocationCharactersRequest> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 8);
 
 /**
- * QueryRoomCharactersResponse contains the list of characters.
+ * QueryLocationCharactersResponse contains the list of characters.
  *
- * @generated from message holomush.plugin.v1.QueryRoomCharactersResponse
+ * @generated from message holomush.plugin.v1.QueryLocationCharactersResponse
  */
-export type QueryRoomCharactersResponse = Message<"holomush.plugin.v1.QueryRoomCharactersResponse"> & {
+export type QueryLocationCharactersResponse = Message<"holomush.plugin.v1.QueryLocationCharactersResponse"> & {
   /**
-   * Characters in the room.
+   * Characters in the location.
    *
    * @generated from field: repeated holomush.plugin.v1.CharacterInfo characters = 1;
    */
@@ -272,10 +272,10 @@ export type QueryRoomCharactersResponse = Message<"holomush.plugin.v1.QueryRoomC
 };
 
 /**
- * Describes the message holomush.plugin.v1.QueryRoomCharactersResponse.
- * Use `create(QueryRoomCharactersResponseSchema)` to create a new message.
+ * Describes the message holomush.plugin.v1.QueryLocationCharactersResponse.
+ * Use `create(QueryLocationCharactersResponseSchema)` to create a new message.
  */
-export const QueryRoomCharactersResponseSchema: GenMessage<QueryRoomCharactersResponse> = /*@__PURE__*/
+export const QueryLocationCharactersResponseSchema: GenMessage<QueryLocationCharactersResponse> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_hostfunc, 9);
 
 /**
@@ -743,14 +743,14 @@ export const HostFunctionsService: GenService<{
     output: typeof EmitEventResponseSchema;
   },
   /**
-   * QueryRoom retrieves information about a room.
+   * QueryLocation retrieves information about a location.
    *
-   * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryRoom
+   * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryLocation
    */
-  queryRoom: {
+  queryLocation: {
     methodKind: "unary";
-    input: typeof QueryRoomRequestSchema;
-    output: typeof QueryRoomResponseSchema;
+    input: typeof QueryLocationRequestSchema;
+    output: typeof QueryLocationResponseSchema;
   },
   /**
    * QueryCharacter retrieves information about a character.
@@ -763,14 +763,14 @@ export const HostFunctionsService: GenService<{
     output: typeof QueryCharacterResponseSchema;
   },
   /**
-   * QueryRoomCharacters retrieves all characters in a room.
+   * QueryLocationCharacters retrieves all characters in a location.
    *
-   * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryRoomCharacters
+   * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryLocationCharacters
    */
-  queryRoomCharacters: {
+  queryLocationCharacters: {
     methodKind: "unary";
-    input: typeof QueryRoomCharactersRequestSchema;
-    output: typeof QueryRoomCharactersResponseSchema;
+    input: typeof QueryLocationCharactersRequestSchema;
+    output: typeof QueryLocationCharactersResponseSchema;
   },
   /**
    * KVGet retrieves a value from the plugin's key-value store.

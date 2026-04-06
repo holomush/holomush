@@ -82,13 +82,21 @@ tasks:
   test:int:
     desc: Run integration tests (needs Docker for testcontainers)
     cmds:
+      - echo "▸ Building binary plugins for host platform..."
+      - GOOS={{OS}} GOARCH={{ARCH}} ./scripts/build-plugins.sh
       - gotestsum --format pkgname -- -race -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic ./internal/content/
-        ./internal/store/ ./test/integration/...
+        ./internal/store/ ./plugins/core-scenes/ ./test/integration/...
 
   test:e2e:
     desc: Run Playwright E2E tests in Docker
     deps: ['docker:build']
     cmds:
+      - cmd: |
+          if docker compose -p holomush-e2e ps -q 2>/dev/null | grep -q .; then
+            echo "ERROR: E2E infrastructure already running (project: holomush-e2e)."
+            echo "Stop it with: docker compose -p holomush-e2e down -v"
+            exit 1
+          fi
       - rm -rf web/test-results
       - defer: docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml down -v
       - cmd: |
@@ -102,6 +110,12 @@ tasks:
     desc: Run E2E tests with binary coverage instrumentation
     deps: ['docker:build:cover']
     cmds:
+      - cmd: |
+          if docker compose -p holomush-e2e ps -q 2>/dev/null | grep -q .; then
+            echo "ERROR: E2E infrastructure already running (project: holomush-e2e)."
+            echo "Stop it with: docker compose -p holomush-e2e down -v"
+            exit 1
+          fi
       - mkdir -p .coverdata/core .coverdata/gateway
       - defer: {docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml -f compose.e2e.cover.yaml down -v; rm -rf .coverdata;: ''}
       - cmd: |
@@ -142,16 +156,26 @@ tasks:
     cmds:
       - go build -o {{.BINARY_NAME}} {{.MAIN_PKG}}
 
+  plugin:build-all:
+    desc: Discover and compile all binary plugins (host + linux/amd64 + linux/arm64)
+    cmds:
+      - ./scripts/build-plugins.sh
+
+  plugin:build:
+    desc: Build a single binary plugin (pass name after --)
+    cmds:
+      - ./scripts/build-plugins.sh {{.CLI_ARGS}}
+
   docker:build:
     desc: Build Docker image from locally-compiled Linux binary
-    deps: ['web:embed']
+    deps: ['web:embed', 'plugin:build-all']
     cmds:
       - CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o holomush {{.MAIN_PKG}}
-      - docker build -t holomush .
+      - docker build --build-arg TARGETARCH=$(go env GOARCH) -t holomush .
 
   docker:build:cover:
     desc: Build Docker image with coverage instrumentation
-    deps: ['web:embed']
+    deps: ['web:embed', 'plugin:build-all']
     cmds:
       - CGO_ENABLED=0 GOOS=linux go build -cover -o holomush {{.MAIN_PKG}}
       - docker build -t holomush .
@@ -407,6 +431,8 @@ tasks:
           fi
       - echo "▸ Checking license headers..."
       - task: license:check
+      - echo "▸ Building binary plugins..."
+      - task: plugin:build-all
       - echo "▸ Running linters..."
       - task: lint
       - echo "▸ Checking formatting..."
@@ -534,6 +560,7 @@ tasks:
     desc: Clean build artifacts
     cmds:
       - rm -rf dist/
+      - rm -rf build/
       - rm -f {{.BINARY_NAME}}
       - rm -f coverage.out coverage.html
       - rm -rf web/build

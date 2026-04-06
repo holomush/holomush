@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: Apache-2.0
 -- Copyright 2026 HoloMUSH Contributors
 
--- Echo bot: repeats messages back to the room
+-- Echo bot: repeats messages back to the location
 -- Demonstrates basic event handling and response
 --
 -- NOTE: This is an example plugin using simple pattern matching for JSON.

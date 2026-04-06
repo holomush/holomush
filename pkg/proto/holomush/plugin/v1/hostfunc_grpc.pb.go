@@ -24,16 +24,16 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	HostFunctionsService_EmitEvent_FullMethodName           = "/holomush.plugin.v1.HostFunctionsService/EmitEvent"
-	HostFunctionsService_QueryRoom_FullMethodName           = "/holomush.plugin.v1.HostFunctionsService/QueryRoom"
-	HostFunctionsService_QueryCharacter_FullMethodName      = "/holomush.plugin.v1.HostFunctionsService/QueryCharacter"
-	HostFunctionsService_QueryRoomCharacters_FullMethodName = "/holomush.plugin.v1.HostFunctionsService/QueryRoomCharacters"
-	HostFunctionsService_KVGet_FullMethodName               = "/holomush.plugin.v1.HostFunctionsService/KVGet"
-	HostFunctionsService_KVSet_FullMethodName               = "/holomush.plugin.v1.HostFunctionsService/KVSet"
-	HostFunctionsService_KVDelete_FullMethodName            = "/holomush.plugin.v1.HostFunctionsService/KVDelete"
-	HostFunctionsService_Log_FullMethodName                 = "/holomush.plugin.v1.HostFunctionsService/Log"
-	HostFunctionsService_ListCommands_FullMethodName        = "/holomush.plugin.v1.HostFunctionsService/ListCommands"
-	HostFunctionsService_GetCommandHelp_FullMethodName      = "/holomush.plugin.v1.HostFunctionsService/GetCommandHelp"
+	HostFunctionsService_EmitEvent_FullMethodName               = "/holomush.plugin.v1.HostFunctionsService/EmitEvent"
+	HostFunctionsService_QueryLocation_FullMethodName           = "/holomush.plugin.v1.HostFunctionsService/QueryLocation"
+	HostFunctionsService_QueryCharacter_FullMethodName          = "/holomush.plugin.v1.HostFunctionsService/QueryCharacter"
+	HostFunctionsService_QueryLocationCharacters_FullMethodName = "/holomush.plugin.v1.HostFunctionsService/QueryLocationCharacters"
+	HostFunctionsService_KVGet_FullMethodName                   = "/holomush.plugin.v1.HostFunctionsService/KVGet"
+	HostFunctionsService_KVSet_FullMethodName                   = "/holomush.plugin.v1.HostFunctionsService/KVSet"
+	HostFunctionsService_KVDelete_FullMethodName                = "/holomush.plugin.v1.HostFunctionsService/KVDelete"
+	HostFunctionsService_Log_FullMethodName                     = "/holomush.plugin.v1.HostFunctionsService/Log"
+	HostFunctionsService_ListCommands_FullMethodName            = "/holomush.plugin.v1.HostFunctionsService/ListCommands"
+	HostFunctionsService_GetCommandHelp_FullMethodName          = "/holomush.plugin.v1.HostFunctionsService/GetCommandHelp"
 )
 
 // HostFunctionsServiceClient is the client API for HostFunctionsService service.
@@ -46,12 +46,12 @@ const (
 type HostFunctionsServiceClient interface {
 	// EmitEvent publishes an event to a stream.
 	EmitEvent(ctx context.Context, in *EmitEventRequest, opts ...grpc.CallOption) (*EmitEventResponse, error)
-	// QueryRoom retrieves information about a room.
-	QueryRoom(ctx context.Context, in *QueryRoomRequest, opts ...grpc.CallOption) (*QueryRoomResponse, error)
+	// QueryLocation retrieves information about a location.
+	QueryLocation(ctx context.Context, in *QueryLocationRequest, opts ...grpc.CallOption) (*QueryLocationResponse, error)
 	// QueryCharacter retrieves information about a character.
 	QueryCharacter(ctx context.Context, in *QueryCharacterRequest, opts ...grpc.CallOption) (*QueryCharacterResponse, error)
-	// QueryRoomCharacters retrieves all characters in a room.
-	QueryRoomCharacters(ctx context.Context, in *QueryRoomCharactersRequest, opts ...grpc.CallOption) (*QueryRoomCharactersResponse, error)
+	// QueryLocationCharacters retrieves all characters in a location.
+	QueryLocationCharacters(ctx context.Context, in *QueryLocationCharactersRequest, opts ...grpc.CallOption) (*QueryLocationCharactersResponse, error)
 	// KVGet retrieves a value from the plugin's key-value store.
 	KVGet(ctx context.Context, in *KVGetRequest, opts ...grpc.CallOption) (*KVGetResponse, error)
 	// KVSet stores a value in the plugin's key-value store.
@@ -86,10 +86,10 @@ func (c *hostFunctionsServiceClient) EmitEvent(ctx context.Context, in *EmitEven
 	return out, nil
 }
 
-func (c *hostFunctionsServiceClient) QueryRoom(ctx context.Context, in *QueryRoomRequest, opts ...grpc.CallOption) (*QueryRoomResponse, error) {
+func (c *hostFunctionsServiceClient) QueryLocation(ctx context.Context, in *QueryLocationRequest, opts ...grpc.CallOption) (*QueryLocationResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(QueryRoomResponse)
-	err := c.cc.Invoke(ctx, HostFunctionsService_QueryRoom_FullMethodName, in, out, cOpts...)
+	out := new(QueryLocationResponse)
+	err := c.cc.Invoke(ctx, HostFunctionsService_QueryLocation_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -106,10 +106,10 @@ func (c *hostFunctionsServiceClient) QueryCharacter(ctx context.Context, in *Que
 	return out, nil
 }
 
-func (c *hostFunctionsServiceClient) QueryRoomCharacters(ctx context.Context, in *QueryRoomCharactersRequest, opts ...grpc.CallOption) (*QueryRoomCharactersResponse, error) {
+func (c *hostFunctionsServiceClient) QueryLocationCharacters(ctx context.Context, in *QueryLocationCharactersRequest, opts ...grpc.CallOption) (*QueryLocationCharactersResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(QueryRoomCharactersResponse)
-	err := c.cc.Invoke(ctx, HostFunctionsService_QueryRoomCharacters_FullMethodName, in, out, cOpts...)
+	out := new(QueryLocationCharactersResponse)
+	err := c.cc.Invoke(ctx, HostFunctionsService_QueryLocationCharacters_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -186,12 +186,12 @@ func (c *hostFunctionsServiceClient) GetCommandHelp(ctx context.Context, in *Get
 type HostFunctionsServiceServer interface {
 	// EmitEvent publishes an event to a stream.
 	EmitEvent(context.Context, *EmitEventRequest) (*EmitEventResponse, error)
-	// QueryRoom retrieves information about a room.
-	QueryRoom(context.Context, *QueryRoomRequest) (*QueryRoomResponse, error)
+	// QueryLocation retrieves information about a location.
+	QueryLocation(context.Context, *QueryLocationRequest) (*QueryLocationResponse, error)
 	// QueryCharacter retrieves information about a character.
 	QueryCharacter(context.Context, *QueryCharacterRequest) (*QueryCharacterResponse, error)
-	// QueryRoomCharacters retrieves all characters in a room.
-	QueryRoomCharacters(context.Context, *QueryRoomCharactersRequest) (*QueryRoomCharactersResponse, error)
+	// QueryLocationCharacters retrieves all characters in a location.
+	QueryLocationCharacters(context.Context, *QueryLocationCharactersRequest) (*QueryLocationCharactersResponse, error)
 	// KVGet retrieves a value from the plugin's key-value store.
 	KVGet(context.Context, *KVGetRequest) (*KVGetResponse, error)
 	// KVSet stores a value in the plugin's key-value store.
@@ -219,14 +219,14 @@ type UnimplementedHostFunctionsServiceServer struct{}
 func (UnimplementedHostFunctionsServiceServer) EmitEvent(context.Context, *EmitEventRequest) (*EmitEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EmitEvent not implemented")
 }
-func (UnimplementedHostFunctionsServiceServer) QueryRoom(context.Context, *QueryRoomRequest) (*QueryRoomResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method QueryRoom not implemented")
+func (UnimplementedHostFunctionsServiceServer) QueryLocation(context.Context, *QueryLocationRequest) (*QueryLocationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method QueryLocation not implemented")
 }
 func (UnimplementedHostFunctionsServiceServer) QueryCharacter(context.Context, *QueryCharacterRequest) (*QueryCharacterResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method QueryCharacter not implemented")
 }
-func (UnimplementedHostFunctionsServiceServer) QueryRoomCharacters(context.Context, *QueryRoomCharactersRequest) (*QueryRoomCharactersResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method QueryRoomCharacters not implemented")
+func (UnimplementedHostFunctionsServiceServer) QueryLocationCharacters(context.Context, *QueryLocationCharactersRequest) (*QueryLocationCharactersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method QueryLocationCharacters not implemented")
 }
 func (UnimplementedHostFunctionsServiceServer) KVGet(context.Context, *KVGetRequest) (*KVGetResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method KVGet not implemented")
@@ -285,20 +285,20 @@ func _HostFunctionsService_EmitEvent_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HostFunctionsService_QueryRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(QueryRoomRequest)
+func _HostFunctionsService_QueryLocation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryLocationRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HostFunctionsServiceServer).QueryRoom(ctx, in)
+		return srv.(HostFunctionsServiceServer).QueryLocation(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: HostFunctionsService_QueryRoom_FullMethodName,
+		FullMethod: HostFunctionsService_QueryLocation_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HostFunctionsServiceServer).QueryRoom(ctx, req.(*QueryRoomRequest))
+		return srv.(HostFunctionsServiceServer).QueryLocation(ctx, req.(*QueryLocationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -321,20 +321,20 @@ func _HostFunctionsService_QueryCharacter_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HostFunctionsService_QueryRoomCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(QueryRoomCharactersRequest)
+func _HostFunctionsService_QueryLocationCharacters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryLocationCharactersRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HostFunctionsServiceServer).QueryRoomCharacters(ctx, in)
+		return srv.(HostFunctionsServiceServer).QueryLocationCharacters(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: HostFunctionsService_QueryRoomCharacters_FullMethodName,
+		FullMethod: HostFunctionsService_QueryLocationCharacters_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HostFunctionsServiceServer).QueryRoomCharacters(ctx, req.(*QueryRoomCharactersRequest))
+		return srv.(HostFunctionsServiceServer).QueryLocationCharacters(ctx, req.(*QueryLocationCharactersRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -459,16 +459,16 @@ var HostFunctionsService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HostFunctionsService_EmitEvent_Handler,
 		},
 		{
-			MethodName: "QueryRoom",
-			Handler:    _HostFunctionsService_QueryRoom_Handler,
+			MethodName: "QueryLocation",
+			Handler:    _HostFunctionsService_QueryLocation_Handler,
 		},
 		{
 			MethodName: "QueryCharacter",
 			Handler:    _HostFunctionsService_QueryCharacter_Handler,
 		},
 		{
-			MethodName: "QueryRoomCharacters",
-			Handler:    _HostFunctionsService_QueryRoomCharacters_Handler,
+			MethodName: "QueryLocationCharacters",
+			Handler:    _HostFunctionsService_QueryLocationCharacters_Handler,
 		},
 		{
 			MethodName: "KVGet",

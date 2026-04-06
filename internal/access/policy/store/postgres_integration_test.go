@@ -9,19 +9,17 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/samber/oops"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	istore "github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/test/testutil"
 )
 
 func TestPolicyStore(t *testing.T) {
@@ -31,36 +29,23 @@ func TestPolicyStore(t *testing.T) {
 
 var (
 	pool      *pgxpool.Pool
-	container *postgres.PostgresContainer
+	container testcontainers.Container
 	ps        *store.PostgresStore
 )
 
 var _ = BeforeSuite(func() {
 	ctx := context.Background()
 
-	var err error
-	container, err = postgres.Run(ctx,
-		"postgres:18-alpine",
-		postgres.WithDatabase("holomush_test"),
-		postgres.WithUsername("holomush"),
-		postgres.WithPassword("holomush"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(30*time.Second),
-		),
-	)
+	pgEnv, err := testutil.StartPostgres(ctx)
 	Expect(err).NotTo(HaveOccurred())
+	container = pgEnv.Container
 
-	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
-	Expect(err).NotTo(HaveOccurred())
-
-	migrator, err := istore.NewMigrator(connStr)
+	migrator, err := istore.NewMigrator(pgEnv.ConnStr)
 	Expect(err).NotTo(HaveOccurred())
 	Expect(migrator.Up()).To(Succeed())
 	_ = migrator.Close()
 
-	pool, err = pgxpool.New(ctx, connStr)
+	pool, err = pgxpool.New(ctx, pgEnv.ConnStr)
 	Expect(err).NotTo(HaveOccurred())
 
 	ps = store.NewPostgresStore(pool)

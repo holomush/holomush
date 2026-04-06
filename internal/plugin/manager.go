@@ -24,6 +24,7 @@ type Manager struct {
 	hosts           map[Type]Host   // host registry keyed by plugin type
 	pluginHosts     map[string]Host // maps plugin name → owning host
 	policyInstaller PluginPolicyInstaller
+	registry        *ServiceRegistry // optional, enables DAG resolution
 	loaded          map[string]*DiscoveredPlugin
 	mu              sync.RWMutex
 }
@@ -43,6 +44,19 @@ func WithPolicyInstaller(pi PluginPolicyInstaller) ManagerOption {
 	return func(m *Manager) {
 		m.policyInstaller = pi
 	}
+}
+
+// WithServiceRegistry configures the manager to use DAG-based dependency
+// resolution via the provided service registry.
+func WithServiceRegistry(reg *ServiceRegistry) ManagerOption {
+	return func(m *Manager) {
+		m.registry = reg
+	}
+}
+
+// Registry returns the service registry, or nil if not configured.
+func (m *Manager) Registry() *ServiceRegistry {
+	return m.registry
 }
 
 // NewManager creates a plugin manager.
@@ -156,6 +170,11 @@ func (m *Manager) Discover(_ context.Context) ([]*DiscoveredPlugin, error) {
 // LoadAll discovers and loads all plugins in the plugins directory.
 // Invalid plugins are logged and skipped.
 //
+// When a ServiceRegistry is configured (via WithServiceRegistry), LoadAll uses
+// DAG-based dependency resolution to determine load order. If resolution fails
+// (e.g. circular dependency or unsatisfied requires), it falls back to priority
+// sort and logs a warning.
+//
 // Design: LoadAll uses graceful degradation - individual plugin failures are
 // logged as warnings but don't fail the entire load. This allows the server to
 // start even if some plugins have issues. Callers who need strict loading should
@@ -166,12 +185,9 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 		return err
 	}
 
-	// Sort by load priority (lower values load first).
-	sort.Slice(discovered, func(i, j int) bool {
-		return discovered[i].Manifest.EffectivePriority() < discovered[j].Manifest.EffectivePriority()
-	})
+	ordered := m.resolveLoadOrder(discovered)
 
-	for _, dp := range discovered {
+	for _, dp := range ordered {
 		if err := m.loadPlugin(ctx, dp); err != nil {
 			slog.Error("failed to load plugin",
 				"plugin", dp.Manifest.Name,
@@ -184,6 +200,32 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 	return nil
 }
 
+// resolveLoadOrder returns plugins in the order they should be loaded.
+// When a registry is configured, it uses DAG-based dependency resolution.
+// Falls back to priority sort if DAG resolution fails or no registry is set.
+func (m *Manager) resolveLoadOrder(discovered []*DiscoveredPlugin) []*DiscoveredPlugin {
+	if m.registry != nil {
+		serverServices := m.registry.List()
+		serverServiceNames := make([]string, 0, len(serverServices))
+		for _, svc := range serverServices {
+			serverServiceNames = append(serverServiceNames, svc.Name)
+		}
+
+		ordered, err := ResolveDependencyOrder(discovered, serverServiceNames)
+		if err == nil {
+			return ordered
+		}
+		slog.Warn("DAG dependency resolution failed, falling back to priority sort",
+			"error", err)
+	}
+
+	// Default: sort by load priority (lower values load first).
+	sort.Slice(discovered, func(i, j int) bool {
+		return discovered[i].Manifest.EffectivePriority() < discovered[j].Manifest.EffectivePriority()
+	})
+	return discovered
+}
+
 // loadPlugin loads a single discovered plugin.
 //
 // Design: Returns nil (not error) for unsupported configurations to support
@@ -194,13 +236,6 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin) error {
 	// For backward compatibility, TypeLua falls back to the dedicated luaHost field.
 	var host Host
 	switch dp.Manifest.Type {
-	case TypeCore:
-		host = m.hosts[TypeCore]
-		if host == nil {
-			slog.Warn("no core host registered, skipping core plugin",
-				"plugin", dp.Manifest.Name)
-			return nil
-		}
 	case TypeLua:
 		host = m.hosts[TypeLua]
 		if host == nil {
@@ -251,6 +286,44 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin) error {
 		}
 	}
 
+	// Register plugin-provided services in the service registry.
+	// Registration failures are treated as hard errors — dependents resolved
+	// by ResolveDependencyOrder rely on the Provides contract being satisfied.
+	if m.registry != nil && len(dp.Manifest.Provides) > 0 {
+		connProvider, ok := host.(ServiceConnProvider)
+		if !ok {
+			return oops.In("manager").
+				With("plugin", dp.Manifest.Name).
+				Errorf("host does not implement ServiceConnProvider but plugin declares Provides")
+		}
+		conn, connErr := connProvider.PluginConn(dp.Manifest.Name)
+		if connErr != nil {
+			return oops.In("manager").
+				With("plugin", dp.Manifest.Name).
+				Wrapf(connErr, "get plugin connection for service registration")
+		}
+		var registered []string
+		for _, svcName := range dp.Manifest.Provides {
+			regErr := m.registry.Register(RegisteredService{
+				Name:       svcName,
+				Conn:       conn,
+				PluginName: dp.Manifest.Name,
+				PluginType: dp.Manifest.Type,
+			})
+			if regErr != nil {
+				// Unwind partial registrations.
+				for _, name := range registered {
+					_ = m.registry.Deregister(name) //nolint:errcheck // best-effort cleanup
+				}
+				return oops.In("manager").
+					With("plugin", dp.Manifest.Name).
+					With("service", svcName).
+					Wrapf(regErr, "register plugin service")
+			}
+			registered = append(registered, svcName)
+		}
+	}
+
 	m.mu.Lock()
 	m.loaded[dp.Manifest.Name] = dp
 	m.pluginHosts[dp.Manifest.Name] = host
@@ -292,16 +365,17 @@ func (m *Manager) Close(ctx context.Context) error {
 		}
 	}
 
-	// Clear loaded maps first to ensure consistent state even if close fails.
-	m.loaded = make(map[string]*DiscoveredPlugin)
-	m.pluginHosts = make(map[string]Host)
-
-	// Close all registered hosts.
+	// Close all registered hosts before clearing maps so that hosts can
+	// still reference loaded state during shutdown.
 	for hostType, host := range m.hosts {
 		if err := host.Close(ctx); err != nil {
 			slog.Error("failed to close host", "type", hostType, "error", err)
 		}
 	}
+
+	// Clear loaded maps after hosts are closed.
+	m.loaded = make(map[string]*DiscoveredPlugin)
+	m.pluginHosts = make(map[string]Host)
 
 	// Close legacy luaHost if not already in the hosts map.
 	if m.luaHost != nil {
@@ -322,6 +396,15 @@ func (m *Manager) IsPluginLoaded(name string) bool {
 	defer m.mu.RUnlock()
 	_, ok := m.loaded[name]
 	return ok
+}
+
+// GetLoadedPlugin returns the discovered plugin info for the named plugin.
+// Returns nil and false if the plugin is not loaded.
+func (m *Manager) GetLoadedPlugin(name string) (*DiscoveredPlugin, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	dp, ok := m.loaded[name]
+	return dp, ok
 }
 
 // RegisterPluginCommands iterates all loaded plugins and registers their

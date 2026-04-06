@@ -37,17 +37,25 @@ func TestPluginSubsystemCommandRegistryPanicsBeforeStart(t *testing.T) {
 	assert.Panics(t, func() { sub.CommandRegistry() })
 }
 
-func TestPluginSubsystemServiceProxyPanicsBeforeStart(t *testing.T) {
-	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
-	assert.Panics(t, func() { sub.ServiceProxy() })
-}
-
 func TestPluginSubsystemImplementsSubsystem(_ *testing.T) {
 	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
 	var _ lifecycle.Subsystem = sub
 }
 
+func TestPluginSubsystemImplementsHealthReporter(_ *testing.T) {
+	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
+	var _ lifecycle.HealthReporter = sub
+}
+
 func TestPluginSubsystemStopBeforeStartIsNoop(t *testing.T) {
 	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
 	assert.NoError(t, sub.Stop(t.Context()))
+}
+
+func TestPluginSubsystemHealthStatusReportsDeadBeforeStart(t *testing.T) {
+	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
+	status := sub.HealthStatus()
+
+	assert.Equal(t, lifecycle.HealthDead, status.Tier)
+	assert.Equal(t, "not started", status.Reason)
 }

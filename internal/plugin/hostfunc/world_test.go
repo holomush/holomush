@@ -227,7 +227,7 @@ func TestQueryLocationPermissionDenied(t *testing.T) {
 
 func TestQueryLocationTimeout(t *testing.T) {
 	locationID := ulid.Make()
-	// Context timeout should be surfaced to plugins as "query timed out"
+	// Context timeout should be surfaced to plugins as "operation timed out"
 	querier := &mockWorldQuerier{err: context.DeadlineExceeded}
 	funcs := hostfunc.New(nil, hostfunc.WithWorldService(querier))
 
@@ -242,7 +242,7 @@ func TestQueryLocationTimeout(t *testing.T) {
 	errVal := L.GetGlobal("err")
 	assert.Equal(t, lua.LTNil, loc.Type())
 	assert.Equal(t, lua.LTString, errVal.Type())
-	assert.Equal(t, "query timed out", errVal.String(), "expected timeout error message")
+	assert.Equal(t, "operation timed out", errVal.String(), "expected timeout error message")
 }
 
 func TestQueryCharacter(t *testing.T) {

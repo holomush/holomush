@@ -13,12 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/holomush/holomush/internal/content"
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/test/testutil"
 )
 
 // setupPool starts a Postgres container, runs migrations, and returns a pool
@@ -27,33 +25,20 @@ func setupPool(t *testing.T) (*pgxpool.Pool, func()) {
 	t.Helper()
 	ctx := context.Background()
 
-	container, err := postgres.Run(ctx,
-		"postgres:18-alpine",
-		postgres.WithDatabase("holomush_test"),
-		postgres.WithUsername("holomush"),
-		postgres.WithPassword("holomush"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(30*time.Second),
-		),
-	)
+	pgEnv, err := testutil.StartPostgres(ctx)
 	require.NoError(t, err)
 
-	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-
-	migrator, err := store.NewMigrator(connStr)
+	migrator, err := store.NewMigrator(pgEnv.ConnStr)
 	require.NoError(t, err)
 	require.NoError(t, migrator.Up())
 	_ = migrator.Close()
 
-	pool, err := pgxpool.New(ctx, connStr)
+	pool, err := pgxpool.New(ctx, pgEnv.ConnStr)
 	require.NoError(t, err)
 
 	cleanup := func() {
 		pool.Close()
-		_ = container.Terminate(ctx)
+		_ = pgEnv.Terminate(ctx)
 	}
 	return pool, cleanup
 }

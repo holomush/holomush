@@ -27,10 +27,13 @@ func createTempExecutable(path string) error {
 }
 
 // mockClientProtocol implements hashiplug.ClientProtocol for testing.
+// It also implements the Conn() accessor so goplugin.Host.Load can capture
+// the gRPC connection for service registration.
 type mockClientProtocol struct {
 	pluginClient pluginv1.PluginServiceClient
 	dispenseErr  error
 	rawDispense  interface{} // If set, return this instead of pluginClient
+	conn         grpc.ClientConnInterface
 }
 
 func (m *mockClientProtocol) Close() error { return nil }
@@ -43,7 +46,8 @@ func (m *mockClientProtocol) Dispense(_ string) (interface{}, error) {
 	}
 	return m.pluginClient, nil
 }
-func (m *mockClientProtocol) Ping() error { return nil }
+func (m *mockClientProtocol) Ping() error                    { return nil }
+func (m *mockClientProtocol) Conn() grpc.ClientConnInterface { return m.conn }
 
 // mockPluginClient implements PluginClient for testing.
 type mockPluginClient struct {
@@ -72,6 +76,20 @@ type mockGRPCPluginClient struct {
 	cmdResponse  *pluginv1.HandleCommandResponse
 	cmdErr       error
 	cmdReturnNil bool
+
+	// Init tracking
+	initCalled bool
+	initReq    *pluginv1.InitRequest
+	initErr    error
+}
+
+func (m *mockGRPCPluginClient) Init(_ context.Context, req *pluginv1.InitRequest, _ ...grpc.CallOption) (*pluginv1.InitResponse, error) {
+	m.initCalled = true
+	m.initReq = req
+	if m.initErr != nil {
+		return nil, m.initErr
+	}
+	return &pluginv1.InitResponse{}, nil
 }
 
 func (m *mockGRPCPluginClient) HandleEvent(_ context.Context, _ *pluginv1.HandleEventRequest, _ ...grpc.CallOption) (*pluginv1.HandleEventResponse, error) {
@@ -632,7 +650,7 @@ func TestDeliverEventSuccess(t *testing.T) {
 	grpcClient := &mockGRPCPluginClient{
 		response: &pluginv1.HandleEventResponse{
 			EmitEvents: []*pluginv1.EmitEvent{
-				{Stream: "room:123", Type: "say", Payload: `{"text":"hello"}`},
+				{Stream: "location:123", Type: "say", Payload: `{"text":"hello"}`},
 			},
 		},
 	}
@@ -661,7 +679,7 @@ func TestDeliverEventSuccess(t *testing.T) {
 
 	event := pluginsdk.Event{
 		ID:        "evt-123",
-		Stream:    "room:456",
+		Stream:    "location:456",
 		Type:      pluginsdk.EventTypeSay,
 		Timestamp: 1234567890,
 		ActorKind: pluginsdk.ActorCharacter,
@@ -672,7 +690,7 @@ func TestDeliverEventSuccess(t *testing.T) {
 	emits, err := host.DeliverEvent(ctx, "test-plugin", event)
 	require.NoError(t, err, "DeliverEvent returned error")
 	require.Len(t, emits, 1, "expected 1 emit event")
-	assert.Equal(t, "room:123", emits[0].Stream, "expected stream 'room:123'")
+	assert.Equal(t, "location:123", emits[0].Stream, "expected stream 'location:123'")
 	assert.Equal(t, pluginsdk.EventTypeSay, emits[0].Type, "expected type 'say'")
 }
 
@@ -1018,4 +1036,278 @@ func TestDeliverCommand_StatusMapping(t *testing.T) {
 			assert.Equal(t, tt.sdkStatus, resp.Status)
 		})
 	}
+}
+
+// --- Init / Service Injection tests ---
+
+// mockSchemaProvisioner provides a test double for SchemaProvisioner.
+// We cannot use *plugins.SchemaProvisioner directly because it needs a real
+// Postgres connection. Instead, we test the Host logic by using a grpcClient
+// that tracks Init calls and verifying the overall Load flow.
+// For schema provisioning specifically, we verify behavior through integration tests.
+
+func TestLoadCallsInitForPostgresStoragePlugin(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	// No schema provisioner — Init should still be called but without connection string
+	host := NewHostWithFactory(factory)
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	err := createTempExecutable(tmpDir + "/storage-plugin")
+	require.NoError(t, err)
+
+	manifest := &plugins.Manifest{
+		Name:    "storage-plugin",
+		Version: "1.0.0",
+		Type:    plugins.TypeBinary,
+		Storage: plugins.StoragePostgres,
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "storage-plugin",
+		},
+	}
+
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err)
+
+	assert.True(t, grpcClient.initCalled, "expected Init to be called for postgres storage plugin")
+	require.NotNil(t, grpcClient.initReq, "expected InitRequest to be set")
+	require.NotNil(t, grpcClient.initReq.Config, "expected ServiceConfig to be set")
+	assert.Empty(t, grpcClient.initReq.Config.ConnectionString,
+		"expected empty connection string when no schema provisioner configured")
+}
+
+func TestLoadCallsInitForPluginWithRequires(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	host := NewHostWithFactory(factory)
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	err := createTempExecutable(tmpDir + "/svc-plugin")
+	require.NoError(t, err)
+
+	manifest := &plugins.Manifest{
+		Name:     "svc-plugin",
+		Version:  "1.0.0",
+		Type:     plugins.TypeBinary,
+		Requires: []string{"event-store"},
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "svc-plugin",
+		},
+	}
+
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err)
+
+	assert.True(t, grpcClient.initCalled, "expected Init to be called for plugin with requires")
+	require.NotNil(t, grpcClient.initReq, "expected InitRequest to be set")
+	require.NotNil(t, grpcClient.initReq.Config, "expected ServiceConfig to be set")
+	// RequiredServices is populated but empty in test path (no broker available
+	// via mock factory). Production path with GRPCBroker populates broker IDs.
+	assert.NotNil(t, grpcClient.initReq.Config.RequiredServices,
+		"expected RequiredServices map to be set (empty in test path)")
+}
+
+func TestLoadPassesRequiredServicesFromRegistryViaInit(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{}
+	fakeConn := &stubClientConn{}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient, conn: fakeConn},
+	}
+	factory := &mockClientFactory{client: mockClient}
+
+	// Set up a registry with a service the plugin requires.
+	registry := plugins.NewServiceRegistry()
+	require.NoError(t, registry.Register(plugins.RegisteredService{
+		Name:       "holomush.scene.v1.SceneService",
+		Conn:       fakeConn,
+		PluginName: "scene-provider",
+		PluginType: plugins.TypeBinary,
+	}))
+
+	host := NewHostWithFactory(factory, WithServiceRegistry(registry))
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	require.NoError(t, createTempExecutable(filepath.Join(tmpDir, "needs-scene")))
+
+	manifest := &plugins.Manifest{
+		Name:     "needs-scene",
+		Version:  "1.0.0",
+		Type:     plugins.TypeBinary,
+		Requires: []string{"holomush.scene.v1.SceneService"},
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "needs-scene",
+		},
+	}
+
+	// In test path, broker is nil so broker proxies are not started and
+	// RequiredServices remains empty. This verifies the graceful-degradation
+	// path where no broker is available.
+	err := host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err)
+
+	assert.True(t, grpcClient.initCalled, "expected Init to be called")
+	require.NotNil(t, grpcClient.initReq.Config, "expected ServiceConfig to be set")
+	assert.Empty(t, grpcClient.initReq.Config.RequiredServices,
+		"expected RequiredServices empty when broker is nil (test path)")
+}
+
+func TestLoadSkipsInitForPluginWithoutStorageOrRequires(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	host := NewHostWithFactory(factory)
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	err := createTempExecutable(tmpDir + "/simple-plugin")
+	require.NoError(t, err)
+
+	manifest := &plugins.Manifest{
+		Name:    "simple-plugin",
+		Version: "1.0.0",
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "simple-plugin",
+		},
+	}
+
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err)
+
+	assert.False(t, grpcClient.initCalled, "expected Init NOT to be called for simple plugin")
+}
+
+func TestLoadFailsWhenInitReturnsError(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{
+		initErr: errors.New("init failed: migration error"),
+	}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	host := NewHostWithFactory(factory)
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	err := createTempExecutable(tmpDir + "/broken-plugin")
+	require.NoError(t, err)
+
+	manifest := &plugins.Manifest{
+		Name:    "broken-plugin",
+		Version: "1.0.0",
+		Type:    plugins.TypeBinary,
+		Storage: plugins.StoragePostgres,
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "broken-plugin",
+		},
+	}
+
+	err = host.Load(ctx, manifest, tmpDir)
+	require.Error(t, err, "expected error when Init fails")
+	assert.Contains(t, err.Error(), "init failed: migration error")
+	assert.True(t, mockClient.killed, "expected client to be killed after Init failure")
+
+	// Plugin should not be in the loaded list
+	assert.Empty(t, host.Plugins(), "expected no plugins loaded after Init failure")
+}
+
+func TestWithSchemaProvisionerOptionSetsField(t *testing.T) {
+	provisioner := plugins.NewSchemaProvisioner("postgres://localhost/test")
+	factory := &mockClientFactory{client: &mockPluginClient{}}
+	host := NewHostWithFactory(factory, WithSchemaProvisioner(provisioner))
+
+	assert.NotNil(t, host.schemaProvisioner, "expected schemaProvisioner to be set by option")
+}
+
+// stubClientConn is a minimal grpc.ClientConnInterface for testing.
+type stubClientConn struct {
+	grpc.ClientConnInterface
+}
+
+func TestPluginConnReturnsConnectionForLoadedPlugin(t *testing.T) {
+	tmpDir := t.TempDir()
+	require.NoError(t, createTempExecutable(filepath.Join(tmpDir, "test-plugin")))
+
+	fakeConn := &stubClientConn{}
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient, conn: fakeConn},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	host := NewHostWithFactory(factory)
+
+	manifest := &plugins.Manifest{
+		Name:    "test-plugin",
+		Version: "1.0.0",
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "test-plugin",
+		},
+	}
+
+	require.NoError(t, host.Load(context.Background(), manifest, tmpDir))
+
+	conn, err := host.PluginConn("test-plugin")
+	require.NoError(t, err)
+	assert.Same(t, fakeConn, conn, "expected the same connection that was set on the mock protocol")
+}
+
+func TestPluginConnReturnsErrorForUnknownPlugin(t *testing.T) {
+	host := NewHost()
+
+	_, err := host.PluginConn("nonexistent")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrPluginNotLoaded)
+}
+
+func TestPluginConnReturnsErrorAfterClose(t *testing.T) {
+	host := NewHost()
+	require.NoError(t, host.Close(context.Background()))
+
+	_, err := host.PluginConn("any")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrHostClosed)
+}
+
+func TestPluginConnReturnsErrorWhenNoConnection(t *testing.T) {
+	tmpDir := t.TempDir()
+	require.NoError(t, createTempExecutable(filepath.Join(tmpDir, "test-plugin")))
+
+	// Protocol without a Conn() — nil conn field.
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient, conn: nil},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	host := NewHostWithFactory(factory)
+
+	manifest := &plugins.Manifest{
+		Name:    "test-plugin",
+		Version: "1.0.0",
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "test-plugin",
+		},
+	}
+
+	require.NoError(t, host.Load(context.Background(), manifest, tmpDir))
+
+	_, err := host.PluginConn("test-plugin")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no gRPC connection")
+}
+
+func TestHostImplementsServiceConnProvider(_ *testing.T) {
+	var _ plugins.ServiceConnProvider = (*Host)(nil)
 }

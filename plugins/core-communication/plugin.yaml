@@ -3,7 +3,11 @@
 
 name: core-communication
 version: 1.0.0
-type: core
+type: lua
+lua-plugin:
+  entry: main.lua
+requires:
+  - holomush.session.v1.SessionService
 commands:
   - name: say
     capabilities:

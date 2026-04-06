@@ -6,68 +6,12 @@ package hostfunc
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 
-	"github.com/oklog/ulid/v2"
 	lua "github.com/yuin/gopher-lua"
 
-	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/world"
 )
-
-// sanitizeErrorForPlugin converts internal errors to safe messages for plugins.
-// It maps known error types to user-friendly messages and logs internal errors
-// at ERROR level for operators while returning a generic message to plugins.
-//
-// For internal errors, a correlation ID (ULID) is generated and included in both
-// the log entry and the error message returned to the plugin. This allows operators
-// to correlate plugin-reported errors with server logs for debugging.
-func sanitizeErrorForPlugin(pluginName, entityType, entityID string, err error) string {
-	if errors.Is(err, world.ErrNotFound) {
-		return fmt.Sprintf("%s not found", entityType)
-	}
-	if errors.Is(err, world.ErrPermissionDenied) {
-		return "access denied"
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		slog.Warn("plugin query timed out",
-			"plugin", pluginName,
-			"entity_type", entityType,
-			"entity_id", entityID)
-		return "query timed out"
-	}
-	// Generate correlation ID for this error instance.
-	// This allows operators to find the corresponding log entry when a plugin
-	// reports an internal error to users.
-	errorID := idgen.New().String()
-
-	// Log full error for operators, return generic message with reference ID to plugin.
-	// The oops error contains full context including stack traces which
-	// should not be exposed to plugins.
-	slog.Error("internal error in plugin query",
-		"error_id", errorID,
-		"plugin", pluginName,
-		"entity_type", entityType,
-		"entity_id", entityID,
-		"error", err)
-	return fmt.Sprintf("internal error (ref: %s)", errorID)
-}
-
-// WorldQuerier provides read access to world data.
-type WorldQuerier interface {
-	// GetLocation retrieves a location by ID.
-	GetLocation(ctx context.Context, id ulid.ULID) (*world.Location, error)
-
-	// GetCharacter retrieves a character by ID.
-	GetCharacter(ctx context.Context, id ulid.ULID) (*world.Character, error)
-
-	// GetCharactersByLocation retrieves characters at a location with pagination.
-	GetCharactersByLocation(ctx context.Context, locationID ulid.ULID, opts world.ListOptions) ([]*world.Character, error)
-
-	// GetObject retrieves an object by ID.
-	GetObject(ctx context.Context, id ulid.ULID) (*world.Object, error)
-}
 
 // queryLocationFn returns a Lua function that queries location information.
 func (f *Functions) queryLocationFn(pluginName string) lua.LGFunction {
@@ -90,7 +34,7 @@ func (f *Functions) queryLocationFn(pluginName string) lua.LGFunction {
 						"plugin", pluginName,
 						"location_id", locationID)
 				}
-				return pushError(L, sanitizeErrorForPlugin(pluginName, "location", locationID, err))
+				return pushError(L, SanitizeErrorForPlugin(PluginErrorContext{Plugin: pluginName, Operation: "query_location", Subject: "location", SubjectID: locationID}, err))
 			}
 
 			location := L.NewTable()
@@ -125,7 +69,7 @@ func (f *Functions) queryCharacterFn(pluginName string) lua.LGFunction {
 						"plugin", pluginName,
 						"character_id", charID)
 				}
-				return pushError(L, sanitizeErrorForPlugin(pluginName, "character", charID, err))
+				return pushError(L, SanitizeErrorForPlugin(PluginErrorContext{Plugin: pluginName, Operation: "query_character", Subject: "character", SubjectID: charID}, err))
 			}
 
 			character := L.NewTable()
@@ -179,7 +123,7 @@ func (f *Functions) queryLocationCharactersFn(pluginName string) lua.LGFunction 
 						"plugin", pluginName,
 						"location_id", locationID)
 				}
-				return pushError(L, sanitizeErrorForPlugin(pluginName, "location", locationID, err))
+				return pushError(L, SanitizeErrorForPlugin(PluginErrorContext{Plugin: pluginName, Operation: "query_location_characters", Subject: "location", SubjectID: locationID}, err))
 			}
 
 			// Return lightweight list of characters (id, name only).
@@ -219,7 +163,7 @@ func (f *Functions) queryObjectFn(pluginName string) lua.LGFunction {
 						"plugin", pluginName,
 						"object_id", objID)
 				}
-				return pushError(L, sanitizeErrorForPlugin(pluginName, "object", objID, err))
+				return pushError(L, SanitizeErrorForPlugin(PluginErrorContext{Plugin: pluginName, Operation: "query_object", Subject: "object", SubjectID: objID}, err))
 			}
 
 			object := L.NewTable()

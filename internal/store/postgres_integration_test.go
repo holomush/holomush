@@ -12,60 +12,43 @@ import (
 	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/test/testutil"
 )
 
 // setupPostgresContainer starts a PostgreSQL container for testing.
 func setupPostgresContainer() (*store.PostgresEventStore, func(), error) {
 	ctx := context.Background()
 
-	container, err := postgres.Run(ctx,
-		"postgres:18-alpine",
-		postgres.WithDatabase("holomush_test"),
-		postgres.WithUsername("holomush"),
-		postgres.WithPassword("holomush"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(30*time.Second),
-		),
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
+	pgEnv, err := testutil.StartPostgres(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Run migrations using the new Migrator
-	migrator, err := store.NewMigrator(connStr)
+	migrator, err := store.NewMigrator(pgEnv.ConnStr)
 	if err != nil {
-		_ = container.Terminate(ctx)
+		_ = pgEnv.Terminate(ctx)
 		return nil, nil, err
 	}
 	if err := migrator.Up(); err != nil {
 		_ = migrator.Close()
-		_ = container.Terminate(ctx)
+		_ = pgEnv.Terminate(ctx)
 		return nil, nil, err
 	}
 	_ = migrator.Close()
 
-	eventStore, err := store.NewPostgresEventStore(ctx, connStr)
+	eventStore, err := store.NewPostgresEventStore(ctx, pgEnv.ConnStr)
 	if err != nil {
-		_ = container.Terminate(ctx)
+		_ = pgEnv.Terminate(ctx)
 		return nil, nil, err
 	}
 
 	cleanup := func() {
 		eventStore.Close()
-		_ = container.Terminate(ctx)
+		_ = pgEnv.Terminate(ctx)
 	}
 
 	return eventStore, cleanup, nil

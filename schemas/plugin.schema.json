@@ -15,7 +15,6 @@
     "type": {
       "type": "string",
       "enum": [
-        "core",
         "lua",
         "binary",
         "setting"
@@ -169,6 +168,21 @@
         "theme",
         "starting_location"
       ]
+    },
+    "requires": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "provides": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "storage": {
+      "type": "string"
     }
   },
   "additionalProperties": false,

@@ -8,7 +8,7 @@ HoloMUSH is a modern MUSH platform with:
 
 - Go core with event-oriented architecture
 - Dual protocol support (telnet + web)
-- Lua plugin system (gopher-lua) with go-plugin for complex extensions
+- Plugin system: Lua (gopher-lua), binary (hashicorp/go-plugin), and setting plugins
 - PostgreSQL for all data
 - SvelteKit PWA for web client
 
@@ -359,12 +359,14 @@ func TestEventType_String(t *testing.T) {
 ### Plugin Tests (`internal/plugin`)
 
 Lua plugins use gopher-lua which creates fresh VM state per event delivery.
+Binary plugins use hashicorp/go-plugin and communicate via gRPC.
 
 | Principle                     | Description                                         |
 | ----------------------------- | --------------------------------------------------- |
-| State isolation               | Each `DeliverEvent` creates a new Lua state         |
+| State isolation (Lua)         | Each `DeliverEvent` creates a new Lua state         |
 | No shared state between tests | No need for special test helpers or shared fixtures |
-| Fast startup                  | ~50μs per Lua state vs ~1.5s for WASM compilation   |
+| Fast startup (Lua)            | ~50μs per Lua state                                 |
+| Process isolation (binary)    | Binary plugins run as separate processes via go-plugin |
 
 ### Assertions
 
@@ -476,6 +478,8 @@ task fmt       # Format all files
 task test      # Run unit tests (compact output via gotestsum)
 task build     # Build binary
 task dev       # Run dev server
+task plugin:build-all              # Discover and compile all binary plugins for linux/amd64
+task plugin:build -- core-scenes   # Build a single binary plugin
 ```
 
 **Test commands accept arguments after `--`:**
@@ -516,6 +520,8 @@ bd dep add <a> <b>    # Add dependency
 ```text
 api/                 # Protocol definitions
   proto/             # Protobuf service definitions
+build/
+  plugins/           # Compiled binary plugin output (gitignored)
 cmd/holomush/        # Server entry point
 docs/
   plans/             # Implementation plans (internal, in-progress work)
@@ -534,7 +540,7 @@ internal/            # Private implementation
   grpc/              # gRPC server implementation
   logging/           # Structured logging setup
   observability/     # Metrics and health endpoints
-  plugin/            # Plugin system (Lua host, manifests, subscribers)
+  plugin/            # Plugin system (Lua, binary, settings; manifests, registry, DAG loader)
   store/             # PostgreSQL implementations
   telnet/            # Telnet protocol adapter
   tls/               # TLS certificate management
@@ -542,10 +548,11 @@ internal/            # Private implementation
   world/             # World model (objects, locations, exits, scenes)
   xdg/               # XDG base directory support
 pkg/                 # Public plugin API
-  plugin/            # Plugin SDK types
+  plugin/            # Plugin SDK types and ServiceProvider interface
   errutil/           # Error handling utilities
-plugins/             # Lua plugins
+plugins/             # Lua and binary plugins (each with manifest.yaml)
 scripts/             # Build and utility scripts
+  build-plugins.sh   # Plugin build discovery script
 test/                # Integration tests
   integration/       # End-to-end test suites
 ```
@@ -562,6 +569,18 @@ type EventStore interface {
     LastEventID(ctx context.Context, stream string) (ulid.ULID, error)
 }
 ```
+
+### ServiceRegistry (`internal/plugin`)
+
+Maps proto service names (e.g., `holomush.scene.v1.SceneService`) to registered
+service implementations. Used by the plugin loader to wire up service
+dependencies between plugins.
+
+### ServiceProvider (`pkg/plugin`)
+
+Interface implemented by binary plugins that provide gRPC services. The plugin
+host calls `RegisterServices` during plugin startup to let the plugin register
+its service implementations with the server.
 
 ## Architecture Invariants
 
@@ -612,6 +631,32 @@ The world model provides the spatial foundation:
 
 All world operations go through `WorldService` which validates constraints and
 persists to PostgreSQL via the repository interface.
+
+### Plugin System (`internal/plugin`)
+
+Three plugin types:
+
+| Type        | Runtime                  | Use case                                    |
+| ----------- | ------------------------ | ------------------------------------------- |
+| `lua`       | gopher-lua VM            | Lightweight event handlers, game logic      |
+| `binary`    | hashicorp/go-plugin subprocess | Complex services with proto contracts  |
+| `setting`   | Bootstrap only           | Configuration-only plugins (no runtime)     |
+
+**Manifest schema** (`manifest.yaml`): Each plugin declares `requires` (proto
+services it depends on), `provides` (proto services it implements), and
+`storage` (database tables it needs). The plugin loader performs DAG dependency
+resolution to determine load order and validates that all `requires` are
+satisfied by another plugin's `provides`.
+
+**Service registry**: Maps proto service names to implementations. Binary
+plugins register services over gRPC; Lua plugins register via the Lua host.
+
+**Plugin admin commands:**
+
+```bash
+plugin list            # List loaded plugins with name, type, version
+plugin info <name>     # Detailed plugin info (requires, provides, storage, commands)
+```
 
 ### Access Control (`internal/access`)
 

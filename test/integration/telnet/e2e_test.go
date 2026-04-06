@@ -22,8 +22,6 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/samber/oops"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
@@ -43,6 +41,7 @@ import (
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	"github.com/holomush/holomush/test/testutil"
 )
 
 // authCharRepoAdapter wraps a pgxpool.Pool to implement auth.CharacterRepository
@@ -266,7 +265,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 	var (
 		testCtx      context.Context
 		testCancel   context.CancelFunc
-		container    *postgres.PostgresContainer
+		container    testcontainers.Container
 		grpcServer   *grpc.Server
 		grpcListener net.Listener
 		grpcCli      *grpcpkg.Client
@@ -281,21 +280,10 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 
 		// 1. Start PostgreSQL container
 		var err error
-		container, err = postgres.Run(testCtx,
-			"postgres:18-alpine",
-			postgres.WithDatabase("holomush_test"),
-			postgres.WithUsername("holomush"),
-			postgres.WithPassword("holomush"),
-			testcontainers.WithWaitStrategy(
-				wait.ForLog("database system is ready to accept connections").
-					WithOccurrence(2).
-					WithStartupTimeout(30*time.Second),
-			),
-		)
+		pgEnv, err := testutil.StartPostgres(testCtx)
 		Expect(err).NotTo(HaveOccurred())
-
-		connStr, err := container.ConnectionString(testCtx, "sslmode=disable")
-		Expect(err).NotTo(HaveOccurred())
+		container = pgEnv.Container
+		connStr := pgEnv.ConnStr
 
 		// 2. Run migrations
 		migrator, err := store.NewMigrator(connStr)

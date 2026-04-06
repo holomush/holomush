@@ -129,7 +129,7 @@ var _ = Describe("Help Plugin Integration", func() {
 				Payload:   makeCommandPayload("help", ""),
 			}
 
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "help", event)
+			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).NotTo(BeNil())
 			Expect(len(result)).To(BeNumerically(">=", 1))
@@ -163,7 +163,7 @@ var _ = Describe("Help Plugin Integration", func() {
 				Payload:   makeCommandPayload("help", "say"),
 			}
 
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "help", event)
+			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).NotTo(BeNil())
 			Expect(len(result)).To(BeNumerically(">=", 1))
@@ -192,7 +192,7 @@ var _ = Describe("Help Plugin Integration", func() {
 				Payload:   makeCommandPayload("help", "nonexistent"),
 			}
 
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "help", event)
+			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).NotTo(BeNil())
 			Expect(len(result)).To(BeNumerically(">=", 1))
@@ -220,7 +220,7 @@ var _ = Describe("Help Plugin Integration", func() {
 				Payload:   makeCommandPayload("help", "search room"),
 			}
 
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "help", event)
+			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).NotTo(BeNil())
 			Expect(len(result)).To(BeNumerically(">=", 1))
@@ -249,7 +249,7 @@ var _ = Describe("Help Plugin Integration", func() {
 				Payload:   makeCommandPayload("help", "search message"),
 			}
 
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "help", event)
+			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).NotTo(BeNil())
 			Expect(len(result)).To(BeNumerically(">=", 1))
@@ -273,7 +273,7 @@ func setupHelpTestWithEngine(engine accesstypes.AccessPolicyEngine) (*helpFixtur
 	if err != nil {
 		return nil, err
 	}
-	helpDir := filepath.Join(pluginsDir, "help")
+	helpDir := filepath.Join(pluginsDir, "core-help")
 
 	if _, statErr := os.Stat(helpDir); os.IsNotExist(statErr) {
 		return nil, statErr
@@ -297,7 +297,7 @@ func setupHelpTestWithEngine(engine accesstypes.AccessPolicyEngine) (*helpFixtur
 
 	var helpPlugin *plugins.DiscoveredPlugin
 	for _, dp := range discovered {
-		if dp.Manifest.Name == "help" {
+		if dp.Manifest.Name == "core-help" {
 			helpPlugin = dp
 			break
 		}
@@ -344,7 +344,7 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 				Payload:   makeCommandPayload("help", ""),
 			}
 
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "help", event)
+			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).NotTo(BeNil())
 			Expect(len(result)).To(BeNumerically(">=", 1))
@@ -380,7 +380,7 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 				Payload:   makeCommandPayload("help", "search room"),
 			}
 
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "help", event)
+			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).NotTo(BeNil())
 			Expect(len(result)).To(BeNumerically(">=", 1))
@@ -417,7 +417,7 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 				Payload:   makeCommandPayload("help", ""),
 			}
 
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "help", event)
+			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).NotTo(BeNil())
 
@@ -466,7 +466,7 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 				Payload:   makeCommandPayload("help", ""),
 			}
 
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "help", event)
+			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).NotTo(BeNil())
 
@@ -502,7 +502,7 @@ var _ = Describe("Help Plugin – list_commands result format", func() {
 				Payload:   makeCommandPayload("help", "search look"),
 			}
 
-			result, err := fixture.LuaHost.DeliverEvent(ctx, "help", event)
+			result, err := fixture.LuaHost.DeliverEvent(ctx, "core-help", event)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).NotTo(BeNil())
 

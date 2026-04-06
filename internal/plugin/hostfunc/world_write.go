@@ -46,7 +46,7 @@ func (f *Functions) createLocationFn(pluginName string) lua.LGFunction {
 		return f.withMutatorContext(L, "create_location", pluginName,
 			func(ctx context.Context, mutator WorldMutator, subjectID string, _ *WorldQuerierAdapter) int {
 				if err := mutator.CreateLocation(ctx, subjectID, loc); err != nil {
-					return pushError(L, sanitizeErrorForPlugin(pluginName, "location", name, err))
+					return pushError(L, SanitizeErrorForPlugin(PluginErrorContext{Plugin: pluginName, Operation: "create_location", Subject: "location", SubjectID: name}, err))
 				}
 
 				result := L.NewTable()
@@ -106,7 +106,7 @@ func (f *Functions) createExitFn(pluginName string) lua.LGFunction {
 		return f.withMutatorContext(L, "create_exit", pluginName,
 			func(ctx context.Context, mutator WorldMutator, subjectID string, _ *WorldQuerierAdapter) int {
 				if err := mutator.CreateExit(ctx, subjectID, exit); err != nil {
-					return pushError(L, sanitizeErrorForPlugin(pluginName, "exit", name, err))
+					return pushError(L, SanitizeErrorForPlugin(PluginErrorContext{Plugin: pluginName, Operation: "create_exit", Subject: "exit", SubjectID: name}, err))
 				}
 
 				result := L.NewTable()
@@ -183,7 +183,7 @@ func (f *Functions) createObjectFn(pluginName string) lua.LGFunction {
 		return f.withMutatorContext(L, "create_object", pluginName,
 			func(ctx context.Context, mutator WorldMutator, subjectID string, _ *WorldQuerierAdapter) int {
 				if err := mutator.CreateObject(ctx, subjectID, obj); err != nil {
-					return pushError(L, sanitizeErrorForPlugin(pluginName, "object", name, err))
+					return pushError(L, SanitizeErrorForPlugin(PluginErrorContext{Plugin: pluginName, Operation: "create_object", Subject: "object", SubjectID: name}, err))
 				}
 
 				result := L.NewTable()
@@ -213,7 +213,7 @@ func (f *Functions) findLocationFn(pluginName string) lua.LGFunction {
 						"plugin", pluginName,
 						"name", name)
 				}
-				return pushError(L, sanitizeErrorForPlugin(pluginName, "location", name, err))
+				return pushError(L, SanitizeErrorForPlugin(PluginErrorContext{Plugin: pluginName, Operation: "find_location", Subject: "location", SubjectID: name}, err))
 			}
 
 			result := L.NewTable()
@@ -341,7 +341,7 @@ func (f *Functions) setPropertyFn(pluginName string) lua.LGFunction {
 		return f.withMutatorContext(L, "set_property", pluginName,
 			func(ctx context.Context, mutator WorldMutator, subjectID string, adapter *WorldQuerierAdapter) int {
 				if err := setEntityProperty(ctx, adapter, mutator, subjectID, opts, value); err != nil {
-					return pushError(L, sanitizeErrorForPlugin(pluginName, opts.entityType, opts.entityIDStr, err))
+					return pushError(L, SanitizeErrorForPlugin(PluginErrorContext{Plugin: pluginName, Operation: "set_property", Subject: opts.entityType, SubjectID: opts.entityIDStr}, err))
 				}
 				return pushSuccess(L, lua.LTrue)
 			})
@@ -366,7 +366,7 @@ func (f *Functions) getPropertyFn(pluginName string) lua.LGFunction {
 		return f.withQueryContext(L, pluginName, func(ctx context.Context, adapter *WorldQuerierAdapter) int {
 			value, err := getEntityProperty(ctx, adapter, opts)
 			if err != nil {
-				return pushError(L, sanitizeErrorForPlugin(pluginName, opts.entityType, opts.entityIDStr, err))
+				return pushError(L, SanitizeErrorForPlugin(PluginErrorContext{Plugin: pluginName, Operation: "get_property", Subject: opts.entityType, SubjectID: opts.entityIDStr}, err))
 			}
 			return pushSuccess(L, lua.LString(value))
 		})

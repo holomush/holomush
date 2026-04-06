@@ -53,7 +53,7 @@ func pushMutatorUnavailable(L *lua.LState, funcName, pluginName string) int {
 
 // parseULID parses a ULID string from Lua arguments. On failure, it pushes an
 // appropriate error to the Lua stack and returns a zero ULID and false.
-// The paramName is used to construct the error message (e.g., "room ID", "character ID").
+// The paramName is used to construct the error message (e.g., "location ID", "character ID").
 func parseULID(L *lua.LState, idStr, pluginName, funcName, paramName string) (ulid.ULID, bool) {
 	id, err := ulid.Parse(idStr)
 	if err != nil {

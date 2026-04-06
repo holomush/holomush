@@ -14,11 +14,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/plugin/mocks"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 // Helper functions for creating test fixtures with secure permissions.
@@ -403,4 +405,248 @@ var _ attribute.PluginRegistry = (*plugins.Manager)(nil)
 func TestManagerIsPluginLoaded(t *testing.T) {
 	m := plugins.NewManager("/nonexistent")
 	assert.False(t, m.IsPluginLoaded("echo-bot"), "no plugins loaded yet")
+}
+
+func TestManagerGetLoadedPluginReturnsFalseWhenNotLoaded(t *testing.T) {
+	m := plugins.NewManager("/nonexistent")
+	dp, ok := m.GetLoadedPlugin("nonexistent")
+	assert.False(t, ok, "should return false for unloaded plugin")
+	assert.Nil(t, dp, "should return nil for unloaded plugin")
+}
+
+func TestManagerGetLoadedPluginReturnsPluginAfterLoad(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+	echoDir := filepath.Join(pluginsDir, "echo-bot")
+	mkdirAll(t, echoDir)
+
+	writeFile(t, filepath.Join(echoDir, "plugin.yaml"), []byte(`
+name: echo-bot
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`))
+	writeFile(t, filepath.Join(echoDir, "main.lua"), []byte("function on_event(e) end"))
+
+	host := pluginlua.NewHost()
+	m := plugins.NewManager(pluginsDir, plugins.WithLuaHost(host))
+	require.NoError(t, m.LoadAll(context.Background()))
+
+	dp, ok := m.GetLoadedPlugin("echo-bot")
+	require.True(t, ok, "should find loaded plugin")
+	assert.Equal(t, "echo-bot", dp.Manifest.Name)
+	assert.Equal(t, "1.0.0", dp.Manifest.Version)
+
+	require.NoError(t, m.Close(context.Background()))
+}
+
+func TestManagerWithServiceRegistryReturnsConfiguredRegistry(t *testing.T) {
+	reg := plugins.NewServiceRegistry()
+	m := plugins.NewManager("/nonexistent", plugins.WithServiceRegistry(reg))
+	assert.Same(t, reg, m.Registry(), "Registry() should return the configured service registry")
+}
+
+func TestManagerRegistryReturnsNilWhenNotConfigured(t *testing.T) {
+	m := plugins.NewManager("/nonexistent")
+	assert.Nil(t, m.Registry(), "Registry() should return nil when no registry is configured")
+}
+
+func TestManagerLoadAllUsesDAGWhenRegistryConfigured(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	// Server pre-registers a service. A Lua consumer plugin requires it.
+	// The registry exposes the service name so DAG resolution can satisfy the
+	// Requires declaration without a plugin-to-plugin edge.
+	consumerDir := filepath.Join(pluginsDir, "consumer")
+	mkdirAll(t, consumerDir)
+	writeFile(t, filepath.Join(consumerDir, "plugin.yaml"), []byte(`name: consumer
+version: 1.0.0
+type: lua
+requires:
+  - holomush.test.v1.ServerService
+lua-plugin:
+  entry: main.lua`))
+	writeFile(t, filepath.Join(consumerDir, "main.lua"), []byte("function on_event(e) end"))
+
+	// Register the service as a server-internal service in the registry.
+	reg := plugins.NewServiceRegistry()
+	require.NoError(t, reg.Register(plugins.RegisteredService{
+		Name:       "holomush.test.v1.ServerService",
+		PluginName: "",
+		PluginType: "",
+	}))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithServiceRegistry(reg))
+	err := mgr.LoadAll(context.Background())
+	require.NoError(t, err, "LoadAll() with DAG resolution should succeed")
+
+	loaded := mgr.ListPlugins()
+	assert.Len(t, loaded, 1, "consumer plugin should be loaded")
+	assert.Contains(t, loaded, "consumer")
+}
+
+// stubClientConn is a minimal grpc.ClientConnInterface for testing.
+type stubClientConn struct {
+	grpc.ClientConnInterface
+}
+
+// mockBinaryHost implements both Host and ServiceConnProvider for testing
+// service registration in loadPlugin.
+type mockBinaryHost struct {
+	loadErr    error
+	unloadErr  error
+	closeErr   error
+	conn       grpc.ClientConnInterface
+	connErr    error
+	pluginList []string
+}
+
+func (h *mockBinaryHost) Load(_ context.Context, _ *plugins.Manifest, _ string) error {
+	return h.loadErr
+}
+func (h *mockBinaryHost) Unload(_ context.Context, _ string) error { return h.unloadErr }
+func (h *mockBinaryHost) DeliverEvent(_ context.Context, _ string, _ pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
+	return nil, nil
+}
+
+func (h *mockBinaryHost) DeliverCommand(_ context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+	return nil, nil
+}
+func (h *mockBinaryHost) Plugins() []string             { return h.pluginList }
+func (h *mockBinaryHost) Close(_ context.Context) error { return h.closeErr }
+func (h *mockBinaryHost) PluginConn(_ string) (grpc.ClientConnInterface, error) {
+	return h.conn, h.connErr
+}
+
+func TestManagerRegistersProvidedServicesAfterBinaryPluginLoad(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	providerDir := filepath.Join(pluginsDir, "scene-provider")
+	mkdirAll(t, providerDir)
+	writeFile(t, filepath.Join(providerDir, "plugin.yaml"), []byte(`name: scene-provider
+version: 1.0.0
+type: binary
+provides:
+  - holomush.scene.v1.SceneService
+binary-plugin:
+  executable: scene-plugin`))
+
+	fakeConn := &stubClientConn{}
+	binaryHost := &mockBinaryHost{conn: fakeConn}
+
+	reg := plugins.NewServiceRegistry()
+
+	mgr := plugins.NewManager(pluginsDir, plugins.WithServiceRegistry(reg))
+	mgr.RegisterHost(plugins.TypeBinary, binaryHost)
+
+	err := mgr.LoadAll(context.Background())
+	require.NoError(t, err)
+
+	loaded := mgr.ListPlugins()
+	require.Contains(t, loaded, "scene-provider")
+
+	svc, resolveErr := reg.Resolve("holomush.scene.v1.SceneService")
+	require.NoError(t, resolveErr, "provided service should be registered after load")
+	assert.Equal(t, "scene-provider", svc.PluginName)
+	assert.Equal(t, plugins.TypeBinary, svc.PluginType)
+	assert.Same(t, fakeConn, svc.Conn)
+}
+
+func TestManagerSkipsServiceRegistrationWhenNoRegistry(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	providerDir := filepath.Join(pluginsDir, "provider")
+	mkdirAll(t, providerDir)
+	writeFile(t, filepath.Join(providerDir, "plugin.yaml"), []byte(`name: provider
+version: 1.0.0
+type: binary
+provides:
+  - holomush.test.v1.TestService
+binary-plugin:
+  executable: test-plugin`))
+
+	fakeConn := &stubClientConn{}
+	binaryHost := &mockBinaryHost{conn: fakeConn}
+
+	// No registry configured — service registration should be silently skipped.
+	mgr := plugins.NewManager(pluginsDir)
+	mgr.RegisterHost(plugins.TypeBinary, binaryHost)
+
+	err := mgr.LoadAll(context.Background())
+	require.NoError(t, err)
+	assert.Contains(t, mgr.ListPlugins(), "provider")
+}
+
+func TestManagerSkipsServiceRegistrationWhenHostLacksConnProvider(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	providerDir := filepath.Join(pluginsDir, "provider")
+	mkdirAll(t, providerDir)
+	writeFile(t, filepath.Join(providerDir, "plugin.yaml"), []byte(`name: provider
+version: 1.0.0
+type: binary
+provides:
+  - holomush.test.v1.TestService
+binary-plugin:
+  executable: test-plugin`))
+
+	// Use a MockHost (which does NOT implement ServiceConnProvider) as the binary host.
+	mockHost := mocks.NewMockHost(t)
+	mockHost.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockHost.EXPECT().Close(mock.Anything).Return(nil)
+
+	reg := plugins.NewServiceRegistry()
+	mgr := plugins.NewManager(pluginsDir, plugins.WithServiceRegistry(reg))
+	mgr.RegisterHost(plugins.TypeBinary, mockHost)
+
+	err := mgr.LoadAll(context.Background())
+	require.NoError(t, err)
+
+	// Service should NOT be registered because MockHost doesn't implement ServiceConnProvider.
+	_, resolveErr := reg.Resolve("holomush.test.v1.TestService")
+	require.Error(t, resolveErr, "service should not be registered when host lacks ServiceConnProvider")
+
+	require.NoError(t, mgr.Close(context.Background()))
+}
+
+func TestManagerRegistersMultipleProvidedServices(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	providerDir := filepath.Join(pluginsDir, "multi-provider")
+	mkdirAll(t, providerDir)
+	writeFile(t, filepath.Join(providerDir, "plugin.yaml"), []byte(`name: multi-provider
+version: 1.0.0
+type: binary
+provides:
+  - holomush.scene.v1.SceneService
+  - holomush.scene.v1.SceneQueryService
+binary-plugin:
+  executable: multi-plugin`))
+
+	fakeConn := &stubClientConn{}
+	binaryHost := &mockBinaryHost{conn: fakeConn}
+
+	reg := plugins.NewServiceRegistry()
+	mgr := plugins.NewManager(pluginsDir, plugins.WithServiceRegistry(reg))
+	mgr.RegisterHost(plugins.TypeBinary, binaryHost)
+
+	err := mgr.LoadAll(context.Background())
+	require.NoError(t, err)
+
+	svc1, err := reg.Resolve("holomush.scene.v1.SceneService")
+	require.NoError(t, err)
+	assert.Equal(t, "multi-provider", svc1.PluginName)
+
+	svc2, err := reg.Resolve("holomush.scene.v1.SceneQueryService")
+	require.NoError(t, err)
+	assert.Equal(t, "multi-provider", svc2.PluginName)
 }

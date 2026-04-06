@@ -5,7 +5,12 @@ package pluginsdk
 
 import (
 	"context"
+	cryptotls "crypto/tls"
+	"crypto/x509"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 
 	hashiplug "github.com/hashicorp/go-plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -77,13 +82,17 @@ func Serve(config *ServeConfig) {
 	if config.Handler == nil {
 		panic("plugin: config.Handler cannot be nil")
 	}
-	hashiplug.Serve(&hashiplug.ServeConfig{
+	serveConfig := &hashiplug.ServeConfig{
 		HandshakeConfig: HandshakeConfig,
 		Plugins: map[string]hashiplug.Plugin{
 			"plugin": &grpcPlugin{handler: config.Handler},
 		},
 		GRPCServer: hashiplug.DefaultGRPCServer,
-	})
+	}
+	if tlsProvider := loadPluginTLSProvider(); tlsProvider != nil {
+		serveConfig.TLSProvider = tlsProvider
+	}
+	hashiplug.Serve(serveConfig)
 }
 
 // grpcPlugin implements go-plugin's Plugin interface for gRPC.
@@ -114,8 +123,21 @@ func (p *grpcPlugin) GRPCClient(_ context.Context, _ *hashiplug.GRPCBroker, _ *g
 // pluginServerAdapter adapts Handler (and optionally CommandHandler) to pluginv1.PluginServiceServer.
 type pluginServerAdapter struct {
 	pluginv1.UnimplementedPluginServiceServer
-	handler    Handler
-	cmdHandler CommandHandler // nil if handler does not implement CommandHandler
+	handler         Handler
+	cmdHandler      CommandHandler  // nil if handler does not implement CommandHandler
+	serviceProvider ServiceProvider // nil if plugin does not provide services
+}
+
+// Init implements pluginv1.PluginServiceServer. When a ServiceProvider is set,
+// it delegates to the provider's Init; otherwise it returns an empty response.
+func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitRequest) (*pluginv1.InitResponse, error) {
+	if a.serviceProvider == nil {
+		return &pluginv1.InitResponse{}, nil
+	}
+	if err := a.serviceProvider.Init(ctx, req.GetConfig()); err != nil {
+		return nil, oops.With("phase", "init").Wrap(err)
+	}
+	return &pluginv1.InitResponse{}, nil
 }
 
 // HandleEvent implements pluginv1.PluginServiceServer.
@@ -226,5 +248,41 @@ func protoActorKindToActorKind(kind string) ActorKind {
 		return ActorPlugin
 	default:
 		return ActorCharacter
+	}
+}
+
+// loadPluginTLSProvider returns a TLS config provider for the plugin server
+// if the cert env vars are set. Returns nil when running without mTLS.
+func loadPluginTLSProvider() func() (*cryptotls.Config, error) {
+	certPath := os.Getenv("HOLOMUSH_PLUGIN_CERT")
+	keyPath := os.Getenv("HOLOMUSH_PLUGIN_KEY")
+	caPath := os.Getenv("HOLOMUSH_CA_CERT")
+
+	if certPath == "" || keyPath == "" || caPath == "" {
+		return nil
+	}
+
+	return func() (*cryptotls.Config, error) {
+		cert, err := cryptotls.LoadX509KeyPair(certPath, keyPath)
+		if err != nil {
+			return nil, fmt.Errorf("load plugin cert: %w", err)
+		}
+
+		caCert, err := os.ReadFile(filepath.Clean(caPath))
+		if err != nil {
+			return nil, fmt.Errorf("read CA cert: %w", err)
+		}
+
+		caPool := x509.NewCertPool()
+		if !caPool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("failed to add CA cert to pool")
+		}
+
+		return &cryptotls.Config{
+			Certificates: []cryptotls.Certificate{cert},
+			ClientCAs:    caPool,
+			ClientAuth:   cryptotls.RequireAndVerifyClientCert,
+			MinVersion:   cryptotls.VersionTLS13,
+		}, nil
 	}
 }

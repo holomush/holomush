@@ -109,7 +109,6 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	startLocationID := s.cfg.Bootstrap.StartLocationID()
 	pluginManager := s.cfg.Plugins.Manager()
 	cmdRegistry := s.cfg.Plugins.CommandRegistry()
-	serviceProxy := s.cfg.Plugins.ServiceProxy()
 	aliasRepo := s.cfg.Bootstrap.AliasRepo()
 	aliasCache := s.cfg.Bootstrap.AliasCache()
 
@@ -117,6 +116,11 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	engine := core.NewEngine(eventStore)
 
 	// 2. Create gRPC server with TLS credentials.
+	// Install GRPCServiceProxy as UnknownServiceHandler so plugin-provided
+	// gRPC services are automatically forwarded through the service registry.
+	serviceRegistry := s.cfg.Plugins.ServiceRegistry()
+	grpcProxy := plugins.NewGRPCServiceProxy(serviceRegistry)
+
 	creds := credentials.NewTLS(s.cfg.TLSConfig)
 	s.grpcServer = grpc.NewServer(
 		grpc.Creds(creds),
@@ -124,6 +128,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 			MinTime:             10 * time.Second,
 			PermitWithoutStream: true,
 		}),
+		grpcProxy.Handler(),
 	)
 
 	// 3. Create guest authenticator (using start location from bootstrap).
@@ -151,15 +156,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		return oops.Code("GUEST_SERVICE_FAILED").Wrap(guestSvcErr)
 	}
 
-	// 6. Complete ServiceProxy late bindings.
-	serviceProxy.SetLateBindings(plugins.LateBindingsConfig{
-		AliasWriter:     aliasRepo,
-		AliasCache:      aliasCache,
-		CommandRegistry: cmdRegistry,
-		StartingLocID:   startLocationID.String(),
-	})
-
-	// 7. Remove disabled commands from registry.
+	// 6. Remove disabled commands from registry.
 	for _, name := range s.cfg.GameConfig.DisabledCommands {
 		if unregErr := cmdRegistry.Unregister(name); unregErr != nil {
 			slog.Warn("disabled command not found in registry", "command", name)
@@ -168,7 +165,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		}
 	}
 
-	// 8. Create command services and dispatcher.
+	// 7. Create command services and dispatcher.
 	cmdServices, cmdSvcErr := command.NewServices(command.ServicesConfig{
 		World:              worldService,
 		Session:            sessionStore,
@@ -191,7 +188,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		return oops.Code("COMMAND_DISPATCHER_FAILED").Wrap(cmdDispErr)
 	}
 
-	// 9. Create CoreServer and register with gRPC.
+	// 8. Create CoreServer and register with gRPC.
 	coreServer := holoGRPC.NewCoreServer(engine, sessionStore, cmdDispatcher, cmdServices,
 		holoGRPC.WithAuthenticator(guestAuth),
 		holoGRPC.WithEventStore(eventStore),
@@ -215,11 +212,11 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	)
 	corev1.RegisterCoreServiceServer(s.grpcServer, coreServer)
 
-	// 10. Create ContentService, register with gRPC.
+	// 9. Create ContentService, register with gRPC.
 	contentStore := content.NewPostgresStore(pool)
 	contentv1.RegisterContentServiceServer(s.grpcServer, holoGRPC.NewContentServiceServer(contentStore))
 
-	// 11. Create and start session reaper.
+	// 10. Create and start session reaper.
 	reaperCtx, reaperCancel := context.WithCancel(context.Background())
 	s.reaperCancel = reaperCancel
 
@@ -242,14 +239,14 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	})
 	go s.sessionReaper.Run(reaperCtx)
 
-	// 12. Create and start guest reaper.
+	// 11. Create and start guest reaper.
 	s.guestReaper = auth.NewGuestReaper(auth.GuestReaperConfig{
 		Interval: 1 * time.Minute,
 		IdleTTL:  10 * time.Minute,
 	}, authPlayerRepo, authPlayerRepo)
 	go s.guestReaper.Run(reaperCtx)
 
-	// 13. Bind TCP listener.
+	// 12. Bind TCP listener.
 	var err error
 	s.listener, err = net.Listen("tcp", s.cfg.GRPCAddr)
 	if err != nil {
@@ -257,7 +254,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		return oops.Code("LISTEN_FAILED").With("operation", "listen").With("addr", s.cfg.GRPCAddr).Wrap(err)
 	}
 
-	// 14. Start grpcServer.Serve() in goroutine.
+	// 13. Start grpcServer.Serve() in goroutine.
 	slog.Info("gRPC server listening", "addr", s.cfg.GRPCAddr)
 	go func() {
 		if serveErr := s.grpcServer.Serve(s.listener); serveErr != nil {

@@ -13,14 +13,11 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
@@ -29,6 +26,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/store"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
+	"github.com/holomush/holomush/test/testutil"
 )
 
 func TestAccessIntegration(t *testing.T) {
@@ -121,26 +119,12 @@ var _ = AfterSuite(func() {
 func setupAccessTestEnv() (*accessTestEnv, error) {
 	ctx := context.Background()
 
-	container, err := postgres.Run(ctx,
-		"postgres:18-alpine",
-		postgres.WithDatabase("holomush_test"),
-		postgres.WithUsername("holomush"),
-		postgres.WithPassword("holomush"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(30*time.Second),
-		),
-	)
+	pgEnv, err := testutil.StartPostgres(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		_ = container.Terminate(ctx)
-		return nil, err
-	}
+	container := pgEnv.Container
+	connStr := pgEnv.ConnStr
 
 	migrator, err := store.NewMigrator(connStr)
 	if err != nil {
