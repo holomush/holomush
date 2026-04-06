@@ -67,7 +67,7 @@ func (p *GRPCServiceProxy) streamHandler(_ interface{}, stream grpc.ServerStream
 		return status.Errorf(codes.Internal, "service temporarily unavailable")
 	}
 
-	return proxyStreams(stream, clientStream)
+	return ProxyStreams(stream, clientStream)
 }
 
 // extractServiceName extracts "package.Service" from "/package.Service/Method".
@@ -82,13 +82,13 @@ func extractServiceName(fullMethod string) string {
 	return parts[0]
 }
 
-// proxyStreams bidirectionally proxies between a server stream and client stream.
-func proxyStreams(srv grpc.ServerStream, cli grpc.ClientStream) error {
+// ProxyStreams bidirectionally proxies between a server stream and client stream.
+func ProxyStreams(srv grpc.ServerStream, cli grpc.ClientStream) error {
 	// Forward client→server (request) in a goroutine
 	errCh := make(chan error, 1)
 	go func() {
 		for {
-			msg := &rawMessage{}
+			msg := &RawMessage{}
 			if err := srv.RecvMsg(msg); err != nil {
 				_ = cli.CloseSend() //nolint:errcheck // best-effort close on proxy teardown
 				errCh <- nil        // EOF or error from client side
@@ -103,7 +103,7 @@ func proxyStreams(srv grpc.ServerStream, cli grpc.ClientStream) error {
 
 	// Forward server→client (response) in main goroutine
 	for {
-		msg := &rawMessage{}
+		msg := &RawMessage{}
 		if err := cli.RecvMsg(msg); err != nil {
 			<-errCh
 			if errors.Is(err, io.EOF) {
@@ -118,14 +118,14 @@ func proxyStreams(srv grpc.ServerStream, cli grpc.ClientStream) error {
 	}
 }
 
-// rawMessage is a pass-through protobuf message for gRPC proxying.
+// RawMessage is a pass-through protobuf message for gRPC proxying.
 // It stores raw bytes without deserialization.
-type rawMessage struct {
+type RawMessage struct {
 	data []byte
 }
 
-func (m *rawMessage) Marshal() ([]byte, error) { return m.data, nil }
-func (m *rawMessage) Unmarshal(b []byte) error { m.data = b; return nil }
-func (m *rawMessage) ProtoMessage()            {}
-func (m *rawMessage) Reset()                   { m.data = nil }
-func (m *rawMessage) String() string           { return string(m.data) }
+func (m *RawMessage) Marshal() ([]byte, error) { return m.data, nil }
+func (m *RawMessage) Unmarshal(b []byte) error { m.data = b; return nil }
+func (m *RawMessage) ProtoMessage()            {}
+func (m *RawMessage) Reset()                   { m.data = nil }
+func (m *RawMessage) String() string           { return string(m.data) }
