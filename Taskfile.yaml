@@ -91,6 +91,12 @@ tasks:
     desc: Run Playwright E2E tests in Docker
     deps: ['docker:build']
     cmds:
+      - cmd: |
+          if docker compose -p holomush-e2e ps -q 2>/dev/null | grep -q .; then
+            echo "ERROR: E2E infrastructure already running (project: holomush-e2e)."
+            echo "Stop it with: docker compose -p holomush-e2e down -v"
+            exit 1
+          fi
       - rm -rf web/test-results
       - defer: docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml down -v
       - cmd: |
@@ -104,6 +110,12 @@ tasks:
     desc: Run E2E tests with binary coverage instrumentation
     deps: ['docker:build:cover']
     cmds:
+      - cmd: |
+          if docker compose -p holomush-e2e ps -q 2>/dev/null | grep -q .; then
+            echo "ERROR: E2E infrastructure already running (project: holomush-e2e)."
+            echo "Stop it with: docker compose -p holomush-e2e down -v"
+            exit 1
+          fi
       - mkdir -p .coverdata/core .coverdata/gateway
       - defer: {docker compose -p holomush-e2e -f compose.yaml -f compose.e2e.yaml -f compose.e2e.cover.yaml down -v; rm -rf .coverdata;: ''}
       - cmd: |
