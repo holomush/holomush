@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -248,6 +249,92 @@ func TestGetPoseOrderRejectsEmptySceneID(t *testing.T) {
 	assert.Contains(t, err.Error(), "scene_id")
 }
 
+// --- Ownership enforcement tests (EndScene) ---
+
+func TestEndSceneRejectsNonOwner(t *testing.T) {
+	store := newStubStore(&SceneRow{
+		ID:        "scene-1",
+		Title:     "Test Scene",
+		OwnerID:   "char-A",
+		State:     stateActive,
+		PoseOrder: poseOrderFree,
+		Visibility: visibilityOpen,
+		CreatedAt: time.Now().UTC(),
+	})
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.EndScene(t.Context(), &scenev1.EndSceneRequest{
+		CharacterId: "char-B",
+		SceneId:     "scene-1",
+	})
+
+	requireGRPCCode(t, err, codes.PermissionDenied)
+}
+
+func TestEndSceneAllowsOwner(t *testing.T) {
+	store := newStubStore(&SceneRow{
+		ID:        "scene-1",
+		Title:     "Test Scene",
+		OwnerID:   "char-A",
+		State:     stateActive,
+		PoseOrder: poseOrderFree,
+		Visibility: visibilityOpen,
+		CreatedAt: time.Now().UTC(),
+	})
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.EndScene(t.Context(), &scenev1.EndSceneRequest{
+		CharacterId: "char-A",
+		SceneId:     "scene-1",
+	})
+
+	require.NoError(t, err)
+}
+
+// --- Ownership enforcement tests (InviteToScene) ---
+
+func TestInviteToSceneRejectsNonOwner(t *testing.T) {
+	store := newStubStore(&SceneRow{
+		ID:        "scene-1",
+		Title:     "Test Scene",
+		OwnerID:   "char-A",
+		State:     stateActive,
+		PoseOrder: poseOrderFree,
+		Visibility: visibilityOpen,
+		CreatedAt: time.Now().UTC(),
+	})
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.InviteToScene(t.Context(), &scenev1.InviteToSceneRequest{
+		CharacterId:       "char-B",
+		SceneId:           "scene-1",
+		TargetCharacterId: "char-C",
+	})
+
+	requireGRPCCode(t, err, codes.PermissionDenied)
+}
+
+func TestInviteToSceneAllowsOwner(t *testing.T) {
+	store := newStubStore(&SceneRow{
+		ID:        "scene-1",
+		Title:     "Test Scene",
+		OwnerID:   "char-A",
+		State:     stateActive,
+		PoseOrder: poseOrderFree,
+		Visibility: visibilityOpen,
+		CreatedAt: time.Now().UTC(),
+	})
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.InviteToScene(t.Context(), &scenev1.InviteToSceneRequest{
+		CharacterId:       "char-A",
+		SceneId:           "scene-1",
+		TargetCharacterId: "char-C",
+	})
+
+	require.NoError(t, err)
+}
+
 // --- Compile-time interface check ---
 
 var _ scenev1.SceneServiceServer = (*SceneServiceImpl)(nil)
@@ -260,4 +347,47 @@ func requireGRPCCode(t *testing.T, err error, code codes.Code) {
 	st, ok := status.FromError(err)
 	require.True(t, ok, "expected gRPC status error, got: %v", err)
 	assert.Equal(t, code, st.Code(), "expected gRPC code %s, got %s: %s", code, st.Code(), st.Message())
+}
+
+// stubStore is a minimal in-memory sceneStorer for unit tests that need a
+// pre-seeded scene without a database connection.
+type stubStore struct {
+	scene *SceneRow
+}
+
+func newStubStore(scene *SceneRow) *stubStore {
+	return &stubStore{scene: scene}
+}
+
+func (s *stubStore) GetScene(_ context.Context, _ string) (*SceneRow, error) {
+	return s.scene, nil
+}
+
+func (s *stubStore) UpdateScene(_ context.Context, row *SceneRow) error {
+	s.scene = row
+	return nil
+}
+
+func (s *stubStore) AddParticipant(_ context.Context, _ *ParticipantRow) error {
+	return nil
+}
+
+func (s *stubStore) CreateScene(_ context.Context, _ *SceneRow) error {
+	return nil
+}
+
+func (s *stubStore) ListScenes(_ context.Context, _ *string, _ *string, _, _ int) ([]*SceneRow, error) {
+	return nil, nil
+}
+
+func (s *stubStore) RemoveParticipant(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (s *stubStore) ListParticipants(_ context.Context, _ string) ([]*ParticipantRow, error) {
+	return nil, nil
+}
+
+func (s *stubStore) GetParticipant(_ context.Context, _, _ string) (*ParticipantRow, error) {
+	return nil, nil
 }

@@ -49,14 +49,26 @@ const (
 	defaultListLimit = 50
 )
 
-// SceneServiceImpl implements scenev1.SceneServiceServer backed by SceneStore.
+// sceneStorer is the persistence interface required by SceneServiceImpl.
+type sceneStorer interface {
+	CreateScene(ctx context.Context, row *SceneRow) error
+	GetScene(ctx context.Context, id string) (*SceneRow, error)
+	UpdateScene(ctx context.Context, row *SceneRow) error
+	ListScenes(ctx context.Context, state *string, visibility *string, limit, offset int) ([]*SceneRow, error)
+	AddParticipant(ctx context.Context, row *ParticipantRow) error
+	RemoveParticipant(ctx context.Context, sceneID, characterID string) error
+	ListParticipants(ctx context.Context, sceneID string) ([]*ParticipantRow, error)
+	GetParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error)
+}
+
+// SceneServiceImpl implements scenev1.SceneServiceServer backed by sceneStorer.
 type SceneServiceImpl struct {
 	scenev1.UnimplementedSceneServiceServer
-	store *SceneStore
+	store sceneStorer
 }
 
 // NewSceneServiceImpl creates a SceneServiceImpl with the given store.
-func NewSceneServiceImpl(store *SceneStore) *SceneServiceImpl {
+func NewSceneServiceImpl(store sceneStorer) *SceneServiceImpl {
 	return &SceneServiceImpl{store: store}
 }
 
