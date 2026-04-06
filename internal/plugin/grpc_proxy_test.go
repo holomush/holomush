@@ -22,7 +22,7 @@ const echoServiceName = "test.proxy.v1.EchoService"
 
 // echoServiceIface is the interface the gRPC service descriptor requires for HandlerType.
 type echoServiceIface interface {
-	Echo(ctx context.Context, req *rawMessage) (*rawMessage, error)
+	Echo(ctx context.Context, req *RawMessage) (*RawMessage, error)
 }
 
 // echoServiceDesc is a minimal gRPC service descriptor for testing proxy forwarding.
@@ -42,12 +42,12 @@ var echoServiceDesc = grpc.ServiceDesc{
 
 type echoServer struct{}
 
-func (e *echoServer) Echo(_ context.Context, req *rawMessage) (*rawMessage, error) {
+func (e *echoServer) Echo(_ context.Context, req *RawMessage) (*RawMessage, error) {
 	return req, nil
 }
 
 func echoHandler(srv any, ctx context.Context, dec func(any) error, _ grpc.UnaryServerInterceptor) (any, error) { //nolint:revive // ctx position required by grpc.methodHandler signature
-	msg := &rawMessage{}
+	msg := &RawMessage{}
 	if err := dec(msg); err != nil {
 		return nil, err
 	}
@@ -137,7 +137,7 @@ func TestExtractServiceName(t *testing.T) {
 
 func TestRawMessage(t *testing.T) {
 	t.Run("round-trips data through marshal/unmarshal", func(t *testing.T) {
-		msg := &rawMessage{}
+		msg := &RawMessage{}
 		require.NoError(t, msg.Unmarshal([]byte("hello")))
 		data, err := msg.Marshal()
 		require.NoError(t, err)
@@ -145,7 +145,7 @@ func TestRawMessage(t *testing.T) {
 	})
 
 	t.Run("reset clears data", func(t *testing.T) {
-		msg := &rawMessage{data: []byte("hello")}
+		msg := &RawMessage{data: []byte("hello")}
 		msg.Reset()
 		assert.Nil(t, msg.data)
 	})
@@ -167,11 +167,11 @@ func TestGRPCServiceProxy(t *testing.T) {
 		frontConn := startFrontendWithProxy(t, proxy)
 
 		reqPayload := []byte("ping")
-		resp := &rawMessage{}
+		resp := &RawMessage{}
 		err := frontConn.Invoke(
 			context.Background(),
 			"/"+echoServiceName+"/Echo",
-			&rawMessage{data: reqPayload},
+			&RawMessage{data: reqPayload},
 			resp,
 		)
 		require.NoError(t, err)
@@ -186,8 +186,8 @@ func TestGRPCServiceProxy(t *testing.T) {
 		err := frontConn.Invoke(
 			context.Background(),
 			"/no.such.v1.Service/Method",
-			&rawMessage{data: []byte("req")},
-			&rawMessage{},
+			&RawMessage{data: []byte("req")},
+			&RawMessage{},
 		)
 		require.Error(t, err)
 		st, ok := status.FromError(err)
@@ -210,8 +210,8 @@ func TestGRPCServiceProxy(t *testing.T) {
 		err := frontConn.Invoke(
 			context.Background(),
 			"/"+echoServiceName+"/Echo",
-			&rawMessage{data: []byte("req")},
-			&rawMessage{},
+			&RawMessage{data: []byte("req")},
+			&RawMessage{},
 		)
 		require.Error(t, err)
 		st, ok := status.FromError(err)
@@ -238,8 +238,8 @@ func TestGRPCServiceProxy(t *testing.T) {
 		err := frontConn.Invoke(
 			context.Background(),
 			"/"+echoServiceName+"/Echo",
-			&rawMessage{data: []byte("req")},
-			&rawMessage{},
+			&RawMessage{data: []byte("req")},
+			&RawMessage{},
 		)
 		require.Error(t, err)
 		st, ok := status.FromError(err)
