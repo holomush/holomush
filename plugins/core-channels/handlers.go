@@ -58,7 +58,7 @@ func handleCreate(ctx context.Context, store *channelStore, req pluginsdk.Comman
 		ct = channelType(strings.ToLower(parts[1]))
 	}
 
-	ch, err := newChannel(name, ct, "", req.CharacterID)
+	ch, err := newChannel(name, ct, "", req.PlayerID)
 	if err != nil {
 		return pluginsdk.Errorf("Could not create channel: %s", err), nil
 	}
@@ -69,7 +69,7 @@ func handleCreate(ctx context.Context, store *channelStore, req pluginsdk.Comman
 
 	membership := &membershipRow{
 		ChannelID: ch.ID,
-		PlayerID:  req.CharacterID,
+		PlayerID:  req.PlayerID,
 		Role:      roleOwner,
 		JoinedAt:  time.Now().UTC(),
 	}
@@ -108,11 +108,11 @@ func handleJoin(ctx context.Context, store *channelStore, req pluginsdk.CommandR
 	}
 
 	// Check if already a member
-	if _, memErr := store.getMembership(ctx, ch.ID, req.CharacterID); memErr == nil {
+	if _, memErr := store.getMembership(ctx, ch.ID, req.PlayerID); memErr == nil {
 		return pluginsdk.Errorf("You are already a member of channel '%s'.", ch.Name), nil
 	}
 
-	count, err := store.countMembershipsByPlayer(ctx, req.CharacterID)
+	count, err := store.countMembershipsByPlayer(ctx, req.PlayerID)
 	if err != nil {
 		return pluginsdk.Errorf("Could not join channel: %s", err), nil
 	}
@@ -122,7 +122,7 @@ func handleJoin(ctx context.Context, store *channelStore, req pluginsdk.CommandR
 
 	membership := &membershipRow{
 		ChannelID: ch.ID,
-		PlayerID:  req.CharacterID,
+		PlayerID:  req.PlayerID,
 		Role:      roleMember,
 		JoinedAt:  time.Now().UTC(),
 	}
@@ -135,7 +135,7 @@ func handleJoin(ctx context.Context, store *channelStore, req pluginsdk.CommandR
 		ChannelName:   ch.Name,
 		CharacterID:   req.CharacterID,
 		CharacterName: req.CharacterName,
-		PlayerID:      req.CharacterID,
+		PlayerID:      req.PlayerID,
 	})
 
 	return &pluginsdk.CommandResponse{
@@ -158,7 +158,7 @@ func handleLeave(ctx context.Context, store *channelStore, req pluginsdk.Command
 	if err != nil {
 		return pluginsdk.Errorf("Channel not found."), nil
 	}
-	if err := store.removeMembership(ctx, ch.ID, req.CharacterID); err != nil {
+	if err := store.removeMembership(ctx, ch.ID, req.PlayerID); err != nil {
 		return pluginsdk.Errorf("Could not leave channel: %s", err), nil
 	}
 
@@ -167,7 +167,7 @@ func handleLeave(ctx context.Context, store *channelStore, req pluginsdk.Command
 		ChannelName:   ch.Name,
 		CharacterID:   req.CharacterID,
 		CharacterName: req.CharacterName,
-		PlayerID:      req.CharacterID,
+		PlayerID:      req.PlayerID,
 	})
 
 	return &pluginsdk.CommandResponse{
@@ -209,7 +209,7 @@ func handleSay(ctx context.Context, store *channelStore, req pluginsdk.CommandRe
 		return pluginsdk.Errorf("Channel not found."), nil
 	}
 
-	if _, memErr := store.getMembership(ctx, ch.ID, req.CharacterID); memErr != nil {
+	if _, memErr := store.getMembership(ctx, ch.ID, req.PlayerID); memErr != nil {
 		return pluginsdk.Errorf("Channel not found."), nil
 	}
 
@@ -269,7 +269,7 @@ func handleWho(ctx context.Context, store *channelStore, req pluginsdk.CommandRe
 	if err != nil {
 		return pluginsdk.Errorf("Channel not found."), nil
 	}
-	if _, memErr := store.getMembership(ctx, ch.ID, req.CharacterID); memErr != nil {
+	if _, memErr := store.getMembership(ctx, ch.ID, req.PlayerID); memErr != nil {
 		return pluginsdk.Errorf("Channel not found."), nil
 	}
 
@@ -320,7 +320,7 @@ func handleHistory(ctx context.Context, store *channelStore, req pluginsdk.Comma
 		return pluginsdk.Errorf("Channel not found."), nil
 	}
 
-	membership, memErr := store.getMembership(ctx, ch.ID, req.CharacterID)
+	membership, memErr := store.getMembership(ctx, ch.ID, req.PlayerID)
 	if memErr != nil {
 		return pluginsdk.Errorf("Channel not found."), nil
 	}

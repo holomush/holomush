@@ -65,8 +65,7 @@ test.describe('Channel Commands', () => {
   test('channel join adds membership and emits join event', async ({ page }) => {
     await connectAsGuest(page);
 
-    // Get character info for DB verification (membership keyed by character ID
-    // until PlayerID wiring is available — see holomush-h83v)
+    // Get player info for DB verification (membership keyed by player ID)
     const sessionId = await page.evaluate(() => {
       const raw = sessionStorage.getItem('holomush-session');
       return raw ? JSON.parse(raw).sessionId : null;
@@ -74,6 +73,8 @@ test.describe('Channel Commands', () => {
     expect(sessionId).toBeTruthy();
     const session = await db.getSessionById(sessionId!);
     expect(session).not.toBeNull();
+    const player = await db.getPlayerByCharacterId(session!.character_id);
+    expect(player).not.toBeNull();
 
     await ensureJoined(page, 'Public');
 
@@ -81,7 +82,7 @@ test.describe('Channel Commands', () => {
     const channel = await db.getChannelByName('Public');
     expect(channel).not.toBeNull();
     await expect(async () => {
-      const membership = await db.getChannelMembership(channel!.id, session!.character_id);
+      const membership = await db.getChannelMembership(channel!.id, player!.id);
       expect(membership, 'Membership row should exist after join').not.toBeNull();
       expect(membership!.role).toBe('member');
     }).toPass({ timeout: 5000 });
@@ -176,6 +177,8 @@ test.describe('Channel Commands', () => {
     });
     const session = await db.getSessionById(sessionId!);
     expect(session).not.toBeNull();
+    const player = await db.getPlayerByCharacterId(session!.character_id);
+    expect(player).not.toBeNull();
 
     await ensureJoined(page, 'Public');
     await sendCommand(page, 'channel leave Public', "left channel 'Public'");
@@ -183,7 +186,7 @@ test.describe('Channel Commands', () => {
     // DB: membership row removed
     const channel = await db.getChannelByName('Public');
     expect(channel).not.toBeNull();
-    const membership = await db.getChannelMembership(channel!.id, session!.character_id);
+    const membership = await db.getChannelMembership(channel!.id, player!.id);
     expect(membership, 'Membership should be removed after leave').toBeNull();
   });
 
