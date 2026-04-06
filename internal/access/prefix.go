@@ -28,6 +28,7 @@ const (
 	ResourceExit      = "exit:"
 	ResourceScene     = "scene:"
 	ResourceKV        = "kv:"
+	ResourceChannel   = "channel:"
 )
 
 // Session error code constants.
@@ -53,6 +54,7 @@ var knownPrefixes = []string{
 	ResourceExit,
 	ResourceScene,
 	ResourceKV,
+	ResourceChannel,
 }
 
 // PluginSubject returns a properly formatted plugin subject identifier.
@@ -148,6 +150,15 @@ func StreamResource(streamID string) string {
 		panic("access.StreamResource: empty streamID would create invalid resource reference")
 	}
 	return ResourceStream + streamID
+}
+
+// ChannelResource returns a properly formatted channel resource identifier.
+// It panics if channelID is empty.
+func ChannelResource(channelID string) string {
+	if channelID == "" {
+		panic("access.ChannelResource: empty channelID would create invalid resource reference")
+	}
+	return ResourceChannel + channelID
 }
 
 // KVResource returns a properly formatted key-value store resource identifier.

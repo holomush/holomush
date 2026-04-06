@@ -45,6 +45,16 @@ const (
 	// UI state event types
 	EventTypeLocationState EventType = "location_state"
 	EventTypeExitUpdate    EventType = "exit_update"
+
+	// Channel communication event types.
+	EventTypeChannelSay    EventType = "channel_say"
+	EventTypeChannelPose   EventType = "channel_pose"
+	EventTypeChannelJoin   EventType = "channel_join"
+	EventTypeChannelLeave  EventType = "channel_leave"
+	EventTypeChannelMute   EventType = "channel_mute"
+	EventTypeChannelBan    EventType = "channel_ban"
+	EventTypeChannelKick   EventType = "channel_kick"
+	EventTypeChannelRename EventType = "channel_rename"
 )
 
 // LocationStatePayload is the JSON payload for location_state events, providing
@@ -118,6 +128,27 @@ type PemitPayload struct {
 	SenderName string `json:"sender_name"`
 	TargetID   string `json:"target_id"`
 	Message    string `json:"message"`
+}
+
+// ChannelMessagePayload is the JSON payload for channel_say and channel_pose events.
+type ChannelMessagePayload struct {
+	ChannelID     string `json:"channel_id"`
+	ChannelName   string `json:"channel_name"`
+	CharacterID   string `json:"character_id,omitempty"`
+	CharacterName string `json:"character_name,omitempty"`
+	AuthorName    string `json:"author_name"`
+	Message       string `json:"message"`
+	Source        string `json:"source"`
+}
+
+// ChannelNotificationPayload is the JSON payload for channel join/leave/mute/ban/kick events.
+type ChannelNotificationPayload struct {
+	ChannelID     string `json:"channel_id"`
+	ChannelName   string `json:"channel_name"`
+	CharacterID   string `json:"character_id,omitempty"`
+	CharacterName string `json:"character_name,omitempty"`
+	PlayerID      string `json:"player_id"`
+	Message       string `json:"message,omitempty"`
 }
 
 // ActorKind identifies what type of entity caused an event.

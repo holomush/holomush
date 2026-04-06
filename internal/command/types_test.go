@@ -611,6 +611,23 @@ func TestCapability_ValidateInvalid(t *testing.T) {
 	}
 }
 
+func TestCapabilityAcceptsChannelResourceType(t *testing.T) {
+	capability := Capability{Action: "emit", Resource: "channel", Scope: ScopeLocal}
+	err := capability.Validate()
+	assert.NoError(t, err)
+}
+
+func TestCapabilityAcceptsChannelActions(t *testing.T) {
+	actions := []string{"join", "leave", "list", "create"}
+	for _, action := range actions {
+		t.Run("accepts "+action+" action", func(t *testing.T) {
+			capability := Capability{Action: action, Resource: "channel", Scope: ScopeLocal}
+			err := capability.Validate()
+			assert.NoError(t, err)
+		})
+	}
+}
+
 func TestCapabilityEffectiveScope(t *testing.T) {
 	assert.Equal(t, ScopeSelf, Capability{Action: "read", Resource: "character"}.EffectiveScope())
 	assert.Equal(t, ScopeLocal, Capability{Action: "read", Resource: "location", Scope: ScopeLocal}.EffectiveScope())

@@ -59,17 +59,45 @@ func RegisterBuiltinTypes(r *VerbRegistry) error {
 		// System
 		{Type: "system", Category: "system", Format: "notification", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL},
 
-		// Channel types (future use, registered now)
+		// Channel communication types
 		{
-			Type: "channel_say", Category: "communication", Format: "speech", Label: "says", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL,
+			Type: "channel_say", Category: "communication", Format: "speech", Label: "says",
+			DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL,
 			MetadataKeys: []MetadataKey{{Key: "channel", ValueType: "string", Description: "Channel name"}},
 		},
 		{
-			Type: "channel_pose", Category: "communication", Format: "action", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL,
+			Type: "channel_pose", Category: "communication", Format: "action",
+			DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL,
 			MetadataKeys: []MetadataKey{{Key: "channel", ValueType: "string", Description: "Channel name"}},
 		},
 		{
-			Type: "channel_system", Category: "system", Format: "notification", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL,
+			Type: "channel_join", Category: "communication", Format: "notification",
+			DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL,
+			MetadataKeys: []MetadataKey{{Key: "channel", ValueType: "string", Description: "Channel name"}},
+		},
+		{
+			Type: "channel_leave", Category: "communication", Format: "notification",
+			DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL,
+			MetadataKeys: []MetadataKey{{Key: "channel", ValueType: "string", Description: "Channel name"}},
+		},
+		{
+			Type: "channel_mute", Category: "communication", Format: "notification",
+			DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL,
+			MetadataKeys: []MetadataKey{{Key: "channel", ValueType: "string", Description: "Channel name"}},
+		},
+		{
+			Type: "channel_ban", Category: "communication", Format: "notification",
+			DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL,
+			MetadataKeys: []MetadataKey{{Key: "channel", ValueType: "string", Description: "Channel name"}},
+		},
+		{
+			Type: "channel_kick", Category: "communication", Format: "notification",
+			DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL,
+			MetadataKeys: []MetadataKey{{Key: "channel", ValueType: "string", Description: "Channel name"}},
+		},
+		{
+			Type: "channel_rename", Category: "communication", Format: "notification",
+			DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL,
 			MetadataKeys: []MetadataKey{{Key: "channel", ValueType: "string", Description: "Channel name"}},
 		},
 	}

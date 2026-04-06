@@ -478,6 +478,25 @@ func TestKVResourcePanicsOnEmptyKey(t *testing.T) {
 	})
 }
 
+func TestChannelResourceReturnsChannelPrefixedID(t *testing.T) {
+	got := access.ChannelResource("01HXYZ")
+	assert.Equal(t, "channel:01HXYZ", got)
+}
+
+func TestChannelResourcePanicsOnEmptyID(t *testing.T) {
+	assert.PanicsWithValue(t,
+		"access.ChannelResource: empty channelID would create invalid resource reference",
+		func() { access.ChannelResource("") },
+	)
+}
+
+func TestParseEntityRefParsesChannelResource(t *testing.T) {
+	typeName, id, err := access.ParseEntityRef("channel:01HXYZ")
+	require.NoError(t, err)
+	assert.Equal(t, "channel", typeName)
+	assert.Equal(t, "01HXYZ", id)
+}
+
 func TestKnownPrefixes_AllConstantsCovered(t *testing.T) {
 	// This test verifies that knownPrefixes (the internal validation list) covers
 	// all prefix constants that should be known. SubjectSystem is intentionally
@@ -549,6 +568,11 @@ func TestKnownPrefixes_AllConstantsCovered(t *testing.T) {
 			name:     "resource kv prefix",
 			constant: access.ResourceKV,
 			desc:     "ResourceKV",
+		},
+		{
+			name:     "resource channel prefix",
+			constant: access.ResourceChannel,
+			desc:     "ResourceChannel",
 		},
 	}
 

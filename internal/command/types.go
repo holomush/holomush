@@ -108,6 +108,7 @@ const (
 var validActions = map[string]bool{
 	"read": true, "write": true, "emit": true, "enter": true,
 	"use": true, "delete": true, "execute": true, "admin": true,
+	"join": true, "leave": true, "list": true, "create": true,
 }
 
 // validResourceTypes lists the known ABAC resource types for capability validation.
@@ -115,6 +116,7 @@ var validResourceTypes = map[string]bool{
 	"character": true, "location": true, "exit": true, "object": true,
 	"stream": true, "property": true, "scene": true, "command": true,
 	"server": true, "alias": true, "player": true, "plugin": true,
+	"channel": true,
 }
 
 // validScopes lists the known scope values.
