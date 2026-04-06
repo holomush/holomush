@@ -1107,6 +1107,57 @@ func TestLoadCallsInitForPluginWithRequires(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, grpcClient.initCalled, "expected Init to be called for plugin with requires")
+	require.NotNil(t, grpcClient.initReq, "expected InitRequest to be set")
+	require.NotNil(t, grpcClient.initReq.Config, "expected ServiceConfig to be set")
+	// RequiredServices is populated but empty in test path (no broker available
+	// via mock factory). Production path with GRPCBroker populates broker IDs.
+	assert.NotNil(t, grpcClient.initReq.Config.RequiredServices,
+		"expected RequiredServices map to be set (empty in test path)")
+}
+
+func TestLoadPassesRequiredServicesFromRegistryViaInit(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{}
+	fakeConn := &stubClientConn{}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient, conn: fakeConn},
+	}
+	factory := &mockClientFactory{client: mockClient}
+
+	// Set up a registry with a service the plugin requires.
+	registry := plugins.NewServiceRegistry()
+	require.NoError(t, registry.Register(plugins.RegisteredService{
+		Name:       "holomush.scene.v1.SceneService",
+		Conn:       fakeConn,
+		PluginName: "scene-provider",
+		PluginType: plugins.TypeBinary,
+	}))
+
+	host := NewHostWithFactory(factory, WithServiceRegistry(registry))
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	require.NoError(t, createTempExecutable(filepath.Join(tmpDir, "needs-scene")))
+
+	manifest := &plugins.Manifest{
+		Name:     "needs-scene",
+		Version:  "1.0.0",
+		Type:     plugins.TypeBinary,
+		Requires: []string{"holomush.scene.v1.SceneService"},
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "needs-scene",
+		},
+	}
+
+	// In test path, broker is nil so broker proxies are not started and
+	// RequiredServices remains empty. This verifies the graceful-degradation
+	// path where no broker is available.
+	err := host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err)
+
+	assert.True(t, grpcClient.initCalled, "expected Init to be called")
+	require.NotNil(t, grpcClient.initReq.Config, "expected ServiceConfig to be set")
+	assert.Empty(t, grpcClient.initReq.Config.RequiredServices,
+		"expected RequiredServices empty when broker is nil (test path)")
 }
 
 func TestLoadSkipsInitForPluginWithoutStorageOrRequires(t *testing.T) {

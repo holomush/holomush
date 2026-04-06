@@ -10,6 +10,7 @@ import (
 	cryptotls "crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -120,8 +121,9 @@ type loadedPlugin struct {
 	manifest *plugins.Manifest
 	client   PluginClient
 	plugin   pluginv1.PluginServiceClient
-	conn     grpc.ClientConnInterface // underlying gRPC conn to the plugin process
-	certDir  string                   // temp cert directory, cleaned up on unload
+	conn     grpc.ClientConnInterface   // underlying gRPC conn to the plugin process
+	certDir  string                     // temp cert directory, cleaned up on unload
+	broker   *hashiplug.GRPCBroker      // broker for service injection, nil if factory-mocked
 }
 
 // NewHost creates a new binary plugin host.
@@ -251,20 +253,31 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		hostTLSConfig = buildHostTLSConfig(h.ca, h.hostClientCert, manifest.Name)
 	}
 
-	// Create the plugin client. When TLS is configured, bypass the factory to
-	// attach TLS config and cert env vars directly.
+	// Create a per-plugin GRPCPlugin instance to capture the GRPCBroker
+	// from the go-plugin handshake. This enables service injection via broker
+	// proxies for plugins that declare required services.
+	grpcPlugin := &GRPCPlugin{}
+	pluginMap := map[string]hashiplug.Plugin{"plugin": grpcPlugin}
+
+	// Create the plugin client. In production (DefaultClientFactory), we create
+	// the client directly to use the per-plugin GRPCPlugin (for broker capture).
+	// Test mocks use the factory path (no broker needed).
 	var client PluginClient
-	if hostTLSConfig != nil {
+	switch h.clientFactory.(type) {
+	case *DefaultClientFactory:
 		cmd := exec.Command(realExec) // #nosec G204 -- nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command, go.grpc.command-injection.grpc-command-injection.grpc-http-command-injection-taint -- realExec resolved from plugin manifest; manifests validated during discovery (symlink-resolved, path-contained, executable-checked)
 		cmd.Env = append([]string{"PATH=" + os.Getenv("PATH")}, pluginCertEnv...)
-		client = hashiplug.NewClient(&hashiplug.ClientConfig{
+		clientConfig := &hashiplug.ClientConfig{
 			HandshakeConfig:  HandshakeConfig,
-			Plugins:          PluginMap,
+			Plugins:          pluginMap,
 			Cmd:              cmd,
 			AllowedProtocols: []hashiplug.Protocol{hashiplug.ProtocolGRPC},
-			TLSConfig:        hostTLSConfig,
-		})
-	} else {
+		}
+		if hostTLSConfig != nil {
+			clientConfig.TLSConfig = hostTLSConfig
+		}
+		client = hashiplug.NewClient(clientConfig)
+	default:
 		client = h.clientFactory.NewClient(realExec)
 	}
 
@@ -300,10 +313,45 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").New("plugin does not implement PluginClient")
 	}
 
+	// Start broker proxies for required services. Each required service gets
+	// a broker ID that the plugin can use to dial back to the host.
+	requiredServices := make(map[string]string)
+	if len(manifest.Requires) > 0 && grpcPlugin.broker != nil && h.registry != nil {
+		var nextBrokerID uint32 = 1
+		for _, svcName := range manifest.Requires {
+			svc, resolveErr := h.registry.Resolve(svcName)
+			if resolveErr != nil {
+				client.Kill()
+				if certDir != "" {
+					_ = os.RemoveAll(certDir)
+				}
+				return oops.Code("PLUGIN_SERVICE_NOT_FOUND").
+					With("plugin", manifest.Name).
+					With("service", svcName).
+					Wrap(resolveErr)
+			}
+
+			brokerID := nextBrokerID
+			nextBrokerID++
+
+			proxyFactory := NewBrokerProxy(svc.Conn, manifest.Name)
+			go grpcPlugin.broker.AcceptAndServe(brokerID, proxyFactory)
+
+			requiredServices[svcName] = fmt.Sprintf("broker:%d", brokerID)
+			slog.Info("started broker proxy for required service",
+				"plugin", manifest.Name,
+				"service", svcName,
+				"broker_id", brokerID,
+			)
+		}
+	}
+
 	// Call Init on plugins that need service injection (storage or requires).
 	if len(manifest.Requires) > 0 || manifest.Storage == plugins.StoragePostgres {
 		initReq := &pluginv1.InitRequest{
-			Config: &pluginv1.ServiceConfig{},
+			Config: &pluginv1.ServiceConfig{
+				RequiredServices: requiredServices,
+			},
 		}
 
 		if manifest.Storage == plugins.StoragePostgres && h.schemaProvisioner != nil {
@@ -327,6 +375,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		plugin:   pluginClient,
 		conn:     pluginConn,
 		certDir:  certDir,
+		broker:   grpcPlugin.broker,
 	}
 
 	return nil

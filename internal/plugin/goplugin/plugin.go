@@ -27,8 +27,10 @@ var PluginMap = map[string]goplugin.Plugin{
 
 // GRPCPlugin implements go-plugin's Plugin interface for gRPC.
 // This is the host-side implementation; plugins use pluginsdk.Serve() instead.
+// Each Load creates a fresh instance to capture the per-plugin GRPCBroker.
 type GRPCPlugin struct {
 	goplugin.NetRPCUnsupportedPlugin
+	broker *goplugin.GRPCBroker
 }
 
 // GRPCServer is required by go-plugin's GRPCPlugin interface but is never
@@ -39,6 +41,8 @@ func (p *GRPCPlugin) GRPCServer(_ *goplugin.GRPCBroker, _ *grpc.Server) error {
 }
 
 // GRPCClient returns a plugin client (called by host process).
-func (p *GRPCPlugin) GRPCClient(_ context.Context, _ *goplugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
+// The broker is stored on the instance so Host.Load can start broker proxies.
+func (p *GRPCPlugin) GRPCClient(_ context.Context, broker *goplugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
+	p.broker = broker
 	return pluginv1.NewPluginServiceClient(c), nil
 }
