@@ -11,6 +11,8 @@ requires:
   - holomush.world.v1.WorldQueryService
 commands:
   - name: describe
+    aliases:
+      - "desc"
     capabilities:
       - action: write
         resource: object
