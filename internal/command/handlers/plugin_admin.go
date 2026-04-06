@@ -91,8 +91,8 @@ func handlePluginInfo(ctx context.Context, exec *command.CommandExecution, liste
 	}
 	if len(m.Commands) > 0 {
 		cmdNames := make([]string, len(m.Commands))
-		for i, c := range m.Commands {
-			cmdNames[i] = c.Name
+		for i := range m.Commands {
+			cmdNames[i] = m.Commands[i].Name
 		}
 		fmt.Fprintf(&sb, "\nCommands: %s", strings.Join(cmdNames, ", "))
 	}

@@ -215,7 +215,7 @@ Expected: All existing tests still PASS.
 
 - [ ] **Step 14: Commit**
 
-```
+```text
 feat(plugin): add Aliases field to CommandSpec with validation
 
 Commands can now declare aliases in plugin.yaml. Empty strings and
@@ -617,7 +617,7 @@ Expected: All PASS.
 
 - [ ] **Step 19: Commit**
 
-```
+```text
 feat(plugin): add CollectManifestAliases and SeedManifestAliases
 
 Collects aliases from loaded plugin manifests, detects cross-plugin
@@ -852,7 +852,7 @@ Expected: All PASS.
 
 - [ ] **Step 8: Commit**
 
-```
+```text
 feat(plugin): wire alias seeding into Manager.LoadAll
 
 Manager accepts WithAliasSeeder option. After loading all plugins,
@@ -915,7 +915,7 @@ Expected: All PASS (ensures YAML is valid).
 
 - [ ] **Step 4: Commit**
 
-```
+```text
 feat(plugin): declare aliases in core-communication and core-objects manifests
 
 Moves ", :, ;, p, w aliases to core-communication and desc to
@@ -992,7 +992,7 @@ Expected: All PASS — no test references deleted code.
 
 - [ ] **Step 9: Commit**
 
-```
+```text
 refactor(bootstrap): remove hardcoded alias seeding
 
 AliasBootstrapper and SeedSystemAliases are replaced by plugin
@@ -1217,7 +1217,7 @@ Expected: All PASS.
 
 - [ ] **Step 4: Commit**
 
-```
+```text
 test(plugin): add E2E integration tests for manifest alias seeding
 
 Verifies aliases are seeded to Postgres on startup, that operator

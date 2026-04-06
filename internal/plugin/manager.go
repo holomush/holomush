@@ -451,7 +451,8 @@ func (m *Manager) RegisterPluginCommands(registry *command.Registry) {
 	defer m.mu.RUnlock()
 
 	for _, dp := range m.loaded {
-		for _, cmdSpec := range dp.Manifest.Commands {
+		for i := range dp.Manifest.Commands {
+			cmdSpec := &dp.Manifest.Commands[i]
 			entry, err := command.NewCommandEntry(command.CommandEntryConfig{
 				Name:         cmdSpec.Name,
 				PluginName:   dp.Manifest.Name,
