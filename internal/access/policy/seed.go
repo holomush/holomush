@@ -11,8 +11,8 @@ type SeedPolicy struct {
 	SeedVersion int
 }
 
-// SeedPolicies returns the complete set of 27 seed policies (26 permit, 1 forbid).
-// The initial 18 (T22) plus 5 gap-fill policies (T22b: G1-G4), 2 phase-2 command policies, and 2 system bootstrap policies.
+// SeedPolicies returns the complete set of 38 seed policies (33 permit, 5 forbid).
+// The initial 18 (T22) plus 5 gap-fill policies (T22b: G1-G4), 2 phase-2 command policies, 2 system bootstrap policies, and 11 channel policies (Epic 10).
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
 // See ADR 087 for rationale on default-deny instead of explicit forbid for system properties.
 //
@@ -206,6 +206,80 @@ func SeedPolicies() []SeedPolicy {
 			Name:        "seed:system-bootstrap-exits",
 			Description: "System bootstrap can create exits for world seeding",
 			DSLText:     `permit(principal is system, action in ["read", "write"], resource is exit);`,
+			SeedVersion: 1,
+		},
+
+		// --- Channel seed policies (Epic 10) ---
+		// See docs/specs/2026-04-03-channels-architecture.md for rationale.
+		// Note: These policies require a ChannelAttributeProvider to resolve
+		// resource.channel.* and principal.character.channel_* attributes at
+		// evaluation time (not yet implemented). Until then, channel operations
+		// fall back to default-deny; the plugin handles its own authorization.
+
+		{
+			Name:        "seed:channel-list",
+			Description: "All players can list public and admin channels",
+			DSLText:     `permit(principal is character, action in ["list"], resource is channel) when { resource.channel.type == "public" || resource.channel.type == "admin" };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:channel-join-public",
+			Description: "All players can join public channels",
+			DSLText:     `permit(principal is character, action in ["join"], resource is channel) when { resource.channel.type == "public" };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:channel-member-actions",
+			Description: "Members can send, read, and leave their channels",
+			DSLText:     `permit(principal is character, action in ["emit", "read", "leave"], resource is channel) when { resource.channel.id in principal.character.channel_memberships };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:channel-admin-create",
+			Description: "Only admins can create channels by default",
+			DSLText:     `permit(principal is character, action in ["create"], resource is channel) when { "admin" in principal.character.roles };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:channel-admin-delete",
+			Description: "Only admins can delete channels",
+			DSLText:     `permit(principal is character, action in ["delete"], resource is channel) when { "admin" in principal.character.roles };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:channel-admin-moderate",
+			Description: "Only admins can moderate channels",
+			DSLText:     `permit(principal is character, action in ["admin"], resource is channel) when { "admin" in principal.character.roles };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:channel-forbid-banned",
+			Description: "Banned players cannot emit, read, or join channels",
+			DSLText:     `forbid(principal is character, action in ["emit", "read", "join"], resource is channel) when { principal.character.channel_banned == true };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:channel-forbid-muted",
+			Description: "Muted players cannot emit on channels",
+			DSLText:     `forbid(principal is character, action in ["emit"], resource is channel) when { principal.character.channel_muted == true };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:channel-forbid-archived",
+			Description: "No one can emit or join archived channels",
+			DSLText:     `forbid(principal is character, action in ["emit", "join"], resource is channel) when { resource.channel.archived == true };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:channel-guest-seeded-only",
+			Description: "Guests can list and join seeded public channels",
+			DSLText:     `permit(principal is character, action in ["list", "join"], resource is channel) when { "guest" in principal.character.roles && resource.channel.type == "public" };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:channel-guest-forbid-create",
+			Description: "Guests cannot create, delete, or moderate channels",
+			DSLText:     `forbid(principal is character, action in ["create", "delete", "admin"], resource is channel) when { "guest" in principal.character.roles };`,
 			SeedVersion: 1,
 		},
 	}
