@@ -26,6 +26,7 @@ import (
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/session"
+	tlscerts "github.com/holomush/holomush/internal/tls"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/xdg"
 )
@@ -68,6 +69,8 @@ type AdminDepsProvider interface {
 type PluginSubsystemConfig struct {
 	DataDir         string
 	DatabaseConnStr string // PostgreSQL connection string for schema provisioning
+	CertsDir        string // path to game certs directory (for loading CA)
+	GameID          string // game ID for cert SANs
 	ABAC            EngineProvider
 	PolicyInst      PolicyInstallerProvider
 	PluginProv      PluginProviderSetter
@@ -176,7 +179,21 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	}
 
 	// Create binary plugin host (subprocess plugins via hashicorp/go-plugin).
-	binaryHost := goplugin.NewHost(goplugin.WithSchemaProvisioner(schemaProvisioner))
+	var hostOpts []goplugin.HostOption
+	hostOpts = append(hostOpts, goplugin.WithSchemaProvisioner(schemaProvisioner))
+	hostOpts = append(hostOpts, goplugin.WithServiceRegistry(s.registry))
+
+	if s.cfg.CertsDir != "" {
+		ca, caErr := tlscerts.LoadCA(s.cfg.CertsDir)
+		if caErr != nil {
+			slog.Warn("plugin mTLS disabled: could not load CA", "error", caErr)
+		} else {
+			hostOpts = append(hostOpts, goplugin.WithCA(ca, s.cfg.GameID))
+			slog.Info("plugin mTLS enabled", "certs_dir", s.cfg.CertsDir)
+		}
+	}
+
+	binaryHost := goplugin.NewHost(hostOpts...)
 	instrumentedBinaryHost, binaryMWErr := plugins.NewHostMiddleware(
 		binaryHost, otel.GetTracerProvider(), otel.GetMeterProvider(),
 	)

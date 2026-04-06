@@ -251,6 +251,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	pluginSub := pluginsetup.NewPluginSubsystem(pluginsetup.PluginSubsystemConfig{
 		DataDir:         cfg.DataDir,
 		DatabaseConnStr: databaseURL,
+		CertsDir:        certsDir,
+		GameID:          gameID,
 		ABAC:            abacSub,
 		PolicyInst:      abacSub,
 		PluginProv:      abacSub,
