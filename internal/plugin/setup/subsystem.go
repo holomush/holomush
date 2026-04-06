@@ -74,17 +74,19 @@ type PluginSubsystemConfig struct {
 	World            WorldServiceProvider
 	Sessions         SessionProvider
 	AdminDeps        AdminDepsProvider
+	Registry         *lifecycle.ReadinessRegistry
 }
 
 // PluginSubsystem manages the plugin Manager, Lua host, core plugin
 // registration, and the command registry.
 type PluginSubsystem struct {
-	cfg              PluginSubsystemConfig
-	manager          *plugins.Manager
-	cmdRegistry      *command.Registry
-	registry         *plugins.ServiceRegistry
-	worldConn        *plugins.InProcessConn
+	cfg               PluginSubsystemConfig
+	manager           *plugins.Manager
+	cmdRegistry       *command.Registry
+	registry          *plugins.ServiceRegistry
+	worldConn         *plugins.InProcessConn
 	schemaProvisioner *plugins.SchemaProvisioner
+	health            *lifecycle.HealthTracker
 }
 
 // NewPluginSubsystem creates a plugin subsystem configured with cfg.
@@ -204,7 +206,15 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		s.schemaProvisioner.Close()
 	}
 
-	// 10. Create command registry, register built-in + admin handlers.
+	// 10. Initialize health tracker and register with readiness registry.
+	s.health = lifecycle.NewHealthTracker(lifecycle.TrackerConfig{
+		SubsystemName: lifecycle.SubsystemPlugins.String(),
+	})
+	if s.cfg.Registry != nil {
+		s.cfg.Registry.Register(lifecycle.SubsystemPlugins, s)
+	}
+
+	// 11. Create command registry, register built-in + admin handlers.
 	s.cmdRegistry = command.NewRegistry()
 	handlers.RegisterAll(s.cmdRegistry)
 	adminDeps := s.cfg.AdminDeps.AdminDeps()
@@ -262,6 +272,19 @@ func (s *PluginSubsystem) ServiceRegistry() *plugins.ServiceRegistry {
 		panic("plugin/setup: ServiceRegistry() called before Start()")
 	}
 	return s.registry
+}
+
+// HealthStatus reports the plugin subsystem's health tier.
+// Returns Dead with reason if the subsystem has not been started.
+func (s *PluginSubsystem) HealthStatus() lifecycle.HealthStatus {
+	if s.health == nil {
+		return lifecycle.HealthStatus{
+			Tier:   lifecycle.HealthDead,
+			Reason: "not started",
+			Since:  time.Time{},
+		}
+	}
+	return s.health.HealthStatus()
 }
 
 func (s *PluginSubsystem) resolvePluginsDir() (string, error) {

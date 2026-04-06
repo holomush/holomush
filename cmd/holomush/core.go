@@ -257,6 +257,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		World:           worldSub,
 		Sessions:        &sessionBridge{sub: sessionSub},
 		AdminDeps:       &adminDepsBridge{auth: authSub, db: dbSub},
+		Registry:        registry,
 	})
 
 	bootstrapSub := bootstrapsetup.NewBootstrapSubsystem(bootstrapsetup.BootstrapSubsystemConfig{
