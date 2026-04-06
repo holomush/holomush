@@ -1558,3 +1558,60 @@ commands:
 		assert.Error(t, err)
 	})
 }
+
+func TestParseManifestCommandWithAliases(t *testing.T) {
+	yamlData := `
+name: test-comm
+version: 1.0.0
+type: lua
+commands:
+  - name: say
+    aliases:
+      - '"'
+    help: Say something
+  - name: pose
+    aliases:
+      - ":"
+      - ";"
+    help: Pose an action
+lua-plugin:
+  entry: main.lua
+`
+	m, err := plugins.ParseManifest([]byte(yamlData))
+	require.NoError(t, err)
+	require.Len(t, m.Commands, 2)
+
+	assert.Equal(t, []string{`"`}, m.Commands[0].Aliases)
+	assert.Equal(t, []string{":", ";"}, m.Commands[1].Aliases)
+}
+
+func TestCommandSpecValidateRejectsEmptyAlias(t *testing.T) {
+	cmd := plugins.CommandSpec{Name: "say", Aliases: []string{""}}
+	err := cmd.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty")
+}
+
+func TestCommandSpecValidateRejectsDuplicateAlias(t *testing.T) {
+	cmd := plugins.CommandSpec{Name: "pose", Aliases: []string{":", ":"}}
+	err := cmd.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate alias")
+}
+
+func TestParseManifestCommandWithoutAliasesBackwardCompatible(t *testing.T) {
+	yamlData := `
+name: test-compat
+version: 1.0.0
+type: lua
+commands:
+  - name: look
+    help: Look around
+lua-plugin:
+  entry: main.lua
+`
+	m, err := plugins.ParseManifest([]byte(yamlData))
+	require.NoError(t, err)
+	require.Len(t, m.Commands, 1)
+	assert.Nil(t, m.Commands[0].Aliases)
+}
