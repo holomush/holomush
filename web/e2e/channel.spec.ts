@@ -62,18 +62,22 @@ test.describe('Channel Commands', () => {
 
     await sendCommand(page, 'channel join Public', "joined channel 'Public'");
 
-    // DB: membership row exists
+    // DB: membership row exists (retry for cross-connection visibility)
     const channel = await db.getChannelByName('Public');
     expect(channel).not.toBeNull();
-    const membership = await db.getChannelMembership(channel!.id, player!.id);
-    expect(membership, 'Membership row should exist after join').not.toBeNull();
-    expect(membership!.role).toBe('member');
+    await expect(async () => {
+      const membership = await db.getChannelMembership(channel!.id, player!.id);
+      expect(membership, 'Membership row should exist after join').not.toBeNull();
+      expect(membership!.role).toBe('member');
+    }).toPass({ timeout: 5000 });
 
     // DB: channel_join event emitted to the event store
     const stream = `channel:${channel!.id}`;
-    const events = await db.getEventsByStream(stream);
-    const joinEvent = events.find((e) => e.type === 'channel_join');
-    expect(joinEvent, 'channel_join event should be in event store').toBeDefined();
+    await expect(async () => {
+      const events = await db.getEventsByStream(stream);
+      const joinEvent = events.find((e) => e.type === 'channel_join');
+      expect(joinEvent, 'channel_join event should be in event store').toBeDefined();
+    }).toPass({ timeout: 5000 });
   });
 
   test('channel say stores message and emits event', async ({ page }) => {

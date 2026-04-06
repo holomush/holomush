@@ -12,28 +12,8 @@ binary-plugin:
 
 commands:
   - name: channel
-    capabilities:
-      - action: list
-        resource: channel
-        scope: global
-      - action: join
-        resource: channel
-        scope: global
-      - action: leave
-        resource: channel
-        scope: global
-      - action: create
-        resource: channel
-        scope: global
-      - action: emit
-        resource: channel
-        scope: global
-      - action: read
-        resource: channel
-        scope: global
-      - action: delete
-        resource: channel
-        scope: global
+    # Layer 2 capabilities deferred until ChannelAttributeProvider can resolve
+    # channel resources. The plugin handles its own authorization internally.
     help: Manage and communicate on channels
     usage: "channel <create|delete|join|leave|list|say|who|history|gag|ungag> [args]"
     helpText: |-
