@@ -109,8 +109,8 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	startLocationID := s.cfg.Bootstrap.StartLocationID()
 	pluginManager := s.cfg.Plugins.Manager()
 	cmdRegistry := s.cfg.Plugins.CommandRegistry()
-	aliasRepo := s.cfg.Bootstrap.AliasRepo()
-	aliasCache := s.cfg.Bootstrap.AliasCache()
+	aliasRepo := s.cfg.Plugins.AliasRepo()
+	aliasCache := s.cfg.Plugins.AliasCache()
 
 	// 1. Create core engine from event store.
 	engine := core.NewEngine(eventStore)

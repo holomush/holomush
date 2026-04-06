@@ -37,6 +37,16 @@ func TestPluginSubsystemCommandRegistryPanicsBeforeStart(t *testing.T) {
 	assert.Panics(t, func() { sub.CommandRegistry() })
 }
 
+func TestPluginSubsystemAliasRepoPanicsBeforeStart(t *testing.T) {
+	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
+	assert.Panics(t, func() { sub.AliasRepo() })
+}
+
+func TestPluginSubsystemAliasCachePanicsBeforeStart(t *testing.T) {
+	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
+	assert.Panics(t, func() { sub.AliasCache() })
+}
+
 func TestPluginSubsystemImplementsSubsystem(_ *testing.T) {
 	sub := setup.NewPluginSubsystem(setup.PluginSubsystemConfig{})
 	var _ lifecycle.Subsystem = sub

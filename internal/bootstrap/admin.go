@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
+// Package bootstrap provides first-boot initialization for HoloMUSH.
 package bootstrap
 
 import (
