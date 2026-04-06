@@ -81,6 +81,10 @@ func (s *stubEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULI
 	return nil, nil, nil
 }
 
+func (s *stubEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time) ([]core.Event, error) {
+	return nil, nil
+}
+
 var _ = Describe("Rate Limiting Integration", func() {
 	var (
 		registry    *command.Registry

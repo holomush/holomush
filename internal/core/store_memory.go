@@ -8,6 +8,7 @@ package core
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 )
@@ -85,6 +86,32 @@ func (s *MemoryEventStore) LastEventID(_ context.Context, stream string) (ulid.U
 		return ulid.ULID{}, ErrStreamEmpty
 	}
 	return events[len(events)-1].ID, nil
+}
+
+// ReplayTail returns up to count events from a stream, reading backward from the most recent.
+func (s *MemoryEventStore) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time) ([]Event, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	events := s.streams[stream]
+	if len(events) == 0 {
+		return nil, nil
+	}
+
+	var filtered []Event
+	hasFilter := !notBefore.IsZero()
+	for _, e := range events {
+		if hasFilter && !e.Timestamp.After(notBefore) {
+			continue
+		}
+		filtered = append(filtered, e)
+	}
+
+	if len(filtered) > count {
+		filtered = filtered[len(filtered)-count:]
+	}
+
+	return filtered, nil
 }
 
 // Subscribe returns channels that receive event IDs when Append is called on the stream.

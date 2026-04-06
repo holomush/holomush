@@ -255,3 +255,54 @@ func TestMemoryEventStoreSubscribeClosesChannelOnContextCancel(t *testing.T) {
 		_ = store.Append(context.Background(), event)
 	})
 }
+
+func TestMemoryEventStore_ReplayTail(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+	stream := "channel:test"
+	now := time.Now()
+
+	ids := make([]ulid.ULID, 5)
+	for i := range 5 {
+		ids[i] = NewULID()
+		err := store.Append(ctx, Event{
+			ID:        ids[i],
+			Stream:    stream,
+			Type:      EventType("channel_say"),
+			Timestamp: now.Add(time.Duration(i) * 10 * time.Millisecond),
+			Actor:     Actor{Kind: ActorCharacter, ID: "char-1"},
+			Payload:   []byte(`{"message":"msg"}`),
+		})
+		require.NoError(t, err)
+	}
+
+	t.Run("returns last N events in chronological order", func(t *testing.T) {
+		events, err := store.ReplayTail(ctx, stream, 3, time.Time{})
+		require.NoError(t, err)
+		assert.Len(t, events, 3)
+		assert.Equal(t, ids[2], events[0].ID)
+		assert.Equal(t, ids[3], events[1].ID)
+		assert.Equal(t, ids[4], events[2].ID)
+	})
+
+	t.Run("respects notBefore filter", func(t *testing.T) {
+		cutoff := now.Add(25 * time.Millisecond)
+		events, err := store.ReplayTail(ctx, stream, 10, cutoff)
+		require.NoError(t, err)
+		assert.Len(t, events, 2)
+		assert.Equal(t, ids[3], events[0].ID)
+		assert.Equal(t, ids[4], events[1].ID)
+	})
+
+	t.Run("returns empty slice for unknown stream", func(t *testing.T) {
+		events, err := store.ReplayTail(ctx, "channel:nonexistent", 10, time.Time{})
+		require.NoError(t, err)
+		assert.Empty(t, events)
+	})
+
+	t.Run("count larger than available returns all events", func(t *testing.T) {
+		events, err := store.ReplayTail(ctx, stream, 100, time.Time{})
+		require.NoError(t, err)
+		assert.Len(t, events, 5)
+	})
+}

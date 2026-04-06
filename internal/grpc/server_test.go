@@ -114,6 +114,10 @@ func (m *mockEventStore) Subscribe(ctx context.Context, _ string) (<-chan ulid.U
 	return eventCh, errCh, nil
 }
 
+func (m *mockEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time) ([]core.Event, error) {
+	return nil, nil
+}
+
 // mockAuthenticator provides authentication for testing.
 type mockAuthenticator struct {
 	authenticateFunc func(ctx context.Context, username, password string) (*AuthResult, error)

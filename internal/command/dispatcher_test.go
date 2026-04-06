@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/prometheus/client_golang/prometheus"
@@ -85,6 +86,10 @@ func (s *stubEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, er
 
 func (s *stubEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
 	return nil, nil, nil
+}
+
+func (s *stubEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time) ([]core.Event, error) {
+	return nil, nil
 }
 
 func TestDispatcherDispatch(t *testing.T) {

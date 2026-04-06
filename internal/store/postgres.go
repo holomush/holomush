@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5"
@@ -165,6 +166,56 @@ func (s *PostgresEventStore) Replay(ctx context.Context, stream string, afterID 
 	if err := rows.Err(); err != nil {
 		return nil, oops.With("operation", "iterate events").With("stream", stream).Wrap(err)
 	}
+	return events, nil
+}
+
+// ReplayTail returns up to count events from a stream, reading backward from the most recent.
+func (s *PostgresEventStore) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time) ([]core.Event, error) {
+	var rows pgx.Rows
+	var err error
+
+	if notBefore.IsZero() {
+		rows, err = s.pool.Query(ctx,
+			`SELECT id, stream, type, actor_kind, actor_id, payload, created_at
+			 FROM events WHERE stream = $1
+			 ORDER BY id DESC LIMIT $2`,
+			stream, count)
+	} else {
+		rows, err = s.pool.Query(ctx,
+			`SELECT id, stream, type, actor_kind, actor_id, payload, created_at
+			 FROM events WHERE stream = $1 AND created_at > $2
+			 ORDER BY id DESC LIMIT $3`,
+			stream, notBefore, count)
+	}
+	if err != nil {
+		return nil, oops.With("operation", "query events (tail)").With("stream", stream).Wrap(err)
+	}
+	defer rows.Close()
+
+	var events []core.Event
+	for rows.Next() {
+		var e core.Event
+		var idStr string
+		var typeStr string
+		if scanErr := rows.Scan(&idStr, &e.Stream, &typeStr, &e.Actor.Kind, &e.Actor.ID, &e.Payload, &e.Timestamp); scanErr != nil {
+			return nil, oops.With("operation", "scan event row").Wrap(scanErr)
+		}
+		parsed, parseErr := ulid.Parse(idStr)
+		if parseErr != nil {
+			return nil, oops.With("operation", "parse event ID").Wrap(parseErr)
+		}
+		e.ID = parsed
+		e.Type = core.EventType(typeStr)
+		events = append(events, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.With("operation", "iterate events").With("stream", stream).Wrap(err)
+	}
+
+	for i, j := 0, len(events)-1; i < j; i, j = i+1, j-1 {
+		events[i], events[j] = events[j], events[i]
+	}
+
 	return events, nil
 }
 

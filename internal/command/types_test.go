@@ -213,6 +213,10 @@ func (m *mockEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULI
 	return nil, nil, nil
 }
 
+func (m *mockEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time) ([]core.Event, error) {
+	return nil, nil
+}
+
 func TestCommandHandlerSignature(t *testing.T) {
 	// Verify CommandHandler can be assigned a function with the correct signature
 	var handler CommandHandler = func(_ context.Context, _ *CommandExecution) error {
