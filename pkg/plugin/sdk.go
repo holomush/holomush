@@ -5,7 +5,11 @@ package pluginsdk
 
 import (
 	"context"
+	cryptotls "crypto/tls"
+	"crypto/x509"
 	"errors"
+	"fmt"
+	"os"
 
 	hashiplug "github.com/hashicorp/go-plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -77,13 +81,17 @@ func Serve(config *ServeConfig) {
 	if config.Handler == nil {
 		panic("plugin: config.Handler cannot be nil")
 	}
-	hashiplug.Serve(&hashiplug.ServeConfig{
+	serveConfig := &hashiplug.ServeConfig{
 		HandshakeConfig: HandshakeConfig,
 		Plugins: map[string]hashiplug.Plugin{
 			"plugin": &grpcPlugin{handler: config.Handler},
 		},
 		GRPCServer: hashiplug.DefaultGRPCServer,
-	})
+	}
+	if tlsProvider := loadPluginTLSProvider(); tlsProvider != nil {
+		serveConfig.TLSProvider = tlsProvider
+	}
+	hashiplug.Serve(serveConfig)
 }
 
 // grpcPlugin implements go-plugin's Plugin interface for gRPC.
@@ -239,5 +247,41 @@ func protoActorKindToActorKind(kind string) ActorKind {
 		return ActorPlugin
 	default:
 		return ActorCharacter
+	}
+}
+
+// loadPluginTLSProvider returns a TLS config provider for the plugin server
+// if the cert env vars are set. Returns nil when running without mTLS.
+func loadPluginTLSProvider() func() (*cryptotls.Config, error) {
+	certPath := os.Getenv("HOLOMUSH_PLUGIN_CERT")
+	keyPath := os.Getenv("HOLOMUSH_PLUGIN_KEY")
+	caPath := os.Getenv("HOLOMUSH_CA_CERT")
+
+	if certPath == "" || keyPath == "" || caPath == "" {
+		return nil
+	}
+
+	return func() (*cryptotls.Config, error) {
+		cert, err := cryptotls.LoadX509KeyPair(certPath, keyPath)
+		if err != nil {
+			return nil, fmt.Errorf("load plugin cert: %w", err)
+		}
+
+		caCert, err := os.ReadFile(caPath)
+		if err != nil {
+			return nil, fmt.Errorf("read CA cert: %w", err)
+		}
+
+		caPool := x509.NewCertPool()
+		if !caPool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("failed to add CA cert to pool")
+		}
+
+		return &cryptotls.Config{
+			Certificates: []cryptotls.Certificate{cert},
+			ClientCAs:    caPool,
+			ClientAuth:   cryptotls.RequireAndVerifyClientCert,
+			MinVersion:   cryptotls.VersionTLS13,
+		}, nil
 	}
 }

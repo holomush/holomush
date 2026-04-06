@@ -42,7 +42,7 @@ func ServeWithServices(config *ServeConfig, provider ServiceProvider) {
 	if provider == nil {
 		panic("plugin: provider cannot be nil")
 	}
-	hashiplug.Serve(&hashiplug.ServeConfig{
+	serveConfig := &hashiplug.ServeConfig{
 		HandshakeConfig: HandshakeConfig,
 		Plugins: map[string]hashiplug.Plugin{
 			"plugin": &grpcServicePlugin{
@@ -51,7 +51,11 @@ func ServeWithServices(config *ServeConfig, provider ServiceProvider) {
 			},
 		},
 		GRPCServer: hashiplug.DefaultGRPCServer,
-	})
+	}
+	if tlsProvider := loadPluginTLSProvider(); tlsProvider != nil {
+		serveConfig.TLSProvider = tlsProvider
+	}
+	hashiplug.Serve(serveConfig)
 }
 
 // grpcServicePlugin extends grpcPlugin with service provider support.

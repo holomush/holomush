@@ -7,6 +7,8 @@ package goplugin
 
 import (
 	"context"
+	cryptotls "crypto/tls"
+	"crypto/x509"
 	"errors"
 	"log/slog"
 	"os"
@@ -22,6 +24,7 @@ import (
 	"google.golang.org/grpc"
 
 	plugins "github.com/holomush/holomush/internal/plugin"
+	tlscerts "github.com/holomush/holomush/internal/tls"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -85,10 +88,28 @@ func WithSchemaProvisioner(p *plugins.SchemaProvisioner) HostOption {
 	return func(h *Host) { h.schemaProvisioner = p }
 }
 
+// WithCA configures the host to use the given CA for mTLS with plugins.
+// A host client cert is generated at construction time.
+func WithCA(ca *tlscerts.CA, gameID string) HostOption {
+	return func(h *Host) {
+		h.ca = ca
+		h.gameID = gameID
+	}
+}
+
+// WithServiceRegistry configures the host to register plugin-provided services.
+func WithServiceRegistry(r *plugins.ServiceRegistry) HostOption {
+	return func(h *Host) { h.registry = r }
+}
+
 // Host manages binary plugins via HashiCorp go-plugins.
 type Host struct {
 	clientFactory     ClientFactory
 	schemaProvisioner *plugins.SchemaProvisioner
+	registry          *plugins.ServiceRegistry
+	ca                *tlscerts.CA
+	gameID            string
+	hostClientCert    *tlscerts.ClientCert
 	plugins           map[string]*loadedPlugin
 	mu                sync.RWMutex
 	closed            bool
@@ -100,6 +121,7 @@ type loadedPlugin struct {
 	client   PluginClient
 	plugin   pluginv1.PluginServiceClient
 	conn     grpc.ClientConnInterface // underlying gRPC conn to the plugin process
+	certDir  string                   // temp cert directory, cleaned up on unload
 }
 
 // NewHost creates a new binary plugin host.
@@ -119,6 +141,13 @@ func NewHostWithFactory(factory ClientFactory, opts ...HostOption) *Host {
 	}
 	for _, opt := range opts {
 		opt(h)
+	}
+	if h.ca != nil {
+		cert, certErr := tlscerts.GenerateClientCert(h.ca, "plugin-host")
+		if certErr != nil {
+			panic("goplugin: failed to generate host client cert: " + certErr.Error())
+		}
+		h.hostClientCert = cert
 	}
 	return h
 }
@@ -191,7 +220,53 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "load").With("path", realExec).New("plugin executable not executable")
 	}
 
-	client := h.clientFactory.NewClient(realExec)
+	// Generate per-plugin mTLS certificates when a CA is configured.
+	var pluginCertEnv []string
+	var hostTLSConfig *cryptotls.Config
+	var certDir string
+
+	if h.ca != nil {
+		serverCert, certErr := tlscerts.GenerateServerCert(h.ca, h.gameID, "plugin-"+manifest.Name)
+		if certErr != nil {
+			return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "generate_cert").Wrap(certErr)
+		}
+
+		tmpCertDir, tmpErr := os.MkdirTemp("", "holomush-plugin-certs-*")
+		if tmpErr != nil {
+			return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "cert_tmpdir").Wrap(tmpErr)
+		}
+		certDir = tmpCertDir
+
+		if saveErr := tlscerts.SaveCertificates(tmpCertDir, h.ca, serverCert); saveErr != nil {
+			_ = os.RemoveAll(tmpCertDir)
+			return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "save_cert").Wrap(saveErr)
+		}
+
+		pluginCertEnv = []string{
+			"HOLOMUSH_PLUGIN_CERT=" + filepath.Join(tmpCertDir, "plugin-"+manifest.Name+".crt"),
+			"HOLOMUSH_PLUGIN_KEY=" + filepath.Join(tmpCertDir, "plugin-"+manifest.Name+".key"),
+			"HOLOMUSH_CA_CERT=" + filepath.Join(tmpCertDir, "root-ca.crt"),
+		}
+
+		hostTLSConfig = buildHostTLSConfig(h.ca, h.hostClientCert, manifest.Name)
+	}
+
+	// Create the plugin client. When TLS is configured, bypass the factory to
+	// attach TLS config and cert env vars directly.
+	var client PluginClient
+	if hostTLSConfig != nil {
+		cmd := exec.Command(realExec) // #nosec G204 -- nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command, go.grpc.command-injection.grpc-command-injection.grpc-http-command-injection-taint -- realExec resolved from plugin manifest; manifests validated during discovery (symlink-resolved, path-contained, executable-checked)
+		cmd.Env = append([]string{"PATH=" + os.Getenv("PATH")}, pluginCertEnv...)
+		client = hashiplug.NewClient(&hashiplug.ClientConfig{
+			HandshakeConfig:  HandshakeConfig,
+			Plugins:          PluginMap,
+			Cmd:              cmd,
+			AllowedProtocols: []hashiplug.Protocol{hashiplug.ProtocolGRPC},
+			TLSConfig:        hostTLSConfig,
+		})
+	} else {
+		client = h.clientFactory.NewClient(realExec)
+	}
 
 	rpcClient, err := client.Client()
 	if err != nil {
@@ -251,6 +326,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		client:   client,
 		plugin:   pluginClient,
 		conn:     pluginConn,
+		certDir:  certDir,
 	}
 
 	return nil
@@ -272,6 +348,10 @@ func (h *Host) Unload(_ context.Context, name string) error {
 
 	if p.client != nil {
 		p.client.Kill()
+	}
+
+	if p.certDir != "" {
+		_ = os.RemoveAll(p.certDir)
 	}
 
 	delete(h.plugins, name)
@@ -464,9 +544,32 @@ func (h *Host) Close(_ context.Context) error {
 		if p.client != nil {
 			p.client.Kill()
 		}
+		if p.certDir != "" {
+			_ = os.RemoveAll(p.certDir)
+		}
 	}
 
 	h.closed = true
 	clear(h.plugins)
 	return nil
+}
+
+// buildHostTLSConfig creates a TLS config for the host to connect to a plugin
+// as a gRPC client with mTLS. The host presents its client cert and verifies
+// the plugin's server cert against the CA.
+func buildHostTLSConfig(ca *tlscerts.CA, clientCert *tlscerts.ClientCert, pluginName string) *cryptotls.Config {
+	caPool := x509.NewCertPool()
+	caPool.AddCert(ca.Certificate)
+
+	clientTLSCert := cryptotls.Certificate{
+		Certificate: [][]byte{clientCert.Certificate.Raw},
+		PrivateKey:  clientCert.PrivateKey,
+	}
+
+	return &cryptotls.Config{
+		Certificates: []cryptotls.Certificate{clientTLSCert},
+		RootCAs:      caPool,
+		ServerName:   "holomush-plugin-" + pluginName,
+		MinVersion:   cryptotls.VersionTLS13,
+	}
 }
