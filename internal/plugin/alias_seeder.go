@@ -72,7 +72,7 @@ func SeedManifestAliases(ctx context.Context, aliases []ManifestAlias, repo Alia
 		if _, exists := existing[a.Alias]; exists {
 			continue
 		}
-		if setErr := repo.SetSystemAlias(ctx, a.Alias, a.Command, a.Plugin); setErr != nil {
+		if setErr := repo.SetSystemAlias(ctx, a.Alias, a.Command, ""); setErr != nil {
 			slog.Error("failed to seed manifest alias",
 				"alias", a.Alias,
 				"command", a.Command,

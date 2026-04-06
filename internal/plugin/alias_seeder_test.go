@@ -176,7 +176,7 @@ func TestSeedManifestAliasesContinuesOnSetError(t *testing.T) {
 	assert.Empty(t, repo.existing)
 }
 
-func TestSeedManifestAliasesSetsCreatedByToPluginName(t *testing.T) {
+func TestSeedManifestAliasesUsesNullCreatedByForManifestSeeding(t *testing.T) {
 	repo := newFakeAliasSeeder()
 	cache := command.NewAliasCache()
 	aliases := []ManifestAlias{
@@ -187,6 +187,9 @@ func TestSeedManifestAliasesSetsCreatedByToPluginName(t *testing.T) {
 	err := SeedManifestAliases(context.Background(), aliases, repo, cache)
 	require.NoError(t, err)
 
-	assert.Equal(t, "comms", repo.creators[`"`])
-	assert.Equal(t, "nav", repo.creators["l"])
+	// Manifest-seeded aliases use empty createdBy (NULL in DB) because
+	// the created_by column references players(id) and plugin names are
+	// not valid player IDs.
+	assert.Equal(t, "", repo.creators[`"`])
+	assert.Equal(t, "", repo.creators["l"])
 }
