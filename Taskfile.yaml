@@ -85,7 +85,7 @@ tasks:
       - echo "▸ Building binary plugins for host platform..."
       - GOOS={{OS}} GOARCH={{ARCH}} ./scripts/build-plugins.sh
       - gotestsum --format pkgname -- -race -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic ./internal/content/
-        ./internal/store/ ./test/integration/...
+        ./internal/store/ ./plugins/core-scenes/ ./test/integration/...
 
   test:e2e:
     desc: Run Playwright E2E tests in Docker
