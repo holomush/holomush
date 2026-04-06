@@ -253,20 +253,37 @@ storage: postgres  # full Postgres with schema isolation
 ### 5.3 Postgres Storage Flow
 
 1. Plugin declares `storage: postgres` in manifest
-2. At load time, plugin manager creates the schema:
+2. At load time, `SchemaProvisioner` creates the schema:
    `CREATE SCHEMA IF NOT EXISTS plugin_<name>`
-3. Plugin manager creates a schema-scoped PostgreSQL role with:
-   - `USAGE` and `CREATE` on `plugin_<name>` schema
-   - No access to `public` schema or any other plugin's schema
-4. Connection string (with `search_path=plugin_<name>`) is passed to the
-   plugin during go-plugin handshake
+3. `SchemaProvisioner` creates a per-plugin PostgreSQL role
+   `holomush_plugin_<name>` with:
+   - `LOGIN` — allows the role to authenticate
+   - No `SUPERUSER`, no `CREATEROLE` — least-privilege
+   - An ephemeral password generated from `crypto/rand` on each server start
+   - `USAGE` and `CREATE` on `plugin_<name>` schema — role owns the schema
+   - `REVOKE ALL ON SCHEMA public` — prevents any access to the public schema
+     or other plugins' schemas
+   - The server role that provisions schemas MUST have `CREATEROLE` privilege
+4. Connection string (with plugin-specific credentials and
+   `search_path=plugin_<name>`) is passed to the plugin via `GRPCBroker`
+   during go-plugin handshake. The `required_services` field in the
+   handshake payload is populated the same way, delivering gRPC client
+   connections for each declared `requires` service.
 5. Plugin uses the **plugin storage SDK** (`pkg/plugin/storage`) to:
    - Open a `pgxpool.Pool` from the connection string
    - Run embedded migrations (same sequential numbering pattern as core)
    - Access its tables within its schema
 6. At unload, the pool is closed. Schema and data persist.
+   `PurgeSchema` (invoked by `plugin purge`) drops all objects owned by the
+   role, then drops the role itself.
 
 ### 5.4 Schema Isolation
+
+Each binary plugin with `storage: postgres` gets a dedicated PostgreSQL role
+(`holomush_plugin_<name>`) that owns its schema exclusively. The role is
+created at server start with an ephemeral password; the server role requires
+`CREATEROLE` to provision plugin roles. `REVOKE ALL ON SCHEMA public` is
+applied at role creation time to enforce the cross-schema boundary.
 
 Plugin schemas MUST NOT have access to the `public` schema or other plugin
 schemas. All cross-domain data flows through proto service contracts.
@@ -275,6 +292,10 @@ If a plugin needs to reference core entities (characters, locations), it
 stores the ID as a plain `TEXT` column — no foreign key constraints across
 schemas. Referential integrity across the service boundary is the plugin's
 responsibility via application logic.
+
+When a plugin is purged (`plugin purge <name>`), `PurgeSchema` drops all
+objects owned by the plugin role, then drops the role itself, leaving no
+residue in the database.
 
 ### 5.5 Plugin Storage SDK
 
@@ -420,9 +441,17 @@ accesses services it declared (and was signed for).
 
 ### 10.2 Schema Isolation
 
-Plugin PostgreSQL roles are scoped to their own schema. No cross-schema
-access prevents plugins from reading or modifying core data or other
-plugins' data.
+Each binary plugin with `storage: postgres` receives a dedicated PostgreSQL
+role (`holomush_plugin_<name>`) with `LOGIN` but no elevated privileges. The
+role is provisioned by `SchemaProvisioner` at server start using an ephemeral
+password from `crypto/rand` — no password is stored persistently. The server
+role requires `CREATEROLE` to create plugin roles; this is the only elevated
+privilege the server needs for storage isolation.
+
+`REVOKE ALL ON SCHEMA public` is applied unconditionally, ensuring plugins
+cannot read or write `public` schema tables or access other plugins' schemas.
+All cross-domain data flows through proto service contracts, never through
+shared database tables.
 
 ### 10.3 Service Access Control
 
@@ -470,8 +499,6 @@ receive only the gRPC client connections they declared.
 | Area                                  | Notes                                                                                                  |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | Proto code generator for Lua bindings | Protoc plugin or standalone generator? Template-based vs reflection-based?                             |
-| go-plugin handshake protocol          | How connection string and service connections are passed during handshake                              |
-| In-process gRPC adapter               | How to wrap server-internal Go services as `grpc.ClientConnInterface` without actual network transport |
 | ABAC integration                      | How plugins declare and install ABAC policies in the new architecture                                  |
 | Event subscription for binary plugins | How binary plugins subscribe to event streams (currently Lua-only via `HandleEvent`)                   |
 | Plugin versioning and upgrades        | How schema migrations interact with plugin version bumps                                               |
