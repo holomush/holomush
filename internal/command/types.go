@@ -83,7 +83,7 @@ type WorldService interface {
 // store.AliasRepository.
 type AliasWriter interface {
 	// SetSystemAlias creates or updates a system-wide alias.
-	SetSystemAlias(ctx context.Context, alias, command, createdBy string) error
+	SetSystemAlias(ctx context.Context, alias, command, createdBy, source string) error
 	// DeleteSystemAlias removes a system-wide alias.
 	DeleteSystemAlias(ctx context.Context, alias string) error
 	// SetPlayerAlias creates or updates a player-specific alias.

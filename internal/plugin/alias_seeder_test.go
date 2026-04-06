@@ -18,6 +18,7 @@ import (
 type fakeAliasSeeder struct {
 	existing map[string]string
 	creators map[string]string
+	sources  map[string]string
 	setErr   error
 }
 
@@ -25,6 +26,7 @@ func newFakeAliasSeeder() *fakeAliasSeeder {
 	return &fakeAliasSeeder{
 		existing: make(map[string]string),
 		creators: make(map[string]string),
+		sources:  make(map[string]string),
 	}
 }
 
@@ -36,12 +38,13 @@ func (f *fakeAliasSeeder) GetSystemAliases(_ context.Context) (map[string]string
 	return cp, nil
 }
 
-func (f *fakeAliasSeeder) SetSystemAlias(_ context.Context, alias, cmd, createdBy string) error {
+func (f *fakeAliasSeeder) SetSystemAlias(_ context.Context, alias, cmd, createdBy, source string) error {
 	if f.setErr != nil {
 		return f.setErr
 	}
 	f.existing[alias] = cmd
 	f.creators[alias] = createdBy
+	f.sources[alias] = source
 	return nil
 }
 
@@ -192,4 +195,19 @@ func TestSeedManifestAliasesUsesNullCreatedByForManifestSeeding(t *testing.T) {
 	// not valid player IDs.
 	assert.Equal(t, "", repo.creators[`"`])
 	assert.Equal(t, "", repo.creators["l"])
+}
+
+func TestSeedManifestAliasesRecordsPluginNameAsSource(t *testing.T) {
+	repo := newFakeAliasSeeder()
+	cache := command.NewAliasCache()
+	aliases := []ManifestAlias{
+		{Alias: `"`, Command: "say", Plugin: "comms"},
+		{Alias: "l", Command: "look", Plugin: "nav"},
+	}
+
+	err := SeedManifestAliases(context.Background(), aliases, repo, cache)
+	require.NoError(t, err)
+
+	assert.Equal(t, "comms", repo.sources[`"`])
+	assert.Equal(t, "nav", repo.sources["l"])
 }

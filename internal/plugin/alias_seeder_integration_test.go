@@ -84,6 +84,14 @@ var _ = Describe("Plugin Alias Seeding Integration", func() {
 			cached := cache.ListSystemAliases()
 			Expect(cached).To(HaveKeyWithValue(`"`, "say"))
 			Expect(cached).To(HaveKeyWithValue("desc", "describe"))
+
+			// Verify source column is populated with plugin name.
+			var source *string
+			err = pool.QueryRow(ctx,
+				`SELECT source FROM system_aliases WHERE alias = $1`, `"`).Scan(&source)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(source).NotTo(BeNil())
+			Expect(*source).To(Equal("core-communication"))
 		})
 	})
 
@@ -103,7 +111,7 @@ var _ = Describe("Plugin Alias Seeding Integration", func() {
 			_ = luaHost1.Close(ctx)
 
 			// Use the bootstrap test player from the baseline migration as the operator.
-			Expect(repo.SetSystemAlias(ctx, `"`, "shout", "01KDVDNA00041061050R3GG28A")).To(Succeed())
+			Expect(repo.SetSystemAlias(ctx, `"`, "shout", "01KDVDNA00041061050R3GG28A", "sysalias")).To(Succeed())
 
 			cache2 := command.NewAliasCache()
 			luaHost2 := pluginlua.NewHost()

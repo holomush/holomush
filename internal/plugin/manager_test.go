@@ -665,7 +665,7 @@ func (f *fakeAliasSeederMgr) GetSystemAliases(_ context.Context) (map[string]str
 	return result, nil
 }
 
-func (f *fakeAliasSeederMgr) SetSystemAlias(_ context.Context, alias, cmd, _ string) error {
+func (f *fakeAliasSeederMgr) SetSystemAlias(_ context.Context, alias, cmd, _, _ string) error {
 	if f.existing == nil {
 		f.existing = make(map[string]string)
 	}

@@ -22,7 +22,7 @@ type ManifestAlias struct {
 // AliasSeeder is the subset of store.AliasRepository needed for seeding.
 type AliasSeeder interface {
 	GetSystemAliases(ctx context.Context) (map[string]string, error)
-	SetSystemAlias(ctx context.Context, alias, command, createdBy string) error
+	SetSystemAlias(ctx context.Context, alias, command, createdBy, source string) error
 }
 
 // CollectManifestAliases gathers all alias declarations from loaded plugin
@@ -73,7 +73,7 @@ func SeedManifestAliases(ctx context.Context, aliases []ManifestAlias, repo Alia
 		if _, exists := existing[a.Alias]; exists {
 			continue
 		}
-		if setErr := repo.SetSystemAlias(ctx, a.Alias, a.Command, ""); setErr != nil {
+		if setErr := repo.SetSystemAlias(ctx, a.Alias, a.Command, "", a.Plugin); setErr != nil {
 			slog.Error("failed to seed manifest alias",
 				"alias", a.Alias,
 				"command", a.Command,

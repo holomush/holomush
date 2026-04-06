@@ -43,7 +43,7 @@ func (m *mockAliasAccessInteg) CheckAliasShadow(_ context.Context, _ string) (bo
 	return false, "", nil
 }
 
-func (m *mockAliasAccessInteg) SetSystemAlias(_ context.Context, _, _, _ string) error {
+func (m *mockAliasAccessInteg) SetSystemAlias(_ context.Context, _, _, _, _ string) error {
 	return nil
 }
 

@@ -169,17 +169,17 @@ func (_c *MockAliasWriter_SetPlayerAlias_Call) RunAndReturn(run func(context.Con
 	return _c
 }
 
-// SetSystemAlias provides a mock function with given fields: ctx, alias, _a2, createdBy
-func (_m *MockAliasWriter) SetSystemAlias(ctx context.Context, alias string, _a2 string, createdBy string) error {
-	ret := _m.Called(ctx, alias, _a2, createdBy)
+// SetSystemAlias provides a mock function with given fields: ctx, alias, _a2, createdBy, source
+func (_m *MockAliasWriter) SetSystemAlias(ctx context.Context, alias string, _a2 string, createdBy string, source string) error {
+	ret := _m.Called(ctx, alias, _a2, createdBy, source)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SetSystemAlias")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) error); ok {
-		r0 = rf(ctx, alias, _a2, createdBy)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, string) error); ok {
+		r0 = rf(ctx, alias, _a2, createdBy, source)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -197,13 +197,14 @@ type MockAliasWriter_SetSystemAlias_Call struct {
 //   - alias string
 //   - _a2 string
 //   - createdBy string
-func (_e *MockAliasWriter_Expecter) SetSystemAlias(ctx interface{}, alias interface{}, _a2 interface{}, createdBy interface{}) *MockAliasWriter_SetSystemAlias_Call {
-	return &MockAliasWriter_SetSystemAlias_Call{Call: _e.mock.On("SetSystemAlias", ctx, alias, _a2, createdBy)}
+//   - source string
+func (_e *MockAliasWriter_Expecter) SetSystemAlias(ctx interface{}, alias interface{}, _a2 interface{}, createdBy interface{}, source interface{}) *MockAliasWriter_SetSystemAlias_Call {
+	return &MockAliasWriter_SetSystemAlias_Call{Call: _e.mock.On("SetSystemAlias", ctx, alias, _a2, createdBy, source)}
 }
 
-func (_c *MockAliasWriter_SetSystemAlias_Call) Run(run func(ctx context.Context, alias string, _a2 string, createdBy string)) *MockAliasWriter_SetSystemAlias_Call {
+func (_c *MockAliasWriter_SetSystemAlias_Call) Run(run func(ctx context.Context, alias string, _a2 string, createdBy string, source string)) *MockAliasWriter_SetSystemAlias_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string))
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string), args[4].(string))
 	})
 	return _c
 }
@@ -213,7 +214,7 @@ func (_c *MockAliasWriter_SetSystemAlias_Call) Return(_a0 error) *MockAliasWrite
 	return _c
 }
 
-func (_c *MockAliasWriter_SetSystemAlias_Call) RunAndReturn(run func(context.Context, string, string, string) error) *MockAliasWriter_SetSystemAlias_Call {
+func (_c *MockAliasWriter_SetSystemAlias_Call) RunAndReturn(run func(context.Context, string, string, string, string) error) *MockAliasWriter_SetSystemAlias_Call {
 	_c.Call.Return(run)
 	return _c
 }
