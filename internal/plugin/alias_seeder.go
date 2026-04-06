@@ -33,7 +33,8 @@ func CollectManifestAliases(loaded []*DiscoveredPlugin) ([]ManifestAlias, error)
 	seen := make(map[string]string) // alias → owning plugin name
 
 	for _, dp := range loaded {
-		for _, cmd := range dp.Manifest.Commands {
+		for i := range dp.Manifest.Commands {
+			cmd := &dp.Manifest.Commands[i]
 			for _, alias := range cmd.Aliases {
 				if owner, dup := seen[alias]; dup {
 					slog.Warn("duplicate manifest alias, skipping",
