@@ -29,6 +29,22 @@ async function sendCommand(page: Page, command: string, expectText?: string) {
   }
 }
 
+/**
+ * Join a channel, accepting both fresh join and already-a-member outcomes.
+ * Tests share DB state so a previous test may have already joined.
+ */
+async function ensureJoined(page: Page, channelName: string) {
+  const input = page.locator('textarea');
+  await input.fill(`channel join ${channelName}`);
+  await input.press('Enter');
+  // Wait for either success or already-member response
+  await expect(
+    page.locator('[data-testid="event"]').filter({
+      hasText: /joined channel|already a member/,
+    }),
+  ).toBeVisible({ timeout: 10000 });
+}
+
 test.describe('Channel Commands', () => {
   test('bootstrap seeds Public channel in plugin schema', async ({ page }) => {
     await connectAsGuest(page);
@@ -49,7 +65,8 @@ test.describe('Channel Commands', () => {
   test('channel join adds membership and emits join event', async ({ page }) => {
     await connectAsGuest(page);
 
-    // Get player info for DB verification
+    // Get character info for DB verification (membership keyed by character ID
+    // until PlayerID wiring is available — see holomush-h83v)
     const sessionId = await page.evaluate(() => {
       const raw = sessionStorage.getItem('holomush-session');
       return raw ? JSON.parse(raw).sessionId : null;
@@ -57,16 +74,14 @@ test.describe('Channel Commands', () => {
     expect(sessionId).toBeTruthy();
     const session = await db.getSessionById(sessionId!);
     expect(session).not.toBeNull();
-    const player = await db.getPlayerByCharacterId(session!.character_id);
-    expect(player).not.toBeNull();
 
-    await sendCommand(page, 'channel join Public', "joined channel 'Public'");
+    await ensureJoined(page, 'Public');
 
     // DB: membership row exists (retry for cross-connection visibility)
     const channel = await db.getChannelByName('Public');
     expect(channel).not.toBeNull();
     await expect(async () => {
-      const membership = await db.getChannelMembership(channel!.id, player!.id);
+      const membership = await db.getChannelMembership(channel!.id, session!.character_id);
       expect(membership, 'Membership row should exist after join').not.toBeNull();
       expect(membership!.role).toBe('member');
     }).toPass({ timeout: 5000 });
@@ -84,7 +99,7 @@ test.describe('Channel Commands', () => {
     await connectAsGuest(page);
 
     // Join first
-    await sendCommand(page, 'channel join Public', "joined channel 'Public'");
+    await ensureJoined(page, 'Public');
 
     const channel = await db.getChannelByName('Public');
     expect(channel).not.toBeNull();
@@ -116,7 +131,7 @@ test.describe('Channel Commands', () => {
 
   test('channel say with : prefix creates pose event', async ({ page }) => {
     await connectAsGuest(page);
-    await sendCommand(page, 'channel join Public', "joined channel 'Public'");
+    await ensureJoined(page, 'Public');
 
     const channel = await db.getChannelByName('Public');
     expect(channel).not.toBeNull();
@@ -134,13 +149,13 @@ test.describe('Channel Commands', () => {
 
   test('channel who shows members after join', async ({ page }) => {
     await connectAsGuest(page);
-    await sendCommand(page, 'channel join Public', "joined channel 'Public'");
+    await ensureJoined(page, 'Public');
     await sendCommand(page, 'channel who Public', 'Members of');
   });
 
   test('channel history shows messages after join', async ({ page }) => {
     await connectAsGuest(page);
-    await sendCommand(page, 'channel join Public', "joined channel 'Public'");
+    await ensureJoined(page, 'Public');
 
     // Send a message so there's something in history
     const token = `e2e-hist-${Date.now()}`;
@@ -160,16 +175,15 @@ test.describe('Channel Commands', () => {
       return raw ? JSON.parse(raw).sessionId : null;
     });
     const session = await db.getSessionById(sessionId!);
-    const player = await db.getPlayerByCharacterId(session!.character_id);
-    expect(player).not.toBeNull();
+    expect(session).not.toBeNull();
 
-    await sendCommand(page, 'channel join Public', "joined channel 'Public'");
+    await ensureJoined(page, 'Public');
     await sendCommand(page, 'channel leave Public', "left channel 'Public'");
 
     // DB: membership row removed
     const channel = await db.getChannelByName('Public');
     expect(channel).not.toBeNull();
-    const membership = await db.getChannelMembership(channel!.id, player!.id);
+    const membership = await db.getChannelMembership(channel!.id, session!.character_id);
     expect(membership, 'Membership should be removed after leave').toBeNull();
   });
 
