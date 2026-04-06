@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	hashiplug "github.com/hashicorp/go-plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -267,7 +268,7 @@ func loadPluginTLSProvider() func() (*cryptotls.Config, error) {
 			return nil, fmt.Errorf("load plugin cert: %w", err)
 		}
 
-		caCert, err := os.ReadFile(caPath)
+		caCert, err := os.ReadFile(filepath.Clean(caPath))
 		if err != nil {
 			return nil, fmt.Errorf("read CA cert: %w", err)
 		}

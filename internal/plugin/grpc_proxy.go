@@ -124,8 +124,17 @@ type RawMessage struct {
 	data []byte
 }
 
+// Marshal returns the raw bytes.
 func (m *RawMessage) Marshal() ([]byte, error) { return m.data, nil }
+
+// Unmarshal stores raw bytes without deserialization.
 func (m *RawMessage) Unmarshal(b []byte) error { m.data = b; return nil }
-func (m *RawMessage) ProtoMessage()            {}
-func (m *RawMessage) Reset()                   { m.data = nil }
-func (m *RawMessage) String() string           { return string(m.data) }
+
+// ProtoMessage marks RawMessage as a proto.Message.
+func (m *RawMessage) ProtoMessage() {}
+
+// Reset clears the stored bytes.
+func (m *RawMessage) Reset() { m.data = nil }
+
+// String returns the raw bytes as a string.
+func (m *RawMessage) String() string { return string(m.data) }

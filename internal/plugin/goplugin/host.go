@@ -240,7 +240,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 		certDir = tmpCertDir
 
 		if saveErr := tlscerts.SaveCertificates(tmpCertDir, h.ca, serverCert); saveErr != nil {
-			_ = os.RemoveAll(tmpCertDir)
+			_ = os.RemoveAll(tmpCertDir) //nolint:errcheck // best-effort cleanup
 			return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "save_cert").Wrap(saveErr)
 		}
 
@@ -323,7 +323,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 			if resolveErr != nil {
 				client.Kill()
 				if certDir != "" {
-					_ = os.RemoveAll(certDir)
+					_ = os.RemoveAll(certDir) //nolint:errcheck // best-effort cleanup
 				}
 				return oops.Code("PLUGIN_SERVICE_NOT_FOUND").
 					With("plugin", manifest.Name).
@@ -400,7 +400,7 @@ func (h *Host) Unload(_ context.Context, name string) error {
 	}
 
 	if p.certDir != "" {
-		_ = os.RemoveAll(p.certDir)
+		_ = os.RemoveAll(p.certDir) //nolint:errcheck // best-effort cleanup
 	}
 
 	delete(h.plugins, name)
@@ -594,7 +594,7 @@ func (h *Host) Close(_ context.Context) error {
 			p.client.Kill()
 		}
 		if p.certDir != "" {
-			_ = os.RemoveAll(p.certDir)
+			_ = os.RemoveAll(p.certDir) //nolint:errcheck // best-effort cleanup
 		}
 	}
 

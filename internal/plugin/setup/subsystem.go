@@ -180,8 +180,10 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 
 	// Create binary plugin host (subprocess plugins via hashicorp/go-plugin).
 	var hostOpts []goplugin.HostOption
-	hostOpts = append(hostOpts, goplugin.WithSchemaProvisioner(schemaProvisioner))
-	hostOpts = append(hostOpts, goplugin.WithServiceRegistry(s.registry))
+	hostOpts = append(hostOpts,
+		goplugin.WithSchemaProvisioner(schemaProvisioner),
+		goplugin.WithServiceRegistry(s.registry),
+	)
 
 	if s.cfg.CertsDir != "" {
 		ca, caErr := tlscerts.LoadCA(s.cfg.CertsDir)

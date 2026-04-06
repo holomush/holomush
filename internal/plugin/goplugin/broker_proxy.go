@@ -49,7 +49,7 @@ func NewBrokerProxy(conn grpc.ClientConnInterface, pluginName string) func([]grp
 				"error", proxyErr,
 			)
 
-			return proxyErr
+			return proxyErr //nolint:wrapcheck // transparent gRPC proxy forwards errors as-is
 		})
 
 		allOpts := append([]grpc.ServerOption{handler}, opts...)
