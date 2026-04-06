@@ -162,4 +162,3 @@ func (a *WorldQuerierAdapter) GetObject(ctx context.Context, id ulid.ULID) (*wor
 	}
 	return obj, nil
 }
-

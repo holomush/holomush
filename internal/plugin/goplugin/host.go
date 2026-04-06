@@ -40,8 +40,10 @@ var (
 )
 
 // Compile-time interface checks.
-var _ plugins.Host = (*Host)(nil)
-var _ plugins.ServiceConnProvider = (*Host)(nil)
+var (
+	_ plugins.Host                = (*Host)(nil)
+	_ plugins.ServiceConnProvider = (*Host)(nil)
+)
 
 // PluginClient wraps go-plugin client for testability.
 type PluginClient interface {
@@ -205,7 +207,9 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 	switch c := rpcClient.(type) {
 	case *hashiplug.GRPCClient:
 		pluginConn = c.Conn
-	case interface{ Conn() grpc.ClientConnInterface }:
+	case interface {
+		Conn() grpc.ClientConnInterface
+	}:
 		pluginConn = c.Conn()
 	}
 

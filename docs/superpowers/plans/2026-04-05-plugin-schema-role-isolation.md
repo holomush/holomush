@@ -12,7 +12,7 @@
 
 ---
 
-### Task 1: Docker Init Script and Compose Changes
+## Task 1: Docker Init Script and Compose Changes
 
 **Files:**
 
@@ -82,7 +82,7 @@ Run: `docker compose down -v`
 
 - [ ] **Step 5: Commit**
 
-```
+```text
 jj commit -m "infra(postgres): switch compose to non-superuser holomush role with CREATEROLE
 
 Add docker/postgres/init-role.sh that creates the holomush application
@@ -218,7 +218,7 @@ Run: `task build`
 
 - [ ] **Step 4: Commit**
 
-```
+```text
 jj commit -m "test(testutil): add shared PostgreSQL helper with non-superuser role
 
 StartPostgres() starts a testcontainer with a postgres superuser for
@@ -404,7 +404,7 @@ Expected: all PASS
 
 - [ ] **Step 14: Commit**
 
-```
+```text
 jj commit -m "feat(plugin): add pluginRoleName, generatePassword, pluginConnString helpers
 
 Pure functions for per-plugin role management:
@@ -957,7 +957,7 @@ Expected: all PASS
 
 - [ ] **Step 9: Commit**
 
-```
+```text
 jj commit -m "feat(plugin): per-plugin PostgreSQL role isolation in SchemaProvisioner
 
 Init() validates CREATEROLE privilege at startup and fails fast if missing.
@@ -1065,7 +1065,7 @@ the extension to `testutil.initHolomushRole()` before role creation.
 
 - [ ] **Step 4: Commit**
 
-```
+```text
 jj commit -m "test: migrate all integration tests to non-superuser holomush role
 
 All 13 integration test suites now use testutil.StartPostgres() which
@@ -1121,7 +1121,7 @@ Run: `docker compose -p holomush-e2e down -v`
 
 - [ ] **Step 4: Commit**
 
-```
+```text
 jj commit -m "ci(e2e): add concurrency guard to prevent overlapping E2E runs
 
 Checks for existing holomush-e2e containers before starting. Fails fast
@@ -1164,6 +1164,6 @@ Run: `bd close holomush-fwan --reason "Per-plugin PostgreSQL role isolation impl
 
 - [ ] **Step 7: Final commit (if any formatting/lint fixes needed)**
 
-```
+```text
 jj commit -m "chore: fix lint/format issues from pr-prep"
 ```

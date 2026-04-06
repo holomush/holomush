@@ -14,7 +14,7 @@ import (
 
 func TestInProcessConnImplementsClientConnInterface(t *testing.T) {
 	t.Run("satisfies grpc.ClientConnInterface", func(t *testing.T) {
-		srv := grpc.NewServer() //nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
+		srv := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
 		defer srv.Stop()
 
 		conn, err := NewInProcessConn(srv)
@@ -28,7 +28,7 @@ func TestInProcessConnImplementsClientConnInterface(t *testing.T) {
 
 func TestInProcessConnInvokeReturnsErrorForUnknownMethod(t *testing.T) {
 	t.Run("returns error for unregistered service method", func(t *testing.T) {
-		srv := grpc.NewServer() //nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
+		srv := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
 		defer srv.Stop()
 
 		conn, err := NewInProcessConn(srv)
@@ -42,7 +42,7 @@ func TestInProcessConnInvokeReturnsErrorForUnknownMethod(t *testing.T) {
 
 func TestInProcessConnCloseIsIdempotent(t *testing.T) {
 	t.Run("close can be called multiple times without error", func(t *testing.T) {
-		srv := grpc.NewServer() //nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
+		srv := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection
 		defer srv.Stop()
 
 		conn, err := NewInProcessConn(srv)

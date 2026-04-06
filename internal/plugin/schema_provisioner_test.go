@@ -31,7 +31,6 @@ func TestPluginSchemaName(t *testing.T) {
 	}
 }
 
-
 func TestPluginRoleName(t *testing.T) {
 	tests := []struct {
 		name     string

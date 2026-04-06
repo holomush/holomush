@@ -253,13 +253,13 @@ func TestGetPoseOrderRejectsEmptySceneID(t *testing.T) {
 
 func TestEndSceneRejectsNonOwner(t *testing.T) {
 	store := newStubStore(&SceneRow{
-		ID:        "scene-1",
-		Title:     "Test Scene",
-		OwnerID:   "char-A",
-		State:     stateActive,
-		PoseOrder: poseOrderFree,
+		ID:         "scene-1",
+		Title:      "Test Scene",
+		OwnerID:    "char-A",
+		State:      stateActive,
+		PoseOrder:  poseOrderFree,
 		Visibility: visibilityOpen,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	})
 	svc := NewSceneServiceImpl(store)
 
@@ -273,13 +273,13 @@ func TestEndSceneRejectsNonOwner(t *testing.T) {
 
 func TestEndSceneAllowsOwner(t *testing.T) {
 	store := newStubStore(&SceneRow{
-		ID:        "scene-1",
-		Title:     "Test Scene",
-		OwnerID:   "char-A",
-		State:     stateActive,
-		PoseOrder: poseOrderFree,
+		ID:         "scene-1",
+		Title:      "Test Scene",
+		OwnerID:    "char-A",
+		State:      stateActive,
+		PoseOrder:  poseOrderFree,
 		Visibility: visibilityOpen,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	})
 	svc := NewSceneServiceImpl(store)
 
@@ -295,13 +295,13 @@ func TestEndSceneAllowsOwner(t *testing.T) {
 
 func TestInviteToSceneRejectsNonOwner(t *testing.T) {
 	store := newStubStore(&SceneRow{
-		ID:        "scene-1",
-		Title:     "Test Scene",
-		OwnerID:   "char-A",
-		State:     stateActive,
-		PoseOrder: poseOrderFree,
+		ID:         "scene-1",
+		Title:      "Test Scene",
+		OwnerID:    "char-A",
+		State:      stateActive,
+		PoseOrder:  poseOrderFree,
 		Visibility: visibilityOpen,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	})
 	svc := NewSceneServiceImpl(store)
 
@@ -316,13 +316,13 @@ func TestInviteToSceneRejectsNonOwner(t *testing.T) {
 
 func TestInviteToSceneAllowsOwner(t *testing.T) {
 	store := newStubStore(&SceneRow{
-		ID:        "scene-1",
-		Title:     "Test Scene",
-		OwnerID:   "char-A",
-		State:     stateActive,
-		PoseOrder: poseOrderFree,
+		ID:         "scene-1",
+		Title:      "Test Scene",
+		OwnerID:    "char-A",
+		State:      stateActive,
+		PoseOrder:  poseOrderFree,
 		Visibility: visibilityOpen,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	})
 	svc := NewSceneServiceImpl(store)
 

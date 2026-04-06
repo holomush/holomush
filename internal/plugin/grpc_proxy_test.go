@@ -65,7 +65,7 @@ func startBackendServer(t *testing.T) *grpc.ClientConn {
 	t.Helper()
 
 	lis := bufconn.Listen(1 << 20)
-	srv := grpc.NewServer() //nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-memory bufconn for tests
+	srv := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-memory bufconn for tests
 	srv.RegisterService(&echoServiceDesc, &echoServer{})
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(func() { srv.Stop(); _ = lis.Close() })
@@ -74,7 +74,7 @@ func startBackendServer(t *testing.T) *grpc.ClientConn {
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return lis.DialContext(ctx)
 		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()), //nosemgrep: go.grpc.tls.grpc-client-new-insecure-connection.grpc-client-new-insecure-connection
+		grpc.WithTransportCredentials(insecure.NewCredentials()), // nosemgrep: go.grpc.tls.grpc-client-new-insecure-connection.grpc-client-new-insecure-connection
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
@@ -87,7 +87,7 @@ func startFrontendWithProxy(t *testing.T, proxy *GRPCServiceProxy) *grpc.ClientC
 	t.Helper()
 
 	lis := bufconn.Listen(1 << 20)
-	srv := grpc.NewServer(proxy.Handler()) //nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-memory bufconn for tests
+	srv := grpc.NewServer(proxy.Handler()) // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-memory bufconn for tests
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(func() { srv.Stop(); _ = lis.Close() })
 
@@ -95,7 +95,7 @@ func startFrontendWithProxy(t *testing.T, proxy *GRPCServiceProxy) *grpc.ClientC
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return lis.DialContext(ctx)
 		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()), //nosemgrep: go.grpc.tls.grpc-client-new-insecure-connection.grpc-client-new-insecure-connection
+		grpc.WithTransportCredentials(insecure.NewCredentials()), // nosemgrep: go.grpc.tls.grpc-client-new-insecure-connection.grpc-client-new-insecure-connection
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })

@@ -303,4 +303,3 @@ func TestPurgeSchemaRemovesRoleAndSchema(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, schemaExists, "schema must be removed after purge")
 }
-

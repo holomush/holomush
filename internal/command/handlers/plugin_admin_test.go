@@ -89,10 +89,10 @@ func luaPlugin() *plugins.Manifest {
 
 func binaryPlugin() *plugins.Manifest {
 	return &plugins.Manifest{
-		Name:    "core-scenes",
-		Version: "2.1.0",
-		Type:    plugins.TypeBinary,
-		Storage: plugins.StoragePostgres,
+		Name:     "core-scenes",
+		Version:  "2.1.0",
+		Type:     plugins.TypeBinary,
+		Storage:  plugins.StoragePostgres,
 		Requires: []string{"holomush.world.v1.WorldService"},
 		Provides: []string{"holomush.scene.v1.SceneService"},
 		Commands: []plugins.CommandSpec{

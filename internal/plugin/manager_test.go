@@ -513,12 +513,15 @@ func (h *mockBinaryHost) Unload(_ context.Context, _ string) error { return h.un
 func (h *mockBinaryHost) DeliverEvent(_ context.Context, _ string, _ pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
 	return nil, nil
 }
+
 func (h *mockBinaryHost) DeliverCommand(_ context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
 	return nil, nil
 }
-func (h *mockBinaryHost) Plugins() []string                                    { return h.pluginList }
-func (h *mockBinaryHost) Close(_ context.Context) error                        { return h.closeErr }
-func (h *mockBinaryHost) PluginConn(_ string) (grpc.ClientConnInterface, error) { return h.conn, h.connErr }
+func (h *mockBinaryHost) Plugins() []string             { return h.pluginList }
+func (h *mockBinaryHost) Close(_ context.Context) error { return h.closeErr }
+func (h *mockBinaryHost) PluginConn(_ string) (grpc.ClientConnInterface, error) {
+	return h.conn, h.connErr
+}
 
 func TestManagerRegistersProvidedServicesAfterBinaryPluginLoad(t *testing.T) {
 	dir := t.TempDir()

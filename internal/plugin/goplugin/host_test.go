@@ -46,8 +46,8 @@ func (m *mockClientProtocol) Dispense(_ string) (interface{}, error) {
 	}
 	return m.pluginClient, nil
 }
-func (m *mockClientProtocol) Ping() error                       { return nil }
-func (m *mockClientProtocol) Conn() grpc.ClientConnInterface    { return m.conn }
+func (m *mockClientProtocol) Ping() error                    { return nil }
+func (m *mockClientProtocol) Conn() grpc.ClientConnInterface { return m.conn }
 
 // mockPluginClient implements PluginClient for testing.
 type mockPluginClient struct {

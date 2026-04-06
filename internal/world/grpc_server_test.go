@@ -28,7 +28,7 @@ import (
 func startWorldServer(t *testing.T, svc *world.Service) worldv1.WorldServiceClient {
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
-	srv := grpc.NewServer() //nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-memory bufconn for tests
+	srv := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-memory bufconn for tests
 	worldv1.RegisterWorldServiceServer(srv, world.NewGRPCServer(svc))
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(func() { srv.Stop(); _ = lis.Close() })
@@ -37,7 +37,7 @@ func startWorldServer(t *testing.T, svc *world.Service) worldv1.WorldServiceClie
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return lis.DialContext(ctx)
 		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()), //nosemgrep: go.grpc.tls.grpc-client-new-insecure-connection.grpc-client-new-insecure-connection
+		grpc.WithTransportCredentials(insecure.NewCredentials()), // nosemgrep: go.grpc.tls.grpc-client-new-insecure-connection.grpc-client-new-insecure-connection
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })

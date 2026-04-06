@@ -11,16 +11,16 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"github.com/oklog/ulid/v2"
 
 	"github.com/holomush/holomush/internal/command"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
-	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	"github.com/holomush/holomush/internal/world"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 // mockWorldMutator implements hostfunc.WorldMutator for building integration tests.

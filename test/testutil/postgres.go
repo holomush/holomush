@@ -26,7 +26,7 @@ type PostgresEnv struct {
 // Terminate stops and removes the PostgreSQL container.
 func (e *PostgresEnv) Terminate(ctx context.Context) error {
 	if e.Container != nil {
-		return e.Container.Terminate(ctx)
+		return fmt.Errorf("terminate container: %w", e.Container.Terminate(ctx))
 	}
 	return nil
 }
@@ -54,18 +54,19 @@ func StartPostgres(ctx context.Context) (*PostgresEnv, error) {
 
 	adminConnStr, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
-		_ = container.Terminate(ctx)
+		_ = container.Terminate(ctx) //nolint:errcheck // best-effort cleanup
 		return nil, fmt.Errorf("get admin connection string: %w", err)
 	}
 
-	if err := initHolomushRole(ctx, adminConnStr); err != nil {
-		_ = container.Terminate(ctx)
+	err = initHolomushRole(ctx, adminConnStr)
+	if err != nil {
+		_ = container.Terminate(ctx) //nolint:errcheck // best-effort cleanup
 		return nil, fmt.Errorf("init holomush role: %w", err)
 	}
 
 	connStr, err := replaceCredentials(adminConnStr, "holomush", "holomush")
 	if err != nil {
-		_ = container.Terminate(ctx)
+		_ = container.Terminate(ctx) //nolint:errcheck // best-effort cleanup
 		return nil, fmt.Errorf("build holomush connection string: %w", err)
 	}
 
@@ -77,7 +78,7 @@ func initHolomushRole(ctx context.Context, adminConnStr string) error {
 	if err != nil {
 		return fmt.Errorf("connect as superuser: %w", err)
 	}
-	defer conn.Close(ctx)
+	defer func() { _ = conn.Close(ctx) }() //nolint:errcheck // best-effort cleanup
 
 	stmts := []string{
 		"CREATE ROLE holomush LOGIN PASSWORD 'holomush' CREATEROLE",
@@ -95,7 +96,7 @@ func initHolomushRole(ctx context.Context, adminConnStr string) error {
 func replaceCredentials(connStr, user, password string) (string, error) {
 	u, err := url.Parse(connStr)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parse connection string: %w", err)
 	}
 	u.User = url.UserPassword(user, password)
 	return u.String(), nil

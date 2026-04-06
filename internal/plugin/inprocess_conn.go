@@ -44,7 +44,7 @@ func NewInProcessConn(srv *grpc.Server) (*InProcessConn, error) {
 	conn, err := grpc.NewClient(
 		"passthrough:///bufconn",
 		grpc.WithContextDialer(dialer),
-		grpc.WithTransportCredentials(insecure.NewCredentials()), //nosemgrep: go.grpc.tls.grpc-client-new-insecure-connection.grpc-client-new-insecure-connection
+		grpc.WithTransportCredentials(insecure.NewCredentials()), // nosemgrep: go.grpc.tls.grpc-client-new-insecure-connection.grpc-client-new-insecure-connection
 	)
 	if err != nil {
 		_ = lis.Close() //nolint:errcheck // best-effort cleanup on dial failure

@@ -91,7 +91,7 @@ func proxyStreams(srv grpc.ServerStream, cli grpc.ClientStream) error {
 			msg := &rawMessage{}
 			if err := srv.RecvMsg(msg); err != nil {
 				_ = cli.CloseSend() //nolint:errcheck // best-effort close on proxy teardown
-				errCh <- nil // EOF or error from client side
+				errCh <- nil        // EOF or error from client side
 				return
 			}
 			if err := cli.SendMsg(msg); err != nil {

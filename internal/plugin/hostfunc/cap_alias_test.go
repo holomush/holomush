@@ -39,9 +39,9 @@ type mockAliasAccess struct {
 	listSystemRet   []hostfunc.AliasEntry
 
 	// shadow check
-	shadowRet     bool
-	shadowCmd     string
-	shadowErr     error
+	shadowRet bool
+	shadowCmd string
+	shadowErr error
 
 	// call capture
 	setPlayerCalls    []aliasPlayerCall

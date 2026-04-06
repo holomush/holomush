@@ -66,15 +66,15 @@ type AdminDepsProvider interface {
 
 // PluginSubsystemConfig configures the plugin subsystem.
 type PluginSubsystemConfig struct {
-	DataDir          string
-	DatabaseConnStr  string // PostgreSQL connection string for schema provisioning
-	ABAC             EngineProvider
-	PolicyInst       PolicyInstallerProvider
-	PluginProv       PluginProviderSetter
-	World            WorldServiceProvider
-	Sessions         SessionProvider
-	AdminDeps        AdminDepsProvider
-	Registry         *lifecycle.ReadinessRegistry
+	DataDir         string
+	DatabaseConnStr string // PostgreSQL connection string for schema provisioning
+	ABAC            EngineProvider
+	PolicyInst      PolicyInstallerProvider
+	PluginProv      PluginProviderSetter
+	World           WorldServiceProvider
+	Sessions        SessionProvider
+	AdminDeps       AdminDepsProvider
+	Registry        *lifecycle.ReadinessRegistry
 }
 
 // PluginSubsystem manages the plugin Manager, Lua host, core plugin

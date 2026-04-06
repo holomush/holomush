@@ -133,7 +133,7 @@ other `plugin_*` schemas.
 
 The returned connection string uses the plugin role's credentials:
 
-```
+```text
 postgres://holomush_plugin_core_scenes:<password>@host:port/dbname?search_path=plugin_core_scenes
 ```
 

@@ -38,7 +38,8 @@ func (sp *SchemaProvisioner) Init(ctx context.Context) error {
 	if err != nil {
 		return oops.Code("SCHEMA_POOL_INIT_FAILED").Wrap(err)
 	}
-	if err := pool.Ping(ctx); err != nil {
+	err = pool.Ping(ctx)
+	if err != nil {
 		pool.Close()
 		return oops.Code("SCHEMA_POOL_PING_FAILED").Wrap(err)
 	}
@@ -84,39 +85,16 @@ func (sp *SchemaProvisioner) ProvisionSchema(ctx context.Context, pluginName str
 			With("plugin", pluginName).Wrap(err)
 	}
 
-	if err := sp.ensureRole(ctx, roleName, password); err != nil {
+	err = sp.ensureRole(ctx, roleName, password)
+	if err != nil {
 		return "", oops.Code("SCHEMA_ROLE_FAILED").
 			With("plugin", pluginName).
 			With("role", roleName).Wrap(err)
 	}
 
-	schemaID := pgx.Identifier{schemaName}
-	roleID := pgx.Identifier{roleName}
-
-	ddl := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schemaID.Sanitize())
-	if _, err := sp.pool.Exec(ctx, ddl); err != nil {
-		return "", oops.Code("SCHEMA_CREATE_FAILED").
-			With("plugin", pluginName).
-			With("schema", schemaName).Wrap(err)
-	}
-
-	ownerDDL := fmt.Sprintf("ALTER SCHEMA %s OWNER TO %s", schemaID.Sanitize(), roleID.Sanitize())
-	if _, err := sp.pool.Exec(ctx, ownerDDL); err != nil {
-		return "", oops.Code("SCHEMA_OWNER_FAILED").
-			With("plugin", pluginName).Wrap(err)
-	}
-
-	grantDDL := fmt.Sprintf("GRANT USAGE, CREATE ON SCHEMA %s TO %s",
-		schemaID.Sanitize(), roleID.Sanitize())
-	if _, err := sp.pool.Exec(ctx, grantDDL); err != nil {
-		return "", oops.Code("SCHEMA_GRANT_FAILED").
-			With("plugin", pluginName).Wrap(err)
-	}
-
-	revokeDDL := fmt.Sprintf("REVOKE ALL ON SCHEMA public FROM %s", roleID.Sanitize())
-	if _, err := sp.pool.Exec(ctx, revokeDDL); err != nil {
-		return "", oops.Code("SCHEMA_REVOKE_FAILED").
-			With("plugin", pluginName).Wrap(err)
+	err = sp.execDDL(ctx, pluginName, schemaName, roleName)
+	if err != nil {
+		return "", err
 	}
 
 	slog.Info("provisioned plugin schema with isolated role",
@@ -128,6 +106,40 @@ func (sp *SchemaProvisioner) ProvisionSchema(ctx context.Context, pluginName str
 			With("plugin", pluginName).Wrap(err)
 	}
 	return connStr, nil
+}
+
+// execDDL runs the schema creation, ownership, grant, and revoke statements.
+func (sp *SchemaProvisioner) execDDL(ctx context.Context, pluginName, schemaName, roleName string) error {
+	schemaID := pgx.Identifier{schemaName}
+	roleID := pgx.Identifier{roleName}
+
+	ddl := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schemaID.Sanitize())
+	if _, err := sp.pool.Exec(ctx, ddl); err != nil {
+		return oops.Code("SCHEMA_CREATE_FAILED").
+			With("plugin", pluginName).
+			With("schema", schemaName).Wrap(err)
+	}
+
+	ownerDDL := fmt.Sprintf("ALTER SCHEMA %s OWNER TO %s", schemaID.Sanitize(), roleID.Sanitize())
+	if _, err := sp.pool.Exec(ctx, ownerDDL); err != nil {
+		return oops.Code("SCHEMA_OWNER_FAILED").
+			With("plugin", pluginName).Wrap(err)
+	}
+
+	grantDDL := fmt.Sprintf("GRANT USAGE, CREATE ON SCHEMA %s TO %s",
+		schemaID.Sanitize(), roleID.Sanitize())
+	if _, err := sp.pool.Exec(ctx, grantDDL); err != nil {
+		return oops.Code("SCHEMA_GRANT_FAILED").
+			With("plugin", pluginName).Wrap(err)
+	}
+
+	revokeDDL := fmt.Sprintf("REVOKE ALL ON SCHEMA public FROM %s", roleID.Sanitize())
+	if _, err := sp.pool.Exec(ctx, revokeDDL); err != nil {
+		return oops.Code("SCHEMA_REVOKE_FAILED").
+			With("plugin", pluginName).Wrap(err)
+	}
+
+	return nil
 }
 
 // PurgeSchema drops all objects owned by the plugin role and then drops
