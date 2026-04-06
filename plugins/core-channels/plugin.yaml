@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: core-channels
+version: 1.0.0
+type: binary
+
+storage: postgres
+
+binary-plugin:
+  executable: core-channels
+
+commands:
+  - name: channel
+    capabilities:
+      - action: list
+        resource: channel
+        scope: global
+      - action: join
+        resource: channel
+        scope: global
+      - action: leave
+        resource: channel
+        scope: global
+      - action: create
+        resource: channel
+        scope: global
+      - action: emit
+        resource: channel
+        scope: global
+      - action: read
+        resource: channel
+        scope: global
+      - action: delete
+        resource: channel
+        scope: global
+    help: Manage and communicate on channels
+    usage: "channel <create|delete|join|leave|list|say|who|history|gag|ungag> [args]"
+    helpText: |-
+      Channel commands for creating, joining, and communicating on channels.
+
+      Subcommands:
+        create <name> [type]  - Create a new channel (type: public, private, admin)
+        delete <name>         - Archive a channel
+        join <name>           - Join a channel
+        leave <name>          - Leave a channel
+        list                  - List available channels
+        say <name>=<message>  - Send a message to a channel
+        who <name>            - Show who is on a channel
+        history <name> [N]    - Show last N messages (default 20)
+        gag <name>            - Silence a channel for this character
+        ungag <name>          - Unsilence a channel for this character

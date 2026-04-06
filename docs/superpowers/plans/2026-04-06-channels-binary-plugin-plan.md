@@ -605,12 +605,14 @@ In `internal/access/policy/seed.go`, add to the end of the `SeedPolicies()` retu
 - [ ] **Step 2: Update seed tests**
 
 Update `internal/access/policy/seed_test.go`:
+
 - Increment the total count assertion
 - Update permit/forbid distribution counts
 - Add the 11 channel policy names to the expected names list
 - Add the 4 channel forbid names to the forbid allowlist
 
 Update `internal/access/policy/bootstrap_test.go`:
+
 - Update forbid count and allowlist if tested there
 
 - [ ] **Step 3: Run tests**

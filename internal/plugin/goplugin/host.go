@@ -121,9 +121,9 @@ type loadedPlugin struct {
 	manifest *plugins.Manifest
 	client   PluginClient
 	plugin   pluginv1.PluginServiceClient
-	conn     grpc.ClientConnInterface   // underlying gRPC conn to the plugin process
-	certDir  string                     // temp cert directory, cleaned up on unload
-	broker   *hashiplug.GRPCBroker      // broker for service injection, nil if factory-mocked
+	conn     grpc.ClientConnInterface // underlying gRPC conn to the plugin process
+	certDir  string                   // temp cert directory, cleaned up on unload
+	broker   *hashiplug.GRPCBroker    // broker for service injection, nil if factory-mocked
 }
 
 // NewHost creates a new binary plugin host.
