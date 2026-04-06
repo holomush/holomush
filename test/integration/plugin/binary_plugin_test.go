@@ -16,6 +16,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/testcontainers/testcontainers-go"
+	"google.golang.org/grpc"
 
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
@@ -129,11 +130,26 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			Expect(provisioner.Init(ctx)).To(Succeed())
 			defer provisioner.Close()
 
-			// Create a service registry
+			// Create a service registry with WorldService registered.
+			// core-scenes declares requires: [holomush.world.v1.WorldService],
+			// so the host must resolve it from the registry during Load.
 			registry := plugins.NewServiceRegistry()
+			worldSrv := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-memory bufconn only
+			worldConn, worldConnErr := plugins.NewInProcessConn(worldSrv)
+			Expect(worldConnErr).NotTo(HaveOccurred())
+			defer func() { _ = worldConn.Close() }()
 
-			// Create goplugin host with schema provisioner
-			host := goplugin.NewHost(goplugin.WithSchemaProvisioner(provisioner))
+			Expect(registry.Register(plugins.RegisteredService{
+				Name:       "holomush.world.v1.WorldService",
+				Conn:       worldConn,
+				PluginType: plugins.TypeServerInternal(),
+			})).To(Succeed())
+
+			// Create goplugin host with schema provisioner and service registry
+			host := goplugin.NewHost(
+				goplugin.WithSchemaProvisioner(provisioner),
+				goplugin.WithServiceRegistry(registry),
+			)
 			defer func() { _ = host.Close(ctx) }()
 
 			// Create manager with host and registry
@@ -210,7 +226,23 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			Expect(provisioner.Init(ctx)).To(Succeed())
 			defer provisioner.Close()
 
-			host := goplugin.NewHost(goplugin.WithSchemaProvisioner(provisioner))
+			// Register WorldService so the plugin's requires are satisfied.
+			registry := plugins.NewServiceRegistry()
+			worldSrv := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-memory bufconn only
+			worldConn, worldConnErr := plugins.NewInProcessConn(worldSrv)
+			Expect(worldConnErr).NotTo(HaveOccurred())
+			defer func() { _ = worldConn.Close() }()
+
+			Expect(registry.Register(plugins.RegisteredService{
+				Name:       "holomush.world.v1.WorldService",
+				Conn:       worldConn,
+				PluginType: plugins.TypeServerInternal(),
+			})).To(Succeed())
+
+			host := goplugin.NewHost(
+				goplugin.WithSchemaProvisioner(provisioner),
+				goplugin.WithServiceRegistry(registry),
+			)
 			defer func() { _ = host.Close(ctx) }()
 
 			// Load the plugin manifest and binary directly
@@ -248,6 +280,35 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(getResp.GetScene().GetTitle()).To(Equal("Direct Connection Test"))
+		})
+	})
+
+	Describe("GRPCBroker service injection", func() {
+		It("fails to load when a required service is not in the registry", func() {
+			provisioner := plugins.NewSchemaProvisioner(connStr)
+			Expect(provisioner.Init(ctx)).To(Succeed())
+			defer provisioner.Close()
+
+			// Create host with an empty registry — WorldService is NOT registered.
+			emptyRegistry := plugins.NewServiceRegistry()
+			host := goplugin.NewHost(
+				goplugin.WithSchemaProvisioner(provisioner),
+				goplugin.WithServiceRegistry(emptyRegistry),
+			)
+			defer func() { _ = host.Close(ctx) }()
+
+			// Load the plugin manifest directly
+			pluginDir, _ := coreScenesBinaryPath()
+			manifestData, err := os.ReadFile(filepath.Join(pluginDir, "plugin.yaml"))
+			Expect(err).NotTo(HaveOccurred())
+
+			manifest, err := plugins.ParseManifest(manifestData)
+			Expect(err).NotTo(HaveOccurred())
+
+			// core-scenes requires WorldService, which is missing from the registry.
+			loadErr := host.Load(ctx, manifest, pluginDir)
+			Expect(loadErr).To(HaveOccurred())
+			Expect(loadErr.Error()).To(ContainSubstring("holomush.world.v1.WorldService"))
 		})
 	})
 })
