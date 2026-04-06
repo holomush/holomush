@@ -73,15 +73,12 @@ func (c *PropertyCapability) listByParentFn(pluginName string) lua.LGFunction {
 		ctx := luaContext(L)
 		props, err := c.properties.ListPropertiesByParent(ctx, subjectID, parentType, parentID)
 		if err != nil {
-			msg := SanitizeErrorForPlugin(PluginErrorContext{
+			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "list_by_parent",
 				Subject:   "property",
 				SubjectID: parentID,
 			}, err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(msg))
-			return 2
 		}
 
 		arr := L.NewTable()
@@ -107,15 +104,12 @@ func (c *PropertyCapability) findByPrefixFn(pluginName string) lua.LGFunction {
 		ctx := luaContext(L)
 		props, err := c.properties.FindPropertyByPrefix(ctx, prefix)
 		if err != nil {
-			msg := SanitizeErrorForPlugin(PluginErrorContext{
+			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "find_by_prefix",
 				Subject:   "property",
 				SubjectID: prefix,
 			}, err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(msg))
-			return 2
 		}
 
 		arr := L.NewTable()
@@ -144,15 +138,12 @@ func (c *PropertyCapability) updateCharacterDescriptionFn(pluginName string) lua
 
 		ctx := luaContext(L)
 		if err := c.properties.UpdateCharacterDescription(ctx, subjectID, characterID, description); err != nil {
-			msg := SanitizeErrorForPlugin(PluginErrorContext{
+			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "update_character_description",
 				Subject:   "property",
 				SubjectID: characterID,
 			}, err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(msg))
-			return 2
 		}
 		return 0
 	}

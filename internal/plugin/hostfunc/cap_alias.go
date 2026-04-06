@@ -86,15 +86,12 @@ func (c *AliasCapability) setPlayerFn(pluginName string) lua.LGFunction {
 
 		ctx := luaContext(L)
 		if err := c.aliases.SetPlayerAlias(ctx, playerID, alias, command); err != nil {
-			msg := SanitizeErrorForPlugin(PluginErrorContext{
+			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "set_player",
 				Subject:   "alias",
 				SubjectID: alias,
 			}, err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(msg))
-			return 2
 		}
 		return 0
 	}
@@ -109,15 +106,12 @@ func (c *AliasCapability) deletePlayerFn(pluginName string) lua.LGFunction {
 
 		ctx := luaContext(L)
 		if err := c.aliases.DeletePlayerAlias(ctx, playerID, alias); err != nil {
-			msg := SanitizeErrorForPlugin(PluginErrorContext{
+			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "delete_player",
 				Subject:   "alias",
 				SubjectID: alias,
 			}, err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(msg))
-			return 2
 		}
 		return 0
 	}
@@ -132,15 +126,12 @@ func (c *AliasCapability) listPlayerFn(pluginName string) lua.LGFunction {
 		ctx := luaContext(L)
 		entries, err := c.aliases.ListPlayerAliases(ctx, playerID)
 		if err != nil {
-			msg := SanitizeErrorForPlugin(PluginErrorContext{
+			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "list_player",
 				Subject:   "alias",
 				SubjectID: playerID,
 			}, err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(msg))
-			return 2
 		}
 
 		arr := L.NewTable()
@@ -164,15 +155,12 @@ func (c *AliasCapability) checkShadowFn(pluginName string) lua.LGFunction {
 		ctx := luaContext(L)
 		shadows, cmd, err := c.aliases.CheckAliasShadow(ctx, alias)
 		if err != nil {
-			msg := SanitizeErrorForPlugin(PluginErrorContext{
+			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "check_shadow",
 				Subject:   "alias",
 				SubjectID: alias,
 			}, err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(msg))
-			return 2
 		}
 
 		tbl := L.NewTable()
@@ -193,15 +181,12 @@ func (c *AliasCapability) setSystemFn(pluginName string) lua.LGFunction {
 
 		ctx := luaContext(L)
 		if err := c.aliases.SetSystemAlias(ctx, alias, command, createdBy); err != nil {
-			msg := SanitizeErrorForPlugin(PluginErrorContext{
+			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "set_system",
 				Subject:   "alias",
 				SubjectID: alias,
 			}, err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(msg))
-			return 2
 		}
 		return 0
 	}
@@ -215,15 +200,12 @@ func (c *AliasCapability) deleteSystemFn(pluginName string) lua.LGFunction {
 
 		ctx := luaContext(L)
 		if err := c.aliases.DeleteSystemAlias(ctx, alias); err != nil {
-			msg := SanitizeErrorForPlugin(PluginErrorContext{
+			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "delete_system",
 				Subject:   "alias",
 				SubjectID: alias,
 			}, err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(msg))
-			return 2
 		}
 		return 0
 	}
@@ -236,14 +218,11 @@ func (c *AliasCapability) listSystemFn(pluginName string) lua.LGFunction {
 		ctx := luaContext(L)
 		entries, err := c.aliases.ListSystemAliases(ctx)
 		if err != nil {
-			msg := SanitizeErrorForPlugin(PluginErrorContext{
+			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "list_system",
 				Subject:   "alias",
 			}, err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(msg))
-			return 2
 		}
 
 		arr := L.NewTable()

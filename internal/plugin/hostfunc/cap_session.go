@@ -78,15 +78,12 @@ func (c *SessionCapability) findByNameFn(pluginName string) lua.LGFunction {
 		ctx := luaContext(L)
 		info, err := c.sessions.FindSessionByName(ctx, name)
 		if err != nil {
-			msg := SanitizeErrorForPlugin(PluginErrorContext{
+			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "find_by_name",
 				Subject:   "session",
 				SubjectID: name,
 			}, err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(msg))
-			return 2
 		}
 		if info == nil {
 			L.Push(lua.LNil)
@@ -131,14 +128,11 @@ func (c *SessionCapability) listActiveFn(pluginName string) lua.LGFunction {
 		ctx := luaContext(L)
 		sessions, err := c.sessions.ListActiveSessions(ctx)
 		if err != nil {
-			msg := SanitizeErrorForPlugin(PluginErrorContext{
+			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "list_active",
 				Subject:   "session",
 			}, err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(msg))
-			return 2
 		}
 
 		arr := L.NewTable()
@@ -165,14 +159,11 @@ func (c *SessionCapability) broadcastFn(pluginName string) lua.LGFunction {
 
 		ctx := luaContext(L)
 		if err := c.sessions.BroadcastSystemMessage(ctx, message); err != nil {
-			msg := SanitizeErrorForPlugin(PluginErrorContext{
+			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "broadcast",
 				Subject:   "session",
 			}, err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(msg))
-			return 2
 		}
 		return 0
 	}
@@ -187,15 +178,12 @@ func (c *SessionCapability) disconnectFn(pluginName string) lua.LGFunction {
 
 		ctx := luaContext(L)
 		if err := c.sessions.DisconnectSession(ctx, sessionID, reason); err != nil {
-			msg := SanitizeErrorForPlugin(PluginErrorContext{
+			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "disconnect",
 				Subject:   "session",
 				SubjectID: sessionID,
 			}, err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(msg))
-			return 2
 		}
 		return 0
 	}

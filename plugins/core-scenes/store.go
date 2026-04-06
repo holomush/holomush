@@ -199,6 +199,22 @@ func (s *SceneStore) ListScenes(ctx context.Context, state *string, visibility *
 	return result, nil
 }
 
+// GetParticipant retrieves a single participant by scene and character ID.
+func (s *SceneStore) GetParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error) {
+	p := &ParticipantRow{}
+	err := s.pool.QueryRow(ctx,
+		"SELECT scene_id, character_id, role, origin_location_id, joined_at, publish_vote FROM scene_participants WHERE scene_id = $1 AND character_id = $2",
+		sceneID, characterID,
+	).Scan(&p.SceneID, &p.CharacterID, &p.Role, &p.OriginLocationID, &p.JoinedAt, &p.PublishVote)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.Code("PARTICIPANT_NOT_FOUND").Errorf("participant %s not in scene %s", characterID, sceneID)
+		}
+		return nil, oops.Code("PARTICIPANT_GET_FAILED").Wrap(err)
+	}
+	return p, nil
+}
+
 // AddParticipant upserts a participant into a scene.
 func (s *SceneStore) AddParticipant(ctx context.Context, row *ParticipantRow) error {
 	_, err := s.pool.Exec(ctx, `

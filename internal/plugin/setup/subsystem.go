@@ -198,6 +198,12 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		slog.Error("failed to load plugins", "error", loadErr)
 	}
 
+	// Close the schema provisioner pool — it's only needed during plugin loading.
+	// Individual plugin pools remain open for runtime queries.
+	if s.schemaProvisioner != nil {
+		s.schemaProvisioner.Close()
+	}
+
 	// 10. Create command registry, register built-in + admin handlers.
 	s.cmdRegistry = command.NewRegistry()
 	handlers.RegisterAll(s.cmdRegistry)

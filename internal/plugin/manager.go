@@ -287,6 +287,12 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin) error {
 	}
 
 	// Register plugin-provided services in the service registry.
+	// Service registration is best-effort: if some services fail to register
+	// (e.g., duplicate provider), the plugin is still considered loaded with
+	// partial Provides. This matches the graceful degradation pattern used
+	// throughout the plugin system — individual failures are logged but don't
+	// prevent the server from starting. Callers that need strict guarantees
+	// should check the service registry directly.
 	if m.registry != nil && len(dp.Manifest.Provides) > 0 {
 		if connProvider, ok := host.(ServiceConnProvider); ok {
 			conn, connErr := connProvider.PluginConn(dp.Manifest.Name)

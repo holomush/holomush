@@ -83,15 +83,12 @@ func (c *WorldQueryCapability) getObjectsByLocationFn(pluginName string) lua.LGF
 		ctx := luaContext(L)
 		objects, err := c.world.GetObjectsByLocation(ctx, subjectID, locationID)
 		if err != nil {
-			msg := SanitizeErrorForPlugin(PluginErrorContext{
+			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "get_objects_by_location",
 				Subject:   "location",
 				SubjectID: locationID,
 			}, err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(msg))
-			return 2
 		}
 
 		arr := L.NewTable()
@@ -121,15 +118,12 @@ func (c *WorldQueryCapability) getCharactersByLocationFn(pluginName string) lua.
 		ctx := luaContext(L)
 		characters, err := c.world.GetCharactersByLocation(ctx, subjectID, locationID)
 		if err != nil {
-			msg := SanitizeErrorForPlugin(PluginErrorContext{
+			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "get_characters_by_location",
 				Subject:   "location",
 				SubjectID: locationID,
 			}, err)
-			L.Push(lua.LNil)
-			L.Push(lua.LString(msg))
-			return 2
 		}
 
 		arr := L.NewTable()

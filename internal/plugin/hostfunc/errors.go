@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	lua "github.com/yuin/gopher-lua"
+
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/world"
 )
@@ -63,4 +65,13 @@ func SanitizeErrorForPlugin(ctx PluginErrorContext, err error) string {
 		"subject_id", ctx.SubjectID,
 		"error", err)
 	return fmt.Sprintf("internal error (ref: %s)", errorID)
+}
+
+// capError pushes a nil + error string pair onto the Lua stack after sanitizing
+// the error. This is the standard error return pattern for capability host functions.
+func capError(ls *lua.LState, ctx PluginErrorContext, err error) int {
+	msg := SanitizeErrorForPlugin(ctx, err)
+	ls.Push(lua.LNil)
+	ls.Push(lua.LString(msg))
+	return 2
 }

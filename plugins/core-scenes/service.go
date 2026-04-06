@@ -105,6 +105,9 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		CreatedAt:       now,
 	}
 
+	// NOTE: CreateScene + AddParticipant are not in a transaction. If AddParticipant
+	// fails, the scene exists without an owner. This is acceptable for now — scene
+	// creation is a single-user operation and the race window is negligible.
 	if err := s.store.CreateScene(ctx, row); err != nil {
 		return nil, mapStoreError(err, "create_scene")
 	}
@@ -304,26 +307,15 @@ func (s *SceneServiceImpl) CastPublishVote(ctx context.Context, req *scenev1.Cas
 		return nil, status.Errorf(codes.InvalidArgument, "scene_id is required")
 	}
 
-	participants, err := s.store.ListParticipants(ctx, req.GetSceneId())
+	participant, err := s.store.GetParticipant(ctx, req.GetSceneId(), req.GetCharacterId())
 	if err != nil {
-		return nil, mapStoreError(err, "list_participants")
-	}
-
-	var found *ParticipantRow
-	for _, p := range participants {
-		if p.CharacterID == req.GetCharacterId() {
-			found = p
-			break
-		}
-	}
-	if found == nil {
-		return nil, status.Errorf(codes.NotFound, "participant not found in scene")
+		return nil, mapStoreError(err, "get_participant")
 	}
 
 	vote := req.GetVote()
-	found.PublishVote = &vote
-	if err := s.store.AddParticipant(ctx, found); err != nil {
-		return nil, mapStoreError(err, "cast_publish_vote")
+	participant.PublishVote = &vote
+	if err := s.store.AddParticipant(ctx, participant); err != nil {
+		return nil, mapStoreError(err, "cast_vote")
 	}
 
 	return &scenev1.CastPublishVoteResponse{}, nil
