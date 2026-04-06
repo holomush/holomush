@@ -10,6 +10,56 @@ storage: postgres
 binary-plugin:
   executable: core-channels
 
+policies:
+  # Command execution — all players can run the channel command
+  - name: channel-execute
+    dsl: 'permit(principal is character, action in ["execute"], resource is command) when { resource.command.name == "channel"
+      };'
+  # Channel listing — all players can list public and admin channels
+  - name: channel-list
+    dsl: 'permit(principal is character, action in ["list"], resource is channel) when { resource.channel.type == "public"
+      || resource.channel.type == "admin" };'
+  # Channel joining — all players can join public channels
+  - name: channel-join-public
+    dsl: 'permit(principal is character, action in ["join"], resource is channel) when { resource.channel.type == "public"
+      };'
+  # Member actions — members can send, read, and leave their channels
+  - name: channel-member-actions
+    dsl: 'permit(principal is character, action in ["emit", "read", "leave"], resource is channel) when { resource.channel.id
+      in principal.character.channel_memberships };'
+  # Admin create — only admins can create channels
+  - name: channel-admin-create
+    dsl: 'permit(principal is character, action in ["create"], resource is channel) when { "admin" in principal.character.roles
+      };'
+  # Admin delete — only admins can delete channels
+  - name: channel-admin-delete
+    dsl: 'permit(principal is character, action in ["delete"], resource is channel) when { "admin" in principal.character.roles
+      };'
+  # Admin moderate — only admins can moderate channels
+  - name: channel-admin-moderate
+    dsl: 'permit(principal is character, action in ["admin"], resource is channel) when { "admin" in principal.character.roles
+      };'
+  # Forbid banned — banned players cannot emit, read, or join
+  - name: channel-forbid-banned
+    dsl: 'forbid(principal is character, action in ["emit", "read", "join"], resource is channel) when { principal.character.channel_banned
+      == true };'
+  # Forbid muted — muted players cannot emit
+  - name: channel-forbid-muted
+    dsl: 'forbid(principal is character, action in ["emit"], resource is channel) when { principal.character.channel_muted
+      == true };'
+  # Forbid archived — no one can emit or join archived channels
+  - name: channel-forbid-archived
+    dsl: 'forbid(principal is character, action in ["emit", "join"], resource is channel) when { resource.channel.archived
+      == true };'
+  # Guest access — guests can list and join seeded public channels
+  - name: channel-guest-seeded-only
+    dsl: 'permit(principal is character, action in ["list", "join"], resource is channel) when { "guest" in principal.character.roles
+      && resource.channel.type == "public" };'
+  # Guest restrictions — guests cannot create, delete, or moderate
+  - name: channel-guest-forbid-create
+    dsl: 'forbid(principal is character, action in ["create", "delete", "admin"], resource is channel) when { "guest" in principal.character.roles
+      };'
+
 commands:
   - name: channel
     capabilities:

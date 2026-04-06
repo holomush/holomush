@@ -13,8 +13,8 @@ import (
 
 func TestSeedPoliciesCount(t *testing.T) {
 	seeds := SeedPolicies()
-	// 33 permit + 5 forbid = 38 total (18 base + 5 gap-fill from T22b + 2 phase-2 commands + 2 system bootstrap + 11 channel policies)
-	assert.Len(t, seeds, 38, "expected 38 seed policies (33 permit, 5 forbid)")
+	// 26 permit + 1 forbid = 27 total (18 base + 5 gap-fill from T22b + 2 phase-2 commands + 2 system bootstrap)
+	assert.Len(t, seeds, 27, "expected 27 seed policies (26 permit, 1 forbid)")
 }
 
 func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
@@ -71,8 +71,8 @@ func TestSeedPoliciesEffectDistribution(t *testing.T) {
 			forbidCount++
 		}
 	}
-	assert.Equal(t, 33, permitCount, "expected 33 permit policies")
-	assert.Equal(t, 5, forbidCount, "expected 5 forbid policies")
+	assert.Equal(t, 26, permitCount, "expected 26 permit policies")
+	assert.Equal(t, 1, forbidCount, "expected 1 forbid policy")
 }
 
 func TestSeedPoliciesExpectedNames(t *testing.T) {
@@ -108,18 +108,6 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		// System bootstrap policies
 		"seed:system-bootstrap-world",
 		"seed:system-bootstrap-exits",
-		// Channel policies (Epic 10)
-		"seed:channel-list",
-		"seed:channel-join-public",
-		"seed:channel-member-actions",
-		"seed:channel-admin-create",
-		"seed:channel-admin-delete",
-		"seed:channel-admin-moderate",
-		"seed:channel-forbid-banned",
-		"seed:channel-forbid-muted",
-		"seed:channel-forbid-archived",
-		"seed:channel-guest-seeded-only",
-		"seed:channel-guest-forbid-create",
 	}
 
 	seeds := SeedPolicies()
@@ -133,10 +121,6 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 func TestSeedPoliciesForbidPoliciesAreExpected(t *testing.T) {
 	expectedForbids := map[string]bool{
 		"seed:property-restricted-excluded": true,
-		"seed:channel-forbid-banned":        true,
-		"seed:channel-forbid-muted":         true,
-		"seed:channel-forbid-archived":      true,
-		"seed:channel-guest-forbid-create":  true,
 	}
 	compiler := NewCompiler(emptySchema())
 	for _, s := range SeedPolicies() {

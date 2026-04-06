@@ -115,7 +115,7 @@ func GenerateServerCert(ca *CA, gameID, serverName string) (*ServerCert, error) 
 		NotAfter:    time.Now().AddDate(1, 0, 0), // 1 year
 		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		DNSNames:    []string{"localhost", "holomush-" + gameID},
+		DNSNames:    []string{"localhost", "holomush-" + gameID, "holomush-" + serverName},
 		IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
 	}
 

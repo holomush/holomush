@@ -240,3 +240,74 @@ const ZERO_ULID = '00000000000000000000000000';
 export function isValidLocationId(locationId: string): boolean {
   return !!locationId && locationId !== ZERO_ULID && locationId.length === 26;
 }
+
+// ── Channel queries (plugin_core_channels schema) ──────────────
+
+const CHANNEL_SCHEMA = 'plugin_core_channels';
+
+export interface DbChannel {
+  id: string;
+  name: string;
+  type: string;
+  description: string;
+  owner_id: string;
+  created_at: Date;
+  archived_at: Date | null;
+}
+
+export async function getChannelByName(name: string): Promise<DbChannel | null> {
+  const { rows } = await getPool().query<DbChannel>(
+    `SELECT id, name, type, description, owner_id, created_at, archived_at
+     FROM ${CHANNEL_SCHEMA}.channels WHERE lower(name) = lower($1)`,
+    [name],
+  );
+  return rows[0] ?? null;
+}
+
+export interface DbChannelMembership {
+  channel_id: string;
+  player_id: string;
+  role: string;
+  joined_at: Date;
+}
+
+export async function getChannelMemberships(channelId: string): Promise<DbChannelMembership[]> {
+  const { rows } = await getPool().query<DbChannelMembership>(
+    `SELECT channel_id, player_id, role, joined_at
+     FROM ${CHANNEL_SCHEMA}.channel_memberships WHERE channel_id = $1 ORDER BY joined_at`,
+    [channelId],
+  );
+  return rows;
+}
+
+export async function getChannelMembership(
+  channelId: string,
+  playerId: string,
+): Promise<DbChannelMembership | null> {
+  const { rows } = await getPool().query<DbChannelMembership>(
+    `SELECT channel_id, player_id, role, joined_at
+     FROM ${CHANNEL_SCHEMA}.channel_memberships WHERE channel_id = $1 AND player_id = $2`,
+    [channelId, playerId],
+  );
+  return rows[0] ?? null;
+}
+
+export interface DbChannelMessage {
+  id: string;
+  channel_id: string;
+  author_id: string;
+  author_name: string;
+  message: string;
+  event_type: string;
+  source: string;
+  created_at: Date;
+}
+
+export async function getChannelMessages(channelId: string): Promise<DbChannelMessage[]> {
+  const { rows } = await getPool().query<DbChannelMessage>(
+    `SELECT id, channel_id, author_id, author_name, message, event_type, source, created_at
+     FROM ${CHANNEL_SCHEMA}.channel_messages WHERE channel_id = $1 ORDER BY created_at`,
+    [channelId],
+  );
+  return rows;
+}
