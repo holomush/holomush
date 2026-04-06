@@ -4,28 +4,25 @@
 package telnet
 
 import (
-	"context"
 	"fmt"
 	"sync"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
-	grpcserver "github.com/holomush/holomush/internal/grpc"
-	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/naming"
 )
 
-// GuestAuthenticator implements grpc.Authenticator for guest logins.
+// GuestAuthenticator generates unique themed guest names and tracks the
+// pool of active names so they can be released on disconnect. It is
+// consumed by auth.GuestService (for the gRPC CreateGuest path) and the
+// session disconnect hook.
 type GuestAuthenticator struct {
 	theme         naming.Theme
 	startLocation ulid.ULID
 	mu            sync.Mutex
 	active        map[string]struct{}
 }
-
-// Ensure GuestAuthenticator satisfies grpc.Authenticator at compile time.
-var _ grpcserver.Authenticator = (*GuestAuthenticator)(nil)
 
 // NewGuestAuthenticator creates a GuestAuthenticator with the given theme and start location.
 func NewGuestAuthenticator(theme naming.Theme, startLocation ulid.ULID) *GuestAuthenticator {
@@ -46,25 +43,6 @@ func (a *GuestAuthenticator) GenerateName() (string, error) {
 // StartLocation returns the start location for guest characters.
 func (a *GuestAuthenticator) StartLocation() ulid.ULID {
 	return a.startLocation
-}
-
-// Authenticate handles guest logins. Only "guest" username is accepted.
-func (a *GuestAuthenticator) Authenticate(_ context.Context, username, _ string) (*grpcserver.AuthResult, error) {
-	if username != "guest" {
-		return nil, oops.Errorf("Registered accounts are not yet available. Use `connect guest` to play.")
-	}
-
-	name, err := a.GenerateName()
-	if err != nil {
-		return nil, err
-	}
-
-	return &grpcserver.AuthResult{
-		CharacterID:   idgen.New(),
-		CharacterName: name,
-		LocationID:    a.startLocation,
-		IsGuest:       true,
-	}, nil
 }
 
 // ActiveCount returns the number of currently active guest names.

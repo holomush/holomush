@@ -31,19 +31,6 @@ import (
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
-// AuthResult contains the result of a successful authentication.
-type AuthResult struct {
-	CharacterID   ulid.ULID
-	CharacterName string
-	LocationID    ulid.ULID
-	IsGuest       bool
-}
-
-// Authenticator validates credentials and returns character info.
-type Authenticator interface {
-	Authenticate(ctx context.Context, username, password string) (*AuthResult, error)
-}
-
 // SessionDefaults configures default values for new sessions.
 type SessionDefaults struct {
 	TTL        time.Duration
@@ -103,7 +90,6 @@ type CoreServer struct {
 	corev1.UnimplementedCoreServiceServer
 
 	engine          *core.Engine
-	authenticator   Authenticator
 	sessionStore    session.Store
 	eventStore      core.EventStore
 	worldQuerier    WorldQuerier
@@ -128,13 +114,6 @@ type CoreServer struct {
 
 // CoreServerOption configures a CoreServer.
 type CoreServerOption func(*CoreServer)
-
-// WithAuthenticator sets the authenticator for the server.
-func WithAuthenticator(a Authenticator) CoreServerOption {
-	return func(s *CoreServer) {
-		s.authenticator = a
-	}
-}
 
 // WithSessionStore sets the session store for the server.
 func WithSessionStore(store session.Store) CoreServerOption {
@@ -198,143 +177,6 @@ func NewCoreServer(engine *core.Engine, sessionStore session.Store, dispatcher *
 	}
 
 	return s
-}
-
-// Authenticate validates credentials and creates a session.
-// Connection registration is intentionally omitted here — the caller (telnet
-// gateway or web StreamEvents handler) registers the connection after auth so
-// it can supply the correct client type and stream list.
-//
-// Deprecated: Use CreateGuest for guests or AuthenticatePlayer for registered
-// users. Kept for proto backward compatibility until the next major version.
-func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
-	requestID := ""
-	if req.Meta != nil {
-		requestID = req.Meta.RequestId
-	}
-
-	slog.DebugContext(ctx, "authenticate request",
-		"request_id", requestID,
-		"username", req.Username,
-	)
-
-	if s.authenticator == nil {
-		return &corev1.AuthenticateResponse{
-			Meta:    responseMeta(requestID),
-			Success: false,
-			Error:   "authentication not configured",
-		}, nil
-	}
-
-	result, err := s.authenticator.Authenticate(ctx, req.Username, req.Password)
-	if err != nil {
-		slog.InfoContext(ctx, "authentication failed",
-			"request_id", requestID,
-			"username", req.Username,
-			"error", err,
-		)
-		return &corev1.AuthenticateResponse{
-			Meta:    responseMeta(requestID),
-			Success: false,
-			Error:   err.Error(),
-		}, nil
-	}
-
-	// Generate session and connection IDs
-	sessionID := s.newSessionID()
-	connID := core.NewULID()
-
-	// Determine client type from request (default: "terminal")
-	clientType := req.ClientType
-	if clientType == "" {
-		clientType = "terminal"
-	}
-
-	// Store session info for command processing
-	now := time.Now()
-	ttlSeconds := int(s.sessionDefaults.TTL.Seconds())
-	if ttlSeconds <= 0 {
-		ttlSeconds = 1800 // fallback
-	}
-	maxHistory := s.sessionDefaults.MaxHistory
-	if maxHistory <= 0 {
-		maxHistory = 500 // fallback
-	}
-
-	sessionInfo := &session.Info{
-		ID:            sessionID.String(),
-		CharacterID:   result.CharacterID,
-		CharacterName: result.CharacterName,
-		LocationID:    result.LocationID,
-		IsGuest:       result.IsGuest,
-		Status:        session.StatusActive,
-		GridPresent:   true,
-		EventCursors:  map[string]ulid.ULID{},
-		TTLSeconds:    ttlSeconds,
-		MaxHistory:    maxHistory,
-		CreatedAt:     now,
-		UpdatedAt:     now,
-	}
-
-	if err := s.sessionStore.Set(ctx, sessionID.String(), sessionInfo); err != nil {
-		slog.ErrorContext(ctx, "failed to store session",
-			"request_id", requestID,
-			"session_id", sessionID.String(),
-			"error", err,
-		)
-		return &corev1.AuthenticateResponse{
-			Meta:    responseMeta(requestID),
-			Success: false,
-			Error:   "session creation failed",
-		}, nil
-	}
-
-	// Register connection with client type.
-	// For the web path, StreamEvents will re-register with the correct stream list;
-	// this initial registration covers the gRPC-native (telnet gateway) path.
-	connInfo := &session.Connection{
-		ID:          connID,
-		SessionID:   sessionID.String(),
-		ClientType:  clientType,
-		Streams:     []string{"location:" + result.LocationID.String()},
-		ConnectedAt: now,
-	}
-	if err := s.sessionStore.AddConnection(ctx, connInfo); err != nil {
-		// Error level: connection count will be wrong, affecting lifecycle decisions.
-		slog.ErrorContext(ctx, "failed to register connection",
-			"request_id", requestID,
-			"session_id", sessionID.String(),
-			"connection_id", connID.String(),
-			"error", err,
-		)
-	}
-
-	// Emit arrive event (best-effort — session is valid even if event fails)
-	char := core.CharacterRef{ID: result.CharacterID, Name: result.CharacterName, LocationID: result.LocationID}
-	if err := s.engine.HandleConnect(ctx, char); err != nil {
-		slog.WarnContext(ctx, "arrive event failed",
-			"request_id", requestID,
-			"session_id", sessionID.String(),
-			"character_id", result.CharacterID.String(),
-			"error", err,
-		)
-	}
-
-	slog.InfoContext(ctx, "authentication successful",
-		"request_id", requestID,
-		"session_id", sessionID.String(),
-		"character_id", result.CharacterID.String(),
-		"character_name", result.CharacterName,
-	)
-
-	return &corev1.AuthenticateResponse{
-		Meta:          responseMeta(requestID),
-		Success:       true,
-		SessionId:     sessionID.String(),
-		CharacterId:   result.CharacterID.String(),
-		CharacterName: result.CharacterName,
-		ConnectionId:  connID.String(),
-	}, nil
 }
 
 // HandleCommand processes a game command.
@@ -421,6 +263,7 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 	var buf bytes.Buffer
 	exec, err := command.NewCommandExecution(command.CommandExecutionConfig{
 		CharacterID:   info.CharacterID,
+		PlayerID:      info.PlayerID,
 		LocationID:    info.LocationID,
 		CharacterName: info.CharacterName,
 		SessionID:     sessionID,

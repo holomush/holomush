@@ -7,14 +7,16 @@
 - [holomush/core/v1/core.proto](#holomush_core_v1_core-proto)
     - [AuthenticatePlayerRequest](#holomush-core-v1-AuthenticatePlayerRequest)
     - [AuthenticatePlayerResponse](#holomush-core-v1-AuthenticatePlayerResponse)
-    - [AuthenticateRequest](#holomush-core-v1-AuthenticateRequest)
-    - [AuthenticateResponse](#holomush-core-v1-AuthenticateResponse)
     - [CharacterSummary](#holomush-core-v1-CharacterSummary)
+    - [CheckPlayerSessionRequest](#holomush-core-v1-CheckPlayerSessionRequest)
+    - [CheckPlayerSessionResponse](#holomush-core-v1-CheckPlayerSessionResponse)
     - [ConfirmPasswordResetRequest](#holomush-core-v1-ConfirmPasswordResetRequest)
     - [ConfirmPasswordResetResponse](#holomush-core-v1-ConfirmPasswordResetResponse)
     - [ControlFrame](#holomush-core-v1-ControlFrame)
     - [CreateCharacterRequest](#holomush-core-v1-CreateCharacterRequest)
     - [CreateCharacterResponse](#holomush-core-v1-CreateCharacterResponse)
+    - [CreateGuestRequest](#holomush-core-v1-CreateGuestRequest)
+    - [CreateGuestResponse](#holomush-core-v1-CreateGuestResponse)
     - [CreatePlayerRequest](#holomush-core-v1-CreatePlayerRequest)
     - [CreatePlayerResponse](#holomush-core-v1-CreatePlayerResponse)
     - [DisconnectRequest](#holomush-core-v1-DisconnectRequest)
@@ -49,22 +51,30 @@
     - [GameEvent](#holomush-web-v1-GameEvent)
     - [GetCommandHistoryRequest](#holomush-web-v1-GetCommandHistoryRequest)
     - [GetCommandHistoryResponse](#holomush-web-v1-GetCommandHistoryResponse)
-    - [LoginRequest](#holomush-web-v1-LoginRequest)
-    - [LoginResponse](#holomush-web-v1-LoginResponse)
     - [SendCommandRequest](#holomush-web-v1-SendCommandRequest)
     - [SendCommandResponse](#holomush-web-v1-SendCommandResponse)
     - [StreamEventsRequest](#holomush-web-v1-StreamEventsRequest)
     - [StreamEventsResponse](#holomush-web-v1-StreamEventsResponse)
     - [WebAuthenticatePlayerRequest](#holomush-web-v1-WebAuthenticatePlayerRequest)
     - [WebAuthenticatePlayerResponse](#holomush-web-v1-WebAuthenticatePlayerResponse)
+    - [WebCheckSessionRequest](#holomush-web-v1-WebCheckSessionRequest)
+    - [WebCheckSessionResponse](#holomush-web-v1-WebCheckSessionResponse)
     - [WebConfirmPasswordResetRequest](#holomush-web-v1-WebConfirmPasswordResetRequest)
     - [WebConfirmPasswordResetResponse](#holomush-web-v1-WebConfirmPasswordResetResponse)
+    - [WebContentItem](#holomush-web-v1-WebContentItem)
+    - [WebContentItem.MetadataEntry](#holomush-web-v1-WebContentItem-MetadataEntry)
     - [WebCreateCharacterRequest](#holomush-web-v1-WebCreateCharacterRequest)
     - [WebCreateCharacterResponse](#holomush-web-v1-WebCreateCharacterResponse)
+    - [WebCreateGuestRequest](#holomush-web-v1-WebCreateGuestRequest)
+    - [WebCreateGuestResponse](#holomush-web-v1-WebCreateGuestResponse)
     - [WebCreatePlayerRequest](#holomush-web-v1-WebCreatePlayerRequest)
     - [WebCreatePlayerResponse](#holomush-web-v1-WebCreatePlayerResponse)
+    - [WebGetContentRequest](#holomush-web-v1-WebGetContentRequest)
+    - [WebGetContentResponse](#holomush-web-v1-WebGetContentResponse)
     - [WebListCharactersRequest](#holomush-web-v1-WebListCharactersRequest)
     - [WebListCharactersResponse](#holomush-web-v1-WebListCharactersResponse)
+    - [WebListContentRequest](#holomush-web-v1-WebListContentRequest)
+    - [WebListContentResponse](#holomush-web-v1-WebListContentResponse)
     - [WebLogoutRequest](#holomush-web-v1-WebLogoutRequest)
     - [WebLogoutResponse](#holomush-web-v1-WebLogoutResponse)
     - [WebRequestPasswordResetRequest](#holomush-web-v1-WebRequestPasswordResetRequest)
@@ -86,11 +96,32 @@
     - [ControlService](#holomush-control-v1-ControlService)
 
 - [holomush/plugin/v1/plugin.proto](#holomush_plugin_v1_plugin-proto)
+    - [CommandRequest](#holomush-plugin-v1-CommandRequest)
+    - [CommandResponse](#holomush-plugin-v1-CommandResponse)
     - [EmitEvent](#holomush-plugin-v1-EmitEvent)
     - [Event](#holomush-plugin-v1-Event)
+    - [HandleCommandRequest](#holomush-plugin-v1-HandleCommandRequest)
+    - [HandleCommandResponse](#holomush-plugin-v1-HandleCommandResponse)
     - [HandleEventRequest](#holomush-plugin-v1-HandleEventRequest)
     - [HandleEventResponse](#holomush-plugin-v1-HandleEventResponse)
+    - [InitRequest](#holomush-plugin-v1-InitRequest)
+    - [InitResponse](#holomush-plugin-v1-InitResponse)
+    - [PluginHostServiceEmitEventRequest](#holomush-plugin-v1-PluginHostServiceEmitEventRequest)
+    - [PluginHostServiceEmitEventResponse](#holomush-plugin-v1-PluginHostServiceEmitEventResponse)
+    - [PluginHostServiceKVDeleteRequest](#holomush-plugin-v1-PluginHostServiceKVDeleteRequest)
+    - [PluginHostServiceKVDeleteResponse](#holomush-plugin-v1-PluginHostServiceKVDeleteResponse)
+    - [PluginHostServiceKVGetRequest](#holomush-plugin-v1-PluginHostServiceKVGetRequest)
+    - [PluginHostServiceKVGetResponse](#holomush-plugin-v1-PluginHostServiceKVGetResponse)
+    - [PluginHostServiceKVSetRequest](#holomush-plugin-v1-PluginHostServiceKVSetRequest)
+    - [PluginHostServiceKVSetResponse](#holomush-plugin-v1-PluginHostServiceKVSetResponse)
+    - [PluginHostServiceLogRequest](#holomush-plugin-v1-PluginHostServiceLogRequest)
+    - [PluginHostServiceLogResponse](#holomush-plugin-v1-PluginHostServiceLogResponse)
+    - [ServiceConfig](#holomush-plugin-v1-ServiceConfig)
+    - [ServiceConfig.RequiredServicesEntry](#holomush-plugin-v1-ServiceConfig-RequiredServicesEntry)
 
+    - [CommandStatus](#holomush-plugin-v1-CommandStatus)
+
+    - [PluginHostService](#holomush-plugin-v1-PluginHostService)
     - [PluginService](#holomush-plugin-v1-PluginService)
 
 - [holomush/plugin/v1/hostfunc.proto](#holomush_plugin_v1_hostfunc-proto)
@@ -109,16 +140,16 @@
     - [KVSetResponse](#holomush-plugin-v1-KVSetResponse)
     - [ListCommandsRequest](#holomush-plugin-v1-ListCommandsRequest)
     - [ListCommandsResponse](#holomush-plugin-v1-ListCommandsResponse)
+    - [LocationInfo](#holomush-plugin-v1-LocationInfo)
     - [LogRequest](#holomush-plugin-v1-LogRequest)
     - [LogRequest.FieldsEntry](#holomush-plugin-v1-LogRequest-FieldsEntry)
     - [LogResponse](#holomush-plugin-v1-LogResponse)
     - [QueryCharacterRequest](#holomush-plugin-v1-QueryCharacterRequest)
     - [QueryCharacterResponse](#holomush-plugin-v1-QueryCharacterResponse)
-    - [QueryRoomCharactersRequest](#holomush-plugin-v1-QueryRoomCharactersRequest)
-    - [QueryRoomCharactersResponse](#holomush-plugin-v1-QueryRoomCharactersResponse)
-    - [QueryRoomRequest](#holomush-plugin-v1-QueryRoomRequest)
-    - [QueryRoomResponse](#holomush-plugin-v1-QueryRoomResponse)
-    - [RoomInfo](#holomush-plugin-v1-RoomInfo)
+    - [QueryLocationCharactersRequest](#holomush-plugin-v1-QueryLocationCharactersRequest)
+    - [QueryLocationCharactersResponse](#holomush-plugin-v1-QueryLocationCharactersResponse)
+    - [QueryLocationRequest](#holomush-plugin-v1-QueryLocationRequest)
+    - [QueryLocationResponse](#holomush-plugin-v1-QueryLocationResponse)
 
     - [LogLevel](#holomush-plugin-v1-LogLevel)
 
@@ -149,35 +180,10 @@
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | success | [bool](#bool) |  |  |
-| player_token | [string](#string) |  |  |
+| player_session_token | [string](#string) |  |  |
 | error_message | [string](#string) |  |  |
 | characters | [CharacterSummary](#holomush-core-v1-CharacterSummary) | repeated |  |
 | default_character_id | [string](#string) |  |  |
-
-<a name="holomush-core-v1-AuthenticateRequest"></a>
-
-### AuthenticateRequest
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| meta | [RequestMeta](#holomush-core-v1-RequestMeta) |  |  |
-| username | [string](#string) |  |  |
-| password | [string](#string) |  |  |
-| client_type | [string](#string) |  | &#34;terminal&#34;, &#34;comms_hub&#34;, &#34;telnet&#34; |
-
-<a name="holomush-core-v1-AuthenticateResponse"></a>
-
-### AuthenticateResponse
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| meta | [ResponseMeta](#holomush-core-v1-ResponseMeta) |  |  |
-| success | [bool](#bool) |  |  |
-| session_id | [string](#string) |  |  |
-| character_id | [string](#string) |  |  |
-| character_name | [string](#string) |  |  |
-| error | [string](#string) |  |  |
-| connection_id | [string](#string) |  |  |
 
 <a name="holomush-core-v1-CharacterSummary"></a>
 
@@ -191,6 +197,22 @@
 | session_status | [string](#string) |  |  |
 | last_location | [string](#string) |  |  |
 | last_played_at | [int64](#int64) |  |  |
+
+<a name="holomush-core-v1-CheckPlayerSessionRequest"></a>
+
+### CheckPlayerSessionRequest
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_session_token | [string](#string) |  |  |
+
+<a name="holomush-core-v1-CheckPlayerSessionResponse"></a>
+
+### CheckPlayerSessionResponse
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_name | [string](#string) |  |  |
 
 <a name="holomush-core-v1-ConfirmPasswordResetRequest"></a>
 
@@ -225,7 +247,7 @@
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| player_token | [string](#string) |  |  |
+| player_session_token | [string](#string) |  |  |
 | character_name | [string](#string) |  |  |
 
 <a name="holomush-core-v1-CreateCharacterResponse"></a>
@@ -238,6 +260,22 @@
 | character_id | [string](#string) |  |  |
 | character_name | [string](#string) |  |  |
 | error_message | [string](#string) |  |  |
+
+<a name="holomush-core-v1-CreateGuestRequest"></a>
+
+### CreateGuestRequest
+
+<a name="holomush-core-v1-CreateGuestResponse"></a>
+
+### CreateGuestResponse
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| success | [bool](#bool) |  |  |
+| error_message | [string](#string) |  |  |
+| player_session_token | [string](#string) |  |  |
+| characters | [CharacterSummary](#holomush-core-v1-CharacterSummary) | repeated |  |
+| default_character_id | [string](#string) |  |  |
 
 <a name="holomush-core-v1-CreatePlayerRequest"></a>
 
@@ -257,7 +295,7 @@
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | success | [bool](#bool) |  |  |
-| player_token | [string](#string) |  |  |
+| player_session_token | [string](#string) |  |  |
 | characters | [CharacterSummary](#holomush-core-v1-CharacterSummary) | repeated |  |
 | error_message | [string](#string) |  |  |
 
@@ -340,7 +378,7 @@
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| player_token | [string](#string) |  |  |
+| player_session_token | [string](#string) |  |  |
 
 <a name="holomush-core-v1-ListCharactersResponse"></a>
 
@@ -356,7 +394,7 @@
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| session_id | [string](#string) |  |  |
+| player_session_token | [string](#string) |  |  |
 
 <a name="holomush-core-v1-LogoutResponse"></a>
 
@@ -406,7 +444,7 @@ ResponseMeta contains metadata echoed back from requests.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| player_token | [string](#string) |  |  |
+| player_session_token | [string](#string) |  |  |
 | character_id | [string](#string) |  |  |
 
 <a name="holomush-core-v1-SelectCharacterResponse"></a>
@@ -459,7 +497,6 @@ CoreService is the main game service.
 
 | Method Name | Request Type | Response Type | Description |
 | ----------- | ------------ | ------------- | ------------|
-| Authenticate | [AuthenticateRequest](#holomush-core-v1-AuthenticateRequest) | [AuthenticateResponse](#holomush-core-v1-AuthenticateResponse) | Authenticate validates credentials and creates a session. |
 | HandleCommand | [HandleCommandRequest](#holomush-core-v1-HandleCommandRequest) | [HandleCommandResponse](#holomush-core-v1-HandleCommandResponse) | HandleCommand processes a game command. |
 | Subscribe | [SubscribeRequest](#holomush-core-v1-SubscribeRequest) | [SubscribeResponse](#holomush-core-v1-SubscribeResponse) stream | Subscribe opens a stream of events for the session. |
 | Disconnect | [DisconnectRequest](#holomush-core-v1-DisconnectRequest) | [DisconnectResponse](#holomush-core-v1-DisconnectResponse) | Disconnect ends a session. |
@@ -467,11 +504,13 @@ CoreService is the main game service.
 | AuthenticatePlayer | [AuthenticatePlayerRequest](#holomush-core-v1-AuthenticatePlayerRequest) | [AuthenticatePlayerResponse](#holomush-core-v1-AuthenticatePlayerResponse) | Two-phase login: authenticate player credentials. |
 | SelectCharacter | [SelectCharacterRequest](#holomush-core-v1-SelectCharacterRequest) | [SelectCharacterResponse](#holomush-core-v1-SelectCharacterResponse) | Two-phase login: select a character, creating or reattaching a game session. |
 | CreatePlayer | [CreatePlayerRequest](#holomush-core-v1-CreatePlayerRequest) | [CreatePlayerResponse](#holomush-core-v1-CreatePlayerResponse) | Create a new player account. |
+| CreateGuest | [CreateGuestRequest](#holomush-core-v1-CreateGuestRequest) | [CreateGuestResponse](#holomush-core-v1-CreateGuestResponse) | Create an ephemeral guest player and character. |
 | CreateCharacter | [CreateCharacterRequest](#holomush-core-v1-CreateCharacterRequest) | [CreateCharacterResponse](#holomush-core-v1-CreateCharacterResponse) | Create a new character for an authenticated player. |
 | ListCharacters | [ListCharactersRequest](#holomush-core-v1-ListCharactersRequest) | [ListCharactersResponse](#holomush-core-v1-ListCharactersResponse) | List characters for an authenticated player. |
 | RequestPasswordReset | [RequestPasswordResetRequest](#holomush-core-v1-RequestPasswordResetRequest) | [RequestPasswordResetResponse](#holomush-core-v1-RequestPasswordResetResponse) | Request a password reset (email stubbed). |
 | ConfirmPasswordReset | [ConfirmPasswordResetRequest](#holomush-core-v1-ConfirmPasswordResetRequest) | [ConfirmPasswordResetResponse](#holomush-core-v1-ConfirmPasswordResetResponse) | Confirm a password reset with token. |
-| Logout | [LogoutRequest](#holomush-core-v1-LogoutRequest) | [LogoutResponse](#holomush-core-v1-LogoutResponse) | End a web session. |
+| Logout | [LogoutRequest](#holomush-core-v1-LogoutRequest) | [LogoutResponse](#holomush-core-v1-LogoutResponse) | End a player session. |
+| CheckPlayerSession | [CheckPlayerSessionRequest](#holomush-core-v1-CheckPlayerSessionRequest) | [CheckPlayerSessionResponse](#holomush-core-v1-CheckPlayerSessionResponse) | Validate a player session token. Used by web gateway for cookie-based auth checks. |
 
 <a name="holomush_web_v1_web-proto"></a>
 <p align="right"><a href="#top">Top</a></p>
@@ -519,10 +558,12 @@ CoreService is the main game service.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | type | [string](#string) |  |  |
-| character_name | [string](#string) |  |  |
-| text | [string](#string) |  |  |
+| category | [string](#string) |  |  |
+| format | [string](#string) |  |  |
+| display_target | [EventChannel](#holomush-web-v1-EventChannel) |  |  |
 | timestamp | [int64](#int64) |  |  |
-| channel | [EventChannel](#holomush-web-v1-EventChannel) |  |  |
+| actor | [string](#string) |  |  |
+| text | [string](#string) |  |  |
 | metadata | [google.protobuf.Struct](https://protobuf.dev/reference/protobuf/google.protobuf/#struct) |  |  |
 
 <a name="holomush-web-v1-GetCommandHistoryRequest"></a>
@@ -540,26 +581,6 @@ CoreService is the main game service.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | commands | [string](#string) | repeated |  |
-
-<a name="holomush-web-v1-LoginRequest"></a>
-
-### LoginRequest
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| username | [string](#string) |  |  |
-| password | [string](#string) |  |  |
-
-<a name="holomush-web-v1-LoginResponse"></a>
-
-### LoginResponse
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| success | [bool](#bool) |  |  |
-| session_id | [string](#string) |  |  |
-| character_name | [string](#string) |  |  |
-| error_message | [string](#string) |  |  |
 
 <a name="holomush-web-v1-SendCommandRequest"></a>
 
@@ -615,10 +636,21 @@ CoreService is the main game service.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | success | [bool](#bool) |  |  |
-| player_token | [string](#string) |  |  |
 | error_message | [string](#string) |  |  |
 | characters | [CharacterSummary](#holomush-web-v1-CharacterSummary) | repeated |  |
 | default_character_id | [string](#string) |  |  |
+
+<a name="holomush-web-v1-WebCheckSessionRequest"></a>
+
+### WebCheckSessionRequest
+
+<a name="holomush-web-v1-WebCheckSessionResponse"></a>
+
+### WebCheckSessionResponse
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| player_name | [string](#string) |  |  |
 
 <a name="holomush-web-v1-WebConfirmPasswordResetRequest"></a>
 
@@ -638,13 +670,32 @@ CoreService is the main game service.
 | success | [bool](#bool) |  |  |
 | error_message | [string](#string) |  |  |
 
+<a name="holomush-web-v1-WebContentItem"></a>
+
+### WebContentItem
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#string) |  |  |
+| content_type | [string](#string) |  |  |
+| body | [bytes](#bytes) |  |  |
+| metadata | [WebContentItem.MetadataEntry](#holomush-web-v1-WebContentItem-MetadataEntry) | repeated |  |
+
+<a name="holomush-web-v1-WebContentItem-MetadataEntry"></a>
+
+### WebContentItem.MetadataEntry
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#string) |  |  |
+| value | [string](#string) |  |  |
+
 <a name="holomush-web-v1-WebCreateCharacterRequest"></a>
 
 ### WebCreateCharacterRequest
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| player_token | [string](#string) |  |  |
 | character_name | [string](#string) |  |  |
 
 <a name="holomush-web-v1-WebCreateCharacterResponse"></a>
@@ -657,6 +708,21 @@ CoreService is the main game service.
 | character_id | [string](#string) |  |  |
 | character_name | [string](#string) |  |  |
 | error_message | [string](#string) |  |  |
+
+<a name="holomush-web-v1-WebCreateGuestRequest"></a>
+
+### WebCreateGuestRequest
+
+<a name="holomush-web-v1-WebCreateGuestResponse"></a>
+
+### WebCreateGuestResponse
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| success | [bool](#bool) |  |  |
+| error_message | [string](#string) |  |  |
+| characters | [CharacterSummary](#holomush-web-v1-CharacterSummary) | repeated |  |
+| default_character_id | [string](#string) |  |  |
 
 <a name="holomush-web-v1-WebCreatePlayerRequest"></a>
 
@@ -675,17 +741,28 @@ CoreService is the main game service.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | success | [bool](#bool) |  |  |
-| player_token | [string](#string) |  |  |
 | characters | [CharacterSummary](#holomush-web-v1-CharacterSummary) | repeated |  |
 | error_message | [string](#string) |  |  |
+
+<a name="holomush-web-v1-WebGetContentRequest"></a>
+
+### WebGetContentRequest
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#string) |  |  |
+
+<a name="holomush-web-v1-WebGetContentResponse"></a>
+
+### WebGetContentResponse
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| item | [WebContentItem](#holomush-web-v1-WebContentItem) |  |  |
 
 <a name="holomush-web-v1-WebListCharactersRequest"></a>
 
 ### WebListCharactersRequest
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| player_token | [string](#string) |  |  |
 
 <a name="holomush-web-v1-WebListCharactersResponse"></a>
 
@@ -695,13 +772,28 @@ CoreService is the main game service.
 | ----- | ---- | ----- | ----------- |
 | characters | [CharacterSummary](#holomush-web-v1-CharacterSummary) | repeated |  |
 
-<a name="holomush-web-v1-WebLogoutRequest"></a>
+<a name="holomush-web-v1-WebListContentRequest"></a>
 
-### WebLogoutRequest
+### WebListContentRequest
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| session_id | [string](#string) |  |  |
+| prefix | [string](#string) |  |  |
+| limit | [int32](#int32) |  |  |
+| cursor | [string](#string) |  |  |
+
+<a name="holomush-web-v1-WebListContentResponse"></a>
+
+### WebListContentResponse
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| items | [WebContentItem](#holomush-web-v1-WebContentItem) | repeated |  |
+| next_cursor | [string](#string) |  |  |
+
+<a name="holomush-web-v1-WebLogoutRequest"></a>
+
+### WebLogoutRequest
 
 <a name="holomush-web-v1-WebLogoutResponse"></a>
 
@@ -729,7 +821,6 @@ CoreService is the main game service.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| player_token | [string](#string) |  |  |
 | character_id | [string](#string) |  |  |
 
 <a name="holomush-web-v1-WebSelectCharacterResponse"></a>
@@ -771,7 +862,6 @@ CoreService is the main game service.
 
 | Method Name | Request Type | Response Type | Description |
 | ----------- | ------------ | ------------- | ------------|
-| Login | [LoginRequest](#holomush-web-v1-LoginRequest) | [LoginResponse](#holomush-web-v1-LoginResponse) | Authenticate as guest or registered user. |
 | SendCommand | [SendCommandRequest](#holomush-web-v1-SendCommandRequest) | [SendCommandResponse](#holomush-web-v1-SendCommandResponse) | Send a game command (say, pose, quit, etc.) |
 | StreamEvents | [StreamEventsRequest](#holomush-web-v1-StreamEventsRequest) | [StreamEventsResponse](#holomush-web-v1-StreamEventsResponse) stream | Server-streaming event feed. Client receives game events (say, pose, arrive, leave) as they occur. |
 | Disconnect | [DisconnectRequest](#holomush-web-v1-DisconnectRequest) | [DisconnectResponse](#holomush-web-v1-DisconnectResponse) | Disconnect ends the session and triggers cleanup. |
@@ -779,11 +869,15 @@ CoreService is the main game service.
 | WebAuthenticatePlayer | [WebAuthenticatePlayerRequest](#holomush-web-v1-WebAuthenticatePlayerRequest) | [WebAuthenticatePlayerResponse](#holomush-web-v1-WebAuthenticatePlayerResponse) | Web auth RPCs. |
 | WebSelectCharacter | [WebSelectCharacterRequest](#holomush-web-v1-WebSelectCharacterRequest) | [WebSelectCharacterResponse](#holomush-web-v1-WebSelectCharacterResponse) |  |
 | WebCreatePlayer | [WebCreatePlayerRequest](#holomush-web-v1-WebCreatePlayerRequest) | [WebCreatePlayerResponse](#holomush-web-v1-WebCreatePlayerResponse) |  |
+| WebCreateGuest | [WebCreateGuestRequest](#holomush-web-v1-WebCreateGuestRequest) | [WebCreateGuestResponse](#holomush-web-v1-WebCreateGuestResponse) | Create an ephemeral guest player and character. |
 | WebCreateCharacter | [WebCreateCharacterRequest](#holomush-web-v1-WebCreateCharacterRequest) | [WebCreateCharacterResponse](#holomush-web-v1-WebCreateCharacterResponse) |  |
 | WebListCharacters | [WebListCharactersRequest](#holomush-web-v1-WebListCharactersRequest) | [WebListCharactersResponse](#holomush-web-v1-WebListCharactersResponse) |  |
 | WebLogout | [WebLogoutRequest](#holomush-web-v1-WebLogoutRequest) | [WebLogoutResponse](#holomush-web-v1-WebLogoutResponse) |  |
 | WebRequestPasswordReset | [WebRequestPasswordResetRequest](#holomush-web-v1-WebRequestPasswordResetRequest) | [WebRequestPasswordResetResponse](#holomush-web-v1-WebRequestPasswordResetResponse) |  |
 | WebConfirmPasswordReset | [WebConfirmPasswordResetRequest](#holomush-web-v1-WebConfirmPasswordResetRequest) | [WebConfirmPasswordResetResponse](#holomush-web-v1-WebConfirmPasswordResetResponse) |  |
+| WebCheckSession | [WebCheckSessionRequest](#holomush-web-v1-WebCheckSessionRequest) | [WebCheckSessionResponse](#holomush-web-v1-WebCheckSessionResponse) | Validate player session from cookie. Returns player info or Unauthenticated error. |
+| WebGetContent | [WebGetContentRequest](#holomush-web-v1-WebGetContentRequest) | [WebGetContentResponse](#holomush-web-v1-WebGetContentResponse) | Content store access (public, no auth required). |
+| WebListContent | [WebListContentRequest](#holomush-web-v1-WebListContentRequest) | [WebListContentResponse](#holomush-web-v1-WebListContentResponse) |  |
 
 <a name="holomush_control_v1_control-proto"></a>
 <p align="right"><a href="#top">Top</a></p>
@@ -847,6 +941,35 @@ ControlService provides administrative operations for HoloMUSH processes.
 
 api/proto/holomush/plugin/v1/plugin.proto
 
+<a name="holomush-plugin-v1-CommandRequest"></a>
+
+### CommandRequest
+
+CommandRequest carries context for a plugin command invocation.
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| command | [string](#string) |  | Parsed command name (e.g., &#34;say&#34;, &#34;dig&#34;). |
+| args | [string](#string) |  | Everything after the command name. |
+| raw_input | [string](#string) |  | What the player actually typed (alias support). |
+| character_id | [string](#string) |  | Invoking character ULID. |
+| character_name | [string](#string) |  | Character display name. |
+| location_id | [string](#string) |  | Character&#39;s current location ULID. |
+| session_id | [string](#string) |  | Active session ULID. |
+| player_id | [string](#string) |  | Player account ULID. |
+
+<a name="holomush-plugin-v1-CommandResponse"></a>
+
+### CommandResponse
+
+CommandResponse carries the result of a plugin command execution.
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| status | [CommandStatus](#holomush-plugin-v1-CommandStatus) |  | Outcome category. |
+| output | [string](#string) |  | Synchronous text output to the invoking player. |
+| events | [EmitEvent](#holomush-plugin-v1-EmitEvent) | repeated | Events to append to the event store. |
+
 <a name="holomush-plugin-v1-EmitEvent"></a>
 
 ### EmitEvent
@@ -870,12 +993,32 @@ Compatible with pkg/plugin.Event but uses protobuf types.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | id | [string](#string) |  | Unique event identifier (ULID string). |
-| stream | [string](#string) |  | Stream the event belongs to (e.g., &#34;room:room_abc123&#34;). |
+| stream | [string](#string) |  | Stream the event belongs to (e.g., &#34;location:loc_abc123&#34;). |
 | type | [string](#string) |  | Event type (e.g., &#34;say&#34;, &#34;pose&#34;, &#34;arrive&#34;, &#34;leave&#34;, &#34;system&#34;). |
 | timestamp | [int64](#int64) |  | Timestamp in Unix milliseconds. |
 | actor_kind | [string](#string) |  | Actor kind as string (e.g., &#34;character&#34;, &#34;system&#34;, &#34;plugin&#34;). Using string instead of enum for flexibility and compatibility. |
 | actor_id | [string](#string) |  | Actor identifier. |
 | payload | [string](#string) |  | JSON-encoded payload. |
+
+<a name="holomush-plugin-v1-HandleCommandRequest"></a>
+
+### HandleCommandRequest
+
+HandleCommandRequest wraps a command for delivery to the plugin.
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| command | [CommandRequest](#holomush-plugin-v1-CommandRequest) |  | The command to handle. |
+
+<a name="holomush-plugin-v1-HandleCommandResponse"></a>
+
+### HandleCommandResponse
+
+HandleCommandResponse wraps the command result from the plugin.
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| response | [CommandResponse](#holomush-plugin-v1-CommandResponse) |  | The command result. |
 
 <a name="holomush-plugin-v1-HandleEventRequest"></a>
 
@@ -897,16 +1040,159 @@ HandleEventResponse contains any events the plugin wants to emit.
 | ----- | ---- | ----- | ----------- |
 | emit_events | [EmitEvent](#holomush-plugin-v1-EmitEvent) | repeated | Events to emit in response. |
 
+<a name="holomush-plugin-v1-InitRequest"></a>
+
+### InitRequest
+
+InitRequest is sent by the host after connecting to the plugin process.
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| config | [ServiceConfig](#holomush-plugin-v1-ServiceConfig) |  | Service configuration for the plugin. |
+
+<a name="holomush-plugin-v1-InitResponse"></a>
+
+### InitResponse
+
+InitResponse is returned by the plugin after initialization.
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| provided_services | [string](#string) | repeated | gRPC service names this plugin provides on the go-plugin transport. |
+
+<a name="holomush-plugin-v1-PluginHostServiceEmitEventRequest"></a>
+
+### PluginHostServiceEmitEventRequest
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| stream | [string](#string) |  |  |
+| event_type | [string](#string) |  |  |
+| payload | [bytes](#bytes) |  |  |
+
+<a name="holomush-plugin-v1-PluginHostServiceEmitEventResponse"></a>
+
+### PluginHostServiceEmitEventResponse
+
+<a name="holomush-plugin-v1-PluginHostServiceKVDeleteRequest"></a>
+
+### PluginHostServiceKVDeleteRequest
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| plugin_name | [string](#string) |  |  |
+| key | [string](#string) |  |  |
+
+<a name="holomush-plugin-v1-PluginHostServiceKVDeleteResponse"></a>
+
+### PluginHostServiceKVDeleteResponse
+
+<a name="holomush-plugin-v1-PluginHostServiceKVGetRequest"></a>
+
+### PluginHostServiceKVGetRequest
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| plugin_name | [string](#string) |  |  |
+| key | [string](#string) |  |  |
+
+<a name="holomush-plugin-v1-PluginHostServiceKVGetResponse"></a>
+
+### PluginHostServiceKVGetResponse
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| value | [string](#string) |  |  |
+| found | [bool](#bool) |  |  |
+
+<a name="holomush-plugin-v1-PluginHostServiceKVSetRequest"></a>
+
+### PluginHostServiceKVSetRequest
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| plugin_name | [string](#string) |  |  |
+| key | [string](#string) |  |  |
+| value | [string](#string) |  |  |
+
+<a name="holomush-plugin-v1-PluginHostServiceKVSetResponse"></a>
+
+### PluginHostServiceKVSetResponse
+
+<a name="holomush-plugin-v1-PluginHostServiceLogRequest"></a>
+
+### PluginHostServiceLogRequest
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| level | [string](#string) |  |  |
+| message | [string](#string) |  |  |
+
+<a name="holomush-plugin-v1-PluginHostServiceLogResponse"></a>
+
+### PluginHostServiceLogResponse
+
+<a name="holomush-plugin-v1-ServiceConfig"></a>
+
+### ServiceConfig
+
+ServiceConfig carries initialization data from the host to the plugin.
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| connection_string | [string](#string) |  | PostgreSQL connection string (provided when the plugin declares storage: postgres). |
+| required_services | [ServiceConfig.RequiredServicesEntry](#holomush-plugin-v1-ServiceConfig-RequiredServicesEntry) | repeated | Addresses of required services, keyed by service name (future use). |
+
+<a name="holomush-plugin-v1-ServiceConfig-RequiredServicesEntry"></a>
+
+### ServiceConfig.RequiredServicesEntry
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| key | [string](#string) |  |  |
+| value | [string](#string) |  |  |
+
+<a name="holomush-plugin-v1-CommandStatus"></a>
+
+### CommandStatus
+
+CommandStatus maps to pkg/plugin.CommandStatus values.
+
+| Name | Number | Description |
+| ---- | ------ | ----------- |
+| COMMAND_STATUS_UNSPECIFIED | 0 |  |
+| COMMAND_STATUS_OK | 1 |  |
+| COMMAND_STATUS_ERROR | 2 |  |
+| COMMAND_STATUS_FAILURE | 3 |  |
+| COMMAND_STATUS_FATAL | 4 |  |
+
+<a name="holomush-plugin-v1-PluginHostService"></a>
+
+### PluginHostService
+
+PluginHostService runs in the host process, allowing binary plugins
+to call back for event emission, logging, and KV storage.
+
+| Method Name | Request Type | Response Type | Description |
+| ----------- | ------------ | ------------- | ------------|
+| EmitEvent | [PluginHostServiceEmitEventRequest](#holomush-plugin-v1-PluginHostServiceEmitEventRequest) | [PluginHostServiceEmitEventResponse](#holomush-plugin-v1-PluginHostServiceEmitEventResponse) | EmitEvent publishes an event to a stream. |
+| Log | [PluginHostServiceLogRequest](#holomush-plugin-v1-PluginHostServiceLogRequest) | [PluginHostServiceLogResponse](#holomush-plugin-v1-PluginHostServiceLogResponse) | Log writes a log message through the host&#39;s logging system. |
+| KVGet | [PluginHostServiceKVGetRequest](#holomush-plugin-v1-PluginHostServiceKVGetRequest) | [PluginHostServiceKVGetResponse](#holomush-plugin-v1-PluginHostServiceKVGetResponse) | KVGet retrieves a value from the plugin&#39;s key-value store. |
+| KVSet | [PluginHostServiceKVSetRequest](#holomush-plugin-v1-PluginHostServiceKVSetRequest) | [PluginHostServiceKVSetResponse](#holomush-plugin-v1-PluginHostServiceKVSetResponse) | KVSet stores a value in the plugin&#39;s key-value store. |
+| KVDelete | [PluginHostServiceKVDeleteRequest](#holomush-plugin-v1-PluginHostServiceKVDeleteRequest) | [PluginHostServiceKVDeleteResponse](#holomush-plugin-v1-PluginHostServiceKVDeleteResponse) | KVDelete removes a value from the plugin&#39;s key-value store. |
+
 <a name="holomush-plugin-v1-PluginService"></a>
 
 ### PluginService
 
-PluginService is called by the go-plugin host to send events to binary plugins.
+PluginService is called by the go-plugin host to send events and commands to binary plugins.
 This service is implemented by the plugin (the gRPC server runs in the plugin process).
 
 | Method Name | Request Type | Response Type | Description |
 | ----------- | ------------ | ------------- | ------------|
+| Init | [InitRequest](#holomush-plugin-v1-InitRequest) | [InitResponse](#holomush-plugin-v1-InitResponse) | Init is called by the host after connection, providing service configuration (DB connection string, required service addresses, etc.) and receiving the list of gRPC services the plugin provides. |
 | HandleEvent | [HandleEventRequest](#holomush-plugin-v1-HandleEventRequest) | [HandleEventResponse](#holomush-plugin-v1-HandleEventResponse) | HandleEvent delivers an event to the plugin and receives any response events. |
+| HandleCommand | [HandleCommandRequest](#holomush-plugin-v1-HandleCommandRequest) | [HandleCommandResponse](#holomush-plugin-v1-HandleCommandResponse) | HandleCommand delivers a command to the plugin. |
 
 <a name="holomush_plugin_v1_hostfunc-proto"></a>
 <p align="right"><a href="#top">Top</a></p>
@@ -1083,6 +1369,18 @@ ListCommandsResponse contains the list of available commands.
 | commands | [CommandInfo](#holomush-plugin-v1-CommandInfo) | repeated | Available commands. |
 | error | [string](#string) |  | Error message if query failed. |
 
+<a name="holomush-plugin-v1-LocationInfo"></a>
+
+### LocationInfo
+
+LocationInfo contains basic location information.
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| id | [string](#string) |  | Location identifier. |
+| name | [string](#string) |  | Location name/title. |
+| description | [string](#string) |  | Location description. |
+
 <a name="holomush-plugin-v1-LogRequest"></a>
 
 ### LogRequest
@@ -1131,59 +1429,47 @@ QueryCharacterResponse contains character information.
 | character | [CharacterInfo](#holomush-plugin-v1-CharacterInfo) |  | Character information (nil if not found). |
 | error | [string](#string) |  | Error message if query failed. |
 
-<a name="holomush-plugin-v1-QueryRoomCharactersRequest"></a>
+<a name="holomush-plugin-v1-QueryLocationCharactersRequest"></a>
 
-### QueryRoomCharactersRequest
+### QueryLocationCharactersRequest
 
-QueryRoomCharactersRequest requests all characters in a room.
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| room_id | [string](#string) |  | Room identifier. |
-
-<a name="holomush-plugin-v1-QueryRoomCharactersResponse"></a>
-
-### QueryRoomCharactersResponse
-
-QueryRoomCharactersResponse contains the list of characters.
+QueryLocationCharactersRequest requests all characters in a location.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| characters | [CharacterInfo](#holomush-plugin-v1-CharacterInfo) | repeated | Characters in the room. |
+| location_id | [string](#string) |  | Location identifier. |
+
+<a name="holomush-plugin-v1-QueryLocationCharactersResponse"></a>
+
+### QueryLocationCharactersResponse
+
+QueryLocationCharactersResponse contains the list of characters.
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| characters | [CharacterInfo](#holomush-plugin-v1-CharacterInfo) | repeated | Characters in the location. |
 | error | [string](#string) |  | Error message if query failed. |
 
-<a name="holomush-plugin-v1-QueryRoomRequest"></a>
+<a name="holomush-plugin-v1-QueryLocationRequest"></a>
 
-### QueryRoomRequest
+### QueryLocationRequest
 
-QueryRoomRequest requests information about a room.
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| room_id | [string](#string) |  | Room identifier. |
-
-<a name="holomush-plugin-v1-QueryRoomResponse"></a>
-
-### QueryRoomResponse
-
-QueryRoomResponse contains room information.
+QueryLocationRequest requests information about a location.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| room | [RoomInfo](#holomush-plugin-v1-RoomInfo) |  | Room information (nil if not found). |
+| location_id | [string](#string) |  | Location identifier. |
+
+<a name="holomush-plugin-v1-QueryLocationResponse"></a>
+
+### QueryLocationResponse
+
+QueryLocationResponse contains location information.
+
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| location | [LocationInfo](#holomush-plugin-v1-LocationInfo) |  | Location information (nil if not found). |
 | error | [string](#string) |  | Error message if query failed. |
-
-<a name="holomush-plugin-v1-RoomInfo"></a>
-
-### RoomInfo
-
-RoomInfo contains basic room information.
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| id | [string](#string) |  | Room identifier. |
-| name | [string](#string) |  | Room name/title. |
-| description | [string](#string) |  | Room description. |
 
 <a name="holomush-plugin-v1-LogLevel"></a>
 
@@ -1210,9 +1496,9 @@ Plugins call these methods to interact with the game world.
 | Method Name | Request Type | Response Type | Description |
 | ----------- | ------------ | ------------- | ------------|
 | EmitEvent | [EmitEventRequest](#holomush-plugin-v1-EmitEventRequest) | [EmitEventResponse](#holomush-plugin-v1-EmitEventResponse) | EmitEvent publishes an event to a stream. |
-| QueryRoom | [QueryRoomRequest](#holomush-plugin-v1-QueryRoomRequest) | [QueryRoomResponse](#holomush-plugin-v1-QueryRoomResponse) | QueryRoom retrieves information about a room. |
+| QueryLocation | [QueryLocationRequest](#holomush-plugin-v1-QueryLocationRequest) | [QueryLocationResponse](#holomush-plugin-v1-QueryLocationResponse) | QueryLocation retrieves information about a location. |
 | QueryCharacter | [QueryCharacterRequest](#holomush-plugin-v1-QueryCharacterRequest) | [QueryCharacterResponse](#holomush-plugin-v1-QueryCharacterResponse) | QueryCharacter retrieves information about a character. |
-| QueryRoomCharacters | [QueryRoomCharactersRequest](#holomush-plugin-v1-QueryRoomCharactersRequest) | [QueryRoomCharactersResponse](#holomush-plugin-v1-QueryRoomCharactersResponse) | QueryRoomCharacters retrieves all characters in a room. |
+| QueryLocationCharacters | [QueryLocationCharactersRequest](#holomush-plugin-v1-QueryLocationCharactersRequest) | [QueryLocationCharactersResponse](#holomush-plugin-v1-QueryLocationCharactersResponse) | QueryLocationCharacters retrieves all characters in a location. |
 | KVGet | [KVGetRequest](#holomush-plugin-v1-KVGetRequest) | [KVGetResponse](#holomush-plugin-v1-KVGetResponse) | KVGet retrieves a value from the plugin&#39;s key-value store. |
 | KVSet | [KVSetRequest](#holomush-plugin-v1-KVSetRequest) | [KVSetResponse](#holomush-plugin-v1-KVSetResponse) | KVSet stores a value in the plugin&#39;s key-value store. |
 | KVDelete | [KVDeleteRequest](#holomush-plugin-v1-KVDeleteRequest) | [KVDeleteResponse](#holomush-plugin-v1-KVDeleteResponse) | KVDelete removes a value from the plugin&#39;s key-value store. |

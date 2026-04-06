@@ -22,7 +22,6 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CoreService_Authenticate_FullMethodName         = "/holomush.core.v1.CoreService/Authenticate"
 	CoreService_HandleCommand_FullMethodName        = "/holomush.core.v1.CoreService/HandleCommand"
 	CoreService_Subscribe_FullMethodName            = "/holomush.core.v1.CoreService/Subscribe"
 	CoreService_Disconnect_FullMethodName           = "/holomush.core.v1.CoreService/Disconnect"
@@ -45,8 +44,6 @@ const (
 //
 // CoreService is the main game service.
 type CoreServiceClient interface {
-	// Authenticate validates credentials and creates a session.
-	Authenticate(ctx context.Context, in *AuthenticateRequest, opts ...grpc.CallOption) (*AuthenticateResponse, error)
 	// HandleCommand processes a game command.
 	HandleCommand(ctx context.Context, in *HandleCommandRequest, opts ...grpc.CallOption) (*HandleCommandResponse, error)
 	// Subscribe opens a stream of events for the session.
@@ -83,16 +80,6 @@ type coreServiceClient struct {
 
 func NewCoreServiceClient(cc grpc.ClientConnInterface) CoreServiceClient {
 	return &coreServiceClient{cc}
-}
-
-func (c *coreServiceClient) Authenticate(ctx context.Context, in *AuthenticateRequest, opts ...grpc.CallOption) (*AuthenticateResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AuthenticateResponse)
-	err := c.cc.Invoke(ctx, CoreService_Authenticate_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *coreServiceClient) HandleCommand(ctx context.Context, in *HandleCommandRequest, opts ...grpc.CallOption) (*HandleCommandResponse, error) {
@@ -250,8 +237,6 @@ func (c *coreServiceClient) CheckPlayerSession(ctx context.Context, in *CheckPla
 //
 // CoreService is the main game service.
 type CoreServiceServer interface {
-	// Authenticate validates credentials and creates a session.
-	Authenticate(context.Context, *AuthenticateRequest) (*AuthenticateResponse, error)
 	// HandleCommand processes a game command.
 	HandleCommand(context.Context, *HandleCommandRequest) (*HandleCommandResponse, error)
 	// Subscribe opens a stream of events for the session.
@@ -290,9 +275,6 @@ type CoreServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedCoreServiceServer struct{}
 
-func (UnimplementedCoreServiceServer) Authenticate(context.Context, *AuthenticateRequest) (*AuthenticateResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Authenticate not implemented")
-}
 func (UnimplementedCoreServiceServer) HandleCommand(context.Context, *HandleCommandRequest) (*HandleCommandResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method HandleCommand not implemented")
 }
@@ -354,24 +336,6 @@ func RegisterCoreServiceServer(s grpc.ServiceRegistrar, srv CoreServiceServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&CoreService_ServiceDesc, srv)
-}
-
-func _CoreService_Authenticate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AuthenticateRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(CoreServiceServer).Authenticate(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: CoreService_Authenticate_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CoreServiceServer).Authenticate(ctx, req.(*AuthenticateRequest))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _CoreService_HandleCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -626,10 +590,6 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "holomush.core.v1.CoreService",
 	HandlerType: (*CoreServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "Authenticate",
-			Handler:    _CoreService_Authenticate_Handler,
-		},
 		{
 			MethodName: "HandleCommand",
 			Handler:    _CoreService_HandleCommand_Handler,

@@ -97,15 +97,6 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// Authenticate validates credentials and creates a session.
-func (c *Client) Authenticate(ctx context.Context, req *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
-	resp, err := c.client.Authenticate(ctx, req)
-	if err != nil {
-		return nil, oops.Code("RPC_FAILED").With("method", "Authenticate").Wrap(err)
-	}
-	return resp, nil
-}
-
 // HandleCommand processes a game command.
 func (c *Client) HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
 	resp, err := c.client.HandleCommand(ctx, req)

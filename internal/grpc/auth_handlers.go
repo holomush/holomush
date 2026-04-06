@@ -270,6 +270,7 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 	sessionInfo := &session.Info{
 		ID:            sessionID.String(),
 		CharacterID:   charID,
+		PlayerID:      playerSession.PlayerID,
 		CharacterName: selectedChar.Name,
 		LocationID:    locationID,
 		Status:        session.StatusActive,

@@ -42,6 +42,7 @@ func (s Status) String() string {
 type Info struct {
 	ID             string
 	CharacterID    ulid.ULID
+	PlayerID       ulid.ULID
 	CharacterName  string
 	LocationID     ulid.ULID
 	IsGuest        bool

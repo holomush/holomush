@@ -34,25 +34,8 @@ func closeWithCheck(t *testing.T, c io.Closer) {
 type mockCoreServer struct {
 	corev1.UnimplementedCoreServiceServer
 
-	authenticateFunc  func(context.Context, *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error)
 	handleCommandFunc func(context.Context, *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error)
 	disconnectFunc    func(context.Context, *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error)
-}
-
-func (m *mockCoreServer) Authenticate(ctx context.Context, req *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
-	if m.authenticateFunc != nil {
-		return m.authenticateFunc(ctx, req)
-	}
-	return &corev1.AuthenticateResponse{
-		Meta: &corev1.ResponseMeta{
-			RequestId: req.GetMeta().GetRequestId(),
-			Timestamp: timestamppb.Now(),
-		},
-		Success:       true,
-		SessionId:     "test-session-id",
-		CharacterId:   "test-char-id",
-		CharacterName: "TestPlayer",
-	}, nil
 }
 
 func (m *mockCoreServer) HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
@@ -93,7 +76,7 @@ func TestNewClient_ConnectsToServer(t *testing.T) {
 	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
-	server := grpc.NewServer()
+	server := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-process test mock
 	corev1.RegisterCoreServiceServer(server, &mockCoreServer{})
 
 	go func() {
@@ -112,89 +95,16 @@ func TestNewClient_ConnectsToServer(t *testing.T) {
 	defer closeWithCheck(t, client)
 
 	// Verify client is connected by making a call
-	resp, err := client.Authenticate(ctx, &corev1.AuthenticateRequest{
+	resp, err := client.HandleCommand(ctx, &corev1.HandleCommandRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "test-req-1",
 			Timestamp: timestamppb.Now(),
 		},
-		Username: "testuser",
-		Password: "testpass",
+		SessionId: "test-session",
+		Command:   "look",
 	})
 	require.NoError(t, err)
-	assert.True(t, resp.GetSuccess(), "Authenticate() success = false, want true")
-}
-
-func TestClient_Authenticate(t *testing.T) {
-	// Start a mock server
-	lis, err := net.Listen("tcp", "localhost:0")
-	require.NoError(t, err, "failed to listen")
-	defer closeWithCheck(t, lis)
-
-	mockServer := &mockCoreServer{
-		authenticateFunc: func(_ context.Context, req *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
-			return &corev1.AuthenticateResponse{
-				Meta: &corev1.ResponseMeta{
-					RequestId: req.GetMeta().GetRequestId(),
-					Timestamp: timestamppb.Now(),
-				},
-				Success:       req.GetUsername() == "validuser",
-				SessionId:     "session-123",
-				CharacterId:   "char-456",
-				CharacterName: "ValidUser",
-				Error:         "",
-			}, nil
-		},
-	}
-
-	server := grpc.NewServer()
-	corev1.RegisterCoreServiceServer(server, mockServer)
-
-	go func() {
-		_ = server.Serve(lis)
-	}()
-	defer server.Stop()
-
-	// Create client
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	client, err := NewClient(ctx, ClientConfig{
-		Address: lis.Addr().String(),
-	})
-	require.NoError(t, err)
-	defer closeWithCheck(t, client)
-
-	tests := []struct {
-		name        string
-		username    string
-		wantSuccess bool
-	}{
-		{
-			name:        "valid credentials",
-			username:    "validuser",
-			wantSuccess: true,
-		},
-		{
-			name:        "invalid credentials",
-			username:    "invaliduser",
-			wantSuccess: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			resp, err := client.Authenticate(ctx, &corev1.AuthenticateRequest{
-				Meta: &corev1.RequestMeta{
-					RequestId: "test-" + tt.name,
-					Timestamp: timestamppb.Now(),
-				},
-				Username: tt.username,
-				Password: "password",
-			})
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantSuccess, resp.GetSuccess())
-		})
-	}
+	assert.True(t, resp.GetSuccess(), "HandleCommand() success = false, want true")
 }
 
 func TestClient_HandleCommand(t *testing.T) {
@@ -203,7 +113,7 @@ func TestClient_HandleCommand(t *testing.T) {
 	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
-	server := grpc.NewServer()
+	server := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-process test mock
 	corev1.RegisterCoreServiceServer(server, &mockCoreServer{})
 
 	go func() {
@@ -239,7 +149,7 @@ func TestClient_Disconnect(t *testing.T) {
 	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
-	server := grpc.NewServer()
+	server := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-process test mock
 	corev1.RegisterCoreServiceServer(server, &mockCoreServer{})
 
 	go func() {
@@ -323,16 +233,16 @@ func TestClient_WithTLS(t *testing.T) {
 	defer closeWithCheck(t, client)
 
 	// Verify mTLS connection works
-	resp, err := client.Authenticate(ctx, &corev1.AuthenticateRequest{
+	resp, err := client.HandleCommand(ctx, &corev1.HandleCommandRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "tls-test",
 			Timestamp: timestamppb.Now(),
 		},
-		Username: "testuser",
-		Password: "testpass",
+		SessionId: "test-session",
+		Command:   "look",
 	})
-	require.NoError(t, err, "Authenticate() with TLS error")
-	assert.True(t, resp.GetSuccess(), "Authenticate() with TLS success = false, want true")
+	require.NoError(t, err, "HandleCommand() with TLS error")
+	assert.True(t, resp.GetSuccess(), "HandleCommand() with TLS success = false, want true")
 }
 
 func TestClient_KeepaliveConfig(t *testing.T) {
@@ -341,7 +251,7 @@ func TestClient_KeepaliveConfig(t *testing.T) {
 	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
-	server := grpc.NewServer()
+	server := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-process test mock
 	corev1.RegisterCoreServiceServer(server, &mockCoreServer{})
 
 	go func() {
@@ -362,16 +272,16 @@ func TestClient_KeepaliveConfig(t *testing.T) {
 	defer closeWithCheck(t, client)
 
 	// Verify client works (keepalive is internal, just verify connection works)
-	resp, err := client.Authenticate(ctx, &corev1.AuthenticateRequest{
+	resp, err := client.HandleCommand(ctx, &corev1.HandleCommandRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "keepalive-test",
 			Timestamp: timestamppb.Now(),
 		},
-		Username: "testuser",
-		Password: "testpass",
+		SessionId: "test-session",
+		Command:   "look",
 	})
 	require.NoError(t, err)
-	assert.True(t, resp.GetSuccess(), "Authenticate() success = false, want true")
+	assert.True(t, resp.GetSuccess(), "HandleCommand() success = false, want true")
 }
 
 func TestClient_CoreClient(t *testing.T) {
@@ -380,7 +290,7 @@ func TestClient_CoreClient(t *testing.T) {
 	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
-	server := grpc.NewServer()
+	server := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-process test mock
 	corev1.RegisterCoreServiceServer(server, &mockCoreServer{})
 
 	go func() {
@@ -403,16 +313,16 @@ func TestClient_CoreClient(t *testing.T) {
 	require.NotNil(t, coreClient, "CoreClient() returned nil")
 
 	// Use the underlying client directly
-	resp, err := coreClient.Authenticate(ctx, &corev1.AuthenticateRequest{
+	resp, err := coreClient.HandleCommand(ctx, &corev1.HandleCommandRequest{
 		Meta: &corev1.RequestMeta{
 			RequestId: "direct-test",
 			Timestamp: timestamppb.Now(),
 		},
-		Username: "testuser",
-		Password: "testpass",
+		SessionId: "test-session",
+		Command:   "look",
 	})
-	require.NoError(t, err, "CoreClient().Authenticate() error")
-	assert.True(t, resp.GetSuccess(), "CoreClient().Authenticate() success = false, want true")
+	require.NoError(t, err, "CoreClient().HandleCommand() error")
+	assert.True(t, resp.GetSuccess(), "CoreClient().HandleCommand() success = false, want true")
 }
 
 func TestClient_Subscribe(t *testing.T) {
@@ -421,7 +331,7 @@ func TestClient_Subscribe(t *testing.T) {
 	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
-	server := grpc.NewServer()
+	server := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-process test mock
 	corev1.RegisterCoreServiceServer(server, &mockCoreServerWithSubscribe{})
 
 	go func() {
@@ -492,48 +402,6 @@ func TestClient_Close_NilConn(t *testing.T) {
 	assert.NoError(t, err, "Close() with nil conn should not error")
 }
 
-func TestClient_Authenticate_RPCError(t *testing.T) {
-	// Start a mock server that returns an error
-	lis, err := net.Listen("tcp", "localhost:0")
-	require.NoError(t, err, "failed to listen")
-	defer closeWithCheck(t, lis)
-
-	mockServer := &mockCoreServer{
-		authenticateFunc: func(_ context.Context, _ *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
-			return nil, io.EOF // Simulate RPC error
-		},
-	}
-
-	server := grpc.NewServer()
-	corev1.RegisterCoreServiceServer(server, mockServer)
-
-	go func() {
-		_ = server.Serve(lis)
-	}()
-	defer server.Stop()
-
-	// Create client
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	client, err := NewClient(ctx, ClientConfig{
-		Address: lis.Addr().String(),
-	})
-	require.NoError(t, err)
-	defer closeWithCheck(t, client)
-
-	// Call Authenticate - should get error
-	_, err = client.Authenticate(ctx, &corev1.AuthenticateRequest{
-		Meta: &corev1.RequestMeta{
-			RequestId: "error-test",
-			Timestamp: timestamppb.Now(),
-		},
-		Username: "testuser",
-		Password: "testpass",
-	})
-	assert.Error(t, err, "Authenticate() should return error when RPC fails")
-}
-
 func TestClient_HandleCommand_RPCError(t *testing.T) {
 	// Start a mock server that returns an error
 	lis, err := net.Listen("tcp", "localhost:0")
@@ -546,7 +414,7 @@ func TestClient_HandleCommand_RPCError(t *testing.T) {
 		},
 	}
 
-	server := grpc.NewServer()
+	server := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-process test mock
 	corev1.RegisterCoreServiceServer(server, mockServer)
 
 	go func() {
@@ -588,7 +456,7 @@ func TestClient_Disconnect_RPCError(t *testing.T) {
 		},
 	}
 
-	server := grpc.NewServer()
+	server := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-process test mock
 	corev1.RegisterCoreServiceServer(server, mockServer)
 
 	go func() {
@@ -623,7 +491,7 @@ func TestClient_Subscribe_StreamError(t *testing.T) {
 	require.NoError(t, err, "failed to listen")
 	defer closeWithCheck(t, lis)
 
-	server := grpc.NewServer()
+	server := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-process test mock
 	corev1.RegisterCoreServiceServer(server, &mockCoreServerWithSubscribeError{})
 
 	go func() {

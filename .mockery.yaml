@@ -18,7 +18,6 @@ packages:
       dir: "{{.InterfaceDir}}/mocks"
       outpkg: mocks
     interfaces:
-      Authenticator:
       AuthServiceProvider:
       ResetServiceProvider:
       CharacterServiceProvider:

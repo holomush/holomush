@@ -263,16 +263,16 @@ func TestMigratorCloseIsIdempotent(t *testing.T) {
 }
 
 func TestMigratorPendingMigrationsReturnsMigrationsAboveCurrentVersion(t *testing.T) {
-	// At version 0, migrations 1-3 should be pending (baseline + is_guest + alias_source)
+	// At version 0, migrations 1-4 should be pending (baseline + is_guest + alias_source + session_player_id)
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3}, pending)
+	assert.Equal(t, []uint{1, 2, 3, 4}, pending)
 }
 
 func TestMigratorPendingMigrationsReturnsEmptyAtLatestVersion(t *testing.T) {
-	// At version 3 (latest), no migrations should be pending
-	m := &Migrator{m: &mockMigrate{versionVal: 3}}
+	// At version 4 (latest), no migrations should be pending
+	m := &Migrator{m: &mockMigrate{versionVal: 4}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
 	assert.Empty(t, pending)
@@ -303,11 +303,11 @@ func TestMigratorAppliedMigrationsReturnsEmptyAtVersionZero(t *testing.T) {
 }
 
 func TestMigratorAppliedMigrationsReturnsAllAtLatestVersion(t *testing.T) {
-	// At version 2 (latest), all migrations applied
-	m := &Migrator{m: &mockMigrate{versionVal: 2}}
+	// At version 4 (latest), all migrations applied
+	m := &Migrator{m: &mockMigrate{versionVal: 4}}
 	applied, err := m.AppliedMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2}, applied)
+	assert.Equal(t, []uint{1, 2, 3, 4}, applied)
 }
 
 func TestMigratorAppliedMigrationsReturnsErrorWhenVersionFails(t *testing.T) {
@@ -446,6 +446,8 @@ func TestMigrationName(t *testing.T) {
 		{1, "000001_baseline", false},
 		{2, "000002_player_is_guest", false},
 		{3, "000003_alias_source", false},
+		{4, "000004_session_player_id", false},
+		{5, "", false},   // No migration 5
 		{7, "", false},   // No migration 7 after collapse
 		{999, "", false}, // Unknown version returns empty string and nil error (not found is expected)
 	}
@@ -509,10 +511,10 @@ func TestMigrationNameUsesCacheAcrossMultipleCalls(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "000001_baseline", name1)
 
-	// Test unknown version (no migration 4 after collapse)
+	// Test known version
 	name4, err := MigrationName(4)
 	require.NoError(t, err)
-	assert.Equal(t, "", name4)
+	assert.Equal(t, "000004_session_player_id", name4)
 
 	// Test unknown version (should return empty, not error)
 	name999, err := MigrationName(999)

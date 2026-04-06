@@ -19,27 +19,34 @@ A gateway never accesses the database directly. It authenticates players, relays
 commands, subscribes to event streams, and translates between its native protocol
 (telnet escape codes, WebSocket frames, etc.) and gRPC.
 
-## The Four RPCs
+## The Core RPCs
 
-The Core service exposes four primary RPCs:
+The Core service exposes a small set of RPCs for the runtime data path plus
+two-phase login. The runtime path is what most clients spend their time on:
 
 ```protobuf
 service CoreService {
-  rpc Authenticate(AuthenticateRequest) returns (AuthenticateResponse);
   rpc HandleCommand(HandleCommandRequest) returns (HandleCommandResponse);
   rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse);
   rpc Disconnect(DisconnectRequest) returns (DisconnectResponse);
+  // ... plus two-phase login: AuthenticatePlayer, SelectCharacter,
+  // CreateGuest, CreatePlayer, etc.
 }
 ```
 
-### Authenticate
+### Two-Phase Login
 
-Validates credentials and creates a session. On success, returns a `session_id`
-that all subsequent calls require.
+Login is split into two RPCs so that registered players can choose between
+multiple characters:
 
-The response also includes the `character_id` and `character_name` for the
-authenticated character. If authentication fails, `success` is `false` and the
-`error` field explains why (invalid credentials, account locked, etc.).
+1. `AuthenticatePlayer(username, password)` validates credentials and returns a
+   `player_session_token` plus the list of characters owned by the player.
+2. `SelectCharacter(player_session_token, character_id)` creates or reattaches a
+   game session for the chosen character and returns a `session_id`.
+
+For ephemeral guest play, `CreateGuest()` short-circuits step 1 by issuing a
+guest player + character + token in a single call; the client then calls
+`SelectCharacter` exactly the same way.
 
 ### HandleCommand
 
@@ -75,13 +82,14 @@ A typical client session looks like this:
 
 ```text
 1. Connect to Core (gRPC + mTLS)
-2. Authenticate  -->  receive session_id
-3. Subscribe     -->  start receiving events
-4. HandleCommand -->  send commands as the player types them
-5. Disconnect    -->  clean up when done
+2. AuthenticatePlayer (or CreateGuest)  -->  receive player_session_token
+3. SelectCharacter                       -->  receive session_id
+4. Subscribe                             -->  start receiving events
+5. HandleCommand                         -->  send commands as the player types them
+6. Disconnect                            -->  clean up when done
 ```
 
-Steps 3 and 4 happen concurrently. The Subscribe stream runs for the lifetime of
+Steps 4 and 5 happen concurrently. The Subscribe stream runs for the lifetime of
 the session, while HandleCommand calls happen on demand.
 
 ## The Subscribe Response and oneof Frames

@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, AuthenticateRequest, AuthenticateResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreateGuestRequest, CreateGuestResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListCharactersRequest, ListCharactersResponse, LogoutRequest, LogoutResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
+import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreateGuestRequest, CreateGuestResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListCharactersRequest, ListCharactersResponse, LogoutRequest, LogoutResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -17,17 +17,6 @@ import { MethodKind } from "@bufbuild/protobuf";
 export const CoreService = {
   typeName: "holomush.core.v1.CoreService",
   methods: {
-    /**
-     * Authenticate validates credentials and creates a session.
-     *
-     * @generated from rpc holomush.core.v1.CoreService.Authenticate
-     */
-    authenticate: {
-      name: "Authenticate",
-      I: AuthenticateRequest,
-      O: AuthenticateResponse,
-      kind: MethodKind.Unary,
-    },
     /**
      * HandleCommand processes a game command.
      *

@@ -93,10 +93,6 @@ func (m *mockGRPCClient) Close() error {
 	return nil
 }
 
-func (m *mockGRPCClient) Authenticate(_ context.Context, _ *corev1.AuthenticateRequest) (*corev1.AuthenticateResponse, error) {
-	return nil, nil
-}
-
 func (m *mockGRPCClient) HandleCommand(_ context.Context, _ *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
 	return nil, nil
 }

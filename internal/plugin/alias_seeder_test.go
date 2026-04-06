@@ -19,13 +19,13 @@ import (
 // configured to fail on the Nth call (1-indexed) via failOnGetCall to exercise
 // the initial fetch and cache reload error paths independently.
 type fakeAliasSeeder struct {
-	existing       map[string]string
-	creators       map[string]string
-	sources        map[string]string
-	setErr         error
-	getCallCount   int
-	failOnGetCall  int   // 1-indexed; 0 disables
-	getErr         error // returned when failOnGetCall matches
+	existing      map[string]string
+	creators      map[string]string
+	sources       map[string]string
+	setErr        error
+	getCallCount  int
+	failOnGetCall int   // 1-indexed; 0 disables
+	getErr        error // returned when failOnGetCall matches
 }
 
 func newFakeAliasSeeder() *fakeAliasSeeder {
