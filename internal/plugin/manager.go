@@ -25,6 +25,8 @@ type Manager struct {
 	pluginHosts     map[string]Host // maps plugin name → owning host
 	policyInstaller PluginPolicyInstaller
 	registry        *ServiceRegistry // optional, enables DAG resolution
+	aliasSeeder     AliasSeeder
+	aliasCache      *command.AliasCache
 	loaded          map[string]*DiscoveredPlugin
 	mu              sync.RWMutex
 }
@@ -43,6 +45,14 @@ func WithLuaHost(h Host) ManagerOption {
 func WithPolicyInstaller(pi PluginPolicyInstaller) ManagerOption {
 	return func(m *Manager) {
 		m.policyInstaller = pi
+	}
+}
+
+// WithAliasSeeder configures alias seeding from plugin manifests during LoadAll.
+func WithAliasSeeder(seeder AliasSeeder, cache *command.AliasCache) ManagerOption {
+	return func(m *Manager) {
+		m.aliasSeeder = seeder
+		m.aliasCache = cache
 	}
 }
 
@@ -197,7 +207,33 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 		}
 	}
 
+	// Seed aliases from loaded plugin manifests.
+	if m.aliasSeeder != nil && m.aliasCache != nil {
+		if err := m.seedAliases(ctx); err != nil {
+			slog.Error("failed to seed plugin aliases", "error", err)
+		}
+	}
+
 	return nil
+}
+
+func (m *Manager) seedAliases(ctx context.Context) error {
+	m.mu.RLock()
+	loaded := make([]*DiscoveredPlugin, 0, len(m.loaded))
+	for _, dp := range m.loaded {
+		loaded = append(loaded, dp)
+	}
+	m.mu.RUnlock()
+
+	aliases, err := CollectManifestAliases(loaded)
+	if err != nil {
+		return err
+	}
+	if len(aliases) == 0 {
+		return nil
+	}
+
+	return SeedManifestAliases(ctx, aliases, m.aliasSeeder, m.aliasCache)
 }
 
 // resolveLoadOrder returns plugins in the order they should be loaded.
