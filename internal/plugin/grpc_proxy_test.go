@@ -46,7 +46,7 @@ func (e *echoServer) Echo(_ context.Context, req *rawMessage) (*rawMessage, erro
 	return req, nil
 }
 
-func echoHandler(srv any, ctx context.Context, dec func(any) error, _ grpc.UnaryServerInterceptor) (any, error) {
+func echoHandler(srv any, ctx context.Context, dec func(any) error, _ grpc.UnaryServerInterceptor) (any, error) { //nolint:revive // ctx position required by grpc.methodHandler signature
 	msg := &rawMessage{}
 	if err := dec(msg); err != nil {
 		return nil, err

@@ -4,6 +4,7 @@
 package plugins
 
 import (
+	"errors"
 	"io"
 	"log/slog"
 	"strings"
@@ -105,7 +106,7 @@ func proxyStreams(srv grpc.ServerStream, cli grpc.ClientStream) error {
 		msg := &rawMessage{}
 		if err := cli.RecvMsg(msg); err != nil {
 			<-errCh
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return nil // backend finished sending — normal completion
 			}
 			return err //nolint:wrapcheck // transparent gRPC proxy forwards errors as-is
