@@ -55,7 +55,7 @@ message ListScenesResponse {
 }
 
 message GetSceneRequest {
-  string session_id = 1;
+  string character_id = 1;
   string scene_id = 2;
 }
 
@@ -64,7 +64,7 @@ message GetSceneResponse {
 }
 
 message CreateSceneRequest {
-  string session_id = 1;
+  string character_id = 1;
   string title = 2;
   string description = 3;
   string location_id = 4;
@@ -79,36 +79,36 @@ message CreateSceneResponse {
 }
 
 message EndSceneRequest {
-  string session_id = 1;
+  string character_id = 1;
   string scene_id = 2;
 }
 
 message EndSceneResponse {}
 
 message JoinSceneRequest {
-  string session_id = 1;
+  string character_id = 1;
   string scene_id = 2;
 }
 
 message JoinSceneResponse {}
 
 message LeaveSceneRequest {
-  string session_id = 1;
+  string character_id = 1;
   string scene_id = 2;
 }
 
 message LeaveSceneResponse {}
 
 message InviteToSceneRequest {
-  string session_id = 1;
+  string character_id = 1;
   string scene_id = 2;
-  string character_id = 3;
+  string target_character_id = 3;
 }
 
 message InviteToSceneResponse {}
 
 message CastPublishVoteRequest {
-  string session_id = 1;
+  string character_id = 1;
   string scene_id = 2;
   bool vote = 3;
 }
@@ -116,7 +116,7 @@ message CastPublishVoteRequest {
 message CastPublishVoteResponse {}
 
 message GetPoseOrderRequest {
-  string session_id = 1;
+  string character_id = 1;
   string scene_id = 2;
 }
 

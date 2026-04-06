@@ -128,17 +128,17 @@ func TestMapStoreErrorReturnsNilForNilError(t *testing.T) {
 
 // --- Validation tests (nil store — only validation paths hit) ---
 
-func TestCreateSceneRejectsEmptySessionID(t *testing.T) {
+func TestCreateSceneRejectsEmptyCharacterID(t *testing.T) {
 	svc := NewSceneServiceImpl(nil)
 	_, err := svc.CreateScene(t.Context(), &scenev1.CreateSceneRequest{})
 	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "session_id")
+	assert.Contains(t, err.Error(), "character_id")
 }
 
 func TestCreateSceneRejectsEmptyTitle(t *testing.T) {
 	svc := NewSceneServiceImpl(nil)
 	_, err := svc.CreateScene(t.Context(), &scenev1.CreateSceneRequest{
-		SessionId: "sess-1",
+		CharacterId: "char-1",
 	})
 	requireGRPCCode(t, err, codes.InvalidArgument)
 	assert.Contains(t, err.Error(), "title")
@@ -151,65 +151,49 @@ func TestGetSceneRejectsEmptySceneID(t *testing.T) {
 	assert.Contains(t, err.Error(), "scene_id")
 }
 
-func TestEndSceneRejectsEmptySessionID(t *testing.T) {
+func TestEndSceneRejectsEmptyCharacterID(t *testing.T) {
 	svc := NewSceneServiceImpl(nil)
 	_, err := svc.EndScene(t.Context(), &scenev1.EndSceneRequest{})
 	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "session_id")
+	assert.Contains(t, err.Error(), "character_id")
 }
 
 func TestEndSceneRejectsEmptySceneID(t *testing.T) {
 	svc := NewSceneServiceImpl(nil)
 	_, err := svc.EndScene(t.Context(), &scenev1.EndSceneRequest{
-		SessionId: "sess-1",
+		CharacterId: "char-1",
 	})
 	requireGRPCCode(t, err, codes.InvalidArgument)
 	assert.Contains(t, err.Error(), "scene_id")
 }
 
-func TestJoinSceneRejectsEmptySessionID(t *testing.T) {
+func TestJoinSceneRejectsEmptyCharacterID(t *testing.T) {
 	svc := NewSceneServiceImpl(nil)
 	_, err := svc.JoinScene(t.Context(), &scenev1.JoinSceneRequest{})
 	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "session_id")
+	assert.Contains(t, err.Error(), "character_id")
 }
 
 func TestJoinSceneRejectsEmptySceneID(t *testing.T) {
 	svc := NewSceneServiceImpl(nil)
 	_, err := svc.JoinScene(t.Context(), &scenev1.JoinSceneRequest{
-		SessionId: "sess-1",
+		CharacterId: "char-1",
 	})
 	requireGRPCCode(t, err, codes.InvalidArgument)
 	assert.Contains(t, err.Error(), "scene_id")
 }
 
-func TestLeaveSceneRejectsEmptySessionID(t *testing.T) {
+func TestLeaveSceneRejectsEmptyCharacterID(t *testing.T) {
 	svc := NewSceneServiceImpl(nil)
 	_, err := svc.LeaveScene(t.Context(), &scenev1.LeaveSceneRequest{})
 	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "session_id")
+	assert.Contains(t, err.Error(), "character_id")
 }
 
 func TestLeaveSceneRejectsEmptySceneID(t *testing.T) {
 	svc := NewSceneServiceImpl(nil)
 	_, err := svc.LeaveScene(t.Context(), &scenev1.LeaveSceneRequest{
-		SessionId: "sess-1",
-	})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "scene_id")
-}
-
-func TestInviteToSceneRejectsEmptySessionID(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.InviteToScene(t.Context(), &scenev1.InviteToSceneRequest{})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "session_id")
-}
-
-func TestInviteToSceneRejectsEmptySceneID(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.InviteToScene(t.Context(), &scenev1.InviteToSceneRequest{
-		SessionId: "sess-1",
+		CharacterId: "char-1",
 	})
 	requireGRPCCode(t, err, codes.InvalidArgument)
 	assert.Contains(t, err.Error(), "scene_id")
@@ -217,25 +201,41 @@ func TestInviteToSceneRejectsEmptySceneID(t *testing.T) {
 
 func TestInviteToSceneRejectsEmptyCharacterID(t *testing.T) {
 	svc := NewSceneServiceImpl(nil)
-	_, err := svc.InviteToScene(t.Context(), &scenev1.InviteToSceneRequest{
-		SessionId: "sess-1",
-		SceneId:   "scene-1",
-	})
+	_, err := svc.InviteToScene(t.Context(), &scenev1.InviteToSceneRequest{})
 	requireGRPCCode(t, err, codes.InvalidArgument)
 	assert.Contains(t, err.Error(), "character_id")
 }
 
-func TestCastPublishVoteRejectsEmptySessionID(t *testing.T) {
+func TestInviteToSceneRejectsEmptySceneID(t *testing.T) {
+	svc := NewSceneServiceImpl(nil)
+	_, err := svc.InviteToScene(t.Context(), &scenev1.InviteToSceneRequest{
+		CharacterId: "char-1",
+	})
+	requireGRPCCode(t, err, codes.InvalidArgument)
+	assert.Contains(t, err.Error(), "scene_id")
+}
+
+func TestInviteToSceneRejectsEmptyTargetCharacterID(t *testing.T) {
+	svc := NewSceneServiceImpl(nil)
+	_, err := svc.InviteToScene(t.Context(), &scenev1.InviteToSceneRequest{
+		CharacterId: "char-1",
+		SceneId:     "scene-1",
+	})
+	requireGRPCCode(t, err, codes.InvalidArgument)
+	assert.Contains(t, err.Error(), "target_character_id")
+}
+
+func TestCastPublishVoteRejectsEmptyCharacterID(t *testing.T) {
 	svc := NewSceneServiceImpl(nil)
 	_, err := svc.CastPublishVote(t.Context(), &scenev1.CastPublishVoteRequest{})
 	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "session_id")
+	assert.Contains(t, err.Error(), "character_id")
 }
 
 func TestCastPublishVoteRejectsEmptySceneID(t *testing.T) {
 	svc := NewSceneServiceImpl(nil)
 	_, err := svc.CastPublishVote(t.Context(), &scenev1.CastPublishVoteRequest{
-		SessionId: "sess-1",
+		CharacterId: "char-1",
 	})
 	requireGRPCCode(t, err, codes.InvalidArgument)
 	assert.Contains(t, err.Error(), "scene_id")

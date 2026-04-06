@@ -63,7 +63,7 @@ message InitResponse {
 message Event {
   // Unique event identifier (ULID string).
   string id = 1;
-  // Stream the event belongs to (e.g., "room:room_abc123").
+  // Stream the event belongs to (e.g., "location:loc_abc123").
   string stream = 2;
   // Event type (e.g., "say", "pose", "arrive", "leave", "system").
   string type = 3;

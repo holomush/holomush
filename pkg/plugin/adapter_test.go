@@ -66,7 +66,7 @@ func (h *adapterTestHandler) HandleEvent(_ context.Context, _ Event) ([]EmitEven
 func TestPluginServerAdapter_HandleEvent_Success(t *testing.T) {
 	handler := &adapterTestHandler{
 		response: []EmitEvent{
-			{Stream: "room:123", Type: "say", Payload: `{"text":"hello"}`},
+			{Stream: "location:123", Type: "say", Payload: `{"text":"hello"}`},
 		},
 	}
 	adapter := &pluginServerAdapter{handler: handler}
@@ -74,7 +74,7 @@ func TestPluginServerAdapter_HandleEvent_Success(t *testing.T) {
 	req := &pluginv1.HandleEventRequest{
 		Event: &pluginv1.Event{
 			Id:        "evt-123",
-			Stream:    "room:456",
+			Stream:    "location:456",
 			Type:      "say",
 			Timestamp: 1234567890,
 			ActorKind: "character",
@@ -89,7 +89,7 @@ func TestPluginServerAdapter_HandleEvent_Success(t *testing.T) {
 	require.Len(t, resp.GetEmitEvents(), 1, "expected 1 emit event")
 
 	emit := resp.GetEmitEvents()[0]
-	assert.Equal(t, "room:123", emit.GetStream())
+	assert.Equal(t, "location:123", emit.GetStream())
 	assert.Equal(t, "say", emit.GetType())
 	assert.Equal(t, `{"text":"hello"}`, emit.GetPayload())
 }
@@ -134,9 +134,9 @@ func TestPluginServerAdapter_HandleEvent_EmptyEmits(t *testing.T) {
 func TestPluginServerAdapter_HandleEvent_MultipleEmits(t *testing.T) {
 	handler := &adapterTestHandler{
 		response: []EmitEvent{
-			{Stream: "room:1", Type: "say", Payload: `{"n":1}`},
-			{Stream: "room:2", Type: "pose", Payload: `{"n":2}`},
-			{Stream: "room:3", Type: "arrive", Payload: `{"n":3}`},
+			{Stream: "location:1", Type: "say", Payload: `{"n":1}`},
+			{Stream: "location:2", Type: "pose", Payload: `{"n":2}`},
+			{Stream: "location:3", Type: "arrive", Payload: `{"n":3}`},
 		},
 	}
 	adapter := &pluginServerAdapter{handler: handler}
@@ -152,7 +152,7 @@ func TestPluginServerAdapter_HandleEvent_MultipleEmits(t *testing.T) {
 
 	require.Len(t, resp.GetEmitEvents(), 3, "expected 3 emit events")
 
-	expectedStreams := []string{"room:1", "room:2", "room:3"}
+	expectedStreams := []string{"location:1", "location:2", "location:3"}
 	for i, emit := range resp.GetEmitEvents() {
 		assert.Equal(t, expectedStreams[i], emit.GetStream())
 	}

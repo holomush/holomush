@@ -102,7 +102,7 @@ export type Event = Message<"holomush.plugin.v1.Event"> & {
   id: string;
 
   /**
-   * Stream the event belongs to (e.g., "room:room_abc123").
+   * Stream the event belongs to (e.g., "location:loc_abc123").
    *
    * @generated from field: string stream = 2;
    */

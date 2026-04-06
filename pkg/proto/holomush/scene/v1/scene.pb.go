@@ -339,7 +339,7 @@ func (x *ListScenesResponse) GetScenes() []*SceneInfo {
 
 type GetSceneRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
 	SceneId       string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -375,9 +375,9 @@ func (*GetSceneRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *GetSceneRequest) GetSessionId() string {
+func (x *GetSceneRequest) GetCharacterId() string {
 	if x != nil {
-		return x.SessionId
+		return x.CharacterId
 	}
 	return ""
 }
@@ -435,7 +435,7 @@ func (x *GetSceneResponse) GetScene() *SceneInfo {
 
 type CreateSceneRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	SessionId       string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	CharacterId     string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
 	Title           string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
 	Description     string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
 	LocationId      string                 `protobuf:"bytes,4,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
@@ -477,9 +477,9 @@ func (*CreateSceneRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *CreateSceneRequest) GetSessionId() string {
+func (x *CreateSceneRequest) GetCharacterId() string {
 	if x != nil {
-		return x.SessionId
+		return x.CharacterId
 	}
 	return ""
 }
@@ -579,7 +579,7 @@ func (x *CreateSceneResponse) GetScene() *SceneInfo {
 
 type EndSceneRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
 	SceneId       string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -615,9 +615,9 @@ func (*EndSceneRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *EndSceneRequest) GetSessionId() string {
+func (x *EndSceneRequest) GetCharacterId() string {
 	if x != nil {
-		return x.SessionId
+		return x.CharacterId
 	}
 	return ""
 }
@@ -667,7 +667,7 @@ func (*EndSceneResponse) Descriptor() ([]byte, []int) {
 
 type JoinSceneRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
 	SceneId       string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -703,9 +703,9 @@ func (*JoinSceneRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *JoinSceneRequest) GetSessionId() string {
+func (x *JoinSceneRequest) GetCharacterId() string {
 	if x != nil {
-		return x.SessionId
+		return x.CharacterId
 	}
 	return ""
 }
@@ -755,7 +755,7 @@ func (*JoinSceneResponse) Descriptor() ([]byte, []int) {
 
 type LeaveSceneRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
 	SceneId       string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -791,9 +791,9 @@ func (*LeaveSceneRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *LeaveSceneRequest) GetSessionId() string {
+func (x *LeaveSceneRequest) GetCharacterId() string {
 	if x != nil {
-		return x.SessionId
+		return x.CharacterId
 	}
 	return ""
 }
@@ -842,12 +842,12 @@ func (*LeaveSceneResponse) Descriptor() ([]byte, []int) {
 }
 
 type InviteToSceneRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	SceneId       string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
-	CharacterId   string                 `protobuf:"bytes,3,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	CharacterId       string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	SceneId           string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	TargetCharacterId string                 `protobuf:"bytes,3,opt,name=target_character_id,json=targetCharacterId,proto3" json:"target_character_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *InviteToSceneRequest) Reset() {
@@ -880,9 +880,9 @@ func (*InviteToSceneRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{14}
 }
 
-func (x *InviteToSceneRequest) GetSessionId() string {
+func (x *InviteToSceneRequest) GetCharacterId() string {
 	if x != nil {
-		return x.SessionId
+		return x.CharacterId
 	}
 	return ""
 }
@@ -894,9 +894,9 @@ func (x *InviteToSceneRequest) GetSceneId() string {
 	return ""
 }
 
-func (x *InviteToSceneRequest) GetCharacterId() string {
+func (x *InviteToSceneRequest) GetTargetCharacterId() string {
 	if x != nil {
-		return x.CharacterId
+		return x.TargetCharacterId
 	}
 	return ""
 }
@@ -939,7 +939,7 @@ func (*InviteToSceneResponse) Descriptor() ([]byte, []int) {
 
 type CastPublishVoteRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
 	SceneId       string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
 	Vote          bool                   `protobuf:"varint,3,opt,name=vote,proto3" json:"vote,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -976,9 +976,9 @@ func (*CastPublishVoteRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{16}
 }
 
-func (x *CastPublishVoteRequest) GetSessionId() string {
+func (x *CastPublishVoteRequest) GetCharacterId() string {
 	if x != nil {
-		return x.SessionId
+		return x.CharacterId
 	}
 	return ""
 }
@@ -1035,7 +1035,7 @@ func (*CastPublishVoteResponse) Descriptor() ([]byte, []int) {
 
 type GetPoseOrderRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
 	SceneId       string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1071,9 +1071,9 @@ func (*GetPoseOrderRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{18}
 }
 
-func (x *GetPoseOrderRequest) GetSessionId() string {
+func (x *GetPoseOrderRequest) GetCharacterId() string {
 	if x != nil {
-		return x.SessionId
+		return x.CharacterId
 	}
 	return ""
 }
@@ -1239,16 +1239,14 @@ const file_holomush_scene_v1_scene_proto_rawDesc = "" +
 	"\x06offset\x18\x02 \x01(\x05R\x06offset\x12\x12\n" +
 	"\x04tags\x18\x03 \x03(\tR\x04tags\"J\n" +
 	"\x12ListScenesResponse\x124\n" +
-	"\x06scenes\x18\x01 \x03(\v2\x1c.holomush.scene.v1.SceneInfoR\x06scenes\"K\n" +
-	"\x0fGetSceneRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
+	"\x06scenes\x18\x01 \x03(\v2\x1c.holomush.scene.v1.SceneInfoR\x06scenes\"O\n" +
+	"\x0fGetSceneRequest\x12!\n" +
+	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12\x19\n" +
 	"\bscene_id\x18\x02 \x01(\tR\asceneId\"F\n" +
 	"\x10GetSceneResponse\x122\n" +
-	"\x05scene\x18\x01 \x01(\v2\x1c.holomush.scene.v1.SceneInfoR\x05scene\"\x93\x02\n" +
-	"\x12CreateSceneRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x14\n" +
+	"\x05scene\x18\x01 \x01(\v2\x1c.holomush.scene.v1.SceneInfoR\x05scene\"\x97\x02\n" +
+	"\x12CreateSceneRequest\x12!\n" +
+	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1f\n" +
 	"\vlocation_id\x18\x04 \x01(\tR\n" +
@@ -1260,37 +1258,31 @@ const file_holomush_scene_v1_scene_proto_rawDesc = "" +
 	"\x04tags\x18\a \x03(\tR\x04tags\x12)\n" +
 	"\x10content_warnings\x18\b \x03(\tR\x0fcontentWarnings\"I\n" +
 	"\x13CreateSceneResponse\x122\n" +
-	"\x05scene\x18\x01 \x01(\v2\x1c.holomush.scene.v1.SceneInfoR\x05scene\"K\n" +
-	"\x0fEndSceneRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
+	"\x05scene\x18\x01 \x01(\v2\x1c.holomush.scene.v1.SceneInfoR\x05scene\"O\n" +
+	"\x0fEndSceneRequest\x12!\n" +
+	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12\x19\n" +
 	"\bscene_id\x18\x02 \x01(\tR\asceneId\"\x12\n" +
-	"\x10EndSceneResponse\"L\n" +
-	"\x10JoinSceneRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
+	"\x10EndSceneResponse\"P\n" +
+	"\x10JoinSceneRequest\x12!\n" +
+	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12\x19\n" +
 	"\bscene_id\x18\x02 \x01(\tR\asceneId\"\x13\n" +
-	"\x11JoinSceneResponse\"M\n" +
-	"\x11LeaveSceneRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
+	"\x11JoinSceneResponse\"Q\n" +
+	"\x11LeaveSceneRequest\x12!\n" +
+	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12\x19\n" +
 	"\bscene_id\x18\x02 \x01(\tR\asceneId\"\x14\n" +
-	"\x12LeaveSceneResponse\"s\n" +
-	"\x14InviteToSceneRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
-	"\bscene_id\x18\x02 \x01(\tR\asceneId\x12!\n" +
-	"\fcharacter_id\x18\x03 \x01(\tR\vcharacterId\"\x17\n" +
-	"\x15InviteToSceneResponse\"f\n" +
-	"\x16CastPublishVoteRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
+	"\x12LeaveSceneResponse\"\x84\x01\n" +
+	"\x14InviteToSceneRequest\x12!\n" +
+	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12\x19\n" +
+	"\bscene_id\x18\x02 \x01(\tR\asceneId\x12.\n" +
+	"\x13target_character_id\x18\x03 \x01(\tR\x11targetCharacterId\"\x17\n" +
+	"\x15InviteToSceneResponse\"j\n" +
+	"\x16CastPublishVoteRequest\x12!\n" +
+	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12\x19\n" +
 	"\bscene_id\x18\x02 \x01(\tR\asceneId\x12\x12\n" +
 	"\x04vote\x18\x03 \x01(\bR\x04vote\"\x19\n" +
-	"\x17CastPublishVoteResponse\"O\n" +
-	"\x13GetPoseOrderRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
+	"\x17CastPublishVoteResponse\"S\n" +
+	"\x13GetPoseOrderRequest\x12!\n" +
+	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12\x19\n" +
 	"\bscene_id\x18\x02 \x01(\tR\asceneId\"\xbb\x01\n" +
 	"\x0ePoseOrderEntry\x12!\n" +
 	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12%\n" +

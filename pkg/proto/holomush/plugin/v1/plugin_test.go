@@ -17,7 +17,7 @@ func TestEventMessageFields(t *testing.T) {
 	// Create an Event to verify field types compile
 	event := &pluginv1.Event{
 		Id:        "01HQGJ7K8P4R5VDXC9YM2N3EF6",
-		Stream:    "room:room_abc123",
+		Stream:    "location:loc_abc123",
 		Type:      "say",
 		Timestamp: 1705678901234,
 		ActorKind: "character", // string, not enum per task requirement
@@ -50,7 +50,7 @@ func TestHandleEventRequestResponse(t *testing.T) {
 	resp := &pluginv1.HandleEventResponse{
 		EmitEvents: []*pluginv1.EmitEvent{
 			{
-				Stream:  "room:room_123",
+				Stream:  "location:loc_123",
 				Type:    "pose",
 				Payload: `{"text":"waves"}`,
 			},
@@ -62,7 +62,7 @@ func TestHandleEventRequestResponse(t *testing.T) {
 // TestEmitEventFields verifies the EmitEvent message.
 func TestEmitEventFields(t *testing.T) {
 	emit := &pluginv1.EmitEvent{
-		Stream:  "room:room_123",
+		Stream:  "location:loc_123",
 		Type:    "system",
 		Payload: `{"message":"Plugin loaded"}`,
 	}

@@ -16,7 +16,7 @@ import (
 func TestEmitEventRPC(t *testing.T) {
 	req := &pluginv1.EmitEventRequest{
 		Event: &pluginv1.EmitEvent{
-			Stream:  "room:room_123",
+			Stream:  "location:loc_123",
 			Type:    "say",
 			Payload: `{"text":"Hello"}`,
 		},
@@ -110,22 +110,22 @@ func TestKVDeleteRPC(t *testing.T) {
 	assert.True(t, resp.Deleted, "expected KVDeleteResponse to have Deleted field")
 }
 
-// TestQueryRoomRPC verifies the QueryRoom RPC request/response types.
-func TestQueryRoomRPC(t *testing.T) {
-	req := &pluginv1.QueryRoomRequest{
-		RoomId: "room_abc123",
+// TestQueryLocationRPC verifies the QueryLocation RPC request/response types.
+func TestQueryLocationRPC(t *testing.T) {
+	req := &pluginv1.QueryLocationRequest{
+		LocationId: "loc_abc123",
 	}
-	assert.NotEmpty(t, req.RoomId, "expected QueryRoomRequest to have RoomId field")
+	assert.NotEmpty(t, req.LocationId, "expected QueryLocationRequest to have LocationId field")
 
-	resp := &pluginv1.QueryRoomResponse{
-		Room: &pluginv1.RoomInfo{
-			Id:          "room_abc123",
+	resp := &pluginv1.QueryLocationResponse{
+		Location: &pluginv1.LocationInfo{
+			Id:          "loc_abc123",
 			Name:        "The Town Square",
 			Description: "A bustling central plaza.",
 		},
 	}
-	require.NotNil(t, resp.Room, "expected QueryRoomResponse to have Room field")
-	assert.NotEmpty(t, resp.Room.Name, "expected RoomInfo to have Name field")
+	require.NotNil(t, resp.Location, "expected QueryLocationResponse to have Location field")
+	assert.NotEmpty(t, resp.Location.Name, "expected LocationInfo to have Name field")
 }
 
 // TestQueryCharacterRPC verifies the QueryCharacter RPC request/response types.
@@ -145,14 +145,14 @@ func TestQueryCharacterRPC(t *testing.T) {
 	assert.NotEmpty(t, resp.Character.Name, "expected CharacterInfo to have Name field")
 }
 
-// TestQueryRoomCharactersRPC verifies the QueryRoomCharacters RPC.
-func TestQueryRoomCharactersRPC(t *testing.T) {
-	req := &pluginv1.QueryRoomCharactersRequest{
-		RoomId: "room_abc123",
+// TestQueryLocationCharactersRPC verifies the QueryLocationCharacters RPC.
+func TestQueryLocationCharactersRPC(t *testing.T) {
+	req := &pluginv1.QueryLocationCharactersRequest{
+		LocationId: "loc_abc123",
 	}
-	assert.NotEmpty(t, req.RoomId, "expected QueryRoomCharactersRequest to have RoomId field")
+	assert.NotEmpty(t, req.LocationId, "expected QueryLocationCharactersRequest to have LocationId field")
 
-	resp := &pluginv1.QueryRoomCharactersResponse{
+	resp := &pluginv1.QueryLocationCharactersResponse{
 		Characters: []*pluginv1.CharacterInfo{
 			{Id: "char_1", Name: "Alice"},
 			{Id: "char_2", Name: "Bob"},

@@ -183,29 +183,29 @@ func (x *EmitEventResponse) GetError() string {
 	return ""
 }
 
-// QueryRoomRequest requests information about a room.
-type QueryRoomRequest struct {
+// QueryLocationRequest requests information about a location.
+type QueryLocationRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Room identifier.
-	RoomId        string `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	// Location identifier.
+	LocationId    string `protobuf:"bytes,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *QueryRoomRequest) Reset() {
-	*x = QueryRoomRequest{}
+func (x *QueryLocationRequest) Reset() {
+	*x = QueryLocationRequest{}
 	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryRoomRequest) String() string {
+func (x *QueryLocationRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*QueryRoomRequest) ProtoMessage() {}
+func (*QueryLocationRequest) ProtoMessage() {}
 
-func (x *QueryRoomRequest) ProtoReflect() protoreflect.Message {
+func (x *QueryLocationRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -217,43 +217,43 @@ func (x *QueryRoomRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryRoomRequest.ProtoReflect.Descriptor instead.
-func (*QueryRoomRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use QueryLocationRequest.ProtoReflect.Descriptor instead.
+func (*QueryLocationRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *QueryRoomRequest) GetRoomId() string {
+func (x *QueryLocationRequest) GetLocationId() string {
 	if x != nil {
-		return x.RoomId
+		return x.LocationId
 	}
 	return ""
 }
 
-// QueryRoomResponse contains room information.
-type QueryRoomResponse struct {
+// QueryLocationResponse contains location information.
+type QueryLocationResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Room information (nil if not found).
-	Room *RoomInfo `protobuf:"bytes,1,opt,name=room,proto3" json:"room,omitempty"`
+	// Location information (nil if not found).
+	Location *LocationInfo `protobuf:"bytes,1,opt,name=location,proto3" json:"location,omitempty"`
 	// Error message if query failed.
 	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *QueryRoomResponse) Reset() {
-	*x = QueryRoomResponse{}
+func (x *QueryLocationResponse) Reset() {
+	*x = QueryLocationResponse{}
 	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryRoomResponse) String() string {
+func (x *QueryLocationResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*QueryRoomResponse) ProtoMessage() {}
+func (*QueryLocationResponse) ProtoMessage() {}
 
-func (x *QueryRoomResponse) ProtoReflect() protoreflect.Message {
+func (x *QueryLocationResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -265,52 +265,52 @@ func (x *QueryRoomResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryRoomResponse.ProtoReflect.Descriptor instead.
-func (*QueryRoomResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use QueryLocationResponse.ProtoReflect.Descriptor instead.
+func (*QueryLocationResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *QueryRoomResponse) GetRoom() *RoomInfo {
+func (x *QueryLocationResponse) GetLocation() *LocationInfo {
 	if x != nil {
-		return x.Room
+		return x.Location
 	}
 	return nil
 }
 
-func (x *QueryRoomResponse) GetError() string {
+func (x *QueryLocationResponse) GetError() string {
 	if x != nil {
 		return x.Error
 	}
 	return ""
 }
 
-// RoomInfo contains basic room information.
-type RoomInfo struct {
+// LocationInfo contains basic location information.
+type LocationInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Room identifier.
+	// Location identifier.
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Room name/title.
+	// Location name/title.
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	// Room description.
+	// Location description.
 	Description   string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RoomInfo) Reset() {
-	*x = RoomInfo{}
+func (x *LocationInfo) Reset() {
+	*x = LocationInfo{}
 	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RoomInfo) String() string {
+func (x *LocationInfo) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RoomInfo) ProtoMessage() {}
+func (*LocationInfo) ProtoMessage() {}
 
-func (x *RoomInfo) ProtoReflect() protoreflect.Message {
+func (x *LocationInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -322,26 +322,26 @@ func (x *RoomInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RoomInfo.ProtoReflect.Descriptor instead.
-func (*RoomInfo) Descriptor() ([]byte, []int) {
+// Deprecated: Use LocationInfo.ProtoReflect.Descriptor instead.
+func (*LocationInfo) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *RoomInfo) GetId() string {
+func (x *LocationInfo) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *RoomInfo) GetName() string {
+func (x *LocationInfo) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *RoomInfo) GetDescription() string {
+func (x *LocationInfo) GetDescription() string {
 	if x != nil {
 		return x.Description
 	}
@@ -504,29 +504,29 @@ func (x *CharacterInfo) GetName() string {
 	return ""
 }
 
-// QueryRoomCharactersRequest requests all characters in a room.
-type QueryRoomCharactersRequest struct {
+// QueryLocationCharactersRequest requests all characters in a location.
+type QueryLocationCharactersRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Room identifier.
-	RoomId        string `protobuf:"bytes,1,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
+	// Location identifier.
+	LocationId    string `protobuf:"bytes,1,opt,name=location_id,json=locationId,proto3" json:"location_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *QueryRoomCharactersRequest) Reset() {
-	*x = QueryRoomCharactersRequest{}
+func (x *QueryLocationCharactersRequest) Reset() {
+	*x = QueryLocationCharactersRequest{}
 	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryRoomCharactersRequest) String() string {
+func (x *QueryLocationCharactersRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*QueryRoomCharactersRequest) ProtoMessage() {}
+func (*QueryLocationCharactersRequest) ProtoMessage() {}
 
-func (x *QueryRoomCharactersRequest) ProtoReflect() protoreflect.Message {
+func (x *QueryLocationCharactersRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -538,22 +538,22 @@ func (x *QueryRoomCharactersRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryRoomCharactersRequest.ProtoReflect.Descriptor instead.
-func (*QueryRoomCharactersRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use QueryLocationCharactersRequest.ProtoReflect.Descriptor instead.
+func (*QueryLocationCharactersRequest) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *QueryRoomCharactersRequest) GetRoomId() string {
+func (x *QueryLocationCharactersRequest) GetLocationId() string {
 	if x != nil {
-		return x.RoomId
+		return x.LocationId
 	}
 	return ""
 }
 
-// QueryRoomCharactersResponse contains the list of characters.
-type QueryRoomCharactersResponse struct {
+// QueryLocationCharactersResponse contains the list of characters.
+type QueryLocationCharactersResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Characters in the room.
+	// Characters in the location.
 	Characters []*CharacterInfo `protobuf:"bytes,1,rep,name=characters,proto3" json:"characters,omitempty"`
 	// Error message if query failed.
 	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
@@ -561,20 +561,20 @@ type QueryRoomCharactersResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *QueryRoomCharactersResponse) Reset() {
-	*x = QueryRoomCharactersResponse{}
+func (x *QueryLocationCharactersResponse) Reset() {
+	*x = QueryLocationCharactersResponse{}
 	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *QueryRoomCharactersResponse) String() string {
+func (x *QueryLocationCharactersResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*QueryRoomCharactersResponse) ProtoMessage() {}
+func (*QueryLocationCharactersResponse) ProtoMessage() {}
 
-func (x *QueryRoomCharactersResponse) ProtoReflect() protoreflect.Message {
+func (x *QueryLocationCharactersResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -586,19 +586,19 @@ func (x *QueryRoomCharactersResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use QueryRoomCharactersResponse.ProtoReflect.Descriptor instead.
-func (*QueryRoomCharactersResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use QueryLocationCharactersResponse.ProtoReflect.Descriptor instead.
+func (*QueryLocationCharactersResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *QueryRoomCharactersResponse) GetCharacters() []*CharacterInfo {
+func (x *QueryLocationCharactersResponse) GetCharacters() []*CharacterInfo {
 	if x != nil {
 		return x.Characters
 	}
 	return nil
 }
 
-func (x *QueryRoomCharactersResponse) GetError() string {
+func (x *QueryLocationCharactersResponse) GetError() string {
 	if x != nil {
 		return x.Error
 	}
@@ -1403,13 +1403,14 @@ const file_holomush_plugin_v1_hostfunc_proto_rawDesc = "" +
 	"\x05event\x18\x01 \x01(\v2\x1d.holomush.plugin.v1.EmitEventR\x05event\"C\n" +
 	"\x11EmitEventResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"+\n" +
-	"\x10QueryRoomRequest\x12\x17\n" +
-	"\aroom_id\x18\x01 \x01(\tR\x06roomId\"[\n" +
-	"\x11QueryRoomResponse\x120\n" +
-	"\x04room\x18\x01 \x01(\v2\x1c.holomush.plugin.v1.RoomInfoR\x04room\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"P\n" +
-	"\bRoomInfo\x12\x0e\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"7\n" +
+	"\x14QueryLocationRequest\x12\x1f\n" +
+	"\vlocation_id\x18\x01 \x01(\tR\n" +
+	"locationId\"k\n" +
+	"\x15QueryLocationResponse\x12<\n" +
+	"\blocation\x18\x01 \x01(\v2 .holomush.plugin.v1.LocationInfoR\blocation\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"T\n" +
+	"\fLocationInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\":\n" +
@@ -1420,10 +1421,11 @@ const file_holomush_plugin_v1_hostfunc_proto_rawDesc = "" +
 	"\x05error\x18\x02 \x01(\tR\x05error\"3\n" +
 	"\rCharacterInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"5\n" +
-	"\x1aQueryRoomCharactersRequest\x12\x17\n" +
-	"\aroom_id\x18\x01 \x01(\tR\x06roomId\"v\n" +
-	"\x1bQueryRoomCharactersResponse\x12A\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"A\n" +
+	"\x1eQueryLocationCharactersRequest\x12\x1f\n" +
+	"\vlocation_id\x18\x01 \x01(\tR\n" +
+	"locationId\"z\n" +
+	"\x1fQueryLocationCharactersResponse\x12A\n" +
 	"\n" +
 	"characters\x18\x01 \x03(\v2!.holomush.plugin.v1.CharacterInfoR\n" +
 	"characters\x12\x14\n" +
@@ -1481,12 +1483,12 @@ const file_holomush_plugin_v1_hostfunc_proto_rawDesc = "" +
 	"\x0fLOG_LEVEL_DEBUG\x10\x01\x12\x12\n" +
 	"\x0eLOG_LEVEL_INFO\x10\x02\x12\x12\n" +
 	"\x0eLOG_LEVEL_WARN\x10\x03\x12\x13\n" +
-	"\x0fLOG_LEVEL_ERROR\x10\x042\xb2\a\n" +
+	"\x0fLOG_LEVEL_ERROR\x10\x042\xcb\a\n" +
 	"\x14HostFunctionsService\x12X\n" +
-	"\tEmitEvent\x12$.holomush.plugin.v1.EmitEventRequest\x1a%.holomush.plugin.v1.EmitEventResponse\x12X\n" +
-	"\tQueryRoom\x12$.holomush.plugin.v1.QueryRoomRequest\x1a%.holomush.plugin.v1.QueryRoomResponse\x12g\n" +
-	"\x0eQueryCharacter\x12).holomush.plugin.v1.QueryCharacterRequest\x1a*.holomush.plugin.v1.QueryCharacterResponse\x12v\n" +
-	"\x13QueryRoomCharacters\x12..holomush.plugin.v1.QueryRoomCharactersRequest\x1a/.holomush.plugin.v1.QueryRoomCharactersResponse\x12L\n" +
+	"\tEmitEvent\x12$.holomush.plugin.v1.EmitEventRequest\x1a%.holomush.plugin.v1.EmitEventResponse\x12d\n" +
+	"\rQueryLocation\x12(.holomush.plugin.v1.QueryLocationRequest\x1a).holomush.plugin.v1.QueryLocationResponse\x12g\n" +
+	"\x0eQueryCharacter\x12).holomush.plugin.v1.QueryCharacterRequest\x1a*.holomush.plugin.v1.QueryCharacterResponse\x12\x82\x01\n" +
+	"\x17QueryLocationCharacters\x122.holomush.plugin.v1.QueryLocationCharactersRequest\x1a3.holomush.plugin.v1.QueryLocationCharactersResponse\x12L\n" +
 	"\x05KVGet\x12 .holomush.plugin.v1.KVGetRequest\x1a!.holomush.plugin.v1.KVGetResponse\x12L\n" +
 	"\x05KVSet\x12 .holomush.plugin.v1.KVSetRequest\x1a!.holomush.plugin.v1.KVSetResponse\x12U\n" +
 	"\bKVDelete\x12#.holomush.plugin.v1.KVDeleteRequest\x1a$.holomush.plugin.v1.KVDeleteResponse\x12F\n" +
@@ -1510,47 +1512,47 @@ func file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP() []byte {
 var file_holomush_plugin_v1_hostfunc_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_holomush_plugin_v1_hostfunc_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_holomush_plugin_v1_hostfunc_proto_goTypes = []any{
-	(LogLevel)(0),                       // 0: holomush.plugin.v1.LogLevel
-	(*EmitEventRequest)(nil),            // 1: holomush.plugin.v1.EmitEventRequest
-	(*EmitEventResponse)(nil),           // 2: holomush.plugin.v1.EmitEventResponse
-	(*QueryRoomRequest)(nil),            // 3: holomush.plugin.v1.QueryRoomRequest
-	(*QueryRoomResponse)(nil),           // 4: holomush.plugin.v1.QueryRoomResponse
-	(*RoomInfo)(nil),                    // 5: holomush.plugin.v1.RoomInfo
-	(*QueryCharacterRequest)(nil),       // 6: holomush.plugin.v1.QueryCharacterRequest
-	(*QueryCharacterResponse)(nil),      // 7: holomush.plugin.v1.QueryCharacterResponse
-	(*CharacterInfo)(nil),               // 8: holomush.plugin.v1.CharacterInfo
-	(*QueryRoomCharactersRequest)(nil),  // 9: holomush.plugin.v1.QueryRoomCharactersRequest
-	(*QueryRoomCharactersResponse)(nil), // 10: holomush.plugin.v1.QueryRoomCharactersResponse
-	(*KVGetRequest)(nil),                // 11: holomush.plugin.v1.KVGetRequest
-	(*KVGetResponse)(nil),               // 12: holomush.plugin.v1.KVGetResponse
-	(*KVSetRequest)(nil),                // 13: holomush.plugin.v1.KVSetRequest
-	(*KVSetResponse)(nil),               // 14: holomush.plugin.v1.KVSetResponse
-	(*KVDeleteRequest)(nil),             // 15: holomush.plugin.v1.KVDeleteRequest
-	(*KVDeleteResponse)(nil),            // 16: holomush.plugin.v1.KVDeleteResponse
-	(*LogRequest)(nil),                  // 17: holomush.plugin.v1.LogRequest
-	(*LogResponse)(nil),                 // 18: holomush.plugin.v1.LogResponse
-	(*ListCommandsRequest)(nil),         // 19: holomush.plugin.v1.ListCommandsRequest
-	(*ListCommandsResponse)(nil),        // 20: holomush.plugin.v1.ListCommandsResponse
-	(*CommandInfo)(nil),                 // 21: holomush.plugin.v1.CommandInfo
-	(*GetCommandHelpRequest)(nil),       // 22: holomush.plugin.v1.GetCommandHelpRequest
-	(*GetCommandHelpResponse)(nil),      // 23: holomush.plugin.v1.GetCommandHelpResponse
-	(*CommandHelpInfo)(nil),             // 24: holomush.plugin.v1.CommandHelpInfo
-	nil,                                 // 25: holomush.plugin.v1.LogRequest.FieldsEntry
-	(*EmitEvent)(nil),                   // 26: holomush.plugin.v1.EmitEvent
+	(LogLevel)(0),                           // 0: holomush.plugin.v1.LogLevel
+	(*EmitEventRequest)(nil),                // 1: holomush.plugin.v1.EmitEventRequest
+	(*EmitEventResponse)(nil),               // 2: holomush.plugin.v1.EmitEventResponse
+	(*QueryLocationRequest)(nil),            // 3: holomush.plugin.v1.QueryLocationRequest
+	(*QueryLocationResponse)(nil),           // 4: holomush.plugin.v1.QueryLocationResponse
+	(*LocationInfo)(nil),                    // 5: holomush.plugin.v1.LocationInfo
+	(*QueryCharacterRequest)(nil),           // 6: holomush.plugin.v1.QueryCharacterRequest
+	(*QueryCharacterResponse)(nil),          // 7: holomush.plugin.v1.QueryCharacterResponse
+	(*CharacterInfo)(nil),                   // 8: holomush.plugin.v1.CharacterInfo
+	(*QueryLocationCharactersRequest)(nil),  // 9: holomush.plugin.v1.QueryLocationCharactersRequest
+	(*QueryLocationCharactersResponse)(nil), // 10: holomush.plugin.v1.QueryLocationCharactersResponse
+	(*KVGetRequest)(nil),                    // 11: holomush.plugin.v1.KVGetRequest
+	(*KVGetResponse)(nil),                   // 12: holomush.plugin.v1.KVGetResponse
+	(*KVSetRequest)(nil),                    // 13: holomush.plugin.v1.KVSetRequest
+	(*KVSetResponse)(nil),                   // 14: holomush.plugin.v1.KVSetResponse
+	(*KVDeleteRequest)(nil),                 // 15: holomush.plugin.v1.KVDeleteRequest
+	(*KVDeleteResponse)(nil),                // 16: holomush.plugin.v1.KVDeleteResponse
+	(*LogRequest)(nil),                      // 17: holomush.plugin.v1.LogRequest
+	(*LogResponse)(nil),                     // 18: holomush.plugin.v1.LogResponse
+	(*ListCommandsRequest)(nil),             // 19: holomush.plugin.v1.ListCommandsRequest
+	(*ListCommandsResponse)(nil),            // 20: holomush.plugin.v1.ListCommandsResponse
+	(*CommandInfo)(nil),                     // 21: holomush.plugin.v1.CommandInfo
+	(*GetCommandHelpRequest)(nil),           // 22: holomush.plugin.v1.GetCommandHelpRequest
+	(*GetCommandHelpResponse)(nil),          // 23: holomush.plugin.v1.GetCommandHelpResponse
+	(*CommandHelpInfo)(nil),                 // 24: holomush.plugin.v1.CommandHelpInfo
+	nil,                                     // 25: holomush.plugin.v1.LogRequest.FieldsEntry
+	(*EmitEvent)(nil),                       // 26: holomush.plugin.v1.EmitEvent
 }
 var file_holomush_plugin_v1_hostfunc_proto_depIdxs = []int32{
 	26, // 0: holomush.plugin.v1.EmitEventRequest.event:type_name -> holomush.plugin.v1.EmitEvent
-	5,  // 1: holomush.plugin.v1.QueryRoomResponse.room:type_name -> holomush.plugin.v1.RoomInfo
+	5,  // 1: holomush.plugin.v1.QueryLocationResponse.location:type_name -> holomush.plugin.v1.LocationInfo
 	8,  // 2: holomush.plugin.v1.QueryCharacterResponse.character:type_name -> holomush.plugin.v1.CharacterInfo
-	8,  // 3: holomush.plugin.v1.QueryRoomCharactersResponse.characters:type_name -> holomush.plugin.v1.CharacterInfo
+	8,  // 3: holomush.plugin.v1.QueryLocationCharactersResponse.characters:type_name -> holomush.plugin.v1.CharacterInfo
 	0,  // 4: holomush.plugin.v1.LogRequest.level:type_name -> holomush.plugin.v1.LogLevel
 	25, // 5: holomush.plugin.v1.LogRequest.fields:type_name -> holomush.plugin.v1.LogRequest.FieldsEntry
 	21, // 6: holomush.plugin.v1.ListCommandsResponse.commands:type_name -> holomush.plugin.v1.CommandInfo
 	24, // 7: holomush.plugin.v1.GetCommandHelpResponse.command:type_name -> holomush.plugin.v1.CommandHelpInfo
 	1,  // 8: holomush.plugin.v1.HostFunctionsService.EmitEvent:input_type -> holomush.plugin.v1.EmitEventRequest
-	3,  // 9: holomush.plugin.v1.HostFunctionsService.QueryRoom:input_type -> holomush.plugin.v1.QueryRoomRequest
+	3,  // 9: holomush.plugin.v1.HostFunctionsService.QueryLocation:input_type -> holomush.plugin.v1.QueryLocationRequest
 	6,  // 10: holomush.plugin.v1.HostFunctionsService.QueryCharacter:input_type -> holomush.plugin.v1.QueryCharacterRequest
-	9,  // 11: holomush.plugin.v1.HostFunctionsService.QueryRoomCharacters:input_type -> holomush.plugin.v1.QueryRoomCharactersRequest
+	9,  // 11: holomush.plugin.v1.HostFunctionsService.QueryLocationCharacters:input_type -> holomush.plugin.v1.QueryLocationCharactersRequest
 	11, // 12: holomush.plugin.v1.HostFunctionsService.KVGet:input_type -> holomush.plugin.v1.KVGetRequest
 	13, // 13: holomush.plugin.v1.HostFunctionsService.KVSet:input_type -> holomush.plugin.v1.KVSetRequest
 	15, // 14: holomush.plugin.v1.HostFunctionsService.KVDelete:input_type -> holomush.plugin.v1.KVDeleteRequest
@@ -1558,9 +1560,9 @@ var file_holomush_plugin_v1_hostfunc_proto_depIdxs = []int32{
 	19, // 16: holomush.plugin.v1.HostFunctionsService.ListCommands:input_type -> holomush.plugin.v1.ListCommandsRequest
 	22, // 17: holomush.plugin.v1.HostFunctionsService.GetCommandHelp:input_type -> holomush.plugin.v1.GetCommandHelpRequest
 	2,  // 18: holomush.plugin.v1.HostFunctionsService.EmitEvent:output_type -> holomush.plugin.v1.EmitEventResponse
-	4,  // 19: holomush.plugin.v1.HostFunctionsService.QueryRoom:output_type -> holomush.plugin.v1.QueryRoomResponse
+	4,  // 19: holomush.plugin.v1.HostFunctionsService.QueryLocation:output_type -> holomush.plugin.v1.QueryLocationResponse
 	7,  // 20: holomush.plugin.v1.HostFunctionsService.QueryCharacter:output_type -> holomush.plugin.v1.QueryCharacterResponse
-	10, // 21: holomush.plugin.v1.HostFunctionsService.QueryRoomCharacters:output_type -> holomush.plugin.v1.QueryRoomCharactersResponse
+	10, // 21: holomush.plugin.v1.HostFunctionsService.QueryLocationCharacters:output_type -> holomush.plugin.v1.QueryLocationCharactersResponse
 	12, // 22: holomush.plugin.v1.HostFunctionsService.KVGet:output_type -> holomush.plugin.v1.KVGetResponse
 	14, // 23: holomush.plugin.v1.HostFunctionsService.KVSet:output_type -> holomush.plugin.v1.KVSetResponse
 	16, // 24: holomush.plugin.v1.HostFunctionsService.KVDelete:output_type -> holomush.plugin.v1.KVDeleteResponse

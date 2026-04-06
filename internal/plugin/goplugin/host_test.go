@@ -650,7 +650,7 @@ func TestDeliverEventSuccess(t *testing.T) {
 	grpcClient := &mockGRPCPluginClient{
 		response: &pluginv1.HandleEventResponse{
 			EmitEvents: []*pluginv1.EmitEvent{
-				{Stream: "room:123", Type: "say", Payload: `{"text":"hello"}`},
+				{Stream: "location:123", Type: "say", Payload: `{"text":"hello"}`},
 			},
 		},
 	}
@@ -679,7 +679,7 @@ func TestDeliverEventSuccess(t *testing.T) {
 
 	event := pluginsdk.Event{
 		ID:        "evt-123",
-		Stream:    "room:456",
+		Stream:    "location:456",
 		Type:      pluginsdk.EventTypeSay,
 		Timestamp: 1234567890,
 		ActorKind: pluginsdk.ActorCharacter,
@@ -690,7 +690,7 @@ func TestDeliverEventSuccess(t *testing.T) {
 	emits, err := host.DeliverEvent(ctx, "test-plugin", event)
 	require.NoError(t, err, "DeliverEvent returned error")
 	require.Len(t, emits, 1, "expected 1 emit event")
-	assert.Equal(t, "room:123", emits[0].Stream, "expected stream 'room:123'")
+	assert.Equal(t, "location:123", emits[0].Stream, "expected stream 'room:123'")
 	assert.Equal(t, pluginsdk.EventTypeSay, emits[0].Type, "expected type 'say'")
 }
 

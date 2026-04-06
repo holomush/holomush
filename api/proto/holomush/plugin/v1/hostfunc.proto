@@ -17,14 +17,14 @@ service HostFunctionsService {
   // EmitEvent publishes an event to a stream.
   rpc EmitEvent(EmitEventRequest) returns (EmitEventResponse);
 
-  // QueryRoom retrieves information about a room.
-  rpc QueryRoom(QueryRoomRequest) returns (QueryRoomResponse);
+  // QueryLocation retrieves information about a location.
+  rpc QueryLocation(QueryLocationRequest) returns (QueryLocationResponse);
 
   // QueryCharacter retrieves information about a character.
   rpc QueryCharacter(QueryCharacterRequest) returns (QueryCharacterResponse);
 
-  // QueryRoomCharacters retrieves all characters in a room.
-  rpc QueryRoomCharacters(QueryRoomCharactersRequest) returns (QueryRoomCharactersResponse);
+  // QueryLocationCharacters retrieves all characters in a location.
+  rpc QueryLocationCharacters(QueryLocationCharactersRequest) returns (QueryLocationCharactersResponse);
 
   // KVGet retrieves a value from the plugin's key-value store.
   rpc KVGet(KVGetRequest) returns (KVGetResponse);
@@ -70,27 +70,27 @@ message EmitEventResponse {
   string error = 2;
 }
 
-// QueryRoomRequest requests information about a room.
-message QueryRoomRequest {
-  // Room identifier.
-  string room_id = 1;
+// QueryLocationRequest requests information about a location.
+message QueryLocationRequest {
+  // Location identifier.
+  string location_id = 1;
 }
 
-// QueryRoomResponse contains room information.
-message QueryRoomResponse {
-  // Room information (nil if not found).
-  RoomInfo room = 1;
+// QueryLocationResponse contains location information.
+message QueryLocationResponse {
+  // Location information (nil if not found).
+  LocationInfo location = 1;
   // Error message if query failed.
   string error = 2;
 }
 
-// RoomInfo contains basic room information.
-message RoomInfo {
-  // Room identifier.
+// LocationInfo contains basic location information.
+message LocationInfo {
+  // Location identifier.
   string id = 1;
-  // Room name/title.
+  // Location name/title.
   string name = 2;
-  // Room description.
+  // Location description.
   string description = 3;
 }
 
@@ -116,15 +116,15 @@ message CharacterInfo {
   string name = 2;
 }
 
-// QueryRoomCharactersRequest requests all characters in a room.
-message QueryRoomCharactersRequest {
-  // Room identifier.
-  string room_id = 1;
+// QueryLocationCharactersRequest requests all characters in a location.
+message QueryLocationCharactersRequest {
+  // Location identifier.
+  string location_id = 1;
 }
 
-// QueryRoomCharactersResponse contains the list of characters.
-message QueryRoomCharactersResponse {
-  // Characters in the room.
+// QueryLocationCharactersResponse contains the list of characters.
+message QueryLocationCharactersResponse {
+  // Characters in the location.
   repeated CharacterInfo characters = 1;
   // Error message if query failed.
   string error = 2;

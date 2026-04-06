@@ -63,8 +63,8 @@ func NewSceneServiceImpl(store *SceneStore) *SceneServiceImpl {
 // CreateScene generates a new scene ID, persists it, and adds the owner as
 // a participant with role "owner".
 func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateSceneRequest) (*scenev1.CreateSceneResponse, error) {
-	if req.GetSessionId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "session_id is required")
+	if req.GetCharacterId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "character_id is required")
 	}
 	if req.GetTitle() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "title is required")
@@ -96,7 +96,7 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		Title:           req.GetTitle(),
 		Description:     req.GetDescription(),
 		LocationID:      nilIfEmpty(req.GetLocationId()),
-		OwnerID:         req.GetSessionId(),
+		OwnerID:         req.GetCharacterId(),
 		State:           stateActive,
 		PoseOrder:       poseOrder,
 		Visibility:      visibility,
@@ -111,7 +111,7 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 
 	ownerParticipant := &ParticipantRow{
 		SceneID:     sceneID,
-		CharacterID: req.GetSessionId(),
+		CharacterID: req.GetCharacterId(),
 		Role:        roleOwner,
 		JoinedAt:    now,
 	}
@@ -181,8 +181,8 @@ func (s *SceneServiceImpl) ListScenes(ctx context.Context, req *scenev1.ListScen
 
 // EndScene transitions a scene from active/paused to ended.
 func (s *SceneServiceImpl) EndScene(ctx context.Context, req *scenev1.EndSceneRequest) (*scenev1.EndSceneResponse, error) {
-	if req.GetSessionId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "session_id is required")
+	if req.GetCharacterId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "character_id is required")
 	}
 	if req.GetSceneId() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "scene_id is required")
@@ -193,7 +193,7 @@ func (s *SceneServiceImpl) EndScene(ctx context.Context, req *scenev1.EndSceneRe
 		return nil, mapStoreError(err, "get_scene")
 	}
 
-	if scene.OwnerID != req.GetSessionId() {
+	if scene.OwnerID != req.GetCharacterId() {
 		return nil, status.Errorf(codes.PermissionDenied, "only the scene owner can end a scene")
 	}
 
@@ -214,8 +214,8 @@ func (s *SceneServiceImpl) EndScene(ctx context.Context, req *scenev1.EndSceneRe
 
 // JoinScene adds the caller as a member participant of a scene.
 func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinSceneRequest) (*scenev1.JoinSceneResponse, error) {
-	if req.GetSessionId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "session_id is required")
+	if req.GetCharacterId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "character_id is required")
 	}
 	if req.GetSceneId() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "scene_id is required")
@@ -235,7 +235,7 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 
 	participant := &ParticipantRow{
 		SceneID:     req.GetSceneId(),
-		CharacterID: req.GetSessionId(),
+		CharacterID: req.GetCharacterId(),
 		Role:        roleMember,
 		JoinedAt:    time.Now().UTC(),
 	}
@@ -248,14 +248,14 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 
 // LeaveScene removes a participant from a scene.
 func (s *SceneServiceImpl) LeaveScene(ctx context.Context, req *scenev1.LeaveSceneRequest) (*scenev1.LeaveSceneResponse, error) {
-	if req.GetSessionId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "session_id is required")
+	if req.GetCharacterId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "character_id is required")
 	}
 	if req.GetSceneId() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "scene_id is required")
 	}
 
-	if err := s.store.RemoveParticipant(ctx, req.GetSceneId(), req.GetSessionId()); err != nil {
+	if err := s.store.RemoveParticipant(ctx, req.GetSceneId(), req.GetCharacterId()); err != nil {
 		return nil, mapStoreError(err, "leave_scene")
 	}
 
@@ -264,27 +264,27 @@ func (s *SceneServiceImpl) LeaveScene(ctx context.Context, req *scenev1.LeaveSce
 
 // InviteToScene adds a character as an invited participant.
 func (s *SceneServiceImpl) InviteToScene(ctx context.Context, req *scenev1.InviteToSceneRequest) (*scenev1.InviteToSceneResponse, error) {
-	if req.GetSessionId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "session_id is required")
+	if req.GetCharacterId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "character_id is required")
 	}
 	if req.GetSceneId() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "scene_id is required")
 	}
-	if req.GetCharacterId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "character_id is required")
+	if req.GetTargetCharacterId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "target_character_id is required")
 	}
 
 	scene, err := s.store.GetScene(ctx, req.GetSceneId())
 	if err != nil {
 		return nil, mapStoreError(err, "get_scene")
 	}
-	if scene.OwnerID != req.GetSessionId() {
+	if scene.OwnerID != req.GetCharacterId() {
 		return nil, status.Errorf(codes.PermissionDenied, "only the scene owner can invite participants")
 	}
 
 	participant := &ParticipantRow{
 		SceneID:     req.GetSceneId(),
-		CharacterID: req.GetCharacterId(),
+		CharacterID: req.GetTargetCharacterId(),
 		Role:        roleInvited,
 		JoinedAt:    time.Now().UTC(),
 	}
@@ -297,8 +297,8 @@ func (s *SceneServiceImpl) InviteToScene(ctx context.Context, req *scenev1.Invit
 
 // CastPublishVote records a participant's publish vote for a scene.
 func (s *SceneServiceImpl) CastPublishVote(ctx context.Context, req *scenev1.CastPublishVoteRequest) (*scenev1.CastPublishVoteResponse, error) {
-	if req.GetSessionId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "session_id is required")
+	if req.GetCharacterId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "character_id is required")
 	}
 	if req.GetSceneId() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "scene_id is required")
@@ -311,7 +311,7 @@ func (s *SceneServiceImpl) CastPublishVote(ctx context.Context, req *scenev1.Cas
 
 	var found *ParticipantRow
 	for _, p := range participants {
-		if p.CharacterID == req.GetSessionId() {
+		if p.CharacterID == req.GetCharacterId() {
 			found = p
 			break
 		}

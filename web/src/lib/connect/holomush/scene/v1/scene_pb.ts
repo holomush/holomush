@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/scene/v1/scene.proto.
  */
 export const file_holomush_scene_v1_scene: GenFile = /*@__PURE__*/
-  fileDesc("Ch1ob2xvbXVzaC9zY2VuZS92MS9zY2VuZS5wcm90bxIRaG9sb211c2guc2NlbmUudjEi3gIKCVNjZW5lSW5mbxIKCgJpZBgBIAEoCRINCgV0aXRsZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRITCgtsb2NhdGlvbl9pZBgEIAEoCRIQCghvd25lcl9pZBgFIAEoCRINCgVzdGF0ZRgGIAEoCRIXCg9wb3NlX29yZGVyX21vZGUYByABKAkSGAoQY29udGVudF93YXJuaW5ncxgIIAMoCRIMCgR0YWdzGAkgAygJEhIKCnZpc2liaWxpdHkYCiABKAkSLgoKY3JlYXRlZF9hdBgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kZWRfYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjgKDHBhcnRpY2lwYW50cxgNIAMoCzIiLmhvbG9tdXNoLnNjZW5lLnYxLlBhcnRpY2lwYW50SW5mbyJ8Cg9QYXJ0aWNpcGFudEluZm8SFAoMY2hhcmFjdGVyX2lkGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJEgwKBHJvbGUYAyABKAkSLQoJam9pbmVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJAChFMaXN0U2NlbmVzUmVxdWVzdBINCgVsaW1pdBgBIAEoBRIOCgZvZmZzZXQYAiABKAUSDAoEdGFncxgDIAMoCSJCChJMaXN0U2NlbmVzUmVzcG9uc2USLAoGc2NlbmVzGAEgAygLMhwuaG9sb211c2guc2NlbmUudjEuU2NlbmVJbmZvIjcKD0dldFNjZW5lUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhAKCHNjZW5lX2lkGAIgASgJIj8KEEdldFNjZW5lUmVzcG9uc2USKwoFc2NlbmUYASABKAsyHC5ob2xvbXVzaC5zY2VuZS52MS5TY2VuZUluZm8itgEKEkNyZWF0ZVNjZW5lUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEg0KBXRpdGxlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEhMKC2xvY2F0aW9uX2lkGAQgASgJEhIKCnZpc2liaWxpdHkYBSABKAkSFwoPcG9zZV9vcmRlcl9tb2RlGAYgASgJEgwKBHRhZ3MYByADKAkSGAoQY29udGVudF93YXJuaW5ncxgIIAMoCSJCChNDcmVhdGVTY2VuZVJlc3BvbnNlEisKBXNjZW5lGAEgASgLMhwuaG9sb211c2guc2NlbmUudjEuU2NlbmVJbmZvIjcKD0VuZFNjZW5lUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhAKCHNjZW5lX2lkGAIgASgJIhIKEEVuZFNjZW5lUmVzcG9uc2UiOAoQSm9pblNjZW5lUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhAKCHNjZW5lX2lkGAIgASgJIhMKEUpvaW5TY2VuZVJlc3BvbnNlIjkKEUxlYXZlU2NlbmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSEAoIc2NlbmVfaWQYAiABKAkiFAoSTGVhdmVTY2VuZVJlc3BvbnNlIlIKFEludml0ZVRvU2NlbmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSEAoIc2NlbmVfaWQYAiABKAkSFAoMY2hhcmFjdGVyX2lkGAMgASgJIhcKFUludml0ZVRvU2NlbmVSZXNwb25zZSJMChZDYXN0UHVibGlzaFZvdGVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSEAoIc2NlbmVfaWQYAiABKAkSDAoEdm90ZRgDIAEoCCIZChdDYXN0UHVibGlzaFZvdGVSZXNwb25zZSI7ChNHZXRQb3NlT3JkZXJSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSEAoIc2NlbmVfaWQYAiABKAkihgEKDlBvc2VPcmRlckVudHJ5EhQKDGNoYXJhY3Rlcl9pZBgBIAEoCRIWCg5jaGFyYWN0ZXJfbmFtZRgCIAEoCRIxCg1sYXN0X3Bvc2VkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBITCgtpc19lbGlnaWJsZRgEIAEoCCJYChRHZXRQb3NlT3JkZXJSZXNwb25zZRIMCgRtb2RlGAEgASgJEjIKB2VudHJpZXMYAiADKAsyIS5ob2xvbXVzaC5zY2VuZS52MS5Qb3NlT3JkZXJFbnRyeTLTBgoMU2NlbmVTZXJ2aWNlElkKCkxpc3RTY2VuZXMSJC5ob2xvbXVzaC5zY2VuZS52MS5MaXN0U2NlbmVzUmVxdWVzdBolLmhvbG9tdXNoLnNjZW5lLnYxLkxpc3RTY2VuZXNSZXNwb25zZRJTCghHZXRTY2VuZRIiLmhvbG9tdXNoLnNjZW5lLnYxLkdldFNjZW5lUmVxdWVzdBojLmhvbG9tdXNoLnNjZW5lLnYxLkdldFNjZW5lUmVzcG9uc2USXAoLQ3JlYXRlU2NlbmUSJS5ob2xvbXVzaC5zY2VuZS52MS5DcmVhdGVTY2VuZVJlcXVlc3QaJi5ob2xvbXVzaC5zY2VuZS52MS5DcmVhdGVTY2VuZVJlc3BvbnNlElMKCEVuZFNjZW5lEiIuaG9sb211c2guc2NlbmUudjEuRW5kU2NlbmVSZXF1ZXN0GiMuaG9sb211c2guc2NlbmUudjEuRW5kU2NlbmVSZXNwb25zZRJWCglKb2luU2NlbmUSIy5ob2xvbXVzaC5zY2VuZS52MS5Kb2luU2NlbmVSZXF1ZXN0GiQuaG9sb211c2guc2NlbmUudjEuSm9pblNjZW5lUmVzcG9uc2USWQoKTGVhdmVTY2VuZRIkLmhvbG9tdXNoLnNjZW5lLnYxLkxlYXZlU2NlbmVSZXF1ZXN0GiUuaG9sb211c2guc2NlbmUudjEuTGVhdmVTY2VuZVJlc3BvbnNlEmIKDUludml0ZVRvU2NlbmUSJy5ob2xvbXVzaC5zY2VuZS52MS5JbnZpdGVUb1NjZW5lUmVxdWVzdBooLmhvbG9tdXNoLnNjZW5lLnYxLkludml0ZVRvU2NlbmVSZXNwb25zZRJoCg9DYXN0UHVibGlzaFZvdGUSKS5ob2xvbXVzaC5zY2VuZS52MS5DYXN0UHVibGlzaFZvdGVSZXF1ZXN0GiouaG9sb211c2guc2NlbmUudjEuQ2FzdFB1Ymxpc2hWb3RlUmVzcG9uc2USXwoMR2V0UG9zZU9yZGVyEiYuaG9sb211c2guc2NlbmUudjEuR2V0UG9zZU9yZGVyUmVxdWVzdBonLmhvbG9tdXNoLnNjZW5lLnYxLkdldFBvc2VPcmRlclJlc3BvbnNlQkJaQGdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3NjZW5lL3YxO3NjZW5ldjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("Ch1ob2xvbXVzaC9zY2VuZS92MS9zY2VuZS5wcm90bxIRaG9sb211c2guc2NlbmUudjEi3gIKCVNjZW5lSW5mbxIKCgJpZBgBIAEoCRINCgV0aXRsZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRITCgtsb2NhdGlvbl9pZBgEIAEoCRIQCghvd25lcl9pZBgFIAEoCRINCgVzdGF0ZRgGIAEoCRIXCg9wb3NlX29yZGVyX21vZGUYByABKAkSGAoQY29udGVudF93YXJuaW5ncxgIIAMoCRIMCgR0YWdzGAkgAygJEhIKCnZpc2liaWxpdHkYCiABKAkSLgoKY3JlYXRlZF9hdBgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kZWRfYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjgKDHBhcnRpY2lwYW50cxgNIAMoCzIiLmhvbG9tdXNoLnNjZW5lLnYxLlBhcnRpY2lwYW50SW5mbyJ8Cg9QYXJ0aWNpcGFudEluZm8SFAoMY2hhcmFjdGVyX2lkGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJEgwKBHJvbGUYAyABKAkSLQoJam9pbmVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJAChFMaXN0U2NlbmVzUmVxdWVzdBINCgVsaW1pdBgBIAEoBRIOCgZvZmZzZXQYAiABKAUSDAoEdGFncxgDIAMoCSJCChJMaXN0U2NlbmVzUmVzcG9uc2USLAoGc2NlbmVzGAEgAygLMhwuaG9sb211c2guc2NlbmUudjEuU2NlbmVJbmZvIjkKD0dldFNjZW5lUmVxdWVzdBIUCgxjaGFyYWN0ZXJfaWQYASABKAkSEAoIc2NlbmVfaWQYAiABKAkiPwoQR2V0U2NlbmVSZXNwb25zZRIrCgVzY2VuZRgBIAEoCzIcLmhvbG9tdXNoLnNjZW5lLnYxLlNjZW5lSW5mbyK4AQoSQ3JlYXRlU2NlbmVSZXF1ZXN0EhQKDGNoYXJhY3Rlcl9pZBgBIAEoCRINCgV0aXRsZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRITCgtsb2NhdGlvbl9pZBgEIAEoCRISCgp2aXNpYmlsaXR5GAUgASgJEhcKD3Bvc2Vfb3JkZXJfbW9kZRgGIAEoCRIMCgR0YWdzGAcgAygJEhgKEGNvbnRlbnRfd2FybmluZ3MYCCADKAkiQgoTQ3JlYXRlU2NlbmVSZXNwb25zZRIrCgVzY2VuZRgBIAEoCzIcLmhvbG9tdXNoLnNjZW5lLnYxLlNjZW5lSW5mbyI5Cg9FbmRTY2VuZVJlcXVlc3QSFAoMY2hhcmFjdGVyX2lkGAEgASgJEhAKCHNjZW5lX2lkGAIgASgJIhIKEEVuZFNjZW5lUmVzcG9uc2UiOgoQSm9pblNjZW5lUmVxdWVzdBIUCgxjaGFyYWN0ZXJfaWQYASABKAkSEAoIc2NlbmVfaWQYAiABKAkiEwoRSm9pblNjZW5lUmVzcG9uc2UiOwoRTGVhdmVTY2VuZVJlcXVlc3QSFAoMY2hhcmFjdGVyX2lkGAEgASgJEhAKCHNjZW5lX2lkGAIgASgJIhQKEkxlYXZlU2NlbmVSZXNwb25zZSJbChRJbnZpdGVUb1NjZW5lUmVxdWVzdBIUCgxjaGFyYWN0ZXJfaWQYASABKAkSEAoIc2NlbmVfaWQYAiABKAkSGwoTdGFyZ2V0X2NoYXJhY3Rlcl9pZBgDIAEoCSIXChVJbnZpdGVUb1NjZW5lUmVzcG9uc2UiTgoWQ2FzdFB1Ymxpc2hWb3RlUmVxdWVzdBIUCgxjaGFyYWN0ZXJfaWQYASABKAkSEAoIc2NlbmVfaWQYAiABKAkSDAoEdm90ZRgDIAEoCCIZChdDYXN0UHVibGlzaFZvdGVSZXNwb25zZSI9ChNHZXRQb3NlT3JkZXJSZXF1ZXN0EhQKDGNoYXJhY3Rlcl9pZBgBIAEoCRIQCghzY2VuZV9pZBgCIAEoCSKGAQoOUG9zZU9yZGVyRW50cnkSFAoMY2hhcmFjdGVyX2lkGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJEjEKDWxhc3RfcG9zZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC2lzX2VsaWdpYmxlGAQgASgIIlgKFEdldFBvc2VPcmRlclJlc3BvbnNlEgwKBG1vZGUYASABKAkSMgoHZW50cmllcxgCIAMoCzIhLmhvbG9tdXNoLnNjZW5lLnYxLlBvc2VPcmRlckVudHJ5MtMGCgxTY2VuZVNlcnZpY2USWQoKTGlzdFNjZW5lcxIkLmhvbG9tdXNoLnNjZW5lLnYxLkxpc3RTY2VuZXNSZXF1ZXN0GiUuaG9sb211c2guc2NlbmUudjEuTGlzdFNjZW5lc1Jlc3BvbnNlElMKCEdldFNjZW5lEiIuaG9sb211c2guc2NlbmUudjEuR2V0U2NlbmVSZXF1ZXN0GiMuaG9sb211c2guc2NlbmUudjEuR2V0U2NlbmVSZXNwb25zZRJcCgtDcmVhdGVTY2VuZRIlLmhvbG9tdXNoLnNjZW5lLnYxLkNyZWF0ZVNjZW5lUmVxdWVzdBomLmhvbG9tdXNoLnNjZW5lLnYxLkNyZWF0ZVNjZW5lUmVzcG9uc2USUwoIRW5kU2NlbmUSIi5ob2xvbXVzaC5zY2VuZS52MS5FbmRTY2VuZVJlcXVlc3QaIy5ob2xvbXVzaC5zY2VuZS52MS5FbmRTY2VuZVJlc3BvbnNlElYKCUpvaW5TY2VuZRIjLmhvbG9tdXNoLnNjZW5lLnYxLkpvaW5TY2VuZVJlcXVlc3QaJC5ob2xvbXVzaC5zY2VuZS52MS5Kb2luU2NlbmVSZXNwb25zZRJZCgpMZWF2ZVNjZW5lEiQuaG9sb211c2guc2NlbmUudjEuTGVhdmVTY2VuZVJlcXVlc3QaJS5ob2xvbXVzaC5zY2VuZS52MS5MZWF2ZVNjZW5lUmVzcG9uc2USYgoNSW52aXRlVG9TY2VuZRInLmhvbG9tdXNoLnNjZW5lLnYxLkludml0ZVRvU2NlbmVSZXF1ZXN0GiguaG9sb211c2guc2NlbmUudjEuSW52aXRlVG9TY2VuZVJlc3BvbnNlEmgKD0Nhc3RQdWJsaXNoVm90ZRIpLmhvbG9tdXNoLnNjZW5lLnYxLkNhc3RQdWJsaXNoVm90ZVJlcXVlc3QaKi5ob2xvbXVzaC5zY2VuZS52MS5DYXN0UHVibGlzaFZvdGVSZXNwb25zZRJfCgxHZXRQb3NlT3JkZXISJi5ob2xvbXVzaC5zY2VuZS52MS5HZXRQb3NlT3JkZXJSZXF1ZXN0GicuaG9sb211c2guc2NlbmUudjEuR2V0UG9zZU9yZGVyUmVzcG9uc2VCQlpAZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvc2NlbmUvdjE7c2NlbmV2MWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message holomush.scene.v1.SceneInfo
@@ -175,9 +175,9 @@ export const ListScenesResponseSchema: GenMessage<ListScenesResponse> = /*@__PUR
  */
 export type GetSceneRequest = Message<"holomush.scene.v1.GetSceneRequest"> & {
   /**
-   * @generated from field: string session_id = 1;
+   * @generated from field: string character_id = 1;
    */
-  sessionId: string;
+  characterId: string;
 
   /**
    * @generated from field: string scene_id = 2;
@@ -214,9 +214,9 @@ export const GetSceneResponseSchema: GenMessage<GetSceneResponse> = /*@__PURE__*
  */
 export type CreateSceneRequest = Message<"holomush.scene.v1.CreateSceneRequest"> & {
   /**
-   * @generated from field: string session_id = 1;
+   * @generated from field: string character_id = 1;
    */
-  sessionId: string;
+  characterId: string;
 
   /**
    * @generated from field: string title = 2;
@@ -283,9 +283,9 @@ export const CreateSceneResponseSchema: GenMessage<CreateSceneResponse> = /*@__P
  */
 export type EndSceneRequest = Message<"holomush.scene.v1.EndSceneRequest"> & {
   /**
-   * @generated from field: string session_id = 1;
+   * @generated from field: string character_id = 1;
    */
-  sessionId: string;
+  characterId: string;
 
   /**
    * @generated from field: string scene_id = 2;
@@ -318,9 +318,9 @@ export const EndSceneResponseSchema: GenMessage<EndSceneResponse> = /*@__PURE__*
  */
 export type JoinSceneRequest = Message<"holomush.scene.v1.JoinSceneRequest"> & {
   /**
-   * @generated from field: string session_id = 1;
+   * @generated from field: string character_id = 1;
    */
-  sessionId: string;
+  characterId: string;
 
   /**
    * @generated from field: string scene_id = 2;
@@ -353,9 +353,9 @@ export const JoinSceneResponseSchema: GenMessage<JoinSceneResponse> = /*@__PURE_
  */
 export type LeaveSceneRequest = Message<"holomush.scene.v1.LeaveSceneRequest"> & {
   /**
-   * @generated from field: string session_id = 1;
+   * @generated from field: string character_id = 1;
    */
-  sessionId: string;
+  characterId: string;
 
   /**
    * @generated from field: string scene_id = 2;
@@ -388,9 +388,9 @@ export const LeaveSceneResponseSchema: GenMessage<LeaveSceneResponse> = /*@__PUR
  */
 export type InviteToSceneRequest = Message<"holomush.scene.v1.InviteToSceneRequest"> & {
   /**
-   * @generated from field: string session_id = 1;
+   * @generated from field: string character_id = 1;
    */
-  sessionId: string;
+  characterId: string;
 
   /**
    * @generated from field: string scene_id = 2;
@@ -398,9 +398,9 @@ export type InviteToSceneRequest = Message<"holomush.scene.v1.InviteToSceneReque
   sceneId: string;
 
   /**
-   * @generated from field: string character_id = 3;
+   * @generated from field: string target_character_id = 3;
    */
-  characterId: string;
+  targetCharacterId: string;
 };
 
 /**
@@ -428,9 +428,9 @@ export const InviteToSceneResponseSchema: GenMessage<InviteToSceneResponse> = /*
  */
 export type CastPublishVoteRequest = Message<"holomush.scene.v1.CastPublishVoteRequest"> & {
   /**
-   * @generated from field: string session_id = 1;
+   * @generated from field: string character_id = 1;
    */
-  sessionId: string;
+  characterId: string;
 
   /**
    * @generated from field: string scene_id = 2;
@@ -468,9 +468,9 @@ export const CastPublishVoteResponseSchema: GenMessage<CastPublishVoteResponse> 
  */
 export type GetPoseOrderRequest = Message<"holomush.scene.v1.GetPoseOrderRequest"> & {
   /**
-   * @generated from field: string session_id = 1;
+   * @generated from field: string character_id = 1;
    */
-  sessionId: string;
+  characterId: string;
 
   /**
    * @generated from field: string scene_id = 2;

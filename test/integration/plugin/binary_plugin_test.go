@@ -176,15 +176,15 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 			// Create a scene through the registry connection → plugin pipeline
 			createResp, err := sceneClient.CreateScene(ctx, &scenev1.CreateSceneRequest{
-				SessionId: "test-session-001",
-				Title:     "Integration Test Scene",
+				CharacterId: "test-char-001",
+				Title:       "Integration Test Scene",
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(createResp.GetScene()).NotTo(BeNil())
 			Expect(createResp.GetScene().GetTitle()).To(Equal("Integration Test Scene"))
 			Expect(createResp.GetScene().GetId()).NotTo(BeEmpty())
 			Expect(createResp.GetScene().GetState()).To(Equal("active"))
-			Expect(createResp.GetScene().GetOwnerId()).To(Equal("test-session-001"))
+			Expect(createResp.GetScene().GetOwnerId()).To(Equal("test-char-001"))
 
 			sceneID := createResp.GetScene().GetId()
 
@@ -198,7 +198,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 			// Verify the owner is a participant
 			Expect(getResp.GetScene().GetParticipants()).To(HaveLen(1))
-			Expect(getResp.GetScene().GetParticipants()[0].GetCharacterId()).To(Equal("test-session-001"))
+			Expect(getResp.GetScene().GetParticipants()[0].GetCharacterId()).To(Equal("test-char-001"))
 			Expect(getResp.GetScene().GetParticipants()[0].GetRole()).To(Equal("owner"))
 
 			// Verify ListScenes returns the scene (open visibility by default)
@@ -249,8 +249,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 			// CreateScene directly on the plugin
 			createResp, err := sceneClient.CreateScene(ctx, &scenev1.CreateSceneRequest{
-				SessionId: "direct-session-001",
-				Title:     "Direct Connection Test",
+				CharacterId: "direct-char-001",
+				Title:       "Direct Connection Test",
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(createResp.GetScene().GetTitle()).To(Equal("Direct Connection Test"))

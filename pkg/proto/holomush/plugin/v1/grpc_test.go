@@ -35,7 +35,7 @@ func (m *mockPluginServer) HandleEvent(_ context.Context, req *pluginv1.HandleEv
 	return &pluginv1.HandleEventResponse{
 		EmitEvents: []*pluginv1.EmitEvent{
 			{
-				Stream:  "room:room_123",
+				Stream:  "location:loc_123",
 				Type:    "say",
 				Payload: `{"text":"response"}`,
 			},
@@ -58,12 +58,12 @@ func (m *mockHostFunctionsServer) EmitEvent(_ context.Context, _ *pluginv1.EmitE
 	return &pluginv1.EmitEventResponse{Success: true}, nil
 }
 
-func (m *mockHostFunctionsServer) QueryRoom(_ context.Context, _ *pluginv1.QueryRoomRequest) (*pluginv1.QueryRoomResponse, error) {
-	return &pluginv1.QueryRoomResponse{
-		Room: &pluginv1.RoomInfo{
-			Id:          "room_123",
-			Name:        "Test Room",
-			Description: "A test room.",
+func (m *mockHostFunctionsServer) QueryLocation(_ context.Context, _ *pluginv1.QueryLocationRequest) (*pluginv1.QueryLocationResponse, error) {
+	return &pluginv1.QueryLocationResponse{
+		Location: &pluginv1.LocationInfo{
+			Id:          "loc_123",
+			Name:        "Test Location",
+			Description: "A test location.",
 		},
 	}, nil
 }
@@ -77,8 +77,8 @@ func (m *mockHostFunctionsServer) QueryCharacter(_ context.Context, _ *pluginv1.
 	}, nil
 }
 
-func (m *mockHostFunctionsServer) QueryRoomCharacters(_ context.Context, _ *pluginv1.QueryRoomCharactersRequest) (*pluginv1.QueryRoomCharactersResponse, error) {
-	return &pluginv1.QueryRoomCharactersResponse{
+func (m *mockHostFunctionsServer) QueryLocationCharacters(_ context.Context, _ *pluginv1.QueryLocationCharactersRequest) (*pluginv1.QueryLocationCharactersResponse, error) {
+	return &pluginv1.QueryLocationCharactersResponse{
 		Characters: []*pluginv1.CharacterInfo{},
 	}, nil
 }

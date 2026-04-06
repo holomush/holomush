@@ -235,7 +235,7 @@ type Event struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unique event identifier (ULID string).
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Stream the event belongs to (e.g., "room:room_abc123").
+	// Stream the event belongs to (e.g., "location:loc_abc123").
 	Stream string `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
 	// Event type (e.g., "say", "pose", "arrive", "leave", "system").
 	Type string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`

@@ -8,7 +8,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { EmitEventRequest, EmitEventResponse, GetCommandHelpRequest, GetCommandHelpResponse, KVDeleteRequest, KVDeleteResponse, KVGetRequest, KVGetResponse, KVSetRequest, KVSetResponse, ListCommandsRequest, ListCommandsResponse, LogRequest, LogResponse, QueryCharacterRequest, QueryCharacterResponse, QueryRoomCharactersRequest, QueryRoomCharactersResponse, QueryRoomRequest, QueryRoomResponse } from "./hostfunc_pb.js";
+import { EmitEventRequest, EmitEventResponse, GetCommandHelpRequest, GetCommandHelpResponse, KVDeleteRequest, KVDeleteResponse, KVGetRequest, KVGetResponse, KVSetRequest, KVSetResponse, ListCommandsRequest, ListCommandsResponse, LogRequest, LogResponse, QueryCharacterRequest, QueryCharacterResponse, QueryLocationCharactersRequest, QueryLocationCharactersResponse, QueryLocationRequest, QueryLocationResponse } from "./hostfunc_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -33,14 +33,14 @@ export const HostFunctionsService = {
       kind: MethodKind.Unary,
     },
     /**
-     * QueryRoom retrieves information about a room.
+     * QueryLocation retrieves information about a location.
      *
-     * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryRoom
+     * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryLocation
      */
-    queryRoom: {
-      name: "QueryRoom",
-      I: QueryRoomRequest,
-      O: QueryRoomResponse,
+    queryLocation: {
+      name: "QueryLocation",
+      I: QueryLocationRequest,
+      O: QueryLocationResponse,
       kind: MethodKind.Unary,
     },
     /**
@@ -55,14 +55,14 @@ export const HostFunctionsService = {
       kind: MethodKind.Unary,
     },
     /**
-     * QueryRoomCharacters retrieves all characters in a room.
+     * QueryLocationCharacters retrieves all characters in a location.
      *
-     * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryRoomCharacters
+     * @generated from rpc holomush.plugin.v1.HostFunctionsService.QueryLocationCharacters
      */
-    queryRoomCharacters: {
-      name: "QueryRoomCharacters",
-      I: QueryRoomCharactersRequest,
-      O: QueryRoomCharactersResponse,
+    queryLocationCharacters: {
+      name: "QueryLocationCharacters",
+      I: QueryLocationCharactersRequest,
+      O: QueryLocationCharactersResponse,
       kind: MethodKind.Unary,
     },
     /**
