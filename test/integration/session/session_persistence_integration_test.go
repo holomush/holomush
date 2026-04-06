@@ -16,8 +16,6 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 	"google.golang.org/grpc"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
@@ -31,6 +29,7 @@ import (
 	"github.com/holomush/holomush/internal/telnet"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	"github.com/holomush/holomush/test/testutil"
 )
 
 // registerTestSayCommand adds a minimal say handler for integration tests.
@@ -74,7 +73,7 @@ var _ = Describe("Session Persistence", func() {
 	var (
 		testCtx      context.Context
 		testCancel   context.CancelFunc
-		container    *postgres.PostgresContainer
+		container    testcontainers.Container
 		grpcServer   *grpc.Server
 		grpcCli      *grpcpkg.Client
 		sessionStore *store.PostgresSessionStore
@@ -92,21 +91,10 @@ var _ = Describe("Session Persistence", func() {
 
 		// 1. Start PostgreSQL container
 		var err error
-		container, err = postgres.Run(testCtx,
-			"postgres:18-alpine",
-			postgres.WithDatabase("holomush_test"),
-			postgres.WithUsername("holomush"),
-			postgres.WithPassword("holomush"),
-			testcontainers.WithWaitStrategy(
-				wait.ForLog("database system is ready to accept connections").
-					WithOccurrence(2).
-					WithStartupTimeout(30*time.Second),
-			),
-		)
+		pgEnv, err := testutil.StartPostgres(testCtx)
 		Expect(err).NotTo(HaveOccurred())
-
-		connStr, err := container.ConnectionString(testCtx, "sslmode=disable")
-		Expect(err).NotTo(HaveOccurred())
+		container = pgEnv.Container
+		connStr := pgEnv.ConnStr
 
 		// 2. Run migrations
 		migrator, err := store.NewMigrator(connStr)

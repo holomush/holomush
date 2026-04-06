@@ -16,13 +16,12 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
 	"github.com/holomush/holomush/internal/store"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
+	"github.com/holomush/holomush/test/testutil"
 )
 
 // pluginBinaryDir returns the directory containing the built core-scenes binary.
@@ -50,7 +49,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 	var (
 		ctx       context.Context
 		cancel    context.CancelFunc
-		container *postgres.PostgresContainer
+		container testcontainers.Container
 		connStr   string
 	)
 
@@ -68,22 +67,10 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
 
 		// Start PostgreSQL via testcontainers
-		var err error
-		container, err = postgres.Run(ctx,
-			"postgres:18-alpine",
-			postgres.WithDatabase("holomush_test"),
-			postgres.WithUsername("holomush"),
-			postgres.WithPassword("holomush"),
-			testcontainers.WithWaitStrategy(
-				wait.ForLog("database system is ready to accept connections").
-					WithOccurrence(2).
-					WithStartupTimeout(30*time.Second),
-			),
-		)
+		pgEnv, err := testutil.StartPostgres(ctx)
 		Expect(err).NotTo(HaveOccurred())
-
-		connStr, err = container.ConnectionString(ctx, "sslmode=disable")
-		Expect(err).NotTo(HaveOccurred())
+		container = pgEnv.Container
+		connStr = pgEnv.ConnStr
 
 		// Run core server migrations (needed for the base schema)
 		migrator, err := store.NewMigrator(connStr)

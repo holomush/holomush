@@ -9,14 +9,11 @@ import (
 	"context"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/test/testutil"
 )
 
 // testPool is the shared database pool for integration tests.
@@ -29,51 +26,35 @@ var testCleanup func()
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 
-	container, err := postgres.Run(ctx,
-		"postgres:18-alpine",
-		postgres.WithDatabase("holomush_test"),
-		postgres.WithUsername("holomush"),
-		postgres.WithPassword("holomush"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(30*time.Second),
-		),
-	)
+	pgEnv, err := testutil.StartPostgres(ctx)
 	if err != nil {
 		panic("failed to start postgres container: " + err.Error())
 	}
 
-	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		_ = container.Terminate(ctx)
-		panic("failed to get connection string: " + err.Error())
-	}
-
 	// Run all migrations using the new Migrator
-	migrator, err := store.NewMigrator(connStr)
+	migrator, err := store.NewMigrator(pgEnv.ConnStr)
 	if err != nil {
-		_ = container.Terminate(ctx)
+		_ = pgEnv.Terminate(ctx)
 		panic("failed to create migrator: " + err.Error())
 	}
 	if err := migrator.Up(); err != nil {
 		_ = migrator.Close()
-		_ = container.Terminate(ctx)
+		_ = pgEnv.Terminate(ctx)
 		panic("failed to run migrations: " + err.Error())
 	}
 	_ = migrator.Close()
 
 	// Create a new pool for tests
-	pool, err := pgxpool.New(ctx, connStr)
+	pool, err := pgxpool.New(ctx, pgEnv.ConnStr)
 	if err != nil {
-		_ = container.Terminate(ctx)
+		_ = pgEnv.Terminate(ctx)
 		panic("failed to create pool: " + err.Error())
 	}
 
 	testPool = pool
 	testCleanup = func() {
 		pool.Close()
-		_ = container.Terminate(ctx)
+		_ = pgEnv.Terminate(ctx)
 	}
 
 	// Run tests

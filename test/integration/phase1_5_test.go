@@ -19,8 +19,6 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
@@ -34,6 +32,7 @@ import (
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	controlv1 "github.com/holomush/holomush/pkg/proto/holomush/control/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	"github.com/holomush/holomush/test/testutil"
 )
 
 // noopEventStore is a stub EventStore for tests that don't exercise event functionality.
@@ -118,37 +117,23 @@ func setupTestEnv() (*testEnv, error) {
 	os.Setenv("XDG_RUNTIME_DIR", tmpDir)
 
 	// Start PostgreSQL container
-	container, err := postgres.Run(ctx,
-		"postgres:18-alpine",
-		postgres.WithDatabase("holomush_test"),
-		postgres.WithUsername("holomush"),
-		postgres.WithPassword("holomush"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(30*time.Second),
-		),
-	)
+	pgEnv, err := testutil.StartPostgres(ctx)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-	env.container = container
-
-	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		return nil, err
-	}
+	env.container = pgEnv.Container
+	connStr := pgEnv.ConnStr
 
 	// Run migrations using the new Migrator
 	migrator, err := store.NewMigrator(connStr)
 	if err != nil {
-		_ = container.Terminate(ctx)
+		_ = pgEnv.Terminate(ctx)
 		return nil, err
 	}
 	if err := migrator.Up(); err != nil {
 		_ = migrator.Close()
-		_ = container.Terminate(ctx)
+		_ = pgEnv.Terminate(ctx)
 		return nil, err
 	}
 	_ = migrator.Close()
@@ -156,7 +141,7 @@ func setupTestEnv() (*testEnv, error) {
 	// Create event store
 	env.store, err = store.NewPostgresEventStore(ctx, connStr)
 	if err != nil {
-		_ = container.Terminate(ctx)
+		_ = pgEnv.Terminate(ctx)
 		return nil, err
 	}
 
