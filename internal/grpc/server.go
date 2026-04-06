@@ -34,6 +34,7 @@ import (
 // AuthResult contains the result of a successful authentication.
 type AuthResult struct {
 	CharacterID   ulid.ULID
+	PlayerID      ulid.ULID
 	CharacterName string
 	LocationID    ulid.ULID
 	IsGuest       bool
@@ -264,6 +265,7 @@ func (s *CoreServer) Authenticate(ctx context.Context, req *corev1.AuthenticateR
 	sessionInfo := &session.Info{
 		ID:            sessionID.String(),
 		CharacterID:   result.CharacterID,
+		PlayerID:      result.PlayerID,
 		CharacterName: result.CharacterName,
 		LocationID:    result.LocationID,
 		IsGuest:       result.IsGuest,
@@ -421,6 +423,7 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 	var buf bytes.Buffer
 	exec, err := command.NewCommandExecution(command.CommandExecutionConfig{
 		CharacterID:   info.CharacterID,
+		PlayerID:      info.PlayerID,
 		LocationID:    info.LocationID,
 		CharacterName: info.CharacterName,
 		SessionID:     sessionID,
