@@ -82,12 +82,15 @@ type WorldService interface {
 // The store.PostgresAliasRepository implements both this interface and the broader
 // store.AliasRepository.
 type AliasWriter interface {
-	// SetSystemAlias creates or updates a system-wide alias.
-	SetSystemAlias(ctx context.Context, alias, command, createdBy, source string) error
+	// SetSystemAlias creates or updates a system-wide alias (UPSERT).
+	// See store.AliasRepository.SetSystemAlias for parameter semantics;
+	// createdBy is a player FK ("" for NULL) and source is a provenance
+	// tag (plugin name for manifest-seeded, "sysalias" for operator-created).
+	SetSystemAlias(ctx context.Context, alias, cmd, createdBy, source string) error
 	// DeleteSystemAlias removes a system-wide alias.
 	DeleteSystemAlias(ctx context.Context, alias string) error
 	// SetPlayerAlias creates or updates a player-specific alias.
-	SetPlayerAlias(ctx context.Context, playerID ulid.ULID, alias, command string) error
+	SetPlayerAlias(ctx context.Context, playerID ulid.ULID, alias, cmd string) error
 	// DeletePlayerAlias removes a player-specific alias.
 	DeletePlayerAlias(ctx context.Context, playerID ulid.ULID, alias string) error
 }

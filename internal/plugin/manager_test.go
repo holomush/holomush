@@ -716,6 +716,72 @@ lua-plugin:
 	assert.Equal(t, "say", cached)
 }
 
+// TestManagerLoadAllSeedsAliasesDeterministicallyAcrossLoads verifies that
+// cross-plugin duplicate alias resolution is stable across multiple LoadAll
+// cycles. The Manager uses loadedOrder (slice) rather than iterating m.loaded
+// (map) to preserve DAG/priority load order. Without this, Go's randomized
+// map iteration would cause the "first plugin wins" contract to pick different
+// winners on different runs.
+func TestManagerLoadAllSeedsAliasesDeterministicallyAcrossLoads(t *testing.T) {
+	const iterations = 25
+
+	writeConflictingPlugins := func(t *testing.T, pluginsDir string) {
+		// Two plugins both declare alias `"`. Priority determines load order
+		// (lower first), so alpha should always win.
+		alphaDir := filepath.Join(pluginsDir, "alpha")
+		mkdirAll(t, alphaDir)
+		writeFile(t, filepath.Join(alphaDir, "plugin.yaml"), []byte(`name: alpha
+version: 1.0.0
+type: lua
+priority: 10
+commands:
+  - name: say
+    aliases:
+      - '"'
+    help: Say something
+lua-plugin:
+  entry: main.lua`))
+		writeFile(t, filepath.Join(alphaDir, "main.lua"), []byte("function on_event(e) end"))
+
+		bravoDir := filepath.Join(pluginsDir, "bravo")
+		mkdirAll(t, bravoDir)
+		writeFile(t, filepath.Join(bravoDir, "plugin.yaml"), []byte(`name: bravo
+version: 1.0.0
+type: lua
+priority: 20
+commands:
+  - name: shout
+    aliases:
+      - '"'
+    help: Shout something
+lua-plugin:
+  entry: main.lua`))
+		writeFile(t, filepath.Join(bravoDir, "main.lua"), []byte("function on_event(e) end"))
+	}
+
+	winners := make(map[string]int)
+	for i := 0; i < iterations; i++ {
+		dir := t.TempDir()
+		pluginsDir := filepath.Join(dir, "plugins")
+		writeConflictingPlugins(t, pluginsDir)
+
+		luaHost := pluginlua.NewHost()
+		repo := &fakeAliasSeederMgr{existing: make(map[string]string)}
+		cache := command.NewAliasCache()
+
+		mgr := plugins.NewManager(pluginsDir,
+			plugins.WithLuaHost(luaHost),
+			plugins.WithAliasSeeder(repo, cache),
+		)
+		require.NoError(t, mgr.LoadAll(context.Background()))
+		_ = luaHost.Close(context.Background())
+
+		winners[repo.existing[`"`]]++
+	}
+	assert.Len(t, winners, 1, "alias winner must be deterministic across loads, got %v", winners)
+	assert.Equal(t, iterations, winners["say"], "alpha (lower priority) should always win the alias")
+}
+
 func TestManagerLoadAllWithoutAliasSeederSkipsSeeding(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")

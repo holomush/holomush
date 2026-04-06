@@ -61,34 +61,74 @@ commands:
 - Manifests without the `aliases` field MUST parse identically to today (zero
   aliases, no error).
 
+## Database Schema Change
+
+A new `source` column is added to `system_aliases` via migration `000003`:
+
+```sql
+ALTER TABLE system_aliases ADD COLUMN IF NOT EXISTS source TEXT;
+```
+
+### Why `source` Is Separate from `created_by`
+
+The existing `system_aliases.created_by` column is declared as
+`TEXT REFERENCES players(id)`. It cannot hold a plugin name — the foreign
+key constraint requires either a valid player ID or NULL. Plugin-seeded
+aliases have no associated player, so they cannot use `created_by` to record
+provenance.
+
+The `source` column is an unconstrained `TEXT` field that records the origin
+of each alias, independent of any player FK:
+
+| Row type | `created_by` | `source` |
+|----------|-------------|---------|
+| Plugin-seeded (from manifest) | `NULL` | plugin name, e.g. `"core-communication"` |
+| Operator-created (via `sysalias`) | player ID FK | `"sysalias"` |
+| Legacy pre-migration-000003 rows | `NULL` or player ID | `NULL` |
+
 ## Loader Seeding Flow
 
 After `LoadAll` discovers and loads all plugins, the loader collects aliases
 from every loaded manifest and seeds them through the existing persistence path:
 
-1. **Collect:** Iterate loaded manifests, gather `{alias, commandName,
-   pluginName}` tuples.
+1. **Collect:** Iterate loaded manifests in DAG/priority load order, gathering
+   `{alias, commandName, pluginName}` tuples.
 2. **Validate cross-plugin:** Detect duplicate aliases across plugins. Log a
-   warning and skip the later one. DAG load order determines the winner.
-3. **Seed to DB:** Call `AliasSeeder.SetSystemAlias(ctx, alias, commandName,
-   pluginName)` for each tuple. This uses "insert if absent" semantics — an
-   alias that already exists in the database is not overwritten.
-4. **Load cache:** Call `cache.LoadSystemAliases()` to hydrate the in-memory
+   warning and skip the later one. **The Manager preserves DAG load order via
+   an ordered slice (`loadedOrder`) rather than iterating its loaded map, so
+   conflict resolution is deterministic across restarts.**
+3. **Seed to DB:** For each tuple, call
+   `AliasSeeder.SetSystemAlias(ctx, alias, commandName, "", pluginName)`.
+   The fourth argument (`createdBy`) is empty (stored as NULL) because
+   plugin-seeded aliases have no associated player. The fifth argument
+   (`source`) is the plugin name.
+4. **Skip-existing semantics:** Before calling `SetSystemAlias`, the seeder
+   reads existing aliases via `GetSystemAliases` and skips any that already
+   exist. This preserves operator overrides across restarts. Note: the
+   repository-level `SetSystemAlias` is an UPSERT; the skip-existing behavior
+   is enforced at the application layer in `SeedManifestAliases`, not in the
+   DB.
+5. **Load cache:** Call `cache.LoadSystemAliases()` to hydrate the in-memory
    `AliasCache` from the database.
 
 ### Integration Points
 
-- The `Manager` MUST receive an `AliasSeeder` and `*AliasCache` (or a small
-  interface wrapping both) via dependency injection.
-- Alias seeding MUST happen at `BootstrapPriorityAlias` (500), after content
-  plugins are loaded.
-- The `createdBy` field in `SetSystemAlias` MUST be set to the plugin name
-  (e.g., `"core-communication"`), replacing the current `"system"` value.
+- The `Manager` MUST receive an `AliasSeeder` and `*AliasCache` via
+  `WithAliasSeeder(seeder, cache)` dependency injection.
+- Alias seeding MUST happen inside `Manager.LoadAll`, after every plugin has
+  loaded successfully, so that any plugin's `commands[].aliases` can contribute
+  regardless of load order.
+- The plugin subsystem (`internal/plugin/setup`) — which starts at lifecycle
+  priority 5, before the bootstrap subsystem — creates the `AliasRepo` and
+  `AliasCache` and passes them to the Manager. Other subsystems (notably
+  gRPC) retrieve them from the plugin subsystem via getter methods.
 
 ### Replaces
 
 This seeding flow replaces the `AliasBootstrapper` bootstrap step entirely.
-The `SeedSystemAliases` function in `internal/bootstrap/aliases.go` is removed.
+The `SeedSystemAliases` function in `internal/bootstrap/aliases.go` and the
+`AliasBootstrapper` adapter in `internal/bootstrap/alias_bootstrap.go` are
+removed. The `BootstrapPriorityAlias` constant is no longer used.
 
 ## Migration Plan
 
@@ -136,13 +176,22 @@ The `SeedSystemAliases` function in `internal/bootstrap/aliases.go` is removed.
 
 ### E2E Tests (Integration, Ginkgo/Gomega)
 
-- **Full startup with DB verification:** Boot the server with
+E2E tests live in `test/integration/plugin/` so they run as part of
+`task test:int` (the `./internal/plugin/` package is excluded from the
+integration test target because of pre-existing orphaned test files
+unrelated to this work).
+
+- **Full startup with DB verification:** Boot the plugin Manager with
   `core-communication` and `core-objects` plugins loaded, then query the
-  system aliases table and assert all six aliases are present with correct
-  `command` and `created_by` values.
-- **Operator override survives restart:** Seed aliases, operator changes one
-  via `sysalias` (e.g., `" → shout`), restart server, verify the changed
-  alias is not overwritten (confirming "skip existing" semantics).
+  system aliases table **by column name** (not positional) and assert
+  all six aliases are present with `command` matching the aliased command
+  name (e.g. `say`, `pose`, `describe`), `created_by` IS NULL, and `source`
+  equal to the owning plugin name (`core-communication` or `core-objects`).
+- **Operator override via sysalias:** Seed aliases, operator overrides one
+  (e.g., `" → shout`) with a player ID via `SetSystemAlias`, restart
+  Manager, verify the override is preserved in `command`, `created_by`,
+  and `source` (= `"sysalias"`) — confirming both the skip-existing
+  semantics and the provenance distinction.
 - **Idempotent seeding:** Load twice against the same database, verify no
   errors and aliases remain correct.
 

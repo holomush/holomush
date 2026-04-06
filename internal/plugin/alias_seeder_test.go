@@ -12,14 +12,20 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
-// fakeAliasSeeder implements AliasSeeder for testing.
+// fakeAliasSeeder implements AliasSeeder for testing. GetSystemAliases can be
+// configured to fail on the Nth call (1-indexed) via failOnGetCall to exercise
+// the initial fetch and cache reload error paths independently.
 type fakeAliasSeeder struct {
-	existing map[string]string
-	creators map[string]string
-	sources  map[string]string
-	setErr   error
+	existing       map[string]string
+	creators       map[string]string
+	sources        map[string]string
+	setErr         error
+	getCallCount   int
+	failOnGetCall  int   // 1-indexed; 0 disables
+	getErr         error // returned when failOnGetCall matches
 }
 
 func newFakeAliasSeeder() *fakeAliasSeeder {
@@ -31,6 +37,10 @@ func newFakeAliasSeeder() *fakeAliasSeeder {
 }
 
 func (f *fakeAliasSeeder) GetSystemAliases(_ context.Context) (map[string]string, error) {
+	f.getCallCount++
+	if f.failOnGetCall > 0 && f.getCallCount == f.failOnGetCall {
+		return nil, f.getErr
+	}
 	cp := make(map[string]string, len(f.existing))
 	for k, v := range f.existing {
 		cp[k] = v
@@ -70,8 +80,7 @@ func TestCollectManifestAliasesGathersFromMultiplePlugins(t *testing.T) {
 		},
 	}
 
-	got, err := CollectManifestAliases(loaded)
-	require.NoError(t, err)
+	got := CollectManifestAliases(loaded)
 
 	assert.Len(t, got, 4)
 	assert.Equal(t, ManifestAlias{Alias: `"`, Command: "say", Plugin: "comms"}, got[0])
@@ -100,8 +109,7 @@ func TestCollectManifestAliasesSkipsDuplicateAcrossPlugins(t *testing.T) {
 		},
 	}
 
-	got, err := CollectManifestAliases(loaded)
-	require.NoError(t, err)
+	got := CollectManifestAliases(loaded)
 
 	assert.Len(t, got, 1)
 	assert.Equal(t, ManifestAlias{Alias: `"`, Command: "say", Plugin: "comms"}, got[0])
@@ -119,8 +127,7 @@ func TestCollectManifestAliasesReturnsEmptyWhenNoAliases(t *testing.T) {
 		},
 	}
 
-	got, err := CollectManifestAliases(loaded)
-	require.NoError(t, err)
+	got := CollectManifestAliases(loaded)
 	assert.Empty(t, got)
 }
 
@@ -210,4 +217,52 @@ func TestSeedManifestAliasesRecordsPluginNameAsSource(t *testing.T) {
 
 	assert.Equal(t, "comms", repo.sources[`"`])
 	assert.Equal(t, "nav", repo.sources["l"])
+}
+
+func TestSeedManifestAliasesReturnsErrorOnInitialFetchFailure(t *testing.T) {
+	repo := newFakeAliasSeeder()
+	repo.failOnGetCall = 1
+	repo.getErr = errors.New("db down")
+	cache := command.NewAliasCache()
+
+	err := SeedManifestAliases(context.Background(),
+		[]ManifestAlias{{Alias: `"`, Command: "say", Plugin: "comms"}},
+		repo, cache)
+
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "ALIAS_SEED_FETCH_FAILED")
+}
+
+func TestSeedManifestAliasesReturnsErrorOnCacheReloadFailure(t *testing.T) {
+	repo := newFakeAliasSeeder()
+	// Succeed on first call (initial fetch), fail on second (cache reload).
+	repo.failOnGetCall = 2
+	repo.getErr = errors.New("connection lost")
+	cache := command.NewAliasCache()
+
+	err := SeedManifestAliases(context.Background(),
+		[]ManifestAlias{{Alias: `"`, Command: "say", Plugin: "comms"}},
+		repo, cache)
+
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "ALIAS_CACHE_RELOAD_FAILED")
+}
+
+func TestSeedManifestAliasesSkipsInBatchDuplicates(t *testing.T) {
+	repo := newFakeAliasSeeder()
+	cache := command.NewAliasCache()
+
+	// Two entries with the same alias — second should be skipped so it
+	// cannot upsert over the first's plugin attribution.
+	aliases := []ManifestAlias{
+		{Alias: `"`, Command: "say", Plugin: "comms"},
+		{Alias: `"`, Command: "shout", Plugin: "other"},
+	}
+
+	err := SeedManifestAliases(context.Background(), aliases, repo, cache)
+	require.NoError(t, err)
+
+	// First entry wins — source stays "comms", command stays "say".
+	assert.Equal(t, "say", repo.existing[`"`])
+	assert.Equal(t, "comms", repo.sources[`"`])
 }

@@ -28,6 +28,7 @@ type Manager struct {
 	aliasSeeder     AliasSeeder
 	aliasCache      *command.AliasCache
 	loaded          map[string]*DiscoveredPlugin
+	loadedOrder     []*DiscoveredPlugin // preserves DAG/priority load order for deterministic iteration
 	mu              sync.RWMutex
 }
 
@@ -217,18 +218,17 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 	return nil
 }
 
+// seedAliases collects alias declarations from all loaded plugin manifests
+// and seeds them into the database. Iterates loadedOrder (not the map) to
+// preserve DAG/priority load order — this makes cross-plugin duplicate
+// resolution deterministic across restarts.
 func (m *Manager) seedAliases(ctx context.Context) error {
 	m.mu.RLock()
-	loaded := make([]*DiscoveredPlugin, 0, len(m.loaded))
-	for _, dp := range m.loaded {
-		loaded = append(loaded, dp)
-	}
+	ordered := make([]*DiscoveredPlugin, len(m.loadedOrder))
+	copy(ordered, m.loadedOrder)
 	m.mu.RUnlock()
 
-	aliases, err := CollectManifestAliases(loaded)
-	if err != nil {
-		return err
-	}
+	aliases := CollectManifestAliases(ordered)
 	if len(aliases) == 0 {
 		return nil
 	}
@@ -361,6 +361,9 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin) error {
 	}
 
 	m.mu.Lock()
+	if _, existed := m.loaded[dp.Manifest.Name]; !existed {
+		m.loadedOrder = append(m.loadedOrder, dp)
+	}
 	m.loaded[dp.Manifest.Name] = dp
 	m.pluginHosts[dp.Manifest.Name] = host
 	m.mu.Unlock()
