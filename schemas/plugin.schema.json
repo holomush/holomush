@@ -63,6 +63,12 @@
             "type": "string",
             "minLength": 1
           },
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "capabilities": {
             "items": {
               "properties": {

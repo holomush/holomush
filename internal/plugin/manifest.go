@@ -108,6 +108,9 @@ type CommandSpec struct {
 	// Name is the canonical command name (e.g., "say", "teleport").
 	Name string `yaml:"name" json:"name" jsonschema:"required,minLength=1"`
 
+	// Aliases lists shortcut strings that expand to this command (e.g., `"` for say).
+	Aliases []string `yaml:"aliases,omitempty" json:"aliases,omitempty"`
+
 	// Capabilities lists all required capabilities for the command (AND logic).
 	// The player must have ALL listed capabilities to use this command.
 	Capabilities []command.Capability `yaml:"capabilities,omitempty" json:"capabilities,omitempty"`
@@ -136,6 +139,17 @@ func (c *CommandSpec) Validate() error {
 
 	if c.HelpText != "" && c.HelpFile != "" {
 		return oops.In("command").With("name", c.Name).New("cannot specify both helpText and helpFile")
+	}
+
+	seenAliases := make(map[string]bool)
+	for i, alias := range c.Aliases {
+		if alias == "" {
+			return oops.In("command").With("name", c.Name).With("alias_index", i).New("alias must not be empty")
+		}
+		if seenAliases[alias] {
+			return oops.In("command").With("name", c.Name).With("alias", alias).New("duplicate alias")
+		}
+		seenAliases[alias] = true
 	}
 
 	for i, cap := range c.Capabilities {

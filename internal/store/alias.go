@@ -15,12 +15,26 @@ import (
 type AliasRepository interface {
 	// System aliases
 	GetSystemAliases(ctx context.Context) (map[string]string, error)
-	SetSystemAlias(ctx context.Context, alias, command, createdBy string) error
+	// SetSystemAlias creates or updates a system-wide alias (UPSERT on alias).
+	//
+	// Parameters:
+	//   - alias:     trigger string (e.g., `"` or `desc`).
+	//   - cmd:       canonical command name to expand to (e.g., "say").
+	//   - createdBy: player ID (FK to players.id) for operator-created aliases;
+	//                pass "" (stored as NULL) for plugin-seeded aliases.
+	//   - source:    provenance tag. Convention: plugin name for manifest-seeded
+	//                rows (e.g., "core-communication"), "sysalias" for operator
+	//                commands. Pass "" for NULL.
+	//
+	// WARNING: ON CONFLICT overwrites all fields including source. Callers that
+	// need skip-existing semantics must check GetSystemAliases first (see
+	// plugins.SeedManifestAliases for the reference pattern).
+	SetSystemAlias(ctx context.Context, alias, cmd, createdBy, source string) error
 	DeleteSystemAlias(ctx context.Context, alias string) error
 
 	// Player aliases
 	GetPlayerAliases(ctx context.Context, playerID ulid.ULID) (map[string]string, error)
-	SetPlayerAlias(ctx context.Context, playerID ulid.ULID, alias, command string) error
+	SetPlayerAlias(ctx context.Context, playerID ulid.ULID, alias, cmd string) error
 	DeletePlayerAlias(ctx context.Context, playerID ulid.ULID, alias string) error
 }
 
@@ -58,19 +72,24 @@ func (r *PostgresAliasRepository) GetSystemAliases(ctx context.Context) (map[str
 	return aliases, nil
 }
 
-// SetSystemAlias creates or updates a system-wide alias.
-func (r *PostgresAliasRepository) SetSystemAlias(ctx context.Context, alias, command, createdBy string) error {
-	// Handle empty createdBy as NULL
+// SetSystemAlias creates or updates a system-wide alias. See the interface
+// godoc on AliasRepository for parameter semantics and the upsert warning.
+func (r *PostgresAliasRepository) SetSystemAlias(ctx context.Context, alias, cmd, createdBy, source string) error {
+	// Handle empty createdBy and source as NULL
 	var createdByArg any = createdBy
 	if createdBy == "" {
 		createdByArg = nil
 	}
+	var sourceArg any = source
+	if source == "" {
+		sourceArg = nil
+	}
 
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO system_aliases (alias, command, created_by)
-		 VALUES ($1, $2, $3)
-		 ON CONFLICT (alias) DO UPDATE SET command = $2, created_by = $3`,
-		alias, command, createdByArg)
+		`INSERT INTO system_aliases (alias, command, created_by, source)
+		 VALUES ($1, $2, $3, $4)
+		 ON CONFLICT (alias) DO UPDATE SET command = $2, created_by = $3, source = $4`,
+		alias, cmd, createdByArg, sourceArg)
 	if err != nil {
 		return oops.With("operation", "set system alias").With("alias", alias).Wrap(err)
 	}

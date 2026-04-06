@@ -35,16 +35,6 @@ func TestBootstrapSubsystemStartLocationIDPanicsBeforeStart(t *testing.T) {
 	assert.Panics(t, func() { sub.StartLocationID() })
 }
 
-func TestBootstrapSubsystemAliasRepoPanicsBeforeStart(t *testing.T) {
-	sub := setup.NewBootstrapSubsystem(setup.BootstrapSubsystemConfig{})
-	assert.Panics(t, func() { sub.AliasRepo() })
-}
-
-func TestBootstrapSubsystemAliasCachePanicsBeforeStart(t *testing.T) {
-	sub := setup.NewBootstrapSubsystem(setup.BootstrapSubsystemConfig{})
-	assert.Panics(t, func() { sub.AliasCache() })
-}
-
 func TestBootstrapSubsystemImplementsSubsystem(_ *testing.T) {
 	sub := setup.NewBootstrapSubsystem(setup.BootstrapSubsystemConfig{})
 	var _ lifecycle.Subsystem = sub

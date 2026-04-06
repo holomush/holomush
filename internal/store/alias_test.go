@@ -95,6 +95,7 @@ func TestPostgresAliasRepository_SetSystemAlias(t *testing.T) {
 		alias     string
 		command   string
 		createdBy string
+		source    string
 		setupMock func(mock pgxmock.PgxPoolIface)
 		wantErr   bool
 		errMsg    string
@@ -104,9 +105,10 @@ func TestPostgresAliasRepository_SetSystemAlias(t *testing.T) {
 			alias:     "n",
 			command:   "north",
 			createdBy: "player-123",
+			source:    "sysalias",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectExec(`INSERT INTO system_aliases`).
-					WithArgs("n", "north", "player-123").
+					WithArgs("n", "north", "player-123", "sysalias").
 					WillReturnResult(pgxmock.NewResult("INSERT", 1))
 			},
 			wantErr: false,
@@ -116,21 +118,36 @@ func TestPostgresAliasRepository_SetSystemAlias(t *testing.T) {
 			alias:     "n",
 			command:   "go north",
 			createdBy: "player-456",
+			source:    "sysalias",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectExec(`INSERT INTO system_aliases`).
-					WithArgs("n", "go north", "player-456").
+					WithArgs("n", "go north", "player-456", "sysalias").
 					WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 			},
 			wantErr: false,
 		},
 		{
-			name:      "empty created_by allowed",
+			name:      "empty created_by and source allowed",
 			alias:     "look",
 			command:   "l",
 			createdBy: "",
+			source:    "",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectExec(`INSERT INTO system_aliases`).
-					WithArgs("look", "l", pgxmock.AnyArg()).
+					WithArgs("look", "l", pgxmock.AnyArg(), pgxmock.AnyArg()).
+					WillReturnResult(pgxmock.NewResult("INSERT", 1))
+			},
+			wantErr: false,
+		},
+		{
+			name:      "plugin source with empty created_by",
+			alias:     `"`,
+			command:   "say",
+			createdBy: "",
+			source:    "core-communication",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectExec(`INSERT INTO system_aliases`).
+					WithArgs(`"`, "say", pgxmock.AnyArg(), "core-communication").
 					WillReturnResult(pgxmock.NewResult("INSERT", 1))
 			},
 			wantErr: false,
@@ -140,9 +157,10 @@ func TestPostgresAliasRepository_SetSystemAlias(t *testing.T) {
 			alias:     "n",
 			command:   "north",
 			createdBy: "player-123",
+			source:    "sysalias",
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectExec(`INSERT INTO system_aliases`).
-					WithArgs("n", "north", "player-123").
+					WithArgs("n", "north", "player-123", "sysalias").
 					WillReturnError(errors.New("constraint violation"))
 			},
 			wantErr: true,
@@ -159,7 +177,7 @@ func TestPostgresAliasRepository_SetSystemAlias(t *testing.T) {
 			tt.setupMock(mock)
 
 			repo := NewPostgresAliasRepository(mock)
-			err = repo.SetSystemAlias(context.Background(), tt.alias, tt.command, tt.createdBy)
+			err = repo.SetSystemAlias(context.Background(), tt.alias, tt.command, tt.createdBy, tt.source)
 
 			if tt.wantErr {
 				require.Error(t, err)

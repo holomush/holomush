@@ -16,6 +16,10 @@
 .coverdata/
 coverage.html
 
+# Local code review artifacts
+.full-review/
+.full-review-*/
+
 # Go workspace
 go.work
 go.work.sum

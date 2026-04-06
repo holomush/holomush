@@ -34,8 +34,11 @@ type AliasAccess interface {
 	// Returns (shadows bool, command string, err error).
 	CheckAliasShadow(ctx context.Context, alias string) (bool, string, error)
 
-	// SetSystemAlias creates or updates a system-wide alias.
-	SetSystemAlias(ctx context.Context, alias, command, createdBy string) error
+	// SetSystemAlias creates or updates a system-wide alias. See
+	// store.AliasRepository.SetSystemAlias for parameter semantics.
+	// For operator-driven sysalias: createdBy is the player ID and source is
+	// the literal "sysalias".
+	SetSystemAlias(ctx context.Context, alias, cmd, createdBy, source string) error
 
 	// DeleteSystemAlias removes a system-wide alias.
 	DeleteSystemAlias(ctx context.Context, alias string) error
@@ -180,7 +183,7 @@ func (c *AliasCapability) setSystemFn(pluginName string) lua.LGFunction {
 		createdBy := L.CheckString(3)
 
 		ctx := luaContext(L)
-		if err := c.aliases.SetSystemAlias(ctx, alias, command, createdBy); err != nil {
+		if err := c.aliases.SetSystemAlias(ctx, alias, command, createdBy, "sysalias"); err != nil {
 			return capError(L, PluginErrorContext{
 				Plugin:    pluginName,
 				Operation: "set_system",

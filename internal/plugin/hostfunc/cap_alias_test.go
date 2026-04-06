@@ -91,7 +91,7 @@ func (m *mockAliasAccess) CheckAliasShadow(_ context.Context, alias string) (boo
 	return m.shadowRet, m.shadowCmd, m.shadowErr
 }
 
-func (m *mockAliasAccess) SetSystemAlias(_ context.Context, alias, command, createdBy string) error {
+func (m *mockAliasAccess) SetSystemAlias(_ context.Context, alias, command, createdBy, _ string) error {
 	m.setSystemCalls = append(m.setSystemCalls, aliasSystemCall{Alias: alias, Command: command, CreatedBy: createdBy})
 	return m.setSystemErr
 }

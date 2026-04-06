@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/holomush/holomush/internal/access/policy/attribute"
+	"github.com/holomush/holomush/internal/command"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/plugin/mocks"
@@ -649,4 +650,164 @@ binary-plugin:
 	svc2, err := reg.Resolve("holomush.scene.v1.SceneQueryService")
 	require.NoError(t, err)
 	assert.Equal(t, "multi-provider", svc2.PluginName)
+}
+
+// fakeAliasSeederMgr is an in-memory AliasSeeder for manager tests.
+type fakeAliasSeederMgr struct {
+	existing map[string]string
+}
+
+func (f *fakeAliasSeederMgr) GetSystemAliases(_ context.Context) (map[string]string, error) {
+	result := make(map[string]string, len(f.existing))
+	for k, v := range f.existing {
+		result[k] = v
+	}
+	return result, nil
+}
+
+func (f *fakeAliasSeederMgr) SetSystemAlias(_ context.Context, alias, cmd, _, _ string) error {
+	if f.existing == nil {
+		f.existing = make(map[string]string)
+	}
+	f.existing[alias] = cmd
+	return nil
+}
+
+func TestManagerLoadAllSeedsAliasesFromManifests(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	commDir := filepath.Join(pluginsDir, "test-comm")
+	mkdirAll(t, commDir)
+	writeFile(t, filepath.Join(commDir, "plugin.yaml"), []byte(`name: test-comm
+version: 1.0.0
+type: lua
+commands:
+  - name: say
+    aliases:
+      - '"'
+    help: Say something
+lua-plugin:
+  entry: main.lua`))
+	writeFile(t, filepath.Join(commDir, "main.lua"), []byte("function on_event(e) end"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	repo := &fakeAliasSeederMgr{existing: make(map[string]string)}
+	cache := command.NewAliasCache()
+
+	mgr := plugins.NewManager(pluginsDir,
+		plugins.WithLuaHost(luaHost),
+		plugins.WithAliasSeeder(repo, cache),
+	)
+
+	err := mgr.LoadAll(context.Background())
+	require.NoError(t, err)
+
+	// Verify alias was persisted to the repo.
+	aliases, repoErr := repo.GetSystemAliases(context.Background())
+	require.NoError(t, repoErr)
+	assert.Equal(t, "say", aliases[`"`], "alias should map to say command")
+
+	// Verify alias was loaded into the cache.
+	cached, found := cache.GetSystemAlias(`"`)
+	require.True(t, found, "cache should contain the seeded alias")
+	assert.Equal(t, "say", cached)
+}
+
+// TestManagerLoadAllSeedsAliasesDeterministicallyAcrossLoads verifies that
+// cross-plugin duplicate alias resolution is stable across multiple LoadAll
+// cycles. The Manager uses loadedOrder (slice) rather than iterating m.loaded
+// (map) to preserve DAG/priority load order. Without this, Go's randomized
+// map iteration would cause the "first plugin wins" contract to pick different
+// winners on different runs.
+func TestManagerLoadAllSeedsAliasesDeterministicallyAcrossLoads(t *testing.T) {
+	const iterations = 25
+
+	writeConflictingPlugins := func(t *testing.T, pluginsDir string) {
+		// Two plugins both declare alias `"`. Priority determines load order
+		// (lower first), so alpha should always win.
+		alphaDir := filepath.Join(pluginsDir, "alpha")
+		mkdirAll(t, alphaDir)
+		writeFile(t, filepath.Join(alphaDir, "plugin.yaml"), []byte(`name: alpha
+version: 1.0.0
+type: lua
+priority: 10
+commands:
+  - name: say
+    aliases:
+      - '"'
+    help: Say something
+lua-plugin:
+  entry: main.lua`))
+		writeFile(t, filepath.Join(alphaDir, "main.lua"), []byte("function on_event(e) end"))
+
+		bravoDir := filepath.Join(pluginsDir, "bravo")
+		mkdirAll(t, bravoDir)
+		writeFile(t, filepath.Join(bravoDir, "plugin.yaml"), []byte(`name: bravo
+version: 1.0.0
+type: lua
+priority: 20
+commands:
+  - name: shout
+    aliases:
+      - '"'
+    help: Shout something
+lua-plugin:
+  entry: main.lua`))
+		writeFile(t, filepath.Join(bravoDir, "main.lua"), []byte("function on_event(e) end"))
+	}
+
+	winners := make(map[string]int)
+	for i := 0; i < iterations; i++ {
+		dir := t.TempDir()
+		pluginsDir := filepath.Join(dir, "plugins")
+		writeConflictingPlugins(t, pluginsDir)
+
+		luaHost := pluginlua.NewHost()
+		repo := &fakeAliasSeederMgr{existing: make(map[string]string)}
+		cache := command.NewAliasCache()
+
+		mgr := plugins.NewManager(pluginsDir,
+			plugins.WithLuaHost(luaHost),
+			plugins.WithAliasSeeder(repo, cache),
+		)
+		require.NoError(t, mgr.LoadAll(context.Background()))
+		_ = luaHost.Close(context.Background())
+
+		winners[repo.existing[`"`]]++
+	}
+	assert.Len(t, winners, 1, "alias winner must be deterministic across loads, got %v", winners)
+	assert.Equal(t, iterations, winners["say"], "alpha (lower priority) should always win the alias")
+}
+
+func TestManagerLoadAllWithoutAliasSeederSkipsSeeding(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	commDir := filepath.Join(pluginsDir, "test-comm")
+	mkdirAll(t, commDir)
+	writeFile(t, filepath.Join(commDir, "plugin.yaml"), []byte(`name: test-comm
+version: 1.0.0
+type: lua
+commands:
+  - name: say
+    aliases:
+      - '"'
+    help: Say something
+lua-plugin:
+  entry: main.lua`))
+	writeFile(t, filepath.Join(commDir, "main.lua"), []byte("function on_event(e) end"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	// No WithAliasSeeder — seeding should be silently skipped.
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	err := mgr.LoadAll(context.Background())
+	require.NoError(t, err, "LoadAll without alias seeder should not error")
+
+	loaded := mgr.ListPlugins()
+	assert.Contains(t, loaded, "test-comm", "plugin should still load without alias seeder")
 }

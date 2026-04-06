@@ -21,7 +21,6 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/bootstrap"
-	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/content"
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/naming"
@@ -98,12 +97,10 @@ type BootstrapSubsystemConfig struct {
 }
 
 // BootstrapSubsystem orchestrates the multi-step bootstrap sequence:
-// policy seeding, setting/world seeding, admin creation, and alias seeding.
+// policy seeding, setting/world seeding, and admin creation.
 type BootstrapSubsystem struct {
 	cfg             BootstrapSubsystemConfig
 	startLocationID ulid.ULID
-	aliasRepo       *store.PostgresAliasRepository
-	aliasCache      *command.AliasCache
 	started         bool
 }
 
@@ -138,9 +135,8 @@ func (s *BootstrapSubsystem) DependsOn() []lifecycle.SubsystemID {
 //  2. Register policy bootstrapper (priority 200)
 //  3. Register setting bootstrapper (priority 300) if configured
 //  4. Register admin bootstrapper (priority 400)
-//  5. Register alias bootstrapper (priority 500)
-//  6. Run all bootstrappers
-//  7. Resolve starting location
+//  5. Run all bootstrappers
+//  6. Resolve starting location
 //
 // codecov:ignore — tested by integration and E2E tests
 func (s *BootstrapSubsystem) Start(ctx context.Context) error {
@@ -199,17 +195,12 @@ func (s *BootstrapSubsystem) Start(ctx context.Context) error {
 		Transactor:  &bootstrapTransactor{inner: s.cfg.WorldTx.Transactor()},
 	}))
 
-	// 5. Register alias bootstrapper (priority 500).
-	s.aliasRepo = store.NewPostgresAliasRepository(pool)
-	s.aliasCache = command.NewAliasCache()
-	runner.Register(bootstrap.NewAliasBootstrapper(s.aliasRepo, s.aliasCache))
-
-	// 6. Run all bootstrappers in priority order.
+	// 5. Run all bootstrappers in priority order.
 	if err := runner.RunAll(ctx); err != nil {
 		return oops.Code("BOOTSTRAP_FAILED").With("operation", "run bootstrap plugins").Wrap(err)
 	}
 
-	// 7. Resolve starting location from bootstrap metadata if not explicitly configured.
+	// 6. Resolve starting location from bootstrap metadata if not explicitly configured.
 	if s.startLocationID.IsZero() {
 		metadataStore := bootstrap.NewPostgresMetadataStore(pool)
 		locIDStr, found, metaErr := metadataStore.Get(ctx, "starting_location_id")
@@ -245,24 +236,6 @@ func (s *BootstrapSubsystem) StartLocationID() ulid.ULID {
 		panic("bootstrap/setup: StartLocationID() called before Start()")
 	}
 	return s.startLocationID
-}
-
-// AliasRepo returns the alias repository created during bootstrap.
-// Panics if called before Start().
-func (s *BootstrapSubsystem) AliasRepo() *store.PostgresAliasRepository {
-	if s.aliasRepo == nil {
-		panic("bootstrap/setup: AliasRepo() called before Start()")
-	}
-	return s.aliasRepo
-}
-
-// AliasCache returns the alias cache populated during bootstrap.
-// Panics if called before Start().
-func (s *BootstrapSubsystem) AliasCache() *command.AliasCache {
-	if s.aliasCache == nil {
-		panic("bootstrap/setup: AliasCache() called before Start()")
-	}
-	return s.aliasCache
 }
 
 // registerSettingBootstrapper discovers and registers the setting bootstrapper

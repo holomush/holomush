@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
 	"go.opentelemetry.io/otel"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/store"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/xdg"
@@ -90,6 +92,9 @@ type PluginSubsystem struct {
 	worldConn         *plugins.InProcessConn
 	schemaProvisioner *plugins.SchemaProvisioner
 	health            *lifecycle.HealthTracker
+	aliasPool         *pgxpool.Pool
+	aliasRepo         *store.PostgresAliasRepository
+	aliasCache        *command.AliasCache
 }
 
 // NewPluginSubsystem creates a plugin subsystem configured with cfg.
@@ -217,18 +222,34 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		return oops.Code("BINARY_HOST_MW_FAILED").Wrap(binaryMWErr)
 	}
 
-	// 7. Create Manager, register hosts.
-	s.manager = plugins.NewManager(pluginsDir,
+	// 7. Create alias repo and cache for plugin manifest alias seeding.
+	if s.cfg.DatabaseConnStr != "" {
+		aliasPool, aliasPoolErr := pgxpool.New(ctx, s.cfg.DatabaseConnStr)
+		if aliasPoolErr != nil {
+			cleanupOnError()
+			return oops.Code("ALIAS_POOL_FAILED").Wrap(aliasPoolErr)
+		}
+		s.aliasPool = aliasPool
+		s.aliasRepo = store.NewPostgresAliasRepository(aliasPool)
+		s.aliasCache = command.NewAliasCache()
+	}
+
+	// 8. Create Manager, register hosts.
+	managerOpts := []plugins.ManagerOption{
 		plugins.WithLuaHost(instrumentedLuaHost),
 		plugins.WithPolicyInstaller(s.cfg.PolicyInst.PolicyInstaller()),
 		plugins.WithServiceRegistry(s.registry),
-	)
+	}
+	if s.aliasRepo != nil && s.aliasCache != nil {
+		managerOpts = append(managerOpts, plugins.WithAliasSeeder(s.aliasRepo, s.aliasCache))
+	}
+	s.manager = plugins.NewManager(pluginsDir, managerOpts...)
 	s.manager.RegisterHost(plugins.TypeBinary, instrumentedBinaryHost)
 
-	// 8. Set ABAC plugin provider registry.
+	// 9. Set ABAC plugin provider registry.
 	s.cfg.PluginProv.PluginProvider().SetRegistry(s.manager)
 
-	// 9. Load all discovered plugins.
+	// 10. Load all discovered plugins (alias seeding happens inside LoadAll).
 	if loadErr := s.manager.LoadAll(ctx); loadErr != nil {
 		slog.Error("failed to load plugins", "error", loadErr)
 	}
@@ -239,7 +260,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		s.schemaProvisioner.Close()
 	}
 
-	// 10. Initialize health tracker and register with readiness registry.
+	// 11. Initialize health tracker and register with readiness registry.
 	s.health = lifecycle.NewHealthTracker(lifecycle.TrackerConfig{
 		SubsystemName: lifecycle.SubsystemPlugins.String(),
 	})
@@ -247,7 +268,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		s.cfg.Registry.Register(lifecycle.SubsystemPlugins, s)
 	}
 
-	// 11. Create command registry, register built-in + admin handlers.
+	// 12. Create command registry, register built-in + admin handlers.
 	s.cmdRegistry = command.NewRegistry()
 	handlers.RegisterAll(s.cmdRegistry)
 	adminDeps := s.cfg.AdminDeps.AdminDeps()
@@ -280,6 +301,9 @@ func (s *PluginSubsystem) Stop(_ context.Context) error {
 	if s.schemaProvisioner != nil {
 		s.schemaProvisioner.Close()
 	}
+	if s.aliasPool != nil {
+		s.aliasPool.Close()
+	}
 	return nil
 }
 
@@ -305,6 +329,24 @@ func (s *PluginSubsystem) ServiceRegistry() *plugins.ServiceRegistry {
 		panic("plugin/setup: ServiceRegistry() called before Start()")
 	}
 	return s.registry
+}
+
+// AliasRepo returns the alias repository created during Start().
+// Panics if called before Start().
+func (s *PluginSubsystem) AliasRepo() *store.PostgresAliasRepository {
+	if s.aliasRepo == nil {
+		panic("plugin/setup: AliasRepo() called before Start()")
+	}
+	return s.aliasRepo
+}
+
+// AliasCache returns the alias cache populated during plugin loading.
+// Panics if called before Start().
+func (s *PluginSubsystem) AliasCache() *command.AliasCache {
+	if s.aliasCache == nil {
+		panic("plugin/setup: AliasCache() called before Start()")
+	}
+	return s.aliasCache
 }
 
 // HealthStatus reports the plugin subsystem's health tier.
