@@ -30,7 +30,9 @@ func NewSchemaProvisioner(baseConnString string) *SchemaProvisioner {
 	return &SchemaProvisioner{baseConnString: baseConnString}
 }
 
-// Init opens the admin connection pool used for DDL operations.
+// Init opens the admin connection pool used for DDL operations and validates
+// that the connected role has the CREATEROLE privilege required for
+// per-plugin role provisioning.
 func (sp *SchemaProvisioner) Init(ctx context.Context) error {
 	pool, err := pgxpool.New(ctx, sp.baseConnString)
 	if err != nil {
@@ -40,40 +42,158 @@ func (sp *SchemaProvisioner) Init(ctx context.Context) error {
 		pool.Close()
 		return oops.Code("SCHEMA_POOL_PING_FAILED").Wrap(err)
 	}
+
+	var currentUser string
+	var hasCreaterole bool
+	err = pool.QueryRow(ctx,
+		"SELECT current_user, rolcreaterole FROM pg_roles WHERE rolname = current_user",
+	).Scan(&currentUser, &hasCreaterole)
+	if err != nil {
+		pool.Close()
+		return oops.Code("SCHEMA_ROLE_NOT_FOUND").
+			Wrap(fmt.Errorf("cannot query current role privileges: %w", err))
+	}
+	if !hasCreaterole {
+		pool.Close()
+		return oops.Code("SCHEMA_INSUFFICIENT_PRIVILEGES").
+			Errorf("server database role %q lacks CREATEROLE privilege; run: ALTER ROLE %s CREATEROLE",
+				currentUser, currentUser)
+	}
+
+	slog.Info("schema provisioner initialized", "role", currentUser, "createrole", true)
+
 	sp.pool = pool
 	return nil
 }
 
-// ProvisionSchema creates a plugin_<name> schema and returns a connection
-// string scoped to that schema via search_path.
+// ProvisionSchema creates a per-plugin PostgreSQL role and schema with
+// full isolation. The plugin role:
+//   - Has LOGIN (can connect)
+//   - Has no SUPERUSER or CREATEROLE privileges
+//   - Owns its schema (can CREATE tables)
+//   - Has REVOKE ALL on public schema (cannot read server data)
+//
+// Returns a connection string scoped to the plugin's schema.
 func (sp *SchemaProvisioner) ProvisionSchema(ctx context.Context, pluginName string) (string, error) {
 	schemaName := pluginSchemaName(pluginName)
+	roleName := pluginRoleName(pluginName)
 
-	identifier := pgx.Identifier{schemaName}
-	ddl := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", identifier.Sanitize())
+	password, err := generatePassword()
+	if err != nil {
+		return "", oops.Code("SCHEMA_PASSWORD_FAILED").
+			With("plugin", pluginName).Wrap(err)
+	}
+
+	if err := sp.ensureRole(ctx, roleName, password); err != nil {
+		return "", oops.Code("SCHEMA_ROLE_FAILED").
+			With("plugin", pluginName).
+			With("role", roleName).Wrap(err)
+	}
+
+	schemaID := pgx.Identifier{schemaName}
+	roleID := pgx.Identifier{roleName}
+
+	ddl := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schemaID.Sanitize())
 	if _, err := sp.pool.Exec(ctx, ddl); err != nil {
 		return "", oops.Code("SCHEMA_CREATE_FAILED").
 			With("plugin", pluginName).
-			With("schema", schemaName).
-			Wrap(err)
+			With("schema", schemaName).Wrap(err)
 	}
 
-	slog.Info("provisioned plugin schema", "plugin", pluginName, "schema", schemaName)
-
-	roleName := pluginRoleName(pluginName)
-	password, err := generatePassword()
-	if err != nil {
-		return "", oops.Code("SCHEMA_CONNSTRING_FAILED").
-			With("plugin", pluginName).
-			Wrap(err)
+	ownerDDL := fmt.Sprintf("ALTER SCHEMA %s OWNER TO %s", schemaID.Sanitize(), roleID.Sanitize())
+	if _, err := sp.pool.Exec(ctx, ownerDDL); err != nil {
+		return "", oops.Code("SCHEMA_OWNER_FAILED").
+			With("plugin", pluginName).Wrap(err)
 	}
+
+	grantDDL := fmt.Sprintf("GRANT USAGE, CREATE ON SCHEMA %s TO %s",
+		schemaID.Sanitize(), roleID.Sanitize())
+	if _, err := sp.pool.Exec(ctx, grantDDL); err != nil {
+		return "", oops.Code("SCHEMA_GRANT_FAILED").
+			With("plugin", pluginName).Wrap(err)
+	}
+
+	revokeDDL := fmt.Sprintf("REVOKE ALL ON SCHEMA public FROM %s", roleID.Sanitize())
+	if _, err := sp.pool.Exec(ctx, revokeDDL); err != nil {
+		return "", oops.Code("SCHEMA_REVOKE_FAILED").
+			With("plugin", pluginName).Wrap(err)
+	}
+
+	slog.Info("provisioned plugin schema with isolated role",
+		"plugin", pluginName, "schema", schemaName, "role", roleName)
+
 	connStr, err := pluginConnString(sp.baseConnString, schemaName, roleName, password)
 	if err != nil {
 		return "", oops.Code("SCHEMA_CONNSTRING_FAILED").
-			With("plugin", pluginName).
-			Wrap(err)
+			With("plugin", pluginName).Wrap(err)
 	}
 	return connStr, nil
+}
+
+// PurgeSchema drops all objects owned by the plugin role and then drops
+// the role itself. This permanently destroys the plugin's data.
+func (sp *SchemaProvisioner) PurgeSchema(ctx context.Context, pluginName string) error {
+	roleName := pluginRoleName(pluginName)
+	roleID := pgx.Identifier{roleName}
+
+	dropOwned := fmt.Sprintf("DROP OWNED BY %s", roleID.Sanitize())
+	if _, err := sp.pool.Exec(ctx, dropOwned); err != nil {
+		return oops.Code("SCHEMA_DROP_OWNED_FAILED").
+			With("plugin", pluginName).
+			With("role", roleName).Wrap(err)
+	}
+
+	dropRole := fmt.Sprintf("DROP ROLE IF EXISTS %s", roleID.Sanitize())
+	if _, err := sp.pool.Exec(ctx, dropRole); err != nil {
+		return oops.Code("SCHEMA_DROP_ROLE_FAILED").
+			With("plugin", pluginName).
+			With("role", roleName).Wrap(err)
+	}
+
+	slog.Info("purged plugin schema and role", "plugin", pluginName, "role", roleName)
+	return nil
+}
+
+// ensureRole creates the plugin role if it doesn't exist, or refreshes
+// the ephemeral password if it does. After creation, grants the new role
+// to the current user so that ALTER SCHEMA OWNER TO succeeds on
+// PostgreSQL 16+ (where CREATEROLE no longer implies membership).
+func (sp *SchemaProvisioner) ensureRole(ctx context.Context, roleName, password string) error {
+	roleID := pgx.Identifier{roleName}
+
+	var exists bool
+	err := sp.pool.QueryRow(ctx,
+		"SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = $1)",
+		roleName,
+	).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("check role existence: %w", err)
+	}
+
+	if exists {
+		ddl := fmt.Sprintf("ALTER ROLE %s PASSWORD '%s'", roleID.Sanitize(), password)
+		if _, err := sp.pool.Exec(ctx, ddl); err != nil {
+			return fmt.Errorf("refresh role password: %w", err)
+		}
+	} else {
+		ddl := fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s'", roleID.Sanitize(), password)
+		if _, err := sp.pool.Exec(ctx, ddl); err != nil {
+			return fmt.Errorf("create role: %w", err)
+		}
+
+		// Grant the new role to the admin user so ALTER SCHEMA OWNER TO
+		// works (PG 16+ requires explicit membership).
+		var currentUser string
+		if err := sp.pool.QueryRow(ctx, "SELECT current_user").Scan(&currentUser); err != nil {
+			return fmt.Errorf("query current user: %w", err)
+		}
+		grantDDL := fmt.Sprintf("GRANT %s TO %s",
+			roleID.Sanitize(), pgx.Identifier{currentUser}.Sanitize())
+		if _, err := sp.pool.Exec(ctx, grantDDL); err != nil {
+			return fmt.Errorf("grant role to admin: %w", err)
+		}
+	}
+	return nil
 }
 
 // Close shuts down the admin connection pool.
