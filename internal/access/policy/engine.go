@@ -245,7 +245,11 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 	}
 
 	// Step 7: Load snapshot and filter policies
-	snap := e.cache.Snapshot()
+	snap, snapErr := e.cache.Snapshot(ctx)
+	if snapErr != nil {
+		return types.NewDecision(types.EffectDefaultDeny, "policy cache unavailable", "infra:cache"),
+			oops.With("subject", req.Subject).With("action", req.Action).With("resource", req.Resource).Wrap(snapErr)
+	}
 	candidates := e.findApplicablePolicies(req, snap.Policies)
 
 	if len(candidates) == 0 {
@@ -414,7 +418,10 @@ func (e *Engine) CanPerformAction(ctx context.Context, subject, action, resource
 	}
 
 	// Step 5: Get compiled policies from the cache snapshot
-	snap := e.cache.Snapshot()
+	snap, snapErr := e.cache.Snapshot(ctx)
+	if snapErr != nil {
+		return false, oops.With("subject", subject).With("action", action).With("resourceType", resourceType).Wrap(snapErr)
+	}
 
 	// Step 6: Filter policies by principal type, action, and resource TYPE only.
 	// We match on resource type, not exact resource (since we have no instance).

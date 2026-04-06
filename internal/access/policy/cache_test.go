@@ -56,6 +56,45 @@ func (m *mockPolicyStore) List(_ context.Context, _ store.ListOptions) ([]*store
 	return nil, nil
 }
 
+// --- slowPolicyStore ---
+
+type slowPolicyStore struct {
+	policies []*store.StoredPolicy
+	err      error
+	delay    time.Duration
+	calls    atomic.Int64
+}
+
+func (m *slowPolicyStore) ListEnabled(ctx context.Context) ([]*store.StoredPolicy, error) {
+	m.calls.Add(1)
+	select {
+	case <-time.After(m.delay):
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return m.policies, m.err
+}
+
+func (m *slowPolicyStore) Create(_ context.Context, _ *store.StoredPolicy) error { return nil }
+func (m *slowPolicyStore) Get(_ context.Context, _ string) (*store.StoredPolicy, error) {
+	return nil, nil
+}
+func (m *slowPolicyStore) GetByID(_ context.Context, _ string) (*store.StoredPolicy, error) {
+	return nil, nil
+}
+func (m *slowPolicyStore) Update(_ context.Context, _ *store.StoredPolicy) error { return nil }
+func (m *slowPolicyStore) Delete(_ context.Context, _ string) error              { return nil }
+func (m *slowPolicyStore) DeleteBySource(_ context.Context, _, _ string) (int64, error) {
+	return 0, nil
+}
+func (m *slowPolicyStore) CreateBatch(_ context.Context, _ []*store.StoredPolicy) error { return nil }
+func (m *slowPolicyStore) ReplaceBySource(_ context.Context, _, _ string, _ []*store.StoredPolicy) error {
+	return nil
+}
+func (m *slowPolicyStore) List(_ context.Context, _ store.ListOptions) ([]*store.StoredPolicy, error) {
+	return nil, nil
+}
+
 // --- Test helpers ---
 
 func testCompiler() *Compiler {
@@ -97,16 +136,18 @@ func TestCacheReload(t *testing.T) {
 	cache := NewCache(ms, compiler)
 
 	// Before reload, snapshot should be nil or empty.
-	snap := cache.Snapshot()
+	snap, err := cache.Snapshot(context.Background())
+	require.NoError(t, err)
 	require.NotNil(t, snap, "snapshot should never be nil (zero value)")
 	assert.Empty(t, snap.Policies, "snapshot should have no policies before reload")
 
 	// Reload.
-	err := cache.Reload(context.Background())
+	err = cache.Reload(context.Background())
 	require.NoError(t, err)
 
 	// Snapshot should now contain compiled policies.
-	snap = cache.Snapshot()
+	snap, err = cache.Snapshot(context.Background())
+	require.NoError(t, err)
 	require.NotNil(t, snap)
 	assert.Len(t, snap.Policies, 2, "snapshot should contain 2 compiled policies")
 	assert.Equal(t, "pol-1", snap.Policies[0].ID)
@@ -137,7 +178,8 @@ func TestCacheReloadFailsOnCompilationError(t *testing.T) {
 	assert.Error(t, err, "reload should fail when a policy cannot compile")
 
 	// Snapshot should still be empty (no partial update).
-	snap := cache.Snapshot()
+	snap, err := cache.Snapshot(context.Background())
+	require.NoError(t, err)
 	assert.Empty(t, snap.Policies)
 }
 
@@ -171,7 +213,8 @@ func TestCacheSnapshotIsSafeConcurrently(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for range iterations {
-				snap := cache.Snapshot()
+				snap, err := cache.Snapshot(context.Background())
+				require.NoError(t, err)
 				require.NotNil(t, snap)
 				// Snapshot should be consistent: either 0 or 2 policies.
 				n := len(snap.Policies)
@@ -218,8 +261,10 @@ func TestSnapshotIsImmutable(t *testing.T) {
 
 	require.NoError(t, cache.Reload(context.Background()))
 
-	snap1 := cache.Snapshot()
-	snap2 := cache.Snapshot()
+	snap1, err := cache.Snapshot(context.Background())
+	require.NoError(t, err)
+	snap2, err := cache.Snapshot(context.Background())
+	require.NoError(t, err)
 
 	// Both snapshots should reference the same underlying data.
 	assert.Equal(t, len(snap1.Policies), len(snap2.Policies))
@@ -244,7 +289,8 @@ func TestCacheInvalidateTriggersReload(t *testing.T) {
 
 	// Initial load
 	require.NoError(t, cache.Reload(context.Background()))
-	snap1 := cache.Snapshot()
+	snap1, err := cache.Snapshot(context.Background())
+	require.NoError(t, err)
 	require.Len(t, snap1.Policies, 1)
 
 	// Add a second policy
@@ -253,10 +299,11 @@ func TestCacheInvalidateTriggersReload(t *testing.T) {
 	})
 
 	// Invalidate triggers reload
-	err := cache.Invalidate(context.Background())
+	err = cache.Invalidate(context.Background())
 	require.NoError(t, err)
 
-	snap2 := cache.Snapshot()
+	snap2, err := cache.Snapshot(context.Background())
+	require.NoError(t, err)
 	assert.Len(t, snap2.Policies, 2)
 	assert.False(t, snap2.CreatedAt.Before(snap1.CreatedAt),
 		"snap2.CreatedAt should not be before snap1.CreatedAt")
@@ -275,7 +322,9 @@ func TestCacheInvalidatePropagatesStoreError(t *testing.T) {
 }
 
 // TestCacheInvalidatePreservesSnapshotOnError verifies that a failed Invalidate
-// does not corrupt the existing snapshot.
+// propagates the error through Snapshot. With the read barrier design, once a
+// reload fails the barrier carries the error so Snapshot returns it — callers
+// must handle the error and may trigger a fresh Reload to recover.
 func TestCacheInvalidatePreservesSnapshotOnError(t *testing.T) {
 	dslText := `permit(principal, action, resource);`
 	ms := &mockPolicyStore{
@@ -288,19 +337,21 @@ func TestCacheInvalidatePreservesSnapshotOnError(t *testing.T) {
 
 	// Load a valid snapshot first.
 	require.NoError(t, cache.Reload(context.Background()))
-	snapBefore := cache.Snapshot()
+	snapBefore, err := cache.Snapshot(context.Background())
+	require.NoError(t, err)
 	require.Len(t, snapBefore.Policies, 1)
 
 	// Now cause the store to return an error.
 	ms.err = assert.AnError
 
-	err := cache.Invalidate(context.Background())
+	err = cache.Invalidate(context.Background())
 	assert.Error(t, err)
 
-	// Snapshot should still contain the original policy.
-	snapAfter := cache.Snapshot()
-	assert.Len(t, snapAfter.Policies, 1, "failed Invalidate must not corrupt snapshot")
-	assert.Equal(t, "p1", snapAfter.Policies[0].ID)
+	// After a failed Invalidate the read barrier carries the reload error, so
+	// Snapshot returns an error rather than stale data.
+	_, snapErr := cache.Snapshot(context.Background())
+	assert.Error(t, snapErr, "Snapshot must return error after failed Invalidate")
+	assert.ErrorIs(t, snapErr, assert.AnError)
 }
 
 // TestCacheInvalidateConcurrentSafe verifies that concurrent Invalidate calls
@@ -325,10 +376,131 @@ func TestCacheInvalidateConcurrentSafe(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_ = cache.Invalidate(context.Background())
-			snap := cache.Snapshot()
+			snap, err := cache.Snapshot(context.Background())
+			require.NoError(t, err)
 			assert.NotNil(t, snap)
 		}()
 	}
 
 	wg.Wait()
+}
+
+func TestSnapshotBlocksDuringInvalidation(t *testing.T) {
+	delay := 100 * time.Millisecond
+	ms := &slowPolicyStore{policies: testPolicies(), delay: delay}
+	cache := NewCache(ms, testCompiler())
+	require.NoError(t, cache.Reload(context.Background()))
+
+	invalidateDone := make(chan error, 1)
+	go func() { invalidateDone <- cache.Invalidate(context.Background()) }()
+	time.Sleep(10 * time.Millisecond)
+
+	start := time.Now()
+	snap, err := cache.Snapshot(context.Background())
+	elapsed := time.Since(start)
+
+	require.NoError(t, err)
+	assert.Len(t, snap.Policies, 2)
+	assert.GreaterOrEqual(t, elapsed, delay/2, "Snapshot should have blocked during reload")
+	require.NoError(t, <-invalidateDone)
+}
+
+func TestSnapshotReturnsErrorWhenBarrierReloadFails(t *testing.T) {
+	ms := &slowPolicyStore{policies: testPolicies(), delay: 50 * time.Millisecond}
+	cache := NewCache(ms, testCompiler())
+	require.NoError(t, cache.Reload(context.Background()))
+
+	ms.err = assert.AnError
+	invalidateDone := make(chan error, 1)
+	go func() { invalidateDone <- cache.Invalidate(context.Background()) }()
+	time.Sleep(10 * time.Millisecond)
+
+	_, err := cache.Snapshot(context.Background())
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, assert.AnError)
+	assert.Error(t, <-invalidateDone)
+}
+
+func TestSnapshotReturnsContextErrorOnTimeout(t *testing.T) {
+	ms := &slowPolicyStore{policies: testPolicies(), delay: 500 * time.Millisecond}
+	cache := NewCache(ms, testCompiler())
+	require.NoError(t, cache.Reload(context.Background()))
+
+	go func() { _ = cache.Invalidate(context.Background()) }()
+	time.Sleep(10 * time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, err := cache.Snapshot(ctx)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestMultipleReadersBlockedOnBarrierGetFreshData(t *testing.T) {
+	ms := &slowPolicyStore{delay: 50 * time.Millisecond}
+	cache := NewCache(ms, testCompiler())
+	require.NoError(t, cache.Reload(context.Background()))
+
+	ms.policies = testPolicies()
+	go func() { _ = cache.Invalidate(context.Background()) }()
+	time.Sleep(10 * time.Millisecond)
+
+	const readers = 10
+	results := make(chan int, readers)
+	for range readers {
+		go func() {
+			snap, err := cache.Snapshot(context.Background())
+			if err != nil {
+				results <- -1
+				return
+			}
+			results <- len(snap.Policies)
+		}()
+	}
+
+	for range readers {
+		select {
+		case n := <-results:
+			assert.Equal(t, 2, n, "all readers should see fresh data after barrier")
+		case <-time.After(2 * time.Second):
+			t.Fatal("reader timed out")
+		}
+	}
+}
+
+func TestSnapshotFastPathWhenNoReloadInProgress(t *testing.T) {
+	ms := &mockPolicyStore{policies: testPolicies()}
+	cache := NewCache(ms, testCompiler())
+	require.NoError(t, cache.Reload(context.Background()))
+
+	start := time.Now()
+	snap, err := cache.Snapshot(context.Background())
+	elapsed := time.Since(start)
+
+	require.NoError(t, err)
+	assert.Len(t, snap.Policies, 2)
+	assert.Less(t, elapsed, 5*time.Millisecond, "fast path should complete in under 5ms")
+}
+
+func TestCoalescingOverlappingInvalidations(t *testing.T) {
+	ms := &slowPolicyStore{policies: testPolicies(), delay: 100 * time.Millisecond}
+	cache := NewCache(ms, testCompiler())
+	require.NoError(t, cache.Reload(context.Background()))
+	initialCalls := ms.calls.Load()
+
+	done1 := make(chan error, 1)
+	go func() { done1 <- cache.Invalidate(context.Background()) }()
+	time.Sleep(10 * time.Millisecond)
+
+	done2 := make(chan error, 1)
+	done3 := make(chan error, 1)
+	go func() { done2 <- cache.Invalidate(context.Background()) }()
+	go func() { done3 <- cache.Invalidate(context.Background()) }()
+
+	require.NoError(t, <-done2)
+	require.NoError(t, <-done3)
+	require.NoError(t, <-done1)
+
+	assert.Equal(t, initialCalls+2, ms.calls.Load(),
+		"overlapping invalidations should coalesce into one re-reload")
 }

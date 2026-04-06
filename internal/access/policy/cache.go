@@ -28,6 +28,14 @@ type Snapshot struct {
 	CreatedAt time.Time
 }
 
+// readBarrier is a one-shot broadcast result for the read barrier.
+// Readers wait on done; err is written before close(done) so Go's
+// memory model guarantees visibility without additional synchronization.
+type readBarrier struct {
+	done chan struct{}
+	err  error
+}
+
 // CacheOption configures Cache behavior.
 type CacheOption func(*cacheConfig)
 
@@ -52,6 +60,12 @@ type Cache struct {
 
 	mu       sync.RWMutex
 	snapshot *Snapshot
+
+	// Read barrier: readers wait on barrier.done before reading snapshot.
+	// A closed done channel = ready (fast path). An open channel = reload in progress.
+	barrierMu sync.Mutex
+	barrier   *readBarrier
+	dirty     bool // true if Invalidate called during active reload
 }
 
 // NewCache creates a Cache with the given store, compiler, and options.
@@ -63,36 +77,56 @@ func NewCache(s store.PolicyStore, compiler *Compiler, opts ...CacheOption) *Cac
 		opt(&cfg)
 	}
 
+	ready := &readBarrier{done: make(chan struct{})}
+	close(ready.done)
+
 	return &Cache{
 		store:    s,
 		compiler: compiler,
 		cfg:      cfg,
-		snapshot: &Snapshot{}, // empty, non-nil snapshot
+		snapshot: &Snapshot{},
+		barrier:  ready,
 	}
 }
 
-// Snapshot returns the current read-only policy snapshot.
-// The returned snapshot is safe for concurrent use.
+// Snapshot returns the current read-only policy snapshot. If a reload is
+// in progress, it blocks until the reload completes or the context expires.
 // Returns a copy of the slice to prevent callers from mutating the snapshot.
-func (pc *Cache) Snapshot() *Snapshot {
+func (pc *Cache) Snapshot(ctx context.Context) (*Snapshot, error) {
+	// Grab current barrier reference.
+	pc.barrierMu.Lock()
+	b := pc.barrier
+	pc.barrierMu.Unlock()
+
+	// Wait for barrier (fast path: already closed channel returns immediately).
+	select {
+	case <-b.done:
+		// Barrier passed.
+	case <-ctx.Done():
+		return nil, fmt.Errorf("policy cache snapshot: context expired: %w", ctx.Err())
+	}
+
+	// If the reload that released this barrier failed, propagate the error.
+	if b.err != nil {
+		return nil, fmt.Errorf("policy cache reload failed: %w", b.err)
+	}
+
 	pc.mu.RLock()
 	snap := pc.snapshot
 	pc.mu.RUnlock()
 
-	// Return a copy with its own slice to prevent mutation.
 	copied := &Snapshot{
 		Policies:  make([]CachedPolicy, len(snap.Policies)),
 		CreatedAt: snap.CreatedAt,
 	}
 	copy(copied.Policies, snap.Policies)
-	return copied
+	return copied, nil
 }
 
 // Reload fetches enabled policies from the store, compiles them, and atomically
 // swaps the snapshot. The write lock is held only during the pointer swap (~50us),
 // not during the DB fetch + compilation (~50ms).
 func (pc *Cache) Reload(ctx context.Context) error {
-	// Fetch and compile without holding the lock.
 	stored, err := pc.store.ListEnabled(ctx)
 	if err != nil {
 		return fmt.Errorf("policy cache reload: list enabled: %w", err)
@@ -116,7 +150,6 @@ func (pc *Cache) Reload(ctx context.Context) error {
 		CreatedAt: time.Now(),
 	}
 
-	// Atomic swap — write lock held only for pointer assignment.
 	pc.mu.Lock()
 	pc.snapshot = snap
 	pc.mu.Unlock()
@@ -128,11 +161,55 @@ func (pc *Cache) Reload(ctx context.Context) error {
 	return nil
 }
 
-// Invalidate triggers an immediate cache reload. This is the fast path
-// for in-process policy mutations — the store layer calls this after
-// successful Create/Update/Delete operations.
+// Invalidate engages the read barrier and reloads the cache. Concurrent
+// Snapshot() calls block until the reload completes. If a reload is already
+// in progress, sets a dirty flag so another reload follows immediately.
 func (pc *Cache) Invalidate(ctx context.Context) error {
-	return pc.Reload(ctx)
+	pc.barrierMu.Lock()
+
+	select {
+	case <-pc.barrier.done:
+		// Barrier is closed (no active reload) — proceed.
+	default:
+		// Barrier is open (reload in progress) — queue the next generation now
+		// so readers that start after this invalidation wait on the follow-up reload.
+		if !pc.dirty {
+			pc.barrier = &readBarrier{done: make(chan struct{})}
+		}
+		pc.dirty = true
+		pc.barrierMu.Unlock()
+		return nil
+	}
+
+	b := &readBarrier{done: make(chan struct{})}
+	pc.barrier = b
+	pc.dirty = false
+	pc.barrierMu.Unlock()
+
+	return pc.barrierReloadLoop(ctx, b)
+}
+
+// barrierReloadLoop runs reload cycles until no dirty flag is set.
+func (pc *Cache) barrierReloadLoop(ctx context.Context, b *readBarrier) error {
+	for {
+		err := pc.Reload(ctx)
+
+		pc.barrierMu.Lock()
+		if pc.dirty {
+			b.err = err
+			close(b.done)
+
+			b = pc.barrier // use the barrier already published by Invalidate
+			pc.dirty = false
+			pc.barrierMu.Unlock()
+			continue
+		}
+
+		b.err = err
+		close(b.done)
+		pc.barrierMu.Unlock()
+		return err
+	}
 }
 
 // CacheLastUpdate is the default Prometheus gauge for tracking the last
