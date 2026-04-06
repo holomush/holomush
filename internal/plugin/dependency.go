@@ -31,6 +31,14 @@ func ResolveDependencyOrder(plugins []*DiscoveredPlugin, serverServices []string
 	// Index plugins by name for fast lookup.
 	byName := make(map[string]*DiscoveredPlugin, len(plugins))
 	for _, p := range plugins {
+		if existing, ok := byName[p.Manifest.Name]; ok {
+			return nil, oops.
+				Code("DUPLICATE_PLUGIN_NAME").
+				With("plugin", p.Manifest.Name).
+				With("dir_a", existing.Dir).
+				With("dir_b", p.Dir).
+				Errorf("plugin %q is declared by both %q and %q", p.Manifest.Name, existing.Dir, p.Dir)
+		}
 		byName[p.Manifest.Name] = p
 	}
 

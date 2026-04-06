@@ -44,14 +44,17 @@ func TestCapabilityRegistry(t *testing.T) {
 		assert.Equal(t, lua.LNil, L.GetGlobal("b"))
 	})
 
-	t.Run("skips unknown services without error", func(_ *testing.T) {
+	t.Run("skips unknown services without error", func(t *testing.T) {
 		reg := NewCapabilityRegistry()
+		reg.Register("svc-a", &stubCapability{name: "a"})
 
 		L := lua.NewState()
 		defer L.Close()
 
-		// Should not panic or error
 		reg.InjectRequired(L, []string{"nonexistent"}, "test-plugin")
+
+		assert.Equal(t, lua.LNil, L.GetGlobal("a"))
+		assert.Equal(t, lua.LNil, L.GetGlobal("nonexistent"))
 	})
 
 	t.Run("lists all registered service names", func(t *testing.T) {

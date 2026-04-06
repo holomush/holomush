@@ -81,14 +81,26 @@ func RunMigrationsFS(ctx context.Context, pool *pgxpool.Pool, migrations fs.FS) 
 		if readErr != nil {
 			return oops.Code("PLUGIN_MIGRATION_READ_FAILED").With("file", name).Wrap(readErr)
 		}
-		if _, execErr := pool.Exec(ctx, string(sql)); execErr != nil {
+
+		tx, txErr := pool.Begin(ctx)
+		if txErr != nil {
+			return oops.Code("PLUGIN_MIGRATION_TX_FAILED").With("file", name).Wrap(txErr)
+		}
+
+		if _, execErr := tx.Exec(ctx, string(sql)); execErr != nil {
+			_ = tx.Rollback(ctx) //nolint:errcheck // best-effort rollback
 			return oops.Code("PLUGIN_MIGRATION_EXEC_FAILED").With("file", name).Wrap(execErr)
 		}
-		if _, trackErr := pool.Exec(ctx,
+		if _, trackErr := tx.Exec(ctx,
 			"INSERT INTO plugin_migrations (version, name) VALUES ($1, $2)",
 			version, name,
 		); trackErr != nil {
+			_ = tx.Rollback(ctx) //nolint:errcheck // best-effort rollback
 			return oops.Code("PLUGIN_MIGRATION_TRACK_FAILED").With("file", name).Wrap(trackErr)
+		}
+
+		if commitErr := tx.Commit(ctx); commitErr != nil {
+			return oops.Code("PLUGIN_MIGRATION_COMMIT_FAILED").With("file", name).Wrap(commitErr)
 		}
 	}
 	return nil

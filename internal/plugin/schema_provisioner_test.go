@@ -97,7 +97,9 @@ func TestNewSchemaProvisionerStoresBaseConnString(t *testing.T) {
 	assert.Nil(t, sp.pool)
 }
 
-func TestCloseIsNoOpWithoutInit(t *testing.T) { //nolint:revive // t required by testing framework
+func TestCloseIsNoOpWithoutInit(t *testing.T) {
 	sp := NewSchemaProvisioner("postgres://localhost/db")
-	sp.Close() // must not panic
+	assert.NotPanics(t, func() {
+		sp.Close()
+	})
 }

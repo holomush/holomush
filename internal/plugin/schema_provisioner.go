@@ -10,12 +10,17 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
 )
+
+// validPgIdentifier matches safe PostgreSQL identifiers: starts with letter or
+// underscore, contains only letters/digits/underscores, max 63 chars.
+var validPgIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`)
 
 // SchemaProvisioner creates schema-isolated Postgres environments for binary
 // plugins that declare storage: postgres in their manifest.
@@ -34,6 +39,14 @@ func NewSchemaProvisioner(baseConnString string) *SchemaProvisioner {
 // that the connected role has the CREATEROLE privilege required for
 // per-plugin role provisioning.
 func (sp *SchemaProvisioner) Init(ctx context.Context) error {
+	// Validate URL-form DSN up front — pluginConnString uses url.Parse to
+	// inject plugin credentials and search_path, which only works for
+	// URL-form connection strings (postgres://...).
+	if u, parseErr := url.Parse(sp.baseConnString); parseErr != nil || u.Scheme == "" {
+		return oops.Code("SCHEMA_DSN_FORMAT").
+			Errorf("base connection string must be URL-form (postgres://...); keyword/value format is not supported")
+	}
+
 	pool, err := pgxpool.New(ctx, sp.baseConnString)
 	if err != nil {
 		return oops.Code("SCHEMA_POOL_INIT_FAILED").Wrap(err)
@@ -78,6 +91,19 @@ func (sp *SchemaProvisioner) Init(ctx context.Context) error {
 func (sp *SchemaProvisioner) ProvisionSchema(ctx context.Context, pluginName string) (string, error) {
 	schemaName := pluginSchemaName(pluginName)
 	roleName := pluginRoleName(pluginName)
+
+	if !validPgIdentifier.MatchString(schemaName) {
+		return "", oops.Code("SCHEMA_INVALID_IDENTIFIER").
+			With("plugin", pluginName).
+			With("schema", schemaName).
+			Errorf("derived schema name %q is not a valid PostgreSQL identifier", schemaName)
+	}
+	if !validPgIdentifier.MatchString(roleName) {
+		return "", oops.Code("SCHEMA_INVALID_ROLE").
+			With("plugin", pluginName).
+			With("role", roleName).
+			Errorf("derived role name %q is not a valid PostgreSQL identifier", roleName)
+	}
 
 	password, err := generatePassword()
 	if err != nil {

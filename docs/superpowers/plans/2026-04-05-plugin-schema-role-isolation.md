@@ -95,7 +95,7 @@ Existing developers: run 'docker compose down -v' to reinitialize."
 
 ---
 
-### Task 2: Shared Test Helper
+## Task 2: Shared Test Helper
 
 **Files:**
 
@@ -229,7 +229,7 @@ production privilege model."
 
 ---
 
-### Task 3: New Pure Helper Functions (TDD)
+## Task 3: New Pure Helper Functions (TDD)
 
 **Files:**
 
@@ -415,7 +415,7 @@ Pure functions for per-plugin role management:
 
 ---
 
-### Task 4: SchemaProvisioner Role Management
+## Task 4: SchemaProvisioner Role Management
 
 **Files:**
 
@@ -970,7 +970,7 @@ Closes: holomush-fwan (SEC-01)"
 
 ---
 
-### Task 5: Migrate Integration Tests to Non-Superuser
+## Task 5: Migrate Integration Tests to Non-Superuser
 
 **Files (13 total):**
 
@@ -1076,7 +1076,7 @@ would silently allow."
 
 ---
 
-### Task 6: E2E Concurrency Guard
+## Task 6: E2E Concurrency Guard
 
 **Files:**
 
@@ -1131,7 +1131,7 @@ test:e2e and test:e2e:cover tasks."
 
 ---
 
-### Task 7: Verification
+## Task 7: Verification
 
 - [ ] **Step 1: Run full unit test suite**
 

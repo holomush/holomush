@@ -189,14 +189,15 @@ All test environments MUST use a non-superuser `holomush` role with
 `CREATEROLE`, matching production behavior. Testing with superuser masks
 permission bugs.
 
-**Init script** (`docker/postgres/init-role.sql`):
+**Init script** (`docker/postgres/init-role.sh`):
 
 ```sql
+-- Application role: not superuser, but can create roles for plugin isolation
 CREATE ROLE holomush LOGIN PASSWORD 'holomush' CREATEROLE;
-CREATE DATABASE holomush OWNER holomush;
-GRANT ALL ON DATABASE holomush TO holomush;
-CREATE DATABASE holomush_test OWNER holomush;
-GRANT ALL ON DATABASE holomush_test TO holomush;
+
+-- Transfer database and schema ownership to application role
+ALTER DATABASE $POSTGRES_DB OWNER TO holomush;
+ALTER SCHEMA public OWNER TO holomush;
 ```
 
 ### 7.2 Compose Changes
@@ -206,7 +207,7 @@ GRANT ALL ON DATABASE holomush_test TO holomush;
 - Remove `POSTGRES_USER` and `POSTGRES_PASSWORD` (defaults to `postgres`
   superuser for container bootstrap only)
 - Add volume mount:
-  `./docker/postgres/init-role.sql:/docker-entrypoint-initdb.d/01-init-role.sql`
+  `./docker/postgres/init-role.sh:/docker-entrypoint-initdb.d/01-init-role.sh`
 - Connection strings remain `postgres://holomush:holomush@...` (unchanged)
 - `pg_isready` healthcheck changes to `-U postgres` (the container superuser)
 

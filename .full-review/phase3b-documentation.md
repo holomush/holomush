@@ -98,7 +98,7 @@ The binary plugin section shows only the `Handler` interface (`HandleEvent`). Th
 4. `RegisterServices` registering gRPC services on the transport
 5. The `pkg/plugin/storage` SDK for database access
 
-### DOC-08 �� Plugin guide missing `dependencies` field and version constraint documentation
+### DOC-08 — Plugin guide missing `dependencies` field and version constraint documentation
 
 **Severity:** Medium
 **File:** `site/docs/extending/plugin-guide.md`
@@ -222,7 +222,7 @@ The `SceneService` service definition lists 9 RPCs with no comments. `WorldServi
 
 ## 6. Plugin Author Guide
 
-### DOC-16 ��� No documentation for plugin storage SDK
+### DOC-16 — No documentation for plugin storage SDK
 
 **Severity:** High
 **File:** `site/docs/extending/plugin-guide.md` (missing section)

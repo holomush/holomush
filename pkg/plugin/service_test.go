@@ -57,7 +57,7 @@ func TestGRPCServicePlugin_GRPCServer_RegistersBothServices(t *testing.T) {
 	provider := &testServiceProvider{}
 	p := &grpcServicePlugin{handler: handler, provider: provider}
 
-	s := grpc.NewServer()
+	s := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- unit test server
 	defer s.Stop()
 
 	err := p.GRPCServer(nil, s)
@@ -73,7 +73,7 @@ func TestGRPCServicePlugin_GRPCServer_RegistersBothServices(t *testing.T) {
 func TestGRPCServicePlugin_GRPCServer_NilHandlerReturnsError(t *testing.T) {
 	p := &grpcServicePlugin{handler: nil, provider: &testServiceProvider{}}
 
-	s := grpc.NewServer()
+	s := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- unit test server
 	defer s.Stop()
 
 	err := p.GRPCServer(nil, s)
@@ -86,11 +86,17 @@ func TestGRPCServicePlugin_GRPCServer_DetectsCommandHandler(t *testing.T) {
 	provider := &testServiceProvider{}
 	p := &grpcServicePlugin{handler: handler, provider: provider}
 
-	s := grpc.NewServer()
+	s := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- unit test server
 	defer s.Stop()
 
 	err := p.GRPCServer(nil, s)
 	require.NoError(t, err)
+
+	info := s.GetServiceInfo()
+	assert.Contains(t, info, "holomush.plugin.v1.PluginService",
+		"expected PluginService to be registered when handler implements CommandHandler")
+	assert.True(t, provider.registerCalled,
+		"expected RegisterServices to be called on provider")
 }
 
 func TestGRPCServicePlugin_GRPCClient_ReturnsError(t *testing.T) {

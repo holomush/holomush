@@ -44,11 +44,13 @@ type mockAliasAccess struct {
 	shadowErr error
 
 	// call capture
-	setPlayerCalls    []aliasPlayerCall
-	deletePlayerCalls []aliasDeleteCall
-	setSystemCalls    []aliasSystemCall
-	deleteSystemCalls []string
-	shadowCalls       []string
+	setPlayerCalls      []aliasPlayerCall
+	deletePlayerCalls   []aliasDeleteCall
+	setSystemCalls      []aliasSystemCall
+	deleteSystemCalls   []string
+	shadowCalls         []string
+	lastListPlayerID    string
+	listPlayerCallCount int
 }
 
 type aliasPlayerCall struct {
@@ -78,7 +80,9 @@ func (m *mockAliasAccess) DeletePlayerAlias(_ context.Context, playerID, alias s
 	return m.deletePlayerErr
 }
 
-func (m *mockAliasAccess) ListPlayerAliases(_ context.Context, _ string) ([]hostfunc.AliasEntry, error) {
+func (m *mockAliasAccess) ListPlayerAliases(_ context.Context, playerID string) ([]hostfunc.AliasEntry, error) {
+	m.lastListPlayerID = playerID
+	m.listPlayerCallCount++
 	return m.listPlayerRet, m.listPlayerErr
 }
 
@@ -222,6 +226,7 @@ func TestAliasCapabilityListPlayerReturnsTable(t *testing.T) {
 	result := L.GetGlobal("result")
 	require.Equal(t, lua.LTTable, result.Type())
 	assert.Equal(t, 2, result.(*lua.LTable).Len())
+	assert.Equal(t, "player-1", aa.lastListPlayerID, "list_player should forward the player_id argument")
 }
 
 func TestAliasCapabilityListPlayerReturnsEmptyTableWhenNone(t *testing.T) {

@@ -287,34 +287,40 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin) error {
 	}
 
 	// Register plugin-provided services in the service registry.
-	// Service registration is best-effort: if some services fail to register
-	// (e.g., duplicate provider), the plugin is still considered loaded with
-	// partial Provides. This matches the graceful degradation pattern used
-	// throughout the plugin system — individual failures are logged but don't
-	// prevent the server from starting. Callers that need strict guarantees
-	// should check the service registry directly.
+	// Registration failures are treated as hard errors — dependents resolved
+	// by ResolveDependencyOrder rely on the Provides contract being satisfied.
 	if m.registry != nil && len(dp.Manifest.Provides) > 0 {
-		if connProvider, ok := host.(ServiceConnProvider); ok {
-			conn, connErr := connProvider.PluginConn(dp.Manifest.Name)
-			if connErr != nil {
-				slog.Error("failed to get plugin connection for service registration",
-					"plugin", dp.Manifest.Name, "error", connErr)
-			} else {
-				for _, svcName := range dp.Manifest.Provides {
-					regErr := m.registry.Register(RegisteredService{
-						Name:       svcName,
-						Conn:       conn,
-						PluginName: dp.Manifest.Name,
-						PluginType: dp.Manifest.Type,
-					})
-					if regErr != nil {
-						slog.Error("failed to register plugin service",
-							"plugin", dp.Manifest.Name,
-							"service", svcName,
-							"error", regErr)
-					}
+		connProvider, ok := host.(ServiceConnProvider)
+		if !ok {
+			return oops.In("manager").
+				With("plugin", dp.Manifest.Name).
+				Errorf("host does not implement ServiceConnProvider but plugin declares Provides")
+		}
+		conn, connErr := connProvider.PluginConn(dp.Manifest.Name)
+		if connErr != nil {
+			return oops.In("manager").
+				With("plugin", dp.Manifest.Name).
+				Wrapf(connErr, "get plugin connection for service registration")
+		}
+		var registered []string
+		for _, svcName := range dp.Manifest.Provides {
+			regErr := m.registry.Register(RegisteredService{
+				Name:       svcName,
+				Conn:       conn,
+				PluginName: dp.Manifest.Name,
+				PluginType: dp.Manifest.Type,
+			})
+			if regErr != nil {
+				// Unwind partial registrations.
+				for _, name := range registered {
+					_ = m.registry.Deregister(name) //nolint:errcheck // best-effort cleanup
 				}
+				return oops.In("manager").
+					With("plugin", dp.Manifest.Name).
+					With("service", svcName).
+					Wrapf(regErr, "register plugin service")
 			}
+			registered = append(registered, svcName)
 		}
 	}
 

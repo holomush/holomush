@@ -358,6 +358,9 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 			connStr, provErr := h.schemaProvisioner.ProvisionSchema(ctx, manifest.Name)
 			if provErr != nil {
 				client.Kill()
+				if certDir != "" {
+					_ = os.RemoveAll(certDir) //nolint:errcheck // best-effort cleanup
+				}
 				return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "provision_schema").Wrap(provErr)
 			}
 			initReq.Config.ConnectionString = connStr
@@ -365,6 +368,9 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 
 		if _, initErr := pluginClient.Init(ctx, initReq); initErr != nil {
 			client.Kill()
+			if certDir != "" {
+				_ = os.RemoveAll(certDir) //nolint:errcheck // best-effort cleanup
+			}
 			return oops.In("goplugin").With("plugin", manifest.Name).With("operation", "init").Wrap(initErr)
 		}
 	}

@@ -690,7 +690,7 @@ func TestDeliverEventSuccess(t *testing.T) {
 	emits, err := host.DeliverEvent(ctx, "test-plugin", event)
 	require.NoError(t, err, "DeliverEvent returned error")
 	require.Len(t, emits, 1, "expected 1 emit event")
-	assert.Equal(t, "location:123", emits[0].Stream, "expected stream 'room:123'")
+	assert.Equal(t, "location:123", emits[0].Stream, "expected stream 'location:123'")
 	assert.Equal(t, pluginsdk.EventTypeSay, emits[0].Type, "expected type 'say'")
 }
 

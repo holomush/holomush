@@ -48,6 +48,10 @@ func (p *GRPCServiceProxy) streamHandler(_ interface{}, stream grpc.ServerStream
 		return status.Errorf(codes.Unimplemented, "unknown service %s", serviceName)
 	}
 
+	if svc.IsServerInternal() {
+		return status.Errorf(codes.Unavailable, "service %s is server-internal", serviceName)
+	}
+
 	if svc.Conn == nil {
 		return status.Errorf(codes.Unavailable, "service %s has no connection", serviceName)
 	}
@@ -83,6 +87,9 @@ func extractServiceName(fullMethod string) string {
 }
 
 // ProxyStreams bidirectionally proxies between a server stream and client stream.
+// NOTE: This implementation only supports unary RPCs safely. For client-streaming
+// or bidi-streaming RPCs, the goroutine blocked on srv.RecvMsg could deadlock if
+// the backend closes early. All current plugin services use unary RPCs.
 func ProxyStreams(srv grpc.ServerStream, cli grpc.ClientStream) error {
 	// Forward client→server (request) in a goroutine
 	errCh := make(chan error, 1)

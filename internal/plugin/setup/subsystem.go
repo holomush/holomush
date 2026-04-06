@@ -149,12 +149,23 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		return oops.Code("WORLD_INPROCESS_CONN_FAILED").Wrap(worldConnErr)
 	}
 	s.worldConn = worldConn
+
+	// cleanupOnError closes partially initialized resources when startup fails.
+	cleanupOnError := func() {
+		if s.schemaProvisioner != nil {
+			s.schemaProvisioner.Close()
+			s.schemaProvisioner = nil
+		}
+		_ = s.worldConn.Close() //nolint:errcheck // best-effort cleanup
+		s.worldConn = nil
+	}
+
 	if regErr := s.registry.Register(plugins.RegisteredService{
 		Name:       "holomush.world.v1.WorldService",
 		Conn:       worldConn,
 		PluginType: plugins.TypeServerInternal(),
 	}); regErr != nil {
-		_ = worldConn.Close() //nolint:errcheck // best-effort cleanup on registration failure
+		cleanupOnError()
 		return oops.Code("WORLD_SERVICE_REGISTER_FAILED").Wrap(regErr)
 	}
 
@@ -165,6 +176,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		luaHost, otel.GetTracerProvider(), otel.GetMeterProvider(),
 	)
 	if luaMWErr != nil {
+		cleanupOnError()
 		return oops.Code("LUA_HOST_MW_FAILED").Wrap(luaMWErr)
 	}
 
@@ -173,6 +185,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	if s.cfg.DatabaseConnStr != "" {
 		schemaProvisioner = plugins.NewSchemaProvisioner(s.cfg.DatabaseConnStr)
 		if spErr := schemaProvisioner.Init(ctx); spErr != nil {
+			cleanupOnError()
 			return oops.Code("SCHEMA_PROVISIONER_INIT_FAILED").Wrap(spErr)
 		}
 		s.schemaProvisioner = schemaProvisioner
@@ -200,6 +213,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		binaryHost, otel.GetTracerProvider(), otel.GetMeterProvider(),
 	)
 	if binaryMWErr != nil {
+		cleanupOnError()
 		return oops.Code("BINARY_HOST_MW_FAILED").Wrap(binaryMWErr)
 	}
 

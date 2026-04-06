@@ -404,7 +404,7 @@ Test that the module registers the expected functions in the Lua namespace.
 
 - [ ] **Step 2: Implement session capability module**
 
-The module wraps `plugins.SessionAccess` (from `internal/plugin/service_proxy.go`) and registers functions like:
+The module wraps `hostfunc.SessionAccess` (from `internal/plugin/hostfunc/cap_session.go`) and registers functions like:
 
 - `session.find_by_name(name)` → `{character_id, character_name, location_id, last_whispered}`
 - `session.list_active()` → array of session objects

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	plugins "github.com/holomush/holomush/internal/plugin"
@@ -57,10 +58,13 @@ func newPluginTestSetup() *pluginTestSetup {
 	}
 }
 
-func (s *pluginTestSetup) exec(t *testing.T, args string) *command.CommandExecution {
+func (s *pluginTestSetup) makeExec(t *testing.T, args string) *command.CommandExecution {
 	t.Helper()
+	engine := policytest.NewGrantEngine()
+	subject := access.CharacterSubject(s.charID.String())
+	engine.GrantCommandExecution(subject, "plugin")
 	svc := command.NewTestServices(command.ServicesConfig{
-		Engine:  policytest.AllowAllEngine(),
+		Engine:  engine,
 		Session: session.NewMemStore(),
 	})
 	return command.NewTestExecution(command.CommandExecutionConfig{
@@ -111,7 +115,7 @@ func TestPluginListFormatsLoadedPlugins(t *testing.T) {
 	)
 
 	handler := NewPluginHandler(lister)
-	err := handler(context.Background(), ts.exec(t, "list"))
+	err := handler(context.Background(), ts.makeExec(t, "list"))
 
 	require.NoError(t, err)
 	output := ts.buf.String()
@@ -129,7 +133,7 @@ func TestPluginListShowsMessageWhenNoPlugins(t *testing.T) {
 	lister := newPluginListerWithPlugins()
 
 	handler := NewPluginHandler(lister)
-	err := handler(context.Background(), ts.exec(t, "list"))
+	err := handler(context.Background(), ts.makeExec(t, "list"))
 
 	require.NoError(t, err)
 	assert.Contains(t, ts.buf.String(), "No plugins loaded.")
@@ -142,7 +146,7 @@ func TestPluginInfoShowsDetailForLoadedPlugin(t *testing.T) {
 	)
 
 	handler := NewPluginHandler(lister)
-	err := handler(context.Background(), ts.exec(t, "info core-scenes"))
+	err := handler(context.Background(), ts.makeExec(t, "info core-scenes"))
 
 	require.NoError(t, err)
 	output := ts.buf.String()
@@ -160,7 +164,7 @@ func TestPluginInfoReturnsErrorForUnknownPlugin(t *testing.T) {
 	lister := newPluginListerWithPlugins()
 
 	handler := NewPluginHandler(lister)
-	err := handler(context.Background(), ts.exec(t, "info nonexistent"))
+	err := handler(context.Background(), ts.makeExec(t, "info nonexistent"))
 
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, command.CodeTargetNotFound)
@@ -173,7 +177,7 @@ func TestPluginInfoOmitsEmptyOptionalFields(t *testing.T) {
 	)
 
 	handler := NewPluginHandler(lister)
-	err := handler(context.Background(), ts.exec(t, "info core-communication"))
+	err := handler(context.Background(), ts.makeExec(t, "info core-communication"))
 
 	require.NoError(t, err)
 	output := ts.buf.String()
@@ -183,24 +187,25 @@ func TestPluginInfoOmitsEmptyOptionalFields(t *testing.T) {
 	assert.NotContains(t, output, "Provides:")
 }
 
-func TestPluginShowsUsageWithNoSubcommand(t *testing.T) {
-	ts := newPluginTestSetup()
-	lister := newPluginListerWithPlugins()
+func TestPluginShowsUsageForInvalidSubcommands(t *testing.T) {
+	cases := []struct {
+		name string
+		args string
+	}{
+		{"shows usage with no subcommand", ""},
+		{"shows usage for unknown subcommand", "reload"},
+	}
 
-	handler := NewPluginHandler(lister)
-	err := handler(context.Background(), ts.exec(t, ""))
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := newPluginTestSetup()
+			lister := newPluginListerWithPlugins()
 
-	require.NoError(t, err)
-	assert.Contains(t, ts.buf.String(), "Usage:")
-}
+			handler := NewPluginHandler(lister)
+			err := handler(context.Background(), ts.makeExec(t, tc.args))
 
-func TestPluginShowsUsageForUnknownSubcommand(t *testing.T) {
-	ts := newPluginTestSetup()
-	lister := newPluginListerWithPlugins()
-
-	handler := NewPluginHandler(lister)
-	err := handler(context.Background(), ts.exec(t, "reload"))
-
-	require.NoError(t, err)
-	assert.Contains(t, ts.buf.String(), "Usage:")
+			require.NoError(t, err)
+			assert.Contains(t, ts.buf.String(), "Usage:")
+		})
+	}
 }

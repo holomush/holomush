@@ -28,6 +28,10 @@ type InProcessConn struct {
 // NewInProcessConn starts srv on an in-memory bufconn listener and returns a
 // client connection to it. The caller must call Close when done.
 func NewInProcessConn(srv *grpc.Server) (*InProcessConn, error) {
+	if srv == nil {
+		return nil, oops.Errorf("grpc server must not be nil")
+	}
+
 	lis := bufconn.Listen(inProcessBufSize)
 
 	go func() {
