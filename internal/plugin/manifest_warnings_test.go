@@ -142,30 +142,6 @@ func TestCheckManifestWarningsNoWarningWhenCapabilityPolicyExists(t *testing.T) 
 	assert.Empty(t, warnings)
 }
 
-func TestCheckManifestWarningsDetectsUnknownAttributeInSchema(t *testing.T) {
-	m := luaManifest("widget-plugin")
-	m.Policies = []plugins.ManifestPolicy{
-		{
-			Name: "allow-read-widget",
-			DSL: `permit(principal, action in ["read"], resource is widget)` +
-				` when { resource.widget.unknown-field == "foo" };`,
-		},
-	}
-
-	schemas := map[string]*types.NamespaceSchema{
-		"widget": {
-			Attributes: map[string]types.AttrType{
-				"name": types.AttrTypeString,
-			},
-		},
-	}
-
-	warnings := plugins.CheckManifestWarnings(m, schemas)
-	require.Len(t, warnings, 1)
-	assert.Contains(t, warnings[0], "unknown-field")
-	assert.Contains(t, warnings[0], "widget")
-}
-
 func TestCheckManifestWarningsNoWarningForKnownAttribute(t *testing.T) {
 	m := luaManifest("widget-plugin")
 	m.Policies = []plugins.ManifestPolicy{
@@ -362,31 +338,6 @@ func TestCheckManifestWarningsParenthesizedExecuteConditionCoversCommand(t *test
 
 	warnings := plugins.CheckManifestWarnings(m, nil)
 	assert.Empty(t, warnings)
-}
-
-func TestCheckManifestWarningsAttributeRefThroughInListProducesWarning(t *testing.T) {
-	// Schema covers "type"; policy references "color" via a list-membership
-	// operator. The collectFromCond InList branch should still find the
-	// attribute reference and emit a warning.
-	m := luaManifest("widget-plugin")
-	m.Policies = []plugins.ManifestPolicy{
-		{
-			Name: "in-list-attr",
-			DSL: `permit(principal, action in ["read"], resource is widget)` +
-				` when { resource.widget.color in ["red", "blue"] };`,
-		},
-	}
-	schemas := map[string]*types.NamespaceSchema{
-		"widget": {
-			Attributes: map[string]types.AttrType{
-				"type": types.AttrTypeString,
-			},
-		},
-	}
-
-	warnings := plugins.CheckManifestWarnings(m, schemas)
-	require.Len(t, warnings, 1)
-	assert.Contains(t, warnings[0], "color")
 }
 
 func TestCheckManifestWarningsSchemaCheckSkippedWhenResourceTypeNotInSchema(t *testing.T) {

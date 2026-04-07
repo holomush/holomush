@@ -18,10 +18,14 @@ type parsedManifestPolicy struct {
 
 // CheckManifestWarnings logs non-fatal warnings about potential policy coverage
 // gaps in a plugin manifest. Called during loadPlugin after policy installation.
-// schemas may be nil for plugins without resource_types.
+//
+// The schemas parameter is retained for API compatibility with the caller in
+// loadPlugin but is no longer consulted: policy/schema cross-validation has
+// been promoted to a hard error path in ValidateManifestPolicySchemas. Only
+// command coverage warnings (Warning 1, Warning 2) remain here as soft hints.
 //
 // Returns a slice of human-readable warning messages (never nil for easy length check).
-func CheckManifestWarnings(manifest *Manifest, schemas map[string]*types.NamespaceSchema) []string {
+func CheckManifestWarnings(manifest *Manifest, _ map[string]*types.NamespaceSchema) []string {
 	var warnings []string
 
 	// Parse all policies up front; skip unparseable ones silently — the
@@ -69,31 +73,6 @@ func CheckManifestWarnings(manifest *Manifest, schemas map[string]*types.Namespa
 					"plugin %q: command %q declares capability %q on resource type %q but no character permit policy covers it",
 					manifest.Name, cmd.Name, act, rt,
 				))
-			}
-		}
-	}
-
-	// Warning 3: policy references an attribute not in the schema for its resource type.
-	if schemas != nil {
-		for _, pp := range parsed {
-			if pp.policy.Target == nil || pp.policy.Target.Resource == nil {
-				continue
-			}
-			rt := pp.policy.Target.Resource.Type
-			if rt == "" {
-				continue
-			}
-			schema, ok := schemas[rt]
-			if !ok || schema == nil {
-				continue
-			}
-			for _, attr := range referencedResourceAttrs(pp.policy) {
-				if _, known := schema.Attributes[attr]; !known {
-					warnings = append(warnings, fmt.Sprintf(
-						"plugin %q: policy %q references attribute %q on resource type %q which is not in the schema",
-						manifest.Name, pp.name, attr, rt,
-					))
-				}
 			}
 		}
 	}
