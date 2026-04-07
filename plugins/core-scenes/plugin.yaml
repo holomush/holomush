@@ -4,12 +4,14 @@
 name: core-scenes
 version: 1.0.0
 type: binary
+resource_types: [scene]
 
 requires:
   - holomush.world.v1.WorldService
 
 provides:
   - holomush.scene.v1.SceneService
+  - holomush.plugin.v1.AttributeResolverService
 
 storage: postgres
 
@@ -24,13 +26,16 @@ commands:
         scope: local
     help: "Manage RP scenes"
     usage: "scene <subcommand> [args]"
-
   - name: scenes
     help: "Browse open scenes"
     usage: "scenes [--tags tag1,tag2]"
 
 policies:
-  - name: execute-scenes
+  - name: execute-scene-commands
     dsl: >-
-      permit(principal is character, action in ["execute"], resource is command) when { resource.command.name in ["scene",
-      "scenes"] };
+      permit(principal is character, action in ["execute"], resource is command)
+      when { resource.command.name in ["scene", "scenes"] };
+  - name: read-own-scene
+    dsl: >-
+      permit(principal is character, action in ["read"], resource is scene)
+      when { resource.scene.owner == principal.id };
