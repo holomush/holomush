@@ -70,9 +70,10 @@ type AdminDepsProvider interface {
 // PluginSubsystemConfig configures the plugin subsystem.
 type PluginSubsystemConfig struct {
 	DataDir         string
-	DatabaseConnStr string // PostgreSQL connection string for schema provisioning
-	CertsDir        string // path to game certs directory (for loading CA)
-	GameID          string // game ID for cert SANs
+	DatabaseConnStr string   // PostgreSQL connection string for schema provisioning
+	CertsDir        string   // path to game certs directory (for loading CA)
+	GameID          string   // game ID for cert SANs
+	TrustAllowlist  []string // server-side plugin trust escalation allowlist
 	ABAC            EngineProvider
 	PolicyInst      PolicyInstallerProvider
 	PluginProv      PluginProviderSetter
@@ -235,9 +236,16 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	}
 
 	// 8. Create Manager, register hosts.
+	policyInstaller := s.cfg.PolicyInst.PolicyInstaller()
+	// Always overwrite the installer's allowlist (including nil/empty) so a
+	// reused installer doesn't carry stale state from a prior configuration.
+	// Removing entries from PluginTrustAllowlist must take effect on the
+	// next start, not require a restart of the installer instance.
+	policyInstaller.SetTrustAllowlist(s.cfg.TrustAllowlist)
 	managerOpts := []plugins.ManagerOption{
 		plugins.WithLuaHost(instrumentedLuaHost),
-		plugins.WithPolicyInstaller(s.cfg.PolicyInst.PolicyInstaller()),
+		plugins.WithPolicyInstaller(policyInstaller),
+		plugins.WithTrustAllowlist(s.cfg.TrustAllowlist),
 		plugins.WithServiceRegistry(s.registry),
 	}
 	if s.aliasRepo != nil && s.aliasCache != nil {
@@ -250,8 +258,12 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	s.cfg.PluginProv.PluginProvider().SetRegistry(s.manager)
 
 	// 10. Load all discovered plugins (alias seeding happens inside LoadAll).
+	// Strict by default — any plugin failure aborts startup so configuration
+	// errors fail fast and visibly. Use plugins.WithGracefulDegradation() in
+	// the manager options (intended for local dev only) to log and continue.
 	if loadErr := s.manager.LoadAll(ctx); loadErr != nil {
 		slog.Error("failed to load plugins", "error", loadErr)
+		return oops.In("plugin-subsystem").Wrapf(loadErr, "loading plugins")
 	}
 
 	// Close the schema provisioner pool — it's only needed during plugin loading.

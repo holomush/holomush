@@ -158,3 +158,13 @@ commands:
       ### Permissions
 
       Requires read access to the alias resource at global scope.
+
+policies:
+  - name: execute-aliases-player
+    dsl: >-
+      permit(principal is character, action in ["execute"], resource is command) when { resource.command.name in ["alias",
+      "unalias", "aliases"] };
+  - name: execute-aliases-admin
+    dsl: >-
+      permit(principal is character, action in ["execute"], resource is command) when { "admin" in principal.character.roles
+      && resource.command.name in ["sysalias", "sysunsalias", "sysaliases"] };

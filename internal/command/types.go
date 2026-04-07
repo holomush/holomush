@@ -108,12 +108,21 @@ const (
 )
 
 // validActions lists the known ABAC actions for capability validation.
+//
+// Thread safety: this map is initialized at package load time and never
+// modified afterward. Concurrent reads without writes are safe in Go.
 var validActions = map[string]bool{
 	"read": true, "write": true, "emit": true, "enter": true,
 	"use": true, "delete": true, "execute": true, "admin": true,
 }
 
 // validResourceTypes lists the known ABAC resource types for capability validation.
+//
+// Thread safety: this map is initialized at package load time and never
+// modified afterward. Concurrent reads without writes are safe in Go.
+// CoreResourceTypes() returns a defensive copy for external mutation.
+// ValidateResourceType() accepts a separate "known" map parameter rather
+// than reading this global, keeping plugin-contributed types isolated.
 var validResourceTypes = map[string]bool{
 	"character": true, "location": true, "exit": true, "object": true,
 	"stream": true, "property": true, "scene": true, "command": true,
@@ -121,6 +130,9 @@ var validResourceTypes = map[string]bool{
 }
 
 // validScopes lists the known scope values.
+//
+// Thread safety: this map is initialized at package load time and never
+// modified afterward. Concurrent reads without writes are safe in Go.
 var validScopes = map[string]bool{
 	ScopeSelf: true, ScopeLocal: true, ScopeGlobal: true,
 }
@@ -133,7 +145,9 @@ type Capability struct {
 	Scope    string `yaml:"scope,omitempty" json:"scope,omitempty"`
 }
 
-// Validate checks that the capability has valid action, resource, and scope.
+// Validate checks structural validity: action is known, resource is non-empty,
+// scope is valid. Does NOT check resource type membership — that requires
+// cross-plugin context and is deferred to ValidateResourceType at load time.
 func (c Capability) Validate() error {
 	if c.Action == "" {
 		return oops.Code("INVALID_CAPABILITY").Errorf("action is required")
@@ -146,17 +160,34 @@ func (c Capability) Validate() error {
 	if c.Resource == "" {
 		return oops.Code("INVALID_CAPABILITY").Errorf("resource is required")
 	}
-	if !validResourceTypes[c.Resource] {
-		return oops.Code("INVALID_CAPABILITY").
-			With("resource", c.Resource).
-			Errorf("unknown resource type %q", c.Resource)
-	}
 	if !validScopes[c.Scope] {
 		return oops.Code("INVALID_CAPABILITY").
 			With("scope", c.Scope).
 			Errorf("unknown scope %q", c.Scope)
 	}
 	return nil
+}
+
+// ValidateResourceType checks that the resource type is in the provided set.
+// Called during plugin load with a set that includes both core types and
+// plugin-declared resource types.
+func (c Capability) ValidateResourceType(known map[string]bool) error {
+	if !known[c.Resource] {
+		return oops.Code("INVALID_CAPABILITY").
+			With("resource", c.Resource).
+			Errorf("unknown resource type %q", c.Resource)
+	}
+	return nil
+}
+
+// CoreResourceTypes returns a copy of the core resource type set.
+// Used by the plugin manager to build the full known-types map.
+func CoreResourceTypes() map[string]bool {
+	result := make(map[string]bool, len(validResourceTypes))
+	for k, v := range validResourceTypes {
+		result[k] = v
+	}
+	return result
 }
 
 // EffectiveScope returns the scope, defaulting to ScopeSelf if empty.

@@ -11,13 +11,18 @@ type SeedPolicy struct {
 	SeedVersion int
 }
 
-// SeedPolicies returns the complete set of 27 seed policies (26 permit, 1 forbid).
-// The initial 18 (T22) plus 5 gap-fill policies (T22b: G1-G4), 2 phase-2 command policies, and 2 system bootstrap policies.
+// SeedPolicies returns the complete set of 25 seed policies (24 permit, 1 forbid).
+// The initial 18 (T22) minus 2 removed command policies, plus 5 gap-fill policies (T22b: G1-G4),
+// 1 phase-2 command policy, and 2 system bootstrap policies.
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
 // See ADR 087 for rationale on default-deny instead of explicit forbid for system properties.
 //
 // Note: guest restrictions for character creation and switching are enforced at the RPC layer
 // (web handlers and grpc auth_handlers), not via game commands. No seed policies are needed.
+//
+// Note: command execute policies for plugin-provided commands (say, pose, emit, page, whisper,
+// examine, help, alias, unalias, aliases, set, dig, create, describe, link, pemit) have
+// migrated to plugin manifests. Only core compiled-in commands remain in seed policies.
 //
 // Attribute paths use fully-qualified namespace.key syntax matching the resolver's
 // storage format (e.g., principal.character.roles, resource.location.id).
@@ -71,9 +76,9 @@ func SeedPolicies() []SeedPolicy {
 		},
 		{
 			Name:        "seed:player-basic-commands",
-			Description: "Characters can execute basic commands",
-			DSLText:     `permit(principal is character, action in ["execute"], resource is command) when { resource.command.name in ["say", "pose", "look", "go", "quit", "page", "whisper", "emit", "who", "examine", "help", "alias", "unalias", "aliases", "set"] };`,
-			SeedVersion: 3,
+			Description: "Characters can execute core compiled-in and unimplemented commands",
+			DSLText:     `permit(principal is character, action in ["execute"], resource is command) when { resource.command.name in ["quit", "look", "go", "who"] };`,
+			SeedVersion: 5,
 		},
 		{
 			Name:        "seed:builder-location-write",
@@ -85,12 +90,6 @@ func SeedPolicies() []SeedPolicy {
 			Name:        "seed:builder-object-write",
 			Description: "Builders and admins can create/modify/delete objects",
 			DSLText:     `permit(principal is character, action in ["write", "delete"], resource is object) when { "builder" in principal.character.roles };`,
-			SeedVersion: 3,
-		},
-		{
-			Name:        "seed:builder-commands",
-			Description: "Builders and admins can execute builder commands",
-			DSLText:     `permit(principal is character, action in ["execute"], resource is command) when { "builder" in principal.character.roles && resource.command.name in ["dig", "create", "describe", "link"] };`,
 			SeedVersion: 3,
 		},
 		{
@@ -183,14 +182,6 @@ func SeedPolicies() []SeedPolicy {
 			Name:        "seed:player-teleport",
 			Description: "All players can execute home and teleport commands",
 			DSLText:     `permit(principal is character, action in ["execute"], resource is command) when { resource.command.name in ["teleport", "home"] };`,
-			SeedVersion: 1,
-		},
-		// Pemit: storyteller and admin roles only. The storyteller role is not
-		// created by default — this policy will simply not match until it exists.
-		{
-			Name:        "seed:pemit-storyteller",
-			Description: "Storyteller and admin roles can execute pemit",
-			DSLText:     `permit(principal is character, action in ["execute"], resource is command) when { principal.character.roles.containsAny(["storyteller", "admin"]) && resource.command.name == "pemit" };`,
 			SeedVersion: 1,
 		},
 		// System bootstrap: setting plugins create locations and exits during server startup.

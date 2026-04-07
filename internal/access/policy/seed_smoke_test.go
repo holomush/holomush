@@ -260,7 +260,7 @@ func TestSeedSmokePlayerExitUse(t *testing.T) {
 }
 
 func TestSeedSmoke_PlayerBasicCommands(t *testing.T) {
-	commands := []string{"say", "pose", "look", "go"}
+	commands := []string{"quit", "look", "go", "who"}
 	for _, cmd := range commands {
 		t.Run(cmd, func(t *testing.T) {
 			engine := createSeedEngine(t, []attribute.AttributeProvider{
@@ -321,29 +321,6 @@ func TestSeedSmokeBuilderLocationWrite(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.True(t, decision.IsAllowed(), "builder should write locations; got: %s — %s", decision.Effect(), decision.Reason())
-}
-
-func TestSeedSmoke_BuilderCommands(t *testing.T) {
-	commands := []string{"dig", "create", "describe", "link"}
-	for _, cmd := range commands {
-		t.Run(cmd, func(t *testing.T) {
-			engine := createSeedEngine(t, []attribute.AttributeProvider{
-				characterProvider(
-					map[string]any{"id": "01CHAR01", "roles": []string{"builder"}, "location": "01LOC000"},
-					nil,
-				),
-				commandProvider(map[string]any{"name": cmd}),
-			})
-
-			decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
-				Subject:  "character:01CHAR01",
-				Action:   "execute",
-				Resource: "command:" + cmd,
-			})
-			require.NoError(t, err)
-			assert.True(t, decision.IsAllowed(), "builder should execute %s; got: %s — %s", cmd, decision.Effect(), decision.Reason())
-		})
-	}
 }
 
 func TestSeedSmoke_AdminFullAccess(t *testing.T) {
@@ -759,22 +736,4 @@ func TestSeedSmokePemitAllowedForAdmin(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.True(t, decision.IsAllowed(), "admin should execute pemit; got: %s — %s", decision.Effect(), decision.Reason())
-}
-
-func TestSeedSmokePemitAllowedForStoryteller(t *testing.T) {
-	engine := createSeedEngine(t, []attribute.AttributeProvider{
-		characterProvider(
-			map[string]any{"id": "01STORY1", "roles": []string{"storyteller"}, "location": "01LOC000"},
-			nil,
-		),
-		commandProvider(map[string]any{"name": "pemit"}),
-	})
-
-	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
-		Subject:  "character:01STORY1",
-		Action:   "execute",
-		Resource: "command:pemit",
-	})
-	require.NoError(t, err)
-	assert.True(t, decision.IsAllowed(), "storyteller should execute pemit; got: %s — %s", decision.Effect(), decision.Reason())
 }

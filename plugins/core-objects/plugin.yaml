@@ -122,3 +122,13 @@ commands:
       ### Permissions
 
       Requires write access to the property resource.
+
+policies:
+  - name: execute-objects-player
+    dsl: >-
+      permit(principal is character, action in ["execute"], resource is command) when { resource.command.name in ["examine",
+      "set"] };
+  - name: execute-objects-builder
+    dsl: >-
+      permit(principal is character, action in ["execute"], resource is command) when { "builder" in principal.character.roles
+      && resource.command.name in ["create", "describe"] };

@@ -28,3 +28,9 @@ commands:
   - name: scenes
     help: "Browse open scenes"
     usage: "scenes [--tags tag1,tag2]"
+
+policies:
+  - name: execute-scenes
+    dsl: >-
+      permit(principal is character, action in ["execute"], resource is command) when { resource.command.name in ["scene",
+      "scenes"] };

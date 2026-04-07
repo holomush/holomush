@@ -339,10 +339,18 @@ func (p *testPolicyInstaller) InstallPluginPolicies(ctx context.Context, name st
 	return p.installFn(ctx, name, policies)
 }
 
+func (p *testPolicyInstaller) InstallPluginPoliciesWithManifest(ctx context.Context, manifest *plugins.Manifest, policies []plugins.ManifestPolicy) error {
+	return p.installFn(ctx, manifest.Name, policies)
+}
+
 func (p *testPolicyInstaller) RemovePluginPolicies(ctx context.Context, name string) error {
 	return p.removeFn(ctx, name)
 }
 
 func (p *testPolicyInstaller) ReplacePluginPolicies(ctx context.Context, name string, policies []plugins.ManifestPolicy) error {
 	return p.installFn(ctx, name, policies)
+}
+
+func (p *testPolicyInstaller) ReplacePluginPoliciesWithManifest(ctx context.Context, manifest *plugins.Manifest, policies []plugins.ManifestPolicy) error {
+	return p.installFn(ctx, manifest.Name, policies)
 }

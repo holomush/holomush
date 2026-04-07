@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: test-abac-widget
+version: 1.0.0
+type: binary
+resource_types: [widget]
+
+# Standard manifest metadata. The test-abac-widget exercises the
+# AttributeResolverService contract, depends on no upstream services, and
+# uses no persistent storage (resolution is hardcoded for determinism).
+requires: []
+provides:
+  - holomush.plugin.v1.AttributeResolverService
+storage: kv
+
+binary-plugin:
+  executable: test-abac-widget
+commands:
+  - name: widget
+    capabilities:
+      - action: read
+        resource: widget
+    help: "Test widget command for ABAC validation"
+    usage: "widget <id>"
+policies:
+  - name: widget-execute
+    dsl: >-
+      permit(principal is character, action in ["execute"], resource is command) when { resource.command.name == "widget"
+      };
+  - name: widget-read-normal
+    dsl: >-
+      permit(principal is character, action in ["read"], resource is widget) when { resource.widget.type == "normal" };
+  - name: widget-forbid-restricted
+    dsl: >-
+      forbid(principal is character, action in ["read"], resource is widget) when { resource.widget.type == "restricted" };

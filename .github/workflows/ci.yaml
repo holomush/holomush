@@ -59,6 +59,14 @@ jobs:
           echo "${DPRINT_SHA256}  ${DPRINT_ZIP}" | sha256sum -c -
           sudo unzip -oq "${DPRINT_ZIP}" -d /usr/local/bin
           rm "${DPRINT_ZIP}"
+          BUF_VERSION="1.67.0"
+          BUF_BIN="buf-Linux-x86_64"
+          BUF_URL="https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/${BUF_BIN}"
+          BUF_SHA256="590b67b0cbde29b287e9772a71f46b569c2204e09a42c1c50dc425237a485e2a"
+          curl -LsSfo /tmp/buf "${BUF_URL}"
+          echo "${BUF_SHA256}  /tmp/buf" | sha256sum -c -
+          sudo install -m 0755 /tmp/buf /usr/local/bin/buf
+          rm /tmp/buf
 
       - name: Verify schema is current
         run: |

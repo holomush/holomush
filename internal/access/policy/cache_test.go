@@ -79,6 +79,7 @@ func (m *slowPolicyStore) Create(_ context.Context, _ *store.StoredPolicy) error
 func (m *slowPolicyStore) Get(_ context.Context, _ string) (*store.StoredPolicy, error) {
 	return nil, nil
 }
+
 func (m *slowPolicyStore) GetByID(_ context.Context, _ string) (*store.StoredPolicy, error) {
 	return nil, nil
 }
@@ -91,6 +92,7 @@ func (m *slowPolicyStore) CreateBatch(_ context.Context, _ []*store.StoredPolicy
 func (m *slowPolicyStore) ReplaceBySource(_ context.Context, _, _ string, _ []*store.StoredPolicy) error {
 	return nil
 }
+
 func (m *slowPolicyStore) List(_ context.Context, _ store.ListOptions) ([]*store.StoredPolicy, error) {
 	return nil, nil
 }
