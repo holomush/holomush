@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/holomush/holomush/pkg/plugin/storage"
 )
@@ -20,7 +21,12 @@ import (
 //go:embed migrations/*.up.sql
 var migrationsFS embed.FS
 
-// SceneRow represents a scene record in the database.
+// SceneRow is the persistence-layer representation of a scene. The shape
+// matches the scenes table column-for-column.
+//
+// Pointer types (LocationID, IdleTimeoutSecs, TemplateID, EndedAt, ArchivedAt)
+// represent nullable columns. ContentWarnings and Tags are non-null TEXT[]
+// columns; an empty slice corresponds to '{}' in the database.
 type SceneRow struct {
 	ID              string
 	Title           string
@@ -39,26 +45,24 @@ type SceneRow struct {
 	ArchivedAt      *time.Time
 }
 
-// ParticipantRow represents a scene participant record in the database.
-type ParticipantRow struct {
-	SceneID          string
-	CharacterID      string
-	Role             string
-	OriginLocationID *string
-	JoinedAt         time.Time
-	PublishVote      *bool
-}
-
-// SceneStore provides PostgreSQL persistence for the scenes plugin.
+// SceneStore provides PostgreSQL persistence for scenes.
+//
+// Phase 1 implements only Create and Get. Subsequent phases extend the store
+// with state transitions (Phase 2), participant operations (Phase 3),
+// publish-vote and log archival (Phase 6), and templates (Phase 7).
 type SceneStore struct {
 	pool *pgxpool.Pool
 }
 
-// NewSceneStore connects to PostgreSQL and runs migrations.
+// NewSceneStore opens a connection pool and runs the embedded migrations.
+//
+// The connection string is the one provided by the host's SchemaProvisioner
+// in ServiceConfig.ConnectionString — it has search_path=plugin_core_scenes
+// pre-configured, so all queries automatically target the plugin's schema.
 func NewSceneStore(ctx context.Context, connString string) (*SceneStore, error) {
 	pool, err := storage.Connect(ctx, connString)
 	if err != nil {
-		return nil, oops.Code("SCENE_CREATE_FAILED").Wrap(err)
+		return nil, oops.Code("SCENE_STORE_CONNECT_FAILED").Wrap(err)
 	}
 
 	sub, err := fs.Sub(migrationsFS, "migrations")
@@ -68,222 +72,76 @@ func NewSceneStore(ctx context.Context, connString string) (*SceneStore, error) 
 	}
 	if err := storage.RunMigrationsFS(ctx, pool, sub); err != nil {
 		pool.Close()
-		return nil, err
+		return nil, oops.Code("SCENE_STORE_MIGRATIONS_FAILED").Wrap(err)
 	}
 
 	return &SceneStore{pool: pool}, nil
 }
 
-// Close releases the database connection pool.
+// Close releases the underlying connection pool. Safe to call from a defer
+// in main(); idempotent if pool is already nil-ish (pgxpool guards internally).
 func (s *SceneStore) Close() {
-	s.pool.Close()
+	if s.pool != nil {
+		s.pool.Close()
+	}
 }
 
-// CreateScene inserts a new scene record.
-func (s *SceneStore) CreateScene(ctx context.Context, row *SceneRow) error {
+// Create inserts a new scene row. The caller MUST populate ID, Title,
+// OwnerID, State, PoseOrder, and Visibility; defaults from the schema apply
+// for unset nullable fields.
+func (s *SceneStore) Create(ctx context.Context, row *SceneRow) error {
+	ctx, span := startSpan(ctx, "scene.store.create",
+		attribute.String("scene_id", row.ID),
+	)
+	defer span.End()
+
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO scenes (
-			id, title, description, location_id, owner_id,
-			state, pose_order, visibility, idle_timeout_secs, template_id,
-			content_warnings, tags, created_at, ended_at, archived_at
-		) VALUES (
-			$1, $2, $3, $4, $5,
-			$6, $7, $8, $9, $10,
-			$11, $12, $13, $14, $15
-		)`,
+        INSERT INTO scenes (
+            id, title, description, location_id, owner_id, state, pose_order,
+            visibility, idle_timeout_secs, template_id, content_warnings, tags
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7,
+            $8, $9, $10, $11, $12
+        )`,
 		row.ID, row.Title, row.Description, row.LocationID, row.OwnerID,
-		row.State, row.PoseOrder, row.Visibility, row.IdleTimeoutSecs, row.TemplateID,
-		row.ContentWarnings, row.Tags, row.CreatedAt, row.EndedAt, row.ArchivedAt,
+		row.State, row.PoseOrder, row.Visibility, row.IdleTimeoutSecs,
+		row.TemplateID, row.ContentWarnings, row.Tags,
 	)
 	if err != nil {
+		recordError(span, err)
 		return oops.Code("SCENE_CREATE_FAILED").With("scene_id", row.ID).Wrap(err)
 	}
 	return nil
 }
 
-// GetScene retrieves a scene by ID.
-func (s *SceneStore) GetScene(ctx context.Context, id string) (*SceneRow, error) {
+// Get loads a single scene by ID. Returns a SCENE_NOT_FOUND error code if
+// the row does not exist.
+func (s *SceneStore) Get(ctx context.Context, id string) (*SceneRow, error) {
+	ctx, span := startSpan(ctx, "scene.store.get",
+		attribute.String("scene_id", id),
+	)
+	defer span.End()
+
 	row := &SceneRow{}
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, title, description, location_id, owner_id,
-			state, pose_order, visibility, idle_timeout_secs, template_id,
-			content_warnings, tags, created_at, ended_at, archived_at
-		FROM scenes WHERE id = $1`, id,
+        SELECT id, title, description, location_id, owner_id, state, pose_order,
+               visibility, idle_timeout_secs, template_id, content_warnings, tags,
+               created_at, ended_at, archived_at
+        FROM scenes
+        WHERE id = $1`,
+		id,
 	).Scan(
 		&row.ID, &row.Title, &row.Description, &row.LocationID, &row.OwnerID,
-		&row.State, &row.PoseOrder, &row.Visibility, &row.IdleTimeoutSecs, &row.TemplateID,
-		&row.ContentWarnings, &row.Tags, &row.CreatedAt, &row.EndedAt, &row.ArchivedAt,
+		&row.State, &row.PoseOrder, &row.Visibility, &row.IdleTimeoutSecs,
+		&row.TemplateID, &row.ContentWarnings, &row.Tags,
+		&row.CreatedAt, &row.EndedAt, &row.ArchivedAt,
 	)
 	if err != nil {
+		recordError(span, err)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.Code("SCENE_NOT_FOUND").With("scene_id", id).Wrap(err)
 		}
 		return nil, oops.Code("SCENE_GET_FAILED").With("scene_id", id).Wrap(err)
 	}
 	return row, nil
-}
-
-// UpdateScene updates an existing scene record.
-func (s *SceneStore) UpdateScene(ctx context.Context, row *SceneRow) error {
-	tag, err := s.pool.Exec(ctx, `
-		UPDATE scenes SET
-			title = $2, description = $3, location_id = $4, owner_id = $5,
-			state = $6, pose_order = $7, visibility = $8, idle_timeout_secs = $9,
-			template_id = $10, content_warnings = $11, tags = $12,
-			ended_at = $13, archived_at = $14
-		WHERE id = $1`,
-		row.ID, row.Title, row.Description, row.LocationID, row.OwnerID,
-		row.State, row.PoseOrder, row.Visibility, row.IdleTimeoutSecs,
-		row.TemplateID, row.ContentWarnings, row.Tags,
-		row.EndedAt, row.ArchivedAt,
-	)
-	if err != nil {
-		return oops.Code("SCENE_UPDATE_FAILED").With("scene_id", row.ID).Wrap(err)
-	}
-	if tag.RowsAffected() == 0 {
-		return oops.Code("SCENE_NOT_FOUND").With("scene_id", row.ID).
-			Errorf("scene not found")
-	}
-	return nil
-}
-
-// ListScenes retrieves scenes with optional state and visibility filters.
-func (s *SceneStore) ListScenes(ctx context.Context, state *string, visibility *string, limit, offset int) ([]*SceneRow, error) {
-	query := `
-		SELECT id, title, description, location_id, owner_id,
-			state, pose_order, visibility, idle_timeout_secs, template_id,
-			content_warnings, tags, created_at, ended_at, archived_at
-		FROM scenes WHERE 1=1`
-	args := []any{}
-	argIdx := 1
-
-	if state != nil {
-		query += " AND state = $" + itoa(argIdx)
-		args = append(args, *state)
-		argIdx++
-	}
-	if visibility != nil {
-		query += " AND visibility = $" + itoa(argIdx)
-		args = append(args, *visibility)
-		argIdx++
-	}
-
-	query += " ORDER BY created_at DESC"
-	query += " LIMIT $" + itoa(argIdx)
-	args = append(args, limit)
-	argIdx++
-	query += " OFFSET $" + itoa(argIdx)
-	args = append(args, offset)
-
-	rows, err := s.pool.Query(ctx, query, args...)
-	if err != nil {
-		return nil, oops.Code("SCENE_LIST_FAILED").Wrap(err)
-	}
-	defer rows.Close()
-
-	var result []*SceneRow
-	for rows.Next() {
-		r := &SceneRow{}
-		if scanErr := rows.Scan(
-			&r.ID, &r.Title, &r.Description, &r.LocationID, &r.OwnerID,
-			&r.State, &r.PoseOrder, &r.Visibility, &r.IdleTimeoutSecs, &r.TemplateID,
-			&r.ContentWarnings, &r.Tags, &r.CreatedAt, &r.EndedAt, &r.ArchivedAt,
-		); scanErr != nil {
-			return nil, oops.Code("SCENE_LIST_FAILED").Wrap(scanErr)
-		}
-		result = append(result, r)
-	}
-	if rows.Err() != nil {
-		return nil, oops.Code("SCENE_LIST_FAILED").Wrap(rows.Err())
-	}
-	return result, nil
-}
-
-// GetParticipant retrieves a single participant by scene and character ID.
-func (s *SceneStore) GetParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error) {
-	p := &ParticipantRow{}
-	err := s.pool.QueryRow(ctx,
-		"SELECT scene_id, character_id, role, origin_location_id, joined_at, publish_vote FROM scene_participants WHERE scene_id = $1 AND character_id = $2",
-		sceneID, characterID,
-	).Scan(&p.SceneID, &p.CharacterID, &p.Role, &p.OriginLocationID, &p.JoinedAt, &p.PublishVote)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.Code("PARTICIPANT_NOT_FOUND").Errorf("participant %s not in scene %s", characterID, sceneID)
-		}
-		return nil, oops.Code("PARTICIPANT_GET_FAILED").Wrap(err)
-	}
-	return p, nil
-}
-
-// AddParticipant upserts a participant into a scene.
-func (s *SceneStore) AddParticipant(ctx context.Context, row *ParticipantRow) error {
-	_, err := s.pool.Exec(ctx, `
-		INSERT INTO scene_participants (scene_id, character_id, role, origin_location_id, joined_at, publish_vote)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (scene_id, character_id)
-		DO UPDATE SET role = EXCLUDED.role, origin_location_id = EXCLUDED.origin_location_id, publish_vote = EXCLUDED.publish_vote`,
-		row.SceneID, row.CharacterID, row.Role, row.OriginLocationID, row.JoinedAt, row.PublishVote,
-	)
-	if err != nil {
-		return oops.Code("SCENE_ADD_PARTICIPANT_FAILED").
-			With("scene_id", row.SceneID).
-			With("character_id", row.CharacterID).Wrap(err)
-	}
-	return nil
-}
-
-// RemoveParticipant deletes a participant from a scene.
-func (s *SceneStore) RemoveParticipant(ctx context.Context, sceneID, characterID string) error {
-	tag, err := s.pool.Exec(ctx, `
-		DELETE FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
-		sceneID, characterID,
-	)
-	if err != nil {
-		return oops.Code("SCENE_REMOVE_PARTICIPANT_FAILED").
-			With("scene_id", sceneID).
-			With("character_id", characterID).Wrap(err)
-	}
-	if tag.RowsAffected() == 0 {
-		return oops.Code("SCENE_NOT_FOUND").
-			With("scene_id", sceneID).
-			With("character_id", characterID).
-			Errorf("participant not found")
-	}
-	return nil
-}
-
-// ListParticipants retrieves all participants in a scene.
-func (s *SceneStore) ListParticipants(ctx context.Context, sceneID string) ([]*ParticipantRow, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT scene_id, character_id, role, origin_location_id, joined_at, publish_vote
-		FROM scene_participants WHERE scene_id = $1
-		ORDER BY joined_at ASC`, sceneID,
-	)
-	if err != nil {
-		return nil, oops.Code("SCENE_LIST_FAILED").With("scene_id", sceneID).Wrap(err)
-	}
-	defer rows.Close()
-
-	var result []*ParticipantRow
-	for rows.Next() {
-		r := &ParticipantRow{}
-		if scanErr := rows.Scan(
-			&r.SceneID, &r.CharacterID, &r.Role, &r.OriginLocationID, &r.JoinedAt, &r.PublishVote,
-		); scanErr != nil {
-			return nil, oops.Code("SCENE_LIST_FAILED").With("scene_id", sceneID).Wrap(scanErr)
-		}
-		result = append(result, r)
-	}
-	if rows.Err() != nil {
-		return nil, oops.Code("SCENE_LIST_FAILED").With("scene_id", sceneID).Wrap(rows.Err())
-	}
-	return result, nil
-}
-
-// itoa converts an int to its decimal string representation.
-func itoa(n int) string {
-	if n < 10 {
-		return string(rune('0' + n))
-	}
-	return itoa(n/10) + string(rune('0'+n%10))
 }
