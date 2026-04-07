@@ -118,6 +118,19 @@ type CoreServer struct {
 	// newSessionID is used for generating session IDs. Can be overridden for testing.
 	newSessionID func() ulid.ULID
 	verbRegistry *core.VerbRegistry
+
+	// cursorLocks serializes the per-session "Send + commit cursor"
+	// critical section in replayAndSend against a concurrent Subscribe's
+	// cursor read on reconnect, deterministically closing the Finding 1
+	// race documented in holomush-9ues. Always non-nil after construction.
+	cursorLocks *cursorLockMap
+
+	// cursorCommitHook is an optional test seam invoked inside
+	// replayAndSend's per-event critical section, AFTER Send returns and
+	// BEFORE UpdateCursors. Production sets this to nil. Tests use it to
+	// pause inside the critical section and drive a concurrent Subscribe
+	// to assert deterministic closure of Finding 1.
+	cursorCommitHook func(ctx context.Context, sessionID string, eventID ulid.ULID)
 }
 
 // CoreServerOption configures a CoreServer.
@@ -166,6 +179,30 @@ func WithDisconnectHook(hook func(session.Info)) CoreServerOption {
 	}
 }
 
+// WithCursorCommitHook installs a test seam invoked inside replayAndSend's
+// per-event critical section, AFTER Send returns and BEFORE UpdateCursors.
+// Production code MUST NOT use this — it exists so integration tests can
+// pause inside the critical section to drive a concurrent Subscribe and
+// assert that Finding 1 is deterministically closed (holomush-9ues).
+func WithCursorCommitHook(hook func(ctx context.Context, sessionID string, eventID ulid.ULID)) CoreServerOption {
+	return func(s *CoreServer) {
+		s.cursorCommitHook = hook
+	}
+}
+
+// CursorLockRefCount returns the number of holders + queued waiters on
+// the per-session cursor lock for sessionID, or 0 if no entry exists.
+//
+// This is an integration-test synchronization helper for the Finding 1
+// closure spec (holomush-9ues): tests need to detect when a concurrent
+// Subscribe handler has queued behind an in-flight commit, and polling
+// on the refcount is the only race-free way to do that without timing
+// heuristics. Production code MUST NOT call this — a refcount snapshot
+// has no semantic meaning outside the lock map's internals.
+func (s *CoreServer) CursorLockRefCount(sessionID string) int {
+	return s.cursorLocks.refCount(sessionID)
+}
+
 // NewCoreServer creates a new Core gRPC server.
 func NewCoreServer(engine *core.Engine, sessionStore session.Store, dispatcher *command.Dispatcher, cmdServices *command.Services, opts ...CoreServerOption) *CoreServer {
 	s := &CoreServer{
@@ -174,6 +211,7 @@ func NewCoreServer(engine *core.Engine, sessionStore session.Store, dispatcher *
 		dispatcher:   dispatcher,
 		cmdServices:  cmdServices,
 		newSessionID: core.NewULID,
+		cursorLocks:  newCursorLockMap(),
 	}
 
 	for _, opt := range opts {
@@ -476,6 +514,14 @@ func subscribeStream(ctx context.Context, store core.EventStore, stream string, 
 // them to the client. Character-stream move events are consumed by the
 // location follower instead of being forwarded. Returns the last sent event
 // ID (or afterID if no events were replayed) and any send error.
+//
+// Each event flows through sendAndCommitEvent, which holds the per-session
+// cursor lock around the Send + UpdateCursors atom. Per-event commit (rather
+// than batch-end commit) keeps the maximum contiguous lock-hold bounded by
+// one event's Send latency plus one DB UPDATE — the smallest critical
+// section that still deterministically closes the Finding 1 race documented
+// in holomush-9ues. Concurrent Subscribes for the same session may slip in
+// between events rather than waiting for the entire batch.
 func (s *CoreServer) replayAndSend(
 	ctx context.Context,
 	info *session.Info,
@@ -491,34 +537,78 @@ func (s *CoreServer) replayAndSend(
 	}
 	last := afterID
 	for _, ev := range events {
-		if ev.Type == core.EventTypeMove && strings.HasPrefix(ev.Stream, world.StreamPrefixCharacter) {
-			lf.handleEvent(ctx, ev, grpcStream)
-		} else if sendErr := grpcStream.Send(eventToProto(ev)); sendErr != nil {
-			return last, oops.With("event_id", ev.ID.String()).Wrap(sendErr)
+		if sendErr := s.sendAndCommitEvent(ctx, info, streamName, ev, grpcStream, lf); sendErr != nil {
+			return last, sendErr
 		}
 		last = ev.ID
 	}
-	if last != afterID {
-		// Synchronous, bounded-timeout cursor commit. Uses a fresh context
-		// so a client disconnect (which cancels `ctx`) does not abort the
-		// write, matching the semantics the old persistCursorAsync intended.
-		// The commit happens here so that any subsequent action — next loop
-		// iteration, return-from-handler, or GracefulStop — observes the
-		// cursor as durably reflecting `last`. Commit failures are logged
-		// but do not break the client: they degrade gracefully to today's
-		// "duplicate-on-reconnect" behavior.
-		commitCtx, cancel := context.WithTimeout(context.Background(), cursorCommitTimeout)
-		if updateErr := s.sessionStore.UpdateCursors(commitCtx, info.ID,
-			map[string]ulid.ULID{streamName: last}); updateErr != nil {
-			slog.ErrorContext(ctx, "cursor commit failed",
-				"session_id", info.ID,
-				"stream", streamName,
-				"last_event", last.String(),
-				"error", updateErr)
-		}
-		cancel()
-	}
 	return last, nil
+}
+
+// sendAndCommitEvent delivers a single event to the client and commits the
+// per-stream cursor under the per-session lock, in that order.
+//
+// The critical section spans Send → (optional cursorCommitHook test seam)
+// → UpdateCursors. Holding the lock across Send is necessary: any acquisition
+// after Send leaves a TOCTOU window where a concurrent Subscribe can read
+// the stale cursor between "wire bytes left" and "lock acquired", reproducing
+// the very race this method is meant to close.
+//
+// Cursor commit failures are logged but do not surface to the caller —
+// they degrade gracefully to "duplicate-on-reconnect", never worse.
+func (s *CoreServer) sendAndCommitEvent(
+	ctx context.Context,
+	info *session.Info,
+	streamName string,
+	ev core.Event,
+	grpcStream grpc.ServerStreamingServer[corev1.SubscribeResponse],
+	lf *locationFollower,
+) error {
+	unlock := s.cursorLocks.lock(info.ID)
+	defer unlock()
+
+	// Character-stream move events are routed through locationFollower
+	// so the client receives a synthetic location_state for the new
+	// location. handleEvent returns true only when it fully consumed
+	// the event (built and Sent the location_state); for all other
+	// paths — nil worldQuerier, payload unmarshal failure, same
+	// location, buildLocationState failure, or location_state Send
+	// failure — it returns false and the raw event must still be
+	// forwarded so the client is not left in a stale state with a
+	// silently-advanced cursor.
+	handled := false
+	if ev.Type == core.EventTypeMove &&
+		strings.HasPrefix(ev.Stream, world.StreamPrefixCharacter) &&
+		lf != nil {
+		handled = lf.handleEvent(ctx, ev, grpcStream)
+	}
+	if !handled {
+		if sendErr := grpcStream.Send(eventToProto(ev)); sendErr != nil {
+			return oops.With("event_id", ev.ID.String()).Wrap(sendErr)
+		}
+	}
+
+	// Test seam: pause inside the critical section so integration tests can
+	// race a concurrent Subscribe and assert it does not observe the stale
+	// cursor. Production sets this to nil. See WithCursorCommitHook.
+	if hook := s.cursorCommitHook; hook != nil {
+		hook(ctx, info.ID, ev.ID)
+	}
+
+	// Synchronous, bounded-timeout cursor commit. Uses a fresh context so a
+	// client disconnect (which cancels `ctx`) does not abort the write,
+	// matching the semantics the old persistCursorAsync intended.
+	commitCtx, cancel := context.WithTimeout(context.Background(), cursorCommitTimeout)
+	defer cancel()
+	if updateErr := s.sessionStore.UpdateCursors(commitCtx, info.ID,
+		map[string]ulid.ULID{streamName: ev.ID}); updateErr != nil {
+		slog.ErrorContext(ctx, "cursor commit failed",
+			"session_id", info.ID,
+			"stream", streamName,
+			"event_id", ev.ID.String(),
+			"error", updateErr)
+	}
+	return nil
 }
 
 // Subscribe opens a stream of events for the session.
@@ -539,7 +629,18 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		return oops.Code("NOT_CONFIGURED").Errorf("event store not configured")
 	}
 
-	info, err := s.sessionStore.Get(ctx, req.SessionId)
+	// Acquire the per-session cursor lock around the session Get so the
+	// EventCursors map we capture here reflects any in-flight commit by a
+	// previous Subscribe handler for this session. Releasing the lock
+	// before the rest of the handler runs keeps the read-side critical
+	// section to a single DB SELECT — the absolute minimum needed to
+	// close the Finding 1 race (holomush-9ues). The captured cursors
+	// are immutable thereafter from this handler's perspective.
+	info, err := func() (*session.Info, error) {
+		unlock := s.cursorLocks.lock(req.SessionId)
+		defer unlock()
+		return s.sessionStore.Get(ctx, req.SessionId)
+	}()
 	if err != nil {
 		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
 	}

@@ -8,6 +8,7 @@ package session_test
 import (
 	"context"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -28,6 +29,41 @@ import (
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
+
+// cursorCommitHookSlot is a package-level indirection for the
+// CoreServer cursorCommitHook test seam. The BeforeEach installs a
+// dispatcher closure that reads this variable; individual specs set it
+// to a function that pauses inside replayAndSend's per-event critical
+// section to drive a deterministic Finding 1 race (holomush-9ues).
+//
+// The slot is guarded by a mutex because the read happens on the gRPC
+// server goroutine and the write happens on the test goroutine, with
+// no other happens-before edge between them.
+var (
+	cursorHookMu sync.Mutex
+	cursorHookFn func(ctx context.Context, sessionID string, eventID ulid.ULID)
+)
+
+// setCursorCommitHook installs (or clears, if fn is nil) the per-event
+// cursor commit hook used by the cursor lock integration spec.
+func setCursorCommitHook(fn func(ctx context.Context, sessionID string, eventID ulid.ULID)) {
+	cursorHookMu.Lock()
+	cursorHookFn = fn
+	cursorHookMu.Unlock()
+}
+
+// dispatchCursorCommitHook is the closure handed to the CoreServer at
+// construction. It reads the current cursorHookFn under the mutex and
+// invokes it if non-nil. This indirection lets specs install hooks
+// after the server is built without rebuilding the BeforeEach.
+func dispatchCursorCommitHook(ctx context.Context, sessionID string, eventID ulid.ULID) {
+	cursorHookMu.Lock()
+	fn := cursorHookFn
+	cursorHookMu.Unlock()
+	if fn != nil {
+		fn(ctx, sessionID, eventID)
+	}
+}
 
 // reaperInterval is the polling interval for the session reaper in tests.
 // Short enough that TTL expirations are observed within a few hundred ms.
@@ -98,6 +134,7 @@ var _ = Describe("Session Persistence", func() {
 		reaperCtx     context.Context
 		reaperCancel  context.CancelFunc
 		startLocation ulid.ULID
+		coreServer    *grpcpkg.CoreServer
 	)
 
 	BeforeEach(func() {
@@ -145,7 +182,11 @@ var _ = Describe("Session Persistence", func() {
 		dispatcher, dispErr := command.NewDispatcher(reg, policyEngine)
 		Expect(dispErr).NotTo(HaveOccurred())
 
-		coreServer := grpcpkg.NewCoreServer(engine, env.sessionStore, dispatcher, cmdSvc,
+		// Reset the cursor commit hook slot before each spec so a
+		// previously-installed hook cannot leak across specs.
+		setCursorCommitHook(nil)
+
+		coreServer = grpcpkg.NewCoreServer(engine, env.sessionStore, dispatcher, cmdSvc,
 			grpcpkg.WithEventStore(env.eventStore),
 			grpcpkg.WithGuestService(guestService),
 			grpcpkg.WithPlayerRepo(env.playerRepo),
@@ -161,6 +202,7 @@ var _ = Describe("Session Persistence", func() {
 					guestAuth.ReleaseGuest(info.CharacterName)
 				}
 			}),
+			grpcpkg.WithCursorCommitHook(dispatchCursorCommitHook),
 		)
 
 		// Bind a fresh listener on an ephemeral port for this spec.
@@ -454,6 +496,171 @@ var _ = Describe("Session Persistence", func() {
 		})
 	})
 
+	Describe("Cursor lock — Finding 1 deterministic closure (holomush-9ues)", func() {
+		// The strict claim of this spec — stronger than the "cursor durable
+		// after handler exit" spec earlier in this file — is that a
+		// concurrent reconnect that begins WHILE the original Subscribe
+		// handler is in the gap between Send and UpdateCursors does NOT
+		// re-deliver the just-sent event. PR #198 shrunk the race window
+		// from "unbounded under load" to "~1-10ms typical" but did not
+		// close it. This spec uses a test seam (cursorCommitHook) to *hold*
+		// the original handler in that gap so the race is observable
+		// deterministically — no GracefulStop, no wall-clock timing on
+		// the assertion path.
+		It("blocks new Subscribe from observing stale cursor while old subscriber is mid-commit", func() {
+			// 1) Establish a session and drain its initial replay so the
+			//    hook fires on the *next* event (the live say) rather
+			//    than the arrive event from SelectCharacter.
+			sessionID, _ := loginAsGuest(testCtx, grpcCli)
+
+			subACtx, subACancel := context.WithCancel(testCtx)
+			defer subACancel()
+			streamA, err := grpcCli.Subscribe(subACtx, &corev1.SubscribeRequest{
+				SessionId: sessionID,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			drainUntilReplayComplete(streamA)
+
+			// 2) Install the hook. Only the FIRST commit blocks (the
+			//    live say). Subsequent commits — including B's eventual
+			//    own replay batch — pass through unhindered, so the
+			//    spec terminates without a deadlock if anything else
+			//    happens to commit a cursor afterwards.
+			//
+			//    The release function is wrapped in sync.Once and
+			//    registered with DeferCleanup so an early test failure
+			//    cannot leave subscriber A blocked inside the hook —
+			//    that would otherwise hang the suite at AfterEach's
+			//    grpcServer.GracefulStop call.
+			hookEntered := make(chan struct{})
+			hookRelease := make(chan struct{})
+			var releaseHookOnce sync.Once
+			releaseHook := func() {
+				releaseHookOnce.Do(func() { close(hookRelease) })
+			}
+			DeferCleanup(releaseHook)
+			var hookFireCount int
+			setCursorCommitHook(func(_ context.Context, _ string, _ ulid.ULID) {
+				if hookFireCount > 0 {
+					hookFireCount++
+					return
+				}
+				hookFireCount++
+				close(hookEntered)
+				<-hookRelease
+			})
+
+			// 3) Trigger a live event. The handler will Send the say to
+			//    streamA, then enter the hook with the cursor lock held.
+			_, err = grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
+				SessionId: sessionID,
+				Command:   "say hello",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Drain A's stream until the say frame arrives, capturing
+			// its ID. Recv runs in a goroutine because once A enters the
+			// hook the live loop yields no more frames until release —
+			// we only need to confirm the say landed.
+			liveSayIDCh := make(chan string, 1)
+			go func() {
+				defer GinkgoRecover()
+				for {
+					ev, recvErr := streamA.Recv()
+					if recvErr != nil {
+						return
+					}
+					if frame := ev.GetEvent(); frame != nil && frame.GetType() == "say" {
+						liveSayIDCh <- frame.GetId()
+						return
+					}
+				}
+			}()
+
+			var liveSayID string
+			Eventually(liveSayIDCh, 5*time.Second).Should(Receive(&liveSayID))
+			Expect(liveSayID).NotTo(BeEmpty())
+
+			// 4) Synchronize on hook entry. By the time hookEntered
+			//    fires, A has Sent the event and is sitting in the
+			//    pre-commit pause with the per-session cursor lock held.
+			Eventually(hookEntered, 5*time.Second).Should(BeClosed())
+
+			// 5) Open Subscribe B with replay_from_cursor=true for the
+			//    SAME session. B's handler must block on the per-session
+			//    cursor lock at the sessionStore.Get call, NOT read the
+			//    stale cursor and start a duplicate replay.
+			subBCtx, subBCancel := context.WithCancel(testCtx)
+			defer subBCancel()
+			streamB, err := grpcCli.Subscribe(subBCtx, &corev1.SubscribeRequest{
+				SessionId:        sessionID,
+				ReplayFromCursor: true,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Wait for B's handler to queue on the per-session cursor
+			// lock. The refcount reaches 2 when B's lock helper has
+			// bumped it.
+			//
+			// Both code paths converge on this signal: with the fix in
+			// place, B's Subscribe-side lock is the contender; with
+			// the fix removed, B's per-event commit lock inside
+			// sendAndCommitEvent is the contender (B can read the
+			// stale cursor immediately, but can't actually Send the
+			// duplicate until A releases its per-event lock). Either
+			// way, refCount == 2 means B has reached a contended lock
+			// acquisition behind A — race-free, no wall clock.
+			Eventually(func() int {
+				return coreServer.CursorLockRefCount(sessionID)
+			}, 5*time.Second, 5*time.Millisecond).Should(BeNumerically(">=", 2),
+				"B's handler should have queued on the per-session cursor lock")
+
+			// 6) Release A. A finishes UpdateCursors, releases the lock;
+			//    B then acquires the lock and reads the now-fresh cursor.
+			releaseHook()
+
+			// 7) Drain B's replay phase, ending at REPLAY_COMPLETE.
+			//    Recv errors are propagated as test failures rather
+			//    than silently treated as "replay complete" — otherwise
+			//    a stream that dies before REPLAY_COMPLETE would let
+			//    bSeenSayIDs stay empty and the spec pass for the
+			//    wrong reason.
+			var bSeenSayIDs []string
+			drainResult := make(chan error, 1)
+			go func() {
+				defer GinkgoRecover()
+				for {
+					ev, recvErr := streamB.Recv()
+					if recvErr != nil {
+						drainResult <- recvErr
+						return
+					}
+					if ctrl := ev.GetControl(); ctrl != nil &&
+						ctrl.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE {
+						drainResult <- nil
+						return
+					}
+					if frame := ev.GetEvent(); frame != nil && frame.GetType() == "say" {
+						bSeenSayIDs = append(bSeenSayIDs, frame.GetId())
+					}
+				}
+			}()
+
+			var drainErr error
+			Eventually(drainResult, 5*time.Second).Should(Receive(&drainErr))
+			Expect(drainErr).NotTo(HaveOccurred(),
+				"B should reach REPLAY_COMPLETE without stream errors")
+
+			// 8) The deterministic guarantee: B's replay does NOT contain
+			//    the live say event A already received.
+			Expect(bSeenSayIDs).NotTo(ContainElement(liveSayID),
+				"B's replay must NOT contain the say event A received "+
+					"— the per-session cursor lock should have blocked B "+
+					"from reading the stale cursor")
+		})
+	})
+
 	Describe("Command history", func() {
 		It("persists commands across HandleCommand calls and exposes them via GetCommandHistory", func() {
 			sessionID, _ := loginAsGuest(testCtx, grpcCli)
@@ -533,3 +740,40 @@ var _ = Describe("Session Persistence", func() {
 		})
 	})
 })
+
+// drainUntilReplayComplete reads frames from the given stream until a
+// REPLAY_COMPLETE control frame arrives, discarding events along the
+// way. Used by specs that need to position a stream at the live loop
+// before triggering further events.
+//
+// The read loop runs in a goroutine so the select can enforce a
+// wall-clock deadline that actually bounds the total wait — a single
+// blocking Recv() can otherwise hold the helper open indefinitely.
+func drainUntilReplayComplete(stream interface {
+	Recv() (*corev1.SubscribeResponse, error)
+}) {
+	done := make(chan error, 1)
+	go func() {
+		defer GinkgoRecover()
+		for {
+			ev, err := stream.Recv()
+			if err != nil {
+				done <- err
+				return
+			}
+			if ctrl := ev.GetControl(); ctrl != nil &&
+				ctrl.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE {
+				done <- nil
+				return
+			}
+		}
+	}()
+
+	select {
+	case err := <-done:
+		Expect(err).NotTo(HaveOccurred(),
+			"stream errored before REPLAY_COMPLETE")
+	case <-time.After(5 * time.Second):
+		Fail("timed out waiting for REPLAY_COMPLETE")
+	}
+}
