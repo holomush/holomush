@@ -8,6 +8,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
@@ -52,6 +53,59 @@ func (f *fakeStore) Get(_ context.Context, id string) (*SceneRow, error) {
 		return nil, oops.Code("SCENE_NOT_FOUND").With("scene_id", id).Errorf("not found")
 	}
 	return row, nil
+}
+
+func (f *fakeStore) End(_ context.Context, id string) (*SceneRow, error) {
+	row, ok := f.scenes[id]
+	if !ok {
+		return nil, oops.Code("SCENE_NOT_FOUND").With("scene_id", id).Errorf("not found")
+	}
+	if row.State != string(SceneStateActive) && row.State != string(SceneStatePaused) {
+		return nil, oops.Code("SCENE_TRANSITION_FORBIDDEN").
+			With("scene_id", id).
+			With("op", "end").
+			With("current_state", row.State).
+			Errorf("cannot end")
+	}
+	row.State = string(SceneStateEnded)
+	now := time.Now().UTC()
+	row.EndedAt = &now
+	cp := *row
+	return &cp, nil
+}
+
+func (f *fakeStore) Pause(_ context.Context, id string) (*SceneRow, error) {
+	row, ok := f.scenes[id]
+	if !ok {
+		return nil, oops.Code("SCENE_NOT_FOUND").With("scene_id", id).Errorf("not found")
+	}
+	if row.State != string(SceneStateActive) {
+		return nil, oops.Code("SCENE_TRANSITION_FORBIDDEN").
+			With("scene_id", id).
+			With("op", "pause").
+			With("current_state", row.State).
+			Errorf("cannot pause")
+	}
+	row.State = string(SceneStatePaused)
+	cp := *row
+	return &cp, nil
+}
+
+func (f *fakeStore) Resume(_ context.Context, id string) (*SceneRow, error) {
+	row, ok := f.scenes[id]
+	if !ok {
+		return nil, oops.Code("SCENE_NOT_FOUND").With("scene_id", id).Errorf("not found")
+	}
+	if row.State != string(SceneStatePaused) {
+		return nil, oops.Code("SCENE_TRANSITION_FORBIDDEN").
+			With("scene_id", id).
+			With("op", "resume").
+			With("current_state", row.State).
+			Errorf("cannot resume")
+	}
+	row.State = string(SceneStateActive)
+	cp := *row
+	return &cp, nil
 }
 
 func TestSceneServiceCreateScenePersistsTitleAndOwnerWhenRequestIsValid(t *testing.T) {

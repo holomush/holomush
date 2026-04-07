@@ -25,10 +25,17 @@ import (
 // Defined here so the service layer is not coupled to the concrete
 // SceneStore type — tests can substitute a fake implementation.
 //
-// Phase 1 only needs Create and Get. The interface grows phase by phase.
+// Phase 1: Create + Get
+// Phase 2: + End, Pause, Resume, Update — all return the post-update row
+//
+//	via Postgres RETURNING so the service handler doesn't need a
+//	separate Get call (eliminates a class of races).
 type sceneStorer interface {
 	Create(ctx context.Context, row *SceneRow) error
 	Get(ctx context.Context, id string) (*SceneRow, error)
+	End(ctx context.Context, id string) (*SceneRow, error)
+	Pause(ctx context.Context, id string) (*SceneRow, error)
+	Resume(ctx context.Context, id string) (*SceneRow, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.

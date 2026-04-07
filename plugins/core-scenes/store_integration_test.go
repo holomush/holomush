@@ -121,3 +121,173 @@ func TestSceneStoreCreateRejectsDuplicateID(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "SCENE_CREATE_FAILED")
 }
+
+func TestSceneStoreEndTransitionsActiveToEnded(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-end-active",
+		Title:           "End from active",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	got, err := store.End(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, string(SceneStateEnded), got.State)
+	require.NotNil(t, got.EndedAt, "ended_at should be set")
+
+	reread, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, got.State, reread.State)
+}
+
+func TestSceneStoreEndTransitionsPausedToEnded(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-end-paused",
+		Title:           "End from paused",
+		OwnerID:         "char-alice",
+		State:           string(SceneStatePaused),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	got, err := store.End(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, string(SceneStateEnded), got.State)
+	require.NotNil(t, got.EndedAt)
+}
+
+func TestSceneStoreEndRejectsAlreadyEnded(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-end-twice",
+		Title:           "Already ended",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateEnded),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	_, err := store.End(ctx, row.ID)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_TRANSITION_FORBIDDEN")
+}
+
+func TestSceneStoreEndReturnsNotFoundForMissingScene(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	_, err := store.End(ctx, "scene-does-not-exist")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
+}
+
+func TestSceneStorePauseTransitionsActiveToPaused(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-pause",
+		Title:           "Pause from active",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	got, err := store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, string(SceneStatePaused), got.State)
+}
+
+func TestSceneStorePauseRejectsAlreadyPaused(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-pause-twice",
+		Title:           "Already paused",
+		OwnerID:         "char-alice",
+		State:           string(SceneStatePaused),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	_, err := store.Pause(ctx, row.ID)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_TRANSITION_FORBIDDEN")
+}
+
+func TestSceneStoreResumeTransitionsPausedToActive(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-resume",
+		Title:           "Resume from paused",
+		OwnerID:         "char-alice",
+		State:           string(SceneStatePaused),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	got, err := store.Resume(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, string(SceneStateActive), got.State)
+}
+
+func TestSceneStoreResumeRejectsActiveScene(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-resume-active",
+		Title:           "Already active",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	_, err := store.Resume(ctx, row.ID)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_TRANSITION_FORBIDDEN")
+}
