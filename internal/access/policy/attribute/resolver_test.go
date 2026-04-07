@@ -148,19 +148,33 @@ func TestResolverUnregisterProviderRemovesRegisteredProviderAndFreesNamespaceFor
 	resolver := NewResolver(registry)
 
 	// Register two providers so we can assert selective removal and
-	// preservation of providerOrder for the survivor.
+	// preservation of providerOrder for the survivor. Give widget an
+	// initial schema with one attribute so we can verify the schema
+	// state is fully cleaned up on unregister.
 	widgetProvider := newResolverMockAttributeProvider("widget")
+	widgetProvider.schema = &types.NamespaceSchema{
+		Attributes: map[string]types.AttrType{"original_attr": types.AttrTypeString},
+	}
 	characterProvider := newResolverMockAttributeProvider("character")
 	require.NoError(t, resolver.RegisterProvider(widgetProvider))
 	require.NoError(t, resolver.RegisterProvider(characterProvider))
+	require.True(t, registry.HasNamespace("widget"),
+		"widget schema must be in the registry after RegisterProvider")
+	require.True(t, registry.IsRegistered("widget", "original_attr"),
+		"original_attr must be in the widget schema")
 
 	// Unregister widget: should return true, remove from providers map,
-	// remove from providerOrder, and drop the circuit breaker.
+	// remove from providerOrder, drop the circuit breaker, AND remove the
+	// schema from the registry.
 	removed := resolver.UnregisterProvider("widget")
 	assert.True(t, removed, "UnregisterProvider should return true for a registered namespace")
 	assert.NotContains(t, resolver.providers, "widget")
 	assert.NotContains(t, resolver.circuitBreakers, "widget")
 	assert.NotContains(t, resolver.providerOrder, "widget")
+	assert.False(t, registry.HasNamespace("widget"),
+		"schema must be removed from the registry on UnregisterProvider")
+	assert.False(t, registry.IsRegistered("widget", "original_attr"),
+		"original_attr must no longer be registered after schema removal")
 	assert.Contains(t, resolver.providers, "character", "unrelated provider must remain registered")
 	assert.Contains(t, resolver.providerOrder, "character")
 
@@ -169,12 +183,31 @@ func TestResolverUnregisterProviderRemovesRegisteredProviderAndFreesNamespaceFor
 	removed = resolver.UnregisterProvider("nonexistent")
 	assert.False(t, removed, "UnregisterProvider should return false for an unknown namespace")
 
-	// After rollback, the namespace must be free for re-registration —
-	// otherwise a retry after a failed load would collide with the stale
-	// entry and produce a confusing "already registered" error.
+	// After rollback, the namespace must be free for re-registration with
+	// a DIFFERENT schema. This is the regression test for CodeRabbit's
+	// finding on PR #199 (holomush-2jv8): if UnregisterProvider leaves
+	// the schema in place, RegisterProvider's HasNamespace short-circuit
+	// would silently drop the new schema.
 	replacementProvider := newResolverMockAttributeProvider("widget")
+	replacementProvider.schema = &types.NamespaceSchema{
+		Attributes: map[string]types.AttrType{
+			"replacement_attr": types.AttrTypeString,
+			"another_attr":     types.AttrTypeBool,
+		},
+	}
 	require.NoError(t, resolver.RegisterProvider(replacementProvider),
 		"namespace must be available for re-registration after UnregisterProvider")
+
+	// Verify the NEW schema is what's registered, not the old one. If
+	// schema cleanup were missing, HasNamespace would have skipped the
+	// re-registration and IsRegistered would still return false for
+	// replacement_attr while returning true for original_attr.
+	assert.True(t, registry.IsRegistered("widget", "replacement_attr"),
+		"replacement_attr from the new schema must be registered after re-registration")
+	assert.True(t, registry.IsRegistered("widget", "another_attr"),
+		"another_attr from the new schema must be registered after re-registration")
+	assert.False(t, registry.IsRegistered("widget", "original_attr"),
+		"original_attr from the old schema must no longer be registered after replacement")
 }
 
 func TestResolverRegisterEnvironmentProvider(t *testing.T) {

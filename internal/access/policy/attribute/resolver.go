@@ -80,6 +80,17 @@ func (r *Resolver) RegisterProvider(provider AttributeProvider) error {
 // registered before a later load-time step (schema validation, policy
 // install) failed.
 //
+// Removes:
+//   - the provider from r.providers
+//   - the namespace from r.providerOrder
+//   - the per-namespace circuit breaker
+//   - the schema from r.registry (via UnregisterForRollback)
+//
+// The schema cleanup is critical: without it, a replacement provider
+// for the same namespace with a DIFFERENT schema would have its schema
+// silently dropped because RegisterProvider's HasNamespace check would
+// short-circuit re-registration.
+//
 // Returns true if a provider was removed, false if the namespace had
 // no registered provider.
 //
@@ -98,6 +109,11 @@ func (r *Resolver) UnregisterProvider(namespace string) bool {
 		}
 	}
 	delete(r.circuitBreakers, namespace)
+	// Remove the schema from the registry so a replacement provider with
+	// a different schema can register cleanly. Safe here because rollback
+	// only runs before any policies that reference this namespace could
+	// have been installed.
+	r.registry.UnregisterForRollback(namespace)
 	return true
 }
 

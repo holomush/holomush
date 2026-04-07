@@ -217,24 +217,25 @@ Current sequence in `Manager.loadPlugin`:
 4. CheckManifestWarnings(manifest, schemas)  // non-fatal; Warning 3 is Sharp Edge 2's current defense
 ```
 
-New sequence:
+New sequence (as shipped):
 
 ```text
 1. host.Load(ctx, manifest, pluginDir)
-2. discoverAndRegisterAttributes(ctx, host, dp)
-3. ValidateManifestPolicySchemas(manifest, schemas)  // NEW: hard failure here
-4. InstallPluginPoliciesWithManifest(ctx, manifest, manifest.Policies)
-5. CheckManifestWarnings(manifest, schemas)          // Warning 3 case removed
+2. discoverAndRegisterAttributes(ctx, host, dp)        // registers PluginAttributeProvider on shared resolver
+3. ValidateManifestPolicySchemas(dp.Manifest, schemas) // hard failure here, runs before any DB write
+4. InstallPluginPoliciesWithManifest(ctx, dp.Manifest, dp.Manifest.Policies)
+5. CheckManifestWarnings(dp.Manifest)                  // single-arg; Warning 3 removed; schemas no longer needed
 ```
 
 Validation MUST run before policy install so the database stays clean on failure.
 
 ### Rollback on validation failure
 
-The existing install-failure rollback path at `manager.go:488-493` MUST be extended to handle the validation failure case:
+The validator-failure branch in `Manager.loadPlugin` unwinds the provider registrations performed in step 2 BEFORE calling `host.Unload`:
 
 ```go
 if valErr := ValidateManifestPolicySchemas(dp.Manifest, schemas); valErr != nil {
+    m.unregisterPluginProviders(dp.Manifest.Name, dp.Manifest.ResourceTypes, len(dp.Manifest.ResourceTypes))
     if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
         slog.Error("failed to rollback plugin load after schema validation failure",
             "plugin", dp.Manifest.Name, "error", unloadErr)
@@ -244,7 +245,13 @@ if valErr := ValidateManifestPolicySchemas(dp.Manifest, schemas); valErr != nil 
 }
 ```
 
-**Implementation note:** `host.Unload` tears down the plugin process but may not unregister the `PluginAttributeProvider` from the shared `attribute.Resolver`. This is flagged as an implementation-time investigation — if the unregistration is missing, add an `UnregisterProvider` method to the resolver and call it during rollback. This is a rollback completeness concern that T35 in the test plan is designed to catch.
+**Implementation finding (Task 14):** The Task 14 investigation found that `host.Unload` does NOT unregister `PluginAttributeProvider` from the shared `attribute.Resolver`, AND it found four additional rollback leak paths beyond the validator-failure branch (partial-loop failure inside `discoverAndRegisterAttributes`, policy-install failure, and three service-registration failures). All five gaps are now closed by:
+
+- New `Resolver.UnregisterProvider(namespace) bool` — removes the provider, providerOrder entry, circuit breaker, AND the schema from the underlying registry (the schema cleanup uses `SchemaRegistry.UnregisterForRollback`, which bypasses the policy-reference safety check that `RemoveNamespace` performs because rollback runs before any policies could possibly reference the namespace).
+- New `plugins.UnregisterPluginProviderFunc` type + `WithAttributeProviderUnregistrar` Manager option — symmetric with the existing registrar option.
+- New `Manager.unregisterPluginProviders(pluginName, resourceTypes, upTo int)` helper — supports partial unwinds via `upTo` for the in-loop failure case.
+
+T35 (`TestManagerLoadAllUnregistersAttributeProviderWhenSchemaValidationFailsAfterRegistration`) lives at the manager level and asserts the registrar+unregistrar pair is invoked correctly when validation fails.
 
 ### Edge cases
 
@@ -284,7 +291,7 @@ Location: `internal/access/policy/attribute/resolver_test.go`
 | T17 | `TestResolverResolveSubjectAttributesPopulatesActionNameEvenWhenEmpty` | Empty action permitted (matches `Resolve`) |
 | T18 | `TestResolverResolveSubjectAttributesReturnsErrorWhenContextAlreadyCancelled` | Context cancellation honored |
 | T19 | `TestResolverResolveSubjectAttributesRecoversFromPanickingProvider` | Panic safety via `safeResolve` reuse |
-| T20 | `TestResolverResolveSubjectAttributesPanicsOnReentrance` | Re-entrance guard shared with `Resolve` |
+| T20 | `TestResolverResolveSubjectAttributesDetectsReentranceAndReturnsErrorNotInfiniteLoop` | Re-entrance guard fires; the panic is caught by `safeResolve` and surfaced as a provider-panic error (not propagated to the caller) |
 | T21 | `TestResolverResolveSubjectAttributesProducesSameSubjectBagAsResolveForSameInput` | Cross-check invariant — C1 is behavior-preserving for subject path |
 | T39 | `TestResolverResolveSubjectAttributesIsSafeForConcurrentCalls` | Thread safety smoke test with `-race` |
 
@@ -294,12 +301,12 @@ Location: `internal/access/policy/engine_test.go`
 
 | ID | Name | What it proves |
 |---|---|---|
-| T5 | `TestEngineCanPerformActionCallsResolveSubjectAttributesNotResolve` | Engine wired to new path |
+| T5 | `TestEngineCanPerformActionDoesNotInvokeResourceProvidersWhenCapabilityCheckRuns` | Engine wired to new path — uses a tracking provider to assert resource provider calls stay at zero, AND asserts subject resolution did run (guards against silent no-op regression) |
 | T6 | `TestEngineCanPerformActionPermitsOptimisticallyForPermitReferencingResourceAttrs` | Optimistic permit branch still fires |
-| T7 | `TestEngineCanPerformActionFailsClosedWhenResolveSubjectAttributesErrors` | Fail-closed via new path |
-| T22 | `TestEngineCanPerformActionReturnsErrEngineDegradedWithoutCallingResolver` | Degraded mode short-circuits |
-| T23 | `TestEngineCanPerformActionReturnsErrorWhenContextAlreadyCancelled` | Cancellation short-circuits |
-| T24 | `TestEngineCanPerformActionRejectsMalformedSubjectRef` | Format validation precedes resolver call |
+| T7 | `TestEngineCanPerformActionAttributeResolutionError` (pre-existing) | Fail-closed via new path — pre-existing test passes after refactor as regression coverage |
+| T22 | `TestEngineCanPerformActionDegradedMode` (pre-existing) | Degraded mode short-circuits — pre-existing test passes after refactor as regression coverage |
+| T23 | `TestEngineCanPerformActionContextCancelled` (pre-existing) | Cancellation short-circuits — pre-existing test passes after refactor as regression coverage |
+| T24 | `TestEngine_CanPerformAction_InvalidSubjectFormat` (pre-existing) | Format validation precedes resolver call — pre-existing test passes after refactor as regression coverage |
 
 ### Layer 3 — Manifest validator unit tests
 
@@ -401,8 +408,8 @@ The original spec MUST NOT be rewritten; the addendum preserves the historical r
 |---|---|
 | `pkg/plugin/service.go` | `AttributeResolverProvider` comment: state the host invariant that `ResolveResource` is only called with real instance IDs |
 | `internal/access/policy/engine.go` | `CanPerformAction` doc comment: remove "synthetic request" language; add "resource providers are never invoked" |
-| `internal/access/policy/attribute/resolver.go` | `ResolveSubjectAttributes` doc comment per Section 4a; emphasize "never calls resource providers" |
-| `internal/plugin/manifest_warnings.go` | `ValidateManifestPolicySchemas` doc comment with rationale for first-error return |
+| `internal/access/policy/attribute/resolver.go` | `ResolveSubjectAttributes` doc comment per Section 4a; emphasize "never calls resource providers". Also `UnregisterProvider` doc comment covers the schema-cleanup invariant. |
+| `internal/plugin/policy_schema_validator.go` | `ValidateManifestPolicySchemas` doc comment with rationale for first-error return (extracted from `manifest_warnings.go` Warning 3) |
 
 ### Bead cross-references
 
