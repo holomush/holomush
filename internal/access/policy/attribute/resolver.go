@@ -75,6 +75,32 @@ func (r *Resolver) RegisterProvider(provider AttributeProvider) error {
 	return nil
 }
 
+// UnregisterProvider removes a provider from the resolver by namespace.
+// Used during plugin load rollback to clean up a provider that was
+// registered before a later load-time step (schema validation, policy
+// install) failed.
+//
+// Returns true if a provider was removed, false if the namespace had
+// no registered provider.
+//
+// Thread safety: Resolver register/unregister paths are not mutex-guarded.
+// Callers MUST only invoke this during plugin load/unload, before Resolve
+// is called concurrently. This matches the RegisterProvider contract.
+func (r *Resolver) UnregisterProvider(namespace string) bool {
+	if _, exists := r.providers[namespace]; !exists {
+		return false
+	}
+	delete(r.providers, namespace)
+	for i, ns := range r.providerOrder {
+		if ns == namespace {
+			r.providerOrder = append(r.providerOrder[:i], r.providerOrder[i+1:]...)
+			break
+		}
+	}
+	delete(r.circuitBreakers, namespace)
+	return true
+}
+
 // RegisterEnvironmentProvider registers an environment provider
 func (r *Resolver) RegisterEnvironmentProvider(provider EnvironmentProvider) error {
 	namespace := provider.Namespace()

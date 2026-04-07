@@ -25,6 +25,17 @@ import (
 // that calls resolver.RegisterProvider(provider).
 type RegisterPluginProviderFunc func(provider *PluginAttributeProvider) error
 
+// UnregisterPluginProviderFunc is a callback that removes a plugin attribute
+// provider from the ABAC attribute resolver by namespace. The server wiring
+// layer provides a closure that calls resolver.UnregisterProvider(namespace).
+//
+// Used during plugin load rollback to unwind provider registrations when a
+// later load-time step (schema validation, policy install) fails. If the
+// registrar callback is set but the unregistrar is nil, the manager logs a
+// warning on rollback — the resolver will retain a stale reference to a
+// plugin that never finished loading.
+type UnregisterPluginProviderFunc func(namespace string) bool
+
 // Error codes returned by the plugin manager. Tests should check these via
 // errutil.AssertErrorCode rather than substring matching error messages.
 const (
@@ -42,10 +53,11 @@ type Manager struct {
 	hostCaps            map[Host]hostCapabilities // optional interfaces, cached at registration
 	pluginHosts         map[string]Host           // maps plugin name → owning host
 	policyInstaller     PluginPolicyInstaller
-	registerProvider    RegisterPluginProviderFunc // optional, registers plugin attribute providers
-	registry            *ServiceRegistry           // optional, enables DAG resolution
-	trustAllowlist      map[string]bool            // server-side trust escalation allowlist
-	gracefulDegradation bool                       // if true, LoadAll continues despite plugin failures
+	registerProvider    RegisterPluginProviderFunc   // optional, registers plugin attribute providers
+	unregisterProvider  UnregisterPluginProviderFunc // optional, unregisters plugin attribute providers on rollback
+	registry            *ServiceRegistry             // optional, enables DAG resolution
+	trustAllowlist      map[string]bool              // server-side trust escalation allowlist
+	gracefulDegradation bool                         // if true, LoadAll continues despite plugin failures
 	aliasSeeder         AliasSeeder
 	aliasCache          *command.AliasCache
 	loaded              map[string]*DiscoveredPlugin
@@ -83,6 +95,18 @@ func WithAliasSeeder(seeder AliasSeeder, cache *command.AliasCache) ManagerOptio
 func WithAttributeProviderRegistrar(fn RegisterPluginProviderFunc) ManagerOption {
 	return func(m *Manager) {
 		m.registerProvider = fn
+	}
+}
+
+// WithAttributeProviderUnregistrar sets a callback used to remove plugin
+// attribute providers from the ABAC resolver when a plugin load fails
+// after provider registration has already occurred. Server wiring SHOULD
+// pass both WithAttributeProviderRegistrar and WithAttributeProviderUnregistrar
+// as a pair — otherwise failed loads leak dangling providers into the
+// resolver registry.
+func WithAttributeProviderUnregistrar(fn UnregisterPluginProviderFunc) ManagerOption {
+	return func(m *Manager) {
+		m.unregisterProvider = fn
 	}
 }
 
@@ -410,6 +434,40 @@ func (m *Manager) resolveLoadOrder(discovered []*DiscoveredPlugin) []*Discovered
 	return discovered
 }
 
+// unregisterPluginProviders removes all attribute providers that were
+// registered for a plugin's declared resource types. It is called during
+// load rollback to keep the resolver registry consistent with the set of
+// successfully loaded plugins.
+//
+// `upTo` limits the slice that will be unregistered — callers that fail
+// partway through the registration loop pass the index of the last
+// successfully-registered resource type so they unregister only what they
+// actually registered.
+//
+// If the unregister callback is not configured but the register callback
+// is, a warning is logged — the resolver will retain stale providers.
+func (m *Manager) unregisterPluginProviders(pluginName string, resourceTypes []string, upTo int) {
+	if m.registerProvider == nil {
+		return // registrar not wired; nothing was ever registered
+	}
+	if upTo > len(resourceTypes) {
+		upTo = len(resourceTypes)
+	}
+	if upTo <= 0 {
+		return
+	}
+	if m.unregisterProvider == nil {
+		slog.Warn("cannot unregister plugin attribute providers on rollback: "+
+			"WithAttributeProviderRegistrar configured but WithAttributeProviderUnregistrar is not",
+			"plugin", pluginName,
+			"leaked_namespaces", resourceTypes[:upTo])
+		return
+	}
+	for _, rt := range resourceTypes[:upTo] {
+		_ = m.unregisterProvider(rt)
+	}
+}
+
 // loadPlugin loads a single discovered plugin.
 //
 // Design: Returns nil (not error) for unsupported configurations to support
@@ -487,6 +545,10 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 	// "type") is a fatal load error per the Plugin ABAC Hardening spec
 	// (2026-04-07).
 	if valErr := ValidateManifestPolicySchemas(dp.Manifest, schemas); valErr != nil {
+		// Unregister attribute providers that were added during
+		// discoverAndRegisterAttributes so the resolver doesn't retain
+		// dangling references to a plugin that never finished loading.
+		m.unregisterPluginProviders(dp.Manifest.Name, dp.Manifest.ResourceTypes, len(dp.Manifest.ResourceTypes))
 		if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
 			slog.Error("failed to rollback plugin load after schema validation failure",
 				"plugin", dp.Manifest.Name, "error", unloadErr)
@@ -500,6 +562,9 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 	if m.policyInstaller != nil && len(dp.Manifest.Policies) > 0 {
 		installErr := m.policyInstaller.InstallPluginPoliciesWithManifest(ctx, dp.Manifest, dp.Manifest.Policies)
 		if installErr != nil {
+			// Unregister providers added during discoverAndRegisterAttributes
+			// — same rationale as the schema-validation branch above.
+			m.unregisterPluginProviders(dp.Manifest.Name, dp.Manifest.ResourceTypes, len(dp.Manifest.ResourceTypes))
 			if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
 				slog.Error("failed to rollback plugin load after policy install failure",
 					"plugin", dp.Manifest.Name, "error", unloadErr)
@@ -521,6 +586,8 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 	if m.registry != nil && len(dp.Manifest.Provides) > 0 {
 		connProvider := m.capabilitiesFor(host).connProvider
 		if connProvider == nil {
+			// Rollback attribute providers registered earlier in loadPlugin.
+			m.unregisterPluginProviders(dp.Manifest.Name, dp.Manifest.ResourceTypes, len(dp.Manifest.ResourceTypes))
 			return oops.Code(CodeHostMissingConnProvider).
 				In("manager").
 				With("plugin", dp.Manifest.Name).
@@ -528,6 +595,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 		}
 		conn, connErr := connProvider.PluginConn(dp.Manifest.Name)
 		if connErr != nil {
+			m.unregisterPluginProviders(dp.Manifest.Name, dp.Manifest.ResourceTypes, len(dp.Manifest.ResourceTypes))
 			return oops.In("manager").
 				With("plugin", dp.Manifest.Name).
 				Wrapf(connErr, "get plugin connection for service registration")
@@ -545,6 +613,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 				for _, name := range registered {
 					_ = m.registry.Deregister(name) //nolint:errcheck // best-effort cleanup
 				}
+				m.unregisterPluginProviders(dp.Manifest.Name, dp.Manifest.ResourceTypes, len(dp.Manifest.ResourceTypes))
 				return oops.In("manager").
 					With("plugin", dp.Manifest.Name).
 					With("service", svcName).
@@ -614,7 +683,7 @@ func (m *Manager) discoverAndRegisterAttributes(ctx context.Context, host Host, 
 	}
 
 	if m.registerProvider != nil {
-		for _, rt := range dp.Manifest.ResourceTypes {
+		for i, rt := range dp.Manifest.ResourceTypes {
 			provider := NewPluginAttributeProvider(rt, arClient, schemas[rt])
 			if regErr := m.registerProvider(provider); regErr != nil {
 				// Provider registration failure must be fatal — the plugin
@@ -623,6 +692,10 @@ func (m *Manager) discoverAndRegisterAttributes(ctx context.Context, host Host, 
 				// silently fail at evaluation. This is consistent with how
 				// GetSchema, policy installation, and service registration
 				// failures are handled.
+				//
+				// Rollback: unregister any providers that were added in
+				// previous iterations of this loop before returning.
+				m.unregisterPluginProviders(pluginName, dp.Manifest.ResourceTypes, i)
 				if unloadErr := host.Unload(ctx, pluginName); unloadErr != nil {
 					slog.Error("failed to rollback plugin after attribute provider registration failure",
 						"plugin", pluginName, "error", unloadErr)

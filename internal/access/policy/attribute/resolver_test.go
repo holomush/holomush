@@ -143,6 +143,40 @@ func TestResolver_RegisterProvider(t *testing.T) {
 	}
 }
 
+func TestResolverUnregisterProviderRemovesRegisteredProviderAndFreesNamespaceForReregistration(t *testing.T) {
+	registry := NewSchemaRegistry()
+	resolver := NewResolver(registry)
+
+	// Register two providers so we can assert selective removal and
+	// preservation of providerOrder for the survivor.
+	widgetProvider := newResolverMockAttributeProvider("widget")
+	characterProvider := newResolverMockAttributeProvider("character")
+	require.NoError(t, resolver.RegisterProvider(widgetProvider))
+	require.NoError(t, resolver.RegisterProvider(characterProvider))
+
+	// Unregister widget: should return true, remove from providers map,
+	// remove from providerOrder, and drop the circuit breaker.
+	removed := resolver.UnregisterProvider("widget")
+	assert.True(t, removed, "UnregisterProvider should return true for a registered namespace")
+	assert.NotContains(t, resolver.providers, "widget")
+	assert.NotContains(t, resolver.circuitBreakers, "widget")
+	assert.NotContains(t, resolver.providerOrder, "widget")
+	assert.Contains(t, resolver.providers, "character", "unrelated provider must remain registered")
+	assert.Contains(t, resolver.providerOrder, "character")
+
+	// Unregister a namespace that was never registered: should return false
+	// and be a safe no-op.
+	removed = resolver.UnregisterProvider("nonexistent")
+	assert.False(t, removed, "UnregisterProvider should return false for an unknown namespace")
+
+	// After rollback, the namespace must be free for re-registration —
+	// otherwise a retry after a failed load would collide with the stale
+	// entry and produce a confusing "already registered" error.
+	replacementProvider := newResolverMockAttributeProvider("widget")
+	require.NoError(t, resolver.RegisterProvider(replacementProvider),
+		"namespace must be available for re-registration after UnregisterProvider")
+}
+
 func TestResolverRegisterEnvironmentProvider(t *testing.T) {
 	registry := NewSchemaRegistry()
 	resolver := NewResolver(registry)
