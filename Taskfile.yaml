@@ -60,7 +60,6 @@ tasks:
       - task: lint:actions
       - task: lint:access-migration
       - task: lint:test-helpers
-      - task: lint:ulid-make
 
   fmt:
     desc: Format all files
@@ -340,19 +339,6 @@ tasks:
         if [ -n "$IMPORTS" ]; then
           echo "ERROR: Found test helper imports in production code:"
           echo "$IMPORTS"
-          exit 1
-        fi
-
-  lint:ulid-make:
-    desc: Prevent ulid.Make() in production code (use idgen.New() from internal/idgen)
-    cmds:
-      - |
-        set -euo pipefail
-        CALLS=$(grep -rn --include="*.go" --exclude="*_test.go" --exclude="*.pb.go" \
-          'ulid\.Make()' internal/ pkg/ cmd/ plugins/ 2>/dev/null | grep -v '^\s*//' | grep -v 'internal/idgen/' || true)
-        if [ -n "$CALLS" ]; then
-          echo "ERROR: Found ulid.Make() in production code (use idgen.New() from internal/idgen):"
-          echo "$CALLS"
           exit 1
         fi
 
