@@ -6,6 +6,8 @@ syntax = "proto3";
 
 package holomush.plugin.v1;
 
+import "buf/validate/validate.proto";
+
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1";
 
 // PluginService is called by the go-plugin host to send events and commands to binary plugins.
@@ -62,31 +64,31 @@ message InitResponse {
 // Compatible with pkg/plugin.Event but uses protobuf types.
 message Event {
   // Unique event identifier (ULID string).
-  string id = 1;
+  string id = 1 [(buf.validate.field).string.min_len = 1];
   // Stream the event belongs to (e.g., "location:loc_abc123").
-  string stream = 2;
+  string stream = 2 [(buf.validate.field).string.min_len = 1];
   // Event type (e.g., "say", "pose", "arrive", "leave", "system").
-  string type = 3;
+  string type = 3 [(buf.validate.field).string.min_len = 1];
   // Timestamp in Unix milliseconds.
   int64 timestamp = 4;
   // Actor kind as string (e.g., "character", "system", "plugin").
   // Using string instead of enum for flexibility and compatibility.
-  string actor_kind = 5;
+  string actor_kind = 5 [(buf.validate.field).string.min_len = 1];
   // Actor identifier.
-  string actor_id = 6;
+  string actor_id = 6 [(buf.validate.field).string.min_len = 1];
   // JSON-encoded payload.
-  string payload = 7;
+  string payload = 7 [(buf.validate.field).string.max_len = 65536];
 }
 
 // EmitEvent represents an event that a plugin wants to emit.
 // Compatible with pkg/plugin.EmitEvent.
 message EmitEvent {
   // Target stream for the event.
-  string stream = 1;
+  string stream = 1 [(buf.validate.field).string.min_len = 1];
   // Event type.
-  string type = 2;
+  string type = 2 [(buf.validate.field).string.min_len = 1];
   // JSON-encoded payload.
-  string payload = 3;
+  string payload = 3 [(buf.validate.field).string.max_len = 65536];
 }
 
 // HandleEventRequest wraps an event for delivery to the plugin.
@@ -104,21 +106,21 @@ message HandleEventResponse {
 // CommandRequest carries context for a plugin command invocation.
 message CommandRequest {
   // Parsed command name (e.g., "say", "dig").
-  string command = 1;
+  string command = 1 [(buf.validate.field).string.min_len = 1];
   // Everything after the command name.
-  string args = 2;
+  string args = 2 [(buf.validate.field).string.max_len = 8192];
   // What the player actually typed (alias support).
-  string raw_input = 3;
+  string raw_input = 3 [(buf.validate.field).string.max_len = 8192];
   // Invoking character ULID.
-  string character_id = 4;
+  string character_id = 4 [(buf.validate.field).string.min_len = 1];
   // Character display name.
-  string character_name = 5;
+  string character_name = 5 [(buf.validate.field).string.min_len = 1];
   // Character's current location ULID.
-  string location_id = 6;
+  string location_id = 6 [(buf.validate.field).string.min_len = 1];
   // Active session ULID.
-  string session_id = 7;
+  string session_id = 7 [(buf.validate.field).string.min_len = 1];
   // Player account ULID.
-  string player_id = 8;
+  string player_id = 8 [(buf.validate.field).string.min_len = 1];
 }
 
 // CommandStatus maps to pkg/plugin.CommandStatus values.
@@ -135,7 +137,7 @@ message CommandResponse {
   // Outcome category.
   CommandStatus status = 1;
   // Synchronous text output to the invoking player.
-  string output = 2;
+  string output = 2 [(buf.validate.field).string.max_len = 8192];
   // Events to append to the event store.
   repeated EmitEvent events = 3;
 }
@@ -155,23 +157,23 @@ message HandleCommandResponse {
 // --- PluginHostService messages ---
 
 message PluginHostServiceEmitEventRequest {
-  string stream = 1;
-  string event_type = 2;
+  string stream = 1 [(buf.validate.field).string.min_len = 1];
+  string event_type = 2 [(buf.validate.field).string.min_len = 1];
   bytes payload = 3;
 }
 
 message PluginHostServiceEmitEventResponse {}
 
 message PluginHostServiceLogRequest {
-  string level = 1;
-  string message = 2;
+  string level = 1 [(buf.validate.field).string.min_len = 1];
+  string message = 2 [(buf.validate.field).string.max_len = 8192];
 }
 
 message PluginHostServiceLogResponse {}
 
 message PluginHostServiceKVGetRequest {
-  string plugin_name = 1;
-  string key = 2;
+  string plugin_name = 1 [(buf.validate.field).string.min_len = 1];
+  string key = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 message PluginHostServiceKVGetResponse {
@@ -180,16 +182,16 @@ message PluginHostServiceKVGetResponse {
 }
 
 message PluginHostServiceKVSetRequest {
-  string plugin_name = 1;
-  string key = 2;
+  string plugin_name = 1 [(buf.validate.field).string.min_len = 1];
+  string key = 2 [(buf.validate.field).string.min_len = 1];
   string value = 3;
 }
 
 message PluginHostServiceKVSetResponse {}
 
 message PluginHostServiceKVDeleteRequest {
-  string plugin_name = 1;
-  string key = 2;
+  string plugin_name = 1 [(buf.validate.field).string.min_len = 1];
+  string key = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 message PluginHostServiceKVDeleteResponse {}

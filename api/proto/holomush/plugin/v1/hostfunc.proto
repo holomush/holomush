@@ -6,6 +6,7 @@ syntax = "proto3";
 
 package holomush.plugin.v1;
 
+import "buf/validate/validate.proto";
 import "holomush/plugin/v1/plugin.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1";
@@ -73,7 +74,7 @@ message EmitEventResponse {
 // QueryLocationRequest requests information about a location.
 message QueryLocationRequest {
   // Location identifier.
-  string location_id = 1;
+  string location_id = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 // QueryLocationResponse contains location information.
@@ -87,17 +88,17 @@ message QueryLocationResponse {
 // LocationInfo contains basic location information.
 message LocationInfo {
   // Location identifier.
-  string id = 1;
+  string id = 1 [(buf.validate.field).string.min_len = 1];
   // Location name/title.
-  string name = 2;
+  string name = 2 [(buf.validate.field).string.min_len = 1];
   // Location description.
-  string description = 3;
+  string description = 3 [(buf.validate.field).string.max_len = 8192];
 }
 
 // QueryCharacterRequest requests information about a character.
 message QueryCharacterRequest {
   // Character identifier.
-  string character_id = 1;
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 // QueryCharacterResponse contains character information.
@@ -111,15 +112,15 @@ message QueryCharacterResponse {
 // CharacterInfo contains basic character information.
 message CharacterInfo {
   // Character identifier.
-  string id = 1;
+  string id = 1 [(buf.validate.field).string.min_len = 1];
   // Character name.
-  string name = 2;
+  string name = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 // QueryLocationCharactersRequest requests all characters in a location.
 message QueryLocationCharactersRequest {
   // Location identifier.
-  string location_id = 1;
+  string location_id = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 // QueryLocationCharactersResponse contains the list of characters.
@@ -133,7 +134,7 @@ message QueryLocationCharactersResponse {
 // KVGetRequest retrieves a value by key.
 message KVGetRequest {
   // Key to look up.
-  string key = 1;
+  string key = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 // KVGetResponse contains the retrieved value.
@@ -149,7 +150,7 @@ message KVGetResponse {
 // KVSetRequest stores a key-value pair.
 message KVSetRequest {
   // Key to store.
-  string key = 1;
+  string key = 1 [(buf.validate.field).string.min_len = 1];
   // Value to store.
   bytes value = 2;
 }
@@ -165,7 +166,7 @@ message KVSetResponse {
 // KVDeleteRequest removes a key.
 message KVDeleteRequest {
   // Key to delete.
-  string key = 1;
+  string key = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 // KVDeleteResponse indicates success or failure.
@@ -181,7 +182,7 @@ message LogRequest {
   // Log level.
   LogLevel level = 1;
   // Log message.
-  string message = 2;
+  string message = 2 [(buf.validate.field).string.max_len = 8192];
   // Additional structured fields.
   map<string, string> fields = 3;
 }
@@ -193,7 +194,7 @@ message LogResponse {}
 // Commands are filtered by the character's capabilities.
 message ListCommandsRequest {
   // Character identifier for capability filtering.
-  string character_id = 1;
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 // ListCommandsResponse contains the list of available commands.
@@ -207,19 +208,19 @@ message ListCommandsResponse {
 // CommandInfo contains basic command information for listing.
 message CommandInfo {
   // Command name.
-  string name = 1;
+  string name = 1 [(buf.validate.field).string.min_len = 1];
   // Short help description.
-  string help = 2;
+  string help = 2 [(buf.validate.field).string.max_len = 8192];
   // Usage pattern (e.g., "say <message>").
-  string usage = 3;
+  string usage = 3 [(buf.validate.field).string.max_len = 8192];
   // Source plugin name or "core".
-  string source = 4;
+  string source = 4 [(buf.validate.field).string.min_len = 1];
 }
 
 // GetCommandHelpRequest requests detailed help for a command.
 message GetCommandHelpRequest {
   // Command name to get help for.
-  string command_name = 1;
+  string command_name = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 // GetCommandHelpResponse contains detailed command help.
@@ -233,15 +234,15 @@ message GetCommandHelpResponse {
 // CommandHelpInfo contains detailed help for a command.
 message CommandHelpInfo {
   // Command name.
-  string name = 1;
+  string name = 1 [(buf.validate.field).string.min_len = 1];
   // Short help description.
-  string help = 2;
+  string help = 2 [(buf.validate.field).string.max_len = 8192];
   // Usage pattern.
-  string usage = 3;
+  string usage = 3 [(buf.validate.field).string.max_len = 8192];
   // Detailed markdown help text.
-  string help_text = 4;
+  string help_text = 4 [(buf.validate.field).string.max_len = 65536];
   // Required capabilities for this command.
   repeated string capabilities = 5;
   // Source plugin name or "core".
-  string source = 6;
+  string source = 6 [(buf.validate.field).string.min_len = 1];
 }

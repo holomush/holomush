@@ -10,6 +10,7 @@
 package pluginv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -462,7 +463,7 @@ var File_holomush_plugin_v1_attribute_proto protoreflect.FileDescriptor
 
 const file_holomush_plugin_v1_attribute_proto_rawDesc = "" +
 	"\n" +
-	"\"holomush/plugin/v1/attribute.proto\x12\x12holomush.plugin.v1\"\x12\n" +
+	"\"holomush/plugin/v1/attribute.proto\x12\x12holomush.plugin.v1\x1a\x1bbuf/validate/validate.proto\"\x12\n" +
 	"\x10GetSchemaRequest\"\xde\x01\n" +
 	"\x11GetSchemaResponse\x12_\n" +
 	"\x0eresource_types\x18\x01 \x03(\v28.holomush.plugin.v1.GetSchemaResponse.ResourceTypesEntryR\rresourceTypes\x1ah\n" +
@@ -475,10 +476,10 @@ const file_holomush_plugin_v1_attribute_proto_rawDesc = "" +
 	"attributes\x1a`\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x127\n" +
-	"\x05value\x18\x02 \x01(\x0e2!.holomush.plugin.v1.AttributeTypeR\x05value:\x028\x01\"^\n" +
-	"\x16ResolveResourceRequest\x12#\n" +
-	"\rresource_type\x18\x01 \x01(\tR\fresourceType\x12\x1f\n" +
-	"\vresource_id\x18\x02 \x01(\tR\n" +
+	"\x05value\x18\x02 \x01(\x0e2!.holomush.plugin.v1.AttributeTypeR\x05value:\x028\x01\"p\n" +
+	"\x16ResolveResourceRequest\x12,\n" +
+	"\rresource_type\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\fresourceType\x12(\n" +
+	"\vresource_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"resourceId\"\xd9\x01\n" +
 	"\x17ResolveResourceResponse\x12[\n" +
 	"\n" +

@@ -12,6 +12,7 @@
 package pluginv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -1398,86 +1399,86 @@ var File_holomush_plugin_v1_hostfunc_proto protoreflect.FileDescriptor
 
 const file_holomush_plugin_v1_hostfunc_proto_rawDesc = "" +
 	"\n" +
-	"!holomush/plugin/v1/hostfunc.proto\x12\x12holomush.plugin.v1\x1a\x1fholomush/plugin/v1/plugin.proto\"G\n" +
+	"!holomush/plugin/v1/hostfunc.proto\x12\x12holomush.plugin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fholomush/plugin/v1/plugin.proto\"G\n" +
 	"\x10EmitEventRequest\x123\n" +
 	"\x05event\x18\x01 \x01(\v2\x1d.holomush.plugin.v1.EmitEventR\x05event\"C\n" +
 	"\x11EmitEventResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"7\n" +
-	"\x14QueryLocationRequest\x12\x1f\n" +
-	"\vlocation_id\x18\x01 \x01(\tR\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"@\n" +
+	"\x14QueryLocationRequest\x12(\n" +
+	"\vlocation_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"locationId\"k\n" +
 	"\x15QueryLocationResponse\x12<\n" +
 	"\blocation\x18\x01 \x01(\v2 .holomush.plugin.v1.LocationInfoR\blocation\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"T\n" +
-	"\fLocationInfo\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x03 \x01(\tR\vdescription\":\n" +
-	"\x15QueryCharacterRequest\x12!\n" +
-	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\"o\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"p\n" +
+	"\fLocationInfo\x12\x17\n" +
+	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\x12\x1b\n" +
+	"\x04name\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12*\n" +
+	"\vdescription\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80@R\vdescription\"C\n" +
+	"\x15QueryCharacterRequest\x12*\n" +
+	"\fcharacter_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\"o\n" +
 	"\x16QueryCharacterResponse\x12?\n" +
 	"\tcharacter\x18\x01 \x01(\v2!.holomush.plugin.v1.CharacterInfoR\tcharacter\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"3\n" +
-	"\rCharacterInfo\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"A\n" +
-	"\x1eQueryLocationCharactersRequest\x12\x1f\n" +
-	"\vlocation_id\x18\x01 \x01(\tR\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"E\n" +
+	"\rCharacterInfo\x12\x17\n" +
+	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\x12\x1b\n" +
+	"\x04name\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"J\n" +
+	"\x1eQueryLocationCharactersRequest\x12(\n" +
+	"\vlocation_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"locationId\"z\n" +
 	"\x1fQueryLocationCharactersResponse\x12A\n" +
 	"\n" +
 	"characters\x18\x01 \x03(\v2!.holomush.plugin.v1.CharacterInfoR\n" +
 	"characters\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\" \n" +
-	"\fKVGetRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\"Q\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\")\n" +
+	"\fKVGetRequest\x12\x19\n" +
+	"\x03key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\"Q\n" +
 	"\rKVGetResponse\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\fR\x05value\x12\x14\n" +
 	"\x05found\x18\x02 \x01(\bR\x05found\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"6\n" +
-	"\fKVSetRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"?\n" +
+	"\fKVSetRequest\x12\x19\n" +
+	"\x03key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\fR\x05value\"?\n" +
 	"\rKVSetResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"#\n" +
-	"\x0fKVDeleteRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\"B\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\",\n" +
+	"\x0fKVDeleteRequest\x12\x19\n" +
+	"\x03key\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\"B\n" +
 	"\x10KVDeleteResponse\x12\x18\n" +
 	"\adeleted\x18\x01 \x01(\bR\adeleted\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"\xd9\x01\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\xe3\x01\n" +
 	"\n" +
 	"LogRequest\x122\n" +
-	"\x05level\x18\x01 \x01(\x0e2\x1c.holomush.plugin.v1.LogLevelR\x05level\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\x12B\n" +
+	"\x05level\x18\x01 \x01(\x0e2\x1c.holomush.plugin.v1.LogLevelR\x05level\x12\"\n" +
+	"\amessage\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80@R\amessage\x12B\n" +
 	"\x06fields\x18\x03 \x03(\v2*.holomush.plugin.v1.LogRequest.FieldsEntryR\x06fields\x1a9\n" +
 	"\vFieldsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\r\n" +
-	"\vLogResponse\"8\n" +
-	"\x13ListCommandsRequest\x12!\n" +
-	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\"i\n" +
+	"\vLogResponse\"A\n" +
+	"\x13ListCommandsRequest\x12*\n" +
+	"\fcharacter_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\"i\n" +
 	"\x14ListCommandsResponse\x12;\n" +
 	"\bcommands\x18\x01 \x03(\v2\x1f.holomush.plugin.v1.CommandInfoR\bcommands\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"c\n" +
-	"\vCommandInfo\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
-	"\x04help\x18\x02 \x01(\tR\x04help\x12\x14\n" +
-	"\x05usage\x18\x03 \x01(\tR\x05usage\x12\x16\n" +
-	"\x06source\x18\x04 \x01(\tR\x06source\":\n" +
-	"\x15GetCommandHelpRequest\x12!\n" +
-	"\fcommand_name\x18\x01 \x01(\tR\vcommandName\"m\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\x89\x01\n" +
+	"\vCommandInfo\x12\x1b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12\x1c\n" +
+	"\x04help\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80@R\x04help\x12\x1e\n" +
+	"\x05usage\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80@R\x05usage\x12\x1f\n" +
+	"\x06source\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06source\"C\n" +
+	"\x15GetCommandHelpRequest\x12*\n" +
+	"\fcommand_name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcommandName\"m\n" +
 	"\x16GetCommandHelpResponse\x12=\n" +
 	"\acommand\x18\x01 \x01(\v2#.holomush.plugin.v1.CommandHelpInfoR\acommand\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"\xa8\x01\n" +
-	"\x0fCommandHelpInfo\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
-	"\x04help\x18\x02 \x01(\tR\x04help\x12\x14\n" +
-	"\x05usage\x18\x03 \x01(\tR\x05usage\x12\x1b\n" +
-	"\thelp_text\x18\x04 \x01(\tR\bhelpText\x12\"\n" +
-	"\fcapabilities\x18\x05 \x03(\tR\fcapabilities\x12\x16\n" +
-	"\x06source\x18\x06 \x01(\tR\x06source*w\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\xd9\x01\n" +
+	"\x0fCommandHelpInfo\x12\x1b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12\x1c\n" +
+	"\x04help\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80@R\x04help\x12\x1e\n" +
+	"\x05usage\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80@R\x05usage\x12&\n" +
+	"\thelp_text\x18\x04 \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x04R\bhelpText\x12\"\n" +
+	"\fcapabilities\x18\x05 \x03(\tR\fcapabilities\x12\x1f\n" +
+	"\x06source\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06source*w\n" +
 	"\bLogLevel\x12\x19\n" +
 	"\x15LOG_LEVEL_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fLOG_LEVEL_DEBUG\x10\x01\x12\x12\n" +
