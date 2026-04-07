@@ -45,3 +45,26 @@ policies:
   - name: read-own-scene
     dsl: >-
       permit(principal is character, action in ["read"], resource is scene) when { resource.scene.owner == principal.id };
+  - name: end-own-scene
+    dsl: >-
+      permit(principal is character, action in ["end"], resource is scene) when { resource.scene.owner == principal.id &&
+      resource.scene.state in ["active", "paused"] };
+  - name: pause-own-scene
+    dsl: >-
+      permit(principal is character, action in ["pause"], resource is scene) when { resource.scene.owner == principal.id &&
+      resource.scene.state == "active" };
+  # PHASE 3 NOTE: this policy is replaced by `resume-any-member` when the
+  # scene_participants table lands. Per spec D6 (async safety), any member
+  # of a paused scene MUST be able to resume it — owner-only here is a
+  # deliberate Phase 2 limitation because Phase 2 has no participant model.
+  # Phase 3 deletes this policy and adds:
+  #   permit(principal is character, action in ["resume"], resource is scene)
+  #   when { resource.scene.state == "paused" && principal.id in resource.scene.participants };
+  - name: resume-own-scene
+    dsl: >-
+      permit(principal is character, action in ["resume"], resource is scene) when { resource.scene.owner == principal.id
+      && resource.scene.state == "paused" };
+  - name: update-own-scene
+    dsl: >-
+      permit(principal is character, action in ["update"], resource is scene) when { resource.scene.owner == principal.id
+      && resource.scene.state in ["active", "paused"] };
