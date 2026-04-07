@@ -181,7 +181,10 @@ func (m *MemStore) ReattachCAS(_ context.Context, id string) (bool, error) {
 	return true, nil
 }
 
-// UpdateCursors updates the event cursors for a session.
+// UpdateCursors updates event cursors with a per-key monotonicity guard.
+// Writes with a cursor lex-smaller-or-equal to the stored value are
+// silently ignored — this mirrors the PostgresSessionStore CAS so unit
+// tests exercise the same contract as production.
 func (m *MemStore) UpdateCursors(_ context.Context, id string, cursors map[string]ulid.ULID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -196,6 +199,11 @@ func (m *MemStore) UpdateCursors(_ context.Context, id string, cursors map[strin
 		info.EventCursors = make(map[string]ulid.ULID)
 	}
 	for k, v := range cursors {
+		existing, hasExisting := info.EventCursors[k]
+		if hasExisting && existing.String() >= v.String() {
+			// Regression or no-op; preserve the existing higher cursor.
+			continue
+		}
 		info.EventCursors[k] = v
 	}
 	return nil
