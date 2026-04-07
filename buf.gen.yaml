@@ -2,6 +2,12 @@
 version: v2
 managed:
   enabled: true
+  disable:
+    # Prevent managed mode from rewriting go_package for the protovalidate
+    # module; its generated Go lives under buf.build/go/protovalidate and
+    # must not be remapped into our local pkg/proto tree.
+    - module: buf.build/bufbuild/protovalidate
+      file_option: go_package
   override:
     - file_option: go_package_prefix
       value: github.com/holomush/holomush/pkg/proto

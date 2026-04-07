@@ -26,6 +26,9 @@ const (
 	SceneService_GetScene_FullMethodName        = "/holomush.scene.v1.SceneService/GetScene"
 	SceneService_CreateScene_FullMethodName     = "/holomush.scene.v1.SceneService/CreateScene"
 	SceneService_EndScene_FullMethodName        = "/holomush.scene.v1.SceneService/EndScene"
+	SceneService_PauseScene_FullMethodName      = "/holomush.scene.v1.SceneService/PauseScene"
+	SceneService_ResumeScene_FullMethodName     = "/holomush.scene.v1.SceneService/ResumeScene"
+	SceneService_UpdateScene_FullMethodName     = "/holomush.scene.v1.SceneService/UpdateScene"
 	SceneService_JoinScene_FullMethodName       = "/holomush.scene.v1.SceneService/JoinScene"
 	SceneService_LeaveScene_FullMethodName      = "/holomush.scene.v1.SceneService/LeaveScene"
 	SceneService_InviteToScene_FullMethodName   = "/holomush.scene.v1.SceneService/InviteToScene"
@@ -41,6 +44,9 @@ type SceneServiceClient interface {
 	GetScene(ctx context.Context, in *GetSceneRequest, opts ...grpc.CallOption) (*GetSceneResponse, error)
 	CreateScene(ctx context.Context, in *CreateSceneRequest, opts ...grpc.CallOption) (*CreateSceneResponse, error)
 	EndScene(ctx context.Context, in *EndSceneRequest, opts ...grpc.CallOption) (*EndSceneResponse, error)
+	PauseScene(ctx context.Context, in *PauseSceneRequest, opts ...grpc.CallOption) (*PauseSceneResponse, error)
+	ResumeScene(ctx context.Context, in *ResumeSceneRequest, opts ...grpc.CallOption) (*ResumeSceneResponse, error)
+	UpdateScene(ctx context.Context, in *UpdateSceneRequest, opts ...grpc.CallOption) (*UpdateSceneResponse, error)
 	JoinScene(ctx context.Context, in *JoinSceneRequest, opts ...grpc.CallOption) (*JoinSceneResponse, error)
 	LeaveScene(ctx context.Context, in *LeaveSceneRequest, opts ...grpc.CallOption) (*LeaveSceneResponse, error)
 	InviteToScene(ctx context.Context, in *InviteToSceneRequest, opts ...grpc.CallOption) (*InviteToSceneResponse, error)
@@ -90,6 +96,36 @@ func (c *sceneServiceClient) EndScene(ctx context.Context, in *EndSceneRequest, 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(EndSceneResponse)
 	err := c.cc.Invoke(ctx, SceneService_EndScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) PauseScene(ctx context.Context, in *PauseSceneRequest, opts ...grpc.CallOption) (*PauseSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PauseSceneResponse)
+	err := c.cc.Invoke(ctx, SceneService_PauseScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) ResumeScene(ctx context.Context, in *ResumeSceneRequest, opts ...grpc.CallOption) (*ResumeSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResumeSceneResponse)
+	err := c.cc.Invoke(ctx, SceneService_ResumeScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) UpdateScene(ctx context.Context, in *UpdateSceneRequest, opts ...grpc.CallOption) (*UpdateSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateSceneResponse)
+	err := c.cc.Invoke(ctx, SceneService_UpdateScene_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -154,6 +190,9 @@ type SceneServiceServer interface {
 	GetScene(context.Context, *GetSceneRequest) (*GetSceneResponse, error)
 	CreateScene(context.Context, *CreateSceneRequest) (*CreateSceneResponse, error)
 	EndScene(context.Context, *EndSceneRequest) (*EndSceneResponse, error)
+	PauseScene(context.Context, *PauseSceneRequest) (*PauseSceneResponse, error)
+	ResumeScene(context.Context, *ResumeSceneRequest) (*ResumeSceneResponse, error)
+	UpdateScene(context.Context, *UpdateSceneRequest) (*UpdateSceneResponse, error)
 	JoinScene(context.Context, *JoinSceneRequest) (*JoinSceneResponse, error)
 	LeaveScene(context.Context, *LeaveSceneRequest) (*LeaveSceneResponse, error)
 	InviteToScene(context.Context, *InviteToSceneRequest) (*InviteToSceneResponse, error)
@@ -180,6 +219,15 @@ func (UnimplementedSceneServiceServer) CreateScene(context.Context, *CreateScene
 }
 func (UnimplementedSceneServiceServer) EndScene(context.Context, *EndSceneRequest) (*EndSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EndScene not implemented")
+}
+func (UnimplementedSceneServiceServer) PauseScene(context.Context, *PauseSceneRequest) (*PauseSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PauseScene not implemented")
+}
+func (UnimplementedSceneServiceServer) ResumeScene(context.Context, *ResumeSceneRequest) (*ResumeSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResumeScene not implemented")
+}
+func (UnimplementedSceneServiceServer) UpdateScene(context.Context, *UpdateSceneRequest) (*UpdateSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateScene not implemented")
 }
 func (UnimplementedSceneServiceServer) JoinScene(context.Context, *JoinSceneRequest) (*JoinSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method JoinScene not implemented")
@@ -285,6 +333,60 @@ func _SceneService_EndScene_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SceneServiceServer).EndScene(ctx, req.(*EndSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_PauseScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).PauseScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_PauseScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).PauseScene(ctx, req.(*PauseSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_ResumeScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResumeSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).ResumeScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_ResumeScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).ResumeScene(ctx, req.(*ResumeSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_UpdateScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).UpdateScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_UpdateScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).UpdateScene(ctx, req.(*UpdateSceneRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -401,6 +503,18 @@ var SceneService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "EndScene",
 			Handler:    _SceneService_EndScene_Handler,
+		},
+		{
+			MethodName: "PauseScene",
+			Handler:    _SceneService_PauseScene_Handler,
+		},
+		{
+			MethodName: "ResumeScene",
+			Handler:    _SceneService_ResumeScene_Handler,
+		},
+		{
+			MethodName: "UpdateScene",
+			Handler:    _SceneService_UpdateScene_Handler,
 		},
 		{
 			MethodName: "JoinScene",
