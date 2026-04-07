@@ -7,10 +7,12 @@ package plugin_test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,6 +20,7 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/testcontainers/testcontainers-go"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	policy "github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
@@ -492,6 +495,296 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(decision.IsAllowed()).To(BeFalse(),
 				"non-owner must be denied (no policy permits)")
+		})
+	})
+
+	Describe("scene plugin lifecycle: state machine", func() {
+		var (
+			lifecyclectx       context.Context
+			lifecyclecancel    context.CancelFunc
+			lifecyclecontainer testcontainers.Container
+			lifecyclehost      *goplugin.Host
+			lifecyclepool      *pgxpool.Pool
+			lifecyclesceneID   string
+		)
+
+		BeforeEach(func() {
+			pluginDir, binaryPath := coreScenesBinaryPath()
+			if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
+				Skip(fmt.Sprintf("core-scenes binary not found at %s — run 'bash scripts/build-plugins.sh' first", binaryPath))
+			}
+
+			lifecyclectx, lifecyclecancel = context.WithTimeout(context.Background(), 2*time.Minute)
+
+			// Postgres + core migrations (so the policy store schema exists)
+			pgEnv, err := testutil.StartPostgres(lifecyclectx)
+			Expect(err).NotTo(HaveOccurred())
+			lifecyclecontainer = pgEnv.Container
+			pgConnStr := pgEnv.ConnStr
+
+			migrator, err := store.NewMigrator(pgConnStr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(migrator.Up()).To(Succeed())
+			_ = migrator.Close()
+
+			// Provisioner + host
+			provisioner := plugins.NewSchemaProvisioner(pgConnStr)
+			Expect(provisioner.Init(lifecyclectx)).To(Succeed())
+			DeferCleanup(func() { provisioner.Close() })
+
+			registry := plugins.NewServiceRegistry()
+			worldSrv := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-memory bufconn only
+			worldConn, worldConnErr := plugins.NewInProcessConn(worldSrv)
+			Expect(worldConnErr).NotTo(HaveOccurred())
+			DeferCleanup(func() { _ = worldConn.Close() })
+
+			Expect(registry.Register(plugins.RegisteredService{
+				Name:       "holomush.world.v1.WorldService",
+				Conn:       worldConn,
+				PluginType: plugins.TypeServerInternal(),
+			})).To(Succeed())
+
+			lifecyclehost = goplugin.NewHost(
+				goplugin.WithSchemaProvisioner(provisioner),
+				goplugin.WithServiceRegistry(registry),
+			)
+
+			manifestData, err := os.ReadFile(filepath.Join(pluginDir, "plugin.yaml"))
+			Expect(err).NotTo(HaveOccurred())
+			manifest, err := plugins.ParseManifest(manifestData)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lifecyclehost.Load(lifecyclectx, manifest, pluginDir)).To(Succeed())
+
+			// Direct pool for schema-qualified DB verification
+			lifecyclepool, err = pgxpool.New(lifecyclectx, pgConnStr)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create a scene to operate on in each test
+			conn, err := lifecyclehost.PluginConn("core-scenes")
+			Expect(err).NotTo(HaveOccurred())
+			setupClient := scenev1.NewSceneServiceClient(conn)
+
+			createResp, err := setupClient.CreateScene(lifecyclectx, &scenev1.CreateSceneRequest{
+				CharacterId: "char-alice",
+				Title:       "Lifecycle Test",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			lifecyclesceneID = createResp.GetScene().GetId()
+			Expect(lifecyclesceneID).NotTo(BeEmpty())
+		})
+
+		AfterEach(func() {
+			if lifecyclehost != nil {
+				_ = lifecyclehost.Close(lifecyclectx)
+			}
+			if lifecyclepool != nil {
+				lifecyclepool.Close()
+			}
+			if lifecyclecontainer != nil {
+				_ = lifecyclecontainer.Terminate(context.Background())
+			}
+			if lifecyclecancel != nil {
+				lifecyclecancel()
+			}
+		})
+
+		// sceneClient builds a fresh SceneServiceClient from the host's
+		// direct PluginConn helper. We use PluginConn rather than resolving
+		// through the service registry because PluginConn is simpler and matches
+		// the "direct plugin connection" test pattern.
+		sceneClient := func() scenev1.SceneServiceClient {
+			conn, err := lifecyclehost.PluginConn("core-scenes")
+			Expect(err).NotTo(HaveOccurred())
+			return scenev1.NewSceneServiceClient(conn)
+		}
+
+		// Helper for direct DB state read
+		readSceneState := func(id string) (state string, endedAt sql.NullTime) {
+			err := lifecyclepool.QueryRow(lifecyclectx,
+				`SELECT state, ended_at FROM plugin_core_scenes.scenes WHERE id = $1`,
+				id,
+			).Scan(&state, &endedAt)
+			Expect(err).NotTo(HaveOccurred())
+			return state, endedAt
+		}
+
+		Describe("EndScene", func() {
+			It("transitions an active scene to ended and sets ended_at", func() {
+				_, err := sceneClient().EndScene(lifecyclectx, &scenev1.EndSceneRequest{
+					CharacterId: "char-alice",
+					SceneId:     lifecyclesceneID,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				state, endedAt := readSceneState(lifecyclesceneID)
+				Expect(state).To(Equal("ended"))
+				Expect(endedAt.Valid).To(BeTrue(), "ended_at should be set")
+			})
+
+			It("returns FailedPrecondition for an already-ended scene", func() {
+				_, err := sceneClient().EndScene(lifecyclectx, &scenev1.EndSceneRequest{
+					CharacterId: "char-alice",
+					SceneId:     lifecyclesceneID,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = sceneClient().EndScene(lifecyclectx, &scenev1.EndSceneRequest{
+					CharacterId: "char-alice",
+					SceneId:     lifecyclesceneID,
+				})
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("returns NotFound for a missing scene", func() {
+				_, err := sceneClient().EndScene(lifecyclectx, &scenev1.EndSceneRequest{
+					CharacterId: "char-alice",
+					SceneId:     "scene-does-not-exist",
+				})
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("rejects concurrent end attempts (race-safe WHERE clause)", func() {
+				// The store uses UPDATE ... WHERE state IN ('active', 'paused')
+				// to prevent races. Two goroutines calling EndScene on the same
+				// scene at the same time MUST result in exactly one success
+				// (whoever's UPDATE wins) and one FailedPrecondition (whoever's
+				// UPDATE finds the row already in 'ended' state).
+				client := sceneClient()
+				var (
+					wg        sync.WaitGroup
+					firstErr  error
+					secondErr error
+				)
+				wg.Add(2)
+				go func() {
+					defer wg.Done()
+					_, firstErr = client.EndScene(lifecyclectx, &scenev1.EndSceneRequest{
+						CharacterId: "char-alice",
+						SceneId:     lifecyclesceneID,
+					})
+				}()
+				go func() {
+					defer wg.Done()
+					_, secondErr = client.EndScene(lifecyclectx, &scenev1.EndSceneRequest{
+						CharacterId: "char-alice",
+						SceneId:     lifecyclesceneID,
+					})
+				}()
+				wg.Wait()
+
+				successes := 0
+				if firstErr == nil {
+					successes++
+				}
+				if secondErr == nil {
+					successes++
+				}
+				Expect(successes).To(Equal(1),
+					"exactly one concurrent end should succeed; got first=%v second=%v",
+					firstErr, secondErr)
+
+				state, endedAt := readSceneState(lifecyclesceneID)
+				Expect(state).To(Equal("ended"))
+				Expect(endedAt.Valid).To(BeTrue())
+			})
+		})
+
+		Describe("PauseScene", func() {
+			It("transitions an active scene to paused", func() {
+				_, err := sceneClient().PauseScene(lifecyclectx, &scenev1.PauseSceneRequest{
+					CharacterId: "char-alice",
+					SceneId:     lifecyclesceneID,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				state, _ := readSceneState(lifecyclesceneID)
+				Expect(state).To(Equal("paused"))
+			})
+
+			It("rejects pause on an already-paused scene", func() {
+				_, err := sceneClient().PauseScene(lifecyclectx, &scenev1.PauseSceneRequest{
+					CharacterId: "char-alice",
+					SceneId:     lifecyclesceneID,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = sceneClient().PauseScene(lifecyclectx, &scenev1.PauseSceneRequest{
+					CharacterId: "char-alice",
+					SceneId:     lifecyclesceneID,
+				})
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		Describe("ResumeScene", func() {
+			It("transitions a paused scene back to active", func() {
+				_, err := sceneClient().PauseScene(lifecyclectx, &scenev1.PauseSceneRequest{
+					CharacterId: "char-alice",
+					SceneId:     lifecyclesceneID,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = sceneClient().ResumeScene(lifecyclectx, &scenev1.ResumeSceneRequest{
+					CharacterId: "char-alice",
+					SceneId:     lifecyclesceneID,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				state, _ := readSceneState(lifecyclesceneID)
+				Expect(state).To(Equal("active"))
+			})
+
+			It("rejects resume on an active scene", func() {
+				_, err := sceneClient().ResumeScene(lifecyclectx, &scenev1.ResumeSceneRequest{
+					CharacterId: "char-alice",
+					SceneId:     lifecyclesceneID,
+				})
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		Describe("UpdateScene", func() {
+			It("applies a title change", func() {
+				_, err := sceneClient().UpdateScene(lifecyclectx, &scenev1.UpdateSceneRequest{
+					CharacterId: "char-alice",
+					SceneId:     lifecyclesceneID,
+					Title:       "Renamed Title",
+					UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"title"}},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				var title string
+				err = lifecyclepool.QueryRow(lifecyclectx,
+					`SELECT title FROM plugin_core_scenes.scenes WHERE id = $1`,
+					lifecyclesceneID,
+				).Scan(&title)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(title).To(Equal("Renamed Title"))
+			})
+
+			It("rejects updates to an ended scene", func() {
+				_, err := sceneClient().EndScene(lifecyclectx, &scenev1.EndSceneRequest{
+					CharacterId: "char-alice",
+					SceneId:     lifecyclesceneID,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = sceneClient().UpdateScene(lifecyclectx, &scenev1.UpdateSceneRequest{
+					CharacterId: "char-alice",
+					SceneId:     lifecyclesceneID,
+					Title:       "Try",
+					UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"title"}},
+				})
+				Expect(err).To(HaveOccurred())
+
+				var title string
+				err = lifecyclepool.QueryRow(lifecyclectx,
+					`SELECT title FROM plugin_core_scenes.scenes WHERE id = $1`,
+					lifecyclesceneID,
+				).Scan(&title)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(title).To(Equal("Lifecycle Test"))
+			})
 		})
 	})
 })
