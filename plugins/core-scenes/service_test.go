@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 )
@@ -245,4 +246,208 @@ func TestSceneServiceGetSceneReturnsInternalForUnknownStoreError(t *testing.T) {
 	require.Error(t, err)
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.Internal, st.Code())
+}
+
+func TestSceneServiceEndSceneTransitionsScene(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{
+		ID:         "scene-1",
+		Title:      "Test",
+		OwnerID:    "char-alice",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+	}
+	svc := NewSceneServiceImpl(store)
+
+	resp, err := svc.EndScene(context.Background(), &scenev1.EndSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "scene-1", resp.GetScene().GetId())
+	assert.Equal(t, string(SceneStateEnded), resp.GetScene().GetState())
+}
+
+func TestSceneServiceEndSceneReturnsNotFoundForMissingScene(t *testing.T) {
+	svc := NewSceneServiceImpl(newFakeStore())
+
+	_, err := svc.EndScene(context.Background(), &scenev1.EndSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-missing",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.NotFound, st.Code())
+}
+
+func TestSceneServiceEndSceneReturnsFailedPreconditionForEndedScene(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-ended"] = &SceneRow{
+		ID:    "scene-ended",
+		State: string(SceneStateEnded),
+	}
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.EndScene(context.Background(), &scenev1.EndSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-ended",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.FailedPrecondition, st.Code())
+}
+
+func TestSceneServicePauseSceneTransitionsScene(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{
+		ID:         "scene-1",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+	}
+	svc := NewSceneServiceImpl(store)
+
+	resp, err := svc.PauseScene(context.Background(), &scenev1.PauseSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, string(SceneStatePaused), resp.GetScene().GetState())
+}
+
+func TestSceneServiceResumeSceneTransitionsScene(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{
+		ID:         "scene-1",
+		State:      string(SceneStatePaused),
+		Visibility: string(SceneVisibilityOpen),
+	}
+	svc := NewSceneServiceImpl(store)
+
+	resp, err := svc.ResumeScene(context.Background(), &scenev1.ResumeSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, string(SceneStateActive), resp.GetScene().GetState())
+}
+
+func TestSceneServiceUpdateSceneAppliesTitleChange(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{
+		ID:         "scene-1",
+		Title:      "Original",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+	}
+	svc := NewSceneServiceImpl(store)
+
+	resp, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-1",
+		Title:       "Updated",
+		UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"title"}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "Updated", resp.GetScene().GetTitle())
+}
+
+func TestSceneServiceUpdateSceneRejectsEndedScene(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-ended"] = &SceneRow{
+		ID:    "scene-ended",
+		State: string(SceneStateEnded),
+	}
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-ended",
+		Title:       "Try",
+		UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"title"}},
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.FailedPrecondition, st.Code())
+}
+
+func TestSceneServiceUpdateSceneAppliesContentWarnings(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{
+		ID:              "scene-1",
+		Title:           "T",
+		State:           string(SceneStateActive),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{"violence"},
+	}
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
+		CharacterId:     "char-alice",
+		SceneId:         "scene-1",
+		ContentWarnings: []string{"violence", "death"},
+		UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"content_warnings"}},
+	})
+	require.NoError(t, err)
+	got := store.scenes["scene-1"]
+	assert.ElementsMatch(t, []string{"violence", "death"}, got.ContentWarnings)
+}
+
+func TestSceneServiceUpdateSceneRejectsEmptyTitleInMask(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{
+		ID:         "scene-1",
+		Title:      "Original",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+	}
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-1",
+		Title:       "   ",
+		UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"title"}},
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.InvalidArgument, st.Code())
+	assert.Contains(t, st.Message(), "title")
+}
+
+func TestSceneServiceUpdateSceneRejectsUnknownMaskPath(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{
+		ID:    "scene-1",
+		State: string(SceneStateActive),
+	}
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-1",
+		UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"owner_id"}},
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.InvalidArgument, st.Code())
+	assert.Contains(t, st.Message(), "unknown update_mask path")
+}
+
+func TestSceneServiceUpdateSceneEmptyMaskIsNoOp(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-1"] = &SceneRow{
+		ID:         "scene-1",
+		Title:      "Unchanged",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+	}
+	svc := NewSceneServiceImpl(store)
+
+	resp, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-1",
+		// No UpdateMask — empty mask, no fields to apply
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "Unchanged", resp.GetScene().GetTitle())
 }

@@ -160,6 +160,218 @@ func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRe
 	}, nil
 }
 
+// EndScene transitions a scene to the ended state. Only the scene owner is
+// authorized (gated by ABAC end-own-scene policy). The transition is
+// rejected if the scene is already ended or archived (FailedPrecondition).
+//
+// The store's End method uses Postgres RETURNING * to atomically return
+// the post-update row, so this handler doesn't need a separate Get call.
+func (s *SceneServiceImpl) EndScene(ctx context.Context, req *scenev1.EndSceneRequest) (*scenev1.EndSceneResponse, error) {
+	ctx, span := startSpan(ctx, "scene.lifecycle.end",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+	)
+	defer span.End()
+
+	row, err := s.store.End(ctx, req.GetSceneId())
+	if err != nil {
+		recordError(span, err)
+		if grpcErr := mapTransitionError(err, req.GetSceneId()); grpcErr != nil {
+			return nil, grpcErr
+		}
+		slog.WarnContext(ctx, "scene.lifecycle.end store error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to end scene: %v", err)
+	}
+
+	metricSceneStateTransition(string(SceneStateActive)+"_or_paused", "ended", "rpc")
+	slog.InfoContext(ctx, "scene.lifecycle.end ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", row.ID,
+	)
+
+	return &scenev1.EndSceneResponse{Scene: rowToProto(row, row.CreatedAt)}, nil
+}
+
+// PauseScene transitions an active scene to paused. Owner-only.
+func (s *SceneServiceImpl) PauseScene(ctx context.Context, req *scenev1.PauseSceneRequest) (*scenev1.PauseSceneResponse, error) {
+	ctx, span := startSpan(ctx, "scene.lifecycle.pause",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+	)
+	defer span.End()
+
+	row, err := s.store.Pause(ctx, req.GetSceneId())
+	if err != nil {
+		recordError(span, err)
+		if grpcErr := mapTransitionError(err, req.GetSceneId()); grpcErr != nil {
+			return nil, grpcErr
+		}
+		slog.WarnContext(ctx, "scene.lifecycle.pause store error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to pause scene: %v", err)
+	}
+
+	metricSceneStateTransition("active", "paused", "rpc")
+	slog.InfoContext(ctx, "scene.lifecycle.pause ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", row.ID,
+	)
+
+	return &scenev1.PauseSceneResponse{Scene: rowToProto(row, row.CreatedAt)}, nil
+}
+
+// ResumeScene transitions a paused scene to active. Phase 2 is owner-only;
+// Phase 3 widens to any member per spec D6 (async safety).
+func (s *SceneServiceImpl) ResumeScene(ctx context.Context, req *scenev1.ResumeSceneRequest) (*scenev1.ResumeSceneResponse, error) {
+	ctx, span := startSpan(ctx, "scene.lifecycle.resume",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+	)
+	defer span.End()
+
+	row, err := s.store.Resume(ctx, req.GetSceneId())
+	if err != nil {
+		recordError(span, err)
+		if grpcErr := mapTransitionError(err, req.GetSceneId()); grpcErr != nil {
+			return nil, grpcErr
+		}
+		slog.WarnContext(ctx, "scene.lifecycle.resume store error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to resume scene: %v", err)
+	}
+
+	metricSceneStateTransition("paused", "active", "rpc")
+	slog.InfoContext(ctx, "scene.lifecycle.resume ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", row.ID,
+	)
+
+	return &scenev1.ResumeSceneResponse{Scene: rowToProto(row, row.CreatedAt)}, nil
+}
+
+// UpdateScene applies a partial update to mutable scene metadata. Owner-only.
+// Rejected for ended/archived scenes. Empty mask updates (no fields specified)
+// succeed as no-ops without touching the database.
+//
+// The update is driven by req.UpdateMask: each path in the mask is a field
+// name to apply from the request. Per-field semantic validation (e.g.,
+// "title cannot be empty when in the mask") happens in the switch statement
+// in buildSceneUpdate; protovalidate constraints in scene.proto handle the
+// wire-level max_len / enum-value checks.
+func (s *SceneServiceImpl) UpdateScene(ctx context.Context, req *scenev1.UpdateSceneRequest) (*scenev1.UpdateSceneResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.update_scene",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+	)
+	defer span.End()
+
+	update, err := buildSceneUpdate(req)
+	if err != nil {
+		recordError(span, err)
+		return nil, err // already a gRPC status error
+	}
+
+	row, err := s.store.Update(ctx, req.GetSceneId(), update)
+	if err != nil {
+		recordError(span, err)
+		if grpcErr := mapTransitionError(err, req.GetSceneId()); grpcErr != nil {
+			return nil, grpcErr
+		}
+		slog.WarnContext(ctx, "scene.service.update_scene store error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to update scene: %v", err)
+	}
+
+	slog.InfoContext(ctx, "scene.service.update_scene ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", row.ID,
+	)
+
+	return &scenev1.UpdateSceneResponse{Scene: rowToProto(row, row.CreatedAt)}, nil
+}
+
+// buildSceneUpdate iterates the request's FieldMask and constructs a store
+// SceneUpdate. Each mask path is matched to the corresponding request field
+// AND validated semantically (e.g., title cannot be empty even though the
+// proto annotation allows max_len-only).
+//
+// Returns a gRPC status error directly if validation fails — the caller
+// passes it through unchanged.
+//
+// Unknown mask paths return InvalidArgument so clients can't silently send
+// updates that get dropped.
+func buildSceneUpdate(req *scenev1.UpdateSceneRequest) (*SceneUpdate, error) {
+	update := &SceneUpdate{}
+	for _, path := range req.GetUpdateMask().GetPaths() {
+		switch path {
+		case "title":
+			t := strings.TrimSpace(req.GetTitle())
+			if t == "" {
+				return nil, status.Errorf(codes.InvalidArgument, "title cannot be empty or whitespace-only")
+			}
+			update.Title = &t
+		case "description":
+			d := req.GetDescription()
+			update.Description = &d
+		case "visibility":
+			v := req.GetVisibility()
+			if v == "" {
+				return nil, status.Errorf(codes.InvalidArgument, "visibility cannot be empty when in update_mask")
+			}
+			update.Visibility = &v
+		case "pose_order_mode":
+			p := req.GetPoseOrderMode()
+			if p == "" {
+				return nil, status.Errorf(codes.InvalidArgument, "pose_order_mode cannot be empty when in update_mask")
+			}
+			update.PoseOrder = &p
+		case "location_id":
+			l := req.GetLocationId()
+			update.LocationID = &l // empty string clears the location
+		case "content_warnings":
+			update.ContentWarnings = req.GetContentWarnings()
+			update.UpdateContentWarnings = true
+		case "tags":
+			update.Tags = req.GetTags()
+			update.UpdateTags = true
+		default:
+			return nil, status.Errorf(codes.InvalidArgument, "unknown update_mask path: %q", path)
+		}
+	}
+	return update, nil
+}
+
+// mapTransitionError translates store-layer transition errors into gRPC
+// status errors. Returns nil if the error is not a transition error
+// (caller should fall through to a generic Internal status).
+func mapTransitionError(err error, sceneID string) error {
+	var oe oops.OopsError
+	if !errors.As(err, &oe) {
+		return nil
+	}
+	switch oe.Code() {
+	case "SCENE_NOT_FOUND":
+		return status.Errorf(codes.NotFound, "scene not found: %s", sceneID)
+	case "SCENE_TRANSITION_FORBIDDEN":
+		return status.Errorf(codes.FailedPrecondition,
+			"scene transition forbidden: %v", err)
+	}
+	return nil
+}
+
 // newSceneID generates a ULID using crypto/rand for entropy. Per project
 // convention, math/rand is forbidden everywhere — see CLAUDE.md.
 func newSceneID() (string, error) {
