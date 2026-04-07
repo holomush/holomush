@@ -38,9 +38,9 @@ callable from the plugin subprocess via the GRPCBroker.
    a. Resolve the service from `ServiceRegistry` → get `RegisteredService.Conn`
    b. Assign a broker ID (sequential `uint32`)
    c. Call `broker.AcceptAndServe(id, NewBrokerProxy(conn))` — starts a reverse
-      gRPC server that transparently proxies all calls to the real service
+   gRPC server that transparently proxies all calls to the real service
    d. Add to `required_services` map:
-      `"holomush.world.v1.WorldService" → "broker:42"`
+   `"holomush.world.v1.WorldService" → "broker:42"`
 4. Pass `required_services` in `InitRequest.Config`
 5. Plugin calls `broker.Dial(42)` → gets a `grpc.ClientConn` for WorldService
 6. Plugin creates typed client: `worldv1.NewWorldServiceClient(conn)`

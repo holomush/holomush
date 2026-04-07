@@ -523,7 +523,7 @@ be decided before writing any content.
 
 - [ ] Landing page renders with hero, features, coming soon, choose your path
 - [ ] All five sections (guide, operating, extending, contributing, reference)
-      have index pages with working links
+  have index pages with working links
 - [ ] Zero dead links across the entire site
 - [ ] Zero instances of "room" used as a spatial concept in documentation
 - [ ] All diagrams render as Mermaid (no ASCII art)

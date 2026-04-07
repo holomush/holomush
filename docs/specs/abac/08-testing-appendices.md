@@ -185,9 +185,9 @@ grows.
 - [ ] Property model designed as first-class entities
 - [ ] Direct replacement of StaticAccessControl documented (no adapter)
 - [ ] Microbenchmarks (pure evaluator, no I/O): single-policy <10μs,
-      50-policy set <100μs, attribute resolution <50μs (via `go test -bench`)
+  50-policy set <100μs, attribute resolution <50μs (via `go test -bench`)
 - [ ] Integration benchmarks (with real providers): `Evaluate()` p99 <10ms cached,
-      <25ms cold, matching the performance targets in the spec
+  <25ms cold, matching the performance targets in the spec
 - [ ] Cache invalidation via LISTEN/NOTIFY reloads policies on change
 - [ ] System subject bypass returns allow without policy evaluation
 - [ ] Subject type prefix-to-DSL-type mapping documented

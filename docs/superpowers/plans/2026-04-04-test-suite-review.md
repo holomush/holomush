@@ -84,13 +84,13 @@ See the spec for full content of each section:
 `docs/superpowers/specs/2026-04-04-test-suite-review-design.md`
 
 - [ ] **Step 1:** Add "Test Naming" section (after "Test Files", before "Table-Driven Tests") —
-    ACE framework, good/bad examples table, subtest example, requirements table.
+  ACE framework, good/bad examples table, subtest example, requirements table.
 
 - [ ] **Step 2:** Update "Table-Driven Tests" example — sentence-style subtest names,
-    testify assertions instead of `t.Errorf`.
+  testify assertions instead of `t.Errorf`.
 
 - [ ] **Step 3:** Add "Test Quality" section (after "Assertions", before "Mocking with Mockery") —
-    five requirements covering both-path testing, assertion quality, focus, error codes.
+  five requirements covering both-path testing, assertion quality, focus, error codes.
 
 - [ ] **Step 4:** Run `task fmt` to verify formatting.
 
