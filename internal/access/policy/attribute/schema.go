@@ -76,6 +76,23 @@ func (r *SchemaRegistry) HasNamespace(namespace string) bool {
 	return r.schema.HasNamespace(namespace)
 }
 
+// UnregisterForRollback removes a namespace from the registry WITHOUT
+// the policy-reference safety check that RemoveNamespace performs.
+//
+// Use ONLY during failed-plugin-load rollback, before any policies that
+// reference the namespace could possibly have been installed. The
+// validator (ValidateManifestPolicySchemas) and policy install both
+// run AFTER provider registration, so a rollback triggered between
+// registration and validation/install is the only safe place to call
+// this.
+//
+// For schema removal during normal plugin lifecycle (unload after a
+// successful load), use RemoveNamespace instead — it scans installed
+// policies and refuses to remove a namespace still in use.
+func (r *SchemaRegistry) UnregisterForRollback(namespace string) {
+	r.schema.Remove(namespace)
+}
+
 // Schema returns the underlying AttributeSchema for use by the compiler.
 func (r *SchemaRegistry) Schema() *types.AttributeSchema {
 	return r.schema

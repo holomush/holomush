@@ -368,9 +368,14 @@ func (e *Engine) findApplicablePolicies(req types.AccessRequest, policies []Cach
 // the subject could potentially perform an action on a resource TYPE without
 // requiring a specific resource instance.
 //
+// Resolves only subject, environment, and action attributes via
+// ResolveSubjectAttributes. Resource providers are NEVER invoked during
+// preflight — there is no resource instance to resolve at type level.
+// Permits whose conditions reference resource attributes are handled via
+// the optimistic-permit branch below: they are treated as "may apply,
+// instance-level Evaluate will enforce the full condition."
+//
 // This is fail-closed: degraded mode and context cancellation both return false.
-// Conditions that reference resource attributes evaluate to false (optimistic skip
-// is intentional: type-level check is coarse; instance-level Evaluate handles those).
 // If any forbid policy with satisfied conditions matches, returns false.
 // If any permit policy with satisfied conditions matches, returns true.
 // No match → default deny (false, nil).
@@ -395,14 +400,11 @@ func (e *Engine) CanPerformAction(ctx context.Context, subject, action, resource
 			Errorf("subject must be in 'type:id' format with non-empty type and id")
 	}
 
-	// Step 4: Resolve subject attributes via a synthetic request.
-	// The resource uses resourceType+":__preflight__" to satisfy resolver format
-	// requirements without needing a real resource instance.
-	syntheticReq, reqErr := types.NewAccessRequest(subject, action, resourceType+":__preflight__")
-	if reqErr != nil {
-		return false, oops.With("subject", subject).With("action", action).With("resourceType", resourceType).Wrap(reqErr)
-	}
-	bags, resolveErr := e.resolver.Resolve(ctx, syntheticReq)
+	// Step 4: Resolve subject + environment attributes only. No resource
+	// instance exists at type-level preflight; resource providers are
+	// never called. The optimistic-permit branch below handles permits
+	// whose conditions reference resource attributes.
+	bags, resolveErr := e.resolver.ResolveSubjectAttributes(ctx, subject, action)
 	if resolveErr != nil {
 		errutil.LogErrorContext(ctx, "CanPerformAction: attribute resolution failed — fail-closed",
 			resolveErr,

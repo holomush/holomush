@@ -1114,6 +1114,78 @@ binary-plugin:
 	assert.Empty(t, mgr.ListPlugins())
 }
 
+func TestManagerLoadAllUnregistersAttributeProviderWhenSchemaValidationFailsAfterRegistration(t *testing.T) {
+	// T35: resolver rollback completeness. When ValidateManifestPolicySchemas
+	// rejects a manifest (e.g., policy references an attribute not in the
+	// discovered schema), the manager must unregister the attribute providers
+	// that discoverAndRegisterAttributes added moments earlier. Otherwise the
+	// ABAC resolver retains a stale provider tied to a plugin that never
+	// finished loading, and a subsequent retry hits "already registered".
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	pluginDir := filepath.Join(pluginsDir, "bad-widget")
+	mkdirAll(t, pluginDir)
+	// Policy references resource.widget.tipe but the schema exposes "type".
+	// ValidateManifestPolicySchemas rejects this at load time, after
+	// discoverAndRegisterAttributes has already registered the widget provider.
+	writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(`name: bad-widget
+version: 1.0.0
+type: binary
+resource_types: [widget]
+binary-plugin:
+  executable: bad-widget
+policies:
+  - name: widget-read-typo
+    dsl: |
+      permit(principal is character, action in ["read"], resource is widget)
+      when { resource.widget.tipe == "normal" };
+`))
+
+	host := &arBinaryHost{
+		mockBinaryHost: mockBinaryHost{conn: &stubClientConn{}},
+		arClient: &stubAttributeResolverClient{
+			schemaResp: &pluginv1.GetSchemaResponse{
+				ResourceTypes: map[string]*pluginv1.ResourceTypeSchema{
+					"widget": {Attributes: map[string]pluginv1.AttributeType{
+						"type": pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING,
+					}},
+				},
+			},
+		},
+	}
+
+	var registered []string
+	var unregistered []string
+	registrar := func(p *plugins.PluginAttributeProvider) error {
+		registered = append(registered, p.Namespace())
+		return nil
+	}
+	unregistrar := func(namespace string) bool {
+		unregistered = append(unregistered, namespace)
+		return true
+	}
+
+	mgr := plugins.NewManager(pluginsDir,
+		plugins.WithAttributeProviderRegistrar(registrar),
+		plugins.WithAttributeProviderUnregistrar(unregistrar),
+	)
+	mgr.RegisterHost(plugins.TypeBinary, host)
+
+	err := mgr.LoadAll(context.Background())
+	require.Error(t, err, "manifest with schema-mismatched policy must fail to load")
+	assert.Contains(t, err.Error(), "validate manifest policy schemas")
+
+	// Assert rollback: the provider registered during
+	// discoverAndRegisterAttributes was also unregistered.
+	assert.Equal(t, []string{"widget"}, registered,
+		"provider must be registered before the validation error")
+	assert.Equal(t, []string{"widget"}, unregistered,
+		"rollback must unregister every provider that was registered")
+	assert.Empty(t, mgr.ListPlugins(),
+		"plugin must not be marked loaded after validation rollback")
+}
+
 func TestManagerLoadAllRegistersAttributeProviderViaCallback(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "plugins")

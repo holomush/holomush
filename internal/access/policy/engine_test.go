@@ -2123,3 +2123,84 @@ func TestEngineOnPolicyCorruptionUnknownEffect(t *testing.T) {
 	engine.OnPolicyCorruption("policy-789", types.PolicyEffect("bogus"))
 	assert.True(t, engine.IsDegraded(), "unknown effect type should trigger degraded mode")
 }
+
+func TestEngineCanPerformActionDoesNotInvokeResourceProvidersWhenCapabilityCheckRuns(t *testing.T) {
+	// T5: Register a tracking provider that counts ResolveSubject and
+	// ResolveResource calls separately, then run CanPerformAction.
+	// Asserts the headline C1 invariant: resource providers are never
+	// invoked during type-level preflight, AND subject resolution did
+	// actually run (guards against a silent no-op regression).
+	dslText := `permit(principal is character, action in ["read"], resource is widget);`
+
+	widgetSchema := &types.NamespaceSchema{
+		Attributes: map[string]types.AttrType{"type": types.AttrTypeString},
+	}
+	widgetProv := &trackingAttrProvider{namespace: "widget", schema: widgetSchema}
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, []attribute.AttributeProvider{widgetProv})
+
+	// Asserting NoError ensures the call actually executed the resolution
+	// path. Without this, a regression that errored out before any provider
+	// was called would silently leave resourceCalls at 0 and false-pass.
+	_, err := engine.CanPerformAction(context.Background(), "character:01ABC", "read", "widget", "")
+	require.NoError(t, err)
+
+	// Headline invariant: resource provider was NOT called.
+	assert.Equal(t, 0, widgetProv.resourceCalls,
+		"widget resource provider must not be called during CanPerformAction")
+	// Positive invariant: subject resolution DID run. The widget provider
+	// is iterated for the subject path (it returns nil since widgetProv has
+	// no subjectAttrs), which still increments subjectCalls. If a future
+	// regression skips subject resolution entirely, this assertion fails.
+	assert.Greater(t, widgetProv.subjectCalls, 0,
+		"subject resolution must still run during CanPerformAction preflight")
+}
+
+// trackingAttrProvider counts ResolveSubject and ResolveResource calls
+// separately so tests can assert the CanPerformAction preflight invariant
+// (no resource providers invoked) alongside the positive invariant that
+// subject resolution still runs.
+type trackingAttrProvider struct {
+	namespace     string
+	subjectAttrs  map[string]any
+	resourceAttrs map[string]any
+	schema        *types.NamespaceSchema
+	subjectCalls  int
+	resourceCalls int
+}
+
+func (p *trackingAttrProvider) Namespace() string { return p.namespace }
+
+func (p *trackingAttrProvider) ResolveSubject(_ context.Context, _ string) (map[string]any, error) {
+	p.subjectCalls++
+	return p.subjectAttrs, nil
+}
+
+func (p *trackingAttrProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
+	p.resourceCalls++
+	return p.resourceAttrs, nil
+}
+
+func (p *trackingAttrProvider) Schema() *types.NamespaceSchema { return p.schema }
+
+func TestEngineCanPerformActionPermitsOptimisticallyForPermitReferencingResourceAttrs(t *testing.T) {
+	// The optimistic-permit branch fires when a permit policy's conditions
+	// reference resource attributes that can't be evaluated at type-level
+	// pre-flight (no resource instance exists). The engine MUST treat such
+	// permits as potentially-applicable and return allowed=true — the
+	// handler's instance-level Evaluate will enforce the full condition.
+	//
+	// This test proves that switching to ResolveSubjectAttributes does not
+	// regress this behavior. Before the refactor, the optimistic branch
+	// worked because the synthetic "__preflight__" resource had an empty
+	// attribute bag; after the refactor, it works because
+	// ResolveSubjectAttributes returns an empty Resource bag by construction.
+	dslText := `permit(principal is character, action in ["read"], resource is widget) when { resource.widget.type == "normal" };`
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "read", "widget", "")
+	require.NoError(t, err)
+	assert.True(t, allowed,
+		"permit policy referencing resource attrs must optimistic-permit at preflight")
+}

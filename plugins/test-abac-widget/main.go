@@ -38,6 +38,20 @@ func (p *widgetPlugin) RegisterAttributeResolver(registrar grpc.ServiceRegistrar
 	pluginv1.RegisterAttributeResolverServiceServer(registrar, &widgetResolver{})
 }
 
+// widgetResolver is the canonical example of an ABAC attribute resolver
+// for a binary plugin. It illustrates two properties the host contract
+// guarantees:
+//
+//  1. The host only calls ResolveResource with real instance IDs it
+//     believes exist. There is no preflight sentinel to handle.
+//  2. Every attribute returned here ("type", "owner") must also appear
+//     in GetSchema — otherwise the returned value is silently dropped
+//     at runtime and the plugin fails to load if a policy references
+//     the undeclared attribute.
+//
+// Plugin authors writing new resolvers should model theirs on this
+// pattern: map instance ID → backing store lookup → return a map keyed
+// by names declared in GetSchema.
 type widgetResolver struct {
 	pluginv1.UnimplementedAttributeResolverServiceServer
 }
@@ -56,10 +70,14 @@ func (r *widgetResolver) GetSchema(_ context.Context, _ *pluginv1.GetSchemaReque
 }
 
 func (r *widgetResolver) ResolveResource(_ context.Context, req *pluginv1.ResolveResourceRequest) (*pluginv1.ResolveResourceResponse, error) {
-	// Reject any resource type other than "widget". This catches host-side
-	// misrouting bugs (e.g., a per-resource-type registration regression
-	// that sends `location:abc` to this resolver) — without it, the E2E
-	// coverage would silently pass on routing bugs.
+	// Reject any resource type other than "widget". This is defense in
+	// depth against a host routing bug (e.g., a per-resource-type
+	// registration regression that sends `location:abc` to this resolver).
+	// The host contract guarantees that ResolveResource is only called
+	// with instance IDs the host believes to exist; this check protects
+	// against the host violating that contract, not against synthetic
+	// preflight IDs (which no longer exist — see spec
+	// 2026-04-07-plugin-abac-hardening-design.md).
 	if req.GetResourceType() != "widget" {
 		return nil, status.Errorf(codes.InvalidArgument,
 			"test-abac-widget only resolves resource type %q, got %q",

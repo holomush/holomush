@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -379,6 +380,360 @@ var _ = Describe("Plugin ABAC Trust Boundary", func() {
 			Expect(decision.Effect()).To(Equal(policytypes.EffectDeny))
 		})
 	})
+
+	// ---------------------------------------------------------------
+	// Plugin ABAC Hardening (spec 2026-04-07): Sharp Edge 1 tests
+	// ---------------------------------------------------------------
+	Describe("plugin ResolveResource call semantics under hardening", func() {
+		var (
+			ctx         context.Context
+			cancel      context.CancelFunc
+			container   testcontainers.Container
+			connStr     string
+			host        *goplugin.Host
+			ps          *policystore.PostgresStore
+			engine      *policy.Engine
+			pool        *pgxpool.Pool
+			provisioner *plugins.SchemaProvisioner
+			countingAR  *countingAttributeResolverClient
+		)
+
+		BeforeEach(func() {
+			_, binaryPath := abacWidgetBinaryPath()
+			if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
+				Skip(fmt.Sprintf("test-abac-widget binary not found at %s — run 'task plugin:build-all' first",
+					binaryPath))
+			}
+
+			pluginDir, _ := abacWidgetBinaryPath()
+			if _, err := os.Stat(filepath.Join(pluginDir, "plugin.yaml")); os.IsNotExist(err) {
+				Skip(fmt.Sprintf("plugin.yaml not found at %s/plugin.yaml — run 'task plugin:build-all' first", pluginDir))
+			}
+
+			ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
+
+			pgEnv, err := testutil.StartPostgres(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			container = pgEnv.Container
+			connStr = pgEnv.ConnStr
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(migrator.Up()).To(Succeed())
+			_ = migrator.Close()
+
+			provisioner = plugins.NewSchemaProvisioner(connStr)
+			Expect(provisioner.Init(ctx)).To(Succeed())
+
+			svcRegistry := plugins.NewServiceRegistry()
+			host = goplugin.NewHost(
+				goplugin.WithSchemaProvisioner(provisioner),
+				goplugin.WithServiceRegistry(svcRegistry),
+			)
+
+			manifest := loadWidgetManifest()
+			Expect(host.Load(ctx, manifest, pluginDir)).To(Succeed())
+
+			pool, err = pgxpool.New(ctx, connStr)
+			Expect(err).NotTo(HaveOccurred())
+			ps = policystore.NewPostgresStore(pool)
+			installer := plugins.NewPolicyInstaller(ps)
+			Expect(installer.InstallPluginPoliciesWithManifest(ctx, manifest, manifest.Policies)).To(Succeed())
+
+			// Wire the counting proxy in place of the raw plugin client.
+			rawClient := host.AttributeResolverClient("test-abac-widget")
+			Expect(rawClient).NotTo(BeNil())
+			countingAR = newCountingAttributeResolverClient(rawClient)
+
+			// Build the engine stack using the counting proxy when
+			// registering the attribute provider.
+			schemaRegistry := attribute.NewSchemaRegistry()
+			resolver := attribute.NewResolver(schemaRegistry)
+
+			cmdProvider := attribute.NewCommandProvider()
+			Expect(resolver.RegisterProvider(cmdProvider)).To(Succeed())
+
+			schemaResp, schemaErr := countingAR.GetSchema(ctx, &pluginv1.GetSchemaRequest{})
+			Expect(schemaErr).NotTo(HaveOccurred())
+			schemas := plugins.ConvertProtoSchema(schemaResp)
+			Expect(schemas).To(HaveKey("widget"))
+
+			widgetProvider := plugins.NewPluginAttributeProvider("widget", countingAR, schemas["widget"])
+			Expect(resolver.RegisterProvider(widgetProvider)).To(Succeed())
+
+			compiler := policy.NewCompiler(schemaRegistry.Schema())
+			cache := policy.NewCache(ps, compiler)
+			Expect(cache.Reload(ctx)).To(Succeed())
+
+			auditWriter := &testAuditWriter{}
+			tmpDir := GinkgoT().TempDir()
+			auditLogger := audit.NewLogger(audit.ModeAll, auditWriter, filepath.Join(tmpDir, "test-wal.jsonl"))
+
+			sessionResolver := &testSessionResolver{}
+			engine = policy.NewEngine(resolver, cache, sessionResolver, auditLogger)
+
+			// Reset counters after BeforeEach so test assertions measure only
+			// the activity that the test body triggers.
+			countingAR.ResetCallCounts()
+		})
+
+		AfterEach(func() {
+			if host != nil {
+				_ = host.Close(ctx)
+			}
+			if provisioner != nil {
+				provisioner.Close()
+			}
+			if pool != nil {
+				pool.Close()
+			}
+			if container != nil {
+				_ = container.Terminate(context.Background())
+			}
+			if cancel != nil {
+				cancel()
+			}
+		})
+
+		It("never invokes the plugin ResolveResource RPC during type-level preflight", func() {
+			// T13: The C1 invariant at E2E layer with a real plugin binary.
+			allowed, err := engine.CanPerformAction(ctx, "character:01ABC", "read", "widget", "self")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(allowed).To(BeTrue(), "preflight should permit via optimistic branch")
+
+			Expect(countingAR.ResolveResourceCallCount()).To(BeEquivalentTo(0),
+				"ResolveResource MUST NOT be called during type-level preflight")
+		})
+
+		It("still invokes the plugin ResolveResource RPC for instance-level Evaluate", func() {
+			// T14: Instance-level evaluation is unaffected.
+			req, reqErr := policytypes.NewAccessRequest("character:01ABC", "read", "widget:normal-1")
+			Expect(reqErr).NotTo(HaveOccurred())
+
+			decision, err := engine.Evaluate(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(decision.IsAllowed()).To(BeTrue())
+
+			Expect(countingAR.ResolveResourceCallCount()).To(BeEquivalentTo(1),
+				"ResolveResource should be called exactly once for one Evaluate")
+		})
+
+		It("permits character:01ABC execute widget command via full database-backed engine stack without invoking plugin ResolveResource", func() {
+			// T38: Full DB-backed stack, CanPerformAction on command execution,
+			// counter asserted zero.
+			allowed, err := engine.CanPerformAction(ctx, "character:01ABC", "execute", "command", "self")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(allowed).To(BeTrue())
+
+			Expect(countingAR.ResolveResourceCallCount()).To(BeEquivalentTo(0),
+				"execute command preflight must not touch the plugin")
+		})
+	})
+
+	// ---------------------------------------------------------------
+	// Plugin ABAC Hardening (spec 2026-04-07): Sharp Edge 2 tests
+	// ---------------------------------------------------------------
+	Describe("manifest policy schema validation at load time", func() {
+		var (
+			ctx       context.Context
+			cancel    context.CancelFunc
+			container testcontainers.Container
+			connStr   string
+		)
+
+		BeforeEach(func() {
+			_, binaryPath := abacWidgetBinaryPath()
+			if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
+				Skip(fmt.Sprintf("test-abac-widget binary not found at %s — run 'task plugin:build-all' first",
+					binaryPath))
+			}
+
+			ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
+
+			pgEnv, err := testutil.StartPostgres(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			container = pgEnv.Container
+			connStr = pgEnv.ConnStr
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(migrator.Up()).To(Succeed())
+			_ = migrator.Close()
+		})
+
+		AfterEach(func() {
+			if container != nil {
+				_ = container.Terminate(context.Background())
+			}
+			if cancel != nil {
+				cancel()
+			}
+		})
+
+		It("fails to load a plugin whose manifest policy references an undeclared resource attribute", func() {
+			// T15: Build a manifest based on the widget manifest but with
+			// a typo in one policy's DSL. Validate it and assert failure.
+			goodManifest := loadWidgetManifest()
+			badManifest := cloneManifestWithBadPolicy(goodManifest)
+
+			provisioner := plugins.NewSchemaProvisioner(connStr)
+			Expect(provisioner.Init(ctx)).To(Succeed())
+			defer provisioner.Close()
+
+			registry := plugins.NewServiceRegistry()
+			host := goplugin.NewHost(
+				goplugin.WithSchemaProvisioner(provisioner),
+				goplugin.WithServiceRegistry(registry),
+			)
+			defer func() { _ = host.Close(ctx) }()
+
+			pluginDir, _ := abacWidgetBinaryPath()
+
+			// host.Load itself succeeds — validation happens at the
+			// validator + installer layer.
+			Expect(host.Load(ctx, badManifest, pluginDir)).To(Succeed())
+
+			arClient := host.AttributeResolverClient("test-abac-widget")
+			schemaResp, err := arClient.GetSchema(ctx, &pluginv1.GetSchemaRequest{})
+			Expect(err).NotTo(HaveOccurred())
+			schemas := plugins.ConvertProtoSchema(schemaResp)
+
+			valErr := plugins.ValidateManifestPolicySchemas(badManifest, schemas)
+			Expect(valErr).To(HaveOccurred())
+			Expect(valErr.Error()).To(ContainSubstring("tipe"))
+			Expect(valErr.Error()).To(ContainSubstring("widget-read-normal-bad"))
+		})
+
+		It("installs zero policies in the database when manifest validation fails", func() {
+			// T34: After a failed validation, the policy store MUST have
+			// zero plugin-source policies. Tests rollback completeness:
+			// validation runs BEFORE install, so there's nothing to roll
+			// back, but we assert the invariant explicitly to guard
+			// against a future regression that reorders the steps.
+			goodManifest := loadWidgetManifest()
+			badManifest := cloneManifestWithBadPolicy(goodManifest)
+
+			provisioner := plugins.NewSchemaProvisioner(connStr)
+			Expect(provisioner.Init(ctx)).To(Succeed())
+			defer provisioner.Close()
+
+			svcRegistry := plugins.NewServiceRegistry()
+			host := goplugin.NewHost(
+				goplugin.WithSchemaProvisioner(provisioner),
+				goplugin.WithServiceRegistry(svcRegistry),
+			)
+			defer func() { _ = host.Close(ctx) }()
+
+			pluginDir, _ := abacWidgetBinaryPath()
+			Expect(host.Load(ctx, badManifest, pluginDir)).To(Succeed())
+
+			arClient := host.AttributeResolverClient("test-abac-widget")
+			schemaResp, err := arClient.GetSchema(ctx, &pluginv1.GetSchemaRequest{})
+			Expect(err).NotTo(HaveOccurred())
+			schemas := plugins.ConvertProtoSchema(schemaResp)
+
+			valErr := plugins.ValidateManifestPolicySchemas(badManifest, schemas)
+			Expect(valErr).To(HaveOccurred())
+
+			// Now check the DB: no policies should be installed.
+			pool, poolErr := pgxpool.New(ctx, connStr)
+			Expect(poolErr).NotTo(HaveOccurred())
+			defer pool.Close()
+
+			ps := policystore.NewPostgresStore(pool)
+			pluginPolicies, listErr := ps.List(ctx, policystore.ListOptions{Source: "plugin"})
+			Expect(listErr).NotTo(HaveOccurred())
+			Expect(pluginPolicies).To(BeEmpty(),
+				"failed validation must leave the policy store pristine")
+		})
+
+		It("successfully loads a fixed manifest after a prior validation failure", func() {
+			// T36: Idempotency — after a failed load, a fixed manifest
+			// should validate successfully without any leftover state
+			// interfering.
+			goodManifest := loadWidgetManifest()
+			badManifest := cloneManifestWithBadPolicy(goodManifest)
+
+			provisioner := plugins.NewSchemaProvisioner(connStr)
+			Expect(provisioner.Init(ctx)).To(Succeed())
+			defer provisioner.Close()
+
+			svcRegistry := plugins.NewServiceRegistry()
+			host := goplugin.NewHost(
+				goplugin.WithSchemaProvisioner(provisioner),
+				goplugin.WithServiceRegistry(svcRegistry),
+			)
+			defer func() { _ = host.Close(ctx) }()
+
+			pluginDir, _ := abacWidgetBinaryPath()
+
+			// First attempt — bad manifest.
+			Expect(host.Load(ctx, badManifest, pluginDir)).To(Succeed())
+			arClient := host.AttributeResolverClient("test-abac-widget")
+			schemaResp, _ := arClient.GetSchema(ctx, &pluginv1.GetSchemaRequest{})
+			schemas := plugins.ConvertProtoSchema(schemaResp)
+			badErr := plugins.ValidateManifestPolicySchemas(badManifest, schemas)
+			Expect(badErr).To(HaveOccurred())
+
+			// Unload the bad plugin before loading the good one.
+			_ = host.Close(ctx)
+
+			// Re-create host and load the good manifest.
+			svcRegistry2 := plugins.NewServiceRegistry()
+			host2 := goplugin.NewHost(
+				goplugin.WithSchemaProvisioner(provisioner),
+				goplugin.WithServiceRegistry(svcRegistry2),
+			)
+			defer func() { _ = host2.Close(ctx) }()
+
+			Expect(host2.Load(ctx, goodManifest, pluginDir)).To(Succeed())
+			arClient2 := host2.AttributeResolverClient("test-abac-widget")
+			schemaResp2, _ := arClient2.GetSchema(ctx, &pluginv1.GetSchemaRequest{})
+			schemas2 := plugins.ConvertProtoSchema(schemaResp2)
+
+			goodErr := plugins.ValidateManifestPolicySchemas(goodManifest, schemas2)
+			Expect(goodErr).NotTo(HaveOccurred(),
+				"good manifest must validate successfully after a prior failure")
+		})
+
+		It("installs three plugin policies in the database when manifest validation passes", func() {
+			// T37: Positive path — explicit DB query assertion mirroring
+			// T34's negative path.
+			goodManifest := loadWidgetManifest()
+
+			provisioner := plugins.NewSchemaProvisioner(connStr)
+			Expect(provisioner.Init(ctx)).To(Succeed())
+			defer provisioner.Close()
+
+			svcRegistry := plugins.NewServiceRegistry()
+			host := goplugin.NewHost(
+				goplugin.WithSchemaProvisioner(provisioner),
+				goplugin.WithServiceRegistry(svcRegistry),
+			)
+			defer func() { _ = host.Close(ctx) }()
+
+			pluginDir, _ := abacWidgetBinaryPath()
+			Expect(host.Load(ctx, goodManifest, pluginDir)).To(Succeed())
+
+			arClient := host.AttributeResolverClient("test-abac-widget")
+			schemaResp, _ := arClient.GetSchema(ctx, &pluginv1.GetSchemaRequest{})
+			schemas := plugins.ConvertProtoSchema(schemaResp)
+			Expect(plugins.ValidateManifestPolicySchemas(goodManifest, schemas)).To(Succeed())
+
+			pool, poolErr := pgxpool.New(ctx, connStr)
+			Expect(poolErr).NotTo(HaveOccurred())
+			defer pool.Close()
+
+			ps := policystore.NewPostgresStore(pool)
+			installer := plugins.NewPolicyInstaller(ps)
+			Expect(installer.InstallPluginPoliciesWithManifest(ctx, goodManifest, goodManifest.Policies)).To(Succeed())
+
+			pluginPolicies, listErr := ps.List(ctx, policystore.ListOptions{Source: "plugin"})
+			Expect(listErr).NotTo(HaveOccurred())
+			Expect(pluginPolicies).To(HaveLen(3),
+				"successful validation must install all three policies")
+		})
+	})
 })
 
 // testAuditWriter captures audit entries in memory for testing.
@@ -433,4 +788,32 @@ func (f *fakePolicyStoreWriter) DeleteBySource(_ context.Context, _, _ string) (
 func (f *fakePolicyStoreWriter) ReplaceBySource(_ context.Context, _, _ string, policies []*policystore.StoredPolicy) error {
 	f.created = append(f.created, policies...)
 	return nil
+}
+
+// cloneManifestWithBadPolicy returns a copy of the given manifest with one
+// policy's DSL mutated to reference an undeclared attribute
+// (resource.widget.tipe instead of resource.widget.type). The policy name
+// is also changed to "widget-read-normal-bad" so tests can assert on it
+// specifically.
+//
+// Used by Sharp Edge 2 integration tests in this file to synthesize a
+// failing manifest in-memory without rebuilding the plugin binary.
+func cloneManifestWithBadPolicy(src *plugins.Manifest) *plugins.Manifest {
+	clone := *src
+	clone.Policies = make([]plugins.ManifestPolicy, len(src.Policies))
+	copy(clone.Policies, src.Policies)
+
+	// Find the first policy that targets `resource is widget` with a
+	// "type" attribute reference and rewrite it to use "tipe".
+	for i, p := range clone.Policies {
+		if p.Name == "widget-read-normal" || strings.Contains(p.DSL, "resource.widget.type") {
+			clone.Policies[i] = plugins.ManifestPolicy{
+				Name: "widget-read-normal-bad",
+				DSL: `permit(principal is character, action in ["read"], resource is widget) ` +
+					`when { resource.widget.tipe == "normal" };`,
+			}
+			break
+		}
+	}
+	return &clone
 }

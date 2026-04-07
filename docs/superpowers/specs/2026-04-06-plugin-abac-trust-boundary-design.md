@@ -514,3 +514,76 @@ for _, cmd := range dp.Manifest.Commands {
 | Proxy provider latency affects ABAC evaluation | Existing circuit breaker + caching infrastructure applies automatically |
 | Seed migration breaks existing E2E tests | Full test suite (59 E2E + unit) must pass after migration |
 | Trust escalation abused by malicious plugin | Requires server-side allowlist — admin must explicitly opt in |
+
+---
+
+## Hardening (2026-04-07)
+
+This section documents hardening work that landed after the original spec and
+resolved two architectural sharp edges identified during the subsequent plugin
+ABAC review. See `docs/superpowers/specs/2026-04-07-plugin-abac-hardening-design.md`
+for the full design.
+
+### Sharp Edge 1 — synthetic `__preflight__` resource ID → eliminated
+
+The original design had `engine.CanPerformAction` construct a synthetic
+resource ID of the form `<resourceType>:__preflight__` and call
+`resolver.Resolve`. This caused plugin `ResolveResource` RPCs to be invoked
+with fake instance IDs during type-level capability pre-flight, with no
+documented contract for how plugins should handle the case.
+
+**Resolution (C1):** `Resolver.ResolveSubjectAttributes(ctx, subject, action)`
+was added as a new entry point that resolves only subject, environment, and
+action attributes — resource providers are never called. `CanPerformAction`
+was rewritten to use this method. The `__preflight__` literal was deleted
+from `internal/access/policy/engine.go` (enforced by a static test in
+`internal/access/policy/hardening_invariants_test.go`).
+
+**New invariant:** `PluginAttributeProvider.ResolveResource` is called if and
+only if the host has a real resource instance ID that corresponds to a
+resource owned by that namespace. There is no synthetic ID, no sentinel, no
+preflight-aware code path, and no documented plugin contract for handling
+non-existent IDs.
+
+**Guidance superseded:** any guidance in this original spec suggesting that
+plugins "should handle non-instance IDs gracefully" is obsolete. Plugins only
+receive real instance IDs.
+
+### Sharp Edge 2 — silent schema validation drops → load-time fatal
+
+The original design logged a `slog.Info` warning when a manifest policy
+referenced an attribute not in the plugin's `GetSchema` response. A typo in
+the policy DSL (e.g., `resource.widget.tipe` instead of `resource.widget.type`)
+would produce a silent always-false condition discoverable only by reading
+load-time log lines.
+
+**Resolution (S1):** the cross-validation logic was extracted from
+`CheckManifestWarnings` Warning 3 into a new function
+`ValidateManifestPolicySchemas` in `internal/plugin/policy_schema_validator.go`.
+This function is called from `Manager.loadPlugin` before policy installation,
+and a non-nil return fails the load via the existing rollback path. Runtime
+`mergeAttributes` drop behavior (warn + Prometheus counter, non-fatal) is
+unchanged — the runtime path catches a different failure mode (plugin returns
+keys outside its declared schema) and remains lenient to avoid breaking
+healthy plugin traffic.
+
+The resolver also gained an `UnregisterProvider` method so that failed
+validation cleanly removes the plugin's attribute provider from the registry,
+allowing a fixed manifest to be re-loaded without "already registered" errors.
+The Task 14 investigation also closed four additional rollback leak paths in
+`Manager.loadPlugin` beyond just the validator-failure branch.
+
+### Test coverage added
+
+- 11 unit tests on `Resolver.ResolveSubjectAttributes` (internal/access/policy/attribute/resolver_test.go)
+- 1 engine unit test (T5) + 1 optimistic-permit test (T6) + reuse of 4 pre-existing CanPerformAction tests as regression coverage (T7/T22/T23/T24)
+- 1 static invariant test (T32 — asserts `__preflight__` is absent from engine.go)
+- 12 unit tests on `ValidateManifestPolicySchemas`
+- 4 integration tests on load-time validation failure with real plugin binary + PostgreSQL
+- 3 integration tests on the C1 invariant with counting proxy over the real plugin client
+- 1 unit test on `Resolver.UnregisterProvider` and 1 manager-level test (T35) on rollback
+
+### Documentation
+
+- Plugin author guide: `site/docs/extending/abac-attribute-resolver.md`
+- Internal doc comments updated in `pkg/plugin/service.go` and `plugins/test-abac-widget/main.go`
