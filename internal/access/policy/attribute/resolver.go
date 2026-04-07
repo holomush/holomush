@@ -155,6 +155,66 @@ func (r *Resolver) Resolve(ctx context.Context, req types.AccessRequest) (*types
 	return bags, errors.Join(errs...)
 }
 
+// ResolveSubjectAttributes resolves subject, action, and environment attributes
+// for a type-level capability check (preflight). It never calls resource
+// providers, which makes it safe to use when no resource instance is available.
+//
+// Returns AttributeBags with Subject/Action/Environment populated and Resource
+// empty. Error semantics match Resolve: partial success returns both bags and
+// error; callers MUST fail closed on non-nil error and MUST NOT use partial
+// bags for policy evaluation.
+func (r *Resolver) ResolveSubjectAttributes(ctx context.Context, subject, action string) (*types.AttributeBags, error) {
+	// Input validation runs BEFORE entering the resolution scope. Empty
+	// subject is rejected with nil bags — no work has started, so there
+	// is nothing partial to return. Resolve tolerates empty subjects, but
+	// a type-level capability check always has a principal.
+	if subject == "" {
+		return nil, oops.Code("INVALID_ENTITY_REF").
+			With("field", "subject").
+			Errorf("subject is required for ResolveSubjectAttributes")
+	}
+
+	// Check re-entrance guard (shared with Resolve).
+	if isInResolution(ctx) {
+		panic("resolver re-entrance detected: resolver cannot be called recursively")
+	}
+
+	// Mark as in resolution and attach request-scoped cache.
+	ctx = markInResolution(ctx)
+	ctx = withCache(ctx)
+
+	bags := &types.AttributeBags{
+		Subject:     make(map[string]any),
+		Resource:    make(map[string]any),
+		Action:      make(map[string]any),
+		Environment: make(map[string]any),
+	}
+
+	// Set action name — matches Resolve's contract for bags.Action.
+	bags.Action["name"] = action
+
+	var errs []error
+
+	// Resolve subject attributes. Reuses validateEntityRef for format
+	// consistency with Resolve.
+	if err := validateEntityRef(subject); err != nil {
+		errs = append(errs, oops.With("field", "subject").Wrap(err))
+	} else if err := r.resolveEntity(ctx, "subject", subject, bags.Subject); err != nil {
+		errs = append(errs, err)
+	}
+
+	// Resolve environment attributes.
+	if err := r.resolveEnvironment(ctx, bags.Environment); err != nil {
+		errs = append(errs, err)
+	}
+
+	// Resource providers are intentionally NOT called. The optimistic-permit
+	// branch in engine.CanPerformAction handles permits whose conditions
+	// reference resource attributes.
+
+	return bags, errors.Join(errs...)
+}
+
 // validateEntityRef checks that an entity reference is in "type:id" format
 // with both parts non-empty. This ensures all providers receive validated refs
 // and the ABAC fail-closed guarantee is preserved.

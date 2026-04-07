@@ -574,3 +574,34 @@ func TestResolverResolveNamespaceValidationRejectsUnregisteredKeys(t *testing.T)
 	_, exists := bags.Subject["character.unregistered_key"]
 	assert.False(t, exists, "unregistered key must be rejected per Spec S6")
 }
+
+func TestResolverResolveSubjectAttributesPopulatesSubjectActionAndEnvironment(t *testing.T) {
+	registry := NewSchemaRegistry()
+	resolver := NewResolver(registry)
+
+	// Subject provider returns {role: "admin"} for character:01ABC.
+	subjectProvider := newResolverMockAttributeProvider("character")
+	subjectProvider.subjectData["character:01ABC"] = map[string]any{"role": "admin"}
+	require.NoError(t, resolver.RegisterProvider(subjectProvider))
+
+	// Environment provider returns {hour: 14.0} — type matches the
+	// AttrTypeFloat schema declaration so the test still passes if
+	// mergeAttributes ever adds runtime type enforcement.
+	envProvider := &mockEnvironmentProvider{
+		namespace: "env",
+		attrs:     map[string]any{"hour": float64(14)},
+		schema: &types.NamespaceSchema{
+			Attributes: map[string]types.AttrType{"hour": types.AttrTypeFloat},
+		},
+	}
+	require.NoError(t, resolver.RegisterEnvironmentProvider(envProvider))
+
+	bags, err := resolver.ResolveSubjectAttributes(context.Background(), "character:01ABC", "read")
+	require.NoError(t, err)
+	require.NotNil(t, bags)
+
+	assert.Equal(t, "admin", bags.Subject["character.role"])
+	assert.Equal(t, float64(14), bags.Environment["env.hour"])
+	assert.Equal(t, "read", bags.Action["name"])
+	assert.Empty(t, bags.Resource, "resource bag must be empty at preflight")
+}
