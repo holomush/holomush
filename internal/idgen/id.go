@@ -15,7 +15,20 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
-// New generates a new ULID using crypto/rand for entropy.
+// New generates a ULID with fresh crypto/rand entropy on every call.
+//
+// Use this for: entity primary keys (players, sessions, locations,
+// characters, exits, objects, policies, audit rows) where the ID is pure
+// identity and there is no requirement for IDs minted in temporal order to
+// also sort in temporal order.
+//
+// Do NOT use this for event IDs (core.Event.ID). Two calls in the same
+// millisecond produce IDs in random lexicographic order, which silently
+// breaks PostgresEventStore.Replay (ORDER BY id, WHERE id > afterID) and
+// PostgresSessionStore.UpdateCursors monotonicity. Use core.NewULID()
+// instead. The ruleguard rule EventIDMustBeMonotonic in gorules/rules.go
+// enforces this for core.Event{} struct literals.
+//
 // Panics if the system's cryptographic random source is unavailable,
 // which indicates an unrecoverable OS-level failure.
 func New() ulid.ULID {
