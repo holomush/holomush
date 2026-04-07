@@ -30,14 +30,14 @@ func (p *scenePlugin) HandleEvent(_ context.Context, _ pluginsdk.Event) ([]plugi
 	return nil, nil
 }
 
-// HandleCommand is a placeholder — scene commands will be routed through the
-// gRPC SceneService rather than the command handler path. Returns OK with a
-// help message for now.
-func (p *scenePlugin) HandleCommand(_ context.Context, req pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
-	return &pluginsdk.CommandResponse{
-		Status: pluginsdk.CommandOK,
-		Output: "Scene commands are not yet implemented. Use the scene service RPCs.",
-	}, nil
+// HandleCommand routes scene commands to the appropriate subcommand handler.
+// The dispatcher lives in commands.go to keep main.go focused on plugin
+// lifecycle.
+func (p *scenePlugin) HandleCommand(ctx context.Context, req pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+	if req.Command != "scene" {
+		return pluginsdk.Errorf("core-scenes does not handle command %q", req.Command), nil
+	}
+	return p.dispatchCommand(ctx, req)
 }
 
 // RegisterServices registers the SceneServiceServer on the go-plugin gRPC
