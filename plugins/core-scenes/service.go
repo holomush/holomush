@@ -53,20 +53,24 @@ func NewSceneServiceImpl(store sceneStorer) *SceneServiceImpl {
 // The caller (host) is responsible for ensuring ABAC has authorised the
 // command-execute action; per-resource ABAC for the new scene happens at
 // the read path.
+//
+// Per-field validation (character_id non-empty, title min_len: 1, etc.)
+// happens via the protovalidate interceptor before this handler runs.
 func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateSceneRequest) (*scenev1.CreateSceneResponse, error) {
 	ctx, span := startSpan(ctx, "scene.service.create_scene",
 		attribute.String("subject_id", req.GetCharacterId()),
 	)
 	defer span.End()
 
-	if req.GetCharacterId() == "" {
-		recordError(span, errors.New("character_id is required"))
-		return nil, status.Errorf(codes.InvalidArgument, "character_id is required")
-	}
+	// Title is trimmed before storage so empty-only-after-trim becomes
+	// empty after trimming. The protovalidate annotation rejects empty
+	// titles at unmarshal time, but a title of "   " (spaces) passes
+	// protovalidate's min_len check and would be stored as a blank
+	// title without this trim. Service-level cleanup, not validation.
 	title := strings.TrimSpace(req.GetTitle())
 	if title == "" {
-		recordError(span, errors.New("title is required"))
-		return nil, status.Errorf(codes.InvalidArgument, "title is required")
+		recordError(span, errors.New("title cannot be whitespace-only"))
+		return nil, status.Errorf(codes.InvalidArgument, "title cannot be whitespace-only")
 	}
 
 	id, err := newSceneID()
@@ -101,6 +105,7 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		return nil, status.Errorf(codes.Internal, "failed to create scene: %v", err)
 	}
 
+	metricSceneCreated(string(SceneVisibilityOpen), false)
 	slog.InfoContext(ctx, "scene.service.create_scene ok",
 		"subject_id", req.GetCharacterId(),
 		"scene_id", id,
@@ -115,16 +120,14 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 // GetScene loads a scene by ID and returns it. The host's ABAC engine has
 // already evaluated the read-own-scene policy before this RPC is invoked,
 // so the service does not perform an additional ownership check.
+//
+// Per-field validation (scene_id non-empty) happens via the protovalidate
+// interceptor before this handler runs.
 func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRequest) (*scenev1.GetSceneResponse, error) {
 	ctx, span := startSpan(ctx, "scene.service.get_scene",
 		attribute.String("scene_id", req.GetSceneId()),
 	)
 	defer span.End()
-
-	if req.GetSceneId() == "" {
-		recordError(span, errors.New("scene_id is required"))
-		return nil, status.Errorf(codes.InvalidArgument, "scene_id is required")
-	}
 
 	row, err := s.store.Get(ctx, req.GetSceneId())
 	if err != nil {

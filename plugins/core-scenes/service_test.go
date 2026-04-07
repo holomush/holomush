@@ -71,21 +71,7 @@ func TestSceneServiceCreateScenePersistsTitleAndOwnerWhenRequestIsValid(t *testi
 	assert.Equal(t, string(SceneVisibilityOpen), resp.GetScene().GetVisibility())
 }
 
-func TestSceneServiceCreateSceneRejectsEmptyCharacterID(t *testing.T) {
-	svc := NewSceneServiceImpl(newFakeStore())
-
-	_, err := svc.CreateScene(context.Background(), &scenev1.CreateSceneRequest{
-		CharacterId: "",
-		Title:       "Anything",
-	})
-	require.Error(t, err)
-	st, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.InvalidArgument, st.Code())
-	assert.Contains(t, st.Message(), "character_id")
-}
-
-func TestSceneServiceCreateSceneRejectsBlankTitle(t *testing.T) {
+func TestSceneServiceCreateSceneRejectsWhitespaceOnlyTitle(t *testing.T) {
 	svc := NewSceneServiceImpl(newFakeStore())
 
 	_, err := svc.CreateScene(context.Background(), &scenev1.CreateSceneRequest{
@@ -95,7 +81,7 @@ func TestSceneServiceCreateSceneRejectsBlankTitle(t *testing.T) {
 	require.Error(t, err)
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.InvalidArgument, st.Code())
-	assert.Contains(t, st.Message(), "title")
+	assert.Contains(t, st.Message(), "whitespace-only")
 }
 
 func TestSceneServiceCreateSceneReturnsInternalWhenStoreFails(t *testing.T) {
