@@ -10,6 +10,7 @@
 package worldv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -684,7 +685,7 @@ var File_holomush_world_v1_world_proto protoreflect.FileDescriptor
 
 const file_holomush_world_v1_world_proto_rawDesc = "" +
 	"\n" +
-	"\x1dholomush/world/v1/world.proto\x12\x11holomush.world.v1\"\x83\x01\n" +
+	"\x1dholomush/world/v1/world.proto\x12\x11holomush.world.v1\x1a\x1bbuf/validate/validate.proto\"\x83\x01\n" +
 	"\fLocationInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -706,33 +707,33 @@ const file_holomush_world_v1_world_proto_rawDesc = "" +
 	"\rbidirectional\x18\x05 \x01(\bR\rbidirectional\x12\x1f\n" +
 	"\vreturn_name\x18\x06 \x01(\tR\n" +
 	"returnName\x12\x16\n" +
-	"\x06locked\x18\a \x01(\bR\x06locked\"T\n" +
-	"\x12GetLocationRequest\x12\x1d\n" +
+	"\x06locked\x18\a \x01(\bR\x06locked\"f\n" +
+	"\x12GetLocationRequest\x12&\n" +
 	"\n" +
-	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12\x1f\n" +
-	"\vlocation_id\x18\x02 \x01(\tR\n" +
+	"subject_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tsubjectId\x12(\n" +
+	"\vlocation_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"locationId\"R\n" +
 	"\x13GetLocationResponse\x12;\n" +
-	"\blocation\x18\x01 \x01(\v2\x1f.holomush.world.v1.LocationInfoR\blocation\"W\n" +
-	"\x13GetCharacterRequest\x12\x1d\n" +
+	"\blocation\x18\x01 \x01(\v2\x1f.holomush.world.v1.LocationInfoR\blocation\"i\n" +
+	"\x13GetCharacterRequest\x12&\n" +
 	"\n" +
-	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12!\n" +
-	"\fcharacter_id\x18\x02 \x01(\tR\vcharacterId\"V\n" +
+	"subject_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tsubjectId\x12*\n" +
+	"\fcharacter_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\"V\n" +
 	"\x14GetCharacterResponse\x12>\n" +
-	"\tcharacter\x18\x01 \x01(\v2 .holomush.world.v1.CharacterInfoR\tcharacter\"a\n" +
-	"\x1fListCharactersAtLocationRequest\x12\x1d\n" +
+	"\tcharacter\x18\x01 \x01(\v2 .holomush.world.v1.CharacterInfoR\tcharacter\"s\n" +
+	"\x1fListCharactersAtLocationRequest\x12&\n" +
 	"\n" +
-	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12\x1f\n" +
-	"\vlocation_id\x18\x02 \x01(\tR\n" +
+	"subject_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tsubjectId\x12(\n" +
+	"\vlocation_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"locationId\"d\n" +
 	" ListCharactersAtLocationResponse\x12@\n" +
 	"\n" +
 	"characters\x18\x01 \x03(\v2 .holomush.world.v1.CharacterInfoR\n" +
-	"characters\"R\n" +
-	"\x10ListExitsRequest\x12\x1d\n" +
+	"characters\"d\n" +
+	"\x10ListExitsRequest\x12&\n" +
 	"\n" +
-	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12\x1f\n" +
-	"\vlocation_id\x18\x02 \x01(\tR\n" +
+	"subject_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tsubjectId\x12(\n" +
+	"\vlocation_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"locationId\"F\n" +
 	"\x11ListExitsResponse\x121\n" +
 	"\x05exits\x18\x01 \x03(\v2\x1b.holomush.world.v1.ExitInfoR\x05exits2\xab\x03\n" +

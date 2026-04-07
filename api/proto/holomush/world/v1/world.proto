@@ -5,6 +5,8 @@ syntax = "proto3";
 
 package holomush.world.v1;
 
+import "buf/validate/validate.proto";
+
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/world/v1;worldv1";
 
 // WorldService exposes read-only world model queries for binary plugins.
@@ -76,9 +78,9 @@ message ExitInfo {
 
 message GetLocationRequest {
   // ULID of the character performing the query (for access control).
-  string subject_id = 1;
+  string subject_id = 1 [(buf.validate.field).string.min_len = 1];
   // ULID of the location to retrieve.
-  string location_id = 2;
+  string location_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 message GetLocationResponse {
@@ -87,9 +89,9 @@ message GetLocationResponse {
 
 message GetCharacterRequest {
   // ULID of the character performing the query (for access control).
-  string subject_id = 1;
+  string subject_id = 1 [(buf.validate.field).string.min_len = 1];
   // ULID of the character to retrieve.
-  string character_id = 2;
+  string character_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 message GetCharacterResponse {
@@ -98,9 +100,9 @@ message GetCharacterResponse {
 
 message ListCharactersAtLocationRequest {
   // ULID of the character performing the query (for access control).
-  string subject_id = 1;
+  string subject_id = 1 [(buf.validate.field).string.min_len = 1];
   // ULID of the location to list characters from.
-  string location_id = 2;
+  string location_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 message ListCharactersAtLocationResponse {
@@ -109,9 +111,9 @@ message ListCharactersAtLocationResponse {
 
 message ListExitsRequest {
   // ULID of the character performing the query (for access control).
-  string subject_id = 1;
+  string subject_id = 1 [(buf.validate.field).string.min_len = 1];
   // ULID of the location to list exits from.
-  string location_id = 2;
+  string location_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 message ListExitsResponse {
