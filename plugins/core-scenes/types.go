@@ -6,9 +6,11 @@ package main
 // SceneState represents the lifecycle state of a scene.
 //
 // Per spec section 1.2, the only valid transitions are:
-//   active  -> paused | ended
-//   paused  -> active | ended
-//   ended   -> archived
+//
+//	active  -> paused | ended
+//	paused  -> active | ended
+//	ended   -> archived
+//
 // A scene MUST NOT transition backward.
 type SceneState string
 

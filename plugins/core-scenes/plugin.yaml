@@ -33,9 +33,8 @@ commands:
 policies:
   - name: execute-scene-commands
     dsl: >-
-      permit(principal is character, action in ["execute"], resource is command)
-      when { resource.command.name in ["scene", "scenes"] };
+      permit(principal is character, action in ["execute"], resource is command) when { resource.command.name in ["scene",
+      "scenes"] };
   - name: read-own-scene
     dsl: >-
-      permit(principal is character, action in ["read"], resource is scene)
-      when { resource.scene.owner == principal.id };
+      permit(principal is character, action in ["read"], resource is scene) when { resource.scene.owner == principal.id };

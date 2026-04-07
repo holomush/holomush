@@ -50,6 +50,7 @@
 The existing `plugins/core-scenes/*` files on `main` are PR #192's stub. Per the brainstorm decision, they are throwaway — useful only if a specific file happens to match what we'd write anyway. Tasks below replace them. This task removes the files we know we don't need.
 
 **Files:**
+
 - Delete: `plugins/core-scenes/migrations/000001_scenes.down.sql`
 
 - [ ] **Step 1: Delete the down migration file**
@@ -66,6 +67,7 @@ Expected: only `000001_scenes.up.sql` shown (will be replaced in Task 3).
 - [ ] **Step 3: Commit**
 
 Run:
+
 ```bash
 jj --no-pager describe -m "chore(scenes): remove unused down migration
 
@@ -81,6 +83,7 @@ jj --no-pager new -m "(working: scenes phase 1 sub-task #1)"
 The `scene` type was protected when it lived in the server core. Now that the plugin owns it, the protection is wrong — plugins must be able to declare `resource_types: [scene]`.
 
 **Files:**
+
 - Modify: `internal/plugin/manifest.go:48-52`
 - Modify: `internal/plugin/manifest_test.go` (add test)
 
@@ -163,6 +166,7 @@ jj --no-pager new -m "(working: scenes phase 1 — plugin manifest)"
 The existing manifest (PR #192) is missing `resource_types`, the AttributeResolverService provider, and the per-resource read-own-scene policy.
 
 **Files:**
+
 - Replace: `plugins/core-scenes/plugin.yaml`
 
 - [ ] **Step 1: Write the new manifest**
@@ -221,9 +225,11 @@ Expected: PASS. (The manifest parser tests don't validate this specific file, bu
 - [ ] **Step 3: Validate the YAML against the schema**
 
 Run: `task pr-prep -- schema` if a schema validation step exists; otherwise:
+
 ```bash
 task lint
 ```
+
 Expected: No errors related to plugin.yaml.
 
 - [ ] **Step 4: Commit**
@@ -248,6 +254,7 @@ jj --no-pager new -m "(working: scenes phase 1 — migration)"
 The existing migration creates four tables. Phase 1 only needs `scenes`. The other tables come back in later phases.
 
 **Files:**
+
 - Replace: `plugins/core-scenes/migrations/000001_scenes.up.sql`
 
 - [ ] **Step 1: Replace the migration content**
@@ -314,6 +321,7 @@ jj --no-pager new -m "(working: scenes phase 1 — types)"
 Phase 1 needs the `Scene` struct and the enums it uses. Other types (templates, logs, participants) come in later phases.
 
 **Files:**
+
 - Create: `plugins/core-scenes/types.go`
 - Create: `plugins/core-scenes/types_test.go`
 
@@ -476,6 +484,7 @@ jj --no-pager new -m "(working: scenes phase 1 — observability)"
 Plugin-side observability uses OTel global tracer (no-op when not configured) and slog. Per spec section 10, this is the foundation that Phase 1 service/store/resolver code builds on.
 
 **Files:**
+
 - Create: `plugins/core-scenes/observability.go`
 
 - [ ] **Step 1: Create the observability helpers**
@@ -558,6 +567,7 @@ jj --no-pager new -m "(working: scenes phase 1 — store)"
 The existing store.go has more methods than Phase 1 needs and references `ParticipantRow`. Trim it to `Create` + `Get` only with `SceneRow` only.
 
 **Files:**
+
 - Replace: `plugins/core-scenes/store.go`
 
 - [ ] **Step 1: Write the new store**
@@ -744,6 +754,7 @@ jj --no-pager new -m "(working: scenes phase 1 — store integration test)"
 The existing integration test references methods that no longer exist. Replace with a focused test of `Create` and `Get`.
 
 **Files:**
+
 - Replace: `plugins/core-scenes/store_integration_test.go`
 - Replace: `plugins/core-scenes/store_test.go` (delete — replaced by integration test for now; pure unit tests can come back later if value emerges)
 
@@ -910,6 +921,7 @@ jj --no-pager new -m "(working: scenes phase 1 — service)"
 The existing service.go has all 9 RPCs from the v1 design. Phase 1 only needs `CreateScene` and `GetScene`; later phases add the rest.
 
 **Files:**
+
 - Replace: `plugins/core-scenes/service.go`
 
 - [ ] **Step 1: Write the new service**
@@ -1140,6 +1152,7 @@ jj --no-pager new -m "(working: scenes phase 1 — service tests)"
 The existing service_test.go tests methods that no longer exist. Replace with a fake-store-based unit test of `CreateScene` and `GetScene`.
 
 **Files:**
+
 - Replace: `plugins/core-scenes/service_test.go`
 
 - [ ] **Step 1: Write the new tests**
@@ -1334,6 +1347,7 @@ jj --no-pager new -m "(working: scenes phase 1 — resolver)"
 The plugin's `AttributeResolverService` resolves scene attributes for the host's ABAC policy engine. Phase 1 needs `GetSchema` (called once at load) and `ResolveResource` returning the scene's owner.
 
 **Files:**
+
 - Create: `plugins/core-scenes/resolver.go`
 - Create: `plugins/core-scenes/resolver_test.go`
 
@@ -1578,6 +1592,7 @@ jj --no-pager new -m "(working: scenes phase 1 — commands)"
 The plugin needs to handle the `scene` command. Phase 1 dispatches the `create` and `info` subcommands to the SceneServiceImpl.
 
 **Files:**
+
 - Create: `plugins/core-scenes/commands.go`
 - Create: `plugins/core-scenes/commands_test.go`
 
@@ -1876,6 +1891,7 @@ jj --no-pager new -m "(working: scenes phase 1 — main.go)"
 The current main.go registers `SceneServiceServer` but does not implement `RegisterAttributeResolver`. Phase 1 needs both.
 
 **Files:**
+
 - Modify: `plugins/core-scenes/main.go`
 
 - [ ] **Step 1: Replace main.go with the updated entry point**
@@ -2022,6 +2038,7 @@ jj --no-pager new -m "(working: scenes phase 1 — integration test)"
 The integration test loads the compiled plugin binary, sets up the host's ABAC engine, and verifies the end-to-end flow: owner can create + read; non-owner is denied by the per-resource policy.
 
 **Files:**
+
 - Create: `test/integration/plugin/core_scenes_test.go`
 
 - [ ] **Step 1: Read the existing reference test**
@@ -2205,12 +2222,14 @@ Do NOT introduce a new test helper package; keep all helpers in this test file.
 - [ ] **Step 3: Build the plugin and run the integration test**
 
 Run:
+
 ```bash
 task build
 task test:int -- -run TestCoreScenesPhase1 ./test/integration/plugin/
 ```
 
 If the test runner uses Ginkgo's package-level test entry point (`go test ./test/integration/plugin/...`), use:
+
 ```bash
 task test:int -- ./test/integration/plugin/
 ```
@@ -2256,6 +2275,7 @@ Expected: All checks pass — lint, format, schema validation, license headers, 
 - [ ] **Step 2: Fix any issues**
 
 If `task pr-prep` reports issues, fix them and re-run. Common likely issues:
+
 - Missing license header on a new file → run `task license:add`
 - Lint warnings on new code → fix in the relevant file
 - Test flakes → investigate; do not just retry
@@ -2271,6 +2291,7 @@ bd show holomush-5rh.10
 ```
 
 Verify each checklist item is satisfied:
+
 - [ ] "scene" removed from ProtectedResourceTypes; test added (Task 1)
 - [ ] core-scenes plugin builds via task build (verified in Task 12 step 3 + Task 14 step 1)
 - [ ] Plugin loads on server startup (implicitly by integration test in Task 13)
@@ -2294,6 +2315,7 @@ If any fix-up commits were made in Step 2, ensure all are described and the work
 ```bash
 jj --no-pager st
 ```
+
 Expected: "The working copy has no changes."
 
 ---
