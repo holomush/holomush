@@ -514,41 +514,43 @@ Run with `-count=20 -race` to make the flake observable.
 (`internal/store/session_store_integration_test.go`, new test):
 
 ```go
-func TestUpdateCursorsRejectsRegression(t *testing.T) {
-    // Setup: real Postgres via testcontainers, create a session row.
+It("rejects a cursor regression for the same stream key", func() {
+    // The CAS guard in UpdateCursors must preserve the highest cursor
+    // ever stored for a (session, stream) pair. Regression attempts
+    // (e.g., from a concurrent Subscribe that observed an earlier
+    // event) must be silently ignored — RowsAffected==0 is not an
+    // error, it just means another writer won with a higher cursor.
     ctx := context.Background()
-    store := newTestStore(t)
-    sessionID := makeTestSession(t, store)
+    info := newTestSession("sess-cas-regression")
+    Expect(sessionStore.Set(ctx, info.ID, info)).To(Succeed())
 
-    streamKey := "location:test"
-    laterCursor := core.NewULID()       // mint first → larger
-    time.Sleep(time.Millisecond)
-    earlierCursor := core.NewULID()     // mint second; ms tick may differ
-    require.True(t, laterCursor.String() > earlierCursor.String() ||
-                   laterCursor.String() < earlierCursor.String(),
-                   "test arrangement requires distinct cursors")
+    // Mint two cursors with core.NewULID so they are strictly monotonic.
+    // The second one is the lex-larger ("higher") cursor.
+    earlier := core.NewULID()
+    time.Sleep(1 * time.Millisecond)
+    later := core.NewULID()
+    Expect(earlier.String() < later.String()).To(BeTrue(),
+        "earlier ULID must be lex-less than later ULID")
 
-    // Force the test to use the lex-larger one as the "winning" write,
-    // regardless of mint order.
-    bigger, smaller := laterCursor, earlierCursor
-    if smaller.String() > bigger.String() {
-        bigger, smaller = smaller, bigger
-    }
+    streamKey := "location:room-cas"
 
-    // Write the larger cursor first.
-    require.NoError(t, store.UpdateCursors(ctx, sessionID,
-        map[string]ulid.ULID{streamKey: bigger}))
+    // First write: later (the higher cursor).
+    Expect(sessionStore.UpdateCursors(ctx, info.ID, map[string]ulid.ULID{
+        streamKey: later,
+    })).To(Succeed())
 
-    // Attempt to regress to the smaller cursor.
-    require.NoError(t, store.UpdateCursors(ctx, sessionID,
-        map[string]ulid.ULID{streamKey: smaller}))
+    // Second write: earlier (a regression). Must not error, but
+    // must not overwrite the stored later.
+    Expect(sessionStore.UpdateCursors(ctx, info.ID, map[string]ulid.ULID{
+        streamKey: earlier,
+    })).To(Succeed(),
+        "regression attempts must not be errors — CAS rows_affected==0 is normal")
 
-    // Stored value must still be the larger cursor.
-    info, err := store.Get(ctx, sessionID)
-    require.NoError(t, err)
-    assert.Equal(t, bigger.String(), info.EventCursors[streamKey].String(),
-        "CAS must reject the regression and preserve the higher cursor")
-}
+    got, err := sessionStore.Get(ctx, info.ID)
+    Expect(err).NotTo(HaveOccurred())
+    Expect(got.EventCursors[streamKey]).To(Equal(later),
+        "stored cursor must remain the higher (later) value")
+})
 ```
 
 **Equivalent unit test** against `MemStore` to anchor the same contract in

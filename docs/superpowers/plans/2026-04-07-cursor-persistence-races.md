@@ -23,7 +23,7 @@ You are working in a **jj workspace** under `.worktrees/holomush_holomush-43nd`,
 - `task test` — runs unit tests (fast, no Docker)
 - `task test:int` — runs integration tests (requires Docker for testcontainers)
 - `task test -- ./internal/store/... -run TestFoo` — targeted unit test
-- `go test -race -v -tags=integration ./test/integration/session/...` — targeted integration test
+- `task test:int` — targeted integration test (runs all integration packages; use `-ginkgo.focus` passthrough only during iterative dev, not in committed scripts)
 - `task lint` — runs all linters including the new ruleguard rule
 - `task fmt` — formats Go/YAML/Markdown
 - `task pr-prep` — the full CI mirror; **must be green before any push to the PR branch** (non-negotiable per project rules)
@@ -494,7 +494,7 @@ Tasks follow strict TDD with these principles:
 
 - [ ] **Step 2: Run integration test to verify it fails**
 
-  Run: `go test -race -v -tags=integration -run TestRunIntegrationSuite ./internal/store/... -ginkgo.focus "rejects a cursor regression"`
+  Run: `task test:int` (all integration packages; during iterative dev you may use `go test -race -v -tags=integration -run TestRunIntegrationSuite ./internal/store/... -ginkgo.focus "rejects a cursor regression"` to focus on this spec, but `task test:int` is the authoritative gate)
 
   Note: if `TestRunIntegrationSuite` is not the correct entry point, use `rg 'var _ = Describe' internal/store/session_store_integration_test.go -B3` to find how the suite is run. Every Ginkgo suite in this project has a `<package>_suite_test.go` with `TestMain` or `RunSpecs`.
 
@@ -625,7 +625,7 @@ Tasks follow strict TDD with these principles:
 
 - [ ] **Step 6: Run integration tests**
 
-  Run: `go test -race -v -tags=integration ./internal/store/... -ginkgo.focus "UpdateCursors"`
+  Run: `task test:int` (authoritative gate; for iterative focus use `go test -race -v -tags=integration ./internal/store/... -ginkgo.focus "UpdateCursors"` during development only)
 
   Expected: PASS — the regression-rejection test now passes because the CAS prevents the regression; the multi-key test passes because the function returns UNSUPPORTED; the original "merges new cursors with existing" still passes.
 
@@ -875,7 +875,7 @@ Tasks follow strict TDD with these principles:
 
 - [ ] **Step 6: Run the integration test suite locally**
 
-  Run: `go test -race -v -tags=integration ./test/integration/session/...`
+  Run: `task test:int`
   Expected: PASS — the existing "Reconnect flow" spec should get **faster** because the strict cursor-equality poll collapses to immediate satisfaction. Observe the runtime: it should drop from ~16s of cursor-waiting to <1s.
 
 - [ ] **Step 7: Commit**
@@ -1059,7 +1059,7 @@ Tasks follow strict TDD with these principles:
 
 - [ ] **Step 3: Run the integration suite against the new tests**
 
-  Run: `go test -race -v -tags=integration ./test/integration/session/... -ginkgo.focus "Reconnect flow"`
+  Run: `task test:int` (authoritative gate; during iterative dev you may use `go test -race -v -tags=integration ./test/integration/session/... -ginkgo.focus "Reconnect flow"` to narrow output)
 
   Expected: all three `It` blocks pass (original + 2 new). The original "replays missed events when client resubscribes after disconnect" still passes because the fix is strictly stronger than the behavior it exercised.
 
@@ -1525,11 +1525,11 @@ cd /Users/sean/Code/github.com/holomush/.worktrees/holomush_holomush-43nd
 # Run a targeted unit test
 task test -- -run TestFooBar ./internal/package/
 
-# Run a targeted integration test
-go test -race -v -tags=integration -run TestSuite ./internal/store/... -ginkgo.focus "pattern"
-
-# Run all integration tests (requires Docker)
+# Run all integration tests (requires Docker) — authoritative gate
 task test:int
+
+# Iterative-dev only: focus a Ginkgo spec (not for committed scripts)
+# go test -race -v -tags=integration ./internal/store/... -ginkgo.focus "pattern"
 
 # Full PR prep (required before push)
 task pr-prep

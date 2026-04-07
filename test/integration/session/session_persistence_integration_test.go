@@ -321,7 +321,35 @@ var _ = Describe("Session Persistence", func() {
 			Expect(replayedSays).To(HaveLen(len(missedPayloads)))
 		})
 
-		It("commits cursor synchronously — fast reconnect does not re-deliver the latest event", func() {
+		It("commits cursor before Subscribe handler returns on client-triggered exit", func() {
+			// Scope of this test: it asserts that under the synchronous-commit
+			// fix, the persisted cursor reflects the latest delivered event by
+			// the time the Subscribe handler goroutine has finished exiting
+			// (where exit was triggered by a client-side context cancellation).
+			//
+			// What this test does NOT prove: it does not deterministically
+			// close Finding 1's strict contract. Finding 1 is about a fast
+			// reconnect that begins WHILE the original handler is in the gap
+			// between grpcStream.Send() and the cursor UPDATE. Sync-in-loop
+			// shrinks that gap from "unbounded under load" (async goroutine
+			// + pool wait) to "~1-10ms typical" (single sync DB round-trip),
+			// but it does not eliminate it. A concurrent reconnect that hits
+			// the in-flight commit window can still observe a stale cursor.
+			//
+			// Deterministic closure of that residual race requires read-after-
+			// write consistency on the cursor at Subscribe start (e.g., a
+			// SELECT FOR SHARE on the session row, an in-process per-session
+			// barrier, a "reconnect cookie" sent by the client, or persist-
+			// before-Send for the last event in the batch — each with its
+			// own trade-offs). Tracked separately as holomush-9ues (P1).
+			//
+			// This test is therefore the strongest deterministic claim we
+			// can make WITHOUT instrumenting production code with a test seam:
+			// after the handler exits, the cursor is durable. The
+			// GracefulStop() call below is the server-side barrier that
+			// guarantees handler exit (ClientStream.Recv() returning a
+			// local Canceled error does NOT imply server handler exit;
+			// grpc-go aborts the client stream locally on context cancel).
 			sessionID, _ := loginAsGuest(testCtx, grpcCli)
 
 			subCtx, subCancel := context.WithCancel(testCtx)
@@ -351,56 +379,26 @@ var _ = Describe("Session Persistence", func() {
 			}).WithTimeout(5 * time.Second).Should(Equal("say"))
 			Expect(liveSayID).NotTo(BeEmpty())
 
-			// Cancel the subscription, then drain the stream until EOF.
-			// Under the fix, the cursor commit runs BEFORE the handler returns,
-			// so by the time Recv() reports EOF, the cursor is already durable.
+			// Cancel the client subscription — triggers cancellation propagation
+			// to the server, which causes the live loop's ctx.Done() case to fire
+			// and the handler to begin exiting (after any in-flight replayAndSend
+			// completes its sync cursor commit).
 			subCancel()
-			for {
-				if _, recvErr := stream.Recv(); recvErr != nil {
-					break
-				}
-			}
 
-			// Read the cursor with NO polling. A polling Eventually here would
-			// hide a regression to the async-commit behavior. Under the fix, the
-			// cursor is committed before the handler goroutine exits, so any
-			// Get() after the stream hits EOF must see the latest sent event ID.
+			// GracefulStop is a SERVER-SIDE barrier: it blocks until all
+			// in-flight handler goroutines return. By the time it unblocks,
+			// the Subscribe handler has definitively exited — and because
+			// the fix commits the cursor inline before the handler returns,
+			// the cursor is durable for events the handler delivered.
+			grpcServer.GracefulStop()
+			grpcServer = nil // prevent AfterEach double-stop
+
+			// Read the cursor — must reflect the live say event.
 			locationStream := world.LocationStream(startLocation)
 			sess, getErr := env.sessionStore.Get(testCtx, sessionID)
 			Expect(getErr).NotTo(HaveOccurred())
 			Expect(sess.EventCursors[locationStream].String()).To(Equal(liveSayID),
-				"cursor must equal the latest sent event ID immediately after the handler exits — no polling")
-
-			// Re-subscribe with replay_from_cursor=true. There must be ZERO
-			// say events on the location stream — the cursor was already at
-			// the live say event, so there is nothing to replay.
-			replayCtx, replayCancel := context.WithTimeout(testCtx, 5*time.Second)
-			defer replayCancel()
-			replayStream, err := grpcCli.Subscribe(replayCtx, &corev1.SubscribeRequest{
-				SessionId:        sessionID,
-				ReplayFromCursor: true,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			sawReplayComplete := false
-			sayCount := 0
-			for !sawReplayComplete {
-				ev, recvErr := replayStream.Recv()
-				if recvErr != nil {
-					break
-				}
-				if frame := ev.GetEvent(); frame != nil &&
-					frame.GetType() == "say" && frame.GetStream() == locationStream {
-					sayCount++
-				}
-				if ctrl := ev.GetControl(); ctrl != nil &&
-					ctrl.Signal == corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE {
-					sawReplayComplete = true
-				}
-			}
-			Expect(sawReplayComplete).To(BeTrue(), "must receive REPLAY_COMPLETE control frame")
-			Expect(sayCount).To(Equal(0),
-				"fast reconnect must not re-deliver the say event; cursor was already at it")
+				"cursor must reflect the live say event after client-cancel-triggered handler exit (synced via GracefulStop barrier)")
 		})
 
 		It("commits cursor before grpcServer.GracefulStop returns (no lost writes on shutdown)", func() {
