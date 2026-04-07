@@ -5,389 +5,147 @@ package main
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
-	"time"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 )
 
-// --- Proto conversion tests ---
+// fakeStore is an in-memory sceneStorer used by service unit tests. It
+// supports configurable error injection so tests can exercise the error
+// branches of the service layer.
+type fakeStore struct {
+	scenes    map[string]*SceneRow
+	createErr error
+	getErr    error
+}
 
-func TestSceneRowToProtoConvertsAllFields(t *testing.T) {
-	loc := "loc-123"
-	ended := time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
-	created := time.Date(2026, 4, 5, 10, 0, 0, 0, time.UTC)
+func newFakeStore() *fakeStore {
+	return &fakeStore{scenes: make(map[string]*SceneRow)}
+}
 
-	row := &SceneRow{
-		ID:              "scene-abc",
-		Title:           "Test Scene",
-		Description:     "A test description",
-		LocationID:      &loc,
-		OwnerID:         "owner-1",
-		State:           "active",
-		PoseOrder:       "round-robin",
-		Visibility:      "open",
-		ContentWarnings: []string{"violence"},
-		Tags:            []string{"action", "drama"},
-		CreatedAt:       created,
-		EndedAt:         &ended,
+func (f *fakeStore) Create(_ context.Context, row *SceneRow) error {
+	if f.createErr != nil {
+		return f.createErr
 	}
-
-	participants := []*ParticipantRow{
-		{
-			SceneID:     "scene-abc",
-			CharacterID: "char-1",
-			Role:        "owner",
-			JoinedAt:    created,
-		},
-		{
-			SceneID:     "scene-abc",
-			CharacterID: "char-2",
-			Role:        "member",
-			JoinedAt:    created.Add(time.Minute),
-		},
+	if _, exists := f.scenes[row.ID]; exists {
+		return oops.Code("SCENE_CREATE_FAILED").With("scene_id", row.ID).Errorf("duplicate")
 	}
-
-	info := sceneRowToProto(row, participants)
-
-	assert.Equal(t, "scene-abc", info.Id)
-	assert.Equal(t, "Test Scene", info.Title)
-	assert.Equal(t, "A test description", info.Description)
-	assert.Equal(t, "loc-123", info.LocationId)
-	assert.Equal(t, "owner-1", info.OwnerId)
-	assert.Equal(t, "active", info.State)
-	assert.Equal(t, "round-robin", info.PoseOrderMode)
-	assert.Equal(t, "open", info.Visibility)
-	assert.Equal(t, []string{"violence"}, info.ContentWarnings)
-	assert.Equal(t, []string{"action", "drama"}, info.Tags)
-	assert.Equal(t, timestamppb.New(created), info.CreatedAt)
-	assert.Equal(t, timestamppb.New(ended), info.EndedAt)
-	require.Len(t, info.Participants, 2)
-	assert.Equal(t, "char-1", info.Participants[0].CharacterId)
-	assert.Equal(t, "owner", info.Participants[0].Role)
-	assert.Equal(t, "char-2", info.Participants[1].CharacterId)
-	assert.Equal(t, "member", info.Participants[1].Role)
+	cp := *row
+	f.scenes[row.ID] = &cp
+	return nil
 }
 
-func TestSceneRowToProtoOmitsOptionalFieldsWhenNil(t *testing.T) {
-	row := &SceneRow{
-		ID:        "scene-min",
-		Title:     "Minimal",
-		OwnerID:   "owner-1",
-		State:     "active",
-		PoseOrder: "free",
-		CreatedAt: time.Now().UTC(),
+func (f *fakeStore) Get(_ context.Context, id string) (*SceneRow, error) {
+	if f.getErr != nil {
+		return nil, f.getErr
 	}
-
-	info := sceneRowToProto(row, nil)
-
-	assert.Equal(t, "scene-min", info.Id)
-	assert.Equal(t, "", info.LocationId)
-	assert.Nil(t, info.EndedAt)
-	assert.Empty(t, info.Participants)
-}
-
-func TestParticipantRowToProtoConvertsFields(t *testing.T) {
-	joined := time.Date(2026, 4, 5, 11, 0, 0, 0, time.UTC)
-	row := &ParticipantRow{
-		SceneID:     "scene-1",
-		CharacterID: "char-42",
-		Role:        "invited",
-		JoinedAt:    joined,
+	row, ok := f.scenes[id]
+	if !ok {
+		return nil, oops.Code("SCENE_NOT_FOUND").With("scene_id", id).Errorf("not found")
 	}
-
-	info := participantRowToProto(row)
-
-	assert.Equal(t, "char-42", info.CharacterId)
-	assert.Equal(t, "invited", info.Role)
-	assert.Equal(t, timestamppb.New(joined), info.JoinedAt)
+	return row, nil
 }
 
-// --- nilIfEmpty tests ---
-
-func TestNilIfEmptyReturnsNilForEmptyString(t *testing.T) {
-	assert.Nil(t, nilIfEmpty(""))
-}
-
-func TestNilIfEmptyReturnsPointerForNonEmptyString(t *testing.T) {
-	result := nilIfEmpty("hello")
-	require.NotNil(t, result)
-	assert.Equal(t, "hello", *result)
-}
-
-// --- mapStoreError tests ---
-
-func TestMapStoreErrorReturnsNilForNilError(t *testing.T) {
-	assert.NoError(t, mapStoreError(nil, "test"))
-}
-
-// --- Validation tests (nil store — only validation paths hit) ---
-
-func TestCreateSceneRejectsEmptyCharacterID(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.CreateScene(t.Context(), &scenev1.CreateSceneRequest{})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "character_id")
-}
-
-func TestCreateSceneRejectsEmptyTitle(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.CreateScene(t.Context(), &scenev1.CreateSceneRequest{
-		CharacterId: "char-1",
-	})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "title")
-}
-
-func TestGetSceneRejectsEmptySceneID(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.GetScene(t.Context(), &scenev1.GetSceneRequest{})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "scene_id")
-}
-
-func TestEndSceneRejectsEmptyCharacterID(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.EndScene(t.Context(), &scenev1.EndSceneRequest{})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "character_id")
-}
-
-func TestEndSceneRejectsEmptySceneID(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.EndScene(t.Context(), &scenev1.EndSceneRequest{
-		CharacterId: "char-1",
-	})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "scene_id")
-}
-
-func TestJoinSceneRejectsEmptyCharacterID(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.JoinScene(t.Context(), &scenev1.JoinSceneRequest{})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "character_id")
-}
-
-func TestJoinSceneRejectsEmptySceneID(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.JoinScene(t.Context(), &scenev1.JoinSceneRequest{
-		CharacterId: "char-1",
-	})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "scene_id")
-}
-
-func TestLeaveSceneRejectsEmptyCharacterID(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.LeaveScene(t.Context(), &scenev1.LeaveSceneRequest{})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "character_id")
-}
-
-func TestLeaveSceneRejectsEmptySceneID(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.LeaveScene(t.Context(), &scenev1.LeaveSceneRequest{
-		CharacterId: "char-1",
-	})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "scene_id")
-}
-
-func TestInviteToSceneRejectsEmptyCharacterID(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.InviteToScene(t.Context(), &scenev1.InviteToSceneRequest{})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "character_id")
-}
-
-func TestInviteToSceneRejectsEmptySceneID(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.InviteToScene(t.Context(), &scenev1.InviteToSceneRequest{
-		CharacterId: "char-1",
-	})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "scene_id")
-}
-
-func TestInviteToSceneRejectsEmptyTargetCharacterID(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.InviteToScene(t.Context(), &scenev1.InviteToSceneRequest{
-		CharacterId: "char-1",
-		SceneId:     "scene-1",
-	})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "target_character_id")
-}
-
-func TestCastPublishVoteRejectsEmptyCharacterID(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.CastPublishVote(t.Context(), &scenev1.CastPublishVoteRequest{})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "character_id")
-}
-
-func TestCastPublishVoteRejectsEmptySceneID(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.CastPublishVote(t.Context(), &scenev1.CastPublishVoteRequest{
-		CharacterId: "char-1",
-	})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "scene_id")
-}
-
-func TestGetPoseOrderRejectsEmptySceneID(t *testing.T) {
-	svc := NewSceneServiceImpl(nil)
-	_, err := svc.GetPoseOrder(t.Context(), &scenev1.GetPoseOrderRequest{})
-	requireGRPCCode(t, err, codes.InvalidArgument)
-	assert.Contains(t, err.Error(), "scene_id")
-}
-
-// --- Ownership enforcement tests (EndScene) ---
-
-func TestEndSceneRejectsNonOwner(t *testing.T) {
-	store := newStubStore(&SceneRow{
-		ID:         "scene-1",
-		Title:      "Test Scene",
-		OwnerID:    "char-A",
-		State:      stateActive,
-		PoseOrder:  poseOrderFree,
-		Visibility: visibilityOpen,
-		CreatedAt:  time.Now().UTC(),
-	})
+func TestSceneServiceCreateScenePersistsTitleAndOwnerWhenRequestIsValid(t *testing.T) {
+	store := newFakeStore()
 	svc := NewSceneServiceImpl(store)
 
-	_, err := svc.EndScene(t.Context(), &scenev1.EndSceneRequest{
-		CharacterId: "char-B",
-		SceneId:     "scene-1",
+	resp, err := svc.CreateScene(context.Background(), &scenev1.CreateSceneRequest{
+		CharacterId: "char-alice",
+		Title:       "  Tea at the Manor  ",
 	})
-
-	requireGRPCCode(t, err, codes.PermissionDenied)
-}
-
-func TestEndSceneAllowsOwner(t *testing.T) {
-	store := newStubStore(&SceneRow{
-		ID:         "scene-1",
-		Title:      "Test Scene",
-		OwnerID:    "char-A",
-		State:      stateActive,
-		PoseOrder:  poseOrderFree,
-		Visibility: visibilityOpen,
-		CreatedAt:  time.Now().UTC(),
-	})
-	svc := NewSceneServiceImpl(store)
-
-	_, err := svc.EndScene(t.Context(), &scenev1.EndSceneRequest{
-		CharacterId: "char-A",
-		SceneId:     "scene-1",
-	})
-
 	require.NoError(t, err)
+	require.NotNil(t, resp.GetScene())
+	assert.True(t, strings.HasPrefix(resp.GetScene().GetId(), "scene-"))
+	assert.Equal(t, "Tea at the Manor", resp.GetScene().GetTitle(), "title should be trimmed")
+	assert.Equal(t, "char-alice", resp.GetScene().GetOwnerId())
+	assert.Equal(t, string(SceneStateActive), resp.GetScene().GetState())
+	assert.Equal(t, string(SceneVisibilityOpen), resp.GetScene().GetVisibility())
 }
 
-// --- Ownership enforcement tests (InviteToScene) ---
+func TestSceneServiceCreateSceneRejectsEmptyCharacterID(t *testing.T) {
+	svc := NewSceneServiceImpl(newFakeStore())
 
-func TestInviteToSceneRejectsNonOwner(t *testing.T) {
-	store := newStubStore(&SceneRow{
-		ID:         "scene-1",
-		Title:      "Test Scene",
-		OwnerID:    "char-A",
-		State:      stateActive,
-		PoseOrder:  poseOrderFree,
-		Visibility: visibilityOpen,
-		CreatedAt:  time.Now().UTC(),
+	_, err := svc.CreateScene(context.Background(), &scenev1.CreateSceneRequest{
+		CharacterId: "",
+		Title:       "Anything",
 	})
-	svc := NewSceneServiceImpl(store)
-
-	_, err := svc.InviteToScene(t.Context(), &scenev1.InviteToSceneRequest{
-		CharacterId:       "char-B",
-		SceneId:           "scene-1",
-		TargetCharacterId: "char-C",
-	})
-
-	requireGRPCCode(t, err, codes.PermissionDenied)
-}
-
-func TestInviteToSceneAllowsOwner(t *testing.T) {
-	store := newStubStore(&SceneRow{
-		ID:         "scene-1",
-		Title:      "Test Scene",
-		OwnerID:    "char-A",
-		State:      stateActive,
-		PoseOrder:  poseOrderFree,
-		Visibility: visibilityOpen,
-		CreatedAt:  time.Now().UTC(),
-	})
-	svc := NewSceneServiceImpl(store)
-
-	_, err := svc.InviteToScene(t.Context(), &scenev1.InviteToSceneRequest{
-		CharacterId:       "char-A",
-		SceneId:           "scene-1",
-		TargetCharacterId: "char-C",
-	})
-
-	require.NoError(t, err)
-}
-
-// --- Compile-time interface check ---
-
-var _ scenev1.SceneServiceServer = (*SceneServiceImpl)(nil)
-
-// --- Test helpers ---
-
-func requireGRPCCode(t *testing.T, err error, code codes.Code) {
-	t.Helper()
 	require.Error(t, err)
 	st, ok := status.FromError(err)
-	require.True(t, ok, "expected gRPC status error, got: %v", err)
-	assert.Equal(t, code, st.Code(), "expected gRPC code %s, got %s: %s", code, st.Code(), st.Message())
+	require.True(t, ok)
+	assert.Equal(t, codes.InvalidArgument, st.Code())
+	assert.Contains(t, st.Message(), "character_id")
 }
 
-// stubStore is a minimal in-memory sceneStorer for unit tests that need a
-// pre-seeded scene without a database connection.
-type stubStore struct {
-	scene *SceneRow
+func TestSceneServiceCreateSceneRejectsBlankTitle(t *testing.T) {
+	svc := NewSceneServiceImpl(newFakeStore())
+
+	_, err := svc.CreateScene(context.Background(), &scenev1.CreateSceneRequest{
+		CharacterId: "char-alice",
+		Title:       "   ",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.InvalidArgument, st.Code())
+	assert.Contains(t, st.Message(), "title")
 }
 
-func newStubStore(scene *SceneRow) *stubStore {
-	return &stubStore{scene: scene}
+func TestSceneServiceCreateSceneReturnsInternalWhenStoreFails(t *testing.T) {
+	store := newFakeStore()
+	store.createErr = oops.Code("SCENE_CREATE_FAILED").Errorf("boom")
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.CreateScene(context.Background(), &scenev1.CreateSceneRequest{
+		CharacterId: "char-alice",
+		Title:       "Tea",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.Internal, st.Code())
 }
 
-func (s *stubStore) GetScene(_ context.Context, _ string) (*SceneRow, error) {
-	return s.scene, nil
+func TestSceneServiceGetSceneReturnsSceneWhenItExists(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-known"] = &SceneRow{
+		ID:         "scene-known",
+		Title:      "Existing",
+		OwnerID:    "char-alice",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityOpen),
+	}
+	svc := NewSceneServiceImpl(store)
+
+	resp, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{SceneId: "scene-known"})
+	require.NoError(t, err)
+	assert.Equal(t, "scene-known", resp.GetScene().GetId())
+	assert.Equal(t, "Existing", resp.GetScene().GetTitle())
 }
 
-func (s *stubStore) UpdateScene(_ context.Context, row *SceneRow) error {
-	s.scene = row
-	return nil
+func TestSceneServiceGetSceneReturnsNotFoundWhenSceneIsMissing(t *testing.T) {
+	svc := NewSceneServiceImpl(newFakeStore())
+
+	_, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{SceneId: "scene-missing"})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.NotFound, st.Code())
 }
 
-func (s *stubStore) AddParticipant(_ context.Context, _ *ParticipantRow) error {
-	return nil
-}
+func TestSceneServiceGetSceneReturnsInternalForUnknownStoreError(t *testing.T) {
+	store := newFakeStore()
+	store.getErr = errors.New("connection refused")
+	svc := NewSceneServiceImpl(store)
 
-func (s *stubStore) CreateScene(_ context.Context, _ *SceneRow) error {
-	return nil
-}
-
-func (s *stubStore) ListScenes(_ context.Context, _ *string, _ *string, _, _ int) ([]*SceneRow, error) {
-	return nil, nil
-}
-
-func (s *stubStore) RemoveParticipant(_ context.Context, _, _ string) error {
-	return nil
-}
-
-func (s *stubStore) ListParticipants(_ context.Context, _ string) ([]*ParticipantRow, error) {
-	return nil, nil
-}
-
-func (s *stubStore) GetParticipant(_ context.Context, _, _ string) (*ParticipantRow, error) {
-	return nil, nil
+	_, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{SceneId: "scene-x"})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.Internal, st.Code())
 }
