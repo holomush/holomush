@@ -570,17 +570,23 @@ Tasks follow strict TDD with these principles:
   `internal/store/session_store_test.go` has `TestPostgresSessionStore_UpdateCursors` at line ~695. The existing test uses `pgxmock` with regex patterns for the SQL — those patterns will no longer match the new query. You must update them:
 
   - Change the `partial update` case regex from:
-    ```
+
+    ```text
     `UPDATE sessions SET event_cursors = event_cursors \|\| \$1::jsonb, updated_at = now\(\) WHERE id = \$2`
     ```
+
     to the new CAS pattern (the regex must escape every `(`, `)`, `|`, and match the multi-line `WHERE … AND (…)` structure):
-    ```
+
+    ```text
     `UPDATE sessions\s+SET event_cursors = event_cursors \|\| \$1::jsonb,\s+updated_at = now\(\)\s+WHERE id = \$2\s+AND \(\s+event_cursors->>\$3 IS NULL\s+OR \(event_cursors->>\$3\) COLLATE "C" < \(\$4::text\) COLLATE "C"\s+\)`
     ```
+
   - The `WithArgs(pgxmock.AnyArg(), "sess-abc")` call must now have **four** args: `pgxmock.AnyArg()` (the JSONB), `"sess-abc"` (the id), `"location:room-1"` (the stream key extracted from `cursors`), and `cursorID.String()` (the new cursor). The existing test uses `cursors := map[string]ulid.ULID{"location:room-1": cursorID}` at line ~697, so:
+
     ```go
     WithArgs(pgxmock.AnyArg(), "sess-abc", "location:room-1", cursorID.String()).
     ```
+
   - Apply the same arg-count update to the `database error` case.
 
   Add two new test cases to the same table:
