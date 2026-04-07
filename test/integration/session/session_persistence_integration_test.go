@@ -276,7 +276,7 @@ var _ = Describe("Session Persistence", func() {
 					return ulid.ULID{}
 				}
 				return sess.EventCursors[locationStream]
-			}).WithTimeout(5 * time.Second).WithPolling(50 * time.Millisecond).
+			}).WithTimeout(5*time.Second).WithPolling(50*time.Millisecond).
 				Should(Equal(liveSayEventID), "location-stream cursor should advance to the live say event ID")
 
 			// Append three events directly to the event store, simulating
@@ -512,7 +512,7 @@ var _ = Describe("Session Persistence", func() {
 				).Scan(&exists)
 				Expect(queryErr).NotTo(HaveOccurred())
 				return exists
-			}).WithTimeout(5 * time.Second).WithPolling(50 * time.Millisecond).
+			}).WithTimeout(5*time.Second).WithPolling(50*time.Millisecond).
 				Should(BeFalse(), "reaper should have deleted the expired session")
 
 			// The OnExpired callback should have emitted a leave event via
@@ -530,7 +530,7 @@ var _ = Describe("Session Persistence", func() {
 					}
 				}
 				return false
-			}).WithTimeout(5 * time.Second).WithPolling(50 * time.Millisecond).Should(BeTrue(),
+			}).WithTimeout(5*time.Second).WithPolling(50*time.Millisecond).Should(BeTrue(),
 				"expected a leave event for the expired character on the location stream")
 		})
 	})

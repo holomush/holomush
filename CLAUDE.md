@@ -164,6 +164,20 @@ Always use `crypto/rand`, never `math/rand`. For picking from slices, use a
 `crypto/rand` + `math/big` helper. The `internal/naming` package has `cryptoIntN(n)`
 as an example.
 
+### ULID Generation
+
+Two ULID generators exist; the choice matters because the event store relies
+on lex order matching arrival order.
+
+| Use case | Generator | Why |
+| --- | --- | --- |
+| **Event IDs** (`core.Event.ID`), session IDs | `core.NewULID()` | Monotonic within a millisecond. `PostgresEventStore.Replay` uses `WHERE id > afterID ORDER BY id`; cursor advances use a SQL monotonicity CAS. Non-monotonic event IDs silently break both. |
+| **Entity primary keys** (players, locations, characters, exits, objects, policies) | `idgen.New()` | Identity, not ordering. Fresh `crypto/rand` entropy per call. |
+
+Enforced by the `EventIDMustBeMonotonic` ruleguard rule in `gorules/rules.go`
+(loaded via `gocritic`). New `core.Event{}` literals using `idgen.New()` will
+fail `task lint`.
+
 ### Error Handling
 
 Use oops for structured errors with context:
