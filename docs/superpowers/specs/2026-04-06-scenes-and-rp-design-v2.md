@@ -360,7 +360,7 @@ warnings (`internal/plugin/manifest_warnings.go`) but do not block load.
 | `scene:<id>` | `write` | Members (active/paused only) | 3 |
 | `scene:<id>` | `join` | Open: anyone. Private: invited only | 3 |
 | `scene:<id>` | `end` | Owner only | 2 |
-| `scene:<id>` | `pause`/`resume` | Owner (pause); any member (resume) | 2 |
+| `scene:<id>` | `pause`/`resume` | Owner only in Phase 2 (members have no identity yet); Phase 3 widens `resume` to any member once the participant model exists (D6 async safety) | 2 |
 | `scene:<id>` | `invite`/`kick` | Owner only | 3 |
 | `scene_log:<id>` | `read` | **NOT enforced via ABAC** — see 5.5 | 6 |
 | `scene_log:<id>` | `publish` | System-only (triggered by unanimous vote) | 6 |
@@ -443,7 +443,7 @@ top-level commands in its manifest.)*
 | `scene create [title]` | Create scene. Flags: `--location`, `--template`, `--visibility`, `--pose-order`, `--tags`, `--warnings` |
 | `scene end` | Owner ends scene. Triggers publish vote. Returns terminal-focused participants to grid. |
 | `scene pause` | Owner manually pauses scene. |
-| `scene resume` | Any member resumes a paused scene. Intentional: async scenes MUST be resumable by any participant, not just the owner, to avoid blocking on an absent owner. |
+| `scene resume` | Owner resumes a paused scene. Phase 2 is owner-only because there is no participant model yet; Phase 3 widens this to any member (D6 async safety: async scenes MUST be resumable by any participant, not just the owner, to avoid blocking on an absent owner). |
 
 ### 6.2 Membership
 
@@ -517,7 +517,7 @@ outside the plugin package are forbidden.
 | `UpdateScene` | Owner modifies settings (`scene set` command) | 2 |
 | `EndScene` | Owner ends, triggers vote | 2 |
 | `PauseScene` | Owner pauses | 2 |
-| `ResumeScene` | Any member resumes | 2 |
+| `ResumeScene` | Owner resumes (Phase 2); Phase 3 widens to any member (D6 async safety) | 2 |
 | `JoinScene` | Join open scene | 3 |
 | `LeaveScene` | Drop membership | 3 |
 | `InviteToScene` | Owner invites character | 3 |
@@ -581,7 +581,12 @@ requires:
 
 provides:
   - holomush.scene.v1.SceneService
-  - holomush.plugin.v1.AttributeResolverService
+# Note: holomush.plugin.v1.AttributeResolverService is NOT listed in
+# `provides`. It is a singleton service exposed by the go-plugin subprocess
+# itself and discovered by the host via `host.AttributeResolverClient(...)`;
+# advertising it here would conflict with the host's implicit registration.
+# Keep the real plugin.yaml and this example in sync — see the checked-in
+# `plugins/core-scenes/plugin.yaml`.
 
 storage: postgres
 

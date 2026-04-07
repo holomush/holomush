@@ -314,6 +314,35 @@ func TestSceneServicePauseSceneTransitionsScene(t *testing.T) {
 	assert.Equal(t, string(SceneStatePaused), resp.GetScene().GetState())
 }
 
+func TestSceneServicePauseSceneReturnsNotFoundForMissingScene(t *testing.T) {
+	svc := NewSceneServiceImpl(newFakeStore())
+
+	_, err := svc.PauseScene(context.Background(), &scenev1.PauseSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-missing",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.NotFound, st.Code())
+}
+
+func TestSceneServicePauseSceneReturnsFailedPreconditionForAlreadyPausedScene(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-paused"] = &SceneRow{
+		ID:    "scene-paused",
+		State: string(SceneStatePaused),
+	}
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.PauseScene(context.Background(), &scenev1.PauseSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-paused",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.FailedPrecondition, st.Code())
+}
+
 func TestSceneServiceResumeSceneTransitionsScene(t *testing.T) {
 	store := newFakeStore()
 	store.scenes["scene-1"] = &SceneRow{
@@ -329,6 +358,35 @@ func TestSceneServiceResumeSceneTransitionsScene(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, string(SceneStateActive), resp.GetScene().GetState())
+}
+
+func TestSceneServiceResumeSceneReturnsNotFoundForMissingScene(t *testing.T) {
+	svc := NewSceneServiceImpl(newFakeStore())
+
+	_, err := svc.ResumeScene(context.Background(), &scenev1.ResumeSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-missing",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.NotFound, st.Code())
+}
+
+func TestSceneServiceResumeSceneReturnsFailedPreconditionForActiveScene(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-active"] = &SceneRow{
+		ID:    "scene-active",
+		State: string(SceneStateActive),
+	}
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.ResumeScene(context.Background(), &scenev1.ResumeSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-active",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.FailedPrecondition, st.Code())
 }
 
 func TestSceneServiceUpdateSceneAppliesTitleChange(t *testing.T) {
@@ -434,20 +492,39 @@ func TestSceneServiceUpdateSceneRejectsUnknownMaskPath(t *testing.T) {
 }
 
 func TestSceneServiceUpdateSceneEmptyMaskIsNoOp(t *testing.T) {
-	store := newFakeStore()
-	store.scenes["scene-1"] = &SceneRow{
-		ID:         "scene-1",
-		Title:      "Unchanged",
-		State:      string(SceneStateActive),
-		Visibility: string(SceneVisibilityOpen),
+	// Clients commonly send either an omitted UpdateMask (nil) or an
+	// explicit empty FieldMask with no paths. Both MUST be treated as a
+	// no-op. Table-driven so a future serialization form can be added
+	// without duplicating the fixture setup.
+	cases := []struct {
+		name string
+		mask *fieldmaskpb.FieldMask
+	}{
+		{"nil update_mask is a no-op", nil},
+		{"explicit empty update_mask paths is a no-op", &fieldmaskpb.FieldMask{Paths: []string{}}},
 	}
-	svc := NewSceneServiceImpl(store)
 
-	resp, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
-		CharacterId: "char-alice",
-		SceneId:     "scene-1",
-		// No UpdateMask — empty mask, no fields to apply
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "Unchanged", resp.GetScene().GetTitle())
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakeStore()
+			store.scenes["scene-1"] = &SceneRow{
+				ID:         "scene-1",
+				Title:      "Unchanged",
+				State:      string(SceneStateActive),
+				Visibility: string(SceneVisibilityOpen),
+			}
+			svc := NewSceneServiceImpl(store)
+
+			resp, err := svc.UpdateScene(context.Background(), &scenev1.UpdateSceneRequest{
+				CharacterId: "char-alice",
+				SceneId:     "scene-1",
+				UpdateMask:  tc.mask,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, "Unchanged", resp.GetScene().GetTitle())
+			// Store row must also be untouched — the no-op path MUST NOT
+			// emit any mutation to the fake store.
+			assert.Equal(t, "Unchanged", store.scenes["scene-1"].Title)
+		})
+	}
 }

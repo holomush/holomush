@@ -26,33 +26,66 @@ async function sendCommand(page: Page, command: string) {
 }
 
 /**
- * Wait for the most recent terminal event whose text matches `pattern` and
- * return the captured substring (the regex match, not the whole event text).
+ * Snapshot the current terminal event count. Used as a baseline before
+ * sending a new command so subsequent waits only inspect events appended
+ * after the command was sent. Without this, a transcript-style UI that
+ * preserves prior events can produce false-positive matches on earlier
+ * output.
  */
-async function waitForOutputMatching(page: Page, pattern: RegExp): Promise<string> {
-  const event = page
-    .locator('[data-testid="event"]')
-    .filter({ hasText: pattern })
-    .last();
-  await expect(event).toBeVisible({ timeout: 10000 });
-  const text = await event.textContent();
-  if (!text) {
-    throw new Error(`event matched ${pattern} but had no text`);
+async function currentEventCount(page: Page): Promise<number> {
+  return page.locator('[data-testid="event"]').count();
+}
+
+/**
+ * Wait for a terminal event whose text matches `pattern` to appear at or
+ * after `sinceIndex`, and return the captured substring (the regex match,
+ * not the whole event text).
+ *
+ * Callers MUST capture `sinceIndex` via currentEventCount BEFORE sending
+ * the command whose output they want to match. This isolates the wait
+ * from any preceding events that may coincidentally match the pattern.
+ */
+async function waitForOutputMatching(
+  page: Page,
+  pattern: RegExp,
+  sinceIndex: number,
+): Promise<string> {
+  const events = page.locator('[data-testid="event"]');
+
+  // Poll the locator until some event at index >= sinceIndex matches the
+  // pattern. Using expect.poll lets Playwright's auto-waiting semantics
+  // handle retry and timeout.
+  let captured = '';
+  await expect
+    .poll(
+      async () => {
+        const count = await events.count();
+        for (let i = sinceIndex; i < count; i++) {
+          const text = (await events.nth(i).textContent()) ?? '';
+          const match = text.match(pattern);
+          if (match && match[0]) {
+            captured = match[0];
+            return true;
+          }
+        }
+        return false;
+      },
+      { timeout: 10000 },
+    )
+    .toBe(true);
+
+  if (!captured) {
+    throw new Error(`poll passed but no value captured for pattern ${pattern}`);
   }
-  const match = text.match(pattern);
-  if (!match || !match[0]) {
-    throw new Error(`pattern ${pattern} matched event but extracted no value`);
-  }
-  return match[0];
+  return captured;
 }
 
 /**
  * Extract the scene ID from a "Scene created: scene-XXXXX" terminal event.
  * Scene IDs are `scene-` plus a 26-char Crockford base32 ULID.
  */
-async function extractSceneIdFromOutput(page: Page): Promise<string> {
-  const text = await waitForOutputMatching(page, /scene-[A-Z0-9]+/);
-  return text;
+async function extractSceneIdFromOutput(page: Page, sinceIndex: number): Promise<string> {
+  return waitForOutputMatching(page, /scene-[A-Z0-9]+/, sinceIndex);
 }
 
 test.describe('Scene lifecycle (Phase 2)', () => {
@@ -63,9 +96,11 @@ test.describe('Scene lifecycle (Phase 2)', () => {
     const session = await db.getSessionById(sessionId!);
     expect(session).not.toBeNull();
 
-    // Create a scene through the terminal
+    // Create a scene through the terminal. Capture the event count before
+    // sending so the wait only inspects events appended after the command.
+    let before = await currentEventCount(page);
     await sendCommand(page, 'scene create Phase 2 Lifecycle Test');
-    const sceneId = await extractSceneIdFromOutput(page);
+    const sceneId = await extractSceneIdFromOutput(page, before);
     expect(sceneId).toMatch(/^scene-[A-Z0-9]+$/);
 
     // DB: scene exists with state='active', owner = current character
@@ -77,20 +112,23 @@ test.describe('Scene lifecycle (Phase 2)', () => {
     expect(scene!.ended_at).toBeNull();
 
     // Pause
+    before = await currentEventCount(page);
     await sendCommand(page, `scene pause ${sceneId}`);
-    await waitForOutputMatching(page, /paused/);
+    await waitForOutputMatching(page, /paused/, before);
     scene = await db.getSceneById(sceneId);
     expect(scene!.state).toBe('paused');
 
     // Resume
+    before = await currentEventCount(page);
     await sendCommand(page, `scene resume ${sceneId}`);
-    await waitForOutputMatching(page, /resumed/);
+    await waitForOutputMatching(page, /resumed/, before);
     scene = await db.getSceneById(sceneId);
     expect(scene!.state).toBe('active');
 
     // End
+    before = await currentEventCount(page);
     await sendCommand(page, `scene end ${sceneId}`);
-    await waitForOutputMatching(page, /ended/);
+    await waitForOutputMatching(page, /ended/, before);
     scene = await db.getSceneById(sceneId);
     expect(scene!.state).toBe('ended');
     expect(scene!.ended_at).not.toBeNull();
@@ -99,14 +137,16 @@ test.describe('Scene lifecycle (Phase 2)', () => {
   test('scene set updates the title', async ({ page }) => {
     await connectAsGuest(page);
 
+    let before = await currentEventCount(page);
     await sendCommand(page, 'scene create Original Title');
-    const sceneId = await extractSceneIdFromOutput(page);
+    const sceneId = await extractSceneIdFromOutput(page, before);
 
     let scene = await db.getSceneById(sceneId);
     expect(scene!.title).toBe('Original Title');
 
+    before = await currentEventCount(page);
     await sendCommand(page, `scene set ${sceneId} title=Renamed Title`);
-    await waitForOutputMatching(page, /updated/);
+    await waitForOutputMatching(page, /updated/, before);
 
     scene = await db.getSceneById(sceneId);
     expect(scene!.title).toBe('Renamed Title');
@@ -115,25 +155,31 @@ test.describe('Scene lifecycle (Phase 2)', () => {
   test('cannot end an already-ended scene', async ({ page }) => {
     await connectAsGuest(page);
 
+    let before = await currentEventCount(page);
     await sendCommand(page, 'scene create Will End Twice');
-    const sceneId = await extractSceneIdFromOutput(page);
+    const sceneId = await extractSceneIdFromOutput(page, before);
 
+    before = await currentEventCount(page);
     await sendCommand(page, `scene end ${sceneId}`);
-    await waitForOutputMatching(page, /ended/);
+    await waitForOutputMatching(page, /ended/, before);
 
     // Second end attempt should produce an error event
+    before = await currentEventCount(page);
     await sendCommand(page, `scene end ${sceneId}`);
-    await waitForOutputMatching(page, /Failed to end scene/);
+    await waitForOutputMatching(page, /Failed to end scene/, before);
   });
 
   test('scene info shows scene metadata', async ({ page }) => {
     await connectAsGuest(page);
 
+    let before = await currentEventCount(page);
     await sendCommand(page, 'scene create Info Test Scene');
-    const sceneId = await extractSceneIdFromOutput(page);
+    const sceneId = await extractSceneIdFromOutput(page, before);
 
+    before = await currentEventCount(page);
     await sendCommand(page, `scene info ${sceneId}`);
-    await waitForOutputMatching(page, /Info Test Scene/);
-    await waitForOutputMatching(page, /State: active/);
+    // Both assertions look at events appended after the `scene info` command.
+    await waitForOutputMatching(page, /Info Test Scene/, before);
+    await waitForOutputMatching(page, /State: active/, before);
   });
 });

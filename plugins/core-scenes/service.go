@@ -390,13 +390,16 @@ func newSceneID() (string, error) {
 // row's actual CreatedAt.
 func rowToProto(row *SceneRow, createdAt time.Time) *scenev1.SceneInfo {
 	info := &scenev1.SceneInfo{
-		Id:          row.ID,
-		Title:       row.Title,
-		Description: row.Description,
-		OwnerId:     row.OwnerID,
-		State:       row.State,
-		Visibility:  row.Visibility,
-		CreatedAt:   timestamppb.New(createdAt),
+		Id:              row.ID,
+		Title:           row.Title,
+		Description:     row.Description,
+		OwnerId:         row.OwnerID,
+		State:           row.State,
+		Visibility:      row.Visibility,
+		PoseOrderMode:   row.PoseOrder,
+		ContentWarnings: row.ContentWarnings,
+		Tags:            row.Tags,
+		CreatedAt:       timestamppb.New(createdAt),
 	}
 	if row.LocationID != nil {
 		info.LocationId = *row.LocationID

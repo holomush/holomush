@@ -14,6 +14,18 @@
 -- If a new state is added, this constraint must be updated AND a new
 -- migration written; the constraint serves as a forcing function.
 
-ALTER TABLE scenes
-  ADD CONSTRAINT scenes_state_check
-  CHECK (state IN ('active', 'paused', 'ended', 'archived'));
+-- Idempotent per the repo's migration guidelines: Postgres does not support
+-- `ADD CONSTRAINT IF NOT EXISTS` for CHECK constraints, so we gate the ALTER
+-- behind a pg_constraint probe inside an anonymous DO block. This is a
+-- one-shot statement, not a stored function or trigger.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'scenes_state_check'
+  ) THEN
+    ALTER TABLE scenes
+      ADD CONSTRAINT scenes_state_check
+      CHECK (state IN ('active', 'paused', 'ended', 'archived'));
+  END IF;
+END
+$$;

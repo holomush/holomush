@@ -20,6 +20,8 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/testcontainers/testcontainers-go"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	policy "github.com/holomush/holomush/internal/access/policy"
@@ -331,6 +333,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 		var (
 			abacCtx         context.Context
 			abacCancel      context.CancelFunc
+			abacContainer   testcontainers.Container
+			abacConnStr     string
 			abacHost        *goplugin.Host
 			abacPs          *policystore.PostgresStore
 			abacEngine      *policy.Engine
@@ -348,19 +352,23 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 			abacCtx, abacCancel = context.WithTimeout(context.Background(), 2*time.Minute)
 
-			// Postgres + migrator
+			// Postgres + migrator — use suite-local handles so the outer
+			// `container`/`connStr` vars are not clobbered. This keeps the
+			// outer Describe block's Postgres instance reachable in its own
+			// AfterEach instead of being terminated twice (once here, never
+			// at the outer level).
 			pgEnv, err := testutil.StartPostgres(abacCtx)
 			Expect(err).NotTo(HaveOccurred())
-			container = pgEnv.Container
-			connStr = pgEnv.ConnStr
+			abacContainer = pgEnv.Container
+			abacConnStr = pgEnv.ConnStr
 
-			migrator, err := store.NewMigrator(connStr)
+			migrator, err := store.NewMigrator(abacConnStr)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(migrator.Up()).To(Succeed())
 			_ = migrator.Close()
 
 			// Provisioner outlives BeforeEach (closed in AfterEach)
-			abacProvisioner = plugins.NewSchemaProvisioner(connStr)
+			abacProvisioner = plugins.NewSchemaProvisioner(abacConnStr)
 			Expect(abacProvisioner.Init(abacCtx)).To(Succeed())
 
 			// Service registry with WorldService stub
@@ -389,7 +397,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			Expect(abacHost.Load(abacCtx, manifest, pluginDir)).To(Succeed())
 
 			// Install policies into postgres store
-			abacPool, err = pgxpool.New(abacCtx, connStr)
+			abacPool, err = pgxpool.New(abacCtx, abacConnStr)
 			Expect(err).NotTo(HaveOccurred())
 			abacPs = policystore.NewPostgresStore(abacPool)
 			installer := plugins.NewPolicyInstaller(abacPs)
@@ -458,8 +466,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			if abacPool != nil {
 				abacPool.Close()
 			}
-			if container != nil {
-				_ = container.Terminate(context.Background())
+			if abacContainer != nil {
+				_ = abacContainer.Terminate(context.Background())
 			}
 			if abacCancel != nil {
 				abacCancel()
@@ -633,6 +641,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 					SceneId:     lifecyclesceneID,
 				})
 				Expect(err).To(HaveOccurred())
+				Expect(status.Code(err)).To(Equal(codes.FailedPrecondition),
+					"second EndScene on already-ended scene must map to FailedPrecondition")
 			})
 
 			It("returns NotFound for a missing scene", func() {
@@ -641,6 +651,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 					SceneId:     "scene-does-not-exist",
 				})
 				Expect(err).To(HaveOccurred())
+				Expect(status.Code(err)).To(Equal(codes.NotFound),
+					"EndScene on a missing scene must map to NotFound")
 			})
 
 			It("rejects concurrent end attempts (race-safe WHERE clause)", func() {
@@ -713,6 +725,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 					SceneId:     lifecyclesceneID,
 				})
 				Expect(err).To(HaveOccurred())
+				Expect(status.Code(err)).To(Equal(codes.FailedPrecondition),
+					"second PauseScene on already-paused scene must map to FailedPrecondition")
 			})
 		})
 
@@ -740,6 +754,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 					SceneId:     lifecyclesceneID,
 				})
 				Expect(err).To(HaveOccurred())
+				Expect(status.Code(err)).To(Equal(codes.FailedPrecondition),
+					"ResumeScene on an active scene must map to FailedPrecondition")
 			})
 		})
 
@@ -776,6 +792,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 					UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"title"}},
 				})
 				Expect(err).To(HaveOccurred())
+				Expect(status.Code(err)).To(Equal(codes.FailedPrecondition),
+					"UpdateScene on an ended scene must map to FailedPrecondition")
 
 				var title string
 				err = lifecyclepool.QueryRow(lifecyclectx,

@@ -7,11 +7,9 @@ package main
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -19,35 +17,42 @@ import (
 	"github.com/holomush/holomush/test/testutil"
 )
 
-// newTestStore starts a Postgres testcontainer, opens a SceneStore against
-// it, and returns the store with a cleanup function.
+// newTestStore starts a Postgres testcontainer and opens a SceneStore against
+// it. Cleanup is registered via t.Cleanup in two phases (container, then
+// store) so the container is released even if NewSceneStore fails. Container
+// termination uses a fresh, short-lived context so teardown does not inherit
+// the 2-minute setup deadline.
 //
 // Note: testutil.PostgresEnv exposes the connection string via the ConnStr
 // field (no "ing" suffix). The holomush role owns the public schema, so
 // the plugin's migrations create the scenes table directly in public.
 // Schema isolation via SchemaProvisioner is exercised by the end-to-end
 // test in test/integration/plugin/core_scenes_test.go (Task 13), not here.
-func newTestStore(t *testing.T) (*SceneStore, func()) {
+func newTestStore(t *testing.T) *SceneStore {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	pgEnv, err := testutil.StartPostgres(ctx)
+	setupCtx, cancelSetup := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancelSetup)
+
+	pgEnv, err := testutil.StartPostgres(setupCtx)
 	require.NoError(t, err, "failed to start postgres testcontainer")
+	// Register container termination immediately so a subsequent
+	// NewSceneStore failure cannot leak the container.
+	t.Cleanup(func() {
+		termCtx, cancelTerm := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancelTerm()
+		_ = pgEnv.Terminate(termCtx)
+	})
 
-	store, err := NewSceneStore(ctx, pgEnv.ConnStr)
+	store, err := NewSceneStore(setupCtx, pgEnv.ConnStr)
 	require.NoError(t, err, "failed to open scene store")
+	t.Cleanup(store.Close)
 
-	cleanup := func() {
-		store.Close()
-		_ = pgEnv.Terminate(ctx)
-		cancel()
-	}
-	return store, cleanup
+	return store
 }
 
 func TestSceneStoreCreatePersistsAllSceneFields(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	locationID := "loc-01"
@@ -83,24 +88,21 @@ func TestSceneStoreCreatePersistsAllSceneFields(t *testing.T) {
 }
 
 func TestSceneStoreGetReturnsNotFoundForMissingScene(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 
 	_, err := store.Get(ctx, "scene-does-not-exist")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
-
-	var oopsErr oops.OopsError
-	if errors.As(err, &oopsErr) {
-		assert.Equal(t, "scene-does-not-exist", oopsErr.Context()["scene_id"])
-	}
+	// Use errutil.AssertErrorContext so the scene_id context is asserted
+	// unconditionally — a conditional errors.As block lets the test pass
+	// silently if the context ever stops being attached.
+	errutil.AssertErrorContext(t, err, "scene_id", "scene-does-not-exist")
 }
 
 func TestSceneStoreCreateRejectsDuplicateID(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	row := &SceneRow{
@@ -123,8 +125,7 @@ func TestSceneStoreCreateRejectsDuplicateID(t *testing.T) {
 }
 
 func TestSceneStoreEndTransitionsActiveToEnded(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	row := &SceneRow{
@@ -150,8 +151,7 @@ func TestSceneStoreEndTransitionsActiveToEnded(t *testing.T) {
 }
 
 func TestSceneStoreEndTransitionsPausedToEnded(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	row := &SceneRow{
@@ -173,8 +173,7 @@ func TestSceneStoreEndTransitionsPausedToEnded(t *testing.T) {
 }
 
 func TestSceneStoreEndRejectsAlreadyEnded(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	row := &SceneRow{
@@ -195,8 +194,7 @@ func TestSceneStoreEndRejectsAlreadyEnded(t *testing.T) {
 }
 
 func TestSceneStoreEndReturnsNotFoundForMissingScene(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	_, err := store.End(ctx, "scene-does-not-exist")
@@ -205,8 +203,7 @@ func TestSceneStoreEndReturnsNotFoundForMissingScene(t *testing.T) {
 }
 
 func TestSceneStorePauseTransitionsActiveToPaused(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	row := &SceneRow{
@@ -227,8 +224,7 @@ func TestSceneStorePauseTransitionsActiveToPaused(t *testing.T) {
 }
 
 func TestSceneStorePauseRejectsAlreadyPaused(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	row := &SceneRow{
@@ -249,8 +245,7 @@ func TestSceneStorePauseRejectsAlreadyPaused(t *testing.T) {
 }
 
 func TestSceneStoreResumeTransitionsPausedToActive(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	row := &SceneRow{
@@ -271,8 +266,7 @@ func TestSceneStoreResumeTransitionsPausedToActive(t *testing.T) {
 }
 
 func TestSceneStoreResumeRejectsActiveScene(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	row := &SceneRow{
@@ -293,8 +287,7 @@ func TestSceneStoreResumeRejectsActiveScene(t *testing.T) {
 }
 
 func TestSceneStoreUpdateAppliesTitleOnly(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	row := &SceneRow{
@@ -324,8 +317,7 @@ func TestSceneStoreUpdateAppliesTitleOnly(t *testing.T) {
 }
 
 func TestSceneStoreUpdateAppliesMultipleFields(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	row := &SceneRow{
@@ -359,8 +351,7 @@ func TestSceneStoreUpdateAppliesMultipleFields(t *testing.T) {
 }
 
 func TestSceneStoreUpdateRepeatedFieldsRespectFlag(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	row := &SceneRow{
@@ -392,8 +383,7 @@ func TestSceneStoreUpdateRepeatedFieldsRespectFlag(t *testing.T) {
 }
 
 func TestSceneStoreUpdateClearsRepeatedFieldWithEmptySlice(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	row := &SceneRow{
@@ -421,8 +411,7 @@ func TestSceneStoreUpdateClearsRepeatedFieldWithEmptySlice(t *testing.T) {
 }
 
 func TestSceneStoreUpdateRejectsEndedScene(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	row := &SceneRow{
@@ -445,8 +434,7 @@ func TestSceneStoreUpdateRejectsEndedScene(t *testing.T) {
 }
 
 func TestSceneStoreUpdateReturnsNotFoundForMissingScene(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	title := "Anything"
@@ -457,8 +445,7 @@ func TestSceneStoreUpdateReturnsNotFoundForMissingScene(t *testing.T) {
 }
 
 func TestSceneStoreUpdateNoFieldsIsNoOp(t *testing.T) {
-	store, cleanup := newTestStore(t)
-	defer cleanup()
+	store := newTestStore(t)
 
 	ctx := context.Background()
 	row := &SceneRow{
