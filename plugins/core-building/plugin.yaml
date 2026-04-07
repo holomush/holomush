@@ -92,3 +92,7 @@ policies:
       permit(principal is plugin, action in ["read"], resource is location) when {
         principal.plugin.name == "core-building"
       };
+  - name: execute-building
+    dsl: >-
+      permit(principal is character, action in ["execute"], resource is command) when { "builder" in principal.character.roles
+      && resource.command.name in ["dig", "link"] };

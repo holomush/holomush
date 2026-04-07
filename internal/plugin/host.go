@@ -8,6 +8,7 @@ import (
 	"context"
 
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
 )
 
@@ -39,4 +40,14 @@ type Host interface {
 type ServiceConnProvider interface {
 	// PluginConn returns the gRPC client connection for the named plugin.
 	PluginConn(name string) (grpc.ClientConnInterface, error)
+}
+
+// AttributeResolverProvider is an optional interface that Host implementations
+// may implement to provide AttributeResolver gRPC clients for loaded plugins.
+// Binary plugin hosts implement this to support schema discovery and attribute
+// resolution for plugin-owned resource types.
+type AttributeResolverProvider interface {
+	// AttributeResolverClient returns the AttributeResolver gRPC client for a loaded plugin.
+	// Returns nil if the plugin is not loaded or doesn't support attribute resolution.
+	AttributeResolverClient(pluginName string) pluginv1.AttributeResolverServiceClient
 }

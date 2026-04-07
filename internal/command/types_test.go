@@ -595,7 +595,8 @@ func TestCapability_ValidateInvalid(t *testing.T) {
 		{"empty action", Capability{Action: "", Resource: "location"}, "action"},
 		{"empty resource", Capability{Action: "read", Resource: ""}, "resource"},
 		{"unknown action", Capability{Action: "destroy", Resource: "location"}, "action"},
-		{"unknown resource", Capability{Action: "read", Resource: "spaceship"}, "resource"},
+		// Note: unknown resource type is NOT checked by Validate() — it's checked
+		// by ValidateResourceType() at load time with cross-plugin context.
 		{"invalid scope", Capability{Action: "read", Resource: "location", Scope: "everywhere"}, "scope"},
 	}
 	for _, tt := range tests {
@@ -605,6 +606,36 @@ func TestCapability_ValidateInvalid(t *testing.T) {
 			assert.Contains(t, err.Error(), tt.want)
 		})
 	}
+}
+
+func TestCapability_ValidateAcceptsUnknownResourceType(t *testing.T) {
+	// Validate() is structural only — unknown resource types pass.
+	// ValidateResourceType() checks membership at load time.
+	c := Capability{Action: "read", Resource: "widget", Scope: ScopeLocal}
+	assert.NoError(t, c.Validate())
+}
+
+func TestCapability_ValidateResourceTypeKnown(t *testing.T) {
+	known := map[string]bool{"location": true, "widget": true}
+	assert.NoError(t, Capability{Action: "read", Resource: "widget"}.ValidateResourceType(known))
+	assert.NoError(t, Capability{Action: "read", Resource: "location"}.ValidateResourceType(known))
+}
+
+func TestCapability_ValidateResourceTypeUnknown(t *testing.T) {
+	known := map[string]bool{"location": true}
+	err := Capability{Action: "read", Resource: "spaceship"}.ValidateResourceType(known)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "spaceship")
+}
+
+func TestCoreResourceTypesReturnsCopy(t *testing.T) {
+	types := CoreResourceTypes()
+	assert.True(t, types["location"])
+	assert.True(t, types["character"])
+	// Mutating the copy doesn't affect the original
+	types["spaceship"] = true
+	types2 := CoreResourceTypes()
+	assert.False(t, types2["spaceship"])
 }
 
 func TestCapabilityEffectiveScope(t *testing.T) {
@@ -626,23 +657,12 @@ func TestNewCommandEntry_InvalidCapabilityReturnsError(t *testing.T) {
 			caps: []Capability{{Action: "destroy", Resource: "location"}},
 			want: "action",
 		},
-		{
-			name: "unknown resource",
-			caps: []Capability{{Action: "read", Resource: "spaceship"}},
-			want: "resource",
-		},
+		// Note: unknown resource type is NOT checked by Validate() at construction
+		// time — resource type validation happens at load time via ValidateResourceType().
 		{
 			name: "invalid scope",
 			caps: []Capability{{Action: "read", Resource: "location", Scope: "everywhere"}},
 			want: "scope",
-		},
-		{
-			name: "second capability invalid",
-			caps: []Capability{
-				{Action: "read", Resource: "location"},
-				{Action: "write", Resource: "bogus"},
-			},
-			want: "resource",
 		},
 		{
 			name: "empty action",

@@ -219,3 +219,13 @@ commands:
       ### Permissions
 
       Requires emit access to the stream resource at global scope.
+
+policies:
+  - name: execute-communication
+    dsl: >-
+      permit(principal is character, action in ["execute"], resource is command) when { resource.command.name in ["say", "pose",
+      "page", "whisper", "emit", "ooc", "wall"] };
+  - name: execute-pemit
+    dsl: >-
+      permit(principal is character, action in ["execute"], resource is command) when { principal.character.roles.containsAny(["storyteller",
+      "admin"]) && resource.command.name == "pemit" };

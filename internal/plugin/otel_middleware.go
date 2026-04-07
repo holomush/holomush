@@ -183,3 +183,10 @@ func (m *HostMiddleware) Plugins() []string {
 func (m *HostMiddleware) Close(ctx context.Context) error {
 	return m.next.Close(ctx)
 }
+
+// Unwrap returns the underlying host. Used by the manager to discover
+// optional interfaces (ServiceConnProvider, AttributeResolverProvider) that
+// only some host implementations support.
+func (m *HostMiddleware) Unwrap() Host {
+	return m.next
+}

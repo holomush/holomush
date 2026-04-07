@@ -253,6 +253,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		DatabaseConnStr: databaseURL,
 		CertsDir:        certsDir,
 		GameID:          gameID,
+		TrustAllowlist:  gameConfig.PluginTrustAllowlist,
 		ABAC:            abacSub,
 		PolicyInst:      abacSub,
 		PluginProv:      abacSub,

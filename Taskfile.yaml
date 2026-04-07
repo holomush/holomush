@@ -54,6 +54,7 @@ tasks:
     desc: Run all linters
     cmds:
       - task: lint:go
+      - task: lint:proto
       - task: lint:markdown
       - task: lint:yaml
       - task: lint:actions
@@ -286,6 +287,12 @@ tasks:
     desc: Lint Go code
     cmds:
       - golangci-lint run
+
+  lint:proto:
+    desc: Lint protobuf definitions (matches CI's Buf Lint check)
+    cmds:
+      - buf lint
+      - buf format --diff --exit-code
 
   lint:markdown:
     desc: Lint Markdown files

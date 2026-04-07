@@ -1,0 +1,62 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.plugin.v1;
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1";
+
+// AttributeResolverService is implemented by binary plugins that declare resource_types.
+// The host calls GetSchema once during plugin load to discover attribute schemas,
+// and ResolveResource during ABAC policy evaluation to resolve resource attributes.
+service AttributeResolverService {
+  // GetSchema returns the attribute schema for resource types this plugin owns.
+  // Called once during plugin load.
+  rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
+
+  // ResolveResource returns attributes for a specific resource instance.
+  // Called during ABAC policy evaluation.
+  rpc ResolveResource(ResolveResourceRequest) returns (ResolveResourceResponse);
+}
+
+message GetSchemaRequest {}
+
+message GetSchemaResponse {
+  // Keyed by resource type name (e.g., "channel", "widget").
+  map<string, ResourceTypeSchema> resource_types = 1;
+}
+
+message ResourceTypeSchema {
+  map<string, AttributeType> attributes = 1;
+}
+
+enum AttributeType {
+  ATTRIBUTE_TYPE_UNSPECIFIED = 0;
+  ATTRIBUTE_TYPE_STRING = 1;
+  ATTRIBUTE_TYPE_BOOL = 2;
+  ATTRIBUTE_TYPE_FLOAT = 3;
+  ATTRIBUTE_TYPE_STRING_LIST = 4;
+}
+
+message ResolveResourceRequest {
+  string resource_type = 1;
+  string resource_id = 2;
+}
+
+message ResolveResourceResponse {
+  map<string, AttributeValue> attributes = 1;
+}
+
+message AttributeValue {
+  oneof kind {
+    string string_value = 1;
+    double number_value = 2;
+    bool bool_value = 3;
+    StringList string_list_value = 4;
+  }
+}
+
+message StringList {
+  repeated string values = 1;
+}

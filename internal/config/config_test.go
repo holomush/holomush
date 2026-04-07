@@ -159,6 +159,20 @@ func TestLoadParsesGameConfigSection(t *testing.T) {
 	assert.Equal(t, "01JMHZ5H3ZSBVTGARX4MSS1MBH", cfg.GuestStartLocation)
 }
 
+func TestLoadParsesPluginTrustAllowlist(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.yaml")
+	err := os.WriteFile(cfgFile, []byte("game:\n  plugin_trust_allowlist:\n    - exotic-plugin\n    - another-plugin\n"), 0o600)
+	require.NoError(t, err)
+
+	cfg := &GameConfig{}
+	cmd := &cobra.Command{Use: "test"}
+
+	err = Load(cfgFile, cmd, cfg, "game")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"exotic-plugin", "another-plugin"}, cfg.PluginTrustAllowlist)
+}
+
 func TestLoadExplicitPathPermissionDeniedReturnsError(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("permission test skipped when running as root")

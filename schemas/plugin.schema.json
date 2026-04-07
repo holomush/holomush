@@ -189,6 +189,24 @@
     },
     "storage": {
       "type": "string"
+    },
+    "resource_types": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "trust": {
+      "properties": {
+        "all_principals": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "all_principals"
+      ]
     }
   },
   "additionalProperties": false,

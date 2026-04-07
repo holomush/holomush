@@ -35,6 +35,22 @@ const (
 	StoragePostgres StorageType = "postgres" // schema-isolated PostgreSQL
 )
 
+// TrustConfig declares trust escalation for the plugin.
+// When AllPrincipals is true AND the server config allowlists this plugin,
+// the plugin can install policies targeting any principal/resource type.
+type TrustConfig struct {
+	AllPrincipals bool `yaml:"all_principals" json:"all_principals"`
+}
+
+// ProtectedResourceTypes are core resource types that plugins MUST NOT
+// declare in resource_types. Plugins cannot install character-level
+// policies targeting these types without trust escalation.
+var ProtectedResourceTypes = map[string]bool{
+	"character": true, "location": true, "exit": true, "object": true,
+	"stream": true, "property": true, "scene": true, "command": true,
+	"system": true, "server": true, "player": true,
+}
+
 // LoadPriority determines plugin load order. Lower values load first.
 type LoadPriority int
 
@@ -72,6 +88,10 @@ type Manifest struct {
 	Requires []string    `yaml:"requires,omitempty" json:"requires,omitempty"`
 	Provides []string    `yaml:"provides,omitempty" json:"provides,omitempty"`
 	Storage  StorageType `yaml:"storage,omitempty" json:"storage,omitempty"`
+
+	// ABAC trust boundary fields
+	ResourceTypes []string     `yaml:"resource_types,omitempty" json:"resource_types,omitempty"`
+	Trust         *TrustConfig `yaml:"trust,omitempty" json:"trust,omitempty"`
 }
 
 // EffectivePriority returns the manifest's load priority, applying
@@ -312,6 +332,30 @@ func (m *Manifest) Validate() error {
 	// Default storage to KV if not specified.
 	if m.Storage == "" {
 		m.Storage = StorageKV
+	}
+
+	// Validate resource_types: binary-only, valid names, no protected types.
+	if len(m.ResourceTypes) > 0 {
+		if m.Type != TypeBinary {
+			return oops.In("manifest").With("name", m.Name).
+				New("resource_types can only be declared by binary plugins")
+		}
+		seen := make(map[string]bool)
+		for _, rt := range m.ResourceTypes {
+			if !namePattern.MatchString(rt) {
+				return oops.In("manifest").With("name", m.Name).With("resource_type", rt).
+					New("resource type name must match plugin naming pattern")
+			}
+			if ProtectedResourceTypes[rt] {
+				return oops.In("manifest").With("name", m.Name).With("resource_type", rt).
+					New("resource type is protected and cannot be declared by plugins")
+			}
+			if seen[rt] {
+				return oops.In("manifest").With("name", m.Name).With("resource_type", rt).
+					New("duplicate resource type")
+			}
+			seen[rt] = true
+		}
 	}
 
 	return nil

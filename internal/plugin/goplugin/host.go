@@ -45,8 +45,9 @@ var (
 
 // Compile-time interface checks.
 var (
-	_ plugins.Host                = (*Host)(nil)
-	_ plugins.ServiceConnProvider = (*Host)(nil)
+	_ plugins.Host                      = (*Host)(nil)
+	_ plugins.ServiceConnProvider       = (*Host)(nil)
+	_ plugins.AttributeResolverProvider = (*Host)(nil)
 )
 
 // PluginClient wraps go-plugin client for testability.
@@ -545,6 +546,18 @@ func protoCommandStatusToSDK(s pluginv1.CommandStatus) pluginsdk.CommandStatus {
 	default:
 		return pluginsdk.CommandOK
 	}
+}
+
+// AttributeResolverClient returns the AttributeResolver gRPC client for a loaded plugin.
+// Returns nil if the plugin is not loaded or doesn't support attribute resolution.
+func (h *Host) AttributeResolverClient(pluginName string) pluginv1.AttributeResolverServiceClient {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	lp, ok := h.plugins[pluginName]
+	if !ok || lp.conn == nil {
+		return nil
+	}
+	return pluginv1.NewAttributeResolverServiceClient(lp.conn)
 }
 
 // PluginConn returns the gRPC client connection for the named plugin.

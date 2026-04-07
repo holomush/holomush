@@ -12,6 +12,12 @@ import (
 	"google.golang.org/grpc"
 )
 
+// AttributeResolverProvider is implemented by binary plugins that provide
+// attribute resolution for resource types they own.
+type AttributeResolverProvider interface {
+	RegisterAttributeResolver(registrar grpc.ServiceRegistrar)
+}
+
 // ServiceProvider is implemented by binary plugins that provide gRPC services
 // and/or need initialization with service configuration.
 type ServiceProvider interface {
@@ -84,6 +90,11 @@ func (p *grpcServicePlugin) GRPCServer(_ *hashiplug.GRPCBroker, s *grpc.Server) 
 	// Let the provider register its own gRPC services on the same server.
 	if p.provider != nil {
 		p.provider.RegisterServices(s)
+	}
+
+	// If the handler implements AttributeResolverProvider, register it too.
+	if arp, ok := p.handler.(AttributeResolverProvider); ok {
+		arp.RegisterAttributeResolver(s)
 	}
 
 	return nil

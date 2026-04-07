@@ -11,6 +11,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -21,7 +22,9 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/plugin/mocks"
+	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
 // Helper functions for creating test fixtures with secure permissions.
@@ -326,11 +329,42 @@ func TestManagerLoadAllFailsOnLuaSyntaxError(t *testing.T) {
 
 	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
 	err := mgr.LoadAll(context.Background())
-	// LoadAll should succeed but log a warning and skip the bad plugin
-	require.NoError(t, err, "LoadAll() should skip plugins with load errors")
+	// Strict by default: a broken Lua plugin is a hard error.
+	require.Error(t, err, "LoadAll() should fail when a plugin has load errors")
 
 	plugins := mgr.ListPlugins()
 	assert.Empty(t, plugins, "ListPlugins() should be empty (bad Lua syntax)")
+}
+
+func TestLoadAllSkipsBrokenPluginsWhenGracefulDegradationEnabled(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	// One good plugin, one broken
+	goodDir := filepath.Join(pluginsDir, "good-lua")
+	mkdirAll(t, goodDir)
+	writeFile(t, filepath.Join(goodDir, "plugin.yaml"), []byte("name: good-lua\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+	writeFile(t, filepath.Join(goodDir, "main.lua"), []byte("return {}"))
+
+	badDir := filepath.Join(pluginsDir, "bad-lua")
+	mkdirAll(t, badDir)
+	writeFile(t, filepath.Join(badDir, "plugin.yaml"), []byte("name: bad-lua\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+	writeFile(t, filepath.Join(badDir, "main.lua"), []byte("function broken"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	mgr := plugins.NewManager(pluginsDir,
+		plugins.WithLuaHost(luaHost),
+		plugins.WithGracefulDegradation(),
+	)
+	err := mgr.LoadAll(context.Background())
+	// Graceful degradation: errors are logged but LoadAll succeeds.
+	require.NoError(t, err)
+
+	loaded := mgr.ListPlugins()
+	assert.Contains(t, loaded, "good-lua")
+	assert.NotContains(t, loaded, "bad-lua")
 }
 
 func TestManagerCloseWithoutLuaHost(t *testing.T) {
@@ -608,8 +642,10 @@ binary-plugin:
 	mgr := plugins.NewManager(pluginsDir, plugins.WithServiceRegistry(reg))
 	mgr.RegisterHost(plugins.TypeBinary, mockHost)
 
+	// LoadAll is strict by default — a host that can't satisfy provides is a hard error.
 	err := mgr.LoadAll(context.Background())
-	require.NoError(t, err)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, plugins.CodeHostMissingConnProvider)
 
 	// Service should NOT be registered because MockHost doesn't implement ServiceConnProvider.
 	_, resolveErr := reg.Resolve("holomush.test.v1.TestService")
@@ -810,4 +846,311 @@ lua-plugin:
 
 	loaded := mgr.ListPlugins()
 	assert.Contains(t, loaded, "test-comm", "plugin should still load without alias seeder")
+}
+
+// CollectResourceTypes is the exported test seam that backs the
+// cross-plugin resource type collection used during LoadAll.
+
+func TestCollectResourceTypesIncludesCoreTypes(t *testing.T) {
+	known := plugins.CollectResourceTypes(nil)
+	assert.True(t, known["character"], "core type 'character' must be included")
+	assert.True(t, known["location"], "core type 'location' must be included")
+	assert.True(t, known["command"], "core type 'command' must be included")
+}
+
+func TestCollectResourceTypesMergesPluginDeclaredTypes(t *testing.T) {
+	discovered := []*plugins.DiscoveredPlugin{
+		{Manifest: &plugins.Manifest{Name: "p1", ResourceTypes: []string{"widget"}}},
+		{Manifest: &plugins.Manifest{Name: "p2", ResourceTypes: []string{"gadget", "gizmo"}}},
+	}
+	known := plugins.CollectResourceTypes(discovered)
+	assert.True(t, known["widget"], "plugin-declared 'widget' should be present")
+	assert.True(t, known["gadget"], "plugin-declared 'gadget' should be present")
+	assert.True(t, known["gizmo"], "plugin-declared 'gizmo' should be present")
+	assert.True(t, known["character"], "core types should still be present after merge")
+	assert.True(t, known["location"], "core types should still be present after merge")
+}
+
+func TestCollectResourceTypesReturnsNewMapPerCall(t *testing.T) {
+	first := plugins.CollectResourceTypes(nil)
+	first["mutated"] = true
+	second := plugins.CollectResourceTypes(nil)
+	assert.False(t, second["mutated"], "subsequent calls must not see prior mutations")
+}
+
+// Semantic capability validation: loadPlugin must reject manifests whose
+// commands declare capabilities on resource types that aren't in the
+// cross-plugin known set.
+
+func TestManagerLoadAllRejectsCommandCapabilityOnUnknownResourceType(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	pluginDir := filepath.Join(pluginsDir, "alien-plugin")
+	mkdirAll(t, pluginDir)
+	writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(`name: alien-plugin
+version: 1.0.0
+type: lua
+commands:
+  - name: probe
+    capabilities:
+      - action: read
+        resource: alien
+lua-plugin:
+  entry: main.lua`))
+	writeFile(t, filepath.Join(pluginDir, "main.lua"), []byte("function on_event(e) end"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	err := mgr.LoadAll(context.Background())
+	require.Error(t, err, "load should fail when capability targets an unknown resource type")
+	assert.Contains(t, err.Error(), "alien")
+	assert.Empty(t, mgr.ListPlugins(), "rejected plugin should not be listed as loaded")
+}
+
+func TestManagerLoadAllAcceptsCapabilityOnAnotherPluginsResourceType(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	// Plugin A declares the "widget" resource type so Plugin B's capability
+	// referencing it becomes valid in the cross-plugin known set.
+	declarerDir := filepath.Join(pluginsDir, "widget-declarer")
+	mkdirAll(t, declarerDir)
+	writeFile(t, filepath.Join(declarerDir, "plugin.yaml"), []byte(`name: widget-declarer
+version: 1.0.0
+type: binary
+resource_types: [widget]
+binary-plugin:
+  executable: widget-declarer`))
+
+	// Plugin B is a Lua consumer that needs the "widget" type known.
+	consumerDir := filepath.Join(pluginsDir, "widget-consumer")
+	mkdirAll(t, consumerDir)
+	writeFile(t, filepath.Join(consumerDir, "plugin.yaml"), []byte(`name: widget-consumer
+version: 1.0.0
+type: lua
+commands:
+  - name: peek
+    capabilities:
+      - action: read
+        resource: widget
+lua-plugin:
+  entry: main.lua`))
+	writeFile(t, filepath.Join(consumerDir, "main.lua"), []byte("function on_event(e) end"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	// No binary host registered — declarer is silently skipped, but its
+	// resource_types still feed CollectResourceTypes during Phase 2.
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	err := mgr.LoadAll(context.Background())
+	require.NoError(t, err, "consumer should validate against declarer's resource type")
+	assert.Contains(t, mgr.ListPlugins(), "widget-consumer")
+}
+
+// WithTrustAllowlist is plumbed through but only takes effect when policies
+// install. The option itself is verified by ensuring no panic / no behavior
+// change for plugins that don't request escalation.
+
+func TestManagerWithTrustAllowlistDoesNotInterfereWithBasicLoad(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+	mkdirAll(t, pluginsDir)
+
+	mgr := plugins.NewManager(pluginsDir,
+		plugins.WithTrustAllowlist([]string{"trusted-one", "trusted-two"}),
+	)
+	// LoadAll on an empty plugins dir should still succeed.
+	require.NoError(t, mgr.LoadAll(context.Background()))
+}
+
+// LoadAll strict mode error joining: a single failing plugin produces a
+// joined error with PLUGIN_LOAD_FAILED code. Multiple failures are joined.
+
+func TestManagerLoadAllStrictModeJoinsMultipleErrors(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	// Two broken Lua plugins. Strict mode collects both errors before
+	// returning a joined failure with the PLUGIN_LOAD_FAILED code and a
+	// failed_count context attribute reflecting both failures.
+	for _, name := range []string{"broken-one", "broken-two"} {
+		pluginDir := filepath.Join(pluginsDir, name)
+		mkdirAll(t, pluginDir)
+		writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(
+			"name: "+name+"\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+		writeFile(t, filepath.Join(pluginDir, "main.lua"), []byte("function broken"))
+	}
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	err := mgr.LoadAll(context.Background())
+	require.Error(t, err, "strict mode should fail when plugins have load errors")
+
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "joined error should be an oops error")
+	assert.Equal(t, "PLUGIN_LOAD_FAILED", oopsErr.Code(),
+		"joined load failure should carry PLUGIN_LOAD_FAILED code")
+	assert.Equal(t, 2, oopsErr.Context()["failed_count"],
+		"failed_count should match the number of broken plugins")
+	assert.Empty(t, mgr.ListPlugins(), "no plugins should remain loaded after strict-mode failure")
+}
+
+// stubAttributeResolverClient lets tests drive GetSchema/ResolveResource
+// behavior for the manager's discoverAndRegisterAttributes path.
+type stubAttributeResolverClient struct {
+	schemaResp *pluginv1.GetSchemaResponse
+	schemaErr  error
+}
+
+func (s *stubAttributeResolverClient) GetSchema(_ context.Context, _ *pluginv1.GetSchemaRequest, _ ...grpc.CallOption) (*pluginv1.GetSchemaResponse, error) {
+	return s.schemaResp, s.schemaErr
+}
+
+func (s *stubAttributeResolverClient) ResolveResource(_ context.Context, _ *pluginv1.ResolveResourceRequest, _ ...grpc.CallOption) (*pluginv1.ResolveResourceResponse, error) {
+	return nil, nil
+}
+
+// arBinaryHost extends mockBinaryHost with AttributeResolverProvider so the
+// manager can exercise schema discovery during loadPlugin.
+type arBinaryHost struct {
+	mockBinaryHost
+	arClient pluginv1.AttributeResolverServiceClient
+}
+
+func (h *arBinaryHost) AttributeResolverClient(_ string) pluginv1.AttributeResolverServiceClient {
+	return h.arClient
+}
+
+func TestManagerLoadAllFailsWhenSchemaDiscoveryReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	pluginDir := filepath.Join(pluginsDir, "broken-schema")
+	mkdirAll(t, pluginDir)
+	writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(`name: broken-schema
+version: 1.0.0
+type: binary
+resource_types: [widget]
+binary-plugin:
+  executable: broken-schema`))
+
+	host := &arBinaryHost{
+		mockBinaryHost: mockBinaryHost{conn: &stubClientConn{}},
+		arClient:       &stubAttributeResolverClient{schemaErr: errors.New("schema rpc failed")},
+	}
+
+	mgr := plugins.NewManager(pluginsDir)
+	mgr.RegisterHost(plugins.TypeBinary, host)
+
+	err := mgr.LoadAll(context.Background())
+	require.Error(t, err, "schema discovery failure should be a hard load error")
+	assert.Contains(t, err.Error(), "schema discovery failed")
+	assert.Empty(t, mgr.ListPlugins(), "plugin should not be marked loaded after rollback")
+}
+
+func TestManagerLoadAllFailsWhenSchemaMissingDeclaredResourceType(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	pluginDir := filepath.Join(pluginsDir, "missing-rt")
+	mkdirAll(t, pluginDir)
+	writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(`name: missing-rt
+version: 1.0.0
+type: binary
+resource_types: [widget]
+binary-plugin:
+  executable: missing-rt`))
+
+	// GetSchema returns a schema for "gadget" — the manifest declared "widget"
+	// so the cross-check inside discoverAndRegisterAttributes should reject it.
+	host := &arBinaryHost{
+		mockBinaryHost: mockBinaryHost{conn: &stubClientConn{}},
+		arClient: &stubAttributeResolverClient{
+			schemaResp: &pluginv1.GetSchemaResponse{
+				ResourceTypes: map[string]*pluginv1.ResourceTypeSchema{
+					"gadget": {Attributes: map[string]pluginv1.AttributeType{}},
+				},
+			},
+		},
+	}
+
+	mgr := plugins.NewManager(pluginsDir)
+	mgr.RegisterHost(plugins.TypeBinary, host)
+
+	err := mgr.LoadAll(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "widget")
+}
+
+func TestManagerLoadAllFailsWhenHostMissingAttributeResolverProvider(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	pluginDir := filepath.Join(pluginsDir, "no-ar-host")
+	mkdirAll(t, pluginDir)
+	writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(`name: no-ar-host
+version: 1.0.0
+type: binary
+resource_types: [widget]
+binary-plugin:
+  executable: no-ar-host`))
+
+	// mockBinaryHost does NOT implement AttributeResolverProvider; the manager
+	// should reject the plugin because resource_types requires that capability.
+	host := &mockBinaryHost{conn: &stubClientConn{}}
+
+	mgr := plugins.NewManager(pluginsDir)
+	mgr.RegisterHost(plugins.TypeBinary, host)
+
+	err := mgr.LoadAll(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "AttributeResolverProvider")
+	assert.Empty(t, mgr.ListPlugins())
+}
+
+func TestManagerLoadAllRegistersAttributeProviderViaCallback(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	pluginDir := filepath.Join(pluginsDir, "good-widget")
+	mkdirAll(t, pluginDir)
+	writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(`name: good-widget
+version: 1.0.0
+type: binary
+resource_types: [widget]
+binary-plugin:
+  executable: good-widget`))
+
+	host := &arBinaryHost{
+		mockBinaryHost: mockBinaryHost{conn: &stubClientConn{}},
+		arClient: &stubAttributeResolverClient{
+			schemaResp: &pluginv1.GetSchemaResponse{
+				ResourceTypes: map[string]*pluginv1.ResourceTypeSchema{
+					"widget": {Attributes: map[string]pluginv1.AttributeType{
+						"type": pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING,
+					}},
+				},
+			},
+		},
+	}
+
+	var registered []*plugins.PluginAttributeProvider
+	registrar := func(p *plugins.PluginAttributeProvider) error {
+		registered = append(registered, p)
+		return nil
+	}
+
+	mgr := plugins.NewManager(pluginsDir, plugins.WithAttributeProviderRegistrar(registrar))
+	mgr.RegisterHost(plugins.TypeBinary, host)
+
+	require.NoError(t, mgr.LoadAll(context.Background()))
+	require.Len(t, registered, 1, "manager should register one provider per declared resource type")
+	assert.Equal(t, "widget", registered[0].Namespace())
+	assert.Contains(t, mgr.ListPlugins(), "good-widget")
 }

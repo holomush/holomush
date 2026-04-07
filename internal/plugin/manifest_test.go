@@ -1369,14 +1369,8 @@ func TestCommandSpec_Validate_InvalidCapability(t *testing.T) {
 			},
 			errMsg: "action",
 		},
-		{
-			name: "invalid resource in capability",
-			cmd: plugins.CommandSpec{
-				Name:         "teleport",
-				Capabilities: []command.Capability{{Action: "write", Resource: "spaceship"}},
-			},
-			errMsg: "resource",
-		},
+		// Note: unknown resource type is NOT checked by Validate() — resource type
+		// validation happens during loadPlugin with cross-plugin context.
 		{
 			name: "invalid scope in capability",
 			cmd: plugins.CommandSpec{
@@ -1393,17 +1387,8 @@ func TestCommandSpec_Validate_InvalidCapability(t *testing.T) {
 			},
 			errMsg: "action",
 		},
-		{
-			name: "second capability invalid",
-			cmd: plugins.CommandSpec{
-				Name: "admin",
-				Capabilities: []command.Capability{
-					{Action: "write", Resource: "location", Scope: command.ScopeGlobal},
-					{Action: "read", Resource: "bogus"},
-				},
-			},
-			errMsg: "resource",
-		},
+		// "second capability invalid resource" removed — resource type validation
+		// is deferred to loadPlugin with cross-plugin context.
 	}
 
 	for _, tt := range tests {
@@ -1615,3 +1600,129 @@ lua-plugin:
 	require.Len(t, m.Commands, 1)
 	assert.Nil(t, m.Commands[0].Aliases)
 }
+
+// TestParseManifestResourceTypesAndTrust covers the four ParseManifest
+// scenarios for the resource_types and trust manifest fields. Each case
+// is named in ACE form (Action — Condition — Expectation) and checks both
+// the error result and any field-level expectations on the parsed manifest.
+func TestParseManifestResourceTypesAndTrust(t *testing.T) {
+	tests := []struct {
+		name    string // ACE: Action — Condition — Expectation
+		yaml    string
+		wantErr string // substring; empty means no error
+		check   func(t *testing.T, m *plugins.Manifest)
+	}{
+		{
+			name: "parses resource_types when declared on a binary plugin",
+			yaml: `
+name: test-plugin
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: test-plugin
+resource_types: [widget]
+`,
+			check: func(t *testing.T, m *plugins.Manifest) {
+				assert.Equal(t, []string{"widget"}, m.ResourceTypes)
+			},
+		},
+		{
+			name:    "rejects resource_types when declared on a Lua plugin",
+			wantErr: "resource_types",
+			yaml: `
+name: test-plugin
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+resource_types: [widget]
+`,
+		},
+		{
+			name:    "rejects resource_types when an entry names a protected core type",
+			wantErr: "protected",
+			yaml: `
+name: test-plugin
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: test-plugin
+resource_types: [location]
+`,
+		},
+		{
+			name: "parses trust.all_principals when declared on a binary plugin",
+			yaml: `
+name: test-plugin
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: test-plugin
+trust:
+  all_principals: true
+`,
+			check: func(t *testing.T, m *plugins.Manifest) {
+				require.NotNil(t, m.Trust)
+				assert.True(t, m.Trust.AllPrincipals)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, err := plugins.ParseManifest([]byte(tt.yaml))
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, m)
+			if tt.check != nil {
+				tt.check(t, m)
+			}
+		})
+	}
+}
+
+func TestManifestResourceTypesRejectsDuplicate(t *testing.T) {
+	data := []byte(`
+name: dup-plugin
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: dup-plugin
+resource_types: [widget, widget]
+`)
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate")
+}
+
+func TestManifestResourceTypesRejectsInvalidName(t *testing.T) {
+	data := []byte(`
+name: bad-rt-plugin
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: bad-rt-plugin
+resource_types: [Bad-Name]
+`)
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "resource type name")
+}
+
+func TestManifestEffectivePriorityDefaultsToLoadPriorityDefault(t *testing.T) {
+	// When a manifest does not set priority, EffectivePriority should
+	// fall back to the LoadPriorityDefault (100) constant.
+	m := &plugins.Manifest{
+		Name:      "p",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+	assert.Equal(t, plugins.LoadPriorityDefault, m.EffectivePriority())
+}
+
+// TestManifestTrustFieldParsed is folded into TestParseManifestResourceTypesAndTrust.

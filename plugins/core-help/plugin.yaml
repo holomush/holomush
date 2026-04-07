@@ -29,3 +29,8 @@ commands:
       - `help` - Lists all commands you can use
       - `help say` - Shows detailed help for the say command
       - `help search build` - Finds commands related to building
+
+policies:
+  - name: execute-help
+    dsl: >-
+      permit(principal is character, action in ["execute"], resource is command) when { resource.command.name == "help" };

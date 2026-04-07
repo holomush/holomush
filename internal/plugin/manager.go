@@ -5,6 +5,7 @@ package plugins
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -13,23 +14,43 @@ import (
 
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+)
+
+// RegisterPluginProviderFunc is a callback that registers a PluginAttributeProvider
+// with the ABAC attribute resolver. The server wiring layer provides a closure
+// that calls resolver.RegisterProvider(provider).
+type RegisterPluginProviderFunc func(provider *PluginAttributeProvider) error
+
+// Error codes returned by the plugin manager. Tests should check these via
+// errutil.AssertErrorCode rather than substring matching error messages.
+const (
+	// CodeHostMissingConnProvider is returned when a plugin declares
+	// `provides:` but the host implementation does not satisfy the optional
+	// ServiceConnProvider interface needed to expose plugin gRPC services.
+	CodeHostMissingConnProvider = "PLUGIN_HOST_MISSING_CONN_PROVIDER"
 )
 
 // Manager discovers and manages plugin lifecycle.
 type Manager struct {
-	pluginsDir      string
-	luaHost         Host
-	hosts           map[Type]Host   // host registry keyed by plugin type
-	pluginHosts     map[string]Host // maps plugin name → owning host
-	policyInstaller PluginPolicyInstaller
-	registry        *ServiceRegistry // optional, enables DAG resolution
-	aliasSeeder     AliasSeeder
-	aliasCache      *command.AliasCache
-	loaded          map[string]*DiscoveredPlugin
-	loadedOrder     []*DiscoveredPlugin // preserves DAG/priority load order for deterministic iteration
-	mu              sync.RWMutex
+	pluginsDir          string
+	luaHost             Host
+	hosts               map[Type]Host             // host registry keyed by plugin type
+	hostCaps            map[Host]hostCapabilities // optional interfaces, cached at registration
+	pluginHosts         map[string]Host           // maps plugin name → owning host
+	policyInstaller     PluginPolicyInstaller
+	registerProvider    RegisterPluginProviderFunc // optional, registers plugin attribute providers
+	registry            *ServiceRegistry           // optional, enables DAG resolution
+	trustAllowlist      map[string]bool            // server-side trust escalation allowlist
+	gracefulDegradation bool                       // if true, LoadAll continues despite plugin failures
+	aliasSeeder         AliasSeeder
+	aliasCache          *command.AliasCache
+	loaded              map[string]*DiscoveredPlugin
+	loadedOrder         []*DiscoveredPlugin // preserves DAG/priority load order for deterministic iteration
+	mu                  sync.RWMutex
 }
 
 // ManagerOption configures the Manager.
@@ -57,11 +78,43 @@ func WithAliasSeeder(seeder AliasSeeder, cache *command.AliasCache) ManagerOptio
 	}
 }
 
+// WithAttributeProviderRegistrar sets a callback used to register plugin
+// attribute providers with the ABAC resolver during plugin load.
+func WithAttributeProviderRegistrar(fn RegisterPluginProviderFunc) ManagerOption {
+	return func(m *Manager) {
+		m.registerProvider = fn
+	}
+}
+
 // WithServiceRegistry configures the manager to use DAG-based dependency
 // resolution via the provided service registry.
 func WithServiceRegistry(reg *ServiceRegistry) ManagerOption {
 	return func(m *Manager) {
 		m.registry = reg
+	}
+}
+
+// WithTrustAllowlist sets the server-side allowlist of plugin names permitted
+// to use trust escalation. A plugin's manifest trust.all_principals declaration
+// only takes effect when the plugin name appears in this allowlist.
+func WithTrustAllowlist(names []string) ManagerOption {
+	return func(m *Manager) {
+		m.trustAllowlist = make(map[string]bool, len(names))
+		for _, n := range names {
+			m.trustAllowlist[n] = true
+		}
+	}
+}
+
+// WithGracefulDegradation enables graceful degradation for LoadAll: individual
+// plugin failures are logged as warnings rather than aborting server startup.
+//
+// This is intended for local development iteration on broken plugins.
+// Production servers should leave this disabled (the default) so that
+// configuration errors fail fast and visibly.
+func WithGracefulDegradation() ManagerOption {
+	return func(m *Manager) {
+		m.gracefulDegradation = true
 	}
 }
 
@@ -76,16 +129,25 @@ func NewManager(pluginsDir string, opts ...ManagerOption) *Manager {
 		pluginsDir:  pluginsDir,
 		loaded:      make(map[string]*DiscoveredPlugin),
 		hosts:       make(map[Type]Host),
+		hostCaps:    make(map[Host]hostCapabilities),
 		pluginHosts: make(map[string]Host),
 	}
 	for _, opt := range opts {
 		opt(m)
+	}
+	// If WithLuaHost was used, cache its capabilities for the same lookup path.
+	if m.luaHost != nil {
+		m.hostCaps[m.luaHost] = discoverCapabilities(m.luaHost)
 	}
 	return m
 }
 
 // RegisterHost registers a host implementation for a plugin type.
 // Must be called before LoadAll. Panics if host is nil.
+//
+// Optional capabilities (ServiceConnProvider, AttributeResolverProvider) are
+// discovered once at registration time by walking the host's Unwrap() chain
+// (if any) and cached on the Manager for the host's lifetime.
 func (m *Manager) RegisterHost(hostType Type, host Host) {
 	if host == nil {
 		panic("RegisterHost: host must not be nil")
@@ -93,6 +155,18 @@ func (m *Manager) RegisterHost(hostType Type, host Host) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.hosts[hostType] = host
+	m.hostCaps[host] = discoverCapabilities(host)
+}
+
+// capabilitiesFor returns the cached capabilities for a host, or an empty
+// hostCapabilities if the host wasn't registered (defensive — shouldn't happen
+// in practice since loadPlugin only handles hosts from m.hosts/m.luaHost).
+func (m *Manager) capabilitiesFor(h Host) hostCapabilities {
+	if caps, ok := m.hostCaps[h]; ok {
+		return caps
+	}
+	// Fallback: discover on demand. Should not happen but keeps loadPlugin safe.
+	return discoverCapabilities(h)
 }
 
 // DeliverCommand routes a command to the correct host for the named plugin.
@@ -179,33 +253,54 @@ func (m *Manager) Discover(_ context.Context) ([]*DiscoveredPlugin, error) {
 }
 
 // LoadAll discovers and loads all plugins in the plugins directory.
-// Invalid plugins are logged and skipped.
 //
 // When a ServiceRegistry is configured (via WithServiceRegistry), LoadAll uses
 // DAG-based dependency resolution to determine load order. If resolution fails
 // (e.g. circular dependency or unsatisfied requires), it falls back to priority
 // sort and logs a warning.
 //
-// Design: LoadAll uses graceful degradation - individual plugin failures are
-// logged as warnings but don't fail the entire load. This allows the server to
-// start even if some plugins have issues. Callers who need strict loading should
-// use Discover + loadPlugin individually with error checking.
+// Strict by default: if any plugin fails to load, LoadAll attempts all
+// remaining plugins, then returns a joined error describing every failure.
+// Production servers should fail fast on broken plugin configuration.
+//
+// Use WithGracefulDegradation() to opt into the legacy behavior where
+// individual plugin failures are logged but don't fail the overall load.
+// This is intended for local development iteration on broken plugins.
 func (m *Manager) LoadAll(ctx context.Context) error {
+	// Phase 1: Discover — structural validation only.
 	discovered, err := m.Discover(ctx)
 	if err != nil {
 		return err
 	}
 
+	// Phase 2: Collect cross-plugin context.
+	knownResourceTypes := CollectResourceTypes(discovered)
+
+	// Phase 3: Resolve load order.
 	ordered := m.resolveLoadOrder(discovered)
 
+	// Phase 4: Load each plugin with full context.
+	var loadErrors []error
 	for _, dp := range ordered {
-		if err := m.loadPlugin(ctx, dp); err != nil {
+		if err := m.loadPlugin(ctx, dp, knownResourceTypes); err != nil {
 			slog.Error("failed to load plugin",
 				"plugin", dp.Manifest.Name,
 				"priority", dp.Manifest.EffectivePriority(),
 				"error", err)
-			continue
+			loadErrors = append(loadErrors,
+				oops.With("plugin", dp.Manifest.Name).Wrap(err))
 		}
+	}
+
+	if len(loadErrors) > 0 {
+		if m.gracefulDegradation {
+			slog.Warn("plugin loading completed with errors (graceful degradation enabled)",
+				"failed_count", len(loadErrors))
+			return nil
+		}
+		return oops.Code("PLUGIN_LOAD_FAILED").
+			With("failed_count", len(loadErrors)).
+			Wrap(errors.Join(loadErrors...))
 	}
 
 	// Seed aliases from loaded plugin manifests.
@@ -234,6 +329,59 @@ func (m *Manager) seedAliases(ctx context.Context) error {
 	}
 
 	return SeedManifestAliases(ctx, aliases, m.aliasSeeder, m.aliasCache)
+}
+
+// hostCapabilities holds the optional interface implementations discovered for
+// a Host. Cached at registration time to avoid repeated wrapper-chain walks.
+type hostCapabilities struct {
+	connProvider ServiceConnProvider       // nil if host doesn't support
+	arProvider   AttributeResolverProvider // nil if host doesn't support
+}
+
+// discoverCapabilities walks a chain of Host wrappers (via the optional Unwrap
+// method) to find implementations of optional interfaces. Called once at host
+// registration time; results are cached on the Manager.
+func discoverCapabilities(h Host) hostCapabilities {
+	return hostCapabilities{
+		connProvider: findOptional[ServiceConnProvider](h),
+		arProvider:   findOptional[AttributeResolverProvider](h),
+	}
+}
+
+// findOptional returns an implementation of T from a Host or any of its
+// Unwrap()-chain ancestors. Returns the zero value if no implementation
+// is found in the chain.
+func findOptional[T any](h Host) T {
+	var zero T
+	current := h
+	for {
+		if t, ok := any(current).(T); ok {
+			return t
+		}
+		unwrapper, ok := current.(interface{ Unwrap() Host })
+		if !ok {
+			return zero
+		}
+		next := unwrapper.Unwrap()
+		if next == nil {
+			return zero
+		}
+		current = next
+	}
+}
+
+// CollectResourceTypes builds the full set of known resource types: core types
+// plus all resource_types declared across discovered plugins. This cross-plugin
+// context is needed for semantic validation during loadPlugin. Exported as a
+// test seam so callers can verify the merge logic without driving LoadAll.
+func CollectResourceTypes(discovered []*DiscoveredPlugin) map[string]bool {
+	known := command.CoreResourceTypes()
+	for _, dp := range discovered {
+		for _, rt := range dp.Manifest.ResourceTypes {
+			known[rt] = true
+		}
+	}
+	return known
 }
 
 // resolveLoadOrder returns plugins in the order they should be loaded.
@@ -267,7 +415,18 @@ func (m *Manager) resolveLoadOrder(discovered []*DiscoveredPlugin) []*Discovered
 // Design: Returns nil (not error) for unsupported configurations to support
 // graceful degradation. This allows running without Lua support or before
 // binary plugin support is implemented. The warning logs provide visibility.
-func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin) error {
+func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownResourceTypes map[string]bool) error {
+	// Semantic validation: check capability resource types against the full known set.
+	for i := range dp.Manifest.Commands {
+		cmd := &dp.Manifest.Commands[i]
+		for _, cap := range cmd.Capabilities {
+			if err := cap.ValidateResourceType(knownResourceTypes); err != nil {
+				return oops.In("manager").With("plugin", dp.Manifest.Name).
+					With("command", cmd.Name).Wrap(err)
+			}
+		}
+	}
+
 	// Resolve the host for this plugin type.
 	// For backward compatibility, TypeLua falls back to the dedicated luaHost field.
 	var host Host
@@ -311,14 +470,34 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin) error {
 		return oops.In("manager").With("plugin", dp.Manifest.Name).With("operation", "load").Wrap(err)
 	}
 
-	// Install ABAC policies if present.
+	// Discover and register attribute providers for plugin resource types.
+	// schemas is non-nil only for binary plugins that declare resource_types.
+	var schemas map[string]*types.NamespaceSchema
+	if len(dp.Manifest.ResourceTypes) > 0 {
+		var regErr error
+		schemas, regErr = m.discoverAndRegisterAttributes(ctx, host, dp)
+		if regErr != nil {
+			return regErr
+		}
+	}
+
+	// Install ABAC policies using manifest-aware validation when resource
+	// types or trust config are present, otherwise fall back to basic install.
 	if m.policyInstaller != nil && len(dp.Manifest.Policies) > 0 {
-		if err := m.policyInstaller.InstallPluginPolicies(ctx, dp.Manifest.Name, dp.Manifest.Policies); err != nil {
+		installErr := m.policyInstaller.InstallPluginPoliciesWithManifest(ctx, dp.Manifest, dp.Manifest.Policies)
+		if installErr != nil {
 			if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
 				slog.Error("failed to rollback plugin load after policy install failure",
 					"plugin", dp.Manifest.Name, "error", unloadErr)
 			}
-			return oops.In("manager").With("plugin", dp.Manifest.Name).Wrapf(err, "install plugin policies")
+			return oops.In("manager").With("plugin", dp.Manifest.Name).Wrapf(installErr, "install plugin policies")
+		}
+	}
+
+	// Check for manifest warnings (non-fatal policy coverage gaps).
+	if warnings := CheckManifestWarnings(dp.Manifest, schemas); len(warnings) > 0 {
+		for _, w := range warnings {
+			slog.Info(w, "plugin", dp.Manifest.Name)
 		}
 	}
 
@@ -326,9 +505,10 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin) error {
 	// Registration failures are treated as hard errors — dependents resolved
 	// by ResolveDependencyOrder rely on the Provides contract being satisfied.
 	if m.registry != nil && len(dp.Manifest.Provides) > 0 {
-		connProvider, ok := host.(ServiceConnProvider)
-		if !ok {
-			return oops.In("manager").
+		connProvider := m.capabilitiesFor(host).connProvider
+		if connProvider == nil {
+			return oops.Code(CodeHostMissingConnProvider).
+				In("manager").
 				With("plugin", dp.Manifest.Name).
 				Errorf("host does not implement ServiceConnProvider but plugin declares Provides")
 		}
@@ -374,6 +554,74 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin) error {
 		"version", dp.Manifest.Version)
 
 	return nil
+}
+
+// discoverAndRegisterAttributes performs schema discovery for plugins that
+// declare resource_types. It obtains the AttributeResolver gRPC client from the
+// binary host, calls GetSchema to discover attribute schemas, validates that the
+// schema covers all declared resource types, and registers proxy providers.
+// It returns the discovered schemas for use by CheckManifestWarnings.
+func (m *Manager) discoverAndRegisterAttributes(ctx context.Context, host Host, dp *DiscoveredPlugin) (map[string]*types.NamespaceSchema, error) {
+	pluginName := dp.Manifest.Name
+
+	arProvider := m.capabilitiesFor(host).arProvider
+	if arProvider == nil {
+		return nil, oops.In("manager").With("plugin", pluginName).
+			Errorf("resource_types requires a host that implements AttributeResolverProvider")
+	}
+
+	arClient := arProvider.AttributeResolverClient(pluginName)
+	if arClient == nil {
+		return nil, oops.In("manager").With("plugin", pluginName).
+			Errorf("failed to get AttributeResolver client")
+	}
+
+	schemaResp, schemaErr := arClient.GetSchema(ctx, &pluginv1.GetSchemaRequest{})
+	if schemaErr != nil {
+		if unloadErr := host.Unload(ctx, pluginName); unloadErr != nil {
+			slog.Error("failed to rollback plugin load after schema discovery failure",
+				"plugin", pluginName, "error", unloadErr)
+		}
+		return nil, oops.In("manager").With("plugin", pluginName).
+			Wrapf(schemaErr, "schema discovery failed")
+	}
+
+	schemas := ConvertProtoSchema(schemaResp)
+	for _, rt := range dp.Manifest.ResourceTypes {
+		if _, ok := schemas[rt]; !ok {
+			if unloadErr := host.Unload(ctx, pluginName); unloadErr != nil {
+				slog.Error("failed to rollback plugin after schema validation failure",
+					"plugin", pluginName, "error", unloadErr)
+			}
+			return nil, oops.In("manager").With("plugin", pluginName).
+				With("resource_type", rt).
+				Errorf("plugin declares resource_type %q but GetSchema did not return it", rt)
+		}
+	}
+
+	if m.registerProvider != nil {
+		for _, rt := range dp.Manifest.ResourceTypes {
+			provider := NewPluginAttributeProvider(rt, arClient, schemas[rt])
+			if regErr := m.registerProvider(provider); regErr != nil {
+				// Provider registration failure must be fatal — the plugin
+				// declares it owns this resource type but ABAC can't resolve
+				// attributes for it, so any policy targeting that type would
+				// silently fail at evaluation. This is consistent with how
+				// GetSchema, policy installation, and service registration
+				// failures are handled.
+				if unloadErr := host.Unload(ctx, pluginName); unloadErr != nil {
+					slog.Error("failed to rollback plugin after attribute provider registration failure",
+						"plugin", pluginName, "error", unloadErr)
+				}
+				return nil, oops.In("manager").
+					With("plugin", pluginName).
+					With("resource_type", rt).
+					Wrapf(regErr, "failed to register attribute provider")
+			}
+		}
+	}
+
+	return schemas, nil
 }
 
 // ListPlugins returns names of all loaded plugins.
