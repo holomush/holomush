@@ -14,6 +14,24 @@ import (
 
 // AttributeResolverProvider is implemented by binary plugins that provide
 // attribute resolution for resource types they own.
+//
+// Host contract (post-hardening):
+//
+// Plugins implementing this interface only ever receive REAL resource
+// instance IDs from the host. There are no synthetic sentinels, no
+// preflight IDs, and no pseudo-instances of any kind. Any ID passed to
+// ResolveResource refers to a genuine entity that the host believes
+// exists in the plugin's backing store; plugin authors do not need to
+// special-case sentinel values or "discovery" calls.
+//
+// In addition, every attribute returned from ResolveResource MUST appear
+// in GetSchema. Undeclared attributes are silently dropped at runtime,
+// and policies referencing undeclared attributes cause the plugin to
+// fail to load.
+//
+// See docs/superpowers/specs/2026-04-07-plugin-abac-hardening-design.md
+// for the full design rationale and the host-side invariants this
+// contract relies on.
 type AttributeResolverProvider interface {
 	RegisterAttributeResolver(registrar grpc.ServiceRegistrar)
 }
