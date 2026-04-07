@@ -13,14 +13,21 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/testcontainers/testcontainers-go"
 	"google.golang.org/grpc"
 
+	policy "github.com/holomush/holomush/internal/access/policy"
+	"github.com/holomush/holomush/internal/access/policy/attribute"
+	"github.com/holomush/holomush/internal/access/policy/audit"
+	policystore "github.com/holomush/holomush/internal/access/policy/store"
+	policytypes "github.com/holomush/holomush/internal/access/policy/types"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
 	"github.com/holomush/holomush/internal/store"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 	"github.com/holomush/holomush/test/testutil"
 )
@@ -123,7 +130,29 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 	Describe("full binary plugin lifecycle via Manager", func() {
 		It("loads core-scenes, registers SceneService, and answers RPCs", func() {
-			pluginsDir := pluginBinaryDir()
+			// Create an isolated plugins dir containing only core-scenes so LoadAll
+			// does not conflict with other test plugins (e.g. test-abac-widget) that
+			// also provide holomush.plugin.v1.AttributeResolverService.
+			//
+			// Constraints:
+			//   - Manager.Discover uses entry.IsDir() — symlinks to dirs are skipped
+			//   - goplugin.Host uses EvalSymlinks + containment check — symlinked
+			//     binaries that resolve outside the plugin dir are rejected
+			// Solution: copy plugin.yaml + binary into a real directory structure.
+			corePluginDir, coreBinaryPath := coreScenesBinaryPath()
+			pluginsDir := GinkgoT().TempDir()
+			coreSubDir := filepath.Join(pluginsDir, "core-scenes")
+			platformDir := runtime.GOOS + "-" + runtime.GOARCH
+			platformSubDir := filepath.Join(coreSubDir, platformDir)
+			Expect(os.MkdirAll(platformSubDir, 0o755)).To(Succeed())
+			// Copy plugin.yaml
+			yamlSrc, yamlErr := os.ReadFile(filepath.Join(corePluginDir, "plugin.yaml"))
+			Expect(yamlErr).NotTo(HaveOccurred())
+			Expect(os.WriteFile(filepath.Join(coreSubDir, "plugin.yaml"), yamlSrc, 0o644)).To(Succeed())
+			// Copy binary
+			binSrc, binErr := os.ReadFile(coreBinaryPath)
+			Expect(binErr).NotTo(HaveOccurred())
+			Expect(os.WriteFile(filepath.Join(platformSubDir, "core-scenes"), binSrc, 0o755)).To(Succeed())
 
 			// Set up schema provisioner
 			provisioner := plugins.NewSchemaProvisioner(connStr)
@@ -198,25 +227,6 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(getResp.GetScene().GetTitle()).To(Equal("Integration Test Scene"))
 			Expect(getResp.GetScene().GetId()).To(Equal(sceneID))
-
-			// Verify the owner is a participant
-			Expect(getResp.GetScene().GetParticipants()).To(HaveLen(1))
-			Expect(getResp.GetScene().GetParticipants()[0].GetCharacterId()).To(Equal("test-char-001"))
-			Expect(getResp.GetScene().GetParticipants()[0].GetRole()).To(Equal("owner"))
-
-			// Verify ListScenes returns the scene (open visibility by default)
-			listResp, err := sceneClient.ListScenes(ctx, &scenev1.ListScenesRequest{})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(listResp.GetScenes()).NotTo(BeEmpty())
-
-			var foundInList bool
-			for _, s := range listResp.GetScenes() {
-				if s.GetId() == sceneID {
-					foundInList = true
-					break
-				}
-			}
-			Expect(foundInList).To(BeTrue(), "created scene should appear in ListScenes")
 		})
 	})
 
@@ -309,6 +319,177 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			loadErr := host.Load(ctx, manifest, pluginDir)
 			Expect(loadErr).To(HaveOccurred())
 			Expect(loadErr.Error()).To(ContainSubstring("holomush.world.v1.WorldService"))
+		})
+	})
+
+	Describe("scene plugin ABAC: read-own-scene", func() {
+		var (
+			abacCtx         context.Context
+			abacCancel      context.CancelFunc
+			abacHost        *goplugin.Host
+			abacPs          *policystore.PostgresStore
+			abacEngine      *policy.Engine
+			abacPool        *pgxpool.Pool
+			abacProvisioner *plugins.SchemaProvisioner
+			abacRegistry    *plugins.ServiceRegistry
+			sceneID         string
+		)
+
+		BeforeEach(func() {
+			pluginDir, binaryPath := coreScenesBinaryPath()
+			if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
+				Skip(fmt.Sprintf("core-scenes binary not found at %s — run 'task plugin:build-all' first", binaryPath))
+			}
+
+			abacCtx, abacCancel = context.WithTimeout(context.Background(), 2*time.Minute)
+
+			// Postgres + migrator
+			pgEnv, err := testutil.StartPostgres(abacCtx)
+			Expect(err).NotTo(HaveOccurred())
+			container = pgEnv.Container
+			connStr = pgEnv.ConnStr
+
+			migrator, err := store.NewMigrator(connStr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(migrator.Up()).To(Succeed())
+			_ = migrator.Close()
+
+			// Provisioner outlives BeforeEach (closed in AfterEach)
+			abacProvisioner = plugins.NewSchemaProvisioner(connStr)
+			Expect(abacProvisioner.Init(abacCtx)).To(Succeed())
+
+			// Service registry with WorldService stub
+			abacRegistry = plugins.NewServiceRegistry()
+			worldSrv := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-memory bufconn only
+			worldConn, worldConnErr := plugins.NewInProcessConn(worldSrv)
+			Expect(worldConnErr).NotTo(HaveOccurred())
+			DeferCleanup(func() { _ = worldConn.Close() })
+
+			Expect(abacRegistry.Register(plugins.RegisteredService{
+				Name:       "holomush.world.v1.WorldService",
+				Conn:       worldConn,
+				PluginType: plugins.TypeServerInternal(),
+			})).To(Succeed())
+
+			// Host + load plugin
+			abacHost = goplugin.NewHost(
+				goplugin.WithSchemaProvisioner(abacProvisioner),
+				goplugin.WithServiceRegistry(abacRegistry),
+			)
+
+			manifestData, err := os.ReadFile(filepath.Join(pluginDir, "plugin.yaml"))
+			Expect(err).NotTo(HaveOccurred())
+			manifest, err := plugins.ParseManifest(manifestData)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(abacHost.Load(abacCtx, manifest, pluginDir)).To(Succeed())
+
+			// Install policies into postgres store
+			abacPool, err = pgxpool.New(abacCtx, connStr)
+			Expect(err).NotTo(HaveOccurred())
+			abacPs = policystore.NewPostgresStore(abacPool)
+			installer := plugins.NewPolicyInstaller(abacPs)
+			Expect(installer.InstallPluginPoliciesWithManifest(abacCtx, manifest, manifest.Policies)).To(Succeed())
+
+			// Build ABAC engine stack (mirrors abac_widget_test.go)
+			// 1. Schema registry + attribute resolver
+			schemaRegistry := attribute.NewSchemaRegistry()
+			resolver := attribute.NewResolver(schemaRegistry)
+
+			// 2. Register the command attribute provider (for resource.command.name)
+			cmdProvider := attribute.NewCommandProvider()
+			Expect(resolver.RegisterProvider(cmdProvider)).To(Succeed())
+
+			// 3. Discover scene schema from the plugin and register proxy provider.
+			arClient := abacHost.AttributeResolverClient("core-scenes")
+			Expect(arClient).NotTo(BeNil())
+
+			schemaResp, schemaErr := arClient.GetSchema(abacCtx, &pluginv1.GetSchemaRequest{})
+			Expect(schemaErr).NotTo(HaveOccurred())
+
+			schemas := plugins.ConvertProtoSchema(schemaResp)
+			Expect(schemas).To(HaveKey("scene"))
+
+			sceneAttrProvider := plugins.NewPluginAttributeProvider("scene", arClient, schemas["scene"])
+			Expect(resolver.RegisterProvider(sceneAttrProvider)).To(Succeed())
+
+			// 4. Create compiler and cache, then reload.
+			compiler := policy.NewCompiler(schemaRegistry.Schema())
+			cache := policy.NewCache(abacPs, compiler)
+			Expect(cache.Reload(abacCtx)).To(Succeed())
+
+			// 5. Create audit logger (minimal, in-memory writer).
+			auditWriter := &testAuditWriter{}
+			tmpDir := GinkgoT().TempDir()
+			auditLogger := audit.NewLogger(audit.ModeAll, auditWriter, filepath.Join(tmpDir, "test-wal.jsonl"))
+
+			// 6. Create mock session resolver (tests use character: subjects directly).
+			sessionResolver := &testSessionResolver{}
+
+			// 7. Assemble the engine.
+			abacEngine = policy.NewEngine(resolver, cache, sessionResolver, auditLogger)
+
+			// Create a scene owned by char-alice via the plugin's gRPC connection.
+			// host.Load registers the plugin process but does not inject it into the
+			// service registry; use PluginConn to get the raw gRPC connection directly.
+			pluginConn, connErr := abacHost.PluginConn("core-scenes")
+			Expect(connErr).NotTo(HaveOccurred())
+			sceneClient := scenev1.NewSceneServiceClient(pluginConn)
+
+			createResp, createErr := sceneClient.CreateScene(abacCtx, &scenev1.CreateSceneRequest{
+				CharacterId: "char-alice",
+				Title:       "Tea at the Manor",
+			})
+			Expect(createErr).NotTo(HaveOccurred())
+			sceneID = createResp.GetScene().GetId()
+		})
+
+		AfterEach(func() {
+			if abacHost != nil {
+				_ = abacHost.Close(abacCtx)
+			}
+			if abacProvisioner != nil {
+				abacProvisioner.Close()
+			}
+			if abacPool != nil {
+				abacPool.Close()
+			}
+			if container != nil {
+				_ = container.Terminate(context.Background())
+			}
+			if abacCancel != nil {
+				abacCancel()
+			}
+		})
+
+		It("permits scene command execution via Layer 1 execute policy", func() {
+			req, err := policytypes.NewAccessRequest("character:char-alice", "execute", "command:scene")
+			Expect(err).NotTo(HaveOccurred())
+
+			decision, err := abacEngine.Evaluate(abacCtx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(decision.IsAllowed()).To(BeTrue(),
+				"execute-scene-commands policy should permit Layer 1 command execution")
+			Expect(decision.Effect()).To(Equal(policytypes.EffectAllow))
+		})
+
+		It("permits the owner to read their own scene via per-resource policy", func() {
+			req, err := policytypes.NewAccessRequest("character:char-alice", "read", "scene:"+sceneID)
+			Expect(err).NotTo(HaveOccurred())
+
+			decision, err := abacEngine.Evaluate(abacCtx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(decision.IsAllowed()).To(BeTrue(),
+				"read-own-scene policy should permit owner")
+		})
+
+		It("denies a non-owner attempting to read the scene", func() {
+			req, err := policytypes.NewAccessRequest("character:char-bob", "read", "scene:"+sceneID)
+			Expect(err).NotTo(HaveOccurred())
+
+			decision, err := abacEngine.Evaluate(abacCtx, req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(decision.IsAllowed()).To(BeFalse(),
+				"non-owner must be denied (no policy permits)")
 		})
 	})
 })

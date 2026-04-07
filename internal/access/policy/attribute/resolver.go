@@ -175,8 +175,16 @@ func (r *Resolver) Resolve(ctx context.Context, req types.AccessRequest) (*types
 	if req.Subject != "" {
 		if err := validateEntityRef(req.Subject); err != nil {
 			errs = append(errs, oops.With("field", "subject").Wrap(err))
-		} else if err := r.resolveEntity(ctx, "subject", req.Subject, bags.Subject); err != nil {
-			errs = append(errs, err)
+		} else {
+			// Inject the raw entity ID so policies can compare via principal.id.
+			// This allows policies like `resource.scene.owner == principal.id`
+			// to work without requiring a provider to set the id explicitly.
+			if idx := strings.Index(req.Subject, ":"); idx >= 0 {
+				bags.Subject["id"] = req.Subject[idx+1:]
+			}
+			if err := r.resolveEntity(ctx, "subject", req.Subject, bags.Subject); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
 
@@ -184,8 +192,14 @@ func (r *Resolver) Resolve(ctx context.Context, req types.AccessRequest) (*types
 	if req.Resource != "" {
 		if err := validateEntityRef(req.Resource); err != nil {
 			errs = append(errs, oops.With("field", "resource").Wrap(err))
-		} else if err := r.resolveEntity(ctx, "resource", req.Resource, bags.Resource); err != nil {
-			errs = append(errs, err)
+		} else {
+			// Inject the raw entity ID so policies can compare via resource.id.
+			if idx := strings.Index(req.Resource, ":"); idx >= 0 {
+				bags.Resource["id"] = req.Resource[idx+1:]
+			}
+			if err := r.resolveEntity(ctx, "resource", req.Resource, bags.Resource); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
 
@@ -241,8 +255,16 @@ func (r *Resolver) ResolveSubjectAttributes(ctx context.Context, subject, action
 	// consistency with Resolve.
 	if err := validateEntityRef(subject); err != nil {
 		errs = append(errs, oops.With("field", "subject").Wrap(err))
-	} else if err := r.resolveEntity(ctx, "subject", subject, bags.Subject); err != nil {
-		errs = append(errs, err)
+	} else {
+		// Inject the raw entity ID so policies can compare via principal.id.
+		// Mirrors Resolve's behavior to preserve the C1 invariant that both
+		// methods produce identical Subject bags for the same (subject, action).
+		if idx := strings.Index(subject, ":"); idx >= 0 {
+			bags.Subject["id"] = subject[idx+1:]
+		}
+		if err := r.resolveEntity(ctx, "subject", subject, bags.Subject); err != nil {
+			errs = append(errs, err)
+		}
 	}
 
 	// Resolve environment attributes.

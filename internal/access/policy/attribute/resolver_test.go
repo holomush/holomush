@@ -554,8 +554,10 @@ func TestResolverResolveUnknownEntityType(t *testing.T) {
 	bags, err := resolver.Resolve(context.Background(), req)
 	require.NoError(t, err)
 
-	// Should have empty subject bag (no provider for "unknown" type)
-	assert.Empty(t, bags.Subject)
+	// Entity ID is always injected as the raw "id" key regardless of type.
+	// No provider matches "unknown" type, so only the injected id is present.
+	assert.Equal(t, "01ABC", bags.Subject["id"])
+	assert.Len(t, bags.Subject, 1, "only injected 'id' key expected — no provider matched 'unknown' type")
 	// Should still have action
 	assert.Equal(t, "read", bags.Action["name"])
 }

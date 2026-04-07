@@ -87,6 +87,11 @@ tasks:
       - gotestsum --format pkgname -- -race -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic ./internal/content/
         ./internal/store/ ./plugins/core-scenes/ ./test/integration/...
 
+  test:int:focus:
+    desc: Run focused integration tests with Ginkgo focus filter (pass -ginkgo.focus="..." after --)
+    cmds:
+      - gotestsum --format pkgname -- -race -tags=integration -count=1 -timeout 8m {{.CLI_ARGS}} github.com/holomush/holomush/test/integration/plugin
+
   test:e2e:
     desc: Run Playwright E2E tests in Docker
     deps: ['docker:build']
