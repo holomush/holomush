@@ -73,13 +73,16 @@ func (p *scenePlugin) handleCreate(ctx context.Context, req pluginsdk.CommandReq
 // policy, the host's ABAC engine has already verified the caller is the owner
 // before this code runs (when invoked via the dispatcher's full ABAC pipeline);
 // in unit tests, ABAC is bypassed and the service is called directly.
-func (p *scenePlugin) handleInfo(ctx context.Context, _ pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+func (p *scenePlugin) handleInfo(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID := strings.TrimSpace(args)
 	if sceneID == "" {
 		return pluginsdk.Errorf("Usage: scene info <scene id>"), nil
 	}
 
-	resp, err := p.service.GetScene(ctx, &scenev1.GetSceneRequest{SceneId: sceneID})
+	resp, err := p.service.GetScene(ctx, &scenev1.GetSceneRequest{
+		CharacterId: req.CharacterID,
+		SceneId:     sceneID,
+	})
 	if err != nil {
 		return pluginsdk.Errorf("Failed to get scene: %v", err), nil
 	}

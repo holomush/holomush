@@ -109,7 +109,10 @@ func TestSceneServiceGetSceneReturnsSceneWhenItExists(t *testing.T) {
 	}
 	svc := NewSceneServiceImpl(store)
 
-	resp, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{SceneId: "scene-known"})
+	resp, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-known",
+	})
 	require.NoError(t, err)
 	assert.Equal(t, "scene-known", resp.GetScene().GetId())
 	assert.Equal(t, "Existing", resp.GetScene().GetTitle())
@@ -118,7 +121,10 @@ func TestSceneServiceGetSceneReturnsSceneWhenItExists(t *testing.T) {
 func TestSceneServiceGetSceneReturnsNotFoundWhenSceneIsMissing(t *testing.T) {
 	svc := NewSceneServiceImpl(newFakeStore())
 
-	_, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{SceneId: "scene-missing"})
+	_, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-missing",
+	})
 	require.Error(t, err)
 	st, ok := status.FromError(err)
 	require.True(t, ok)
@@ -130,7 +136,10 @@ func TestSceneServiceGetSceneReturnsInternalForUnknownStoreError(t *testing.T) {
 	store.getErr = errors.New("connection refused")
 	svc := NewSceneServiceImpl(store)
 
-	_, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{SceneId: "scene-x"})
+	_, err := svc.GetScene(context.Background(), &scenev1.GetSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-x",
+	})
 	require.Error(t, err)
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.Internal, st.Code())

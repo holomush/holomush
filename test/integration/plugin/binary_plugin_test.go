@@ -222,7 +222,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 			// Verify via GetScene that it was persisted
 			getResp, err := sceneClient.GetScene(ctx, &scenev1.GetSceneRequest{
-				SceneId: sceneID,
+				CharacterId: "test-char-001",
+				SceneId:     sceneID,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(getResp.GetScene().GetTitle()).To(Equal("Integration Test Scene"))
@@ -286,7 +287,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 			// GetScene directly
 			getResp, err := sceneClient.GetScene(ctx, &scenev1.GetSceneRequest{
-				SceneId: createResp.GetScene().GetId(),
+				CharacterId: "direct-char-001",
+				SceneId:     createResp.GetScene().GetId(),
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(getResp.GetScene().GetTitle()).To(Equal("Direct Connection Test"))
