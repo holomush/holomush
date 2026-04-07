@@ -1725,4 +1725,14 @@ func TestManifestEffectivePriorityDefaultsToLoadPriorityDefault(t *testing.T) {
 	assert.Equal(t, plugins.LoadPriorityDefault, m.EffectivePriority())
 }
 
+func TestSceneResourceTypeIsNotProtected(t *testing.T) {
+	// Why: scenes are owned by the core-scenes plugin (Epic 9 v2), not the
+	// server core. The plugin must be able to declare resource_types: [scene]
+	// without trust escalation. See spec
+	// docs/superpowers/specs/2026-04-06-scenes-and-rp-design-v2.md section 5.1.
+	if plugins.ProtectedResourceTypes["scene"] {
+		t.Fatal("scene MUST NOT be in ProtectedResourceTypes — owned by core-scenes plugin")
+	}
+}
+
 // TestManifestTrustFieldParsed is folded into TestParseManifestResourceTypesAndTrust.

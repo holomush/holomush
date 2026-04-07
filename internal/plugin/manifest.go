@@ -47,7 +47,7 @@ type TrustConfig struct {
 // policies targeting these types without trust escalation.
 var ProtectedResourceTypes = map[string]bool{
 	"character": true, "location": true, "exit": true, "object": true,
-	"stream": true, "property": true, "scene": true, "command": true,
+	"stream": true, "property": true, "command": true,
 	"system": true, "server": true, "player": true,
 }
 
