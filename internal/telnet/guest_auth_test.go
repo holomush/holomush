@@ -4,14 +4,12 @@
 package telnet
 
 import (
-	"context"
 	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	grpcserver "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/naming"
 	"github.com/oklog/ulid/v2"
 )
@@ -55,49 +53,10 @@ func TestGemstoneElementTheme_TitleCase(t *testing.T) {
 	}
 }
 
-// TestGuestAuthenticator_GuestLogin verifies that "guest" username produces a valid AuthResult.
-func TestGuestAuthenticator_GuestLogin(t *testing.T) {
+func TestGuestAuthenticator_StartLocationReturnsConfiguredLocation(t *testing.T) {
 	startLocation := ulid.Make()
 	auth := NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocation)
-
-	result, err := auth.Authenticate(context.Background(), "guest", "")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.NotEmpty(t, result.CharacterName)
-	assert.NotEqual(t, ulid.ULID{}, result.CharacterID)
-	assert.Equal(t, startLocation, result.LocationID)
-}
-
-// TestGuestAuthenticator_RegisteredLoginRejected verifies non-guest usernames are rejected.
-func TestGuestAuthenticator_RegisteredLoginRejected(t *testing.T) {
-	startLocation := ulid.Make()
-	auth := NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocation)
-
-	result, err := auth.Authenticate(context.Background(), "alice", "secret")
-	assert.Error(t, err)
-	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "Registered accounts are not yet available")
-}
-
-// TestGuestAuthenticator_UniqueNames verifies guest logins all receive unique names within pool capacity.
-func TestGuestAuthenticator_UniqueNames(t *testing.T) {
-	startLocation := ulid.Make()
-	auth := NewGuestAuthenticator(naming.NewGemstoneElementTheme(), startLocation)
-
-	// Connect 20 guests — all should get unique names from the 400-name pool.
-	seen := make(map[string]struct{})
-	for i := 0; i < 20; i++ {
-		result, err := auth.Authenticate(context.Background(), "guest", "")
-		require.NoError(t, err)
-		_, duplicate := seen[result.CharacterName]
-		assert.Falsef(t, duplicate, "duplicate guest name: %s", result.CharacterName)
-		seen[result.CharacterName] = struct{}{}
-	}
-}
-
-// TestGuestAuthenticator_ImplementsInterface is a compile-time check.
-func TestGuestAuthenticator_ImplementsInterface(_ *testing.T) {
-	var _ grpcserver.Authenticator = (*GuestAuthenticator)(nil)
+	assert.Equal(t, startLocation, auth.StartLocation())
 }
 
 func TestGuestAuthenticator_GenerateName(t *testing.T) {
@@ -122,4 +81,15 @@ func TestGuestAuthenticator_GenerateName_Unique(t *testing.T) {
 		assert.False(t, duplicate, "duplicate name: %s", name)
 		seen[name] = struct{}{}
 	}
+}
+
+func TestGuestAuthenticator_ReleaseGuestRemovesFromActiveSet(t *testing.T) {
+	auth := NewGuestAuthenticator(naming.NewGemstoneElementTheme(), ulid.Make())
+
+	name, err := auth.GenerateName()
+	require.NoError(t, err)
+	assert.Equal(t, 1, auth.ActiveCount())
+
+	auth.ReleaseGuest(name)
+	assert.Equal(t, 0, auth.ActiveCount())
 }

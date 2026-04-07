@@ -26,6 +26,7 @@ func testSessionInfo() *session.Info {
 	return &session.Info{
 		ID:             "sess-abc",
 		CharacterID:    core.NewULID(),
+		PlayerID:       core.NewULID(),
 		CharacterName:  "TestChar",
 		LocationID:     core.NewULID(),
 		IsGuest:        false,
@@ -45,7 +46,7 @@ func testSessionInfo() *session.Info {
 // sessionColumns returns the column names for session SELECT queries.
 func sessionColumns() []string {
 	return []string{
-		"id", "character_id", "character_name", "location_id",
+		"id", "character_id", "player_id", "character_name", "location_id",
 		"is_guest", "status", "grid_present", "event_cursors",
 		"command_history", "ttl_seconds", "max_history",
 		"detached_at", "expires_at", "created_at", "updated_at",
@@ -59,6 +60,7 @@ func sessionRow(info *session.Info) []any {
 	return []any{
 		info.ID,
 		info.CharacterID.String(),
+		info.PlayerID.String(),
 		info.CharacterName,
 		info.LocationID.String(),
 		info.IsGuest,
@@ -184,6 +186,7 @@ func TestPostgresSessionStore_Set(t *testing.T) {
 					WithArgs(
 						pgxmock.AnyArg(), // id
 						pgxmock.AnyArg(), // character_id
+						pgxmock.AnyArg(), // player_id
 						pgxmock.AnyArg(), // character_name
 						pgxmock.AnyArg(), // location_id
 						pgxmock.AnyArg(), // is_guest
@@ -214,7 +217,7 @@ func TestPostgresSessionStore_Set(t *testing.T) {
 						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
-						pgxmock.AnyArg(),
+						pgxmock.AnyArg(), pgxmock.AnyArg(),
 					).
 					WillReturnError(errors.New("disk full"))
 			},
@@ -270,6 +273,7 @@ func TestPostgresSessionStore_Set_NilCommandHistory(t *testing.T) {
 		WithArgs(
 			pgxmock.AnyArg(),     // id
 			pgxmock.AnyArg(),     // character_id
+			pgxmock.AnyArg(),     // player_id
 			pgxmock.AnyArg(),     // character_name
 			pgxmock.AnyArg(),     // location_id
 			pgxmock.AnyArg(),     // is_guest
@@ -432,7 +436,8 @@ func TestPostgresSessionStore_ListByPlayer(t *testing.T) {
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				rows := pgxmock.NewRows(sessionColumns()).
 					AddRow(sessionRow(info)...)
-				mock.ExpectQuery(`SELECT .+ FROM sessions WHERE status != 'expired'`).
+				mock.ExpectQuery(`SELECT .+ FROM sessions WHERE player_id = .+ AND status != 'expired'`).
+					WithArgs(playerID.String()).
 					WillReturnRows(rows)
 			},
 			wantCount: 1,
@@ -442,7 +447,8 @@ func TestPostgresSessionStore_ListByPlayer(t *testing.T) {
 			playerID: playerID,
 			setupMock: func(mock pgxmock.PgxPoolIface) {
 				rows := pgxmock.NewRows(sessionColumns())
-				mock.ExpectQuery(`SELECT .+ FROM sessions WHERE status != 'expired'`).
+				mock.ExpectQuery(`SELECT .+ FROM sessions WHERE player_id = .+ AND status != 'expired'`).
+					WithArgs(playerID.String()).
 					WillReturnRows(rows)
 			},
 			wantCount: 0,
@@ -451,7 +457,8 @@ func TestPostgresSessionStore_ListByPlayer(t *testing.T) {
 			name:     "database error",
 			playerID: playerID,
 			setupMock: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectQuery(`SELECT .+ FROM sessions WHERE status != 'expired'`).
+				mock.ExpectQuery(`SELECT .+ FROM sessions WHERE player_id = .+ AND status != 'expired'`).
+					WithArgs(playerID.String()).
 					WillReturnError(errors.New("timeout"))
 			},
 			wantErr: true,

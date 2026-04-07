@@ -359,7 +359,6 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		Expect(dispErr).NotTo(HaveOccurred())
 
 		coreServer := grpcpkg.NewCoreServer(engine, sessStore, dispatcher, cmdSvc,
-			grpcpkg.WithAuthenticator(guestAuth),
 			grpcpkg.WithEventStore(eventStore),
 			grpcpkg.WithGuestService(guestService),
 			grpcpkg.WithPlayerRepo(playerRepo),

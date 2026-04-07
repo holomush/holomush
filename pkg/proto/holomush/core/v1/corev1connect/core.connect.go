@@ -36,9 +36,6 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// CoreServiceAuthenticateProcedure is the fully-qualified name of the CoreService's Authenticate
-	// RPC.
-	CoreServiceAuthenticateProcedure = "/holomush.core.v1.CoreService/Authenticate"
 	// CoreServiceHandleCommandProcedure is the fully-qualified name of the CoreService's HandleCommand
 	// RPC.
 	CoreServiceHandleCommandProcedure = "/holomush.core.v1.CoreService/HandleCommand"
@@ -81,8 +78,6 @@ const (
 
 // CoreServiceClient is a client for the holomush.core.v1.CoreService service.
 type CoreServiceClient interface {
-	// Authenticate validates credentials and creates a session.
-	Authenticate(context.Context, *connect.Request[v1.AuthenticateRequest]) (*connect.Response[v1.AuthenticateResponse], error)
 	// HandleCommand processes a game command.
 	HandleCommand(context.Context, *connect.Request[v1.HandleCommandRequest]) (*connect.Response[v1.HandleCommandResponse], error)
 	// Subscribe opens a stream of events for the session.
@@ -124,12 +119,6 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 	baseURL = strings.TrimRight(baseURL, "/")
 	coreServiceMethods := v1.File_holomush_core_v1_core_proto.Services().ByName("CoreService").Methods()
 	return &coreServiceClient{
-		authenticate: connect.NewClient[v1.AuthenticateRequest, v1.AuthenticateResponse](
-			httpClient,
-			baseURL+CoreServiceAuthenticateProcedure,
-			connect.WithSchema(coreServiceMethods.ByName("Authenticate")),
-			connect.WithClientOptions(opts...),
-		),
 		handleCommand: connect.NewClient[v1.HandleCommandRequest, v1.HandleCommandResponse](
 			httpClient,
 			baseURL+CoreServiceHandleCommandProcedure,
@@ -219,7 +208,6 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // coreServiceClient implements CoreServiceClient.
 type coreServiceClient struct {
-	authenticate         *connect.Client[v1.AuthenticateRequest, v1.AuthenticateResponse]
 	handleCommand        *connect.Client[v1.HandleCommandRequest, v1.HandleCommandResponse]
 	subscribe            *connect.Client[v1.SubscribeRequest, v1.SubscribeResponse]
 	disconnect           *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
@@ -234,11 +222,6 @@ type coreServiceClient struct {
 	confirmPasswordReset *connect.Client[v1.ConfirmPasswordResetRequest, v1.ConfirmPasswordResetResponse]
 	logout               *connect.Client[v1.LogoutRequest, v1.LogoutResponse]
 	checkPlayerSession   *connect.Client[v1.CheckPlayerSessionRequest, v1.CheckPlayerSessionResponse]
-}
-
-// Authenticate calls holomush.core.v1.CoreService.Authenticate.
-func (c *coreServiceClient) Authenticate(ctx context.Context, req *connect.Request[v1.AuthenticateRequest]) (*connect.Response[v1.AuthenticateResponse], error) {
-	return c.authenticate.CallUnary(ctx, req)
 }
 
 // HandleCommand calls holomush.core.v1.CoreService.HandleCommand.
@@ -313,8 +296,6 @@ func (c *coreServiceClient) CheckPlayerSession(ctx context.Context, req *connect
 
 // CoreServiceHandler is an implementation of the holomush.core.v1.CoreService service.
 type CoreServiceHandler interface {
-	// Authenticate validates credentials and creates a session.
-	Authenticate(context.Context, *connect.Request[v1.AuthenticateRequest]) (*connect.Response[v1.AuthenticateResponse], error)
 	// HandleCommand processes a game command.
 	HandleCommand(context.Context, *connect.Request[v1.HandleCommandRequest]) (*connect.Response[v1.HandleCommandResponse], error)
 	// Subscribe opens a stream of events for the session.
@@ -352,12 +333,6 @@ type CoreServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	coreServiceMethods := v1.File_holomush_core_v1_core_proto.Services().ByName("CoreService").Methods()
-	coreServiceAuthenticateHandler := connect.NewUnaryHandler(
-		CoreServiceAuthenticateProcedure,
-		svc.Authenticate,
-		connect.WithSchema(coreServiceMethods.ByName("Authenticate")),
-		connect.WithHandlerOptions(opts...),
-	)
 	coreServiceHandleCommandHandler := connect.NewUnaryHandler(
 		CoreServiceHandleCommandProcedure,
 		svc.HandleCommand,
@@ -444,8 +419,6 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 	)
 	return "/holomush.core.v1.CoreService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case CoreServiceAuthenticateProcedure:
-			coreServiceAuthenticateHandler.ServeHTTP(w, r)
 		case CoreServiceHandleCommandProcedure:
 			coreServiceHandleCommandHandler.ServeHTTP(w, r)
 		case CoreServiceSubscribeProcedure:
@@ -482,10 +455,6 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 
 // UnimplementedCoreServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedCoreServiceHandler struct{}
-
-func (UnimplementedCoreServiceHandler) Authenticate(context.Context, *connect.Request[v1.AuthenticateRequest]) (*connect.Response[v1.AuthenticateResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.Authenticate is not implemented"))
-}
 
 func (UnimplementedCoreServiceHandler) HandleCommand(context.Context, *connect.Request[v1.HandleCommandRequest]) (*connect.Response[v1.HandleCommandResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.HandleCommand is not implemented"))

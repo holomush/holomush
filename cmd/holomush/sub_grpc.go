@@ -190,7 +190,6 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 
 	// 8. Create CoreServer and register with gRPC.
 	coreServer := holoGRPC.NewCoreServer(engine, sessionStore, cmdDispatcher, cmdServices,
-		holoGRPC.WithAuthenticator(guestAuth),
 		holoGRPC.WithEventStore(eventStore),
 		holoGRPC.WithWorldQuerier(worldService),
 		holoGRPC.WithAuthService(authService),

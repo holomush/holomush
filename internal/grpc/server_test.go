@@ -114,18 +114,6 @@ func (m *mockEventStore) Subscribe(ctx context.Context, _ string) (<-chan ulid.U
 	return eventCh, errCh, nil
 }
 
-// mockAuthenticator provides authentication for testing.
-type mockAuthenticator struct {
-	authenticateFunc func(ctx context.Context, username, password string) (*AuthResult, error)
-}
-
-func (m *mockAuthenticator) Authenticate(ctx context.Context, username, password string) (*AuthResult, error) {
-	if m.authenticateFunc != nil {
-		return m.authenticateFunc(ctx, username, password)
-	}
-	return nil, errors.New("authentication not configured")
-}
-
 // mockSubscribeStream implements grpc.ServerStreamingServer[corev1.SubscribeResponse] for testing.
 type mockSubscribeStream struct {
 	grpc.ServerStream
@@ -143,82 +131,6 @@ func (m *mockSubscribeStream) Context() context.Context {
 func (m *mockSubscribeStream) Send(event *corev1.SubscribeResponse) error {
 	m.events = append(m.events, event)
 	return nil
-}
-
-func TestCoreServer_Authenticate_Success(t *testing.T) {
-	charID := core.NewULID()
-	sessionID := core.NewULID()
-
-	auth := &mockAuthenticator{
-		authenticateFunc: func(_ context.Context, username, password string) (*AuthResult, error) {
-			if username == "testuser" && password == "testpass" {
-				return &AuthResult{
-					CharacterID:   charID,
-					CharacterName: "TestCharacter",
-				}, nil
-			}
-			return nil, errors.New("invalid credentials")
-		},
-	}
-
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
-
-		authenticator: auth,
-		sessionStore:  session.NewMemStore(),
-		newSessionID:  func() ulid.ULID { return sessionID },
-	}
-
-	ctx := context.Background()
-	req := &corev1.AuthenticateRequest{
-		Meta: &corev1.RequestMeta{
-			RequestId: "test-request-id",
-			Timestamp: timestamppb.Now(),
-		},
-		Username: "testuser",
-		Password: "testpass",
-	}
-
-	resp, err := server.Authenticate(ctx, req)
-	require.NoError(t, err)
-
-	assert.True(t, resp.Success)
-	assert.Equal(t, sessionID.String(), resp.SessionId)
-	assert.Equal(t, charID.String(), resp.CharacterId)
-	assert.Equal(t, "TestCharacter", resp.CharacterName)
-	require.NotNil(t, resp.Meta)
-	assert.Equal(t, "test-request-id", resp.Meta.RequestId)
-}
-
-func TestCoreServer_Authenticate_InvalidCredentials(t *testing.T) {
-	auth := &mockAuthenticator{
-		authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
-			return nil, errors.New("invalid credentials")
-		},
-	}
-
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
-
-		authenticator: auth,
-		sessionStore:  session.NewMemStore(),
-	}
-
-	ctx := context.Background()
-	req := &corev1.AuthenticateRequest{
-		Meta: &corev1.RequestMeta{
-			RequestId: "test-request-id",
-			Timestamp: timestamppb.Now(),
-		},
-		Username: "baduser",
-		Password: "badpass",
-	}
-
-	resp, err := server.Authenticate(ctx, req)
-	require.NoError(t, err)
-
-	assert.False(t, resp.Success, "expected failure for invalid credentials")
-	assert.NotEmpty(t, resp.Error, "error message should be present")
 }
 
 func TestCoreServer_HandleCommand_Say(t *testing.T) {
@@ -404,16 +316,13 @@ func TestNewCoreServer(t *testing.T) {
 func TestNewCoreServer_WithOptions(t *testing.T) {
 	store := &mockEventStore{}
 
-	customAuth := &mockAuthenticator{}
 	customStore := session.NewMemStore()
 
 	server := newHandleCommandServer(t, store, nil,
-		WithAuthenticator(customAuth),
 		WithSessionStore(customStore),
 	)
 
 	require.NotNil(t, server, "NewCoreServer returned nil")
-	assert.Equal(t, customAuth, server.authenticator, "WithAuthenticator option not applied")
 	assert.Equal(t, customStore, server.sessionStore, "WithSessionStore option not applied")
 }
 
@@ -421,65 +330,6 @@ func TestNewCoreServer_PanicsWithoutDispatcher(t *testing.T) {
 	assert.Panics(t, func() {
 		NewCoreServer(core.NewEngine(&mockEventStore{}), session.NewMemStore(), nil, nil)
 	}, "NewCoreServer should panic without dispatcher")
-}
-
-func TestCoreServer_Authenticate_NoAuthenticator(t *testing.T) {
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
-
-		sessionStore:  session.NewMemStore(),
-		authenticator: nil, // No authenticator configured
-	}
-
-	ctx := context.Background()
-	req := &corev1.AuthenticateRequest{
-		Meta: &corev1.RequestMeta{
-			RequestId: "no-auth-test",
-			Timestamp: timestamppb.Now(),
-		},
-		Username: "testuser",
-		Password: "testpass",
-	}
-
-	resp, err := server.Authenticate(ctx, req)
-	require.NoError(t, err)
-
-	assert.False(t, resp.Success, "expected failure when authenticator not configured")
-	assert.Equal(t, "authentication not configured", resp.Error)
-}
-
-func TestCoreServer_Authenticate_NilMeta(t *testing.T) {
-	charID := core.NewULID()
-	sessionID := core.NewULID()
-
-	auth := &mockAuthenticator{
-		authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
-			return &AuthResult{
-				CharacterID:   charID,
-				CharacterName: "TestCharacter",
-			}, nil
-		},
-	}
-
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
-
-		authenticator: auth,
-		sessionStore:  session.NewMemStore(),
-		newSessionID:  func() ulid.ULID { return sessionID },
-	}
-
-	ctx := context.Background()
-	req := &corev1.AuthenticateRequest{
-		Meta:     nil, // No meta
-		Username: "testuser",
-		Password: "testpass",
-	}
-
-	resp, err := server.Authenticate(ctx, req)
-	require.NoError(t, err)
-
-	assert.True(t, resp.Success)
 }
 
 func TestCoreServer_HandleCommand_NilMeta(t *testing.T) {
@@ -1631,67 +1481,6 @@ func TestCoreServer_HandleCommand_EmptyCommandWithTimeout(t *testing.T) {
 // Malformed Request Tests (e55.38)
 // =============================================================================
 
-func TestCoreServer_MalformedRequest_NilAuthRequest(t *testing.T) {
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
-
-		sessionStore:  session.NewMemStore(),
-		authenticator: nil,
-	}
-
-	ctx := context.Background()
-
-	// Pass nil request - should not panic
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("Authenticate panicked on nil request: %v", r)
-		}
-	}()
-
-	// This tests the server's behavior with an empty AuthRequest
-	req := &corev1.AuthenticateRequest{}
-	resp, err := server.Authenticate(ctx, req)
-	// Should return an error response, not panic
-	if err != nil {
-		// gRPC error is acceptable
-		return
-	}
-	assert.False(t, resp.Success, "expected failure for empty auth request")
-}
-
-func TestCoreServer_MalformedRequest_EmptyUsername(t *testing.T) {
-	auth := &mockAuthenticator{
-		authenticateFunc: func(_ context.Context, username, _ string) (*AuthResult, error) {
-			if username == "" {
-				return nil, errors.New("username required")
-			}
-			return nil, errors.New("invalid credentials")
-		},
-	}
-
-	server := &CoreServer{
-		engine:        core.NewEngine(core.NewMemoryEventStore()),
-		authenticator: auth,
-		sessionStore:  session.NewMemStore(),
-	}
-
-	ctx := context.Background()
-	req := &corev1.AuthenticateRequest{
-		Meta: &corev1.RequestMeta{
-			RequestId: "empty-username",
-			Timestamp: timestamppb.Now(),
-		},
-		Username: "",
-		Password: "password",
-	}
-
-	resp, err := server.Authenticate(ctx, req)
-	require.NoError(t, err)
-
-	assert.False(t, resp.Success, "expected failure for empty username")
-	assert.NotEmpty(t, resp.Error, "error message should be present")
-}
-
 func TestCoreServer_MalformedRequest_InvalidSessionID(t *testing.T) {
 	server := newHandleCommandServer(t, core.NewMemoryEventStore(), nil)
 
@@ -1926,48 +1715,6 @@ func TestCoreServer_MalformedRequest_NilMeta(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, resp.Success, "expected success for disconnect")
 	})
-}
-
-func TestCoreServer_MalformedRequest_UnknownFields(t *testing.T) {
-	// Protobuf messages gracefully ignore unknown fields by design
-	// This test verifies the server behaves correctly with valid requests
-	// that have extra data (which protobuf silently ignores)
-
-	charID := core.NewULID()
-	sessionID := core.NewULID()
-
-	auth := &mockAuthenticator{
-		authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
-			return &AuthResult{
-				CharacterID:   charID,
-				CharacterName: "Test",
-			}, nil
-		},
-	}
-
-	server := &CoreServer{
-		engine: core.NewEngine(core.NewMemoryEventStore()),
-
-		authenticator: auth,
-		sessionStore:  session.NewMemStore(),
-		newSessionID:  func() ulid.ULID { return sessionID },
-	}
-
-	ctx := context.Background()
-
-	// Normal request should work
-	req := &corev1.AuthenticateRequest{
-		Meta: &corev1.RequestMeta{
-			RequestId: "unknown-fields-test",
-			Timestamp: timestamppb.Now(),
-		},
-		Username: "testuser",
-		Password: "testpass",
-	}
-
-	resp, err := server.Authenticate(ctx, req)
-	require.NoError(t, err)
-	assert.True(t, resp.Success, "expected success, got error: %s", resp.Error)
 }
 
 func TestCoreServer_MalformedRequest_ConcurrentMalformedRequests(t *testing.T) {
@@ -2207,27 +1954,11 @@ func TestCoreServer_DisconnectHook_PanicRecovery(t *testing.T) {
 	locationID := core.NewULID()
 	sessionID := core.NewULID()
 
-	store := core.NewMemoryEventStore()
-
-	engine := core.NewEngine(store)
-
 	hookCallCount := 0
 	server := &CoreServer{
-		engine: engine,
-
-		eventStore: core.NewMemoryEventStore(),
-		authenticator: &mockAuthenticator{
-			authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
-				return &AuthResult{
-					CharacterID:   charID,
-					CharacterName: "PanicTest",
-					LocationID:    locationID,
-					IsGuest:       true,
-				}, nil
-			},
-		},
+		engine:       core.NewEngine(core.NewMemoryEventStore()),
+		eventStore:   core.NewMemoryEventStore(),
 		sessionStore: session.NewMemStore(),
-		newSessionID: func() ulid.ULID { return sessionID },
 		disconnectHooks: []func(session.Info){
 			func(_ session.Info) { panic("hook panic") },
 			func(_ session.Info) { hookCallCount++ },
@@ -2235,18 +1966,20 @@ func TestCoreServer_DisconnectHook_PanicRecovery(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	authResp, err := server.Authenticate(ctx, &corev1.AuthenticateRequest{
-		Username: "guest",
-		Meta:     &corev1.RequestMeta{RequestId: "test"},
-	})
-	require.NoError(t, err)
-	require.True(t, authResp.Success)
+	require.NoError(t, server.sessionStore.Set(ctx, sessionID.String(), &session.Info{
+		ID:            sessionID.String(),
+		CharacterID:   charID,
+		CharacterName: "PanicTest",
+		LocationID:    locationID,
+		IsGuest:       true,
+		Status:        session.StatusActive,
+		TTLSeconds:    1800,
+	}))
 
 	// Disconnect should not panic — recovery catches it
 	discResp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
-		SessionId:    authResp.SessionId,
-		ConnectionId: authResp.ConnectionId,
-		Meta:         &corev1.RequestMeta{RequestId: "test"},
+		SessionId: sessionID.String(),
+		Meta:      &corev1.RequestMeta{RequestId: "test"},
 	})
 	require.NoError(t, err)
 	require.True(t, discResp.Success)
@@ -2405,45 +2138,6 @@ func TestCoreServer_HandleCommand_HistoryBestEffort(t *testing.T) {
 	resp, err := server.HandleCommand(ctx, req)
 	require.NoError(t, err)
 	assert.True(t, resp.Success, "command should succeed even when history append fails")
-}
-
-func TestCoreServer_Authenticate_EmitsArriveEvent(t *testing.T) {
-	charID := core.NewULID()
-	locationID := core.NewULID()
-	sessionID := core.NewULID()
-
-	store := core.NewMemoryEventStore()
-
-	auth := &mockAuthenticator{
-		authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
-			return &AuthResult{
-				CharacterID:   charID,
-				CharacterName: "ArriveChar",
-				LocationID:    locationID,
-			}, nil
-		},
-	}
-
-	server := newHandleCommandServer(t, store, nil,
-		WithAuthenticator(auth),
-	)
-	server.newSessionID = func() ulid.ULID { return sessionID }
-
-	ctx := context.Background()
-	req := &corev1.AuthenticateRequest{
-		Meta:     &corev1.RequestMeta{RequestId: "arrive-test", Timestamp: timestamppb.Now()},
-		Username: "user",
-		Password: "pass",
-	}
-
-	resp, err := server.Authenticate(ctx, req)
-	require.NoError(t, err)
-	assert.True(t, resp.Success)
-
-	events, err := store.Replay(ctx, "location:"+locationID.String(), ulid.ULID{}, 100)
-	require.NoError(t, err)
-	require.Len(t, events, 1, "expected exactly one arrive event")
-	assert.Equal(t, core.EventTypeArrive, events[0].Type)
 }
 
 func TestCoreServer_Disconnect_EmitsLeaveEvent(t *testing.T) {
@@ -3109,70 +2803,6 @@ func TestEventToProto(t *testing.T) {
 // =============================================================================
 // Connection Type Tracking + Grid Presence Tests (Chunk 7)
 // =============================================================================
-
-func TestCoreServer_Authenticate_RegistersConnection(t *testing.T) {
-	charID := core.NewULID()
-	locationID := core.NewULID()
-	sessionID := core.NewULID()
-
-	store := core.NewMemoryEventStore()
-
-	auth := &mockAuthenticator{
-		authenticateFunc: func(_ context.Context, _, _ string) (*AuthResult, error) {
-			return &AuthResult{
-				CharacterID:   charID,
-				CharacterName: "ConnChar",
-				LocationID:    locationID,
-			}, nil
-		},
-	}
-
-	sessStore := session.NewMemStore()
-	server := newHandleCommandServer(t, store, sessStore,
-		WithAuthenticator(auth),
-	)
-	server.newSessionID = func() ulid.ULID { return sessionID }
-
-	ctx := context.Background()
-
-	t.Run("default client_type is terminal", func(t *testing.T) {
-		resp, err := server.Authenticate(ctx, &corev1.AuthenticateRequest{
-			Meta:     &corev1.RequestMeta{RequestId: "conn-test", Timestamp: timestamppb.Now()},
-			Username: "user",
-			Password: "pass",
-		})
-		require.NoError(t, err)
-		assert.True(t, resp.Success)
-		assert.NotEmpty(t, resp.ConnectionId)
-
-		count, err := sessStore.CountConnections(ctx, sessionID.String())
-		require.NoError(t, err)
-		assert.Equal(t, 1, count)
-
-		termCount, err := sessStore.CountConnectionsByType(ctx, sessionID.String(), "terminal")
-		require.NoError(t, err)
-		assert.Equal(t, 1, termCount)
-	})
-
-	t.Run("telnet client_type", func(t *testing.T) {
-		telSessionID := core.NewULID()
-		server.newSessionID = func() ulid.ULID { return telSessionID }
-
-		resp, err := server.Authenticate(ctx, &corev1.AuthenticateRequest{
-			Meta:       &corev1.RequestMeta{RequestId: "tel-conn-test", Timestamp: timestamppb.Now()},
-			Username:   "user",
-			Password:   "pass",
-			ClientType: "telnet",
-		})
-		require.NoError(t, err)
-		assert.True(t, resp.Success)
-		assert.NotEmpty(t, resp.ConnectionId)
-
-		telCount, err := sessStore.CountConnectionsByType(ctx, telSessionID.String(), "telnet")
-		require.NoError(t, err)
-		assert.Equal(t, 1, telCount)
-	})
-}
 
 func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 	t.Run("last terminal disconnects with comms_hub remaining emits leave", func(t *testing.T) {

@@ -140,7 +140,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(3), version)
+	assert.Equal(t, uint(4), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)
@@ -165,7 +165,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(3), version)
+	assert.Equal(t, uint(4), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)

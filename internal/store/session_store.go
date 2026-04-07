@@ -38,7 +38,7 @@ var (
 	_ session.Access = (*PostgresSessionStore)(nil)
 )
 
-const sessionSelectColumns = `id, character_id, character_name, location_id,
+const sessionSelectColumns = `id, character_id, player_id, character_name, location_id,
 	is_guest, status, grid_present, event_cursors,
 	command_history, ttl_seconds, max_history,
 	detached_at, expires_at, created_at, updated_at,
@@ -47,12 +47,21 @@ const sessionSelectColumns = `id, character_id, character_name, location_id,
 // parseSessionRow parses the scalar fields scanned from a session row into a
 // session.Info. Both scanSession and scanSessions call Scan with the same
 // variable set and then delegate here to avoid duplicating the parse logic.
-func parseSessionRow(info *session.Info, charIDStr, locIDStr, statusStr string, cursorsJSON []byte) error {
+func parseSessionRow(info *session.Info, charIDStr, playerIDStr, locIDStr, statusStr string, cursorsJSON []byte) error {
 	charID, err := ulid.Parse(charIDStr)
 	if err != nil {
 		return oops.With("operation", "parse character_id").With("raw_id", charIDStr).Wrap(err)
 	}
 	info.CharacterID = charID
+
+	// PlayerID may be empty for legacy sessions created before this column existed.
+	if playerIDStr != "" {
+		playerID, parseErr := ulid.Parse(playerIDStr)
+		if parseErr != nil {
+			return oops.With("operation", "parse player_id").With("raw_id", playerIDStr).Wrap(parseErr)
+		}
+		info.PlayerID = playerID
+	}
 
 	locID, err := ulid.Parse(locIDStr)
 	if err != nil {
@@ -81,12 +90,13 @@ func parseSessionRow(info *session.Info, charIDStr, locIDStr, statusStr string, 
 // scanSession scans a pgx.Row into a session.Info.
 func scanSession(row pgx.Row) (*session.Info, error) {
 	var info session.Info
-	var charIDStr, locIDStr, statusStr string
+	var charIDStr, playerIDStr, locIDStr, statusStr string
 	var cursorsJSON []byte
 
 	err := row.Scan(
 		&info.ID,
 		&charIDStr,
+		&playerIDStr,
 		&info.CharacterName,
 		&locIDStr,
 		&info.IsGuest,
@@ -107,7 +117,7 @@ func scanSession(row pgx.Row) (*session.Info, error) {
 		return nil, oops.With("operation", "scan session row").Wrap(err)
 	}
 
-	if err := parseSessionRow(&info, charIDStr, locIDStr, statusStr, cursorsJSON); err != nil {
+	if err := parseSessionRow(&info, charIDStr, playerIDStr, locIDStr, statusStr, cursorsJSON); err != nil {
 		return nil, err
 	}
 
@@ -120,12 +130,13 @@ func scanSessions(rows pgx.Rows) ([]*session.Info, error) {
 	var result []*session.Info
 	for rows.Next() {
 		var info session.Info
-		var charIDStr, locIDStr, statusStr string
+		var charIDStr, playerIDStr, locIDStr, statusStr string
 		var cursorsJSON []byte
 
 		err := rows.Scan(
 			&info.ID,
 			&charIDStr,
+			&playerIDStr,
 			&info.CharacterName,
 			&locIDStr,
 			&info.IsGuest,
@@ -146,7 +157,7 @@ func scanSessions(rows pgx.Rows) ([]*session.Info, error) {
 			return nil, oops.With("operation", "scan session row").Wrap(err)
 		}
 
-		if err := parseSessionRow(&info, charIDStr, locIDStr, statusStr, cursorsJSON); err != nil {
+		if err := parseSessionRow(&info, charIDStr, playerIDStr, locIDStr, statusStr, cursorsJSON); err != nil {
 			return nil, err
 		}
 
@@ -188,14 +199,15 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 	}
 
 	_, err = s.pool.Exec(ctx,
-		`INSERT INTO sessions (id, character_id, character_name, location_id,
+		`INSERT INTO sessions (id, character_id, player_id, character_name, location_id,
 			is_guest, status, grid_present, event_cursors,
 			command_history, ttl_seconds, max_history,
 			detached_at, expires_at, created_at,
 			last_paged, last_whispered)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17)
 		 ON CONFLICT (id) DO UPDATE SET
 			character_id = EXCLUDED.character_id,
+			player_id = EXCLUDED.player_id,
 			character_name = EXCLUDED.character_name,
 			location_id = EXCLUDED.location_id,
 			is_guest = EXCLUDED.is_guest,
@@ -212,6 +224,7 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 			updated_at = now()`,
 		id,
 		info.CharacterID.String(),
+		info.PlayerID.String(),
 		info.CharacterName,
 		info.LocationID.String(),
 		info.IsGuest,
@@ -280,14 +293,12 @@ func (s *PostgresSessionStore) FindByCharacter(ctx context.Context, characterID 
 }
 
 // ListByPlayer returns all non-expired sessions for a player's characters.
-// TODO: filter by playerID when player-character relationship table exists.
-// Note: player_id is not stored in the sessions table yet (will be added in
-// chunk 5). For now, returns all non-expired sessions.
-func (s *PostgresSessionStore) ListByPlayer(ctx context.Context, _ ulid.ULID) ([]*session.Info, error) {
+func (s *PostgresSessionStore) ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*session.Info, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT `+sessionSelectColumns+` FROM sessions WHERE status != 'expired'`)
+		`SELECT `+sessionSelectColumns+` FROM sessions WHERE player_id = $1 AND status != 'expired'`,
+		playerID.String())
 	if err != nil {
-		return nil, oops.With("operation", "list sessions by player").Wrap(err)
+		return nil, oops.With("operation", "list sessions by player").With("player_id", playerID.String()).Wrap(err)
 	}
 	return scanSessions(rows)
 }

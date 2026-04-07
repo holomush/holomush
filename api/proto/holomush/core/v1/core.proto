@@ -23,9 +23,6 @@ message ResponseMeta {
 
 // CoreService is the main game service.
 service CoreService {
-  // Authenticate validates credentials and creates a session.
-  rpc Authenticate(AuthenticateRequest) returns (AuthenticateResponse);
-
   // HandleCommand processes a game command.
   rpc HandleCommand(HandleCommandRequest) returns (HandleCommandResponse);
 
@@ -67,23 +64,6 @@ service CoreService {
 
   // Validate a player session token. Used by web gateway for cookie-based auth checks.
   rpc CheckPlayerSession(CheckPlayerSessionRequest) returns (CheckPlayerSessionResponse);
-}
-
-message AuthenticateRequest {
-  RequestMeta meta = 1;
-  string username = 2;
-  string password = 3;
-  string client_type = 4; // "terminal", "comms_hub", "telnet"
-}
-
-message AuthenticateResponse {
-  ResponseMeta meta = 1;
-  bool success = 2;
-  string session_id = 3;
-  string character_id = 4;
-  string character_name = 5;
-  string error = 6;
-  string connection_id = 7;
 }
 
 message HandleCommandRequest {

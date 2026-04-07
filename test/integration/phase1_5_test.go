@@ -339,14 +339,15 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 			defer client.Close()
 
-			// Test connection by attempting to authenticate (will fail auth but confirms connection works)
-			resp, err := client.Authenticate(env.ctx, &corev1.AuthenticateRequest{
-				Username: "test",
-				Password: "test",
+			// Test connection by issuing a command for an unknown session — the
+			// RPC should succeed (mTLS handshake works) and return a soft failure.
+			resp, err := client.HandleCommand(env.ctx, &corev1.HandleCommandRequest{
+				SessionId: "test-session",
+				Command:   "look",
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			// We expect auth to fail (no authenticator configured) but the RPC should succeed
+			// Session does not exist, so the command fails — but the RPC succeeded.
 			Expect(resp.Success).To(BeFalse())
 		})
 
@@ -416,9 +417,9 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			defer client.Close()
 
 			// Attempt RPC - should fail due to cert mismatch
-			_, err = client.Authenticate(env.ctx, &corev1.AuthenticateRequest{
-				Username: "test",
-				Password: "test",
+			_, err = client.HandleCommand(env.ctx, &corev1.HandleCommandRequest{
+				SessionId: "test-session",
+				Command:   "look",
 			})
 			Expect(err).To(HaveOccurred())
 		})
@@ -570,10 +571,10 @@ var _ = Describe("Phase 1.5 Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 			defer client.Close()
 
-			By("Step 6: Verify authentication works (RPC succeeds, auth fails as expected)")
-			resp, err := client.Authenticate(env.ctx, &corev1.AuthenticateRequest{
-				Username: "test",
-				Password: "test",
+			By("Step 6: Verify gRPC connectivity (RPC succeeds, command fails for unknown session)")
+			resp, err := client.HandleCommand(env.ctx, &corev1.HandleCommandRequest{
+				SessionId: "test-session",
+				Command:   "look",
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.Success).To(BeFalse())
