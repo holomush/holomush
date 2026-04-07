@@ -271,6 +271,7 @@ func (d *Dispatcher) dispatchToPlugin(ctx context.Context, entry *CommandEntry, 
 		CharacterName: exec.CharacterName(),
 		LocationID:    exec.LocationID().String(),
 		SessionID:     exec.SessionID().String(),
+		PlayerID:      exec.PlayerID().String(),
 		InvokedAs:     invokedAs,
 	}
 

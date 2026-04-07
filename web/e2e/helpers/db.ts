@@ -233,6 +233,41 @@ export async function grantAdminRole(characterId: string): Promise<void> {
   );
 }
 
+// ── Scene queries ───────────────────────────────────────────────
+
+export interface DbScene {
+  id: string;
+  title: string;
+  description: string;
+  owner_id: string;
+  state: string;
+  visibility: string;
+  pose_order: string;
+  location_id: string | null;
+  created_at: Date;
+  ended_at: Date | null;
+  archived_at: Date | null;
+}
+
+/**
+ * Fetch a scene row directly from the core-scenes plugin's Postgres schema.
+ *
+ * The plugin owns its own schema (plugin_core_scenes); cross-schema reads
+ * from a privileged test role like the e2e test runner are permitted by
+ * the underlying Postgres role. The plugin's restricted role only protects
+ * writes from cross-plugin contamination, not reads from privileged callers.
+ */
+export async function getSceneById(sceneId: string): Promise<DbScene | null> {
+  const { rows } = await getPool().query<DbScene>(
+    `SELECT id, title, description, owner_id, state, visibility, pose_order,
+            location_id, created_at, ended_at, archived_at
+     FROM plugin_core_scenes.scenes
+     WHERE id = $1`,
+    [sceneId],
+  );
+  return rows[0] ?? null;
+}
+
 // ── Zero ULID check ─────────────────────────────────────────────
 
 const ZERO_ULID = '00000000000000000000000000';

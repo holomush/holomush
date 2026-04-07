@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CastPublishVoteRequest, CastPublishVoteResponse, CreateSceneRequest, CreateSceneResponse, EndSceneRequest, EndSceneResponse, GetPoseOrderRequest, GetPoseOrderResponse, GetSceneRequest, GetSceneResponse, InviteToSceneRequest, InviteToSceneResponse, JoinSceneRequest, JoinSceneResponse, LeaveSceneRequest, LeaveSceneResponse, ListScenesRequest, ListScenesResponse } from "./scene_pb.js";
+import { CastPublishVoteRequest, CastPublishVoteResponse, CreateSceneRequest, CreateSceneResponse, EndSceneRequest, EndSceneResponse, GetPoseOrderRequest, GetPoseOrderResponse, GetSceneRequest, GetSceneResponse, InviteToSceneRequest, InviteToSceneResponse, JoinSceneRequest, JoinSceneResponse, LeaveSceneRequest, LeaveSceneResponse, ListScenesRequest, ListScenesResponse, PauseSceneRequest, PauseSceneResponse, ResumeSceneRequest, ResumeSceneResponse, UpdateSceneRequest, UpdateSceneResponse } from "./scene_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -49,6 +49,33 @@ export const SceneService = {
       name: "EndScene",
       I: EndSceneRequest,
       O: EndSceneResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.scene.v1.SceneService.PauseScene
+     */
+    pauseScene: {
+      name: "PauseScene",
+      I: PauseSceneRequest,
+      O: PauseSceneResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.scene.v1.SceneService.ResumeScene
+     */
+    resumeScene: {
+      name: "ResumeScene",
+      I: ResumeSceneRequest,
+      O: ResumeSceneResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.scene.v1.SceneService.UpdateScene
+     */
+    updateScene: {
+      name: "UpdateScene",
+      I: UpdateSceneRequest,
+      O: UpdateSceneResponse,
       kind: MethodKind.Unary,
     },
     /**
