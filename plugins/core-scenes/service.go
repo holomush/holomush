@@ -6,12 +6,14 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -19,407 +21,162 @@ import (
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 )
 
-// Scene state constants.
-const (
-	stateActive = "active"
-	statePaused = "paused"
-	stateEnded  = "ended"
-)
-
-// Visibility constants.
-const (
-	visibilityOpen = "open"
-)
-
-// Participant role constants.
-const (
-	roleOwner   = "owner"
-	roleMember  = "member"
-	roleInvited = "invited"
-)
-
-// Pose order constants.
-const (
-	poseOrderFree = "free"
-)
-
-// List pagination limits.
-const (
-	maxListLimit     = 200
-	defaultListLimit = 50
-)
-
 // sceneStorer is the persistence interface required by SceneServiceImpl.
+// Defined here so the service layer is not coupled to the concrete
+// SceneStore type — tests can substitute a fake implementation.
+//
+// Phase 1 only needs Create and Get. The interface grows phase by phase.
 type sceneStorer interface {
-	CreateScene(ctx context.Context, row *SceneRow) error
-	GetScene(ctx context.Context, id string) (*SceneRow, error)
-	UpdateScene(ctx context.Context, row *SceneRow) error
-	ListScenes(ctx context.Context, state *string, visibility *string, limit, offset int) ([]*SceneRow, error)
-	AddParticipant(ctx context.Context, row *ParticipantRow) error
-	RemoveParticipant(ctx context.Context, sceneID, characterID string) error
-	ListParticipants(ctx context.Context, sceneID string) ([]*ParticipantRow, error)
-	GetParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error)
+	Create(ctx context.Context, row *SceneRow) error
+	Get(ctx context.Context, id string) (*SceneRow, error)
 }
 
-// SceneServiceImpl implements scenev1.SceneServiceServer backed by sceneStorer.
+// SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.
+//
+// The store field is wired by main()'s Init via direct field assignment
+// after NewSceneStore returns. The pre-allocated zero-value SceneServiceImpl
+// is registered with the gRPC server in RegisterServices, before Init is
+// called, so the field assignment in Init wires the store after RegisterServices.
 type SceneServiceImpl struct {
 	scenev1.UnimplementedSceneServiceServer
 	store sceneStorer
 }
 
-// NewSceneServiceImpl creates a SceneServiceImpl with the given store.
+// NewSceneServiceImpl returns a service backed by the given store.
+// Used by tests; main() constructs the service directly with a nil store
+// and assigns it after Init.
 func NewSceneServiceImpl(store sceneStorer) *SceneServiceImpl {
 	return &SceneServiceImpl{store: store}
 }
 
-// CreateScene generates a new scene ID, persists it, and adds the owner as
-// a participant with role "owner".
+// CreateScene generates a new scene ID, persists the scene, and returns it.
+// The caller (host) is responsible for ensuring ABAC has authorised the
+// command-execute action; per-resource ABAC for the new scene happens at
+// the read path.
 func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateSceneRequest) (*scenev1.CreateSceneResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.create_scene",
+		attribute.String("subject_id", req.GetCharacterId()),
+	)
+	defer span.End()
+
 	if req.GetCharacterId() == "" {
+		recordError(span, errors.New("character_id is required"))
 		return nil, status.Errorf(codes.InvalidArgument, "character_id is required")
 	}
-	if req.GetTitle() == "" {
+	title := strings.TrimSpace(req.GetTitle())
+	if title == "" {
+		recordError(span, errors.New("title is required"))
 		return nil, status.Errorf(codes.InvalidArgument, "title is required")
 	}
 
-	now := time.Now().UTC()
-	sceneID := ulid.MustNew(ulid.Now(), rand.Reader).String()
-
-	visibility := req.GetVisibility()
-	if visibility == "" {
-		visibility = visibilityOpen
+	id, err := newSceneID()
+	if err != nil {
+		recordError(span, err)
+		return nil, status.Errorf(codes.Internal, "failed to generate scene id: %v", err)
 	}
-	poseOrder := req.GetPoseOrderMode()
-	if poseOrder == "" {
-		poseOrder = poseOrderFree
-	}
-
-	contentWarnings := req.GetContentWarnings()
-	if contentWarnings == nil {
-		contentWarnings = []string{}
-	}
-	tags := req.GetTags()
-	if tags == nil {
-		tags = []string{}
-	}
+	span.SetAttributes(attribute.String("scene_id", id))
 
 	row := &SceneRow{
-		ID:              sceneID,
-		Title:           req.GetTitle(),
+		ID:              id,
+		Title:           title,
 		Description:     req.GetDescription(),
-		LocationID:      nilIfEmpty(req.GetLocationId()),
 		OwnerID:         req.GetCharacterId(),
-		State:           stateActive,
-		PoseOrder:       poseOrder,
-		Visibility:      visibility,
-		ContentWarnings: contentWarnings,
-		Tags:            tags,
-		CreatedAt:       now,
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	if loc := req.GetLocationId(); loc != "" {
+		row.LocationID = &loc
 	}
 
-	// NOTE: CreateScene + AddParticipant are not in a transaction. If AddParticipant
-	// fails, the scene exists without an owner. This is acceptable for now — scene
-	// creation is a single-user operation and the race window is negligible.
-	if err := s.store.CreateScene(ctx, row); err != nil {
-		return nil, mapStoreError(err, "create_scene")
+	if err := s.store.Create(ctx, row); err != nil {
+		recordError(span, err)
+		slog.WarnContext(ctx, "scene.service.create_scene store error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", id,
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to create scene: %v", err)
 	}
 
-	ownerParticipant := &ParticipantRow{
-		SceneID:     sceneID,
-		CharacterID: req.GetCharacterId(),
-		Role:        roleOwner,
-		JoinedAt:    now,
-	}
-	if err := s.store.AddParticipant(ctx, ownerParticipant); err != nil {
-		return nil, mapStoreError(err, "add_owner_participant")
-	}
-
-	participants, err := s.store.ListParticipants(ctx, sceneID)
-	if err != nil {
-		return nil, mapStoreError(err, "list_participants")
-	}
+	slog.InfoContext(ctx, "scene.service.create_scene ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", id,
+		"title", title,
+	)
 
 	return &scenev1.CreateSceneResponse{
-		Scene: sceneRowToProto(row, participants),
+		Scene: rowToProto(row, time.Now().UTC()),
 	}, nil
 }
 
-// GetScene retrieves a scene by ID along with its participants.
+// GetScene loads a scene by ID and returns it. The host's ABAC engine has
+// already evaluated the read-own-scene policy before this RPC is invoked,
+// so the service does not perform an additional ownership check.
 func (s *SceneServiceImpl) GetScene(ctx context.Context, req *scenev1.GetSceneRequest) (*scenev1.GetSceneResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.get_scene",
+		attribute.String("scene_id", req.GetSceneId()),
+	)
+	defer span.End()
+
 	if req.GetSceneId() == "" {
+		recordError(span, errors.New("scene_id is required"))
 		return nil, status.Errorf(codes.InvalidArgument, "scene_id is required")
 	}
 
-	scene, err := s.store.GetScene(ctx, req.GetSceneId())
+	row, err := s.store.Get(ctx, req.GetSceneId())
 	if err != nil {
-		return nil, mapStoreError(err, "get_scene")
+		recordError(span, err)
+		var oe oops.OopsError
+		if errors.As(err, &oe) && oe.Code() == "SCENE_NOT_FOUND" {
+			return nil, status.Errorf(codes.NotFound, "scene not found: %s", req.GetSceneId())
+		}
+		slog.WarnContext(ctx, "scene.service.get_scene store error",
+			"scene_id", req.GetSceneId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to get scene: %v", err)
 	}
 
-	participants, err := s.store.ListParticipants(ctx, req.GetSceneId())
-	if err != nil {
-		return nil, mapStoreError(err, "list_participants")
-	}
+	slog.InfoContext(ctx, "scene.service.get_scene ok",
+		"scene_id", row.ID,
+	)
 
 	return &scenev1.GetSceneResponse{
-		Scene: sceneRowToProto(scene, participants),
+		Scene: rowToProto(row, row.CreatedAt),
 	}, nil
 }
 
-// ListScenes returns scenes filtered by open visibility.
-func (s *SceneServiceImpl) ListScenes(ctx context.Context, req *scenev1.ListScenesRequest) (*scenev1.ListScenesResponse, error) {
-	limit := int(req.GetLimit())
-	if limit <= 0 {
-		limit = defaultListLimit
-	}
-	if limit > maxListLimit {
-		limit = maxListLimit
-	}
-	offset := int(req.GetOffset())
-	if offset < 0 {
-		offset = 0
-	}
-
-	openVis := visibilityOpen
-	scenes, err := s.store.ListScenes(ctx, nil, &openVis, limit, offset)
+// newSceneID generates a ULID using crypto/rand for entropy. Per project
+// convention, math/rand is forbidden everywhere — see CLAUDE.md.
+func newSceneID() (string, error) {
+	ms := ulid.Timestamp(time.Now())
+	id, err := ulid.New(ms, rand.Reader)
 	if err != nil {
-		return nil, mapStoreError(err, "list_scenes")
+		return "", oops.Code("SCENE_ID_GEN_FAILED").Wrap(err)
 	}
-
-	resp := &scenev1.ListScenesResponse{
-		Scenes: make([]*scenev1.SceneInfo, 0, len(scenes)),
-	}
-	for _, sc := range scenes {
-		resp.Scenes = append(resp.Scenes, sceneRowToProto(sc, nil))
-	}
-	return resp, nil
+	return "scene-" + id.String(), nil
 }
 
-// EndScene transitions a scene from active/paused to ended.
-func (s *SceneServiceImpl) EndScene(ctx context.Context, req *scenev1.EndSceneRequest) (*scenev1.EndSceneResponse, error) {
-	if req.GetCharacterId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "character_id is required")
-	}
-	if req.GetSceneId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "scene_id is required")
-	}
-
-	scene, err := s.store.GetScene(ctx, req.GetSceneId())
-	if err != nil {
-		return nil, mapStoreError(err, "get_scene")
-	}
-
-	if scene.OwnerID != req.GetCharacterId() {
-		return nil, status.Errorf(codes.PermissionDenied, "only the scene owner can end a scene")
-	}
-
-	if scene.State != stateActive && scene.State != statePaused {
-		return nil, status.Errorf(codes.FailedPrecondition, "scene must be active or paused to end, current state: %s", scene.State)
-	}
-
-	now := time.Now().UTC()
-	scene.State = stateEnded
-	scene.EndedAt = &now
-
-	if err := s.store.UpdateScene(ctx, scene); err != nil {
-		return nil, mapStoreError(err, "end_scene")
-	}
-
-	return &scenev1.EndSceneResponse{}, nil
-}
-
-// JoinScene adds the caller as a member participant of a scene.
-func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinSceneRequest) (*scenev1.JoinSceneResponse, error) {
-	if req.GetCharacterId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "character_id is required")
-	}
-	if req.GetSceneId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "scene_id is required")
-	}
-
-	scene, err := s.store.GetScene(ctx, req.GetSceneId())
-	if err != nil {
-		return nil, mapStoreError(err, "get_scene")
-	}
-
-	if scene.State != stateActive {
-		return nil, status.Errorf(codes.FailedPrecondition, "scene must be active to join, current state: %s", scene.State)
-	}
-	if scene.Visibility != visibilityOpen {
-		return nil, status.Errorf(codes.PermissionDenied, "scene is not open for joining")
-	}
-
-	participant := &ParticipantRow{
-		SceneID:     req.GetSceneId(),
-		CharacterID: req.GetCharacterId(),
-		Role:        roleMember,
-		JoinedAt:    time.Now().UTC(),
-	}
-	if err := s.store.AddParticipant(ctx, participant); err != nil {
-		return nil, mapStoreError(err, "join_scene")
-	}
-
-	return &scenev1.JoinSceneResponse{}, nil
-}
-
-// LeaveScene removes a participant from a scene.
-func (s *SceneServiceImpl) LeaveScene(ctx context.Context, req *scenev1.LeaveSceneRequest) (*scenev1.LeaveSceneResponse, error) {
-	if req.GetCharacterId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "character_id is required")
-	}
-	if req.GetSceneId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "scene_id is required")
-	}
-
-	if err := s.store.RemoveParticipant(ctx, req.GetSceneId(), req.GetCharacterId()); err != nil {
-		return nil, mapStoreError(err, "leave_scene")
-	}
-
-	return &scenev1.LeaveSceneResponse{}, nil
-}
-
-// InviteToScene adds a character as an invited participant.
-func (s *SceneServiceImpl) InviteToScene(ctx context.Context, req *scenev1.InviteToSceneRequest) (*scenev1.InviteToSceneResponse, error) {
-	if req.GetCharacterId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "character_id is required")
-	}
-	if req.GetSceneId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "scene_id is required")
-	}
-	if req.GetTargetCharacterId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "target_character_id is required")
-	}
-
-	scene, err := s.store.GetScene(ctx, req.GetSceneId())
-	if err != nil {
-		return nil, mapStoreError(err, "get_scene")
-	}
-	if scene.OwnerID != req.GetCharacterId() {
-		return nil, status.Errorf(codes.PermissionDenied, "only the scene owner can invite participants")
-	}
-
-	participant := &ParticipantRow{
-		SceneID:     req.GetSceneId(),
-		CharacterID: req.GetTargetCharacterId(),
-		Role:        roleInvited,
-		JoinedAt:    time.Now().UTC(),
-	}
-	if err := s.store.AddParticipant(ctx, participant); err != nil {
-		return nil, mapStoreError(err, "invite_to_scene")
-	}
-
-	return &scenev1.InviteToSceneResponse{}, nil
-}
-
-// CastPublishVote records a participant's publish vote for a scene.
-func (s *SceneServiceImpl) CastPublishVote(ctx context.Context, req *scenev1.CastPublishVoteRequest) (*scenev1.CastPublishVoteResponse, error) {
-	if req.GetCharacterId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "character_id is required")
-	}
-	if req.GetSceneId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "scene_id is required")
-	}
-
-	participant, err := s.store.GetParticipant(ctx, req.GetSceneId(), req.GetCharacterId())
-	if err != nil {
-		return nil, mapStoreError(err, "get_participant")
-	}
-
-	vote := req.GetVote()
-	participant.PublishVote = &vote
-	if err := s.store.AddParticipant(ctx, participant); err != nil {
-		return nil, mapStoreError(err, "cast_vote")
-	}
-
-	return &scenev1.CastPublishVoteResponse{}, nil
-}
-
-// GetPoseOrder returns the scene's pose order mode and empty entries.
-// Pose order is derived from the event stream (future work).
-func (s *SceneServiceImpl) GetPoseOrder(ctx context.Context, req *scenev1.GetPoseOrderRequest) (*scenev1.GetPoseOrderResponse, error) {
-	if req.GetSceneId() == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "scene_id is required")
-	}
-
-	scene, err := s.store.GetScene(ctx, req.GetSceneId())
-	if err != nil {
-		return nil, mapStoreError(err, "get_scene")
-	}
-
-	participants, err := s.store.ListParticipants(ctx, req.GetSceneId())
-	if err != nil {
-		return nil, mapStoreError(err, "list_participants")
-	}
-
-	entries := make([]*scenev1.PoseOrderEntry, 0, len(participants))
-	for _, p := range participants {
-		entries = append(entries, &scenev1.PoseOrderEntry{
-			CharacterId: p.CharacterID,
-			IsEligible:  true,
-		})
-	}
-
-	return &scenev1.GetPoseOrderResponse{
-		Mode:    scene.PoseOrder,
-		Entries: entries,
-	}, nil
-}
-
-// sceneRowToProto converts a SceneRow and optional participants to a SceneInfo proto.
-func sceneRowToProto(scene *SceneRow, participants []*ParticipantRow) *scenev1.SceneInfo {
+// rowToProto converts a SceneRow to the proto representation.
+//
+// createdAt is passed in to allow CreateScene (which has not re-fetched
+// from the database) to use the host's wall clock; GetScene passes the
+// row's actual CreatedAt.
+func rowToProto(row *SceneRow, createdAt time.Time) *scenev1.SceneInfo {
 	info := &scenev1.SceneInfo{
-		Id:              scene.ID,
-		Title:           scene.Title,
-		Description:     scene.Description,
-		OwnerId:         scene.OwnerID,
-		State:           scene.State,
-		PoseOrderMode:   scene.PoseOrder,
-		ContentWarnings: scene.ContentWarnings,
-		Tags:            scene.Tags,
-		Visibility:      scene.Visibility,
-		CreatedAt:       timestamppb.New(scene.CreatedAt),
+		Id:          row.ID,
+		Title:       row.Title,
+		Description: row.Description,
+		OwnerId:     row.OwnerID,
+		State:       row.State,
+		Visibility:  row.Visibility,
+		CreatedAt:   timestamppb.New(createdAt),
 	}
-	if scene.LocationID != nil {
-		info.LocationId = *scene.LocationID
-	}
-	if scene.EndedAt != nil {
-		info.EndedAt = timestamppb.New(*scene.EndedAt)
-	}
-	for _, p := range participants {
-		info.Participants = append(info.Participants, participantRowToProto(p))
+	if row.LocationID != nil {
+		info.LocationId = *row.LocationID
 	}
 	return info
-}
-
-// participantRowToProto converts a ParticipantRow to a ParticipantInfo proto.
-func participantRowToProto(p *ParticipantRow) *scenev1.ParticipantInfo {
-	return &scenev1.ParticipantInfo{
-		CharacterId: p.CharacterID,
-		Role:        p.Role,
-		JoinedAt:    timestamppb.New(p.JoinedAt),
-	}
-}
-
-// nilIfEmpty returns nil for empty strings, a pointer to s otherwise.
-func nilIfEmpty(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
-// mapStoreError converts oops-coded store errors to gRPC status errors.
-func mapStoreError(err error, operation string) error {
-	if err == nil {
-		return nil
-	}
-	oopsErr, ok := oops.AsOops(err)
-	if ok {
-		if code, isStr := oopsErr.Code().(string); isStr {
-			if strings.HasSuffix(code, "_NOT_FOUND") {
-				return status.Errorf(codes.NotFound, "%s: not found", operation)
-			}
-		}
-	}
-	slog.Error("store operation failed", "operation", operation, "error", err)
-	return status.Errorf(codes.Internal, "%s failed", operation)
 }
