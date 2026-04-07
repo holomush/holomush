@@ -1,0 +1,67 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+package main
+
+// Phase 2 metric stubs.
+//
+// Spec section 10.2 lists Prometheus counter, histogram, and gauge metrics
+// that the scene plugin SHOULD emit. Spec section 11 documents that binary
+// plugin metrics infrastructure does not exist yet — there is no defined
+// path for a binary plugin to expose metrics that the host can scrape.
+//
+// This file provides no-op metric functions named per spec 10.2 so that
+// every handler in this package can call them as if they were real. When
+// the binary plugin metrics infrastructure lands (separate effort), this
+// file is the ONLY place that needs to change: add a Prometheus registry,
+// register the actual counters/histograms/gauges, and have the functions
+// here delegate to them. Every call site is already in place.
+//
+// Naming follows spec section 10.2 (e.g., scene_created_total → metricSceneCreated).
+//
+// Until then, these are zero-cost no-ops.
+
+// metricSceneCreated counts scene creations, labeled by visibility and
+// whether the scene was created from a template. Spec metric:
+// scene_created_total{visibility, from_template}.
+func metricSceneCreated(visibility string, fromTemplate bool) {
+	_ = visibility
+	_ = fromTemplate
+}
+
+// metricSceneStateTransition counts state machine transitions, labeled by
+// from-state, to-state, and reason. Spec metric:
+// scene_state_transitions_total{from, to, reason}. Reason is "rpc" when
+// triggered by a direct RPC call (Phase 2's only path) and will be
+// expanded in later phases (e.g., "idle_timeout" for Phase 4).
+func metricSceneStateTransition(from, to, reason string) {
+	_ = from
+	_ = to
+	_ = reason
+}
+
+// metricSceneABACDenial counts ABAC denials at the resolver layer, labeled
+// by action and resource type. Spec metric:
+// scene_abac_denials_total{action, resource_type}. Phase 2 emits this from
+// the AttributeResolverService when a resolution is attempted but the
+// scene's owner check fails — though in practice the host's policy engine
+// catches denials before they reach the resolver, so this counter is
+// expected to be zero in normal operation. Useful for spotting policy
+// misconfiguration where the resolver gets called for forbidden access.
+func metricSceneABACDenial(action, resourceType string) {
+	_ = action
+	_ = resourceType
+}
+
+// metricSceneRPCDuration records the latency of a scene gRPC RPC, labeled
+// by RPC name and success/failure. Spec metric:
+// scene_rpc_duration_seconds{rpc, result}. Phase 2 doesn't actually call
+// this from any handler — the host's plugin OTel middleware already
+// records plugin command durations at the gRPC delivery level — but the
+// stub exists so service-internal RPC timing can be added cheaply later
+// if it surfaces a real need.
+func metricSceneRPCDuration(rpc string, durationSeconds float64, ok bool) {
+	_ = rpc
+	_ = durationSeconds
+	_ = ok
+}
