@@ -11,7 +11,14 @@ requires:
 
 provides:
   - holomush.scene.v1.SceneService
-  - holomush.plugin.v1.AttributeResolverService
+# Note: holomush.plugin.v1.AttributeResolverService is intentionally NOT
+# declared in provides. The host auto-registers it via the plugin's
+# RegisterAttributeResolver method (AttributeResolverProvider interface),
+# and the per-plugin attribute resolver client is accessed via
+# host.AttributeResolverClient(<plugin name>) — not via the service registry.
+# Declaring it in provides causes a SERVICE_ALREADY_REGISTERED conflict
+# with any other plugin (e.g. test-abac-widget) that also provides it,
+# because the registry treats service names as singletons.
 
 storage: postgres
 
