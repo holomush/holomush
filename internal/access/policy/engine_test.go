@@ -2182,3 +2182,25 @@ func (p *trackingAttrProvider) ResolveResource(_ context.Context, _ string) (map
 }
 
 func (p *trackingAttrProvider) Schema() *types.NamespaceSchema { return p.schema }
+
+func TestEngineCanPerformActionPermitsOptimisticallyForPermitReferencingResourceAttrs(t *testing.T) {
+	// The optimistic-permit branch fires when a permit policy's conditions
+	// reference resource attributes that can't be evaluated at type-level
+	// pre-flight (no resource instance exists). The engine MUST treat such
+	// permits as potentially-applicable and return allowed=true — the
+	// handler's instance-level Evaluate will enforce the full condition.
+	//
+	// This test proves that switching to ResolveSubjectAttributes does not
+	// regress this behavior. Before the refactor, the optimistic branch
+	// worked because the synthetic "__preflight__" resource had an empty
+	// attribute bag; after the refactor, it works because
+	// ResolveSubjectAttributes returns an empty Resource bag by construction.
+	dslText := `permit(principal is character, action in ["read"], resource is widget) when { resource.widget.type == "normal" };`
+
+	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
+
+	allowed, err := engine.CanPerformAction(context.Background(), "character:01ABC", "read", "widget", "")
+	require.NoError(t, err)
+	assert.True(t, allowed,
+		"permit policy referencing resource attrs must optimistic-permit at preflight")
+}
