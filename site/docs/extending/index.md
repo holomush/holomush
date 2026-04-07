@@ -36,6 +36,12 @@ How the ABAC policy engine works and how to write policies for your plugin.
 Every host function call is checked against your declared policies — this
 page explains how to get them right.
 
+### [Implementing AttributeResolverService](abac-attribute-resolver.md)
+
+For binary plugins that declare custom resource types. Documents the host
+contract for `GetSchema` and `ResolveResource`, load-time policy/schema
+validation, and common anti-patterns.
+
 ### [Event Reference](events.md)
 
 Event types, payload schemas, and stream patterns. Everything you need to know
