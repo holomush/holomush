@@ -105,3 +105,145 @@ func TestHandleCommandInfoReturnsErrorWhenSceneIDIsMissing(t *testing.T) {
 	assert.Equal(t, pluginsdk.CommandError, resp.Status)
 	assert.Contains(t, resp.Output, "scene id")
 }
+
+func TestHandleCommandEndCallsEndScene(t *testing.T) {
+	p := newTestPlugin()
+	// Pre-create a scene in the fake store via the service
+	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "create The Manor",
+		CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	require.Equal(t, pluginsdk.CommandOK, createResp.Status)
+
+	parts := strings.Split(createResp.Output, "Scene created:")
+	require.Len(t, parts, 2)
+	sceneID := strings.TrimSpace(parts[1])
+
+	// End it
+	endResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "end " + sceneID,
+		CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, endResp.Status)
+	assert.Contains(t, endResp.Output, "ended")
+}
+
+func TestHandleCommandEndReturnsErrorWhenSceneIDIsMissing(t *testing.T) {
+	p := newTestPlugin()
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "end",
+		CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "scene id")
+}
+
+func TestHandleCommandPauseCallsPauseScene(t *testing.T) {
+	p := newTestPlugin()
+	sceneID := createSceneInTest(t, p, "char-alice", "Pausable")
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "pause " + sceneID,
+		CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "paused")
+}
+
+func TestHandleCommandResumeCallsResumeScene(t *testing.T) {
+	p := newTestPlugin()
+	sceneID := createSceneInTest(t, p, "char-alice", "Resumable")
+
+	// Pause first
+	_, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "pause " + sceneID,
+		CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+
+	// Then resume
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "resume " + sceneID,
+		CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "resumed")
+}
+
+func TestHandleCommandSetUpdatesTitle(t *testing.T) {
+	p := newTestPlugin()
+	sceneID := createSceneInTest(t, p, "char-alice", "Original Title")
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "set " + sceneID + " title=New Title",
+		CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "updated")
+
+	// Verify via info
+	infoResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "info " + sceneID,
+		CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Contains(t, infoResp.Output, "New Title")
+}
+
+func TestHandleCommandSetRejectsUnknownField(t *testing.T) {
+	p := newTestPlugin()
+	sceneID := createSceneInTest(t, p, "char-alice", "T")
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "set " + sceneID + " bogus=foo",
+		CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "unknown field")
+}
+
+func TestHandleCommandSetRejectsMissingEqualsSeparator(t *testing.T) {
+	p := newTestPlugin()
+	sceneID := createSceneInTest(t, p, "char-alice", "T")
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "set " + sceneID + " title",
+		CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "field=value")
+}
+
+// createSceneInTest is a helper that creates a scene via the command path
+// and returns its ID. Used by Phase 2 tests that need a scene to operate on.
+func createSceneInTest(t *testing.T, p *scenePlugin, characterID, title string) string {
+	t.Helper()
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "create " + title,
+		CharacterID: characterID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, pluginsdk.CommandOK, resp.Status)
+	parts := strings.Split(resp.Output, "Scene created:")
+	require.Len(t, parts, 2)
+	return strings.TrimSpace(parts[1])
+}
