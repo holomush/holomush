@@ -44,6 +44,13 @@ type ServeConfig struct {
 	// Handler is the event handler implementation.
 	// Required; Serve will panic if nil.
 	Handler Handler
+
+	// Validator is an optional protobuf message validator installed as a
+	// gRPC unary server interceptor on the plugin's gRPC server. If nil,
+	// ServeWithServices constructs a default validator via
+	// NewDefaultValidator() at startup. Plugins that need custom validation
+	// (e.g., a validator with extra rules registered) can supply their own.
+	Validator Validator
 }
 
 // Serve starts the plugin server. This should be called from main().

@@ -45,6 +45,14 @@ const (
 	SceneServiceCreateSceneProcedure = "/holomush.scene.v1.SceneService/CreateScene"
 	// SceneServiceEndSceneProcedure is the fully-qualified name of the SceneService's EndScene RPC.
 	SceneServiceEndSceneProcedure = "/holomush.scene.v1.SceneService/EndScene"
+	// SceneServicePauseSceneProcedure is the fully-qualified name of the SceneService's PauseScene RPC.
+	SceneServicePauseSceneProcedure = "/holomush.scene.v1.SceneService/PauseScene"
+	// SceneServiceResumeSceneProcedure is the fully-qualified name of the SceneService's ResumeScene
+	// RPC.
+	SceneServiceResumeSceneProcedure = "/holomush.scene.v1.SceneService/ResumeScene"
+	// SceneServiceUpdateSceneProcedure is the fully-qualified name of the SceneService's UpdateScene
+	// RPC.
+	SceneServiceUpdateSceneProcedure = "/holomush.scene.v1.SceneService/UpdateScene"
 	// SceneServiceJoinSceneProcedure is the fully-qualified name of the SceneService's JoinScene RPC.
 	SceneServiceJoinSceneProcedure = "/holomush.scene.v1.SceneService/JoinScene"
 	// SceneServiceLeaveSceneProcedure is the fully-qualified name of the SceneService's LeaveScene RPC.
@@ -66,6 +74,9 @@ type SceneServiceClient interface {
 	GetScene(context.Context, *connect.Request[v1.GetSceneRequest]) (*connect.Response[v1.GetSceneResponse], error)
 	CreateScene(context.Context, *connect.Request[v1.CreateSceneRequest]) (*connect.Response[v1.CreateSceneResponse], error)
 	EndScene(context.Context, *connect.Request[v1.EndSceneRequest]) (*connect.Response[v1.EndSceneResponse], error)
+	PauseScene(context.Context, *connect.Request[v1.PauseSceneRequest]) (*connect.Response[v1.PauseSceneResponse], error)
+	ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error)
+	UpdateScene(context.Context, *connect.Request[v1.UpdateSceneRequest]) (*connect.Response[v1.UpdateSceneResponse], error)
 	JoinScene(context.Context, *connect.Request[v1.JoinSceneRequest]) (*connect.Response[v1.JoinSceneResponse], error)
 	LeaveScene(context.Context, *connect.Request[v1.LeaveSceneRequest]) (*connect.Response[v1.LeaveSceneResponse], error)
 	InviteToScene(context.Context, *connect.Request[v1.InviteToSceneRequest]) (*connect.Response[v1.InviteToSceneResponse], error)
@@ -108,6 +119,24 @@ func NewSceneServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(sceneServiceMethods.ByName("EndScene")),
 			connect.WithClientOptions(opts...),
 		),
+		pauseScene: connect.NewClient[v1.PauseSceneRequest, v1.PauseSceneResponse](
+			httpClient,
+			baseURL+SceneServicePauseSceneProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("PauseScene")),
+			connect.WithClientOptions(opts...),
+		),
+		resumeScene: connect.NewClient[v1.ResumeSceneRequest, v1.ResumeSceneResponse](
+			httpClient,
+			baseURL+SceneServiceResumeSceneProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("ResumeScene")),
+			connect.WithClientOptions(opts...),
+		),
+		updateScene: connect.NewClient[v1.UpdateSceneRequest, v1.UpdateSceneResponse](
+			httpClient,
+			baseURL+SceneServiceUpdateSceneProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("UpdateScene")),
+			connect.WithClientOptions(opts...),
+		),
 		joinScene: connect.NewClient[v1.JoinSceneRequest, v1.JoinSceneResponse](
 			httpClient,
 			baseURL+SceneServiceJoinSceneProcedure,
@@ -147,6 +176,9 @@ type sceneServiceClient struct {
 	getScene        *connect.Client[v1.GetSceneRequest, v1.GetSceneResponse]
 	createScene     *connect.Client[v1.CreateSceneRequest, v1.CreateSceneResponse]
 	endScene        *connect.Client[v1.EndSceneRequest, v1.EndSceneResponse]
+	pauseScene      *connect.Client[v1.PauseSceneRequest, v1.PauseSceneResponse]
+	resumeScene     *connect.Client[v1.ResumeSceneRequest, v1.ResumeSceneResponse]
+	updateScene     *connect.Client[v1.UpdateSceneRequest, v1.UpdateSceneResponse]
 	joinScene       *connect.Client[v1.JoinSceneRequest, v1.JoinSceneResponse]
 	leaveScene      *connect.Client[v1.LeaveSceneRequest, v1.LeaveSceneResponse]
 	inviteToScene   *connect.Client[v1.InviteToSceneRequest, v1.InviteToSceneResponse]
@@ -172,6 +204,21 @@ func (c *sceneServiceClient) CreateScene(ctx context.Context, req *connect.Reque
 // EndScene calls holomush.scene.v1.SceneService.EndScene.
 func (c *sceneServiceClient) EndScene(ctx context.Context, req *connect.Request[v1.EndSceneRequest]) (*connect.Response[v1.EndSceneResponse], error) {
 	return c.endScene.CallUnary(ctx, req)
+}
+
+// PauseScene calls holomush.scene.v1.SceneService.PauseScene.
+func (c *sceneServiceClient) PauseScene(ctx context.Context, req *connect.Request[v1.PauseSceneRequest]) (*connect.Response[v1.PauseSceneResponse], error) {
+	return c.pauseScene.CallUnary(ctx, req)
+}
+
+// ResumeScene calls holomush.scene.v1.SceneService.ResumeScene.
+func (c *sceneServiceClient) ResumeScene(ctx context.Context, req *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error) {
+	return c.resumeScene.CallUnary(ctx, req)
+}
+
+// UpdateScene calls holomush.scene.v1.SceneService.UpdateScene.
+func (c *sceneServiceClient) UpdateScene(ctx context.Context, req *connect.Request[v1.UpdateSceneRequest]) (*connect.Response[v1.UpdateSceneResponse], error) {
+	return c.updateScene.CallUnary(ctx, req)
 }
 
 // JoinScene calls holomush.scene.v1.SceneService.JoinScene.
@@ -205,6 +252,9 @@ type SceneServiceHandler interface {
 	GetScene(context.Context, *connect.Request[v1.GetSceneRequest]) (*connect.Response[v1.GetSceneResponse], error)
 	CreateScene(context.Context, *connect.Request[v1.CreateSceneRequest]) (*connect.Response[v1.CreateSceneResponse], error)
 	EndScene(context.Context, *connect.Request[v1.EndSceneRequest]) (*connect.Response[v1.EndSceneResponse], error)
+	PauseScene(context.Context, *connect.Request[v1.PauseSceneRequest]) (*connect.Response[v1.PauseSceneResponse], error)
+	ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error)
+	UpdateScene(context.Context, *connect.Request[v1.UpdateSceneRequest]) (*connect.Response[v1.UpdateSceneResponse], error)
 	JoinScene(context.Context, *connect.Request[v1.JoinSceneRequest]) (*connect.Response[v1.JoinSceneResponse], error)
 	LeaveScene(context.Context, *connect.Request[v1.LeaveSceneRequest]) (*connect.Response[v1.LeaveSceneResponse], error)
 	InviteToScene(context.Context, *connect.Request[v1.InviteToSceneRequest]) (*connect.Response[v1.InviteToSceneResponse], error)
@@ -241,6 +291,24 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 		SceneServiceEndSceneProcedure,
 		svc.EndScene,
 		connect.WithSchema(sceneServiceMethods.ByName("EndScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServicePauseSceneHandler := connect.NewUnaryHandler(
+		SceneServicePauseSceneProcedure,
+		svc.PauseScene,
+		connect.WithSchema(sceneServiceMethods.ByName("PauseScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceResumeSceneHandler := connect.NewUnaryHandler(
+		SceneServiceResumeSceneProcedure,
+		svc.ResumeScene,
+		connect.WithSchema(sceneServiceMethods.ByName("ResumeScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceUpdateSceneHandler := connect.NewUnaryHandler(
+		SceneServiceUpdateSceneProcedure,
+		svc.UpdateScene,
+		connect.WithSchema(sceneServiceMethods.ByName("UpdateScene")),
 		connect.WithHandlerOptions(opts...),
 	)
 	sceneServiceJoinSceneHandler := connect.NewUnaryHandler(
@@ -283,6 +351,12 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 			sceneServiceCreateSceneHandler.ServeHTTP(w, r)
 		case SceneServiceEndSceneProcedure:
 			sceneServiceEndSceneHandler.ServeHTTP(w, r)
+		case SceneServicePauseSceneProcedure:
+			sceneServicePauseSceneHandler.ServeHTTP(w, r)
+		case SceneServiceResumeSceneProcedure:
+			sceneServiceResumeSceneHandler.ServeHTTP(w, r)
+		case SceneServiceUpdateSceneProcedure:
+			sceneServiceUpdateSceneHandler.ServeHTTP(w, r)
 		case SceneServiceJoinSceneProcedure:
 			sceneServiceJoinSceneHandler.ServeHTTP(w, r)
 		case SceneServiceLeaveSceneProcedure:
@@ -316,6 +390,18 @@ func (UnimplementedSceneServiceHandler) CreateScene(context.Context, *connect.Re
 
 func (UnimplementedSceneServiceHandler) EndScene(context.Context, *connect.Request[v1.EndSceneRequest]) (*connect.Response[v1.EndSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.EndScene is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) PauseScene(context.Context, *connect.Request[v1.PauseSceneRequest]) (*connect.Response[v1.PauseSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.PauseScene is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) ResumeScene(context.Context, *connect.Request[v1.ResumeSceneRequest]) (*connect.Response[v1.ResumeSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.ResumeScene is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) UpdateScene(context.Context, *connect.Request[v1.UpdateSceneRequest]) (*connect.Response[v1.UpdateSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.UpdateScene is not implemented"))
 }
 
 func (UnimplementedSceneServiceHandler) JoinScene(context.Context, *connect.Request[v1.JoinSceneRequest]) (*connect.Response[v1.JoinSceneResponse], error) {

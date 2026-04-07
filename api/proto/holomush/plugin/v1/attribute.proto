@@ -5,6 +5,8 @@ syntax = "proto3";
 
 package holomush.plugin.v1;
 
+import "buf/validate/validate.proto";
+
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1";
 
 // AttributeResolverService is implemented by binary plugins that declare resource_types.
@@ -40,8 +42,8 @@ enum AttributeType {
 }
 
 message ResolveResourceRequest {
-  string resource_type = 1;
-  string resource_id = 2;
+  string resource_type = 1 [(buf.validate.field).string.min_len = 1];
+  string resource_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 message ResolveResourceResponse {

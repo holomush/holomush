@@ -10,292 +10,462 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/holomush/holomush/test/testutil"
 )
 
-// setupSceneStore provisions a schema-isolated database and returns a connected
-// SceneStore. The caller does not need to close the store; cleanup runs via
-// t.Cleanup.
-func setupSceneStore(t *testing.T) *SceneStore {
+// newTestStore starts a Postgres testcontainer and opens a SceneStore against
+// it. Cleanup is registered via t.Cleanup in two phases (container, then
+// store) so the container is released even if NewSceneStore fails. Container
+// termination uses a fresh, short-lived context so teardown does not inherit
+// the 2-minute setup deadline.
+//
+// Note: testutil.PostgresEnv exposes the connection string via the ConnStr
+// field (no "ing" suffix). The holomush role owns the public schema, so
+// the plugin's migrations create the scenes table directly in public.
+// Schema isolation via SchemaProvisioner is exercised by the end-to-end
+// test in test/integration/plugin/core_scenes_test.go (Task 13), not here.
+func newTestStore(t *testing.T) *SceneStore {
 	t.Helper()
-	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgEnv.Terminate(ctx) })
+	setupCtx, cancelSetup := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancelSetup)
 
-	sp := plugins.NewSchemaProvisioner(pgEnv.ConnStr)
-	require.NoError(t, sp.Init(ctx))
-	t.Cleanup(sp.Close)
+	pgEnv, err := testutil.StartPostgres(setupCtx)
+	require.NoError(t, err, "failed to start postgres testcontainer")
+	// Register container termination immediately so a subsequent
+	// NewSceneStore failure cannot leak the container.
+	t.Cleanup(func() {
+		termCtx, cancelTerm := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancelTerm()
+		_ = pgEnv.Terminate(termCtx)
+	})
 
-	connStr, err := sp.ProvisionSchema(ctx, "core-scenes")
-	require.NoError(t, err)
-
-	store, err := NewSceneStore(ctx, connStr)
-	require.NoError(t, err)
+	store, err := NewSceneStore(setupCtx, pgEnv.ConnStr)
+	require.NoError(t, err, "failed to open scene store")
 	t.Cleanup(store.Close)
 
 	return store
 }
 
-func TestCreateSceneAndGetSceneRoundTrip(t *testing.T) {
-	store := setupSceneStore(t)
+func TestSceneStoreCreatePersistsAllSceneFields(t *testing.T) {
+	store := newTestStore(t)
+
 	ctx := context.Background()
-
-	loc := "loc-100"
-	tmpl := "tmpl-42"
-	timeout := 600
-	now := time.Now().UTC().Truncate(time.Microsecond)
-
-	input := &SceneRow{
-		ID:              "scene-rt-1",
-		Title:           "Round Trip Scene",
-		Description:     "Tests create and get",
-		LocationID:      &loc,
-		OwnerID:         "owner-rt",
-		State:           "active",
-		PoseOrder:       "round-robin",
-		Visibility:      "private",
-		IdleTimeoutSecs: &timeout,
-		TemplateID:      &tmpl,
-		ContentWarnings: []string{"mature", "violence"},
-		Tags:            []string{"pvp", "arena"},
-		CreatedAt:       now,
+	locationID := "loc-01"
+	row := &SceneRow{
+		ID:              "scene-01HXYZ",
+		Title:           "A Decades-Crossed Meeting",
+		Description:     "Off-grid private meeting",
+		LocationID:      &locationID,
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{"plot", "social"},
 	}
 
-	require.NoError(t, store.CreateScene(ctx, input))
-
-	got, err := store.GetScene(ctx, "scene-rt-1")
+	err := store.Create(ctx, row)
 	require.NoError(t, err)
 
-	assert.Equal(t, input.ID, got.ID)
-	assert.Equal(t, input.Title, got.Title)
-	assert.Equal(t, input.Description, got.Description)
-	assert.Equal(t, input.LocationID, got.LocationID)
-	assert.Equal(t, input.OwnerID, got.OwnerID)
-	assert.Equal(t, input.State, got.State)
-	assert.Equal(t, input.PoseOrder, got.PoseOrder)
-	assert.Equal(t, input.Visibility, got.Visibility)
-	assert.Equal(t, input.IdleTimeoutSecs, got.IdleTimeoutSecs)
-	assert.Equal(t, input.TemplateID, got.TemplateID)
-	assert.Equal(t, input.ContentWarnings, got.ContentWarnings)
-	assert.Equal(t, input.Tags, got.Tags)
-	assert.Equal(t, input.CreatedAt, got.CreatedAt.UTC())
-	assert.Nil(t, got.EndedAt)
-	assert.Nil(t, got.ArchivedAt)
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, row.ID, got.ID)
+	assert.Equal(t, row.Title, got.Title)
+	assert.Equal(t, row.Description, got.Description)
+	require.NotNil(t, got.LocationID)
+	assert.Equal(t, locationID, *got.LocationID)
+	assert.Equal(t, row.OwnerID, got.OwnerID)
+	assert.Equal(t, row.State, got.State)
+	assert.Equal(t, row.PoseOrder, got.PoseOrder)
+	assert.Equal(t, row.Visibility, got.Visibility)
+	assert.ElementsMatch(t, row.Tags, got.Tags)
+	assert.NotZero(t, got.CreatedAt)
 }
 
-func TestCreateSceneWithMinimalFields(t *testing.T) {
-	store := setupSceneStore(t)
+func TestSceneStoreGetReturnsNotFoundForMissingScene(t *testing.T) {
+	store := newTestStore(t)
+
 	ctx := context.Background()
 
-	input := &SceneRow{
-		ID:              "scene-min-1",
-		Title:           "Minimal",
-		Description:     "",
-		OwnerID:         "owner-min",
-		State:           "active",
-		PoseOrder:       "free",
-		Visibility:      "open",
+	_, err := store.Get(ctx, "scene-does-not-exist")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
+	// Use errutil.AssertErrorContext so the scene_id context is asserted
+	// unconditionally — a conditional errors.As block lets the test pass
+	// silently if the context ever stops being attached.
+	errutil.AssertErrorContext(t, err, "scene_id", "scene-does-not-exist")
+}
+
+func TestSceneStoreCreateRejectsDuplicateID(t *testing.T) {
+	store := newTestStore(t)
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-dup",
+		Title:           "Original",
+		OwnerID:         "char-bob",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{},
 		Tags:            []string{},
-		CreatedAt:       time.Now().UTC().Truncate(time.Microsecond),
 	}
 
-	require.NoError(t, store.CreateScene(ctx, input))
-
-	got, err := store.GetScene(ctx, "scene-min-1")
+	err := store.Create(ctx, row)
 	require.NoError(t, err)
 
-	assert.Equal(t, "scene-min-1", got.ID)
-	assert.Nil(t, got.LocationID)
-	assert.Nil(t, got.TemplateID)
-	assert.Nil(t, got.IdleTimeoutSecs)
+	err = store.Create(ctx, row)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_CREATE_FAILED")
 }
 
-func TestGetSceneReturnsErrorForMissingScene(t *testing.T) {
-	store := setupSceneStore(t)
-	ctx := context.Background()
+func TestSceneStoreEndTransitionsActiveToEnded(t *testing.T) {
+	store := newTestStore(t)
 
-	_, err := store.GetScene(ctx, "nonexistent")
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-end-active",
+		Title:           "End from active",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	got, err := store.End(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, string(SceneStateEnded), got.State)
+	require.NotNil(t, got.EndedAt, "ended_at should be set")
+
+	reread, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, got.State, reread.State)
+}
+
+func TestSceneStoreEndTransitionsPausedToEnded(t *testing.T) {
+	store := newTestStore(t)
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-end-paused",
+		Title:           "End from paused",
+		OwnerID:         "char-alice",
+		State:           string(SceneStatePaused),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	got, err := store.End(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, string(SceneStateEnded), got.State)
+	require.NotNil(t, got.EndedAt)
+}
+
+func TestSceneStoreEndRejectsAlreadyEnded(t *testing.T) {
+	store := newTestStore(t)
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-end-twice",
+		Title:           "Already ended",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateEnded),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	_, err := store.End(ctx, row.ID)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_TRANSITION_FORBIDDEN")
+}
+
+func TestSceneStoreEndReturnsNotFoundForMissingScene(t *testing.T) {
+	store := newTestStore(t)
+
+	ctx := context.Background()
+	_, err := store.End(ctx, "scene-does-not-exist")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
 }
 
-func TestParticipantAddListRemoveCycle(t *testing.T) {
-	store := setupSceneStore(t)
-	ctx := context.Background()
+func TestSceneStorePauseTransitionsActiveToPaused(t *testing.T) {
+	store := newTestStore(t)
 
-	// Create a scene first (FK constraint).
-	require.NoError(t, store.CreateScene(ctx, &SceneRow{
-		ID:              "scene-part-1",
-		Title:           "Participant Test",
-		OwnerID:         "owner-part",
-		State:           "active",
-		PoseOrder:       "free",
-		Visibility:      "open",
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-pause",
+		Title:           "Pause from active",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{},
 		Tags:            []string{},
-		CreatedAt:       time.Now().UTC().Truncate(time.Microsecond),
-	}))
-
-	origin := "loc-origin"
-	vote := true
-	now := time.Now().UTC().Truncate(time.Microsecond)
-
-	// Add two participants.
-	p1 := &ParticipantRow{
-		SceneID:          "scene-part-1",
-		CharacterID:      "char-1",
-		Role:             "owner",
-		OriginLocationID: &origin,
-		JoinedAt:         now,
-		PublishVote:      &vote,
 	}
-	p2 := &ParticipantRow{
-		SceneID:     "scene-part-1",
-		CharacterID: "char-2",
-		Role:        "member",
-		JoinedAt:    now.Add(time.Second),
+	require.NoError(t, store.Create(ctx, row))
+
+	got, err := store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, string(SceneStatePaused), got.State)
+}
+
+func TestSceneStorePauseRejectsAlreadyPaused(t *testing.T) {
+	store := newTestStore(t)
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-pause-twice",
+		Title:           "Already paused",
+		OwnerID:         "char-alice",
+		State:           string(SceneStatePaused),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
 	}
+	require.NoError(t, store.Create(ctx, row))
 
-	require.NoError(t, store.AddParticipant(ctx, p1))
-	require.NoError(t, store.AddParticipant(ctx, p2))
+	_, err := store.Pause(ctx, row.ID)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_TRANSITION_FORBIDDEN")
+}
 
-	// List — should return both, ordered by joined_at.
-	list, err := store.ListParticipants(ctx, "scene-part-1")
+func TestSceneStoreResumeTransitionsPausedToActive(t *testing.T) {
+	store := newTestStore(t)
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-resume",
+		Title:           "Resume from paused",
+		OwnerID:         "char-alice",
+		State:           string(SceneStatePaused),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	got, err := store.Resume(ctx, row.ID)
 	require.NoError(t, err)
-	require.Len(t, list, 2)
-	assert.Equal(t, "char-1", list[0].CharacterID)
-	assert.Equal(t, "char-2", list[1].CharacterID)
-	assert.Equal(t, "owner", list[0].Role)
-	assert.Equal(t, &origin, list[0].OriginLocationID)
-	assert.Equal(t, &vote, list[0].PublishVote)
-	assert.Nil(t, list[1].OriginLocationID)
-	assert.Nil(t, list[1].PublishVote)
+	assert.Equal(t, string(SceneStateActive), got.State)
+}
 
-	// Get single participant.
-	got, err := store.GetParticipant(ctx, "scene-part-1", "char-1")
+func TestSceneStoreResumeRejectsActiveScene(t *testing.T) {
+	store := newTestStore(t)
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-resume-active",
+		Title:           "Already active",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	_, err := store.Resume(ctx, row.ID)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_TRANSITION_FORBIDDEN")
+}
+
+func TestSceneStoreUpdateAppliesTitleOnly(t *testing.T) {
+	store := newTestStore(t)
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-update-title",
+		Title:           "Original",
+		Description:     "Original description",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{"violence"},
+		Tags:            []string{"plot"},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	newTitle := "Renamed"
+	update := &SceneUpdate{Title: &newTitle}
+	_, err := store.Update(ctx, row.ID, update)
 	require.NoError(t, err)
-	assert.Equal(t, "owner", got.Role)
 
-	// Remove char-1 and verify.
-	require.NoError(t, store.RemoveParticipant(ctx, "scene-part-1", "char-1"))
-
-	list, err = store.ListParticipants(ctx, "scene-part-1")
+	got, err := store.Get(ctx, row.ID)
 	require.NoError(t, err)
-	require.Len(t, list, 1)
-	assert.Equal(t, "char-2", list[0].CharacterID)
+	assert.Equal(t, "Renamed", got.Title)
+	assert.Equal(t, "Original description", got.Description)
+	assert.ElementsMatch(t, []string{"violence"}, got.ContentWarnings)
+	assert.ElementsMatch(t, []string{"plot"}, got.Tags)
+}
 
-	// Removing again should fail.
-	err = store.RemoveParticipant(ctx, "scene-part-1", "char-1")
+func TestSceneStoreUpdateAppliesMultipleFields(t *testing.T) {
+	store := newTestStore(t)
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-update-many",
+		Title:           "Title 1",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	title := "Title 2"
+	desc := "New description"
+	vis := "private"
+	update := &SceneUpdate{
+		Title:       &title,
+		Description: &desc,
+		Visibility:  &vis,
+	}
+	_, err := store.Update(ctx, row.ID, update)
+	require.NoError(t, err)
+
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Title 2", got.Title)
+	assert.Equal(t, "New description", got.Description)
+	assert.Equal(t, "private", got.Visibility)
+}
+
+func TestSceneStoreUpdateRepeatedFieldsRespectFlag(t *testing.T) {
+	store := newTestStore(t)
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-update-repeated",
+		Title:           "T",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{"violence"},
+		Tags:            []string{"plot", "social"},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	// Only update content_warnings; leave tags alone.
+	update := &SceneUpdate{
+		ContentWarnings:       []string{"violence", "death"},
+		UpdateContentWarnings: true,
+		Tags:                  nil,
+		UpdateTags:            false, // explicitly NOT updating
+	}
+	_, err := store.Update(ctx, row.ID, update)
+	require.NoError(t, err)
+
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"violence", "death"}, got.ContentWarnings)
+	assert.ElementsMatch(t, []string{"plot", "social"}, got.Tags, "tags should be unchanged")
+}
+
+func TestSceneStoreUpdateClearsRepeatedFieldWithEmptySlice(t *testing.T) {
+	store := newTestStore(t)
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-update-clear",
+		Title:           "T",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{"violence"},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	update := &SceneUpdate{
+		ContentWarnings:       []string{},
+		UpdateContentWarnings: true, // explicit clear
+	}
+	_, err := store.Update(ctx, row.ID, update)
+	require.NoError(t, err)
+
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Empty(t, got.ContentWarnings, "content_warnings should be cleared to empty slice")
+}
+
+func TestSceneStoreUpdateRejectsEndedScene(t *testing.T) {
+	store := newTestStore(t)
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-update-ended",
+		Title:           "Ended",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateEnded),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	title := "Try to rename"
+	update := &SceneUpdate{Title: &title}
+	_, err := store.Update(ctx, row.ID, update)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_TRANSITION_FORBIDDEN")
+}
+
+func TestSceneStoreUpdateReturnsNotFoundForMissingScene(t *testing.T) {
+	store := newTestStore(t)
+
+	ctx := context.Background()
+	title := "Anything"
+	update := &SceneUpdate{Title: &title}
+	_, err := store.Update(ctx, "scene-does-not-exist", update)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
 }
 
-func TestAddParticipantUpsertsOnConflict(t *testing.T) {
-	store := setupSceneStore(t)
-	ctx := context.Background()
+func TestSceneStoreUpdateNoFieldsIsNoOp(t *testing.T) {
+	store := newTestStore(t)
 
-	require.NoError(t, store.CreateScene(ctx, &SceneRow{
-		ID:              "scene-upsert-1",
-		Title:           "Upsert Test",
-		OwnerID:         "owner-u",
-		State:           "active",
-		PoseOrder:       "free",
-		Visibility:      "open",
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-update-noop",
+		Title:           "Unchanged",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{},
 		Tags:            []string{},
-		CreatedAt:       time.Now().UTC().Truncate(time.Microsecond),
-	}))
-
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	p := &ParticipantRow{
-		SceneID:     "scene-upsert-1",
-		CharacterID: "char-up",
-		Role:        "member",
-		JoinedAt:    now,
 	}
+	require.NoError(t, store.Create(ctx, row))
 
-	require.NoError(t, store.AddParticipant(ctx, p))
-
-	// Upsert: promote to owner.
-	p.Role = "owner"
-	require.NoError(t, store.AddParticipant(ctx, p))
-
-	got, err := store.GetParticipant(ctx, "scene-upsert-1", "char-up")
-	require.NoError(t, err)
-	assert.Equal(t, "owner", got.Role)
-}
-
-func TestMigrationIdempotency(t *testing.T) {
-	ctx := context.Background()
-
-	pgEnv, err := testutil.StartPostgres(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgEnv.Terminate(ctx) })
-
-	sp := plugins.NewSchemaProvisioner(pgEnv.ConnStr)
-	require.NoError(t, sp.Init(ctx))
-	t.Cleanup(sp.Close)
-
-	connStr, err := sp.ProvisionSchema(ctx, "core-scenes")
+	// Empty update — no fields specified
+	update := &SceneUpdate{}
+	_, err := store.Update(ctx, row.ID, update)
 	require.NoError(t, err)
 
-	// First run — creates tables.
-	store1, err := NewSceneStore(ctx, connStr)
+	got, err := store.Get(ctx, row.ID)
 	require.NoError(t, err)
-	store1.Close()
-
-	// Second run — must succeed without error (migrations already applied).
-	store2, err := NewSceneStore(ctx, connStr)
-	require.NoError(t, err)
-	store2.Close()
-}
-
-func TestSceneTablesExistInPluginSchemaNotPublic(t *testing.T) {
-	ctx := context.Background()
-
-	pgEnv, err := testutil.StartPostgres(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgEnv.Terminate(ctx) })
-
-	sp := plugins.NewSchemaProvisioner(pgEnv.ConnStr)
-	require.NoError(t, sp.Init(ctx))
-	t.Cleanup(sp.Close)
-
-	connStr, err := sp.ProvisionSchema(ctx, "core-scenes")
-	require.NoError(t, err)
-
-	_, err = NewSceneStore(ctx, connStr)
-	require.NoError(t, err)
-
-	// Query information_schema as the holomush admin role to see where
-	// the scenes table landed.
-	adminConn, err := pgx.Connect(ctx, pgEnv.ConnStr)
-	require.NoError(t, err)
-	defer adminConn.Close(ctx)
-
-	// The scenes table MUST exist in plugin_core_scenes schema.
-	var pluginCount int
-	err = adminConn.QueryRow(ctx,
-		"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2",
-		"plugin_core_scenes", "scenes",
-	).Scan(&pluginCount)
-	require.NoError(t, err)
-	assert.Equal(t, 1, pluginCount, "scenes table must exist in plugin_core_scenes schema")
-
-	// The scenes table MUST NOT exist in the public schema.
-	var publicCount int
-	err = adminConn.QueryRow(ctx,
-		"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'scenes'",
-	).Scan(&publicCount)
-	require.NoError(t, err)
-	assert.Equal(t, 0, publicCount, "scenes table must not exist in public schema")
+	assert.Equal(t, "Unchanged", got.Title)
 }

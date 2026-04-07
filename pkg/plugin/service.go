@@ -66,6 +66,16 @@ func ServeWithServices(config *ServeConfig, provider ServiceProvider) {
 	if provider == nil {
 		panic("plugin: provider cannot be nil")
 	}
+
+	validator := config.Validator
+	if validator == nil {
+		v, err := NewDefaultValidator()
+		if err != nil {
+			panic("plugin: failed to construct default validator: " + err.Error())
+		}
+		validator = v
+	}
+
 	serveConfig := &hashiplug.ServeConfig{
 		HandshakeConfig: HandshakeConfig,
 		Plugins: map[string]hashiplug.Plugin{
@@ -74,7 +84,12 @@ func ServeWithServices(config *ServeConfig, provider ServiceProvider) {
 				provider: provider,
 			},
 		},
-		GRPCServer: hashiplug.DefaultGRPCServer,
+		GRPCServer: func(opts []grpc.ServerOption) *grpc.Server {
+			opts = append(opts, grpc.ChainUnaryInterceptor(
+				ValidateInterceptor(validator),
+			))
+			return grpc.NewServer(opts...)
+		},
 	}
 	if tlsProvider := loadPluginTLSProvider(); tlsProvider != nil {
 		serveConfig.TLSProvider = tlsProvider

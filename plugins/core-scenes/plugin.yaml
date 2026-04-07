@@ -4,12 +4,21 @@
 name: core-scenes
 version: 1.0.0
 type: binary
+resource_types: [scene]
 
 requires:
   - holomush.world.v1.WorldService
 
 provides:
   - holomush.scene.v1.SceneService
+# Note: holomush.plugin.v1.AttributeResolverService is intentionally NOT
+# declared in provides. The host auto-registers it via the plugin's
+# RegisterAttributeResolver method (AttributeResolverProvider interface),
+# and the per-plugin attribute resolver client is accessed via
+# host.AttributeResolverClient(<plugin name>) — not via the service registry.
+# Declaring it in provides causes a SERVICE_ALREADY_REGISTERED conflict
+# with any other plugin (e.g. test-abac-widget) that also provides it,
+# because the registry treats service names as singletons.
 
 storage: postgres
 
@@ -24,13 +33,38 @@ commands:
         scope: local
     help: "Manage RP scenes"
     usage: "scene <subcommand> [args]"
-
   - name: scenes
     help: "Browse open scenes"
     usage: "scenes [--tags tag1,tag2]"
 
 policies:
-  - name: execute-scenes
+  - name: execute-scene-commands
     dsl: >-
       permit(principal is character, action in ["execute"], resource is command) when { resource.command.name in ["scene",
       "scenes"] };
+  - name: read-own-scene
+    dsl: >-
+      permit(principal is character, action in ["read"], resource is scene) when { resource.scene.owner == principal.id };
+  - name: end-own-scene
+    dsl: >-
+      permit(principal is character, action in ["end"], resource is scene) when { resource.scene.owner == principal.id &&
+      resource.scene.state in ["active", "paused"] };
+  - name: pause-own-scene
+    dsl: >-
+      permit(principal is character, action in ["pause"], resource is scene) when { resource.scene.owner == principal.id &&
+      resource.scene.state == "active" };
+  # PHASE 3 NOTE: this policy is replaced by `resume-any-member` when the
+  # scene_participants table lands. Per spec D6 (async safety), any member
+  # of a paused scene MUST be able to resume it — owner-only here is a
+  # deliberate Phase 2 limitation because Phase 2 has no participant model.
+  # Phase 3 deletes this policy and adds:
+  #   permit(principal is character, action in ["resume"], resource is scene)
+  #   when { resource.scene.state == "paused" && principal.id in resource.scene.participants };
+  - name: resume-own-scene
+    dsl: >-
+      permit(principal is character, action in ["resume"], resource is scene) when { resource.scene.owner == principal.id
+      && resource.scene.state == "paused" };
+  - name: update-own-scene
+    dsl: >-
+      permit(principal is character, action in ["update"], resource is scene) when { resource.scene.owner == principal.id
+      && resource.scene.state in ["active", "paused"] };

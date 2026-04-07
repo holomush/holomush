@@ -12,6 +12,7 @@
 package pluginv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -1229,7 +1230,7 @@ var File_holomush_plugin_v1_plugin_proto protoreflect.FileDescriptor
 
 const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
-	"\x1fholomush/plugin/v1/plugin.proto\x12\x12holomush.plugin.v1\"\xe7\x01\n" +
+	"\x1fholomush/plugin/v1/plugin.proto\x12\x12holomush.plugin.v1\x1a\x1bbuf/validate/validate.proto\"\xe7\x01\n" +
 	"\rServiceConfig\x12+\n" +
 	"\x11connection_string\x18\x01 \x01(\tR\x10connectionString\x12d\n" +
 	"\x11required_services\x18\x02 \x03(\v27.holomush.plugin.v1.ServiceConfig.RequiredServicesEntryR\x10requiredServices\x1aC\n" +
@@ -1239,71 +1240,71 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\vInitRequest\x129\n" +
 	"\x06config\x18\x01 \x01(\v2!.holomush.plugin.v1.ServiceConfigR\x06config\";\n" +
 	"\fInitResponse\x12+\n" +
-	"\x11provided_services\x18\x01 \x03(\tR\x10providedServices\"\xb5\x01\n" +
-	"\x05Event\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
-	"\x06stream\x18\x02 \x01(\tR\x06stream\x12\x12\n" +
-	"\x04type\x18\x03 \x01(\tR\x04type\x12\x1c\n" +
-	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp\x12\x1d\n" +
+	"\x11provided_services\x18\x01 \x03(\tR\x10providedServices\"\xed\x01\n" +
+	"\x05Event\x12\x17\n" +
+	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\x12\x1f\n" +
+	"\x06stream\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06stream\x12\x1b\n" +
+	"\x04type\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04type\x12\x1c\n" +
+	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp\x12&\n" +
 	"\n" +
-	"actor_kind\x18\x05 \x01(\tR\tactorKind\x12\x19\n" +
-	"\bactor_id\x18\x06 \x01(\tR\aactorId\x12\x18\n" +
-	"\apayload\x18\a \x01(\tR\apayload\"Q\n" +
-	"\tEmitEvent\x12\x16\n" +
-	"\x06stream\x18\x01 \x01(\tR\x06stream\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\x12\x18\n" +
-	"\apayload\x18\x03 \x01(\tR\apayload\"E\n" +
+	"actor_kind\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tactorKind\x12\"\n" +
+	"\bactor_id\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\aactorId\x12#\n" +
+	"\apayload\x18\a \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x04R\apayload\"n\n" +
+	"\tEmitEvent\x12\x1f\n" +
+	"\x06stream\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06stream\x12\x1b\n" +
+	"\x04type\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04type\x12#\n" +
+	"\apayload\x18\x03 \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x04R\apayload\"E\n" +
 	"\x12HandleEventRequest\x12/\n" +
 	"\x05event\x18\x01 \x01(\v2\x19.holomush.plugin.v1.EventR\x05event\"U\n" +
 	"\x13HandleEventResponse\x12>\n" +
 	"\vemit_events\x18\x01 \x03(\v2\x1d.holomush.plugin.v1.EmitEventR\n" +
-	"emitEvents\"\x82\x02\n" +
-	"\x0eCommandRequest\x12\x18\n" +
-	"\acommand\x18\x01 \x01(\tR\acommand\x12\x12\n" +
-	"\x04args\x18\x02 \x01(\tR\x04args\x12\x1b\n" +
-	"\traw_input\x18\x03 \x01(\tR\brawInput\x12!\n" +
-	"\fcharacter_id\x18\x04 \x01(\tR\vcharacterId\x12%\n" +
-	"\x0echaracter_name\x18\x05 \x01(\tR\rcharacterName\x12\x1f\n" +
-	"\vlocation_id\x18\x06 \x01(\tR\n" +
-	"locationId\x12\x1d\n" +
+	"emitEvents\"\xcc\x02\n" +
+	"\x0eCommandRequest\x12!\n" +
+	"\acommand\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\acommand\x12\x1c\n" +
+	"\x04args\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80@R\x04args\x12%\n" +
+	"\traw_input\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80@R\brawInput\x12*\n" +
+	"\fcharacter_id\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\x12.\n" +
+	"\x0echaracter_name\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\rcharacterName\x12(\n" +
+	"\vlocation_id\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
+	"locationId\x12&\n" +
 	"\n" +
-	"session_id\x18\a \x01(\tR\tsessionId\x12\x1b\n" +
-	"\tplayer_id\x18\b \x01(\tR\bplayerId\"\x9b\x01\n" +
+	"session_id\x18\a \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tsessionId\x12$\n" +
+	"\tplayer_id\x18\b \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bplayerId\"\xa5\x01\n" +
 	"\x0fCommandResponse\x129\n" +
-	"\x06status\x18\x01 \x01(\x0e2!.holomush.plugin.v1.CommandStatusR\x06status\x12\x16\n" +
-	"\x06output\x18\x02 \x01(\tR\x06output\x125\n" +
+	"\x06status\x18\x01 \x01(\x0e2!.holomush.plugin.v1.CommandStatusR\x06status\x12 \n" +
+	"\x06output\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80@R\x06output\x125\n" +
 	"\x06events\x18\x03 \x03(\v2\x1d.holomush.plugin.v1.EmitEventR\x06events\"T\n" +
 	"\x14HandleCommandRequest\x12<\n" +
 	"\acommand\x18\x01 \x01(\v2\".holomush.plugin.v1.CommandRequestR\acommand\"X\n" +
 	"\x15HandleCommandResponse\x12?\n" +
-	"\bresponse\x18\x01 \x01(\v2#.holomush.plugin.v1.CommandResponseR\bresponse\"t\n" +
-	"!PluginHostServiceEmitEventRequest\x12\x16\n" +
-	"\x06stream\x18\x01 \x01(\tR\x06stream\x12\x1d\n" +
+	"\bresponse\x18\x01 \x01(\v2#.holomush.plugin.v1.CommandResponseR\bresponse\"\x86\x01\n" +
+	"!PluginHostServiceEmitEventRequest\x12\x1f\n" +
+	"\x06stream\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06stream\x12&\n" +
 	"\n" +
-	"event_type\x18\x02 \x01(\tR\teventType\x12\x18\n" +
+	"event_type\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\teventType\x12\x18\n" +
 	"\apayload\x18\x03 \x01(\fR\apayload\"$\n" +
-	"\"PluginHostServiceEmitEventResponse\"M\n" +
-	"\x1bPluginHostServiceLogRequest\x12\x14\n" +
-	"\x05level\x18\x01 \x01(\tR\x05level\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\x1e\n" +
-	"\x1cPluginHostServiceLogResponse\"R\n" +
-	"\x1dPluginHostServiceKVGetRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\x12\x10\n" +
-	"\x03key\x18\x02 \x01(\tR\x03key\"L\n" +
+	"\"PluginHostServiceEmitEventResponse\"`\n" +
+	"\x1bPluginHostServiceLogRequest\x12\x1d\n" +
+	"\x05level\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05level\x12\"\n" +
+	"\amessage\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80@R\amessage\"\x1e\n" +
+	"\x1cPluginHostServiceLogResponse\"d\n" +
+	"\x1dPluginHostServiceKVGetRequest\x12(\n" +
+	"\vplugin_name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
+	"pluginName\x12\x19\n" +
+	"\x03key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\"L\n" +
 	"\x1ePluginHostServiceKVGetResponse\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
-	"\x05found\x18\x02 \x01(\bR\x05found\"h\n" +
-	"\x1dPluginHostServiceKVSetRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\x12\x10\n" +
-	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
+	"\x05found\x18\x02 \x01(\bR\x05found\"z\n" +
+	"\x1dPluginHostServiceKVSetRequest\x12(\n" +
+	"\vplugin_name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
+	"pluginName\x12\x19\n" +
+	"\x03key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\x12\x14\n" +
 	"\x05value\x18\x03 \x01(\tR\x05value\" \n" +
-	"\x1ePluginHostServiceKVSetResponse\"U\n" +
-	" PluginHostServiceKVDeleteRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\x12\x10\n" +
-	"\x03key\x18\x02 \x01(\tR\x03key\"#\n" +
+	"\x1ePluginHostServiceKVSetResponse\"g\n" +
+	" PluginHostServiceKVDeleteRequest\x12(\n" +
+	"\vplugin_name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
+	"pluginName\x12\x19\n" +
+	"\x03key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\"#\n" +
 	"!PluginHostServiceKVDeleteResponse*\x96\x01\n" +
 	"\rCommandStatus\x12\x1e\n" +
 	"\x1aCOMMAND_STATUS_UNSPECIFIED\x10\x00\x12\x15\n" +

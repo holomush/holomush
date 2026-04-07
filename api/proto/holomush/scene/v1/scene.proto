@@ -5,6 +5,8 @@ syntax = "proto3";
 
 package holomush.scene.v1;
 
+import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/scene/v1;scenev1";
@@ -14,6 +16,9 @@ service SceneService {
   rpc GetScene(GetSceneRequest) returns (GetSceneResponse);
   rpc CreateScene(CreateSceneRequest) returns (CreateSceneResponse);
   rpc EndScene(EndSceneRequest) returns (EndSceneResponse);
+  rpc PauseScene(PauseSceneRequest) returns (PauseSceneResponse);
+  rpc ResumeScene(ResumeSceneRequest) returns (ResumeSceneResponse);
+  rpc UpdateScene(UpdateSceneRequest) returns (UpdateSceneResponse);
   rpc JoinScene(JoinSceneRequest) returns (JoinSceneResponse);
   rpc LeaveScene(LeaveSceneRequest) returns (LeaveSceneResponse);
   rpc InviteToScene(InviteToSceneRequest) returns (InviteToSceneResponse);
@@ -45,8 +50,11 @@ message ParticipantInfo {
 }
 
 message ListScenesRequest {
-  int32 limit = 1;
-  int32 offset = 2;
+  int32 limit = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  int32 offset = 2 [(buf.validate.field).int32.gte = 0];
   repeated string tags = 3;
 }
 
@@ -55,8 +63,8 @@ message ListScenesResponse {
 }
 
 message GetSceneRequest {
-  string character_id = 1;
-  string scene_id = 2;
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 message GetSceneResponse {
@@ -64,14 +72,31 @@ message GetSceneResponse {
 }
 
 message CreateSceneRequest {
-  string character_id = 1;
-  string title = 2;
-  string description = 3;
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string title = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+  string description = 3 [(buf.validate.field).string.max_len = 4096];
   string location_id = 4;
-  string visibility = 5;
-  string pose_order_mode = 6;
-  repeated string tags = 7;
-  repeated string content_warnings = 8;
+  string visibility = 5 [(buf.validate.field).string = {
+    in: [
+      "",
+      "open",
+      "private"
+    ]
+  }];
+  string pose_order_mode = 6 [(buf.validate.field).string = {
+    in: [
+      "",
+      "free",
+      "strict",
+      "3pr",
+      "5pr"
+    ]
+  }];
+  repeated string tags = 7 [(buf.validate.field).repeated.max_items = 32];
+  repeated string content_warnings = 8 [(buf.validate.field).repeated.max_items = 32];
 }
 
 message CreateSceneResponse {
@@ -79,45 +104,112 @@ message CreateSceneResponse {
 }
 
 message EndSceneRequest {
-  string character_id = 1;
-  string scene_id = 2;
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
-message EndSceneResponse {}
+message EndSceneResponse {
+  SceneInfo scene = 1;
+}
+
+message PauseSceneRequest {
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message PauseSceneResponse {
+  SceneInfo scene = 1;
+}
+
+message ResumeSceneRequest {
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message ResumeSceneResponse {
+  SceneInfo scene = 1;
+}
+
+// UpdateSceneRequest uses google.protobuf.FieldMask as the canonical proto3
+// pattern for partial updates (per Google AIP-134). The mask is the single
+// source of truth for "which fields to apply" — fields listed in the mask
+// are updated to the value in the request (even if that value is empty/zero);
+// fields not in the mask are left unchanged.
+//
+// Per-field constraint semantics:
+// - max_len limits apply to all string fields regardless of mask membership
+// - min_len IS NOT used at the proto layer because the mask gates whether
+//   the field is applied; per-field semantic validation (e.g. "title cannot
+//   be empty when in the mask") happens in the service handler's mask-iteration
+//   switch statement
+// - enum-style fields use `in:` constraints that include the empty string
+//   so that "field not set" doesn't trip the validator
+message UpdateSceneRequest {
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+
+  string title = 3 [(buf.validate.field).string.max_len = 200];
+  string description = 4 [(buf.validate.field).string.max_len = 4096];
+  string visibility = 5 [(buf.validate.field).string = {
+    in: [
+      "",
+      "open",
+      "private"
+    ]
+  }];
+  string pose_order_mode = 6 [(buf.validate.field).string = {
+    in: [
+      "",
+      "free",
+      "strict",
+      "3pr",
+      "5pr"
+    ]
+  }];
+  string location_id = 7;
+  repeated string content_warnings = 8 [(buf.validate.field).repeated.max_items = 32];
+  repeated string tags = 9 [(buf.validate.field).repeated.max_items = 32];
+
+  google.protobuf.FieldMask update_mask = 99;
+}
+
+message UpdateSceneResponse {
+  SceneInfo scene = 1;
+}
 
 message JoinSceneRequest {
-  string character_id = 1;
-  string scene_id = 2;
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 message JoinSceneResponse {}
 
 message LeaveSceneRequest {
-  string character_id = 1;
-  string scene_id = 2;
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 message LeaveSceneResponse {}
 
 message InviteToSceneRequest {
-  string character_id = 1;
-  string scene_id = 2;
-  string target_character_id = 3;
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  string target_character_id = 3 [(buf.validate.field).string.min_len = 1];
 }
 
 message InviteToSceneResponse {}
 
 message CastPublishVoteRequest {
-  string character_id = 1;
-  string scene_id = 2;
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
   bool vote = 3;
 }
 
 message CastPublishVoteResponse {}
 
 message GetPoseOrderRequest {
-  string character_id = 1;
-  string scene_id = 2;
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
 }
 
 message PoseOrderEntry {
