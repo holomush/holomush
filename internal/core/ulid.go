@@ -17,7 +17,19 @@ var (
 	entropyLock sync.Mutex
 )
 
-// NewULID generates a new ULID.
+// NewULID generates a monotonic-within-millisecond ULID using crypto/rand.
+//
+// Use this for: event IDs (core.Event.ID), session IDs, and any identifier
+// whose lexicographic order MUST match arrival order. The PostgresEventStore
+// relies on this property — Replay uses `WHERE id > afterID ORDER BY id` and
+// PostgresSessionStore.UpdateCursors uses a per-key monotonicity CAS on the
+// cursor JSONB value. A non-monotonic event ID can produce a lex-inverted
+// pair within the same millisecond, which silently breaks both replay
+// (the second event is skipped) and cursor advances (the second cursor is
+// rejected by the CAS).
+//
+// Do NOT use idgen.New() for these. The ruleguard rule EventIDMustBeMonotonic
+// in gorules/rules.go enforces this for core.Event{} struct literals.
 func NewULID() ulid.ULID {
 	entropyLock.Lock()
 	defer entropyLock.Unlock()

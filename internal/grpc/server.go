@@ -41,6 +41,14 @@ type SessionDefaults struct {
 // defaultMaxReplay is used when MaxReplay is not configured.
 const defaultMaxReplay = 1000
 
+// cursorCommitTimeout bounds the synchronous cursor commit inside
+// replayAndSend. 1 second is ~1000x the healthy-DB latency, well below
+// the "chat feels broken" threshold, and covers typical pool-wait hiccups.
+// On timeout, the write is dropped (logged at error level) and the live
+// loop continues — failure mode degrades to today's "duplicate-on-reconnect"
+// behavior, never worse.
+const cursorCommitTimeout = 1 * time.Second
+
 // streamNotification wraps a ULID event notification with the stream
 // it came from. Relay goroutines send these to a shared channel so the
 // live loop can select on a single source.
@@ -415,19 +423,6 @@ func (s *CoreServer) runDisconnectHooks(ctx context.Context, info session.Info) 
 	}
 }
 
-// persistCursorAsync persists a cursor update to the session store in a background
-// goroutine (best-effort, non-blocking). Uses context.Background() intentionally:
-// the request ctx may be cancelled before the goroutine runs, but we still want
-// the durable cursor write to complete.
-func (s *CoreServer) persistCursorAsync(sessionID, streamName string, eventID ulid.ULID) {
-	go func() {
-		if err := s.sessionStore.UpdateCursors(context.Background(),
-			sessionID, map[string]ulid.ULID{streamName: eventID}); err != nil {
-			slog.Warn("cursor persist failed", "session_id", sessionID, "error", err)
-		}
-	}()
-}
-
 // maxReplay returns the configured maximum replay count, or the default.
 func (s *CoreServer) maxReplay() int {
 	if s.sessionDefaults.MaxReplay > 0 {
@@ -504,7 +499,24 @@ func (s *CoreServer) replayAndSend(
 		last = ev.ID
 	}
 	if last != afterID {
-		s.persistCursorAsync(info.ID, streamName, last)
+		// Synchronous, bounded-timeout cursor commit. Uses a fresh context
+		// so a client disconnect (which cancels `ctx`) does not abort the
+		// write, matching the semantics the old persistCursorAsync intended.
+		// The commit happens here so that any subsequent action — next loop
+		// iteration, return-from-handler, or GracefulStop — observes the
+		// cursor as durably reflecting `last`. Commit failures are logged
+		// but do not break the client: they degrade gracefully to today's
+		// "duplicate-on-reconnect" behavior.
+		commitCtx, cancel := context.WithTimeout(context.Background(), cursorCommitTimeout)
+		if updateErr := s.sessionStore.UpdateCursors(commitCtx, info.ID,
+			map[string]ulid.ULID{streamName: last}); updateErr != nil {
+			slog.ErrorContext(ctx, "cursor commit failed",
+				"session_id", info.ID,
+				"stream", streamName,
+				"last_event", last.String(),
+				"error", updateErr)
+		}
+		cancel()
 	}
 	return last, nil
 }

@@ -702,6 +702,7 @@ func TestPostgresSessionStore_UpdateCursors(t *testing.T) {
 		cursors   map[string]ulid.ULID
 		setupMock func(mock pgxmock.PgxPoolIface)
 		wantErr   bool
+		errCode   string
 		errMsg    string
 	}{
 		{
@@ -709,8 +710,8 @@ func TestPostgresSessionStore_UpdateCursors(t *testing.T) {
 			id:      "sess-abc",
 			cursors: cursors,
 			setupMock: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectExec(`UPDATE sessions SET event_cursors = event_cursors \|\| \$1::jsonb, updated_at = now\(\) WHERE id = \$2`).
-					WithArgs(pgxmock.AnyArg(), "sess-abc").
+				mock.ExpectExec(`UPDATE sessions\s+SET event_cursors = event_cursors \|\| \$1::jsonb,\s+updated_at = now\(\)\s+WHERE id = \$2\s+AND \(\s+event_cursors->>\$3 IS NULL\s+OR \(event_cursors->>\$3\) COLLATE "C" < \(\$4::text\) COLLATE "C"\s+\)`).
+					WithArgs(pgxmock.AnyArg(), "sess-abc", "location:room-1", cursorID.String()).
 					WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 			},
 		},
@@ -719,12 +720,36 @@ func TestPostgresSessionStore_UpdateCursors(t *testing.T) {
 			id:      "sess-abc",
 			cursors: cursors,
 			setupMock: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectExec(`UPDATE sessions SET event_cursors = event_cursors \|\| \$1::jsonb, updated_at = now\(\) WHERE id = \$2`).
-					WithArgs(pgxmock.AnyArg(), "sess-abc").
+				mock.ExpectExec(`UPDATE sessions\s+SET event_cursors = event_cursors \|\| \$1::jsonb,\s+updated_at = now\(\)\s+WHERE id = \$2\s+AND \(\s+event_cursors->>\$3 IS NULL\s+OR \(event_cursors->>\$3\) COLLATE "C" < \(\$4::text\) COLLATE "C"\s+\)`).
+					WithArgs(pgxmock.AnyArg(), "sess-abc", "location:room-1", cursorID.String()).
 					WillReturnError(errors.New("write error"))
 			},
 			wantErr: true,
 			errMsg:  "write error",
+		},
+		{
+			name:    "empty cursors map is a no-op",
+			id:      "sess-abc",
+			cursors: map[string]ulid.ULID{},
+			setupMock: func(_ pgxmock.PgxPoolIface) {
+				// No ExpectExec — the function should return early
+				// without touching the database.
+			},
+		},
+		{
+			name: "multi-key cursors returns UNSUPPORTED",
+			id:   "sess-abc",
+			cursors: map[string]ulid.ULID{
+				"location:room-1": cursorID,
+				"location:room-2": core.NewULID(),
+			},
+			setupMock: func(_ pgxmock.PgxPoolIface) {
+				// No ExpectExec — the function should reject the
+				// multi-key input before querying the database.
+			},
+			wantErr: true,
+			errCode: "UNSUPPORTED",
+			errMsg:  "multi-key cursor updates are not supported",
 		},
 	}
 
@@ -741,7 +766,12 @@ func TestPostgresSessionStore_UpdateCursors(t *testing.T) {
 
 			if tt.wantErr {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errMsg)
+				if tt.errCode != "" {
+					errutil.AssertErrorCode(t, err, tt.errCode)
+				}
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
 			} else {
 				require.NoError(t, err)
 			}

@@ -338,19 +338,60 @@ func (s *PostgresSessionStore) ReattachCAS(ctx context.Context, id string) (bool
 	return tag.RowsAffected() == 1, nil
 }
 
-// UpdateCursors updates the event cursors for a session via jsonb merge.
+// UpdateCursors updates event cursors via JSONB merge with a per-key
+// monotonicity guard. A write is applied only if the new cursor is
+// strictly greater (lexicographic, COLLATE "C") than the stored value
+// for the key being written. Writes that lose the CAS race — i.e.,
+// another writer committed a higher cursor first — are silently
+// dropped (RowsAffected==0 is not an error, it is the correct outcome).
+//
+// The CAS depends on cursor values being monotonic ULIDs (core.NewULID),
+// not random ULIDs (idgen.New). A non-monotonic cursor can produce a
+// lex-inverted value within the same millisecond, causing legitimate
+// cursor advances to be silently rejected. The ruleguard rule
+// EventIDMustBeMonotonic in gorules/rules.go enforces monotonic event
+// IDs for core.Event{} struct literals.
+//
+// Multi-key writes are rejected with UNSUPPORTED. The only current
+// caller (CoreServer.replayAndSend) always passes one key, and a
+// single-statement per-key CAS cannot be expressed cleanly for multiple
+// keys. A future multi-key caller should refactor this function to
+// apply per-key CAS across multiple UPDATE statements in a transaction.
 func (s *PostgresSessionStore) UpdateCursors(ctx context.Context, id string, cursors map[string]ulid.ULID) error {
+	if len(cursors) == 0 {
+		return nil
+	}
+	if len(cursors) != 1 {
+		return oops.Code("UNSUPPORTED").
+			With("operation", "update cursors").
+			With("session_id", id).
+			With("key_count", len(cursors)).
+			Errorf("multi-key cursor updates are not supported")
+	}
+	var streamKey string
+	var newCursor ulid.ULID
+	for k, v := range cursors {
+		streamKey, newCursor = k, v
+	}
 	cursorsJSON, err := json.Marshal(cursors)
 	if err != nil {
 		return oops.With("operation", "marshal cursors").With("session_id", id).Wrap(err)
 	}
-
 	_, err = s.pool.Exec(ctx,
-		`UPDATE sessions SET event_cursors = event_cursors || $1::jsonb, updated_at = now() WHERE id = $2`,
-		cursorsJSON, id)
+		`UPDATE sessions
+            SET event_cursors = event_cursors || $1::jsonb,
+                updated_at = now()
+          WHERE id = $2
+            AND (
+                event_cursors->>$3 IS NULL
+                OR (event_cursors->>$3) COLLATE "C" < ($4::text) COLLATE "C"
+            )`,
+		cursorsJSON, id, streamKey, newCursor.String())
 	if err != nil {
 		return oops.With("operation", "update cursors").With("session_id", id).Wrap(err)
 	}
+	// RowsAffected==0 is intentional: another writer beat us with a higher
+	// cursor. Do not surface it as an error.
 	return nil
 }
 

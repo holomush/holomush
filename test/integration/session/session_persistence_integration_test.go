@@ -276,7 +276,7 @@ var _ = Describe("Session Persistence", func() {
 					return ulid.ULID{}
 				}
 				return sess.EventCursors[locationStream]
-			}).WithTimeout(5 * time.Second).WithPolling(50 * time.Millisecond).
+			}).WithTimeout(5*time.Second).WithPolling(50*time.Millisecond).
 				Should(Equal(liveSayEventID), "location-stream cursor should advance to the live say event ID")
 
 			// Append three events directly to the event store, simulating
@@ -319,6 +319,138 @@ var _ = Describe("Session Persistence", func() {
 				}
 			}
 			Expect(replayedSays).To(HaveLen(len(missedPayloads)))
+		})
+
+		It("commits cursor before Subscribe handler returns on client-triggered exit", func() {
+			// Scope of this test: it asserts that under the synchronous-commit
+			// fix, the persisted cursor reflects the latest delivered event by
+			// the time the Subscribe handler goroutine has finished exiting
+			// (where exit was triggered by a client-side context cancellation).
+			//
+			// What this test does NOT prove: it does not deterministically
+			// close Finding 1's strict contract. Finding 1 is about a fast
+			// reconnect that begins WHILE the original handler is in the gap
+			// between grpcStream.Send() and the cursor UPDATE. Sync-in-loop
+			// shrinks that gap from "unbounded under load" (async goroutine
+			// + pool wait) to "~1-10ms typical" (single sync DB round-trip),
+			// but it does not eliminate it. A concurrent reconnect that hits
+			// the in-flight commit window can still observe a stale cursor.
+			//
+			// Deterministic closure of that residual race requires read-after-
+			// write consistency on the cursor at Subscribe start (e.g., a
+			// SELECT FOR SHARE on the session row, an in-process per-session
+			// barrier, a "reconnect cookie" sent by the client, or persist-
+			// before-Send for the last event in the batch — each with its
+			// own trade-offs). Tracked separately as holomush-9ues (P1).
+			//
+			// This test is therefore the strongest deterministic claim we
+			// can make WITHOUT instrumenting production code with a test seam:
+			// after the handler exits, the cursor is durable. The
+			// GracefulStop() call below is the server-side barrier that
+			// guarantees handler exit (ClientStream.Recv() returning a
+			// local Canceled error does NOT imply server handler exit;
+			// grpc-go aborts the client stream locally on context cancel).
+			sessionID, _ := loginAsGuest(testCtx, grpcCli)
+
+			subCtx, subCancel := context.WithCancel(testCtx)
+			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
+				SessionId: sessionID,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
+				SessionId: sessionID,
+				Command:   "say hello",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Drain until the live say event arrives, capturing its ID.
+			var liveSayID string
+			Eventually(func() string {
+				ev, recvErr := stream.Recv()
+				if recvErr != nil {
+					return ""
+				}
+				if frame := ev.GetEvent(); frame != nil && frame.GetType() == "say" {
+					liveSayID = frame.GetId()
+					return frame.GetType()
+				}
+				return ""
+			}).WithTimeout(5 * time.Second).Should(Equal("say"))
+			Expect(liveSayID).NotTo(BeEmpty())
+
+			// Cancel the client subscription — triggers cancellation propagation
+			// to the server, which causes the live loop's ctx.Done() case to fire
+			// and the handler to begin exiting (after any in-flight replayAndSend
+			// completes its sync cursor commit).
+			subCancel()
+
+			// GracefulStop is a SERVER-SIDE barrier: it blocks until all
+			// in-flight handler goroutines return. By the time it unblocks,
+			// the Subscribe handler has definitively exited — and because
+			// the fix commits the cursor inline before the handler returns,
+			// the cursor is durable for events the handler delivered.
+			grpcServer.GracefulStop()
+			grpcServer = nil // prevent AfterEach double-stop
+
+			// Read the cursor — must reflect the live say event.
+			locationStream := world.LocationStream(startLocation)
+			sess, getErr := env.sessionStore.Get(testCtx, sessionID)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(sess.EventCursors[locationStream].String()).To(Equal(liveSayID),
+				"cursor must reflect the live say event after client-cancel-triggered handler exit (synced via GracefulStop barrier)")
+		})
+
+		It("commits cursor before grpcServer.GracefulStop returns (no lost writes on shutdown)", func() {
+			sessionID, _ := loginAsGuest(testCtx, grpcCli)
+
+			subCtx, subCancel := context.WithCancel(testCtx)
+			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
+				SessionId: sessionID,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
+				SessionId: sessionID,
+				Command:   "say hello",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Drain until the live say arrives, capturing its ID.
+			var liveSayID string
+			Eventually(func() string {
+				ev, recvErr := stream.Recv()
+				if recvErr != nil {
+					return ""
+				}
+				if frame := ev.GetEvent(); frame != nil && frame.GetType() == "say" {
+					liveSayID = frame.GetId()
+					return frame.GetType()
+				}
+				return ""
+			}).WithTimeout(5 * time.Second).Should(Equal("say"))
+			Expect(liveSayID).NotTo(BeEmpty())
+
+			// Cancel the client sub and drain to EOF to free the handler goroutine.
+			subCancel()
+			for {
+				if _, recvErr := stream.Recv(); recvErr != nil {
+					break
+				}
+			}
+
+			// GracefulStop blocks until in-flight RPC handlers return. The
+			// Subscribe handler returns after committing the cursor inline,
+			// so by the time GracefulStop unblocks, the commit is durable.
+			grpcServer.GracefulStop()
+			grpcServer = nil // prevent AfterEach from calling GracefulStop twice
+
+			// Read the cursor — the session row must reflect the latest sent event.
+			locationStream := world.LocationStream(startLocation)
+			sess, getErr := env.sessionStore.Get(testCtx, sessionID)
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(sess.EventCursors[locationStream].String()).To(Equal(liveSayID),
+				"cursor must reflect the latest sent event after GracefulStop returns")
 		})
 	})
 
@@ -378,7 +510,7 @@ var _ = Describe("Session Persistence", func() {
 				).Scan(&exists)
 				Expect(queryErr).NotTo(HaveOccurred())
 				return exists
-			}).WithTimeout(5 * time.Second).WithPolling(50 * time.Millisecond).
+			}).WithTimeout(5*time.Second).WithPolling(50*time.Millisecond).
 				Should(BeFalse(), "reaper should have deleted the expired session")
 
 			// The OnExpired callback should have emitted a leave event via
@@ -396,7 +528,7 @@ var _ = Describe("Session Persistence", func() {
 					}
 				}
 				return false
-			}).WithTimeout(5 * time.Second).WithPolling(50 * time.Millisecond).Should(BeTrue(),
+			}).WithTimeout(5*time.Second).WithPolling(50*time.Millisecond).Should(BeTrue(),
 				"expected a leave event for the expired character on the location stream")
 		})
 	})
