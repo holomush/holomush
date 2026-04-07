@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/holomush/holomush/internal/access/policy/dsl"
-	"github.com/holomush/holomush/internal/access/policy/types"
 )
 
 // parsedManifestPolicy pairs a manifest policy name with its parsed DSL AST.
@@ -19,13 +18,12 @@ type parsedManifestPolicy struct {
 // CheckManifestWarnings logs non-fatal warnings about potential policy coverage
 // gaps in a plugin manifest. Called during loadPlugin after policy installation.
 //
-// The schemas parameter is retained for API compatibility with the caller in
-// loadPlugin but is no longer consulted: policy/schema cross-validation has
-// been promoted to a hard error path in ValidateManifestPolicySchemas. Only
-// command coverage warnings (Warning 1, Warning 2) remain here as soft hints.
+// Policy/schema cross-validation has been promoted to a hard error path in
+// ValidateManifestPolicySchemas. Only command coverage warnings (Warning 1,
+// Warning 2) remain here as soft hints.
 //
 // Returns a slice of human-readable warning messages (never nil for easy length check).
-func CheckManifestWarnings(manifest *Manifest, _ map[string]*types.NamespaceSchema) []string {
+func CheckManifestWarnings(manifest *Manifest) []string {
 	var warnings []string
 
 	// Parse all policies up front; skip unparseable ones silently — the

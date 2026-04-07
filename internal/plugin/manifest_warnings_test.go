@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	plugins "github.com/holomush/holomush/internal/plugin"
 )
@@ -36,7 +35,7 @@ func TestCheckManifestWarningsNoWarningsForFullCoverage(t *testing.T) {
 		},
 	}
 
-	warnings := plugins.CheckManifestWarnings(m, nil)
+	warnings := plugins.CheckManifestWarnings(m)
 	assert.Empty(t, warnings)
 }
 
@@ -47,7 +46,7 @@ func TestCheckManifestWarningsDetectsMissingExecutePolicy(t *testing.T) {
 	}
 	// No policy in the manifest at all.
 
-	warnings := plugins.CheckManifestWarnings(m, nil)
+	warnings := plugins.CheckManifestWarnings(m)
 	require.Len(t, warnings, 1)
 	assert.Contains(t, warnings[0], "widget-create")
 	assert.Contains(t, warnings[0], "no policy")
@@ -68,7 +67,7 @@ func TestCheckManifestWarningsDetectsMissingExecutePolicyForOneOfTwoCommands(t *
 		},
 	}
 
-	warnings := plugins.CheckManifestWarnings(m, nil)
+	warnings := plugins.CheckManifestWarnings(m)
 	require.Len(t, warnings, 1)
 	assert.Contains(t, warnings[0], "widget-delete")
 }
@@ -87,7 +86,7 @@ func TestCheckManifestWarningsNoWarningWhenWildcardExecutePolicyCoversAllCommand
 		},
 	}
 
-	warnings := plugins.CheckManifestWarnings(m, nil)
+	warnings := plugins.CheckManifestWarnings(m)
 	assert.Empty(t, warnings)
 }
 
@@ -110,7 +109,7 @@ func TestCheckManifestWarningsDetectsMissingCapabilityPolicy(t *testing.T) {
 		},
 	}
 
-	warnings := plugins.CheckManifestWarnings(m, nil)
+	warnings := plugins.CheckManifestWarnings(m)
 	require.Len(t, warnings, 1)
 	assert.Contains(t, warnings[0], "widget")
 	assert.Contains(t, warnings[0], "widget-create")
@@ -138,7 +137,7 @@ func TestCheckManifestWarningsNoWarningWhenCapabilityPolicyExists(t *testing.T) 
 		},
 	}
 
-	warnings := plugins.CheckManifestWarnings(m, nil)
+	warnings := plugins.CheckManifestWarnings(m)
 	assert.Empty(t, warnings)
 }
 
@@ -152,15 +151,11 @@ func TestCheckManifestWarningsNoWarningForKnownAttribute(t *testing.T) {
 		},
 	}
 
-	schemas := map[string]*types.NamespaceSchema{
-		"widget": {
-			Attributes: map[string]types.AttrType{
-				"name": types.AttrTypeString,
-			},
-		},
-	}
-
-	warnings := plugins.CheckManifestWarnings(m, schemas)
+	// CheckManifestWarnings no longer cross-validates policy attribute
+	// references against schemas — that check is a hard error path in
+	// ValidateManifestPolicySchemas now. This test stays as a regression
+	// guard that known-good attribute refs never leak into warnings.
+	warnings := plugins.CheckManifestWarnings(m)
 	assert.Empty(t, warnings)
 }
 
@@ -175,13 +170,13 @@ func TestCheckManifestWarningsSchemaCheckSkippedWhenSchemasNil(t *testing.T) {
 	}
 
 	// nil schemas — no schema warnings expected.
-	warnings := plugins.CheckManifestWarnings(m, nil)
+	warnings := plugins.CheckManifestWarnings(m)
 	assert.Empty(t, warnings)
 }
 
 func TestCheckManifestWarningsEmptyManifestProducesNoWarnings(t *testing.T) {
 	m := luaManifest("minimal")
-	warnings := plugins.CheckManifestWarnings(m, nil)
+	warnings := plugins.CheckManifestWarnings(m)
 	assert.Empty(t, warnings)
 }
 
@@ -210,7 +205,7 @@ func TestCheckManifestWarningsCommandWithTwoCapabilitiesOneUncovered(t *testing.
 		},
 	}
 
-	warnings := plugins.CheckManifestWarnings(m, nil)
+	warnings := plugins.CheckManifestWarnings(m)
 	require.Len(t, warnings, 1, "exactly one capability should be flagged as uncovered")
 	assert.Contains(t, warnings[0], "gadget", "the missing resource type should be named")
 	assert.NotContains(t, warnings[0], "widget-create"+`"`+" declares capability on resource type \"widget\"",
@@ -240,7 +235,7 @@ func TestCheckManifestWarningsCommandWithDistinctCapabilityActionsWarnsPerAction
 		},
 	}
 
-	warnings := plugins.CheckManifestWarnings(m, nil)
+	warnings := plugins.CheckManifestWarnings(m)
 	require.Len(t, warnings, 2, "write and read are independent capabilities")
 	// Both warnings should reference gadget but for different actions.
 	allMessages := warnings[0] + " | " + warnings[1]
@@ -275,7 +270,7 @@ func TestCheckManifestWarningsCapabilityCoverageRequiresMatchingAction(t *testin
 		},
 	}
 
-	warnings := plugins.CheckManifestWarnings(m, nil)
+	warnings := plugins.CheckManifestWarnings(m)
 	require.Len(t, warnings, 1, "read policy must not cover write capability")
 	assert.Contains(t, warnings[0], `"write"`)
 	assert.Contains(t, warnings[0], "widget")
@@ -297,7 +292,7 @@ func TestCheckManifestWarningsExecuteCoverageRequiresCharacterPrincipal(t *testi
 		},
 	}
 
-	warnings := plugins.CheckManifestWarnings(m, nil)
+	warnings := plugins.CheckManifestWarnings(m)
 	require.Len(t, warnings, 1, "plugin-principal execute policy must not satisfy character coverage")
 	assert.Contains(t, warnings[0], "widget")
 	assert.Contains(t, warnings[0], "no policy that permits execute")
@@ -319,7 +314,7 @@ func TestCheckManifestWarningsExecutePolicyWithInListCoversCommand(t *testing.T)
 		},
 	}
 
-	warnings := plugins.CheckManifestWarnings(m, nil)
+	warnings := plugins.CheckManifestWarnings(m)
 	assert.Empty(t, warnings)
 }
 
@@ -336,13 +331,14 @@ func TestCheckManifestWarningsParenthesizedExecuteConditionCoversCommand(t *test
 		},
 	}
 
-	warnings := plugins.CheckManifestWarnings(m, nil)
+	warnings := plugins.CheckManifestWarnings(m)
 	assert.Empty(t, warnings)
 }
 
 func TestCheckManifestWarningsSchemaCheckSkippedWhenResourceTypeNotInSchema(t *testing.T) {
-	// Policy targets "gadget" but schemas only describe "widget" — the
-	// referenced attribute check should skip rather than warn.
+	// Policy targets "gadget" — CheckManifestWarnings no longer cross-checks
+	// attribute references against schemas (that's ValidateManifestPolicySchemas'
+	// job), so no warnings should surface here regardless of schema shape.
 	m := luaManifest("widget-plugin")
 	m.Policies = []plugins.ManifestPolicy{
 		{
@@ -351,10 +347,7 @@ func TestCheckManifestWarningsSchemaCheckSkippedWhenResourceTypeNotInSchema(t *t
 				` when { resource.gadget.color == "red" };`,
 		},
 	}
-	schemas := map[string]*types.NamespaceSchema{
-		"widget": {Attributes: map[string]types.AttrType{"type": types.AttrTypeString}},
-	}
 
-	warnings := plugins.CheckManifestWarnings(m, schemas)
-	assert.Empty(t, warnings, "missing schema for the policy's resource type should be silently skipped")
+	warnings := plugins.CheckManifestWarnings(m)
+	assert.Empty(t, warnings, "CheckManifestWarnings must not warn about attribute refs")
 }

@@ -481,6 +481,20 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 		}
 	}
 
+	// Validate manifest policy attribute references against discovered
+	// schemas BEFORE installing policies. A load-time schema mismatch
+	// (e.g., policy references resource.widget.tipe but schema declares
+	// "type") is a fatal load error per the Plugin ABAC Hardening spec
+	// (2026-04-07).
+	if valErr := ValidateManifestPolicySchemas(dp.Manifest, schemas); valErr != nil {
+		if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
+			slog.Error("failed to rollback plugin load after schema validation failure",
+				"plugin", dp.Manifest.Name, "error", unloadErr)
+		}
+		return oops.In("manager").With("plugin", dp.Manifest.Name).
+			Wrapf(valErr, "validate manifest policy schemas")
+	}
+
 	// Install ABAC policies using manifest-aware validation when resource
 	// types or trust config are present, otherwise fall back to basic install.
 	if m.policyInstaller != nil && len(dp.Manifest.Policies) > 0 {
@@ -495,7 +509,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 	}
 
 	// Check for manifest warnings (non-fatal policy coverage gaps).
-	if warnings := CheckManifestWarnings(dp.Manifest, schemas); len(warnings) > 0 {
+	if warnings := CheckManifestWarnings(dp.Manifest); len(warnings) > 0 {
 		for _, w := range warnings {
 			slog.Info(w, "plugin", dp.Manifest.Name)
 		}
