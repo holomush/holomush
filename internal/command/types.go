@@ -16,7 +16,6 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
-	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
@@ -599,7 +598,10 @@ func (s *Services) BroadcastSystemMessage(ctx context.Context, stream, message s
 	})
 
 	event := core.Event{
-		ID:        idgen.New(),
+		// Event IDs MUST be monotonic for PostgresEventStore.Replay
+		// (WHERE id > afterID ORDER BY id) and the PostgresSessionStore
+		// cursor CAS. idgen.New() is non-monotonic. See internal/core/ulid.go.
+		ID:        core.NewULID(),
 		Stream:    stream,
 		Type:      core.EventTypeSystem,
 		Timestamp: time.Now(),

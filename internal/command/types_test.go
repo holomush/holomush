@@ -6,6 +6,7 @@ package command
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -764,4 +765,63 @@ func TestServicesBroadcastSystemMessageCreatesCorrectEvent(t *testing.T) {
 	// Verify timestamp is recent
 	assert.WithinDuration(t, time.Now(), event.Timestamp, time.Second,
 		"Timestamp should be recent")
+}
+
+func TestServicesBroadcastSystemMessageProducesMonotonicEventIDs(t *testing.T) {
+	// BroadcastSystemMessage must mint monotonic ULIDs so two consecutive
+	// broadcasts to the same stream do not produce lex-inverted event IDs.
+	// Non-monotonic IDs cause PostgresEventStore.Replay to silently skip
+	// events (it uses WHERE id > afterID ORDER BY id), and would cause
+	// the PostgresSessionStore.UpdateCursors CAS to reject
+	// legitimate cursor advances.
+	//
+	// Loops 1000 times because same-millisecond collisions are the
+	// failure mode: on a fast machine this loop spans ~1-5ms and produces
+	// many same-ms call pairs, exercising the regression scenario.
+	captured := &captureEventStore{}
+	svc := NewTestServices(ServicesConfig{
+		Events: captured,
+	})
+	ctx := context.Background()
+
+	const n = 1000
+	for i := 0; i < n; i++ {
+		svc.BroadcastSystemMessage(ctx, "stream:test", "msg")
+	}
+
+	require.Len(t, captured.events, n)
+	for i := 1; i < n; i++ {
+		prev := captured.events[i-1].ID.String()
+		cur := captured.events[i].ID.String()
+		// String comparison (not ID.Compare) is deliberate — it mirrors the
+		// SQL semantics (WHERE id > afterID, COLLATE "C" CAS) that depend
+		// on this property. See core.NewULID doc comment.
+		require.True(t, prev < cur,
+			"non-monotonic event IDs at index %d: prev=%s cur=%s",
+			i, prev, cur)
+	}
+}
+
+// captureEventStore is a minimal core.EventStore fake that records every
+// Append call for assertion. Subscribe/Replay/LastEventID return errors
+// because BroadcastSystemMessage does not call them.
+type captureEventStore struct {
+	events []core.Event
+}
+
+func (c *captureEventStore) Append(_ context.Context, ev core.Event) error {
+	c.events = append(c.events, ev)
+	return nil
+}
+
+func (c *captureEventStore) Subscribe(context.Context, string) (<-chan ulid.ULID, <-chan error, error) {
+	return nil, nil, errors.New("captureEventStore.Subscribe not implemented")
+}
+
+func (c *captureEventStore) Replay(context.Context, string, ulid.ULID, int) ([]core.Event, error) {
+	return nil, errors.New("captureEventStore.Replay not implemented")
+}
+
+func (c *captureEventStore) LastEventID(context.Context, string) (ulid.ULID, error) {
+	return ulid.ULID{}, errors.New("captureEventStore.LastEventID not implemented")
 }
