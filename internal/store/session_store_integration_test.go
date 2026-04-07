@@ -15,6 +15,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/store"
 )
@@ -474,6 +475,61 @@ var _ = Describe("PostgresSessionStore", func() {
 			Expect(got.EventCursors).To(HaveLen(2))
 			Expect(got.EventCursors["location:room1"]).To(Equal(cursor1))
 			Expect(got.EventCursors["location:room2"]).To(Equal(cursor2))
+		})
+
+		It("rejects a cursor regression for the same stream key", func() {
+			// The CAS guard in UpdateCursors must preserve the highest cursor
+			// ever stored for a (session, stream) pair. Regression attempts
+			// (e.g., from a concurrent Subscribe that observed an earlier
+			// event) must be silently ignored — RowsAffected==0 is not an
+			// error, it just means another writer won with a higher cursor.
+			ctx := context.Background()
+			info := newTestSession("sess-cas-regression")
+			Expect(sessionStore.Set(ctx, info.ID, info)).To(Succeed())
+
+			// Mint two cursors with core.NewULID so they are strictly monotonic.
+			// The second one is the lex-larger ("higher") cursor.
+			earlier := core.NewULID()
+			time.Sleep(1 * time.Millisecond)
+			later := core.NewULID()
+			Expect(earlier.String() < later.String()).To(BeTrue(), "earlier ULID must be lex-less than later ULID")
+
+			streamKey := "location:room-cas"
+
+			// First write: later (the higher cursor).
+			Expect(sessionStore.UpdateCursors(ctx, info.ID, map[string]ulid.ULID{
+				streamKey: later,
+			})).To(Succeed())
+
+			// Second write: earlier (a regression). Must not error, but
+			// must not overwrite the stored later.
+			Expect(sessionStore.UpdateCursors(ctx, info.ID, map[string]ulid.ULID{
+				streamKey: earlier,
+			})).To(Succeed(),
+				"regression attempts must not be errors — CAS rows_affected==0 is normal")
+
+			got, err := sessionStore.Get(ctx, info.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.EventCursors[streamKey]).To(Equal(later),
+				"stored cursor must remain the higher (later) value")
+		})
+
+		It("rejects multi-key cursor writes with UNSUPPORTED", func() {
+			// Current production code (replayAndSend) always writes exactly
+			// one key per call. Multi-key writes cannot be handled by a
+			// single-statement per-key CAS, and silently applying CAS to only
+			// one key would be a correctness hole. Fail loudly so a future
+			// caller that assumes multi-key works gets a clear signal.
+			ctx := context.Background()
+			info := newTestSession("sess-cas-multikey")
+			Expect(sessionStore.Set(ctx, info.ID, info)).To(Succeed())
+
+			err := sessionStore.UpdateCursors(ctx, info.ID, map[string]ulid.ULID{
+				"location:room-a": core.NewULID(),
+				"location:room-b": core.NewULID(),
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("multi-key cursor updates are not supported"))
 		})
 	})
 })
