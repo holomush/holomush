@@ -5,6 +5,7 @@ modules:
     name: buf.build/holomush/holomush
 deps:
   - buf.build/googleapis/googleapis
+  - buf.build/bufbuild/protovalidate
 lint:
   use:
     - STANDARD
