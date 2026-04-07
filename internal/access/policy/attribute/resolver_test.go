@@ -6,7 +6,9 @@ package attribute
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
@@ -740,6 +742,194 @@ func (p *ctxAwareSubjectProvider) ResolveResource(_ context.Context, _ string) (
 }
 
 func (p *ctxAwareSubjectProvider) Schema() *types.NamespaceSchema {
+	return &types.NamespaceSchema{
+		Attributes: map[string]types.AttrType{"role": types.AttrTypeString},
+	}
+}
+
+func TestResolverResolveSubjectAttributesRecoversFromPanickingProvider(t *testing.T) {
+	registry := NewSchemaRegistry()
+	resolver := NewResolver(registry)
+
+	provider := newResolverMockAttributeProvider("character")
+	provider.shouldPanic = true
+	require.NoError(t, resolver.RegisterProvider(provider))
+
+	_, err := resolver.ResolveSubjectAttributes(context.Background(), "character:01ABC", "read")
+	require.Error(t, err, "panic must be recovered and returned as error")
+	assert.Contains(t, err.Error(), "panicked")
+	// Pin the panic to the right provider and resolve type so a future
+	// refactor that reroutes panics to a different namespace would fail
+	// this test loudly.
+	errutil.AssertErrorContext(t, err, "namespace", "character")
+	errutil.AssertErrorContext(t, err, "resolve_type", "subject")
+}
+
+func TestResolverResolveSubjectAttributesDetectsReentranceAndReturnsErrorNotInfiniteLoop(t *testing.T) {
+	registry := NewSchemaRegistry()
+	resolver := NewResolver(registry)
+
+	// Provider that re-calls the resolver from inside ResolveSubject.
+	// The inner call will hit the re-entrance guard and panic; safeResolve
+	// catches the panic and converts it to an error. The test verifies
+	// this chain works and the resolver does not infinite-loop.
+	reentrant := &reentrantSubjectProvider{resolver: resolver}
+	require.NoError(t, resolver.RegisterProvider(reentrant))
+
+	_, err := resolver.ResolveSubjectAttributes(context.Background(), "character:01ABC", "read")
+	require.Error(t, err, "re-entrance should be detected and converted to an error via safeResolve")
+	assert.Contains(t, err.Error(), "panicked",
+		"the re-entrance panic should be caught by safeResolve and surfaced as a provider-panic error")
+	// Pin the surfaced error to the namespace and resolve type so a
+	// future refactor cannot silently route the re-entrance error
+	// somewhere else.
+	errutil.AssertErrorContext(t, err, "namespace", "character")
+	errutil.AssertErrorContext(t, err, "resolve_type", "subject")
+}
+
+// reentrantSubjectProvider intentionally recurses into the resolver from
+// within ResolveSubject to exercise the re-entrance guard. Used only by T20.
+type reentrantSubjectProvider struct {
+	resolver *Resolver
+}
+
+func (p *reentrantSubjectProvider) Namespace() string { return "character" }
+
+func (p *reentrantSubjectProvider) ResolveSubject(ctx context.Context, _ string) (map[string]any, error) {
+	// This recursive call is illegal. The resolver's re-entrance guard
+	// at the top of ResolveSubjectAttributes will panic; safeResolve
+	// (the caller of this method) will catch it.
+	//
+	// The "character:02XYZ" subject is incidental — any well-formed
+	// entity ref triggers the recursive entry, and the test does not
+	// assert anything about it.
+	_, _ = p.resolver.ResolveSubjectAttributes(ctx, "character:02XYZ", "read")
+	return nil, nil
+}
+
+func (p *reentrantSubjectProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
+	return nil, nil
+}
+
+func (p *reentrantSubjectProvider) Schema() *types.NamespaceSchema {
+	return &types.NamespaceSchema{
+		Attributes: map[string]types.AttrType{"role": types.AttrTypeString},
+	}
+}
+
+func TestResolverResolveSubjectAttributesProducesSameSubjectBagAsResolveForSameInput(t *testing.T) {
+	registry := NewSchemaRegistry()
+	resolver := NewResolver(registry)
+
+	provider := newResolverMockAttributeProvider("character")
+	provider.subjectData["character:01ABC"] = map[string]any{"role": "admin"}
+	// Also give the provider resource data so Resolve doesn't error.
+	// ResolveSubjectAttributes ignores this.
+	provider.resourceData["character:test-id"] = map[string]any{"role": "ignored"}
+	require.NoError(t, resolver.RegisterProvider(provider))
+
+	// Register an environment provider so the cross-check covers the
+	// environment bag in addition to subject and action. Both methods
+	// use the same r.resolveEnvironment helper, so any divergence here
+	// would represent a regression in C1's behavior preservation.
+	envProvider := &mockEnvironmentProvider{
+		namespace: "env",
+		attrs:     map[string]any{"hour": float64(14)},
+		schema: &types.NamespaceSchema{
+			Attributes: map[string]types.AttrType{"hour": types.AttrTypeFloat},
+		},
+	}
+	require.NoError(t, resolver.RegisterEnvironmentProvider(envProvider))
+
+	// Call ResolveSubjectAttributes.
+	preflightBags, preflightErr := resolver.ResolveSubjectAttributes(
+		context.Background(), "character:01ABC", "read")
+	require.NoError(t, preflightErr)
+
+	// Call Resolve with an access request that includes a resource.
+	req := types.AccessRequest{
+		Subject:  "character:01ABC",
+		Action:   "read",
+		Resource: "character:test-id",
+	}
+	fullBags, fullErr := resolver.Resolve(context.Background(), req)
+	require.NoError(t, fullErr)
+
+	// Subject bags MUST be identical between the two paths — this is the
+	// C1 invariant that ResolveSubjectAttributes is behavior-preserving
+	// for the subject path, differing only by not calling resource
+	// providers.
+	assert.Equal(t, fullBags.Subject, preflightBags.Subject,
+		"ResolveSubjectAttributes and Resolve must produce identical Subject bags for the same (subject, action)")
+	assert.Equal(t, fullBags.Action["name"], preflightBags.Action["name"],
+		"action name must match between the two paths")
+	// Environment bags MUST also be identical — both methods route
+	// environment resolution through the same r.resolveEnvironment helper.
+	assert.Equal(t, fullBags.Environment, preflightBags.Environment,
+		"environment bags must be identical between Resolve and ResolveSubjectAttributes")
+}
+
+func TestResolverResolveSubjectAttributesIsSafeForConcurrentCalls(t *testing.T) {
+	// concurrentCallCount goroutines drives the smoke test. Kept as a
+	// constant so the channel buffer and the loop bound can never drift.
+	const concurrentCallCount = 100
+
+	registry := NewSchemaRegistry()
+	resolver := NewResolver(registry)
+
+	// Use a dedicated concurrency-safe provider rather than
+	// resolverMockAttributeProvider, which mutates an unsynchronized
+	// callCount map on every call and would itself race under -race.
+	// This test targets resolver concurrency safety, not mock bookkeeping.
+	provider := &concurrentSubjectProvider{role: "admin"}
+	require.NoError(t, resolver.RegisterProvider(provider))
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, concurrentCallCount)
+
+	for i := 0; i < concurrentCallCount; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			subject := fmt.Sprintf("character:%03d", n)
+			bags, err := resolver.ResolveSubjectAttributes(context.Background(), subject, "read")
+			if err != nil {
+				errCh <- err
+				return
+			}
+			if bags.Subject["character.role"] != "admin" {
+				errCh <- fmt.Errorf("subject bag mismatch for %s: got %v", subject, bags.Subject["character.role"])
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Errorf("concurrent ResolveSubjectAttributes error: %v", err)
+	}
+}
+
+// concurrentSubjectProvider is a read-only, allocation-per-call provider
+// used by the concurrency test. It deliberately performs no shared-state
+// writes so that any race reported under -race must originate in the
+// resolver itself, which is what the test exists to verify.
+type concurrentSubjectProvider struct {
+	role string
+}
+
+func (p *concurrentSubjectProvider) Namespace() string { return "character" }
+
+func (p *concurrentSubjectProvider) ResolveSubject(_ context.Context, _ string) (map[string]any, error) {
+	return map[string]any{"role": p.role}, nil
+}
+
+func (p *concurrentSubjectProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
+	return nil, nil
+}
+
+func (p *concurrentSubjectProvider) Schema() *types.NamespaceSchema {
 	return &types.NamespaceSchema{
 		Attributes: map[string]types.AttrType{"role": types.AttrTypeString},
 	}
