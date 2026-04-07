@@ -291,3 +291,194 @@ func TestSceneStoreResumeRejectsActiveScene(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "SCENE_TRANSITION_FORBIDDEN")
 }
+
+func TestSceneStoreUpdateAppliesTitleOnly(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-update-title",
+		Title:           "Original",
+		Description:     "Original description",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{"violence"},
+		Tags:            []string{"plot"},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	newTitle := "Renamed"
+	update := &SceneUpdate{Title: &newTitle}
+	_, err := store.Update(ctx, row.ID, update)
+	require.NoError(t, err)
+
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Renamed", got.Title)
+	assert.Equal(t, "Original description", got.Description)
+	assert.ElementsMatch(t, []string{"violence"}, got.ContentWarnings)
+	assert.ElementsMatch(t, []string{"plot"}, got.Tags)
+}
+
+func TestSceneStoreUpdateAppliesMultipleFields(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-update-many",
+		Title:           "Title 1",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	title := "Title 2"
+	desc := "New description"
+	vis := "private"
+	update := &SceneUpdate{
+		Title:       &title,
+		Description: &desc,
+		Visibility:  &vis,
+	}
+	_, err := store.Update(ctx, row.ID, update)
+	require.NoError(t, err)
+
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Title 2", got.Title)
+	assert.Equal(t, "New description", got.Description)
+	assert.Equal(t, "private", got.Visibility)
+}
+
+func TestSceneStoreUpdateRepeatedFieldsRespectFlag(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-update-repeated",
+		Title:           "T",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{"violence"},
+		Tags:            []string{"plot", "social"},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	// Only update content_warnings; leave tags alone.
+	update := &SceneUpdate{
+		ContentWarnings:       []string{"violence", "death"},
+		UpdateContentWarnings: true,
+		Tags:                  nil,
+		UpdateTags:            false, // explicitly NOT updating
+	}
+	_, err := store.Update(ctx, row.ID, update)
+	require.NoError(t, err)
+
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"violence", "death"}, got.ContentWarnings)
+	assert.ElementsMatch(t, []string{"plot", "social"}, got.Tags, "tags should be unchanged")
+}
+
+func TestSceneStoreUpdateClearsRepeatedFieldWithEmptySlice(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-update-clear",
+		Title:           "T",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{"violence"},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	update := &SceneUpdate{
+		ContentWarnings:       []string{},
+		UpdateContentWarnings: true, // explicit clear
+	}
+	_, err := store.Update(ctx, row.ID, update)
+	require.NoError(t, err)
+
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Empty(t, got.ContentWarnings, "content_warnings should be cleared to empty slice")
+}
+
+func TestSceneStoreUpdateRejectsEndedScene(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-update-ended",
+		Title:           "Ended",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateEnded),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	title := "Try to rename"
+	update := &SceneUpdate{Title: &title}
+	_, err := store.Update(ctx, row.ID, update)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_TRANSITION_FORBIDDEN")
+}
+
+func TestSceneStoreUpdateReturnsNotFoundForMissingScene(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	title := "Anything"
+	update := &SceneUpdate{Title: &title}
+	_, err := store.Update(ctx, "scene-does-not-exist", update)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
+}
+
+func TestSceneStoreUpdateNoFieldsIsNoOp(t *testing.T) {
+	store, cleanup := newTestStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	row := &SceneRow{
+		ID:              "scene-update-noop",
+		Title:           "Unchanged",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(ctx, row))
+
+	// Empty update — no fields specified
+	update := &SceneUpdate{}
+	_, err := store.Update(ctx, row.ID, update)
+	require.NoError(t, err)
+
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "Unchanged", got.Title)
+}

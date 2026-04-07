@@ -7,7 +7,9 @@ import (
 	"context"
 	"embed"
 	"errors"
+	"fmt"
 	"io/fs"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -239,6 +241,141 @@ func (s *SceneStore) Resume(ctx context.Context, id string) (*SceneRow, error) {
 			return nil, s.classifyTransitionMiss(ctx, id, span, "resume")
 		}
 		return nil, oops.Code("SCENE_RESUME_FAILED").With("scene_id", id).Wrap(err)
+	}
+	return row, nil
+}
+
+// SceneUpdate captures a partial update to a scene. Each scalar field is
+// a pointer: nil means "don't update this field", non-nil means "set the
+// field to the pointed-to value."
+//
+// Slice fields use a paired boolean (UpdateContentWarnings, UpdateTags)
+// because Go's `nil slice` is indistinguishable from "empty slice" for
+// the purposes of "is this field being changed?". When the boolean is
+// true, the slice value (possibly empty) is written; when false, the
+// slice is unchanged.
+//
+// This struct mirrors UpdateSceneRequest but lives in the store package
+// so the store layer doesn't depend on proto-generated types.
+type SceneUpdate struct {
+	Title       *string
+	Description *string
+	Visibility  *string
+	PoseOrder   *string
+	LocationID  *string
+
+	ContentWarnings       []string
+	UpdateContentWarnings bool
+
+	Tags       []string
+	UpdateTags bool
+}
+
+// HasChanges reports whether the update specifies any field changes.
+func (u *SceneUpdate) HasChanges() bool {
+	return u.Title != nil ||
+		u.Description != nil ||
+		u.Visibility != nil ||
+		u.PoseOrder != nil ||
+		u.LocationID != nil ||
+		u.UpdateContentWarnings ||
+		u.UpdateTags
+}
+
+// Update applies a partial update to a scene and returns the post-update
+// row. The update parameter specifies which fields to change; nil/false
+// fields are left unchanged.
+//
+// The state of the scene is checked: ended and archived scenes cannot be
+// updated. The check is enforced via the WHERE clause `state IN ('active',
+// 'paused')` so concurrent updates from a transition cannot race.
+//
+// If `update.HasChanges()` is false, the call is a no-op: the function
+// reads the current row via Get and returns it (so callers always get a
+// valid SceneRow back, matching the End/Pause/Resume contract). This costs
+// one query for the no-op case but keeps the API surface uniform.
+//
+// Returns SCENE_NOT_FOUND if the scene doesn't exist, or
+// SCENE_TRANSITION_FORBIDDEN if it exists but is in a non-updatable state.
+func (s *SceneStore) Update(ctx context.Context, id string, update *SceneUpdate) (*SceneRow, error) {
+	ctx, span := startSpan(ctx, "scene.store.update",
+		attribute.String("scene_id", id),
+	)
+	defer span.End()
+
+	if update == nil || !update.HasChanges() {
+		// No-op: read the current row and return it. Maintains the
+		// (*SceneRow, error) API contract without an UPDATE.
+		return s.Get(ctx, id)
+	}
+
+	// Build the SET clause dynamically based on which fields are present.
+	//
+	// SQL injection note: column names come from hard-coded string literals
+	// below — never from user input — so building the SET clause via
+	// fmt.Sprintf is safe. All VALUES are parameterized via $1, $2, etc.
+	var (
+		setParts []string
+		args     []any
+		argIdx   = 1
+	)
+	addSet := func(col string, value any) {
+		setParts = append(setParts, fmt.Sprintf("%s = $%d", col, argIdx))
+		args = append(args, value)
+		argIdx++
+	}
+
+	if update.Title != nil {
+		addSet("title", *update.Title)
+	}
+	if update.Description != nil {
+		addSet("description", *update.Description)
+	}
+	if update.Visibility != nil {
+		addSet("visibility", *update.Visibility)
+	}
+	if update.PoseOrder != nil {
+		addSet("pose_order", *update.PoseOrder)
+	}
+	if update.LocationID != nil {
+		// Empty string means "clear the location" → store NULL
+		if *update.LocationID == "" {
+			setParts = append(setParts, fmt.Sprintf("location_id = $%d", argIdx))
+			args = append(args, nil)
+			argIdx++
+		} else {
+			addSet("location_id", *update.LocationID)
+		}
+	}
+	if update.UpdateContentWarnings {
+		addSet("content_warnings", update.ContentWarnings)
+	}
+	if update.UpdateTags {
+		addSet("tags", update.Tags)
+	}
+
+	// Append the WHERE-clause parameter (the scene ID) at the end.
+	args = append(args, id)
+	sceneIDIdx := argIdx
+
+	query := fmt.Sprintf(
+		`UPDATE scenes
+         SET %s
+         WHERE id = $%d AND state IN ('active', 'paused')
+         RETURNING %s`,
+		strings.Join(setParts, ", "),
+		sceneIDIdx,
+		sceneSelectColumns,
+	)
+
+	row := &SceneRow{}
+	err := scanSceneRow(s.pool.QueryRow(ctx, query, args...), row)
+	if err != nil {
+		recordError(span, err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, s.classifyTransitionMiss(ctx, id, span, "update")
+		}
+		return nil, oops.Code("SCENE_UPDATE_FAILED").With("scene_id", id).Wrap(err)
 	}
 	return row, nil
 }

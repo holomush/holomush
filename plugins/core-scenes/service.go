@@ -36,6 +36,7 @@ type sceneStorer interface {
 	End(ctx context.Context, id string) (*SceneRow, error)
 	Pause(ctx context.Context, id string) (*SceneRow, error)
 	Resume(ctx context.Context, id string) (*SceneRow, error)
+	Update(ctx context.Context, id string, update *SceneUpdate) (*SceneRow, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.

@@ -108,6 +108,54 @@ func (f *fakeStore) Resume(_ context.Context, id string) (*SceneRow, error) {
 	return &cp, nil
 }
 
+func (f *fakeStore) Update(_ context.Context, id string, update *SceneUpdate) (*SceneRow, error) {
+	row, ok := f.scenes[id]
+	if !ok {
+		return nil, oops.Code("SCENE_NOT_FOUND").With("scene_id", id).Errorf("not found")
+	}
+	if update == nil || !update.HasChanges() {
+		// No-op: return a copy of the current row, mirroring the real
+		// store's "no-op returns current state" contract.
+		cp := *row
+		return &cp, nil
+	}
+	if row.State != string(SceneStateActive) && row.State != string(SceneStatePaused) {
+		return nil, oops.Code("SCENE_TRANSITION_FORBIDDEN").
+			With("scene_id", id).
+			With("op", "update").
+			With("current_state", row.State).
+			Errorf("cannot update")
+	}
+	if update.Title != nil {
+		row.Title = *update.Title
+	}
+	if update.Description != nil {
+		row.Description = *update.Description
+	}
+	if update.Visibility != nil {
+		row.Visibility = *update.Visibility
+	}
+	if update.PoseOrder != nil {
+		row.PoseOrder = *update.PoseOrder
+	}
+	if update.LocationID != nil {
+		if *update.LocationID == "" {
+			row.LocationID = nil
+		} else {
+			loc := *update.LocationID
+			row.LocationID = &loc
+		}
+	}
+	if update.UpdateContentWarnings {
+		row.ContentWarnings = update.ContentWarnings
+	}
+	if update.UpdateTags {
+		row.Tags = update.Tags
+	}
+	cp := *row
+	return &cp, nil
+}
+
 func TestSceneServiceCreateScenePersistsTitleAndOwnerWhenRequestIsValid(t *testing.T) {
 	store := newFakeStore()
 	svc := NewSceneServiceImpl(store)
