@@ -6,9 +6,11 @@ package attribute
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -604,4 +606,141 @@ func TestResolverResolveSubjectAttributesPopulatesSubjectActionAndEnvironment(t 
 	assert.Equal(t, float64(14), bags.Environment["env.hour"])
 	assert.Equal(t, "read", bags.Action["name"])
 	assert.Empty(t, bags.Resource, "resource bag must be empty at preflight")
+}
+
+func TestResolverResolveSubjectAttributesReturnsErrorForInvalidSubjectRef(t *testing.T) {
+	registry := NewSchemaRegistry()
+	resolver := NewResolver(registry)
+
+	// Bags may be non-nil here (validateEntityRef is invoked after the
+	// resolution scope is entered), but the contract is the error is
+	// non-nil. Callers MUST fail closed regardless of bag state.
+	_, err := resolver.ResolveSubjectAttributes(context.Background(), "malformed", "read")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "INVALID_ENTITY_REF")
+}
+
+func TestResolverResolveSubjectAttributesReturnsErrorWhenSubjectProviderFails(t *testing.T) {
+	registry := NewSchemaRegistry()
+	resolver := NewResolver(registry)
+
+	provider := newResolverMockAttributeProvider("character")
+	provider.subjectError = errors.New("database unavailable")
+	require.NoError(t, resolver.RegisterProvider(provider))
+
+	_, err := resolver.ResolveSubjectAttributes(context.Background(), "character:01ABC", "read")
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "database unavailable")
+}
+
+func TestResolverResolveSubjectAttributesDoesNotInvokeResourceProviderWhenResourceProviderExists(t *testing.T) {
+	registry := NewSchemaRegistry()
+	resolver := NewResolver(registry)
+
+	// Subject provider in character namespace — contributes the subject bag.
+	subjectProvider := newResolverMockAttributeProvider("character")
+	subjectProvider.subjectData["character:01ABC"] = map[string]any{"role": "admin"}
+	require.NoError(t, resolver.RegisterProvider(subjectProvider))
+
+	// Resource provider in a different namespace. It has resource data that
+	// would be returned if ResolveResource were called — we use the mock's
+	// per-key callCount (keyed "resource:<id>") to assert zero calls.
+	resourceProvider := newResolverMockAttributeProvider("widget")
+	resourceProvider.resourceData["widget:restricted-1"] = map[string]any{"type": "restricted"}
+	require.NoError(t, resolver.RegisterProvider(resourceProvider))
+
+	bags, err := resolver.ResolveSubjectAttributes(context.Background(), "character:01ABC", "read")
+	require.NoError(t, err)
+
+	// Output invariant: the returned bags.Resource MUST be empty. This
+	// guards against a regression that populates the resource bag through
+	// some path other than ResolveResource (e.g., a future batch API).
+	assert.Empty(t, bags.Resource, "bags.Resource must be empty after preflight resolution")
+
+	// Mechanism invariant: the resource provider's ResolveResource MUST
+	// NOT have been invoked. Use a positive per-key assertion rather than
+	// a filter-loop so the check fails loudly if the mock is refactored.
+	assert.Zero(t, resourceProvider.callCount["resource:widget:restricted-1"],
+		"ResolveResource must not be called during subject-only resolution")
+	// Defense in depth: scan for any other "resource:" keys that may
+	// have been introduced. The positive assertion above is the load-bearing
+	// check; this catches the case where a future code path sends a
+	// different resource ID we didn't predict.
+	for key, n := range resourceProvider.callCount {
+		if strings.HasPrefix(key, "resource:") {
+			assert.Zero(t, n, "unexpected resource-provider call: %s", key)
+		}
+	}
+}
+
+func TestResolverResolveSubjectAttributesReturnsErrorWhenSubjectIsEmpty(t *testing.T) {
+	registry := NewSchemaRegistry()
+	resolver := NewResolver(registry)
+
+	bags, err := resolver.ResolveSubjectAttributes(context.Background(), "", "read")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "INVALID_ENTITY_REF")
+	errutil.AssertErrorContext(t, err, "field", "subject")
+	// Empty-subject validation runs before the resolution scope is entered,
+	// so bags is nil (no partial work to return).
+	assert.Nil(t, bags)
+}
+
+func TestResolverResolveSubjectAttributesPopulatesActionNameEvenWhenEmpty(t *testing.T) {
+	registry := NewSchemaRegistry()
+	resolver := NewResolver(registry)
+
+	provider := newResolverMockAttributeProvider("character")
+	provider.subjectData["character:01ABC"] = map[string]any{"role": "admin"}
+	require.NoError(t, resolver.RegisterProvider(provider))
+
+	bags, err := resolver.ResolveSubjectAttributes(context.Background(), "character:01ABC", "")
+	require.NoError(t, err)
+	require.NotNil(t, bags)
+
+	// Verify the action name key is actually PRESENT (not just zero-value
+	// from a missing key lookup). The contract is "populates action name
+	// even when empty", so the key must exist.
+	actionName, ok := bags.Action["name"]
+	require.True(t, ok, "action name key must be present in bags.Action")
+	assert.Equal(t, "", actionName)
+}
+
+func TestResolverResolveSubjectAttributesReturnsErrorWhenContextAlreadyCancelled(t *testing.T) {
+	registry := NewSchemaRegistry()
+	resolver := NewResolver(registry)
+
+	cancelAware := &ctxAwareSubjectProvider{}
+	require.NoError(t, resolver.RegisterProvider(cancelAware))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := resolver.ResolveSubjectAttributes(ctx, "character:01ABC", "read")
+	require.Error(t, err, "cancelled context must produce an error via context-aware provider")
+	assert.ErrorIs(t, err, context.Canceled,
+		"error chain must include context.Canceled so callers can distinguish cancellation")
+}
+
+// ctxAwareSubjectProvider honors context cancellation in ResolveSubject.
+// Lives in resolver_test.go next to the tests that use it.
+type ctxAwareSubjectProvider struct{}
+
+func (p *ctxAwareSubjectProvider) Namespace() string { return "character" }
+
+func (p *ctxAwareSubjectProvider) ResolveSubject(ctx context.Context, _ string) (map[string]any, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func (p *ctxAwareSubjectProvider) ResolveResource(_ context.Context, _ string) (map[string]any, error) {
+	return nil, nil
+}
+
+func (p *ctxAwareSubjectProvider) Schema() *types.NamespaceSchema {
+	return &types.NamespaceSchema{
+		Attributes: map[string]types.AttrType{"role": types.AttrTypeString},
+	}
 }
