@@ -34,7 +34,7 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	span.SetAttributes(attribute.String("subcommand", sub))
 
 	if sub == "" {
-		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, info, end, pause, resume, set"), nil
+		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, info, end, pause, resume, set, join, leave, invite, kick, transfer"), nil
 	}
 
 	switch sub {
@@ -50,8 +50,18 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 		return p.handleResume(ctx, req, rest)
 	case "set":
 		return p.handleSet(ctx, req, rest)
+	case "join":
+		return p.handleJoin(ctx, req, rest)
+	case "leave":
+		return p.handleLeave(ctx, req, rest)
+	case "invite":
+		return p.handleInvite(ctx, req, rest)
+	case "kick":
+		return p.handleKick(ctx, req, rest)
+	case "transfer":
+		return p.handleTransfer(ctx, req, rest)
 	default:
-		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, info, end, pause, resume, set.", sub), nil
+		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, info, end, pause, resume, set, join, leave, invite, kick, transfer.", sub), nil
 	}
 }
 
@@ -258,4 +268,115 @@ func splitSubcommand(args string) (sub, rest string) {
 		return args, ""
 	}
 	return args[:idx], strings.TrimSpace(args[idx+1:])
+}
+
+// handleJoin parses "scene join <scene-id>" and calls JoinScene.
+func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	sceneID := strings.TrimSpace(args)
+	if sceneID == "" {
+		return pluginsdk.Errorf("Usage: scene join <scene id>"), nil
+	}
+
+	_, err := p.service.JoinScene(ctx, &scenev1.JoinSceneRequest{
+		CharacterId: req.CharacterID,
+		SceneId:     sceneID,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Failed to join scene: %v", err), nil
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Joined scene %s.", sceneID),
+	}, nil
+}
+
+// handleLeave parses "scene leave <scene-id>" and calls LeaveScene.
+func (p *scenePlugin) handleLeave(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	sceneID := strings.TrimSpace(args)
+	if sceneID == "" {
+		return pluginsdk.Errorf("Usage: scene leave <scene id>"), nil
+	}
+
+	_, err := p.service.LeaveScene(ctx, &scenev1.LeaveSceneRequest{
+		CharacterId: req.CharacterID,
+		SceneId:     sceneID,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Failed to leave scene: %v", err), nil
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Left scene %s.", sceneID),
+	}, nil
+}
+
+// handleInvite parses "scene invite <scene-id> <character>".
+func (p *scenePlugin) handleInvite(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	sceneID, rest := splitSubcommand(args)
+	target := strings.TrimSpace(rest)
+	if sceneID == "" || target == "" {
+		return pluginsdk.Errorf("Usage: scene invite <scene id> <character>"), nil
+	}
+
+	_, err := p.service.InviteToScene(ctx, &scenev1.InviteToSceneRequest{
+		CharacterId:       req.CharacterID,
+		SceneId:           sceneID,
+		TargetCharacterId: target,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Failed to invite: %v", err), nil
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Invited %s to scene %s.", target, sceneID),
+	}, nil
+}
+
+// handleKick parses "scene kick <scene-id> <character>".
+func (p *scenePlugin) handleKick(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	sceneID, rest := splitSubcommand(args)
+	target := strings.TrimSpace(rest)
+	if sceneID == "" || target == "" {
+		return pluginsdk.Errorf("Usage: scene kick <scene id> <character>"), nil
+	}
+
+	_, err := p.service.KickFromScene(ctx, &scenev1.KickFromSceneRequest{
+		CharacterId:       req.CharacterID,
+		SceneId:           sceneID,
+		TargetCharacterId: target,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Failed to kick: %v", err), nil
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Removed %s from scene %s.", target, sceneID),
+	}, nil
+}
+
+// handleTransfer parses "scene transfer <scene-id> <character>".
+func (p *scenePlugin) handleTransfer(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	sceneID, rest := splitSubcommand(args)
+	target := strings.TrimSpace(rest)
+	if sceneID == "" || target == "" {
+		return pluginsdk.Errorf("Usage: scene transfer <scene id> <character>"), nil
+	}
+
+	_, err := p.service.TransferOwnership(ctx, &scenev1.TransferOwnershipRequest{
+		CharacterId:         req.CharacterID,
+		SceneId:             sceneID,
+		NewOwnerCharacterId: target,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Failed to transfer ownership: %v", err), nil
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Transferred ownership of scene %s to %s.", sceneID, target),
+	}, nil
 }

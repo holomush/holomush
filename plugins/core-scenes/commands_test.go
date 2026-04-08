@@ -247,3 +247,59 @@ func createSceneInTest(t *testing.T, p *scenePlugin, characterID, title string) 
 	require.Len(t, parts, 2)
 	return strings.TrimSpace(parts[1])
 }
+
+func TestSceneCommandJoinForwardsToServiceWithCorrectSceneID(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-cmd-j", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	plugin := &scenePlugin{service: NewSceneServiceImpl(store)}
+
+	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "join scene-cmd-j",
+		CharacterID: "char-bob",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "Joined scene scene-cmd-j")
+}
+
+func TestSceneCommandLeaveRejectsMissingSceneID(t *testing.T) {
+	plugin := &scenePlugin{service: NewSceneServiceImpl(newFakeStore())}
+
+	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "leave", CharacterID: "char-bob",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "Usage: scene leave")
+}
+
+func TestSceneCommandInviteParsesSceneIDAndTarget(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-cmd-i", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityPrivate),
+	}))
+	plugin := &scenePlugin{service: NewSceneServiceImpl(store)}
+
+	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "invite scene-cmd-i char-bob", CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Equal(t, "invited", store.participants["scene-cmd-i"]["char-bob"])
+}
+
+func TestSceneCommandTransferRejectsMissingTarget(t *testing.T) {
+	plugin := &scenePlugin{service: NewSceneServiceImpl(newFakeStore())}
+
+	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "transfer scene-x", CharacterID: "char-alice",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "Usage: scene transfer")
+}
