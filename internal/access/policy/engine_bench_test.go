@@ -29,8 +29,8 @@ import (
 	"time"
 
 	"github.com/holomush/holomush/internal/access/policy/attribute"
-	"github.com/holomush/holomush/internal/access/policy/audit"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/audit"
 )
 
 // noopAuditWriter discards all audit entries for benchmarking.

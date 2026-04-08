@@ -22,9 +22,9 @@ import (
 
 	policy "github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
-	"github.com/holomush/holomush/internal/access/policy/audit"
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	policytypes "github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/audit"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
 	"github.com/holomush/holomush/internal/store"

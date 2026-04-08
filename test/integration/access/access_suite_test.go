@@ -21,9 +21,9 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
-	"github.com/holomush/holomush/internal/access/policy/audit"
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/store"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/test/testutil"
