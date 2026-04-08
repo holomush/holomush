@@ -1113,3 +1113,57 @@ func TestTransferOwnershipIsNoOpWhenTargetEqualsCurrentOwner(t *testing.T) {
 	// No transfer ops event emitted.
 	assert.Equal(t, 0, countOpsEvents(t, store, row.ID, OpsKindMembershipOwnershipTransferred))
 }
+
+func TestListParticipantsReturnsAllRolesOrderedByJoinedAt(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-lp-1", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+
+	got, err := store.ListParticipants(ctx, row.ID)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, "char-alice", got[0].CharacterID) // joined first via CreateWithOwner
+	assert.Equal(t, "owner", got[0].Role)
+	assert.Equal(t, "char-bob", got[1].CharacterID)
+	assert.Equal(t, "member", got[1].Role)
+}
+
+func TestGetParticipantReturnsRowWhenPresent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-gp-1", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	got, err := store.GetParticipant(ctx, row.ID, "char-alice")
+	require.NoError(t, err)
+	assert.Equal(t, "owner", got.Role)
+}
+
+func TestGetParticipantReturnsNotFoundForMissingParticipant(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-gp-missing", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, err := store.GetParticipant(ctx, row.ID, "char-ghost")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_PARTICIPANT_NOT_FOUND")
+}

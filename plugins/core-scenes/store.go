@@ -988,6 +988,74 @@ func (s *SceneStore) classifyTransferMiss(ctx context.Context, sceneID, currentO
 	return oops.Code("SCENE_TRANSFER_FAILED").Errorf("unexpected classify state")
 }
 
+// ListParticipants returns all participants for a scene, ordered by joined_at
+// ASC (so the owner appears first since CreateWithOwner inserts them at scene
+// creation).
+func (s *SceneStore) ListParticipants(ctx context.Context, sceneID string) ([]ParticipantRow, error) {
+	ctx, span := startSpan(ctx, "scene.store.list_participants",
+		attribute.String("scene_id", sceneID),
+	)
+	defer span.End()
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT scene_id, character_id, role, joined_at
+		FROM scene_participants
+		WHERE scene_id = $1
+		ORDER BY joined_at ASC`,
+		sceneID,
+	)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_PARTICIPANTS_FAILED").
+			With("scene_id", sceneID).Wrap(err)
+	}
+	defer rows.Close()
+
+	var out []ParticipantRow
+	for rows.Next() {
+		var p ParticipantRow
+		if err := rows.Scan(&p.SceneID, &p.CharacterID, &p.Role, &p.JoinedAt); err != nil {
+			recordError(span, err)
+			return nil, oops.Code("SCENE_LIST_PARTICIPANTS_FAILED").Wrap(err)
+		}
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LIST_PARTICIPANTS_FAILED").Wrap(err)
+	}
+	return out, nil
+}
+
+// GetParticipant returns a single participant row, or SCENE_PARTICIPANT_NOT_FOUND.
+func (s *SceneStore) GetParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error) {
+	ctx, span := startSpan(ctx, "scene.store.get_participant",
+		attribute.String("scene_id", sceneID),
+		attribute.String("character_id", characterID),
+	)
+	defer span.End()
+
+	p := &ParticipantRow{}
+	err := s.pool.QueryRow(ctx, `
+		SELECT scene_id, character_id, role, joined_at
+		FROM scene_participants
+		WHERE scene_id = $1 AND character_id = $2`,
+		sceneID, characterID,
+	).Scan(&p.SceneID, &p.CharacterID, &p.Role, &p.JoinedAt)
+	if err != nil {
+		recordError(span, err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.Code("SCENE_PARTICIPANT_NOT_FOUND").
+				With("scene_id", sceneID).
+				With("character_id", characterID).Wrap(err)
+		}
+		return nil, oops.Code("SCENE_GET_PARTICIPANT_FAILED").
+			With("scene_id", sceneID).
+			With("character_id", characterID).Wrap(err)
+	}
+	return p, nil
+}
+
 // classifyJoinMiss issues one diagnostic SELECT to figure out which
 // precondition failed when AddParticipant's RETURNING was empty. Pays the
 // extra round trip ONLY in the error path; the happy path is single-statement.

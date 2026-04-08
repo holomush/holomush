@@ -44,6 +44,8 @@ type sceneStorer interface {
 	InviteParticipant(ctx context.Context, sceneID, inviterID, targetID string) (*ParticipantRow, error)
 	KickParticipant(ctx context.Context, sceneID, kickerID, targetID string) (*ParticipantRow, error)
 	TransferOwnership(ctx context.Context, sceneID, currentOwnerID, newOwnerID string) error
+	ListParticipants(ctx context.Context, sceneID string) ([]ParticipantRow, error)
+	GetParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.

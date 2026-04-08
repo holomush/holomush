@@ -192,6 +192,23 @@ func (f *fakeStore) TransferOwnership(_ context.Context, sceneID, currentOwnerID
 	return nil
 }
 
+func (f *fakeStore) ListParticipants(_ context.Context, sceneID string) ([]ParticipantRow, error) {
+	var out []ParticipantRow
+	for cid, role := range f.participants[sceneID] {
+		out = append(out, ParticipantRow{SceneID: sceneID, CharacterID: cid, Role: role})
+	}
+	return out, nil
+}
+
+func (f *fakeStore) GetParticipant(_ context.Context, sceneID, characterID string) (*ParticipantRow, error) {
+	role, ok := f.participants[sceneID][characterID]
+	if !ok {
+		return nil, oops.Code("SCENE_PARTICIPANT_NOT_FOUND").
+			With("scene_id", sceneID).With("character_id", characterID).Errorf("not found")
+	}
+	return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: role}, nil
+}
+
 func (f *fakeStore) End(_ context.Context, id string) (*SceneRow, error) {
 	row, ok := f.scenes[id]
 	if !ok {
