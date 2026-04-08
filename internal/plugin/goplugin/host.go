@@ -525,10 +525,43 @@ func protoCommandResponseToSDK(r *pluginv1.CommandResponse) *pluginsdk.CommandRe
 		}
 	}
 
+	auditHints := make([]pluginsdk.AuditHint, len(r.GetAuditHints()))
+	for i, h := range r.GetAuditHints() {
+		auditHints[i] = pluginsdk.AuditHint{
+			ID:              h.GetId(),
+			Name:            h.GetName(),
+			Message:         h.GetMessage(),
+			Effect:          protoAuditEffectToSDK(h.GetEffect()),
+			ActionQualifier: h.GetActionQualifier(),
+			Resource:        h.GetResource(),
+			Attributes:      h.GetAttributes(),
+		}
+	}
+
 	return &pluginsdk.CommandResponse{
-		Status: protoCommandStatusToSDK(r.GetStatus()),
-		Output: r.GetOutput(),
-		Events: events,
+		Status:     protoCommandStatusToSDK(r.GetStatus()),
+		Output:     r.GetOutput(),
+		Events:     events,
+		AuditHints: auditHints,
+	}
+}
+
+// protoAuditEffectToSDK converts a proto AuditEffect enum to the SDK
+// AuditEffect string. Unspecified and unknown values return an empty SDK
+// effect so the dispatcher's extractAuditHints can detect the malformed
+// hint and drop it with a warning — this surfaces plugin misbehavior to
+// operators rather than silently coercing to allow/deny.
+func protoAuditEffectToSDK(e pluginv1.AuditEffect) pluginsdk.AuditEffect {
+	switch e {
+	case pluginv1.AuditEffect_AUDIT_EFFECT_DENY:
+		return pluginsdk.AuditEffectDeny
+	case pluginv1.AuditEffect_AUDIT_EFFECT_ALLOW:
+		return pluginsdk.AuditEffectAllow
+	default:
+		// Unspecified or unknown — return empty so the dispatcher's
+		// extractAuditHints unknown-effect path drops the hint with a
+		// warning, surfacing the misbehavior to operators.
+		return ""
 	}
 }
 

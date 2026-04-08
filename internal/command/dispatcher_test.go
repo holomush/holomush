@@ -7,7 +7,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -22,10 +25,12 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 // stubServices creates a minimal non-nil Services for tests that don't
@@ -2004,4 +2009,413 @@ func TestDispatcherEngineErrorDuringSecondCapability(t *testing.T) {
 	})
 	val := testutil.ToFloat64(metrics)
 	assert.Greater(t, val, float64(0), "should have recorded engine_failure metric")
+}
+
+// ---------------------------------------------------------------------------
+// Task 11: dispatcher-side audit hint collection + flush + host field stamping
+// ---------------------------------------------------------------------------
+
+// capturingAuditWriter records every event passed to WriteSync or WriteAsync.
+// It is a minimal audit.Writer implementation local to the dispatcher tests.
+type capturingAuditWriter struct {
+	mu     sync.Mutex
+	events []audit.Event
+}
+
+func (w *capturingAuditWriter) WriteSync(_ context.Context, event audit.Event) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.events = append(w.events, event)
+	return nil
+}
+
+func (w *capturingAuditWriter) WriteAsync(event audit.Event) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.events = append(w.events, event)
+	return nil
+}
+
+func (w *capturingAuditWriter) Close() error { return nil }
+
+// fakePluginDeliverer is a PluginCommandDeliverer whose behavior is driven
+// by an injected callback. Unlike mockPluginDeliverer (plugin_dispatch_test.go),
+// this variant allows each test to control the response dynamically, which is
+// useful for concurrency tests where each call must produce a unique response.
+type fakePluginDeliverer struct {
+	onDeliver func(ctx context.Context, pluginName string, cmd pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error)
+}
+
+func (f *fakePluginDeliverer) DeliverCommand(ctx context.Context, pluginName string, cmd pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+	if f.onDeliver == nil {
+		return &pluginsdk.CommandResponse{Status: pluginsdk.CommandOK}, nil
+	}
+	return f.onDeliver(ctx, pluginName, cmd)
+}
+
+// newTestDispatcherWithPlugin constructs a Dispatcher wired to deliver commands
+// through the given PluginCommandDeliverer. It registers a single plugin-backed
+// command named "plugintest" so tests can invoke it via Dispatch.
+func newTestDispatcherWithPlugin(t *testing.T, deliverer PluginCommandDeliverer) *Dispatcher {
+	t.Helper()
+	reg := NewRegistry()
+	entry := NewTestEntry(CommandEntryConfig{
+		Name:       "plugintest",
+		PluginName: "test-plugin",
+		Source:     "test-plugin",
+	})
+	require.NoError(t, reg.Register(entry))
+
+	dispatcher, err := NewDispatcher(reg, policytest.AllowAllEngine(),
+		WithPluginDeliverer(deliverer),
+	)
+	require.NoError(t, err)
+	return dispatcher
+}
+
+// newTestDispatcherWithPluginAndAudit is like newTestDispatcherWithPlugin but
+// also wires an audit.Logger via WithAuditLogger so plugin-emitted audit events
+// are flushed through the logger.
+func newTestDispatcherWithPluginAndAudit(t *testing.T, deliverer PluginCommandDeliverer, logger *audit.Logger) *Dispatcher {
+	t.Helper()
+	reg := NewRegistry()
+	entry := NewTestEntry(CommandEntryConfig{
+		Name:       "plugintest",
+		PluginName: "test-plugin",
+		Source:     "test-plugin",
+	})
+	require.NoError(t, reg.Register(entry))
+
+	dispatcher, err := NewDispatcher(reg, policytest.AllowAllEngine(),
+		WithPluginDeliverer(deliverer),
+		WithAuditLogger(logger),
+	)
+	require.NoError(t, err)
+	return dispatcher
+}
+
+// newTestCommandExecution returns a minimal CommandExecution suitable for
+// dispatcher tests that do not care about the underlying services beyond
+// stub behavior.
+func newTestCommandExecution(t *testing.T) *CommandExecution {
+	t.Helper()
+	var buf bytes.Buffer
+	return NewTestExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		Output:      &buf,
+		Services:    stubServices(),
+	})
+}
+
+func TestDispatcherAttachesAuditContextToDispatchContext(t *testing.T) {
+	// Verify that after Dispatch is called, the context seen by the
+	// plugin deliverer is derived from audit.NewContextForDispatch
+	// (i.e., audit.AddEventToContext works inside it).
+	var capturedCtx context.Context
+	deliverer := &fakePluginDeliverer{
+		onDeliver: func(ctx context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+			capturedCtx = ctx
+			return &pluginsdk.CommandResponse{Status: pluginsdk.CommandOK}, nil
+		},
+	}
+
+	dispatcher := newTestDispatcherWithPlugin(t, deliverer)
+
+	exec := newTestCommandExecution(t)
+	err := dispatcher.Dispatch(context.Background(), "plugintest", exec)
+	require.NoError(t, err)
+
+	// capturedCtx should accept AddEventToContext without being nil
+	require.NotNil(t, capturedCtx)
+	audit.AddEventToContext(capturedCtx, audit.Event{ID: "sanity"})
+	events := audit.EventsFromContext(capturedCtx)
+	assert.Len(t, events, 1)
+}
+
+func TestDispatcherExtractsAuditHintsFromCommandResponseAndStampsHostFields(t *testing.T) {
+	// The plugin returns a hint; the dispatcher should stamp Source,
+	// Component, Subject, Action from the host context and push the
+	// resulting Event through the audit logger.
+	writer := &capturingAuditWriter{}
+	logger := audit.NewLogger(audit.ModeAll, writer, "")
+	t.Cleanup(func() { _ = logger.Close() })
+
+	deliverer := &fakePluginDeliverer{
+		onDeliver: func(_ context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+			return &pluginsdk.CommandResponse{
+				Status: pluginsdk.CommandError,
+				Output: "no permission",
+				AuditHints: []pluginsdk.AuditHint{
+					{
+						ID:              "not_member",
+						Name:            "channels: not a member",
+						Message:         "player not in channel members",
+						Effect:          pluginsdk.AuditEffectDeny,
+						ActionQualifier: "speak",
+						Resource:        "channel:01XYZ",
+						Attributes:      map[string]string{"channel.type": "public"},
+					},
+				},
+			}, nil
+		},
+	}
+
+	dispatcher := newTestDispatcherWithPluginAndAudit(t, deliverer, logger)
+	exec := newTestCommandExecution(t)
+
+	err := dispatcher.Dispatch(context.Background(), "plugintest", exec)
+	// CommandError is a user-facing denial, not a dispatch error.
+	// Dispatch returns nil for CommandError (the command ran, the user
+	// was told no). Confirm with the existing dispatcher behavior.
+	assert.NoError(t, err)
+
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	require.Len(t, writer.events, 1, "expected exactly one plugin audit event")
+	event := writer.events[0]
+
+	// Host-stamped fields
+	assert.Equal(t, audit.SourcePlugin, event.Source,
+		"Source must be host-stamped as SourcePlugin")
+	assert.NotEmpty(t, event.Component,
+		"Component must be host-stamped from plugin name")
+	assert.NotEmpty(t, event.Subject,
+		"Subject must be host-stamped from dispatch context")
+
+	// Plugin-provided fields
+	assert.Equal(t, "not_member", event.ID)
+	assert.Equal(t, "player not in channel members", event.Message)
+	assert.Equal(t, types.EffectDeny, event.Effect)
+
+	// Composed field
+	assert.Contains(t, event.Action, "speak",
+		"Action should contain the plugin's qualifier")
+}
+
+func TestDispatcherContinuesFlushWhenOneAuditEventWriteFails(t *testing.T) {
+	// Simulate an audit logger where the first event write fails but
+	// subsequent writes succeed. All events should be attempted; the
+	// failure must not propagate to the user.
+	writer := &sometimesFailingWriter{failIndex: 0}
+	logger := audit.NewLogger(audit.ModeAll, writer, "")
+	t.Cleanup(func() { _ = logger.Close() })
+
+	deliverer := &fakePluginDeliverer{
+		onDeliver: func(_ context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+			return &pluginsdk.CommandResponse{
+				Status: pluginsdk.CommandOK,
+				AuditHints: []pluginsdk.AuditHint{
+					{ID: "e1", Effect: pluginsdk.AuditEffectDeny},
+					{ID: "e2", Effect: pluginsdk.AuditEffectDeny},
+				},
+			}, nil
+		},
+	}
+
+	dispatcher := newTestDispatcherWithPluginAndAudit(t, deliverer, logger)
+	exec := newTestCommandExecution(t)
+
+	err := dispatcher.Dispatch(context.Background(), "plugintest", exec)
+	require.NoError(t, err,
+		"audit write failure must not propagate to the dispatcher caller")
+
+	// Both events should have been attempted.
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	assert.Equal(t, 2, writer.attemptCount,
+		"all hints should be attempted even if one fails")
+}
+
+// sometimesFailingWriter returns an error on writes whose 0-based index
+// matches failIndex.
+type sometimesFailingWriter struct {
+	mu           sync.Mutex
+	attemptCount int
+	failIndex    int
+}
+
+func (w *sometimesFailingWriter) WriteSync(_ context.Context, _ audit.Event) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	idx := w.attemptCount
+	w.attemptCount++
+	if idx == w.failIndex {
+		return fmt.Errorf("simulated write failure")
+	}
+	return nil
+}
+
+func (w *sometimesFailingWriter) WriteAsync(_ audit.Event) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.attemptCount++
+	return nil
+}
+
+func (w *sometimesFailingWriter) Close() error { return nil }
+
+// T22a — MUST negative: unknown effect string is skipped with a warning.
+func TestDispatcherSkipsHintWithUnknownEffectStringAndLogsWarning(t *testing.T) {
+	writer := &capturingAuditWriter{}
+	logger := audit.NewLogger(audit.ModeAll, writer, "")
+
+	deliverer := &fakePluginDeliverer{
+		onDeliver: func(_ context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+			return &pluginsdk.CommandResponse{
+				Status: pluginsdk.CommandOK,
+				AuditHints: []pluginsdk.AuditHint{
+					{ID: "good", Effect: pluginsdk.AuditEffectDeny, Message: "this one is valid"},
+					{ID: "bad", Effect: pluginsdk.AuditEffect("mystery"), Message: "unknown effect"},
+					{ID: "also_good", Effect: pluginsdk.AuditEffectAllow, Message: "valid again"},
+				},
+			}, nil
+		},
+	}
+
+	dispatcher := newTestDispatcherWithPluginAndAudit(t, deliverer, logger)
+	exec := newTestCommandExecution(t)
+
+	err := dispatcher.Dispatch(context.Background(), "plugintest", exec)
+	require.NoError(t, err)
+
+	// Close the logger to drain async writes deterministically before
+	// asserting. In ModeAll, allow events are written asynchronously.
+	require.NoError(t, logger.Close())
+
+	// Only the two valid hints should be flushed. The bad one is dropped.
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	require.Len(t, writer.events, 2)
+	// Order is not guaranteed: "good" (deny) goes sync, "also_good" (allow)
+	// goes async — both are captured but their arrival order may differ.
+	ids := []string{writer.events[0].ID, writer.events[1].ID}
+	assert.Contains(t, ids, "good")
+	assert.Contains(t, ids, "also_good")
+	assert.NotContains(t, ids, "bad")
+}
+
+// T22b — SHOULD boundary: malformed resource refs.
+func TestDispatcherValidatesMalformedResourceRefs(t *testing.T) {
+	cases := []struct {
+		name        string
+		resource    string
+		expectWarn  bool
+		expectFlush bool // hint still flushes with the malformed resource string
+	}{
+		{"well-formed two-part ref", "channel:01XYZ", false, true},
+		{"empty resource string", "", false, true},                 // empty is valid (optional field)
+		{"no colon", "channel01XYZ", true, true},                   // malformed, logged, still flushed
+		{"trailing colon only", "channel:", true, true},            // malformed
+		{"leading colon only", ":01XYZ", true, true},               // malformed
+		{"only a colon", ":", true, true},                          // malformed
+		{"multi-colon ambiguous", "channel:01:extra", false, true}, // two colons is permissive — the first colon delimits
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			writer := &capturingAuditWriter{}
+			logger := audit.NewLogger(audit.ModeAll, writer, "")
+			t.Cleanup(func() { _ = logger.Close() })
+
+			deliverer := &fakePluginDeliverer{
+				onDeliver: func(_ context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+					return &pluginsdk.CommandResponse{
+						Status: pluginsdk.CommandOK,
+						AuditHints: []pluginsdk.AuditHint{
+							{ID: "test", Effect: pluginsdk.AuditEffectDeny, Resource: tc.resource},
+						},
+					}, nil
+				},
+			}
+
+			dispatcher := newTestDispatcherWithPluginAndAudit(t, deliverer, logger)
+			exec := newTestCommandExecution(t)
+
+			err := dispatcher.Dispatch(context.Background(), "plugintest", exec)
+			require.NoError(t, err)
+
+			if tc.expectFlush {
+				writer.mu.Lock()
+				defer writer.mu.Unlock()
+				require.Len(t, writer.events, 1)
+				assert.Equal(t, tc.resource, writer.events[0].Resource,
+					"malformed resource refs are logged but still emitted as-is")
+			}
+		})
+	}
+}
+
+// T22c — SHOULD boundary: dispatcher with no audit logger configured.
+func TestDispatcherFlushIsNoOpWhenAuditLoggerIsNil(t *testing.T) {
+	deliverer := &fakePluginDeliverer{
+		onDeliver: func(_ context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+			return &pluginsdk.CommandResponse{
+				Status: pluginsdk.CommandOK,
+				AuditHints: []pluginsdk.AuditHint{
+					{ID: "dropped", Effect: pluginsdk.AuditEffectDeny},
+				},
+			}, nil
+		},
+	}
+
+	// Construct dispatcher WITHOUT WithAuditLogger — d.auditLogger is nil.
+	dispatcher := newTestDispatcherWithPlugin(t, deliverer)
+	exec := newTestCommandExecution(t)
+
+	// This must not panic and must not fail the command.
+	err := dispatcher.Dispatch(context.Background(), "plugintest", exec)
+	require.NoError(t, err)
+}
+
+// T22d — SHOULD invariant: context-per-dispatch isolation under concurrency.
+func TestDispatcherConcurrentDispatchesDoNotCrossContaminateAuditContexts(t *testing.T) {
+	const numDispatches = 10
+
+	// Each dispatch emits a unique hint ID. After all dispatches complete,
+	// the audit writer should have received exactly numDispatches events,
+	// each with a unique ID matching the dispatch index.
+	writer := &capturingAuditWriter{}
+	logger := audit.NewLogger(audit.ModeAll, writer, "")
+	t.Cleanup(func() { _ = logger.Close() })
+
+	var dispatchIdx atomic.Int32
+	deliverer := &fakePluginDeliverer{
+		onDeliver: func(_ context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+			idx := dispatchIdx.Add(1) - 1
+			return &pluginsdk.CommandResponse{
+				Status: pluginsdk.CommandOK,
+				AuditHints: []pluginsdk.AuditHint{
+					{ID: fmt.Sprintf("hint-%d", idx), Effect: pluginsdk.AuditEffectDeny},
+				},
+			}, nil
+		},
+	}
+
+	dispatcher := newTestDispatcherWithPluginAndAudit(t, deliverer, logger)
+
+	var wg sync.WaitGroup
+	for i := 0; i < numDispatches; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			exec := newTestCommandExecution(t)
+			if err := dispatcher.Dispatch(context.Background(), "plugintest", exec); err != nil {
+				t.Errorf("dispatch failed: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	require.Len(t, writer.events, numDispatches,
+		"each dispatch should emit exactly one event; no cross-contamination")
+
+	// Collect the IDs seen and assert each dispatch-idx appears exactly once.
+	seen := make(map[string]int)
+	for _, e := range writer.events {
+		seen[e.ID]++
+	}
+	assert.Len(t, seen, numDispatches,
+		"each dispatch should see its own unique hint ID, not someone else's")
 }

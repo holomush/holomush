@@ -1,6 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 HoloMUSH Contributors
 
+codecov:
+  notify:
+    # Wait for coverage uploads to merge before posting status checks and
+    # PR comments. Without this, codecov evaluates on the first upload
+    # (unit only) and reports a stale failure even if integration/e2e
+    # uploads would push the patch above target.
+    #
+    # We upload three coverage files (unit, integration via flag, e2e via
+    # flag) but codecov de-duplicates to two sessions — the unflagged unit
+    # session and one merged flagged session covering integration+e2e.
+    # Setting after_n_builds: 2 matches that session count; 3 would block
+    # codecov from ever notifying.
+    #
+    # Note: per-status-target after_n_builds is rejected by codecov's
+    # validator as an unknown field — the top-level codecov.notify.* is
+    # the only supported location.
+    after_n_builds: 2
+    wait_for_ci: true
+
 coverage:
   status:
     project:

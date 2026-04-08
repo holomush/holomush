@@ -26,30 +26,30 @@ import (
 // mockWriter records all writes for verification
 type mockWriter struct {
 	mu          sync.Mutex
-	syncWrites  []Entry
-	asyncWrites []Entry
+	syncWrites  []Event
+	asyncWrites []Event
 	failSync    bool
 	failAsync   bool
 	closed      bool
 }
 
-func (m *mockWriter) WriteSync(_ context.Context, entry Entry) error {
+func (m *mockWriter) WriteSync(_ context.Context, event Event) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.failSync {
 		return assert.AnError
 	}
-	m.syncWrites = append(m.syncWrites, entry)
+	m.syncWrites = append(m.syncWrites, event)
 	return nil
 }
 
-func (m *mockWriter) WriteAsync(entry Entry) error {
+func (m *mockWriter) WriteAsync(event Event) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.failAsync {
 		return assert.AnError
 	}
-	m.asyncWrites = append(m.asyncWrites, entry)
+	m.asyncWrites = append(m.asyncWrites, event)
 	return nil
 }
 
@@ -60,16 +60,16 @@ func (m *mockWriter) Close() error {
 	return nil
 }
 
-func (m *mockWriter) getSyncWrites() []Entry {
+func (m *mockWriter) getSyncWrites() []Event {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return append([]Entry{}, m.syncWrites...)
+	return append([]Event{}, m.syncWrites...)
 }
 
-func (m *mockWriter) getAsyncWrites() []Entry {
+func (m *mockWriter) getAsyncWrites() []Event {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return append([]Entry{}, m.asyncWrites...)
+	return append([]Event{}, m.asyncWrites...)
 }
 
 func (m *mockWriter) isClosed() bool {
@@ -83,13 +83,13 @@ func TestAuditLoggerMinimalModeAllowNotLogged(t *testing.T) {
 	logger := NewLogger(ModeMinimal, writer, "")
 	defer logger.Close()
 
-	entry := Entry{
+	entry := Event{
 		Subject:    "character:01ABC",
 		Action:     "read",
 		Resource:   "location:01XYZ",
 		Effect:     types.EffectAllow,
-		PolicyID:   "policy-123",
-		PolicyName: "allow-read",
+		ID:         "policy-123",
+		Name:       "allow-read",
 		Attributes: map[string]any{"role": "player"},
 		DurationUS: 100,
 		Timestamp:  time.Now(),
@@ -108,13 +108,13 @@ func TestAuditLoggerMinimalModeDenyLoggedSync(t *testing.T) {
 	logger := NewLogger(ModeMinimal, writer, "")
 	defer logger.Close()
 
-	entry := Entry{
+	entry := Event{
 		Subject:    "character:01ABC",
 		Action:     "delete",
 		Resource:   "location:01XYZ",
 		Effect:     types.EffectDeny,
-		PolicyID:   "policy-456",
-		PolicyName: "deny-delete",
+		ID:         "policy-456",
+		Name:       "deny-delete",
 		Attributes: map[string]any{"role": "player"},
 		DurationUS: 200,
 		Timestamp:  time.Now(),
@@ -135,13 +135,13 @@ func TestAuditLoggerMinimalModeSystemBypassLoggedSync(t *testing.T) {
 	logger := NewLogger(ModeMinimal, writer, "")
 	defer logger.Close()
 
-	entry := Entry{
+	entry := Event{
 		Subject:    "system",
 		Action:     "write",
 		Resource:   "property:01DEF",
 		Effect:     types.EffectSystemBypass,
-		PolicyID:   "system-bypass",
-		PolicyName: "system-bypass",
+		ID:         "system-bypass",
+		Name:       "system-bypass",
 		Attributes: map[string]any{},
 		DurationUS: 50,
 		Timestamp:  time.Now(),
@@ -163,13 +163,13 @@ func TestAuditLoggerDenialsOnlyModeAllowNotLogged(t *testing.T) {
 	logger := NewLogger(ModeDenialsOnly, writer, "")
 	defer logger.Close()
 
-	entry := Entry{
+	entry := Event{
 		Subject:    "character:01ABC",
 		Action:     "read",
 		Resource:   "location:01XYZ",
 		Effect:     types.EffectAllow,
-		PolicyID:   "policy-123",
-		PolicyName: "allow-read",
+		ID:         "policy-123",
+		Name:       "allow-read",
 		Attributes: map[string]any{},
 		DurationUS: 100,
 		Timestamp:  time.Now(),
@@ -188,13 +188,13 @@ func TestAuditLoggerDenialsOnlyModeDenyLoggedSync(t *testing.T) {
 	logger := NewLogger(ModeDenialsOnly, writer, "")
 	defer logger.Close()
 
-	entry := Entry{
+	entry := Event{
 		Subject:    "character:01ABC",
 		Action:     "delete",
 		Resource:   "location:01XYZ",
 		Effect:     types.EffectDeny,
-		PolicyID:   "policy-456",
-		PolicyName: "deny-delete",
+		ID:         "policy-456",
+		Name:       "deny-delete",
 		Attributes: map[string]any{},
 		DurationUS: 200,
 		Timestamp:  time.Now(),
@@ -213,13 +213,13 @@ func TestAuditLoggerAllModeAllowLoggedAsync(t *testing.T) {
 	logger := NewLogger(ModeAll, writer, "")
 	defer logger.Close()
 
-	entry := Entry{
+	entry := Event{
 		Subject:    "character:01ABC",
 		Action:     "read",
 		Resource:   "location:01XYZ",
 		Effect:     types.EffectAllow,
-		PolicyID:   "policy-123",
-		PolicyName: "allow-read",
+		ID:         "policy-123",
+		Name:       "allow-read",
 		Attributes: map[string]any{},
 		DurationUS: 100,
 		Timestamp:  time.Now(),
@@ -240,13 +240,13 @@ func TestAuditLoggerAllModeDenyLoggedSync(t *testing.T) {
 	logger := NewLogger(ModeAll, writer, "")
 	defer logger.Close()
 
-	entry := Entry{
+	entry := Event{
 		Subject:    "character:01ABC",
 		Action:     "delete",
 		Resource:   "location:01XYZ",
 		Effect:     types.EffectDeny,
-		PolicyID:   "policy-456",
-		PolicyName: "deny-delete",
+		ID:         "policy-456",
+		Name:       "deny-delete",
 		Attributes: map[string]any{},
 		DurationUS: 200,
 		Timestamp:  time.Now(),
@@ -269,13 +269,13 @@ func TestAuditLoggerSyncWriteFailureFallsBackToWAL(t *testing.T) {
 	logger := NewLogger(ModeMinimal, writer, walPath)
 	defer logger.Close()
 
-	entry := Entry{
+	entry := Event{
 		Subject:    "character:01ABC",
 		Action:     "delete",
 		Resource:   "location:01XYZ",
 		Effect:     types.EffectDeny,
-		PolicyID:   "policy-456",
-		PolicyName: "deny-delete",
+		ID:         "policy-456",
+		Name:       "deny-delete",
 		Attributes: map[string]any{"role": "player"},
 		DurationUS: 200,
 		Timestamp:  time.Now(),
@@ -299,25 +299,25 @@ func TestAuditLoggerReplayWAL(t *testing.T) {
 	writer1 := &mockWriter{failSync: true}
 	logger1 := NewLogger(ModeMinimal, writer1, walPath)
 
-	entry1 := Entry{
+	entry1 := Event{
 		Subject:    "character:01ABC",
 		Action:     "delete",
 		Resource:   "location:01XYZ",
 		Effect:     types.EffectDeny,
-		PolicyID:   "policy-1",
-		PolicyName: "deny-1",
+		ID:         "policy-1",
+		Name:       "deny-1",
 		Attributes: map[string]any{},
 		DurationUS: 100,
 		Timestamp:  time.Now(),
 	}
 
-	entry2 := Entry{
+	entry2 := Event{
 		Subject:    "character:01DEF",
 		Action:     "write",
 		Resource:   "property:01GHI",
 		Effect:     types.EffectDeny,
-		PolicyID:   "policy-2",
-		PolicyName: "deny-2",
+		ID:         "policy-2",
+		Name:       "deny-2",
 		Attributes: map[string]any{},
 		DurationUS: 150,
 		Timestamp:  time.Now(),
@@ -337,8 +337,8 @@ func TestAuditLoggerReplayWAL(t *testing.T) {
 
 	syncWrites := writer2.getSyncWrites()
 	require.Len(t, syncWrites, 2)
-	assert.Equal(t, "policy-1", syncWrites[0].PolicyID)
-	assert.Equal(t, "policy-2", syncWrites[1].PolicyID)
+	assert.Equal(t, "policy-1", syncWrites[0].ID)
+	assert.Equal(t, "policy-2", syncWrites[1].ID)
 
 	// WAL should be empty after replay
 	data, err := os.ReadFile(walPath)
@@ -346,7 +346,7 @@ func TestAuditLoggerReplayWAL(t *testing.T) {
 	assert.Empty(t, data)
 }
 
-func TestAuditLoggerBothDBAndWALFailEntryDropped(t *testing.T) {
+func TestAuditLoggerBothDBAndWALFailEventDropped(t *testing.T) {
 	tmpDir := t.TempDir()
 	// Create invalid WAL path (directory instead of file)
 	walPath := filepath.Join(tmpDir, "invalid-dir")
@@ -357,13 +357,13 @@ func TestAuditLoggerBothDBAndWALFailEntryDropped(t *testing.T) {
 	logger := NewLogger(ModeMinimal, writer, walPath)
 	defer logger.Close()
 
-	entry := Entry{
+	entry := Event{
 		Subject:    "character:01ABC",
 		Action:     "delete",
 		Resource:   "location:01XYZ",
 		Effect:     types.EffectDeny,
-		PolicyID:   "policy-456",
-		PolicyName: "deny-delete",
+		ID:         "policy-456",
+		Name:       "deny-delete",
 		Attributes: map[string]any{},
 		DurationUS: 200,
 		Timestamp:  time.Now(),
@@ -391,13 +391,13 @@ func TestAuditLoggerGracefulShutdownFlushesBuffered(t *testing.T) {
 
 	// Queue multiple async entries
 	for i := 0; i < 5; i++ {
-		entry := Entry{
+		entry := Event{
 			Subject:    "character:01ABC",
 			Action:     "read",
 			Resource:   "location:01XYZ",
 			Effect:     types.EffectAllow,
-			PolicyID:   "policy-123",
-			PolicyName: "allow-read",
+			ID:         "policy-123",
+			Name:       "allow-read",
 			Attributes: map[string]any{},
 			DurationUS: int64(100 + i),
 			Timestamp:  time.Now(),
@@ -414,19 +414,100 @@ func TestAuditLoggerGracefulShutdownFlushesBuffered(t *testing.T) {
 	assert.True(t, writer.isClosed())
 }
 
-func TestAuditLoggerEntryContainsAllFields(t *testing.T) {
+func TestAuditLoggerLogRejectsSyncEventAfterClose(t *testing.T) {
+	writer := &mockWriter{}
+	logger := NewLogger(ModeMinimal, writer, "")
+
+	// Shut down the logger first.
+	require.NoError(t, logger.Close())
+
+	// A sync-path event (deny) posted afterwards must fail with AUDIT_LOGGER_CLOSED
+	// instead of being silently dropped.
+	entry := Event{
+		Subject:    "character:01ABC",
+		Action:     "delete",
+		Resource:   "location:01XYZ",
+		Effect:     types.EffectDeny,
+		ID:         "policy-after-close",
+		Name:       "deny-after-close",
+		Attributes: map[string]any{},
+		DurationUS: 100,
+		Timestamp:  time.Now(),
+	}
+	err := logger.Log(context.Background(), entry)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "AUDIT_LOGGER_CLOSED")
+
+	// And nothing was written to the underlying writer.
+	assert.Empty(t, writer.getSyncWrites())
+	assert.Empty(t, writer.getAsyncWrites())
+}
+
+func TestAuditLoggerLogRejectsAsyncEventAfterClose(t *testing.T) {
+	writer := &mockWriter{}
+	logger := NewLogger(ModeAll, writer, "")
+
+	// Shut down the logger first so the async consumer exits cleanly.
+	require.NoError(t, logger.Close())
+
+	// An async-path event (allow) posted afterwards must fail with AUDIT_LOGGER_CLOSED
+	// rather than being orphaned in a channel with no live consumer.
+	entry := Event{
+		Subject:    "character:01ABC",
+		Action:     "read",
+		Resource:   "location:01XYZ",
+		Effect:     types.EffectAllow,
+		ID:         "policy-allow-after-close",
+		Name:       "allow-after-close",
+		Attributes: map[string]any{},
+		DurationUS: 100,
+		Timestamp:  time.Now(),
+	}
+	err := logger.Log(context.Background(), entry)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "AUDIT_LOGGER_CLOSED")
+
+	assert.Empty(t, writer.getSyncWrites())
+	assert.Empty(t, writer.getAsyncWrites())
+}
+
+func TestAuditLoggerLogSkipsEventBelowMode(t *testing.T) {
+	// Events filtered out by mode shouldn't touch writers even after Close(),
+	// because shouldLog short-circuits before any channel interaction.
+	// This is the pre-close happy path for the shouldLog=false branch.
+	writer := &mockWriter{}
+	logger := NewLogger(ModeDenialsOnly, writer, "")
+	defer logger.Close()
+
+	err := logger.Log(context.Background(), Event{
+		Subject:    "character:01ABC",
+		Action:     "read",
+		Resource:   "location:01XYZ",
+		Effect:     types.EffectAllow, // denials_only: allow is skipped
+		ID:         "policy-skip",
+		Name:       "skip",
+		Attributes: map[string]any{},
+		DurationUS: 10,
+		Timestamp:  time.Now(),
+	})
+	require.NoError(t, err)
+	assert.Empty(t, writer.getSyncWrites())
+	assert.Empty(t, writer.getAsyncWrites())
+}
+
+func TestAuditLoggerEventContainsAllFields(t *testing.T) {
 	writer := &mockWriter{}
 	logger := NewLogger(ModeAll, writer, "")
 	defer logger.Close()
 
 	now := time.Now()
-	entry := Entry{
-		Subject:    "character:01ABC",
-		Action:     "write",
-		Resource:   "property:01DEF",
-		Effect:     types.EffectAllow,
-		PolicyID:   "policy-789",
-		PolicyName: "allow-write-property",
+	entry := Event{
+		Subject:  "character:01ABC",
+		Action:   "write",
+		Resource: "property:01DEF",
+		Effect:   types.EffectAllow,
+		ID:       "policy-789",
+		Name:     "allow-write-property",
 		Attributes: map[string]any{
 			"role":        "builder",
 			"permissions": []string{"write", "read"},
@@ -447,38 +528,38 @@ func TestAuditLoggerEntryContainsAllFields(t *testing.T) {
 	assert.Equal(t, "write", logged.Action)
 	assert.Equal(t, "property:01DEF", logged.Resource)
 	assert.Equal(t, types.EffectAllow, logged.Effect)
-	assert.Equal(t, "policy-789", logged.PolicyID)
-	assert.Equal(t, "allow-write-property", logged.PolicyName)
+	assert.Equal(t, "policy-789", logged.ID)
+	assert.Equal(t, "allow-write-property", logged.Name)
 	assert.Equal(t, int64(250), logged.DurationUS)
 	assert.Equal(t, now, logged.Timestamp)
 	assert.NotNil(t, logged.Attributes)
 	assert.Equal(t, "builder", logged.Attributes["role"])
 }
 
-// selectiveFailWriter fails WriteSync for specific PolicyIDs.
+// selectiveFailWriter fails WriteSync for specific event IDs.
 type selectiveFailWriter struct {
-	mu            sync.Mutex
-	syncWrites    []Entry
-	failPolicyIDs map[string]bool
+	mu           sync.Mutex
+	syncWrites   []Event
+	failEventIDs map[string]bool
 }
 
-func (s *selectiveFailWriter) WriteSync(_ context.Context, entry Entry) error {
-	if s.failPolicyIDs[entry.PolicyID] {
-		return fmt.Errorf("write failed for policy %s", entry.PolicyID)
+func (s *selectiveFailWriter) WriteSync(_ context.Context, event Event) error {
+	if s.failEventIDs[event.ID] {
+		return fmt.Errorf("write failed for event %s", event.ID)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.syncWrites = append(s.syncWrites, entry)
+	s.syncWrites = append(s.syncWrites, event)
 	return nil
 }
 
-func (s *selectiveFailWriter) WriteAsync(_ Entry) error { return nil }
+func (s *selectiveFailWriter) WriteAsync(_ Event) error { return nil }
 func (s *selectiveFailWriter) Close() error             { return nil }
 
-func (s *selectiveFailWriter) getSyncWrites() []Entry {
+func (s *selectiveFailWriter) getSyncWrites() []Event {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]Entry{}, s.syncWrites...)
+	return append([]Event{}, s.syncWrites...)
 }
 
 func TestAuditLoggerReplayWALPartialFailure(t *testing.T) {
@@ -489,18 +570,18 @@ func TestAuditLoggerReplayWALPartialFailure(t *testing.T) {
 	writer1 := &mockWriter{failSync: true}
 	logger1 := NewLogger(ModeMinimal, writer1, walPath)
 
-	entries := []Entry{
-		{Subject: "character:1", Action: "read", Resource: "loc:1", Effect: types.EffectDeny, PolicyID: "policy-ok-1", PolicyName: "p1", Attributes: map[string]any{}, DurationUS: 100, Timestamp: time.Now()},
-		{Subject: "character:2", Action: "write", Resource: "loc:2", Effect: types.EffectDeny, PolicyID: "policy-fail", PolicyName: "p2", Attributes: map[string]any{}, DurationUS: 200, Timestamp: time.Now()},
-		{Subject: "character:3", Action: "delete", Resource: "loc:3", Effect: types.EffectDeny, PolicyID: "policy-ok-2", PolicyName: "p3", Attributes: map[string]any{}, DurationUS: 300, Timestamp: time.Now()},
+	events := []Event{
+		{Subject: "character:1", Action: "read", Resource: "loc:1", Effect: types.EffectDeny, ID: "policy-ok-1", Name: "p1", Attributes: map[string]any{}, DurationUS: 100, Timestamp: time.Now()},
+		{Subject: "character:2", Action: "write", Resource: "loc:2", Effect: types.EffectDeny, ID: "policy-fail", Name: "p2", Attributes: map[string]any{}, DurationUS: 200, Timestamp: time.Now()},
+		{Subject: "character:3", Action: "delete", Resource: "loc:3", Effect: types.EffectDeny, ID: "policy-ok-2", Name: "p3", Attributes: map[string]any{}, DurationUS: 300, Timestamp: time.Now()},
 	}
-	for _, e := range entries {
+	for _, e := range events {
 		logger1.Log(context.Background(), e)
 	}
 	logger1.Close()
 
 	// Replay with a writer that fails only for "policy-fail"
-	writer2 := &selectiveFailWriter{failPolicyIDs: map[string]bool{"policy-fail": true}}
+	writer2 := &selectiveFailWriter{failEventIDs: map[string]bool{"policy-fail": true}}
 	logger2 := NewLogger(ModeMinimal, writer2, walPath)
 	defer logger2.Close()
 
@@ -519,10 +600,10 @@ func TestAuditLoggerReplayWALPartialFailure(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	require.Len(t, lines, 1, "WAL should contain only the failed entry")
 
-	// Verify the failed entry's PolicyID
-	var walEntry Entry
-	require.NoError(t, json.Unmarshal([]byte(lines[0]), &walEntry))
-	assert.Equal(t, "policy-fail", walEntry.PolicyID)
+	// Verify the failed event's ID
+	var walEvent Event
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &walEvent))
+	assert.Equal(t, "policy-fail", walEvent.ID)
 
 	// Verify the 2 successful entries were written
 	syncWrites := writer2.getSyncWrites()
@@ -538,10 +619,10 @@ func TestAuditLoggerReplayWALAllFail(t *testing.T) {
 	logger1 := NewLogger(ModeMinimal, writer1, walPath)
 
 	for i := range 2 {
-		logger1.Log(context.Background(), Entry{
+		logger1.Log(context.Background(), Event{
 			Subject: fmt.Sprintf("character:%d", i), Action: "read", Resource: "loc:1",
-			Effect: types.EffectDeny, PolicyID: fmt.Sprintf("policy-%d", i),
-			PolicyName: "p", Attributes: map[string]any{}, DurationUS: 100, Timestamp: time.Now(),
+			Effect: types.EffectDeny, ID: fmt.Sprintf("policy-%d", i),
+			Name: "p", Attributes: map[string]any{}, DurationUS: 100, Timestamp: time.Now(),
 		})
 	}
 	logger1.Close()
@@ -587,4 +668,27 @@ func TestRecordEngineAuditFailureIncrementsCounter(t *testing.T) {
 
 	after := promtestutil.ToFloat64(engineAuditFailuresCounter)
 	assert.Equal(t, before+2, after, "counter should increment by 2")
+}
+
+func TestEventHasSourceComponentMessageFields(t *testing.T) {
+	event := Event{
+		Subject:   "character:01ABC",
+		Action:    "speak",
+		Resource:  "channel:01XYZ",
+		Effect:    types.EffectDeny,
+		ID:        "not_member",
+		Name:      "channels: not a member",
+		Message:   "player not in channel members",
+		Source:    SourcePlugin,
+		Component: "core-channels",
+	}
+	assert.Equal(t, "character:01ABC", event.Subject)
+	assert.Equal(t, "speak", event.Action)
+	assert.Equal(t, "channel:01XYZ", event.Resource)
+	assert.Equal(t, types.EffectDeny, event.Effect)
+	assert.Equal(t, "not_member", event.ID)
+	assert.Equal(t, "channels: not a member", event.Name)
+	assert.Equal(t, "player not in channel members", event.Message)
+	assert.Equal(t, SourcePlugin, event.Source)
+	assert.Equal(t, "core-channels", event.Component)
 }

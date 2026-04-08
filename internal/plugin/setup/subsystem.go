@@ -134,6 +134,7 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	// any capabilities registered before or after New() will be injected at
 	// plugin delivery time.
 	capRegistry := hostfunc.NewCapabilityRegistry()
+	capRegistry.Register("holomush.plugin.v1.AuditService", hostfunc.NewAuditCapability())
 
 	// Create hostfunc bridge.
 	hostFuncs := hostfunc.New(nil, // KV store not yet available

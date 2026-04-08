@@ -263,16 +263,17 @@ func TestMigratorCloseIsIdempotent(t *testing.T) {
 }
 
 func TestMigratorPendingMigrationsReturnsMigrationsAboveCurrentVersion(t *testing.T) {
-	// At version 0, migrations 1-4 should be pending (baseline + is_guest + alias_source + session_player_id)
+	// At version 0, migrations 1-5 should be pending (baseline + is_guest +
+	// alias_source + session_player_id + audit_source_component)
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4}, pending)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5}, pending)
 }
 
 func TestMigratorPendingMigrationsReturnsEmptyAtLatestVersion(t *testing.T) {
-	// At version 4 (latest), no migrations should be pending
-	m := &Migrator{m: &mockMigrate{versionVal: 4}}
+	// At version 5 (latest), no migrations should be pending
+	m := &Migrator{m: &mockMigrate{versionVal: 5}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
 	assert.Empty(t, pending)
@@ -303,11 +304,11 @@ func TestMigratorAppliedMigrationsReturnsEmptyAtVersionZero(t *testing.T) {
 }
 
 func TestMigratorAppliedMigrationsReturnsAllAtLatestVersion(t *testing.T) {
-	// At version 4 (latest), all migrations applied
-	m := &Migrator{m: &mockMigrate{versionVal: 4}}
+	// At version 5 (latest), all migrations applied
+	m := &Migrator{m: &mockMigrate{versionVal: 5}}
 	applied, err := m.AppliedMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4}, applied)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5}, applied)
 }
 
 func TestMigratorAppliedMigrationsReturnsErrorWhenVersionFails(t *testing.T) {
@@ -447,7 +448,7 @@ func TestMigrationName(t *testing.T) {
 		{2, "000002_player_is_guest", false},
 		{3, "000003_alias_source", false},
 		{4, "000004_session_player_id", false},
-		{5, "", false},   // No migration 5
+		{5, "000005_audit_source_component", false},
 		{7, "", false},   // No migration 7 after collapse
 		{999, "", false}, // Unknown version returns empty string and nil error (not found is expected)
 	}

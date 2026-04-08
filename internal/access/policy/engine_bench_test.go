@@ -29,15 +29,15 @@ import (
 	"time"
 
 	"github.com/holomush/holomush/internal/access/policy/attribute"
-	"github.com/holomush/holomush/internal/access/policy/audit"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/audit"
 )
 
-// noopAuditWriter discards all audit entries for benchmarking.
+// noopAuditWriter discards all audit events for benchmarking.
 type noopAuditWriter struct{}
 
-func (n *noopAuditWriter) WriteSync(_ context.Context, _ audit.Entry) error { return nil }
-func (n *noopAuditWriter) WriteAsync(_ audit.Entry) error                   { return nil }
+func (n *noopAuditWriter) WriteSync(_ context.Context, _ audit.Event) error { return nil }
+func (n *noopAuditWriter) WriteAsync(_ audit.Event) error                   { return nil }
 func (n *noopAuditWriter) Close() error                                     { return nil }
 
 // noopSessionResolver always returns empty for benchmarking.

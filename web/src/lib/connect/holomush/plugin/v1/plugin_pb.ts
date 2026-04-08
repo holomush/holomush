@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/plugin/v1/plugin.proto.
  */
 export const file_holomush_plugin_v1_plugin: GenFile = /*@__PURE__*/
-  fileDesc("Ch9ob2xvbXVzaC9wbHVnaW4vdjEvcGx1Z2luLnByb3RvEhJob2xvbXVzaC5wbHVnaW4udjEitwEKDVNlcnZpY2VDb25maWcSGQoRY29ubmVjdGlvbl9zdHJpbmcYASABKAkSUgoRcmVxdWlyZWRfc2VydmljZXMYAiADKAsyNy5ob2xvbXVzaC5wbHVnaW4udjEuU2VydmljZUNvbmZpZy5SZXF1aXJlZFNlcnZpY2VzRW50cnkaNwoVUmVxdWlyZWRTZXJ2aWNlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiQAoLSW5pdFJlcXVlc3QSMQoGY29uZmlnGAEgASgLMiEuaG9sb211c2gucGx1Z2luLnYxLlNlcnZpY2VDb25maWciKQoMSW5pdFJlc3BvbnNlEhkKEXByb3ZpZGVkX3NlcnZpY2VzGAEgAygJIrMBCgVFdmVudBITCgJpZBgBIAEoCUIHukgEcgIQARIXCgZzdHJlYW0YAiABKAlCB7pIBHICEAESFQoEdHlwZRgDIAEoCUIHukgEcgIQARIRCgl0aW1lc3RhbXAYBCABKAMSGwoKYWN0b3Jfa2luZBgFIAEoCUIHukgEcgIQARIZCghhY3Rvcl9pZBgGIAEoCUIHukgEcgIQARIaCgdwYXlsb2FkGAcgASgJQgm6SAZyBBiAgAQiVwoJRW1pdEV2ZW50EhcKBnN0cmVhbRgBIAEoCUIHukgEcgIQARIVCgR0eXBlGAIgASgJQge6SARyAhABEhoKB3BheWxvYWQYAyABKAlCCbpIBnIEGICABCI+ChJIYW5kbGVFdmVudFJlcXVlc3QSKAoFZXZlbnQYASABKAsyGS5ob2xvbXVzaC5wbHVnaW4udjEuRXZlbnQiSQoTSGFuZGxlRXZlbnRSZXNwb25zZRIyCgtlbWl0X2V2ZW50cxgBIAMoCzIdLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnQi9gEKDkNvbW1hbmRSZXF1ZXN0EhgKB2NvbW1hbmQYASABKAlCB7pIBHICEAESFgoEYXJncxgCIAEoCUIIukgFcgMYgEASGwoJcmF3X2lucHV0GAMgASgJQgi6SAVyAxiAQBIdCgxjaGFyYWN0ZXJfaWQYBCABKAlCB7pIBHICEAESHwoOY2hhcmFjdGVyX25hbWUYBSABKAlCB7pIBHICEAESHAoLbG9jYXRpb25faWQYBiABKAlCB7pIBHICEAESGwoKc2Vzc2lvbl9pZBgHIAEoCUIHukgEcgIQARIaCglwbGF5ZXJfaWQYCCABKAlCB7pIBHICEAEijQEKD0NvbW1hbmRSZXNwb25zZRIxCgZzdGF0dXMYASABKA4yIS5ob2xvbXVzaC5wbHVnaW4udjEuQ29tbWFuZFN0YXR1cxIYCgZvdXRwdXQYAiABKAlCCLpIBXIDGIBAEi0KBmV2ZW50cxgDIAMoCzIdLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnQiSwoUSGFuZGxlQ29tbWFuZFJlcXVlc3QSMwoHY29tbWFuZBgBIAEoCzIiLmhvbG9tdXNoLnBsdWdpbi52MS5Db21tYW5kUmVxdWVzdCJOChVIYW5kbGVDb21tYW5kUmVzcG9uc2USNQoIcmVzcG9uc2UYASABKAsyIy5ob2xvbXVzaC5wbHVnaW4udjEuQ29tbWFuZFJlc3BvbnNlImoKIVBsdWdpbkhvc3RTZXJ2aWNlRW1pdEV2ZW50UmVxdWVzdBIXCgZzdHJlYW0YASABKAlCB7pIBHICEAESGwoKZXZlbnRfdHlwZRgCIAEoCUIHukgEcgIQARIPCgdwYXlsb2FkGAMgASgMIiQKIlBsdWdpbkhvc3RTZXJ2aWNlRW1pdEV2ZW50UmVzcG9uc2UiUAobUGx1Z2luSG9zdFNlcnZpY2VMb2dSZXF1ZXN0EhYKBWxldmVsGAEgASgJQge6SARyAhABEhkKB21lc3NhZ2UYAiABKAlCCLpIBXIDGIBAIh4KHFBsdWdpbkhvc3RTZXJ2aWNlTG9nUmVzcG9uc2UiUwodUGx1Z2luSG9zdFNlcnZpY2VLVkdldFJlcXVlc3QSHAoLcGx1Z2luX25hbWUYASABKAlCB7pIBHICEAESFAoDa2V5GAIgASgJQge6SARyAhABIj4KHlBsdWdpbkhvc3RTZXJ2aWNlS1ZHZXRSZXNwb25zZRINCgV2YWx1ZRgBIAEoCRINCgVmb3VuZBgCIAEoCCJiCh1QbHVnaW5Ib3N0U2VydmljZUtWU2V0UmVxdWVzdBIcCgtwbHVnaW5fbmFtZRgBIAEoCUIHukgEcgIQARIUCgNrZXkYAiABKAlCB7pIBHICEAESDQoFdmFsdWUYAyABKAkiIAoeUGx1Z2luSG9zdFNlcnZpY2VLVlNldFJlc3BvbnNlIlYKIFBsdWdpbkhvc3RTZXJ2aWNlS1ZEZWxldGVSZXF1ZXN0EhwKC3BsdWdpbl9uYW1lGAEgASgJQge6SARyAhABEhQKA2tleRgCIAEoCUIHukgEcgIQASIjCiFQbHVnaW5Ib3N0U2VydmljZUtWRGVsZXRlUmVzcG9uc2UqlgEKDUNvbW1hbmRTdGF0dXMSHgoaQ09NTUFORF9TVEFUVVNfVU5TUEVDSUZJRUQQABIVChFDT01NQU5EX1NUQVRVU19PSxABEhgKFENPTU1BTkRfU1RBVFVTX0VSUk9SEAISGgoWQ09NTUFORF9TVEFUVVNfRkFJTFVSRRADEhgKFENPTU1BTkRfU1RBVFVTX0ZBVEFMEAQyoAIKDVBsdWdpblNlcnZpY2USSQoESW5pdBIfLmhvbG9tdXNoLnBsdWdpbi52MS5Jbml0UmVxdWVzdBogLmhvbG9tdXNoLnBsdWdpbi52MS5Jbml0UmVzcG9uc2USXgoLSGFuZGxlRXZlbnQSJi5ob2xvbXVzaC5wbHVnaW4udjEuSGFuZGxlRXZlbnRSZXF1ZXN0GicuaG9sb211c2gucGx1Z2luLnYxLkhhbmRsZUV2ZW50UmVzcG9uc2USZAoNSGFuZGxlQ29tbWFuZBIoLmhvbG9tdXNoLnBsdWdpbi52MS5IYW5kbGVDb21tYW5kUmVxdWVzdBopLmhvbG9tdXNoLnBsdWdpbi52MS5IYW5kbGVDb21tYW5kUmVzcG9uc2Uy0gQKEVBsdWdpbkhvc3RTZXJ2aWNlEnoKCUVtaXRFdmVudBI1LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUVtaXRFdmVudFJlcXVlc3QaNi5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VFbWl0RXZlbnRSZXNwb25zZRJoCgNMb2cSLy5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VMb2dSZXF1ZXN0GjAuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlTG9nUmVzcG9uc2USbgoFS1ZHZXQSMS5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VLVkdldFJlcXVlc3QaMi5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VLVkdldFJlc3BvbnNlEm4KBUtWU2V0EjEuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlS1ZTZXRSZXF1ZXN0GjIuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlS1ZTZXRSZXNwb25zZRJ3CghLVkRlbGV0ZRI0LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUtWRGVsZXRlUmVxdWVzdBo1LmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUtWRGVsZXRlUmVzcG9uc2VCRFpCZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvcGx1Z2luL3YxO3BsdWdpbnYxYgZwcm90bzM", [file_buf_validate_validate]);
+  fileDesc("Ch9ob2xvbXVzaC9wbHVnaW4vdjEvcGx1Z2luLnByb3RvEhJob2xvbXVzaC5wbHVnaW4udjEitwEKDVNlcnZpY2VDb25maWcSGQoRY29ubmVjdGlvbl9zdHJpbmcYASABKAkSUgoRcmVxdWlyZWRfc2VydmljZXMYAiADKAsyNy5ob2xvbXVzaC5wbHVnaW4udjEuU2VydmljZUNvbmZpZy5SZXF1aXJlZFNlcnZpY2VzRW50cnkaNwoVUmVxdWlyZWRTZXJ2aWNlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiQAoLSW5pdFJlcXVlc3QSMQoGY29uZmlnGAEgASgLMiEuaG9sb211c2gucGx1Z2luLnYxLlNlcnZpY2VDb25maWciKQoMSW5pdFJlc3BvbnNlEhkKEXByb3ZpZGVkX3NlcnZpY2VzGAEgAygJIrMBCgVFdmVudBITCgJpZBgBIAEoCUIHukgEcgIQARIXCgZzdHJlYW0YAiABKAlCB7pIBHICEAESFQoEdHlwZRgDIAEoCUIHukgEcgIQARIRCgl0aW1lc3RhbXAYBCABKAMSGwoKYWN0b3Jfa2luZBgFIAEoCUIHukgEcgIQARIZCghhY3Rvcl9pZBgGIAEoCUIHukgEcgIQARIaCgdwYXlsb2FkGAcgASgJQgm6SAZyBBiAgAQiVwoJRW1pdEV2ZW50EhcKBnN0cmVhbRgBIAEoCUIHukgEcgIQARIVCgR0eXBlGAIgASgJQge6SARyAhABEhoKB3BheWxvYWQYAyABKAlCCbpIBnIEGICABCI+ChJIYW5kbGVFdmVudFJlcXVlc3QSKAoFZXZlbnQYASABKAsyGS5ob2xvbXVzaC5wbHVnaW4udjEuRXZlbnQiSQoTSGFuZGxlRXZlbnRSZXNwb25zZRIyCgtlbWl0X2V2ZW50cxgBIAMoCzIdLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnQi9gEKDkNvbW1hbmRSZXF1ZXN0EhgKB2NvbW1hbmQYASABKAlCB7pIBHICEAESFgoEYXJncxgCIAEoCUIIukgFcgMYgEASGwoJcmF3X2lucHV0GAMgASgJQgi6SAVyAxiAQBIdCgxjaGFyYWN0ZXJfaWQYBCABKAlCB7pIBHICEAESHwoOY2hhcmFjdGVyX25hbWUYBSABKAlCB7pIBHICEAESHAoLbG9jYXRpb25faWQYBiABKAlCB7pIBHICEAESGwoKc2Vzc2lvbl9pZBgHIAEoCUIHukgEcgIQARIaCglwbGF5ZXJfaWQYCCABKAlCB7pIBHICEAEiyQEKD0NvbW1hbmRSZXNwb25zZRIxCgZzdGF0dXMYASABKA4yIS5ob2xvbXVzaC5wbHVnaW4udjEuQ29tbWFuZFN0YXR1cxIYCgZvdXRwdXQYAiABKAlCCLpIBXIDGIBAEi0KBmV2ZW50cxgDIAMoCzIdLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnQSOgoLYXVkaXRfaGludHMYBCADKAsyJS5ob2xvbXVzaC5wbHVnaW4udjEuQXVkaXREZWNpc2lvbkhpbnQizAIKEUF1ZGl0RGVjaXNpb25IaW50EhYKAmlkGAEgASgJQgq6SAdyBRABGIABEhYKBG5hbWUYAiABKAlCCLpIBXIDGIACEhkKB21lc3NhZ2UYAyABKAlCCLpIBXIDGIAIEi8KBmVmZmVjdBgEIAEoDjIfLmhvbG9tdXNoLnBsdWdpbi52MS5BdWRpdEVmZmVjdBIhChBhY3Rpb25fcXVhbGlmaWVyGAUgASgJQge6SARyAhhAEhoKCHJlc291cmNlGAYgASgJQgi6SAVyAxiAAhJJCgphdHRyaWJ1dGVzGAcgAygLMjUuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RGVjaXNpb25IaW50LkF0dHJpYnV0ZXNFbnRyeRoxCg9BdHRyaWJ1dGVzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJLChRIYW5kbGVDb21tYW5kUmVxdWVzdBIzCgdjb21tYW5kGAEgASgLMiIuaG9sb211c2gucGx1Z2luLnYxLkNvbW1hbmRSZXF1ZXN0Ik4KFUhhbmRsZUNvbW1hbmRSZXNwb25zZRI1CghyZXNwb25zZRgBIAEoCzIjLmhvbG9tdXNoLnBsdWdpbi52MS5Db21tYW5kUmVzcG9uc2UiagohUGx1Z2luSG9zdFNlcnZpY2VFbWl0RXZlbnRSZXF1ZXN0EhcKBnN0cmVhbRgBIAEoCUIHukgEcgIQARIbCgpldmVudF90eXBlGAIgASgJQge6SARyAhABEg8KB3BheWxvYWQYAyABKAwiJAoiUGx1Z2luSG9zdFNlcnZpY2VFbWl0RXZlbnRSZXNwb25zZSJQChtQbHVnaW5Ib3N0U2VydmljZUxvZ1JlcXVlc3QSFgoFbGV2ZWwYASABKAlCB7pIBHICEAESGQoHbWVzc2FnZRgCIAEoCUIIukgFcgMYgEAiHgocUGx1Z2luSG9zdFNlcnZpY2VMb2dSZXNwb25zZSJTCh1QbHVnaW5Ib3N0U2VydmljZUtWR2V0UmVxdWVzdBIcCgtwbHVnaW5fbmFtZRgBIAEoCUIHukgEcgIQARIUCgNrZXkYAiABKAlCB7pIBHICEAEiPgoeUGx1Z2luSG9zdFNlcnZpY2VLVkdldFJlc3BvbnNlEg0KBXZhbHVlGAEgASgJEg0KBWZvdW5kGAIgASgIImIKHVBsdWdpbkhvc3RTZXJ2aWNlS1ZTZXRSZXF1ZXN0EhwKC3BsdWdpbl9uYW1lGAEgASgJQge6SARyAhABEhQKA2tleRgCIAEoCUIHukgEcgIQARINCgV2YWx1ZRgDIAEoCSIgCh5QbHVnaW5Ib3N0U2VydmljZUtWU2V0UmVzcG9uc2UiVgogUGx1Z2luSG9zdFNlcnZpY2VLVkRlbGV0ZVJlcXVlc3QSHAoLcGx1Z2luX25hbWUYASABKAlCB7pIBHICEAESFAoDa2V5GAIgASgJQge6SARyAhABIiMKIVBsdWdpbkhvc3RTZXJ2aWNlS1ZEZWxldGVSZXNwb25zZSqWAQoNQ29tbWFuZFN0YXR1cxIeChpDT01NQU5EX1NUQVRVU19VTlNQRUNJRklFRBAAEhUKEUNPTU1BTkRfU1RBVFVTX09LEAESGAoUQ09NTUFORF9TVEFUVVNfRVJST1IQAhIaChZDT01NQU5EX1NUQVRVU19GQUlMVVJFEAMSGAoUQ09NTUFORF9TVEFUVVNfRkFUQUwQBCpaCgtBdWRpdEVmZmVjdBIcChhBVURJVF9FRkZFQ1RfVU5TUEVDSUZJRUQQABIVChFBVURJVF9FRkZFQ1RfREVOWRABEhYKEkFVRElUX0VGRkVDVF9BTExPVxACMqACCg1QbHVnaW5TZXJ2aWNlEkkKBEluaXQSHy5ob2xvbXVzaC5wbHVnaW4udjEuSW5pdFJlcXVlc3QaIC5ob2xvbXVzaC5wbHVnaW4udjEuSW5pdFJlc3BvbnNlEl4KC0hhbmRsZUV2ZW50EiYuaG9sb211c2gucGx1Z2luLnYxLkhhbmRsZUV2ZW50UmVxdWVzdBonLmhvbG9tdXNoLnBsdWdpbi52MS5IYW5kbGVFdmVudFJlc3BvbnNlEmQKDUhhbmRsZUNvbW1hbmQSKC5ob2xvbXVzaC5wbHVnaW4udjEuSGFuZGxlQ29tbWFuZFJlcXVlc3QaKS5ob2xvbXVzaC5wbHVnaW4udjEuSGFuZGxlQ29tbWFuZFJlc3BvbnNlMtIEChFQbHVnaW5Ib3N0U2VydmljZRJ6CglFbWl0RXZlbnQSNS5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VFbWl0RXZlbnRSZXF1ZXN0GjYuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlRW1pdEV2ZW50UmVzcG9uc2USaAoDTG9nEi8uaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlTG9nUmVxdWVzdBowLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUxvZ1Jlc3BvbnNlEm4KBUtWR2V0EjEuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlS1ZHZXRSZXF1ZXN0GjIuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlS1ZHZXRSZXNwb25zZRJuCgVLVlNldBIxLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUtWU2V0UmVxdWVzdBoyLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUtWU2V0UmVzcG9uc2USdwoIS1ZEZWxldGUSNC5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VLVkRlbGV0ZVJlcXVlc3QaNS5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VLVkRlbGV0ZVJlc3BvbnNlQkRaQmdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3BsdWdpbi92MTtwbHVnaW52MWIGcHJvdG8z", [file_buf_validate_validate]);
 
 /**
  * ServiceConfig carries initialization data from the host to the plugin.
@@ -327,6 +327,17 @@ export type CommandResponse = Message<"holomush.plugin.v1.CommandResponse"> & {
    * @generated from field: repeated holomush.plugin.v1.EmitEvent events = 3;
    */
   events: EmitEvent[];
+
+  /**
+   * Audit decision hints accumulated by the plugin handler during this
+   * command dispatch. The dispatcher extracts these after the response is
+   * returned, stamps host-controlled fields (subject, action base, source,
+   * component, timestamp, duration), and flushes them through the audit
+   * logger.
+   *
+   * @generated from field: repeated holomush.plugin.v1.AuditDecisionHint audit_hints = 4;
+   */
+  auditHints: AuditDecisionHint[];
 };
 
 /**
@@ -335,6 +346,82 @@ export type CommandResponse = Message<"holomush.plugin.v1.CommandResponse"> & {
  */
 export const CommandResponseSchema: GenMessage<CommandResponse> = /*@__PURE__*/
   messageDesc(file_holomush_plugin_v1_plugin, 8);
+
+/**
+ * AuditDecisionHint is a partial audit event emitted by a plugin handler.
+ * The plugin provides decision-specific fields (id, name, message, effect,
+ * resource, attributes, action qualifier); the host stamps identity fields
+ * (subject from dispatch context, source = SourcePlugin, component =
+ * plugin name, timestamp, duration).
+ *
+ * Plugins MUST NOT set subject, source, or component — the dispatcher
+ * overwrites those fields to prevent spoofing.
+ *
+ * @generated from message holomush.plugin.v1.AuditDecisionHint
+ */
+export type AuditDecisionHint = Message<"holomush.plugin.v1.AuditDecisionHint"> & {
+  /**
+   * Stable slug identifying the plugin's internal rule, e.g., "not_member".
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * Human-readable label for the rule, e.g., "channels: not a member".
+   *
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * Per-firing description, e.g., "player not in channel members".
+   *
+   * @generated from field: string message = 3;
+   */
+  message: string;
+
+  /**
+   * Effect the plugin decided. Closed enum at the proto boundary —
+   * unknown effects can never round-trip the wire.
+   *
+   * @generated from field: holomush.plugin.v1.AuditEffect effect = 4;
+   */
+  effect: AuditEffect;
+
+  /**
+   * Action qualifier appended to the dispatcher-known base action.
+   * E.g., the dispatcher knows the command is "channel"; the plugin
+   * supplies "speak", producing final action "channel:speak".
+   *
+   * @generated from field: string action_qualifier = 5;
+   */
+  actionQualifier: string;
+
+  /**
+   * Resource reference in <type>:<id> form, e.g., "channel:01XYZ".
+   * Plugin-provided, host-validated for shape.
+   *
+   * @generated from field: string resource = 6;
+   */
+  resource: string;
+
+  /**
+   * Plugin-provided context. Keys SHOULD be namespaced (e.g.,
+   * "channel.type" rather than "type") to avoid collision with
+   * host-overlay keys.
+   *
+   * @generated from field: map<string, string> attributes = 7;
+   */
+  attributes: { [key: string]: string };
+};
+
+/**
+ * Describes the message holomush.plugin.v1.AuditDecisionHint.
+ * Use `create(AuditDecisionHintSchema)` to create a new message.
+ */
+export const AuditDecisionHintSchema: GenMessage<AuditDecisionHint> = /*@__PURE__*/
+  messageDesc(file_holomush_plugin_v1_plugin, 9);
 
 /**
  * HandleCommandRequest wraps a command for delivery to the plugin.
@@ -355,7 +442,7 @@ export type HandleCommandRequest = Message<"holomush.plugin.v1.HandleCommandRequ
  * Use `create(HandleCommandRequestSchema)` to create a new message.
  */
 export const HandleCommandRequestSchema: GenMessage<HandleCommandRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 9);
+  messageDesc(file_holomush_plugin_v1_plugin, 10);
 
 /**
  * HandleCommandResponse wraps the command result from the plugin.
@@ -376,7 +463,7 @@ export type HandleCommandResponse = Message<"holomush.plugin.v1.HandleCommandRes
  * Use `create(HandleCommandResponseSchema)` to create a new message.
  */
 export const HandleCommandResponseSchema: GenMessage<HandleCommandResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 10);
+  messageDesc(file_holomush_plugin_v1_plugin, 11);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceEmitEventRequest
@@ -403,7 +490,7 @@ export type PluginHostServiceEmitEventRequest = Message<"holomush.plugin.v1.Plug
  * Use `create(PluginHostServiceEmitEventRequestSchema)` to create a new message.
  */
 export const PluginHostServiceEmitEventRequestSchema: GenMessage<PluginHostServiceEmitEventRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 11);
+  messageDesc(file_holomush_plugin_v1_plugin, 12);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceEmitEventResponse
@@ -416,7 +503,7 @@ export type PluginHostServiceEmitEventResponse = Message<"holomush.plugin.v1.Plu
  * Use `create(PluginHostServiceEmitEventResponseSchema)` to create a new message.
  */
 export const PluginHostServiceEmitEventResponseSchema: GenMessage<PluginHostServiceEmitEventResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 12);
+  messageDesc(file_holomush_plugin_v1_plugin, 13);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceLogRequest
@@ -438,7 +525,7 @@ export type PluginHostServiceLogRequest = Message<"holomush.plugin.v1.PluginHost
  * Use `create(PluginHostServiceLogRequestSchema)` to create a new message.
  */
 export const PluginHostServiceLogRequestSchema: GenMessage<PluginHostServiceLogRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 13);
+  messageDesc(file_holomush_plugin_v1_plugin, 14);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceLogResponse
@@ -451,7 +538,7 @@ export type PluginHostServiceLogResponse = Message<"holomush.plugin.v1.PluginHos
  * Use `create(PluginHostServiceLogResponseSchema)` to create a new message.
  */
 export const PluginHostServiceLogResponseSchema: GenMessage<PluginHostServiceLogResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 14);
+  messageDesc(file_holomush_plugin_v1_plugin, 15);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceKVGetRequest
@@ -473,7 +560,7 @@ export type PluginHostServiceKVGetRequest = Message<"holomush.plugin.v1.PluginHo
  * Use `create(PluginHostServiceKVGetRequestSchema)` to create a new message.
  */
 export const PluginHostServiceKVGetRequestSchema: GenMessage<PluginHostServiceKVGetRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 15);
+  messageDesc(file_holomush_plugin_v1_plugin, 16);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceKVGetResponse
@@ -495,7 +582,7 @@ export type PluginHostServiceKVGetResponse = Message<"holomush.plugin.v1.PluginH
  * Use `create(PluginHostServiceKVGetResponseSchema)` to create a new message.
  */
 export const PluginHostServiceKVGetResponseSchema: GenMessage<PluginHostServiceKVGetResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 16);
+  messageDesc(file_holomush_plugin_v1_plugin, 17);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceKVSetRequest
@@ -522,7 +609,7 @@ export type PluginHostServiceKVSetRequest = Message<"holomush.plugin.v1.PluginHo
  * Use `create(PluginHostServiceKVSetRequestSchema)` to create a new message.
  */
 export const PluginHostServiceKVSetRequestSchema: GenMessage<PluginHostServiceKVSetRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 17);
+  messageDesc(file_holomush_plugin_v1_plugin, 18);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceKVSetResponse
@@ -535,7 +622,7 @@ export type PluginHostServiceKVSetResponse = Message<"holomush.plugin.v1.PluginH
  * Use `create(PluginHostServiceKVSetResponseSchema)` to create a new message.
  */
 export const PluginHostServiceKVSetResponseSchema: GenMessage<PluginHostServiceKVSetResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 18);
+  messageDesc(file_holomush_plugin_v1_plugin, 19);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceKVDeleteRequest
@@ -557,7 +644,7 @@ export type PluginHostServiceKVDeleteRequest = Message<"holomush.plugin.v1.Plugi
  * Use `create(PluginHostServiceKVDeleteRequestSchema)` to create a new message.
  */
 export const PluginHostServiceKVDeleteRequestSchema: GenMessage<PluginHostServiceKVDeleteRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 19);
+  messageDesc(file_holomush_plugin_v1_plugin, 20);
 
 /**
  * @generated from message holomush.plugin.v1.PluginHostServiceKVDeleteResponse
@@ -570,7 +657,7 @@ export type PluginHostServiceKVDeleteResponse = Message<"holomush.plugin.v1.Plug
  * Use `create(PluginHostServiceKVDeleteResponseSchema)` to create a new message.
  */
 export const PluginHostServiceKVDeleteResponseSchema: GenMessage<PluginHostServiceKVDeleteResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_plugin_v1_plugin, 20);
+  messageDesc(file_holomush_plugin_v1_plugin, 21);
 
 /**
  * CommandStatus maps to pkg/plugin.CommandStatus values.
@@ -609,6 +696,38 @@ export enum CommandStatus {
  */
 export const CommandStatusSchema: GenEnum<CommandStatus> = /*@__PURE__*/
   enumDesc(file_holomush_plugin_v1_plugin, 0);
+
+/**
+ * AuditEffect is the closed set of decision outcomes a plugin handler may
+ * emit through an AuditDecisionHint. Plugin denials and plugin allows are
+ * the only meaningful outcomes — engine-specific effects (default_deny,
+ * system_bypass) are not exposed to plugins because plugins do not produce
+ * those decisions.
+ *
+ * @generated from enum holomush.plugin.v1.AuditEffect
+ */
+export enum AuditEffect {
+  /**
+   * @generated from enum value: AUDIT_EFFECT_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: AUDIT_EFFECT_DENY = 1;
+   */
+  DENY = 1,
+
+  /**
+   * @generated from enum value: AUDIT_EFFECT_ALLOW = 2;
+   */
+  ALLOW = 2,
+}
+
+/**
+ * Describes the enum holomush.plugin.v1.AuditEffect.
+ */
+export const AuditEffectSchema: GenEnum<AuditEffect> = /*@__PURE__*/
+  enumDesc(file_holomush_plugin_v1_plugin, 1);
 
 /**
  * PluginService is called by the go-plugin host to send events and commands to binary plugins.

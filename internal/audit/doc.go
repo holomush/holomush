@@ -17,7 +17,7 @@
 //
 // # Architecture
 //
-// The Logger routes entries based on effect and mode:
+// The Logger routes events based on effect and mode:
 //
 //	deny, default_deny, system_bypass → sync write → WAL fallback on failure
 //	allow (in ModeAll only) → async write via buffered channel
@@ -26,9 +26,9 @@
 //
 // # Resilience
 //
-// When sync writes fail, entries are written to a WAL file at
+// When sync writes fail, events are written to a WAL file at
 // $XDG_STATE_HOME/holomush/audit-wal.jsonl. The ReplayWAL method can be
-// used to recover entries after outages.
+// used to recover events after outages.
 //
 // # Metrics
 //
@@ -44,18 +44,20 @@
 //	defer logger.Close()
 //
 //	// Log a decision
-//	entry := audit.Entry{
+//	event := audit.Event{
+//	    ID:         "policy-123",
+//	    Name:       "allow-read",
+//	    Source:     audit.SourceEngine,
+//	    Component:  "abac",
 //	    Subject:    "character:01ABC",
 //	    Action:     "read",
 //	    Resource:   "location:01XYZ",
 //	    Effect:     types.EffectAllow,
-//	    PolicyID:   "policy-123",
-//	    PolicyName: "allow-read",
 //	    Attributes: map[string]any{"role": "player"},
 //	    DurationUS: 150,
 //	    Timestamp:  time.Now(),
 //	}
-//	logger.Log(ctx, entry)
+//	logger.Log(ctx, event)
 //
 //	// Replay WAL after recovery
 //	if err := logger.ReplayWAL(ctx); err != nil {
