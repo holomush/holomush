@@ -101,11 +101,27 @@ func assertParticipantRowAbsent(t *testing.T, store *SceneStore, sceneID, charac
 	assert.ErrorIs(t, err, pgx.ErrNoRows, "expected participant row for (%s, %s) to be absent", sceneID, characterID)
 }
 
-// assertOpsEventRecorded asserts that exactly one row exists in
+// assertOpsEventRecorded asserts that EXACTLY one row exists in
 // scene_ops_events for the given scene with the given kind. Returns the
 // payload JSON for the caller to inspect kind-specific fields.
+//
+// The count check is required to catch duplicate-emission bugs: a previous
+// version of this helper used `ORDER BY ... LIMIT 1` which silently passed
+// when a mutation accidentally emitted the same ops event twice. The
+// idempotent-retry contract (P3.D5) requires "exactly one event per
+// successful mutation, zero events for OpNoChange retries".
 func assertOpsEventRecorded(t *testing.T, store *SceneStore, sceneID string, kind OpsEventKind, expectedActor, expectedTarget string) map[string]any {
 	t.Helper()
+
+	// Step 1: assert exactly one matching row exists.
+	var count int
+	require.NoError(t, store.pool.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM scene_ops_events WHERE scene_id = $1 AND kind = $2`,
+		sceneID, string(kind),
+	).Scan(&count))
+	require.Equal(t, 1, count, "expected exactly one ops event %s for scene %s, found %d", kind, sceneID, count)
+
+	// Step 2: read the single row and verify actor/target/payload.
 	var (
 		actor   string
 		target  *string
@@ -113,8 +129,7 @@ func assertOpsEventRecorded(t *testing.T, store *SceneStore, sceneID string, kin
 	)
 	err := store.pool.QueryRow(context.Background(), `
 		SELECT actor_id, target_id, payload FROM scene_ops_events
-		WHERE scene_id = $1 AND kind = $2
-		ORDER BY occurred_at DESC LIMIT 1`,
+		WHERE scene_id = $1 AND kind = $2`,
 		sceneID, string(kind),
 	).Scan(&actor, &target, &payload)
 	require.NoError(t, err, "expected ops event %s for scene %s but query failed", kind, sceneID)

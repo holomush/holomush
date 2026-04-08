@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
@@ -990,7 +991,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
 					sceneID, "char-bob",
 				).Scan(&bobRole)
-				Expect(err).To(MatchError(ContainSubstring("no rows")))
+				Expect(err).To(MatchError(pgx.ErrNoRows))
 
 				// DB validation: membership.kick event recorded.
 				var kickCount int
@@ -1070,7 +1071,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
 					sceneID, "char-alice",
 				).Scan(&aliceRole)
-				Expect(err).To(MatchError(ContainSubstring("no rows")))
+				Expect(err).To(MatchError(pgx.ErrNoRows))
 
 				// DB validation: membership.leave event recorded.
 				var leaveCount int
