@@ -562,7 +562,6 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 		RETURNING scene_id, character_id, role, joined_at, (xmax = 0) AS was_inserted`,
 		sceneID, characterID,
 	).Scan(&row.SceneID, &row.CharacterID, &row.Role, &row.JoinedAt, &wasInserted)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Eligibility check failed. Classify the precise reason.
@@ -853,6 +852,140 @@ func (s *SceneStore) KickParticipant(ctx context.Context, sceneID, kickerID, tar
 		return nil, oops.Code("SCENE_KICK_FAILED").Wrap(err)
 	}
 	return row, nil
+}
+
+// TransferOwnership performs a 3-statement transactional ownership swap:
+//  1. Demote current owner: UPDATE scene_participants SET role='member' WHERE owner
+//  2. Promote target: UPDATE scene_participants SET role='owner' WHERE member
+//  3. Update denormalised owner_id: UPDATE scenes SET owner_id = $new
+//
+// All three statements MUST succeed (non-empty RETURNING). Rolls back otherwise.
+// Idempotent when newOwnerID == currentOwnerID (returns nil without changes).
+func (s *SceneStore) TransferOwnership(ctx context.Context, sceneID, currentOwnerID, newOwnerID string) error {
+	ctx, span := startSpan(ctx, "scene.store.transfer_ownership",
+		attribute.String("scene_id", sceneID),
+		attribute.String("current_owner", currentOwnerID),
+		attribute.String("new_owner", newOwnerID),
+	)
+	defer span.End()
+
+	if currentOwnerID == newOwnerID {
+		return nil // idempotent no-op
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		recordError(span, err)
+		return oops.Code("SCENE_TRANSFER_FAILED").Wrap(err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Statement 1: demote current owner.
+	var demotedID string
+	err = tx.QueryRow(ctx, `
+		UPDATE scene_participants SET role = 'member'
+		WHERE scene_id = $1 AND character_id = $2 AND role = 'owner'
+		RETURNING character_id`,
+		sceneID, currentOwnerID,
+	).Scan(&demotedID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return s.classifyTransferMiss(ctx, sceneID, currentOwnerID, newOwnerID, span)
+		}
+		recordError(span, err)
+		return oops.Code("SCENE_TRANSFER_FAILED").Wrap(err)
+	}
+
+	// Statement 2: promote target (must currently be a member, not invited).
+	var promotedID string
+	err = tx.QueryRow(ctx, `
+		UPDATE scene_participants SET role = 'owner'
+		WHERE scene_id = $1 AND character_id = $2 AND role = 'member'
+		RETURNING character_id`,
+		sceneID, newOwnerID,
+	).Scan(&promotedID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return s.classifyTransferMiss(ctx, sceneID, currentOwnerID, newOwnerID, span)
+		}
+		recordError(span, err)
+		return oops.Code("SCENE_TRANSFER_FAILED").Wrap(err)
+	}
+
+	// Statement 3: update denormalised owner_id, gated on state.
+	var sceneIDOut string
+	err = tx.QueryRow(ctx, `
+		UPDATE scenes SET owner_id = $1
+		WHERE id = $2 AND owner_id = $3 AND state IN ('active', 'paused')
+		RETURNING id`,
+		newOwnerID, sceneID, currentOwnerID,
+	).Scan(&sceneIDOut)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return s.classifyTransferMiss(ctx, sceneID, currentOwnerID, newOwnerID, span)
+		}
+		recordError(span, err)
+		return oops.Code("SCENE_TRANSFER_FAILED").Wrap(err)
+	}
+
+	payload := map[string]any{"from": currentOwnerID}
+	if err := recordOpsEventTx(ctx, tx, sceneID, OpsKindMembershipOwnershipTransferred, currentOwnerID, newOwnerID, payload); err != nil {
+		recordError(span, err)
+		return oops.Code("SCENE_TRANSFER_OPS_EVENT_FAILED").Wrap(err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		recordError(span, err)
+		return oops.Code("SCENE_TRANSFER_FAILED").Wrap(err)
+	}
+	return nil
+}
+
+// classifyTransferMiss diagnoses why TransferOwnership's UPDATE chain failed.
+// Issues a single SELECT to figure out the precise reason.
+func (s *SceneStore) classifyTransferMiss(ctx context.Context, sceneID, currentOwnerID, newOwnerID string, span trace.Span) error {
+	// Check the scene exists and its state.
+	var (
+		state         string
+		actualOwnerID string
+	)
+	err := s.pool.QueryRow(ctx,
+		`SELECT state, owner_id FROM scenes WHERE id = $1`,
+		sceneID,
+	).Scan(&state, &actualOwnerID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.Code("SCENE_NOT_FOUND").With("scene_id", sceneID).Wrap(err)
+		}
+		recordError(span, err)
+		return oops.Code("SCENE_TRANSFER_CLASSIFY_FAILED").Wrap(err)
+	}
+	if state != "active" && state != "paused" {
+		return oops.Code("SCENE_TRANSITION_FORBIDDEN").
+			With("scene_id", sceneID).With("op", "transfer-ownership").
+			With("current_state", state).
+			Errorf("scene in state %q cannot have ownership transferred", state)
+	}
+	if actualOwnerID != currentOwnerID {
+		return oops.Code("SCENE_NOT_OWNER").
+			With("scene_id", sceneID).
+			With("caller", currentOwnerID).
+			With("actual_owner", actualOwnerID).
+			Errorf("caller is not the current owner")
+	}
+	// State is OK and caller IS the owner; the failure must be the target.
+	var targetRole string
+	err = s.pool.QueryRow(ctx,
+		`SELECT role FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
+		sceneID, newOwnerID,
+	).Scan(&targetRole)
+	if err != nil || targetRole != "member" {
+		return oops.Code("SCENE_TRANSFER_TARGET_NOT_MEMBER").
+			With("scene_id", sceneID).
+			With("target_id", newOwnerID).
+			Errorf("transfer target must be an existing member")
+	}
+	return oops.Code("SCENE_TRANSFER_FAILED").Errorf("unexpected classify state")
 }
 
 // classifyJoinMiss issues one diagnostic SELECT to figure out which

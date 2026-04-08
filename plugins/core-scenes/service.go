@@ -43,6 +43,7 @@ type sceneStorer interface {
 	RemoveParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error)
 	InviteParticipant(ctx context.Context, sceneID, inviterID, targetID string) (*ParticipantRow, error)
 	KickParticipant(ctx context.Context, sceneID, kickerID, targetID string) (*ParticipantRow, error)
+	TransferOwnership(ctx context.Context, sceneID, currentOwnerID, newOwnerID string) error
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.
@@ -541,6 +542,53 @@ func (s *SceneServiceImpl) KickFromScene(ctx context.Context, req *scenev1.KickF
 		"target_id", req.GetTargetCharacterId(),
 	)
 	return &scenev1.KickFromSceneResponse{}, nil
+}
+
+// TransferOwnership reassigns ownership of a scene from the calling character
+// to a target member. ABAC enforces owner-only transfer at the dispatcher.
+// Per design decision P3.D8, the target MUST be an existing member; the
+// previous owner becomes a member.
+func (s *SceneServiceImpl) TransferOwnership(ctx context.Context, req *scenev1.TransferOwnershipRequest) (*scenev1.TransferOwnershipResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.transfer_ownership",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+		attribute.String("new_owner", req.GetNewOwnerCharacterId()),
+	)
+	defer span.End()
+
+	if err := s.store.TransferOwnership(ctx, req.GetSceneId(), req.GetCharacterId(), req.GetNewOwnerCharacterId()); err != nil {
+		recordError(span, err)
+		var oe oops.OopsError
+		if errors.As(err, &oe) {
+			switch oe.Code() {
+			case "SCENE_NOT_FOUND":
+				return nil, status.Errorf(codes.NotFound, "scene not found: %s", req.GetSceneId())
+			case "SCENE_NOT_OWNER":
+				return nil, status.Errorf(codes.PermissionDenied,
+					"only the scene owner can transfer ownership")
+			case "SCENE_TRANSITION_FORBIDDEN":
+				return nil, status.Errorf(codes.FailedPrecondition,
+					"scene cannot have ownership transferred in its current state")
+			case "SCENE_TRANSFER_TARGET_NOT_MEMBER":
+				return nil, status.Errorf(codes.FailedPrecondition,
+					"transfer target must be an existing member of the scene")
+			}
+		}
+		slog.WarnContext(ctx, "scene.service.transfer_ownership store error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"new_owner", req.GetNewOwnerCharacterId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to transfer ownership: %v", err)
+	}
+
+	slog.InfoContext(ctx, "scene.service.transfer_ownership ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", req.GetSceneId(),
+		"new_owner", req.GetNewOwnerCharacterId(),
+	)
+	return &scenev1.TransferOwnershipResponse{}, nil
 }
 
 // mapTransitionError translates store-layer transition errors into gRPC

@@ -167,6 +167,31 @@ func (f *fakeStore) KickParticipant(_ context.Context, sceneID, kickerID, target
 	return &ParticipantRow{SceneID: sceneID, CharacterID: targetID, Role: role}, nil
 }
 
+func (f *fakeStore) TransferOwnership(_ context.Context, sceneID, currentOwnerID, newOwnerID string) error {
+	if currentOwnerID == newOwnerID {
+		return nil
+	}
+	scene, ok := f.scenes[sceneID]
+	if !ok {
+		return oops.Code("SCENE_NOT_FOUND").With("scene_id", sceneID).Errorf("not found")
+	}
+	if scene.OwnerID != currentOwnerID {
+		return oops.Code("SCENE_NOT_OWNER").With("scene_id", sceneID).Errorf("not owner")
+	}
+	if scene.State != string(SceneStateActive) && scene.State != string(SceneStatePaused) {
+		return oops.Code("SCENE_TRANSITION_FORBIDDEN").
+			With("scene_id", sceneID).With("current_state", scene.State).Errorf("wrong state")
+	}
+	if f.participants[sceneID][newOwnerID] != "member" {
+		return oops.Code("SCENE_TRANSFER_TARGET_NOT_MEMBER").
+			With("scene_id", sceneID).With("target_id", newOwnerID).Errorf("not member")
+	}
+	f.participants[sceneID][currentOwnerID] = "member"
+	f.participants[sceneID][newOwnerID] = "owner"
+	scene.OwnerID = newOwnerID
+	return nil
+}
+
 func (f *fakeStore) End(_ context.Context, id string) (*SceneRow, error) {
 	row, ok := f.scenes[id]
 	if !ok {
@@ -783,6 +808,43 @@ func TestSceneServiceKickFromSceneRejectsKickingOwner(t *testing.T) {
 		CharacterId:       "char-alice",
 		SceneId:           "scene-kfs-owner",
 		TargetCharacterId: "char-alice",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.FailedPrecondition, st.Code())
+}
+
+func TestSceneServiceTransferOwnershipUpdatesOwner(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-tos-1", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	_, _, err := store.AddParticipant(context.Background(), "scene-tos-1", "char-bob")
+	require.NoError(t, err)
+	svc := NewSceneServiceImpl(store)
+
+	_, err = svc.TransferOwnership(context.Background(), &scenev1.TransferOwnershipRequest{
+		CharacterId:         "char-alice",
+		SceneId:             "scene-tos-1",
+		NewOwnerCharacterId: "char-bob",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "char-bob", store.scenes["scene-tos-1"].OwnerID)
+}
+
+func TestSceneServiceTransferOwnershipRejectsNonMemberTargetWithFailedPrecondition(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-tos-nm", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.TransferOwnership(context.Background(), &scenev1.TransferOwnershipRequest{
+		CharacterId:         "char-alice",
+		SceneId:             "scene-tos-nm",
+		NewOwnerCharacterId: "char-bob",
 	})
 	require.Error(t, err)
 	st, _ := status.FromError(err)

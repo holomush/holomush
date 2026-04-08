@@ -920,7 +920,7 @@ func TestInviteParticipantInsertsInvitedRowAndEmitsOpsEvent(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-inv-1", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityPrivate),
+		Visibility:      string(SceneVisibilityPrivate),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -938,7 +938,7 @@ func TestInviteParticipantIsIdempotentForExistingInvitee(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-inv-2", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityPrivate),
+		Visibility:      string(SceneVisibilityPrivate),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -957,7 +957,7 @@ func TestInviteParticipantRejectsExistingMember(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-inv-3", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityOpen),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -975,7 +975,7 @@ func TestKickParticipantRemovesMemberRowAndEmitsOpsEvent(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-kp-1", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityOpen),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -997,7 +997,7 @@ func TestKickParticipantRemovesInvitedRowAndPayloadReflectsPriorRole(t *testing.
 	row := &SceneRow{
 		ID: "scene-kp-inv", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityPrivate),
+		Visibility:      string(SceneVisibilityPrivate),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -1019,7 +1019,7 @@ func TestKickParticipantRefusesToKickOwner(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-kp-owner", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityOpen),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -1028,4 +1028,88 @@ func TestKickParticipantRefusesToKickOwner(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "SCENE_KICK_FORBIDDEN")
 	assertParticipantRowExists(t, store, row.ID, "char-alice", "owner")
+}
+
+func TestTransferOwnershipUpdatesParticipantsAndScenesRowAtomically(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-to-1", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+
+	err = store.TransferOwnership(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+
+	// Previous owner is now a member.
+	assertParticipantRowExists(t, store, row.ID, "char-alice", "member")
+	// New owner.
+	assertParticipantRowExists(t, store, row.ID, "char-bob", "owner")
+	// Denormalised scenes.owner_id updated.
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "char-bob", got.OwnerID)
+
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindMembershipOwnershipTransferred, "char-alice", "char-bob")
+	assert.Equal(t, "char-alice", payload["from"])
+}
+
+func TestTransferOwnershipRejectsNonMemberTarget(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-to-nm", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	err := store.TransferOwnership(ctx, row.ID, "char-alice", "char-bob")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_TRANSFER_TARGET_NOT_MEMBER")
+}
+
+func TestTransferOwnershipRejectsNonOwnerCaller(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-to-no", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	_, _, err = store.AddParticipant(ctx, row.ID, "char-carol")
+	require.NoError(t, err)
+
+	// char-bob (not owner) tries to transfer ownership of the scene to char-carol.
+	err = store.TransferOwnership(ctx, row.ID, "char-bob", "char-carol")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_NOT_OWNER")
+}
+
+func TestTransferOwnershipIsNoOpWhenTargetEqualsCurrentOwner(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-to-self", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	err := store.TransferOwnership(ctx, row.ID, "char-alice", "char-alice")
+	require.NoError(t, err) // idempotent no-op
+	assertParticipantRowExists(t, store, row.ID, "char-alice", "owner")
+	// No transfer ops event emitted.
+	assert.Equal(t, 0, countOpsEvents(t, store, row.ID, OpsKindMembershipOwnershipTransferred))
 }
