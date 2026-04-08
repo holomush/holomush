@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -38,6 +40,7 @@ type Dispatcher struct {
 	aliasCache      *AliasCache            // optional, can be nil
 	rateLimiter     *RateLimitMiddleware   // optional, can be nil
 	pluginDeliverer PluginCommandDeliverer // optional, can be nil
+	auditLogger     *audit.Logger          // optional, can be nil; when nil, plugin-audit flush is skipped
 	optErr          error                  // error from applying options
 }
 
@@ -57,6 +60,16 @@ func WithAliasCache(cache *AliasCache) DispatcherOption {
 func WithPluginDeliverer(pd PluginCommandDeliverer) DispatcherOption {
 	return func(d *Dispatcher) {
 		d.pluginDeliverer = pd
+	}
+}
+
+// WithAuditLogger configures the dispatcher to flush plugin-emitted audit
+// events through the given audit logger. If not provided, plugin audit
+// events are silently dropped — useful for tests that do not care about
+// audit flow.
+func WithAuditLogger(logger *audit.Logger) DispatcherOption {
+	return func(d *Dispatcher) {
+		d.auditLogger = logger
 	}
 }
 
@@ -104,6 +117,19 @@ func NewDispatcher(registry *Registry, engine types.AccessPolicyEngine, opts ...
 func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandExecution) (err error) {
 	metrics := NewMetricsRecorder()
 	defer metrics.Record()
+
+	// Attach an audit event slice to the dispatch context so plugin-emitted
+	// hints can accumulate during command processing. Also attach the exec
+	// so the flush path can stamp Subject/Action on events that lack them
+	// (events pushed directly by the Lua capability, as opposed to those
+	// that came through extractAuditHints which stamps them inline).
+	ctx = audit.NewContextForDispatch(ctx)
+	ctx = context.WithValue(ctx, execContextKey{}, exec)
+
+	// Flush accumulated plugin audit events at the end of dispatch. Errors
+	// are logged and metric-counted but never fail the user's operation
+	// per the failure mode decision in the spec.
+	defer d.flushPluginAuditEvents(ctx)
 
 	// Validate execution context - commands require a character
 	if exec.CharacterID().Compare(ulid.ULID{}) == 0 {
@@ -288,6 +314,11 @@ func (d *Dispatcher) dispatchToPlugin(ctx context.Context, entry *CommandEntry, 
 		return nil
 	}
 
+	// Extract audit hints from the response, stamp host-controlled fields,
+	// and push each onto the context-bound slice. The dispatcher's deferred
+	// flush will route them through the audit logger.
+	d.extractAuditHints(ctx, resp.AuditHints, entry, exec)
+
 	// Handle CommandStatus: set metrics, activity, error flags based on outcome.
 	switch resp.Status {
 	case pluginsdk.CommandOK:
@@ -388,4 +419,149 @@ func (d *Dispatcher) dispatchToPlugin(ctx context.Context, entry *CommandEntry, 
 	}
 
 	return nil
+}
+
+// execContextKey is the context.WithValue key for the CommandExecution
+// attached during Dispatch. The flush path uses this to stamp Subject
+// and Action on events whose emit path did not fill them in (e.g., Lua
+// capability events).
+type execContextKey struct{}
+
+// flushPluginAuditEvents drains any plugin-emitted audit events attached to
+// ctx and writes them through the configured audit logger. Called from
+// Dispatch's deferred path. Errors are logged, counted, and then dropped —
+// audit flush failures MUST NOT fail the user's command per the spec.
+//
+// For each event, Subject and Action are stamped from the dispatch context
+// if they are empty (Lua capability emit path leaves them blank; the binary
+// path fills them in via extractAuditHints).
+func (d *Dispatcher) flushPluginAuditEvents(ctx context.Context) {
+	events := audit.EventsFromContext(ctx)
+	if len(events) == 0 {
+		return
+	}
+
+	if d.auditLogger == nil {
+		// No logger configured — drop events silently. This is the
+		// correct behavior for tests that don't wire an audit logger.
+		return
+	}
+
+	// Retrieve the exec for host field stamping of any events that lack
+	// Subject/Action (typically Lua-emitted events).
+	exec, _ := ctx.Value(execContextKey{}).(*CommandExecution)
+
+	for i := range events {
+		// Fill in host-controlled fields that the emit path may have
+		// left empty.
+		if events[i].Subject == "" && exec != nil {
+			events[i].Subject = access.CharacterSubject(exec.CharacterID().String())
+		}
+		if events[i].Action == "" && exec != nil {
+			events[i].Action = exec.InvokedAs
+		}
+		if events[i].Timestamp.IsZero() {
+			events[i].Timestamp = time.Now()
+		}
+
+		if logErr := d.auditLogger.Log(ctx, events[i]); logErr != nil {
+			slog.WarnContext(ctx, "plugin audit event flush failed",
+				"subject", events[i].Subject,
+				"action", events[i].Action,
+				"resource", events[i].Resource,
+				"component", events[i].Component,
+				"error", logErr,
+			)
+			audit.RecordPluginAuditFailure()
+			// Continue with remaining events.
+		}
+	}
+}
+
+// extractAuditHints converts plugin-provided audit hints into audit.Event
+// values, stamping host-controlled fields (subject, action base, source,
+// component, timestamp, duration) from the dispatch context. The plugin
+// cannot spoof these fields — the dispatcher overwrites them regardless
+// of what the hint contains.
+func (d *Dispatcher) extractAuditHints(ctx context.Context, hints []pluginsdk.AuditHint, entry *CommandEntry, exec *CommandExecution) {
+	if len(hints) == 0 {
+		return
+	}
+
+	hostSubject := access.CharacterSubject(exec.CharacterID().String())
+	hostComponent := entry.PluginName()
+	if hostComponent == "" {
+		hostComponent = "unknown-plugin"
+	}
+
+	for _, hint := range hints {
+		// Validate resource shape if provided. A malformed resource is
+		// logged but does not abort the flush — the event is emitted
+		// with the plugin-provided value (operators see the malformed
+		// string and can investigate).
+		if hint.Resource != "" && !isValidResourceRef(hint.Resource) {
+			slog.WarnContext(ctx, "plugin audit hint has malformed resource",
+				"plugin", hostComponent,
+				"resource", hint.Resource,
+				"hint_id", hint.ID,
+			)
+		}
+
+		// Compose the final action: base from the dispatcher, qualifier
+		// from the plugin. Joined with ':'.
+		action := entry.Name
+		if hint.ActionQualifier != "" {
+			action = entry.Name + ":" + hint.ActionQualifier
+		}
+
+		// Convert hint effect to audit effect.
+		var effect types.Effect
+		switch hint.Effect {
+		case pluginsdk.AuditEffectAllow:
+			effect = types.EffectAllow
+		case pluginsdk.AuditEffectDeny:
+			effect = types.EffectDeny
+		default:
+			// Unknown effect from plugin — log and skip this hint.
+			slog.WarnContext(ctx, "plugin audit hint has unknown effect",
+				"plugin", hostComponent,
+				"effect", hint.Effect,
+				"hint_id", hint.ID,
+			)
+			continue
+		}
+
+		// Merge attributes: plugin-provided first, then host-overlay
+		// (host keys win on collision).
+		merged := make(map[string]any, len(hint.Attributes)+2)
+		for k, v := range hint.Attributes {
+			merged[k] = v
+		}
+		merged["command.invoked_as"] = exec.InvokedAs
+
+		event := audit.Event{
+			ID:         hint.ID,
+			Name:       hint.Name,
+			Message:    hint.Message,
+			Source:     audit.SourcePlugin, // host-stamped, plugin cannot spoof
+			Component:  hostComponent,      // host-stamped from entry.PluginName()
+			Subject:    hostSubject,        // host-stamped from dispatch context
+			Action:     action,             // composed: base + qualifier
+			Resource:   hint.Resource,      // plugin-provided (shape validated above)
+			Effect:     effect,
+			Attributes: merged,
+			DurationUS: 0, // per-hint duration is not meaningful for D-inline — hints accumulate during handler execution and flush atomically
+			Timestamp:  time.Now(),
+		}
+
+		audit.AddEventToContext(ctx, event)
+	}
+}
+
+// isValidResourceRef performs a minimal shape check on a plugin-provided
+// resource reference. Valid form: "<type>:<id>" with at least one character
+// on each side of the colon.
+func isValidResourceRef(ref string) bool {
+	colon := strings.Index(ref, ":")
+	return colon > 0 && colon < len(ref)-1
 }
