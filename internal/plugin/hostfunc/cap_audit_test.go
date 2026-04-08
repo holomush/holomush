@@ -20,16 +20,16 @@ import (
 var _ hostfunc.Capability = (*hostfunc.AuditCapability)(nil)
 
 func TestCapAuditNamespaceIsAudit(t *testing.T) {
-	cap := hostfunc.NewAuditCapability()
-	assert.Equal(t, "audit", cap.Namespace())
+	auditCap := hostfunc.NewAuditCapability()
+	assert.Equal(t, "audit", auditCap.Namespace())
 }
 
 func TestCapAuditRegisterInjectsAuditGlobalTable(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 
-	cap := hostfunc.NewAuditCapability()
-	cap.Register(L, "test-plugin")
+	auditCap := hostfunc.NewAuditCapability()
+	auditCap.Register(L, "test-plugin")
 
 	auditGlobal := L.GetGlobal("audit")
 	require.Equal(t, lua.LTTable, auditGlobal.Type(),
@@ -44,8 +44,8 @@ func TestCapAuditDenyPushesHintToContextBoundSlice(t *testing.T) {
 	ctx := audit.NewContextForDispatch(context.Background())
 	L.SetContext(ctx)
 
-	cap := hostfunc.NewAuditCapability()
-	cap.Register(L, "test-plugin")
+	auditCap := hostfunc.NewAuditCapability()
+	auditCap.Register(L, "test-plugin")
 
 	err := L.DoString(`audit.deny("not_member", "player not in channel members", {channel_type = "public"})`)
 	require.NoError(t, err)
@@ -67,8 +67,8 @@ func TestCapAuditAllowPushesHintWithAllowEffect(t *testing.T) {
 	ctx := audit.NewContextForDispatch(context.Background())
 	L.SetContext(ctx)
 
-	cap := hostfunc.NewAuditCapability()
-	cap.Register(L, "test-plugin")
+	auditCap := hostfunc.NewAuditCapability()
+	auditCap.Register(L, "test-plugin")
 
 	err := L.DoString(`audit.allow("speak_ok", "message delivered")`)
 	require.NoError(t, err)
@@ -84,8 +84,8 @@ func TestCapAuditIsNoOpWhenNoContextAttachedToLState(t *testing.T) {
 
 	// No SetContext — luaContext() returns context.Background which has
 	// no attached event slice.
-	cap := hostfunc.NewAuditCapability()
-	cap.Register(L, "test-plugin")
+	auditCap := hostfunc.NewAuditCapability()
+	auditCap.Register(L, "test-plugin")
 
 	err := L.DoString(`audit.deny("orphan", "no context")`)
 	require.NoError(t, err)
@@ -99,8 +99,8 @@ func TestCapAuditHandlesOptionalAttributesTable(t *testing.T) {
 	ctx := audit.NewContextForDispatch(context.Background())
 	L.SetContext(ctx)
 
-	cap := hostfunc.NewAuditCapability()
-	cap.Register(L, "test-plugin")
+	auditCap := hostfunc.NewAuditCapability()
+	auditCap.Register(L, "test-plugin")
 
 	// Call without the third argument.
 	err := L.DoString(`audit.deny("simple", "minimal form")`)
@@ -121,8 +121,8 @@ func TestCapAuditSkipsNonStringKeysInAttributesTable(t *testing.T) {
 	ctx := audit.NewContextForDispatch(context.Background())
 	L.SetContext(ctx)
 
-	cap := hostfunc.NewAuditCapability()
-	cap.Register(L, "test-plugin")
+	auditCap := hostfunc.NewAuditCapability()
+	auditCap.Register(L, "test-plugin")
 
 	// Mix of valid (string) and invalid (int, bool) keys.
 	script := `

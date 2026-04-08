@@ -448,8 +448,13 @@ func (d *Dispatcher) flushPluginAuditEvents(ctx context.Context) {
 	}
 
 	// Retrieve the exec for host field stamping of any events that lack
-	// Subject/Action (typically Lua-emitted events).
-	exec, _ := ctx.Value(execContextKey{}).(*CommandExecution)
+	// Subject/Action (typically Lua-emitted events). When the key is
+	// absent or of the wrong type, exec will be nil and the loop body
+	// handles that gracefully.
+	exec, ok := ctx.Value(execContextKey{}).(*CommandExecution)
+	if !ok {
+		exec = nil
+	}
 
 	for i := range events {
 		// Fill in host-controlled fields that the emit path may have

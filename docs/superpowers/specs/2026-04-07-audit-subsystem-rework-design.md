@@ -9,9 +9,10 @@
 **Bead:** `holomush-ggbz`
 **Blocks:** `holomush-0sc.12` (channel plugin rework)
 **Related:**
-  - `docs/superpowers/specs/2026-04-07-plugin-abac-hardening-design.md` — plugin ABAC hardening that made handler-side decision auditing feasible
-  - `docs/specs/2026-04-03-channels-architecture.md` — the immediate downstream consumer
-  - `docs/superpowers/specs/2026-04-06-plugin-abac-trust-boundary-design.md` — plugin trust boundary this spec extends
+
+- `docs/superpowers/specs/2026-04-07-plugin-abac-hardening-design.md` — plugin ABAC hardening that made handler-side decision auditing feasible
+- `docs/specs/2026-04-03-channels-architecture.md` — the immediate downstream consumer
+- `docs/superpowers/specs/2026-04-06-plugin-abac-trust-boundary-design.md` — plugin trust boundary this spec extends
 
 ## RFC2119 Keywords
 
@@ -87,6 +88,7 @@ Rationale: nothing in the audit package switches on `Source` to change behavior 
 `Source` identifies the *kind* of emitter. `Component` identifies the *specific* emitter within that kind. For engine entries, `Component = "abac"`. For plugin entries, `Component = "core-channels"` or whichever specific plugin name. For system entries, `Component = "session-reaper"` or similar.
 
 The split lets operators query at two granularities:
+
 - "All plugin denials": `WHERE source = 'plugin'`
 - "All denials from core-channels specifically": `WHERE source = 'plugin' AND component = 'core-channels'`
 
@@ -157,6 +159,7 @@ message AuditDecisionHint {
 ```
 
 **The SDK flow:**
+
 1. Plugin handler calls `pluginsdk.Audit(ctx).Deny(id, message, attrs...)`
 2. SDK pushes a hint onto an in-process context-bound slice (`context.WithValue` key `auditHintsKey`)
 3. When the handler returns, SDK harvests the slice and serializes it into `CommandResponse.audit_hints`

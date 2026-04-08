@@ -601,6 +601,12 @@ func TestEventHasSourceComponentMessageFields(t *testing.T) {
 		Source:    SourcePlugin,
 		Component: "core-channels",
 	}
+	assert.Equal(t, "character:01ABC", event.Subject)
+	assert.Equal(t, "speak", event.Action)
+	assert.Equal(t, "channel:01XYZ", event.Resource)
+	assert.Equal(t, types.EffectDeny, event.Effect)
+	assert.Equal(t, "not_member", event.ID)
+	assert.Equal(t, "channels: not a member", event.Name)
 	assert.Equal(t, "player not in channel members", event.Message)
 	assert.Equal(t, SourcePlugin, event.Source)
 	assert.Equal(t, "core-channels", event.Component)

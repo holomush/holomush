@@ -115,6 +115,7 @@ Expected: old directory gone. `ls internal/access/policy/audit 2>&1` returns "No
 For each file, replace `"github.com/holomush/holomush/internal/access/policy/audit"` with `"github.com/holomush/holomush/internal/audit"`:
 
 Files to update:
+
 1. `internal/access/policy/engine.go`
 2. `internal/access/policy/engine_test.go`
 3. `internal/access/policy/engine_bench_test.go`
@@ -129,11 +130,13 @@ Files to update:
 Each edit is the same single-line replace:
 
 Old:
+
 ```go
 "github.com/holomush/holomush/internal/access/policy/audit"
 ```
 
 New:
+
 ```go
 "github.com/holomush/holomush/internal/audit"
 ```
@@ -189,6 +192,7 @@ Expected: new working-copy change created on top of the rename commit.
 File: `internal/audit/logger.go`
 
 Find:
+
 ```go
 // Entry represents a single access control decision to be logged.
 type Entry struct {
@@ -205,6 +209,7 @@ type Entry struct {
 ```
 
 Replace with:
+
 ```go
 // Event represents a single access control decision to be logged.
 type Event struct {
@@ -225,6 +230,7 @@ type Event struct {
 File: `internal/audit/logger.go`
 
 Find:
+
 ```go
 // Writer is the interface for writing audit entries to a backend.
 type Writer interface {
@@ -235,6 +241,7 @@ type Writer interface {
 ```
 
 Replace with:
+
 ```go
 // Writer is the interface for writing audit events to a backend.
 type Writer interface {
@@ -273,6 +280,7 @@ Expected: no output.
 File: `internal/audit/postgres.go`
 
 Find:
+
 ```go
 // PostgresWriter implements Writer for PostgreSQL.
 type PostgresWriter struct {
@@ -286,6 +294,7 @@ type PostgresWriter struct {
 ```
 
 Replace with:
+
 ```go
 // PostgresWriter implements Writer for PostgreSQL.
 type PostgresWriter struct {
@@ -299,6 +308,7 @@ type PostgresWriter struct {
 ```
 
 Find:
+
 ```go
 	writer := &PostgresWriter{
 		db:          db,
@@ -306,6 +316,7 @@ Find:
 ```
 
 Replace with:
+
 ```go
 	writer := &PostgresWriter{
 		db:          db,
@@ -313,6 +324,7 @@ Replace with:
 ```
 
 Find (the `WriteSync` method):
+
 ```go
 // WriteSync performs a synchronous write to the database.
 func (w *PostgresWriter) WriteSync(ctx context.Context, entry Entry) error {
@@ -352,6 +364,7 @@ func (w *PostgresWriter) WriteSync(ctx context.Context, entry Entry) error {
 ```
 
 Replace with:
+
 ```go
 // WriteSync performs a synchronous write to the database.
 func (w *PostgresWriter) WriteSync(ctx context.Context, event Event) error {
@@ -393,6 +406,7 @@ func (w *PostgresWriter) WriteSync(ctx context.Context, event Event) error {
 Note: the SQL column names change from `policy_id, policy_name` to `event_id, event_name`. These are the final column names (not temporary). The schema migration in Task 11 will do this rename on the database side.
 
 Find (the `WriteAsync` method):
+
 ```go
 // WriteAsync queues an entry for asynchronous batch writing.
 func (w *PostgresWriter) WriteAsync(entry Entry) error {
@@ -402,6 +416,7 @@ func (w *PostgresWriter) WriteAsync(entry Entry) error {
 ```
 
 Replace with:
+
 ```go
 // WriteAsync queues an event for asynchronous batch writing.
 func (w *PostgresWriter) WriteAsync(event Event) error {
@@ -411,40 +426,47 @@ func (w *PostgresWriter) WriteAsync(event Event) error {
 ```
 
 Find (the `batchConsumer`):
+
 ```go
 	var batch []Entry
 ```
 
 Replace with:
+
 ```go
 	var batch []Event
 ```
 
 Find (inside `batchConsumer` — `case entry := <-w.asyncChan:`):
+
 ```go
 		case entry := <-w.asyncChan:
 			batch = append(batch, entry)
 ```
 
 Replace with:
+
 ```go
 		case event := <-w.asyncChan:
 			batch = append(batch, event)
 ```
 
 And inside the drain branch of `batchConsumer`:
+
 ```go
 				case entry := <-w.asyncChan:
 					batch = append(batch, entry)
 ```
 
 Replace with:
+
 ```go
 				case event := <-w.asyncChan:
 					batch = append(batch, event)
 ```
 
 Find (the `writeBatch` method):
+
 ```go
 // writeBatch writes multiple entries in a single transaction.
 func (w *PostgresWriter) writeBatch(ctx context.Context, entries []Entry) error {
@@ -510,6 +532,7 @@ func (w *PostgresWriter) writeBatch(ctx context.Context, entries []Entry) error 
 ```
 
 Replace with:
+
 ```go
 // writeBatch writes multiple events in a single transaction.
 func (w *PostgresWriter) writeBatch(ctx context.Context, events []Event) error {
@@ -579,6 +602,7 @@ func (w *PostgresWriter) writeBatch(ctx context.Context, events []Event) error {
 File: `internal/audit/doc.go`
 
 Find:
+
 ```go
 //	// Log a decision
 //	entry := audit.Entry{
@@ -596,6 +620,7 @@ Find:
 ```
 
 Replace with:
+
 ```go
 //	// Log a decision
 //	event := audit.Event{
@@ -619,6 +644,7 @@ File: `internal/access/policy/engine.go`
 For each of the six `audit.Entry{ ... }` constructions at lines ~125, ~151, ~198, ~229, ~262, ~300, apply the same transformation:
 
 Old shape:
+
 ```go
 entry := audit.Entry{
     Subject:    req.Subject,
@@ -637,6 +663,7 @@ if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
 ```
 
 New shape:
+
 ```go
 event := audit.Event{
     Subject:    req.Subject,
@@ -655,6 +682,7 @@ if auditErr := e.audit.Log(ctx, event); auditErr != nil {
 ```
 
 Specifically at each location:
+
 - Line ~125 (system bypass): `PolicyID: ""` → `ID: ""`, `PolicyName: ""` → `Name: ""`
 - Line ~151 (degraded mode): `PolicyID: "infra:degraded-mode"` → `ID: "infra:degraded-mode"`, `PolicyName: ""` → `Name: ""`
 - Line ~198 (session invalid/error): `PolicyID: decision.PolicyID()` → `ID: decision.PolicyID()`, `PolicyName: ""` → `Name: ""`
@@ -669,6 +697,7 @@ Also rename the local variable from `entry` to `event` at each site, and update 
 File: `internal/audit/logger_test.go`
 
 Global replace in this file:
+
 - `audit.Entry` → `audit.Event`
 - `Entry{` → `Event{` (when constructing)
 - `PolicyID:` → `ID:` (when setting)
@@ -686,6 +715,7 @@ Expected: only matches inside docstrings or test names that the rename didn't ne
 File: `internal/access/policy/engine_test.go`
 
 Global replace:
+
 - `audit.Entry` → `audit.Event`
 - `Entry{` → `Event{` (inside audit construction context)
 - `PolicyID:` → `ID:` (when setting inside `audit.Event{}`)
@@ -710,6 +740,7 @@ If `audit.Entry` appears, replace with `audit.Event`.
 - [ ] **Step 2.11: Verify compilation and run tests**
 
 Run:
+
 ```bash
 task build
 task test -- ./internal/audit/... ./internal/access/...
@@ -890,6 +921,7 @@ Expected: FAIL with `unknown field Message in struct literal of type audit.Event
 File: `internal/audit/logger.go`
 
 Find:
+
 ```go
 // Event represents a single access control decision to be logged.
 type Event struct {
@@ -906,6 +938,7 @@ type Event struct {
 ```
 
 Replace with:
+
 ```go
 // Event represents a single access control decision to be logged.
 type Event struct {
@@ -941,6 +974,7 @@ File: `internal/audit/postgres.go`
 Find the `WriteSync` query and the `ExecContext` call. Update both the column list and the parameters:
 
 Find:
+
 ```go
 	query := `
 		INSERT INTO access_audit_log (
@@ -969,6 +1003,7 @@ Find:
 ```
 
 Replace with:
+
 ```go
 	query := `
 		INSERT INTO access_audit_log (
@@ -1006,6 +1041,7 @@ File: `internal/audit/postgres.go`
 Apply the same column list + parameter extension to the prepared statement and the `stmt.ExecContext` call inside `writeBatch`.
 
 Find:
+
 ```go
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO access_audit_log (
@@ -1016,6 +1052,7 @@ Find:
 ```
 
 Replace with:
+
 ```go
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO access_audit_log (
@@ -1026,6 +1063,7 @@ Replace with:
 ```
 
 Find (the loop body):
+
 ```go
 		_, err = stmt.ExecContext(ctx,
 			idgen.New().String(),
@@ -1042,6 +1080,7 @@ Find (the loop body):
 ```
 
 Replace with:
+
 ```go
 		_, err = stmt.ExecContext(ctx,
 			idgen.New().String(),
@@ -1065,6 +1104,7 @@ Replace with:
 File: `internal/audit/doc.go`
 
 Find:
+
 ```go
 //	// Log a decision
 //	event := audit.Event{
@@ -1082,6 +1122,7 @@ Find:
 ```
 
 Replace with:
+
 ```go
 //	// Log a decision
 //	event := audit.Event{
@@ -1213,6 +1254,7 @@ func (r *noopSessionResolver) ResolveSession(_ context.Context, _ string) (strin
 ```
 
 Add required imports if not already present:
+
 - `"sync"`
 - `"fmt"`
 - `"github.com/holomush/holomush/internal/audit"`
@@ -1236,6 +1278,7 @@ For each of the six `audit.Event{}` literals at approximately lines 125, 151, 19
 Example transformation for the system-bypass site (~line 125):
 
 Old:
+
 ```go
 event := audit.Event{
     Subject:    req.Subject,
@@ -1250,6 +1293,7 @@ event := audit.Event{
 ```
 
 New:
+
 ```go
 event := audit.Event{
     ID:         "",
@@ -1283,6 +1327,7 @@ event := audit.Event{
 ```
 
 Specifically:
+
 - Line ~125 (system bypass): `Source: audit.SourceSystem`, `Component: "abac"` — system bypass is the one non-engine engine path
 - Line ~151 (degraded mode): `Source: audit.SourceEngine`, `Component: "abac"`
 - Line ~198 (session invalid): `Source: audit.SourceEngine`, `Component: "abac"`
@@ -1901,6 +1946,7 @@ Bead: holomush-ggbz"
 File: `api/proto/holomush/plugin/v1/plugin.proto`
 
 Find:
+
 ```proto
 // CommandResponse carries the result of a plugin command execution.
 message CommandResponse {
@@ -1914,6 +1960,7 @@ message CommandResponse {
 ```
 
 Replace with:
+
 ```proto
 // CommandResponse carries the result of a plugin command execution.
 message CommandResponse {
@@ -2013,6 +2060,7 @@ Bead: holomush-ggbz"
 File: `pkg/plugin/command.go`
 
 Find:
+
 ```go
 // CommandResponse carries the result of a plugin command execution.
 type CommandResponse struct {
@@ -2036,6 +2084,7 @@ type CommandResponse struct {
 ```
 
 Replace with:
+
 ```go
 // AuditEffect is the effect a plugin handler decided for a given audit hint.
 // Only "deny" and "allow" are valid — plugin denials never carry
@@ -2197,6 +2246,7 @@ func TestAuditRecorderDenyWithEmptyIDIsSilentlyDroppedAndLogged(t *testing.T) {
 **Also update `pkg/plugin/audit.go`** to add the empty-ID guard:
 
 Find:
+
 ```go
 func (r *contextRecorder) record(id, message string, effect AuditEffect, attrs AuditAttrs) {
 	slice, ok := r.ctx.Value(handlerKey).(*[]AuditHint)
@@ -2207,6 +2257,7 @@ func (r *contextRecorder) record(id, message string, effect AuditEffect, attrs A
 ```
 
 Replace with:
+
 ```go
 func (r *contextRecorder) record(id, message string, effect AuditEffect, attrs AuditAttrs) {
 	if id == "" {
@@ -2540,6 +2591,7 @@ Bead: holomush-ggbz"
 File: `internal/command/dispatcher.go`
 
 Find:
+
 ```go
 // Dispatcher handles command parsing, capability checks, and execution.
 type Dispatcher struct {
@@ -2553,6 +2605,7 @@ type Dispatcher struct {
 ```
 
 Replace with:
+
 ```go
 // Dispatcher handles command parsing, capability checks, and execution.
 type Dispatcher struct {
@@ -2569,6 +2622,7 @@ type Dispatcher struct {
 Also add an import for `"github.com/holomush/holomush/internal/audit"` in the file's import block.
 
 Find:
+
 ```go
 // WithRateLimiter configures the dispatcher to use rate limiting.
 // If not provided, rate limiting is disabled. Passing nil is an error —
@@ -2577,6 +2631,7 @@ func WithRateLimiter(rl *RateLimiter) DispatcherOption {
 ```
 
 Insert BEFORE that function:
+
 ```go
 // WithAuditLogger configures the dispatcher to flush plugin-emitted audit
 // events through the given audit logger. If not provided, plugin audit
@@ -2595,6 +2650,7 @@ func WithAuditLogger(logger *audit.Logger) DispatcherOption {
 File: `internal/command/dispatcher.go`
 
 Find (top of `Dispatch`):
+
 ```go
 // Dispatch parses and executes a command.
 func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandExecution) (err error) {
@@ -2603,6 +2659,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandEx
 ```
 
 Replace with:
+
 ```go
 // Dispatch parses and executes a command.
 func (d *Dispatcher) Dispatch(ctx context.Context, input string, exec *CommandExecution) (err error) {
@@ -2707,6 +2764,7 @@ Find (inside `dispatchToPlugin`, after the `resp, err := d.pluginDeliverer.Deliv
 ```
 
 Replace with:
+
 ```go
 	resp, err := d.pluginDeliverer.DeliverCommand(ctx, entry.PluginName(), cmd)
 	if err != nil {
@@ -3847,7 +3905,7 @@ Bead: holomush-ggbz"
 
 File: `site/docs/extending/audit-events.md`
 
-```markdown
+````markdown
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
@@ -3967,7 +4025,7 @@ Audit write failures never fail your command. The dispatcher logs the failure, b
 - [Binary Plugins](binary-plugins.md) — Go plugin authoring guide
 - [Lua Plugins](lua-plugins.md) — Lua plugin authoring guide
 - [AttributeResolverService](abac-attribute-resolver.md) — for plugins that also want to expose custom resource attributes
-```
+````
 
 - [ ] **Step 14.2: Commit**
 
