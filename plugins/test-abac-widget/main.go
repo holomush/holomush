@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
+// Package main implements the test-abac-widget binary plugin used by the
+// host's plugin integration tests to exercise the ABAC attribute resolver
+// and command dispatcher contracts. Not deployed in production.
 package main
 
 import (

@@ -138,7 +138,7 @@ func (f *fakeStore) RemoveParticipant(_ context.Context, sceneID, characterID st
 	return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: role}, nil
 }
 
-func (f *fakeStore) InviteParticipant(_ context.Context, sceneID, inviterID, targetID string) (*ParticipantRow, error) {
+func (f *fakeStore) InviteParticipant(_ context.Context, sceneID, _, targetID string) (*ParticipantRow, error) {
 	if f.participants[sceneID] == nil {
 		f.participants[sceneID] = make(map[string]string)
 	}
@@ -153,7 +153,7 @@ func (f *fakeStore) InviteParticipant(_ context.Context, sceneID, inviterID, tar
 	return &ParticipantRow{SceneID: sceneID, CharacterID: targetID, Role: "invited"}, nil
 }
 
-func (f *fakeStore) KickParticipant(_ context.Context, sceneID, kickerID, targetID string) (*ParticipantRow, error) {
+func (f *fakeStore) KickParticipant(_ context.Context, sceneID, _, targetID string) (*ParticipantRow, error) {
 	role, exists := f.participants[sceneID][targetID]
 	if !exists {
 		return nil, oops.Code("SCENE_PARTICIPANT_NOT_FOUND").
@@ -193,7 +193,7 @@ func (f *fakeStore) TransferOwnership(_ context.Context, sceneID, currentOwnerID
 }
 
 func (f *fakeStore) ListParticipants(_ context.Context, sceneID string) ([]ParticipantRow, error) {
-	var out []ParticipantRow
+	out := make([]ParticipantRow, 0, len(f.participants[sceneID]))
 	for cid, role := range f.participants[sceneID] {
 		out = append(out, ParticipantRow{SceneID: sceneID, CharacterID: cid, Role: role})
 	}

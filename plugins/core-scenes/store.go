@@ -30,6 +30,13 @@ const sceneSelectColumns = `id, title, description, location_id, owner_id,
 
 // scanSceneRow scans a single row into the provided SceneRow. The column
 // order MUST match sceneSelectColumns.
+//
+// The pgx.Row.Scan error is intentionally NOT wrapped here: every caller
+// of scanSceneRow wraps the error with an operation-specific oops code
+// (SCENE_END_FAILED, SCENE_PAUSE_FAILED, etc.) so that wrapping at this
+// helper level would either duplicate or hide the operation context.
+//
+//nolint:wrapcheck // caller wraps with operation-specific oops code
 func scanSceneRow(scanner pgx.Row, row *SceneRow) error {
 	return scanner.Scan(
 		&row.ID, &row.Title, &row.Description, &row.LocationID, &row.OwnerID,
@@ -157,7 +164,7 @@ func (s *SceneStore) CreateWithOwner(ctx context.Context, row *SceneRow) error {
 		recordError(span, err)
 		return oops.Code("SCENE_CREATE_FAILED").With("scene_id", row.ID).Wrap(err)
 	}
-	defer tx.Rollback(ctx) // no-op after Commit
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
 	// 1. Insert the scene row.
 	_, err = tx.Exec(ctx, `
@@ -245,15 +252,14 @@ func (s *SceneStore) Get(ctx context.Context, id string) (*SceneRow, error) {
 // Per design decision P3.D9, this uses two array_agg subselects on the
 // indexed scene_participants(scene_id, role) index. No caching layer in
 // Phase 3.
-func (s *SceneStore) GetWithMembership(ctx context.Context, id string) (*SceneRow, []string, []string, error) {
+func (s *SceneStore) GetWithMembership(ctx context.Context, id string) (scene *SceneRow, participants, invitees []string, err error) {
 	ctx, span := startSpan(ctx, "scene.store.get_with_membership",
 		attribute.String("scene_id", id),
 	)
 	defer span.End()
 
 	row := &SceneRow{}
-	var participants, invitees []string
-	err := s.pool.QueryRow(ctx, `
+	err = s.pool.QueryRow(ctx, `
 		SELECT
 			s.id, s.title, s.description, s.location_id, s.owner_id,
 			s.state, s.pose_order, s.visibility, s.idle_timeout_secs,
@@ -309,7 +315,7 @@ func (s *SceneStore) End(ctx context.Context, id string) (*SceneRow, error) {
 		recordError(span, err)
 		return nil, oops.Code("SCENE_END_FAILED").With("scene_id", id).Wrap(err)
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
 	// Capture prior_state in the same SELECT-via-RETURNING by reading the
 	// state before the update via a CTE subquery. The CTE snapshots the
@@ -367,7 +373,7 @@ func (s *SceneStore) Pause(ctx context.Context, id string) (*SceneRow, error) {
 		recordError(span, err)
 		return nil, oops.Code("SCENE_PAUSE_FAILED").With("scene_id", id).Wrap(err)
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
 	row := &SceneRow{}
 	err = scanSceneRow(tx.QueryRow(ctx, `
@@ -410,7 +416,7 @@ func (s *SceneStore) Resume(ctx context.Context, id string) (*SceneRow, error) {
 		recordError(span, err)
 		return nil, oops.Code("SCENE_RESUME_FAILED").With("scene_id", id).Wrap(err)
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
 	row := &SceneRow{}
 	err = scanSceneRow(tx.QueryRow(ctx, `
@@ -509,7 +515,7 @@ func (s *SceneStore) Update(ctx context.Context, id string, update *SceneUpdate)
 		recordError(span, err)
 		return nil, oops.Code("SCENE_UPDATE_FAILED").With("scene_id", id).Wrap(err)
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
 	// Build the SET clause dynamically based on which fields are present.
 	// Track field names in `paths` for the settings.updated ops event payload.
@@ -627,7 +633,7 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 		return nil, OpNoChange, oops.Code("SCENE_JOIN_FAILED").
 			With("scene_id", sceneID).With("character_id", characterID).Wrap(err)
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
 	row := &ParticipantRow{}
 	var wasInserted bool
@@ -746,7 +752,7 @@ func (s *SceneStore) RemoveParticipant(ctx context.Context, sceneID, characterID
 		return nil, oops.Code("SCENE_LEAVE_FAILED").
 			With("scene_id", sceneID).With("character_id", characterID).Wrap(err)
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
 	row := &ParticipantRow{}
 	err = tx.QueryRow(ctx, `
@@ -817,7 +823,7 @@ func (s *SceneStore) InviteParticipant(ctx context.Context, sceneID, inviterID, 
 		recordError(span, err)
 		return nil, oops.Code("SCENE_INVITE_FAILED").Wrap(err)
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
 	// Check existing role for target — distinguish "already invited" (no-op),
 	// "already member/owner" (error), and "not present" (insert).
@@ -832,7 +838,10 @@ func (s *SceneStore) InviteParticipant(ctx context.Context, sceneID, inviterID, 
 		if existingRole == "invited" {
 			// Idempotent no-op — return the existing row, no new ops event.
 			row := &ParticipantRow{SceneID: sceneID, CharacterID: targetID, Role: "invited"}
-			return row, tx.Commit(ctx)
+			if commitErr := tx.Commit(ctx); commitErr != nil {
+				return nil, oops.Code("SCENE_INVITE_FAILED").Wrap(commitErr)
+			}
+			return row, nil
 		}
 		// Already member or owner — reject.
 		return nil, oops.Code("SCENE_INVITE_TARGET_ALREADY_MEMBER").
@@ -892,7 +901,7 @@ func (s *SceneStore) KickParticipant(ctx context.Context, sceneID, kickerID, tar
 		recordError(span, err)
 		return nil, oops.Code("SCENE_KICK_FAILED").Wrap(err)
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
 	row := &ParticipantRow{}
 	err = tx.QueryRow(ctx, `
@@ -966,7 +975,7 @@ func (s *SceneStore) TransferOwnership(ctx context.Context, sceneID, currentOwne
 		recordError(span, err)
 		return oops.Code("SCENE_TRANSFER_FAILED").Wrap(err)
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
 	// Statement 1: demote current owner.
 	var demotedID string

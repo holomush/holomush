@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
+// Package main implements the core-scenes binary plugin: the host-loaded
+// process that owns the scene domain (membership, lifecycle, ops events,
+// resolver, ABAC attribute resolution). See plugin.yaml for the manifest
+// declaring its services, policies, and command commands.
 package main
 
 import (

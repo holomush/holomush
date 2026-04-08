@@ -65,7 +65,7 @@ func recordOpsEventTx(ctx context.Context, tx pgx.Tx, sceneID string, kind OpsEv
 
 	id, err := newOpsEventID()
 	if err != nil {
-		return oops.Code("SCENE_OPS_EVENT_ID_GEN_FAILED").Wrap(err)
+		return err // already wrapped with SCENE_OPS_EVENT_ID_GEN_FAILED by newOpsEventID
 	}
 
 	if payload == nil {
@@ -105,7 +105,7 @@ func newOpsEventID() (string, error) {
 	ms := ulid.Timestamp(time.Now())
 	id, err := ulid.New(ms, rand.Reader)
 	if err != nil {
-		return "", err
+		return "", oops.Code("SCENE_OPS_EVENT_ID_GEN_FAILED").Wrap(err)
 	}
 	return "ope-" + id.String(), nil
 }
