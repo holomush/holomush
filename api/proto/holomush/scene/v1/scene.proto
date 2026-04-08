@@ -22,6 +22,8 @@ service SceneService {
   rpc JoinScene(JoinSceneRequest) returns (JoinSceneResponse);
   rpc LeaveScene(LeaveSceneRequest) returns (LeaveSceneResponse);
   rpc InviteToScene(InviteToSceneRequest) returns (InviteToSceneResponse);
+  rpc KickFromScene(KickFromSceneRequest) returns (KickFromSceneResponse);
+  rpc TransferOwnership(TransferOwnershipRequest) returns (TransferOwnershipResponse);
   rpc CastPublishVote(CastPublishVoteRequest) returns (CastPublishVoteResponse);
   rpc GetPoseOrder(GetPoseOrderRequest) returns (GetPoseOrderResponse);
 }
@@ -198,6 +200,22 @@ message InviteToSceneRequest {
 }
 
 message InviteToSceneResponse {}
+
+message KickFromSceneRequest {
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  string target_character_id = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+message KickFromSceneResponse {}
+
+message TransferOwnershipRequest {
+  string character_id = 1 [(buf.validate.field).string.min_len = 1];
+  string scene_id = 2 [(buf.validate.field).string.min_len = 1];
+  string new_owner_character_id = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+message TransferOwnershipResponse {}
 
 message CastPublishVoteRequest {
   string character_id = 1 [(buf.validate.field).string.min_len = 1];

@@ -22,18 +22,20 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SceneService_ListScenes_FullMethodName      = "/holomush.scene.v1.SceneService/ListScenes"
-	SceneService_GetScene_FullMethodName        = "/holomush.scene.v1.SceneService/GetScene"
-	SceneService_CreateScene_FullMethodName     = "/holomush.scene.v1.SceneService/CreateScene"
-	SceneService_EndScene_FullMethodName        = "/holomush.scene.v1.SceneService/EndScene"
-	SceneService_PauseScene_FullMethodName      = "/holomush.scene.v1.SceneService/PauseScene"
-	SceneService_ResumeScene_FullMethodName     = "/holomush.scene.v1.SceneService/ResumeScene"
-	SceneService_UpdateScene_FullMethodName     = "/holomush.scene.v1.SceneService/UpdateScene"
-	SceneService_JoinScene_FullMethodName       = "/holomush.scene.v1.SceneService/JoinScene"
-	SceneService_LeaveScene_FullMethodName      = "/holomush.scene.v1.SceneService/LeaveScene"
-	SceneService_InviteToScene_FullMethodName   = "/holomush.scene.v1.SceneService/InviteToScene"
-	SceneService_CastPublishVote_FullMethodName = "/holomush.scene.v1.SceneService/CastPublishVote"
-	SceneService_GetPoseOrder_FullMethodName    = "/holomush.scene.v1.SceneService/GetPoseOrder"
+	SceneService_ListScenes_FullMethodName        = "/holomush.scene.v1.SceneService/ListScenes"
+	SceneService_GetScene_FullMethodName          = "/holomush.scene.v1.SceneService/GetScene"
+	SceneService_CreateScene_FullMethodName       = "/holomush.scene.v1.SceneService/CreateScene"
+	SceneService_EndScene_FullMethodName          = "/holomush.scene.v1.SceneService/EndScene"
+	SceneService_PauseScene_FullMethodName        = "/holomush.scene.v1.SceneService/PauseScene"
+	SceneService_ResumeScene_FullMethodName       = "/holomush.scene.v1.SceneService/ResumeScene"
+	SceneService_UpdateScene_FullMethodName       = "/holomush.scene.v1.SceneService/UpdateScene"
+	SceneService_JoinScene_FullMethodName         = "/holomush.scene.v1.SceneService/JoinScene"
+	SceneService_LeaveScene_FullMethodName        = "/holomush.scene.v1.SceneService/LeaveScene"
+	SceneService_InviteToScene_FullMethodName     = "/holomush.scene.v1.SceneService/InviteToScene"
+	SceneService_KickFromScene_FullMethodName     = "/holomush.scene.v1.SceneService/KickFromScene"
+	SceneService_TransferOwnership_FullMethodName = "/holomush.scene.v1.SceneService/TransferOwnership"
+	SceneService_CastPublishVote_FullMethodName   = "/holomush.scene.v1.SceneService/CastPublishVote"
+	SceneService_GetPoseOrder_FullMethodName      = "/holomush.scene.v1.SceneService/GetPoseOrder"
 )
 
 // SceneServiceClient is the client API for SceneService service.
@@ -50,6 +52,8 @@ type SceneServiceClient interface {
 	JoinScene(ctx context.Context, in *JoinSceneRequest, opts ...grpc.CallOption) (*JoinSceneResponse, error)
 	LeaveScene(ctx context.Context, in *LeaveSceneRequest, opts ...grpc.CallOption) (*LeaveSceneResponse, error)
 	InviteToScene(ctx context.Context, in *InviteToSceneRequest, opts ...grpc.CallOption) (*InviteToSceneResponse, error)
+	KickFromScene(ctx context.Context, in *KickFromSceneRequest, opts ...grpc.CallOption) (*KickFromSceneResponse, error)
+	TransferOwnership(ctx context.Context, in *TransferOwnershipRequest, opts ...grpc.CallOption) (*TransferOwnershipResponse, error)
 	CastPublishVote(ctx context.Context, in *CastPublishVoteRequest, opts ...grpc.CallOption) (*CastPublishVoteResponse, error)
 	GetPoseOrder(ctx context.Context, in *GetPoseOrderRequest, opts ...grpc.CallOption) (*GetPoseOrderResponse, error)
 }
@@ -162,6 +166,26 @@ func (c *sceneServiceClient) InviteToScene(ctx context.Context, in *InviteToScen
 	return out, nil
 }
 
+func (c *sceneServiceClient) KickFromScene(ctx context.Context, in *KickFromSceneRequest, opts ...grpc.CallOption) (*KickFromSceneResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(KickFromSceneResponse)
+	err := c.cc.Invoke(ctx, SceneService_KickFromScene_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sceneServiceClient) TransferOwnership(ctx context.Context, in *TransferOwnershipRequest, opts ...grpc.CallOption) (*TransferOwnershipResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TransferOwnershipResponse)
+	err := c.cc.Invoke(ctx, SceneService_TransferOwnership_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *sceneServiceClient) CastPublishVote(ctx context.Context, in *CastPublishVoteRequest, opts ...grpc.CallOption) (*CastPublishVoteResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CastPublishVoteResponse)
@@ -196,6 +220,8 @@ type SceneServiceServer interface {
 	JoinScene(context.Context, *JoinSceneRequest) (*JoinSceneResponse, error)
 	LeaveScene(context.Context, *LeaveSceneRequest) (*LeaveSceneResponse, error)
 	InviteToScene(context.Context, *InviteToSceneRequest) (*InviteToSceneResponse, error)
+	KickFromScene(context.Context, *KickFromSceneRequest) (*KickFromSceneResponse, error)
+	TransferOwnership(context.Context, *TransferOwnershipRequest) (*TransferOwnershipResponse, error)
 	CastPublishVote(context.Context, *CastPublishVoteRequest) (*CastPublishVoteResponse, error)
 	GetPoseOrder(context.Context, *GetPoseOrderRequest) (*GetPoseOrderResponse, error)
 	mustEmbedUnimplementedSceneServiceServer()
@@ -237,6 +263,12 @@ func (UnimplementedSceneServiceServer) LeaveScene(context.Context, *LeaveSceneRe
 }
 func (UnimplementedSceneServiceServer) InviteToScene(context.Context, *InviteToSceneRequest) (*InviteToSceneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method InviteToScene not implemented")
+}
+func (UnimplementedSceneServiceServer) KickFromScene(context.Context, *KickFromSceneRequest) (*KickFromSceneResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method KickFromScene not implemented")
+}
+func (UnimplementedSceneServiceServer) TransferOwnership(context.Context, *TransferOwnershipRequest) (*TransferOwnershipResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TransferOwnership not implemented")
 }
 func (UnimplementedSceneServiceServer) CastPublishVote(context.Context, *CastPublishVoteRequest) (*CastPublishVoteResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CastPublishVote not implemented")
@@ -445,6 +477,42 @@ func _SceneService_InviteToScene_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SceneService_KickFromScene_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(KickFromSceneRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).KickFromScene(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_KickFromScene_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).KickFromScene(ctx, req.(*KickFromSceneRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SceneService_TransferOwnership_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TransferOwnershipRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SceneServiceServer).TransferOwnership(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SceneService_TransferOwnership_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SceneServiceServer).TransferOwnership(ctx, req.(*TransferOwnershipRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _SceneService_CastPublishVote_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CastPublishVoteRequest)
 	if err := dec(in); err != nil {
@@ -527,6 +595,14 @@ var SceneService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "InviteToScene",
 			Handler:    _SceneService_InviteToScene_Handler,
+		},
+		{
+			MethodName: "KickFromScene",
+			Handler:    _SceneService_KickFromScene_Handler,
+		},
+		{
+			MethodName: "TransferOwnership",
+			Handler:    _SceneService_TransferOwnership_Handler,
 		},
 		{
 			MethodName: "CastPublishVote",
