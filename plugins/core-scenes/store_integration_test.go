@@ -7,9 +7,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -49,6 +51,103 @@ func newTestStore(t *testing.T) *SceneStore {
 	t.Cleanup(store.Close)
 
 	return store
+}
+
+// mustCreateScene inserts a minimal scene row directly via the store's
+// Phase 1 Create method. Used by Phase 3 tests that need a pre-existing
+// scene but don't care about the participant/ops event side effects of
+// CreateWithOwner. Once Task 5 lands, prefer mustCreateSceneWithOwner.
+func mustCreateScene(t *testing.T, store *SceneStore, sceneID, ownerID, visibility string) *SceneRow {
+	t.Helper()
+	row := &SceneRow{
+		ID:              sceneID,
+		Title:           "Test Scene " + sceneID,
+		OwnerID:         ownerID,
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      visibility,
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(context.Background(), row))
+	return row
+}
+
+// assertParticipantRowExists asserts that a row exists in scene_participants
+// for the given (sceneID, characterID) pair with the expected role. Queries
+// the database directly rather than going through any store method, so the
+// assertion is independent of the methods under test.
+func assertParticipantRowExists(t *testing.T, store *SceneStore, sceneID, characterID, expectedRole string) {
+	t.Helper()
+	var role string
+	err := store.pool.QueryRow(context.Background(),
+		`SELECT role FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
+		sceneID, characterID,
+	).Scan(&role)
+	require.NoError(t, err, "expected participant row for (%s, %s) but query failed", sceneID, characterID)
+	assert.Equal(t, expectedRole, role)
+}
+
+// assertParticipantRowAbsent asserts that no row exists in scene_participants
+// for the given (sceneID, characterID) pair. Used to verify deletes.
+func assertParticipantRowAbsent(t *testing.T, store *SceneStore, sceneID, characterID string) {
+	t.Helper()
+	var role string
+	err := store.pool.QueryRow(context.Background(),
+		`SELECT role FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
+		sceneID, characterID,
+	).Scan(&role)
+	assert.ErrorIs(t, err, pgx.ErrNoRows, "expected participant row for (%s, %s) to be absent", sceneID, characterID)
+}
+
+// assertOpsEventRecorded asserts that exactly one row exists in
+// scene_ops_events for the given scene with the given kind. Returns the
+// payload JSON for the caller to inspect kind-specific fields.
+func assertOpsEventRecorded(t *testing.T, store *SceneStore, sceneID string, kind OpsEventKind, expectedActor, expectedTarget string) map[string]any {
+	t.Helper()
+	var (
+		actor   string
+		target  *string
+		payload []byte
+	)
+	err := store.pool.QueryRow(context.Background(), `
+		SELECT actor_id, target_id, payload FROM scene_ops_events
+		WHERE scene_id = $1 AND kind = $2
+		ORDER BY occurred_at DESC LIMIT 1`,
+		sceneID, string(kind),
+	).Scan(&actor, &target, &payload)
+	require.NoError(t, err, "expected ops event %s for scene %s but query failed", kind, sceneID)
+	assert.Equal(t, expectedActor, actor)
+	if expectedTarget == "" {
+		assert.Nil(t, target)
+	} else {
+		require.NotNil(t, target)
+		assert.Equal(t, expectedTarget, *target)
+	}
+	var p map[string]any
+	require.NoError(t, json.Unmarshal(payload, &p))
+	return p
+}
+
+// countOpsEvents returns the number of scene_ops_events rows for a scene,
+// optionally filtered by kind. Pass an empty string for kind to count all.
+func countOpsEvents(t *testing.T, store *SceneStore, sceneID string, kind OpsEventKind) int {
+	t.Helper()
+	var n int
+	var err error
+	if kind == "" {
+		err = store.pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM scene_ops_events WHERE scene_id = $1`,
+			sceneID,
+		).Scan(&n)
+	} else {
+		err = store.pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM scene_ops_events WHERE scene_id = $1 AND kind = $2`,
+			sceneID, string(kind),
+		).Scan(&n)
+	}
+	require.NoError(t, err)
+	return n
 }
 
 func TestSceneStoreCreatePersistsAllSceneFields(t *testing.T) {
