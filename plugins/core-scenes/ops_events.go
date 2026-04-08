@@ -25,7 +25,7 @@ const (
 	OpsKindMembershipJoin          OpsEventKind = "membership.join"
 	OpsKindMembershipLeave         OpsEventKind = "membership.leave"
 	OpsKindMembershipKick          OpsEventKind = "membership.kick"
-	OpsKindMembershipOwnershipXfer OpsEventKind = "membership.ownership_transferred"
+	OpsKindMembershipOwnershipTransferred OpsEventKind = "membership.ownership_transferred"
 	OpsKindLifecycleCreated        OpsEventKind = "lifecycle.created"
 	OpsKindLifecycleEnded          OpsEventKind = "lifecycle.ended"
 	OpsKindLifecyclePaused         OpsEventKind = "lifecycle.paused"
@@ -37,7 +37,7 @@ const (
 func (k OpsEventKind) IsValid() bool {
 	switch k {
 	case OpsKindMembershipInvite, OpsKindMembershipJoin, OpsKindMembershipLeave,
-		OpsKindMembershipKick, OpsKindMembershipOwnershipXfer,
+		OpsKindMembershipKick, OpsKindMembershipOwnershipTransferred,
 		OpsKindLifecycleCreated, OpsKindLifecycleEnded,
 		OpsKindLifecyclePaused, OpsKindLifecycleResumed,
 		OpsKindSettingsUpdated:

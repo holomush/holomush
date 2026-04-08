@@ -310,7 +310,7 @@ const (
 	OpsKindMembershipJoin          OpsEventKind = "membership.join"
 	OpsKindMembershipLeave         OpsEventKind = "membership.leave"
 	OpsKindMembershipKick          OpsEventKind = "membership.kick"
-	OpsKindMembershipOwnershipXfer OpsEventKind = "membership.ownership_transferred"
+	OpsKindMembershipOwnershipTransferred OpsEventKind = "membership.ownership_transferred"
 	OpsKindLifecycleCreated        OpsEventKind = "lifecycle.created"
 	OpsKindLifecycleEnded          OpsEventKind = "lifecycle.ended"
 	OpsKindLifecyclePaused         OpsEventKind = "lifecycle.paused"
@@ -322,7 +322,7 @@ const (
 func (k OpsEventKind) IsValid() bool {
 	switch k {
 	case OpsKindMembershipInvite, OpsKindMembershipJoin, OpsKindMembershipLeave,
-		OpsKindMembershipKick, OpsKindMembershipOwnershipXfer,
+		OpsKindMembershipKick, OpsKindMembershipOwnershipTransferred,
 		OpsKindLifecycleCreated, OpsKindLifecycleEnded,
 		OpsKindLifecyclePaused, OpsKindLifecycleResumed,
 		OpsKindSettingsUpdated:
@@ -2855,7 +2855,7 @@ func TestTransferOwnershipUpdatesParticipantsAndScenesRowAtomically(t *testing.T
 	require.NoError(t, err)
 	assert.Equal(t, "char-bob", got.OwnerID)
 
-	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindMembershipOwnershipXfer, "char-alice", "char-bob")
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindMembershipOwnershipTransferred, "char-alice", "char-bob")
 	assert.Equal(t, "char-alice", payload["from"])
 }
 
@@ -2911,7 +2911,7 @@ func TestTransferOwnershipIsNoOpWhenTargetEqualsCurrentOwner(t *testing.T) {
 	require.NoError(t, err) // idempotent no-op
 	assertParticipantRowExists(t, store, row.ID, "char-alice", "owner")
 	// No transfer ops event emitted.
-	assert.Equal(t, 0, countOpsEvents(t, store, row.ID, OpsKindMembershipOwnershipXfer))
+	assert.Equal(t, 0, countOpsEvents(t, store, row.ID, OpsKindMembershipOwnershipTransferred))
 }
 ```
 
@@ -2993,7 +2993,7 @@ func (s *SceneStore) TransferOwnership(ctx context.Context, sceneID, currentOwne
 	}
 
 	payload := map[string]any{"from": currentOwnerID}
-	if err := recordOpsEventTx(ctx, tx, sceneID, OpsKindMembershipOwnershipXfer, currentOwnerID, newOwnerID, payload); err != nil {
+	if err := recordOpsEventTx(ctx, tx, sceneID, OpsKindMembershipOwnershipTransferred, currentOwnerID, newOwnerID, payload); err != nil {
 		recordError(span, err)
 		return oops.Code("SCENE_TRANSFER_OPS_EVENT_FAILED").Wrap(err)
 	}
