@@ -66,6 +66,16 @@ func (f *fakeStore) Get(_ context.Context, id string) (*SceneRow, error) {
 	return row, nil
 }
 
+func (f *fakeStore) GetWithMembership(ctx context.Context, id string) (*SceneRow, []string, []string, error) {
+	row, err := f.Get(ctx, id)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	// fakeStore has no participants table — return owner-only participants
+	// and empty invitees, matching the post-CreateWithOwner reality.
+	return row, []string{row.OwnerID}, nil, nil
+}
+
 func (f *fakeStore) End(_ context.Context, id string) (*SceneRow, error) {
 	row, ok := f.scenes[id]
 	if !ok {

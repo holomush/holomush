@@ -34,6 +34,7 @@ type sceneStorer interface {
 	Create(ctx context.Context, row *SceneRow) error
 	CreateWithOwner(ctx context.Context, row *SceneRow) error
 	Get(ctx context.Context, id string) (*SceneRow, error)
+	GetWithMembership(ctx context.Context, id string) (*SceneRow, []string, []string, error)
 	End(ctx context.Context, id string) (*SceneRow, error)
 	Pause(ctx context.Context, id string) (*SceneRow, error)
 	Resume(ctx context.Context, id string) (*SceneRow, error)

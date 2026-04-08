@@ -682,3 +682,56 @@ func TestCreateWithOwnerRollsBackWhenSceneIDIsDuplicate(t *testing.T) {
 	// Exactly one lifecycle.created event for this scene (the first call).
 	assert.Equal(t, 1, countOpsEvents(t, store, row.ID, OpsKindLifecycleCreated))
 }
+
+func TestGetWithMembershipReturnsParticipantsAndInviteesLists(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	// Create a scene with the owner.
+	row := &SceneRow{
+		ID: "scene-gwm-1", Title: "T", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	// Manually insert a member and an invitee row to test the partition.
+	_, err := store.pool.Exec(ctx,
+		`INSERT INTO scene_participants (scene_id, character_id, role) VALUES ($1, 'char-bob', 'member')`,
+		row.ID)
+	require.NoError(t, err)
+	_, err = store.pool.Exec(ctx,
+		`INSERT INTO scene_participants (scene_id, character_id, role) VALUES ($1, 'char-carol', 'invited')`,
+		row.ID)
+	require.NoError(t, err)
+
+	got, participants, invitees, err := store.GetWithMembership(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "char-alice", got.OwnerID)
+	assert.ElementsMatch(t, []string{"char-alice", "char-bob"}, participants)
+	assert.ElementsMatch(t, []string{"char-carol"}, invitees)
+}
+
+func TestGetWithMembershipReturnsEmptyListsWhenSceneHasNoParticipants(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	// Use Phase 1 Create to skip the auto-owner-row insertion of CreateWithOwner.
+	mustCreateScene(t, store, "scene-gwm-empty", "char-alice", string(SceneVisibilityOpen))
+
+	row, participants, invitees, err := store.GetWithMembership(ctx, "scene-gwm-empty")
+	require.NoError(t, err)
+	assert.Equal(t, "char-alice", row.OwnerID)
+	assert.Empty(t, participants)
+	assert.Empty(t, invitees)
+}
+
+func TestGetWithMembershipReturnsNotFoundForMissingScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	_, _, _, err := store.GetWithMembership(ctx, "scene-gwm-missing")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
+}

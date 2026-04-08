@@ -235,6 +235,60 @@ func (s *SceneStore) Get(ctx context.Context, id string) (*SceneRow, error) {
 	return row, nil
 }
 
+// GetWithMembership returns the scene row plus its participants and invitees
+// lists in a single SQL round trip. Used by the resolver to materialise ABAC
+// attributes without two separate queries.
+//
+// participants contains all character IDs where role IN ('owner', 'member').
+// invitees contains all character IDs where role = 'invited'.
+//
+// Per design decision P3.D9, this uses two array_agg subselects on the
+// indexed scene_participants(scene_id, role) index. No caching layer in
+// Phase 3.
+func (s *SceneStore) GetWithMembership(ctx context.Context, id string) (*SceneRow, []string, []string, error) {
+	ctx, span := startSpan(ctx, "scene.store.get_with_membership",
+		attribute.String("scene_id", id),
+	)
+	defer span.End()
+
+	row := &SceneRow{}
+	var participants, invitees []string
+	err := s.pool.QueryRow(ctx, `
+		SELECT
+			s.id, s.title, s.description, s.location_id, s.owner_id,
+			s.state, s.pose_order, s.visibility, s.idle_timeout_secs,
+			s.template_id, s.content_warnings, s.tags,
+			s.created_at, s.ended_at, s.archived_at,
+			COALESCE(
+				(SELECT array_agg(character_id) FROM scene_participants
+				 WHERE scene_id = s.id AND role IN ('owner', 'member')),
+				'{}'::TEXT[]
+			) AS participants,
+			COALESCE(
+				(SELECT array_agg(character_id) FROM scene_participants
+				 WHERE scene_id = s.id AND role = 'invited'),
+				'{}'::TEXT[]
+			) AS invitees
+		FROM scenes s
+		WHERE s.id = $1`,
+		id,
+	).Scan(
+		&row.ID, &row.Title, &row.Description, &row.LocationID, &row.OwnerID,
+		&row.State, &row.PoseOrder, &row.Visibility, &row.IdleTimeoutSecs,
+		&row.TemplateID, &row.ContentWarnings, &row.Tags,
+		&row.CreatedAt, &row.EndedAt, &row.ArchivedAt,
+		&participants, &invitees,
+	)
+	if err != nil {
+		recordError(span, err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil, nil, oops.Code("SCENE_NOT_FOUND").With("scene_id", id).Wrap(err)
+		}
+		return nil, nil, nil, oops.Code("SCENE_GET_FAILED").With("scene_id", id).Wrap(err)
+	}
+	return row, participants, invitees, nil
+}
+
 // End transitions a scene to the `ended` state and returns the post-update
 // row. Only scenes currently in `active` or `paused` states can be ended;
 // the WHERE clause enforces this at the database level so concurrent
