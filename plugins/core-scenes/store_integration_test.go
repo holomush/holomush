@@ -1167,3 +1167,76 @@ func TestGetParticipantReturnsNotFoundForMissingParticipant(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "SCENE_PARTICIPANT_NOT_FOUND")
 }
+
+func TestEndEmitsLifecycleEndedOpsEventInSameTransaction(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-end-ope", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, err := store.End(ctx, row.ID)
+	require.NoError(t, err)
+
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindLifecycleEnded, row.OwnerID, "")
+	assert.Equal(t, "active", payload["prior_state"])
+}
+
+func TestPauseEmitsLifecyclePausedOpsEvent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-pause-ope", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, err := store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+	assertOpsEventRecorded(t, store, row.ID, OpsKindLifecyclePaused, row.OwnerID, "")
+}
+
+func TestResumeEmitsLifecycleResumedOpsEvent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-resume-ope", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, err := store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+
+	_, err = store.Resume(ctx, row.ID)
+	require.NoError(t, err)
+	assertOpsEventRecorded(t, store, row.ID, OpsKindLifecycleResumed, row.OwnerID, "")
+}
+
+func TestUpdateEmitsSettingsUpdatedOpsEventWithMaskPaths(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-upd-ope", OwnerID: "char-alice", Title: "Old",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	newTitle := "New"
+	_, err := store.Update(ctx, row.ID, &SceneUpdate{Title: &newTitle})
+	require.NoError(t, err)
+
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindSettingsUpdated, row.OwnerID, "")
+	paths, ok := payload["paths"].([]any)
+	require.True(t, ok)
+	assert.Contains(t, paths, "title")
+}

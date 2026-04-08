@@ -304,20 +304,52 @@ func (s *SceneStore) End(ctx context.Context, id string) (*SceneRow, error) {
 	)
 	defer span.End()
 
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_END_FAILED").With("scene_id", id).Wrap(err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Capture prior_state in the same SELECT-via-RETURNING by reading the
+	// state before the update via a CTE subquery. The CTE snapshots the
+	// row before the UPDATE fires, so `(SELECT state FROM prior)` gives us
+	// the pre-transition state in a single round trip.
 	row := &SceneRow{}
-	err := scanSceneRow(s.pool.QueryRow(ctx, `
+	var priorState string
+	err = tx.QueryRow(ctx, `
+        WITH prior AS (
+            SELECT state FROM scenes WHERE id = $1
+        )
         UPDATE scenes
         SET state = 'ended', ended_at = NOW()
         WHERE id = $1 AND state IN ('active', 'paused')
-        RETURNING `+sceneSelectColumns,
+        RETURNING `+sceneSelectColumns+`, (SELECT state FROM prior)`,
 		id,
-	), row)
+	).Scan(
+		&row.ID, &row.Title, &row.Description, &row.LocationID, &row.OwnerID,
+		&row.State, &row.PoseOrder, &row.Visibility, &row.IdleTimeoutSecs,
+		&row.TemplateID, &row.ContentWarnings, &row.Tags,
+		&row.CreatedAt, &row.EndedAt, &row.ArchivedAt,
+		&priorState,
+	)
 	if err != nil {
 		recordError(span, err)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, s.classifyTransitionMiss(ctx, id, span, "end")
 		}
 		return nil, oops.Code("SCENE_END_FAILED").With("scene_id", id).Wrap(err)
+	}
+
+	payload := map[string]any{"prior_state": priorState}
+	if err := recordOpsEventTx(ctx, tx, id, OpsKindLifecycleEnded, row.OwnerID, "", payload); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_END_OPS_EVENT_FAILED").Wrap(err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_END_FAILED").Wrap(err)
 	}
 	return row, nil
 }
@@ -330,8 +362,15 @@ func (s *SceneStore) Pause(ctx context.Context, id string) (*SceneRow, error) {
 	)
 	defer span.End()
 
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_PAUSE_FAILED").With("scene_id", id).Wrap(err)
+	}
+	defer tx.Rollback(ctx)
+
 	row := &SceneRow{}
-	err := scanSceneRow(s.pool.QueryRow(ctx, `
+	err = scanSceneRow(tx.QueryRow(ctx, `
         UPDATE scenes
         SET state = 'paused'
         WHERE id = $1 AND state = 'active'
@@ -345,6 +384,16 @@ func (s *SceneStore) Pause(ctx context.Context, id string) (*SceneRow, error) {
 		}
 		return nil, oops.Code("SCENE_PAUSE_FAILED").With("scene_id", id).Wrap(err)
 	}
+
+	if err := recordOpsEventTx(ctx, tx, id, OpsKindLifecyclePaused, row.OwnerID, "", nil); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_PAUSE_OPS_EVENT_FAILED").Wrap(err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_PAUSE_FAILED").Wrap(err)
+	}
 	return row, nil
 }
 
@@ -356,8 +405,15 @@ func (s *SceneStore) Resume(ctx context.Context, id string) (*SceneRow, error) {
 	)
 	defer span.End()
 
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_RESUME_FAILED").With("scene_id", id).Wrap(err)
+	}
+	defer tx.Rollback(ctx)
+
 	row := &SceneRow{}
-	err := scanSceneRow(s.pool.QueryRow(ctx, `
+	err = scanSceneRow(tx.QueryRow(ctx, `
         UPDATE scenes
         SET state = 'active'
         WHERE id = $1 AND state = 'paused'
@@ -370,6 +426,16 @@ func (s *SceneStore) Resume(ctx context.Context, id string) (*SceneRow, error) {
 			return nil, s.classifyTransitionMiss(ctx, id, span, "resume")
 		}
 		return nil, oops.Code("SCENE_RESUME_FAILED").With("scene_id", id).Wrap(err)
+	}
+
+	if err := recordOpsEventTx(ctx, tx, id, OpsKindLifecycleResumed, row.OwnerID, "", nil); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_RESUME_OPS_EVENT_FAILED").Wrap(err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_RESUME_FAILED").Wrap(err)
 	}
 	return row, nil
 }
@@ -438,7 +504,15 @@ func (s *SceneStore) Update(ctx context.Context, id string, update *SceneUpdate)
 		return s.Get(ctx, id)
 	}
 
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_UPDATE_FAILED").With("scene_id", id).Wrap(err)
+	}
+	defer tx.Rollback(ctx)
+
 	// Build the SET clause dynamically based on which fields are present.
+	// Track field names in `paths` for the settings.updated ops event payload.
 	//
 	// SQL injection note: column names come from hard-coded string literals
 	// below — never from user input — so building the SET clause via
@@ -446,11 +520,13 @@ func (s *SceneStore) Update(ctx context.Context, id string, update *SceneUpdate)
 	var (
 		setParts []string
 		args     []any
+		paths    []string
 		argIdx   = 1
 	)
 	addSet := func(col string, value any) {
 		setParts = append(setParts, fmt.Sprintf("%s = $%d", col, argIdx))
 		args = append(args, value)
+		paths = append(paths, col)
 		argIdx++
 	}
 
@@ -471,6 +547,7 @@ func (s *SceneStore) Update(ctx context.Context, id string, update *SceneUpdate)
 		if *update.LocationID == "" {
 			setParts = append(setParts, fmt.Sprintf("location_id = $%d", argIdx))
 			args = append(args, nil)
+			paths = append(paths, "location_id")
 			argIdx++
 		} else {
 			addSet("location_id", *update.LocationID)
@@ -498,13 +575,24 @@ func (s *SceneStore) Update(ctx context.Context, id string, update *SceneUpdate)
 	)
 
 	row := &SceneRow{}
-	err := scanSceneRow(s.pool.QueryRow(ctx, query, args...), row)
+	err = scanSceneRow(tx.QueryRow(ctx, query, args...), row)
 	if err != nil {
 		recordError(span, err)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, s.classifyTransitionMiss(ctx, id, span, "update")
 		}
 		return nil, oops.Code("SCENE_UPDATE_FAILED").With("scene_id", id).Wrap(err)
+	}
+
+	payload := map[string]any{"paths": paths}
+	if err := recordOpsEventTx(ctx, tx, id, OpsKindSettingsUpdated, row.OwnerID, "", payload); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_UPDATE_OPS_EVENT_FAILED").Wrap(err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_UPDATE_FAILED").Wrap(err)
 	}
 	return row, nil
 }
