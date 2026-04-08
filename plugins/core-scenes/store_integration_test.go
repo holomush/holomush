@@ -1120,7 +1120,7 @@ func TestListParticipantsReturnsAllRolesOrderedByJoinedAt(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-lp-1", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityOpen),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -1142,7 +1142,7 @@ func TestGetParticipantReturnsRowWhenPresent(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-gp-1", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityOpen),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -1158,7 +1158,7 @@ func TestGetParticipantReturnsNotFoundForMissingParticipant(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-gp-missing", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityOpen),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))

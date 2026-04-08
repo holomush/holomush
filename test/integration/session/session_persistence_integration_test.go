@@ -751,7 +751,8 @@ var _ = Describe("Session Persistence", func() {
 // blocking Recv() can otherwise hold the helper open indefinitely.
 func drainUntilReplayComplete(stream interface {
 	Recv() (*corev1.SubscribeResponse, error)
-}) {
+},
+) {
 	done := make(chan error, 1)
 	go func() {
 		defer GinkgoRecover()

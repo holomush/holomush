@@ -21,16 +21,16 @@ import (
 type OpsEventKind string
 
 const (
-	OpsKindMembershipInvite        OpsEventKind = "membership.invite"
-	OpsKindMembershipJoin          OpsEventKind = "membership.join"
-	OpsKindMembershipLeave         OpsEventKind = "membership.leave"
-	OpsKindMembershipKick          OpsEventKind = "membership.kick"
+	OpsKindMembershipInvite               OpsEventKind = "membership.invite"
+	OpsKindMembershipJoin                 OpsEventKind = "membership.join"
+	OpsKindMembershipLeave                OpsEventKind = "membership.leave"
+	OpsKindMembershipKick                 OpsEventKind = "membership.kick"
 	OpsKindMembershipOwnershipTransferred OpsEventKind = "membership.ownership_transferred"
-	OpsKindLifecycleCreated        OpsEventKind = "lifecycle.created"
-	OpsKindLifecycleEnded          OpsEventKind = "lifecycle.ended"
-	OpsKindLifecyclePaused         OpsEventKind = "lifecycle.paused"
-	OpsKindLifecycleResumed        OpsEventKind = "lifecycle.resumed"
-	OpsKindSettingsUpdated         OpsEventKind = "settings.updated"
+	OpsKindLifecycleCreated               OpsEventKind = "lifecycle.created"
+	OpsKindLifecycleEnded                 OpsEventKind = "lifecycle.ended"
+	OpsKindLifecyclePaused                OpsEventKind = "lifecycle.paused"
+	OpsKindLifecycleResumed               OpsEventKind = "lifecycle.resumed"
+	OpsKindSettingsUpdated                OpsEventKind = "settings.updated"
 )
 
 // IsValid reports whether k is one of the declared OpsEventKind constants.
