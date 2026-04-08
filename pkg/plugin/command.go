@@ -34,6 +34,35 @@ type CommandRequest struct {
 	InvokedAs     string // what the player actually typed (alias support)
 }
 
+// AuditEffect is the effect a plugin handler decided for a given audit hint.
+// Only "deny" and "allow" are valid — plugin denials never carry
+// default_deny or system_bypass semantics.
+type AuditEffect string
+
+// AuditEffect constants for audit hint construction.
+const (
+	AuditEffectDeny  AuditEffect = "deny"
+	AuditEffectAllow AuditEffect = "allow"
+)
+
+// AuditHint is a partial audit event the plugin handler accumulates during
+// command processing. Hints are serialized into CommandResponse.audit_hints
+// and harvested by the dispatcher after the handler returns.
+//
+// Host-stamped fields (subject, source, component, timestamp, duration) are
+// filled in by the dispatcher — the plugin provides only decision-specific
+// fields. Setting Subject, Source, or Component on this struct is a no-op;
+// the dispatcher overwrites them.
+type AuditHint struct {
+	ID              string            // stable slug, e.g., "not_member"
+	Name            string            // human label, e.g., "channels: not a member"
+	Message         string            // per-firing description
+	Effect          AuditEffect       // deny or allow
+	ActionQualifier string            // appended to host base action, e.g., "speak"
+	Resource        string            // <type>:<id>, e.g., "channel:01XYZ"
+	Attributes      map[string]string // plugin-provided context (namespaced keys)
+}
+
 // CommandResponse carries the result of a plugin command execution.
 type CommandResponse struct {
 	// Status indicates the outcome category (OK, Error, Failure, Fatal).
@@ -52,6 +81,13 @@ type CommandResponse struct {
 
 	// EndSession signals that the invoking session should end.
 	EndSession bool
+
+	// AuditHints are plugin-emitted audit entries accumulated during
+	// command processing. The dispatcher harvests these after the handler
+	// returns and routes them through the audit logger after stamping
+	// host-controlled fields. Plugin authors SHOULD NOT construct hints
+	// directly; use Audit(ctx).Deny / Allow instead.
+	AuditHints []AuditHint
 }
 
 // OK returns a successful command response with output text.
