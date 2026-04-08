@@ -37,13 +37,15 @@ linters:
     presets:
       - common-false-positives
 
-    # Path exclusions
-    paths:
-      # TinyGo WASM plugins use patterns incompatible with standard linting:
-      # - //export directives make functions appear unused
-      # - unsafe memory access is required for WASM host communication
-      # - integer conversions are necessary for 32-bit WASM ABI
-      - plugins/
+    # No path-level exclusions. The previous `plugins/` exclusion was a
+    # leftover from a TinyGo WASM plugin design that no longer exists in
+    # this codebase. The current plugin layout under plugins/ is:
+    #   - Lua plugins (core-aliases, core-building, core-communication,
+    #     core-help, core-objects, echo-bot, setting-crossroads,
+    #     setting-skeleton) — no Go files, nothing for golangci-lint to
+    #     scan.
+    #   - Go binary plugins (core-scenes, test-abac-widget) — should be
+    #     linted normally like any other Go package.
 
     rules:
       # Test files can have longer functions and more complexity
