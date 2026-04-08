@@ -49,8 +49,8 @@ func (w *PostgresWriter) WriteSync(ctx context.Context, event Event) error {
 	query := `
 		INSERT INTO access_audit_log (
 			id, subject, action, resource, effect, event_id, event_name,
-			attributes, duration_us, timestamp
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			message, source, component, attributes, duration_us, timestamp
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`
 
 	attributesJSON, err := json.Marshal(event.Attributes)
@@ -66,6 +66,9 @@ func (w *PostgresWriter) WriteSync(ctx context.Context, event Event) error {
 		event.Effect.String(),
 		event.ID,
 		event.Name,
+		event.Message,
+		string(event.Source),
+		event.Component,
 		attributesJSON,
 		event.DurationUS,
 		event.Timestamp,
@@ -161,8 +164,8 @@ func (w *PostgresWriter) writeBatch(ctx context.Context, events []Event) error {
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO access_audit_log (
 			id, subject, action, resource, effect, event_id, event_name,
-			attributes, duration_us, timestamp
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			message, source, component, attributes, duration_us, timestamp
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`)
 	if err != nil {
 		return oops.Wrap(err)
@@ -188,6 +191,9 @@ func (w *PostgresWriter) writeBatch(ctx context.Context, events []Event) error {
 			event.Effect.String(),
 			event.ID,
 			event.Name,
+			event.Message,
+			string(event.Source),
+			event.Component,
 			attributesJSON,
 			event.DurationUS,
 			event.Timestamp,

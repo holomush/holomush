@@ -588,3 +588,20 @@ func TestRecordEngineAuditFailureIncrementsCounter(t *testing.T) {
 	after := promtestutil.ToFloat64(engineAuditFailuresCounter)
 	assert.Equal(t, before+2, after, "counter should increment by 2")
 }
+
+func TestEventHasSourceComponentMessageFields(t *testing.T) {
+	event := Event{
+		Subject:   "character:01ABC",
+		Action:    "speak",
+		Resource:  "channel:01XYZ",
+		Effect:    types.EffectDeny,
+		ID:        "not_member",
+		Name:      "channels: not a member",
+		Message:   "player not in channel members",
+		Source:    SourcePlugin,
+		Component: "core-channels",
+	}
+	assert.Equal(t, "player not in channel members", event.Message)
+	assert.Equal(t, SourcePlugin, event.Source)
+	assert.Equal(t, "core-channels", event.Component)
+}

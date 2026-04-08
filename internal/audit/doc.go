@@ -45,12 +45,14 @@
 //
 //	// Log a decision
 //	event := audit.Event{
+//	    ID:         "policy-123",
+//	    Name:       "allow-read",
+//	    Source:     audit.SourceEngine,
+//	    Component:  "abac",
 //	    Subject:    "character:01ABC",
 //	    Action:     "read",
 //	    Resource:   "location:01XYZ",
 //	    Effect:     types.EffectAllow,
-//	    ID:         "policy-123",
-//	    Name:       "allow-read",
 //	    Attributes: map[string]any{"role": "player"},
 //	    DurationUS: 150,
 //	    Timestamp:  time.Now(),

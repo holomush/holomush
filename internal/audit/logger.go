@@ -33,12 +33,20 @@ const (
 
 // Event represents a single access control decision to be logged.
 type Event struct {
-	Subject    string         `json:"subject"`
-	Action     string         `json:"action"`
-	Resource   string         `json:"resource"`
-	Effect     types.Effect   `json:"effect"`
-	ID         string         `json:"id"`
-	Name       string         `json:"name"`
+	// Identity of the decision
+	ID        string      `json:"id"`        // stable slug: "permit-write-own-room", "not_member"
+	Name      string      `json:"name"`      // human-readable rule label
+	Message   string      `json:"message"`   // per-firing human description
+	Source    EventSource `json:"source"`    // kind of emitter: engine / plugin / system
+	Component string      `json:"component"` // subsystem within source: "core-channels", "abac"
+
+	// What was attempted
+	Subject  string       `json:"subject"`
+	Action   string       `json:"action"`
+	Resource string       `json:"resource"`
+	Effect   types.Effect `json:"effect"`
+
+	// Context
 	Attributes map[string]any `json:"attributes"`
 	DurationUS int64          `json:"duration_us"`
 	Timestamp  time.Time      `json:"timestamp"`
