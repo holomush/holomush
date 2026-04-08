@@ -1472,9 +1472,16 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 		// joined_at from the row we just touched and compare to the
 		// current statement_timestamp(). If they're equal (within the same
 		// transaction), it was a promotion. Otherwise, no-change.
+		// Use transaction_timestamp() (alias for xact_start()) — fixed for the
+		// duration of the current transaction. NOW() inside a txn returns the
+		// same value, so a row promoted by THIS txn has joined_at >=
+		// transaction_timestamp(), while a row that predates this txn has
+		// joined_at < transaction_timestamp(). This is exact, not heuristic.
+		// (An earlier draft of this plan used statement_timestamp() - 1s, but
+		// that's vulnerable to rapid back-to-back retries.)
 		var promoted bool
 		err = tx.QueryRow(ctx, `
-			SELECT joined_at >= statement_timestamp() - interval '1 second'
+			SELECT joined_at >= transaction_timestamp()
 			FROM scene_participants
 			WHERE scene_id = $1 AND character_id = $2`,
 			sceneID, characterID,
