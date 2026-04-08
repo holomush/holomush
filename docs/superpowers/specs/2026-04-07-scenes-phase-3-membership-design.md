@@ -694,25 +694,25 @@ func assertOpsEventRecorded(t *testing.T, db *pgxpool.Pool, sceneID string, kind
 The bead's acceptance criteria, refined and expanded based on the design:
 
 - [ ] Migration 000003 creates `scene_participants` and `scene_ops_events` tables, both
-      with their indexes and CHECK constraints; reverse migration drops them
+  with their indexes and CHECK constraints; reverse migration drops them
 - [ ] `CreateScene` becomes transactional and inserts owner participant row + lifecycle.created
-      ops event atomically
+  ops event atomically
 - [ ] `JoinScene`, `LeaveScene`, `InviteToScene`, `KickFromScene`, `TransferOwnership` RPCs
-      all work end-to-end with race-safe store mutations
+  all work end-to-end with race-safe store mutations
 - [ ] Open scenes accept any join; private scenes require an invitation
 - [ ] Owner-only operations (invite, kick, transfer, end, pause, update) are enforced via
-      ABAC
+  ABAC
 - [ ] Members can read scenes they belong to (replacing owner-only reads)
 - [ ] Members can resume paused scenes (replacing owner-only resume — D6 async safety)
 - [ ] Owners cannot leave their own scene; the rejection message is actionable
 - [ ] Ownership transfer demotes prior owner to member, promotes target from member to owner,
-      updates `scenes.owner_id`, all atomically
+  updates `scenes.owner_id`, all atomically
 - [ ] Every membership-mutating operation emits exactly one `scene_ops_events` row (or zero
-      for no-op retries)
+  for no-op retries)
 - [ ] Every Phase 1+2 lifecycle/settings handler emits its corresponding ops event
 - [ ] Resolver returns `participants` and `invitees` STRING_LIST attributes in a single query
 - [ ] All new Phase 3 ABAC policies are declared in `plugin.yaml`; the Phase 2
-      `read-own-scene` and `resume-own-scene` policies are deleted
+  `read-own-scene` and `resume-own-scene` policies are deleted
 - [ ] Metrics stubs exist for all new membership and ops events
 - [ ] Test coverage matches the test plan above; all tests use ACE naming
 - [ ] `task pr-prep` passes with zero failures

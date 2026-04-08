@@ -4747,6 +4747,7 @@ Run: `wc -l test/integration/plugin/binary_plugin_test.go`
 Expected: a substantial file (multiple `Describe` blocks for Phase 1+2 scene operations).
 
 Read the existing file with the Read tool to understand the patterns it uses for:
+
 - Setting up the host with the core-scenes plugin
 - Getting a SceneServiceClient
 - Acquiring a pgxpool to the plugin's schema
@@ -5056,6 +5057,7 @@ Run: `task pr-prep`
 Expected: all jobs pass — lint, format, schema, license, unit tests, integration tests, E2E tests. This may take 10–15 minutes; do NOT abort early.
 
 If any job fails:
+
 - **Lint:** Fix the issue. Do NOT add lint suppressions without justification. If a fix isn't straightforward, ask for guidance.
 - **Format:** Run `task fmt` and re-run pr-prep.
 - **License:** Run `task license:add` to add SPDX headers to any new files missing them.
