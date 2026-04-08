@@ -65,3 +65,41 @@ func metricSceneRPCDuration(rpc string, durationSeconds float64, ok bool) {
 	_ = durationSeconds
 	_ = ok
 }
+
+// metricSceneParticipantJoined counts successful joins. Labels: visibility,
+// from_invited. Metric: scene_participants_joined_total{visibility, from_invited}.
+func metricSceneParticipantJoined(visibility, fromInvited string) {
+	_ = visibility
+	_ = fromInvited
+}
+
+// metricSceneParticipantLeft counts successful leaves. Labels: visibility.
+// Metric: scene_participants_left_total{visibility}.
+func metricSceneParticipantLeft(visibility string) {
+	_ = visibility
+}
+
+// metricSceneParticipantKicked counts successful kicks. Labels: visibility,
+// prior_role. Metric: scene_participants_kicked_total{visibility, prior_role}.
+func metricSceneParticipantKicked(visibility, priorRole string) {
+	_ = visibility
+	_ = priorRole
+}
+
+// metricSceneParticipantInvited counts successful invitations. Labels: visibility.
+// Metric: scene_participants_invited_total{visibility}.
+func metricSceneParticipantInvited(visibility string) {
+	_ = visibility
+}
+
+// metricSceneOwnershipTransferred counts ownership transfers. Labels: visibility.
+// Metric: scene_ownership_transfers_total{visibility}.
+func metricSceneOwnershipTransferred(visibility string) {
+	_ = visibility
+}
+
+// metricSceneOpsEventRecorded counts every ops event by kind. Catch-all for
+// observability of the ops timeline. Metric: scene_ops_events_total{kind}.
+func metricSceneOpsEventRecorded(kind string) {
+	_ = kind
+}
