@@ -79,3 +79,45 @@ func TestSceneResolverResolveResourceReturnsNotFoundForMissingScene(t *testing.T
 	require.True(t, ok)
 	assert.Equal(t, codes.NotFound, st.Code())
 }
+
+func TestGetSchemaIncludesParticipantsAndInviteesAttributes(t *testing.T) {
+	resolver := NewSceneResolver(newFakeStore())
+
+	resp, err := resolver.GetSchema(context.Background(), &pluginv1.GetSchemaRequest{})
+	require.NoError(t, err)
+
+	sceneSchema, ok := resp.GetResourceTypes()["scene"]
+	require.True(t, ok, "scene resource type missing from schema")
+
+	attrs := sceneSchema.GetAttributes()
+	assert.Equal(t, pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING_LIST, attrs["participants"])
+	assert.Equal(t, pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING_LIST, attrs["invitees"])
+}
+
+func TestResolveResourceReturnsParticipantsAndInviteesLists(t *testing.T) {
+	store := newFakeStore()
+	store.scenes["scene-r-1"] = &SceneRow{
+		ID:         "scene-r-1",
+		Title:      "T",
+		OwnerID:    "char-alice",
+		State:      string(SceneStateActive),
+		Visibility: string(SceneVisibilityPrivate),
+	}
+	resolver := NewSceneResolver(store)
+
+	resp, err := resolver.ResolveResource(context.Background(), &pluginv1.ResolveResourceRequest{
+		ResourceType: "scene",
+		ResourceId:   "scene-r-1",
+	})
+	require.NoError(t, err)
+
+	participantsAttr := resp.GetAttributes()["participants"]
+	require.NotNil(t, participantsAttr)
+	require.NotNil(t, participantsAttr.GetStringListValue())
+	assert.ElementsMatch(t, []string{"char-alice"}, participantsAttr.GetStringListValue().GetValues())
+
+	inviteesAttr := resp.GetAttributes()["invitees"]
+	require.NotNil(t, inviteesAttr)
+	require.NotNil(t, inviteesAttr.GetStringListValue())
+	assert.Empty(t, inviteesAttr.GetStringListValue().GetValues())
+}

@@ -49,11 +49,13 @@ func (r *SceneResolver) GetSchema(ctx context.Context, _ *pluginv1.GetSchemaRequ
 		ResourceTypes: map[string]*pluginv1.ResourceTypeSchema{
 			resourceTypeScene: {
 				Attributes: map[string]pluginv1.AttributeType{
-					"id":         pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING,
-					"owner":      pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING,
-					"state":      pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING,
-					"visibility": pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING,
-					"location":   pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING,
+					"id":           pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING,
+					"owner":        pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING,
+					"state":        pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING,
+					"visibility":   pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING,
+					"location":     pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING,
+					"participants": pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING_LIST,
+					"invitees":     pluginv1.AttributeType_ATTRIBUTE_TYPE_STRING_LIST,
 				},
 			},
 		},
@@ -82,7 +84,7 @@ func (r *SceneResolver) ResolveResource(ctx context.Context, req *pluginv1.Resol
 		return nil, err
 	}
 
-	row, err := r.store.Get(ctx, req.GetResourceId())
+	row, participants, invitees, err := r.store.GetWithMembership(ctx, req.GetResourceId())
 	if err != nil {
 		recordError(span, err)
 		var oe oops.OopsError
@@ -104,6 +106,12 @@ func (r *SceneResolver) ResolveResource(ctx context.Context, req *pluginv1.Resol
 			"state":      {Kind: &pluginv1.AttributeValue_StringValue{StringValue: row.State}},
 			"visibility": {Kind: &pluginv1.AttributeValue_StringValue{StringValue: row.Visibility}},
 			"location":   {Kind: &pluginv1.AttributeValue_StringValue{StringValue: location}},
+			"participants": {Kind: &pluginv1.AttributeValue_StringListValue{
+				StringListValue: &pluginv1.StringList{Values: participants},
+			}},
+			"invitees": {Kind: &pluginv1.AttributeValue_StringListValue{
+				StringListValue: &pluginv1.StringList{Values: invitees},
+			}},
 		},
 	}, nil
 }
