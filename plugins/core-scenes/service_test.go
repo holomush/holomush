@@ -124,6 +124,20 @@ func (f *fakeStore) AddParticipant(_ context.Context, sceneID, characterID strin
 	return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: "member"}, OpInserted, nil
 }
 
+func (f *fakeStore) RemoveParticipant(_ context.Context, sceneID, characterID string) (*ParticipantRow, error) {
+	role, exists := f.participants[sceneID][characterID]
+	if !exists {
+		return nil, oops.Code("SCENE_PARTICIPANT_NOT_FOUND").
+			With("scene_id", sceneID).With("character_id", characterID).Errorf("not found")
+	}
+	if role == "owner" {
+		return nil, oops.Code("SCENE_OWNER_CANNOT_LEAVE").
+			With("scene_id", sceneID).With("character_id", characterID).Errorf("owners cannot leave")
+	}
+	delete(f.participants[sceneID], characterID)
+	return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: role}, nil
+}
+
 func (f *fakeStore) End(_ context.Context, id string) (*SceneRow, error) {
 	row, ok := f.scenes[id]
 	if !ok {
@@ -652,4 +666,41 @@ func TestSceneServiceJoinSceneMapsTransitionForbiddenToFailedPrecondition(t *tes
 	require.Error(t, err)
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.FailedPrecondition, st.Code())
+}
+
+func TestSceneServiceLeaveSceneRejectsOwnerWithFailedPrecondition(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-ls-owner", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.LeaveScene(context.Background(), &scenev1.LeaveSceneRequest{
+		CharacterId: "char-alice",
+		SceneId:     "scene-ls-owner",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.FailedPrecondition, st.Code())
+	assert.Contains(t, st.Message(), "owners cannot leave")
+}
+
+func TestSceneServiceLeaveSceneRemovesMember(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-ls-1", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	_, _, err := store.AddParticipant(context.Background(), "scene-ls-1", "char-bob")
+	require.NoError(t, err)
+	svc := NewSceneServiceImpl(store)
+
+	_, err = svc.LeaveScene(context.Background(), &scenev1.LeaveSceneRequest{
+		CharacterId: "char-bob",
+		SceneId:     "scene-ls-1",
+	})
+	require.NoError(t, err)
+	_, exists := store.participants["scene-ls-1"]["char-bob"]
+	assert.False(t, exists)
 }

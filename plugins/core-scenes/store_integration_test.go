@@ -857,3 +857,59 @@ func TestAddParticipantReturnsNotFoundForMissingScene(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
 }
+
+func TestRemoveParticipantDeletesMemberRowAndEmitsOpsEvent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID: "scene-rp-1", Title: "T", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+
+	got, err := store.RemoveParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, "member", got.Role)
+	assertParticipantRowAbsent(t, store, row.ID, "char-bob")
+
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindMembershipLeave, "char-bob", "char-bob")
+	assert.Equal(t, "member", payload["prior_role"])
+}
+
+func TestRemoveParticipantRefusesToRemoveOwner(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-rp-owner", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen), Title: "T",
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, err := store.RemoveParticipant(ctx, row.ID, "char-alice")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_OWNER_CANNOT_LEAVE")
+	assertParticipantRowExists(t, store, row.ID, "char-alice", "owner")
+}
+
+func TestRemoveParticipantReturnsNotFoundForMissingParticipant(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-rp-missing", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen), Title: "T",
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, err := store.RemoveParticipant(ctx, row.ID, "char-ghost")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_PARTICIPANT_NOT_FOUND")
+}

@@ -637,6 +637,82 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 	return row, result, nil
 }
 
+// RemoveParticipant deletes the participant row for characterID in sceneID.
+//
+// The DELETE has a `WHERE role <> 'owner'` filter for defense-in-depth: the
+// service layer rejects owner-leave first, but this prevents accidental
+// owner removal if the service-layer check is ever bypassed (direct store
+// call, future bug, etc.).
+//
+// Returns the removed row via RETURNING. Distinguishes "owner cannot leave"
+// from "participant not found" via a follow-up SELECT in the error path.
+func (s *SceneStore) RemoveParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error) {
+	ctx, span := startSpan(ctx, "scene.store.remove_participant",
+		attribute.String("scene_id", sceneID),
+		attribute.String("character_id", characterID),
+	)
+	defer span.End()
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LEAVE_FAILED").
+			With("scene_id", sceneID).With("character_id", characterID).Wrap(err)
+	}
+	defer tx.Rollback(ctx)
+
+	row := &ParticipantRow{}
+	err = tx.QueryRow(ctx, `
+		DELETE FROM scene_participants
+		WHERE scene_id = $1 AND character_id = $2 AND role <> 'owner'
+		RETURNING scene_id, character_id, role, joined_at`,
+		sceneID, characterID,
+	).Scan(&row.SceneID, &row.CharacterID, &row.Role, &row.JoinedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Either the row doesn't exist or it was the owner. Distinguish.
+			var existingRole string
+			err2 := tx.QueryRow(ctx, `
+				SELECT role FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
+				sceneID, characterID,
+			).Scan(&existingRole)
+			if err2 != nil {
+				if errors.Is(err2, pgx.ErrNoRows) {
+					return nil, oops.Code("SCENE_PARTICIPANT_NOT_FOUND").
+						With("scene_id", sceneID).
+						With("character_id", characterID).
+						Wrap(err)
+				}
+				recordError(span, err2)
+				return nil, oops.Code("SCENE_LEAVE_CLASSIFY_FAILED").
+					With("scene_id", sceneID).Wrap(err2)
+			}
+			if existingRole == "owner" {
+				return nil, oops.Code("SCENE_OWNER_CANNOT_LEAVE").
+					With("scene_id", sceneID).
+					With("character_id", characterID).
+					Errorf("scene owners cannot leave; use scene end or transfer ownership")
+			}
+			// Shouldn't happen — DELETE matched no row but SELECT did?
+			return nil, oops.Code("SCENE_LEAVE_FAILED").Errorf("unexpected state")
+		}
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LEAVE_FAILED").Wrap(err)
+	}
+
+	payload := map[string]any{"prior_role": row.Role}
+	if err := recordOpsEventTx(ctx, tx, sceneID, OpsKindMembershipLeave, characterID, characterID, payload); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LEAVE_OPS_EVENT_FAILED").Wrap(err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_LEAVE_FAILED").Wrap(err)
+	}
+	return row, nil
+}
+
 // classifyJoinMiss issues one diagnostic SELECT to figure out which
 // precondition failed when AddParticipant's RETURNING was empty. Pays the
 // extra round trip ONLY in the error path; the happy path is single-statement.

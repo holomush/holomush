@@ -40,6 +40,7 @@ type sceneStorer interface {
 	Resume(ctx context.Context, id string) (*SceneRow, error)
 	Update(ctx context.Context, id string, update *SceneUpdate) (*SceneRow, error)
 	AddParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, ParticipantOpResult, error)
+	RemoveParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.
@@ -401,6 +402,70 @@ func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinScene
 	)
 
 	return &scenev1.JoinSceneResponse{}, nil
+}
+
+// LeaveScene removes the calling character from a scene. Per design decision
+// P3.D7, scene owners cannot leave their own scene — they must use scene end
+// or transfer ownership first. The service-layer pre-check returns
+// FailedPrecondition with an actionable hint message.
+//
+// The store's RemoveParticipant ALSO has a `WHERE role <> 'owner'` filter
+// for defense-in-depth.
+func (s *SceneServiceImpl) LeaveScene(ctx context.Context, req *scenev1.LeaveSceneRequest) (*scenev1.LeaveSceneResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.leave_scene",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+	)
+	defer span.End()
+
+	// Service-layer owner-leave pre-check. Reads the scene first so we can
+	// give the user a helpful message before hitting the store's defensive
+	// WHERE filter (which would return SCENE_OWNER_CANNOT_LEAVE — same
+	// outcome but the error path is uglier).
+	sceneRow, err := s.store.Get(ctx, req.GetSceneId())
+	if err != nil {
+		recordError(span, err)
+		var oe oops.OopsError
+		if errors.As(err, &oe) && oe.Code() == "SCENE_NOT_FOUND" {
+			return nil, status.Errorf(codes.NotFound, "scene not found: %s", req.GetSceneId())
+		}
+		return nil, status.Errorf(codes.Internal, "failed to load scene: %v", err)
+	}
+	if sceneRow.OwnerID == req.GetCharacterId() {
+		err := status.Errorf(codes.FailedPrecondition,
+			"scene owners cannot leave; use `scene end` to terminate the scene or transfer ownership first")
+		recordError(span, err)
+		return nil, err
+	}
+
+	if _, err := s.store.RemoveParticipant(ctx, req.GetSceneId(), req.GetCharacterId()); err != nil {
+		recordError(span, err)
+		var oe oops.OopsError
+		if errors.As(err, &oe) {
+			switch oe.Code() {
+			case "SCENE_PARTICIPANT_NOT_FOUND":
+				return nil, status.Errorf(codes.NotFound, "character not in scene")
+			case "SCENE_OWNER_CANNOT_LEAVE":
+				// Defense-in-depth path — should never trigger after the
+				// service-layer pre-check above, but mapped for completeness.
+				return nil, status.Errorf(codes.FailedPrecondition,
+					"scene owners cannot leave")
+			}
+		}
+		slog.WarnContext(ctx, "scene.service.leave_scene store error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to leave scene: %v", err)
+	}
+
+	slog.InfoContext(ctx, "scene.service.leave_scene ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", req.GetSceneId(),
+	)
+
+	return &scenev1.LeaveSceneResponse{}, nil
 }
 
 // mapTransitionError translates store-layer transition errors into gRPC
