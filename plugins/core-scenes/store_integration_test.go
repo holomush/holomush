@@ -568,3 +568,54 @@ func TestSceneStoreUpdateNoFieldsIsNoOp(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Unchanged", got.Title)
 }
+
+func TestRecordOpsEventTxWritesRowWithExpectedKindAndPayload(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	scene := mustCreateScene(t, store, "scene-ope-1", "char-alice", string(SceneVisibilityOpen))
+
+	tx, err := store.pool.Begin(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+
+	err = recordOpsEventTx(ctx, tx, scene.ID, OpsKindMembershipJoin, "char-alice", "char-alice",
+		map[string]any{"visibility": "open", "from_invited": false})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+
+	payload := assertOpsEventRecorded(t, store, scene.ID, OpsKindMembershipJoin, "char-alice", "char-alice")
+	assert.Equal(t, "open", payload["visibility"])
+	assert.Equal(t, false, payload["from_invited"])
+}
+
+func TestRecordOpsEventTxRejectsUnknownKind(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	mustCreateScene(t, store, "scene-ope-2", "char-alice", string(SceneVisibilityOpen))
+
+	tx, err := store.pool.Begin(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+
+	err = recordOpsEventTx(ctx, tx, "scene-ope-2", OpsEventKind("bogus.kind"), "char-alice", "", nil)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_OPS_EVENT_INVALID_KIND")
+}
+
+func TestRecordOpsEventTxAcceptsNilPayloadAsEmptyObject(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	mustCreateScene(t, store, "scene-ope-3", "char-alice", string(SceneVisibilityOpen))
+
+	tx, err := store.pool.Begin(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+
+	err = recordOpsEventTx(ctx, tx, "scene-ope-3", OpsKindLifecyclePaused, "char-alice", "", nil)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+
+	payload := assertOpsEventRecorded(t, store, "scene-ope-3", OpsKindLifecyclePaused, "char-alice", "")
+	assert.Empty(t, payload)
+}
