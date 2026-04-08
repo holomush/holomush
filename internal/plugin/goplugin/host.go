@@ -547,9 +547,10 @@ func protoCommandResponseToSDK(r *pluginv1.CommandResponse) *pluginsdk.CommandRe
 }
 
 // protoAuditEffectToSDK converts a proto AuditEffect enum to the SDK
-// AuditEffect string. Unknown values map to AuditEffectDeny conservatively
-// (a known unknown should be denied, not silently allowed). The dispatcher's
-// extractAuditHints will further validate and may drop the hint if needed.
+// AuditEffect string. Unspecified and unknown values return an empty SDK
+// effect so the dispatcher's extractAuditHints can detect the malformed
+// hint and drop it with a warning — this surfaces plugin misbehavior to
+// operators rather than silently coercing to allow/deny.
 func protoAuditEffectToSDK(e pluginv1.AuditEffect) pluginsdk.AuditEffect {
 	switch e {
 	case pluginv1.AuditEffect_AUDIT_EFFECT_DENY:

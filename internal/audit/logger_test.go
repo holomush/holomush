@@ -414,6 +414,87 @@ func TestAuditLoggerGracefulShutdownFlushesBuffered(t *testing.T) {
 	assert.True(t, writer.isClosed())
 }
 
+func TestAuditLoggerLogRejectsSyncEventAfterClose(t *testing.T) {
+	writer := &mockWriter{}
+	logger := NewLogger(ModeMinimal, writer, "")
+
+	// Shut down the logger first.
+	require.NoError(t, logger.Close())
+
+	// A sync-path event (deny) posted afterwards must fail with AUDIT_LOGGER_CLOSED
+	// instead of being silently dropped.
+	entry := Event{
+		Subject:    "character:01ABC",
+		Action:     "delete",
+		Resource:   "location:01XYZ",
+		Effect:     types.EffectDeny,
+		ID:         "policy-after-close",
+		Name:       "deny-after-close",
+		Attributes: map[string]any{},
+		DurationUS: 100,
+		Timestamp:  time.Now(),
+	}
+	err := logger.Log(context.Background(), entry)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "AUDIT_LOGGER_CLOSED")
+
+	// And nothing was written to the underlying writer.
+	assert.Empty(t, writer.getSyncWrites())
+	assert.Empty(t, writer.getAsyncWrites())
+}
+
+func TestAuditLoggerLogRejectsAsyncEventAfterClose(t *testing.T) {
+	writer := &mockWriter{}
+	logger := NewLogger(ModeAll, writer, "")
+
+	// Shut down the logger first so the async consumer exits cleanly.
+	require.NoError(t, logger.Close())
+
+	// An async-path event (allow) posted afterwards must fail with AUDIT_LOGGER_CLOSED
+	// rather than being orphaned in a channel with no live consumer.
+	entry := Event{
+		Subject:    "character:01ABC",
+		Action:     "read",
+		Resource:   "location:01XYZ",
+		Effect:     types.EffectAllow,
+		ID:         "policy-allow-after-close",
+		Name:       "allow-after-close",
+		Attributes: map[string]any{},
+		DurationUS: 100,
+		Timestamp:  time.Now(),
+	}
+	err := logger.Log(context.Background(), entry)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "AUDIT_LOGGER_CLOSED")
+
+	assert.Empty(t, writer.getSyncWrites())
+	assert.Empty(t, writer.getAsyncWrites())
+}
+
+func TestAuditLoggerLogSkipsEventBelowMode(t *testing.T) {
+	// Events filtered out by mode shouldn't touch writers even after Close(),
+	// because shouldLog short-circuits before any channel interaction.
+	// This is the pre-close happy path for the shouldLog=false branch.
+	writer := &mockWriter{}
+	logger := NewLogger(ModeDenialsOnly, writer, "")
+	defer logger.Close()
+
+	err := logger.Log(context.Background(), Event{
+		Subject:    "character:01ABC",
+		Action:     "read",
+		Resource:   "location:01XYZ",
+		Effect:     types.EffectAllow, // denials_only: allow is skipped
+		ID:         "policy-skip",
+		Name:       "skip",
+		Attributes: map[string]any{},
+		DurationUS: 10,
+		Timestamp:  time.Now(),
+	})
+	require.NoError(t, err)
+	assert.Empty(t, writer.getSyncWrites())
+	assert.Empty(t, writer.getAsyncWrites())
+}
+
 func TestAuditLoggerEventContainsAllFields(t *testing.T) {
 	writer := &mockWriter{}
 	logger := NewLogger(ModeAll, writer, "")

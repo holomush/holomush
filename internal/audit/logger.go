@@ -135,7 +135,23 @@ func NewLogger(mode Mode, writer Writer, walPath string) *Logger {
 }
 
 // Log routes an audit event based on the configured mode and effect.
+// Returns AUDIT_LOGGER_CLOSED if Close() has already started shutdown —
+// callers must not rely on a stale Logger after Close() returns.
 func (l *Logger) Log(ctx context.Context, event Event) error {
+	// Reject calls after shutdown starts so events aren't silently orphaned.
+	// Without this, Log could enqueue into asyncChan after the consumer
+	// goroutine has already drained and exited — those records would never
+	// be written and callers would have no way to notice.
+	select {
+	case <-l.stopChan:
+		return oops.Code("AUDIT_LOGGER_CLOSED").
+			With("subject", event.Subject).
+			With("action", event.Action).
+			With("resource", event.Resource).
+			Errorf("audit logger is closed")
+	default:
+	}
+
 	// Determine if event should be logged based on mode and effect
 	shouldLog, useSync := l.shouldLog(event.Effect)
 	if !shouldLog {
@@ -178,8 +194,18 @@ func (l *Logger) Log(ctx context.Context, event Event) error {
 		return nil
 	}
 
-	// Async write for allows in all mode
+	// Async write for allows in all mode.
+	// The stopChan case here is belt-and-suspenders: the check at the top of
+	// Log() already rejects calls after shutdown starts, but that check can
+	// race with a concurrent Close(). Keeping the case in the select ensures
+	// an event is never handed to a drained asyncChan.
 	select {
+	case <-l.stopChan:
+		return oops.Code("AUDIT_LOGGER_CLOSED").
+			With("subject", event.Subject).
+			With("action", event.Action).
+			With("resource", event.Resource).
+			Errorf("audit logger is closed")
 	case l.asyncChan <- event:
 		return nil
 	default:
