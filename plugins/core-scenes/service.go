@@ -32,6 +32,7 @@ import (
 //	separate Get call (eliminates a class of races).
 type sceneStorer interface {
 	Create(ctx context.Context, row *SceneRow) error
+	CreateWithOwner(ctx context.Context, row *SceneRow) error
 	Get(ctx context.Context, id string) (*SceneRow, error)
 	End(ctx context.Context, id string) (*SceneRow, error)
 	Pause(ctx context.Context, id string) (*SceneRow, error)
@@ -103,7 +104,7 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		row.LocationID = &loc
 	}
 
-	if err := s.store.Create(ctx, row); err != nil {
+	if err := s.store.CreateWithOwner(ctx, row); err != nil {
 		recordError(span, err)
 		slog.WarnContext(ctx, "scene.service.create_scene store error",
 			"subject_id", req.GetCharacterId(),

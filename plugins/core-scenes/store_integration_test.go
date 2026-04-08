@@ -619,3 +619,66 @@ func TestRecordOpsEventTxAcceptsNilPayloadAsEmptyObject(t *testing.T) {
 	payload := assertOpsEventRecorded(t, store, "scene-ope-3", OpsKindLifecyclePaused, "char-alice", "")
 	assert.Empty(t, payload)
 }
+
+func TestCreateWithOwnerInsertsSceneAndOwnerParticipantAndOpsEvent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID:              "scene-cwo-1",
+		Title:           "Owned scene",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityPrivate),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+
+	err := store.CreateWithOwner(ctx, row)
+	require.NoError(t, err)
+
+	// 1. Scene row exists
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, row.OwnerID, got.OwnerID)
+
+	// 2. Owner participant row exists with role='owner'
+	assertParticipantRowExists(t, store, row.ID, row.OwnerID, "owner")
+
+	// 3. lifecycle.created ops event recorded
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindLifecycleCreated, row.OwnerID, "")
+	assert.Equal(t, "private", payload["visibility"])
+	assert.Equal(t, false, payload["from_template"])
+}
+
+func TestCreateWithOwnerRollsBackWhenSceneIDIsDuplicate(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID:              "scene-cwo-dup",
+		Title:           "First",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	// Second insert with same ID — must fail and leave scene_participants /
+	// scene_ops_events untouched (no orphan rows from a partial transaction).
+	rowDup := *row
+	rowDup.OwnerID = "char-bob" // different owner attempt
+	err := store.CreateWithOwner(ctx, &rowDup)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_CREATE_FAILED")
+
+	// char-bob must NOT have a participant row for this scene.
+	assertParticipantRowAbsent(t, store, row.ID, "char-bob")
+
+	// Exactly one lifecycle.created event for this scene (the first call).
+	assert.Equal(t, 1, countOpsEvents(t, store, row.ID, OpsKindLifecycleCreated))
+}

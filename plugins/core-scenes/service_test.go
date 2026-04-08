@@ -24,9 +24,10 @@ import (
 // supports configurable error injection so tests can exercise the error
 // branches of the service layer.
 type fakeStore struct {
-	scenes    map[string]*SceneRow
-	createErr error
-	getErr    error
+	scenes             map[string]*SceneRow
+	createErr          error
+	createWithOwnerErr error
+	getErr             error
 }
 
 func newFakeStore() *fakeStore {
@@ -43,6 +44,15 @@ func (f *fakeStore) Create(_ context.Context, row *SceneRow) error {
 	cp := *row
 	f.scenes[row.ID] = &cp
 	return nil
+}
+
+func (f *fakeStore) CreateWithOwner(ctx context.Context, row *SceneRow) error {
+	if f.createWithOwnerErr != nil {
+		return f.createWithOwnerErr
+	}
+	// fakeStore is in-memory and has no participants/ops_events tables to
+	// populate. The service-layer test only cares that the call succeeded.
+	return f.Create(ctx, row)
 }
 
 func (f *fakeStore) Get(_ context.Context, id string) (*SceneRow, error) {

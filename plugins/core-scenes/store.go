@@ -135,6 +135,81 @@ func (s *SceneStore) Create(ctx context.Context, row *SceneRow) error {
 	return nil
 }
 
+// CreateWithOwner is the transactional Phase 3 replacement for Create.
+//
+// All-or-nothing: inserts the scene row, the owner's participant row
+// (role='owner'), and a lifecycle.created ops event in a single transaction.
+// If any step fails, none of the rows persist.
+//
+// Per design decision P3.D6, this exists because Phase 3's ABAC policies
+// use `principal.id in resource.scene.participants`. An owner without a
+// participant row would lose access to their own scene under the new
+// policies. The "create + insert owner row + emit ops event" trio MUST
+// be atomic.
+func (s *SceneStore) CreateWithOwner(ctx context.Context, row *SceneRow) error {
+	ctx, span := startSpan(ctx, "scene.store.create_with_owner",
+		attribute.String("scene_id", row.ID),
+	)
+	defer span.End()
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		recordError(span, err)
+		return oops.Code("SCENE_CREATE_FAILED").With("scene_id", row.ID).Wrap(err)
+	}
+	defer tx.Rollback(ctx) // no-op after Commit
+
+	// 1. Insert the scene row.
+	_, err = tx.Exec(ctx, `
+		INSERT INTO scenes (
+			id, title, description, location_id, owner_id, state, pose_order,
+			visibility, idle_timeout_secs, template_id, content_warnings, tags
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7,
+			$8, $9, $10, $11, $12
+		)`,
+		row.ID, row.Title, row.Description, row.LocationID, row.OwnerID,
+		row.State, row.PoseOrder, row.Visibility, row.IdleTimeoutSecs,
+		row.TemplateID, row.ContentWarnings, row.Tags,
+	)
+	if err != nil {
+		recordError(span, err)
+		return oops.Code("SCENE_CREATE_FAILED").With("scene_id", row.ID).Wrap(err)
+	}
+
+	// 2. Insert the owner participant row.
+	_, err = tx.Exec(ctx, `
+		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
+		VALUES ($1, $2, 'owner', NOW())`,
+		row.ID, row.OwnerID,
+	)
+	if err != nil {
+		recordError(span, err)
+		return oops.Code("SCENE_CREATE_OWNER_PARTICIPANT_FAILED").
+			With("scene_id", row.ID).
+			With("owner_id", row.OwnerID).
+			Wrap(err)
+	}
+
+	// 3. Record the lifecycle.created ops event.
+	payload := map[string]any{
+		"visibility":    row.Visibility,
+		"from_template": row.TemplateID != nil,
+	}
+	if err := recordOpsEventTx(ctx, tx, row.ID, OpsKindLifecycleCreated, row.OwnerID, "", payload); err != nil {
+		recordError(span, err)
+		return oops.Code("SCENE_CREATE_OPS_EVENT_FAILED").
+			With("scene_id", row.ID).
+			Wrap(err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		recordError(span, err)
+		return oops.Code("SCENE_CREATE_FAILED").With("scene_id", row.ID).Wrap(err)
+	}
+	return nil
+}
+
 // Get loads a single scene by ID. Returns a SCENE_NOT_FOUND error code if
 // the row does not exist.
 func (s *SceneStore) Get(ctx context.Context, id string) (*SceneRow, error) {
