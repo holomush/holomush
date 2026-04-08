@@ -138,6 +138,21 @@ func (f *fakeStore) RemoveParticipant(_ context.Context, sceneID, characterID st
 	return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: role}, nil
 }
 
+func (f *fakeStore) InviteParticipant(_ context.Context, sceneID, inviterID, targetID string) (*ParticipantRow, error) {
+	if f.participants[sceneID] == nil {
+		f.participants[sceneID] = make(map[string]string)
+	}
+	if existing, ok := f.participants[sceneID][targetID]; ok {
+		if existing == "invited" {
+			return &ParticipantRow{SceneID: sceneID, CharacterID: targetID, Role: "invited"}, nil
+		}
+		return nil, oops.Code("SCENE_INVITE_TARGET_ALREADY_MEMBER").
+			With("scene_id", sceneID).With("target_id", targetID).Errorf("already %s", existing)
+	}
+	f.participants[sceneID][targetID] = "invited"
+	return &ParticipantRow{SceneID: sceneID, CharacterID: targetID, Role: "invited"}, nil
+}
+
 func (f *fakeStore) End(_ context.Context, id string) (*SceneRow, error) {
 	row, ok := f.scenes[id]
 	if !ok {
@@ -703,4 +718,21 @@ func TestSceneServiceLeaveSceneRemovesMember(t *testing.T) {
 	require.NoError(t, err)
 	_, exists := store.participants["scene-ls-1"]["char-bob"]
 	assert.False(t, exists)
+}
+
+func TestSceneServiceInviteToSceneCallsStore(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-its-1", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityPrivate),
+	}))
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.InviteToScene(context.Background(), &scenev1.InviteToSceneRequest{
+		CharacterId:       "char-alice",
+		SceneId:           "scene-its-1",
+		TargetCharacterId: "char-bob",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "invited", store.participants["scene-its-1"]["char-bob"])
 }

@@ -41,6 +41,7 @@ type sceneStorer interface {
 	Update(ctx context.Context, id string, update *SceneUpdate) (*SceneRow, error)
 	AddParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, ParticipantOpResult, error)
 	RemoveParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error)
+	InviteParticipant(ctx context.Context, sceneID, inviterID, targetID string) (*ParticipantRow, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.
@@ -466,6 +467,39 @@ func (s *SceneServiceImpl) LeaveScene(ctx context.Context, req *scenev1.LeaveSce
 	)
 
 	return &scenev1.LeaveSceneResponse{}, nil
+}
+
+// InviteToScene adds an 'invited' participant row for the target character.
+// ABAC enforces owner-only invite at the dispatcher layer.
+func (s *SceneServiceImpl) InviteToScene(ctx context.Context, req *scenev1.InviteToSceneRequest) (*scenev1.InviteToSceneResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.invite_to_scene",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+		attribute.String("target_id", req.GetTargetCharacterId()),
+	)
+	defer span.End()
+
+	if _, err := s.store.InviteParticipant(ctx, req.GetSceneId(), req.GetCharacterId(), req.GetTargetCharacterId()); err != nil {
+		recordError(span, err)
+		var oe oops.OopsError
+		if errors.As(err, &oe) && oe.Code() == "SCENE_INVITE_TARGET_ALREADY_MEMBER" {
+			return nil, status.Errorf(codes.AlreadyExists, "character is already a member of this scene")
+		}
+		slog.WarnContext(ctx, "scene.service.invite_to_scene store error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"target_id", req.GetTargetCharacterId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to invite: %v", err)
+	}
+
+	slog.InfoContext(ctx, "scene.service.invite_to_scene ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", req.GetSceneId(),
+		"target_id", req.GetTargetCharacterId(),
+	)
+	return &scenev1.InviteToSceneResponse{}, nil
 }
 
 // mapTransitionError translates store-layer transition errors into gRPC

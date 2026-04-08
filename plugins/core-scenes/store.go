@@ -713,6 +713,78 @@ func (s *SceneStore) RemoveParticipant(ctx context.Context, sceneID, characterID
 	return row, nil
 }
 
+// InviteParticipant inserts a participant row with role='invited'. Idempotent
+// on identity match (re-inviting an already-invited character is a no-op,
+// no second ops event). Rejected for existing members or owners with
+// SCENE_INVITE_TARGET_ALREADY_MEMBER.
+func (s *SceneStore) InviteParticipant(ctx context.Context, sceneID, inviterID, targetID string) (*ParticipantRow, error) {
+	ctx, span := startSpan(ctx, "scene.store.invite_participant",
+		attribute.String("scene_id", sceneID),
+		attribute.String("inviter_id", inviterID),
+		attribute.String("target_id", targetID),
+	)
+	defer span.End()
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_INVITE_FAILED").Wrap(err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Check existing role for target — distinguish "already invited" (no-op),
+	// "already member/owner" (error), and "not present" (insert).
+	var existingRole string
+	err = tx.QueryRow(ctx,
+		`SELECT role FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
+		sceneID, targetID,
+	).Scan(&existingRole)
+
+	switch {
+	case err == nil:
+		if existingRole == "invited" {
+			// Idempotent no-op — return the existing row, no new ops event.
+			row := &ParticipantRow{SceneID: sceneID, CharacterID: targetID, Role: "invited"}
+			return row, tx.Commit(ctx)
+		}
+		// Already member or owner — reject.
+		return nil, oops.Code("SCENE_INVITE_TARGET_ALREADY_MEMBER").
+			With("scene_id", sceneID).
+			With("target_id", targetID).
+			With("current_role", existingRole).
+			Errorf("character is already a %s", existingRole)
+	case errors.Is(err, pgx.ErrNoRows):
+		// Not present — fall through to insert.
+	default:
+		recordError(span, err)
+		return nil, oops.Code("SCENE_INVITE_FAILED").Wrap(err)
+	}
+
+	row := &ParticipantRow{}
+	err = tx.QueryRow(ctx, `
+		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
+		VALUES ($1, $2, 'invited', NOW())
+		RETURNING scene_id, character_id, role, joined_at`,
+		sceneID, targetID,
+	).Scan(&row.SceneID, &row.CharacterID, &row.Role, &row.JoinedAt)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_INVITE_FAILED").
+			With("scene_id", sceneID).With("target_id", targetID).Wrap(err)
+	}
+
+	if err := recordOpsEventTx(ctx, tx, sceneID, OpsKindMembershipInvite, inviterID, targetID, nil); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_INVITE_OPS_EVENT_FAILED").Wrap(err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_INVITE_FAILED").Wrap(err)
+	}
+	return row, nil
+}
+
 // classifyJoinMiss issues one diagnostic SELECT to figure out which
 // precondition failed when AddParticipant's RETURNING was empty. Pays the
 // extra round trip ONLY in the error path; the happy path is single-statement.
