@@ -8,6 +8,7 @@ package plugin_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -802,6 +803,334 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				).Scan(&title)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(title).To(Equal("Lifecycle Test"))
+			})
+		})
+	})
+
+	Describe("Phase 3 Membership", func() {
+		var (
+			membershipCtx       context.Context
+			membershipCancel    context.CancelFunc
+			membershipContainer testcontainers.Container
+			membershipHost      *goplugin.Host
+			membershipPool      *pgxpool.Pool
+			membershipClient    scenev1.SceneServiceClient
+		)
+
+		BeforeEach(func() {
+			pluginDir, binaryPath := coreScenesBinaryPath()
+			if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
+				Skip(fmt.Sprintf("core-scenes binary not found at %s — run 'task plugin:build-all' first", binaryPath))
+			}
+
+			membershipCtx, membershipCancel = context.WithTimeout(context.Background(), 2*time.Minute)
+
+			// Postgres + core migrations
+			pgEnv, err := testutil.StartPostgres(membershipCtx)
+			Expect(err).NotTo(HaveOccurred())
+			membershipContainer = pgEnv.Container
+			pgConnStr := pgEnv.ConnStr
+
+			migrator, err := store.NewMigrator(pgConnStr)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(migrator.Up()).To(Succeed())
+			_ = migrator.Close()
+
+			// Provisioner + host (matches the lifecycle suite pattern)
+			provisioner := plugins.NewSchemaProvisioner(pgConnStr)
+			Expect(provisioner.Init(membershipCtx)).To(Succeed())
+			DeferCleanup(func() { provisioner.Close() })
+
+			registry := plugins.NewServiceRegistry()
+			worldSrv := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- in-memory bufconn only
+			worldConn, worldConnErr := plugins.NewInProcessConn(worldSrv)
+			Expect(worldConnErr).NotTo(HaveOccurred())
+			DeferCleanup(func() { _ = worldConn.Close() })
+
+			Expect(registry.Register(plugins.RegisteredService{
+				Name:       "holomush.world.v1.WorldService",
+				Conn:       worldConn,
+				PluginType: plugins.TypeServerInternal(),
+			})).To(Succeed())
+
+			membershipHost = goplugin.NewHost(
+				goplugin.WithSchemaProvisioner(provisioner),
+				goplugin.WithServiceRegistry(registry),
+			)
+
+			manifestData, err := os.ReadFile(filepath.Join(pluginDir, "plugin.yaml"))
+			Expect(err).NotTo(HaveOccurred())
+			manifest, err := plugins.ParseManifest(manifestData)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(membershipHost.Load(membershipCtx, manifest, pluginDir)).To(Succeed())
+
+			// Direct pool for schema-qualified DB verification
+			membershipPool, err = pgxpool.New(membershipCtx, pgConnStr)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Build the SceneServiceClient via the host's direct PluginConn helper.
+			conn, err := membershipHost.PluginConn("core-scenes")
+			Expect(err).NotTo(HaveOccurred())
+			membershipClient = scenev1.NewSceneServiceClient(conn)
+		})
+
+		AfterEach(func() {
+			if membershipHost != nil {
+				_ = membershipHost.Close(membershipCtx)
+			}
+			if membershipPool != nil {
+				membershipPool.Close()
+			}
+			if membershipContainer != nil {
+				_ = membershipContainer.Terminate(context.Background())
+			}
+			if membershipCancel != nil {
+				membershipCancel()
+			}
+		})
+
+		// makePrivateScene creates a scene then flips its visibility to "private"
+		// via UpdateScene. CreateScene currently hardcodes visibility="open"
+		// (the proto field is ignored), so the visibility flip is necessary
+		// for tests that exercise the private-scene join gate.
+		makePrivateScene := func(owner, title string) string {
+			createResp, err := membershipClient.CreateScene(membershipCtx, &scenev1.CreateSceneRequest{
+				CharacterId: owner,
+				Title:       title,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			id := createResp.GetScene().GetId()
+
+			_, err = membershipClient.UpdateScene(membershipCtx, &scenev1.UpdateSceneRequest{
+				CharacterId: owner,
+				SceneId:     id,
+				Visibility:  "private",
+				UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"visibility"}},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			return id
+		}
+
+		Describe("Full membership lifecycle over the binary plugin boundary", func() {
+			It("supports create→invite→join→kick→reinvite→join→transfer→leave", func() {
+				// 1. Create a private scene as char-alice (CreateScene then
+				// UpdateScene to flip visibility — see makePrivateScene comment).
+				sceneID := makePrivateScene("char-alice", "E2E Test Scene")
+				Expect(sceneID).To(HavePrefix("scene-"))
+
+				// DB validation: owner participant row inserted by CreateWithOwner.
+				var ownerRole string
+				Expect(membershipPool.QueryRow(membershipCtx,
+					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
+					sceneID, "char-alice",
+				).Scan(&ownerRole)).To(Succeed())
+				Expect(ownerRole).To(Equal("owner"))
+
+				// DB validation: lifecycle.created ops event recorded exactly once.
+				var createdEventCount int
+				Expect(membershipPool.QueryRow(membershipCtx,
+					`SELECT COUNT(*) FROM plugin_core_scenes.scene_ops_events WHERE scene_id = $1 AND kind = 'lifecycle.created'`,
+					sceneID,
+				).Scan(&createdEventCount)).To(Succeed())
+				Expect(createdEventCount).To(Equal(1))
+
+				// 2. Invite char-bob to the private scene.
+				_, err := membershipClient.InviteToScene(membershipCtx, &scenev1.InviteToSceneRequest{
+					CharacterId:       "char-alice",
+					SceneId:           sceneID,
+					TargetCharacterId: "char-bob",
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				// DB validation: invited row exists.
+				var bobRole string
+				Expect(membershipPool.QueryRow(membershipCtx,
+					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
+					sceneID, "char-bob",
+				).Scan(&bobRole)).To(Succeed())
+				Expect(bobRole).To(Equal("invited"))
+
+				// 3. char-bob joins (promotes invited→member).
+				_, err = membershipClient.JoinScene(membershipCtx, &scenev1.JoinSceneRequest{
+					CharacterId: "char-bob",
+					SceneId:     sceneID,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(membershipPool.QueryRow(membershipCtx,
+					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
+					sceneID, "char-bob",
+				).Scan(&bobRole)).To(Succeed())
+				Expect(bobRole).To(Equal("member"))
+
+				// DB validation: membership.join ops event with from_invited=true.
+				// Parse the JSONB payload as a map so we don't depend on
+				// Postgres's whitespace normalisation of the stored bytes.
+				var joinPayloadBytes []byte
+				Expect(membershipPool.QueryRow(membershipCtx,
+					`SELECT payload FROM plugin_core_scenes.scene_ops_events
+					 WHERE scene_id = $1 AND kind = 'membership.join' AND target_id = $2`,
+					sceneID, "char-bob",
+				).Scan(&joinPayloadBytes)).To(Succeed())
+				var joinPayload map[string]any
+				Expect(json.Unmarshal(joinPayloadBytes, &joinPayload)).To(Succeed())
+				Expect(joinPayload).To(HaveKeyWithValue("from_invited", true))
+				Expect(joinPayload).To(HaveKeyWithValue("visibility", "private"))
+
+				// 4. char-alice (owner) kicks char-bob.
+				_, err = membershipClient.KickFromScene(membershipCtx, &scenev1.KickFromSceneRequest{
+					CharacterId:       "char-alice",
+					SceneId:           sceneID,
+					TargetCharacterId: "char-bob",
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				// DB validation: char-bob row gone.
+				err = membershipPool.QueryRow(membershipCtx,
+					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
+					sceneID, "char-bob",
+				).Scan(&bobRole)
+				Expect(err).To(MatchError(ContainSubstring("no rows")))
+
+				// DB validation: membership.kick event recorded.
+				var kickCount int
+				Expect(membershipPool.QueryRow(membershipCtx,
+					`SELECT COUNT(*) FROM plugin_core_scenes.scene_ops_events
+					 WHERE scene_id = $1 AND kind = 'membership.kick' AND target_id = $2`,
+					sceneID, "char-bob",
+				).Scan(&kickCount)).To(Succeed())
+				Expect(kickCount).To(Equal(1))
+
+				// 5. Re-invite + re-join.
+				_, err = membershipClient.InviteToScene(membershipCtx, &scenev1.InviteToSceneRequest{
+					CharacterId:       "char-alice",
+					SceneId:           sceneID,
+					TargetCharacterId: "char-bob",
+				})
+				Expect(err).NotTo(HaveOccurred())
+				_, err = membershipClient.JoinScene(membershipCtx, &scenev1.JoinSceneRequest{
+					CharacterId: "char-bob",
+					SceneId:     sceneID,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(membershipPool.QueryRow(membershipCtx,
+					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
+					sceneID, "char-bob",
+				).Scan(&bobRole)).To(Succeed())
+				Expect(bobRole).To(Equal("member"))
+
+				// 6. char-alice transfers ownership to char-bob.
+				_, err = membershipClient.TransferOwnership(membershipCtx, &scenev1.TransferOwnershipRequest{
+					CharacterId:         "char-alice",
+					SceneId:             sceneID,
+					NewOwnerCharacterId: "char-bob",
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				// DB validation: char-bob is now owner, char-alice is member,
+				// scenes.owner_id is denormalised correctly.
+				Expect(membershipPool.QueryRow(membershipCtx,
+					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
+					sceneID, "char-bob",
+				).Scan(&bobRole)).To(Succeed())
+				Expect(bobRole).To(Equal("owner"))
+
+				var aliceRole string
+				Expect(membershipPool.QueryRow(membershipCtx,
+					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
+					sceneID, "char-alice",
+				).Scan(&aliceRole)).To(Succeed())
+				Expect(aliceRole).To(Equal("member"))
+
+				var denormOwner string
+				Expect(membershipPool.QueryRow(membershipCtx,
+					`SELECT owner_id FROM plugin_core_scenes.scenes WHERE id = $1`,
+					sceneID,
+				).Scan(&denormOwner)).To(Succeed())
+				Expect(denormOwner).To(Equal("char-bob"))
+
+				// DB validation: membership.ownership_transferred event recorded.
+				var transferCount int
+				Expect(membershipPool.QueryRow(membershipCtx,
+					`SELECT COUNT(*) FROM plugin_core_scenes.scene_ops_events
+					 WHERE scene_id = $1 AND kind = 'membership.ownership_transferred'`,
+					sceneID,
+				).Scan(&transferCount)).To(Succeed())
+				Expect(transferCount).To(Equal(1))
+
+				// 7. char-alice (now member) can leave.
+				_, err = membershipClient.LeaveScene(membershipCtx, &scenev1.LeaveSceneRequest{
+					CharacterId: "char-alice",
+					SceneId:     sceneID,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				err = membershipPool.QueryRow(membershipCtx,
+					`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
+					sceneID, "char-alice",
+				).Scan(&aliceRole)
+				Expect(err).To(MatchError(ContainSubstring("no rows")))
+
+				// DB validation: membership.leave event recorded.
+				var leaveCount int
+				Expect(membershipPool.QueryRow(membershipCtx,
+					`SELECT COUNT(*) FROM plugin_core_scenes.scene_ops_events
+					 WHERE scene_id = $1 AND kind = 'membership.leave' AND target_id = $2`,
+					sceneID, "char-alice",
+				).Scan(&leaveCount)).To(Succeed())
+				Expect(leaveCount).To(Equal(1))
+			})
+
+			It("rejects owner leave with FailedPrecondition over the wire", func() {
+				createResp, err := membershipClient.CreateScene(membershipCtx, &scenev1.CreateSceneRequest{
+					CharacterId: "char-alice",
+					Title:       "Owner-leave test",
+				})
+				Expect(err).NotTo(HaveOccurred())
+				sceneID := createResp.GetScene().GetId()
+
+				_, err = membershipClient.LeaveScene(membershipCtx, &scenev1.LeaveSceneRequest{
+					CharacterId: "char-alice",
+					SceneId:     sceneID,
+				})
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.FailedPrecondition))
+				Expect(st.Message()).To(ContainSubstring("owners cannot leave"))
+			})
+
+			It("rejects join to a private scene without invitation with PermissionDenied", func() {
+				sceneID := makePrivateScene("char-alice", "Private join test")
+
+				_, err := membershipClient.JoinScene(membershipCtx, &scenev1.JoinSceneRequest{
+					CharacterId: "char-bob",
+					SceneId:     sceneID,
+				})
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.PermissionDenied))
+			})
+
+			It("rejects transfer to a non-member with FailedPrecondition", func() {
+				createResp, err := membershipClient.CreateScene(membershipCtx, &scenev1.CreateSceneRequest{
+					CharacterId: "char-alice",
+					Title:       "Transfer test",
+				})
+				Expect(err).NotTo(HaveOccurred())
+				sceneID := createResp.GetScene().GetId()
+
+				_, err = membershipClient.TransferOwnership(membershipCtx, &scenev1.TransferOwnershipRequest{
+					CharacterId:         "char-alice",
+					SceneId:             sceneID,
+					NewOwnerCharacterId: "char-bob",
+				})
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.FailedPrecondition))
 			})
 		})
 	})
