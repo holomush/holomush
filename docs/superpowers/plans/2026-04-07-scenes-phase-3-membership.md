@@ -50,7 +50,7 @@
 
 ## Task List
 
-The plan has 19 tasks. Each task is a single coherent commit. Order matters: later tasks depend on artifacts from earlier ones.
+The plan has 21 tasks. Each task is a single coherent commit. Order matters: later tasks depend on artifacts from earlier ones.
 
 | # | Task | Depends on |
 |---|------|------------|
@@ -69,10 +69,12 @@ The plan has 19 tasks. Each task is a single coherent commit. Order matters: lat
 | 13 | `ListParticipants` + `GetParticipant` store methods | 5 |
 | 14 | Phase 1+2 retrofit: emit ops events from `End`/`Pause`/`Resume`/`Update` | 4 |
 | 15 | Command handlers: `handleJoin`/`Leave`/`Invite`/`Kick`/`Transfer` | 8–12 |
-| 16 | ABAC policy replacement in `plugin.yaml` | — (independent, but tested by 19) |
+| 16 | ABAC policy replacement in `plugin.yaml` | — (independent, but tested by 21) |
 | 17 | Metric stubs in `metrics.go` | — (independent) |
 | 18 | Integration test lockdown suite (the spec's ~9 ABAC swap tests) | 8–17 |
-| 19 | `task pr-prep` verification + final commit | 18 |
+| 19 | Boundary and invariant tests (paused-state ops, denorm consistency, ops event count, PK uniqueness) | 8–14 |
+| 20 | E2E binary plugin tests in `test/integration/plugin/binary_plugin_test.go` | 1–17 |
+| 21 | `task pr-prep` verification + final commit | 18, 19, 20 |
 
 ---
 
@@ -4410,7 +4412,639 @@ Refs: holomush-5rh.12"
 
 ---
 
-## Task 19: `task pr-prep` verification + final commit
+## Task 19: Boundary and invariant tests
+
+**Files:** `plugins/core-scenes/store_integration_test.go`
+
+These fill gaps the lockdown suite doesn't cover: state-machine boundary cases (paused-state operations) and invariants that must hold across the system (denorm consistency, ops event counts, primary key uniqueness).
+
+- [ ] **Step 1: Write boundary tests for paused-state operations**
+
+Append to `store_integration_test.go`:
+
+```go
+func TestAddParticipantWorksOnPausedScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-bnd-pj", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, err := store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+
+	// Joining a PAUSED scene must succeed (state IN ('active', 'paused')).
+	got, result, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, OpInserted, result)
+	assert.Equal(t, "member", got.Role)
+}
+
+func TestKickParticipantWorksOnPausedScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-bnd-pk", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	_, err = store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+
+	// Kicking from a PAUSED scene must succeed (no state filter on kick;
+	// scene state is irrelevant to the membership operation itself).
+	_, err = store.KickParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assertParticipantRowAbsent(t, store, row.ID, "char-bob")
+}
+
+func TestTransferOwnershipWorksOnPausedScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-bnd-pt", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	_, err = store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+
+	// Transfer must work in paused state (paused scenes can have admin
+	// operations including ownership transfer).
+	require.NoError(t, store.TransferOwnership(ctx, row.ID, "char-alice", "char-bob"))
+	assertParticipantRowExists(t, store, row.ID, "char-bob", "owner")
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "char-bob", got.OwnerID)
+	assert.Equal(t, "paused", got.State, "transfer must not affect scene state")
+}
+
+func TestInviteParticipantRejectsOwnerTarget(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-bnd-io", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	// Inviting the owner must reject — they're already a participant with
+	// the highest role. The existing-role check in InviteParticipant catches
+	// this via the SCENE_INVITE_TARGET_ALREADY_MEMBER code path.
+	_, err := store.InviteParticipant(ctx, row.ID, "char-alice", "char-alice")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_INVITE_TARGET_ALREADY_MEMBER")
+	errutil.AssertErrorContext(t, err, "current_role", "owner")
+}
+```
+
+- [ ] **Step 2: Run boundary tests**
+
+Run: `task test:int -- -run "TestAddParticipantWorksOnPausedScene|TestKickParticipantWorksOnPausedScene|TestTransferOwnershipWorksOnPausedScene|TestInviteParticipantRejectsOwnerTarget" ./plugins/core-scenes/`
+Expected: 4 tests pass.
+
+- [ ] **Step 3: Write invariant test for denorm consistency**
+
+Append:
+
+```go
+func TestSceneOwnerIDDenormAlwaysMatchesParticipantOwnerRow(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	// Helper that asserts the invariant for a given scene at the current moment.
+	assertInvariant := func(sceneID string) {
+		t.Helper()
+		var (
+			denormOwnerID    string
+			participantOwner string
+		)
+		require.NoError(t, store.pool.QueryRow(ctx,
+			`SELECT owner_id FROM scenes WHERE id = $1`, sceneID,
+		).Scan(&denormOwnerID))
+		require.NoError(t, store.pool.QueryRow(ctx,
+			`SELECT character_id FROM scene_participants WHERE scene_id = $1 AND role = 'owner'`,
+			sceneID,
+		).Scan(&participantOwner))
+		assert.Equal(t, denormOwnerID, participantOwner,
+			"scenes.owner_id must always match the participant row with role='owner'")
+	}
+
+	row := &SceneRow{
+		ID: "scene-inv-denorm", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+
+	// Initial state after CreateWithOwner.
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	assertInvariant(row.ID)
+
+	// After adding a regular member — denorm unchanged.
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assertInvariant(row.ID)
+
+	// After ownership transfer — denorm MUST update.
+	require.NoError(t, store.TransferOwnership(ctx, row.ID, "char-alice", "char-bob"))
+	assertInvariant(row.ID)
+
+	// After old owner (now member) leaves — denorm unchanged.
+	_, err = store.RemoveParticipant(ctx, row.ID, "char-alice")
+	require.NoError(t, err)
+	assertInvariant(row.ID)
+}
+```
+
+- [ ] **Step 4: Write invariant test for ops event count**
+
+Append:
+
+```go
+func TestEachMembershipMutationProducesExactlyOneOpsEvent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID: "scene-inv-count", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+
+	// CreateWithOwner produces 1 ops event: lifecycle.created.
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	assert.Equal(t, 1, countOpsEvents(t, store, row.ID, ""), "after create")
+
+	// Invite produces 1 event: membership.invite.
+	_, err := store.InviteParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, 2, countOpsEvents(t, store, row.ID, ""), "after invite")
+
+	// Re-invite is idempotent: NO new event.
+	_, err = store.InviteParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, 2, countOpsEvents(t, store, row.ID, ""), "after redundant invite")
+
+	// Join (promotes invited→member) produces 1 event: membership.join.
+	_, _, err = store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, 3, countOpsEvents(t, store, row.ID, ""), "after join")
+
+	// Retry of join (OpNoChange) produces NO new event.
+	_, _, err = store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, 3, countOpsEvents(t, store, row.ID, ""), "after redundant join")
+
+	// Kick produces 1 event: membership.kick.
+	_, err = store.KickParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, 4, countOpsEvents(t, store, row.ID, ""), "after kick")
+
+	// Pause + Resume each produce 1 event.
+	_, err = store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 5, countOpsEvents(t, store, row.ID, ""), "after pause")
+	_, err = store.Resume(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 6, countOpsEvents(t, store, row.ID, ""), "after resume")
+
+	// End produces 1 event.
+	_, err = store.End(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 7, countOpsEvents(t, store, row.ID, ""), "after end")
+}
+```
+
+- [ ] **Step 5: Write invariant test for primary key uniqueness**
+
+Append:
+
+```go
+func TestParticipantPrimaryKeyPreventsDoubleInsertion(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-inv-pk", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	// Direct insert of a duplicate row MUST fail at the PK constraint.
+	// This proves the schema, not the store API, prevents duplicates.
+	_, err := store.pool.Exec(ctx,
+		`INSERT INTO scene_participants (scene_id, character_id, role) VALUES ($1, $2, 'member')`,
+		row.ID, "char-alice", // char-alice is already the owner row
+	)
+	require.Error(t, err, "duplicate (scene_id, character_id) must violate PK")
+
+	// Verify exactly one row exists for char-alice.
+	var count int
+	require.NoError(t, store.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
+		row.ID, "char-alice",
+	).Scan(&count))
+	assert.Equal(t, 1, count)
+}
+```
+
+- [ ] **Step 6: Write invariant test for ops event immutability**
+
+Append:
+
+```go
+func TestOpsEventsCannotBeUpdatedOrDeletedByApplicationCode(t *testing.T) {
+	// This is a meta-test: assert that the codebase contains no UPDATE or
+	// DELETE statements against scene_ops_events. Append-only is enforced by
+	// convention (the recordOpsEventTx helper is the only writer); this test
+	// catches accidental future violations via grep.
+	//
+	// The check uses os.ReadFile + strings.Contains rather than running an
+	// external grep so it works in any test environment.
+	files := []string{
+		"store.go",
+		"ops_events.go",
+		"service.go",
+		"resolver.go",
+		"commands.go",
+		"main.go",
+	}
+	for _, fname := range files {
+		data, err := os.ReadFile(fname)
+		if err != nil {
+			continue // file doesn't exist in this layout
+		}
+		content := string(data)
+		assert.NotContains(t, content, "UPDATE scene_ops_events",
+			"%s contains UPDATE on scene_ops_events — events must be immutable", fname)
+		assert.NotContains(t, content, "DELETE FROM scene_ops_events",
+			"%s contains DELETE on scene_ops_events — events must be immutable", fname)
+	}
+}
+```
+
+You'll need to add `"os"` to the imports of `store_integration_test.go` if it isn't already there.
+
+- [ ] **Step 7: Run all invariant tests**
+
+Run: `task test:int -- -run "TestSceneOwnerIDDenorm|TestEachMembershipMutation|TestParticipantPrimaryKey|TestOpsEventsCannotBe" ./plugins/core-scenes/`
+Expected: 4 tests pass.
+
+- [ ] **Step 8: Run the full integration suite to confirm nothing else broke**
+
+Run: `task test:int -- ./plugins/core-scenes/`
+Expected: all tests pass.
+
+- [ ] **Step 9: Commit**
+
+```bash
+jj --no-pager commit -m "test(scenes): boundary and invariant tests for Phase 3
+
+Boundary tests: paused-state join/kick/transfer (paused scenes can still
+have membership ops); invite-owner rejection.
+
+Invariant tests:
+- scenes.owner_id always matches the participant row with role='owner'
+  (cross-table consistency, defends against TransferOwnership txn bugs)
+- Each membership mutation produces exactly one ops event; idempotent
+  retries produce zero (audit log integrity)
+- Primary key prevents double-insertion of (scene_id, character_id)
+- scene_ops_events table is never UPDATE'd or DELETE'd by application
+  code (append-only invariant via static check)
+
+Refs: holomush-5rh.12"
+```
+
+---
+
+## Task 20: E2E binary plugin tests in `test/integration/plugin/binary_plugin_test.go`
+
+**Files:** `test/integration/plugin/binary_plugin_test.go`
+
+This task adds Phase 3 membership coverage to the existing binary plugin E2E suite. These tests build the actual `core-scenes` binary, start it via go-plugin (real subprocess boundary), make gRPC calls through the host's proxy (real wire marshalling), and validate DB state via direct SQL.
+
+This catches problems the in-process integration tests miss: plugin manifest validation, gRPC marshalling at the plugin boundary, schema isolation, host-plugin context propagation.
+
+- [ ] **Step 1: Inspect the existing binary_plugin_test.go structure**
+
+Run: `wc -l test/integration/plugin/binary_plugin_test.go`
+Expected: a substantial file (multiple `Describe` blocks for Phase 1+2 scene operations).
+
+Read the existing file with the Read tool to understand the patterns it uses for:
+- Setting up the host with the core-scenes plugin
+- Getting a SceneServiceClient
+- Acquiring a pgxpool to the plugin's schema
+- Cleaning up between tests
+
+The new Phase 3 tests reuse this same harness — no new setup code is needed.
+
+- [ ] **Step 2: Add a "Phase 3 Membership" Describe block**
+
+Append to `test/integration/plugin/binary_plugin_test.go`, just before the final closing brace of the file (after the existing Describe blocks):
+
+```go
+var _ = Describe("Phase 3 Membership", func() {
+	var (
+		ctx       context.Context
+		cancel    context.CancelFunc
+		container testcontainers.Container
+		connStr   string
+		host      *plugins.Host
+		client    scenev1.SceneServiceClient
+		pool      *pgxpool.Pool
+	)
+
+	BeforeEach(func() {
+		// Reuse the same setup pattern as the existing Describe blocks.
+		// Skip if the binary isn't built; check + setup match the existing
+		// BeforeEach in this file.
+		pluginDir, binaryPath := coreScenesBinaryPath()
+		if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
+			Skip(fmt.Sprintf("core-scenes binary not found at %s — run task plugin:build-all first", binaryPath))
+		}
+
+		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
+
+		var err error
+		container, connStr, err = testutil.StartPostgresContainer(ctx)
+		Expect(err).NotTo(HaveOccurred())
+
+		host, client, pool, err = setupHostWithCoreScenes(ctx, pluginDir, connStr)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		if host != nil {
+			_ = host.Shutdown(ctx)
+		}
+		if pool != nil {
+			pool.Close()
+		}
+		if container != nil {
+			termCtx, termCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			_ = container.Terminate(termCtx)
+			termCancel()
+		}
+		cancel()
+	})
+
+	Describe("Full membership lifecycle over the binary plugin boundary", func() {
+		It("supports create→invite→join→kick→reinvite→join→transfer→leave", func() {
+			// 1. Create a private scene as char-alice.
+			createResp, err := client.CreateScene(ctx, &scenev1.CreateSceneRequest{
+				CharacterId: "char-alice",
+				Title:       "E2E Test Scene",
+				Visibility:  "private",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			sceneID := createResp.GetScene().GetId()
+			Expect(sceneID).To(HavePrefix("scene-"))
+
+			// DB validation: owner participant row inserted by CreateWithOwner.
+			var ownerRole string
+			Expect(pool.QueryRow(ctx,
+				`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
+				sceneID, "char-alice",
+			).Scan(&ownerRole)).To(Succeed())
+			Expect(ownerRole).To(Equal("owner"))
+
+			// DB validation: lifecycle.created ops event recorded.
+			var createdEventCount int
+			Expect(pool.QueryRow(ctx,
+				`SELECT COUNT(*) FROM plugin_core_scenes.scene_ops_events WHERE scene_id = $1 AND kind = 'lifecycle.created'`,
+				sceneID,
+			).Scan(&createdEventCount)).To(Succeed())
+			Expect(createdEventCount).To(Equal(1))
+
+			// 2. Invite char-bob to the private scene.
+			_, err = client.InviteToScene(ctx, &scenev1.InviteToSceneRequest{
+				CharacterId:       "char-alice",
+				SceneId:           sceneID,
+				TargetCharacterId: "char-bob",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// DB validation: invited row exists.
+			var bobRole string
+			Expect(pool.QueryRow(ctx,
+				`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
+				sceneID, "char-bob",
+			).Scan(&bobRole)).To(Succeed())
+			Expect(bobRole).To(Equal("invited"))
+
+			// 3. char-bob joins (promotes invited→member).
+			_, err = client.JoinScene(ctx, &scenev1.JoinSceneRequest{
+				CharacterId: "char-bob",
+				SceneId:     sceneID,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(pool.QueryRow(ctx,
+				`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
+				sceneID, "char-bob",
+			).Scan(&bobRole)).To(Succeed())
+			Expect(bobRole).To(Equal("member"))
+
+			// DB validation: membership.join ops event with from_invited=true.
+			var joinPayload []byte
+			Expect(pool.QueryRow(ctx,
+				`SELECT payload FROM plugin_core_scenes.scene_ops_events
+				 WHERE scene_id = $1 AND kind = 'membership.join' AND target_id = $2`,
+				sceneID, "char-bob",
+			).Scan(&joinPayload)).To(Succeed())
+			Expect(string(joinPayload)).To(ContainSubstring(`"from_invited": true`))
+
+			// 4. char-alice (owner) kicks char-bob.
+			_, err = client.KickFromScene(ctx, &scenev1.KickFromSceneRequest{
+				CharacterId:       "char-alice",
+				SceneId:           sceneID,
+				TargetCharacterId: "char-bob",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// DB validation: char-bob row gone.
+			err = pool.QueryRow(ctx,
+				`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
+				sceneID, "char-bob",
+			).Scan(&bobRole)
+			Expect(err).To(MatchError(ContainSubstring("no rows")))
+
+			// 5. Re-invite + re-join.
+			_, err = client.InviteToScene(ctx, &scenev1.InviteToSceneRequest{
+				CharacterId: "char-alice", SceneId: sceneID, TargetCharacterId: "char-bob",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = client.JoinScene(ctx, &scenev1.JoinSceneRequest{
+				CharacterId: "char-bob", SceneId: sceneID,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// 6. char-alice transfers ownership to char-bob.
+			_, err = client.TransferOwnership(ctx, &scenev1.TransferOwnershipRequest{
+				CharacterId:         "char-alice",
+				SceneId:             sceneID,
+				NewOwnerCharacterId: "char-bob",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// DB validation: char-bob is now owner, char-alice is member,
+			// scenes.owner_id is denormalised correctly.
+			Expect(pool.QueryRow(ctx,
+				`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
+				sceneID, "char-bob",
+			).Scan(&bobRole)).To(Succeed())
+			Expect(bobRole).To(Equal("owner"))
+
+			var aliceRole string
+			Expect(pool.QueryRow(ctx,
+				`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
+				sceneID, "char-alice",
+			).Scan(&aliceRole)).To(Succeed())
+			Expect(aliceRole).To(Equal("member"))
+
+			var denormOwner string
+			Expect(pool.QueryRow(ctx,
+				`SELECT owner_id FROM plugin_core_scenes.scenes WHERE id = $1`,
+				sceneID,
+			).Scan(&denormOwner)).To(Succeed())
+			Expect(denormOwner).To(Equal("char-bob"))
+
+			// 7. char-alice (now member) can leave.
+			_, err = client.LeaveScene(ctx, &scenev1.LeaveSceneRequest{
+				CharacterId: "char-alice",
+				SceneId:     sceneID,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = pool.QueryRow(ctx,
+				`SELECT role FROM plugin_core_scenes.scene_participants WHERE scene_id = $1 AND character_id = $2`,
+				sceneID, "char-alice",
+			).Scan(&aliceRole)
+			Expect(err).To(MatchError(ContainSubstring("no rows")))
+		})
+
+		It("rejects owner leave with FailedPrecondition over the wire", func() {
+			createResp, err := client.CreateScene(ctx, &scenev1.CreateSceneRequest{
+				CharacterId: "char-alice",
+				Title:       "Owner-leave test",
+				Visibility:  "open",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			sceneID := createResp.GetScene().GetId()
+
+			_, err = client.LeaveScene(ctx, &scenev1.LeaveSceneRequest{
+				CharacterId: "char-alice",
+				SceneId:     sceneID,
+			})
+			Expect(err).To(HaveOccurred())
+			st, ok := status.FromError(err)
+			Expect(ok).To(BeTrue())
+			Expect(st.Code()).To(Equal(codes.FailedPrecondition))
+			Expect(st.Message()).To(ContainSubstring("owners cannot leave"))
+		})
+
+		It("rejects join to a private scene without invitation with PermissionDenied", func() {
+			createResp, err := client.CreateScene(ctx, &scenev1.CreateSceneRequest{
+				CharacterId: "char-alice",
+				Title:       "Private join test",
+				Visibility:  "private",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			sceneID := createResp.GetScene().GetId()
+
+			_, err = client.JoinScene(ctx, &scenev1.JoinSceneRequest{
+				CharacterId: "char-bob",
+				SceneId:     sceneID,
+			})
+			Expect(err).To(HaveOccurred())
+			st, ok := status.FromError(err)
+			Expect(ok).To(BeTrue())
+			Expect(st.Code()).To(Equal(codes.PermissionDenied))
+		})
+
+		It("rejects transfer to a non-member with FailedPrecondition", func() {
+			createResp, err := client.CreateScene(ctx, &scenev1.CreateSceneRequest{
+				CharacterId: "char-alice",
+				Title:       "Transfer test",
+				Visibility:  "open",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			sceneID := createResp.GetScene().GetId()
+
+			_, err = client.TransferOwnership(ctx, &scenev1.TransferOwnershipRequest{
+				CharacterId:         "char-alice",
+				SceneId:             sceneID,
+				NewOwnerCharacterId: "char-bob",
+			})
+			Expect(err).To(HaveOccurred())
+			st, ok := status.FromError(err)
+			Expect(ok).To(BeTrue())
+			Expect(st.Code()).To(Equal(codes.FailedPrecondition))
+		})
+	})
+})
+```
+
+The `setupHostWithCoreScenes` helper already exists in the file from Phase 1+2 work. If the existing helper signature differs from what's used above, adapt the test code to match — the helper returns whatever the existing tests use for `host`, `client`, `pool`. Read the existing Describe blocks to see the exact pattern.
+
+- [ ] **Step 3: Build the plugin binary**
+
+Run: `task plugin:build-all`
+Expected: success. Outputs `build/plugins/core-scenes/<os>-<arch>/core-scenes`.
+
+- [ ] **Step 4: Run the new Phase 3 binary plugin tests**
+
+Run: `task test:int -- -run "Phase 3 Membership" ./test/integration/plugin/...`
+Expected: 4 specs pass (the full lifecycle + 3 error-mapping specs).
+
+If specs fail with `setupHostWithCoreScenes undefined` or similar, read the existing binary_plugin_test.go to find the actual helper name and adapt.
+
+- [ ] **Step 5: Run the full binary plugin suite to confirm no regressions**
+
+Run: `task test:int -- ./test/integration/plugin/...`
+Expected: all specs pass (Phase 1+2 + Phase 3).
+
+- [ ] **Step 6: Commit**
+
+```bash
+jj --no-pager commit -m "test(scenes): E2E binary plugin tests for Phase 3 membership
+
+Adds 'Phase 3 Membership' Describe block to binary_plugin_test.go that
+exercises the full membership lifecycle (create→invite→join→kick→
+reinvite→join→transfer→leave) over the actual go-plugin subprocess
+boundary, with direct DB verification of scene_participants and
+scene_ops_events at every step.
+
+Plus three error-mapping specs that verify the gRPC status codes
+travel correctly across the wire: owner-cannot-leave (FailedPrecondition),
+non-invitee-private-join (PermissionDenied), transfer-non-member
+(FailedPrecondition).
+
+Closes the gap where store-layer integration tests didn't exercise the
+plugin manifest, gRPC marshalling, or schema isolation.
+
+Refs: holomush-5rh.12"
+```
+
+---
+
+## Task 21: `task pr-prep` verification + final commit
 
 **Files:** none (verification only)
 
@@ -4436,7 +5070,7 @@ Expected: status=in_progress.
 Update with a brief completion note:
 
 ```bash
-bd update holomush-5rh.12 --notes "Phase 3 implementation complete. PR pending. All 19 tasks landed via TDD; task pr-prep green; full integration suite passes. Spec at docs/superpowers/specs/2026-04-07-scenes-phase-3-membership-design.md, plan at docs/superpowers/plans/2026-04-07-scenes-phase-3-membership.md."
+bd update holomush-5rh.12 --notes "Phase 3 implementation complete. PR pending. All 21 tasks landed via TDD; task pr-prep green; full integration suite passes including E2E binary plugin tests. Spec at docs/superpowers/specs/2026-04-07-scenes-phase-3-membership-design.md, plan at docs/superpowers/plans/2026-04-07-scenes-phase-3-membership.md."
 ```
 
 - [ ] **Step 3: Push the branch and create the PR**
@@ -4515,7 +5149,7 @@ If no fixes were needed, no commit is necessary — proceed to push.
 
 ## Self-Review Checklist
 
-After completing all 19 tasks, verify:
+After completing all 21 tasks, verify:
 
 - [ ] Every spec acceptance criterion has a corresponding test (run `grep -r "SCENE_" plugins/core-scenes/store_integration_test.go` and confirm coverage of all error codes introduced)
 - [ ] No `TODO`, `TBD`, or `FIXME` markers introduced in production code
