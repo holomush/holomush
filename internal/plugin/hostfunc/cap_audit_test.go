@@ -89,7 +89,15 @@ func TestCapAuditIsNoOpWhenNoContextAttachedToLState(t *testing.T) {
 
 	err := L.DoString(`audit.deny("orphan", "no context")`)
 	require.NoError(t, err)
-	// No assertion needed — just verify the call did not panic.
+
+	// Verify no events were emitted: with no dispatch context attached,
+	// audit.AddEventToContext is a documented no-op. Reading from a fresh
+	// dispatch context should yield zero events, proving the orphaned call
+	// silently dropped the hint instead of leaking it somewhere.
+	freshCtx := audit.NewContextForDispatch(context.Background())
+	events := audit.EventsFromContext(freshCtx)
+	assert.Empty(t, events,
+		"orphan emit must not produce any events on a fresh dispatch context")
 }
 
 func TestCapAuditHandlesOptionalAttributesTable(t *testing.T) {

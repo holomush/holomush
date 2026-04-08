@@ -237,7 +237,7 @@ func (a *pluginServerAdapter) HandleCommand(ctx context.Context, req *pluginv1.H
 			Id:              h.ID,
 			Name:            h.Name,
 			Message:         h.Message,
-			Effect:          string(h.Effect),
+			Effect:          sdkAuditEffectToProto(h.Effect),
 			ActionQualifier: h.ActionQualifier,
 			Resource:        h.Resource,
 			Attributes:      h.Attributes,
@@ -252,6 +252,21 @@ func (a *pluginServerAdapter) HandleCommand(ctx context.Context, req *pluginv1.H
 			AuditHints: protoHints,
 		},
 	}, nil
+}
+
+// sdkAuditEffectToProto converts an SDK AuditEffect string to the closed
+// proto enum. Unknown SDK effects collapse to UNSPECIFIED — they have already
+// been dropped at the recorder level by the empty-ID guard, but defensive
+// mapping keeps the wire format honest.
+func sdkAuditEffectToProto(e AuditEffect) pluginv1.AuditEffect {
+	switch e {
+	case AuditEffectDeny:
+		return pluginv1.AuditEffect_AUDIT_EFFECT_DENY
+	case AuditEffectAllow:
+		return pluginv1.AuditEffect_AUDIT_EFFECT_ALLOW
+	default:
+		return pluginv1.AuditEffect_AUDIT_EFFECT_UNSPECIFIED
+	}
 }
 
 // sdkCommandStatusToProto converts an SDK CommandStatus to a proto CommandStatus.

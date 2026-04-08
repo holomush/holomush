@@ -170,9 +170,9 @@ message AuditDecisionHint {
 | Option | Description | Rejected because |
 |---|---|---|
 | **D-rpc** — Separate `WriteAuditEntry` RPC on `HostFunctionsService` | Plugin makes one gRPC call per emit | Extra round-trip per audit emit; requires standing up the first concrete `HostFunctionsServiceServer` from scratch; more implementation surface |
-| **Hybrid** — both D-inline and D-rpc | Inline for command flow, RPC for deferred | YAGNI; nothing in scope needs deferred audit emits |
+| **Hybrid** — both D-inline and D-rpc | Inline for command flow, RPC for deferred | YAGNI; nothing in scope requires deferred audit emits |
 
-D-rpc is not closed off — the SDK exposes `pluginsdk.Audit(ctx)` as an interface abstraction, so a future D-rpc implementation can slot in without changing how plugin authors call it. A plugin that needs deferred audit (e.g., a scene auto-archival timer) would use D-rpc later; plugins that emit during command flow keep using D-inline.
+D-rpc is not closed off — the SDK exposes `pluginsdk.Audit(ctx)` as an interface abstraction, so a future D-rpc implementation can slot in without changing how plugin authors call it. A plugin that requires deferred audit (e.g., a scene auto-archival timer) would use D-rpc later; plugins that emit during command flow keep using D-inline.
 
 ### Decision G: Dispatcher-side hint collection + flush
 

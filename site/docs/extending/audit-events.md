@@ -22,6 +22,8 @@ Call `pluginsdk.Audit(ctx)` from your `HandleCommand` method. The returned recor
 
 ```go
 import (
+    "context"
+
     pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
@@ -75,7 +77,7 @@ function handle_command(cmd)
         audit.deny(
             "not_member",
             "player not in channel members",
-            {channel_type = "public"}
+            {["channel.type"] = "public"}
         )
         return {
             status = "error",

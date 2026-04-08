@@ -91,3 +91,17 @@ func TestAuditRecorderDenyWithEmptyIDIsSilentlyDroppedAndLogged(t *testing.T) {
 	assert.Empty(t, hints,
 		"recorder must silently drop hints with empty ID (proto min_len=1 would fail marshal)")
 }
+
+// T27a (mirror) — symmetric Allow empty-ID drop. The empty-ID guard lives
+// on the shared record() helper, so Allow inherits the same behavior. This
+// test makes the symmetry explicit so a future regression that special-cases
+// only Deny would be caught immediately.
+func TestAuditRecorderAllowWithEmptyIDIsSilentlyDroppedAndLogged(t *testing.T) {
+	ctx := pluginsdk.NewContextForHandler(context.Background())
+
+	pluginsdk.Audit(ctx).Allow("", "allow with no id", nil)
+
+	hints := pluginsdk.HarvestAuditHints(ctx)
+	assert.Empty(t, hints,
+		"recorder must silently drop Allow hints with empty ID, mirroring the Deny path")
+}

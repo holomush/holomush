@@ -83,6 +83,60 @@ func (CommandStatus) EnumDescriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{0}
 }
 
+// AuditEffect is the closed set of decision outcomes a plugin handler may
+// emit through an AuditDecisionHint. Plugin denials and plugin allows are
+// the only meaningful outcomes — engine-specific effects (default_deny,
+// system_bypass) are not exposed to plugins because plugins do not produce
+// those decisions.
+type AuditEffect int32
+
+const (
+	AuditEffect_AUDIT_EFFECT_UNSPECIFIED AuditEffect = 0
+	AuditEffect_AUDIT_EFFECT_DENY        AuditEffect = 1
+	AuditEffect_AUDIT_EFFECT_ALLOW       AuditEffect = 2
+)
+
+// Enum value maps for AuditEffect.
+var (
+	AuditEffect_name = map[int32]string{
+		0: "AUDIT_EFFECT_UNSPECIFIED",
+		1: "AUDIT_EFFECT_DENY",
+		2: "AUDIT_EFFECT_ALLOW",
+	}
+	AuditEffect_value = map[string]int32{
+		"AUDIT_EFFECT_UNSPECIFIED": 0,
+		"AUDIT_EFFECT_DENY":        1,
+		"AUDIT_EFFECT_ALLOW":       2,
+	}
+)
+
+func (x AuditEffect) Enum() *AuditEffect {
+	p := new(AuditEffect)
+	*p = x
+	return p
+}
+
+func (x AuditEffect) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AuditEffect) Descriptor() protoreflect.EnumDescriptor {
+	return file_holomush_plugin_v1_plugin_proto_enumTypes[1].Descriptor()
+}
+
+func (AuditEffect) Type() protoreflect.EnumType {
+	return &file_holomush_plugin_v1_plugin_proto_enumTypes[1]
+}
+
+func (x AuditEffect) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AuditEffect.Descriptor instead.
+func (AuditEffect) EnumDescriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{1}
+}
+
 // ServiceConfig carries initialization data from the host to the plugin.
 type ServiceConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -691,8 +745,9 @@ type AuditDecisionHint struct {
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// Per-firing description, e.g., "player not in channel members".
 	Message string `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
-	// Effect the plugin decided: "deny" or "allow".
-	Effect string `protobuf:"bytes,4,opt,name=effect,proto3" json:"effect,omitempty"`
+	// Effect the plugin decided. Closed enum at the proto boundary —
+	// unknown effects can never round-trip the wire.
+	Effect AuditEffect `protobuf:"varint,4,opt,name=effect,proto3,enum=holomush.plugin.v1.AuditEffect" json:"effect,omitempty"`
 	// Action qualifier appended to the dispatcher-known base action.
 	// E.g., the dispatcher knows the command is "channel"; the plugin
 	// supplies "speak", producing final action "channel:speak".
@@ -759,11 +814,11 @@ func (x *AuditDecisionHint) GetMessage() string {
 	return ""
 }
 
-func (x *AuditDecisionHint) GetEffect() string {
+func (x *AuditDecisionHint) GetEffect() AuditEffect {
 	if x != nil {
 		return x.Effect
 	}
-	return ""
+	return AuditEffect_AUDIT_EFFECT_UNSPECIFIED
 }
 
 func (x *AuditDecisionHint) GetActionQualifier() string {
@@ -1400,13 +1455,13 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x06output\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80@R\x06output\x125\n" +
 	"\x06events\x18\x03 \x03(\v2\x1d.holomush.plugin.v1.EmitEventR\x06events\x12F\n" +
 	"\vaudit_hints\x18\x04 \x03(\v2%.holomush.plugin.v1.AuditDecisionHintR\n" +
-	"auditHints\"\x82\x03\n" +
+	"auditHints\"\x9a\x03\n" +
 	"\x11AuditDecisionHint\x12\x1a\n" +
 	"\x02id\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\x02id\x12\x1c\n" +
 	"\x04name\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\x04name\x12\"\n" +
-	"\amessage\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\bR\amessage\x12\x1f\n" +
-	"\x06effect\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06effect\x122\n" +
+	"\amessage\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\bR\amessage\x127\n" +
+	"\x06effect\x18\x04 \x01(\x0e2\x1f.holomush.plugin.v1.AuditEffectR\x06effect\x122\n" +
 	"\x10action_qualifier\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x18@R\x0factionQualifier\x12$\n" +
 	"\bresource\x18\x06 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\bresource\x12U\n" +
 	"\n" +
@@ -1452,7 +1507,11 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x11COMMAND_STATUS_OK\x10\x01\x12\x18\n" +
 	"\x14COMMAND_STATUS_ERROR\x10\x02\x12\x1a\n" +
 	"\x16COMMAND_STATUS_FAILURE\x10\x03\x12\x18\n" +
-	"\x14COMMAND_STATUS_FATAL\x10\x042\xa0\x02\n" +
+	"\x14COMMAND_STATUS_FATAL\x10\x04*Z\n" +
+	"\vAuditEffect\x12\x1c\n" +
+	"\x18AUDIT_EFFECT_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11AUDIT_EFFECT_DENY\x10\x01\x12\x16\n" +
+	"\x12AUDIT_EFFECT_ALLOW\x10\x022\xa0\x02\n" +
 	"\rPluginService\x12I\n" +
 	"\x04Init\x12\x1f.holomush.plugin.v1.InitRequest\x1a .holomush.plugin.v1.InitResponse\x12^\n" +
 	"\vHandleEvent\x12&.holomush.plugin.v1.HandleEventRequest\x1a'.holomush.plugin.v1.HandleEventResponse\x12d\n" +
@@ -1477,67 +1536,69 @@ func file_holomush_plugin_v1_plugin_proto_rawDescGZIP() []byte {
 	return file_holomush_plugin_v1_plugin_proto_rawDescData
 }
 
-var file_holomush_plugin_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_holomush_plugin_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_holomush_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_holomush_plugin_v1_plugin_proto_goTypes = []any{
 	(CommandStatus)(0),                         // 0: holomush.plugin.v1.CommandStatus
-	(*ServiceConfig)(nil),                      // 1: holomush.plugin.v1.ServiceConfig
-	(*InitRequest)(nil),                        // 2: holomush.plugin.v1.InitRequest
-	(*InitResponse)(nil),                       // 3: holomush.plugin.v1.InitResponse
-	(*Event)(nil),                              // 4: holomush.plugin.v1.Event
-	(*EmitEvent)(nil),                          // 5: holomush.plugin.v1.EmitEvent
-	(*HandleEventRequest)(nil),                 // 6: holomush.plugin.v1.HandleEventRequest
-	(*HandleEventResponse)(nil),                // 7: holomush.plugin.v1.HandleEventResponse
-	(*CommandRequest)(nil),                     // 8: holomush.plugin.v1.CommandRequest
-	(*CommandResponse)(nil),                    // 9: holomush.plugin.v1.CommandResponse
-	(*AuditDecisionHint)(nil),                  // 10: holomush.plugin.v1.AuditDecisionHint
-	(*HandleCommandRequest)(nil),               // 11: holomush.plugin.v1.HandleCommandRequest
-	(*HandleCommandResponse)(nil),              // 12: holomush.plugin.v1.HandleCommandResponse
-	(*PluginHostServiceEmitEventRequest)(nil),  // 13: holomush.plugin.v1.PluginHostServiceEmitEventRequest
-	(*PluginHostServiceEmitEventResponse)(nil), // 14: holomush.plugin.v1.PluginHostServiceEmitEventResponse
-	(*PluginHostServiceLogRequest)(nil),        // 15: holomush.plugin.v1.PluginHostServiceLogRequest
-	(*PluginHostServiceLogResponse)(nil),       // 16: holomush.plugin.v1.PluginHostServiceLogResponse
-	(*PluginHostServiceKVGetRequest)(nil),      // 17: holomush.plugin.v1.PluginHostServiceKVGetRequest
-	(*PluginHostServiceKVGetResponse)(nil),     // 18: holomush.plugin.v1.PluginHostServiceKVGetResponse
-	(*PluginHostServiceKVSetRequest)(nil),      // 19: holomush.plugin.v1.PluginHostServiceKVSetRequest
-	(*PluginHostServiceKVSetResponse)(nil),     // 20: holomush.plugin.v1.PluginHostServiceKVSetResponse
-	(*PluginHostServiceKVDeleteRequest)(nil),   // 21: holomush.plugin.v1.PluginHostServiceKVDeleteRequest
-	(*PluginHostServiceKVDeleteResponse)(nil),  // 22: holomush.plugin.v1.PluginHostServiceKVDeleteResponse
-	nil, // 23: holomush.plugin.v1.ServiceConfig.RequiredServicesEntry
-	nil, // 24: holomush.plugin.v1.AuditDecisionHint.AttributesEntry
+	(AuditEffect)(0),                           // 1: holomush.plugin.v1.AuditEffect
+	(*ServiceConfig)(nil),                      // 2: holomush.plugin.v1.ServiceConfig
+	(*InitRequest)(nil),                        // 3: holomush.plugin.v1.InitRequest
+	(*InitResponse)(nil),                       // 4: holomush.plugin.v1.InitResponse
+	(*Event)(nil),                              // 5: holomush.plugin.v1.Event
+	(*EmitEvent)(nil),                          // 6: holomush.plugin.v1.EmitEvent
+	(*HandleEventRequest)(nil),                 // 7: holomush.plugin.v1.HandleEventRequest
+	(*HandleEventResponse)(nil),                // 8: holomush.plugin.v1.HandleEventResponse
+	(*CommandRequest)(nil),                     // 9: holomush.plugin.v1.CommandRequest
+	(*CommandResponse)(nil),                    // 10: holomush.plugin.v1.CommandResponse
+	(*AuditDecisionHint)(nil),                  // 11: holomush.plugin.v1.AuditDecisionHint
+	(*HandleCommandRequest)(nil),               // 12: holomush.plugin.v1.HandleCommandRequest
+	(*HandleCommandResponse)(nil),              // 13: holomush.plugin.v1.HandleCommandResponse
+	(*PluginHostServiceEmitEventRequest)(nil),  // 14: holomush.plugin.v1.PluginHostServiceEmitEventRequest
+	(*PluginHostServiceEmitEventResponse)(nil), // 15: holomush.plugin.v1.PluginHostServiceEmitEventResponse
+	(*PluginHostServiceLogRequest)(nil),        // 16: holomush.plugin.v1.PluginHostServiceLogRequest
+	(*PluginHostServiceLogResponse)(nil),       // 17: holomush.plugin.v1.PluginHostServiceLogResponse
+	(*PluginHostServiceKVGetRequest)(nil),      // 18: holomush.plugin.v1.PluginHostServiceKVGetRequest
+	(*PluginHostServiceKVGetResponse)(nil),     // 19: holomush.plugin.v1.PluginHostServiceKVGetResponse
+	(*PluginHostServiceKVSetRequest)(nil),      // 20: holomush.plugin.v1.PluginHostServiceKVSetRequest
+	(*PluginHostServiceKVSetResponse)(nil),     // 21: holomush.plugin.v1.PluginHostServiceKVSetResponse
+	(*PluginHostServiceKVDeleteRequest)(nil),   // 22: holomush.plugin.v1.PluginHostServiceKVDeleteRequest
+	(*PluginHostServiceKVDeleteResponse)(nil),  // 23: holomush.plugin.v1.PluginHostServiceKVDeleteResponse
+	nil, // 24: holomush.plugin.v1.ServiceConfig.RequiredServicesEntry
+	nil, // 25: holomush.plugin.v1.AuditDecisionHint.AttributesEntry
 }
 var file_holomush_plugin_v1_plugin_proto_depIdxs = []int32{
-	23, // 0: holomush.plugin.v1.ServiceConfig.required_services:type_name -> holomush.plugin.v1.ServiceConfig.RequiredServicesEntry
-	1,  // 1: holomush.plugin.v1.InitRequest.config:type_name -> holomush.plugin.v1.ServiceConfig
-	4,  // 2: holomush.plugin.v1.HandleEventRequest.event:type_name -> holomush.plugin.v1.Event
-	5,  // 3: holomush.plugin.v1.HandleEventResponse.emit_events:type_name -> holomush.plugin.v1.EmitEvent
+	24, // 0: holomush.plugin.v1.ServiceConfig.required_services:type_name -> holomush.plugin.v1.ServiceConfig.RequiredServicesEntry
+	2,  // 1: holomush.plugin.v1.InitRequest.config:type_name -> holomush.plugin.v1.ServiceConfig
+	5,  // 2: holomush.plugin.v1.HandleEventRequest.event:type_name -> holomush.plugin.v1.Event
+	6,  // 3: holomush.plugin.v1.HandleEventResponse.emit_events:type_name -> holomush.plugin.v1.EmitEvent
 	0,  // 4: holomush.plugin.v1.CommandResponse.status:type_name -> holomush.plugin.v1.CommandStatus
-	5,  // 5: holomush.plugin.v1.CommandResponse.events:type_name -> holomush.plugin.v1.EmitEvent
-	10, // 6: holomush.plugin.v1.CommandResponse.audit_hints:type_name -> holomush.plugin.v1.AuditDecisionHint
-	24, // 7: holomush.plugin.v1.AuditDecisionHint.attributes:type_name -> holomush.plugin.v1.AuditDecisionHint.AttributesEntry
-	8,  // 8: holomush.plugin.v1.HandleCommandRequest.command:type_name -> holomush.plugin.v1.CommandRequest
-	9,  // 9: holomush.plugin.v1.HandleCommandResponse.response:type_name -> holomush.plugin.v1.CommandResponse
-	2,  // 10: holomush.plugin.v1.PluginService.Init:input_type -> holomush.plugin.v1.InitRequest
-	6,  // 11: holomush.plugin.v1.PluginService.HandleEvent:input_type -> holomush.plugin.v1.HandleEventRequest
-	11, // 12: holomush.plugin.v1.PluginService.HandleCommand:input_type -> holomush.plugin.v1.HandleCommandRequest
-	13, // 13: holomush.plugin.v1.PluginHostService.EmitEvent:input_type -> holomush.plugin.v1.PluginHostServiceEmitEventRequest
-	15, // 14: holomush.plugin.v1.PluginHostService.Log:input_type -> holomush.plugin.v1.PluginHostServiceLogRequest
-	17, // 15: holomush.plugin.v1.PluginHostService.KVGet:input_type -> holomush.plugin.v1.PluginHostServiceKVGetRequest
-	19, // 16: holomush.plugin.v1.PluginHostService.KVSet:input_type -> holomush.plugin.v1.PluginHostServiceKVSetRequest
-	21, // 17: holomush.plugin.v1.PluginHostService.KVDelete:input_type -> holomush.plugin.v1.PluginHostServiceKVDeleteRequest
-	3,  // 18: holomush.plugin.v1.PluginService.Init:output_type -> holomush.plugin.v1.InitResponse
-	7,  // 19: holomush.plugin.v1.PluginService.HandleEvent:output_type -> holomush.plugin.v1.HandleEventResponse
-	12, // 20: holomush.plugin.v1.PluginService.HandleCommand:output_type -> holomush.plugin.v1.HandleCommandResponse
-	14, // 21: holomush.plugin.v1.PluginHostService.EmitEvent:output_type -> holomush.plugin.v1.PluginHostServiceEmitEventResponse
-	16, // 22: holomush.plugin.v1.PluginHostService.Log:output_type -> holomush.plugin.v1.PluginHostServiceLogResponse
-	18, // 23: holomush.plugin.v1.PluginHostService.KVGet:output_type -> holomush.plugin.v1.PluginHostServiceKVGetResponse
-	20, // 24: holomush.plugin.v1.PluginHostService.KVSet:output_type -> holomush.plugin.v1.PluginHostServiceKVSetResponse
-	22, // 25: holomush.plugin.v1.PluginHostService.KVDelete:output_type -> holomush.plugin.v1.PluginHostServiceKVDeleteResponse
-	18, // [18:26] is the sub-list for method output_type
-	10, // [10:18] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	6,  // 5: holomush.plugin.v1.CommandResponse.events:type_name -> holomush.plugin.v1.EmitEvent
+	11, // 6: holomush.plugin.v1.CommandResponse.audit_hints:type_name -> holomush.plugin.v1.AuditDecisionHint
+	1,  // 7: holomush.plugin.v1.AuditDecisionHint.effect:type_name -> holomush.plugin.v1.AuditEffect
+	25, // 8: holomush.plugin.v1.AuditDecisionHint.attributes:type_name -> holomush.plugin.v1.AuditDecisionHint.AttributesEntry
+	9,  // 9: holomush.plugin.v1.HandleCommandRequest.command:type_name -> holomush.plugin.v1.CommandRequest
+	10, // 10: holomush.plugin.v1.HandleCommandResponse.response:type_name -> holomush.plugin.v1.CommandResponse
+	3,  // 11: holomush.plugin.v1.PluginService.Init:input_type -> holomush.plugin.v1.InitRequest
+	7,  // 12: holomush.plugin.v1.PluginService.HandleEvent:input_type -> holomush.plugin.v1.HandleEventRequest
+	12, // 13: holomush.plugin.v1.PluginService.HandleCommand:input_type -> holomush.plugin.v1.HandleCommandRequest
+	14, // 14: holomush.plugin.v1.PluginHostService.EmitEvent:input_type -> holomush.plugin.v1.PluginHostServiceEmitEventRequest
+	16, // 15: holomush.plugin.v1.PluginHostService.Log:input_type -> holomush.plugin.v1.PluginHostServiceLogRequest
+	18, // 16: holomush.plugin.v1.PluginHostService.KVGet:input_type -> holomush.plugin.v1.PluginHostServiceKVGetRequest
+	20, // 17: holomush.plugin.v1.PluginHostService.KVSet:input_type -> holomush.plugin.v1.PluginHostServiceKVSetRequest
+	22, // 18: holomush.plugin.v1.PluginHostService.KVDelete:input_type -> holomush.plugin.v1.PluginHostServiceKVDeleteRequest
+	4,  // 19: holomush.plugin.v1.PluginService.Init:output_type -> holomush.plugin.v1.InitResponse
+	8,  // 20: holomush.plugin.v1.PluginService.HandleEvent:output_type -> holomush.plugin.v1.HandleEventResponse
+	13, // 21: holomush.plugin.v1.PluginService.HandleCommand:output_type -> holomush.plugin.v1.HandleCommandResponse
+	15, // 22: holomush.plugin.v1.PluginHostService.EmitEvent:output_type -> holomush.plugin.v1.PluginHostServiceEmitEventResponse
+	17, // 23: holomush.plugin.v1.PluginHostService.Log:output_type -> holomush.plugin.v1.PluginHostServiceLogResponse
+	19, // 24: holomush.plugin.v1.PluginHostService.KVGet:output_type -> holomush.plugin.v1.PluginHostServiceKVGetResponse
+	21, // 25: holomush.plugin.v1.PluginHostService.KVSet:output_type -> holomush.plugin.v1.PluginHostServiceKVSetResponse
+	23, // 26: holomush.plugin.v1.PluginHostService.KVDelete:output_type -> holomush.plugin.v1.PluginHostServiceKVDeleteResponse
+	19, // [19:27] is the sub-list for method output_type
+	11, // [11:19] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_holomush_plugin_v1_plugin_proto_init() }
@@ -1550,7 +1611,7 @@ func file_holomush_plugin_v1_plugin_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_plugin_v1_plugin_proto_rawDesc), len(file_holomush_plugin_v1_plugin_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   2,

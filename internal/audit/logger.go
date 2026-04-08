@@ -252,8 +252,18 @@ func (l *Logger) asyncConsumer() {
 					"error", err,
 					"subject", event.Subject,
 					"action", event.Action,
+					"source", event.Source,
+					"component", event.Component,
 				)
 				failuresCounter.WithLabelValues("async_write_failed").Inc()
+				// Plugin-sourced events that fail asynchronously would
+				// otherwise drop without surfacing through the
+				// dispatcher's flush failure path. Bump the plugin-
+				// specific counter so operators see the same metric
+				// regardless of whether the failure happened sync or async.
+				if event.Source == SourcePlugin {
+					pluginAuditFailuresCounter.Inc()
+				}
 			}
 		case <-l.stopChan:
 			// Drain remaining events

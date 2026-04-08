@@ -148,6 +148,17 @@ message CommandResponse {
   repeated AuditDecisionHint audit_hints = 4;
 }
 
+// AuditEffect is the closed set of decision outcomes a plugin handler may
+// emit through an AuditDecisionHint. Plugin denials and plugin allows are
+// the only meaningful outcomes — engine-specific effects (default_deny,
+// system_bypass) are not exposed to plugins because plugins do not produce
+// those decisions.
+enum AuditEffect {
+  AUDIT_EFFECT_UNSPECIFIED = 0;
+  AUDIT_EFFECT_DENY = 1;
+  AUDIT_EFFECT_ALLOW = 2;
+}
+
 // AuditDecisionHint is a partial audit event emitted by a plugin handler.
 // The plugin provides decision-specific fields (id, name, message, effect,
 // resource, attributes, action qualifier); the host stamps identity fields
@@ -169,8 +180,9 @@ message AuditDecisionHint {
   // Per-firing description, e.g., "player not in channel members".
   string message = 3 [(buf.validate.field).string.max_len = 1024];
 
-  // Effect the plugin decided: "deny" or "allow".
-  string effect = 4 [(buf.validate.field).string.min_len = 1];
+  // Effect the plugin decided. Closed enum at the proto boundary —
+  // unknown effects can never round-trip the wire.
+  AuditEffect effect = 4;
 
   // Action qualifier appended to the dispatcher-known base action.
   // E.g., the dispatcher knows the command is "channel"; the plugin

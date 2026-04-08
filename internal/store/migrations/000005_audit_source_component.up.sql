@@ -5,8 +5,31 @@
 -- that the audit log records events from any authorization source, not
 -- just ABAC policies. Add source, component, message columns.
 
-ALTER TABLE access_audit_log RENAME COLUMN policy_id TO event_id;
-ALTER TABLE access_audit_log RENAME COLUMN policy_name TO event_name;
+-- Idempotent column renames: only rename if the source column still exists
+-- and the target column has not yet been created. This makes the migration
+-- safe to re-run after partial application.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'access_audit_log' AND column_name = 'policy_id'
+    ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'access_audit_log' AND column_name = 'event_id'
+    ) THEN
+        ALTER TABLE access_audit_log RENAME COLUMN policy_id TO event_id;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'access_audit_log' AND column_name = 'policy_name'
+    ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'access_audit_log' AND column_name = 'event_name'
+    ) THEN
+        ALTER TABLE access_audit_log RENAME COLUMN policy_name TO event_name;
+    END IF;
+END $$;
 
 ALTER TABLE access_audit_log ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'engine';
 ALTER TABLE access_audit_log ADD COLUMN IF NOT EXISTS component TEXT NOT NULL DEFAULT 'abac';
