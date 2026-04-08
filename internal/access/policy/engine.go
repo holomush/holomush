@@ -122,17 +122,17 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			return decision, oops.Wrapf(err, "decision validation failed")
 		}
 
-		entry := audit.Entry{
+		event := audit.Event{
 			Subject:    req.Subject,
 			Action:     req.Action,
 			Resource:   req.Resource,
 			Effect:     types.EffectSystemBypass,
-			PolicyID:   "",
-			PolicyName: "",
+			ID:         "",
+			Name:       "",
 			DurationUS: time.Since(start).Microseconds(),
 			Timestamp:  time.Now(),
 		}
-		if err := e.audit.Log(ctx, entry); err != nil {
+		if err := e.audit.Log(ctx, event); err != nil {
 			slog.WarnContext(ctx, "audit log failed", "error", err)
 			audit.RecordEngineAuditFailure()
 		}
@@ -148,17 +148,17 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			"resource", req.Resource,
 		)
 		decision := types.NewDecision(types.EffectDefaultDeny, "degraded_mode", "infra:degraded-mode")
-		entry := audit.Entry{
+		event := audit.Event{
 			Subject:    req.Subject,
 			Action:     req.Action,
 			Resource:   req.Resource,
 			Effect:     types.EffectDefaultDeny,
-			PolicyID:   "infra:degraded-mode",
-			PolicyName: "",
+			ID:         "infra:degraded-mode",
+			Name:       "",
 			DurationUS: time.Since(start).Microseconds(),
 			Timestamp:  time.Now(),
 		}
-		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
+		if auditErr := e.audit.Log(ctx, event); auditErr != nil {
 			slog.WarnContext(ctx, "audit log failed", "error", auditErr)
 			audit.RecordEngineAuditFailure()
 		}
@@ -195,17 +195,17 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			if valErr := decision.Validate(); valErr != nil {
 				return decision, oops.Wrapf(valErr, "decision validation failed")
 			}
-			entry := audit.Entry{
+			event := audit.Event{
 				Subject:    req.Subject,
 				Action:     req.Action,
 				Resource:   req.Resource,
 				Effect:     types.EffectDefaultDeny,
-				PolicyID:   decision.PolicyID(),
-				PolicyName: "",
+				ID:         decision.PolicyID(),
+				Name:       "",
 				DurationUS: time.Since(start).Microseconds(),
 				Timestamp:  time.Now(),
 			}
-			if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
+			if auditErr := e.audit.Log(ctx, event); auditErr != nil {
 				slog.WarnContext(ctx, "audit log failed", "error", auditErr)
 				audit.RecordEngineAuditFailure()
 			}
@@ -226,17 +226,17 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			"action", req.Action,
 			"resource", req.Resource,
 		)
-		entry := audit.Entry{
+		event := audit.Event{
 			Subject:    req.Subject,
 			Action:     req.Action,
 			Resource:   req.Resource,
 			Effect:     types.EffectDefaultDeny,
-			PolicyID:   "infra:attribute-resolution-failed",
-			PolicyName: "",
+			ID:         "infra:attribute-resolution-failed",
+			Name:       "",
 			DurationUS: time.Since(start).Microseconds(),
 			Timestamp:  time.Now(),
 		}
-		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
+		if auditErr := e.audit.Log(ctx, event); auditErr != nil {
 			slog.WarnContext(ctx, "audit log failed", "error", auditErr)
 			audit.RecordEngineAuditFailure()
 		}
@@ -259,17 +259,17 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			return decision, oops.Wrapf(valErr, "decision validation failed")
 		}
 
-		entry := audit.Entry{
+		event := audit.Event{
 			Subject:    req.Subject,
 			Action:     req.Action,
 			Resource:   req.Resource,
 			Effect:     types.EffectDefaultDeny,
-			PolicyID:   "",
-			PolicyName: "",
+			ID:         "",
+			Name:       "",
 			DurationUS: time.Since(start).Microseconds(),
 			Timestamp:  time.Now(),
 		}
-		if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
+		if auditErr := e.audit.Log(ctx, event); auditErr != nil {
 			slog.WarnContext(ctx, "audit log failed", "error", auditErr)
 			audit.RecordEngineAuditFailure()
 		}
@@ -297,17 +297,17 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 	}
 
 	// Step 10: Audit the decision
-	entry := audit.Entry{
+	event := audit.Event{
 		Subject:    req.Subject,
 		Action:     req.Action,
 		Resource:   req.Resource,
 		Effect:     decision.Effect(),
-		PolicyID:   decision.PolicyID(),
-		PolicyName: policyNameFromMatches(decision.PolicyID(), decision.Policies()),
+		ID:         decision.PolicyID(),
+		Name:       policyNameFromMatches(decision.PolicyID(), decision.Policies()),
 		DurationUS: time.Since(start).Microseconds(),
 		Timestamp:  time.Now(),
 	}
-	if auditErr := e.audit.Log(ctx, entry); auditErr != nil {
+	if auditErr := e.audit.Log(ctx, event); auditErr != nil {
 		slog.WarnContext(ctx, "audit log failed", "error", auditErr)
 		audit.RecordEngineAuditFailure()
 	}

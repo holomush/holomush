@@ -20,7 +20,7 @@ import (
 // PostgresWriter implements Writer for PostgreSQL.
 type PostgresWriter struct {
 	db          *sql.DB
-	asyncChan   chan Entry
+	asyncChan   chan Event
 	stopChan    chan struct{}
 	wg          sync.WaitGroup
 	batchSize   int
@@ -31,7 +31,7 @@ type PostgresWriter struct {
 func NewPostgresWriter(db *sql.DB) *PostgresWriter {
 	writer := &PostgresWriter{
 		db:          db,
-		asyncChan:   make(chan Entry, 1000),
+		asyncChan:   make(chan Event, 1000),
 		stopChan:    make(chan struct{}),
 		batchSize:   100,
 		flushPeriod: 1 * time.Second,
@@ -45,45 +45,45 @@ func NewPostgresWriter(db *sql.DB) *PostgresWriter {
 }
 
 // WriteSync performs a synchronous write to the database.
-func (w *PostgresWriter) WriteSync(ctx context.Context, entry Entry) error {
+func (w *PostgresWriter) WriteSync(ctx context.Context, event Event) error {
 	query := `
 		INSERT INTO access_audit_log (
-			id, subject, action, resource, effect, policy_id, policy_name,
+			id, subject, action, resource, effect, event_id, event_name,
 			attributes, duration_us, timestamp
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
-	attributesJSON, err := json.Marshal(entry.Attributes)
+	attributesJSON, err := json.Marshal(event.Attributes)
 	if err != nil {
 		return oops.Wrap(err)
 	}
 
 	_, err = w.db.ExecContext(ctx, query,
 		idgen.New().String(),
-		entry.Subject,
-		entry.Action,
-		entry.Resource,
-		entry.Effect.String(),
-		entry.PolicyID,
-		entry.PolicyName,
+		event.Subject,
+		event.Action,
+		event.Resource,
+		event.Effect.String(),
+		event.ID,
+		event.Name,
 		attributesJSON,
-		entry.DurationUS,
-		entry.Timestamp,
+		event.DurationUS,
+		event.Timestamp,
 	)
 	if err != nil {
-		return oops.With("subject", entry.Subject).
-			With("action", entry.Action).
-			With("resource", entry.Resource).
+		return oops.With("subject", event.Subject).
+			With("action", event.Action).
+			With("resource", event.Resource).
 			Wrap(err)
 	}
 
 	return nil
 }
 
-// WriteAsync queues an entry for asynchronous batch writing.
-func (w *PostgresWriter) WriteAsync(entry Entry) error {
+// WriteAsync queues an event for asynchronous batch writing.
+func (w *PostgresWriter) WriteAsync(event Event) error {
 	select {
-	case w.asyncChan <- entry:
+	case w.asyncChan <- event:
 		return nil
 	default:
 		// Channel full - caller should handle
@@ -99,7 +99,7 @@ func (w *PostgresWriter) batchConsumer() {
 	ticker := time.NewTicker(w.flushPeriod)
 	defer ticker.Stop()
 
-	var batch []Entry
+	var batch []Event
 
 	flush := func() {
 		if len(batch) == 0 {
@@ -119,8 +119,8 @@ func (w *PostgresWriter) batchConsumer() {
 
 	for {
 		select {
-		case entry := <-w.asyncChan:
-			batch = append(batch, entry)
+		case event := <-w.asyncChan:
+			batch = append(batch, event)
 			if len(batch) >= w.batchSize {
 				flush()
 			}
@@ -129,11 +129,11 @@ func (w *PostgresWriter) batchConsumer() {
 			flush()
 
 		case <-w.stopChan:
-			// Drain remaining entries
+			// Drain remaining events
 			for {
 				select {
-				case entry := <-w.asyncChan:
-					batch = append(batch, entry)
+				case event := <-w.asyncChan:
+					batch = append(batch, event)
 				default:
 					flush()
 					return
@@ -143,9 +143,9 @@ func (w *PostgresWriter) batchConsumer() {
 	}
 }
 
-// writeBatch writes multiple entries in a single transaction.
-func (w *PostgresWriter) writeBatch(ctx context.Context, entries []Entry) error {
-	if len(entries) == 0 {
+// writeBatch writes multiple events in a single transaction.
+func (w *PostgresWriter) writeBatch(ctx context.Context, events []Event) error {
+	if len(events) == 0 {
 		return nil
 	}
 
@@ -160,7 +160,7 @@ func (w *PostgresWriter) writeBatch(ctx context.Context, entries []Entry) error 
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO access_audit_log (
-			id, subject, action, resource, effect, policy_id, policy_name,
+			id, subject, action, resource, effect, event_id, event_name,
 			attributes, duration_us, timestamp
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`)
@@ -172,29 +172,29 @@ func (w *PostgresWriter) writeBatch(ctx context.Context, entries []Entry) error 
 		_ = stmt.Close()
 	}()
 
-	for i := range entries {
-		entry := &entries[i]
-		attributesJSON, err := json.Marshal(entry.Attributes)
+	for i := range events {
+		event := &events[i]
+		attributesJSON, err := json.Marshal(event.Attributes)
 		if err != nil {
-			slog.Error("failed to marshal attributes", "error", err, "entry", entry)
+			slog.Error("failed to marshal attributes", "error", err, "event", event)
 			continue
 		}
 
 		_, err = stmt.ExecContext(ctx,
 			idgen.New().String(),
-			entry.Subject,
-			entry.Action,
-			entry.Resource,
-			entry.Effect.String(),
-			entry.PolicyID,
-			entry.PolicyName,
+			event.Subject,
+			event.Action,
+			event.Resource,
+			event.Effect.String(),
+			event.ID,
+			event.Name,
 			attributesJSON,
-			entry.DurationUS,
-			entry.Timestamp,
+			event.DurationUS,
+			event.Timestamp,
 		)
 		if err != nil {
-			slog.Error("failed to insert audit entry", "error", err, "entry", entry)
-			// Continue with other entries
+			slog.Error("failed to insert audit event", "error", err, "event", event)
+			// Continue with other events
 		}
 	}
 

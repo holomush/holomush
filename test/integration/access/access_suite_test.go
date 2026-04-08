@@ -49,20 +49,20 @@ type accessTestEnv struct {
 
 type testAuditWriter struct {
 	mu      sync.Mutex
-	entries []audit.Entry
+	entries []audit.Event
 }
 
-func (w *testAuditWriter) WriteSync(_ context.Context, entry audit.Entry) error {
+func (w *testAuditWriter) WriteSync(_ context.Context, event audit.Event) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.entries = append(w.entries, entry)
+	w.entries = append(w.entries, event)
 	return nil
 }
 
-func (w *testAuditWriter) WriteAsync(entry audit.Entry) error {
+func (w *testAuditWriter) WriteAsync(event audit.Event) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.entries = append(w.entries, entry)
+	w.entries = append(w.entries, event)
 	return nil
 }
 
@@ -74,10 +74,10 @@ func (w *testAuditWriter) Reset() {
 	w.entries = nil
 }
 
-func (w *testAuditWriter) Entries() []audit.Entry {
+func (w *testAuditWriter) Entries() []audit.Event {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	cp := make([]audit.Entry, len(w.entries))
+	cp := make([]audit.Event, len(w.entries))
 	copy(cp, w.entries)
 	return cp
 }

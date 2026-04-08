@@ -736,23 +736,23 @@ var _ = Describe("Plugin ABAC Trust Boundary", func() {
 	})
 })
 
-// testAuditWriter captures audit entries in memory for testing.
+// testAuditWriter captures audit events in memory for testing.
 type testAuditWriter struct {
-	entries []audit.Entry
+	entries []audit.Event
 	mu      sync.Mutex
 }
 
-func (w *testAuditWriter) WriteSync(_ context.Context, entry audit.Entry) error {
+func (w *testAuditWriter) WriteSync(_ context.Context, event audit.Event) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.entries = append(w.entries, entry)
+	w.entries = append(w.entries, event)
 	return nil
 }
 
-func (w *testAuditWriter) WriteAsync(entry audit.Entry) error {
+func (w *testAuditWriter) WriteAsync(event audit.Event) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.entries = append(w.entries, entry)
+	w.entries = append(w.entries, event)
 	return nil
 }
 

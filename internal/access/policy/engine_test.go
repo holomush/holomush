@@ -35,23 +35,23 @@ func (m *mockSessionResolver) ResolveSession(ctx context.Context, sessionID stri
 	return "", oops.Errorf("mock not configured")
 }
 
-// mockAuditWriter captures audit entries for testing.
+// mockAuditWriter captures audit events for testing.
 type mockAuditWriter struct {
-	entries []audit.Entry
+	entries []audit.Event
 	mu      sync.Mutex
 }
 
-func (m *mockAuditWriter) WriteSync(_ context.Context, entry audit.Entry) error {
+func (m *mockAuditWriter) WriteSync(_ context.Context, event audit.Event) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.entries = append(m.entries, entry)
+	m.entries = append(m.entries, event)
 	return nil
 }
 
-func (m *mockAuditWriter) WriteAsync(entry audit.Entry) error {
+func (m *mockAuditWriter) WriteAsync(event audit.Event) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.entries = append(m.entries, entry)
+	m.entries = append(m.entries, event)
 	return nil
 }
 
@@ -59,10 +59,10 @@ func (m *mockAuditWriter) Close() error {
 	return nil
 }
 
-func (m *mockAuditWriter) getEntries() []audit.Entry {
+func (m *mockAuditWriter) getEntries() []audit.Event {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	result := make([]audit.Entry, len(m.entries))
+	result := make([]audit.Event, len(m.entries))
 	copy(result, m.entries)
 	return result
 }
@@ -379,16 +379,16 @@ func TestMockAuditWriterThreadSafety(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			entry := audit.Entry{
+			event := audit.Event{
 				Subject:  "test",
 				Action:   "read",
 				Resource: "test",
 				Effect:   types.EffectAllow,
 			}
 			if idx%2 == 0 {
-				_ = writer.WriteSync(ctx, entry)
+				_ = writer.WriteSync(ctx, event)
 			} else {
-				_ = writer.WriteAsync(entry)
+				_ = writer.WriteAsync(event)
 			}
 		}(i)
 	}
@@ -1398,7 +1398,7 @@ func TestEngineAuditModeAllAllowAudited(t *testing.T) {
 	assert.Equal(t, "say", entries[0].Action)
 	assert.Equal(t, "location:01XYZ", entries[0].Resource)
 	assert.Equal(t, types.EffectAllow, entries[0].Effect)
-	assert.Equal(t, "policy-1", entries[0].PolicyID)
+	assert.Equal(t, "policy-1", entries[0].ID)
 }
 
 func TestEngineAuditModeAllDenyAudited(t *testing.T) {
@@ -1427,7 +1427,7 @@ func TestEngineAuditModeAllDenyAudited(t *testing.T) {
 	assert.Equal(t, "say", entries[0].Action)
 	assert.Equal(t, "location:01XYZ", entries[0].Resource)
 	assert.Equal(t, types.EffectDeny, entries[0].Effect)
-	assert.Equal(t, "policy-1", entries[0].PolicyID)
+	assert.Equal(t, "policy-1", entries[0].ID)
 }
 
 func TestEngineAuditModeMinimalAllowNotAudited(t *testing.T) {

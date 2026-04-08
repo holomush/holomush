@@ -57,7 +57,7 @@ var _ = Describe("ABAC Full Evaluation Path (Canary)", func() {
 		Expect(decision.Effect()).To(Equal(types.EffectAllow))
 		// Allow entries are written asynchronously via a buffered channel;
 		// poll until the async consumer has flushed the entry to the writer.
-		Eventually(func() []audit.Entry {
+		Eventually(func() []audit.Event {
 			return env.auditWriter.Entries()
 		}).WithTimeout(2 * time.Second).WithPolling(10 * time.Millisecond).ShouldNot(BeEmpty())
 

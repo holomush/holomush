@@ -31,23 +31,23 @@ const (
 	ModeAll         Mode = "all"          // everything
 )
 
-// Entry represents a single access control decision to be logged.
-type Entry struct {
+// Event represents a single access control decision to be logged.
+type Event struct {
 	Subject    string         `json:"subject"`
 	Action     string         `json:"action"`
 	Resource   string         `json:"resource"`
 	Effect     types.Effect   `json:"effect"`
-	PolicyID   string         `json:"policy_id"`
-	PolicyName string         `json:"policy_name"`
+	ID         string         `json:"id"`
+	Name       string         `json:"name"`
 	Attributes map[string]any `json:"attributes"`
 	DurationUS int64          `json:"duration_us"`
 	Timestamp  time.Time      `json:"timestamp"`
 }
 
-// Writer is the interface for writing audit entries to a backend.
+// Writer is the interface for writing audit events to a backend.
 type Writer interface {
-	WriteSync(ctx context.Context, entry Entry) error
-	WriteAsync(entry Entry) error
+	WriteSync(ctx context.Context, event Event) error
+	WriteAsync(event Event) error
 	Close() error
 }
 
@@ -83,14 +83,14 @@ func RecordEngineAuditFailure() {
 	engineAuditFailuresCounter.Inc()
 }
 
-// Logger routes audit entries based on mode and effect.
+// Logger routes audit events based on mode and effect.
 type Logger struct {
 	mode      Mode
 	writer    Writer
 	walPath   string
 	walFile   *os.File
 	walMu     sync.Mutex
-	asyncChan chan Entry
+	asyncChan chan Event
 	stopChan  chan struct{}
 	wg        sync.WaitGroup
 }
@@ -115,7 +115,7 @@ func NewLogger(mode Mode, writer Writer, walPath string) *Logger {
 		mode:      mode,
 		writer:    writer,
 		walPath:   walPath,
-		asyncChan: make(chan Entry, 1000), // buffered channel
+		asyncChan: make(chan Event, 1000), // buffered channel
 		stopChan:  make(chan struct{}),
 	}
 
@@ -126,44 +126,44 @@ func NewLogger(mode Mode, writer Writer, walPath string) *Logger {
 	return logger
 }
 
-// Log routes an audit entry based on the configured mode and effect.
-func (l *Logger) Log(ctx context.Context, entry Entry) error {
-	// Determine if entry should be logged based on mode and effect
-	shouldLog, useSync := l.shouldLog(entry.Effect)
+// Log routes an audit event based on the configured mode and effect.
+func (l *Logger) Log(ctx context.Context, event Event) error {
+	// Determine if event should be logged based on mode and effect
+	shouldLog, useSync := l.shouldLog(event.Effect)
 	if !shouldLog {
 		return nil
 	}
 
 	if useSync {
 		// Synchronous write for denials, default_deny, system_bypass
-		if err := l.writer.WriteSync(ctx, entry); err != nil {
+		if err := l.writer.WriteSync(ctx, event); err != nil {
 			// Fallback to WAL
-			if walErr := l.writeToWAL(entry); walErr != nil {
+			if walErr := l.writeToWAL(event); walErr != nil {
 				// Both failed - log error and return it to the caller
 				slog.Error("audit write failed: both DB and WAL failed",
 					"db_error", err,
 					"wal_error", walErr,
-					"subject", entry.Subject,
-					"action", entry.Action,
-					"resource", entry.Resource,
-					"effect", entry.Effect,
+					"subject", event.Subject,
+					"action", event.Action,
+					"resource", event.Resource,
+					"effect", event.Effect,
 				)
 				failuresCounter.WithLabelValues("wal_failed").Inc()
 				return oops.Code("AUDIT_WRITE_FAILED").
 					With("db_error", err).
 					With("wal_error", walErr).
-					With("subject", entry.Subject).
-					With("action", entry.Action).
-					With("resource", entry.Resource).
+					With("subject", event.Subject).
+					With("action", event.Action).
+					With("resource", event.Resource).
 					Errorf("audit write failed: both DB and WAL failed")
 			}
 			// WAL succeeded but primary DB failed — log degraded state
 			slog.Warn("audit DB write failed, fell back to WAL",
 				"db_error", err,
-				"subject", entry.Subject,
-				"action", entry.Action,
-				"resource", entry.Resource,
-				"effect", entry.Effect,
+				"subject", event.Subject,
+				"action", event.Action,
+				"resource", event.Resource,
+				"effect", event.Effect,
 			)
 			failuresCounter.WithLabelValues("db_failed_wal_ok").Inc()
 		}
@@ -172,27 +172,27 @@ func (l *Logger) Log(ctx context.Context, entry Entry) error {
 
 	// Async write for allows in all mode
 	select {
-	case l.asyncChan <- entry:
+	case l.asyncChan <- event:
 		return nil
 	default:
-		// Channel full - drop entry, increment metric, and return error so
+		// Channel full - drop event, increment metric, and return error so
 		// engine callers can track audit loss via RecordEngineAuditFailure.
 		channelFullCounter.Inc()
-		slog.Warn("audit channel full: dropping async entry",
-			"subject", entry.Subject,
-			"action", entry.Action,
-			"resource", entry.Resource,
+		slog.Warn("audit channel full: dropping async event",
+			"subject", event.Subject,
+			"action", event.Action,
+			"resource", event.Resource,
 			"channel_len", len(l.asyncChan),
 		)
 		return oops.Code("AUDIT_CHANNEL_FULL").
-			With("subject", entry.Subject).
-			With("action", entry.Action).
-			With("resource", entry.Resource).
-			Errorf("audit channel full: entry dropped")
+			With("subject", event.Subject).
+			With("action", event.Action).
+			With("resource", event.Resource).
+			Errorf("audit channel full: event dropped")
 	}
 }
 
-// shouldLog determines if an entry should be logged based on mode and effect.
+// shouldLog determines if an event should be logged based on mode and effect.
 // Returns (shouldLog bool, useSync bool).
 func (l *Logger) shouldLog(effect types.Effect) (shouldLog, useSync bool) {
 	switch l.mode {
@@ -238,32 +238,32 @@ func (l *Logger) asyncConsumer() {
 
 	for {
 		select {
-		case entry := <-l.asyncChan:
-			if err := l.writer.WriteAsync(entry); err != nil {
+		case event := <-l.asyncChan:
+			if err := l.writer.WriteAsync(event); err != nil {
 				slog.Error("async audit write failed",
 					"error", err,
-					"subject", entry.Subject,
-					"action", entry.Action,
+					"subject", event.Subject,
+					"action", event.Action,
 				)
 				failuresCounter.WithLabelValues("async_write_failed").Inc()
 			}
 		case <-l.stopChan:
-			// Drain remaining entries
+			// Drain remaining events
 			l.drainAsync()
 			return
 		}
 	}
 }
 
-// drainAsync processes all remaining entries in the channel.
+// drainAsync processes all remaining events in the channel.
 func (l *Logger) drainAsync() {
 	for {
 		select {
-		case entry := <-l.asyncChan:
-			if err := l.writer.WriteAsync(entry); err != nil {
+		case event := <-l.asyncChan:
+			if err := l.writer.WriteAsync(event); err != nil {
 				slog.Error("async audit write failed during drain",
 					"error", err,
-					"subject", entry.Subject,
+					"subject", event.Subject,
 				)
 				failuresCounter.WithLabelValues("async_write_failed").Inc()
 			}
@@ -273,8 +273,8 @@ func (l *Logger) drainAsync() {
 	}
 }
 
-// writeToWAL writes an entry to the write-ahead log.
-func (l *Logger) writeToWAL(entry Entry) error {
+// writeToWAL writes an event to the write-ahead log.
+func (l *Logger) writeToWAL(event Event) error {
 	l.walMu.Lock()
 	defer l.walMu.Unlock()
 
@@ -287,8 +287,8 @@ func (l *Logger) writeToWAL(entry Entry) error {
 		l.walFile = file
 	}
 
-	// Write JSON entry
-	data, err := json.Marshal(entry)
+	// Write JSON event
+	data, err := json.Marshal(event)
 	if err != nil {
 		return oops.Wrap(err)
 	}
@@ -337,7 +337,7 @@ func (l *Logger) ReplayWAL(ctx context.Context) error {
 		return nil // Empty WAL
 	}
 
-	// Parse and replay entries; collect failed entries for WAL rewrite.
+	// Parse and replay events; collect failed events for WAL rewrite.
 	replayed := 0
 	var failedLines []string
 	for _, line := range splitLines(string(data)) {
@@ -345,20 +345,20 @@ func (l *Logger) ReplayWAL(ctx context.Context) error {
 			continue
 		}
 
-		var entry Entry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			slog.Error("failed to unmarshal WAL entry", "error", err, "line", line)
+		var event Event
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			slog.Error("failed to unmarshal WAL event", "error", err, "line", line)
 			failuresCounter.WithLabelValues("wal_unmarshal_failed").Inc()
 			// Keep the raw line so it is preserved for manual inspection.
 			failedLines = append(failedLines, line)
 			continue
 		}
 
-		if err := l.writer.WriteSync(ctx, entry); err != nil {
-			slog.Error("failed to replay WAL entry", "error", err, "entry", entry)
+		if err := l.writer.WriteSync(ctx, event); err != nil {
+			slog.Error("failed to replay WAL event", "error", err, "event", event)
 			failuresCounter.WithLabelValues("wal_replay_failed").Inc()
-			// Re-marshal so the entry is preserved in the WAL for retry.
-			if raw, merr := json.Marshal(entry); merr == nil {
+			// Re-marshal so the event is preserved in the WAL for retry.
+			if raw, merr := json.Marshal(event); merr == nil {
 				failedLines = append(failedLines, string(raw))
 			} else {
 				// Fall back to the original line if re-marshal fails.
