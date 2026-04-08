@@ -4,7 +4,6 @@
 package web
 
 import (
-	"embed"
 	"io/fs"
 	"net/http"
 	"os"
@@ -12,23 +11,23 @@ import (
 	"strings"
 )
 
-//go:embed all:dist
-var embeddedFS embed.FS
-
 // FileServer returns an HTTP handler that serves static files from an embedded
 // FS or an override directory. If webDir is non-empty the filesystem at that
 // path is used instead of the embedded build. Requests for unknown paths that
 // lack a file extension fall back to index.html to support client-side routing.
+//
+// The embedded FS root is selected at compile time via build tags: the default
+// build (no tags) embeds internal/web/placeholder/ as a tracked stub so
+// `go build ./cmd/holomush` compiles on a fresh checkout; builds with
+// `-tags realweb` embed internal/web/dist/ after `task web:embed` has
+// populated it with the real SvelteKit bundle. See static_placeholder.go and
+// static_realweb.go.
 func FileServer(webDir string) http.Handler {
 	var root fs.FS
 	if webDir != "" {
 		root = os.DirFS(webDir)
 	} else {
-		sub, err := fs.Sub(embeddedFS, "dist")
-		if err != nil {
-			panic("web: failed to sub embedded FS: " + err.Error())
-		}
-		root = sub
+		root = embeddedRoot()
 	}
 
 	fileServer := http.FileServer(http.FS(root))

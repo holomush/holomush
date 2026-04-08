@@ -68,6 +68,8 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 // handleCreate creates a new scene with the given title. The title is the
 // rest of the command line (allowing whitespace) so "scene create The Manor"
 // works without quoting.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleCreate(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	title := strings.TrimSpace(args)
 	if title == "" {
@@ -92,6 +94,8 @@ func (p *scenePlugin) handleCreate(ctx context.Context, req pluginsdk.CommandReq
 // policy, the host's ABAC engine has already verified the caller is the owner
 // before this code runs (when invoked via the dispatcher's full ABAC pipeline);
 // in unit tests, ABAC is bypassed and the service is called directly.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleInfo(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID := strings.TrimSpace(args)
 	if sceneID == "" {
@@ -129,6 +133,8 @@ func (p *scenePlugin) handleInfo(ctx context.Context, req pluginsdk.CommandReque
 // (the host's ABAC engine evaluates end-own-scene before this code runs in
 // production); in unit tests, ABAC is bypassed so the test must use the
 // scene owner's character ID.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleEnd(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID := strings.TrimSpace(args)
 	if sceneID == "" {
@@ -150,6 +156,8 @@ func (p *scenePlugin) handleEnd(ctx context.Context, req pluginsdk.CommandReques
 }
 
 // handlePause transitions an active scene to the paused state. Owner-only.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handlePause(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID := strings.TrimSpace(args)
 	if sceneID == "" {
@@ -172,6 +180,8 @@ func (p *scenePlugin) handlePause(ctx context.Context, req pluginsdk.CommandRequ
 
 // handleResume transitions a paused scene back to active. Owner-only in
 // Phase 2; Phase 3 widens to any member per spec D6.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleResume(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID := strings.TrimSpace(args)
 	if sceneID == "" {
@@ -202,6 +212,8 @@ func (p *scenePlugin) handleResume(ctx context.Context, req pluginsdk.CommandReq
 // the single field path being set. The service handler then applies it via
 // the standard mask-iteration path, getting the same per-field validation
 // any other UpdateScene call would.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleSet(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	args = strings.TrimSpace(args)
 	if args == "" {
@@ -271,6 +283,8 @@ func splitSubcommand(args string) (sub, rest string) {
 }
 
 // handleJoin parses "scene join <scene-id>" and calls JoinScene.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID := strings.TrimSpace(args)
 	if sceneID == "" {
@@ -292,6 +306,8 @@ func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandReque
 }
 
 // handleLeave parses "scene leave <scene-id>" and calls LeaveScene.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleLeave(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID := strings.TrimSpace(args)
 	if sceneID == "" {
@@ -313,6 +329,8 @@ func (p *scenePlugin) handleLeave(ctx context.Context, req pluginsdk.CommandRequ
 }
 
 // handleInvite parses "scene invite <scene-id> <character>".
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleInvite(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID, rest := splitSubcommand(args)
 	target := strings.TrimSpace(rest)
@@ -336,6 +354,8 @@ func (p *scenePlugin) handleInvite(ctx context.Context, req pluginsdk.CommandReq
 }
 
 // handleKick parses "scene kick <scene-id> <character>".
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleKick(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID, rest := splitSubcommand(args)
 	target := strings.TrimSpace(rest)
@@ -359,6 +379,8 @@ func (p *scenePlugin) handleKick(ctx context.Context, req pluginsdk.CommandReque
 }
 
 // handleTransfer parses "scene transfer <scene-id> <character>".
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleTransfer(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID, rest := splitSubcommand(args)
 	target := strings.TrimSpace(rest)

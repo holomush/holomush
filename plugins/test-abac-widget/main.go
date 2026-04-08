@@ -24,6 +24,7 @@ func (p *widgetPlugin) HandleEvent(_ context.Context, _ pluginsdk.Event) ([]plug
 	return nil, nil
 }
 
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *widgetPlugin) HandleCommand(_ context.Context, req pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
 	return &pluginsdk.CommandResponse{
 		Status: pluginsdk.CommandOK,

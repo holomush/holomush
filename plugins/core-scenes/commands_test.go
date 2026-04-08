@@ -234,6 +234,8 @@ func TestHandleCommandSetRejectsMissingEqualsSeparator(t *testing.T) {
 
 // createSceneInTest is a helper that creates a scene via the command path
 // and returns its ID. Used by Phase 2 tests that need a scene to operate on.
+//
+//nolint:unparam // characterID is parameterised for clarity at call sites even though every current caller passes "char-alice"; future tests with multi-character setups will need this without changing the signature
 func createSceneInTest(t *testing.T, p *scenePlugin, characterID, title string) string {
 	t.Helper()
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{

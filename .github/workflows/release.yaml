@@ -74,6 +74,26 @@ jobs:
       - name: Install Syft
         uses: anchore/sbom-action/download-syft@v0
 
+      # internal/web/dist/ is gitignored; the SvelteKit bundle must be built
+      # fresh on the release runner so the -tags realweb build configured in
+      # .goreleaser.yaml can embed it. See internal/web/static.go.
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build web bundle into internal/web/dist/
+        run: task web:embed
+
       # GoReleaser handles building, signing, and releasing atomically.
       # Signing happens BEFORE artifacts are published - releases are never
       # published with unsigned artifacts.

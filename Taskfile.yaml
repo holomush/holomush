@@ -177,10 +177,14 @@ tasks:
   # ──────────────────────────────────────────
 
   build:
-    desc: Build the server binary
+    desc: Build the server binary with the real SvelteKit bundle embedded
     deps: ['web:embed']
     cmds:
-      - go build -o {{.BINARY_NAME}} {{.MAIN_PKG}}
+      # -tags realweb selects static_realweb.go (go:embed all:dist).
+      # Without the tag, the default build embeds internal/web/placeholder/
+      # via static_placeholder.go — used by `task test` and fresh-checkout
+      # `go build`. See internal/web/static.go for the full rationale.
+      - go build -tags realweb -o {{.BINARY_NAME}} {{.MAIN_PKG}}
 
   plugin:build-all:
     desc: Discover and compile all binary plugins (host + linux/amd64 + linux/arm64)
@@ -196,14 +200,15 @@ tasks:
     desc: Build Docker image from locally-compiled Linux binary
     deps: ['web:embed', 'plugin:build-all']
     cmds:
-      - CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o holomush {{.MAIN_PKG}}
+      # -tags realweb embeds the real dist bundle; see `build:` for context.
+      - CGO_ENABLED=0 GOOS=linux go build -tags realweb -ldflags="-s -w" -o holomush {{.MAIN_PKG}}
       - docker build --build-arg TARGETARCH=$(go env GOARCH) -t holomush .
 
   docker:build:cover:
     desc: Build Docker image with coverage instrumentation
     deps: ['web:embed', 'plugin:build-all']
     cmds:
-      - CGO_ENABLED=0 GOOS=linux go build -cover -o holomush {{.MAIN_PKG}}
+      - CGO_ENABLED=0 GOOS=linux go build -tags realweb -cover -o holomush {{.MAIN_PKG}}
       - docker build -t holomush .
 
   # ──────────────────────────────────────────

@@ -66,9 +66,13 @@ tmp/
 
 # goreleaser
 dist/
-# Allow web client placeholder (needed for go:embed)
-!internal/web/dist/
-!internal/web/dist/index.html
+# internal/web/dist/ is a generated build artifact produced by
+# `task web:embed` (runs `pnpm build` and copies web/build/ into it).
+# It is ignored entirely. The default `go build` uses
+# internal/web/placeholder/ via `//go:build !realweb`, so a fresh checkout
+# compiles without requiring the SvelteKit pipeline to have run yet.
+# `task build` / `task docker:build` pass `-tags realweb` to embed the
+# real bundle from dist/ after web:embed has populated it.
 
 # dprint cache
 .dprint/

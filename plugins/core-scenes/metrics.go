@@ -48,6 +48,8 @@ func metricSceneStateTransition(from, to, reason string) {
 // catches denials before they reach the resolver, so this counter is
 // expected to be zero in normal operation. Useful for spotting policy
 // misconfiguration where the resolver gets called for forbidden access.
+//
+//nolint:unused // stub for the future binary plugin metrics infrastructure (spec section 11); intentionally retained so call sites can be wired in cheaply once that infrastructure lands
 func metricSceneABACDenial(action, resourceType string) {
 	_ = action
 	_ = resourceType
@@ -60,6 +62,8 @@ func metricSceneABACDenial(action, resourceType string) {
 // records plugin command durations at the gRPC delivery level — but the
 // stub exists so service-internal RPC timing can be added cheaply later
 // if it surfaces a real need.
+//
+//nolint:unused // stub for the future binary plugin metrics infrastructure (spec section 11); intentionally retained so call sites can be wired in cheaply once that infrastructure lands
 func metricSceneRPCDuration(rpc string, durationSeconds float64, ok bool) {
 	_ = rpc
 	_ = durationSeconds
@@ -68,6 +72,8 @@ func metricSceneRPCDuration(rpc string, durationSeconds float64, ok bool) {
 
 // metricSceneParticipantJoined counts successful joins. Labels: visibility,
 // from_invited. Metric: scene_participants_joined_total{visibility, from_invited}.
+//
+//nolint:unused // stub for the future binary plugin metrics infrastructure (spec section 11); intentionally retained so call sites can be wired in cheaply once that infrastructure lands
 func metricSceneParticipantJoined(visibility, fromInvited string) {
 	_ = visibility
 	_ = fromInvited
@@ -75,12 +81,16 @@ func metricSceneParticipantJoined(visibility, fromInvited string) {
 
 // metricSceneParticipantLeft counts successful leaves. Labels: visibility.
 // Metric: scene_participants_left_total{visibility}.
+//
+//nolint:unused // stub for the future binary plugin metrics infrastructure (spec section 11); intentionally retained so call sites can be wired in cheaply once that infrastructure lands
 func metricSceneParticipantLeft(visibility string) {
 	_ = visibility
 }
 
 // metricSceneParticipantKicked counts successful kicks. Labels: visibility,
 // prior_role. Metric: scene_participants_kicked_total{visibility, prior_role}.
+//
+//nolint:unused // stub for the future binary plugin metrics infrastructure (spec section 11); intentionally retained so call sites can be wired in cheaply once that infrastructure lands
 func metricSceneParticipantKicked(visibility, priorRole string) {
 	_ = visibility
 	_ = priorRole
@@ -88,18 +98,24 @@ func metricSceneParticipantKicked(visibility, priorRole string) {
 
 // metricSceneParticipantInvited counts successful invitations. Labels: visibility.
 // Metric: scene_participants_invited_total{visibility}.
+//
+//nolint:unused // stub for the future binary plugin metrics infrastructure (spec section 11); intentionally retained so call sites can be wired in cheaply once that infrastructure lands
 func metricSceneParticipantInvited(visibility string) {
 	_ = visibility
 }
 
 // metricSceneOwnershipTransferred counts ownership transfers. Labels: visibility.
 // Metric: scene_ownership_transfers_total{visibility}.
+//
+//nolint:unused // stub for the future binary plugin metrics infrastructure (spec section 11); intentionally retained so call sites can be wired in cheaply once that infrastructure lands
 func metricSceneOwnershipTransferred(visibility string) {
 	_ = visibility
 }
 
 // metricSceneOpsEventRecorded counts every ops event by kind. Catch-all for
 // observability of the ops timeline. Metric: scene_ops_events_total{kind}.
+//
+//nolint:unused // stub for the future binary plugin metrics infrastructure (spec section 11); intentionally retained so call sites can be wired in cheaply once that infrastructure lands
 func metricSceneOpsEventRecorded(kind string) {
 	_ = kind
 }
