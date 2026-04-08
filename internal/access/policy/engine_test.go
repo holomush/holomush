@@ -2204,3 +2204,30 @@ func TestEngineCanPerformActionPermitsOptimisticallyForPermitReferencingResource
 	assert.True(t, allowed,
 		"permit policy referencing resource attrs must optimistic-permit at preflight")
 }
+
+// TestEngineAuditEventsCarrySourceEngineAndComponentAbac verifies that audit
+// events emitted by the ABAC engine during Evaluate carry Source = SourceEngine
+// and Component = "abac" so operator queries can filter engine events. The
+// test exercises the "no applicable policies" path, which still emits an audit
+// event but takes the regular (non-bypass) engine code path.
+func TestEngineAuditEventsCarrySourceEngineAndComponentAbac(t *testing.T) {
+	// createTestEngine already builds an Engine backed by an empty NewCache,
+	// so evaluation will hit the "no applicable policies" branch — which still
+	// emits an audit event via the regular engine path.
+	engine, writer := createTestEngine(t, &mockSessionResolver{})
+
+	req, err := types.NewAccessRequest("character:01ABC", "read", "location:01XYZ")
+	require.NoError(t, err)
+
+	_, evalErr := engine.Evaluate(context.Background(), req)
+	require.NoError(t, evalErr)
+
+	entries := writer.getEntries()
+	require.NotEmpty(t, entries, "expected at least one audit event")
+
+	last := entries[len(entries)-1]
+	assert.Equal(t, audit.SourceEngine, last.Source,
+		"engine-produced events must carry SourceEngine")
+	assert.Equal(t, "abac", last.Component,
+		"engine-produced events must carry Component='abac'")
+}

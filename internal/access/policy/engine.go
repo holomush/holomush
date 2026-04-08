@@ -123,12 +123,14 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		}
 
 		event := audit.Event{
+			ID:         "",
+			Name:       "",
+			Source:     audit.SourceSystem,
+			Component:  "abac",
 			Subject:    req.Subject,
 			Action:     req.Action,
 			Resource:   req.Resource,
 			Effect:     types.EffectSystemBypass,
-			ID:         "",
-			Name:       "",
 			DurationUS: time.Since(start).Microseconds(),
 			Timestamp:  time.Now(),
 		}
@@ -149,12 +151,14 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		)
 		decision := types.NewDecision(types.EffectDefaultDeny, "degraded_mode", "infra:degraded-mode")
 		event := audit.Event{
+			ID:         "infra:degraded-mode",
+			Name:       "",
+			Source:     audit.SourceEngine,
+			Component:  "abac",
 			Subject:    req.Subject,
 			Action:     req.Action,
 			Resource:   req.Resource,
 			Effect:     types.EffectDefaultDeny,
-			ID:         "infra:degraded-mode",
-			Name:       "",
 			DurationUS: time.Since(start).Microseconds(),
 			Timestamp:  time.Now(),
 		}
@@ -196,12 +200,14 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 				return decision, oops.Wrapf(valErr, "decision validation failed")
 			}
 			event := audit.Event{
+				ID:         decision.PolicyID(),
+				Name:       "",
+				Source:     audit.SourceEngine,
+				Component:  "abac",
 				Subject:    req.Subject,
 				Action:     req.Action,
 				Resource:   req.Resource,
 				Effect:     types.EffectDefaultDeny,
-				ID:         decision.PolicyID(),
-				Name:       "",
 				DurationUS: time.Since(start).Microseconds(),
 				Timestamp:  time.Now(),
 			}
@@ -227,12 +233,14 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			"resource", req.Resource,
 		)
 		event := audit.Event{
+			ID:         "infra:attribute-resolution-failed",
+			Name:       "",
+			Source:     audit.SourceEngine,
+			Component:  "abac",
 			Subject:    req.Subject,
 			Action:     req.Action,
 			Resource:   req.Resource,
 			Effect:     types.EffectDefaultDeny,
-			ID:         "infra:attribute-resolution-failed",
-			Name:       "",
 			DurationUS: time.Since(start).Microseconds(),
 			Timestamp:  time.Now(),
 		}
@@ -260,12 +268,14 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 		}
 
 		event := audit.Event{
+			ID:         "",
+			Name:       "",
+			Source:     audit.SourceEngine,
+			Component:  "abac",
 			Subject:    req.Subject,
 			Action:     req.Action,
 			Resource:   req.Resource,
 			Effect:     types.EffectDefaultDeny,
-			ID:         "",
-			Name:       "",
 			DurationUS: time.Since(start).Microseconds(),
 			Timestamp:  time.Now(),
 		}
@@ -298,12 +308,14 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 
 	// Step 10: Audit the decision
 	event := audit.Event{
+		ID:         decision.PolicyID(),
+		Name:       policyNameFromMatches(decision.PolicyID(), decision.Policies()),
+		Source:     audit.SourceEngine,
+		Component:  "abac",
 		Subject:    req.Subject,
 		Action:     req.Action,
 		Resource:   req.Resource,
 		Effect:     decision.Effect(),
-		ID:         decision.PolicyID(),
-		Name:       policyNameFromMatches(decision.PolicyID(), decision.Policies()),
 		DurationUS: time.Since(start).Microseconds(),
 		Timestamp:  time.Now(),
 	}
