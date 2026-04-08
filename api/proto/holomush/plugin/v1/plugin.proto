@@ -140,6 +140,51 @@ message CommandResponse {
   string output = 2 [(buf.validate.field).string.max_len = 8192];
   // Events to append to the event store.
   repeated EmitEvent events = 3;
+  // Audit decision hints accumulated by the plugin handler during this
+  // command dispatch. The dispatcher extracts these after the response is
+  // returned, stamps host-controlled fields (subject, action base, source,
+  // component, timestamp, duration), and flushes them through the audit
+  // logger.
+  repeated AuditDecisionHint audit_hints = 4;
+}
+
+// AuditDecisionHint is a partial audit event emitted by a plugin handler.
+// The plugin provides decision-specific fields (id, name, message, effect,
+// resource, attributes, action qualifier); the host stamps identity fields
+// (subject from dispatch context, source = SourcePlugin, component =
+// plugin name, timestamp, duration).
+//
+// Plugins MUST NOT set subject, source, or component — the dispatcher
+// overwrites those fields to prevent spoofing.
+message AuditDecisionHint {
+  // Stable slug identifying the plugin's internal rule, e.g., "not_member".
+  string id = 1 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+
+  // Human-readable label for the rule, e.g., "channels: not a member".
+  string name = 2 [(buf.validate.field).string.max_len = 256];
+
+  // Per-firing description, e.g., "player not in channel members".
+  string message = 3 [(buf.validate.field).string.max_len = 1024];
+
+  // Effect the plugin decided: "deny" or "allow".
+  string effect = 4 [(buf.validate.field).string.min_len = 1];
+
+  // Action qualifier appended to the dispatcher-known base action.
+  // E.g., the dispatcher knows the command is "channel"; the plugin
+  // supplies "speak", producing final action "channel:speak".
+  string action_qualifier = 5 [(buf.validate.field).string.max_len = 64];
+
+  // Resource reference in <type>:<id> form, e.g., "channel:01XYZ".
+  // Plugin-provided, host-validated for shape.
+  string resource = 6 [(buf.validate.field).string.max_len = 256];
+
+  // Plugin-provided context. Keys SHOULD be namespaced (e.g.,
+  // "channel.type" rather than "type") to avoid collision with
+  // host-overlay keys.
+  map<string, string> attributes = 7;
 }
 
 // HandleCommandRequest wraps a command for delivery to the plugin.
