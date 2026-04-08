@@ -9,6 +9,9 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -1152,6 +1155,25 @@ func TestListParticipantsReturnsAllRolesOrderedByJoinedAt(t *testing.T) {
 	assert.Equal(t, "member", got[1].Role)
 }
 
+// TestListParticipantsReturnsEmptyForMissingScene locks in the contract that
+// ListParticipants is a list operation, not a Get-style lookup: a missing
+// scene returns (empty slice, nil error), the same as a scene that exists
+// with zero participants. This is intentional Postgres SELECT-WHERE semantics
+// — there's no way to distinguish "scene doesn't exist" from "scene exists
+// but has no rows" via a single query, and the caller can verify scene
+// existence via Get if they need that distinction.
+//
+// Negative-path coverage per project guideline (every exported function needs
+// at least one positive and one negative test).
+func TestListParticipantsReturnsEmptyForMissingScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	got, err := store.ListParticipants(ctx, "scene-does-not-exist")
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
 func TestGetParticipantReturnsRowWhenPresent(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
@@ -1627,29 +1649,45 @@ func TestParticipantPrimaryKeyPreventsDoubleInsertion(t *testing.T) {
 
 func TestOpsEventsCannotBeUpdatedOrDeletedByApplicationCode(t *testing.T) {
 	// This is a meta-test: assert that the codebase contains no UPDATE or
-	// DELETE statements against scene_ops_events. Append-only is enforced by
-	// convention (the recordOpsEventTx helper is the only writer); this test
-	// catches accidental future violations via grep.
+	// DELETE statements against scene_ops_events. Append-only is enforced
+	// by convention (the recordOpsEventTx helper is the only writer); this
+	// test catches accidental future violations.
 	//
-	// The check uses os.ReadFile + strings.Contains rather than running an
-	// external grep so it works in any test environment.
-	files := []string{
-		"store.go",
-		"ops_events.go",
-		"service.go",
-		"resolver.go",
-		"commands.go",
-		"main.go",
-	}
-	for _, fname := range files {
-		data, err := os.ReadFile(fname)
-		if err != nil {
-			continue // file doesn't exist in this layout
+	// Per project policy (CLAUDE.md: "MUST NOT use triggers or functions —
+	// All logic lives in Go; PostgreSQL is storage only"), we cannot enforce
+	// append-only via a database trigger. This static check IS the
+	// enforcement, so it must be robust:
+	//
+	//   - Discover production .go files dynamically via filepath.Glob, so
+	//     a future file added to the package is automatically scanned. The
+	//     previous fixed-file list could be bypassed by adding a new file.
+	//   - Fail loudly on read errors (require.NoError), not silently skip.
+	//   - Match case-insensitively after whitespace folding, so a mutation
+	//     formatted as `delete\nfrom scene_ops_events` or with mixed case
+	//     still trips the check.
+	//
+	// Test files (`*_test.go`) are excluded because tests legitimately
+	// query scene_ops_events for assertions; only production code is
+	// scrutinized.
+
+	goFiles, err := filepath.Glob("*.go")
+	require.NoError(t, err)
+	require.NotEmpty(t, goFiles, "expected at least one .go file in package directory")
+
+	whitespace := regexp.MustCompile(`\s+`)
+	for _, fname := range goFiles {
+		if strings.HasSuffix(fname, "_test.go") {
+			continue
 		}
-		content := string(data)
-		assert.NotContains(t, content, "UPDATE scene_ops_events",
+		data, err := os.ReadFile(fname)
+		require.NoError(t, err, "failed to read %s", fname)
+		// Lowercase + collapse whitespace so multi-line / mixed-case SQL
+		// like `DELETE\n  FROM scene_ops_events` is normalised to
+		// `delete from scene_ops_events`.
+		content := whitespace.ReplaceAllString(strings.ToLower(string(data)), " ")
+		assert.NotContains(t, content, "update scene_ops_events",
 			"%s contains UPDATE on scene_ops_events — events must be immutable", fname)
-		assert.NotContains(t, content, "DELETE FROM scene_ops_events",
+		assert.NotContains(t, content, "delete from scene_ops_events",
 			"%s contains DELETE on scene_ops_events — events must be immutable", fname)
 	}
 }
