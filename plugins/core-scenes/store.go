@@ -641,7 +641,7 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 		    visibility = 'open'
 		    OR EXISTS (
 		      SELECT 1 FROM scene_participants
-		      WHERE scene_id = $1 AND character_id = $2 AND role = 'invited'
+		      WHERE scene_id = $1 AND character_id = $2 AND role IN ('invited', 'member', 'owner')
 		    )
 		  )
 		ON CONFLICT (scene_id, character_id) DO UPDATE

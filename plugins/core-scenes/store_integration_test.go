@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"testing"
 	"time"
 
@@ -1390,4 +1391,250 @@ func TestOwnerCanTransferToMemberAndPreviousOwnerBecomesMember(t *testing.T) {
 	_, err = store.RemoveParticipant(ctx, row.ID, "char-alice")
 	require.NoError(t, err)
 	assertParticipantRowAbsent(t, store, row.ID, "char-alice")
+}
+
+func TestAddParticipantWorksOnPausedScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-bnd-pj", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, err := store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+
+	// Joining a PAUSED scene must succeed (state IN ('active', 'paused')).
+	got, result, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, OpInserted, result)
+	assert.Equal(t, "member", got.Role)
+}
+
+func TestKickParticipantWorksOnPausedScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-bnd-pk", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	_, err = store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+
+	// Kicking from a PAUSED scene must succeed (no state filter on kick;
+	// scene state is irrelevant to the membership operation itself).
+	_, err = store.KickParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assertParticipantRowAbsent(t, store, row.ID, "char-bob")
+}
+
+func TestTransferOwnershipWorksOnPausedScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-bnd-pt", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	_, err = store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+
+	// Transfer must work in paused state (paused scenes can have admin
+	// operations including ownership transfer).
+	require.NoError(t, store.TransferOwnership(ctx, row.ID, "char-alice", "char-bob"))
+	assertParticipantRowExists(t, store, row.ID, "char-bob", "owner")
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "char-bob", got.OwnerID)
+	assert.Equal(t, "paused", got.State, "transfer must not affect scene state")
+}
+
+func TestInviteParticipantRejectsOwnerTarget(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-bnd-io", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	// Inviting the owner must reject — they're already a participant with
+	// the highest role. The existing-role check in InviteParticipant catches
+	// this via the SCENE_INVITE_TARGET_ALREADY_MEMBER code path.
+	_, err := store.InviteParticipant(ctx, row.ID, "char-alice", "char-alice")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_INVITE_TARGET_ALREADY_MEMBER")
+	errutil.AssertErrorContext(t, err, "current_role", "owner")
+}
+
+func TestSceneOwnerIDDenormAlwaysMatchesParticipantOwnerRow(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	// Helper that asserts the invariant for a given scene at the current moment.
+	assertInvariant := func(sceneID string) {
+		t.Helper()
+		var (
+			denormOwnerID    string
+			participantOwner string
+		)
+		require.NoError(t, store.pool.QueryRow(ctx,
+			`SELECT owner_id FROM scenes WHERE id = $1`, sceneID,
+		).Scan(&denormOwnerID))
+		require.NoError(t, store.pool.QueryRow(ctx,
+			`SELECT character_id FROM scene_participants WHERE scene_id = $1 AND role = 'owner'`,
+			sceneID,
+		).Scan(&participantOwner))
+		assert.Equal(t, denormOwnerID, participantOwner,
+			"scenes.owner_id must always match the participant row with role='owner'")
+	}
+
+	row := &SceneRow{
+		ID: "scene-inv-denorm", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+
+	// Initial state after CreateWithOwner.
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	assertInvariant(row.ID)
+
+	// After adding a regular member — denorm unchanged.
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assertInvariant(row.ID)
+
+	// After ownership transfer — denorm MUST update.
+	require.NoError(t, store.TransferOwnership(ctx, row.ID, "char-alice", "char-bob"))
+	assertInvariant(row.ID)
+
+	// After old owner (now member) leaves — denorm unchanged.
+	_, err = store.RemoveParticipant(ctx, row.ID, "char-alice")
+	require.NoError(t, err)
+	assertInvariant(row.ID)
+}
+
+func TestEachMembershipMutationProducesExactlyOneOpsEvent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID: "scene-inv-count", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+
+	// CreateWithOwner produces 1 ops event: lifecycle.created.
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	assert.Equal(t, 1, countOpsEvents(t, store, row.ID, ""), "after create")
+
+	// Invite produces 1 event: membership.invite.
+	_, err := store.InviteParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, 2, countOpsEvents(t, store, row.ID, ""), "after invite")
+
+	// Re-invite is idempotent: NO new event.
+	_, err = store.InviteParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, 2, countOpsEvents(t, store, row.ID, ""), "after redundant invite")
+
+	// Join (promotes invited→member) produces 1 event: membership.join.
+	_, _, err = store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, 3, countOpsEvents(t, store, row.ID, ""), "after join")
+
+	// Retry of join (OpNoChange) produces NO new event.
+	_, _, err = store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, 3, countOpsEvents(t, store, row.ID, ""), "after redundant join")
+
+	// Kick produces 1 event: membership.kick.
+	_, err = store.KickParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, 4, countOpsEvents(t, store, row.ID, ""), "after kick")
+
+	// Pause + Resume each produce 1 event.
+	_, err = store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 5, countOpsEvents(t, store, row.ID, ""), "after pause")
+	_, err = store.Resume(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 6, countOpsEvents(t, store, row.ID, ""), "after resume")
+
+	// End produces 1 event.
+	_, err = store.End(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 7, countOpsEvents(t, store, row.ID, ""), "after end")
+}
+
+func TestParticipantPrimaryKeyPreventsDoubleInsertion(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-inv-pk", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	// Direct insert of a duplicate row MUST fail at the PK constraint.
+	// This proves the schema, not the store API, prevents duplicates.
+	_, err := store.pool.Exec(ctx,
+		`INSERT INTO scene_participants (scene_id, character_id, role) VALUES ($1, $2, 'member')`,
+		row.ID, "char-alice", // char-alice is already the owner row
+	)
+	require.Error(t, err, "duplicate (scene_id, character_id) must violate PK")
+
+	// Verify exactly one row exists for char-alice.
+	var count int
+	require.NoError(t, store.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
+		row.ID, "char-alice",
+	).Scan(&count))
+	assert.Equal(t, 1, count)
+}
+
+func TestOpsEventsCannotBeUpdatedOrDeletedByApplicationCode(t *testing.T) {
+	// This is a meta-test: assert that the codebase contains no UPDATE or
+	// DELETE statements against scene_ops_events. Append-only is enforced by
+	// convention (the recordOpsEventTx helper is the only writer); this test
+	// catches accidental future violations via grep.
+	//
+	// The check uses os.ReadFile + strings.Contains rather than running an
+	// external grep so it works in any test environment.
+	files := []string{
+		"store.go",
+		"ops_events.go",
+		"service.go",
+		"resolver.go",
+		"commands.go",
+		"main.go",
+	}
+	for _, fname := range files {
+		data, err := os.ReadFile(fname)
+		if err != nil {
+			continue // file doesn't exist in this layout
+		}
+		content := string(data)
+		assert.NotContains(t, content, "UPDATE scene_ops_events",
+			"%s contains UPDATE on scene_ops_events — events must be immutable", fname)
+		assert.NotContains(t, content, "DELETE FROM scene_ops_events",
+			"%s contains DELETE on scene_ops_events — events must be immutable", fname)
+	}
 }
