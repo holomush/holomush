@@ -78,7 +78,12 @@ tasks:
   test:cover:
     desc: Run tests with coverage report
     cmds:
-      - gotestsum --format pkgname -- -race -coverprofile=coverage.out -covermode=atomic ./...
+      # -coverpkg=./... instruments ALL packages so a test in package A that
+      # exercises code in package B contributes coverage to B. Without this,
+      # Go's default only counts coverage for the package currently being
+      # tested, which hides cross-package exercise (e.g., integration tests
+      # that drive multiple packages via an end-to-end flow).
+      - gotestsum --format pkgname -- -race -coverprofile=coverage.out -covermode=atomic -coverpkg=./... ./...
       - go tool cover -html=coverage.out -o coverage.html
 
   test:int:
@@ -86,8 +91,19 @@ tasks:
     cmds:
       - echo "▸ Building binary plugins for host platform..."
       - GOOS={{OS}} GOARCH={{ARCH}} ./scripts/build-plugins.sh
-      - gotestsum --format pkgname -- -race -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic ./internal/content/
-        ./internal/store/ ./plugins/core-scenes/ ./test/integration/...
+      # The explicit package list is load-bearing: `./...` under `-tags=integration`
+      # tries to compile packages like `internal/grpc/` whose unit tests depend on
+      # `core.NewMemoryEventStore` (a file with `//go:build !integration`), causing
+      # compilation failures. The list below enumerates the packages that actually
+      # contain `//go:build integration` test files.
+      #
+      # -coverpkg=./... makes integration tests contribute coverage to every
+      # production package they exercise, not just the package that contains
+      # the test. Without this, files like internal/audit/postgres.go reported
+      # 0% despite being fully exercised by test/integration/audit/ and the
+      # store migration tests. See .codecov.yml for Codecov's merge behavior.
+      - gotestsum --format pkgname -- -race -tags=integration -count=1 -coverprofile=coverage-int.out -covermode=atomic -coverpkg=./...
+        ./internal/content/ ./internal/store/ ./plugins/core-scenes/ ./test/integration/...
 
   test:int:focus:
     desc: Run focused integration tests with Ginkgo focus filter (pass -ginkgo.focus="..." after --)
