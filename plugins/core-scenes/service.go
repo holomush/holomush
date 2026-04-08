@@ -39,6 +39,7 @@ type sceneStorer interface {
 	Pause(ctx context.Context, id string) (*SceneRow, error)
 	Resume(ctx context.Context, id string) (*SceneRow, error)
 	Update(ctx context.Context, id string, update *SceneUpdate) (*SceneRow, error)
+	AddParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, ParticipantOpResult, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.
@@ -354,6 +355,52 @@ func buildSceneUpdate(req *scenev1.UpdateSceneRequest) (*SceneUpdate, error) {
 		}
 	}
 	return update, nil
+}
+
+// JoinScene attempts to add the calling character to a scene. The store
+// method handles all eligibility checks (open vs private, state, etc.).
+//
+// Per design decision P3.D5, the operation is idempotent: same-character
+// retries return success without polluting the audit log with extra
+// membership.join events. The store's ParticipantOpResult enum drives
+// the emit-or-not decision inside the store transaction.
+func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinSceneRequest) (*scenev1.JoinSceneResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.join_scene",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+	)
+	defer span.End()
+
+	_, _, err := s.store.AddParticipant(ctx, req.GetSceneId(), req.GetCharacterId())
+	if err != nil {
+		recordError(span, err)
+		var oe oops.OopsError
+		if errors.As(err, &oe) {
+			switch oe.Code() {
+			case "SCENE_NOT_FOUND":
+				return nil, status.Errorf(codes.NotFound, "scene not found: %s", req.GetSceneId())
+			case "SCENE_TRANSITION_FORBIDDEN":
+				return nil, status.Errorf(codes.FailedPrecondition,
+					"scene cannot be joined in its current state: %v", err)
+			case "SCENE_JOIN_NOT_INVITED":
+				return nil, status.Errorf(codes.PermissionDenied,
+					"character not invited to private scene")
+			}
+		}
+		slog.WarnContext(ctx, "scene.service.join_scene store error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to join scene: %v", err)
+	}
+
+	slog.InfoContext(ctx, "scene.service.join_scene ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", req.GetSceneId(),
+	)
+
+	return &scenev1.JoinSceneResponse{}, nil
 }
 
 // mapTransitionError translates store-layer transition errors into gRPC

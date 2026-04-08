@@ -96,13 +96,13 @@ func TestGetSchemaIncludesParticipantsAndInviteesAttributes(t *testing.T) {
 
 func TestResolveResourceReturnsParticipantsAndInviteesLists(t *testing.T) {
 	store := newFakeStore()
-	store.scenes["scene-r-1"] = &SceneRow{
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
 		ID:         "scene-r-1",
 		Title:      "T",
 		OwnerID:    "char-alice",
 		State:      string(SceneStateActive),
 		Visibility: string(SceneVisibilityPrivate),
-	}
+	}))
 	resolver := NewSceneResolver(store)
 
 	resp, err := resolver.ResolveResource(context.Background(), &pluginv1.ResolveResourceRequest{

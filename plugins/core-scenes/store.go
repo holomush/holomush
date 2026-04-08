@@ -509,6 +509,181 @@ func (s *SceneStore) Update(ctx context.Context, id string, update *SceneUpdate)
 	return row, nil
 }
 
+// AddParticipant attempts to add characterID to sceneID. The operation is
+// idempotent on identity match (calling it twice for the same character is
+// a no-op) and atomically promotes invited→member.
+//
+// Returns:
+//   - OpInserted: a fresh member row was created
+//   - OpPromoted: an existing invited row was flipped to member
+//   - OpNoChange: the caller was already a member or owner
+//
+// The single SELECT-WHERE-guarded UPSERT enforces all join eligibility
+// checks at the SQL layer:
+//   - Scene must exist
+//   - Scene must be in active or paused state
+//   - Either the scene is open OR there's an invited row for this character
+//
+// If the eligibility check fails, RETURNING is empty and we issue a
+// diagnostic SELECT (classifyJoinMiss) to figure out the precise reason.
+func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, ParticipantOpResult, error) {
+	ctx, span := startSpan(ctx, "scene.store.add_participant",
+		attribute.String("scene_id", sceneID),
+		attribute.String("character_id", characterID),
+	)
+	defer span.End()
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		recordError(span, err)
+		return nil, OpNoChange, oops.Code("SCENE_JOIN_FAILED").
+			With("scene_id", sceneID).With("character_id", characterID).Wrap(err)
+	}
+	defer tx.Rollback(ctx)
+
+	row := &ParticipantRow{}
+	var wasInserted bool
+	err = tx.QueryRow(ctx, `
+		INSERT INTO scene_participants (scene_id, character_id, role, joined_at)
+		SELECT $1, $2, 'member', NOW()
+		FROM scenes
+		WHERE id = $1
+		  AND state IN ('active', 'paused')
+		  AND (
+		    visibility = 'open'
+		    OR EXISTS (
+		      SELECT 1 FROM scene_participants
+		      WHERE scene_id = $1 AND character_id = $2 AND role = 'invited'
+		    )
+		  )
+		ON CONFLICT (scene_id, character_id) DO UPDATE
+		  SET role = CASE WHEN scene_participants.role = 'invited' THEN 'member' ELSE scene_participants.role END,
+		      joined_at = CASE WHEN scene_participants.role = 'invited' THEN NOW() ELSE scene_participants.joined_at END
+		RETURNING scene_id, character_id, role, joined_at, (xmax = 0) AS was_inserted`,
+		sceneID, characterID,
+	).Scan(&row.SceneID, &row.CharacterID, &row.Role, &row.JoinedAt, &wasInserted)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Eligibility check failed. Classify the precise reason.
+			return nil, OpNoChange, s.classifyJoinMiss(ctx, sceneID, characterID, span)
+		}
+		recordError(span, err)
+		return nil, OpNoChange, oops.Code("SCENE_JOIN_FAILED").
+			With("scene_id", sceneID).With("character_id", characterID).Wrap(err)
+	}
+
+	// Determine the result. wasInserted=true → OpInserted. Otherwise either
+	// promoted (the existing row was 'invited' and is now 'member') or no
+	// change (the existing row was already 'member' or 'owner').
+	var result ParticipantOpResult
+	if wasInserted {
+		result = OpInserted
+	} else {
+		// We need to figure out if this was a promotion or no-op. The post-
+		// update row's role is 'member' in both cases, so we can't tell from
+		// the row itself. Compare the row's joined_at to the transaction
+		// start time: if joined_at >= transaction_timestamp(), the CASE
+		// branch fired within THIS txn (promotion). If joined_at predates
+		// the txn start, the row was already a member (no-change).
+		//
+		// transaction_timestamp() (alias for xact_start()) is fixed for the
+		// duration of the txn and is exact — it does not suffer the false-
+		// positive problem of statement_timestamp() heuristics under rapid
+		// back-to-back retries.
+		var promoted bool
+		err = tx.QueryRow(ctx, `
+			SELECT joined_at >= transaction_timestamp()
+			FROM scene_participants
+			WHERE scene_id = $1 AND character_id = $2`,
+			sceneID, characterID,
+		).Scan(&promoted)
+		if err != nil {
+			recordError(span, err)
+			return nil, OpNoChange, oops.Code("SCENE_JOIN_CLASSIFY_FAILED").
+				With("scene_id", sceneID).With("character_id", characterID).Wrap(err)
+		}
+		if promoted {
+			result = OpPromoted
+		} else {
+			result = OpNoChange
+		}
+	}
+
+	// Emit ops event ONLY for OpInserted and OpPromoted; OpNoChange must
+	// not pollute the audit log with retry events.
+	if result != OpNoChange {
+		// Determine visibility for the payload by reading the scene row.
+		var visibility string
+		err = tx.QueryRow(ctx, `SELECT visibility FROM scenes WHERE id = $1`, sceneID).Scan(&visibility)
+		if err != nil {
+			recordError(span, err)
+			return nil, OpNoChange, oops.Code("SCENE_JOIN_OPS_EVENT_FAILED").Wrap(err)
+		}
+		payload := map[string]any{
+			"visibility":   visibility,
+			"from_invited": result == OpPromoted,
+		}
+		if err := recordOpsEventTx(ctx, tx, sceneID, OpsKindMembershipJoin, characterID, characterID, payload); err != nil {
+			recordError(span, err)
+			return nil, OpNoChange, oops.Code("SCENE_JOIN_OPS_EVENT_FAILED").Wrap(err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		recordError(span, err)
+		return nil, OpNoChange, oops.Code("SCENE_JOIN_FAILED").Wrap(err)
+	}
+	return row, result, nil
+}
+
+// classifyJoinMiss issues one diagnostic SELECT to figure out which
+// precondition failed when AddParticipant's RETURNING was empty. Pays the
+// extra round trip ONLY in the error path; the happy path is single-statement.
+//
+// Returns one of:
+//   - SCENE_NOT_FOUND
+//   - SCENE_TRANSITION_FORBIDDEN (with current_state in context)
+//   - SCENE_JOIN_NOT_INVITED (private scene, no invitation)
+func (s *SceneStore) classifyJoinMiss(ctx context.Context, sceneID, characterID string, span trace.Span) error {
+	var (
+		state      string
+		visibility string
+	)
+	err := s.pool.QueryRow(ctx, `
+		SELECT state, visibility FROM scenes WHERE id = $1`,
+		sceneID,
+	).Scan(&state, &visibility)
+	if err != nil {
+		recordError(span, err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.Code("SCENE_NOT_FOUND").
+				With("scene_id", sceneID).
+				With("op", "join").
+				Wrap(err)
+		}
+		return oops.Code("SCENE_JOIN_CLASSIFY_FAILED").
+			With("scene_id", sceneID).
+			With("op", "join").
+			Wrap(err)
+	}
+
+	if state != "active" && state != "paused" {
+		return oops.Code("SCENE_TRANSITION_FORBIDDEN").
+			With("scene_id", sceneID).
+			With("op", "join").
+			With("current_state", state).
+			Errorf("scene in state %q cannot be joined", state)
+	}
+
+	// State is OK. The remaining reason is private scene without invitation.
+	return oops.Code("SCENE_JOIN_NOT_INVITED").
+		With("scene_id", sceneID).
+		With("character_id", characterID).
+		With("visibility", visibility).
+		Errorf("character not invited to private scene")
+}
+
 // classifyTransitionMiss is called when a transition UPDATE returned no
 // row (RETURNING produced ErrNoRows). It distinguishes between two cases
 // by issuing a SELECT:

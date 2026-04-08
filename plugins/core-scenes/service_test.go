@@ -25,13 +25,18 @@ import (
 // branches of the service layer.
 type fakeStore struct {
 	scenes             map[string]*SceneRow
+	participants       map[string]map[string]string // sceneID → characterID → role
 	createErr          error
 	createWithOwnerErr error
 	getErr             error
+	addParticipantErr  error
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{scenes: make(map[string]*SceneRow)}
+	return &fakeStore{
+		scenes:       make(map[string]*SceneRow),
+		participants: make(map[string]map[string]string),
+	}
 }
 
 func (f *fakeStore) Create(_ context.Context, row *SceneRow) error {
@@ -50,9 +55,14 @@ func (f *fakeStore) CreateWithOwner(ctx context.Context, row *SceneRow) error {
 	if f.createWithOwnerErr != nil {
 		return f.createWithOwnerErr
 	}
-	// fakeStore is in-memory and has no participants/ops_events tables to
-	// populate. The service-layer test only cares that the call succeeded.
-	return f.Create(ctx, row)
+	if err := f.Create(ctx, row); err != nil {
+		return err
+	}
+	if f.participants[row.ID] == nil {
+		f.participants[row.ID] = make(map[string]string)
+	}
+	f.participants[row.ID][row.OwnerID] = "owner"
+	return nil
 }
 
 func (f *fakeStore) Get(_ context.Context, id string) (*SceneRow, error) {
@@ -71,9 +81,47 @@ func (f *fakeStore) GetWithMembership(ctx context.Context, id string) (*SceneRow
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	// fakeStore has no participants table — return owner-only participants
-	// and empty invitees, matching the post-CreateWithOwner reality.
-	return row, []string{row.OwnerID}, nil, nil
+	var participants, invitees []string
+	for cid, role := range f.participants[id] {
+		switch role {
+		case "owner", "member":
+			participants = append(participants, cid)
+		case "invited":
+			invitees = append(invitees, cid)
+		}
+	}
+	return row, participants, invitees, nil
+}
+
+func (f *fakeStore) AddParticipant(_ context.Context, sceneID, characterID string) (*ParticipantRow, ParticipantOpResult, error) {
+	if f.addParticipantErr != nil {
+		return nil, OpNoChange, f.addParticipantErr
+	}
+	scene, ok := f.scenes[sceneID]
+	if !ok {
+		return nil, OpNoChange, oops.Code("SCENE_NOT_FOUND").With("scene_id", sceneID).Errorf("not found")
+	}
+	if scene.State != string(SceneStateActive) && scene.State != string(SceneStatePaused) {
+		return nil, OpNoChange, oops.Code("SCENE_TRANSITION_FORBIDDEN").
+			With("scene_id", sceneID).With("current_state", scene.State).Errorf("cannot join")
+	}
+	if f.participants[sceneID] == nil {
+		f.participants[sceneID] = make(map[string]string)
+	}
+	existing, exists := f.participants[sceneID][characterID]
+	if exists {
+		if existing == "invited" {
+			f.participants[sceneID][characterID] = "member"
+			return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: "member"}, OpPromoted, nil
+		}
+		return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: existing}, OpNoChange, nil
+	}
+	if scene.Visibility == string(SceneVisibilityPrivate) {
+		return nil, OpNoChange, oops.Code("SCENE_JOIN_NOT_INVITED").
+			With("scene_id", sceneID).With("character_id", characterID).Errorf("not invited")
+	}
+	f.participants[sceneID][characterID] = "member"
+	return &ParticipantRow{SceneID: sceneID, CharacterID: characterID, Role: "member"}, OpInserted, nil
 }
 
 func (f *fakeStore) End(_ context.Context, id string) (*SceneRow, error) {
@@ -547,4 +595,61 @@ func TestSceneServiceUpdateSceneEmptyMaskIsNoOp(t *testing.T) {
 			assert.Equal(t, "Unchanged", store.scenes["scene-1"].Title)
 		})
 	}
+}
+
+func TestSceneServiceJoinSceneInsertsMemberAndReturnsSuccess(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-js-1", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.JoinScene(context.Background(), &scenev1.JoinSceneRequest{
+		CharacterId: "char-bob",
+		SceneId:     "scene-js-1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "member", store.participants["scene-js-1"]["char-bob"])
+}
+
+func TestSceneServiceJoinSceneMapsNotInvitedToPermissionDenied(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-js-priv", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityPrivate),
+	}))
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.JoinScene(context.Background(), &scenev1.JoinSceneRequest{
+		CharacterId: "char-bob", SceneId: "scene-js-priv",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
+}
+
+func TestSceneServiceJoinSceneMapsNotFoundToNotFound(t *testing.T) {
+	svc := NewSceneServiceImpl(newFakeStore())
+	_, err := svc.JoinScene(context.Background(), &scenev1.JoinSceneRequest{
+		CharacterId: "char-bob", SceneId: "scene-missing",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.NotFound, st.Code())
+}
+
+func TestSceneServiceJoinSceneMapsTransitionForbiddenToFailedPrecondition(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-js-ended", OwnerID: "char-alice",
+		State: string(SceneStateEnded), Visibility: string(SceneVisibilityOpen),
+	}))
+	svc := NewSceneServiceImpl(store)
+	_, err := svc.JoinScene(context.Background(), &scenev1.JoinSceneRequest{
+		CharacterId: "char-bob", SceneId: "scene-js-ended",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.FailedPrecondition, st.Code())
 }

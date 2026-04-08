@@ -735,3 +735,125 @@ func TestGetWithMembershipReturnsNotFoundForMissingScene(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
 }
+
+func TestAddParticipantInsertsFreshMemberRowForOpenScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID: "scene-ap-1", Title: "T", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	got, result, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, OpInserted, result)
+	assert.Equal(t, "char-bob", got.CharacterID)
+	assert.Equal(t, "member", got.Role)
+	assertParticipantRowExists(t, store, row.ID, "char-bob", "member")
+	assertOpsEventRecorded(t, store, row.ID, OpsKindMembershipJoin, "char-bob", "char-bob")
+}
+
+func TestAddParticipantPromotesInvitedRowToMemberOnPrivateScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID: "scene-ap-promote", Title: "T", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	// Pre-insert an invitation for char-bob.
+	_, err := store.pool.Exec(ctx,
+		`INSERT INTO scene_participants (scene_id, character_id, role) VALUES ($1, 'char-bob', 'invited')`,
+		row.ID)
+	require.NoError(t, err)
+
+	got, result, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, OpPromoted, result)
+	assert.Equal(t, "member", got.Role)
+	assertParticipantRowExists(t, store, row.ID, "char-bob", "member")
+
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindMembershipJoin, "char-bob", "char-bob")
+	assert.Equal(t, "private", payload["visibility"])
+	assert.Equal(t, true, payload["from_invited"])
+}
+
+func TestAddParticipantReturnsOpNoChangeForExistingMember(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID: "scene-ap-noop", Title: "T", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	// First join — OpInserted.
+	_, result1, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, OpInserted, result1)
+
+	// Second join (retry) — OpNoChange, no new ops event.
+	_, result2, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, OpNoChange, result2)
+
+	// Exactly one membership.join event for this scene.
+	assert.Equal(t, 1, countOpsEvents(t, store, row.ID, OpsKindMembershipJoin))
+}
+
+func TestAddParticipantRejectsPrivateSceneWithoutInvitation(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID: "scene-ap-priv", Title: "T", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_JOIN_NOT_INVITED")
+	errutil.AssertErrorContext(t, err, "scene_id", row.ID)
+	errutil.AssertErrorContext(t, err, "character_id", "char-bob")
+}
+
+func TestAddParticipantRejectsEndedScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID: "scene-ap-ended", Title: "T", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, err := store.End(ctx, row.ID)
+	require.NoError(t, err)
+
+	_, _, err = store.AddParticipant(ctx, row.ID, "char-bob")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_TRANSITION_FORBIDDEN")
+	errutil.AssertErrorContext(t, err, "current_state", "ended")
+}
+
+func TestAddParticipantReturnsNotFoundForMissingScene(t *testing.T) {
+	store := newTestStore(t)
+	_, _, err := store.AddParticipant(context.Background(), "scene-nope", "char-bob")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
+}
