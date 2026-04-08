@@ -1416,7 +1416,7 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 		    visibility = 'open'
 		    OR EXISTS (
 		      SELECT 1 FROM scene_participants
-		      WHERE scene_id = $1 AND character_id = $2 AND role = 'invited'
+		      WHERE scene_id = $1 AND character_id = $2 AND role IN ('invited', 'member', 'owner')
 		    )
 		  )
 		ON CONFLICT (scene_id, character_id) DO UPDATE
@@ -1425,6 +1425,16 @@ func (s *SceneStore) AddParticipant(ctx context.Context, sceneID, characterID st
 		RETURNING scene_id, character_id, role, joined_at, (xmax = 0) AS was_inserted`,
 		sceneID, characterID,
 	).Scan(&row.SceneID, &row.CharacterID, &row.Role, &row.JoinedAt, &wasInserted)
+
+	// NOTE: The EXISTS predicate above covers ALL roles, not just 'invited'.
+	// This is required for the idempotent no-op path on PRIVATE scenes: a
+	// character who is already a member or owner must still match the SELECT
+	// so the INSERT proceeds to ON CONFLICT DO UPDATE (which no-ops because
+	// scene_participants.role is not 'invited'). Without the broader check,
+	// a retry of AddParticipant on a private-scene member would return 0
+	// rows from the INSERT and classifyJoinMiss would misclassify it as
+	// SCENE_JOIN_NOT_INVITED. Caught by Task 19's
+	// TestEachMembershipMutationProducesExactlyOneOpsEvent.
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
