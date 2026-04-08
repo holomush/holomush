@@ -968,3 +968,64 @@ func TestInviteParticipantRejectsExistingMember(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "SCENE_INVITE_TARGET_ALREADY_MEMBER")
 }
+
+func TestKickParticipantRemovesMemberRowAndEmitsOpsEvent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-kp-1", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+
+	got, err := store.KickParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, "member", got.Role)
+	assertParticipantRowAbsent(t, store, row.ID, "char-bob")
+
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindMembershipKick, "char-alice", "char-bob")
+	assert.Equal(t, "member", payload["prior_role"])
+}
+
+func TestKickParticipantRemovesInvitedRowAndPayloadReflectsPriorRole(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-kp-inv", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, err := store.InviteParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+
+	got, err := store.KickParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, "invited", got.Role)
+	assertParticipantRowAbsent(t, store, row.ID, "char-bob")
+
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindMembershipKick, "char-alice", "char-bob")
+	assert.Equal(t, "invited", payload["prior_role"])
+}
+
+func TestKickParticipantRefusesToKickOwner(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-kp-owner", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, err := store.KickParticipant(ctx, row.ID, "char-alice", "char-alice")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_KICK_FORBIDDEN")
+	assertParticipantRowExists(t, store, row.ID, "char-alice", "owner")
+}

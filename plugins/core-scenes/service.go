@@ -42,6 +42,7 @@ type sceneStorer interface {
 	AddParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, ParticipantOpResult, error)
 	RemoveParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error)
 	InviteParticipant(ctx context.Context, sceneID, inviterID, targetID string) (*ParticipantRow, error)
+	KickParticipant(ctx context.Context, sceneID, kickerID, targetID string) (*ParticipantRow, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.
@@ -500,6 +501,46 @@ func (s *SceneServiceImpl) InviteToScene(ctx context.Context, req *scenev1.Invit
 		"target_id", req.GetTargetCharacterId(),
 	)
 	return &scenev1.InviteToSceneResponse{}, nil
+}
+
+// KickFromScene removes a target character from a scene. ABAC enforces
+// owner-only kick at the dispatcher layer. The store's WHERE filter is
+// the defense-in-depth layer that prevents owner removal.
+func (s *SceneServiceImpl) KickFromScene(ctx context.Context, req *scenev1.KickFromSceneRequest) (*scenev1.KickFromSceneResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.kick_from_scene",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+		attribute.String("target_id", req.GetTargetCharacterId()),
+	)
+	defer span.End()
+
+	if _, err := s.store.KickParticipant(ctx, req.GetSceneId(), req.GetCharacterId(), req.GetTargetCharacterId()); err != nil {
+		recordError(span, err)
+		var oe oops.OopsError
+		if errors.As(err, &oe) {
+			switch oe.Code() {
+			case "SCENE_PARTICIPANT_NOT_FOUND":
+				return nil, status.Errorf(codes.NotFound, "target not in scene")
+			case "SCENE_KICK_FORBIDDEN":
+				return nil, status.Errorf(codes.FailedPrecondition,
+					"scene owner cannot be kicked")
+			}
+		}
+		slog.WarnContext(ctx, "scene.service.kick_from_scene store error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"target_id", req.GetTargetCharacterId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to kick: %v", err)
+	}
+
+	slog.InfoContext(ctx, "scene.service.kick_from_scene ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", req.GetSceneId(),
+		"target_id", req.GetTargetCharacterId(),
+	)
+	return &scenev1.KickFromSceneResponse{}, nil
 }
 
 // mapTransitionError translates store-layer transition errors into gRPC

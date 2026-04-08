@@ -153,6 +153,20 @@ func (f *fakeStore) InviteParticipant(_ context.Context, sceneID, inviterID, tar
 	return &ParticipantRow{SceneID: sceneID, CharacterID: targetID, Role: "invited"}, nil
 }
 
+func (f *fakeStore) KickParticipant(_ context.Context, sceneID, kickerID, targetID string) (*ParticipantRow, error) {
+	role, exists := f.participants[sceneID][targetID]
+	if !exists {
+		return nil, oops.Code("SCENE_PARTICIPANT_NOT_FOUND").
+			With("scene_id", sceneID).With("target_id", targetID).Errorf("not found")
+	}
+	if role == "owner" {
+		return nil, oops.Code("SCENE_KICK_FORBIDDEN").
+			With("scene_id", sceneID).With("target_id", targetID).Errorf("cannot kick owner")
+	}
+	delete(f.participants[sceneID], targetID)
+	return &ParticipantRow{SceneID: sceneID, CharacterID: targetID, Role: role}, nil
+}
+
 func (f *fakeStore) End(_ context.Context, id string) (*SceneRow, error) {
 	row, ok := f.scenes[id]
 	if !ok {
@@ -735,4 +749,42 @@ func TestSceneServiceInviteToSceneCallsStore(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "invited", store.participants["scene-its-1"]["char-bob"])
+}
+
+func TestSceneServiceKickFromSceneRemovesMember(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-kfs-1", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	_, _, err := store.AddParticipant(context.Background(), "scene-kfs-1", "char-bob")
+	require.NoError(t, err)
+	svc := NewSceneServiceImpl(store)
+
+	_, err = svc.KickFromScene(context.Background(), &scenev1.KickFromSceneRequest{
+		CharacterId:       "char-alice",
+		SceneId:           "scene-kfs-1",
+		TargetCharacterId: "char-bob",
+	})
+	require.NoError(t, err)
+	_, exists := store.participants["scene-kfs-1"]["char-bob"]
+	assert.False(t, exists)
+}
+
+func TestSceneServiceKickFromSceneRejectsKickingOwner(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-kfs-owner", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.KickFromScene(context.Background(), &scenev1.KickFromSceneRequest{
+		CharacterId:       "char-alice",
+		SceneId:           "scene-kfs-owner",
+		TargetCharacterId: "char-alice",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.FailedPrecondition, st.Code())
 }

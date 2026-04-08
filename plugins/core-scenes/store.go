@@ -785,6 +785,76 @@ func (s *SceneStore) InviteParticipant(ctx context.Context, sceneID, inviterID, 
 	return row, nil
 }
 
+// KickParticipant deletes the target's participant row. The DELETE filter is
+// `WHERE role <> 'owner'` so the owner cannot be kicked even by themselves.
+// Removes both 'member' and 'invited' rows in a single statement (i.e., kick
+// also withdraws pending invitations).
+//
+// Returns SCENE_KICK_FORBIDDEN if the target is the owner; SCENE_PARTICIPANT_NOT_FOUND
+// if the target isn't in the scene at all.
+func (s *SceneStore) KickParticipant(ctx context.Context, sceneID, kickerID, targetID string) (*ParticipantRow, error) {
+	ctx, span := startSpan(ctx, "scene.store.kick_participant",
+		attribute.String("scene_id", sceneID),
+		attribute.String("kicker_id", kickerID),
+		attribute.String("target_id", targetID),
+	)
+	defer span.End()
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_KICK_FAILED").Wrap(err)
+	}
+	defer tx.Rollback(ctx)
+
+	row := &ParticipantRow{}
+	err = tx.QueryRow(ctx, `
+		DELETE FROM scene_participants
+		WHERE scene_id = $1 AND character_id = $2 AND role <> 'owner'
+		RETURNING scene_id, character_id, role, joined_at`,
+		sceneID, targetID,
+	).Scan(&row.SceneID, &row.CharacterID, &row.Role, &row.JoinedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Distinguish "owner" from "not present".
+			var existing string
+			err2 := tx.QueryRow(ctx,
+				`SELECT role FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
+				sceneID, targetID,
+			).Scan(&existing)
+			if err2 != nil {
+				if errors.Is(err2, pgx.ErrNoRows) {
+					return nil, oops.Code("SCENE_PARTICIPANT_NOT_FOUND").
+						With("scene_id", sceneID).With("target_id", targetID).Wrap(err)
+				}
+				recordError(span, err2)
+				return nil, oops.Code("SCENE_KICK_CLASSIFY_FAILED").Wrap(err2)
+			}
+			if existing == "owner" {
+				return nil, oops.Code("SCENE_KICK_FORBIDDEN").
+					With("scene_id", sceneID).
+					With("target_id", targetID).
+					Errorf("scene owner cannot be kicked")
+			}
+			return nil, oops.Code("SCENE_KICK_FAILED").Errorf("unexpected state")
+		}
+		recordError(span, err)
+		return nil, oops.Code("SCENE_KICK_FAILED").Wrap(err)
+	}
+
+	payload := map[string]any{"prior_role": row.Role}
+	if err := recordOpsEventTx(ctx, tx, sceneID, OpsKindMembershipKick, kickerID, targetID, payload); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_KICK_OPS_EVENT_FAILED").Wrap(err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		recordError(span, err)
+		return nil, oops.Code("SCENE_KICK_FAILED").Wrap(err)
+	}
+	return row, nil
+}
+
 // classifyJoinMiss issues one diagnostic SELECT to figure out which
 // precondition failed when AddParticipant's RETURNING was empty. Pays the
 // extra round trip ONLY in the error path; the happy path is single-statement.
