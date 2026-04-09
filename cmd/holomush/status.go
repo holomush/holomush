@@ -154,31 +154,7 @@ func queryProcessStatusGRPC(component, addr string) ProcessStatus {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	// TODO: Migrate to grpc.NewClient when ready.
-	//
-	// grpc.DialContext is deprecated in favor of grpc.NewClient. Key differences:
-	//
-	// 1. Connection behavior: grpc.NewClient creates a "virtual" connection without
-	//    immediately establishing a physical connection (lazy connect). grpc.DialContext
-	//    can block with WithBlock option. For our use case, we want eager connection
-	//    to detect unavailable services quickly.
-	//
-	// 2. Name resolver: grpc.NewClient uses "dns" as default resolver, while DialContext
-	//    uses "passthrough". For direct IP:port addresses like ours, this shouldn't matter,
-	//    but we should verify behavior with mTLS ServerName verification.
-	//
-	// 3. Migration steps:
-	//    a. Replace grpc.DialContext with grpc.NewClient
-	//    b. Remove context parameter (NewClient doesn't take context)
-	//    c. If blocking behavior is needed, call conn.Connect() and use
-	//       conn.WaitForStateChange() to wait for Ready state
-	//    d. Test mTLS with ServerName verification still works correctly
-	//    e. Update timeout handling (move to RPC context instead of dial context)
-	//
-	// See: https://github.com/grpc/grpc-go/blob/master/Documentation/anti-patterns.md
-	//
-	//nolint:staticcheck // grpc.NewClient requires different setup; DialContext works for 1.x
-	conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(creds))
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		return NewProcessStatusError(component, oops.Code("GRPC_CONNECT_FAILED").With("operation", "connect").With("addr", addr).Wrap(err))
 	}
