@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
+// Package main implements the test-abac-widget binary plugin used by the
+// host's plugin integration tests to exercise the ABAC attribute resolver
+// and command dispatcher contracts. Not deployed in production.
 package main
 
 import (
@@ -21,6 +24,7 @@ func (p *widgetPlugin) HandleEvent(_ context.Context, _ pluginsdk.Event) ([]plug
 	return nil, nil
 }
 
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *widgetPlugin) HandleCommand(_ context.Context, req pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
 	return &pluginsdk.CommandResponse{
 		Status: pluginsdk.CommandOK,

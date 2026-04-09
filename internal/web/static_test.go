@@ -20,9 +20,11 @@ func TestFileServer_Embedded_ServesIndex(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
-	// SvelteKit production builds render "HoloMUSH" client-side via JS hydration.
-	// The static HTML shell always contains the sveltekit bootstrap marker.
-	assert.Contains(t, rec.Body.String(), "sveltekit")
+	// internal/web/dist/ contains either the placeholder stub tracked in
+	// git or the real SvelteKit bundle produced by `task web:embed`. Both
+	// are valid HTML documents, so assert on the HTML shape rather than
+	// bundle-specific markers that only exist after a build.
+	assert.Contains(t, rec.Body.String(), "<!doctype html>")
 }
 
 func TestFileServer_Embedded_SPAFallback(t *testing.T) {
@@ -31,7 +33,9 @@ func TestFileServer_Embedded_SPAFallback(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, rec.Body.String(), "sveltekit")
+	// SPA fallback serves index.html for client-side routes; see the
+	// ServesIndex test for why we assert on the HTML shape.
+	assert.Contains(t, rec.Body.String(), "<!doctype html>")
 }
 
 func TestFileServer_Override(t *testing.T) {

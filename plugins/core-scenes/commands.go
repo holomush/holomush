@@ -34,7 +34,7 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	span.SetAttributes(attribute.String("subcommand", sub))
 
 	if sub == "" {
-		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, info, end, pause, resume, set"), nil
+		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, info, end, pause, resume, set, join, leave, invite, kick, transfer"), nil
 	}
 
 	switch sub {
@@ -50,14 +50,26 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 		return p.handleResume(ctx, req, rest)
 	case "set":
 		return p.handleSet(ctx, req, rest)
+	case "join":
+		return p.handleJoin(ctx, req, rest)
+	case "leave":
+		return p.handleLeave(ctx, req, rest)
+	case "invite":
+		return p.handleInvite(ctx, req, rest)
+	case "kick":
+		return p.handleKick(ctx, req, rest)
+	case "transfer":
+		return p.handleTransfer(ctx, req, rest)
 	default:
-		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, info, end, pause, resume, set.", sub), nil
+		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, info, end, pause, resume, set, join, leave, invite, kick, transfer.", sub), nil
 	}
 }
 
 // handleCreate creates a new scene with the given title. The title is the
 // rest of the command line (allowing whitespace) so "scene create The Manor"
 // works without quoting.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleCreate(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	title := strings.TrimSpace(args)
 	if title == "" {
@@ -82,6 +94,8 @@ func (p *scenePlugin) handleCreate(ctx context.Context, req pluginsdk.CommandReq
 // policy, the host's ABAC engine has already verified the caller is the owner
 // before this code runs (when invoked via the dispatcher's full ABAC pipeline);
 // in unit tests, ABAC is bypassed and the service is called directly.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleInfo(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID := strings.TrimSpace(args)
 	if sceneID == "" {
@@ -119,6 +133,8 @@ func (p *scenePlugin) handleInfo(ctx context.Context, req pluginsdk.CommandReque
 // (the host's ABAC engine evaluates end-own-scene before this code runs in
 // production); in unit tests, ABAC is bypassed so the test must use the
 // scene owner's character ID.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleEnd(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID := strings.TrimSpace(args)
 	if sceneID == "" {
@@ -140,6 +156,8 @@ func (p *scenePlugin) handleEnd(ctx context.Context, req pluginsdk.CommandReques
 }
 
 // handlePause transitions an active scene to the paused state. Owner-only.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handlePause(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID := strings.TrimSpace(args)
 	if sceneID == "" {
@@ -162,6 +180,8 @@ func (p *scenePlugin) handlePause(ctx context.Context, req pluginsdk.CommandRequ
 
 // handleResume transitions a paused scene back to active. Owner-only in
 // Phase 2; Phase 3 widens to any member per spec D6.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleResume(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	sceneID := strings.TrimSpace(args)
 	if sceneID == "" {
@@ -192,6 +212,8 @@ func (p *scenePlugin) handleResume(ctx context.Context, req pluginsdk.CommandReq
 // the single field path being set. The service handler then applies it via
 // the standard mask-iteration path, getting the same per-field validation
 // any other UpdateScene call would.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleSet(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
 	args = strings.TrimSpace(args)
 	if args == "" {
@@ -258,4 +280,134 @@ func splitSubcommand(args string) (sub, rest string) {
 		return args, ""
 	}
 	return args[:idx], strings.TrimSpace(args[idx+1:])
+}
+
+// handleJoin parses "scene join <scene-id>" and calls JoinScene.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
+func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	// Strict arity: reject empty args AND trailing tokens. Without this,
+	// `scene join scn123 typo` would pass "scn123 typo" as SceneId and
+	// produce a confusing RPC error instead of a usage message.
+	fields := strings.Fields(args)
+	if len(fields) != 1 {
+		return pluginsdk.Errorf("Usage: scene join <scene id>"), nil
+	}
+	sceneID := fields[0]
+
+	_, err := p.service.JoinScene(ctx, &scenev1.JoinSceneRequest{
+		CharacterId: req.CharacterID,
+		SceneId:     sceneID,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Failed to join scene: %v", err), nil
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Joined scene %s.", sceneID),
+	}, nil
+}
+
+// handleLeave parses "scene leave <scene-id>" and calls LeaveScene.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
+func (p *scenePlugin) handleLeave(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	// Strict arity: reject empty args AND trailing tokens — see handleJoin.
+	fields := strings.Fields(args)
+	if len(fields) != 1 {
+		return pluginsdk.Errorf("Usage: scene leave <scene id>"), nil
+	}
+	sceneID := fields[0]
+
+	_, err := p.service.LeaveScene(ctx, &scenev1.LeaveSceneRequest{
+		CharacterId: req.CharacterID,
+		SceneId:     sceneID,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Failed to leave scene: %v", err), nil
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Left scene %s.", sceneID),
+	}, nil
+}
+
+// handleInvite parses "scene invite <scene-id> <character>".
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
+func (p *scenePlugin) handleInvite(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	// Strict arity: reject anything other than exactly 2 tokens — see handleJoin.
+	fields := strings.Fields(args)
+	if len(fields) != 2 {
+		return pluginsdk.Errorf("Usage: scene invite <scene id> <character>"), nil
+	}
+	sceneID, target := fields[0], fields[1]
+
+	_, err := p.service.InviteToScene(ctx, &scenev1.InviteToSceneRequest{
+		CharacterId:       req.CharacterID,
+		SceneId:           sceneID,
+		TargetCharacterId: target,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Failed to invite: %v", err), nil
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Invited %s to scene %s.", target, sceneID),
+	}, nil
+}
+
+// handleKick parses "scene kick <scene-id> <character>".
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
+func (p *scenePlugin) handleKick(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	// Strict arity: reject anything other than exactly 2 tokens — see handleJoin.
+	fields := strings.Fields(args)
+	if len(fields) != 2 {
+		return pluginsdk.Errorf("Usage: scene kick <scene id> <character>"), nil
+	}
+	sceneID, target := fields[0], fields[1]
+
+	_, err := p.service.KickFromScene(ctx, &scenev1.KickFromSceneRequest{
+		CharacterId:       req.CharacterID,
+		SceneId:           sceneID,
+		TargetCharacterId: target,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Failed to kick: %v", err), nil
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Removed %s from scene %s.", target, sceneID),
+	}, nil
+}
+
+// handleTransfer parses "scene transfer <scene-id> <character>".
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
+func (p *scenePlugin) handleTransfer(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	// Strict arity: reject anything other than exactly 2 tokens — see handleJoin.
+	fields := strings.Fields(args)
+	if len(fields) != 2 {
+		return pluginsdk.Errorf("Usage: scene transfer <scene id> <character>"), nil
+	}
+	sceneID, target := fields[0], fields[1]
+
+	_, err := p.service.TransferOwnership(ctx, &scenev1.TransferOwnershipRequest{
+		CharacterId:         req.CharacterID,
+		SceneId:             sceneID,
+		NewOwnerCharacterId: target,
+	})
+	if err != nil {
+		return pluginsdk.Errorf("Failed to transfer ownership: %v", err), nil
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Transferred ownership of scene %s to %s.", sceneID, target),
+	}, nil
 }

@@ -1313,6 +1313,198 @@ func (*InviteToSceneResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{21}
 }
 
+type KickFromSceneRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	CharacterId       string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	SceneId           string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	TargetCharacterId string                 `protobuf:"bytes,3,opt,name=target_character_id,json=targetCharacterId,proto3" json:"target_character_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *KickFromSceneRequest) Reset() {
+	*x = KickFromSceneRequest{}
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KickFromSceneRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KickFromSceneRequest) ProtoMessage() {}
+
+func (x *KickFromSceneRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KickFromSceneRequest.ProtoReflect.Descriptor instead.
+func (*KickFromSceneRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *KickFromSceneRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *KickFromSceneRequest) GetSceneId() string {
+	if x != nil {
+		return x.SceneId
+	}
+	return ""
+}
+
+func (x *KickFromSceneRequest) GetTargetCharacterId() string {
+	if x != nil {
+		return x.TargetCharacterId
+	}
+	return ""
+}
+
+type KickFromSceneResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KickFromSceneResponse) Reset() {
+	*x = KickFromSceneResponse{}
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KickFromSceneResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KickFromSceneResponse) ProtoMessage() {}
+
+func (x *KickFromSceneResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KickFromSceneResponse.ProtoReflect.Descriptor instead.
+func (*KickFromSceneResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{23}
+}
+
+type TransferOwnershipRequest struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	CharacterId         string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	SceneId             string                 `protobuf:"bytes,2,opt,name=scene_id,json=sceneId,proto3" json:"scene_id,omitempty"`
+	NewOwnerCharacterId string                 `protobuf:"bytes,3,opt,name=new_owner_character_id,json=newOwnerCharacterId,proto3" json:"new_owner_character_id,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *TransferOwnershipRequest) Reset() {
+	*x = TransferOwnershipRequest{}
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TransferOwnershipRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TransferOwnershipRequest) ProtoMessage() {}
+
+func (x *TransferOwnershipRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TransferOwnershipRequest.ProtoReflect.Descriptor instead.
+func (*TransferOwnershipRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *TransferOwnershipRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *TransferOwnershipRequest) GetSceneId() string {
+	if x != nil {
+		return x.SceneId
+	}
+	return ""
+}
+
+func (x *TransferOwnershipRequest) GetNewOwnerCharacterId() string {
+	if x != nil {
+		return x.NewOwnerCharacterId
+	}
+	return ""
+}
+
+type TransferOwnershipResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TransferOwnershipResponse) Reset() {
+	*x = TransferOwnershipResponse{}
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TransferOwnershipResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TransferOwnershipResponse) ProtoMessage() {}
+
+func (x *TransferOwnershipResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TransferOwnershipResponse.ProtoReflect.Descriptor instead.
+func (*TransferOwnershipResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{25}
+}
+
 type CastPublishVoteRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	CharacterId   string                 `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
@@ -1324,7 +1516,7 @@ type CastPublishVoteRequest struct {
 
 func (x *CastPublishVoteRequest) Reset() {
 	*x = CastPublishVoteRequest{}
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[22]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1336,7 +1528,7 @@ func (x *CastPublishVoteRequest) String() string {
 func (*CastPublishVoteRequest) ProtoMessage() {}
 
 func (x *CastPublishVoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[22]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1349,7 +1541,7 @@ func (x *CastPublishVoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CastPublishVoteRequest.ProtoReflect.Descriptor instead.
 func (*CastPublishVoteRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{22}
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CastPublishVoteRequest) GetCharacterId() string {
@@ -1381,7 +1573,7 @@ type CastPublishVoteResponse struct {
 
 func (x *CastPublishVoteResponse) Reset() {
 	*x = CastPublishVoteResponse{}
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[23]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1393,7 +1585,7 @@ func (x *CastPublishVoteResponse) String() string {
 func (*CastPublishVoteResponse) ProtoMessage() {}
 
 func (x *CastPublishVoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[23]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1406,7 +1598,7 @@ func (x *CastPublishVoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CastPublishVoteResponse.ProtoReflect.Descriptor instead.
 func (*CastPublishVoteResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{23}
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{27}
 }
 
 type GetPoseOrderRequest struct {
@@ -1419,7 +1611,7 @@ type GetPoseOrderRequest struct {
 
 func (x *GetPoseOrderRequest) Reset() {
 	*x = GetPoseOrderRequest{}
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[24]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1431,7 +1623,7 @@ func (x *GetPoseOrderRequest) String() string {
 func (*GetPoseOrderRequest) ProtoMessage() {}
 
 func (x *GetPoseOrderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[24]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1444,7 +1636,7 @@ func (x *GetPoseOrderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPoseOrderRequest.ProtoReflect.Descriptor instead.
 func (*GetPoseOrderRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{24}
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *GetPoseOrderRequest) GetCharacterId() string {
@@ -1473,7 +1665,7 @@ type PoseOrderEntry struct {
 
 func (x *PoseOrderEntry) Reset() {
 	*x = PoseOrderEntry{}
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[25]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1485,7 +1677,7 @@ func (x *PoseOrderEntry) String() string {
 func (*PoseOrderEntry) ProtoMessage() {}
 
 func (x *PoseOrderEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[25]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1498,7 +1690,7 @@ func (x *PoseOrderEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PoseOrderEntry.ProtoReflect.Descriptor instead.
 func (*PoseOrderEntry) Descriptor() ([]byte, []int) {
-	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{25}
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *PoseOrderEntry) GetCharacterId() string {
@@ -1539,7 +1731,7 @@ type GetPoseOrderResponse struct {
 
 func (x *GetPoseOrderResponse) Reset() {
 	*x = GetPoseOrderResponse{}
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[26]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1551,7 +1743,7 @@ func (x *GetPoseOrderResponse) String() string {
 func (*GetPoseOrderResponse) ProtoMessage() {}
 
 func (x *GetPoseOrderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_scene_v1_scene_proto_msgTypes[26]
+	mi := &file_holomush_scene_v1_scene_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1564,7 +1756,7 @@ func (x *GetPoseOrderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPoseOrderResponse.ProtoReflect.Descriptor instead.
 func (*GetPoseOrderResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{26}
+	return file_holomush_scene_v1_scene_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GetPoseOrderResponse) GetMode() string {
@@ -1681,7 +1873,17 @@ const file_holomush_scene_v1_scene_proto_rawDesc = "" +
 	"\fcharacter_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\x12\"\n" +
 	"\bscene_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asceneId\x127\n" +
 	"\x13target_character_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x11targetCharacterId\"\x17\n" +
-	"\x15InviteToSceneResponse\"|\n" +
+	"\x15InviteToSceneResponse\"\x9f\x01\n" +
+	"\x14KickFromSceneRequest\x12*\n" +
+	"\fcharacter_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\x12\"\n" +
+	"\bscene_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asceneId\x127\n" +
+	"\x13target_character_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x11targetCharacterId\"\x17\n" +
+	"\x15KickFromSceneResponse\"\xa8\x01\n" +
+	"\x18TransferOwnershipRequest\x12*\n" +
+	"\fcharacter_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\x12\"\n" +
+	"\bscene_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asceneId\x12<\n" +
+	"\x16new_owner_character_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x13newOwnerCharacterId\"\x1b\n" +
+	"\x19TransferOwnershipResponse\"|\n" +
 	"\x16CastPublishVoteRequest\x12*\n" +
 	"\fcharacter_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\vcharacterId\x12\"\n" +
 	"\bscene_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asceneId\x12\x12\n" +
@@ -1698,7 +1900,8 @@ const file_holomush_scene_v1_scene_proto_rawDesc = "" +
 	"isEligible\"g\n" +
 	"\x14GetPoseOrderResponse\x12\x12\n" +
 	"\x04mode\x18\x01 \x01(\tR\x04mode\x12;\n" +
-	"\aentries\x18\x02 \x03(\v2!.holomush.scene.v1.PoseOrderEntryR\aentries2\xea\b\n" +
+	"\aentries\x18\x02 \x03(\v2!.holomush.scene.v1.PoseOrderEntryR\aentries2\xbe\n" +
+	"\n" +
 	"\fSceneService\x12Y\n" +
 	"\n" +
 	"ListScenes\x12$.holomush.scene.v1.ListScenesRequest\x1a%.holomush.scene.v1.ListScenesResponse\x12S\n" +
@@ -1712,7 +1915,9 @@ const file_holomush_scene_v1_scene_proto_rawDesc = "" +
 	"\tJoinScene\x12#.holomush.scene.v1.JoinSceneRequest\x1a$.holomush.scene.v1.JoinSceneResponse\x12Y\n" +
 	"\n" +
 	"LeaveScene\x12$.holomush.scene.v1.LeaveSceneRequest\x1a%.holomush.scene.v1.LeaveSceneResponse\x12b\n" +
-	"\rInviteToScene\x12'.holomush.scene.v1.InviteToSceneRequest\x1a(.holomush.scene.v1.InviteToSceneResponse\x12h\n" +
+	"\rInviteToScene\x12'.holomush.scene.v1.InviteToSceneRequest\x1a(.holomush.scene.v1.InviteToSceneResponse\x12b\n" +
+	"\rKickFromScene\x12'.holomush.scene.v1.KickFromSceneRequest\x1a(.holomush.scene.v1.KickFromSceneResponse\x12n\n" +
+	"\x11TransferOwnership\x12+.holomush.scene.v1.TransferOwnershipRequest\x1a,.holomush.scene.v1.TransferOwnershipResponse\x12h\n" +
 	"\x0fCastPublishVote\x12).holomush.scene.v1.CastPublishVoteRequest\x1a*.holomush.scene.v1.CastPublishVoteResponse\x12_\n" +
 	"\fGetPoseOrder\x12&.holomush.scene.v1.GetPoseOrderRequest\x1a'.holomush.scene.v1.GetPoseOrderResponseB\xcb\x01\n" +
 	"\x15com.holomush.scene.v1B\n" +
@@ -1730,53 +1935,57 @@ func file_holomush_scene_v1_scene_proto_rawDescGZIP() []byte {
 	return file_holomush_scene_v1_scene_proto_rawDescData
 }
 
-var file_holomush_scene_v1_scene_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_holomush_scene_v1_scene_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_holomush_scene_v1_scene_proto_goTypes = []any{
-	(*SceneInfo)(nil),               // 0: holomush.scene.v1.SceneInfo
-	(*ParticipantInfo)(nil),         // 1: holomush.scene.v1.ParticipantInfo
-	(*ListScenesRequest)(nil),       // 2: holomush.scene.v1.ListScenesRequest
-	(*ListScenesResponse)(nil),      // 3: holomush.scene.v1.ListScenesResponse
-	(*GetSceneRequest)(nil),         // 4: holomush.scene.v1.GetSceneRequest
-	(*GetSceneResponse)(nil),        // 5: holomush.scene.v1.GetSceneResponse
-	(*CreateSceneRequest)(nil),      // 6: holomush.scene.v1.CreateSceneRequest
-	(*CreateSceneResponse)(nil),     // 7: holomush.scene.v1.CreateSceneResponse
-	(*EndSceneRequest)(nil),         // 8: holomush.scene.v1.EndSceneRequest
-	(*EndSceneResponse)(nil),        // 9: holomush.scene.v1.EndSceneResponse
-	(*PauseSceneRequest)(nil),       // 10: holomush.scene.v1.PauseSceneRequest
-	(*PauseSceneResponse)(nil),      // 11: holomush.scene.v1.PauseSceneResponse
-	(*ResumeSceneRequest)(nil),      // 12: holomush.scene.v1.ResumeSceneRequest
-	(*ResumeSceneResponse)(nil),     // 13: holomush.scene.v1.ResumeSceneResponse
-	(*UpdateSceneRequest)(nil),      // 14: holomush.scene.v1.UpdateSceneRequest
-	(*UpdateSceneResponse)(nil),     // 15: holomush.scene.v1.UpdateSceneResponse
-	(*JoinSceneRequest)(nil),        // 16: holomush.scene.v1.JoinSceneRequest
-	(*JoinSceneResponse)(nil),       // 17: holomush.scene.v1.JoinSceneResponse
-	(*LeaveSceneRequest)(nil),       // 18: holomush.scene.v1.LeaveSceneRequest
-	(*LeaveSceneResponse)(nil),      // 19: holomush.scene.v1.LeaveSceneResponse
-	(*InviteToSceneRequest)(nil),    // 20: holomush.scene.v1.InviteToSceneRequest
-	(*InviteToSceneResponse)(nil),   // 21: holomush.scene.v1.InviteToSceneResponse
-	(*CastPublishVoteRequest)(nil),  // 22: holomush.scene.v1.CastPublishVoteRequest
-	(*CastPublishVoteResponse)(nil), // 23: holomush.scene.v1.CastPublishVoteResponse
-	(*GetPoseOrderRequest)(nil),     // 24: holomush.scene.v1.GetPoseOrderRequest
-	(*PoseOrderEntry)(nil),          // 25: holomush.scene.v1.PoseOrderEntry
-	(*GetPoseOrderResponse)(nil),    // 26: holomush.scene.v1.GetPoseOrderResponse
-	(*timestamppb.Timestamp)(nil),   // 27: google.protobuf.Timestamp
-	(*fieldmaskpb.FieldMask)(nil),   // 28: google.protobuf.FieldMask
+	(*SceneInfo)(nil),                 // 0: holomush.scene.v1.SceneInfo
+	(*ParticipantInfo)(nil),           // 1: holomush.scene.v1.ParticipantInfo
+	(*ListScenesRequest)(nil),         // 2: holomush.scene.v1.ListScenesRequest
+	(*ListScenesResponse)(nil),        // 3: holomush.scene.v1.ListScenesResponse
+	(*GetSceneRequest)(nil),           // 4: holomush.scene.v1.GetSceneRequest
+	(*GetSceneResponse)(nil),          // 5: holomush.scene.v1.GetSceneResponse
+	(*CreateSceneRequest)(nil),        // 6: holomush.scene.v1.CreateSceneRequest
+	(*CreateSceneResponse)(nil),       // 7: holomush.scene.v1.CreateSceneResponse
+	(*EndSceneRequest)(nil),           // 8: holomush.scene.v1.EndSceneRequest
+	(*EndSceneResponse)(nil),          // 9: holomush.scene.v1.EndSceneResponse
+	(*PauseSceneRequest)(nil),         // 10: holomush.scene.v1.PauseSceneRequest
+	(*PauseSceneResponse)(nil),        // 11: holomush.scene.v1.PauseSceneResponse
+	(*ResumeSceneRequest)(nil),        // 12: holomush.scene.v1.ResumeSceneRequest
+	(*ResumeSceneResponse)(nil),       // 13: holomush.scene.v1.ResumeSceneResponse
+	(*UpdateSceneRequest)(nil),        // 14: holomush.scene.v1.UpdateSceneRequest
+	(*UpdateSceneResponse)(nil),       // 15: holomush.scene.v1.UpdateSceneResponse
+	(*JoinSceneRequest)(nil),          // 16: holomush.scene.v1.JoinSceneRequest
+	(*JoinSceneResponse)(nil),         // 17: holomush.scene.v1.JoinSceneResponse
+	(*LeaveSceneRequest)(nil),         // 18: holomush.scene.v1.LeaveSceneRequest
+	(*LeaveSceneResponse)(nil),        // 19: holomush.scene.v1.LeaveSceneResponse
+	(*InviteToSceneRequest)(nil),      // 20: holomush.scene.v1.InviteToSceneRequest
+	(*InviteToSceneResponse)(nil),     // 21: holomush.scene.v1.InviteToSceneResponse
+	(*KickFromSceneRequest)(nil),      // 22: holomush.scene.v1.KickFromSceneRequest
+	(*KickFromSceneResponse)(nil),     // 23: holomush.scene.v1.KickFromSceneResponse
+	(*TransferOwnershipRequest)(nil),  // 24: holomush.scene.v1.TransferOwnershipRequest
+	(*TransferOwnershipResponse)(nil), // 25: holomush.scene.v1.TransferOwnershipResponse
+	(*CastPublishVoteRequest)(nil),    // 26: holomush.scene.v1.CastPublishVoteRequest
+	(*CastPublishVoteResponse)(nil),   // 27: holomush.scene.v1.CastPublishVoteResponse
+	(*GetPoseOrderRequest)(nil),       // 28: holomush.scene.v1.GetPoseOrderRequest
+	(*PoseOrderEntry)(nil),            // 29: holomush.scene.v1.PoseOrderEntry
+	(*GetPoseOrderResponse)(nil),      // 30: holomush.scene.v1.GetPoseOrderResponse
+	(*timestamppb.Timestamp)(nil),     // 31: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil),     // 32: google.protobuf.FieldMask
 }
 var file_holomush_scene_v1_scene_proto_depIdxs = []int32{
-	27, // 0: holomush.scene.v1.SceneInfo.created_at:type_name -> google.protobuf.Timestamp
-	27, // 1: holomush.scene.v1.SceneInfo.ended_at:type_name -> google.protobuf.Timestamp
+	31, // 0: holomush.scene.v1.SceneInfo.created_at:type_name -> google.protobuf.Timestamp
+	31, // 1: holomush.scene.v1.SceneInfo.ended_at:type_name -> google.protobuf.Timestamp
 	1,  // 2: holomush.scene.v1.SceneInfo.participants:type_name -> holomush.scene.v1.ParticipantInfo
-	27, // 3: holomush.scene.v1.ParticipantInfo.joined_at:type_name -> google.protobuf.Timestamp
+	31, // 3: holomush.scene.v1.ParticipantInfo.joined_at:type_name -> google.protobuf.Timestamp
 	0,  // 4: holomush.scene.v1.ListScenesResponse.scenes:type_name -> holomush.scene.v1.SceneInfo
 	0,  // 5: holomush.scene.v1.GetSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
 	0,  // 6: holomush.scene.v1.CreateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
 	0,  // 7: holomush.scene.v1.EndSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
 	0,  // 8: holomush.scene.v1.PauseSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
 	0,  // 9: holomush.scene.v1.ResumeSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	28, // 10: holomush.scene.v1.UpdateSceneRequest.update_mask:type_name -> google.protobuf.FieldMask
+	32, // 10: holomush.scene.v1.UpdateSceneRequest.update_mask:type_name -> google.protobuf.FieldMask
 	0,  // 11: holomush.scene.v1.UpdateSceneResponse.scene:type_name -> holomush.scene.v1.SceneInfo
-	27, // 12: holomush.scene.v1.PoseOrderEntry.last_posed_at:type_name -> google.protobuf.Timestamp
-	25, // 13: holomush.scene.v1.GetPoseOrderResponse.entries:type_name -> holomush.scene.v1.PoseOrderEntry
+	31, // 12: holomush.scene.v1.PoseOrderEntry.last_posed_at:type_name -> google.protobuf.Timestamp
+	29, // 13: holomush.scene.v1.GetPoseOrderResponse.entries:type_name -> holomush.scene.v1.PoseOrderEntry
 	2,  // 14: holomush.scene.v1.SceneService.ListScenes:input_type -> holomush.scene.v1.ListScenesRequest
 	4,  // 15: holomush.scene.v1.SceneService.GetScene:input_type -> holomush.scene.v1.GetSceneRequest
 	6,  // 16: holomush.scene.v1.SceneService.CreateScene:input_type -> holomush.scene.v1.CreateSceneRequest
@@ -1787,22 +1996,26 @@ var file_holomush_scene_v1_scene_proto_depIdxs = []int32{
 	16, // 21: holomush.scene.v1.SceneService.JoinScene:input_type -> holomush.scene.v1.JoinSceneRequest
 	18, // 22: holomush.scene.v1.SceneService.LeaveScene:input_type -> holomush.scene.v1.LeaveSceneRequest
 	20, // 23: holomush.scene.v1.SceneService.InviteToScene:input_type -> holomush.scene.v1.InviteToSceneRequest
-	22, // 24: holomush.scene.v1.SceneService.CastPublishVote:input_type -> holomush.scene.v1.CastPublishVoteRequest
-	24, // 25: holomush.scene.v1.SceneService.GetPoseOrder:input_type -> holomush.scene.v1.GetPoseOrderRequest
-	3,  // 26: holomush.scene.v1.SceneService.ListScenes:output_type -> holomush.scene.v1.ListScenesResponse
-	5,  // 27: holomush.scene.v1.SceneService.GetScene:output_type -> holomush.scene.v1.GetSceneResponse
-	7,  // 28: holomush.scene.v1.SceneService.CreateScene:output_type -> holomush.scene.v1.CreateSceneResponse
-	9,  // 29: holomush.scene.v1.SceneService.EndScene:output_type -> holomush.scene.v1.EndSceneResponse
-	11, // 30: holomush.scene.v1.SceneService.PauseScene:output_type -> holomush.scene.v1.PauseSceneResponse
-	13, // 31: holomush.scene.v1.SceneService.ResumeScene:output_type -> holomush.scene.v1.ResumeSceneResponse
-	15, // 32: holomush.scene.v1.SceneService.UpdateScene:output_type -> holomush.scene.v1.UpdateSceneResponse
-	17, // 33: holomush.scene.v1.SceneService.JoinScene:output_type -> holomush.scene.v1.JoinSceneResponse
-	19, // 34: holomush.scene.v1.SceneService.LeaveScene:output_type -> holomush.scene.v1.LeaveSceneResponse
-	21, // 35: holomush.scene.v1.SceneService.InviteToScene:output_type -> holomush.scene.v1.InviteToSceneResponse
-	23, // 36: holomush.scene.v1.SceneService.CastPublishVote:output_type -> holomush.scene.v1.CastPublishVoteResponse
-	26, // 37: holomush.scene.v1.SceneService.GetPoseOrder:output_type -> holomush.scene.v1.GetPoseOrderResponse
-	26, // [26:38] is the sub-list for method output_type
-	14, // [14:26] is the sub-list for method input_type
+	22, // 24: holomush.scene.v1.SceneService.KickFromScene:input_type -> holomush.scene.v1.KickFromSceneRequest
+	24, // 25: holomush.scene.v1.SceneService.TransferOwnership:input_type -> holomush.scene.v1.TransferOwnershipRequest
+	26, // 26: holomush.scene.v1.SceneService.CastPublishVote:input_type -> holomush.scene.v1.CastPublishVoteRequest
+	28, // 27: holomush.scene.v1.SceneService.GetPoseOrder:input_type -> holomush.scene.v1.GetPoseOrderRequest
+	3,  // 28: holomush.scene.v1.SceneService.ListScenes:output_type -> holomush.scene.v1.ListScenesResponse
+	5,  // 29: holomush.scene.v1.SceneService.GetScene:output_type -> holomush.scene.v1.GetSceneResponse
+	7,  // 30: holomush.scene.v1.SceneService.CreateScene:output_type -> holomush.scene.v1.CreateSceneResponse
+	9,  // 31: holomush.scene.v1.SceneService.EndScene:output_type -> holomush.scene.v1.EndSceneResponse
+	11, // 32: holomush.scene.v1.SceneService.PauseScene:output_type -> holomush.scene.v1.PauseSceneResponse
+	13, // 33: holomush.scene.v1.SceneService.ResumeScene:output_type -> holomush.scene.v1.ResumeSceneResponse
+	15, // 34: holomush.scene.v1.SceneService.UpdateScene:output_type -> holomush.scene.v1.UpdateSceneResponse
+	17, // 35: holomush.scene.v1.SceneService.JoinScene:output_type -> holomush.scene.v1.JoinSceneResponse
+	19, // 36: holomush.scene.v1.SceneService.LeaveScene:output_type -> holomush.scene.v1.LeaveSceneResponse
+	21, // 37: holomush.scene.v1.SceneService.InviteToScene:output_type -> holomush.scene.v1.InviteToSceneResponse
+	23, // 38: holomush.scene.v1.SceneService.KickFromScene:output_type -> holomush.scene.v1.KickFromSceneResponse
+	25, // 39: holomush.scene.v1.SceneService.TransferOwnership:output_type -> holomush.scene.v1.TransferOwnershipResponse
+	27, // 40: holomush.scene.v1.SceneService.CastPublishVote:output_type -> holomush.scene.v1.CastPublishVoteResponse
+	30, // 41: holomush.scene.v1.SceneService.GetPoseOrder:output_type -> holomush.scene.v1.GetPoseOrderResponse
+	28, // [28:42] is the sub-list for method output_type
+	14, // [14:28] is the sub-list for method input_type
 	14, // [14:14] is the sub-list for extension type_name
 	14, // [14:14] is the sub-list for extension extendee
 	0,  // [0:14] is the sub-list for field type_name
@@ -1819,7 +2032,7 @@ func file_holomush_scene_v1_scene_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_scene_v1_scene_proto_rawDesc), len(file_holomush_scene_v1_scene_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   27,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

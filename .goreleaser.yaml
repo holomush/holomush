@@ -24,6 +24,13 @@ builds:
     goarch:
       - amd64
       - arm64
+    # -tags realweb selects internal/web/static_realweb.go which embeds
+    # the real SvelteKit bundle from internal/web/dist/. The release
+    # workflow (release.yaml) populates dist/ via `task web:embed`
+    # before invoking goreleaser; without the tag we would ship a binary
+    # embedding only the internal/web/placeholder/ stub.
+    flags:
+      - -tags=realweb
     ldflags:
       - -s -w
       - -X main.version={{.Version}}

@@ -7,9 +7,15 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -49,6 +55,118 @@ func newTestStore(t *testing.T) *SceneStore {
 	t.Cleanup(store.Close)
 
 	return store
+}
+
+// mustCreateScene inserts a minimal scene row directly via the store's
+// Phase 1 Create method. Used by Phase 3 tests that need a pre-existing
+// scene but don't care about the participant/ops event side effects of
+// CreateWithOwner. Once Task 5 lands, prefer mustCreateSceneWithOwner.
+func mustCreateScene(t *testing.T, store *SceneStore, sceneID, ownerID, visibility string) *SceneRow {
+	t.Helper()
+	row := &SceneRow{
+		ID:              sceneID,
+		Title:           "Test Scene " + sceneID,
+		OwnerID:         ownerID,
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      visibility,
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.Create(context.Background(), row))
+	return row
+}
+
+// assertParticipantRowExists asserts that a row exists in scene_participants
+// for the given (sceneID, characterID) pair with the expected role. Queries
+// the database directly rather than going through any store method, so the
+// assertion is independent of the methods under test.
+func assertParticipantRowExists(t *testing.T, store *SceneStore, sceneID, characterID, expectedRole string) {
+	t.Helper()
+	var role string
+	err := store.pool.QueryRow(context.Background(),
+		`SELECT role FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
+		sceneID, characterID,
+	).Scan(&role)
+	require.NoError(t, err, "expected participant row for (%s, %s) but query failed", sceneID, characterID)
+	assert.Equal(t, expectedRole, role)
+}
+
+// assertParticipantRowAbsent asserts that no row exists in scene_participants
+// for the given (sceneID, characterID) pair. Used to verify deletes.
+func assertParticipantRowAbsent(t *testing.T, store *SceneStore, sceneID, characterID string) {
+	t.Helper()
+	var role string
+	err := store.pool.QueryRow(context.Background(),
+		`SELECT role FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
+		sceneID, characterID,
+	).Scan(&role)
+	assert.ErrorIs(t, err, pgx.ErrNoRows, "expected participant row for (%s, %s) to be absent", sceneID, characterID)
+}
+
+// assertOpsEventRecorded asserts that EXACTLY one row exists in
+// scene_ops_events for the given scene with the given kind. Returns the
+// payload JSON for the caller to inspect kind-specific fields.
+//
+// The count check is required to catch duplicate-emission bugs: a previous
+// version of this helper used `ORDER BY ... LIMIT 1` which silently passed
+// when a mutation accidentally emitted the same ops event twice. The
+// idempotent-retry contract (P3.D5) requires "exactly one event per
+// successful mutation, zero events for OpNoChange retries".
+func assertOpsEventRecorded(t *testing.T, store *SceneStore, sceneID string, kind OpsEventKind, expectedActor, expectedTarget string) map[string]any {
+	t.Helper()
+
+	// Step 1: assert exactly one matching row exists.
+	var count int
+	require.NoError(t, store.pool.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM scene_ops_events WHERE scene_id = $1 AND kind = $2`,
+		sceneID, string(kind),
+	).Scan(&count))
+	require.Equal(t, 1, count, "expected exactly one ops event %s for scene %s, found %d", kind, sceneID, count)
+
+	// Step 2: read the single row and verify actor/target/payload.
+	var (
+		actor   string
+		target  *string
+		payload []byte
+	)
+	err := store.pool.QueryRow(context.Background(), `
+		SELECT actor_id, target_id, payload FROM scene_ops_events
+		WHERE scene_id = $1 AND kind = $2`,
+		sceneID, string(kind),
+	).Scan(&actor, &target, &payload)
+	require.NoError(t, err, "expected ops event %s for scene %s but query failed", kind, sceneID)
+	assert.Equal(t, expectedActor, actor)
+	if expectedTarget == "" {
+		assert.Nil(t, target)
+	} else {
+		require.NotNil(t, target)
+		assert.Equal(t, expectedTarget, *target)
+	}
+	var p map[string]any
+	require.NoError(t, json.Unmarshal(payload, &p))
+	return p
+}
+
+// countOpsEvents returns the number of scene_ops_events rows for a scene,
+// optionally filtered by kind. Pass an empty string for kind to count all.
+func countOpsEvents(t *testing.T, store *SceneStore, sceneID string, kind OpsEventKind) int {
+	t.Helper()
+	var n int
+	var err error
+	if kind == "" {
+		err = store.pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM scene_ops_events WHERE scene_id = $1`,
+			sceneID,
+		).Scan(&n)
+	} else {
+		err = store.pool.QueryRow(context.Background(),
+			`SELECT COUNT(*) FROM scene_ops_events WHERE scene_id = $1 AND kind = $2`,
+			sceneID, string(kind),
+		).Scan(&n)
+	}
+	require.NoError(t, err)
+	return n
 }
 
 func TestSceneStoreCreatePersistsAllSceneFields(t *testing.T) {
@@ -468,4 +586,1108 @@ func TestSceneStoreUpdateNoFieldsIsNoOp(t *testing.T) {
 	got, err := store.Get(ctx, row.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "Unchanged", got.Title)
+}
+
+func TestRecordOpsEventTxWritesRowWithExpectedKindAndPayload(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	scene := mustCreateScene(t, store, "scene-ope-1", "char-alice", string(SceneVisibilityOpen))
+
+	tx, err := store.pool.Begin(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+
+	err = recordOpsEventTx(ctx, tx, scene.ID, OpsKindMembershipJoin, "char-alice", "char-alice",
+		map[string]any{"visibility": "open", "from_invited": false})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+
+	payload := assertOpsEventRecorded(t, store, scene.ID, OpsKindMembershipJoin, "char-alice", "char-alice")
+	assert.Equal(t, "open", payload["visibility"])
+	assert.Equal(t, false, payload["from_invited"])
+}
+
+func TestRecordOpsEventTxRejectsUnknownKind(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	mustCreateScene(t, store, "scene-ope-2", "char-alice", string(SceneVisibilityOpen))
+
+	tx, err := store.pool.Begin(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+
+	err = recordOpsEventTx(ctx, tx, "scene-ope-2", OpsEventKind("bogus.kind"), "char-alice", "", nil)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_OPS_EVENT_INVALID_KIND")
+}
+
+func TestRecordOpsEventTxAcceptsNilPayloadAsEmptyObject(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	mustCreateScene(t, store, "scene-ope-3", "char-alice", string(SceneVisibilityOpen))
+
+	tx, err := store.pool.Begin(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(ctx)
+
+	err = recordOpsEventTx(ctx, tx, "scene-ope-3", OpsKindLifecyclePaused, "char-alice", "", nil)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+
+	payload := assertOpsEventRecorded(t, store, "scene-ope-3", OpsKindLifecyclePaused, "char-alice", "")
+	assert.Empty(t, payload)
+}
+
+func TestCreateWithOwnerInsertsSceneAndOwnerParticipantAndOpsEvent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID:              "scene-cwo-1",
+		Title:           "Owned scene",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityPrivate),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+
+	err := store.CreateWithOwner(ctx, row)
+	require.NoError(t, err)
+
+	// 1. Scene row exists
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, row.OwnerID, got.OwnerID)
+
+	// 2. Owner participant row exists with role='owner'
+	assertParticipantRowExists(t, store, row.ID, row.OwnerID, "owner")
+
+	// 3. lifecycle.created ops event recorded
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindLifecycleCreated, row.OwnerID, "")
+	assert.Equal(t, "private", payload["visibility"])
+	assert.Equal(t, false, payload["from_template"])
+}
+
+func TestCreateWithOwnerRollsBackWhenSceneIDIsDuplicate(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID:              "scene-cwo-dup",
+		Title:           "First",
+		OwnerID:         "char-alice",
+		State:           string(SceneStateActive),
+		PoseOrder:       string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{},
+		Tags:            []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	// Second insert with same ID — must fail and leave scene_participants /
+	// scene_ops_events untouched (no orphan rows from a partial transaction).
+	rowDup := *row
+	rowDup.OwnerID = "char-bob" // different owner attempt
+	err := store.CreateWithOwner(ctx, &rowDup)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_CREATE_FAILED")
+
+	// char-bob must NOT have a participant row for this scene.
+	assertParticipantRowAbsent(t, store, row.ID, "char-bob")
+
+	// Exactly one lifecycle.created event for this scene (the first call).
+	assert.Equal(t, 1, countOpsEvents(t, store, row.ID, OpsKindLifecycleCreated))
+}
+
+func TestGetWithMembershipReturnsParticipantsAndInviteesLists(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	// Create a scene with the owner.
+	row := &SceneRow{
+		ID: "scene-gwm-1", Title: "T", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	// Manually insert a member and an invitee row to test the partition.
+	_, err := store.pool.Exec(ctx,
+		`INSERT INTO scene_participants (scene_id, character_id, role) VALUES ($1, 'char-bob', 'member')`,
+		row.ID)
+	require.NoError(t, err)
+	_, err = store.pool.Exec(ctx,
+		`INSERT INTO scene_participants (scene_id, character_id, role) VALUES ($1, 'char-carol', 'invited')`,
+		row.ID)
+	require.NoError(t, err)
+
+	got, participants, invitees, err := store.GetWithMembership(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "char-alice", got.OwnerID)
+	assert.ElementsMatch(t, []string{"char-alice", "char-bob"}, participants)
+	assert.ElementsMatch(t, []string{"char-carol"}, invitees)
+}
+
+func TestGetWithMembershipReturnsEmptyListsWhenSceneHasNoParticipants(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	// Use Phase 1 Create to skip the auto-owner-row insertion of CreateWithOwner.
+	mustCreateScene(t, store, "scene-gwm-empty", "char-alice", string(SceneVisibilityOpen))
+
+	row, participants, invitees, err := store.GetWithMembership(ctx, "scene-gwm-empty")
+	require.NoError(t, err)
+	assert.Equal(t, "char-alice", row.OwnerID)
+	assert.Empty(t, participants)
+	assert.Empty(t, invitees)
+}
+
+func TestGetWithMembershipReturnsNotFoundForMissingScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	_, _, _, err := store.GetWithMembership(ctx, "scene-gwm-missing")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
+}
+
+func TestAddParticipantInsertsFreshMemberRowForOpenScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID: "scene-ap-1", Title: "T", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	got, result, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, OpInserted, result)
+	assert.Equal(t, "char-bob", got.CharacterID)
+	assert.Equal(t, "member", got.Role)
+	assertParticipantRowExists(t, store, row.ID, "char-bob", "member")
+	assertOpsEventRecorded(t, store, row.ID, OpsKindMembershipJoin, "char-bob", "char-bob")
+}
+
+func TestAddParticipantPromotesInvitedRowToMemberOnPrivateScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID: "scene-ap-promote", Title: "T", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	// Pre-insert an invitation for char-bob.
+	_, err := store.pool.Exec(ctx,
+		`INSERT INTO scene_participants (scene_id, character_id, role) VALUES ($1, 'char-bob', 'invited')`,
+		row.ID)
+	require.NoError(t, err)
+
+	got, result, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, OpPromoted, result)
+	assert.Equal(t, "member", got.Role)
+	assertParticipantRowExists(t, store, row.ID, "char-bob", "member")
+
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindMembershipJoin, "char-bob", "char-bob")
+	assert.Equal(t, "private", payload["visibility"])
+	assert.Equal(t, true, payload["from_invited"])
+}
+
+func TestAddParticipantReturnsOpNoChangeForExistingMember(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID: "scene-ap-noop", Title: "T", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	// First join — OpInserted.
+	_, result1, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, OpInserted, result1)
+
+	// Second join (retry) — OpNoChange, no new ops event.
+	_, result2, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, OpNoChange, result2)
+
+	// Exactly one membership.join event for this scene.
+	assert.Equal(t, 1, countOpsEvents(t, store, row.ID, OpsKindMembershipJoin))
+}
+
+func TestAddParticipantRejectsPrivateSceneWithoutInvitation(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID: "scene-ap-priv", Title: "T", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_JOIN_NOT_INVITED")
+	errutil.AssertErrorContext(t, err, "scene_id", row.ID)
+	errutil.AssertErrorContext(t, err, "character_id", "char-bob")
+}
+
+func TestAddParticipantRejectsEndedScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID: "scene-ap-ended", Title: "T", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, err := store.End(ctx, row.ID)
+	require.NoError(t, err)
+
+	_, _, err = store.AddParticipant(ctx, row.ID, "char-bob")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_TRANSITION_FORBIDDEN")
+	errutil.AssertErrorContext(t, err, "current_state", "ended")
+}
+
+func TestAddParticipantReturnsNotFoundForMissingScene(t *testing.T) {
+	store := newTestStore(t)
+	_, _, err := store.AddParticipant(context.Background(), "scene-nope", "char-bob")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_NOT_FOUND")
+}
+
+func TestRemoveParticipantDeletesMemberRowAndEmitsOpsEvent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID: "scene-rp-1", Title: "T", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+
+	got, err := store.RemoveParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, "member", got.Role)
+	assertParticipantRowAbsent(t, store, row.ID, "char-bob")
+
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindMembershipLeave, "char-bob", "char-bob")
+	assert.Equal(t, "member", payload["prior_role"])
+}
+
+func TestRemoveParticipantRefusesToRemoveOwner(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-rp-owner", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen), Title: "T",
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, err := store.RemoveParticipant(ctx, row.ID, "char-alice")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_OWNER_CANNOT_LEAVE")
+	assertParticipantRowExists(t, store, row.ID, "char-alice", "owner")
+}
+
+func TestRemoveParticipantReturnsNotFoundForMissingParticipant(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-rp-missing", OwnerID: "char-alice",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen), Title: "T",
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, err := store.RemoveParticipant(ctx, row.ID, "char-ghost")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_PARTICIPANT_NOT_FOUND")
+}
+
+func TestInviteParticipantInsertsInvitedRowAndEmitsOpsEvent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-inv-1", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	got, err := store.InviteParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, "invited", got.Role)
+	assertParticipantRowExists(t, store, row.ID, "char-bob", "invited")
+	assertOpsEventRecorded(t, store, row.ID, OpsKindMembershipInvite, "char-alice", "char-bob")
+}
+
+func TestInviteParticipantIsIdempotentForExistingInvitee(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-inv-2", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, err := store.InviteParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	// Second invite — no error, no second event.
+	_, err = store.InviteParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, 1, countOpsEvents(t, store, row.ID, OpsKindMembershipInvite))
+}
+
+func TestInviteParticipantRejectsExistingMember(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-inv-3", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+
+	_, err = store.InviteParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_INVITE_TARGET_ALREADY_MEMBER")
+}
+
+func TestKickParticipantRemovesMemberRowAndEmitsOpsEvent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-kp-1", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+
+	got, err := store.KickParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, "member", got.Role)
+	assertParticipantRowAbsent(t, store, row.ID, "char-bob")
+
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindMembershipKick, "char-alice", "char-bob")
+	assert.Equal(t, "member", payload["prior_role"])
+}
+
+func TestKickParticipantRemovesInvitedRowAndPayloadReflectsPriorRole(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-kp-inv", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, err := store.InviteParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+
+	got, err := store.KickParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, "invited", got.Role)
+	assertParticipantRowAbsent(t, store, row.ID, "char-bob")
+
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindMembershipKick, "char-alice", "char-bob")
+	assert.Equal(t, "invited", payload["prior_role"])
+}
+
+func TestKickParticipantRefusesToKickOwner(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-kp-owner", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, err := store.KickParticipant(ctx, row.ID, "char-alice", "char-alice")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_KICK_FORBIDDEN")
+	assertParticipantRowExists(t, store, row.ID, "char-alice", "owner")
+}
+
+func TestTransferOwnershipUpdatesParticipantsAndScenesRowAtomically(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-to-1", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+
+	err = store.TransferOwnership(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+
+	// Previous owner is now a member.
+	assertParticipantRowExists(t, store, row.ID, "char-alice", "member")
+	// New owner.
+	assertParticipantRowExists(t, store, row.ID, "char-bob", "owner")
+	// Denormalised scenes.owner_id updated.
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "char-bob", got.OwnerID)
+
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindMembershipOwnershipTransferred, "char-alice", "char-bob")
+	assert.Equal(t, "char-alice", payload["from"])
+}
+
+func TestTransferOwnershipRejectsNonMemberTarget(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-to-nm", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	err := store.TransferOwnership(ctx, row.ID, "char-alice", "char-bob")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_TRANSFER_TARGET_NOT_MEMBER")
+}
+
+func TestTransferOwnershipRejectsNonOwnerCaller(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-to-no", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	_, _, err = store.AddParticipant(ctx, row.ID, "char-carol")
+	require.NoError(t, err)
+
+	// char-bob (not owner) tries to transfer ownership of the scene to char-carol.
+	err = store.TransferOwnership(ctx, row.ID, "char-bob", "char-carol")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_NOT_OWNER")
+}
+
+func TestTransferOwnershipIsNoOpWhenTargetEqualsCurrentOwner(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-to-self", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	err := store.TransferOwnership(ctx, row.ID, "char-alice", "char-alice")
+	require.NoError(t, err) // idempotent no-op
+	assertParticipantRowExists(t, store, row.ID, "char-alice", "owner")
+	// No transfer ops event emitted.
+	assert.Equal(t, 0, countOpsEvents(t, store, row.ID, OpsKindMembershipOwnershipTransferred))
+}
+
+func TestListParticipantsReturnsAllRolesOrderedByJoinedAt(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-lp-1", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+
+	got, err := store.ListParticipants(ctx, row.ID)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, "char-alice", got[0].CharacterID) // joined first via CreateWithOwner
+	assert.Equal(t, "owner", got[0].Role)
+	assert.Equal(t, "char-bob", got[1].CharacterID)
+	assert.Equal(t, "member", got[1].Role)
+}
+
+// TestListParticipantsReturnsEmptyForMissingScene locks in the contract that
+// ListParticipants is a list operation, not a Get-style lookup: a missing
+// scene returns (empty slice, nil error), the same as a scene that exists
+// with zero participants. This is intentional Postgres SELECT-WHERE semantics
+// — there's no way to distinguish "scene doesn't exist" from "scene exists
+// but has no rows" via a single query, and the caller can verify scene
+// existence via Get if they need that distinction.
+//
+// Negative-path coverage per project guideline (every exported function needs
+// at least one positive and one negative test).
+func TestListParticipantsReturnsEmptyForMissingScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	got, err := store.ListParticipants(ctx, "scene-does-not-exist")
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestGetParticipantReturnsRowWhenPresent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-gp-1", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	got, err := store.GetParticipant(ctx, row.ID, "char-alice")
+	require.NoError(t, err)
+	assert.Equal(t, "owner", got.Role)
+}
+
+func TestGetParticipantReturnsNotFoundForMissingParticipant(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-gp-missing", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, err := store.GetParticipant(ctx, row.ID, "char-ghost")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_PARTICIPANT_NOT_FOUND")
+}
+
+func TestEndEmitsLifecycleEndedOpsEventInSameTransaction(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-end-ope", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, err := store.End(ctx, row.ID)
+	require.NoError(t, err)
+
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindLifecycleEnded, row.OwnerID, "")
+	assert.Equal(t, "active", payload["prior_state"])
+}
+
+func TestPauseEmitsLifecyclePausedOpsEvent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-pause-ope", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, err := store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+	assertOpsEventRecorded(t, store, row.ID, OpsKindLifecyclePaused, row.OwnerID, "")
+}
+
+func TestResumeEmitsLifecycleResumedOpsEvent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-resume-ope", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, err := store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+
+	_, err = store.Resume(ctx, row.ID)
+	require.NoError(t, err)
+	assertOpsEventRecorded(t, store, row.ID, OpsKindLifecycleResumed, row.OwnerID, "")
+}
+
+func TestUpdateEmitsSettingsUpdatedOpsEventWithMaskPaths(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-upd-ope", OwnerID: "char-alice", Title: "Old",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility:      string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	newTitle := "New"
+	_, err := store.Update(ctx, row.ID, &SceneUpdate{Title: &newTitle})
+	require.NoError(t, err)
+
+	payload := assertOpsEventRecorded(t, store, row.ID, OpsKindSettingsUpdated, row.OwnerID, "")
+	paths, ok := payload["paths"].([]any)
+	require.True(t, ok)
+	assert.Contains(t, paths, "title")
+}
+
+func TestOwnerCanReadOwnSceneViaParticipantPolicy(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-locks-1", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	// CreateWithOwner must have inserted the owner participant row.
+	// This is the regression-locking assertion: an owner without a
+	// participant row would lose access under Phase 3's member-based
+	// read policy.
+	_, participants, _, err := store.GetWithMembership(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Contains(t, participants, "char-alice", "owner must be in participants list")
+}
+
+func TestMemberCanResumePausedScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-locks-resume", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	_, err = store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+
+	// char-bob is in the participants list — the resume-scene-as-participant
+	// policy should permit them. Verify by reading the resolver attributes.
+	_, participants, _, err := store.GetWithMembership(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Contains(t, participants, "char-bob",
+		"member must be in participants list for resume-scene-as-participant policy")
+}
+
+func TestKickedCharacterImmediatelyDisappearsFromParticipants(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-locks-kick", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+
+	// Verify char-bob is in participants pre-kick.
+	_, before, _, err := store.GetWithMembership(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Contains(t, before, "char-bob")
+
+	// Kick char-bob.
+	_, err = store.KickParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+
+	// IMMEDIATELY (no cache, so no TTL) char-bob is gone.
+	_, after, _, err := store.GetWithMembership(ctx, row.ID)
+	require.NoError(t, err)
+	assert.NotContains(t, after, "char-bob",
+		"kicked character must immediately disappear from participants list")
+}
+
+func TestInviteeCanJoinPrivateScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-locks-pj", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, err := store.InviteParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+
+	got, result, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, OpPromoted, result)
+	assert.Equal(t, "member", got.Role)
+}
+
+func TestNonInviteeCannotJoinPrivateScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-locks-pj-no", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_JOIN_NOT_INVITED")
+}
+
+func TestOwnerCannotLeaveOwnScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-locks-ol", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	_, err := store.RemoveParticipant(ctx, row.ID, "char-alice")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_OWNER_CANNOT_LEAVE")
+}
+
+func TestOwnerCanTransferToMemberAndPreviousOwnerBecomesMember(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-locks-xfer", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+
+	require.NoError(t, store.TransferOwnership(ctx, row.ID, "char-alice", "char-bob"))
+
+	// Verify all three changes landed in one transaction:
+	assertParticipantRowExists(t, store, row.ID, "char-alice", "member") // demoted
+	assertParticipantRowExists(t, store, row.ID, "char-bob", "owner")    // promoted
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "char-bob", got.OwnerID) // denorm updated
+
+	// Now char-alice (no longer owner) CAN leave.
+	_, err = store.RemoveParticipant(ctx, row.ID, "char-alice")
+	require.NoError(t, err)
+	assertParticipantRowAbsent(t, store, row.ID, "char-alice")
+}
+
+func TestAddParticipantWorksOnPausedScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-bnd-pj", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, err := store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+
+	// Joining a PAUSED scene must succeed (state IN ('active', 'paused')).
+	got, result, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, OpInserted, result)
+	assert.Equal(t, "member", got.Role)
+}
+
+func TestKickParticipantWorksOnPausedScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-bnd-pk", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	_, err = store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+
+	// Kicking from a PAUSED scene must succeed (no state filter on kick;
+	// scene state is irrelevant to the membership operation itself).
+	_, err = store.KickParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assertParticipantRowAbsent(t, store, row.ID, "char-bob")
+}
+
+func TestTransferOwnershipWorksOnPausedScene(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-bnd-pt", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	_, err = store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+
+	// Transfer must work in paused state (paused scenes can have admin
+	// operations including ownership transfer).
+	require.NoError(t, store.TransferOwnership(ctx, row.ID, "char-alice", "char-bob"))
+	assertParticipantRowExists(t, store, row.ID, "char-bob", "owner")
+	got, err := store.Get(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "char-bob", got.OwnerID)
+	assert.Equal(t, "paused", got.State, "transfer must not affect scene state")
+}
+
+func TestInviteParticipantRejectsOwnerTarget(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-bnd-io", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	// Inviting the owner must reject — they're already a participant with
+	// the highest role. The existing-role check in InviteParticipant catches
+	// this via the SCENE_INVITE_TARGET_ALREADY_MEMBER code path.
+	_, err := store.InviteParticipant(ctx, row.ID, "char-alice", "char-alice")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SCENE_INVITE_TARGET_ALREADY_MEMBER")
+	errutil.AssertErrorContext(t, err, "current_role", "owner")
+}
+
+func TestSceneOwnerIDDenormAlwaysMatchesParticipantOwnerRow(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	// Helper that asserts the invariant for a given scene at the current moment.
+	assertInvariant := func(sceneID string) {
+		t.Helper()
+		var (
+			denormOwnerID    string
+			participantOwner string
+		)
+		require.NoError(t, store.pool.QueryRow(ctx,
+			`SELECT owner_id FROM scenes WHERE id = $1`, sceneID,
+		).Scan(&denormOwnerID))
+		require.NoError(t, store.pool.QueryRow(ctx,
+			`SELECT character_id FROM scene_participants WHERE scene_id = $1 AND role = 'owner'`,
+			sceneID,
+		).Scan(&participantOwner))
+		assert.Equal(t, denormOwnerID, participantOwner,
+			"scenes.owner_id must always match the participant row with role='owner'")
+	}
+
+	row := &SceneRow{
+		ID: "scene-inv-denorm", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+
+	// Initial state after CreateWithOwner.
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	assertInvariant(row.ID)
+
+	// After adding a regular member — denorm unchanged.
+	_, _, err := store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assertInvariant(row.ID)
+
+	// After ownership transfer — denorm MUST update.
+	require.NoError(t, store.TransferOwnership(ctx, row.ID, "char-alice", "char-bob"))
+	assertInvariant(row.ID)
+
+	// After old owner (now member) leaves — denorm unchanged.
+	_, err = store.RemoveParticipant(ctx, row.ID, "char-alice")
+	require.NoError(t, err)
+	assertInvariant(row.ID)
+}
+
+func TestEachMembershipMutationProducesExactlyOneOpsEvent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	row := &SceneRow{
+		ID: "scene-inv-count", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityPrivate),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+
+	// CreateWithOwner produces 1 ops event: lifecycle.created.
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+	assert.Equal(t, 1, countOpsEvents(t, store, row.ID, ""), "after create")
+
+	// Invite produces 1 event: membership.invite.
+	_, err := store.InviteParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, 2, countOpsEvents(t, store, row.ID, ""), "after invite")
+
+	// Re-invite is idempotent: NO new event.
+	_, err = store.InviteParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, 2, countOpsEvents(t, store, row.ID, ""), "after redundant invite")
+
+	// Join (promotes invited→member) produces 1 event: membership.join.
+	_, _, err = store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, 3, countOpsEvents(t, store, row.ID, ""), "after join")
+
+	// Retry of join (OpNoChange) produces NO new event.
+	_, _, err = store.AddParticipant(ctx, row.ID, "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, 3, countOpsEvents(t, store, row.ID, ""), "after redundant join")
+
+	// Kick produces 1 event: membership.kick.
+	_, err = store.KickParticipant(ctx, row.ID, "char-alice", "char-bob")
+	require.NoError(t, err)
+	assert.Equal(t, 4, countOpsEvents(t, store, row.ID, ""), "after kick")
+
+	// Pause + Resume each produce 1 event.
+	_, err = store.Pause(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 5, countOpsEvents(t, store, row.ID, ""), "after pause")
+	_, err = store.Resume(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 6, countOpsEvents(t, store, row.ID, ""), "after resume")
+
+	// End produces 1 event.
+	_, err = store.End(ctx, row.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 7, countOpsEvents(t, store, row.ID, ""), "after end")
+}
+
+func TestParticipantPrimaryKeyPreventsDoubleInsertion(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	row := &SceneRow{
+		ID: "scene-inv-pk", OwnerID: "char-alice", Title: "T",
+		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
+		Visibility: string(SceneVisibilityOpen),
+		ContentWarnings: []string{}, Tags: []string{},
+	}
+	require.NoError(t, store.CreateWithOwner(ctx, row))
+
+	// Direct insert of a duplicate row MUST fail at the PK constraint.
+	// This proves the schema, not the store API, prevents duplicates.
+	_, err := store.pool.Exec(ctx,
+		`INSERT INTO scene_participants (scene_id, character_id, role) VALUES ($1, $2, 'member')`,
+		row.ID, "char-alice", // char-alice is already the owner row
+	)
+	require.Error(t, err, "duplicate (scene_id, character_id) must violate PK")
+
+	// Verify exactly one row exists for char-alice.
+	var count int
+	require.NoError(t, store.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM scene_participants WHERE scene_id = $1 AND character_id = $2`,
+		row.ID, "char-alice",
+	).Scan(&count))
+	assert.Equal(t, 1, count)
+}
+
+func TestOpsEventsCannotBeUpdatedOrDeletedByApplicationCode(t *testing.T) {
+	// This is a meta-test: assert that the codebase contains no UPDATE or
+	// DELETE statements against scene_ops_events. Append-only is enforced
+	// by convention (the recordOpsEventTx helper is the only writer); this
+	// test catches accidental future violations.
+	//
+	// Per project policy (CLAUDE.md: "MUST NOT use triggers or functions —
+	// All logic lives in Go; PostgreSQL is storage only"), we cannot enforce
+	// append-only via a database trigger. This static check IS the
+	// enforcement, so it must be robust:
+	//
+	//   - Discover production .go files dynamically via filepath.Glob, so
+	//     a future file added to the package is automatically scanned. The
+	//     previous fixed-file list could be bypassed by adding a new file.
+	//   - Fail loudly on read errors (require.NoError), not silently skip.
+	//   - Match case-insensitively after whitespace folding, so a mutation
+	//     formatted as `delete\nfrom scene_ops_events` or with mixed case
+	//     still trips the check.
+	//
+	// Test files (`*_test.go`) are excluded because tests legitimately
+	// query scene_ops_events for assertions; only production code is
+	// scrutinized.
+
+	goFiles, err := filepath.Glob("*.go")
+	require.NoError(t, err)
+	require.NotEmpty(t, goFiles, "expected at least one .go file in package directory")
+
+	whitespace := regexp.MustCompile(`\s+`)
+	for _, fname := range goFiles {
+		if strings.HasSuffix(fname, "_test.go") {
+			continue
+		}
+		data, err := os.ReadFile(fname)
+		require.NoError(t, err, "failed to read %s", fname)
+		// Lowercase + collapse whitespace so multi-line / mixed-case SQL
+		// like `DELETE\n  FROM scene_ops_events` is normalised to
+		// `delete from scene_ops_events`.
+		content := whitespace.ReplaceAllString(strings.ToLower(string(data)), " ")
+		assert.NotContains(t, content, "update scene_ops_events",
+			"%s contains UPDATE on scene_ops_events — events must be immutable", fname)
+		assert.NotContains(t, content, "delete from scene_ops_events",
+			"%s contains DELETE on scene_ops_events — events must be immutable", fname)
+	}
 }

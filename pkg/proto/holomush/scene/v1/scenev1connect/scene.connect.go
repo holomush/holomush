@@ -60,6 +60,12 @@ const (
 	// SceneServiceInviteToSceneProcedure is the fully-qualified name of the SceneService's
 	// InviteToScene RPC.
 	SceneServiceInviteToSceneProcedure = "/holomush.scene.v1.SceneService/InviteToScene"
+	// SceneServiceKickFromSceneProcedure is the fully-qualified name of the SceneService's
+	// KickFromScene RPC.
+	SceneServiceKickFromSceneProcedure = "/holomush.scene.v1.SceneService/KickFromScene"
+	// SceneServiceTransferOwnershipProcedure is the fully-qualified name of the SceneService's
+	// TransferOwnership RPC.
+	SceneServiceTransferOwnershipProcedure = "/holomush.scene.v1.SceneService/TransferOwnership"
 	// SceneServiceCastPublishVoteProcedure is the fully-qualified name of the SceneService's
 	// CastPublishVote RPC.
 	SceneServiceCastPublishVoteProcedure = "/holomush.scene.v1.SceneService/CastPublishVote"
@@ -80,6 +86,8 @@ type SceneServiceClient interface {
 	JoinScene(context.Context, *connect.Request[v1.JoinSceneRequest]) (*connect.Response[v1.JoinSceneResponse], error)
 	LeaveScene(context.Context, *connect.Request[v1.LeaveSceneRequest]) (*connect.Response[v1.LeaveSceneResponse], error)
 	InviteToScene(context.Context, *connect.Request[v1.InviteToSceneRequest]) (*connect.Response[v1.InviteToSceneResponse], error)
+	KickFromScene(context.Context, *connect.Request[v1.KickFromSceneRequest]) (*connect.Response[v1.KickFromSceneResponse], error)
+	TransferOwnership(context.Context, *connect.Request[v1.TransferOwnershipRequest]) (*connect.Response[v1.TransferOwnershipResponse], error)
 	CastPublishVote(context.Context, *connect.Request[v1.CastPublishVoteRequest]) (*connect.Response[v1.CastPublishVoteResponse], error)
 	GetPoseOrder(context.Context, *connect.Request[v1.GetPoseOrderRequest]) (*connect.Response[v1.GetPoseOrderResponse], error)
 }
@@ -155,6 +163,18 @@ func NewSceneServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(sceneServiceMethods.ByName("InviteToScene")),
 			connect.WithClientOptions(opts...),
 		),
+		kickFromScene: connect.NewClient[v1.KickFromSceneRequest, v1.KickFromSceneResponse](
+			httpClient,
+			baseURL+SceneServiceKickFromSceneProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("KickFromScene")),
+			connect.WithClientOptions(opts...),
+		),
+		transferOwnership: connect.NewClient[v1.TransferOwnershipRequest, v1.TransferOwnershipResponse](
+			httpClient,
+			baseURL+SceneServiceTransferOwnershipProcedure,
+			connect.WithSchema(sceneServiceMethods.ByName("TransferOwnership")),
+			connect.WithClientOptions(opts...),
+		),
 		castPublishVote: connect.NewClient[v1.CastPublishVoteRequest, v1.CastPublishVoteResponse](
 			httpClient,
 			baseURL+SceneServiceCastPublishVoteProcedure,
@@ -172,18 +192,20 @@ func NewSceneServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 
 // sceneServiceClient implements SceneServiceClient.
 type sceneServiceClient struct {
-	listScenes      *connect.Client[v1.ListScenesRequest, v1.ListScenesResponse]
-	getScene        *connect.Client[v1.GetSceneRequest, v1.GetSceneResponse]
-	createScene     *connect.Client[v1.CreateSceneRequest, v1.CreateSceneResponse]
-	endScene        *connect.Client[v1.EndSceneRequest, v1.EndSceneResponse]
-	pauseScene      *connect.Client[v1.PauseSceneRequest, v1.PauseSceneResponse]
-	resumeScene     *connect.Client[v1.ResumeSceneRequest, v1.ResumeSceneResponse]
-	updateScene     *connect.Client[v1.UpdateSceneRequest, v1.UpdateSceneResponse]
-	joinScene       *connect.Client[v1.JoinSceneRequest, v1.JoinSceneResponse]
-	leaveScene      *connect.Client[v1.LeaveSceneRequest, v1.LeaveSceneResponse]
-	inviteToScene   *connect.Client[v1.InviteToSceneRequest, v1.InviteToSceneResponse]
-	castPublishVote *connect.Client[v1.CastPublishVoteRequest, v1.CastPublishVoteResponse]
-	getPoseOrder    *connect.Client[v1.GetPoseOrderRequest, v1.GetPoseOrderResponse]
+	listScenes        *connect.Client[v1.ListScenesRequest, v1.ListScenesResponse]
+	getScene          *connect.Client[v1.GetSceneRequest, v1.GetSceneResponse]
+	createScene       *connect.Client[v1.CreateSceneRequest, v1.CreateSceneResponse]
+	endScene          *connect.Client[v1.EndSceneRequest, v1.EndSceneResponse]
+	pauseScene        *connect.Client[v1.PauseSceneRequest, v1.PauseSceneResponse]
+	resumeScene       *connect.Client[v1.ResumeSceneRequest, v1.ResumeSceneResponse]
+	updateScene       *connect.Client[v1.UpdateSceneRequest, v1.UpdateSceneResponse]
+	joinScene         *connect.Client[v1.JoinSceneRequest, v1.JoinSceneResponse]
+	leaveScene        *connect.Client[v1.LeaveSceneRequest, v1.LeaveSceneResponse]
+	inviteToScene     *connect.Client[v1.InviteToSceneRequest, v1.InviteToSceneResponse]
+	kickFromScene     *connect.Client[v1.KickFromSceneRequest, v1.KickFromSceneResponse]
+	transferOwnership *connect.Client[v1.TransferOwnershipRequest, v1.TransferOwnershipResponse]
+	castPublishVote   *connect.Client[v1.CastPublishVoteRequest, v1.CastPublishVoteResponse]
+	getPoseOrder      *connect.Client[v1.GetPoseOrderRequest, v1.GetPoseOrderResponse]
 }
 
 // ListScenes calls holomush.scene.v1.SceneService.ListScenes.
@@ -236,6 +258,16 @@ func (c *sceneServiceClient) InviteToScene(ctx context.Context, req *connect.Req
 	return c.inviteToScene.CallUnary(ctx, req)
 }
 
+// KickFromScene calls holomush.scene.v1.SceneService.KickFromScene.
+func (c *sceneServiceClient) KickFromScene(ctx context.Context, req *connect.Request[v1.KickFromSceneRequest]) (*connect.Response[v1.KickFromSceneResponse], error) {
+	return c.kickFromScene.CallUnary(ctx, req)
+}
+
+// TransferOwnership calls holomush.scene.v1.SceneService.TransferOwnership.
+func (c *sceneServiceClient) TransferOwnership(ctx context.Context, req *connect.Request[v1.TransferOwnershipRequest]) (*connect.Response[v1.TransferOwnershipResponse], error) {
+	return c.transferOwnership.CallUnary(ctx, req)
+}
+
 // CastPublishVote calls holomush.scene.v1.SceneService.CastPublishVote.
 func (c *sceneServiceClient) CastPublishVote(ctx context.Context, req *connect.Request[v1.CastPublishVoteRequest]) (*connect.Response[v1.CastPublishVoteResponse], error) {
 	return c.castPublishVote.CallUnary(ctx, req)
@@ -258,6 +290,8 @@ type SceneServiceHandler interface {
 	JoinScene(context.Context, *connect.Request[v1.JoinSceneRequest]) (*connect.Response[v1.JoinSceneResponse], error)
 	LeaveScene(context.Context, *connect.Request[v1.LeaveSceneRequest]) (*connect.Response[v1.LeaveSceneResponse], error)
 	InviteToScene(context.Context, *connect.Request[v1.InviteToSceneRequest]) (*connect.Response[v1.InviteToSceneResponse], error)
+	KickFromScene(context.Context, *connect.Request[v1.KickFromSceneRequest]) (*connect.Response[v1.KickFromSceneResponse], error)
+	TransferOwnership(context.Context, *connect.Request[v1.TransferOwnershipRequest]) (*connect.Response[v1.TransferOwnershipResponse], error)
 	CastPublishVote(context.Context, *connect.Request[v1.CastPublishVoteRequest]) (*connect.Response[v1.CastPublishVoteResponse], error)
 	GetPoseOrder(context.Context, *connect.Request[v1.GetPoseOrderRequest]) (*connect.Response[v1.GetPoseOrderResponse], error)
 }
@@ -329,6 +363,18 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(sceneServiceMethods.ByName("InviteToScene")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sceneServiceKickFromSceneHandler := connect.NewUnaryHandler(
+		SceneServiceKickFromSceneProcedure,
+		svc.KickFromScene,
+		connect.WithSchema(sceneServiceMethods.ByName("KickFromScene")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sceneServiceTransferOwnershipHandler := connect.NewUnaryHandler(
+		SceneServiceTransferOwnershipProcedure,
+		svc.TransferOwnership,
+		connect.WithSchema(sceneServiceMethods.ByName("TransferOwnership")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sceneServiceCastPublishVoteHandler := connect.NewUnaryHandler(
 		SceneServiceCastPublishVoteProcedure,
 		svc.CastPublishVote,
@@ -363,6 +409,10 @@ func NewSceneServiceHandler(svc SceneServiceHandler, opts ...connect.HandlerOpti
 			sceneServiceLeaveSceneHandler.ServeHTTP(w, r)
 		case SceneServiceInviteToSceneProcedure:
 			sceneServiceInviteToSceneHandler.ServeHTTP(w, r)
+		case SceneServiceKickFromSceneProcedure:
+			sceneServiceKickFromSceneHandler.ServeHTTP(w, r)
+		case SceneServiceTransferOwnershipProcedure:
+			sceneServiceTransferOwnershipHandler.ServeHTTP(w, r)
 		case SceneServiceCastPublishVoteProcedure:
 			sceneServiceCastPublishVoteHandler.ServeHTTP(w, r)
 		case SceneServiceGetPoseOrderProcedure:
@@ -414,6 +464,14 @@ func (UnimplementedSceneServiceHandler) LeaveScene(context.Context, *connect.Req
 
 func (UnimplementedSceneServiceHandler) InviteToScene(context.Context, *connect.Request[v1.InviteToSceneRequest]) (*connect.Response[v1.InviteToSceneResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.InviteToScene is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) KickFromScene(context.Context, *connect.Request[v1.KickFromSceneRequest]) (*connect.Response[v1.KickFromSceneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.KickFromScene is not implemented"))
+}
+
+func (UnimplementedSceneServiceHandler) TransferOwnership(context.Context, *connect.Request[v1.TransferOwnershipRequest]) (*connect.Response[v1.TransferOwnershipResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.scene.v1.SceneService.TransferOwnership is not implemented"))
 }
 
 func (UnimplementedSceneServiceHandler) CastPublishVote(context.Context, *connect.Request[v1.CastPublishVoteRequest]) (*connect.Response[v1.CastPublishVoteResponse], error) {

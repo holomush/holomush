@@ -32,11 +32,20 @@ import (
 //	separate Get call (eliminates a class of races).
 type sceneStorer interface {
 	Create(ctx context.Context, row *SceneRow) error
+	CreateWithOwner(ctx context.Context, row *SceneRow) error
 	Get(ctx context.Context, id string) (*SceneRow, error)
+	GetWithMembership(ctx context.Context, id string) (*SceneRow, []string, []string, error)
 	End(ctx context.Context, id string) (*SceneRow, error)
 	Pause(ctx context.Context, id string) (*SceneRow, error)
 	Resume(ctx context.Context, id string) (*SceneRow, error)
 	Update(ctx context.Context, id string, update *SceneUpdate) (*SceneRow, error)
+	AddParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, ParticipantOpResult, error)
+	RemoveParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error)
+	InviteParticipant(ctx context.Context, sceneID, inviterID, targetID string) (*ParticipantRow, error)
+	KickParticipant(ctx context.Context, sceneID, kickerID, targetID string) (*ParticipantRow, error)
+	TransferOwnership(ctx context.Context, sceneID, currentOwnerID, newOwnerID string) error
+	ListParticipants(ctx context.Context, sceneID string) ([]ParticipantRow, error)
+	GetParticipant(ctx context.Context, sceneID, characterID string) (*ParticipantRow, error)
 }
 
 // SceneServiceImpl implements scenev1.SceneServiceServer for Phase 1.
@@ -103,7 +112,7 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		row.LocationID = &loc
 	}
 
-	if err := s.store.Create(ctx, row); err != nil {
+	if err := s.store.CreateWithOwner(ctx, row); err != nil {
 		recordError(span, err)
 		slog.WarnContext(ctx, "scene.service.create_scene store error",
 			"subject_id", req.GetCharacterId(),
@@ -352,6 +361,236 @@ func buildSceneUpdate(req *scenev1.UpdateSceneRequest) (*SceneUpdate, error) {
 		}
 	}
 	return update, nil
+}
+
+// JoinScene attempts to add the calling character to a scene. The store
+// method handles all eligibility checks (open vs private, state, etc.).
+//
+// Per design decision P3.D5, the operation is idempotent: same-character
+// retries return success without polluting the audit log with extra
+// membership.join events. The store's ParticipantOpResult enum drives
+// the emit-or-not decision inside the store transaction.
+func (s *SceneServiceImpl) JoinScene(ctx context.Context, req *scenev1.JoinSceneRequest) (*scenev1.JoinSceneResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.join_scene",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+	)
+	defer span.End()
+
+	_, _, err := s.store.AddParticipant(ctx, req.GetSceneId(), req.GetCharacterId())
+	if err != nil {
+		recordError(span, err)
+		var oe oops.OopsError
+		if errors.As(err, &oe) {
+			switch oe.Code() {
+			case "SCENE_NOT_FOUND":
+				return nil, status.Errorf(codes.NotFound, "scene not found: %s", req.GetSceneId())
+			case "SCENE_TRANSITION_FORBIDDEN":
+				return nil, status.Errorf(codes.FailedPrecondition,
+					"scene cannot be joined in its current state: %v", err)
+			case "SCENE_JOIN_NOT_INVITED":
+				return nil, status.Errorf(codes.PermissionDenied,
+					"character not invited to private scene")
+			}
+		}
+		slog.WarnContext(ctx, "scene.service.join_scene store error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to join scene: %v", err)
+	}
+
+	slog.InfoContext(ctx, "scene.service.join_scene ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", req.GetSceneId(),
+	)
+
+	return &scenev1.JoinSceneResponse{}, nil
+}
+
+// LeaveScene removes the calling character from a scene. Per design decision
+// P3.D7, scene owners cannot leave their own scene — they must use scene end
+// or transfer ownership first. The service-layer pre-check returns
+// FailedPrecondition with an actionable hint message.
+//
+// The store's RemoveParticipant ALSO has a `WHERE role <> 'owner'` filter
+// for defense-in-depth.
+func (s *SceneServiceImpl) LeaveScene(ctx context.Context, req *scenev1.LeaveSceneRequest) (*scenev1.LeaveSceneResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.leave_scene",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+	)
+	defer span.End()
+
+	// Service-layer owner-leave pre-check. Reads the scene first so we can
+	// give the user a helpful message before hitting the store's defensive
+	// WHERE filter (which would return SCENE_OWNER_CANNOT_LEAVE — same
+	// outcome but the error path is uglier).
+	sceneRow, err := s.store.Get(ctx, req.GetSceneId())
+	if err != nil {
+		recordError(span, err)
+		var oe oops.OopsError
+		if errors.As(err, &oe) && oe.Code() == "SCENE_NOT_FOUND" {
+			return nil, status.Errorf(codes.NotFound, "scene not found: %s", req.GetSceneId())
+		}
+		return nil, status.Errorf(codes.Internal, "failed to load scene: %v", err)
+	}
+	if sceneRow.OwnerID == req.GetCharacterId() {
+		err := status.Errorf(codes.FailedPrecondition,
+			"scene owners cannot leave; use `scene end` to terminate the scene or transfer ownership first")
+		recordError(span, err)
+		return nil, err
+	}
+
+	if _, err := s.store.RemoveParticipant(ctx, req.GetSceneId(), req.GetCharacterId()); err != nil {
+		recordError(span, err)
+		var oe oops.OopsError
+		if errors.As(err, &oe) {
+			switch oe.Code() {
+			case "SCENE_PARTICIPANT_NOT_FOUND":
+				return nil, status.Errorf(codes.NotFound, "character not in scene")
+			case "SCENE_OWNER_CANNOT_LEAVE":
+				// Defense-in-depth path — should never trigger after the
+				// service-layer pre-check above, but mapped for completeness.
+				return nil, status.Errorf(codes.FailedPrecondition,
+					"scene owners cannot leave")
+			}
+		}
+		slog.WarnContext(ctx, "scene.service.leave_scene store error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to leave scene: %v", err)
+	}
+
+	slog.InfoContext(ctx, "scene.service.leave_scene ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", req.GetSceneId(),
+	)
+
+	return &scenev1.LeaveSceneResponse{}, nil
+}
+
+// InviteToScene adds an 'invited' participant row for the target character.
+// ABAC enforces owner-only invite at the dispatcher layer.
+func (s *SceneServiceImpl) InviteToScene(ctx context.Context, req *scenev1.InviteToSceneRequest) (*scenev1.InviteToSceneResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.invite_to_scene",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+		attribute.String("target_id", req.GetTargetCharacterId()),
+	)
+	defer span.End()
+
+	if _, err := s.store.InviteParticipant(ctx, req.GetSceneId(), req.GetCharacterId(), req.GetTargetCharacterId()); err != nil {
+		recordError(span, err)
+		var oe oops.OopsError
+		if errors.As(err, &oe) && oe.Code() == "SCENE_INVITE_TARGET_ALREADY_MEMBER" {
+			return nil, status.Errorf(codes.AlreadyExists, "character is already a member of this scene")
+		}
+		slog.WarnContext(ctx, "scene.service.invite_to_scene store error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"target_id", req.GetTargetCharacterId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to invite: %v", err)
+	}
+
+	slog.InfoContext(ctx, "scene.service.invite_to_scene ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", req.GetSceneId(),
+		"target_id", req.GetTargetCharacterId(),
+	)
+	return &scenev1.InviteToSceneResponse{}, nil
+}
+
+// KickFromScene removes a target character from a scene. ABAC enforces
+// owner-only kick at the dispatcher layer. The store's WHERE filter is
+// the defense-in-depth layer that prevents owner removal.
+func (s *SceneServiceImpl) KickFromScene(ctx context.Context, req *scenev1.KickFromSceneRequest) (*scenev1.KickFromSceneResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.kick_from_scene",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+		attribute.String("target_id", req.GetTargetCharacterId()),
+	)
+	defer span.End()
+
+	if _, err := s.store.KickParticipant(ctx, req.GetSceneId(), req.GetCharacterId(), req.GetTargetCharacterId()); err != nil {
+		recordError(span, err)
+		var oe oops.OopsError
+		if errors.As(err, &oe) {
+			switch oe.Code() {
+			case "SCENE_PARTICIPANT_NOT_FOUND":
+				return nil, status.Errorf(codes.NotFound, "target not in scene")
+			case "SCENE_KICK_FORBIDDEN":
+				return nil, status.Errorf(codes.FailedPrecondition,
+					"scene owner cannot be kicked")
+			}
+		}
+		slog.WarnContext(ctx, "scene.service.kick_from_scene store error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"target_id", req.GetTargetCharacterId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to kick: %v", err)
+	}
+
+	slog.InfoContext(ctx, "scene.service.kick_from_scene ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", req.GetSceneId(),
+		"target_id", req.GetTargetCharacterId(),
+	)
+	return &scenev1.KickFromSceneResponse{}, nil
+}
+
+// TransferOwnership reassigns ownership of a scene from the calling character
+// to a target member. ABAC enforces owner-only transfer at the dispatcher.
+// Per design decision P3.D8, the target MUST be an existing member; the
+// previous owner becomes a member.
+func (s *SceneServiceImpl) TransferOwnership(ctx context.Context, req *scenev1.TransferOwnershipRequest) (*scenev1.TransferOwnershipResponse, error) {
+	ctx, span := startSpan(ctx, "scene.service.transfer_ownership",
+		attribute.String("subject_id", req.GetCharacterId()),
+		attribute.String("scene_id", req.GetSceneId()),
+		attribute.String("new_owner", req.GetNewOwnerCharacterId()),
+	)
+	defer span.End()
+
+	if err := s.store.TransferOwnership(ctx, req.GetSceneId(), req.GetCharacterId(), req.GetNewOwnerCharacterId()); err != nil {
+		recordError(span, err)
+		var oe oops.OopsError
+		if errors.As(err, &oe) {
+			switch oe.Code() {
+			case "SCENE_NOT_FOUND":
+				return nil, status.Errorf(codes.NotFound, "scene not found: %s", req.GetSceneId())
+			case "SCENE_NOT_OWNER":
+				return nil, status.Errorf(codes.PermissionDenied,
+					"only the scene owner can transfer ownership")
+			case "SCENE_TRANSITION_FORBIDDEN":
+				return nil, status.Errorf(codes.FailedPrecondition,
+					"scene cannot have ownership transferred in its current state")
+			case "SCENE_TRANSFER_TARGET_NOT_MEMBER":
+				return nil, status.Errorf(codes.FailedPrecondition,
+					"transfer target must be an existing member of the scene")
+			}
+		}
+		slog.WarnContext(ctx, "scene.service.transfer_ownership store error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", req.GetSceneId(),
+			"new_owner", req.GetNewOwnerCharacterId(),
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to transfer ownership: %v", err)
+	}
+
+	slog.InfoContext(ctx, "scene.service.transfer_ownership ok",
+		"subject_id", req.GetCharacterId(),
+		"scene_id", req.GetSceneId(),
+		"new_owner", req.GetNewOwnerCharacterId(),
+	)
+	return &scenev1.TransferOwnershipResponse{}, nil
 }
 
 // mapTransitionError translates store-layer transition errors into gRPC

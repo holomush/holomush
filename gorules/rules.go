@@ -32,3 +32,54 @@ func ULIDMakeForbidden(m dsl.Matcher) {
 	m.Match(`ulid.Make()`).
 		Report(`use idgen.New() for entity IDs or core.NewULID() for event IDs; ulid.Make() uses math/rand`)
 }
+
+// SceneOpsEventsAppendOnly forbids UPDATE/DELETE/TRUNCATE statements
+// against the scene_ops_events table. The table is the append-only ops
+// journal for the core-scenes plugin (Phase 3 design spec P3.D3, P3.D4).
+// The single legitimate writer is recordOpsEventTx in
+// plugins/core-scenes/ops_events.go (INSERT only).
+//
+// Per CLAUDE.md ("MUST NOT use triggers or functions — All logic lives
+// in Go; PostgreSQL is storage only"), append-only cannot be enforced
+// via a database trigger. This lint rule is the project's chosen
+// enforcement mechanism — it runs on every task lint, repo-wide,
+// before any code executes.
+//
+// The match anchors on pgx-style Exec/Query/QueryRow callsites and
+// inspects the literal SQL string argument. Matching the call
+// expression directly (not an enclosing AssignStmt) makes the rule
+// independent of how the result is consumed — bare expression
+// statements, blank-LHS assigns, and named-LHS assigns all match.
+//
+// The Text.Matches regex is case-insensitive and tolerates arbitrary
+// whitespace (including newlines in raw string literals) between the
+// verb and the table name.
+//
+// Limitations:
+//   - SQL passed via concatenation or a const-by-name will NOT be
+//     caught (ruleguard sees only literal expressions at the call
+//     site). In practice every SQL in this codebase is a single
+//     literal argument.
+//   - The Type filter on $tx is intentionally omitted: pgx
+//     connection/transaction types are plural (pgx.Tx,
+//     *pgxpool.Pool, *pgxpool.Conn, etc.) and method-name plus the
+//     table-name regex is specific enough to avoid false positives.
+//
+// Pattern shape derived from go-ruleguard's dsl v0.3.23 reference
+// (dsl.go:314 for Text.Matches).
+func SceneOpsEventsAppendOnly(m dsl.Matcher) {
+	const forbidden = `(?i)(?:update\s+scene_ops_events|delete\s+from\s+scene_ops_events|truncate(?:\s+table)?\s+scene_ops_events)`
+	const msg = `scene_ops_events is append-only (Phase 3 design P3.D3/D4): use a new INSERT via recordOpsEventTx to record corrections instead of UPDATE/DELETE/TRUNCATE`
+
+	m.Match(`$tx.Exec($ctx, $sql, $*args)`).
+		Where(m["sql"].Text.Matches(forbidden)).
+		Report(msg)
+
+	m.Match(`$tx.Query($ctx, $sql, $*args)`).
+		Where(m["sql"].Text.Matches(forbidden)).
+		Report(msg)
+
+	m.Match(`$tx.QueryRow($ctx, $sql, $*args)`).
+		Where(m["sql"].Text.Matches(forbidden)).
+		Report(msg)
+}

@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CastPublishVoteRequest, CastPublishVoteResponse, CreateSceneRequest, CreateSceneResponse, EndSceneRequest, EndSceneResponse, GetPoseOrderRequest, GetPoseOrderResponse, GetSceneRequest, GetSceneResponse, InviteToSceneRequest, InviteToSceneResponse, JoinSceneRequest, JoinSceneResponse, LeaveSceneRequest, LeaveSceneResponse, ListScenesRequest, ListScenesResponse, PauseSceneRequest, PauseSceneResponse, ResumeSceneRequest, ResumeSceneResponse, UpdateSceneRequest, UpdateSceneResponse } from "./scene_pb.js";
+import { CastPublishVoteRequest, CastPublishVoteResponse, CreateSceneRequest, CreateSceneResponse, EndSceneRequest, EndSceneResponse, GetPoseOrderRequest, GetPoseOrderResponse, GetSceneRequest, GetSceneResponse, InviteToSceneRequest, InviteToSceneResponse, JoinSceneRequest, JoinSceneResponse, KickFromSceneRequest, KickFromSceneResponse, LeaveSceneRequest, LeaveSceneResponse, ListScenesRequest, ListScenesResponse, PauseSceneRequest, PauseSceneResponse, ResumeSceneRequest, ResumeSceneResponse, TransferOwnershipRequest, TransferOwnershipResponse, UpdateSceneRequest, UpdateSceneResponse } from "./scene_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -103,6 +103,24 @@ export const SceneService = {
       name: "InviteToScene",
       I: InviteToSceneRequest,
       O: InviteToSceneResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.scene.v1.SceneService.KickFromScene
+     */
+    kickFromScene: {
+      name: "KickFromScene",
+      I: KickFromSceneRequest,
+      O: KickFromSceneResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.scene.v1.SceneService.TransferOwnership
+     */
+    transferOwnership: {
+      name: "TransferOwnership",
+      I: TransferOwnershipRequest,
+      O: TransferOwnershipResponse,
       kind: MethodKind.Unary,
     },
     /**
