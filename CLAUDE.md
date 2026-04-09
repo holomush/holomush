@@ -519,6 +519,24 @@ This mirrors all CI jobs (lint, format, schema, license, unit, integration,
 E2E) and MUST pass with zero failures. Do NOT push to a PR branch without
 a green `task pr-prep`. Docker is always available — never skip E2E tests.
 
+### jj Workspace Commands
+
+Workspaces live in a `.worktrees/` directory that is a sibling of the main repo root
+(e.g., `<parent>/.worktrees/<name>`). The exact path is machine-specific.
+
+```bash
+jj workspace add <parent>/.worktrees/<name> --name <name> -r main
+jj workspace forget <name>  # then: rm -rf <parent>/.worktrees/<name>
+task gowork                 # MUST run after add or forget — regenerates go.work
+```
+
+| Requirement | Description |
+| ----------- | ----------- |
+| **MUST** run `task gowork` | After every `jj workspace add` or `jj workspace forget` |
+
+`task gowork` regenerates `go.work` in the main repo root so gopls covers all active
+workspaces without "not in workspace" LSP diagnostics. Works from any workspace.
+
 ### Beads Commands
 
 ```bash
