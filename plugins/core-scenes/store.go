@@ -242,25 +242,6 @@ func (s *SceneStore) Get(ctx context.Context, id string) (*SceneRow, error) {
 	return row, nil
 }
 
-// Delete removes a scene row by ID. Cascading foreign keys remove participant
-// and ops-event rows created with the scene.
-func (s *SceneStore) Delete(ctx context.Context, id string) error {
-	ctx, span := startSpan(ctx, "scene.store.delete",
-		attribute.String("scene_id", id),
-	)
-	defer span.End()
-
-	tag, err := s.pool.Exec(ctx, `DELETE FROM scenes WHERE id = $1`, id)
-	if err != nil {
-		recordError(span, err)
-		return oops.Code("SCENE_DELETE_FAILED").With("scene_id", id).Wrap(err)
-	}
-	if tag.RowsAffected() == 0 {
-		return oops.Code("SCENE_NOT_FOUND").With("scene_id", id).Errorf("scene not found")
-	}
-	return nil
-}
-
 // GetWithMembership returns the scene row plus its participants and invitees
 // lists in a single SQL round trip. Used by the resolver to materialise ABAC
 // attributes without two separate queries.

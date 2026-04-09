@@ -1339,6 +1339,83 @@ func TestPluginHostServiceEmitEventFallsBackToPluginActorWhenIncomingActorMissin
 	assert.Equal(t, "core-scenes", events[0].Actor.ID)
 }
 
+func TestPluginHostServiceEmitEventReturnsErrorWhenHostIsMissing(t *testing.T) {
+	server := &pluginHostServiceServer{pluginName: "core-scenes"}
+
+	_, err := server.EmitEvent(context.Background(), &pluginv1.PluginHostServiceEmitEventRequest{
+		Stream:    "scene:01SCENE",
+		EventType: "system",
+		Payload:   []byte(`{"kind":"created"}`),
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not configured")
+}
+
+func TestPluginHostServiceEmitEventReturnsErrorWhenEmitterIsMissing(t *testing.T) {
+	server := &pluginHostServiceServer{
+		host:       NewHost(),
+		pluginName: "core-scenes",
+	}
+
+	_, err := server.EmitEvent(context.Background(), &pluginv1.PluginHostServiceEmitEventRequest{
+		Stream:    "scene:01SCENE",
+		EventType: "system",
+		Payload:   []byte(`{"kind":"created"}`),
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "event emitter is not configured")
+}
+
+func TestSDKActorKindToCoreMapsSystemKind(t *testing.T) {
+	assert.Equal(t, core.ActorSystem, sdkActorKindToCore(pluginsdk.ActorSystem))
+}
+
+func TestSDKActorKindToCoreDefaultsToPluginKind(t *testing.T) {
+	assert.Equal(t, core.ActorPlugin, sdkActorKindToCore(pluginsdk.ActorKind(99)))
+}
+
+func TestNewPluginHostServiceServerRegistersPluginHostService(t *testing.T) {
+	factory := newPluginHostServiceServer(NewHost(), "core-scenes")
+
+	server := factory(nil)
+	t.Cleanup(server.Stop)
+
+	assert.Contains(t, server.GetServiceInfo(), "holomush.plugin.v1.PluginHostService")
+}
+
+func TestPluginHostServiceEmitEventReturnsWrappedEmitterError(t *testing.T) {
+	store := core.NewMemoryEventStore()
+	emitter := plugins.NewPluginEventEmitter(
+		store,
+		func(string) *plugins.Manifest {
+			return &plugins.Manifest{Name: "core-scenes", Emits: []string{"scene"}}
+		},
+		func(ctx context.Context, _ string) (core.Actor, error) {
+			actor, ok := core.ActorFromContext(ctx)
+			if !ok {
+				return core.Actor{}, errors.New("missing actor")
+			}
+			return actor, nil
+		},
+	)
+
+	host := NewHost()
+	host.SetEventEmitter(emitter)
+
+	server := &pluginHostServiceServer{
+		host:       host,
+		pluginName: "core-scenes",
+	}
+
+	_, err := server.EmitEvent(context.Background(), &pluginv1.PluginHostServiceEmitEventRequest{
+		Stream:    "scene:01SCENE",
+		EventType: "system",
+		Payload:   []byte(`{"kind":`),
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "valid JSON")
+}
+
 func TestLoadSkipsInitForPluginWithoutStorageOrRequires(t *testing.T) {
 	grpcClient := &mockGRPCPluginClient{}
 	mockClient := &mockPluginClient{

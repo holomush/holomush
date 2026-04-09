@@ -91,6 +91,10 @@ func (h *testEventEmitterHost) DeliverCommand(context.Context, string, pluginsdk
 	return nil, nil
 }
 
+func (h *testEventEmitterHost) QuerySessionStreams(context.Context, string, plugins.SessionStreamsRequest) ([]string, error) {
+	return nil, nil
+}
+
 func (h *testEventEmitterHost) Plugins() []string { return append([]string(nil), h.loadedNames...) }
 
 func (h *testEventEmitterHost) Close(context.Context) error { return nil }

@@ -16,8 +16,51 @@ import (
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
+type recordingEventStore struct {
+	eventsByStream map[string][]core.Event
+}
+
+func newRecordingEventStore() *recordingEventStore {
+	return &recordingEventStore{eventsByStream: make(map[string][]core.Event)}
+}
+
+func (s *recordingEventStore) Append(_ context.Context, event core.Event) error {
+	s.eventsByStream[event.Stream] = append(s.eventsByStream[event.Stream], event)
+	return nil
+}
+
+func (s *recordingEventStore) Replay(_ context.Context, stream string, afterID ulid.ULID, limit int) ([]core.Event, error) {
+	events := s.eventsByStream[stream]
+	if limit <= 0 || len(events) == 0 {
+		return nil, nil
+	}
+	var replay []core.Event
+	for _, event := range events {
+		if afterID.Compare(event.ID) >= 0 {
+			continue
+		}
+		replay = append(replay, event)
+		if len(replay) == limit {
+			break
+		}
+	}
+	return replay, nil
+}
+
+func (s *recordingEventStore) LastEventID(_ context.Context, stream string) (ulid.ULID, error) {
+	events := s.eventsByStream[stream]
+	if len(events) == 0 {
+		return ulid.ULID{}, nil
+	}
+	return events[len(events)-1].ID, nil
+}
+
+func (s *recordingEventStore) Subscribe(context.Context, string) (<-chan ulid.ULID, <-chan error, error) {
+	return nil, nil, nil
+}
+
 func TestPluginEventEmitterStampsHostOwnedFields(t *testing.T) {
-	store := core.NewMemoryEventStore()
+	store := newRecordingEventStore()
 	emitter := NewPluginEventEmitter(
 		store,
 		func(string) *Manifest { return &Manifest{Name: "core-scenes", Emits: []string{"scene"}} },
@@ -46,7 +89,7 @@ func TestPluginEventEmitterStampsHostOwnedFields(t *testing.T) {
 }
 
 func TestPluginEventEmitterRejectsUndeclaredNamespace(t *testing.T) {
-	store := core.NewMemoryEventStore()
+	store := newRecordingEventStore()
 	emitter := NewPluginEventEmitter(
 		store,
 		func(string) *Manifest { return &Manifest{Name: "core-scenes", Emits: []string{"scene"}} },
@@ -69,7 +112,7 @@ func TestPluginEventEmitterRejectsUndeclaredNamespace(t *testing.T) {
 }
 
 func TestPluginEventEmitterRejectsMissingManifestWithoutAppending(t *testing.T) {
-	store := core.NewMemoryEventStore()
+	store := newRecordingEventStore()
 	emitter := NewPluginEventEmitter(
 		store,
 		func(string) *Manifest { return nil },
@@ -92,7 +135,7 @@ func TestPluginEventEmitterRejectsMissingManifestWithoutAppending(t *testing.T) 
 }
 
 func TestPluginEventEmitterRejectsMissingManifestLookupWithoutAppending(t *testing.T) {
-	store := core.NewMemoryEventStore()
+	store := newRecordingEventStore()
 	emitter := NewPluginEventEmitter(
 		store,
 		nil,
@@ -115,7 +158,7 @@ func TestPluginEventEmitterRejectsMissingManifestLookupWithoutAppending(t *testi
 }
 
 func TestPluginEventEmitterRejectsActorResolverFailureWithoutAppending(t *testing.T) {
-	store := core.NewMemoryEventStore()
+	store := newRecordingEventStore()
 	emitter := NewPluginEventEmitter(
 		store,
 		func(string) *Manifest { return &Manifest{Name: "core-scenes", Emits: []string{"scene"}} },
@@ -138,7 +181,7 @@ func TestPluginEventEmitterRejectsActorResolverFailureWithoutAppending(t *testin
 }
 
 func TestPluginEventEmitterRejectsNilActorResolverWithoutAppending(t *testing.T) {
-	store := core.NewMemoryEventStore()
+	store := newRecordingEventStore()
 	emitter := NewPluginEventEmitter(
 		store,
 		func(string) *Manifest { return &Manifest{Name: "core-scenes", Emits: []string{"scene"}} },
@@ -159,7 +202,7 @@ func TestPluginEventEmitterRejectsNilActorResolverWithoutAppending(t *testing.T)
 }
 
 func TestPluginEventEmitterRejectsEmptyResolvedActorWithoutAppending(t *testing.T) {
-	store := core.NewMemoryEventStore()
+	store := newRecordingEventStore()
 	emitter := NewPluginEventEmitter(
 		store,
 		func(string) *Manifest { return &Manifest{Name: "core-scenes", Emits: []string{"scene"}} },
@@ -180,7 +223,7 @@ func TestPluginEventEmitterRejectsEmptyResolvedActorWithoutAppending(t *testing.
 }
 
 func TestPluginEventEmitterRejectsUnknownResolvedActorKindWithoutAppending(t *testing.T) {
-	store := core.NewMemoryEventStore()
+	store := newRecordingEventStore()
 	emitter := NewPluginEventEmitter(
 		store,
 		func(string) *Manifest { return &Manifest{Name: "core-scenes", Emits: []string{"scene"}} },
@@ -216,7 +259,7 @@ func TestPluginEventEmitterRejectsMalformedStreamWithoutAppending(t *testing.T) 
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			store := core.NewMemoryEventStore()
+			store := newRecordingEventStore()
 			emitter := NewPluginEventEmitter(
 				store,
 				func(string) *Manifest { return &Manifest{Name: "core-scenes", Emits: []string{"scene"}} },
@@ -274,6 +317,29 @@ func TestPluginEventEmitterRejectsMissingEventStoreWithoutAppending(t *testing.T
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "event store")
+}
+
+func TestPluginEventEmitterRejectsInvalidJSONPayloadWithoutAppending(t *testing.T) {
+	store := newRecordingEventStore()
+	emitter := NewPluginEventEmitter(
+		store,
+		func(string) *Manifest { return &Manifest{Name: "core-scenes", Emits: []string{"scene"}} },
+		func(context.Context, string) (core.Actor, error) {
+			return core.Actor{Kind: core.ActorPlugin, ID: "core-scenes"}, nil
+		},
+	)
+
+	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
+		Stream:  "scene:01TEST:ic",
+		Type:    pluginsdk.EventTypeSay,
+		Payload: `{"text":`,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "valid JSON")
+
+	events, replayErr := store.Replay(context.Background(), "scene:01TEST:ic", ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	assert.Empty(t, events)
 }
 
 type failingEventStore struct {

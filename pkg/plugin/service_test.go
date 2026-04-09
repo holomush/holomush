@@ -252,6 +252,43 @@ func TestEventSinkEmitForwardsTrustedActorMetadata(t *testing.T) {
 	assert.Equal(t, []byte(`{"kind":"created"}`), hostService.requests[0].GetPayload())
 }
 
+func TestEventSinkEmitReturnsErrorWhenClientIsMissing(t *testing.T) {
+	sink := &pluginHostEventSink{}
+
+	err := sink.Emit(context.Background(), EmitIntent{
+		Stream:  "scene:01SCENE",
+		Type:    EventTypeSystem,
+		Payload: `{"kind":"created"}`,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not configured")
+}
+
+func TestNewEventSinkFromBrokerReturnsErrorWhenBrokerIsMissing(t *testing.T) {
+	sink, err := newEventSinkFromBroker(nil, map[string]string{
+		PluginHostServiceName: "broker:7",
+	})
+	require.Error(t, err)
+	assert.Nil(t, sink)
+	assert.Contains(t, err.Error(), "broker is not configured")
+}
+
+func TestNewEventSinkFromBrokerReturnsErrorWhenPluginHostServiceIsMissing(t *testing.T) {
+	sink, err := newEventSinkFromBroker(&testBrokerDialer{}, map[string]string{})
+	require.Error(t, err)
+	assert.Nil(t, sink)
+	assert.Contains(t, err.Error(), PluginHostServiceName)
+}
+
+func TestNewEventSinkFromBrokerReturnsErrorWhenDialFails(t *testing.T) {
+	sink, err := newEventSinkFromBroker(&testBrokerDialer{}, map[string]string{
+		PluginHostServiceName: "broker:7",
+	})
+	require.Error(t, err)
+	assert.Nil(t, sink)
+	assert.Contains(t, err.Error(), "unknown broker id")
+}
+
 func TestPluginServerAdapterInitRoutesServiceOriginatedEmitThroughSharedEmitter(t *testing.T) {
 	service := &emittingPluginHostServiceServer{
 		pluginName: "core-scenes",

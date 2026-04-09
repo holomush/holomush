@@ -29,7 +29,6 @@ type fakeStore struct {
 	participants       map[string]map[string]string // sceneID → characterID → role
 	createErr          error
 	createWithOwnerErr error
-	deleteErr          error
 	getErr             error
 	addParticipantErr  error
 }
@@ -89,18 +88,6 @@ func (f *fakeStore) Get(_ context.Context, id string) (*SceneRow, error) {
 		return nil, oops.Code("SCENE_NOT_FOUND").With("scene_id", id).Errorf("not found")
 	}
 	return row, nil
-}
-
-func (f *fakeStore) Delete(_ context.Context, id string) error {
-	if f.deleteErr != nil {
-		return f.deleteErr
-	}
-	if _, ok := f.scenes[id]; !ok {
-		return oops.Code("SCENE_NOT_FOUND").With("scene_id", id).Errorf("not found")
-	}
-	delete(f.scenes, id)
-	delete(f.participants, id)
-	return nil
 }
 
 func (f *fakeStore) GetWithMembership(ctx context.Context, id string) (*SceneRow, []string, []string, error) {
@@ -457,7 +444,7 @@ func TestSceneServiceCreateSceneFailsWhenEventSinkIsMissing(t *testing.T) {
 	assert.Empty(t, store.scenes)
 }
 
-func TestSceneServiceCreateSceneRollsBackWhenEventEmitFailsAfterPersist(t *testing.T) {
+func TestSceneServiceCreateSceneReturnsInternalWhenEventEmitFailsAfterPersist(t *testing.T) {
 	store := newFakeStore()
 	sink := &recordingEventSink{err: errors.New("boom")}
 	svc := NewSceneServiceImpl(store)
@@ -471,7 +458,31 @@ func TestSceneServiceCreateSceneRollsBackWhenEventEmitFailsAfterPersist(t *testi
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.Internal, st.Code())
 	assert.Contains(t, st.Message(), "failed to emit scene event")
-	assert.Empty(t, store.scenes)
+	require.Len(t, store.scenes, 1)
+}
+
+func TestSceneServiceSceneCreatedIntentReturnsZeroValueForNilRow(t *testing.T) {
+	svc := NewSceneServiceImpl(newFakeStore())
+
+	intent, err := svc.sceneCreatedIntent(nil)
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.EmitIntent{}, intent)
+}
+
+func TestSceneServiceSceneCreatedIntentBuildsLifecyclePayload(t *testing.T) {
+	svc := NewSceneServiceImpl(newFakeStore())
+
+	intent, err := svc.sceneCreatedIntent(&SceneRow{
+		ID:      "scene-123",
+		OwnerID: "char-alice",
+		Title:   "Tea",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "scene:scene-123", intent.Stream)
+	assert.Equal(t, pluginsdk.EventTypeSystem, intent.Type)
+	assert.Contains(t, intent.Payload, `"kind":"scene.lifecycle.created"`)
+	assert.Contains(t, intent.Payload, `"scene_id":"scene-123"`)
+	assert.Contains(t, intent.Payload, `"owner_id":"char-alice"`)
 }
 
 func TestSceneServiceGetSceneReturnsSceneWhenItExists(t *testing.T) {

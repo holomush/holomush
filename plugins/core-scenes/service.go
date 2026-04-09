@@ -35,7 +35,6 @@ import (
 type sceneStorer interface {
 	Create(ctx context.Context, row *SceneRow) error
 	CreateWithOwner(ctx context.Context, row *SceneRow) error
-	Delete(ctx context.Context, id string) error
 	Get(ctx context.Context, id string) (*SceneRow, error)
 	GetWithMembership(ctx context.Context, id string) (*SceneRow, []string, []string, error)
 	End(ctx context.Context, id string) (*SceneRow, error)
@@ -164,16 +163,8 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 			With("scene_id", row.ID).
 			Wrap(err)
 		recordError(span, err)
-		if rollbackErr := s.store.Delete(ctx, row.ID); rollbackErr != nil {
-			recordError(span, rollbackErr)
-			slog.ErrorContext(ctx, "scene.service.create_scene rollback failed",
-				"subject_id", req.GetCharacterId(),
-				"scene_id", id,
-				"emit_error", err,
-				"rollback_error", rollbackErr,
-			)
-			return nil, status.Errorf(codes.Internal, "failed to emit scene event and rollback scene: %v", rollbackErr)
-		}
+		// Do not delete persisted scene rows here. CreateWithOwner already
+		// appended lifecycle ops events, and those rows are append-only.
 		slog.WarnContext(ctx, "scene.service.create_scene emit error",
 			"subject_id", req.GetCharacterId(),
 			"scene_id", id,

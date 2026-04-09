@@ -6,6 +6,7 @@ package plugins
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -67,6 +68,10 @@ func (e *PluginEventEmitter) Emit(ctx context.Context, pluginName string, intent
 	if e.store == nil {
 		return oops.With("plugin", pluginName).With("stream", intent.Stream).
 			New("plugin event store is not configured")
+	}
+	if !json.Valid([]byte(intent.Payload)) {
+		return oops.With("plugin", pluginName).With("stream", intent.Stream).
+			New("event payload must be valid JSON")
 	}
 
 	event := core.Event{

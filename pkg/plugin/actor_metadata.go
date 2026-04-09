@@ -25,11 +25,11 @@ type actorMetadata struct {
 // WithOutgoingActorMetadata attaches trusted host actor metadata to an
 // outgoing gRPC context for plugin RPC calls.
 func WithOutgoingActorMetadata(ctx context.Context, kind ActorKind, id string) context.Context {
-	return metadata.AppendToOutgoingContext(
-		ctx,
-		actorKindHeader, strconv.Itoa(int(kind)),
-		actorIDHeader, id,
-	)
+	md, _ := metadata.FromOutgoingContext(ctx)
+	md = md.Copy()
+	md.Set(actorKindHeader, strconv.Itoa(int(kind)))
+	md.Set(actorIDHeader, id)
+	return metadata.NewOutgoingContext(ctx, md)
 }
 
 // ActorMetadataFromOutgoingContext returns trusted actor metadata carried on
