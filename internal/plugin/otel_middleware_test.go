@@ -182,6 +182,8 @@ func TestHostMiddlewarePassthrough(t *testing.T) {
 	mockHost.EXPECT().Close(mock.Anything).Return(nil)
 	mockHost.EXPECT().Load(mock.Anything, mock.Anything, "dir").Return(nil)
 	mockHost.EXPECT().Unload(mock.Anything, "a").Return(nil)
+	mockHost.EXPECT().QuerySessionStreams(mock.Anything, "a", mock.Anything).
+		Return([]string{"channel:test"}, nil)
 
 	mw, err := plugins.NewHostMiddleware(mockHost, h.tracerProvider, h.meterProvider)
 	require.NoError(t, err)
@@ -189,6 +191,11 @@ func TestHostMiddlewarePassthrough(t *testing.T) {
 	assert.Equal(t, []string{"a", "b"}, mw.Plugins())
 	require.NoError(t, mw.Load(context.Background(), &plugins.Manifest{}, "dir"))
 	require.NoError(t, mw.Unload(context.Background(), "a"))
+
+	streams, qErr := mw.QuerySessionStreams(context.Background(), "a", plugins.SessionStreamsRequest{})
+	require.NoError(t, qErr)
+	assert.Equal(t, []string{"channel:test"}, streams)
+
 	require.NoError(t, mw.Close(context.Background()))
 }
 

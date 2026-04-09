@@ -34,6 +34,8 @@ const (
 	HostFunctionsService_Log_FullMethodName                     = "/holomush.plugin.v1.HostFunctionsService/Log"
 	HostFunctionsService_ListCommands_FullMethodName            = "/holomush.plugin.v1.HostFunctionsService/ListCommands"
 	HostFunctionsService_GetCommandHelp_FullMethodName          = "/holomush.plugin.v1.HostFunctionsService/GetCommandHelp"
+	HostFunctionsService_AddSessionStream_FullMethodName        = "/holomush.plugin.v1.HostFunctionsService/AddSessionStream"
+	HostFunctionsService_RemoveSessionStream_FullMethodName     = "/holomush.plugin.v1.HostFunctionsService/RemoveSessionStream"
 )
 
 // HostFunctionsServiceClient is the client API for HostFunctionsService service.
@@ -66,6 +68,12 @@ type HostFunctionsServiceClient interface {
 	// GetCommandHelp returns detailed help for a specific command.
 	// Requires capability: command.help
 	GetCommandHelp(ctx context.Context, in *GetCommandHelpRequest, opts ...grpc.CallOption) (*GetCommandHelpResponse, error)
+	// AddSessionStream subscribes an active session to an additional stream mid-session.
+	// Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+	AddSessionStream(ctx context.Context, in *AddSessionStreamRequest, opts ...grpc.CallOption) (*AddSessionStreamResponse, error)
+	// RemoveSessionStream unsubscribes an active session from a stream.
+	// Idempotent: returns success if stream is not subscribed.
+	RemoveSessionStream(ctx context.Context, in *RemoveSessionStreamRequest, opts ...grpc.CallOption) (*RemoveSessionStreamResponse, error)
 }
 
 type hostFunctionsServiceClient struct {
@@ -176,6 +184,26 @@ func (c *hostFunctionsServiceClient) GetCommandHelp(ctx context.Context, in *Get
 	return out, nil
 }
 
+func (c *hostFunctionsServiceClient) AddSessionStream(ctx context.Context, in *AddSessionStreamRequest, opts ...grpc.CallOption) (*AddSessionStreamResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddSessionStreamResponse)
+	err := c.cc.Invoke(ctx, HostFunctionsService_AddSessionStream_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *hostFunctionsServiceClient) RemoveSessionStream(ctx context.Context, in *RemoveSessionStreamRequest, opts ...grpc.CallOption) (*RemoveSessionStreamResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveSessionStreamResponse)
+	err := c.cc.Invoke(ctx, HostFunctionsService_RemoveSessionStream_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HostFunctionsServiceServer is the server API for HostFunctionsService service.
 // All implementations must embed UnimplementedHostFunctionsServiceServer
 // for forward compatibility.
@@ -206,6 +234,12 @@ type HostFunctionsServiceServer interface {
 	// GetCommandHelp returns detailed help for a specific command.
 	// Requires capability: command.help
 	GetCommandHelp(context.Context, *GetCommandHelpRequest) (*GetCommandHelpResponse, error)
+	// AddSessionStream subscribes an active session to an additional stream mid-session.
+	// Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+	AddSessionStream(context.Context, *AddSessionStreamRequest) (*AddSessionStreamResponse, error)
+	// RemoveSessionStream unsubscribes an active session from a stream.
+	// Idempotent: returns success if stream is not subscribed.
+	RemoveSessionStream(context.Context, *RemoveSessionStreamRequest) (*RemoveSessionStreamResponse, error)
 	mustEmbedUnimplementedHostFunctionsServiceServer()
 }
 
@@ -245,6 +279,12 @@ func (UnimplementedHostFunctionsServiceServer) ListCommands(context.Context, *Li
 }
 func (UnimplementedHostFunctionsServiceServer) GetCommandHelp(context.Context, *GetCommandHelpRequest) (*GetCommandHelpResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCommandHelp not implemented")
+}
+func (UnimplementedHostFunctionsServiceServer) AddSessionStream(context.Context, *AddSessionStreamRequest) (*AddSessionStreamResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddSessionStream not implemented")
+}
+func (UnimplementedHostFunctionsServiceServer) RemoveSessionStream(context.Context, *RemoveSessionStreamRequest) (*RemoveSessionStreamResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveSessionStream not implemented")
 }
 func (UnimplementedHostFunctionsServiceServer) mustEmbedUnimplementedHostFunctionsServiceServer() {}
 func (UnimplementedHostFunctionsServiceServer) testEmbeddedByValue()                              {}
@@ -447,6 +487,42 @@ func _HostFunctionsService_GetCommandHelp_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HostFunctionsService_AddSessionStream_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddSessionStreamRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HostFunctionsServiceServer).AddSessionStream(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HostFunctionsService_AddSessionStream_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HostFunctionsServiceServer).AddSessionStream(ctx, req.(*AddSessionStreamRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HostFunctionsService_RemoveSessionStream_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveSessionStreamRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HostFunctionsServiceServer).RemoveSessionStream(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HostFunctionsService_RemoveSessionStream_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HostFunctionsServiceServer).RemoveSessionStream(ctx, req.(*RemoveSessionStreamRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HostFunctionsService_ServiceDesc is the grpc.ServiceDesc for HostFunctionsService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -493,6 +569,14 @@ var HostFunctionsService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetCommandHelp",
 			Handler:    _HostFunctionsService_GetCommandHelp_Handler,
+		},
+		{
+			MethodName: "AddSessionStream",
+			Handler:    _HostFunctionsService_AddSessionStream_Handler,
+		},
+		{
+			MethodName: "RemoveSessionStream",
+			Handler:    _HostFunctionsService_RemoveSessionStream_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -81,6 +81,7 @@ type PluginSubsystemConfig struct {
 	Sessions        SessionProvider
 	AdminDeps       AdminDepsProvider
 	Registry        *lifecycle.ReadinessRegistry
+	StreamRegistry  plugins.StreamRegistry
 }
 
 // PluginSubsystem manages the plugin Manager, Lua host, core plugin
@@ -137,12 +138,16 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	capRegistry.Register("holomush.plugin.v1.AuditService", hostfunc.NewAuditCapability())
 
 	// Create hostfunc bridge.
-	hostFuncs := hostfunc.New(nil, // KV store not yet available
+	hostFuncOpts := []hostfunc.Option{
 		hostfunc.WithEngine(s.cfg.ABAC.Engine()),
 		hostfunc.WithWorldService(s.cfg.World.Service()),
 		hostfunc.WithSessionAccess(sessionStore),
 		hostfunc.WithCapabilities(capRegistry),
-	)
+	}
+	if s.cfg.StreamRegistry != nil {
+		hostFuncOpts = append(hostFuncOpts, hostfunc.WithStreamRegistry(s.cfg.StreamRegistry))
+	}
+	hostFuncs := hostfunc.New(nil, hostFuncOpts...) // KV store not yet available
 
 	// 3. Create Lua host.
 	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)

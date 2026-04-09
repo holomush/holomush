@@ -19,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/idgen"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/property"
 	"github.com/holomush/holomush/internal/session"
 )
@@ -44,6 +45,7 @@ type Functions struct {
 	propertyRegistry *property.Registry
 	sessionAccess    session.Access
 	capabilities     *CapabilityRegistry
+	streamRegistry   plugins.StreamRegistry
 }
 
 // Option configures Functions.
@@ -78,6 +80,13 @@ func WithSessionAccess(sa session.Access) Option {
 func WithCapabilities(reg *CapabilityRegistry) Option {
 	return func(f *Functions) {
 		f.capabilities = reg
+	}
+}
+
+// WithStreamRegistry sets the stream registry for add/remove session stream host functions.
+func WithStreamRegistry(r plugins.StreamRegistry) Option {
+	return func(f *Functions) {
+		f.streamRegistry = r
 	}
 }
 
@@ -143,6 +152,9 @@ func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...stri
 	// Command registry functions
 	ls.SetField(mod, "list_commands", ls.NewFunction(f.listCommandsFn(pluginName)))
 	ls.SetField(mod, "get_command_help", ls.NewFunction(f.getCommandHelpFn(pluginName)))
+
+	// Register stream management functions (always; guard against nil registry inside).
+	RegisterStreamFuncs(ls, mod, f.streamRegistry)
 
 	ls.SetGlobal("holomush", mod)
 

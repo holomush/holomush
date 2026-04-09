@@ -260,6 +260,77 @@ func (h *Host) Plugins() []string {
 	return names
 }
 
+// QuerySessionStreams calls the plugin's on_session_subscribe(character_id, player_id, session_id)
+// function if defined. Returns the list of stream names the plugin wants added.
+// Returns nil without error if the function is not defined.
+func (h *Host) QuerySessionStreams(ctx context.Context, name string, req plugins.SessionStreamsRequest) ([]string, error) {
+	h.mu.RLock()
+	if h.closed {
+		h.mu.RUnlock()
+		return nil, oops.In("lua").With("plugin", name).With("operation", "query_session_streams").New("host is closed")
+	}
+	p, ok := h.plugins[name]
+	if !ok {
+		h.mu.RUnlock()
+		return nil, oops.In("lua").With("plugin", name).With("operation", "query_session_streams").New("plugin not loaded")
+	}
+	code := p.code
+	requires := p.manifest.Requires
+	h.mu.RUnlock()
+
+	L, err := h.factory.NewState(ctx)
+	if err != nil {
+		return nil, oops.In("lua").With("plugin", name).With("operation", "query_session_streams").Hint("failed to create state").Wrap(err)
+	}
+	defer L.Close()
+	L.SetContext(ctx)
+
+	if h.hostFuncs != nil {
+		h.hostFuncs.Register(L, name, requires...)
+	}
+
+	if err := L.DoString(code); err != nil {
+		return nil, oops.In("lua").With("plugin", name).With("operation", "query_session_streams").Hint("failed to load code").Wrap(err)
+	}
+
+	fn := L.GetGlobal("on_session_subscribe")
+	if fn.Type() == lua.LTNil {
+		return nil, nil
+	}
+
+	if err := L.CallByParam(lua.P{
+		Fn:      fn,
+		NRet:    1,
+		Protect: true,
+	},
+		lua.LString(req.CharacterID),
+		lua.LString(req.PlayerID),
+		lua.LString(req.SessionID),
+	); err != nil {
+		return nil, oops.In("lua").With("plugin", name).With("operation", "on_session_subscribe").Wrap(err)
+	}
+
+	ret := L.Get(-1)
+	L.Pop(1)
+
+	tbl, ok := ret.(*lua.LTable)
+	if !ok {
+		if ret.Type() == lua.LTNil {
+			return nil, nil
+		}
+		return nil, oops.In("lua").With("plugin", name).With("operation", "on_session_subscribe").
+			Errorf("expected table return, got %s", ret.Type())
+	}
+
+	var streams []string
+	tbl.ForEach(func(_ lua.LValue, v lua.LValue) {
+		if s, ok := v.(lua.LString); ok {
+			streams = append(streams, string(s))
+		}
+	})
+	return streams, nil
+}
+
 // Close shuts down the host.
 func (h *Host) Close(_ context.Context) error {
 	h.mu.Lock()

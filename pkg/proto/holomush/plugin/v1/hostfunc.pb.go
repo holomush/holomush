@@ -1395,6 +1395,226 @@ func (x *CommandHelpInfo) GetSource() string {
 	return ""
 }
 
+// AddSessionStreamRequest specifies which session and stream to add.
+type AddSessionStreamRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Active session identifier.
+	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Stream name to subscribe to (format: "prefix:id").
+	Stream        string `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddSessionStreamRequest) Reset() {
+	*x = AddSessionStreamRequest{}
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddSessionStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddSessionStreamRequest) ProtoMessage() {}
+
+func (x *AddSessionStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddSessionStreamRequest.ProtoReflect.Descriptor instead.
+func (*AddSessionStreamRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *AddSessionStreamRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *AddSessionStreamRequest) GetStream() string {
+	if x != nil {
+		return x.Stream
+	}
+	return ""
+}
+
+// AddSessionStreamResponse indicates success or failure.
+type AddSessionStreamResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Whether the stream was successfully added.
+	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	// Non-empty on error.
+	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddSessionStreamResponse) Reset() {
+	*x = AddSessionStreamResponse{}
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddSessionStreamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddSessionStreamResponse) ProtoMessage() {}
+
+func (x *AddSessionStreamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddSessionStreamResponse.ProtoReflect.Descriptor instead.
+func (*AddSessionStreamResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *AddSessionStreamResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *AddSessionStreamResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+// RemoveSessionStreamRequest specifies which stream to remove.
+type RemoveSessionStreamRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Active session identifier.
+	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Stream name to unsubscribe from.
+	Stream        string `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveSessionStreamRequest) Reset() {
+	*x = RemoveSessionStreamRequest{}
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveSessionStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveSessionStreamRequest) ProtoMessage() {}
+
+func (x *RemoveSessionStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveSessionStreamRequest.ProtoReflect.Descriptor instead.
+func (*RemoveSessionStreamRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *RemoveSessionStreamRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *RemoveSessionStreamRequest) GetStream() string {
+	if x != nil {
+		return x.Stream
+	}
+	return ""
+}
+
+// RemoveSessionStreamResponse indicates success or failure.
+type RemoveSessionStreamResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Whether the stream was successfully removed (true even if not subscribed).
+	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	// Non-empty on error.
+	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveSessionStreamResponse) Reset() {
+	*x = RemoveSessionStreamResponse{}
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveSessionStreamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveSessionStreamResponse) ProtoMessage() {}
+
+func (x *RemoveSessionStreamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_hostfunc_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveSessionStreamResponse.ProtoReflect.Descriptor instead.
+func (*RemoveSessionStreamResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *RemoveSessionStreamResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *RemoveSessionStreamResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_holomush_plugin_v1_hostfunc_proto protoreflect.FileDescriptor
 
 const file_holomush_plugin_v1_hostfunc_proto_rawDesc = "" +
@@ -1478,13 +1698,27 @@ const file_holomush_plugin_v1_hostfunc_proto_rawDesc = "" +
 	"\x05usage\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80@R\x05usage\x12&\n" +
 	"\thelp_text\x18\x04 \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x04R\bhelpText\x12\"\n" +
 	"\fcapabilities\x18\x05 \x03(\tR\fcapabilities\x12\x1f\n" +
-	"\x06source\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06source*w\n" +
+	"\x06source\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06source\"b\n" +
+	"\x17AddSessionStreamRequest\x12&\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tsessionId\x12\x1f\n" +
+	"\x06stream\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06stream\"J\n" +
+	"\x18AddSessionStreamResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"e\n" +
+	"\x1aRemoveSessionStreamRequest\x12&\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tsessionId\x12\x1f\n" +
+	"\x06stream\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06stream\"M\n" +
+	"\x1bRemoveSessionStreamResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error*w\n" +
 	"\bLogLevel\x12\x19\n" +
 	"\x15LOG_LEVEL_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fLOG_LEVEL_DEBUG\x10\x01\x12\x12\n" +
 	"\x0eLOG_LEVEL_INFO\x10\x02\x12\x12\n" +
 	"\x0eLOG_LEVEL_WARN\x10\x03\x12\x13\n" +
-	"\x0fLOG_LEVEL_ERROR\x10\x042\xcb\a\n" +
+	"\x0fLOG_LEVEL_ERROR\x10\x042\xb2\t\n" +
 	"\x14HostFunctionsService\x12X\n" +
 	"\tEmitEvent\x12$.holomush.plugin.v1.EmitEventRequest\x1a%.holomush.plugin.v1.EmitEventResponse\x12d\n" +
 	"\rQueryLocation\x12(.holomush.plugin.v1.QueryLocationRequest\x1a).holomush.plugin.v1.QueryLocationResponse\x12g\n" +
@@ -1495,7 +1729,9 @@ const file_holomush_plugin_v1_hostfunc_proto_rawDesc = "" +
 	"\bKVDelete\x12#.holomush.plugin.v1.KVDeleteRequest\x1a$.holomush.plugin.v1.KVDeleteResponse\x12F\n" +
 	"\x03Log\x12\x1e.holomush.plugin.v1.LogRequest\x1a\x1f.holomush.plugin.v1.LogResponse\x12a\n" +
 	"\fListCommands\x12'.holomush.plugin.v1.ListCommandsRequest\x1a(.holomush.plugin.v1.ListCommandsResponse\x12g\n" +
-	"\x0eGetCommandHelp\x12).holomush.plugin.v1.GetCommandHelpRequest\x1a*.holomush.plugin.v1.GetCommandHelpResponseB\xd5\x01\n" +
+	"\x0eGetCommandHelp\x12).holomush.plugin.v1.GetCommandHelpRequest\x1a*.holomush.plugin.v1.GetCommandHelpResponse\x12m\n" +
+	"\x10AddSessionStream\x12+.holomush.plugin.v1.AddSessionStreamRequest\x1a,.holomush.plugin.v1.AddSessionStreamResponse\x12v\n" +
+	"\x13RemoveSessionStream\x12..holomush.plugin.v1.RemoveSessionStreamRequest\x1a/.holomush.plugin.v1.RemoveSessionStreamResponseB\xd5\x01\n" +
 	"\x16com.holomush.plugin.v1B\rHostfuncProtoP\x01ZBgithub.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1\xa2\x02\x03HPX\xaa\x02\x12Holomush.Plugin.V1\xca\x02\x12Holomush\\Plugin\\V1\xe2\x02\x1eHolomush\\Plugin\\V1\\GPBMetadata\xea\x02\x14Holomush::Plugin::V1b\x06proto3"
 
 var (
@@ -1511,7 +1747,7 @@ func file_holomush_plugin_v1_hostfunc_proto_rawDescGZIP() []byte {
 }
 
 var file_holomush_plugin_v1_hostfunc_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_holomush_plugin_v1_hostfunc_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_holomush_plugin_v1_hostfunc_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_holomush_plugin_v1_hostfunc_proto_goTypes = []any{
 	(LogLevel)(0),                           // 0: holomush.plugin.v1.LogLevel
 	(*EmitEventRequest)(nil),                // 1: holomush.plugin.v1.EmitEventRequest
@@ -1538,16 +1774,20 @@ var file_holomush_plugin_v1_hostfunc_proto_goTypes = []any{
 	(*GetCommandHelpRequest)(nil),           // 22: holomush.plugin.v1.GetCommandHelpRequest
 	(*GetCommandHelpResponse)(nil),          // 23: holomush.plugin.v1.GetCommandHelpResponse
 	(*CommandHelpInfo)(nil),                 // 24: holomush.plugin.v1.CommandHelpInfo
-	nil,                                     // 25: holomush.plugin.v1.LogRequest.FieldsEntry
-	(*EmitEvent)(nil),                       // 26: holomush.plugin.v1.EmitEvent
+	(*AddSessionStreamRequest)(nil),         // 25: holomush.plugin.v1.AddSessionStreamRequest
+	(*AddSessionStreamResponse)(nil),        // 26: holomush.plugin.v1.AddSessionStreamResponse
+	(*RemoveSessionStreamRequest)(nil),      // 27: holomush.plugin.v1.RemoveSessionStreamRequest
+	(*RemoveSessionStreamResponse)(nil),     // 28: holomush.plugin.v1.RemoveSessionStreamResponse
+	nil,                                     // 29: holomush.plugin.v1.LogRequest.FieldsEntry
+	(*EmitEvent)(nil),                       // 30: holomush.plugin.v1.EmitEvent
 }
 var file_holomush_plugin_v1_hostfunc_proto_depIdxs = []int32{
-	26, // 0: holomush.plugin.v1.EmitEventRequest.event:type_name -> holomush.plugin.v1.EmitEvent
+	30, // 0: holomush.plugin.v1.EmitEventRequest.event:type_name -> holomush.plugin.v1.EmitEvent
 	5,  // 1: holomush.plugin.v1.QueryLocationResponse.location:type_name -> holomush.plugin.v1.LocationInfo
 	8,  // 2: holomush.plugin.v1.QueryCharacterResponse.character:type_name -> holomush.plugin.v1.CharacterInfo
 	8,  // 3: holomush.plugin.v1.QueryLocationCharactersResponse.characters:type_name -> holomush.plugin.v1.CharacterInfo
 	0,  // 4: holomush.plugin.v1.LogRequest.level:type_name -> holomush.plugin.v1.LogLevel
-	25, // 5: holomush.plugin.v1.LogRequest.fields:type_name -> holomush.plugin.v1.LogRequest.FieldsEntry
+	29, // 5: holomush.plugin.v1.LogRequest.fields:type_name -> holomush.plugin.v1.LogRequest.FieldsEntry
 	21, // 6: holomush.plugin.v1.ListCommandsResponse.commands:type_name -> holomush.plugin.v1.CommandInfo
 	24, // 7: holomush.plugin.v1.GetCommandHelpResponse.command:type_name -> holomush.plugin.v1.CommandHelpInfo
 	1,  // 8: holomush.plugin.v1.HostFunctionsService.EmitEvent:input_type -> holomush.plugin.v1.EmitEventRequest
@@ -1560,18 +1800,22 @@ var file_holomush_plugin_v1_hostfunc_proto_depIdxs = []int32{
 	17, // 15: holomush.plugin.v1.HostFunctionsService.Log:input_type -> holomush.plugin.v1.LogRequest
 	19, // 16: holomush.plugin.v1.HostFunctionsService.ListCommands:input_type -> holomush.plugin.v1.ListCommandsRequest
 	22, // 17: holomush.plugin.v1.HostFunctionsService.GetCommandHelp:input_type -> holomush.plugin.v1.GetCommandHelpRequest
-	2,  // 18: holomush.plugin.v1.HostFunctionsService.EmitEvent:output_type -> holomush.plugin.v1.EmitEventResponse
-	4,  // 19: holomush.plugin.v1.HostFunctionsService.QueryLocation:output_type -> holomush.plugin.v1.QueryLocationResponse
-	7,  // 20: holomush.plugin.v1.HostFunctionsService.QueryCharacter:output_type -> holomush.plugin.v1.QueryCharacterResponse
-	10, // 21: holomush.plugin.v1.HostFunctionsService.QueryLocationCharacters:output_type -> holomush.plugin.v1.QueryLocationCharactersResponse
-	12, // 22: holomush.plugin.v1.HostFunctionsService.KVGet:output_type -> holomush.plugin.v1.KVGetResponse
-	14, // 23: holomush.plugin.v1.HostFunctionsService.KVSet:output_type -> holomush.plugin.v1.KVSetResponse
-	16, // 24: holomush.plugin.v1.HostFunctionsService.KVDelete:output_type -> holomush.plugin.v1.KVDeleteResponse
-	18, // 25: holomush.plugin.v1.HostFunctionsService.Log:output_type -> holomush.plugin.v1.LogResponse
-	20, // 26: holomush.plugin.v1.HostFunctionsService.ListCommands:output_type -> holomush.plugin.v1.ListCommandsResponse
-	23, // 27: holomush.plugin.v1.HostFunctionsService.GetCommandHelp:output_type -> holomush.plugin.v1.GetCommandHelpResponse
-	18, // [18:28] is the sub-list for method output_type
-	8,  // [8:18] is the sub-list for method input_type
+	25, // 18: holomush.plugin.v1.HostFunctionsService.AddSessionStream:input_type -> holomush.plugin.v1.AddSessionStreamRequest
+	27, // 19: holomush.plugin.v1.HostFunctionsService.RemoveSessionStream:input_type -> holomush.plugin.v1.RemoveSessionStreamRequest
+	2,  // 20: holomush.plugin.v1.HostFunctionsService.EmitEvent:output_type -> holomush.plugin.v1.EmitEventResponse
+	4,  // 21: holomush.plugin.v1.HostFunctionsService.QueryLocation:output_type -> holomush.plugin.v1.QueryLocationResponse
+	7,  // 22: holomush.plugin.v1.HostFunctionsService.QueryCharacter:output_type -> holomush.plugin.v1.QueryCharacterResponse
+	10, // 23: holomush.plugin.v1.HostFunctionsService.QueryLocationCharacters:output_type -> holomush.plugin.v1.QueryLocationCharactersResponse
+	12, // 24: holomush.plugin.v1.HostFunctionsService.KVGet:output_type -> holomush.plugin.v1.KVGetResponse
+	14, // 25: holomush.plugin.v1.HostFunctionsService.KVSet:output_type -> holomush.plugin.v1.KVSetResponse
+	16, // 26: holomush.plugin.v1.HostFunctionsService.KVDelete:output_type -> holomush.plugin.v1.KVDeleteResponse
+	18, // 27: holomush.plugin.v1.HostFunctionsService.Log:output_type -> holomush.plugin.v1.LogResponse
+	20, // 28: holomush.plugin.v1.HostFunctionsService.ListCommands:output_type -> holomush.plugin.v1.ListCommandsResponse
+	23, // 29: holomush.plugin.v1.HostFunctionsService.GetCommandHelp:output_type -> holomush.plugin.v1.GetCommandHelpResponse
+	26, // 30: holomush.plugin.v1.HostFunctionsService.AddSessionStream:output_type -> holomush.plugin.v1.AddSessionStreamResponse
+	28, // 31: holomush.plugin.v1.HostFunctionsService.RemoveSessionStream:output_type -> holomush.plugin.v1.RemoveSessionStreamResponse
+	20, // [20:32] is the sub-list for method output_type
+	8,  // [8:20] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name
 	8,  // [8:8] is the sub-list for extension extendee
 	0,  // [0:8] is the sub-list for field type_name
@@ -1589,7 +1833,7 @@ func file_holomush_plugin_v1_hostfunc_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_plugin_v1_hostfunc_proto_rawDesc), len(file_holomush_plugin_v1_hostfunc_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   25,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

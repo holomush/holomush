@@ -632,6 +632,38 @@ func (h *Host) Plugins() []string {
 	return names
 }
 
+// QuerySessionStreams calls the plugin's QuerySessionStreams RPC.
+// Returns nil if the plugin has no streams to contribute.
+func (h *Host) QuerySessionStreams(ctx context.Context, name string, req plugins.SessionStreamsRequest) ([]string, error) {
+	h.mu.RLock()
+	if h.closed {
+		h.mu.RUnlock()
+		return nil, ErrHostClosed
+	}
+	p, ok := h.plugins[name]
+	h.mu.RUnlock()
+
+	if !ok {
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "query_session_streams").Wrap(ErrPluginNotLoaded)
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, DefaultEventTimeout)
+	defer cancel()
+
+	resp, err := p.plugin.QuerySessionStreams(callCtx, &pluginv1.QuerySessionStreamsRequest{
+		CharacterId: req.CharacterID,
+		PlayerId:    req.PlayerID,
+		SessionId:   req.SessionID,
+	})
+	if err != nil {
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "query_session_streams").Wrap(err)
+	}
+	if resp.GetError() != "" {
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "query_session_streams").New(resp.GetError())
+	}
+	return resp.GetStreams(), nil
+}
+
 // Close shuts down the host and all plugins.
 func (h *Host) Close(_ context.Context) error {
 	h.mu.Lock()

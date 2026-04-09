@@ -31,7 +31,6 @@ import (
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
-
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	authsetup "github.com/holomush/holomush/internal/auth/setup"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
@@ -55,6 +54,7 @@ type grpcSubsystemConfig struct {
 	ReaperInterval time.Duration
 	MaxHistory     int
 	GameConfig     config.GameConfig
+	StreamRegistry *holoGRPC.SessionStreamRegistry
 }
 
 // grpcSubsystem is the terminal subsystem that wires the gRPC server.
@@ -189,7 +189,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	}
 
 	// 8. Create CoreServer and register with gRPC.
-	coreServer := holoGRPC.NewCoreServer(engine, sessionStore, cmdDispatcher, cmdServices,
+	coreServerOpts := []holoGRPC.CoreServerOption{
 		holoGRPC.WithEventStore(eventStore),
 		holoGRPC.WithWorldQuerier(worldService),
 		holoGRPC.WithAuthService(authService),
@@ -208,7 +208,12 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 			}
 		}),
 		holoGRPC.WithGuestService(guestService),
-	)
+		holoGRPC.WithStreamContributor(pluginManager),
+	}
+	if s.cfg.StreamRegistry != nil {
+		coreServerOpts = append(coreServerOpts, holoGRPC.WithStreamRegistry(s.cfg.StreamRegistry))
+	}
+	coreServer := holoGRPC.NewCoreServer(engine, sessionStore, cmdDispatcher, cmdServices, coreServerOpts...)
 	corev1.RegisterCoreServiceServer(s.grpcServer, coreServer)
 
 	// 9. Create ContentService, register with gRPC.

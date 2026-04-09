@@ -8,7 +8,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { EmitEventRequest, EmitEventResponse, GetCommandHelpRequest, GetCommandHelpResponse, KVDeleteRequest, KVDeleteResponse, KVGetRequest, KVGetResponse, KVSetRequest, KVSetResponse, ListCommandsRequest, ListCommandsResponse, LogRequest, LogResponse, QueryCharacterRequest, QueryCharacterResponse, QueryLocationCharactersRequest, QueryLocationCharactersResponse, QueryLocationRequest, QueryLocationResponse } from "./hostfunc_pb.js";
+import { AddSessionStreamRequest, AddSessionStreamResponse, EmitEventRequest, EmitEventResponse, GetCommandHelpRequest, GetCommandHelpResponse, KVDeleteRequest, KVDeleteResponse, KVGetRequest, KVGetResponse, KVSetRequest, KVSetResponse, ListCommandsRequest, ListCommandsResponse, LogRequest, LogResponse, QueryCharacterRequest, QueryCharacterResponse, QueryLocationCharactersRequest, QueryLocationCharactersResponse, QueryLocationRequest, QueryLocationResponse, RemoveSessionStreamRequest, RemoveSessionStreamResponse } from "./hostfunc_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -131,6 +131,30 @@ export const HostFunctionsService = {
       name: "GetCommandHelp",
       I: GetCommandHelpRequest,
       O: GetCommandHelpResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * AddSessionStream subscribes an active session to an additional stream mid-session.
+     * Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+     *
+     * @generated from rpc holomush.plugin.v1.HostFunctionsService.AddSessionStream
+     */
+    addSessionStream: {
+      name: "AddSessionStream",
+      I: AddSessionStreamRequest,
+      O: AddSessionStreamResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * RemoveSessionStream unsubscribes an active session from a stream.
+     * Idempotent: returns success if stream is not subscribed.
+     *
+     * @generated from rpc holomush.plugin.v1.HostFunctionsService.RemoveSessionStream
+     */
+    removeSessionStream: {
+      name: "RemoveSessionStream",
+      I: RemoveSessionStreamRequest,
+      O: RemoveSessionStreamResponse,
       kind: MethodKind.Unary,
     },
   }

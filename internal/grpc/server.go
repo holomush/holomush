@@ -26,6 +26,7 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -93,6 +94,11 @@ type WorldQuerier interface {
 	GetExitsByLocation(ctx context.Context, subjectID string, locationID ulid.ULID) ([]*world.Exit, error)
 }
 
+// SessionStreamContributor collects plugin-contributed stream names for a session.
+type SessionStreamContributor interface {
+	QuerySessionStreams(ctx context.Context, req plugins.SessionStreamsRequest) []string
+}
+
 // CoreServer implements the gRPC Core service.
 type CoreServer struct {
 	corev1.UnimplementedCoreServiceServer
@@ -114,6 +120,13 @@ type CoreServer struct {
 	playerRepo        auth.PlayerRepository
 	charRepo          auth.CharacterRepository
 	guestService      *auth.GuestService
+
+	// Plugin stream contribution and mid-session stream control.
+	streamContributor SessionStreamContributor
+	streamRegistry    *SessionStreamRegistry
+
+	// afterLISTENHook fires between LISTEN setup and replay — used in tests.
+	afterLISTENHook func()
 
 	// newSessionID is used for generating session IDs. Can be overridden for testing.
 	newSessionID func() ulid.ULID
@@ -201,6 +214,24 @@ func WithCursorCommitHook(hook func(ctx context.Context, sessionID string, event
 // has no semantic meaning outside the lock map's internals.
 func (s *CoreServer) CursorLockRefCount(sessionID string) int {
 	return s.cursorLocks.refCount(sessionID)
+}
+
+// WithStreamContributor sets the plugin stream contributor for the server.
+func WithStreamContributor(c SessionStreamContributor) CoreServerOption {
+	return func(s *CoreServer) { s.streamContributor = c }
+}
+
+// WithStreamRegistry sets the session stream registry for mid-session stream control.
+func WithStreamRegistry(r *SessionStreamRegistry) CoreServerOption {
+	return func(s *CoreServer) { s.streamRegistry = r }
+}
+
+// WithAfterLISTENHook sets a callback fired between LISTEN setup and replay.
+// For testing only.
+func WithAfterLISTENHook(hook func()) CoreServerOption {
+	return func(s *CoreServer) {
+		s.afterLISTENHook = hook
+	}
 }
 
 // NewCoreServer creates a new Core gRPC server.
@@ -400,6 +431,21 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 func isUserFacingError(err error) bool {
 	msg := command.PlayerMessage(err)
 	return msg != "Something went wrong. Try again."
+}
+
+// isValidSessionStreamName validates a plugin-contributed stream name.
+// Stream names must be non-empty, contain at least one colon, have no whitespace,
+// and be at most 256 characters long. Mirrors internal/plugin/manager.isValidStreamName.
+func isValidSessionStreamName(name string) bool {
+	if name == "" || len(name) > 256 {
+		return false
+	}
+	for _, r := range name {
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			return false
+		}
+	}
+	return strings.Contains(name, ":")
 }
 
 // emitCommandResponse emits a command_response or command_error event to the
@@ -673,6 +719,37 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		staticStreams = append(staticStreams, charStreamName)
 	}
 
+	// Collect plugin-contributed streams (before LISTEN setup to preserve ordering invariant).
+	if s.streamContributor != nil {
+		contribCtx, contribCancel := context.WithTimeout(ctx, 2*time.Second)
+		playerID := ""
+		if !info.PlayerID.IsZero() {
+			playerID = info.PlayerID.String()
+		}
+		pluginStreams := s.streamContributor.QuerySessionStreams(contribCtx, plugins.SessionStreamsRequest{
+			CharacterID: info.CharacterID.String(),
+			PlayerID:    playerID,
+			SessionID:   info.ID,
+		})
+		contribCancel()
+		seen := make(map[string]bool, len(staticStreams))
+		for _, sn := range staticStreams {
+			seen[sn] = true
+		}
+		for _, ps := range pluginStreams {
+			if strings.HasPrefix(ps, world.StreamPrefixLocation) || seen[ps] {
+				continue
+			}
+			if !isValidSessionStreamName(ps) {
+				slog.WarnContext(ctx, "plugin contributed malformed stream name — skipping",
+					"session_id", info.ID, "stream", ps)
+				continue
+			}
+			staticStreams = append(staticStreams, ps)
+			seen[ps] = true
+		}
+	}
+
 	// All streams = static + location.
 	allStreams := make([]string, 0, len(staticStreams)+1)
 	allStreams = append(allStreams, staticStreams...)
@@ -683,8 +760,23 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	// Set up LISTEN subscriptions before any replay to avoid missing events.
 	notifyCh := make(chan streamNotification, 100)
 	errCh := make(chan error, len(allStreams))
+	streamCancels := make(map[string]context.CancelFunc)
+	subscribeWithCancel := func(sn string) error {
+		sctx, cancel := context.WithCancel(ctx)
+		if err := subscribeStream(sctx, s.eventStore, sn, notifyCh, errCh); err != nil {
+			cancel()
+			return err
+		}
+		streamCancels[sn] = cancel
+		return nil
+	}
+	defer func() {
+		for _, cancel := range streamCancels {
+			cancel()
+		}
+	}()
 	for _, sn := range allStreams {
-		if subErr := subscribeStream(ctx, s.eventStore, sn, notifyCh, errCh); subErr != nil {
+		if subErr := subscribeWithCancel(sn); subErr != nil {
 			return oops.Code("SUBSCRIBE_FAILED").With("session_id", req.SessionId).With("stream", sn).Wrap(subErr)
 		}
 	}
@@ -719,6 +811,17 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 			lf.locCancel()
 		}
 	}()
+
+	// Register session control channel for mid-session stream updates.
+	ctrlCh := make(chan sessionStreamUpdate, 16)
+	if s.streamRegistry != nil {
+		s.streamRegistry.Register(info.ID, ctrlCh)
+		defer s.streamRegistry.Deregister(info.ID, ctrlCh)
+	}
+
+	if s.afterLISTENHook != nil {
+		s.afterLISTENHook()
+	}
 
 	// Single replay pass: catches both historical cursor-based events
 	// (reconnection) and events appended during LISTEN setup (race window).
@@ -791,6 +894,44 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 					},
 				})
 				return nil
+			}
+
+		case ctrl, ok := <-ctrlCh:
+			if !ok {
+				return nil
+			}
+			if ctrl.add {
+				if _, exists := streamCancels[ctrl.stream]; exists {
+					continue // already subscribed — idempotent
+				}
+				if strings.HasPrefix(ctrl.stream, world.StreamPrefixLocation) {
+					slog.WarnContext(ctx, "plugin attempted to add location stream — rejected",
+						"session_id", info.ID, "stream", ctrl.stream)
+					continue
+				}
+				if subErr := subscribeWithCancel(ctrl.stream); subErr != nil {
+					slog.WarnContext(ctx, "mid-session stream add failed",
+						"session_id", info.ID, "stream", ctrl.stream, "error", subErr)
+				} else {
+					cursor := lastSentID[ctrl.stream]
+					if cursor.IsZero() && info.EventCursors != nil {
+						if c, ok := info.EventCursors[ctrl.stream]; ok {
+							cursor = c
+						}
+					}
+					last, sendErr := s.replayAndSend(ctx, info, ctrl.stream, cursor, stream, lf)
+					if sendErr != nil {
+						return oops.Code("SEND_FAILED").With("session_id", info.ID).Wrap(sendErr)
+					}
+					if !last.IsZero() {
+						lastSentID[ctrl.stream] = last
+					}
+				}
+			} else {
+				if cancel, exists := streamCancels[ctrl.stream]; exists {
+					cancel()
+					delete(streamCancels, ctrl.stream)
+				}
 			}
 		}
 	}

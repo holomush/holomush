@@ -1406,6 +1406,327 @@ func (*PluginHostServiceKVDeleteResponse) Descriptor() ([]byte, []int) {
 	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{21}
 }
 
+// PluginHostServiceAddSessionStreamRequest specifies which session and stream to add.
+type PluginHostServiceAddSessionStreamRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Active session identifier.
+	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Stream name to subscribe to (format: "prefix:id").
+	Stream        string `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginHostServiceAddSessionStreamRequest) Reset() {
+	*x = PluginHostServiceAddSessionStreamRequest{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginHostServiceAddSessionStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginHostServiceAddSessionStreamRequest) ProtoMessage() {}
+
+func (x *PluginHostServiceAddSessionStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginHostServiceAddSessionStreamRequest.ProtoReflect.Descriptor instead.
+func (*PluginHostServiceAddSessionStreamRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *PluginHostServiceAddSessionStreamRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *PluginHostServiceAddSessionStreamRequest) GetStream() string {
+	if x != nil {
+		return x.Stream
+	}
+	return ""
+}
+
+// PluginHostServiceAddSessionStreamResponse indicates success or failure.
+type PluginHostServiceAddSessionStreamResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Whether the stream was successfully added.
+	Success       bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginHostServiceAddSessionStreamResponse) Reset() {
+	*x = PluginHostServiceAddSessionStreamResponse{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginHostServiceAddSessionStreamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginHostServiceAddSessionStreamResponse) ProtoMessage() {}
+
+func (x *PluginHostServiceAddSessionStreamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginHostServiceAddSessionStreamResponse.ProtoReflect.Descriptor instead.
+func (*PluginHostServiceAddSessionStreamResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *PluginHostServiceAddSessionStreamResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+// PluginHostServiceRemoveSessionStreamRequest specifies which stream to remove.
+type PluginHostServiceRemoveSessionStreamRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Active session identifier.
+	SessionId string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Stream name to unsubscribe from.
+	Stream        string `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginHostServiceRemoveSessionStreamRequest) Reset() {
+	*x = PluginHostServiceRemoveSessionStreamRequest{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginHostServiceRemoveSessionStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginHostServiceRemoveSessionStreamRequest) ProtoMessage() {}
+
+func (x *PluginHostServiceRemoveSessionStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginHostServiceRemoveSessionStreamRequest.ProtoReflect.Descriptor instead.
+func (*PluginHostServiceRemoveSessionStreamRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *PluginHostServiceRemoveSessionStreamRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *PluginHostServiceRemoveSessionStreamRequest) GetStream() string {
+	if x != nil {
+		return x.Stream
+	}
+	return ""
+}
+
+// PluginHostServiceRemoveSessionStreamResponse indicates success or failure.
+type PluginHostServiceRemoveSessionStreamResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Whether the stream was successfully removed (true even if not subscribed).
+	Success       bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PluginHostServiceRemoveSessionStreamResponse) Reset() {
+	*x = PluginHostServiceRemoveSessionStreamResponse{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PluginHostServiceRemoveSessionStreamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PluginHostServiceRemoveSessionStreamResponse) ProtoMessage() {}
+
+func (x *PluginHostServiceRemoveSessionStreamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PluginHostServiceRemoveSessionStreamResponse.ProtoReflect.Descriptor instead.
+func (*PluginHostServiceRemoveSessionStreamResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *PluginHostServiceRemoveSessionStreamResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+// QuerySessionStreamsRequest provides session context for stream contribution.
+type QuerySessionStreamsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Identifier of the character entering the session.
+	CharacterId string `protobuf:"bytes,1,opt,name=character_id,json=characterId,proto3" json:"character_id,omitempty"`
+	// Identifier of the player owning the character.
+	PlayerId string `protobuf:"bytes,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	// Session identifier.
+	SessionId     string `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QuerySessionStreamsRequest) Reset() {
+	*x = QuerySessionStreamsRequest{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QuerySessionStreamsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QuerySessionStreamsRequest) ProtoMessage() {}
+
+func (x *QuerySessionStreamsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QuerySessionStreamsRequest.ProtoReflect.Descriptor instead.
+func (*QuerySessionStreamsRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *QuerySessionStreamsRequest) GetCharacterId() string {
+	if x != nil {
+		return x.CharacterId
+	}
+	return ""
+}
+
+func (x *QuerySessionStreamsRequest) GetPlayerId() string {
+	if x != nil {
+		return x.PlayerId
+	}
+	return ""
+}
+
+func (x *QuerySessionStreamsRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+// QuerySessionStreamsResponse returns stream names and an optional error.
+type QuerySessionStreamsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Stream names the plugin wants added to this session's subscription.
+	Streams []string `protobuf:"bytes,1,rep,name=streams,proto3" json:"streams,omitempty"`
+	// Non-empty indicates a plugin-reported error. Host degrades (logs + skips).
+	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QuerySessionStreamsResponse) Reset() {
+	*x = QuerySessionStreamsResponse{}
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QuerySessionStreamsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QuerySessionStreamsResponse) ProtoMessage() {}
+
+func (x *QuerySessionStreamsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_plugin_v1_plugin_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QuerySessionStreamsResponse.ProtoReflect.Descriptor instead.
+func (*QuerySessionStreamsResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_plugin_v1_plugin_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *QuerySessionStreamsResponse) GetStreams() []string {
+	if x != nil {
+		return x.Streams
+	}
+	return nil
+}
+
+func (x *QuerySessionStreamsResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_holomush_plugin_v1_plugin_proto protoreflect.FileDescriptor
 
 const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
@@ -1501,7 +1822,27 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\vplugin_name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"pluginName\x12\x19\n" +
 	"\x03key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03key\"#\n" +
-	"!PluginHostServiceKVDeleteResponse*\x96\x01\n" +
+	"!PluginHostServiceKVDeleteResponse\"a\n" +
+	"(PluginHostServiceAddSessionStreamRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x16\n" +
+	"\x06stream\x18\x02 \x01(\tR\x06stream\"E\n" +
+	")PluginHostServiceAddSessionStreamResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"d\n" +
+	"+PluginHostServiceRemoveSessionStreamRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x16\n" +
+	"\x06stream\x18\x02 \x01(\tR\x06stream\"H\n" +
+	",PluginHostServiceRemoveSessionStreamResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"{\n" +
+	"\x1aQuerySessionStreamsRequest\x12!\n" +
+	"\fcharacter_id\x18\x01 \x01(\tR\vcharacterId\x12\x1b\n" +
+	"\tplayer_id\x18\x02 \x01(\tR\bplayerId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x03 \x01(\tR\tsessionId\"M\n" +
+	"\x1bQuerySessionStreamsResponse\x12\x18\n" +
+	"\astreams\x18\x01 \x03(\tR\astreams\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error*\x96\x01\n" +
 	"\rCommandStatus\x12\x1e\n" +
 	"\x1aCOMMAND_STATUS_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11COMMAND_STATUS_OK\x10\x01\x12\x18\n" +
@@ -1511,17 +1852,20 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\vAuditEffect\x12\x1c\n" +
 	"\x18AUDIT_EFFECT_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11AUDIT_EFFECT_DENY\x10\x01\x12\x16\n" +
-	"\x12AUDIT_EFFECT_ALLOW\x10\x022\xa0\x02\n" +
+	"\x12AUDIT_EFFECT_ALLOW\x10\x022\x98\x03\n" +
 	"\rPluginService\x12I\n" +
 	"\x04Init\x12\x1f.holomush.plugin.v1.InitRequest\x1a .holomush.plugin.v1.InitResponse\x12^\n" +
 	"\vHandleEvent\x12&.holomush.plugin.v1.HandleEventRequest\x1a'.holomush.plugin.v1.HandleEventResponse\x12d\n" +
-	"\rHandleCommand\x12(.holomush.plugin.v1.HandleCommandRequest\x1a).holomush.plugin.v1.HandleCommandResponse2\xd2\x04\n" +
+	"\rHandleCommand\x12(.holomush.plugin.v1.HandleCommandRequest\x1a).holomush.plugin.v1.HandleCommandResponse\x12v\n" +
+	"\x13QuerySessionStreams\x12..holomush.plugin.v1.QuerySessionStreamsRequest\x1a/.holomush.plugin.v1.QuerySessionStreamsResponse2\xff\x06\n" +
 	"\x11PluginHostService\x12z\n" +
 	"\tEmitEvent\x125.holomush.plugin.v1.PluginHostServiceEmitEventRequest\x1a6.holomush.plugin.v1.PluginHostServiceEmitEventResponse\x12h\n" +
 	"\x03Log\x12/.holomush.plugin.v1.PluginHostServiceLogRequest\x1a0.holomush.plugin.v1.PluginHostServiceLogResponse\x12n\n" +
 	"\x05KVGet\x121.holomush.plugin.v1.PluginHostServiceKVGetRequest\x1a2.holomush.plugin.v1.PluginHostServiceKVGetResponse\x12n\n" +
 	"\x05KVSet\x121.holomush.plugin.v1.PluginHostServiceKVSetRequest\x1a2.holomush.plugin.v1.PluginHostServiceKVSetResponse\x12w\n" +
-	"\bKVDelete\x124.holomush.plugin.v1.PluginHostServiceKVDeleteRequest\x1a5.holomush.plugin.v1.PluginHostServiceKVDeleteResponseB\xd3\x01\n" +
+	"\bKVDelete\x124.holomush.plugin.v1.PluginHostServiceKVDeleteRequest\x1a5.holomush.plugin.v1.PluginHostServiceKVDeleteResponse\x12\x8f\x01\n" +
+	"\x10AddSessionStream\x12<.holomush.plugin.v1.PluginHostServiceAddSessionStreamRequest\x1a=.holomush.plugin.v1.PluginHostServiceAddSessionStreamResponse\x12\x98\x01\n" +
+	"\x13RemoveSessionStream\x12?.holomush.plugin.v1.PluginHostServiceRemoveSessionStreamRequest\x1a@.holomush.plugin.v1.PluginHostServiceRemoveSessionStreamResponseB\xd3\x01\n" +
 	"\x16com.holomush.plugin.v1B\vPluginProtoP\x01ZBgithub.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1\xa2\x02\x03HPX\xaa\x02\x12Holomush.Plugin.V1\xca\x02\x12Holomush\\Plugin\\V1\xe2\x02\x1eHolomush\\Plugin\\V1\\GPBMetadata\xea\x02\x14Holomush::Plugin::V1b\x06proto3"
 
 var (
@@ -1537,37 +1881,43 @@ func file_holomush_plugin_v1_plugin_proto_rawDescGZIP() []byte {
 }
 
 var file_holomush_plugin_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_holomush_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_holomush_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_holomush_plugin_v1_plugin_proto_goTypes = []any{
-	(CommandStatus)(0),                         // 0: holomush.plugin.v1.CommandStatus
-	(AuditEffect)(0),                           // 1: holomush.plugin.v1.AuditEffect
-	(*ServiceConfig)(nil),                      // 2: holomush.plugin.v1.ServiceConfig
-	(*InitRequest)(nil),                        // 3: holomush.plugin.v1.InitRequest
-	(*InitResponse)(nil),                       // 4: holomush.plugin.v1.InitResponse
-	(*Event)(nil),                              // 5: holomush.plugin.v1.Event
-	(*EmitEvent)(nil),                          // 6: holomush.plugin.v1.EmitEvent
-	(*HandleEventRequest)(nil),                 // 7: holomush.plugin.v1.HandleEventRequest
-	(*HandleEventResponse)(nil),                // 8: holomush.plugin.v1.HandleEventResponse
-	(*CommandRequest)(nil),                     // 9: holomush.plugin.v1.CommandRequest
-	(*CommandResponse)(nil),                    // 10: holomush.plugin.v1.CommandResponse
-	(*AuditDecisionHint)(nil),                  // 11: holomush.plugin.v1.AuditDecisionHint
-	(*HandleCommandRequest)(nil),               // 12: holomush.plugin.v1.HandleCommandRequest
-	(*HandleCommandResponse)(nil),              // 13: holomush.plugin.v1.HandleCommandResponse
-	(*PluginHostServiceEmitEventRequest)(nil),  // 14: holomush.plugin.v1.PluginHostServiceEmitEventRequest
-	(*PluginHostServiceEmitEventResponse)(nil), // 15: holomush.plugin.v1.PluginHostServiceEmitEventResponse
-	(*PluginHostServiceLogRequest)(nil),        // 16: holomush.plugin.v1.PluginHostServiceLogRequest
-	(*PluginHostServiceLogResponse)(nil),       // 17: holomush.plugin.v1.PluginHostServiceLogResponse
-	(*PluginHostServiceKVGetRequest)(nil),      // 18: holomush.plugin.v1.PluginHostServiceKVGetRequest
-	(*PluginHostServiceKVGetResponse)(nil),     // 19: holomush.plugin.v1.PluginHostServiceKVGetResponse
-	(*PluginHostServiceKVSetRequest)(nil),      // 20: holomush.plugin.v1.PluginHostServiceKVSetRequest
-	(*PluginHostServiceKVSetResponse)(nil),     // 21: holomush.plugin.v1.PluginHostServiceKVSetResponse
-	(*PluginHostServiceKVDeleteRequest)(nil),   // 22: holomush.plugin.v1.PluginHostServiceKVDeleteRequest
-	(*PluginHostServiceKVDeleteResponse)(nil),  // 23: holomush.plugin.v1.PluginHostServiceKVDeleteResponse
-	nil, // 24: holomush.plugin.v1.ServiceConfig.RequiredServicesEntry
-	nil, // 25: holomush.plugin.v1.AuditDecisionHint.AttributesEntry
+	(CommandStatus)(0),                                   // 0: holomush.plugin.v1.CommandStatus
+	(AuditEffect)(0),                                     // 1: holomush.plugin.v1.AuditEffect
+	(*ServiceConfig)(nil),                                // 2: holomush.plugin.v1.ServiceConfig
+	(*InitRequest)(nil),                                  // 3: holomush.plugin.v1.InitRequest
+	(*InitResponse)(nil),                                 // 4: holomush.plugin.v1.InitResponse
+	(*Event)(nil),                                        // 5: holomush.plugin.v1.Event
+	(*EmitEvent)(nil),                                    // 6: holomush.plugin.v1.EmitEvent
+	(*HandleEventRequest)(nil),                           // 7: holomush.plugin.v1.HandleEventRequest
+	(*HandleEventResponse)(nil),                          // 8: holomush.plugin.v1.HandleEventResponse
+	(*CommandRequest)(nil),                               // 9: holomush.plugin.v1.CommandRequest
+	(*CommandResponse)(nil),                              // 10: holomush.plugin.v1.CommandResponse
+	(*AuditDecisionHint)(nil),                            // 11: holomush.plugin.v1.AuditDecisionHint
+	(*HandleCommandRequest)(nil),                         // 12: holomush.plugin.v1.HandleCommandRequest
+	(*HandleCommandResponse)(nil),                        // 13: holomush.plugin.v1.HandleCommandResponse
+	(*PluginHostServiceEmitEventRequest)(nil),            // 14: holomush.plugin.v1.PluginHostServiceEmitEventRequest
+	(*PluginHostServiceEmitEventResponse)(nil),           // 15: holomush.plugin.v1.PluginHostServiceEmitEventResponse
+	(*PluginHostServiceLogRequest)(nil),                  // 16: holomush.plugin.v1.PluginHostServiceLogRequest
+	(*PluginHostServiceLogResponse)(nil),                 // 17: holomush.plugin.v1.PluginHostServiceLogResponse
+	(*PluginHostServiceKVGetRequest)(nil),                // 18: holomush.plugin.v1.PluginHostServiceKVGetRequest
+	(*PluginHostServiceKVGetResponse)(nil),               // 19: holomush.plugin.v1.PluginHostServiceKVGetResponse
+	(*PluginHostServiceKVSetRequest)(nil),                // 20: holomush.plugin.v1.PluginHostServiceKVSetRequest
+	(*PluginHostServiceKVSetResponse)(nil),               // 21: holomush.plugin.v1.PluginHostServiceKVSetResponse
+	(*PluginHostServiceKVDeleteRequest)(nil),             // 22: holomush.plugin.v1.PluginHostServiceKVDeleteRequest
+	(*PluginHostServiceKVDeleteResponse)(nil),            // 23: holomush.plugin.v1.PluginHostServiceKVDeleteResponse
+	(*PluginHostServiceAddSessionStreamRequest)(nil),     // 24: holomush.plugin.v1.PluginHostServiceAddSessionStreamRequest
+	(*PluginHostServiceAddSessionStreamResponse)(nil),    // 25: holomush.plugin.v1.PluginHostServiceAddSessionStreamResponse
+	(*PluginHostServiceRemoveSessionStreamRequest)(nil),  // 26: holomush.plugin.v1.PluginHostServiceRemoveSessionStreamRequest
+	(*PluginHostServiceRemoveSessionStreamResponse)(nil), // 27: holomush.plugin.v1.PluginHostServiceRemoveSessionStreamResponse
+	(*QuerySessionStreamsRequest)(nil),                   // 28: holomush.plugin.v1.QuerySessionStreamsRequest
+	(*QuerySessionStreamsResponse)(nil),                  // 29: holomush.plugin.v1.QuerySessionStreamsResponse
+	nil,                                                  // 30: holomush.plugin.v1.ServiceConfig.RequiredServicesEntry
+	nil,                                                  // 31: holomush.plugin.v1.AuditDecisionHint.AttributesEntry
 }
 var file_holomush_plugin_v1_plugin_proto_depIdxs = []int32{
-	24, // 0: holomush.plugin.v1.ServiceConfig.required_services:type_name -> holomush.plugin.v1.ServiceConfig.RequiredServicesEntry
+	30, // 0: holomush.plugin.v1.ServiceConfig.required_services:type_name -> holomush.plugin.v1.ServiceConfig.RequiredServicesEntry
 	2,  // 1: holomush.plugin.v1.InitRequest.config:type_name -> holomush.plugin.v1.ServiceConfig
 	5,  // 2: holomush.plugin.v1.HandleEventRequest.event:type_name -> holomush.plugin.v1.Event
 	6,  // 3: holomush.plugin.v1.HandleEventResponse.emit_events:type_name -> holomush.plugin.v1.EmitEvent
@@ -1575,27 +1925,33 @@ var file_holomush_plugin_v1_plugin_proto_depIdxs = []int32{
 	6,  // 5: holomush.plugin.v1.CommandResponse.events:type_name -> holomush.plugin.v1.EmitEvent
 	11, // 6: holomush.plugin.v1.CommandResponse.audit_hints:type_name -> holomush.plugin.v1.AuditDecisionHint
 	1,  // 7: holomush.plugin.v1.AuditDecisionHint.effect:type_name -> holomush.plugin.v1.AuditEffect
-	25, // 8: holomush.plugin.v1.AuditDecisionHint.attributes:type_name -> holomush.plugin.v1.AuditDecisionHint.AttributesEntry
+	31, // 8: holomush.plugin.v1.AuditDecisionHint.attributes:type_name -> holomush.plugin.v1.AuditDecisionHint.AttributesEntry
 	9,  // 9: holomush.plugin.v1.HandleCommandRequest.command:type_name -> holomush.plugin.v1.CommandRequest
 	10, // 10: holomush.plugin.v1.HandleCommandResponse.response:type_name -> holomush.plugin.v1.CommandResponse
 	3,  // 11: holomush.plugin.v1.PluginService.Init:input_type -> holomush.plugin.v1.InitRequest
 	7,  // 12: holomush.plugin.v1.PluginService.HandleEvent:input_type -> holomush.plugin.v1.HandleEventRequest
 	12, // 13: holomush.plugin.v1.PluginService.HandleCommand:input_type -> holomush.plugin.v1.HandleCommandRequest
-	14, // 14: holomush.plugin.v1.PluginHostService.EmitEvent:input_type -> holomush.plugin.v1.PluginHostServiceEmitEventRequest
-	16, // 15: holomush.plugin.v1.PluginHostService.Log:input_type -> holomush.plugin.v1.PluginHostServiceLogRequest
-	18, // 16: holomush.plugin.v1.PluginHostService.KVGet:input_type -> holomush.plugin.v1.PluginHostServiceKVGetRequest
-	20, // 17: holomush.plugin.v1.PluginHostService.KVSet:input_type -> holomush.plugin.v1.PluginHostServiceKVSetRequest
-	22, // 18: holomush.plugin.v1.PluginHostService.KVDelete:input_type -> holomush.plugin.v1.PluginHostServiceKVDeleteRequest
-	4,  // 19: holomush.plugin.v1.PluginService.Init:output_type -> holomush.plugin.v1.InitResponse
-	8,  // 20: holomush.plugin.v1.PluginService.HandleEvent:output_type -> holomush.plugin.v1.HandleEventResponse
-	13, // 21: holomush.plugin.v1.PluginService.HandleCommand:output_type -> holomush.plugin.v1.HandleCommandResponse
-	15, // 22: holomush.plugin.v1.PluginHostService.EmitEvent:output_type -> holomush.plugin.v1.PluginHostServiceEmitEventResponse
-	17, // 23: holomush.plugin.v1.PluginHostService.Log:output_type -> holomush.plugin.v1.PluginHostServiceLogResponse
-	19, // 24: holomush.plugin.v1.PluginHostService.KVGet:output_type -> holomush.plugin.v1.PluginHostServiceKVGetResponse
-	21, // 25: holomush.plugin.v1.PluginHostService.KVSet:output_type -> holomush.plugin.v1.PluginHostServiceKVSetResponse
-	23, // 26: holomush.plugin.v1.PluginHostService.KVDelete:output_type -> holomush.plugin.v1.PluginHostServiceKVDeleteResponse
-	19, // [19:27] is the sub-list for method output_type
-	11, // [11:19] is the sub-list for method input_type
+	28, // 14: holomush.plugin.v1.PluginService.QuerySessionStreams:input_type -> holomush.plugin.v1.QuerySessionStreamsRequest
+	14, // 15: holomush.plugin.v1.PluginHostService.EmitEvent:input_type -> holomush.plugin.v1.PluginHostServiceEmitEventRequest
+	16, // 16: holomush.plugin.v1.PluginHostService.Log:input_type -> holomush.plugin.v1.PluginHostServiceLogRequest
+	18, // 17: holomush.plugin.v1.PluginHostService.KVGet:input_type -> holomush.plugin.v1.PluginHostServiceKVGetRequest
+	20, // 18: holomush.plugin.v1.PluginHostService.KVSet:input_type -> holomush.plugin.v1.PluginHostServiceKVSetRequest
+	22, // 19: holomush.plugin.v1.PluginHostService.KVDelete:input_type -> holomush.plugin.v1.PluginHostServiceKVDeleteRequest
+	24, // 20: holomush.plugin.v1.PluginHostService.AddSessionStream:input_type -> holomush.plugin.v1.PluginHostServiceAddSessionStreamRequest
+	26, // 21: holomush.plugin.v1.PluginHostService.RemoveSessionStream:input_type -> holomush.plugin.v1.PluginHostServiceRemoveSessionStreamRequest
+	4,  // 22: holomush.plugin.v1.PluginService.Init:output_type -> holomush.plugin.v1.InitResponse
+	8,  // 23: holomush.plugin.v1.PluginService.HandleEvent:output_type -> holomush.plugin.v1.HandleEventResponse
+	13, // 24: holomush.plugin.v1.PluginService.HandleCommand:output_type -> holomush.plugin.v1.HandleCommandResponse
+	29, // 25: holomush.plugin.v1.PluginService.QuerySessionStreams:output_type -> holomush.plugin.v1.QuerySessionStreamsResponse
+	15, // 26: holomush.plugin.v1.PluginHostService.EmitEvent:output_type -> holomush.plugin.v1.PluginHostServiceEmitEventResponse
+	17, // 27: holomush.plugin.v1.PluginHostService.Log:output_type -> holomush.plugin.v1.PluginHostServiceLogResponse
+	19, // 28: holomush.plugin.v1.PluginHostService.KVGet:output_type -> holomush.plugin.v1.PluginHostServiceKVGetResponse
+	21, // 29: holomush.plugin.v1.PluginHostService.KVSet:output_type -> holomush.plugin.v1.PluginHostServiceKVSetResponse
+	23, // 30: holomush.plugin.v1.PluginHostService.KVDelete:output_type -> holomush.plugin.v1.PluginHostServiceKVDeleteResponse
+	25, // 31: holomush.plugin.v1.PluginHostService.AddSessionStream:output_type -> holomush.plugin.v1.PluginHostServiceAddSessionStreamResponse
+	27, // 32: holomush.plugin.v1.PluginHostService.RemoveSessionStream:output_type -> holomush.plugin.v1.PluginHostServiceRemoveSessionStreamResponse
+	22, // [22:33] is the sub-list for method output_type
+	11, // [11:22] is the sub-list for method input_type
 	11, // [11:11] is the sub-list for extension type_name
 	11, // [11:11] is the sub-list for extension extendee
 	0,  // [0:11] is the sub-list for field type_name
@@ -1612,7 +1968,7 @@ func file_holomush_plugin_v1_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_plugin_v1_plugin_proto_rawDesc), len(file_holomush_plugin_v1_plugin_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   24,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

@@ -174,6 +174,11 @@ func (m *HostMiddleware) DeliverEvent(ctx context.Context, name string, event pl
 	return emits, nil
 }
 
+// QuerySessionStreams delegates to the wrapped host.
+func (m *HostMiddleware) QuerySessionStreams(ctx context.Context, name string, req SessionStreamsRequest) ([]string, error) {
+	return m.next.QuerySessionStreams(ctx, name, req)
+}
+
 // Plugins delegates to the wrapped host.
 func (m *HostMiddleware) Plugins() []string {
 	return m.next.Plugins()

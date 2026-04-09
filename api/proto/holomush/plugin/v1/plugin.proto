@@ -23,6 +23,11 @@ service PluginService {
 
   // HandleCommand delivers a command to the plugin.
   rpc HandleCommand(HandleCommandRequest) returns (HandleCommandResponse);
+
+  // QuerySessionStreams returns stream names the plugin wants subscribed for a session.
+  // Called once at session establishment, before LISTEN setup.
+  // Only invoked for plugins that declare session_streams: true in their manifest.
+  rpc QuerySessionStreams(QuerySessionStreamsRequest) returns (QuerySessionStreamsResponse);
 }
 
 // PluginHostService runs in the host process, allowing binary plugins
@@ -38,6 +43,12 @@ service PluginHostService {
   rpc KVSet(PluginHostServiceKVSetRequest) returns (PluginHostServiceKVSetResponse);
   // KVDelete removes a value from the plugin's key-value store.
   rpc KVDelete(PluginHostServiceKVDeleteRequest) returns (PluginHostServiceKVDeleteResponse);
+  // AddSessionStream subscribes an active session to an additional stream mid-session.
+  // Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+  rpc AddSessionStream(PluginHostServiceAddSessionStreamRequest) returns (PluginHostServiceAddSessionStreamResponse);
+  // RemoveSessionStream unsubscribes an active session from a stream.
+  // Idempotent: returns success if stream is not subscribed.
+  rpc RemoveSessionStream(PluginHostServiceRemoveSessionStreamRequest) returns (PluginHostServiceRemoveSessionStreamResponse);
 }
 
 // ServiceConfig carries initialization data from the host to the plugin.
@@ -252,3 +263,49 @@ message PluginHostServiceKVDeleteRequest {
 }
 
 message PluginHostServiceKVDeleteResponse {}
+
+// PluginHostServiceAddSessionStreamRequest specifies which session and stream to add.
+message PluginHostServiceAddSessionStreamRequest {
+  // Active session identifier.
+  string session_id = 1;
+  // Stream name to subscribe to (format: "prefix:id").
+  string stream = 2;
+}
+
+// PluginHostServiceAddSessionStreamResponse indicates success or failure.
+message PluginHostServiceAddSessionStreamResponse {
+  // Whether the stream was successfully added.
+  bool success = 1;
+}
+
+// PluginHostServiceRemoveSessionStreamRequest specifies which stream to remove.
+message PluginHostServiceRemoveSessionStreamRequest {
+  // Active session identifier.
+  string session_id = 1;
+  // Stream name to unsubscribe from.
+  string stream = 2;
+}
+
+// PluginHostServiceRemoveSessionStreamResponse indicates success or failure.
+message PluginHostServiceRemoveSessionStreamResponse {
+  // Whether the stream was successfully removed (true even if not subscribed).
+  bool success = 1;
+}
+
+// QuerySessionStreamsRequest provides session context for stream contribution.
+message QuerySessionStreamsRequest {
+  // Identifier of the character entering the session.
+  string character_id = 1;
+  // Identifier of the player owning the character.
+  string player_id = 2;
+  // Session identifier.
+  string session_id = 3;
+}
+
+// QuerySessionStreamsResponse returns stream names and an optional error.
+message QuerySessionStreamsResponse {
+  // Stream names the plugin wants added to this session's subscription.
+  repeated string streams = 1;
+  // Non-empty indicates a plugin-reported error. Host degrades (logs + skips).
+  string error = 2;
+}

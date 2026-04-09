@@ -12,6 +12,25 @@ import (
 	"google.golang.org/grpc"
 )
 
+// SessionStreamsRequest carries session context for plugin stream contribution queries.
+type SessionStreamsRequest struct {
+	// CharacterID is the character entering the session.
+	CharacterID string
+	// PlayerID is the player owning the character.
+	PlayerID string
+	// SessionID is the active session identifier.
+	SessionID string
+}
+
+// StreamRegistry allows plugins to modify session stream subscriptions mid-session.
+type StreamRegistry interface {
+	// AddStream subscribes a session to an additional stream.
+	// Returns an error (code SESSION_NOT_FOUND) if the session is not active.
+	AddStream(ctx context.Context, sessionID, stream string) error
+	// RemoveStream unsubscribes a session from a stream. Idempotent.
+	RemoveStream(ctx context.Context, sessionID, stream string) error
+}
+
 // Host manages a specific plugin runtime type.
 type Host interface {
 	// Load initializes a plugin from its manifest.
@@ -25,6 +44,11 @@ type Host interface {
 
 	// DeliverCommand sends a command to a plugin and returns the response.
 	DeliverCommand(ctx context.Context, name string, cmd pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error)
+
+	// QuerySessionStreams returns stream names the plugin wants subscribed for a session.
+	// Only called for plugins with SessionStreams: true in their manifest.
+	// Returns nil if the plugin has no streams to contribute.
+	QuerySessionStreams(ctx context.Context, name string, req SessionStreamsRequest) ([]string, error)
 
 	// Plugins returns names of all loaded plugins.
 	Plugins() []string

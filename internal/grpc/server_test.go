@@ -22,8 +22,10 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/session"
 	tlscerts "github.com/holomush/holomush/internal/tls"
+	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -80,6 +82,7 @@ type mockEventStore struct {
 	appendFunc      func(ctx context.Context, event core.Event) error
 	replayFunc      func(ctx context.Context, stream string, afterID ulid.ULID, limit int) ([]core.Event, error)
 	lastEventIDFunc func(ctx context.Context, stream string) (ulid.ULID, error)
+	subscribeFunc   func(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error)
 }
 
 func (m *mockEventStore) Append(ctx context.Context, event core.Event) error {
@@ -103,7 +106,10 @@ func (m *mockEventStore) LastEventID(ctx context.Context, stream string) (ulid.U
 	return ulid.ULID{}, core.ErrStreamEmpty
 }
 
-func (m *mockEventStore) Subscribe(ctx context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
+func (m *mockEventStore) Subscribe(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error) {
+	if m.subscribeFunc != nil {
+		return m.subscribeFunc(ctx, stream)
+	}
 	eventCh := make(chan ulid.ULID)
 	errCh := make(chan error)
 	go func() {
@@ -324,6 +330,25 @@ func TestNewCoreServer_WithOptions(t *testing.T) {
 
 	require.NotNil(t, server, "NewCoreServer returned nil")
 	assert.Equal(t, customStore, server.sessionStore, "WithSessionStore option not applied")
+}
+
+func TestNewCoreServer_WithStreamOptions(t *testing.T) {
+	store := &mockEventStore{}
+
+	registry := NewSessionStreamRegistry()
+	hookCalled := false
+	server := newHandleCommandServer(t, store, nil,
+		WithStreamContributor(nil),
+		WithStreamRegistry(registry),
+		WithAfterLISTENHook(func() { hookCalled = true }),
+	)
+
+	require.NotNil(t, server)
+	assert.Nil(t, server.streamContributor)
+	assert.Equal(t, registry, server.streamRegistry)
+	assert.NotNil(t, server.afterLISTENHook)
+	server.afterLISTENHook()
+	assert.True(t, hookCalled)
 }
 
 func TestNewCoreServer_PanicsWithoutDispatcher(t *testing.T) {
@@ -3036,4 +3061,164 @@ func TestCoreServer_GetCommandHistory(t *testing.T) {
 		assert.True(t, resp.Success)
 		assert.Empty(t, resp.Commands)
 	})
+}
+
+// =============================================================================
+// Plugin Stream Contribution Tests (holomush-oirq Task 10)
+// =============================================================================
+
+// mockStreamContributor returns a fixed list of plugin streams.
+type mockStreamContributor struct {
+	streams []string
+}
+
+func (m *mockStreamContributor) QuerySessionStreams(_ context.Context, _ plugins.SessionStreamsRequest) []string {
+	return m.streams
+}
+
+// trackingEventStore wraps core.MemoryEventStore and records Subscribe calls.
+type trackingEventStore struct {
+	core.EventStore
+	mu              sync.Mutex
+	subscribedNames []string
+}
+
+func newTrackingEventStore() *trackingEventStore {
+	return &trackingEventStore{EventStore: core.NewMemoryEventStore()}
+}
+
+func (t *trackingEventStore) Subscribe(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error) {
+	t.mu.Lock()
+	t.subscribedNames = append(t.subscribedNames, stream)
+	t.mu.Unlock()
+	return t.EventStore.Subscribe(ctx, stream)
+}
+
+func (t *trackingEventStore) subscribedStreams() []string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	result := make([]string, len(t.subscribedNames))
+	copy(result, t.subscribedNames)
+	return result
+}
+
+func TestSubscribeIncludesPluginContributedStreams(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+
+	eventStore := newTrackingEventStore()
+
+	contributor := &mockStreamContributor{streams: []string{"channel:abc"}}
+
+	ready := make(chan struct{})
+	server := &CoreServer{
+		engine:            core.NewEngine(eventStore),
+		eventStore:        eventStore,
+		streamContributor: contributor,
+		afterLISTENHook:   func() { close(ready) },
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
+			},
+		}),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := &mockSubscribeStream{ctx: ctx}
+
+	req := &corev1.SubscribeRequest{
+		SessionId: sessionID.String(),
+		Streams:   []string{"location:" + locationID.String()},
+	}
+
+	done := make(chan error)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	// Wait for Subscribe to finish LISTEN setup before cancelling.
+	select {
+	case <-ready:
+	case <-time.After(time.Second):
+		t.Fatal("Subscribe did not finish LISTEN setup")
+	}
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Subscribe did not return after context cancellation")
+	}
+
+	subscribed := eventStore.subscribedStreams()
+	assert.Contains(t, subscribed, "channel:abc",
+		"Subscribe should have called Subscribe on plugin-contributed stream channel:abc; got %v", subscribed)
+}
+
+func TestSubscribeDeregistersRegistryOnExit(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+
+	eventStore := core.NewMemoryEventStore()
+	registry := NewSessionStreamRegistry()
+
+	server := &CoreServer{
+		engine:         core.NewEngine(eventStore),
+		eventStore:     eventStore,
+		streamRegistry: registry,
+		sessionStore: newTestSessionStore(t, map[string]*session.Info{
+			sessionID.String(): {
+				ID:          sessionID.String(),
+				CharacterID: charID,
+				LocationID:  locationID,
+				Status:      session.StatusActive,
+			},
+		}),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := &mockSubscribeStream{ctx: ctx}
+
+	req := &corev1.SubscribeRequest{
+		SessionId: sessionID.String(),
+		Streams:   []string{"location:" + locationID.String()},
+	}
+
+	// Use afterLISTENHook to verify the session IS registered just before replay.
+	registeredDuringSetup := make(chan bool, 1)
+	server.afterLISTENHook = func() {
+		err := registry.Send(sessionID.String(), sessionStreamUpdate{stream: "channel:test", add: true})
+		registeredDuringSetup <- (err == nil)
+	}
+
+	done := make(chan error)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	// Wait for afterLISTENHook to fire.
+	select {
+	case wasRegistered := <-registeredDuringSetup:
+		assert.True(t, wasRegistered, "session should be registered in registry during Subscribe")
+	case <-time.After(time.Second):
+		t.Fatal("afterLISTENHook did not fire")
+	}
+
+	// Cancel context to exit Subscribe.
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Subscribe did not return after context cancellation")
+	}
+
+	// After Subscribe exits, the session should be deregistered.
+	err := registry.Send(sessionID.String(), sessionStreamUpdate{stream: "channel:test", add: false})
+	require.Error(t, err, "registry should return SESSION_NOT_FOUND after Subscribe exits")
+	errutil.AssertErrorCode(t, err, "SESSION_NOT_FOUND")
 }

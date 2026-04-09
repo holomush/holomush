@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/samber/oops"
@@ -724,6 +725,119 @@ func (m *Manager) ListPlugins() []string {
 	// Sort for deterministic output
 	sort.Strings(names)
 	return names
+}
+
+// TestLoadPlugin injects a plugin directly for unit testing.
+// Only available in tests (but not build-tag restricted to keep it simple).
+func (m *Manager) TestLoadPlugin(name string, manifest *Manifest) {
+	m.mu.Lock()
+	host, ok := m.hosts[manifest.Type]
+	if !ok && manifest.Type == TypeLua && m.luaHost != nil {
+		host, ok = m.luaHost, true
+	}
+	m.mu.Unlock()
+
+	if ok {
+		if err := host.Load(context.Background(), manifest, ""); err != nil {
+			panic("TestLoadPlugin: host.Load failed: " + err.Error())
+		}
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.loaded[name] = &DiscoveredPlugin{Manifest: manifest}
+	if ok {
+		m.pluginHosts[name] = host
+	}
+}
+
+// isValidStreamName returns true if name is a valid HoloMUSH stream name.
+// Stream names must be non-empty, contain at least one colon, have no whitespace,
+// and be at most 256 characters long.
+func isValidStreamName(name string) bool {
+	if name == "" || len(name) > 256 {
+		return false
+	}
+	for _, r := range name {
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			return false
+		}
+	}
+	return strings.Contains(name, ":")
+}
+
+// QuerySessionStreams collects plugin-contributed stream names for a session.
+// Only plugins with SessionStreams: true in their manifest are queried.
+// Plugin errors are logged and skipped (degraded-subscribe policy).
+// Invalid stream names are dropped. Duplicate streams are deduplicated.
+func (m *Manager) QuerySessionStreams(ctx context.Context, req SessionStreamsRequest) []string {
+	m.mu.RLock()
+	type pluginEntry struct {
+		name string
+		host Host
+	}
+	var opted []pluginEntry
+	for name, dp := range m.loaded {
+		if dp.Manifest.SessionStreams {
+			if host, ok := m.pluginHosts[name]; ok {
+				opted = append(opted, pluginEntry{name, host})
+			}
+		}
+	}
+	m.mu.RUnlock()
+
+	if len(opted) == 0 {
+		return nil
+	}
+
+	type result struct {
+		name    string
+		streams []string
+		err     error
+	}
+	results := make(chan result, len(opted))
+	for _, p := range opted {
+		p := p
+		go func() {
+			streams, err := p.host.QuerySessionStreams(ctx, p.name, req)
+			select {
+			case results <- result{name: p.name, streams: streams, err: err}:
+			case <-ctx.Done():
+			}
+		}()
+	}
+
+	seen := make(map[string]bool)
+	var merged []string
+	for range opted {
+		var r result
+		select {
+		case r = <-results:
+		case <-ctx.Done():
+			return merged
+		}
+		if r.err != nil {
+			slog.WarnContext(ctx, "plugin stream contribution failed — skipping",
+				"plugin", r.name,
+				"character_id", req.CharacterID,
+				"session_id", req.SessionID,
+				"error", r.err)
+			continue
+		}
+		for _, s := range r.streams {
+			if !isValidStreamName(s) {
+				slog.WarnContext(ctx, "plugin returned invalid stream name — dropping",
+					"plugin", r.name,
+					"stream", s)
+				continue
+			}
+			if !seen[s] {
+				seen[s] = true
+				merged = append(merged, s)
+			}
+		}
+	}
+	return merged
 }
 
 // Close shuts down the manager and all loaded plugins.

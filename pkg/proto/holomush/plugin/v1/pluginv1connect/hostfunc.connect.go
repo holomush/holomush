@@ -68,6 +68,12 @@ const (
 	// HostFunctionsServiceGetCommandHelpProcedure is the fully-qualified name of the
 	// HostFunctionsService's GetCommandHelp RPC.
 	HostFunctionsServiceGetCommandHelpProcedure = "/holomush.plugin.v1.HostFunctionsService/GetCommandHelp"
+	// HostFunctionsServiceAddSessionStreamProcedure is the fully-qualified name of the
+	// HostFunctionsService's AddSessionStream RPC.
+	HostFunctionsServiceAddSessionStreamProcedure = "/holomush.plugin.v1.HostFunctionsService/AddSessionStream"
+	// HostFunctionsServiceRemoveSessionStreamProcedure is the fully-qualified name of the
+	// HostFunctionsService's RemoveSessionStream RPC.
+	HostFunctionsServiceRemoveSessionStreamProcedure = "/holomush.plugin.v1.HostFunctionsService/RemoveSessionStream"
 )
 
 // HostFunctionsServiceClient is a client for the holomush.plugin.v1.HostFunctionsService service.
@@ -94,6 +100,12 @@ type HostFunctionsServiceClient interface {
 	// GetCommandHelp returns detailed help for a specific command.
 	// Requires capability: command.help
 	GetCommandHelp(context.Context, *connect.Request[v1.GetCommandHelpRequest]) (*connect.Response[v1.GetCommandHelpResponse], error)
+	// AddSessionStream subscribes an active session to an additional stream mid-session.
+	// Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+	AddSessionStream(context.Context, *connect.Request[v1.AddSessionStreamRequest]) (*connect.Response[v1.AddSessionStreamResponse], error)
+	// RemoveSessionStream unsubscribes an active session from a stream.
+	// Idempotent: returns success if stream is not subscribed.
+	RemoveSessionStream(context.Context, *connect.Request[v1.RemoveSessionStreamRequest]) (*connect.Response[v1.RemoveSessionStreamResponse], error)
 }
 
 // NewHostFunctionsServiceClient constructs a client for the holomush.plugin.v1.HostFunctionsService
@@ -167,6 +179,18 @@ func NewHostFunctionsServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(hostFunctionsServiceMethods.ByName("GetCommandHelp")),
 			connect.WithClientOptions(opts...),
 		),
+		addSessionStream: connect.NewClient[v1.AddSessionStreamRequest, v1.AddSessionStreamResponse](
+			httpClient,
+			baseURL+HostFunctionsServiceAddSessionStreamProcedure,
+			connect.WithSchema(hostFunctionsServiceMethods.ByName("AddSessionStream")),
+			connect.WithClientOptions(opts...),
+		),
+		removeSessionStream: connect.NewClient[v1.RemoveSessionStreamRequest, v1.RemoveSessionStreamResponse](
+			httpClient,
+			baseURL+HostFunctionsServiceRemoveSessionStreamProcedure,
+			connect.WithSchema(hostFunctionsServiceMethods.ByName("RemoveSessionStream")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -182,6 +206,8 @@ type hostFunctionsServiceClient struct {
 	log                     *connect.Client[v1.LogRequest, v1.LogResponse]
 	listCommands            *connect.Client[v1.ListCommandsRequest, v1.ListCommandsResponse]
 	getCommandHelp          *connect.Client[v1.GetCommandHelpRequest, v1.GetCommandHelpResponse]
+	addSessionStream        *connect.Client[v1.AddSessionStreamRequest, v1.AddSessionStreamResponse]
+	removeSessionStream     *connect.Client[v1.RemoveSessionStreamRequest, v1.RemoveSessionStreamResponse]
 }
 
 // EmitEvent calls holomush.plugin.v1.HostFunctionsService.EmitEvent.
@@ -234,6 +260,16 @@ func (c *hostFunctionsServiceClient) GetCommandHelp(ctx context.Context, req *co
 	return c.getCommandHelp.CallUnary(ctx, req)
 }
 
+// AddSessionStream calls holomush.plugin.v1.HostFunctionsService.AddSessionStream.
+func (c *hostFunctionsServiceClient) AddSessionStream(ctx context.Context, req *connect.Request[v1.AddSessionStreamRequest]) (*connect.Response[v1.AddSessionStreamResponse], error) {
+	return c.addSessionStream.CallUnary(ctx, req)
+}
+
+// RemoveSessionStream calls holomush.plugin.v1.HostFunctionsService.RemoveSessionStream.
+func (c *hostFunctionsServiceClient) RemoveSessionStream(ctx context.Context, req *connect.Request[v1.RemoveSessionStreamRequest]) (*connect.Response[v1.RemoveSessionStreamResponse], error) {
+	return c.removeSessionStream.CallUnary(ctx, req)
+}
+
 // HostFunctionsServiceHandler is an implementation of the holomush.plugin.v1.HostFunctionsService
 // service.
 type HostFunctionsServiceHandler interface {
@@ -259,6 +295,12 @@ type HostFunctionsServiceHandler interface {
 	// GetCommandHelp returns detailed help for a specific command.
 	// Requires capability: command.help
 	GetCommandHelp(context.Context, *connect.Request[v1.GetCommandHelpRequest]) (*connect.Response[v1.GetCommandHelpResponse], error)
+	// AddSessionStream subscribes an active session to an additional stream mid-session.
+	// Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+	AddSessionStream(context.Context, *connect.Request[v1.AddSessionStreamRequest]) (*connect.Response[v1.AddSessionStreamResponse], error)
+	// RemoveSessionStream unsubscribes an active session from a stream.
+	// Idempotent: returns success if stream is not subscribed.
+	RemoveSessionStream(context.Context, *connect.Request[v1.RemoveSessionStreamRequest]) (*connect.Response[v1.RemoveSessionStreamResponse], error)
 }
 
 // NewHostFunctionsServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -328,6 +370,18 @@ func NewHostFunctionsServiceHandler(svc HostFunctionsServiceHandler, opts ...con
 		connect.WithSchema(hostFunctionsServiceMethods.ByName("GetCommandHelp")),
 		connect.WithHandlerOptions(opts...),
 	)
+	hostFunctionsServiceAddSessionStreamHandler := connect.NewUnaryHandler(
+		HostFunctionsServiceAddSessionStreamProcedure,
+		svc.AddSessionStream,
+		connect.WithSchema(hostFunctionsServiceMethods.ByName("AddSessionStream")),
+		connect.WithHandlerOptions(opts...),
+	)
+	hostFunctionsServiceRemoveSessionStreamHandler := connect.NewUnaryHandler(
+		HostFunctionsServiceRemoveSessionStreamProcedure,
+		svc.RemoveSessionStream,
+		connect.WithSchema(hostFunctionsServiceMethods.ByName("RemoveSessionStream")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.plugin.v1.HostFunctionsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case HostFunctionsServiceEmitEventProcedure:
@@ -350,6 +404,10 @@ func NewHostFunctionsServiceHandler(svc HostFunctionsServiceHandler, opts ...con
 			hostFunctionsServiceListCommandsHandler.ServeHTTP(w, r)
 		case HostFunctionsServiceGetCommandHelpProcedure:
 			hostFunctionsServiceGetCommandHelpHandler.ServeHTTP(w, r)
+		case HostFunctionsServiceAddSessionStreamProcedure:
+			hostFunctionsServiceAddSessionStreamHandler.ServeHTTP(w, r)
+		case HostFunctionsServiceRemoveSessionStreamProcedure:
+			hostFunctionsServiceRemoveSessionStreamHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -397,4 +455,12 @@ func (UnimplementedHostFunctionsServiceHandler) ListCommands(context.Context, *c
 
 func (UnimplementedHostFunctionsServiceHandler) GetCommandHelp(context.Context, *connect.Request[v1.GetCommandHelpRequest]) (*connect.Response[v1.GetCommandHelpResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.GetCommandHelp is not implemented"))
+}
+
+func (UnimplementedHostFunctionsServiceHandler) AddSessionStream(context.Context, *connect.Request[v1.AddSessionStreamRequest]) (*connect.Response[v1.AddSessionStreamResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.AddSessionStream is not implemented"))
+}
+
+func (UnimplementedHostFunctionsServiceHandler) RemoveSessionStream(context.Context, *connect.Request[v1.RemoveSessionStreamRequest]) (*connect.Response[v1.RemoveSessionStreamResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.HostFunctionsService.RemoveSessionStream is not implemented"))
 }

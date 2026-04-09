@@ -46,6 +46,14 @@ service HostFunctionsService {
   // GetCommandHelp returns detailed help for a specific command.
   // Requires capability: command.help
   rpc GetCommandHelp(GetCommandHelpRequest) returns (GetCommandHelpResponse);
+
+  // AddSessionStream subscribes an active session to an additional stream mid-session.
+  // Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+  rpc AddSessionStream(AddSessionStreamRequest) returns (AddSessionStreamResponse);
+
+  // RemoveSessionStream unsubscribes an active session from a stream.
+  // Idempotent: returns success if stream is not subscribed.
+  rpc RemoveSessionStream(RemoveSessionStreamRequest) returns (RemoveSessionStreamResponse);
 }
 
 // LogLevel specifies the severity of a log message.
@@ -245,4 +253,36 @@ message CommandHelpInfo {
   repeated string capabilities = 5;
   // Source plugin name or "core".
   string source = 6 [(buf.validate.field).string.min_len = 1];
+}
+
+// AddSessionStreamRequest specifies which session and stream to add.
+message AddSessionStreamRequest {
+  // Active session identifier.
+  string session_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Stream name to subscribe to (format: "prefix:id").
+  string stream = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+// AddSessionStreamResponse indicates success or failure.
+message AddSessionStreamResponse {
+  // Whether the stream was successfully added.
+  bool success = 1;
+  // Non-empty on error.
+  string error = 2;
+}
+
+// RemoveSessionStreamRequest specifies which stream to remove.
+message RemoveSessionStreamRequest {
+  // Active session identifier.
+  string session_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Stream name to unsubscribe from.
+  string stream = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+// RemoveSessionStreamResponse indicates success or failure.
+message RemoveSessionStreamResponse {
+  // Whether the stream was successfully removed (true even if not subscribed).
+  bool success = 1;
+  // Non-empty on error.
+  string error = 2;
 }
