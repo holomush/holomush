@@ -97,6 +97,11 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 	}
 	span.SetAttributes(attribute.String("scene_id", id))
 
+	visibility := SceneVisibilityOpen
+	if v := req.GetVisibility(); v != "" {
+		visibility = SceneVisibility(v)
+	}
+
 	row := &SceneRow{
 		ID:              id,
 		Title:           title,
@@ -104,7 +109,7 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		OwnerID:         req.GetCharacterId(),
 		State:           string(SceneStateActive),
 		PoseOrder:       string(PoseOrderModeFree),
-		Visibility:      string(SceneVisibilityOpen),
+		Visibility:      string(visibility),
 		ContentWarnings: []string{},
 		Tags:            []string{},
 	}
@@ -122,7 +127,7 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		return nil, status.Errorf(codes.Internal, "failed to create scene: %v", err)
 	}
 
-	metricSceneCreated(string(SceneVisibilityOpen), false)
+	metricSceneCreated(string(visibility), false)
 	slog.InfoContext(ctx, "scene.service.create_scene ok",
 		"subject_id", req.GetCharacterId(),
 		"scene_id", id,

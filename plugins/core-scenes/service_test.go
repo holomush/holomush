@@ -327,6 +327,43 @@ func TestSceneServiceCreateScenePersistsTitleAndOwnerWhenRequestIsValid(t *testi
 	assert.Equal(t, string(SceneVisibilityOpen), resp.GetScene().GetVisibility())
 }
 
+func TestSceneServiceCreateSceneDefaultsVisibilityToOpenWhenRequestOmitsIt(t *testing.T) {
+	store := newFakeStore()
+	svc := NewSceneServiceImpl(store)
+
+	resp, err := svc.CreateScene(context.Background(), &scenev1.CreateSceneRequest{
+		CharacterId: "char-alice",
+		Title:       "Open Scene",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp.GetScene())
+	assert.Equal(t, string(SceneVisibilityOpen), resp.GetScene().GetVisibility())
+}
+
+func TestSceneServiceCreateScenePersistsPrivateVisibilityWhenRequestSpecifiesIt(t *testing.T) {
+	store := newFakeStore()
+	svc := NewSceneServiceImpl(store)
+
+	resp, err := svc.CreateScene(context.Background(), &scenev1.CreateSceneRequest{
+		CharacterId: "char-alice",
+		Title:       "Secret Gathering",
+		Visibility:  string(SceneVisibilityPrivate),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp.GetScene())
+	assert.Equal(t, string(SceneVisibilityPrivate), resp.GetScene().GetVisibility(),
+		"private visibility from request must be stored and returned")
+
+	// Verify the row in the store also has private visibility.
+	var stored *SceneRow
+	for _, row := range store.scenes {
+		stored = row
+	}
+	require.NotNil(t, stored)
+	assert.Equal(t, string(SceneVisibilityPrivate), stored.Visibility,
+		"persisted row must carry private visibility, not the default")
+}
+
 func TestSceneServiceCreateSceneRejectsWhitespaceOnlyTitle(t *testing.T) {
 	svc := NewSceneServiceImpl(newFakeStore())
 

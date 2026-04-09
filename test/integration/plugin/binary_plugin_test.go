@@ -890,32 +890,19 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			}
 		})
 
-		// makePrivateScene creates a scene then flips its visibility to "private"
-		// via UpdateScene. CreateScene currently hardcodes visibility="open"
-		// (the proto field is ignored), so the visibility flip is necessary
-		// for tests that exercise the private-scene join gate.
 		makePrivateScene := func(owner, title string) string {
 			createResp, err := membershipClient.CreateScene(membershipCtx, &scenev1.CreateSceneRequest{
 				CharacterId: owner,
 				Title:       title,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			id := createResp.GetScene().GetId()
-
-			_, err = membershipClient.UpdateScene(membershipCtx, &scenev1.UpdateSceneRequest{
-				CharacterId: owner,
-				SceneId:     id,
 				Visibility:  "private",
-				UpdateMask:  &fieldmaskpb.FieldMask{Paths: []string{"visibility"}},
 			})
 			Expect(err).NotTo(HaveOccurred())
-			return id
+			return createResp.GetScene().GetId()
 		}
 
 		Describe("Full membership lifecycle over the binary plugin boundary", func() {
 			It("supports create→invite→join→kick→reinvite→join→transfer→leave", func() {
-				// 1. Create a private scene as char-alice (CreateScene then
-				// UpdateScene to flip visibility — see makePrivateScene comment).
+				// 1. Create a private scene as char-alice.
 				sceneID := makePrivateScene("char-alice", "E2E Test Scene")
 				Expect(sceneID).To(HavePrefix("scene-"))
 
