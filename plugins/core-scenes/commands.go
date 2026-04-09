@@ -286,10 +286,14 @@ func splitSubcommand(args string) (sub, rest string) {
 //
 //nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
-	sceneID := strings.TrimSpace(args)
-	if sceneID == "" {
+	// Strict arity: reject empty args AND trailing tokens. Without this,
+	// `scene join scn123 typo` would pass "scn123 typo" as SceneId and
+	// produce a confusing RPC error instead of a usage message.
+	fields := strings.Fields(args)
+	if len(fields) != 1 {
 		return pluginsdk.Errorf("Usage: scene join <scene id>"), nil
 	}
+	sceneID := fields[0]
 
 	_, err := p.service.JoinScene(ctx, &scenev1.JoinSceneRequest{
 		CharacterId: req.CharacterID,
@@ -309,10 +313,12 @@ func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandReque
 //
 //nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleLeave(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
-	sceneID := strings.TrimSpace(args)
-	if sceneID == "" {
+	// Strict arity: reject empty args AND trailing tokens — see handleJoin.
+	fields := strings.Fields(args)
+	if len(fields) != 1 {
 		return pluginsdk.Errorf("Usage: scene leave <scene id>"), nil
 	}
+	sceneID := fields[0]
 
 	_, err := p.service.LeaveScene(ctx, &scenev1.LeaveSceneRequest{
 		CharacterId: req.CharacterID,
@@ -332,11 +338,12 @@ func (p *scenePlugin) handleLeave(ctx context.Context, req pluginsdk.CommandRequ
 //
 //nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleInvite(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
-	sceneID, rest := splitSubcommand(args)
-	target := strings.TrimSpace(rest)
-	if sceneID == "" || target == "" {
+	// Strict arity: reject anything other than exactly 2 tokens — see handleJoin.
+	fields := strings.Fields(args)
+	if len(fields) != 2 {
 		return pluginsdk.Errorf("Usage: scene invite <scene id> <character>"), nil
 	}
+	sceneID, target := fields[0], fields[1]
 
 	_, err := p.service.InviteToScene(ctx, &scenev1.InviteToSceneRequest{
 		CharacterId:       req.CharacterID,
@@ -357,11 +364,12 @@ func (p *scenePlugin) handleInvite(ctx context.Context, req pluginsdk.CommandReq
 //
 //nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleKick(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
-	sceneID, rest := splitSubcommand(args)
-	target := strings.TrimSpace(rest)
-	if sceneID == "" || target == "" {
+	// Strict arity: reject anything other than exactly 2 tokens — see handleJoin.
+	fields := strings.Fields(args)
+	if len(fields) != 2 {
 		return pluginsdk.Errorf("Usage: scene kick <scene id> <character>"), nil
 	}
+	sceneID, target := fields[0], fields[1]
 
 	_, err := p.service.KickFromScene(ctx, &scenev1.KickFromSceneRequest{
 		CharacterId:       req.CharacterID,
@@ -382,11 +390,12 @@ func (p *scenePlugin) handleKick(ctx context.Context, req pluginsdk.CommandReque
 //
 //nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleTransfer(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
-	sceneID, rest := splitSubcommand(args)
-	target := strings.TrimSpace(rest)
-	if sceneID == "" || target == "" {
+	// Strict arity: reject anything other than exactly 2 tokens — see handleJoin.
+	fields := strings.Fields(args)
+	if len(fields) != 2 {
 		return pluginsdk.Errorf("Usage: scene transfer <scene id> <character>"), nil
 	}
+	sceneID, target := fields[0], fields[1]
 
 	_, err := p.service.TransferOwnership(ctx, &scenev1.TransferOwnershipRequest{
 		CharacterId:         req.CharacterID,

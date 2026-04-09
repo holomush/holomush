@@ -867,3 +867,72 @@ func TestSceneServiceTransferOwnershipRejectsNonMemberTargetWithFailedPreconditi
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.FailedPrecondition, st.Code())
 }
+
+// --- Error-path coverage for membership service handlers ---
+
+func TestSceneServiceLeaveSceneReturnsNotFoundForMissingScene(t *testing.T) {
+	svc := NewSceneServiceImpl(newFakeStore())
+
+	_, err := svc.LeaveScene(context.Background(), &scenev1.LeaveSceneRequest{
+		CharacterId: "char-bob",
+		SceneId:     "scene-does-not-exist",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.NotFound, st.Code())
+}
+
+func TestSceneServiceLeaveSceneReturnsNotFoundForNonParticipant(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-ls-np", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.LeaveScene(context.Background(), &scenev1.LeaveSceneRequest{
+		CharacterId: "char-stranger",
+		SceneId:     "scene-ls-np",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.NotFound, st.Code())
+}
+
+func TestSceneServiceInviteToSceneReturnsAlreadyExistsForMember(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-inv-ae", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	_, _, err := store.AddParticipant(context.Background(), "scene-inv-ae", "char-bob")
+	require.NoError(t, err)
+	svc := NewSceneServiceImpl(store)
+
+	_, err = svc.InviteToScene(context.Background(), &scenev1.InviteToSceneRequest{
+		CharacterId:       "char-alice",
+		SceneId:           "scene-inv-ae",
+		TargetCharacterId: "char-bob",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.AlreadyExists, st.Code())
+}
+
+func TestSceneServiceKickFromSceneReturnsNotFoundForNonParticipant(t *testing.T) {
+	store := newFakeStore()
+	require.NoError(t, store.CreateWithOwner(context.Background(), &SceneRow{
+		ID: "scene-kick-np", OwnerID: "char-alice",
+		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
+	}))
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.KickFromScene(context.Background(), &scenev1.KickFromSceneRequest{
+		CharacterId:       "char-alice",
+		SceneId:           "scene-kick-np",
+		TargetCharacterId: "char-stranger",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.NotFound, st.Code())
+}

@@ -42,6 +42,15 @@ ignore:
   - "**/*_test.go"
   - "**/mocks/**"
   - "**/mock_*.go"
+  # Binary plugin entry points — go-plugin runs these in a subprocess
+  # so coverage instrumentation in the test process cannot observe them.
+  # E2E tests exercise them end-to-end but the coverage doesn't flow
+  # back across the process boundary.
+  - "plugins/*/main.go"
+  # Metric stub hooks — intentionally unused no-op call-site anchors
+  # awaiting future instrumentation. They exist so future metric wiring
+  # has a stable call site; there is no behavior to test.
+  - "plugins/*/metrics.go"
 
 comment:
   layout: "condensed_header, condensed_files, condensed_footer"
