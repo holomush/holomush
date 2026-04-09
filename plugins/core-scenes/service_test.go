@@ -330,6 +330,7 @@ func TestSceneServiceCreateScenePersistsTitleAndOwnerWhenRequestIsValid(t *testi
 func TestSceneServiceCreateSceneDefaultsVisibilityToOpenWhenRequestOmitsIt(t *testing.T) {
 	store := newFakeStore()
 	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(&recordingEventSink{})
 
 	resp, err := svc.CreateScene(context.Background(), &scenev1.CreateSceneRequest{
 		CharacterId: "char-alice",
@@ -343,6 +344,7 @@ func TestSceneServiceCreateSceneDefaultsVisibilityToOpenWhenRequestOmitsIt(t *te
 func TestSceneServiceCreateScenePersistsPrivateVisibilityWhenRequestSpecifiesIt(t *testing.T) {
 	store := newFakeStore()
 	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(&recordingEventSink{})
 
 	resp, err := svc.CreateScene(context.Background(), &scenev1.CreateSceneRequest{
 		CharacterId: "char-alice",

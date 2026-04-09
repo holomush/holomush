@@ -36,6 +36,38 @@ lua-plugin:
 	assert.Equal(t, "main.lua", m.LuaPlugin.Entry)
 }
 
+func TestManifestAcceptsLuaPluginWithEmits(t *testing.T) {
+	data := []byte(`
+name: emit-lua
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+emits: [scene, notifications]
+`)
+
+	manifest, err := plugins.ParseManifest(data)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"scene", "notifications"}, manifest.Emits)
+}
+
+func TestManifestRejectsSettingPluginWithEmits(t *testing.T) {
+	data := []byte(`
+name: emit-setting
+version: 1.0.0
+type: setting
+setting:
+  display_name: Test
+  content_dir: content
+  starting_location: start
+emits: [scene]
+`)
+
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "emits")
+}
+
 func TestParseManifestBinaryPlugin(t *testing.T) {
 	yaml := `
 name: combat-system
