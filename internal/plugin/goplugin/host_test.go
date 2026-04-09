@@ -10,14 +10,17 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	hashiplug "github.com/hashicorp/go-plugin"
+	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 // createTempExecutable creates a dummy file with execute permissions.
@@ -72,10 +75,12 @@ type mockGRPCPluginClient struct {
 	response  *pluginv1.HandleEventResponse
 	err       error
 	returnNil bool // If true, return nil response (simulates edge case)
+	eventCtx  context.Context
 
 	cmdResponse  *pluginv1.HandleCommandResponse
 	cmdErr       error
 	cmdReturnNil bool
+	commandCtx   context.Context
 
 	// Init tracking
 	initCalled bool
@@ -94,7 +99,8 @@ func (m *mockGRPCPluginClient) Init(_ context.Context, req *pluginv1.InitRequest
 	return &pluginv1.InitResponse{}, nil
 }
 
-func (m *mockGRPCPluginClient) HandleEvent(_ context.Context, _ *pluginv1.HandleEventRequest, _ ...grpc.CallOption) (*pluginv1.HandleEventResponse, error) {
+func (m *mockGRPCPluginClient) HandleEvent(ctx context.Context, _ *pluginv1.HandleEventRequest, _ ...grpc.CallOption) (*pluginv1.HandleEventResponse, error) {
+	m.eventCtx = ctx
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -107,7 +113,8 @@ func (m *mockGRPCPluginClient) HandleEvent(_ context.Context, _ *pluginv1.Handle
 	return &pluginv1.HandleEventResponse{}, nil
 }
 
-func (m *mockGRPCPluginClient) HandleCommand(_ context.Context, _ *pluginv1.HandleCommandRequest, _ ...grpc.CallOption) (*pluginv1.HandleCommandResponse, error) {
+func (m *mockGRPCPluginClient) HandleCommand(ctx context.Context, _ *pluginv1.HandleCommandRequest, _ ...grpc.CallOption) (*pluginv1.HandleCommandResponse, error) {
+	m.commandCtx = ctx
 	if m.cmdErr != nil {
 		return nil, m.cmdErr
 	}
@@ -1124,6 +1131,37 @@ func TestLoadCallsInitForPluginWithRequires(t *testing.T) {
 		"expected RequiredServices map to be set (empty in test path)")
 }
 
+func TestLoadCallsInitForPluginWithProvides(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	host := NewHostWithFactory(factory)
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	err := createTempExecutable(filepath.Join(tmpDir, "scene-provider"))
+	require.NoError(t, err)
+
+	manifest := &plugins.Manifest{
+		Name:     "scene-provider",
+		Version:  "1.0.0",
+		Type:     plugins.TypeBinary,
+		Provides: []string{"holomush.scene.v1.SceneService"},
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "scene-provider",
+		},
+	}
+
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err)
+
+	assert.True(t, grpcClient.initCalled, "expected Init to be called for plugin with provides")
+	require.NotNil(t, grpcClient.initReq, "expected InitRequest to be set")
+	require.NotNil(t, grpcClient.initReq.Config, "expected ServiceConfig to be set")
+}
+
 func TestLoadPassesRequiredServicesFromRegistryViaInit(t *testing.T) {
 	grpcClient := &mockGRPCPluginClient{}
 	fakeConn := &stubClientConn{}
@@ -1167,6 +1205,138 @@ func TestLoadPassesRequiredServicesFromRegistryViaInit(t *testing.T) {
 	require.NotNil(t, grpcClient.initReq.Config, "expected ServiceConfig to be set")
 	assert.Empty(t, grpcClient.initReq.Config.RequiredServices,
 		"expected RequiredServices empty when broker is nil (test path)")
+}
+
+func TestHostDeliverCommandForwardsTrustedActorMetadata(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	host := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	host.plugins["core-scenes"] = &loadedPlugin{
+		manifest: &plugins.Manifest{Name: "core-scenes"},
+		plugin:   grpcClient,
+	}
+
+	ctx := core.WithActor(context.Background(), core.Actor{
+		Kind: core.ActorCharacter,
+		ID:   "char-alice",
+	})
+	_, err := host.DeliverCommand(ctx, "core-scenes", pluginsdk.CommandRequest{Command: "scene"})
+	require.NoError(t, err)
+
+	kind, id, ok := pluginsdk.ActorMetadataFromOutgoingContext(grpcClient.commandCtx)
+	require.True(t, ok)
+	assert.Equal(t, pluginsdk.ActorCharacter, kind)
+	assert.Equal(t, "char-alice", id)
+}
+
+func TestHostDeliverEventForwardsTrustedActorMetadata(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	host := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	host.plugins["core-scenes"] = &loadedPlugin{
+		manifest: &plugins.Manifest{Name: "core-scenes"},
+		plugin:   grpcClient,
+	}
+
+	ctx := core.WithActor(context.Background(), core.Actor{
+		Kind: core.ActorCharacter,
+		ID:   "char-alice",
+	})
+	_, err := host.DeliverEvent(ctx, "core-scenes", pluginsdk.Event{
+		Stream: "scene:01SCENE",
+		Type:   pluginsdk.EventTypeSystem,
+	})
+	require.NoError(t, err)
+
+	kind, id, ok := pluginsdk.ActorMetadataFromOutgoingContext(grpcClient.eventCtx)
+	require.True(t, ok)
+	assert.Equal(t, pluginsdk.ActorCharacter, kind)
+	assert.Equal(t, "char-alice", id)
+}
+
+func TestPluginHostServiceEmitEventPreservesIncomingActor(t *testing.T) {
+	store := core.NewMemoryEventStore()
+	emitter := plugins.NewPluginEventEmitter(
+		store,
+		func(string) *plugins.Manifest {
+			return &plugins.Manifest{Name: "core-scenes", Emits: []string{"scene"}}
+		},
+		func(ctx context.Context, _ string) (core.Actor, error) {
+			actor, ok := core.ActorFromContext(ctx)
+			if !ok {
+				return core.Actor{}, errors.New("missing actor")
+			}
+			return actor, nil
+		},
+	)
+
+	host := NewHost()
+	host.SetEventEmitter(emitter)
+
+	server := &pluginHostServiceServer{
+		host:       host,
+		pluginName: "core-scenes",
+	}
+
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+		"x-holomush-actor-kind", "0",
+		"x-holomush-actor-id", "char-alice",
+	))
+	_, err := server.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
+		Stream:    "scene:01SCENE",
+		EventType: "system",
+		Payload:   []byte(`{"kind":"created"}`),
+	})
+	require.NoError(t, err)
+
+	events, replayErr := store.Replay(context.Background(), "scene:01SCENE", ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	assert.Equal(t, core.ActorCharacter, events[0].Actor.Kind)
+	assert.Equal(t, "char-alice", events[0].Actor.ID)
+	assert.Equal(t, []byte(`{"kind":"created"}`), events[0].Payload)
+}
+
+func TestPluginHostServiceEmitEventFallsBackToPluginActorWhenIncomingActorMissing(t *testing.T) {
+	store := core.NewMemoryEventStore()
+	emitter := plugins.NewPluginEventEmitter(
+		store,
+		func(string) *plugins.Manifest {
+			return &plugins.Manifest{Name: "core-scenes", Emits: []string{"scene"}}
+		},
+		func(ctx context.Context, _ string) (core.Actor, error) {
+			actor, ok := core.ActorFromContext(ctx)
+			if !ok {
+				return core.Actor{}, errors.New("missing actor")
+			}
+			return actor, nil
+		},
+	)
+
+	host := NewHost()
+	host.SetEventEmitter(emitter)
+
+	server := &pluginHostServiceServer{
+		host:       host,
+		pluginName: "core-scenes",
+	}
+
+	_, err := server.EmitEvent(context.Background(), &pluginv1.PluginHostServiceEmitEventRequest{
+		Stream:    "scene:01SCENE",
+		EventType: "system",
+		Payload:   []byte(`{"kind":"created"}`),
+	})
+	require.NoError(t, err)
+
+	events, replayErr := store.Replay(context.Background(), "scene:01SCENE", ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	assert.Equal(t, core.ActorPlugin, events[0].Actor.Kind)
+	assert.Equal(t, "core-scenes", events[0].Actor.ID)
 }
 
 func TestLoadSkipsInitForPluginWithoutStorageOrRequires(t *testing.T) {

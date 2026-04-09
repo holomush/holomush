@@ -17,6 +17,7 @@ import (
 func newTestPlugin() *scenePlugin {
 	store := newFakeStore()
 	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(&recordingEventSink{})
 	return &scenePlugin{
 		store:   nil, // not used by command handlers
 		service: svc,
@@ -388,9 +389,9 @@ func TestParticipantRoleIsValidReturnsExpectedResults(t *testing.T) {
 // usage hint.
 func TestMembershipCommandsRejectExtraPositionalTokens(t *testing.T) {
 	tests := []struct {
-		name       string
-		args       string
-		wantUsage  string
+		name      string
+		args      string
+		wantUsage string
 	}{
 		{
 			name:      "join rejects one trailing token",

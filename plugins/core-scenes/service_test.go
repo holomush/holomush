@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 )
 
@@ -28,8 +29,14 @@ type fakeStore struct {
 	participants       map[string]map[string]string // sceneID → characterID → role
 	createErr          error
 	createWithOwnerErr error
+	deleteErr          error
 	getErr             error
 	addParticipantErr  error
+}
+
+type recordingEventSink struct {
+	intents []pluginsdk.EmitIntent
+	err     error
 }
 
 func newFakeStore() *fakeStore {
@@ -37,6 +44,14 @@ func newFakeStore() *fakeStore {
 		scenes:       make(map[string]*SceneRow),
 		participants: make(map[string]map[string]string),
 	}
+}
+
+func (s *recordingEventSink) Emit(_ context.Context, intent pluginsdk.EmitIntent) error {
+	if s.err != nil {
+		return s.err
+	}
+	s.intents = append(s.intents, intent)
+	return nil
 }
 
 func (f *fakeStore) Create(_ context.Context, row *SceneRow) error {
@@ -74,6 +89,18 @@ func (f *fakeStore) Get(_ context.Context, id string) (*SceneRow, error) {
 		return nil, oops.Code("SCENE_NOT_FOUND").With("scene_id", id).Errorf("not found")
 	}
 	return row, nil
+}
+
+func (f *fakeStore) Delete(_ context.Context, id string) error {
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	if _, ok := f.scenes[id]; !ok {
+		return oops.Code("SCENE_NOT_FOUND").With("scene_id", id).Errorf("not found")
+	}
+	delete(f.scenes, id)
+	delete(f.participants, id)
+	return nil
 }
 
 func (f *fakeStore) GetWithMembership(ctx context.Context, id string) (*SceneRow, []string, []string, error) {
@@ -313,6 +340,7 @@ func (f *fakeStore) Update(_ context.Context, id string, update *SceneUpdate) (*
 func TestSceneServiceCreateScenePersistsTitleAndOwnerWhenRequestIsValid(t *testing.T) {
 	store := newFakeStore()
 	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(&recordingEventSink{})
 
 	resp, err := svc.CreateScene(context.Background(), &scenev1.CreateSceneRequest{
 		CharacterId: "char-alice",
@@ -383,6 +411,7 @@ func TestSceneServiceCreateSceneReturnsInternalWhenStoreFails(t *testing.T) {
 	store := newFakeStore()
 	store.createErr = oops.Code("SCENE_CREATE_FAILED").Errorf("boom")
 	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(&recordingEventSink{})
 
 	_, err := svc.CreateScene(context.Background(), &scenev1.CreateSceneRequest{
 		CharacterId: "char-alice",
@@ -391,6 +420,58 @@ func TestSceneServiceCreateSceneReturnsInternalWhenStoreFails(t *testing.T) {
 	require.Error(t, err)
 	st, _ := status.FromError(err)
 	assert.Equal(t, codes.Internal, st.Code())
+}
+
+func TestSceneServiceCreateSceneEmitsLifecycleEventWhenEventSinkConfigured(t *testing.T) {
+	store := newFakeStore()
+	sink := &recordingEventSink{}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	resp, err := svc.CreateScene(context.Background(), &scenev1.CreateSceneRequest{
+		CharacterId: "char-alice",
+		Title:       "Tea",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp.GetScene())
+
+	require.Len(t, sink.intents, 1)
+	assert.Equal(t, "scene:"+resp.GetScene().GetId(), sink.intents[0].Stream)
+	assert.Equal(t, pluginsdk.EventTypeSystem, sink.intents[0].Type)
+	assert.Contains(t, sink.intents[0].Payload, `"kind":"scene.lifecycle.created"`)
+	assert.Contains(t, sink.intents[0].Payload, `"scene_id":"`+resp.GetScene().GetId()+`"`)
+}
+
+func TestSceneServiceCreateSceneFailsWhenEventSinkIsMissing(t *testing.T) {
+	store := newFakeStore()
+	svc := NewSceneServiceImpl(store)
+
+	_, err := svc.CreateScene(context.Background(), &scenev1.CreateSceneRequest{
+		CharacterId: "char-alice",
+		Title:       "Tea",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.Internal, st.Code())
+	assert.Contains(t, st.Message(), "failed to prepare scene event")
+	assert.Empty(t, store.scenes)
+}
+
+func TestSceneServiceCreateSceneRollsBackWhenEventEmitFailsAfterPersist(t *testing.T) {
+	store := newFakeStore()
+	sink := &recordingEventSink{err: errors.New("boom")}
+	svc := NewSceneServiceImpl(store)
+	svc.SetEventSink(sink)
+
+	_, err := svc.CreateScene(context.Background(), &scenev1.CreateSceneRequest{
+		CharacterId: "char-alice",
+		Title:       "Tea",
+	})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.Internal, st.Code())
+	assert.Contains(t, st.Message(), "failed to emit scene event")
+	assert.Empty(t, store.scenes)
 }
 
 func TestSceneServiceGetSceneReturnsSceneWhenItExists(t *testing.T) {

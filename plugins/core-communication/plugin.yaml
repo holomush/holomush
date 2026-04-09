@@ -8,6 +8,7 @@ lua-plugin:
   entry: main.lua
 requires:
   - holomush.session.v1.SessionService
+emits: [location, character]
 commands:
   - name: say
     aliases:

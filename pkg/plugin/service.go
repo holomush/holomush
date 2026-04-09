@@ -102,17 +102,20 @@ type grpcServicePlugin struct {
 	hashiplug.NetRPCUnsupportedPlugin
 	handler  Handler
 	provider ServiceProvider
+	broker   *hashiplug.GRPCBroker
 }
 
 // GRPCServer registers both PluginServiceServer and the provider's services.
-func (p *grpcServicePlugin) GRPCServer(_ *hashiplug.GRPCBroker, s *grpc.Server) error {
+func (p *grpcServicePlugin) GRPCServer(broker *hashiplug.GRPCBroker, s *grpc.Server) error {
 	if p.handler == nil {
 		return errors.New("plugin: handler is nil")
 	}
+	p.broker = broker
 
 	adapter := &pluginServerAdapter{
 		handler:         p.handler,
 		serviceProvider: p.provider,
+		brokerDialer:    broker,
 	}
 	if ch, ok := p.handler.(CommandHandler); ok {
 		adapter.cmdHandler = ch

@@ -25,6 +25,15 @@
   const tracer = trace.getTracer('holomush-web');
   let pendingCommandSpan: Span | null = null;
   let streamSpan: Span | null = null;
+  let streamGeneration = 0;
+  let streamReadyGate:
+    | {
+        generation: number;
+        promise: Promise<void>;
+        resolve: () => void;
+        reject: (reason?: unknown) => void;
+      }
+    | null = null;
 
   let sessionId = $state('');
   let characterName = $state('');
@@ -81,11 +90,46 @@
     isMobile = window.innerWidth < 768;
   }
 
+  function createStreamReadyGate(generation: number) {
+    let resolve!: () => void;
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise<void>((innerResolve, innerReject) => {
+      resolve = innerResolve;
+      reject = innerReject;
+    });
+    streamReadyGate = { generation, promise, resolve, reject };
+  }
+
+  function resolveStreamReady(generation: number) {
+    if (streamReadyGate?.generation !== generation) return;
+    streamReadyGate.resolve();
+    streamReadyGate = null;
+  }
+
+  function rejectStreamReady(generation: number, reason: unknown) {
+    if (streamReadyGate?.generation !== generation) return;
+    streamReadyGate.reject(reason);
+    streamReadyGate = null;
+  }
+
+  async function waitForStreamReady() {
+    const gate = streamReadyGate;
+    if (!gate) return;
+    await Promise.race([
+      gate.promise,
+      new Promise<void>((_, reject) => {
+        window.setTimeout(() => reject(new Error('Event stream is still syncing')), 10000);
+      }),
+    ]);
+  }
+
   async function startStreaming() {
     abortController?.abort();
     abortController = new AbortController();
     clearLines();
     replayActive.set(true);
+    const generation = ++streamGeneration;
+    createStreamReadyGate(generation);
     let inReplay = true;
 
     // stream.lifecycle span — tracks the lifetime of the event stream connection
@@ -105,6 +149,7 @@
           if (ctrl.signal === ControlSignal.REPLAY_COMPLETE) {
             inReplay = false;
             replayActive.set(false);
+            resolveStreamReady(generation);
           } else if (ctrl.signal === ControlSignal.STREAM_CLOSED) {
             if (ctrl.message) {
               appendLine(
@@ -115,6 +160,7 @@
             clearCharacterSession();
             connected = false;
             sessionId = '';
+            rejectStreamReady(generation, new Error(ctrl.message || 'Stream closed'));
             streamSpan?.end();
             streamSpan = null;
             goto('/characters');
@@ -133,8 +179,14 @@
       if (e instanceof Error && e.name !== 'AbortError') {
         connected = false;
         error = 'Connection lost. Click "Reconnect" or refresh the page.';
+        rejectStreamReady(generation, e);
+      } else {
+        rejectStreamReady(generation, e);
       }
     } finally {
+      if (streamReadyGate?.generation === generation) {
+        rejectStreamReady(generation, new Error('Event stream ended before replay completed'));
+      }
       streamSpan?.end();
       streamSpan = null;
     }
@@ -151,6 +203,7 @@
     });
 
     try {
+      await waitForStreamReady();
       const resp = await client.sendCommand({ sessionId, text: command });
       if (!resp.success) {
         error = resp.errorMessage || 'Command failed';

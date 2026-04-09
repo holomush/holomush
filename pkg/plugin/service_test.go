@@ -6,6 +6,8 @@ package pluginsdk
 import (
 	"context"
 	"errors"
+	"net"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,6 +15,9 @@ import (
 
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/test/bufconn"
 )
 
 // --- compile-time interface checks ---
@@ -171,6 +176,118 @@ func TestPluginServerAdapter_Init_NilConfig(t *testing.T) {
 	assert.True(t, provider.initCalled)
 }
 
+func TestPluginServerAdapterInitInjectsBrokerBackedEventSinkIntoServiceProvider(t *testing.T) {
+	hostService := &testPluginHostServiceServer{}
+	hostConn := startPluginHostServiceTestServer(t, hostService)
+
+	provider := &eventSinkInitProvider{}
+	adapter := &pluginServerAdapter{
+		handler:         &adapterTestHandler{},
+		serviceProvider: provider,
+		brokerDialer: &testBrokerDialer{
+			conns: map[uint32]*grpc.ClientConn{7: hostConn},
+		},
+	}
+
+	_, err := adapter.Init(context.Background(), &pluginv1.InitRequest{
+		Config: &pluginv1.ServiceConfig{
+			RequiredServices: map[string]string{
+				PluginHostServiceName: "broker:7",
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, provider.initCalled, "expected provider.Init to run")
+	require.Len(t, hostService.requests, 1)
+	assert.Equal(t, "scene:01SCENE", hostService.requests[0].GetStream())
+	assert.Equal(t, string(EventTypeSystem), hostService.requests[0].GetEventType())
+	assert.Equal(t, []byte(`{"kind":"init"}`), hostService.requests[0].GetPayload())
+}
+
+func TestPluginServerAdapterHandleCommandRestoresTrustedIncomingActor(t *testing.T) {
+	handler := &actorAwareCommandHandler{}
+	adapter := &pluginServerAdapter{
+		handler:    handler,
+		cmdHandler: handler,
+	}
+
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+		actorKindHeader, "0",
+		actorIDHeader, "char-alice",
+	))
+	_, err := adapter.HandleCommand(ctx, &pluginv1.HandleCommandRequest{
+		Command: &pluginv1.CommandRequest{Command: "scene"},
+	})
+	require.NoError(t, err)
+	require.True(t, handler.sawActor)
+	assert.Equal(t, ActorCharacter, handler.kind)
+	assert.Equal(t, "char-alice", handler.id)
+}
+
+func TestEventSinkEmitForwardsTrustedActorMetadata(t *testing.T) {
+	hostService := &testPluginHostServiceServer{}
+	hostConn := startPluginHostServiceTestServer(t, hostService)
+
+	sink, err := newEventSinkFromBroker(&testBrokerDialer{
+		conns: map[uint32]*grpc.ClientConn{7: hostConn},
+	}, map[string]string{
+		PluginHostServiceName: "broker:7",
+	})
+	require.NoError(t, err)
+
+	emitCtx := context.WithValue(context.Background(), actorMetadataContextKey{}, actorMetadata{
+		kind: ActorCharacter,
+		id:   "char-alice",
+	})
+	err = sink.Emit(emitCtx, EmitIntent{
+		Stream:  "scene:01SCENE",
+		Type:    EventTypeSystem,
+		Payload: `{"kind":"created"}`,
+	})
+	require.NoError(t, err)
+	require.Len(t, hostService.requests, 1)
+	require.True(t, hostService.sawActor)
+	assert.Equal(t, ActorCharacter, hostService.actorKind)
+	assert.Equal(t, "char-alice", hostService.actorID)
+	assert.Equal(t, []byte(`{"kind":"created"}`), hostService.requests[0].GetPayload())
+}
+
+func TestPluginServerAdapterInitRoutesServiceOriginatedEmitThroughSharedEmitter(t *testing.T) {
+	service := &emittingPluginHostServiceServer{
+		pluginName: "core-scenes",
+	}
+	hostConn := startPluginHostServiceTestServer(t, service)
+
+	provider := &eventSinkInitProvider{}
+	adapter := &pluginServerAdapter{
+		handler:         &adapterTestHandler{},
+		serviceProvider: provider,
+		brokerDialer: &testBrokerDialer{
+			conns: map[uint32]*grpc.ClientConn{7: hostConn},
+		},
+	}
+
+	ctx := context.WithValue(context.Background(), actorMetadataContextKey{}, actorMetadata{
+		kind: ActorCharacter,
+		id:   "char-alice",
+	})
+	_, err := adapter.Init(ctx, &pluginv1.InitRequest{
+		Config: &pluginv1.ServiceConfig{
+			RequiredServices: map[string]string{
+				PluginHostServiceName: "broker:7",
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, provider.initCalled, "expected provider.Init to run")
+
+	require.Len(t, service.requests, 1)
+	assert.Equal(t, "scene:01SCENE", service.requests[0].GetStream())
+	assert.Equal(t, ActorCharacter, service.actorKind)
+	assert.Equal(t, "char-alice", service.actorID)
+	assert.Equal(t, []byte(`{"kind":"init"}`), service.requests[0].GetPayload())
+}
+
 // --- test doubles ---
 
 type testServiceProvider struct {
@@ -191,6 +308,132 @@ func (p *testServiceProvider) Init(_ context.Context, config *pluginv1.ServiceCo
 		return p.initErr
 	}
 	return nil
+}
+
+type eventSinkInitProvider struct {
+	initCalled bool
+	sink       EventSink
+}
+
+func (p *eventSinkInitProvider) RegisterServices(_ grpc.ServiceRegistrar) {}
+
+func (p *eventSinkInitProvider) Init(ctx context.Context, _ *pluginv1.ServiceConfig) error {
+	p.initCalled = true
+	if p.sink == nil {
+		return errors.New("event sink not injected")
+	}
+	return p.sink.Emit(ctx, EmitIntent{
+		Stream:  "scene:01SCENE",
+		Type:    EventTypeSystem,
+		Payload: `{"kind":"init"}`,
+	})
+}
+
+func (p *eventSinkInitProvider) SetEventSink(sink EventSink) {
+	p.sink = sink
+}
+
+type actorAwareCommandHandler struct {
+	adapterTestHandler
+	sawActor bool
+	kind     ActorKind
+	id       string
+}
+
+func (h *actorAwareCommandHandler) HandleCommand(ctx context.Context, _ CommandRequest) (*CommandResponse, error) {
+	kind, id, ok := actorMetadataFromContext(ctx)
+	h.sawActor = ok
+	h.kind = kind
+	h.id = id
+	return OK("ok"), nil
+}
+
+type testBrokerDialer struct {
+	conns map[uint32]*grpc.ClientConn
+}
+
+func (d *testBrokerDialer) DialWithOptions(id uint32, _ ...grpc.DialOption) (*grpc.ClientConn, error) {
+	conn, ok := d.conns[id]
+	if !ok {
+		return nil, errors.New("unknown broker id")
+	}
+	return conn, nil
+}
+
+type testPluginHostServiceServer struct {
+	pluginv1.UnimplementedPluginHostServiceServer
+	mu        sync.Mutex
+	requests  []*pluginv1.PluginHostServiceEmitEventRequest
+	sawActor  bool
+	actorKind ActorKind
+	actorID   string
+}
+
+func (s *testPluginHostServiceServer) EmitEvent(ctx context.Context, req *pluginv1.PluginHostServiceEmitEventRequest) (*pluginv1.PluginHostServiceEmitEventResponse, error) {
+	s.mu.Lock()
+	s.requests = append(s.requests, &pluginv1.PluginHostServiceEmitEventRequest{
+		Stream:    req.GetStream(),
+		EventType: req.GetEventType(),
+		Payload:   append([]byte(nil), req.GetPayload()...),
+	})
+	s.actorKind, s.actorID, s.sawActor = ActorMetadataFromIncomingContext(ctx)
+	s.mu.Unlock()
+	return &pluginv1.PluginHostServiceEmitEventResponse{}, nil
+}
+
+type emittingPluginHostServiceServer struct {
+	pluginv1.UnimplementedPluginHostServiceServer
+	pluginName string
+	mu         sync.Mutex
+	requests   []*pluginv1.PluginHostServiceEmitEventRequest
+	actorKind  ActorKind
+	actorID    string
+}
+
+func (s *emittingPluginHostServiceServer) EmitEvent(ctx context.Context, req *pluginv1.PluginHostServiceEmitEventRequest) (*pluginv1.PluginHostServiceEmitEventResponse, error) {
+	kind, id, ok := ActorMetadataFromIncomingContext(ctx)
+	if !ok {
+		kind = ActorPlugin
+		id = s.pluginName
+	}
+	s.mu.Lock()
+	s.actorKind = kind
+	s.actorID = id
+	s.requests = append(s.requests, &pluginv1.PluginHostServiceEmitEventRequest{
+		Stream:    req.GetStream(),
+		EventType: req.GetEventType(),
+		Payload:   append([]byte(nil), req.GetPayload()...),
+	})
+	s.mu.Unlock()
+	return &pluginv1.PluginHostServiceEmitEventResponse{}, nil
+}
+
+func startPluginHostServiceTestServer(t *testing.T, srv pluginv1.PluginHostServiceServer) *grpc.ClientConn {
+	t.Helper()
+
+	listener := bufconn.Listen(1024 * 1024)
+	server := grpc.NewServer() // nosemgrep: go.grpc.security.grpc-server-insecure-connection.grpc-server-insecure-connection -- bufconn test server
+	pluginv1.RegisterPluginHostServiceServer(server, srv)
+
+	go func() {
+		_ = server.Serve(listener)
+	}()
+
+	t.Cleanup(func() {
+		server.Stop()
+		_ = listener.Close()
+	})
+
+	conn, err := grpc.NewClient("passthrough:///plugin-host-test",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return listener.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	return conn
 }
 
 type testFullAdapterHandler struct {

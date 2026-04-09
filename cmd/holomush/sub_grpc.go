@@ -15,7 +15,9 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 
+	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/auth"
+	authsetup "github.com/holomush/holomush/internal/auth/setup"
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/config"
@@ -25,17 +27,15 @@ import (
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/naming"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
 	"github.com/holomush/holomush/internal/session"
+	sessionsetup "github.com/holomush/holomush/internal/session/setup"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telnet"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
+	worldsetup "github.com/holomush/holomush/internal/world/setup"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
-	abacsetup "github.com/holomush/holomush/internal/access/setup"
-	authsetup "github.com/holomush/holomush/internal/auth/setup"
-	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
-	sessionsetup "github.com/holomush/holomush/internal/session/setup"
-	worldsetup "github.com/holomush/holomush/internal/world/setup"
 )
 
 // grpcSubsystemConfig configures the gRPC subsystem.
@@ -111,6 +111,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	cmdRegistry := s.cfg.Plugins.CommandRegistry()
 	aliasRepo := s.cfg.Plugins.AliasRepo()
 	aliasCache := s.cfg.Plugins.AliasCache()
+	pluginManager.ConfigureEventEmitter(eventStore)
 
 	// 1. Create core engine from event store.
 	engine := core.NewEngine(eventStore)

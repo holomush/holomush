@@ -1285,7 +1285,7 @@ func TestOwnerCanReadOwnSceneViaParticipantPolicy(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-locks-1", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityOpen),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -1305,7 +1305,7 @@ func TestMemberCanResumePausedScene(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-locks-resume", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityOpen),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -1328,7 +1328,7 @@ func TestKickedCharacterImmediatelyDisappearsFromParticipants(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-locks-kick", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityOpen),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -1357,7 +1357,7 @@ func TestInviteeCanJoinPrivateScene(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-locks-pj", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityPrivate),
+		Visibility:      string(SceneVisibilityPrivate),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -1376,7 +1376,7 @@ func TestNonInviteeCannotJoinPrivateScene(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-locks-pj-no", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityPrivate),
+		Visibility:      string(SceneVisibilityPrivate),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -1392,7 +1392,7 @@ func TestOwnerCannotLeaveOwnScene(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-locks-ol", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityOpen),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -1408,7 +1408,7 @@ func TestOwnerCanTransferToMemberAndPreviousOwnerBecomesMember(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-locks-xfer", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityOpen),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -1436,7 +1436,7 @@ func TestAddParticipantWorksOnPausedScene(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-bnd-pj", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityOpen),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -1456,7 +1456,7 @@ func TestKickParticipantWorksOnPausedScene(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-bnd-pk", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityOpen),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -1478,7 +1478,7 @@ func TestTransferOwnershipWorksOnPausedScene(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-bnd-pt", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityOpen),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -1503,7 +1503,7 @@ func TestInviteParticipantRejectsOwnerTarget(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-bnd-io", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityPrivate),
+		Visibility:      string(SceneVisibilityPrivate),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))
@@ -1542,7 +1542,7 @@ func TestSceneOwnerIDDenormAlwaysMatchesParticipantOwnerRow(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-inv-denorm", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityOpen),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 
@@ -1572,7 +1572,7 @@ func TestEachMembershipMutationProducesExactlyOneOpsEvent(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-inv-count", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityPrivate),
+		Visibility:      string(SceneVisibilityPrivate),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 
@@ -1625,7 +1625,7 @@ func TestParticipantPrimaryKeyPreventsDoubleInsertion(t *testing.T) {
 	row := &SceneRow{
 		ID: "scene-inv-pk", OwnerID: "char-alice", Title: "T",
 		State: string(SceneStateActive), PoseOrder: string(PoseOrderModeFree),
-		Visibility: string(SceneVisibilityOpen),
+		Visibility:      string(SceneVisibilityOpen),
 		ContentWarnings: []string{}, Tags: []string{},
 	}
 	require.NoError(t, store.CreateWithOwner(ctx, row))

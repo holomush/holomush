@@ -2044,6 +2044,9 @@ func (w *capturingAuditWriter) Close() error { return nil }
 // useful for concurrency tests where each call must produce a unique response.
 type fakePluginDeliverer struct {
 	onDeliver func(ctx context.Context, pluginName string, cmd pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error)
+	onEmit    func(ctx context.Context, pluginName string, event pluginsdk.EmitEvent) error
+	emits     []pluginsdk.EmitEvent
+	emitMu    sync.Mutex
 }
 
 func (f *fakePluginDeliverer) DeliverCommand(ctx context.Context, pluginName string, cmd pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
@@ -2051,6 +2054,16 @@ func (f *fakePluginDeliverer) DeliverCommand(ctx context.Context, pluginName str
 		return &pluginsdk.CommandResponse{Status: pluginsdk.CommandOK}, nil
 	}
 	return f.onDeliver(ctx, pluginName, cmd)
+}
+
+func (f *fakePluginDeliverer) EmitPluginEvent(ctx context.Context, pluginName string, event pluginsdk.EmitEvent) error {
+	f.emitMu.Lock()
+	f.emits = append(f.emits, event)
+	f.emitMu.Unlock()
+	if f.onEmit != nil {
+		return f.onEmit(ctx, pluginName, event)
+	}
+	return nil
 }
 
 // newTestDispatcherWithPlugin constructs a Dispatcher wired to deliver commands
@@ -2107,6 +2120,37 @@ func newTestCommandExecution(t *testing.T) *CommandExecution {
 	})
 }
 
+func newTestCommandExecutionWithServices(t *testing.T, services *Services) *CommandExecution {
+	t.Helper()
+	var buf bytes.Buffer
+	return NewTestExecution(CommandExecutionConfig{
+		CharacterID: ulid.Make(),
+		Output:      &buf,
+		Services:    services,
+	})
+}
+
+type appendCountingEventStore struct {
+	appendCount int
+}
+
+func (s *appendCountingEventStore) Append(_ context.Context, _ core.Event) error {
+	s.appendCount++
+	return nil
+}
+
+func (s *appendCountingEventStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
+	return nil, nil
+}
+
+func (s *appendCountingEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
+	return ulid.ULID{}, nil
+}
+
+func (s *appendCountingEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
+	return nil, nil, nil
+}
+
 func TestDispatcherAttachesAuditContextToDispatchContext(t *testing.T) {
 	// Verify that after Dispatch is called, the context seen by the
 	// plugin deliverer is derived from audit.NewContextForDispatch
@@ -2130,6 +2174,43 @@ func TestDispatcherAttachesAuditContextToDispatchContext(t *testing.T) {
 	audit.AddEventToContext(capturedCtx, audit.Event{ID: "sanity"})
 	events := audit.EventsFromContext(capturedCtx)
 	assert.Len(t, events, 1)
+}
+
+func TestDispatcherRoutesPluginResponseEventsThroughSharedEmitter(t *testing.T) {
+	store := &appendCountingEventStore{}
+	services := NewTestServices(ServicesConfig{
+		Events: store,
+	})
+
+	var emittedActor core.Actor
+	deliverer := &fakePluginDeliverer{
+		onDeliver: func(_ context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+			return &pluginsdk.CommandResponse{
+				Status: pluginsdk.CommandOK,
+				Events: []pluginsdk.EmitEvent{
+					{Stream: "scene:01TEST:ic", Type: pluginsdk.EventTypeSay, Payload: `{"text":"hello"}`},
+				},
+			}, nil
+		},
+		onEmit: func(ctx context.Context, pluginName string, event pluginsdk.EmitEvent) error {
+			actor, ok := core.ActorFromContext(ctx)
+			require.True(t, ok)
+			emittedActor = actor
+			assert.Equal(t, "test-plugin", pluginName)
+			assert.Equal(t, "scene:01TEST:ic", event.Stream)
+			return nil
+		},
+	}
+
+	dispatcher := newTestDispatcherWithPlugin(t, deliverer)
+	exec := newTestCommandExecutionWithServices(t, services)
+
+	err := dispatcher.Dispatch(context.Background(), "plugintest", exec)
+	require.NoError(t, err)
+	assert.Len(t, deliverer.emits, 1, "plugin response events should route through shared emitter")
+	assert.Equal(t, 0, store.appendCount, "dispatcher must not append plugin response events directly")
+	assert.Equal(t, core.ActorCharacter, emittedActor.Kind)
+	assert.Equal(t, exec.CharacterID().String(), emittedActor.ID)
 }
 
 func TestDispatcherExtractsAuditHintsFromCommandResponseAndStampsHostFields(t *testing.T) {

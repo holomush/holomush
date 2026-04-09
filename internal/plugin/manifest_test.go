@@ -68,6 +68,132 @@ emits: [scene]
 	assert.Contains(t, err.Error(), "emits")
 }
 
+func TestManifestRejectsSettingPluginWithEmptyEmitsDeclaration(t *testing.T) {
+	data := []byte(`
+name: emit-setting-empty
+version: 1.0.0
+type: setting
+setting:
+  display_name: Test
+  content_dir: content
+  starting_location: start
+emits: []
+`)
+
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "emits")
+}
+
+func TestManifestRejectsSettingPluginWithNullEmitsDeclaration(t *testing.T) {
+	data := []byte(`
+name: emit-setting-null
+version: 1.0.0
+type: setting
+setting:
+  display_name: Test
+  content_dir: content
+  starting_location: start
+emits:
+`)
+
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "emits")
+}
+
+func TestManifestAcceptsBinaryPluginWithEmits(t *testing.T) {
+	data := []byte(`
+name: emit-binary
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: emit-binary
+emits: [" scene ", notifications]
+`)
+
+	manifest, err := plugins.ParseManifest(data)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"scene", "notifications"}, manifest.Emits)
+}
+
+func TestManifestRejectsInvalidEmitsEntries(t *testing.T) {
+	tests := []struct {
+		name    string
+		yaml    string
+		wantErr string
+	}{
+		{
+			name: "empty entry",
+			yaml: `
+name: emit-empty
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+emits: [scene, ""]
+`,
+			wantErr: "emits",
+		},
+		{
+			name: "duplicate entry",
+			yaml: `
+name: emit-dup
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: emit-binary
+emits: [scene, scene]
+`,
+			wantErr: "duplicate",
+		},
+		{
+			name: "entry with colon",
+			yaml: `
+name: emit-colon
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: emit-binary
+emits: [scene:local]
+`,
+			wantErr: ":",
+		},
+		{
+			name: "whitespace only entry",
+			yaml: `
+name: emit-space
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+emits: ["   "]
+`,
+			wantErr: "empty",
+		},
+		{
+			name: "null declaration",
+			yaml: `
+name: emit-null
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+emits:
+`,
+			wantErr: "sequence",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := plugins.ParseManifest([]byte(tt.yaml))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
 func TestParseManifestBinaryPlugin(t *testing.T) {
 	yaml := `
 name: combat-system

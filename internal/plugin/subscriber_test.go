@@ -10,9 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/mocks"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
@@ -450,6 +455,53 @@ func TestSubscriberCustomEventTypeFilteredBySubscription(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	assert.Equal(t, 1, host.deliveredCount(), "only telepathy event should be delivered")
+}
+
+func TestSubscriberRoutesResponseEventsThroughSharedEmitterWithIncomingActor(t *testing.T) {
+	pluginsDir := setupRoutingFixture(t)
+	store := core.NewMemoryEventStore()
+	mockLua := mocks.NewMockHost(t)
+
+	mockLua.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil).Times(2)
+	mockLua.EXPECT().Close(mock.Anything).Return(nil)
+
+	manager := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua))
+	t.Cleanup(func() { _ = manager.Close(context.Background()) })
+
+	require.NoError(t, manager.LoadAll(context.Background()))
+	manager.ConfigureEventEmitter(store)
+
+	host := &subscriberHost{
+		response: []pluginsdk.EmitEvent{
+			{Stream: "location:123", Type: pluginsdk.EventTypeSay, Payload: `{"text":"echo"}`},
+		},
+	}
+
+	sub := plugins.NewSubscriber(host, manager)
+	sub.Subscribe("echo-bot", "location:123", []string{"say"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	events := make(chan pluginsdk.Event, 1)
+	sub.Start(ctx, events)
+
+	events <- pluginsdk.Event{
+		ID:        "1",
+		Stream:    "location:123",
+		Type:      pluginsdk.EventTypeSay,
+		ActorKind: pluginsdk.ActorCharacter,
+		ActorID:   "01ACTORFROMEVENT",
+	}
+
+	time.Sleep(50 * time.Millisecond)
+
+	recorded, err := store.Replay(context.Background(), "location:123", ulid.ULID{}, 10)
+	require.NoError(t, err)
+	require.Len(t, recorded, 1)
+	assert.Equal(t, core.ActorCharacter, recorded[0].Actor.Kind)
+	assert.Equal(t, "01ACTORFROMEVENT", recorded[0].Actor.ID)
+	assert.Equal(t, core.EventTypeSay, recorded[0].Type)
 }
 
 // slowSubscriberHost blocks DeliverEvent until blockCh is closed.

@@ -8,6 +8,7 @@ package plugins
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/samber/oops"
@@ -94,6 +95,8 @@ type Manifest struct {
 	// ABAC trust boundary fields
 	ResourceTypes []string     `yaml:"resource_types,omitempty" json:"resource_types,omitempty"`
 	Trust         *TrustConfig `yaml:"trust,omitempty" json:"trust,omitempty"`
+
+	emitsDeclared bool `yaml:"-" json:"-" jsonschema:"-"`
 }
 
 // EffectivePriority returns the manifest's load priority, applying
@@ -183,6 +186,29 @@ func (c *CommandSpec) Validate() error {
 	return nil
 }
 
+func validateEmits(names []string) ([]string, error) {
+	seen := make(map[string]bool, len(names))
+	validated := make([]string, 0, len(names))
+	for i, raw := range names {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			return nil, oops.In("manifest").With("emits_index", i).New("emits entries must not be empty")
+		}
+		if strings.Contains(name, ":") {
+			return nil, oops.In("manifest").With("emits", name).New("emits entries must be bare namespaces without ':'")
+		}
+		if !namePattern.MatchString(name) {
+			return nil, oops.In("manifest").With("emits", name).New("emits entries must match plugin naming pattern")
+		}
+		if seen[name] {
+			return nil, oops.In("manifest").With("emits", name).New("duplicate emits namespace")
+		}
+		seen[name] = true
+		validated = append(validated, name)
+	}
+	return validated, nil
+}
+
 // maxNameLength is the maximum allowed length for plugin names.
 const maxNameLength = 64
 
@@ -197,9 +223,21 @@ func ParseManifest(data []byte) (*Manifest, error) {
 		return nil, oops.In("manifest").New("manifest data is empty")
 	}
 
-	var m Manifest
-	if err := yaml.Unmarshal(data, &m); err != nil {
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
 		return nil, oops.In("manifest").Hint("invalid YAML").Wrap(err)
+	}
+
+	var m Manifest
+	if err := root.Decode(&m); err != nil {
+		return nil, oops.In("manifest").Hint("invalid YAML").Wrap(err)
+	}
+	if emitsNode := manifestKeyNode(&root, "emits"); emitsNode != nil {
+		m.emitsDeclared = true
+		if emitsNode.Kind != yaml.SequenceNode {
+			return nil, oops.In("manifest").With("name", m.Name).
+				New("emits must be declared as a YAML sequence")
+		}
 	}
 
 	if err := m.Validate(); err != nil {
@@ -290,11 +328,17 @@ func (m *Manifest) Validate() error {
 		return oops.In("manifest").With("name", m.Name).With("type", m.Type).
 			New("session_streams is only valid for lua and binary plugin types")
 	}
-	if len(m.Emits) > 0 && m.Type != TypeLua && m.Type != TypeBinary {
+	if (m.emitsDeclared || len(m.Emits) > 0) && m.Type != TypeLua && m.Type != TypeBinary {
 		return oops.In("manifest").With("name", m.Name).With("type", m.Type).
 			New("emits is only valid for lua and binary plugin types")
 	}
-
+	if len(m.Emits) > 0 {
+		validated, err := validateEmits(m.Emits)
+		if err != nil {
+			return err
+		}
+		m.Emits = validated
+	}
 	// Validate load priority: priorities below -999 are reserved (historically for core plugins).
 	if m.Priority != nil && int(*m.Priority) < -999 {
 		return oops.In("manifest").With("name", m.Name).
@@ -370,5 +414,21 @@ func (m *Manifest) Validate() error {
 		}
 	}
 
+	return nil
+}
+
+func manifestKeyNode(root *yaml.Node, key string) *yaml.Node {
+	if root == nil || len(root.Content) == 0 {
+		return nil
+	}
+	mapping := root.Content[0]
+	if mapping.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			return mapping.Content[i+1]
+		}
+	}
 	return nil
 }

@@ -34,6 +34,10 @@ func (m *mockPluginDeliverer) DeliverCommand(_ context.Context, pluginName strin
 	return m.response, m.err
 }
 
+func (m *mockPluginDeliverer) EmitPluginEvent(context.Context, string, pluginsdk.EmitEvent) error {
+	return nil
+}
+
 func TestDispatchPluginBackedCommand(t *testing.T) {
 	// Set up a plugin-backed command in the registry
 	registry := command.NewRegistry()

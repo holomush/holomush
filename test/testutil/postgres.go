@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/docker/go-connections/nat"
 	"github.com/jackc/pgx/v5"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -37,22 +38,47 @@ func (e *PostgresEnv) Terminate(ctx context.Context) error {
 //
 // Callers are responsible for running migrations via store.NewMigrator.
 func StartPostgres(ctx context.Context) (*PostgresEnv, error) {
+	var lastErr error
+	for attempt := range 3 {
+		env, err := startPostgresOnce(ctx)
+		if err == nil {
+			return env, nil
+		}
+		lastErr = err
+		if attempt == 2 {
+			break
+		}
+
+		backoff := time.Duration(attempt+1) * 250 * time.Millisecond
+		timer := time.NewTimer(backoff)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, fmt.Errorf("start postgres container: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
+
+	return nil, fmt.Errorf("start postgres container: %w", lastErr)
+}
+
+func startPostgresOnce(ctx context.Context) (*PostgresEnv, error) {
 	container, err := postgres.Run(ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("holomush_test"),
 		postgres.WithUsername("postgres"),
 		postgres.WithPassword("postgres"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(30*time.Second),
+		testcontainers.WithWaitStrategyAndDeadline(
+			2*time.Minute,
+			wait.ForLog("database system is ready to accept connections").WithOccurrence(2),
+			wait.ForListeningPort("5432/tcp"),
 		),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("start postgres container: %w", err)
+		return nil, fmt.Errorf("run postgres: %w", err)
 	}
 
-	adminConnStr, err := container.ConnectionString(ctx, "sslmode=disable")
+	adminConnStr, err := adminConnectionString(ctx, container)
 	if err != nil {
 		_ = container.Terminate(ctx) //nolint:errcheck // best-effort cleanup
 		return nil, fmt.Errorf("get admin connection string: %w", err)
@@ -71,6 +97,36 @@ func StartPostgres(ctx context.Context) (*PostgresEnv, error) {
 	}
 
 	return &PostgresEnv{Container: container, ConnStr: connStr}, nil
+}
+
+func adminConnectionString(ctx context.Context, container *postgres.PostgresContainer) (string, error) {
+	if connStr, err := container.ConnectionString(ctx, "sslmode=disable"); err == nil {
+		return connStr, nil
+	}
+
+	host, err := container.Host(ctx)
+	if err != nil {
+		return "", fmt.Errorf("resolve container host: %w", err)
+	}
+
+	port, err := container.MappedPort(ctx, nat.Port("5432/tcp"))
+	if err != nil {
+		port, err = container.MappedPort(ctx, nat.Port("5432"))
+		if err != nil {
+			return "", fmt.Errorf("resolve postgres port: %w", err)
+		}
+	}
+
+	adminURL := &url.URL{
+		Scheme: "postgres",
+		Host:   fmt.Sprintf("%s:%s", host, port.Port()),
+		Path:   "holomush_test",
+	}
+	adminURL.User = url.UserPassword("postgres", "postgres")
+	q := adminURL.Query()
+	q.Set("sslmode", "disable")
+	adminURL.RawQuery = q.Encode()
+	return adminURL.String(), nil
 }
 
 func initHolomushRole(ctx context.Context, adminConnStr string) error {

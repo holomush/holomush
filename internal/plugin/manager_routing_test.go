@@ -5,14 +5,17 @@ package plugins_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"sync"
 	"testing"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/mocks"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -32,6 +35,8 @@ func setupRoutingFixture(t *testing.T) string {
 	writeFile(t, filepath.Join(sayDir, "plugin.yaml"), []byte(`name: say-plugin
 version: 1.0.0
 type: lua
+emits:
+  - location
 commands:
   - name: say
     help: Say something
@@ -46,6 +51,8 @@ lua-plugin:
 	writeFile(t, filepath.Join(luaDir, "plugin.yaml"), []byte(`name: echo-bot
 version: 1.0.0
 type: lua
+emits:
+  - location
 events:
   - say
 lua-plugin:
@@ -55,6 +62,38 @@ lua-plugin:
 
 	return pluginsDir
 }
+
+type testEventEmitterHost struct {
+	emitter     plugins.PluginIntentEmitter
+	loadFn      func(context.Context, *plugins.Manifest, string) error
+	loadedNames []string
+}
+
+func (h *testEventEmitterHost) SetEventEmitter(emitter plugins.PluginIntentEmitter) {
+	h.emitter = emitter
+}
+
+func (h *testEventEmitterHost) Load(ctx context.Context, manifest *plugins.Manifest, dir string) error {
+	h.loadedNames = append(h.loadedNames, manifest.Name)
+	if h.loadFn != nil {
+		return h.loadFn(ctx, manifest, dir)
+	}
+	return nil
+}
+
+func (h *testEventEmitterHost) Unload(context.Context, string) error { return nil }
+
+func (h *testEventEmitterHost) DeliverEvent(context.Context, string, pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
+	return nil, nil
+}
+
+func (h *testEventEmitterHost) DeliverCommand(context.Context, string, pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+	return nil, nil
+}
+
+func (h *testEventEmitterHost) Plugins() []string { return append([]string(nil), h.loadedNames...) }
+
+func (h *testEventEmitterHost) Close(context.Context) error { return nil }
 
 func TestManagerRegisterHost(t *testing.T) {
 	mgr := plugins.NewManager(t.TempDir())
@@ -75,6 +114,60 @@ func TestManagerRegisterHostPanicsOnNil(t *testing.T) {
 	assert.Panics(t, func() {
 		mgr.RegisterHost(plugins.TypeBinary, nil)
 	})
+}
+
+func TestManagerRegisterHostBackfillsConfiguredEventEmitter(t *testing.T) {
+	mgr := plugins.NewManager(t.TempDir())
+	store := core.NewMemoryEventStore()
+
+	mgr.ConfigureEventEmitter(store)
+
+	host := &testEventEmitterHost{}
+	mgr.RegisterHost(plugins.TypeBinary, host)
+
+	require.NotNil(t, host.emitter)
+}
+
+func TestManagerLoadAllExposesInflightManifestToInitTimeEmitter(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+	binDir := filepath.Join(pluginsDir, "scene-binary")
+	mkdirAll(t, binDir)
+	writeFile(t, filepath.Join(binDir, "plugin.yaml"), []byte(`name: scene-binary
+version: 1.0.0
+type: binary
+emits:
+  - scene
+binary-plugin:
+  executable: scene-binary
+`))
+
+	store := core.NewMemoryEventStore()
+	host := &testEventEmitterHost{}
+	host.loadFn = func(ctx context.Context, manifest *plugins.Manifest, _ string) error {
+		if host.emitter == nil {
+			return errors.New("event emitter was not injected")
+		}
+		emitCtx := core.WithActor(ctx, core.Actor{Kind: core.ActorPlugin, ID: manifest.Name})
+		return host.emitter.Emit(emitCtx, manifest.Name, pluginsdk.EmitIntent{
+			Stream:  "scene:test",
+			Type:    pluginsdk.EventTypeSystem,
+			Payload: `{"phase":"init"}`,
+		})
+	}
+
+	mgr := plugins.NewManager(pluginsDir)
+	mgr.RegisterHost(plugins.TypeBinary, host)
+	mgr.ConfigureEventEmitter(store)
+
+	require.NoError(t, mgr.LoadAll(context.Background()))
+
+	events, err := store.Replay(context.Background(), "scene:test", ulid.ULID{}, 10)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "scene:test", events[0].Stream)
+	assert.Equal(t, "scene-binary", events[0].Actor.ID)
+	assert.Equal(t, core.ActorPlugin, events[0].Actor.Kind)
 }
 
 func TestManagerDeliverCommandRoutesToCorrectHost(t *testing.T) {
@@ -142,6 +235,40 @@ func TestManagerDeliverEventUnknownPlugin(t *testing.T) {
 	_, err := mgr.DeliverEvent(context.Background(), "nonexistent", pluginsdk.Event{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "plugin not loaded")
+}
+
+func TestManagerEmitPluginEventUsesConfiguredSharedEmitter(t *testing.T) {
+	pluginsDir := setupRoutingFixture(t)
+	store := core.NewMemoryEventStore()
+	mockLua := mocks.NewMockHost(t)
+
+	mockLua.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil).Times(2)
+	mockLua.EXPECT().Close(mock.Anything).Return(nil)
+
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua))
+	t.Cleanup(func() { _ = mgr.Close(context.Background()) })
+
+	require.NoError(t, mgr.LoadAll(context.Background()))
+	mgr.ConfigureEventEmitter(store)
+
+	ctx := core.WithActor(context.Background(), core.Actor{
+		Kind: core.ActorCharacter,
+		ID:   "01CHARACTERTEST",
+	})
+
+	err := mgr.EmitPluginEvent(ctx, "say-plugin", pluginsdk.EmitEvent{
+		Stream:  "location:123",
+		Type:    pluginsdk.EventTypeSay,
+		Payload: `{"text":"hello"}`,
+	})
+	require.NoError(t, err)
+
+	events, replayErr := store.Replay(context.Background(), "location:123", ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+	assert.Equal(t, core.ActorCharacter, events[0].Actor.Kind)
+	assert.Equal(t, "01CHARACTERTEST", events[0].Actor.ID)
+	assert.Equal(t, "location:123", events[0].Stream)
 }
 
 func TestManagerDeliverCommandConcurrentSafety(t *testing.T) {

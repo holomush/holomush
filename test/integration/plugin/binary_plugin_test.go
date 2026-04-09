@@ -31,6 +31,7 @@ import (
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	policytypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/audit"
+	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
 	"github.com/holomush/holomush/internal/store"
@@ -58,6 +59,27 @@ func coreScenesBinaryPath() (string, string) {
 	dir := filepath.Join(pluginBinaryDir(), "core-scenes")
 	platformDir := runtime.GOOS + "-" + runtime.GOARCH
 	return dir, filepath.Join(dir, platformDir, "core-scenes")
+}
+
+func configureBinaryHostEventEmitter(host *goplugin.Host, eventStore core.EventStore, manifests ...*plugins.Manifest) {
+	manifestByName := make(map[string]*plugins.Manifest, len(manifests))
+	for _, manifest := range manifests {
+		if manifest != nil {
+			manifestByName[manifest.Name] = manifest
+		}
+	}
+	host.SetEventEmitter(plugins.NewPluginEventEmitter(
+		eventStore,
+		func(pluginName string) *plugins.Manifest {
+			return manifestByName[pluginName]
+		},
+		func(ctx context.Context, pluginName string) (core.Actor, error) {
+			if actor, ok := core.ActorFromContext(ctx); ok {
+				return actor, nil
+			}
+			return core.Actor{Kind: core.ActorPlugin, ID: pluginName}, nil
+		},
+	))
 }
 
 var _ = Describe("Binary Plugin Lifecycle", func() {
@@ -187,12 +209,16 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				goplugin.WithServiceRegistry(registry),
 			)
 			defer func() { _ = host.Close(ctx) }()
+			eventStore, eventStoreErr := store.NewPostgresEventStore(ctx, connStr)
+			Expect(eventStoreErr).NotTo(HaveOccurred())
+			defer eventStore.Close()
 
 			// Create manager with host and registry
 			manager := plugins.NewManager(pluginsDir,
 				plugins.WithServiceRegistry(registry),
 			)
 			manager.RegisterHost(plugins.TypeBinary, host)
+			manager.ConfigureEventEmitter(eventStore)
 			defer func() { _ = manager.Close(ctx) }()
 
 			// LoadAll discovers + loads all plugins
@@ -270,6 +296,10 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 			manifest, err := plugins.ParseManifest(manifestData)
 			Expect(err).NotTo(HaveOccurred())
+			eventStore, eventStoreErr := store.NewPostgresEventStore(ctx, connStr)
+			Expect(eventStoreErr).NotTo(HaveOccurred())
+			defer eventStore.Close()
+			configureBinaryHostEventEmitter(host, eventStore, manifest)
 
 			Expect(host.Load(ctx, manifest, pluginDir)).To(Succeed())
 
@@ -323,6 +353,10 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 			manifest, err := plugins.ParseManifest(manifestData)
 			Expect(err).NotTo(HaveOccurred())
+			eventStore, eventStoreErr := store.NewPostgresEventStore(ctx, connStr)
+			Expect(eventStoreErr).NotTo(HaveOccurred())
+			defer eventStore.Close()
+			configureBinaryHostEventEmitter(host, eventStore, manifest)
 
 			// core-scenes requires WorldService, which is missing from the registry.
 			loadErr := host.Load(ctx, manifest, pluginDir)
@@ -396,6 +430,10 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			Expect(err).NotTo(HaveOccurred())
 			manifest, err := plugins.ParseManifest(manifestData)
 			Expect(err).NotTo(HaveOccurred())
+			eventStore, eventStoreErr := store.NewPostgresEventStore(abacCtx, abacConnStr)
+			Expect(eventStoreErr).NotTo(HaveOccurred())
+			DeferCleanup(eventStore.Close)
+			configureBinaryHostEventEmitter(abacHost, eventStore, manifest)
 			Expect(abacHost.Load(abacCtx, manifest, pluginDir)).To(Succeed())
 
 			// Install policies into postgres store
@@ -563,6 +601,10 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			Expect(err).NotTo(HaveOccurred())
 			manifest, err := plugins.ParseManifest(manifestData)
 			Expect(err).NotTo(HaveOccurred())
+			eventStore, eventStoreErr := store.NewPostgresEventStore(lifecyclectx, pgConnStr)
+			Expect(eventStoreErr).NotTo(HaveOccurred())
+			DeferCleanup(eventStore.Close)
+			configureBinaryHostEventEmitter(lifecyclehost, eventStore, manifest)
 			Expect(lifecyclehost.Load(lifecyclectx, manifest, pluginDir)).To(Succeed())
 
 			// Direct pool for schema-qualified DB verification
@@ -863,6 +905,10 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			Expect(err).NotTo(HaveOccurred())
 			manifest, err := plugins.ParseManifest(manifestData)
 			Expect(err).NotTo(HaveOccurred())
+			eventStore, eventStoreErr := store.NewPostgresEventStore(membershipCtx, pgConnStr)
+			Expect(eventStoreErr).NotTo(HaveOccurred())
+			DeferCleanup(eventStore.Close)
+			configureBinaryHostEventEmitter(membershipHost, eventStore, manifest)
 			Expect(membershipHost.Load(membershipCtx, manifest, pluginDir)).To(Succeed())
 
 			// Direct pool for schema-qualified DB verification

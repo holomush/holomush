@@ -396,14 +396,14 @@ var _ = Describe("Player Session Lifecycle", func() {
 			_, tokenHash, err := auth.GenerateSessionToken()
 			Expect(err).NotTo(HaveOccurred())
 
-			// Create session with a very short TTL that has already expired
-			ps, err := auth.NewPlayerSession(player.ID, tokenHash, "", "", 1*time.Millisecond)
+			// Insert an already-expired session directly to avoid clock/scheduling flakes.
+			ps, err := auth.NewPlayerSession(player.ID, tokenHash, "", "", 24*time.Hour)
 			Expect(err).NotTo(HaveOccurred())
+			expiredAt := time.Now().Add(-time.Minute)
+			ps.ExpiresAt = expiredAt
+			ps.UpdatedAt = expiredAt
 			err = env.playerSessionStore.Create(ctx, ps)
 			Expect(err).NotTo(HaveOccurred())
-
-			// Wait for it to expire
-			time.Sleep(10 * time.Millisecond)
 
 			// Should return error
 			_, err = env.playerSessionStore.GetByTokenHash(ctx, tokenHash)
@@ -417,8 +417,11 @@ var _ = Describe("Player Session Lifecycle", func() {
 			for i := 0; i < 2; i++ {
 				_, tokenHash, err := auth.GenerateSessionToken()
 				Expect(err).NotTo(HaveOccurred())
-				ps, err := auth.NewPlayerSession(player.ID, tokenHash, "", "", 1*time.Millisecond)
+				ps, err := auth.NewPlayerSession(player.ID, tokenHash, "", "", 24*time.Hour)
 				Expect(err).NotTo(HaveOccurred())
+				expiredAt := time.Now().Add(-time.Minute)
+				ps.ExpiresAt = expiredAt
+				ps.UpdatedAt = expiredAt
 				err = env.playerSessionStore.Create(ctx, ps)
 				Expect(err).NotTo(HaveOccurred())
 			}
@@ -430,9 +433,6 @@ var _ = Describe("Player Session Lifecycle", func() {
 			Expect(err).NotTo(HaveOccurred())
 			err = env.playerSessionStore.Create(ctx, validSession)
 			Expect(err).NotTo(HaveOccurred())
-
-			// Wait for the short-lived ones to expire
-			time.Sleep(10 * time.Millisecond)
 
 			deleted, err := env.playerSessionStore.DeleteExpired(ctx)
 			Expect(err).NotTo(HaveOccurred())

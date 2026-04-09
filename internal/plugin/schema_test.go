@@ -198,6 +198,75 @@ lua-plugin:
 	assert.Error(t, err, "ValidateSchema() expected error for invalid type")
 }
 
+func TestValidateSchemaRejectsInvalidEmitsEntries(t *testing.T) {
+	tests := []struct {
+		name string
+		yaml string
+	}{
+		{
+			name: "empty emits entry",
+			yaml: `
+name: test-plugin
+version: 1.0.0
+type: lua
+emits:
+  - ""
+lua-plugin:
+  entry: main.lua
+`,
+		},
+		{
+			name: "duplicate emits entry",
+			yaml: `
+name: test-plugin
+version: 1.0.0
+type: lua
+emits:
+  - location
+  - location
+lua-plugin:
+  entry: main.lua
+`,
+		},
+		{
+			name: "invalid emits pattern",
+			yaml: `
+name: test-plugin
+version: 1.0.0
+type: lua
+emits:
+  - bad_namespace
+lua-plugin:
+  entry: main.lua
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := plugins.ValidateSchema([]byte(tt.yaml))
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestValidateSchemaRejectsEmitsForSettingPlugins(t *testing.T) {
+	yaml := `
+name: setting-pack
+version: 1.0.0
+type: setting
+emits:
+  - location
+setting:
+  display_name: Crossroads
+  content_dir: content
+  starting_location: crossroads
+`
+
+	err := plugins.ValidateSchema([]byte(yaml))
+	assert.Error(t, err)
+}
+
 func TestValidateSchema_EmptyInput(t *testing.T) {
 	tests := []struct {
 		name  string

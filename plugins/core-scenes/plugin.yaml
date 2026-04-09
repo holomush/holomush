@@ -11,6 +11,7 @@ requires:
 
 provides:
   - holomush.scene.v1.SceneService
+emits: [scene]
 # Note: holomush.plugin.v1.AttributeResolverService is intentionally NOT
 # declared in provides. The host auto-registers it via the plugin's
 # RegisterAttributeResolver method (AttributeResolverProvider interface),
