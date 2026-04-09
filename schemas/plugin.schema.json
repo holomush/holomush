@@ -117,6 +117,10 @@
       "type": "integer",
       "description": "Load priority (lower loads first)"
     },
+    "session_streams": {
+      "type": "boolean",
+      "description": "Plugin contributes streams to session subscriptions via QuerySessionStreams"
+    },
     "lua-plugin": {
       "properties": {
         "entry": {

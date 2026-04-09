@@ -24,9 +24,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	PluginService_Init_FullMethodName          = "/holomush.plugin.v1.PluginService/Init"
-	PluginService_HandleEvent_FullMethodName   = "/holomush.plugin.v1.PluginService/HandleEvent"
-	PluginService_HandleCommand_FullMethodName = "/holomush.plugin.v1.PluginService/HandleCommand"
+	PluginService_Init_FullMethodName                = "/holomush.plugin.v1.PluginService/Init"
+	PluginService_HandleEvent_FullMethodName         = "/holomush.plugin.v1.PluginService/HandleEvent"
+	PluginService_HandleCommand_FullMethodName       = "/holomush.plugin.v1.PluginService/HandleCommand"
+	PluginService_QuerySessionStreams_FullMethodName = "/holomush.plugin.v1.PluginService/QuerySessionStreams"
 )
 
 // PluginServiceClient is the client API for PluginService service.
@@ -44,6 +45,10 @@ type PluginServiceClient interface {
 	HandleEvent(ctx context.Context, in *HandleEventRequest, opts ...grpc.CallOption) (*HandleEventResponse, error)
 	// HandleCommand delivers a command to the plugin.
 	HandleCommand(ctx context.Context, in *HandleCommandRequest, opts ...grpc.CallOption) (*HandleCommandResponse, error)
+	// QuerySessionStreams returns stream names the plugin wants subscribed for a session.
+	// Called once at session establishment, before LISTEN setup.
+	// Only invoked for plugins that declare session_streams: true in their manifest.
+	QuerySessionStreams(ctx context.Context, in *QuerySessionStreamsRequest, opts ...grpc.CallOption) (*QuerySessionStreamsResponse, error)
 }
 
 type pluginServiceClient struct {
@@ -84,6 +89,16 @@ func (c *pluginServiceClient) HandleCommand(ctx context.Context, in *HandleComma
 	return out, nil
 }
 
+func (c *pluginServiceClient) QuerySessionStreams(ctx context.Context, in *QuerySessionStreamsRequest, opts ...grpc.CallOption) (*QuerySessionStreamsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QuerySessionStreamsResponse)
+	err := c.cc.Invoke(ctx, PluginService_QuerySessionStreams_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginServiceServer is the server API for PluginService service.
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility.
@@ -99,6 +114,10 @@ type PluginServiceServer interface {
 	HandleEvent(context.Context, *HandleEventRequest) (*HandleEventResponse, error)
 	// HandleCommand delivers a command to the plugin.
 	HandleCommand(context.Context, *HandleCommandRequest) (*HandleCommandResponse, error)
+	// QuerySessionStreams returns stream names the plugin wants subscribed for a session.
+	// Called once at session establishment, before LISTEN setup.
+	// Only invoked for plugins that declare session_streams: true in their manifest.
+	QuerySessionStreams(context.Context, *QuerySessionStreamsRequest) (*QuerySessionStreamsResponse, error)
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -117,6 +136,9 @@ func (UnimplementedPluginServiceServer) HandleEvent(context.Context, *HandleEven
 }
 func (UnimplementedPluginServiceServer) HandleCommand(context.Context, *HandleCommandRequest) (*HandleCommandResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method HandleCommand not implemented")
+}
+func (UnimplementedPluginServiceServer) QuerySessionStreams(context.Context, *QuerySessionStreamsRequest) (*QuerySessionStreamsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method QuerySessionStreams not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
 func (UnimplementedPluginServiceServer) testEmbeddedByValue()                       {}
@@ -193,6 +215,24 @@ func _PluginService_HandleCommand_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_QuerySessionStreams_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QuerySessionStreamsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).QuerySessionStreams(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_QuerySessionStreams_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).QuerySessionStreams(ctx, req.(*QuerySessionStreamsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -212,17 +252,23 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "HandleCommand",
 			Handler:    _PluginService_HandleCommand_Handler,
 		},
+		{
+			MethodName: "QuerySessionStreams",
+			Handler:    _PluginService_QuerySessionStreams_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "holomush/plugin/v1/plugin.proto",
 }
 
 const (
-	PluginHostService_EmitEvent_FullMethodName = "/holomush.plugin.v1.PluginHostService/EmitEvent"
-	PluginHostService_Log_FullMethodName       = "/holomush.plugin.v1.PluginHostService/Log"
-	PluginHostService_KVGet_FullMethodName     = "/holomush.plugin.v1.PluginHostService/KVGet"
-	PluginHostService_KVSet_FullMethodName     = "/holomush.plugin.v1.PluginHostService/KVSet"
-	PluginHostService_KVDelete_FullMethodName  = "/holomush.plugin.v1.PluginHostService/KVDelete"
+	PluginHostService_EmitEvent_FullMethodName           = "/holomush.plugin.v1.PluginHostService/EmitEvent"
+	PluginHostService_Log_FullMethodName                 = "/holomush.plugin.v1.PluginHostService/Log"
+	PluginHostService_KVGet_FullMethodName               = "/holomush.plugin.v1.PluginHostService/KVGet"
+	PluginHostService_KVSet_FullMethodName               = "/holomush.plugin.v1.PluginHostService/KVSet"
+	PluginHostService_KVDelete_FullMethodName            = "/holomush.plugin.v1.PluginHostService/KVDelete"
+	PluginHostService_AddSessionStream_FullMethodName    = "/holomush.plugin.v1.PluginHostService/AddSessionStream"
+	PluginHostService_RemoveSessionStream_FullMethodName = "/holomush.plugin.v1.PluginHostService/RemoveSessionStream"
 )
 
 // PluginHostServiceClient is the client API for PluginHostService service.
@@ -242,6 +288,12 @@ type PluginHostServiceClient interface {
 	KVSet(ctx context.Context, in *PluginHostServiceKVSetRequest, opts ...grpc.CallOption) (*PluginHostServiceKVSetResponse, error)
 	// KVDelete removes a value from the plugin's key-value store.
 	KVDelete(ctx context.Context, in *PluginHostServiceKVDeleteRequest, opts ...grpc.CallOption) (*PluginHostServiceKVDeleteResponse, error)
+	// AddSessionStream subscribes an active session to an additional stream mid-session.
+	// Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+	AddSessionStream(ctx context.Context, in *PluginHostServiceAddSessionStreamRequest, opts ...grpc.CallOption) (*PluginHostServiceAddSessionStreamResponse, error)
+	// RemoveSessionStream unsubscribes an active session from a stream.
+	// Idempotent: returns success if stream is not subscribed.
+	RemoveSessionStream(ctx context.Context, in *PluginHostServiceRemoveSessionStreamRequest, opts ...grpc.CallOption) (*PluginHostServiceRemoveSessionStreamResponse, error)
 }
 
 type pluginHostServiceClient struct {
@@ -302,6 +354,26 @@ func (c *pluginHostServiceClient) KVDelete(ctx context.Context, in *PluginHostSe
 	return out, nil
 }
 
+func (c *pluginHostServiceClient) AddSessionStream(ctx context.Context, in *PluginHostServiceAddSessionStreamRequest, opts ...grpc.CallOption) (*PluginHostServiceAddSessionStreamResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceAddSessionStreamResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_AddSessionStream_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginHostServiceClient) RemoveSessionStream(ctx context.Context, in *PluginHostServiceRemoveSessionStreamRequest, opts ...grpc.CallOption) (*PluginHostServiceRemoveSessionStreamResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceRemoveSessionStreamResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_RemoveSessionStream_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginHostServiceServer is the server API for PluginHostService service.
 // All implementations must embed UnimplementedPluginHostServiceServer
 // for forward compatibility.
@@ -319,6 +391,12 @@ type PluginHostServiceServer interface {
 	KVSet(context.Context, *PluginHostServiceKVSetRequest) (*PluginHostServiceKVSetResponse, error)
 	// KVDelete removes a value from the plugin's key-value store.
 	KVDelete(context.Context, *PluginHostServiceKVDeleteRequest) (*PluginHostServiceKVDeleteResponse, error)
+	// AddSessionStream subscribes an active session to an additional stream mid-session.
+	// Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+	AddSessionStream(context.Context, *PluginHostServiceAddSessionStreamRequest) (*PluginHostServiceAddSessionStreamResponse, error)
+	// RemoveSessionStream unsubscribes an active session from a stream.
+	// Idempotent: returns success if stream is not subscribed.
+	RemoveSessionStream(context.Context, *PluginHostServiceRemoveSessionStreamRequest) (*PluginHostServiceRemoveSessionStreamResponse, error)
 	mustEmbedUnimplementedPluginHostServiceServer()
 }
 
@@ -343,6 +421,12 @@ func (UnimplementedPluginHostServiceServer) KVSet(context.Context, *PluginHostSe
 }
 func (UnimplementedPluginHostServiceServer) KVDelete(context.Context, *PluginHostServiceKVDeleteRequest) (*PluginHostServiceKVDeleteResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method KVDelete not implemented")
+}
+func (UnimplementedPluginHostServiceServer) AddSessionStream(context.Context, *PluginHostServiceAddSessionStreamRequest) (*PluginHostServiceAddSessionStreamResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddSessionStream not implemented")
+}
+func (UnimplementedPluginHostServiceServer) RemoveSessionStream(context.Context, *PluginHostServiceRemoveSessionStreamRequest) (*PluginHostServiceRemoveSessionStreamResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveSessionStream not implemented")
 }
 func (UnimplementedPluginHostServiceServer) mustEmbedUnimplementedPluginHostServiceServer() {}
 func (UnimplementedPluginHostServiceServer) testEmbeddedByValue()                           {}
@@ -455,6 +539,42 @@ func _PluginHostService_KVDelete_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginHostService_AddSessionStream_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceAddSessionStreamRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).AddSessionStream(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_AddSessionStream_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).AddSessionStream(ctx, req.(*PluginHostServiceAddSessionStreamRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginHostService_RemoveSessionStream_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceRemoveSessionStreamRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).RemoveSessionStream(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_RemoveSessionStream_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).RemoveSessionStream(ctx, req.(*PluginHostServiceRemoveSessionStreamRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginHostService_ServiceDesc is the grpc.ServiceDesc for PluginHostService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -481,6 +601,14 @@ var PluginHostService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "KVDelete",
 			Handler:    _PluginHostService_KVDelete_Handler,
+		},
+		{
+			MethodName: "AddSessionStream",
+			Handler:    _PluginHostService_AddSessionStream_Handler,
+		},
+		{
+			MethodName: "RemoveSessionStream",
+			Handler:    _PluginHostService_RemoveSessionStream_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

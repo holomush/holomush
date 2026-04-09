@@ -48,6 +48,9 @@ const (
 	// PluginServiceHandleCommandProcedure is the fully-qualified name of the PluginService's
 	// HandleCommand RPC.
 	PluginServiceHandleCommandProcedure = "/holomush.plugin.v1.PluginService/HandleCommand"
+	// PluginServiceQuerySessionStreamsProcedure is the fully-qualified name of the PluginService's
+	// QuerySessionStreams RPC.
+	PluginServiceQuerySessionStreamsProcedure = "/holomush.plugin.v1.PluginService/QuerySessionStreams"
 	// PluginHostServiceEmitEventProcedure is the fully-qualified name of the PluginHostService's
 	// EmitEvent RPC.
 	PluginHostServiceEmitEventProcedure = "/holomush.plugin.v1.PluginHostService/EmitEvent"
@@ -60,6 +63,12 @@ const (
 	// PluginHostServiceKVDeleteProcedure is the fully-qualified name of the PluginHostService's
 	// KVDelete RPC.
 	PluginHostServiceKVDeleteProcedure = "/holomush.plugin.v1.PluginHostService/KVDelete"
+	// PluginHostServiceAddSessionStreamProcedure is the fully-qualified name of the PluginHostService's
+	// AddSessionStream RPC.
+	PluginHostServiceAddSessionStreamProcedure = "/holomush.plugin.v1.PluginHostService/AddSessionStream"
+	// PluginHostServiceRemoveSessionStreamProcedure is the fully-qualified name of the
+	// PluginHostService's RemoveSessionStream RPC.
+	PluginHostServiceRemoveSessionStreamProcedure = "/holomush.plugin.v1.PluginHostService/RemoveSessionStream"
 )
 
 // PluginServiceClient is a client for the holomush.plugin.v1.PluginService service.
@@ -72,6 +81,10 @@ type PluginServiceClient interface {
 	HandleEvent(context.Context, *connect.Request[v1.HandleEventRequest]) (*connect.Response[v1.HandleEventResponse], error)
 	// HandleCommand delivers a command to the plugin.
 	HandleCommand(context.Context, *connect.Request[v1.HandleCommandRequest]) (*connect.Response[v1.HandleCommandResponse], error)
+	// QuerySessionStreams returns stream names the plugin wants subscribed for a session.
+	// Called once at session establishment, before LISTEN setup.
+	// Only invoked for plugins that declare session_streams: true in their manifest.
+	QuerySessionStreams(context.Context, *connect.Request[v1.QuerySessionStreamsRequest]) (*connect.Response[v1.QuerySessionStreamsResponse], error)
 }
 
 // NewPluginServiceClient constructs a client for the holomush.plugin.v1.PluginService service. By
@@ -103,14 +116,21 @@ func NewPluginServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(pluginServiceMethods.ByName("HandleCommand")),
 			connect.WithClientOptions(opts...),
 		),
+		querySessionStreams: connect.NewClient[v1.QuerySessionStreamsRequest, v1.QuerySessionStreamsResponse](
+			httpClient,
+			baseURL+PluginServiceQuerySessionStreamsProcedure,
+			connect.WithSchema(pluginServiceMethods.ByName("QuerySessionStreams")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // pluginServiceClient implements PluginServiceClient.
 type pluginServiceClient struct {
-	init          *connect.Client[v1.InitRequest, v1.InitResponse]
-	handleEvent   *connect.Client[v1.HandleEventRequest, v1.HandleEventResponse]
-	handleCommand *connect.Client[v1.HandleCommandRequest, v1.HandleCommandResponse]
+	init                *connect.Client[v1.InitRequest, v1.InitResponse]
+	handleEvent         *connect.Client[v1.HandleEventRequest, v1.HandleEventResponse]
+	handleCommand       *connect.Client[v1.HandleCommandRequest, v1.HandleCommandResponse]
+	querySessionStreams *connect.Client[v1.QuerySessionStreamsRequest, v1.QuerySessionStreamsResponse]
 }
 
 // Init calls holomush.plugin.v1.PluginService.Init.
@@ -128,6 +148,11 @@ func (c *pluginServiceClient) HandleCommand(ctx context.Context, req *connect.Re
 	return c.handleCommand.CallUnary(ctx, req)
 }
 
+// QuerySessionStreams calls holomush.plugin.v1.PluginService.QuerySessionStreams.
+func (c *pluginServiceClient) QuerySessionStreams(ctx context.Context, req *connect.Request[v1.QuerySessionStreamsRequest]) (*connect.Response[v1.QuerySessionStreamsResponse], error) {
+	return c.querySessionStreams.CallUnary(ctx, req)
+}
+
 // PluginServiceHandler is an implementation of the holomush.plugin.v1.PluginService service.
 type PluginServiceHandler interface {
 	// Init is called by the host after connection, providing service configuration
@@ -138,6 +163,10 @@ type PluginServiceHandler interface {
 	HandleEvent(context.Context, *connect.Request[v1.HandleEventRequest]) (*connect.Response[v1.HandleEventResponse], error)
 	// HandleCommand delivers a command to the plugin.
 	HandleCommand(context.Context, *connect.Request[v1.HandleCommandRequest]) (*connect.Response[v1.HandleCommandResponse], error)
+	// QuerySessionStreams returns stream names the plugin wants subscribed for a session.
+	// Called once at session establishment, before LISTEN setup.
+	// Only invoked for plugins that declare session_streams: true in their manifest.
+	QuerySessionStreams(context.Context, *connect.Request[v1.QuerySessionStreamsRequest]) (*connect.Response[v1.QuerySessionStreamsResponse], error)
 }
 
 // NewPluginServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -165,6 +194,12 @@ func NewPluginServiceHandler(svc PluginServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(pluginServiceMethods.ByName("HandleCommand")),
 		connect.WithHandlerOptions(opts...),
 	)
+	pluginServiceQuerySessionStreamsHandler := connect.NewUnaryHandler(
+		PluginServiceQuerySessionStreamsProcedure,
+		svc.QuerySessionStreams,
+		connect.WithSchema(pluginServiceMethods.ByName("QuerySessionStreams")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.plugin.v1.PluginService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PluginServiceInitProcedure:
@@ -173,6 +208,8 @@ func NewPluginServiceHandler(svc PluginServiceHandler, opts ...connect.HandlerOp
 			pluginServiceHandleEventHandler.ServeHTTP(w, r)
 		case PluginServiceHandleCommandProcedure:
 			pluginServiceHandleCommandHandler.ServeHTTP(w, r)
+		case PluginServiceQuerySessionStreamsProcedure:
+			pluginServiceQuerySessionStreamsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -194,6 +231,10 @@ func (UnimplementedPluginServiceHandler) HandleCommand(context.Context, *connect
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginService.HandleCommand is not implemented"))
 }
 
+func (UnimplementedPluginServiceHandler) QuerySessionStreams(context.Context, *connect.Request[v1.QuerySessionStreamsRequest]) (*connect.Response[v1.QuerySessionStreamsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginService.QuerySessionStreams is not implemented"))
+}
+
 // PluginHostServiceClient is a client for the holomush.plugin.v1.PluginHostService service.
 type PluginHostServiceClient interface {
 	// EmitEvent publishes an event to a stream.
@@ -206,6 +247,12 @@ type PluginHostServiceClient interface {
 	KVSet(context.Context, *connect.Request[v1.PluginHostServiceKVSetRequest]) (*connect.Response[v1.PluginHostServiceKVSetResponse], error)
 	// KVDelete removes a value from the plugin's key-value store.
 	KVDelete(context.Context, *connect.Request[v1.PluginHostServiceKVDeleteRequest]) (*connect.Response[v1.PluginHostServiceKVDeleteResponse], error)
+	// AddSessionStream subscribes an active session to an additional stream mid-session.
+	// Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+	AddSessionStream(context.Context, *connect.Request[v1.PluginHostServiceAddSessionStreamRequest]) (*connect.Response[v1.PluginHostServiceAddSessionStreamResponse], error)
+	// RemoveSessionStream unsubscribes an active session from a stream.
+	// Idempotent: returns success if stream is not subscribed.
+	RemoveSessionStream(context.Context, *connect.Request[v1.PluginHostServiceRemoveSessionStreamRequest]) (*connect.Response[v1.PluginHostServiceRemoveSessionStreamResponse], error)
 }
 
 // NewPluginHostServiceClient constructs a client for the holomush.plugin.v1.PluginHostService
@@ -249,16 +296,30 @@ func NewPluginHostServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(pluginHostServiceMethods.ByName("KVDelete")),
 			connect.WithClientOptions(opts...),
 		),
+		addSessionStream: connect.NewClient[v1.PluginHostServiceAddSessionStreamRequest, v1.PluginHostServiceAddSessionStreamResponse](
+			httpClient,
+			baseURL+PluginHostServiceAddSessionStreamProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("AddSessionStream")),
+			connect.WithClientOptions(opts...),
+		),
+		removeSessionStream: connect.NewClient[v1.PluginHostServiceRemoveSessionStreamRequest, v1.PluginHostServiceRemoveSessionStreamResponse](
+			httpClient,
+			baseURL+PluginHostServiceRemoveSessionStreamProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("RemoveSessionStream")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // pluginHostServiceClient implements PluginHostServiceClient.
 type pluginHostServiceClient struct {
-	emitEvent *connect.Client[v1.PluginHostServiceEmitEventRequest, v1.PluginHostServiceEmitEventResponse]
-	log       *connect.Client[v1.PluginHostServiceLogRequest, v1.PluginHostServiceLogResponse]
-	kVGet     *connect.Client[v1.PluginHostServiceKVGetRequest, v1.PluginHostServiceKVGetResponse]
-	kVSet     *connect.Client[v1.PluginHostServiceKVSetRequest, v1.PluginHostServiceKVSetResponse]
-	kVDelete  *connect.Client[v1.PluginHostServiceKVDeleteRequest, v1.PluginHostServiceKVDeleteResponse]
+	emitEvent           *connect.Client[v1.PluginHostServiceEmitEventRequest, v1.PluginHostServiceEmitEventResponse]
+	log                 *connect.Client[v1.PluginHostServiceLogRequest, v1.PluginHostServiceLogResponse]
+	kVGet               *connect.Client[v1.PluginHostServiceKVGetRequest, v1.PluginHostServiceKVGetResponse]
+	kVSet               *connect.Client[v1.PluginHostServiceKVSetRequest, v1.PluginHostServiceKVSetResponse]
+	kVDelete            *connect.Client[v1.PluginHostServiceKVDeleteRequest, v1.PluginHostServiceKVDeleteResponse]
+	addSessionStream    *connect.Client[v1.PluginHostServiceAddSessionStreamRequest, v1.PluginHostServiceAddSessionStreamResponse]
+	removeSessionStream *connect.Client[v1.PluginHostServiceRemoveSessionStreamRequest, v1.PluginHostServiceRemoveSessionStreamResponse]
 }
 
 // EmitEvent calls holomush.plugin.v1.PluginHostService.EmitEvent.
@@ -286,6 +347,16 @@ func (c *pluginHostServiceClient) KVDelete(ctx context.Context, req *connect.Req
 	return c.kVDelete.CallUnary(ctx, req)
 }
 
+// AddSessionStream calls holomush.plugin.v1.PluginHostService.AddSessionStream.
+func (c *pluginHostServiceClient) AddSessionStream(ctx context.Context, req *connect.Request[v1.PluginHostServiceAddSessionStreamRequest]) (*connect.Response[v1.PluginHostServiceAddSessionStreamResponse], error) {
+	return c.addSessionStream.CallUnary(ctx, req)
+}
+
+// RemoveSessionStream calls holomush.plugin.v1.PluginHostService.RemoveSessionStream.
+func (c *pluginHostServiceClient) RemoveSessionStream(ctx context.Context, req *connect.Request[v1.PluginHostServiceRemoveSessionStreamRequest]) (*connect.Response[v1.PluginHostServiceRemoveSessionStreamResponse], error) {
+	return c.removeSessionStream.CallUnary(ctx, req)
+}
+
 // PluginHostServiceHandler is an implementation of the holomush.plugin.v1.PluginHostService
 // service.
 type PluginHostServiceHandler interface {
@@ -299,6 +370,12 @@ type PluginHostServiceHandler interface {
 	KVSet(context.Context, *connect.Request[v1.PluginHostServiceKVSetRequest]) (*connect.Response[v1.PluginHostServiceKVSetResponse], error)
 	// KVDelete removes a value from the plugin's key-value store.
 	KVDelete(context.Context, *connect.Request[v1.PluginHostServiceKVDeleteRequest]) (*connect.Response[v1.PluginHostServiceKVDeleteResponse], error)
+	// AddSessionStream subscribes an active session to an additional stream mid-session.
+	// Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+	AddSessionStream(context.Context, *connect.Request[v1.PluginHostServiceAddSessionStreamRequest]) (*connect.Response[v1.PluginHostServiceAddSessionStreamResponse], error)
+	// RemoveSessionStream unsubscribes an active session from a stream.
+	// Idempotent: returns success if stream is not subscribed.
+	RemoveSessionStream(context.Context, *connect.Request[v1.PluginHostServiceRemoveSessionStreamRequest]) (*connect.Response[v1.PluginHostServiceRemoveSessionStreamResponse], error)
 }
 
 // NewPluginHostServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -338,6 +415,18 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 		connect.WithSchema(pluginHostServiceMethods.ByName("KVDelete")),
 		connect.WithHandlerOptions(opts...),
 	)
+	pluginHostServiceAddSessionStreamHandler := connect.NewUnaryHandler(
+		PluginHostServiceAddSessionStreamProcedure,
+		svc.AddSessionStream,
+		connect.WithSchema(pluginHostServiceMethods.ByName("AddSessionStream")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pluginHostServiceRemoveSessionStreamHandler := connect.NewUnaryHandler(
+		PluginHostServiceRemoveSessionStreamProcedure,
+		svc.RemoveSessionStream,
+		connect.WithSchema(pluginHostServiceMethods.ByName("RemoveSessionStream")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.plugin.v1.PluginHostService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PluginHostServiceEmitEventProcedure:
@@ -350,6 +439,10 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 			pluginHostServiceKVSetHandler.ServeHTTP(w, r)
 		case PluginHostServiceKVDeleteProcedure:
 			pluginHostServiceKVDeleteHandler.ServeHTTP(w, r)
+		case PluginHostServiceAddSessionStreamProcedure:
+			pluginHostServiceAddSessionStreamHandler.ServeHTTP(w, r)
+		case PluginHostServiceRemoveSessionStreamProcedure:
+			pluginHostServiceRemoveSessionStreamHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -377,4 +470,12 @@ func (UnimplementedPluginHostServiceHandler) KVSet(context.Context, *connect.Req
 
 func (UnimplementedPluginHostServiceHandler) KVDelete(context.Context, *connect.Request[v1.PluginHostServiceKVDeleteRequest]) (*connect.Response[v1.PluginHostServiceKVDeleteResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.KVDelete is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) AddSessionStream(context.Context, *connect.Request[v1.PluginHostServiceAddSessionStreamRequest]) (*connect.Response[v1.PluginHostServiceAddSessionStreamResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.AddSessionStream is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) RemoveSessionStream(context.Context, *connect.Request[v1.PluginHostServiceRemoveSessionStreamRequest]) (*connect.Response[v1.PluginHostServiceRemoveSessionStreamResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.RemoveSessionStream is not implemented"))
 }

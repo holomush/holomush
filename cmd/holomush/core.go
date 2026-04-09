@@ -25,6 +25,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/config"
+	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/logging"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
@@ -248,6 +249,10 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		DB: dbSub,
 	})
 
+	// Create stream registry early so it can be shared between the plugin
+	// subsystem (hostfunc) and the gRPC subsystem (CoreServer + PluginHostService).
+	streamRegistry := holoGRPC.NewSessionStreamRegistry()
+
 	pluginSub := pluginsetup.NewPluginSubsystem(pluginsetup.PluginSubsystemConfig{
 		DataDir:         cfg.DataDir,
 		DatabaseConnStr: databaseURL,
@@ -261,6 +266,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		Sessions:        &sessionBridge{sub: sessionSub},
 		AdminDeps:       &adminDepsBridge{auth: authSub, db: dbSub},
 		Registry:        registry,
+		StreamRegistry:  streamRegistry,
 	})
 
 	bootstrapSub := bootstrapsetup.NewBootstrapSubsystem(bootstrapsetup.BootstrapSubsystemConfig{
@@ -291,6 +297,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		ReaperInterval: reaperInterval,
 		MaxHistory:     cfg.SessionMaxHistory,
 		GameConfig:     gameConfig,
+		StreamRegistry: streamRegistry,
 	})
 
 	// --- 8. Orchestrator: register + start ---

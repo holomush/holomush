@@ -40,6 +40,10 @@ func (h *subscriberHost) DeliverEvent(_ context.Context, _ string, event plugins
 	return h.response, h.err
 }
 
+func (h *subscriberHost) QuerySessionStreams(context.Context, string, plugins.SessionStreamsRequest) ([]string, error) {
+	return nil, nil
+}
+
 func (h *subscriberHost) deliveredCount() int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -469,6 +473,10 @@ func (h *slowSubscriberHost) DeliverEvent(_ context.Context, _ string, event plu
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.delivered = append(h.delivered, event)
+	return nil, nil
+}
+
+func (h *slowSubscriberHost) QuerySessionStreams(context.Context, string, plugins.SessionStreamsRequest) ([]string, error) {
 	return nil, nil
 }
 

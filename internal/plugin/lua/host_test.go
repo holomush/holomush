@@ -1467,3 +1467,187 @@ end
 	require.NotNil(t, resp)
 	assert.Contains(t, resp.Output, "request_id=")
 }
+
+func TestLuaHostQuerySessionStreamsReturnsErrorWhenHostClosed(t *testing.T) {
+	dir := t.TempDir()
+	writeMainLua(t, dir, `function on_session_subscribe() return {} end`)
+	host := pluginlua.NewHost()
+
+	manifest := &plugins.Manifest{
+		Name:      "test-plugin",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+	require.NoError(t, host.Load(context.Background(), manifest, dir))
+	closeHost(t, host)
+
+	_, err := host.QuerySessionStreams(context.Background(), "test-plugin", plugins.SessionStreamsRequest{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "host is closed")
+}
+
+func TestLuaHostQuerySessionStreamsReturnsErrorForUnknownPlugin(t *testing.T) {
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	_, err := host.QuerySessionStreams(context.Background(), "nonexistent", plugins.SessionStreamsRequest{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "plugin not loaded")
+}
+
+func TestLuaHostQuerySessionStreamsRegistersHostFuncsWhenAvailable(t *testing.T) {
+	dir := t.TempDir()
+	writeMainLua(t, dir, `
+function on_session_subscribe(character_id, player_id, session_id)
+    return {"channel:test"}
+end
+`)
+	hf := hostfunc.New(nil)
+	host := pluginlua.NewHostWithFunctions(hf)
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "test-plugin",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+		Requires:  []string{"test-svc"},
+	}
+	require.NoError(t, host.Load(context.Background(), manifest, dir))
+
+	streams, err := host.QuerySessionStreams(context.Background(), "test-plugin", plugins.SessionStreamsRequest{
+		CharacterID: "char-1", PlayerID: "player-1", SessionID: "sess-1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"channel:test"}, streams)
+}
+
+func TestLuaHostQuerySessionStreamsCallsOnSessionSubscribeWhenDefined(t *testing.T) {
+	dir := t.TempDir()
+	writeMainLua(t, dir, `
+function on_session_subscribe(character_id, player_id, session_id)
+    return {"channel:" .. character_id, "channel:general"}
+end
+`)
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "test-plugin",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	req := plugins.SessionStreamsRequest{
+		CharacterID: "char-abc",
+		PlayerID:    "player-xyz",
+		SessionID:   "sess-123",
+	}
+	streams, err := host.QuerySessionStreams(context.Background(), "test-plugin", req)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"channel:char-abc", "channel:general"}, streams)
+}
+
+func TestLuaHostQuerySessionStreamsReturnsNilWhenHandlerNotDefined(t *testing.T) {
+	dir := t.TempDir()
+	writeMainLua(t, dir, `-- no on_session_subscribe defined`)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "test-plugin",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	streams, err := host.QuerySessionStreams(context.Background(), "test-plugin", plugins.SessionStreamsRequest{
+		CharacterID: "char-abc", PlayerID: "player-xyz", SessionID: "sess-123",
+	})
+	require.NoError(t, err)
+	assert.Nil(t, streams)
+}
+
+func TestLuaHostQuerySessionStreamsReturnsErrorWhenHandlerFails(t *testing.T) {
+	dir := t.TempDir()
+	writeMainLua(t, dir, `
+function on_session_subscribe(character_id, player_id, session_id)
+    error("db connection failed")
+end
+`)
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "test-plugin",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	_, err = host.QuerySessionStreams(context.Background(), "test-plugin", plugins.SessionStreamsRequest{
+		CharacterID: "char-abc", PlayerID: "player-xyz", SessionID: "sess-123",
+	})
+	require.Error(t, err)
+}
+
+func TestLuaHostQuerySessionStreamsReturnsErrorWhenHandlerReturnsNonTable(t *testing.T) {
+	dir := t.TempDir()
+	writeMainLua(t, dir, `
+function on_session_subscribe(character_id, player_id, session_id)
+    return "not a table"
+end
+`)
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "test-plugin",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	_, err = host.QuerySessionStreams(context.Background(), "test-plugin", plugins.SessionStreamsRequest{
+		CharacterID: "char-abc", PlayerID: "player-xyz", SessionID: "sess-123",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "expected table return")
+}
+
+func TestLuaHostQuerySessionStreamsReturnsNilWhenHandlerReturnsNil(t *testing.T) {
+	dir := t.TempDir()
+	writeMainLua(t, dir, `
+function on_session_subscribe(character_id, player_id, session_id)
+    return nil
+end
+`)
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "test-plugin",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	streams, err := host.QuerySessionStreams(context.Background(), "test-plugin", plugins.SessionStreamsRequest{
+		CharacterID: "char-abc", PlayerID: "player-xyz", SessionID: "sess-123",
+	})
+	require.NoError(t, err)
+	assert.Nil(t, streams)
+}

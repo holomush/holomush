@@ -557,6 +557,9 @@ func (h *mockBinaryHost) Close(_ context.Context) error { return h.closeErr }
 func (h *mockBinaryHost) PluginConn(_ string) (grpc.ClientConnInterface, error) {
 	return h.conn, h.connErr
 }
+func (h *mockBinaryHost) QuerySessionStreams(_ context.Context, _ string, _ plugins.SessionStreamsRequest) ([]string, error) {
+	return nil, nil
+}
 
 func TestManagerRegistersProvidedServicesAfterBinaryPluginLoad(t *testing.T) {
 	dir := t.TempDir()
@@ -1225,4 +1228,149 @@ binary-plugin:
 	require.Len(t, registered, 1, "manager should register one provider per declared resource type")
 	assert.Equal(t, "widget", registered[0].Namespace())
 	assert.Contains(t, mgr.ListPlugins(), "good-widget")
+}
+
+// newTestManager creates a Manager with a temp dir for unit tests.
+func newTestManager(t *testing.T) *plugins.Manager {
+	t.Helper()
+	return plugins.NewManager(t.TempDir())
+}
+
+// loadPlugin registers a fake plugin manifest with the manager.
+// sessionStreams controls whether Manifest.SessionStreams is true.
+func loadPlugin(t *testing.T, m *plugins.Manager, name string, plugType plugins.Type, sessionStreams bool) {
+	t.Helper()
+	manifest := &plugins.Manifest{
+		Name:          name,
+		Version:       "1.0.0",
+		Type:          plugType,
+		SessionStreams: sessionStreams,
+	}
+	if plugType == plugins.TypeLua {
+		manifest.LuaPlugin = &plugins.LuaConfig{Entry: "main.lua"}
+	}
+	if plugType == plugins.TypeBinary {
+		manifest.BinaryPlugin = &plugins.BinaryConfig{Executable: "plugin"}
+	}
+	m.TestLoadPlugin(name, manifest)
+}
+
+func TestManagerQuerySessionStreamsReturnsNilWhenNoOptedInPlugins(t *testing.T) {
+	m := newTestManager(t)
+	result := m.QuerySessionStreams(context.Background(), plugins.SessionStreamsRequest{
+		CharacterID: "char-1",
+		PlayerID:    "player-1",
+		SessionID:   "sess-1",
+	})
+	assert.Nil(t, result)
+}
+
+func TestManagerQuerySessionStreamsMergesContributionsFromMultiplePlugins(t *testing.T) {
+	m := newTestManager(t)
+
+	hostA := mocks.NewMockHost(t)
+	hostA.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	hostA.EXPECT().QuerySessionStreams(mock.Anything, "plugin-a", mock.Anything).
+		Return([]string{"channel:abc", "channel:shared"}, nil)
+	m.RegisterHost(plugins.TypeLua, hostA)
+
+	hostB := mocks.NewMockHost(t)
+	hostB.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	hostB.EXPECT().QuerySessionStreams(mock.Anything, "plugin-b", mock.Anything).
+		Return([]string{"channel:shared", "channel:def"}, nil) // channel:shared is a duplicate
+	m.RegisterHost(plugins.TypeBinary, hostB)
+
+	loadPlugin(t, m, "plugin-a", plugins.TypeLua, true) // session_streams: true
+	loadPlugin(t, m, "plugin-b", plugins.TypeBinary, true)
+
+	result := m.QuerySessionStreams(context.Background(), plugins.SessionStreamsRequest{
+		CharacterID: "char-1", PlayerID: "player-1", SessionID: "sess-1",
+	})
+
+	assert.ElementsMatch(t, []string{"channel:abc", "channel:shared", "channel:def"}, result)
+}
+
+func TestManagerQuerySessionStreamsDegradeOnSinglePluginError(t *testing.T) {
+	m := newTestManager(t)
+
+	hostA := mocks.NewMockHost(t)
+	hostA.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	hostA.EXPECT().QuerySessionStreams(mock.Anything, "plugin-a", mock.Anything).
+		Return(nil, errors.New("db unavailable"))
+	m.RegisterHost(plugins.TypeLua, hostA)
+
+	hostB := mocks.NewMockHost(t)
+	hostB.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	hostB.EXPECT().QuerySessionStreams(mock.Anything, "plugin-b", mock.Anything).
+		Return([]string{"channel:abc"}, nil)
+	m.RegisterHost(plugins.TypeBinary, hostB)
+
+	loadPlugin(t, m, "plugin-a", plugins.TypeLua, true)
+	loadPlugin(t, m, "plugin-b", plugins.TypeBinary, true)
+
+	result := m.QuerySessionStreams(context.Background(), plugins.SessionStreamsRequest{
+		CharacterID: "char-1", PlayerID: "player-1", SessionID: "sess-1",
+	})
+
+	assert.Equal(t, []string{"channel:abc"}, result)
+}
+
+func TestManagerQuerySessionStreamsSkipsOptedOutPlugins(t *testing.T) {
+	m := newTestManager(t)
+
+	host := mocks.NewMockHost(t)
+	host.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	// QuerySessionStreams must NOT be called on opted-out plugin
+	m.RegisterHost(plugins.TypeLua, host)
+	loadPlugin(t, m, "plugin-a", plugins.TypeLua, false) // session_streams: false
+
+	result := m.QuerySessionStreams(context.Background(), plugins.SessionStreamsRequest{
+		CharacterID: "char-1", PlayerID: "player-1", SessionID: "sess-1",
+	})
+	assert.Nil(t, result)
+	// testify/mock will fail the test if QuerySessionStreams was called unexpectedly
+}
+
+func TestManagerQuerySessionStreamsDropsInvalidStreamNames(t *testing.T) {
+	m := newTestManager(t)
+	host := mocks.NewMockHost(t)
+	host.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	host.EXPECT().QuerySessionStreams(mock.Anything, "plugin-a", mock.Anything).
+		Return([]string{
+			"",              // empty — invalid
+			"nocolon",       // no colon — invalid
+			"has space:abc", // whitespace — invalid
+			"channel:valid", // valid
+		}, nil)
+	m.RegisterHost(plugins.TypeLua, host)
+	loadPlugin(t, m, "plugin-a", plugins.TypeLua, true)
+
+	result := m.QuerySessionStreams(context.Background(), plugins.SessionStreamsRequest{
+		CharacterID: "char-1", PlayerID: "player-1", SessionID: "sess-1",
+	})
+	assert.Equal(t, []string{"channel:valid"}, result)
+}
+
+func TestManagerQuerySessionStreamsReturnsEarlyOnContextCancellation(t *testing.T) {
+	m := newTestManager(t)
+	host := mocks.NewMockHost(t)
+	host.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	// Plugin blocks forever — context cancellation should rescue us.
+	// Use Maybe() since the goroutine may not start before context is cancelled.
+	host.EXPECT().QuerySessionStreams(mock.Anything, "plugin-a", mock.Anything).
+		RunAndReturn(func(ctx context.Context, _ string, _ plugins.SessionStreamsRequest) ([]string, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}).Maybe()
+	m.RegisterHost(plugins.TypeLua, host)
+	loadPlugin(t, m, "plugin-a", plugins.TypeLua, true)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	result := m.QuerySessionStreams(ctx, plugins.SessionStreamsRequest{
+		CharacterID: "char-1", PlayerID: "player-1", SessionID: "sess-1",
+	})
+	// Should return empty/partial results instead of blocking
+	assert.Empty(t, result)
 }

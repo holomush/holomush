@@ -8,7 +8,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse } from "./plugin_pb.js";
+import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -53,6 +53,19 @@ export const PluginService = {
       name: "HandleCommand",
       I: HandleCommandRequest,
       O: HandleCommandResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * QuerySessionStreams returns stream names the plugin wants subscribed for a session.
+     * Called once at session establishment, before LISTEN setup.
+     * Only invoked for plugins that declare session_streams: true in their manifest.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginService.QuerySessionStreams
+     */
+    querySessionStreams: {
+      name: "QuerySessionStreams",
+      I: QuerySessionStreamsRequest,
+      O: QuerySessionStreamsResponse,
       kind: MethodKind.Unary,
     },
   }
@@ -120,6 +133,30 @@ export const PluginHostService = {
       name: "KVDelete",
       I: PluginHostServiceKVDeleteRequest,
       O: PluginHostServiceKVDeleteResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * AddSessionStream subscribes an active session to an additional stream mid-session.
+     * Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.AddSessionStream
+     */
+    addSessionStream: {
+      name: "AddSessionStream",
+      I: PluginHostServiceAddSessionStreamRequest,
+      O: PluginHostServiceAddSessionStreamResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * RemoveSessionStream unsubscribes an active session from a stream.
+     * Idempotent: returns success if stream is not subscribed.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.RemoveSessionStream
+     */
+    removeSessionStream: {
+      name: "RemoveSessionStream",
+      I: PluginHostServiceRemoveSessionStreamRequest,
+      O: PluginHostServiceRemoveSessionStreamResponse,
       kind: MethodKind.Unary,
     },
   }

@@ -1736,3 +1736,63 @@ func TestSceneResourceTypeIsNotProtected(t *testing.T) {
 }
 
 // TestManifestTrustFieldParsed is folded into TestParseManifestResourceTypesAndTrust.
+
+func TestParseManifestSessionStreamsValidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		data      string
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name: "accepts lua plugin with session_streams",
+			data: `
+name: my-plugin
+version: 1.0.0
+type: lua
+session_streams: true
+lua-plugin:
+  entry: main.lua
+`,
+		},
+		{
+			name: "accepts binary plugin with session_streams",
+			data: `
+name: my-plugin
+version: 1.0.0
+type: binary
+session_streams: true
+binary-plugin:
+  executable: plugin
+`,
+		},
+		{
+			name: "rejects setting plugin with session_streams",
+			data: `
+name: my-plugin
+version: 1.0.0
+type: setting
+session_streams: true
+setting:
+  display_name: My World
+  content_dir: content
+  starting_location: start
+`,
+			wantErr:   true,
+			errSubstr: "session_streams",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, err := plugins.ParseManifest([]byte(tt.data))
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errSubstr)
+			} else {
+				require.NoError(t, err)
+				assert.True(t, m.SessionStreams)
+			}
+		})
+	}
+}

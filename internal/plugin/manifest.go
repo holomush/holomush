@@ -67,18 +67,19 @@ type ManifestPolicy struct {
 
 // Manifest represents a plugin.yaml file.
 type Manifest struct {
-	Name         string            `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=64,pattern=^[a-z](-?[a-z0-9])*$"`
-	Version      string            `yaml:"version" json:"version" jsonschema:"required,minLength=1"`
-	Type         Type              `yaml:"type" json:"type" jsonschema:"required,enum=lua,enum=binary,enum=setting"`
-	Engine       string            `yaml:"engine,omitempty" json:"engine,omitempty" jsonschema:"description=HoloMUSH version constraint (e.g. >= 2.0.0)"`
-	Dependencies map[string]string `yaml:"dependencies,omitempty" json:"dependencies,omitempty" jsonschema:"description=Plugin dependencies with version constraints"`
-	Events       []string          `yaml:"events,omitempty" json:"events,omitempty"`
-	Policies     []ManifestPolicy  `yaml:"policies,omitempty" json:"policies,omitempty"`
-	Commands     []CommandSpec     `yaml:"commands,omitempty" json:"commands,omitempty" jsonschema:"description=Commands provided by this plugin"`
-	Priority     *LoadPriority     `yaml:"priority,omitempty" json:"priority,omitempty" jsonschema:"description=Load priority (lower loads first)"`
-	LuaPlugin    *LuaConfig        `yaml:"lua-plugin,omitempty" json:"lua-plugin,omitempty"`
-	BinaryPlugin *BinaryConfig     `yaml:"binary-plugin,omitempty" json:"binary-plugin,omitempty"`
-	Setting      *SettingConfig    `yaml:"setting,omitempty" json:"setting,omitempty"`
+	Name          string            `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=64,pattern=^[a-z](-?[a-z0-9])*$"`
+	Version       string            `yaml:"version" json:"version" jsonschema:"required,minLength=1"`
+	Type          Type              `yaml:"type" json:"type" jsonschema:"required,enum=lua,enum=binary,enum=setting"`
+	Engine        string            `yaml:"engine,omitempty" json:"engine,omitempty" jsonschema:"description=HoloMUSH version constraint (e.g. >= 2.0.0)"`
+	Dependencies  map[string]string `yaml:"dependencies,omitempty" json:"dependencies,omitempty" jsonschema:"description=Plugin dependencies with version constraints"`
+	Events        []string          `yaml:"events,omitempty" json:"events,omitempty"`
+	Policies      []ManifestPolicy  `yaml:"policies,omitempty" json:"policies,omitempty"`
+	Commands      []CommandSpec     `yaml:"commands,omitempty" json:"commands,omitempty" jsonschema:"description=Commands provided by this plugin"`
+	Priority      *LoadPriority     `yaml:"priority,omitempty" json:"priority,omitempty" jsonschema:"description=Load priority (lower loads first)"`
+	SessionStreams bool              `yaml:"session_streams,omitempty" json:"session_streams,omitempty" jsonschema:"description=Plugin contributes streams to session subscriptions via QuerySessionStreams"`
+	LuaPlugin     *LuaConfig        `yaml:"lua-plugin,omitempty" json:"lua-plugin,omitempty"`
+	BinaryPlugin  *BinaryConfig     `yaml:"binary-plugin,omitempty" json:"binary-plugin,omitempty"`
+	Setting       *SettingConfig    `yaml:"setting,omitempty" json:"setting,omitempty"`
 
 	// Deprecated: capabilities field is no longer supported. Use policies instead.
 	// This field exists only to detect old-format manifests and produce a clear error.
@@ -281,6 +282,12 @@ func (m *Manifest) Validate() error {
 		}
 	default:
 		return oops.In("manifest").With("name", m.Name).With("type", m.Type).New("type must be 'lua', 'binary', or 'setting'")
+	}
+
+	// Validate session_streams: only lua and binary plugins can contribute session streams.
+	if m.SessionStreams && m.Type != TypeLua && m.Type != TypeBinary {
+		return oops.In("manifest").With("name", m.Name).With("type", m.Type).
+			New("session_streams is only valid for lua and binary plugin types")
 	}
 
 	// Validate load priority: priorities below -999 are reserved (historically for core plugins).

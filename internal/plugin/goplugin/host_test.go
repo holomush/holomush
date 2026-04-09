@@ -81,6 +81,8 @@ type mockGRPCPluginClient struct {
 	initCalled bool
 	initReq    *pluginv1.InitRequest
 	initErr    error
+
+	QuerySessionStreamsFunc func(ctx context.Context, req *pluginv1.QuerySessionStreamsRequest) (*pluginv1.QuerySessionStreamsResponse, error)
 }
 
 func (m *mockGRPCPluginClient) Init(_ context.Context, req *pluginv1.InitRequest, _ ...grpc.CallOption) (*pluginv1.InitResponse, error) {
@@ -116,6 +118,13 @@ func (m *mockGRPCPluginClient) HandleCommand(_ context.Context, _ *pluginv1.Hand
 		return m.cmdResponse, nil
 	}
 	return &pluginv1.HandleCommandResponse{Response: &pluginv1.CommandResponse{}}, nil
+}
+
+func (m *mockGRPCPluginClient) QuerySessionStreams(ctx context.Context, req *pluginv1.QuerySessionStreamsRequest, _ ...grpc.CallOption) (*pluginv1.QuerySessionStreamsResponse, error) {
+	if m.QuerySessionStreamsFunc != nil {
+		return m.QuerySessionStreamsFunc(ctx, req)
+	}
+	return &pluginv1.QuerySessionStreamsResponse{}, nil
 }
 
 // mockClientFactory creates mock clients for testing.
@@ -1310,4 +1319,167 @@ func TestPluginConnReturnsErrorWhenNoConnection(t *testing.T) {
 
 func TestHostImplementsServiceConnProvider(_ *testing.T) {
 	var _ plugins.ServiceConnProvider = (*Host)(nil)
+}
+
+// --- QuerySessionStreams tests ---
+
+func TestGopluginHostQuerySessionStreamsCallsPluginRPC(t *testing.T) {
+	var capturedReq *pluginv1.QuerySessionStreamsRequest
+	grpcClient := &mockGRPCPluginClient{
+		QuerySessionStreamsFunc: func(_ context.Context, req *pluginv1.QuerySessionStreamsRequest) (*pluginv1.QuerySessionStreamsResponse, error) {
+			capturedReq = req
+			return &pluginv1.QuerySessionStreamsResponse{
+				Streams: []string{"channel:general", "channel:ooc"},
+			}, nil
+		},
+	}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	host := NewHostWithFactory(factory)
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	err := createTempExecutable(tmpDir + "/test-plugin")
+	require.NoError(t, err)
+
+	manifest := &plugins.Manifest{
+		Name:    "test-plugin",
+		Version: "1.0.0",
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "test-plugin",
+		},
+	}
+
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err)
+
+	req := plugins.SessionStreamsRequest{
+		CharacterID: "char-123",
+		PlayerID:    "player-456",
+		SessionID:   "sess-789",
+	}
+
+	streams, err := host.QuerySessionStreams(ctx, "test-plugin", req)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"channel:general", "channel:ooc"}, streams)
+	require.NotNil(t, capturedReq)
+	assert.Equal(t, "char-123", capturedReq.CharacterId)
+	assert.Equal(t, "player-456", capturedReq.PlayerId)
+	assert.Equal(t, "sess-789", capturedReq.SessionId)
+}
+
+func TestGopluginHostQuerySessionStreamsReturnsErrorFromPlugin(t *testing.T) {
+	grpcClient := &mockGRPCPluginClient{
+		QuerySessionStreamsFunc: func(_ context.Context, _ *pluginv1.QuerySessionStreamsRequest) (*pluginv1.QuerySessionStreamsResponse, error) {
+			return &pluginv1.QuerySessionStreamsResponse{
+				Error: "db unavailable",
+			}, nil
+		},
+	}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	host := NewHostWithFactory(factory)
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	err := createTempExecutable(tmpDir + "/test-plugin")
+	require.NoError(t, err)
+
+	manifest := &plugins.Manifest{
+		Name:    "test-plugin",
+		Version: "1.0.0",
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "test-plugin",
+		},
+	}
+
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err)
+
+	req := plugins.SessionStreamsRequest{
+		CharacterID: "char-123",
+		PlayerID:    "player-456",
+		SessionID:   "sess-789",
+	}
+
+	_, err = host.QuerySessionStreams(ctx, "test-plugin", req)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "db unavailable")
+}
+
+func TestGopluginHostQuerySessionStreamsReturnsErrorOnRPCFailure(t *testing.T) {
+	wantErr := errors.New("transport failure")
+	grpcClient := &mockGRPCPluginClient{
+		QuerySessionStreamsFunc: func(_ context.Context, _ *pluginv1.QuerySessionStreamsRequest) (*pluginv1.QuerySessionStreamsResponse, error) {
+			return nil, wantErr
+		},
+	}
+	mockClient := &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: grpcClient},
+	}
+	factory := &mockClientFactory{client: mockClient}
+	host := NewHostWithFactory(factory)
+
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	err := createTempExecutable(tmpDir + "/test-plugin")
+	require.NoError(t, err)
+
+	manifest := &plugins.Manifest{
+		Name:    "test-plugin",
+		Version: "1.0.0",
+		Type:    plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{
+			Executable: "test-plugin",
+		},
+	}
+
+	err = host.Load(ctx, manifest, tmpDir)
+	require.NoError(t, err)
+
+	_, err = host.QuerySessionStreams(ctx, "test-plugin", plugins.SessionStreamsRequest{
+		CharacterID: "char-1",
+		PlayerID:    "player-1",
+		SessionID:   "sess-1",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "transport failure")
+}
+
+func TestGopluginHostQuerySessionStreamsReturnsErrorWhenHostClosed(t *testing.T) {
+	factory := &mockClientFactory{client: &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: &mockGRPCPluginClient{}},
+	}}
+	host := NewHostWithFactory(factory)
+
+	tmpDir := t.TempDir()
+	require.NoError(t, createTempExecutable(tmpDir+"/test-plugin"))
+	manifest := &plugins.Manifest{
+		Name:         "test-plugin",
+		Version:      "1.0.0",
+		Type:         plugins.TypeBinary,
+		BinaryPlugin: &plugins.BinaryConfig{Executable: "test-plugin"},
+	}
+	require.NoError(t, host.Load(context.Background(), manifest, tmpDir))
+	require.NoError(t, host.Close(context.Background()))
+
+	_, err := host.QuerySessionStreams(context.Background(), "test-plugin", plugins.SessionStreamsRequest{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrHostClosed)
+}
+
+func TestGopluginHostQuerySessionStreamsReturnsErrorForUnknownPlugin(t *testing.T) {
+	host := NewHostWithFactory(&mockClientFactory{client: &mockPluginClient{
+		protocol: &mockClientProtocol{pluginClient: &mockGRPCPluginClient{}},
+	}})
+
+	_, err := host.QuerySessionStreams(context.Background(), "nonexistent", plugins.SessionStreamsRequest{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrPluginNotLoaded)
 }

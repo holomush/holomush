@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/plugin/v1/plugin.proto.
  */
 export const file_holomush_plugin_v1_plugin: GenFile = /*@__PURE__*/
-  fileDesc("Ch9ob2xvbXVzaC9wbHVnaW4vdjEvcGx1Z2luLnByb3RvEhJob2xvbXVzaC5wbHVnaW4udjEitwEKDVNlcnZpY2VDb25maWcSGQoRY29ubmVjdGlvbl9zdHJpbmcYASABKAkSUgoRcmVxdWlyZWRfc2VydmljZXMYAiADKAsyNy5ob2xvbXVzaC5wbHVnaW4udjEuU2VydmljZUNvbmZpZy5SZXF1aXJlZFNlcnZpY2VzRW50cnkaNwoVUmVxdWlyZWRTZXJ2aWNlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiQAoLSW5pdFJlcXVlc3QSMQoGY29uZmlnGAEgASgLMiEuaG9sb211c2gucGx1Z2luLnYxLlNlcnZpY2VDb25maWciKQoMSW5pdFJlc3BvbnNlEhkKEXByb3ZpZGVkX3NlcnZpY2VzGAEgAygJIrMBCgVFdmVudBITCgJpZBgBIAEoCUIHukgEcgIQARIXCgZzdHJlYW0YAiABKAlCB7pIBHICEAESFQoEdHlwZRgDIAEoCUIHukgEcgIQARIRCgl0aW1lc3RhbXAYBCABKAMSGwoKYWN0b3Jfa2luZBgFIAEoCUIHukgEcgIQARIZCghhY3Rvcl9pZBgGIAEoCUIHukgEcgIQARIaCgdwYXlsb2FkGAcgASgJQgm6SAZyBBiAgAQiVwoJRW1pdEV2ZW50EhcKBnN0cmVhbRgBIAEoCUIHukgEcgIQARIVCgR0eXBlGAIgASgJQge6SARyAhABEhoKB3BheWxvYWQYAyABKAlCCbpIBnIEGICABCI+ChJIYW5kbGVFdmVudFJlcXVlc3QSKAoFZXZlbnQYASABKAsyGS5ob2xvbXVzaC5wbHVnaW4udjEuRXZlbnQiSQoTSGFuZGxlRXZlbnRSZXNwb25zZRIyCgtlbWl0X2V2ZW50cxgBIAMoCzIdLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnQi9gEKDkNvbW1hbmRSZXF1ZXN0EhgKB2NvbW1hbmQYASABKAlCB7pIBHICEAESFgoEYXJncxgCIAEoCUIIukgFcgMYgEASGwoJcmF3X2lucHV0GAMgASgJQgi6SAVyAxiAQBIdCgxjaGFyYWN0ZXJfaWQYBCABKAlCB7pIBHICEAESHwoOY2hhcmFjdGVyX25hbWUYBSABKAlCB7pIBHICEAESHAoLbG9jYXRpb25faWQYBiABKAlCB7pIBHICEAESGwoKc2Vzc2lvbl9pZBgHIAEoCUIHukgEcgIQARIaCglwbGF5ZXJfaWQYCCABKAlCB7pIBHICEAEiyQEKD0NvbW1hbmRSZXNwb25zZRIxCgZzdGF0dXMYASABKA4yIS5ob2xvbXVzaC5wbHVnaW4udjEuQ29tbWFuZFN0YXR1cxIYCgZvdXRwdXQYAiABKAlCCLpIBXIDGIBAEi0KBmV2ZW50cxgDIAMoCzIdLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnQSOgoLYXVkaXRfaGludHMYBCADKAsyJS5ob2xvbXVzaC5wbHVnaW4udjEuQXVkaXREZWNpc2lvbkhpbnQizAIKEUF1ZGl0RGVjaXNpb25IaW50EhYKAmlkGAEgASgJQgq6SAdyBRABGIABEhYKBG5hbWUYAiABKAlCCLpIBXIDGIACEhkKB21lc3NhZ2UYAyABKAlCCLpIBXIDGIAIEi8KBmVmZmVjdBgEIAEoDjIfLmhvbG9tdXNoLnBsdWdpbi52MS5BdWRpdEVmZmVjdBIhChBhY3Rpb25fcXVhbGlmaWVyGAUgASgJQge6SARyAhhAEhoKCHJlc291cmNlGAYgASgJQgi6SAVyAxiAAhJJCgphdHRyaWJ1dGVzGAcgAygLMjUuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RGVjaXNpb25IaW50LkF0dHJpYnV0ZXNFbnRyeRoxCg9BdHRyaWJ1dGVzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJLChRIYW5kbGVDb21tYW5kUmVxdWVzdBIzCgdjb21tYW5kGAEgASgLMiIuaG9sb211c2gucGx1Z2luLnYxLkNvbW1hbmRSZXF1ZXN0Ik4KFUhhbmRsZUNvbW1hbmRSZXNwb25zZRI1CghyZXNwb25zZRgBIAEoCzIjLmhvbG9tdXNoLnBsdWdpbi52MS5Db21tYW5kUmVzcG9uc2UiagohUGx1Z2luSG9zdFNlcnZpY2VFbWl0RXZlbnRSZXF1ZXN0EhcKBnN0cmVhbRgBIAEoCUIHukgEcgIQARIbCgpldmVudF90eXBlGAIgASgJQge6SARyAhABEg8KB3BheWxvYWQYAyABKAwiJAoiUGx1Z2luSG9zdFNlcnZpY2VFbWl0RXZlbnRSZXNwb25zZSJQChtQbHVnaW5Ib3N0U2VydmljZUxvZ1JlcXVlc3QSFgoFbGV2ZWwYASABKAlCB7pIBHICEAESGQoHbWVzc2FnZRgCIAEoCUIIukgFcgMYgEAiHgocUGx1Z2luSG9zdFNlcnZpY2VMb2dSZXNwb25zZSJTCh1QbHVnaW5Ib3N0U2VydmljZUtWR2V0UmVxdWVzdBIcCgtwbHVnaW5fbmFtZRgBIAEoCUIHukgEcgIQARIUCgNrZXkYAiABKAlCB7pIBHICEAEiPgoeUGx1Z2luSG9zdFNlcnZpY2VLVkdldFJlc3BvbnNlEg0KBXZhbHVlGAEgASgJEg0KBWZvdW5kGAIgASgIImIKHVBsdWdpbkhvc3RTZXJ2aWNlS1ZTZXRSZXF1ZXN0EhwKC3BsdWdpbl9uYW1lGAEgASgJQge6SARyAhABEhQKA2tleRgCIAEoCUIHukgEcgIQARINCgV2YWx1ZRgDIAEoCSIgCh5QbHVnaW5Ib3N0U2VydmljZUtWU2V0UmVzcG9uc2UiVgogUGx1Z2luSG9zdFNlcnZpY2VLVkRlbGV0ZVJlcXVlc3QSHAoLcGx1Z2luX25hbWUYASABKAlCB7pIBHICEAESFAoDa2V5GAIgASgJQge6SARyAhABIiMKIVBsdWdpbkhvc3RTZXJ2aWNlS1ZEZWxldGVSZXNwb25zZSqWAQoNQ29tbWFuZFN0YXR1cxIeChpDT01NQU5EX1NUQVRVU19VTlNQRUNJRklFRBAAEhUKEUNPTU1BTkRfU1RBVFVTX09LEAESGAoUQ09NTUFORF9TVEFUVVNfRVJST1IQAhIaChZDT01NQU5EX1NUQVRVU19GQUlMVVJFEAMSGAoUQ09NTUFORF9TVEFUVVNfRkFUQUwQBCpaCgtBdWRpdEVmZmVjdBIcChhBVURJVF9FRkZFQ1RfVU5TUEVDSUZJRUQQABIVChFBVURJVF9FRkZFQ1RfREVOWRABEhYKEkFVRElUX0VGRkVDVF9BTExPVxACMqACCg1QbHVnaW5TZXJ2aWNlEkkKBEluaXQSHy5ob2xvbXVzaC5wbHVnaW4udjEuSW5pdFJlcXVlc3QaIC5ob2xvbXVzaC5wbHVnaW4udjEuSW5pdFJlc3BvbnNlEl4KC0hhbmRsZUV2ZW50EiYuaG9sb211c2gucGx1Z2luLnYxLkhhbmRsZUV2ZW50UmVxdWVzdBonLmhvbG9tdXNoLnBsdWdpbi52MS5IYW5kbGVFdmVudFJlc3BvbnNlEmQKDUhhbmRsZUNvbW1hbmQSKC5ob2xvbXVzaC5wbHVnaW4udjEuSGFuZGxlQ29tbWFuZFJlcXVlc3QaKS5ob2xvbXVzaC5wbHVnaW4udjEuSGFuZGxlQ29tbWFuZFJlc3BvbnNlMtIEChFQbHVnaW5Ib3N0U2VydmljZRJ6CglFbWl0RXZlbnQSNS5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VFbWl0RXZlbnRSZXF1ZXN0GjYuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlRW1pdEV2ZW50UmVzcG9uc2USaAoDTG9nEi8uaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlTG9nUmVxdWVzdBowLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUxvZ1Jlc3BvbnNlEm4KBUtWR2V0EjEuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlS1ZHZXRSZXF1ZXN0GjIuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlS1ZHZXRSZXNwb25zZRJuCgVLVlNldBIxLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUtWU2V0UmVxdWVzdBoyLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUtWU2V0UmVzcG9uc2USdwoIS1ZEZWxldGUSNC5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VLVkRlbGV0ZVJlcXVlc3QaNS5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VLVkRlbGV0ZVJlc3BvbnNlQkRaQmdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3BsdWdpbi92MTtwbHVnaW52MWIGcHJvdG8z", [file_buf_validate_validate]);
+  fileDesc("Ch9ob2xvbXVzaC9wbHVnaW4vdjEvcGx1Z2luLnByb3RvEhJob2xvbXVzaC5wbHVnaW4udjEitwEKDVNlcnZpY2VDb25maWcSGQoRY29ubmVjdGlvbl9zdHJpbmcYASABKAkSUgoRcmVxdWlyZWRfc2VydmljZXMYAiADKAsyNy5ob2xvbXVzaC5wbHVnaW4udjEuU2VydmljZUNvbmZpZy5SZXF1aXJlZFNlcnZpY2VzRW50cnkaNwoVUmVxdWlyZWRTZXJ2aWNlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiQAoLSW5pdFJlcXVlc3QSMQoGY29uZmlnGAEgASgLMiEuaG9sb211c2gucGx1Z2luLnYxLlNlcnZpY2VDb25maWciKQoMSW5pdFJlc3BvbnNlEhkKEXByb3ZpZGVkX3NlcnZpY2VzGAEgAygJIrMBCgVFdmVudBITCgJpZBgBIAEoCUIHukgEcgIQARIXCgZzdHJlYW0YAiABKAlCB7pIBHICEAESFQoEdHlwZRgDIAEoCUIHukgEcgIQARIRCgl0aW1lc3RhbXAYBCABKAMSGwoKYWN0b3Jfa2luZBgFIAEoCUIHukgEcgIQARIZCghhY3Rvcl9pZBgGIAEoCUIHukgEcgIQARIaCgdwYXlsb2FkGAcgASgJQgm6SAZyBBiAgAQiVwoJRW1pdEV2ZW50EhcKBnN0cmVhbRgBIAEoCUIHukgEcgIQARIVCgR0eXBlGAIgASgJQge6SARyAhABEhoKB3BheWxvYWQYAyABKAlCCbpIBnIEGICABCI+ChJIYW5kbGVFdmVudFJlcXVlc3QSKAoFZXZlbnQYASABKAsyGS5ob2xvbXVzaC5wbHVnaW4udjEuRXZlbnQiSQoTSGFuZGxlRXZlbnRSZXNwb25zZRIyCgtlbWl0X2V2ZW50cxgBIAMoCzIdLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnQi9gEKDkNvbW1hbmRSZXF1ZXN0EhgKB2NvbW1hbmQYASABKAlCB7pIBHICEAESFgoEYXJncxgCIAEoCUIIukgFcgMYgEASGwoJcmF3X2lucHV0GAMgASgJQgi6SAVyAxiAQBIdCgxjaGFyYWN0ZXJfaWQYBCABKAlCB7pIBHICEAESHwoOY2hhcmFjdGVyX25hbWUYBSABKAlCB7pIBHICEAESHAoLbG9jYXRpb25faWQYBiABKAlCB7pIBHICEAESGwoKc2Vzc2lvbl9pZBgHIAEoCUIHukgEcgIQARIaCglwbGF5ZXJfaWQYCCABKAlCB7pIBHICEAEiyQEKD0NvbW1hbmRSZXNwb25zZRIxCgZzdGF0dXMYASABKA4yIS5ob2xvbXVzaC5wbHVnaW4udjEuQ29tbWFuZFN0YXR1cxIYCgZvdXRwdXQYAiABKAlCCLpIBXIDGIBAEi0KBmV2ZW50cxgDIAMoCzIdLmhvbG9tdXNoLnBsdWdpbi52MS5FbWl0RXZlbnQSOgoLYXVkaXRfaGludHMYBCADKAsyJS5ob2xvbXVzaC5wbHVnaW4udjEuQXVkaXREZWNpc2lvbkhpbnQizAIKEUF1ZGl0RGVjaXNpb25IaW50EhYKAmlkGAEgASgJQgq6SAdyBRABGIABEhYKBG5hbWUYAiABKAlCCLpIBXIDGIACEhkKB21lc3NhZ2UYAyABKAlCCLpIBXIDGIAIEi8KBmVmZmVjdBgEIAEoDjIfLmhvbG9tdXNoLnBsdWdpbi52MS5BdWRpdEVmZmVjdBIhChBhY3Rpb25fcXVhbGlmaWVyGAUgASgJQge6SARyAhhAEhoKCHJlc291cmNlGAYgASgJQgi6SAVyAxiAAhJJCgphdHRyaWJ1dGVzGAcgAygLMjUuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RGVjaXNpb25IaW50LkF0dHJpYnV0ZXNFbnRyeRoxCg9BdHRyaWJ1dGVzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJLChRIYW5kbGVDb21tYW5kUmVxdWVzdBIzCgdjb21tYW5kGAEgASgLMiIuaG9sb211c2gucGx1Z2luLnYxLkNvbW1hbmRSZXF1ZXN0Ik4KFUhhbmRsZUNvbW1hbmRSZXNwb25zZRI1CghyZXNwb25zZRgBIAEoCzIjLmhvbG9tdXNoLnBsdWdpbi52MS5Db21tYW5kUmVzcG9uc2UiagohUGx1Z2luSG9zdFNlcnZpY2VFbWl0RXZlbnRSZXF1ZXN0EhcKBnN0cmVhbRgBIAEoCUIHukgEcgIQARIbCgpldmVudF90eXBlGAIgASgJQge6SARyAhABEg8KB3BheWxvYWQYAyABKAwiJAoiUGx1Z2luSG9zdFNlcnZpY2VFbWl0RXZlbnRSZXNwb25zZSJQChtQbHVnaW5Ib3N0U2VydmljZUxvZ1JlcXVlc3QSFgoFbGV2ZWwYASABKAlCB7pIBHICEAESGQoHbWVzc2FnZRgCIAEoCUIIukgFcgMYgEAiHgocUGx1Z2luSG9zdFNlcnZpY2VMb2dSZXNwb25zZSJTCh1QbHVnaW5Ib3N0U2VydmljZUtWR2V0UmVxdWVzdBIcCgtwbHVnaW5fbmFtZRgBIAEoCUIHukgEcgIQARIUCgNrZXkYAiABKAlCB7pIBHICEAEiPgoeUGx1Z2luSG9zdFNlcnZpY2VLVkdldFJlc3BvbnNlEg0KBXZhbHVlGAEgASgJEg0KBWZvdW5kGAIgASgIImIKHVBsdWdpbkhvc3RTZXJ2aWNlS1ZTZXRSZXF1ZXN0EhwKC3BsdWdpbl9uYW1lGAEgASgJQge6SARyAhABEhQKA2tleRgCIAEoCUIHukgEcgIQARINCgV2YWx1ZRgDIAEoCSIgCh5QbHVnaW5Ib3N0U2VydmljZUtWU2V0UmVzcG9uc2UiVgogUGx1Z2luSG9zdFNlcnZpY2VLVkRlbGV0ZVJlcXVlc3QSHAoLcGx1Z2luX25hbWUYASABKAlCB7pIBHICEAESFAoDa2V5GAIgASgJQge6SARyAhABIiMKIVBsdWdpbkhvc3RTZXJ2aWNlS1ZEZWxldGVSZXNwb25zZSJOCihQbHVnaW5Ib3N0U2VydmljZUFkZFNlc3Npb25TdHJlYW1SZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSDgoGc3RyZWFtGAIgASgJIjwKKVBsdWdpbkhvc3RTZXJ2aWNlQWRkU2Vzc2lvblN0cmVhbVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiUQorUGx1Z2luSG9zdFNlcnZpY2VSZW1vdmVTZXNzaW9uU3RyZWFtUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEg4KBnN0cmVhbRgCIAEoCSI/CixQbHVnaW5Ib3N0U2VydmljZVJlbW92ZVNlc3Npb25TdHJlYW1SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIlkKGlF1ZXJ5U2Vzc2lvblN0cmVhbXNSZXF1ZXN0EhQKDGNoYXJhY3Rlcl9pZBgBIAEoCRIRCglwbGF5ZXJfaWQYAiABKAkSEgoKc2Vzc2lvbl9pZBgDIAEoCSI9ChtRdWVyeVNlc3Npb25TdHJlYW1zUmVzcG9uc2USDwoHc3RyZWFtcxgBIAMoCRINCgVlcnJvchgCIAEoCSqWAQoNQ29tbWFuZFN0YXR1cxIeChpDT01NQU5EX1NUQVRVU19VTlNQRUNJRklFRBAAEhUKEUNPTU1BTkRfU1RBVFVTX09LEAESGAoUQ09NTUFORF9TVEFUVVNfRVJST1IQAhIaChZDT01NQU5EX1NUQVRVU19GQUlMVVJFEAMSGAoUQ09NTUFORF9TVEFUVVNfRkFUQUwQBCpaCgtBdWRpdEVmZmVjdBIcChhBVURJVF9FRkZFQ1RfVU5TUEVDSUZJRUQQABIVChFBVURJVF9FRkZFQ1RfREVOWRABEhYKEkFVRElUX0VGRkVDVF9BTExPVxACMpgDCg1QbHVnaW5TZXJ2aWNlEkkKBEluaXQSHy5ob2xvbXVzaC5wbHVnaW4udjEuSW5pdFJlcXVlc3QaIC5ob2xvbXVzaC5wbHVnaW4udjEuSW5pdFJlc3BvbnNlEl4KC0hhbmRsZUV2ZW50EiYuaG9sb211c2gucGx1Z2luLnYxLkhhbmRsZUV2ZW50UmVxdWVzdBonLmhvbG9tdXNoLnBsdWdpbi52MS5IYW5kbGVFdmVudFJlc3BvbnNlEmQKDUhhbmRsZUNvbW1hbmQSKC5ob2xvbXVzaC5wbHVnaW4udjEuSGFuZGxlQ29tbWFuZFJlcXVlc3QaKS5ob2xvbXVzaC5wbHVnaW4udjEuSGFuZGxlQ29tbWFuZFJlc3BvbnNlEnYKE1F1ZXJ5U2Vzc2lvblN0cmVhbXMSLi5ob2xvbXVzaC5wbHVnaW4udjEuUXVlcnlTZXNzaW9uU3RyZWFtc1JlcXVlc3QaLy5ob2xvbXVzaC5wbHVnaW4udjEuUXVlcnlTZXNzaW9uU3RyZWFtc1Jlc3BvbnNlMv8GChFQbHVnaW5Ib3N0U2VydmljZRJ6CglFbWl0RXZlbnQSNS5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VFbWl0RXZlbnRSZXF1ZXN0GjYuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlRW1pdEV2ZW50UmVzcG9uc2USaAoDTG9nEi8uaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlTG9nUmVxdWVzdBowLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUxvZ1Jlc3BvbnNlEm4KBUtWR2V0EjEuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlS1ZHZXRSZXF1ZXN0GjIuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlS1ZHZXRSZXNwb25zZRJuCgVLVlNldBIxLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUtWU2V0UmVxdWVzdBoyLmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZUtWU2V0UmVzcG9uc2USdwoIS1ZEZWxldGUSNC5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VLVkRlbGV0ZVJlcXVlc3QaNS5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VLVkRlbGV0ZVJlc3BvbnNlEo8BChBBZGRTZXNzaW9uU3RyZWFtEjwuaG9sb211c2gucGx1Z2luLnYxLlBsdWdpbkhvc3RTZXJ2aWNlQWRkU2Vzc2lvblN0cmVhbVJlcXVlc3QaPS5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VBZGRTZXNzaW9uU3RyZWFtUmVzcG9uc2USmAEKE1JlbW92ZVNlc3Npb25TdHJlYW0SPy5ob2xvbXVzaC5wbHVnaW4udjEuUGx1Z2luSG9zdFNlcnZpY2VSZW1vdmVTZXNzaW9uU3RyZWFtUmVxdWVzdBpALmhvbG9tdXNoLnBsdWdpbi52MS5QbHVnaW5Ib3N0U2VydmljZVJlbW92ZVNlc3Npb25TdHJlYW1SZXNwb25zZUJEWkJnaXRodWIuY29tL2hvbG9tdXNoL2hvbG9tdXNoL3BrZy9wcm90by9ob2xvbXVzaC9wbHVnaW4vdjE7cGx1Z2ludjFiBnByb3RvMw", [file_buf_validate_validate]);
 
 /**
  * ServiceConfig carries initialization data from the host to the plugin.
@@ -660,6 +660,167 @@ export const PluginHostServiceKVDeleteResponseSchema: GenMessage<PluginHostServi
   messageDesc(file_holomush_plugin_v1_plugin, 21);
 
 /**
+ * PluginHostServiceAddSessionStreamRequest specifies which session and stream to add.
+ *
+ * @generated from message holomush.plugin.v1.PluginHostServiceAddSessionStreamRequest
+ */
+export type PluginHostServiceAddSessionStreamRequest = Message<"holomush.plugin.v1.PluginHostServiceAddSessionStreamRequest"> & {
+  /**
+   * Active session identifier.
+   *
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * Stream name to subscribe to (format: "prefix:id").
+   *
+   * @generated from field: string stream = 2;
+   */
+  stream: string;
+};
+
+/**
+ * Describes the message holomush.plugin.v1.PluginHostServiceAddSessionStreamRequest.
+ * Use `create(PluginHostServiceAddSessionStreamRequestSchema)` to create a new message.
+ */
+export const PluginHostServiceAddSessionStreamRequestSchema: GenMessage<PluginHostServiceAddSessionStreamRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_plugin_v1_plugin, 22);
+
+/**
+ * PluginHostServiceAddSessionStreamResponse indicates success or failure.
+ *
+ * @generated from message holomush.plugin.v1.PluginHostServiceAddSessionStreamResponse
+ */
+export type PluginHostServiceAddSessionStreamResponse = Message<"holomush.plugin.v1.PluginHostServiceAddSessionStreamResponse"> & {
+  /**
+   * Whether the stream was successfully added.
+   *
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+};
+
+/**
+ * Describes the message holomush.plugin.v1.PluginHostServiceAddSessionStreamResponse.
+ * Use `create(PluginHostServiceAddSessionStreamResponseSchema)` to create a new message.
+ */
+export const PluginHostServiceAddSessionStreamResponseSchema: GenMessage<PluginHostServiceAddSessionStreamResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_plugin_v1_plugin, 23);
+
+/**
+ * PluginHostServiceRemoveSessionStreamRequest specifies which stream to remove.
+ *
+ * @generated from message holomush.plugin.v1.PluginHostServiceRemoveSessionStreamRequest
+ */
+export type PluginHostServiceRemoveSessionStreamRequest = Message<"holomush.plugin.v1.PluginHostServiceRemoveSessionStreamRequest"> & {
+  /**
+   * Active session identifier.
+   *
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * Stream name to unsubscribe from.
+   *
+   * @generated from field: string stream = 2;
+   */
+  stream: string;
+};
+
+/**
+ * Describes the message holomush.plugin.v1.PluginHostServiceRemoveSessionStreamRequest.
+ * Use `create(PluginHostServiceRemoveSessionStreamRequestSchema)` to create a new message.
+ */
+export const PluginHostServiceRemoveSessionStreamRequestSchema: GenMessage<PluginHostServiceRemoveSessionStreamRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_plugin_v1_plugin, 24);
+
+/**
+ * PluginHostServiceRemoveSessionStreamResponse indicates success or failure.
+ *
+ * @generated from message holomush.plugin.v1.PluginHostServiceRemoveSessionStreamResponse
+ */
+export type PluginHostServiceRemoveSessionStreamResponse = Message<"holomush.plugin.v1.PluginHostServiceRemoveSessionStreamResponse"> & {
+  /**
+   * Whether the stream was successfully removed (true even if not subscribed).
+   *
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+};
+
+/**
+ * Describes the message holomush.plugin.v1.PluginHostServiceRemoveSessionStreamResponse.
+ * Use `create(PluginHostServiceRemoveSessionStreamResponseSchema)` to create a new message.
+ */
+export const PluginHostServiceRemoveSessionStreamResponseSchema: GenMessage<PluginHostServiceRemoveSessionStreamResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_plugin_v1_plugin, 25);
+
+/**
+ * QuerySessionStreamsRequest provides session context for stream contribution.
+ *
+ * @generated from message holomush.plugin.v1.QuerySessionStreamsRequest
+ */
+export type QuerySessionStreamsRequest = Message<"holomush.plugin.v1.QuerySessionStreamsRequest"> & {
+  /**
+   * Identifier of the character entering the session.
+   *
+   * @generated from field: string character_id = 1;
+   */
+  characterId: string;
+
+  /**
+   * Identifier of the player owning the character.
+   *
+   * @generated from field: string player_id = 2;
+   */
+  playerId: string;
+
+  /**
+   * Session identifier.
+   *
+   * @generated from field: string session_id = 3;
+   */
+  sessionId: string;
+};
+
+/**
+ * Describes the message holomush.plugin.v1.QuerySessionStreamsRequest.
+ * Use `create(QuerySessionStreamsRequestSchema)` to create a new message.
+ */
+export const QuerySessionStreamsRequestSchema: GenMessage<QuerySessionStreamsRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_plugin_v1_plugin, 26);
+
+/**
+ * QuerySessionStreamsResponse returns stream names and an optional error.
+ *
+ * @generated from message holomush.plugin.v1.QuerySessionStreamsResponse
+ */
+export type QuerySessionStreamsResponse = Message<"holomush.plugin.v1.QuerySessionStreamsResponse"> & {
+  /**
+   * Stream names the plugin wants added to this session's subscription.
+   *
+   * @generated from field: repeated string streams = 1;
+   */
+  streams: string[];
+
+  /**
+   * Non-empty indicates a plugin-reported error. Host degrades (logs + skips).
+   *
+   * @generated from field: string error = 2;
+   */
+  error: string;
+};
+
+/**
+ * Describes the message holomush.plugin.v1.QuerySessionStreamsResponse.
+ * Use `create(QuerySessionStreamsResponseSchema)` to create a new message.
+ */
+export const QuerySessionStreamsResponseSchema: GenMessage<QuerySessionStreamsResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_plugin_v1_plugin, 27);
+
+/**
  * CommandStatus maps to pkg/plugin.CommandStatus values.
  *
  * @generated from enum holomush.plugin.v1.CommandStatus
@@ -768,6 +929,18 @@ export const PluginService: GenService<{
     input: typeof HandleCommandRequestSchema;
     output: typeof HandleCommandResponseSchema;
   },
+  /**
+   * QuerySessionStreams returns stream names the plugin wants subscribed for a session.
+   * Called once at session establishment, before LISTEN setup.
+   * Only invoked for plugins that declare session_streams: true in their manifest.
+   *
+   * @generated from rpc holomush.plugin.v1.PluginService.QuerySessionStreams
+   */
+  querySessionStreams: {
+    methodKind: "unary";
+    input: typeof QuerySessionStreamsRequestSchema;
+    output: typeof QuerySessionStreamsResponseSchema;
+  },
 }> = /*@__PURE__*/
   serviceDesc(file_holomush_plugin_v1_plugin, 0);
 
@@ -827,6 +1000,28 @@ export const PluginHostService: GenService<{
     methodKind: "unary";
     input: typeof PluginHostServiceKVDeleteRequestSchema;
     output: typeof PluginHostServiceKVDeleteResponseSchema;
+  },
+  /**
+   * AddSessionStream subscribes an active session to an additional stream mid-session.
+   * Returns SESSION_NOT_FOUND (codes.NotFound) if session_id is not active.
+   *
+   * @generated from rpc holomush.plugin.v1.PluginHostService.AddSessionStream
+   */
+  addSessionStream: {
+    methodKind: "unary";
+    input: typeof PluginHostServiceAddSessionStreamRequestSchema;
+    output: typeof PluginHostServiceAddSessionStreamResponseSchema;
+  },
+  /**
+   * RemoveSessionStream unsubscribes an active session from a stream.
+   * Idempotent: returns success if stream is not subscribed.
+   *
+   * @generated from rpc holomush.plugin.v1.PluginHostService.RemoveSessionStream
+   */
+  removeSessionStream: {
+    methodKind: "unary";
+    input: typeof PluginHostServiceRemoveSessionStreamRequestSchema;
+    output: typeof PluginHostServiceRemoveSessionStreamResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_holomush_plugin_v1_plugin, 1);
