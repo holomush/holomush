@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 )
 
@@ -56,7 +58,8 @@ type sceneStorer interface {
 // called, so the field assignment in Init wires the store after RegisterServices.
 type SceneServiceImpl struct {
 	scenev1.UnimplementedSceneServiceServer
-	store sceneStorer
+	store     sceneStorer
+	eventSink pluginsdk.EventSink
 }
 
 // NewSceneServiceImpl returns a service backed by the given store.
@@ -64,6 +67,12 @@ type SceneServiceImpl struct {
 // and assigns it after Init.
 func NewSceneServiceImpl(store sceneStorer) *SceneServiceImpl {
 	return &SceneServiceImpl{store: store}
+}
+
+// SetEventSink installs the host callback event sink used for service-owned
+// emissions from the binary plugin.
+func (s *SceneServiceImpl) SetEventSink(sink pluginsdk.EventSink) {
+	s.eventSink = sink
 }
 
 // CreateScene generates a new scene ID, persists the scene, and returns it.
@@ -116,6 +125,28 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 	if loc := req.GetLocationId(); loc != "" {
 		row.LocationID = &loc
 	}
+	intent, err := s.sceneCreatedIntent(row)
+	if err != nil {
+		recordError(span, err)
+		slog.WarnContext(ctx, "scene.service.create_scene emit-intent error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", id,
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to prepare scene event: %v", err)
+	}
+	if s.eventSink == nil {
+		err := oops.Code("SCENE_EVENT_SINK_NOT_CONFIGURED").
+			With("scene_id", row.ID).
+			New("scene event sink is not configured")
+		recordError(span, err)
+		slog.WarnContext(ctx, "scene.service.create_scene emit preflight error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", id,
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to prepare scene event: %v", err)
+	}
 
 	if err := s.store.CreateWithOwner(ctx, row); err != nil {
 		recordError(span, err)
@@ -127,6 +158,20 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 		return nil, status.Errorf(codes.Internal, "failed to create scene: %v", err)
 	}
 
+	if err := s.eventSink.Emit(ctx, intent); err != nil {
+		err = oops.Code("SCENE_EVENT_EMIT_FAILED").
+			With("scene_id", row.ID).
+			Wrap(err)
+		recordError(span, err)
+		// Do not delete persisted scene rows here. CreateWithOwner already
+		// appended lifecycle ops events, and those rows are append-only.
+		slog.WarnContext(ctx, "scene.service.create_scene emit error",
+			"subject_id", req.GetCharacterId(),
+			"scene_id", id,
+			"error", err,
+		)
+		return nil, status.Errorf(codes.Internal, "failed to emit scene event: %v", err)
+	}
 	metricSceneCreated(string(visibility), false)
 	slog.InfoContext(ctx, "scene.service.create_scene ok",
 		"subject_id", req.GetCharacterId(),
@@ -136,6 +181,30 @@ func (s *SceneServiceImpl) CreateScene(ctx context.Context, req *scenev1.CreateS
 
 	return &scenev1.CreateSceneResponse{
 		Scene: rowToProto(row, time.Now().UTC()),
+	}, nil
+}
+
+func (s *SceneServiceImpl) sceneCreatedIntent(row *SceneRow) (pluginsdk.EmitIntent, error) {
+	if row == nil {
+		return pluginsdk.EmitIntent{}, nil
+	}
+
+	payload, err := json.Marshal(map[string]string{
+		"kind":     "scene.lifecycle.created",
+		"scene_id": row.ID,
+		"owner_id": row.OwnerID,
+		"title":    row.Title,
+	})
+	if err != nil {
+		return pluginsdk.EmitIntent{}, oops.Code("SCENE_EVENT_PAYLOAD_MARSHAL_FAILED").
+			With("scene_id", row.ID).
+			Wrap(err)
+	}
+
+	return pluginsdk.EmitIntent{
+		Stream:  "scene:" + row.ID,
+		Type:    pluginsdk.EventTypeSystem,
+		Payload: string(payload),
 	}, nil
 }
 

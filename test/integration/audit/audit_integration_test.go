@@ -283,6 +283,10 @@ func (d *scriptedDeliverer) DeliverCommand(_ context.Context, _ string, _ plugin
 	return d.response, nil
 }
 
+func (d *scriptedDeliverer) EmitPluginEvent(_ context.Context, _ string, _ pluginsdk.EmitEvent) error {
+	return nil
+}
+
 // newIntegrationTestDispatcher constructs a minimal dispatcher with the given
 // deliverer and audit logger wired in. The registry contains a single
 // plugin-backed command named "channel" attributed to "test-plugin", which

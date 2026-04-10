@@ -133,15 +133,31 @@ type pluginServerAdapter struct {
 	handler         Handler
 	cmdHandler      CommandHandler  // nil if handler does not implement CommandHandler
 	serviceProvider ServiceProvider // nil if plugin does not provide services
+	brokerDialer    brokerDialer
 }
 
 // Init implements pluginv1.PluginServiceServer. When a ServiceProvider is set,
 // it delegates to the provider's Init; otherwise it returns an empty response.
 func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitRequest) (*pluginv1.InitResponse, error) {
+	var config *pluginv1.ServiceConfig
+	if req != nil {
+		config = req.GetConfig()
+	}
+	if sinkAware, ok := a.serviceProvider.(EventSinkAware); ok {
+		requiredServices := map[string]string(nil)
+		if config != nil {
+			requiredServices = config.GetRequiredServices()
+		}
+		sink, err := newEventSinkFromBroker(a.brokerDialer, requiredServices)
+		if err != nil {
+			return nil, oops.With("phase", "init").With("service", PluginHostServiceName).Wrap(err)
+		}
+		sinkAware.SetEventSink(sink)
+	}
 	if a.serviceProvider == nil {
 		return &pluginv1.InitResponse{}, nil
 	}
-	if err := a.serviceProvider.Init(ctx, req.GetConfig()); err != nil {
+	if err := a.serviceProvider.Init(ctx, config); err != nil {
 		return nil, oops.With("phase", "init").Wrap(err)
 	}
 	return &pluginv1.InitResponse{}, nil
@@ -149,6 +165,8 @@ func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitReques
 
 // HandleEvent implements pluginv1.PluginServiceServer.
 func (a *pluginServerAdapter) HandleEvent(ctx context.Context, req *pluginv1.HandleEventRequest) (*pluginv1.HandleEventResponse, error) {
+	ctx = contextWithIncomingActorMetadata(ctx)
+
 	// protoEvent may be nil; proto getters return zero values for nil receivers,
 	// making this safe without explicit nil checks.
 	protoEvent := req.GetEvent()
@@ -188,6 +206,7 @@ func (a *pluginServerAdapter) HandleCommand(ctx context.Context, req *pluginv1.H
 	if a.cmdHandler == nil {
 		return &pluginv1.HandleCommandResponse{Response: &pluginv1.CommandResponse{}}, nil
 	}
+	ctx = contextWithIncomingActorMetadata(ctx)
 
 	protoCmd := req.GetCommand()
 	cmd := CommandRequest{
@@ -328,6 +347,7 @@ func loadPluginTLSProvider() func() (*cryptotls.Config, error) {
 
 		return &cryptotls.Config{
 			Certificates: []cryptotls.Certificate{cert},
+			RootCAs:      caPool,
 			ClientCAs:    caPool,
 			ClientAuth:   cryptotls.RequireAndVerifyClientCert,
 			MinVersion:   cryptotls.VersionTLS13,

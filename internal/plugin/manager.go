@@ -17,6 +17,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/core"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -61,7 +62,9 @@ type Manager struct {
 	gracefulDegradation bool                         // if true, LoadAll continues despite plugin failures
 	aliasSeeder         AliasSeeder
 	aliasCache          *command.AliasCache
+	eventEmitter        *PluginEventEmitter
 	loaded              map[string]*DiscoveredPlugin
+	inflight            map[string]*DiscoveredPlugin
 	loadedOrder         []*DiscoveredPlugin // preserves DAG/priority load order for deterministic iteration
 	mu                  sync.RWMutex
 }
@@ -153,6 +156,7 @@ func NewManager(pluginsDir string, opts ...ManagerOption) *Manager {
 	m := &Manager{
 		pluginsDir:  pluginsDir,
 		loaded:      make(map[string]*DiscoveredPlugin),
+		inflight:    make(map[string]*DiscoveredPlugin),
 		hosts:       make(map[Type]Host),
 		hostCaps:    make(map[Host]hostCapabilities),
 		pluginHosts: make(map[string]Host),
@@ -181,6 +185,11 @@ func (m *Manager) RegisterHost(hostType Type, host Host) {
 	defer m.mu.Unlock()
 	m.hosts[hostType] = host
 	m.hostCaps[host] = discoverCapabilities(host)
+	if m.eventEmitter != nil {
+		if configurer := findOptional[EventEmitterConfigurer](host); configurer != nil {
+			configurer.SetEventEmitter(m.eventEmitter)
+		}
+	}
 }
 
 // capabilitiesFor returns the cached capabilities for a host, or an empty
@@ -210,6 +219,25 @@ func (m *Manager) DeliverCommand(ctx context.Context, pluginName string, cmd plu
 	return resp, nil
 }
 
+// ConfigureEventEmitter wires the shared plugin event emitter to the provided
+// host event store. Production startup MUST call this before plugin response
+// events are routed through the manager.
+func (m *Manager) ConfigureEventEmitter(store core.EventStore) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.eventEmitter = NewPluginEventEmitter(store, m.lookupManifest, actorFromContext)
+	for _, host := range m.hosts {
+		if configurer := findOptional[EventEmitterConfigurer](host); configurer != nil {
+			configurer.SetEventEmitter(m.eventEmitter)
+		}
+	}
+	if m.luaHost != nil {
+		if configurer := findOptional[EventEmitterConfigurer](m.luaHost); configurer != nil {
+			configurer.SetEventEmitter(m.eventEmitter)
+		}
+	}
+}
+
 // DeliverEvent routes an event to the correct host for the named plugin.
 func (m *Manager) DeliverEvent(ctx context.Context, pluginName string, event pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
 	m.mu.RLock()
@@ -224,6 +252,21 @@ func (m *Manager) DeliverEvent(ctx context.Context, pluginName string, event plu
 		return nil, oops.In("manager").With("plugin", pluginName).With("operation", "deliver_event").Wrap(err)
 	}
 	return emits, nil
+}
+
+// EmitPluginEvent routes a plugin-owned emit request through the shared host
+// emitter so manifests are validated and host-owned event fields are stamped
+// consistently across command and subscriber paths.
+func (m *Manager) EmitPluginEvent(ctx context.Context, pluginName string, event pluginsdk.EmitEvent) error {
+	m.mu.RLock()
+	emitter := m.eventEmitter
+	m.mu.RUnlock()
+
+	if emitter == nil {
+		return oops.With("plugin", pluginName).
+			New("plugin event emitter is not configured")
+	}
+	return emitter.Emit(ctx, pluginName, pluginsdk.EmitIntent(event))
 }
 
 // DiscoveredPlugin contains a manifest and its directory.
@@ -517,13 +560,24 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 	// Reject duplicate plugin names before loading to prevent the second plugin
 	// from overwriting the first in the manager maps while leaving the original
 	// loaded inside its host but unreachable.
-	m.mu.RLock()
-	_, duplicate := m.loaded[dp.Manifest.Name]
-	m.mu.RUnlock()
-	if duplicate {
+	m.mu.Lock()
+	if _, duplicate := m.loaded[dp.Manifest.Name]; duplicate {
+		m.mu.Unlock()
 		return oops.In("manager").With("plugin", dp.Manifest.Name).With("operation", "load").
 			Errorf("plugin %q is already loaded", dp.Manifest.Name)
 	}
+	if _, inflight := m.inflight[dp.Manifest.Name]; inflight {
+		m.mu.Unlock()
+		return oops.In("manager").With("plugin", dp.Manifest.Name).With("operation", "load").
+			Errorf("plugin %q is already loading", dp.Manifest.Name)
+	}
+	m.inflight[dp.Manifest.Name] = dp
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		delete(m.inflight, dp.Manifest.Name)
+		m.mu.Unlock()
+	}()
 
 	if err := host.Load(ctx, dp.Manifest, dp.Dir); err != nil {
 		return oops.In("manager").With("plugin", dp.Manifest.Name).With("operation", "load").Wrap(err)
@@ -628,6 +682,7 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 	if _, existed := m.loaded[dp.Manifest.Name]; !existed {
 		m.loadedOrder = append(m.loadedOrder, dp)
 	}
+	delete(m.inflight, dp.Manifest.Name)
 	m.loaded[dp.Manifest.Name] = dp
 	m.pluginHosts[dp.Manifest.Name] = host
 	m.mu.Unlock()
@@ -893,6 +948,27 @@ func (m *Manager) GetLoadedPlugin(name string) (*DiscoveredPlugin, bool) {
 	defer m.mu.RUnlock()
 	dp, ok := m.loaded[name]
 	return dp, ok
+}
+
+func (m *Manager) lookupManifest(name string) *Manifest {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	dp, ok := m.loaded[name]
+	if !ok {
+		dp, ok = m.inflight[name]
+	}
+	if !ok {
+		return nil
+	}
+	return dp.Manifest
+}
+
+func actorFromContext(ctx context.Context, _ string) (core.Actor, error) {
+	actor, ok := core.ActorFromContext(ctx)
+	if !ok {
+		return core.Actor{}, oops.New("plugin event actor missing from context")
+	}
+	return actor, nil
 }
 
 // RegisterPluginCommands iterates all loaded plugins and registers their

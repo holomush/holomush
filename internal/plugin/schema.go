@@ -35,6 +35,7 @@ func GenerateSchema() ([]byte, error) {
 	schema.ID = jsonschema.ID(GetSchemaID())
 	schema.Title = "HoloMUSH Plugin Manifest"
 	schema.Description = "Schema for plugin.yaml manifest files"
+	tightenEmitsSchema(schema)
 
 	data, err := json.MarshalIndent(schema, "", "  ")
 	if err != nil {
@@ -43,6 +44,39 @@ func GenerateSchema() ([]byte, error) {
 	// Append trailing newline for POSIX compliance
 	data = append(data, '\n')
 	return data, nil
+}
+
+func tightenEmitsSchema(schema *jsonschema.Schema) {
+	if schema == nil || schema.Properties == nil {
+		return
+	}
+
+	emits, ok := schema.Properties.Get("emits")
+	if ok && emits != nil {
+		emits.UniqueItems = true
+		if emits.Items != nil {
+			emits.Items.MinLength = ptrUint64(1)
+			emits.Items.Pattern = namePattern.String()
+		}
+	}
+
+	settingDisallowEmits := &jsonschema.Schema{
+		If: &jsonschema.Schema{
+			Required: []string{"type"},
+		},
+		Then: &jsonschema.Schema{
+			Not: &jsonschema.Schema{
+				Required: []string{"emits"},
+			},
+		},
+	}
+	settingDisallowEmits.If.Properties = jsonschema.NewProperties()
+	settingDisallowEmits.If.Properties.Set("type", &jsonschema.Schema{Const: "setting"})
+	schema.AllOf = append(schema.AllOf, settingDisallowEmits)
+}
+
+func ptrUint64(v uint64) *uint64 {
+	return &v
 }
 
 // ValidateSchema validates YAML data against the plugin manifest JSON Schema.

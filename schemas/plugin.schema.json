@@ -1,6 +1,27 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://holomush.dev/schemas/plugin.schema.json",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "setting"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "emits"
+          ]
+        }
+      }
+    }
+  ],
   "properties": {
     "name": {
       "type": "string",
@@ -36,6 +57,15 @@
         "type": "string"
       },
       "type": "array"
+    },
+    "emits": {
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[a-z](-?[a-z0-9])*$"
+      },
+      "type": "array",
+      "uniqueItems": true
     },
     "policies": {
       "items": {

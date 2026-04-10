@@ -8,6 +8,7 @@ package plugins
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/samber/oops"
@@ -67,19 +68,20 @@ type ManifestPolicy struct {
 
 // Manifest represents a plugin.yaml file.
 type Manifest struct {
-	Name          string            `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=64,pattern=^[a-z](-?[a-z0-9])*$"`
-	Version       string            `yaml:"version" json:"version" jsonschema:"required,minLength=1"`
-	Type          Type              `yaml:"type" json:"type" jsonschema:"required,enum=lua,enum=binary,enum=setting"`
-	Engine        string            `yaml:"engine,omitempty" json:"engine,omitempty" jsonschema:"description=HoloMUSH version constraint (e.g. >= 2.0.0)"`
-	Dependencies  map[string]string `yaml:"dependencies,omitempty" json:"dependencies,omitempty" jsonschema:"description=Plugin dependencies with version constraints"`
-	Events        []string          `yaml:"events,omitempty" json:"events,omitempty"`
-	Policies      []ManifestPolicy  `yaml:"policies,omitempty" json:"policies,omitempty"`
-	Commands      []CommandSpec     `yaml:"commands,omitempty" json:"commands,omitempty" jsonschema:"description=Commands provided by this plugin"`
-	Priority      *LoadPriority     `yaml:"priority,omitempty" json:"priority,omitempty" jsonschema:"description=Load priority (lower loads first)"`
+	Name           string            `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=64,pattern=^[a-z](-?[a-z0-9])*$"`
+	Version        string            `yaml:"version" json:"version" jsonschema:"required,minLength=1"`
+	Type           Type              `yaml:"type" json:"type" jsonschema:"required,enum=lua,enum=binary,enum=setting"`
+	Engine         string            `yaml:"engine,omitempty" json:"engine,omitempty" jsonschema:"description=HoloMUSH version constraint (e.g. >= 2.0.0)"`
+	Dependencies   map[string]string `yaml:"dependencies,omitempty" json:"dependencies,omitempty" jsonschema:"description=Plugin dependencies with version constraints"`
+	Events         []string          `yaml:"events,omitempty" json:"events,omitempty"`
+	Emits          []string          `yaml:"emits,omitempty" json:"emits,omitempty"`
+	Policies       []ManifestPolicy  `yaml:"policies,omitempty" json:"policies,omitempty"`
+	Commands       []CommandSpec     `yaml:"commands,omitempty" json:"commands,omitempty" jsonschema:"description=Commands provided by this plugin"`
+	Priority       *LoadPriority     `yaml:"priority,omitempty" json:"priority,omitempty" jsonschema:"description=Load priority (lower loads first)"`
 	SessionStreams bool              `yaml:"session_streams,omitempty" json:"session_streams,omitempty" jsonschema:"description=Plugin contributes streams to session subscriptions via QuerySessionStreams"`
-	LuaPlugin     *LuaConfig        `yaml:"lua-plugin,omitempty" json:"lua-plugin,omitempty"`
-	BinaryPlugin  *BinaryConfig     `yaml:"binary-plugin,omitempty" json:"binary-plugin,omitempty"`
-	Setting       *SettingConfig    `yaml:"setting,omitempty" json:"setting,omitempty"`
+	LuaPlugin      *LuaConfig        `yaml:"lua-plugin,omitempty" json:"lua-plugin,omitempty"`
+	BinaryPlugin   *BinaryConfig     `yaml:"binary-plugin,omitempty" json:"binary-plugin,omitempty"`
+	Setting        *SettingConfig    `yaml:"setting,omitempty" json:"setting,omitempty"`
 
 	// Deprecated: capabilities field is no longer supported. Use policies instead.
 	// This field exists only to detect old-format manifests and produce a clear error.
@@ -93,6 +95,8 @@ type Manifest struct {
 	// ABAC trust boundary fields
 	ResourceTypes []string     `yaml:"resource_types,omitempty" json:"resource_types,omitempty"`
 	Trust         *TrustConfig `yaml:"trust,omitempty" json:"trust,omitempty"`
+
+	emitsDeclared bool `yaml:"-" json:"-" jsonschema:"-"`
 }
 
 // EffectivePriority returns the manifest's load priority, applying
@@ -182,6 +186,29 @@ func (c *CommandSpec) Validate() error {
 	return nil
 }
 
+func validateEmits(names []string) ([]string, error) {
+	seen := make(map[string]bool, len(names))
+	validated := make([]string, 0, len(names))
+	for i, raw := range names {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			return nil, oops.In("manifest").With("emits_index", i).New("emits entries must not be empty")
+		}
+		if strings.Contains(name, ":") {
+			return nil, oops.In("manifest").With("emits", name).New("emits entries must be bare namespaces without ':'")
+		}
+		if !namePattern.MatchString(name) {
+			return nil, oops.In("manifest").With("emits", name).New("emits entries must match plugin naming pattern")
+		}
+		if seen[name] {
+			return nil, oops.In("manifest").With("emits", name).New("duplicate emits namespace")
+		}
+		seen[name] = true
+		validated = append(validated, name)
+	}
+	return validated, nil
+}
+
 // maxNameLength is the maximum allowed length for plugin names.
 const maxNameLength = 64
 
@@ -196,9 +223,21 @@ func ParseManifest(data []byte) (*Manifest, error) {
 		return nil, oops.In("manifest").New("manifest data is empty")
 	}
 
-	var m Manifest
-	if err := yaml.Unmarshal(data, &m); err != nil {
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
 		return nil, oops.In("manifest").Hint("invalid YAML").Wrap(err)
+	}
+
+	var m Manifest
+	if err := root.Decode(&m); err != nil {
+		return nil, oops.In("manifest").Hint("invalid YAML").Wrap(err)
+	}
+	if emitsNode := manifestKeyNode(&root, "emits"); emitsNode != nil {
+		m.emitsDeclared = true
+		if emitsNode.Kind != yaml.SequenceNode {
+			return nil, oops.In("manifest").With("name", m.Name).
+				New("emits must be declared as a YAML sequence")
+		}
 	}
 
 	if err := m.Validate(); err != nil {
@@ -289,7 +328,17 @@ func (m *Manifest) Validate() error {
 		return oops.In("manifest").With("name", m.Name).With("type", m.Type).
 			New("session_streams is only valid for lua and binary plugin types")
 	}
-
+	if (m.emitsDeclared || len(m.Emits) > 0) && m.Type != TypeLua && m.Type != TypeBinary {
+		return oops.In("manifest").With("name", m.Name).With("type", m.Type).
+			New("emits is only valid for lua and binary plugin types")
+	}
+	if len(m.Emits) > 0 {
+		validated, err := validateEmits(m.Emits)
+		if err != nil {
+			return err
+		}
+		m.Emits = validated
+	}
 	// Validate load priority: priorities below -999 are reserved (historically for core plugins).
 	if m.Priority != nil && int(*m.Priority) < -999 {
 		return oops.In("manifest").With("name", m.Name).
@@ -365,5 +414,21 @@ func (m *Manifest) Validate() error {
 		}
 	}
 
+	return nil
+}
+
+func manifestKeyNode(root *yaml.Node, key string) *yaml.Node {
+	if root == nil || len(root.Content) == 0 {
+		return nil
+	}
+	mapping := root.Content[0]
+	if mapping.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			return mapping.Content[i+1]
+		}
+	}
 	return nil
 }

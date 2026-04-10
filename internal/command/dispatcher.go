@@ -31,6 +31,7 @@ var tracer = otel.Tracer("holomush/command")
 // PluginManager implements this interface.
 type PluginCommandDeliverer interface {
 	DeliverCommand(ctx context.Context, pluginName string, cmd pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error)
+	EmitPluginEvent(ctx context.Context, pluginName string, event pluginsdk.EmitEvent) error
 }
 
 // Dispatcher handles command parsing, capability checks, and execution.
@@ -364,26 +365,18 @@ func (d *Dispatcher) dispatchToPlugin(ctx context.Context, entry *CommandEntry, 
 			With("status", resp.Status).Errorf("plugin command returned unknown status")
 	}
 
-	// Process response events: emit each to the event store.
-	if exec.Services() != nil && exec.Services().Events() != nil {
-		for _, evt := range resp.Events {
-			emitEvent := core.Event{
-				ID:        core.NewULID(),
-				Stream:    evt.Stream,
-				Type:      core.EventType(evt.Type),
-				Timestamp: time.Now(),
-				Actor: core.Actor{
-					Kind: core.ActorCharacter,
-					ID:   exec.CharacterID().String(),
-				},
-				Payload: []byte(evt.Payload),
-			}
-			if appendErr := exec.Services().Events().Append(ctx, emitEvent); appendErr != nil {
-				return oops.In("dispatcher").
-					With("command", entry.Name).
-					With("stream", evt.Stream).
-					Wrap(appendErr)
-			}
+	// Process response events through the shared plugin emitter so manifest
+	// validation and host-owned stamping stay consistent with subscriber flow.
+	emitCtx := core.WithActor(ctx, core.Actor{
+		Kind: core.ActorCharacter,
+		ID:   exec.CharacterID().String(),
+	})
+	for _, evt := range resp.Events {
+		if emitErr := d.pluginDeliverer.EmitPluginEvent(emitCtx, entry.PluginName(), evt); emitErr != nil {
+			return oops.In("dispatcher").
+				With("command", entry.Name).
+				With("stream", evt.Stream).
+				Wrap(emitErr)
 		}
 	}
 

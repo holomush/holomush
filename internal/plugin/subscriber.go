@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/holomush/holomush/internal/core"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
@@ -133,11 +134,13 @@ func (s *Subscriber) deliverAsync(ctx context.Context, pluginName string, event 
 			return
 		}
 
+		emitCtx := core.WithActor(tctx, actorFromIncomingEvent(event))
+
 		// Emit response events. Event type validation is the responsibility
 		// of the VerbRegistry, not the subscriber. The subscriber passes
 		// through any event type the plugin emits.
 		for _, emit := range emits {
-			if err := s.emitter.EmitPluginEvent(tctx, pluginName, emit); err != nil {
+			if err := s.emitter.EmitPluginEvent(emitCtx, pluginName, emit); err != nil {
 				slog.ErrorContext(tctx, "failed to emit plugin event",
 					"plugin", pluginName,
 					"stream", emit.Stream,
@@ -145,4 +148,19 @@ func (s *Subscriber) deliverAsync(ctx context.Context, pluginName string, event 
 			}
 		}
 	}()
+}
+
+func actorFromIncomingEvent(event pluginsdk.Event) core.Actor {
+	actor := core.Actor{ID: event.ActorID}
+	switch event.ActorKind {
+	case pluginsdk.ActorCharacter:
+		actor.Kind = core.ActorCharacter
+	case pluginsdk.ActorSystem:
+		actor.Kind = core.ActorSystem
+	case pluginsdk.ActorPlugin:
+		actor.Kind = core.ActorPlugin
+	default:
+		actor.Kind = core.ActorKind(event.ActorKind)
+	}
+	return actor
 }

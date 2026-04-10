@@ -11,6 +11,11 @@ import (
 
 const brokerPrefix = "broker:"
 
+// PluginHostServiceName is the reserved broker service name used by binary
+// plugins to call back into the host for event emission and other host-owned
+// operations.
+const PluginHostServiceName = "holomush.plugin.v1.PluginHostService"
+
 // ParseBrokerServices parses the required_services map from InitRequest
 // into a map of service name to broker ID. Each value must have the format
 // "broker:<uint32>".
@@ -28,4 +33,18 @@ func ParseBrokerServices(services map[string]string) (map[string]uint32, error) 
 		result[name] = uint32(id)
 	}
 	return result, nil
+}
+
+// BrokerServiceID resolves a single broker-backed service ID from the
+// required_services init map.
+func BrokerServiceID(services map[string]string, serviceName string) (uint32, error) {
+	parsed, err := ParseBrokerServices(services)
+	if err != nil {
+		return 0, err
+	}
+	id, ok := parsed[serviceName]
+	if !ok {
+		return 0, fmt.Errorf("service %q not found in required services", serviceName)
+	}
+	return id, nil
 }

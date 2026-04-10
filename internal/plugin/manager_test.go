@@ -557,6 +557,7 @@ func (h *mockBinaryHost) Close(_ context.Context) error { return h.closeErr }
 func (h *mockBinaryHost) PluginConn(_ string) (grpc.ClientConnInterface, error) {
 	return h.conn, h.connErr
 }
+
 func (h *mockBinaryHost) QuerySessionStreams(_ context.Context, _ string, _ plugins.SessionStreamsRequest) ([]string, error) {
 	return nil, nil
 }
@@ -1241,9 +1242,9 @@ func newTestManager(t *testing.T) *plugins.Manager {
 func loadPlugin(t *testing.T, m *plugins.Manager, name string, plugType plugins.Type, sessionStreams bool) {
 	t.Helper()
 	manifest := &plugins.Manifest{
-		Name:          name,
-		Version:       "1.0.0",
-		Type:          plugType,
+		Name:           name,
+		Version:        "1.0.0",
+		Type:           plugType,
 		SessionStreams: sessionStreams,
 	}
 	if plugType == plugins.TypeLua {

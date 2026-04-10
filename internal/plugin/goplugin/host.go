@@ -24,6 +24,7 @@ import (
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
 
+	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -48,6 +49,7 @@ var (
 	_ plugins.Host                      = (*Host)(nil)
 	_ plugins.ServiceConnProvider       = (*Host)(nil)
 	_ plugins.AttributeResolverProvider = (*Host)(nil)
+	_ plugins.EventEmitterConfigurer    = (*Host)(nil)
 )
 
 // PluginClient wraps go-plugin client for testability.
@@ -111,7 +113,9 @@ type Host struct {
 	registry          *plugins.ServiceRegistry
 	ca                *tlscerts.CA
 	gameID            string
+	hostBrokerCert    *tlscerts.ServerCert
 	hostClientCert    *tlscerts.ClientCert
+	eventEmitter      plugins.PluginIntentEmitter
 	plugins           map[string]*loadedPlugin
 	mu                sync.RWMutex
 	closed            bool
@@ -146,13 +150,27 @@ func NewHostWithFactory(factory ClientFactory, opts ...HostOption) *Host {
 		opt(h)
 	}
 	if h.ca != nil {
+		brokerCert, brokerCertErr := tlscerts.GenerateServerCert(h.ca, h.gameID, "plugin-host")
+		if brokerCertErr != nil {
+			panic("goplugin: failed to generate host broker cert: " + brokerCertErr.Error())
+		}
+		h.hostBrokerCert = brokerCert
+
 		cert, certErr := tlscerts.GenerateClientCert(h.ca, "plugin-host")
 		if certErr != nil {
-			panic("goplugin: failed to generate host client cert: " + certErr.Error())
+			panic("goplugin: failed to generate host TLS cert: " + certErr.Error())
 		}
 		h.hostClientCert = cert
 	}
 	return h
+}
+
+// SetEventEmitter injects the shared plugin intent emitter used by the host
+// callback service for binary plugins.
+func (h *Host) SetEventEmitter(emitter plugins.PluginIntentEmitter) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.eventEmitter = emitter
 }
 
 // Load initializes a plugin from its manifest.
@@ -251,7 +269,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 			"HOLOMUSH_CA_CERT=" + filepath.Join(tmpCertDir, "root-ca.crt"),
 		}
 
-		hostTLSConfig = buildHostTLSConfig(h.ca, h.hostClientCert, manifest.Name)
+		hostTLSConfig = buildHostTLSConfig(h.ca, h.hostBrokerCert, h.hostClientCert, manifest.Name)
 	}
 
 	// Create a per-plugin GRPCPlugin instance to capture the GRPCBroker
@@ -317,8 +335,14 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 	// Start broker proxies for required services. Each required service gets
 	// a broker ID that the plugin can use to dial back to the host.
 	requiredServices := make(map[string]string)
+	var nextBrokerID uint32 = 1
+	if grpcPlugin.broker != nil {
+		hostBrokerID := nextBrokerID
+		nextBrokerID++
+		go grpcPlugin.broker.AcceptAndServe(hostBrokerID, newPluginHostServiceServer(h, manifest.Name))
+		requiredServices[pluginsdk.PluginHostServiceName] = fmt.Sprintf("broker:%d", hostBrokerID)
+	}
 	if len(manifest.Requires) > 0 && grpcPlugin.broker != nil && h.registry != nil {
-		var nextBrokerID uint32 = 1
 		for _, svcName := range manifest.Requires {
 			svc, resolveErr := h.registry.Resolve(svcName)
 			if resolveErr != nil {
@@ -348,7 +372,7 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 	}
 
 	// Call Init on plugins that need service injection (storage or requires).
-	if len(manifest.Requires) > 0 || manifest.Storage == plugins.StoragePostgres {
+	if len(manifest.Requires) > 0 || len(manifest.Provides) > 0 || manifest.Storage == plugins.StoragePostgres {
 		initReq := &pluginv1.InitRequest{
 			Config: &pluginv1.ServiceConfig{
 				RequiredServices: requiredServices,
@@ -452,6 +476,9 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 
 	callCtx, cancel := context.WithTimeout(ctx, DefaultEventTimeout)
 	defer cancel()
+	if actor, ok := core.ActorFromContext(ctx); ok {
+		callCtx = pluginsdk.WithOutgoingActorMetadata(callCtx, coreActorKindToSDK(actor.Kind), actor.ID)
+	}
 
 	resp, err := p.plugin.HandleEvent(callCtx, &pluginv1.HandleEventRequest{Event: protoEvent})
 	if err != nil {
@@ -501,6 +528,9 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 
 	callCtx, cancel := context.WithTimeout(ctx, DefaultEventTimeout)
 	defer cancel()
+	if actor, ok := core.ActorFromContext(ctx); ok {
+		callCtx = pluginsdk.WithOutgoingActorMetadata(callCtx, coreActorKindToSDK(actor.Kind), actor.ID)
+	}
 
 	resp, err := p.plugin.HandleCommand(callCtx, protoReq)
 	if err != nil {
@@ -543,6 +573,17 @@ func protoCommandResponseToSDK(r *pluginv1.CommandResponse) *pluginsdk.CommandRe
 		Output:     r.GetOutput(),
 		Events:     events,
 		AuditHints: auditHints,
+	}
+}
+
+func coreActorKindToSDK(kind core.ActorKind) pluginsdk.ActorKind {
+	switch kind {
+	case core.ActorCharacter:
+		return pluginsdk.ActorCharacter
+	case core.ActorSystem:
+		return pluginsdk.ActorSystem
+	default:
+		return pluginsdk.ActorPlugin
 	}
 }
 
@@ -690,19 +731,26 @@ func (h *Host) Close(_ context.Context) error {
 // buildHostTLSConfig creates a TLS config for the host to connect to a plugin
 // as a gRPC client with mTLS. The host presents its client cert and verifies
 // the plugin's server cert against the CA.
-func buildHostTLSConfig(ca *tlscerts.CA, clientCert *tlscerts.ClientCert, pluginName string) *cryptotls.Config {
+func buildHostTLSConfig(ca *tlscerts.CA, brokerCert *tlscerts.ServerCert, clientCert *tlscerts.ClientCert, pluginName string) *cryptotls.Config {
 	caPool := x509.NewCertPool()
 	caPool.AddCert(ca.Certificate)
 
+	serverTLSCert := cryptotls.Certificate{
+		Certificate: [][]byte{brokerCert.Certificate.Raw},
+		PrivateKey:  brokerCert.PrivateKey,
+	}
 	clientTLSCert := cryptotls.Certificate{
 		Certificate: [][]byte{clientCert.Certificate.Raw},
 		PrivateKey:  clientCert.PrivateKey,
 	}
 
 	return &cryptotls.Config{
-		Certificates: []cryptotls.Certificate{clientTLSCert},
-		RootCAs:      caPool,
-		ServerName:   "holomush-plugin-" + pluginName,
-		MinVersion:   cryptotls.VersionTLS13,
+		Certificates: []cryptotls.Certificate{serverTLSCert},
+		GetClientCertificate: func(*cryptotls.CertificateRequestInfo) (*cryptotls.Certificate, error) {
+			return &clientTLSCert, nil
+		},
+		RootCAs:    caPool,
+		ServerName: "holomush-plugin-" + pluginName,
+		MinVersion: cryptotls.VersionTLS13,
 	}
 }

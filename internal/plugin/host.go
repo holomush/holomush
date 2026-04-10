@@ -75,3 +75,15 @@ type AttributeResolverProvider interface {
 	// Returns nil if the plugin is not loaded or doesn't support attribute resolution.
 	AttributeResolverClient(pluginName string) pluginv1.AttributeResolverServiceClient
 }
+
+// PluginIntentEmitter routes plugin-owned emit intents through the shared host
+// event emission path.
+type PluginIntentEmitter interface {
+	Emit(ctx context.Context, pluginName string, intent pluginsdk.EmitIntent) error
+}
+
+// EventEmitterConfigurer is an optional interface for hosts that need the
+// shared plugin event emitter injected after construction.
+type EventEmitterConfigurer interface {
+	SetEventEmitter(emitter PluginIntentEmitter)
+}

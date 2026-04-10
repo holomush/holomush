@@ -72,3 +72,12 @@ type EmitEvent struct {
 	Type    EventType
 	Payload string // JSON string
 }
+
+// EmitIntent is a host-side request to emit an event on behalf of a plugin.
+// Hosts use this to validate stream ownership and stamp system-owned fields
+// before persisting the event.
+type EmitIntent struct {
+	Stream  string
+	Type    EventType
+	Payload string // JSON string
+}

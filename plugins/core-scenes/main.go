@@ -63,6 +63,14 @@ func (p *scenePlugin) RegisterAttributeResolver(registrar grpc.ServiceRegistrar)
 	pluginv1.RegisterAttributeResolverServiceServer(registrar, p.resolver)
 }
 
+// SetEventSink forwards the SDK-injected event sink to the scene service so
+// service-owned RPC handlers can emit host-owned core events.
+func (p *scenePlugin) SetEventSink(sink pluginsdk.EventSink) {
+	if p.service != nil {
+		p.service.SetEventSink(sink)
+	}
+}
+
 // Init is called by the host after the gRPC connection is established and
 // the Postgres schema/role have been provisioned. It opens the connection
 // pool, runs the embedded migrations, and wires the resulting store into
