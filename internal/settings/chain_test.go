@@ -229,6 +229,44 @@ func TestChainWithNilCharacterScopeFallsToPlayer(t *testing.T) {
 	assert.Equal(t, 7, v)
 }
 
+func TestChainBoolNReturnsFalseWhenNoScopeHasKey(t *testing.T) {
+	ctx := context.Background()
+	chain := settings.NewChain(newStub(), newStub())
+	_, ok := chain.BoolN(ctx, "auth.auto_login")
+	assert.False(t, ok)
+}
+
+func TestChainDurationNReturnsFalseWhenNoScopeHasKey(t *testing.T) {
+	ctx := context.Background()
+	chain := settings.NewChain(newStub(), newStub())
+	_, ok := chain.DurationN(ctx, "core.session_timeout")
+	assert.False(t, ok)
+}
+
+func TestChainDurationNFallsToLaterScope(t *testing.T) {
+	ctx := context.Background()
+	player := newStub() // no duration set
+	game := newStub()
+	game.durations["core.session_timeout"] = 60 * time.Second
+
+	chain := settings.NewChain(player, game)
+	v, ok := chain.DurationN(ctx, "core.session_timeout")
+	assert.True(t, ok)
+	assert.Equal(t, 60*time.Second, v)
+}
+
+func TestChainBoolNFallsToLaterScope(t *testing.T) {
+	ctx := context.Background()
+	player := newStub() // no bool set
+	game := newStub()
+	game.bools["auth.auto_login"] = true
+
+	chain := settings.NewChain(player, game)
+	v, ok := chain.BoolN(ctx, "auth.auto_login")
+	assert.True(t, ok)
+	assert.True(t, v)
+}
+
 func TestChainTypeMixStringFromCharIntFromGame(t *testing.T) {
 	ctx := context.Background()
 

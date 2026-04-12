@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -167,6 +168,134 @@ func TestPlayerSettingsSetStringRejectsInvalidNamespace(t *testing.T) {
 	err := store.SetString(ctx, pid, "bogus.key", "val")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown namespace")
+}
+
+func TestPlayerSettingsForReturnsEmptyOnJSONUnmarshalFailure(t *testing.T) {
+	ctx := context.Background()
+	reader := newMockPlayerPrefsReader()
+	pid := ulid.Make()
+	reader.prefs[pid] = json.RawMessage(`not valid json`)
+	store := settings.NewPlayerSettingsStore(reader)
+
+	s := store.For(ctx, pid)
+	_, ok := s.StringN(ctx, "scenes.focus.mode")
+	assert.False(t, ok)
+}
+
+func TestPlayerSettingsSetStringReturnsStoreWriteError(t *testing.T) {
+	ctx := context.Background()
+	reader := newMockPlayerPrefsReader()
+	store := settings.NewPlayerSettingsStore(reader)
+	pid := ulid.Make()
+
+	// First set succeeds (no error configured).
+	err := store.SetString(ctx, pid, "scenes.focus.mode", "bounded")
+	assert.NoError(t, err)
+
+	// Now configure a write error.
+	reader.err = errors.New("disk full")
+	err = store.SetString(ctx, pid, "scenes.focus.mode", "bounded")
+	assert.Error(t, err)
+}
+
+func TestPlayerSettingsStringNFallsBackToRawForNonStringJSON(t *testing.T) {
+	ctx := context.Background()
+	reader := newMockPlayerPrefsReader()
+	pid := ulid.Make()
+	// Store a raw numeric value — json.Unmarshal into string will fail,
+	// triggering the fallback to string(raw).
+	reader.prefs[pid] = json.RawMessage(`{"count":42}`)
+	store := settings.NewPlayerSettingsStore(reader)
+
+	s := store.For(ctx, pid)
+	v, ok := s.StringN(ctx, "count")
+	assert.True(t, ok)
+	assert.Equal(t, "42", v)
+}
+
+func TestPlayerSettingsIntNReturnsFalseForMissingKey(t *testing.T) {
+	ctx := context.Background()
+	reader := newMockPlayerPrefsReader()
+	pid := ulid.Make()
+	reader.prefs[pid] = json.RawMessage(`{"other.key":"hello"}`)
+	store := settings.NewPlayerSettingsStore(reader)
+
+	s := store.For(ctx, pid)
+	_, ok := s.IntN(ctx, "scenes.focus.count")
+	assert.False(t, ok)
+}
+
+func TestPlayerSettingsIntNReturnsFalseForUnparseableString(t *testing.T) {
+	ctx := context.Background()
+	reader := newMockPlayerPrefsReader()
+	pid := ulid.Make()
+	reader.prefs[pid] = json.RawMessage(`{"scenes.focus.count":"not-a-number"}`)
+	store := settings.NewPlayerSettingsStore(reader)
+
+	s := store.For(ctx, pid)
+	_, ok := s.IntN(ctx, "scenes.focus.count")
+	assert.False(t, ok)
+}
+
+func TestPlayerSettingsBoolNReturnsFalseForMissingKey(t *testing.T) {
+	ctx := context.Background()
+	reader := newMockPlayerPrefsReader()
+	pid := ulid.Make()
+	reader.prefs[pid] = json.RawMessage(`{"other.key":"hello"}`)
+	store := settings.NewPlayerSettingsStore(reader)
+
+	s := store.For(ctx, pid)
+	_, ok := s.BoolN(ctx, "auth.auto_login")
+	assert.False(t, ok)
+}
+
+func TestPlayerSettingsBoolNReturnsFalseForUnparseableString(t *testing.T) {
+	ctx := context.Background()
+	reader := newMockPlayerPrefsReader()
+	pid := ulid.Make()
+	reader.prefs[pid] = json.RawMessage(`{"auth.auto_login":"maybe"}`)
+	store := settings.NewPlayerSettingsStore(reader)
+
+	s := store.For(ctx, pid)
+	_, ok := s.BoolN(ctx, "auth.auto_login")
+	assert.False(t, ok)
+}
+
+func TestPlayerSettingsDurationNParsesStoredValue(t *testing.T) {
+	ctx := context.Background()
+	reader := newMockPlayerPrefsReader()
+	pid := ulid.Make()
+	reader.prefs[pid] = json.RawMessage(`{"core.session_timeout":"30s"}`)
+	store := settings.NewPlayerSettingsStore(reader)
+
+	s := store.For(ctx, pid)
+	v, ok := s.DurationN(ctx, "core.session_timeout")
+	assert.True(t, ok)
+	assert.Equal(t, 30*time.Second, v)
+}
+
+func TestPlayerSettingsDurationNReturnsFalseForMissingKey(t *testing.T) {
+	ctx := context.Background()
+	reader := newMockPlayerPrefsReader()
+	pid := ulid.Make()
+	reader.prefs[pid] = json.RawMessage(`{"other.key":"hello"}`)
+	store := settings.NewPlayerSettingsStore(reader)
+
+	s := store.For(ctx, pid)
+	_, ok := s.DurationN(ctx, "core.session_timeout")
+	assert.False(t, ok)
+}
+
+func TestPlayerSettingsDurationNReturnsFalseForInvalidDuration(t *testing.T) {
+	ctx := context.Background()
+	reader := newMockPlayerPrefsReader()
+	pid := ulid.Make()
+	reader.prefs[pid] = json.RawMessage(`{"core.session_timeout":"not-a-duration"}`)
+	store := settings.NewPlayerSettingsStore(reader)
+
+	s := store.For(ctx, pid)
+	_, ok := s.DurationN(ctx, "core.session_timeout")
+	assert.False(t, ok)
 }
 
 func TestPlayerSettingsStoreImplementsInterface(_ *testing.T) {

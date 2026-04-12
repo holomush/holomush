@@ -184,6 +184,105 @@ func TestGameSettingsSetStringReturnsStoreError(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestGameSettingsBoolNReturnsFalseWhenNotFound(t *testing.T) {
+	ctx := context.Background()
+	gs := settings.NewGameSettings(newMockSystemInfoStore())
+
+	_, ok := gs.BoolN(ctx, "core.maintenance_mode")
+	assert.False(t, ok)
+}
+
+func TestGameSettingsDurationNReturnsFalseWhenNotFound(t *testing.T) {
+	ctx := context.Background()
+	gs := settings.NewGameSettings(newMockSystemInfoStore())
+
+	_, ok := gs.DurationN(ctx, "core.session_timeout")
+	assert.False(t, ok)
+}
+
+// --- SystemInfoAdapter tests ---
+
+func TestSystemInfoAdapterMapsNotFoundToSettingsErrNotFound(t *testing.T) {
+	ctx := context.Background()
+	storeErr := errors.New("store: not found")
+	adapter := &settings.SystemInfoAdapter{
+		Store:       &foreignNotFoundStore{sentinel: storeErr},
+		NotFoundErr: storeErr,
+	}
+
+	_, err := adapter.GetSystemInfo(ctx, "anything")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, settings.ErrNotFound)
+}
+
+func TestSystemInfoAdapterPassesThroughNonNotFoundErrors(t *testing.T) {
+	ctx := context.Background()
+	storeErr := errors.New("store: not found")
+	otherErr := errors.New("connection refused")
+	adapter := &settings.SystemInfoAdapter{
+		Store:       &foreignNotFoundStore{sentinel: otherErr},
+		NotFoundErr: storeErr,
+	}
+
+	_, err := adapter.GetSystemInfo(ctx, "anything")
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, settings.ErrNotFound)
+}
+
+func TestSystemInfoAdapterReturnsValueOnSuccess(t *testing.T) {
+	ctx := context.Background()
+	inner := newMockSystemInfoStore()
+	inner.data["core.name"] = "TestMUSH"
+	adapter := &settings.SystemInfoAdapter{
+		Store:       inner,
+		NotFoundErr: settings.ErrNotFound,
+	}
+
+	v, err := adapter.GetSystemInfo(ctx, "core.name")
+	require.NoError(t, err)
+	assert.Equal(t, "TestMUSH", v)
+}
+
+func TestSystemInfoAdapterSetSystemInfoDelegatesToStore(t *testing.T) {
+	ctx := context.Background()
+	inner := newMockSystemInfoStore()
+	adapter := &settings.SystemInfoAdapter{
+		Store:       inner,
+		NotFoundErr: settings.ErrNotFound,
+	}
+
+	err := adapter.SetSystemInfo(ctx, "core.name", "TestMUSH")
+	require.NoError(t, err)
+	assert.Equal(t, "TestMUSH", inner.data["core.name"])
+}
+
+func TestSystemInfoAdapterSetSystemInfoReturnsStoreError(t *testing.T) {
+	ctx := context.Background()
+	inner := newMockSystemInfoStore()
+	inner.err = errors.New("write failed")
+	adapter := &settings.SystemInfoAdapter{
+		Store:       inner,
+		NotFoundErr: settings.ErrNotFound,
+	}
+
+	err := adapter.SetSystemInfo(ctx, "core.name", "TestMUSH")
+	assert.Error(t, err)
+}
+
+// foreignNotFoundStore is a SystemInfoStore that returns its sentinel error
+// for all reads, simulating a store with its own not-found error type.
+type foreignNotFoundStore struct {
+	sentinel error
+}
+
+func (f *foreignNotFoundStore) GetSystemInfo(context.Context, string) (string, error) {
+	return "", f.sentinel
+}
+
+func (f *foreignNotFoundStore) SetSystemInfo(context.Context, string, string) error {
+	return nil
+}
+
 func TestGameSettingsImplementsGameSettingsInterface(_ *testing.T) {
 	var _ settings.GameSettings = settings.NewGameSettings(newMockSystemInfoStore()) //nolint:staticcheck // intentional interface check
 }
