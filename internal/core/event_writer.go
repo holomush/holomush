@@ -151,6 +151,23 @@ func (w *EventWriter) SubscribeSession(ctx context.Context) (Subscription, error
 	return sub, nil
 }
 
+// Subscribe delegates the legacy per-stream subscription to the underlying
+// store. This is a transitional pass-through: the server's Subscribe handler
+// still uses the per-stream path via the legacySubscriber interface until B7
+// (Subscribe handler refactor) replaces it with SubscribeSession.
+//
+// TODO(B7): Remove this method when the Subscribe handler is rewritten to
+// use SubscribeSession exclusively.
+func (w *EventWriter) Subscribe(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error) {
+	type subscriber interface {
+		Subscribe(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error)
+	}
+	if s, ok := w.store.(subscriber); ok {
+		return s.Subscribe(ctx, stream)
+	}
+	return nil, nil, oops.Errorf("underlying store does not support legacy Subscribe")
+}
+
 // Compile-time interface check.
 var _ EventStore = (*EventWriter)(nil)
 
