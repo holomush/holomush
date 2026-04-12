@@ -634,6 +634,7 @@ func TestCapability_ValidateResourceTypeUnknown(t *testing.T) {
 	err := Capability{Action: "read", Resource: "spaceship"}.ValidateResourceType(known)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "spaceship")
+	errutil.AssertErrorCode(t, err, "INVALID_CAPABILITY")
 }
 
 func TestCoreResourceTypesReturnsCopy(t *testing.T) {

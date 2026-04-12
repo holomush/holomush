@@ -110,6 +110,9 @@ const (
 //
 // Thread safety: this map is initialized at package load time and never
 // modified afterward. Concurrent reads without writes are safe in Go.
+// CoreActions() returns a defensive copy for external mutation.
+// ValidateAction() accepts a separate "known" map parameter rather
+// than reading this global, keeping plugin-contributed types isolated.
 var validActions = map[string]bool{
 	"read": true, "write": true, "emit": true, "enter": true,
 	"use": true, "delete": true, "execute": true, "admin": true,
@@ -174,7 +177,7 @@ func (c Capability) ValidateResourceType(known map[string]bool) error {
 	return nil
 }
 
-// CoreResourceTypes returns a copy of the core resource type set.
+// CoreResourceTypes returns a defensive copy of the core resource type set.
 // Used by the plugin manager to build the full known-types map.
 func CoreResourceTypes() map[string]bool {
 	result := make(map[string]bool, len(validResourceTypes))
