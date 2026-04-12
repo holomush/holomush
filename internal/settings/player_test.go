@@ -60,7 +60,7 @@ func (m *mockPlayerPrefsReader) SetPlayerPreferenceKey(
 	return nil
 }
 
-func TestPlayerSettingsForReturnsNilWhenNoPreferences(t *testing.T) {
+func TestPlayerSettingsStringNReturnsFalseWhenNoPreferencesExist(t *testing.T) {
 	ctx := context.Background()
 	reader := newMockPlayerPrefsReader()
 	store := settings.NewPlayerSettingsStore(reader)
@@ -71,7 +71,7 @@ func TestPlayerSettingsForReturnsNilWhenNoPreferences(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestPlayerSettingsForReadsNestedDotKey(t *testing.T) {
+func TestPlayerSettingsStringNReturnsDotKeyedValue(t *testing.T) {
 	ctx := context.Background()
 	reader := newMockPlayerPrefsReader()
 	pid := ulid.Make()
@@ -85,7 +85,7 @@ func TestPlayerSettingsForReadsNestedDotKey(t *testing.T) {
 	assert.Equal(t, "7", v)
 }
 
-func TestPlayerSettingsIntNParsesStoredString(t *testing.T) {
+func TestPlayerSettingsIntNParsesStringValueAsInteger(t *testing.T) {
 	ctx := context.Background()
 	reader := newMockPlayerPrefsReader()
 	pid := ulid.Make()
@@ -98,7 +98,7 @@ func TestPlayerSettingsIntNParsesStoredString(t *testing.T) {
 	assert.Equal(t, 5, v)
 }
 
-func TestPlayerSettingsIntNHandlesNumericJSON(t *testing.T) {
+func TestPlayerSettingsIntNReturnsNativeJSONNumber(t *testing.T) {
 	ctx := context.Background()
 	reader := newMockPlayerPrefsReader()
 	pid := ulid.Make()
@@ -111,7 +111,7 @@ func TestPlayerSettingsIntNHandlesNumericJSON(t *testing.T) {
 	assert.Equal(t, 5, v)
 }
 
-func TestPlayerSettingsBoolNParsesStoredValue(t *testing.T) {
+func TestPlayerSettingsBoolNParsesStringTrueValue(t *testing.T) {
 	ctx := context.Background()
 	reader := newMockPlayerPrefsReader()
 	pid := ulid.Make()
@@ -124,7 +124,7 @@ func TestPlayerSettingsBoolNParsesStoredValue(t *testing.T) {
 	assert.True(t, v)
 }
 
-func TestPlayerSettingsBoolNHandsNativeBoolJSON(t *testing.T) {
+func TestPlayerSettingsBoolNReturnsNativeJSONBool(t *testing.T) {
 	ctx := context.Background()
 	reader := newMockPlayerPrefsReader()
 	pid := ulid.Make()
@@ -137,7 +137,7 @@ func TestPlayerSettingsBoolNHandsNativeBoolJSON(t *testing.T) {
 	assert.True(t, v)
 }
 
-func TestPlayerSettingsForReturnsFalseOnReadError(t *testing.T) {
+func TestPlayerSettingsStringNReturnsFalseOnDatabaseReadError(t *testing.T) {
 	ctx := context.Background()
 	reader := newMockPlayerPrefsReader()
 	reader.err = errors.New("db down")
@@ -149,7 +149,7 @@ func TestPlayerSettingsForReturnsFalseOnReadError(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestPlayerSettingsSetStringWritesKey(t *testing.T) {
+func TestPlayerSettingsSetStringPersistsValidKey(t *testing.T) {
 	ctx := context.Background()
 	reader := newMockPlayerPrefsReader()
 	store := settings.NewPlayerSettingsStore(reader)
@@ -170,7 +170,7 @@ func TestPlayerSettingsSetStringRejectsInvalidNamespace(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown namespace")
 }
 
-func TestPlayerSettingsForReturnsEmptyOnJSONUnmarshalFailure(t *testing.T) {
+func TestPlayerSettingsStringNReturnsFalseOnInvalidJSON(t *testing.T) {
 	ctx := context.Background()
 	reader := newMockPlayerPrefsReader()
 	pid := ulid.Make()
@@ -182,7 +182,7 @@ func TestPlayerSettingsForReturnsEmptyOnJSONUnmarshalFailure(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestPlayerSettingsSetStringReturnsStoreWriteError(t *testing.T) {
+func TestPlayerSettingsSetStringReturnsErrorOnWriteFailure(t *testing.T) {
 	ctx := context.Background()
 	reader := newMockPlayerPrefsReader()
 	store := settings.NewPlayerSettingsStore(reader)
@@ -198,17 +198,17 @@ func TestPlayerSettingsSetStringReturnsStoreWriteError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestPlayerSettingsStringNFallsBackToRawForNonStringJSON(t *testing.T) {
+func TestPlayerSettingsStringNReturnsRawJSONWhenValueIsNotString(t *testing.T) {
 	ctx := context.Background()
 	reader := newMockPlayerPrefsReader()
 	pid := ulid.Make()
 	// Store a raw numeric value — json.Unmarshal into string will fail,
 	// triggering the fallback to string(raw).
-	reader.prefs[pid] = json.RawMessage(`{"count":42}`)
+	reader.prefs[pid] = json.RawMessage(`{"core.count":42}`)
 	store := settings.NewPlayerSettingsStore(reader)
 
 	s := store.For(ctx, pid)
-	v, ok := s.StringN(ctx, "count")
+	v, ok := s.StringN(ctx, "core.count")
 	assert.True(t, ok)
 	assert.Equal(t, "42", v)
 }
@@ -261,7 +261,7 @@ func TestPlayerSettingsBoolNReturnsFalseForUnparseableString(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestPlayerSettingsDurationNParsesStoredValue(t *testing.T) {
+func TestPlayerSettingsDurationNParsesValidDurationString(t *testing.T) {
 	ctx := context.Background()
 	reader := newMockPlayerPrefsReader()
 	pid := ulid.Make()
@@ -298,6 +298,30 @@ func TestPlayerSettingsDurationNReturnsFalseForInvalidDuration(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestPlayerSettingsStoreImplementsInterface(_ *testing.T) {
-	var _ settings.PlayerSettingsStore = settings.NewPlayerSettingsStore(newMockPlayerPrefsReader()) //nolint:staticcheck // intentional interface check
+func TestPlayerSettingsStringNReturnsFalseForUnknownNamespace(t *testing.T) {
+	ctx := context.Background()
+	reader := newMockPlayerPrefsReader()
+	pid := ulid.Make()
+	reader.prefs[pid] = json.RawMessage(`{"bogus.key":"value"}`)
+	store := settings.NewPlayerSettingsStore(reader)
+
+	s := store.For(ctx, pid)
+	_, ok := s.StringN(ctx, "bogus.key")
+	assert.False(t, ok)
+}
+
+func TestPlayerSettingsIntNReturnsFalseForFractionalJSONNumber(t *testing.T) {
+	ctx := context.Background()
+	reader := newMockPlayerPrefsReader()
+	pid := ulid.Make()
+	reader.prefs[pid] = json.RawMessage(`{"scenes.focus.count":3.7}`)
+	store := settings.NewPlayerSettingsStore(reader)
+
+	s := store.For(ctx, pid)
+	_, ok := s.IntN(ctx, "scenes.focus.count")
+	assert.False(t, ok)
+}
+
+func TestPlayerSettingsStoreConcreteTypeSatisfiesInterface(_ *testing.T) {
+	var _ settings.PlayerSettingsStore = settings.NewPlayerSettingsStore(newMockPlayerPrefsReader())
 }

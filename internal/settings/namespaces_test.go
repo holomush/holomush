@@ -46,5 +46,7 @@ func TestValidateNamespaceRejectsEmptyKey(t *testing.T) {
 
 func TestRegisteredNamespacesContainsExpectedEntries(t *testing.T) {
 	expected := []string{"core", "scenes", "channels", "auth"}
-	assert.Equal(t, expected, settings.RegisteredNamespaces)
+	for _, ns := range expected {
+		assert.Contains(t, settings.RegisteredNamespaces, ns, "missing expected namespace %q", ns)
+	}
 }

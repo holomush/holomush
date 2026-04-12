@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"math"
 	"strconv"
 	"time"
 
@@ -22,21 +23,21 @@ type PlayerPrefsReader interface {
 	SetPlayerPreferenceKey(ctx context.Context, playerID ulid.ULID, key, value string) error
 }
 
-// playerSettingsStore implements PlayerSettingsStore.
-type playerSettingsStore struct {
+// PlayerSettings implements PlayerSettingsStore.
+type PlayerSettings struct {
 	reader PlayerPrefsReader
 }
 
 // NewPlayerSettingsStore creates a PlayerSettingsStore backed by a
 // PlayerPrefsReader.
-func NewPlayerSettingsStore(reader PlayerPrefsReader) PlayerSettingsStore {
-	return &playerSettingsStore{reader: reader}
+func NewPlayerSettingsStore(reader PlayerPrefsReader) *PlayerSettings {
+	return &PlayerSettings{reader: reader}
 }
 
 // For returns a read-only Settings view for a specific player. The
 // returned Settings reads the player's preferences JSONB as a flat
 // dot-keyed map (keys like "scenes.focus.replay_tail_default").
-func (s *playerSettingsStore) For(ctx context.Context, playerID ulid.ULID) Settings {
+func (s *PlayerSettings) For(ctx context.Context, playerID ulid.ULID) Settings {
 	raw, err := s.reader.GetPlayerPreferencesJSON(ctx, playerID)
 	if err != nil {
 		slog.DebugContext(ctx, "player settings read failed",
@@ -57,7 +58,7 @@ func (s *playerSettingsStore) For(ctx context.Context, playerID ulid.ULID) Setti
 }
 
 // SetString writes a single preference key for a player.
-func (s *playerSettingsStore) SetString(
+func (s *PlayerSettings) SetString(
 	ctx context.Context, playerID ulid.ULID, key, value string,
 ) error {
 	if err := ValidateNamespace(key); err != nil {
@@ -77,7 +78,11 @@ type jsonMapSettings struct {
 	data map[string]json.RawMessage
 }
 
-func (j *jsonMapSettings) StringN(_ context.Context, key string) (string, bool) {
+func (j *jsonMapSettings) StringN(ctx context.Context, key string) (string, bool) {
+	if err := ValidateNamespace(key); err != nil {
+		slog.DebugContext(ctx, "settings read: invalid namespace", "key", key, "error", err)
+		return "", false
+	}
 	raw, ok := j.data[key]
 	if !ok {
 		return "", false
@@ -92,6 +97,10 @@ func (j *jsonMapSettings) StringN(_ context.Context, key string) (string, bool) 
 }
 
 func (j *jsonMapSettings) IntN(ctx context.Context, key string) (int, bool) {
+	if err := ValidateNamespace(key); err != nil {
+		slog.DebugContext(ctx, "settings read: invalid namespace", "key", key, "error", err)
+		return 0, false
+	}
 	raw, ok := j.data[key]
 	if !ok {
 		return 0, false
@@ -99,6 +108,9 @@ func (j *jsonMapSettings) IntN(ctx context.Context, key string) (int, bool) {
 	// Try native JSON number first.
 	var n float64
 	if err := json.Unmarshal(raw, &n); err == nil {
+		if math.Floor(n) != n {
+			return 0, false
+		}
 		return int(n), true
 	}
 	// Fall back to string parse.
@@ -114,6 +126,10 @@ func (j *jsonMapSettings) IntN(ctx context.Context, key string) (int, bool) {
 }
 
 func (j *jsonMapSettings) BoolN(ctx context.Context, key string) (value, ok bool) {
+	if err := ValidateNamespace(key); err != nil {
+		slog.DebugContext(ctx, "settings read: invalid namespace", "key", key, "error", err)
+		return false, false
+	}
 	raw, ok := j.data[key]
 	if !ok {
 		return false, false
@@ -136,6 +152,7 @@ func (j *jsonMapSettings) BoolN(ctx context.Context, key string) (value, ok bool
 }
 
 func (j *jsonMapSettings) DurationN(ctx context.Context, key string) (time.Duration, bool) {
+	// Namespace validation happens inside StringN; no need to duplicate here.
 	s, ok := j.StringN(ctx, key)
 	if !ok {
 		return 0, false
