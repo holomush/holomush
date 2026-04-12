@@ -81,14 +81,12 @@ func registerTestSayCommand(reg *command.Registry) {
 		Name: "say",
 		Handler: func(ctx context.Context, exec *command.CommandExecution) error {
 			payload := []byte(`{"character_name":"` + exec.CharacterName() + `","message":"` + exec.Args + `"}`)
-			return exec.Services().Events().Append(ctx, core.Event{
-				ID:        ulid.Make(),
-				Stream:    world.LocationStream(exec.LocationID()),
-				Type:      core.EventType(pluginsdk.EventTypeSay),
-				Timestamp: time.Now(),
-				Actor:     core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
-				Payload:   payload,
-			})
+			return exec.Services().Events().Append(ctx, core.NewEvent(
+				world.LocationStream(exec.LocationID()),
+				core.EventType(pluginsdk.EventTypeSay),
+				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+				payload,
+			))
 		},
 		Help:   "Say something",
 		Usage:  "say <message>",
@@ -325,14 +323,9 @@ var _ = Describe("Session Persistence", func() {
 			// activity from other characters while we are disconnected.
 			missedPayloads := []string{"missed-A", "missed-B", "missed-C"}
 			for _, msg := range missedPayloads {
-				missed := core.Event{
-					ID:        core.NewULID(),
-					Stream:    locationStream,
-					Type:      core.EventTypeSay,
-					Payload:   []byte(`{"character_name":"Other","message":"` + msg + `"}`),
-					Timestamp: time.Now(),
-					Actor:     core.Actor{Kind: core.ActorCharacter, ID: "other"},
-				}
+				missed := core.NewEvent(locationStream, core.EventTypeSay, core.Actor{
+					Kind: core.ActorCharacter, ID: "other",
+				}, []byte(`{"character_name":"Other","message":"`+msg+`"}`))
 				Expect(env.eventStore.Append(testCtx, missed)).To(Succeed())
 			}
 

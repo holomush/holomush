@@ -142,13 +142,12 @@ func registerTestCommands(reg *command.Registry) {
 	mustRegister(command.CommandEntryConfig{
 		Name: "say",
 		Handler: func(ctx context.Context, exec *command.CommandExecution) error {
-			return exec.Services().Events().Append(ctx, core.Event{
-				ID:      ulid.Make(),
-				Stream:  "location:" + exec.LocationID().String(),
-				Type:    core.EventType(pluginsdk.EventTypeSay),
-				Actor:   core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
-				Payload: []byte(fmt.Sprintf(`{"character_name":"%s","message":"%s"}`, exec.CharacterName(), exec.Args)),
-			})
+			return exec.Services().Events().Append(ctx, core.NewEvent(
+				"location:"+exec.LocationID().String(),
+				core.EventType(pluginsdk.EventTypeSay),
+				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+				[]byte(fmt.Sprintf(`{"character_name":"%s","message":"%s"}`, exec.CharacterName(), exec.Args)),
+			))
 		},
 		Help:   "Say something",
 		Usage:  "say <message>",
@@ -158,13 +157,12 @@ func registerTestCommands(reg *command.Registry) {
 	mustRegister(command.CommandEntryConfig{
 		Name: "pose",
 		Handler: func(ctx context.Context, exec *command.CommandExecution) error {
-			return exec.Services().Events().Append(ctx, core.Event{
-				ID:      ulid.Make(),
-				Stream:  "location:" + exec.LocationID().String(),
-				Type:    core.EventType(pluginsdk.EventTypePose),
-				Actor:   core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
-				Payload: []byte(fmt.Sprintf(`{"character_name":"%s","message":"%s"}`, exec.CharacterName(), exec.Args)),
-			})
+			return exec.Services().Events().Append(ctx, core.NewEvent(
+				"location:"+exec.LocationID().String(),
+				core.EventType(pluginsdk.EventTypePose),
+				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+				[]byte(fmt.Sprintf(`{"character_name":"%s","message":"%s"}`, exec.CharacterName(), exec.Args)),
+			))
 		},
 		Help:   "Pose an action",
 		Usage:  "pose <action>",

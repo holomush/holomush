@@ -259,14 +259,12 @@ var _ = Describe("Plugin Session Stream Contribution", func() {
 	// appendEvent appends a test event on the given stream.
 	appendEvent := func(stream string) {
 		GinkgoHelper()
-		Expect(eventStore.Append(testCtx, core.Event{
-			ID:        core.NewULID(),
-			Stream:    stream,
-			Type:      core.EventType("test"),
-			Payload:   []byte(`{}`),
-			Timestamp: time.Now(),
-			Actor:     core.Actor{Kind: core.ActorSystem},
-		})).To(Succeed())
+		Expect(eventStore.Append(testCtx, core.NewEvent(
+			stream,
+			core.EventType("test"),
+			core.Actor{Kind: core.ActorSystem},
+			[]byte(`{}`),
+		))).To(Succeed())
 	}
 
 	Describe("UC1: session-start auto-subscribe", func() {
