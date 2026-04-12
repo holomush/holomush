@@ -376,6 +376,7 @@ func (s *PostgresEventStore) Subscribe(ctx context.Context, stream string) (even
 // streamCtrl is a control message sent to the notification loop to
 // issue LISTEN/UNLISTEN on the conn it exclusively owns.
 type streamCtrl struct {
+	ctx    context.Context //nolint:containedctx // request-scoped context for LISTEN/UNLISTEN
 	stream string
 	add    bool
 	done   chan error
@@ -526,13 +527,20 @@ func (ps *pgSubscription) processCtrlMessages() {
 }
 
 // handleCtrl executes a single LISTEN or UNLISTEN on conn.
+// Uses the request's context for the SQL exec so callers can timeout.
 func (ps *pgSubscription) handleCtrl(ctrl streamCtrl) error {
+	// Use the request context if provided, falling back to parentCtx.
+	execCtx := ctrl.ctx
+	if execCtx == nil {
+		execCtx = ps.parentCtx
+	}
+
 	if ctrl.add {
 		if _, exists := ps.streams[ctrl.stream]; exists {
 			return nil // idempotent
 		}
 		channel := streamToChannel(ctrl.stream)
-		_, err := ps.conn.Exec(ps.parentCtx, "LISTEN "+pgx.Identifier{channel}.Sanitize())
+		_, err := ps.conn.Exec(execCtx, "LISTEN "+pgx.Identifier{channel}.Sanitize())
 		if err != nil {
 			return oops.With("operation", "listen").With("channel", channel).With("stream", ctrl.stream).Wrap(err)
 		}
@@ -546,7 +554,7 @@ func (ps *pgSubscription) handleCtrl(ctrl streamCtrl) error {
 	if !exists {
 		return nil
 	}
-	_, err := ps.conn.Exec(ps.parentCtx, "UNLISTEN "+pgx.Identifier{channel}.Sanitize())
+	_, err := ps.conn.Exec(execCtx, "UNLISTEN "+pgx.Identifier{channel}.Sanitize())
 	if err != nil {
 		return oops.With("operation", "unlisten").With("channel", channel).With("stream", ctrl.stream).Wrap(err)
 	}
@@ -558,12 +566,14 @@ func (ps *pgSubscription) handleCtrl(ctrl streamCtrl) error {
 // AddStream starts LISTENing on the PG channel for the given stream.
 // Idempotent: if the stream is already added, returns nil immediately.
 // The request is processed by the notification loop which owns the conn.
-func (ps *pgSubscription) AddStream(_ context.Context, stream string) error {
+func (ps *pgSubscription) AddStream(ctx context.Context, stream string) error {
 	done := make(chan error, 1)
-	ctrl := streamCtrl{stream: stream, add: true, done: done}
+	ctrl := streamCtrl{ctx: ctx, stream: stream, add: true, done: done}
 
 	select {
 	case ps.ctrlCh <- ctrl:
+	case <-ctx.Done():
+		return oops.With("operation", "add stream").With("stream", stream).Wrap(ctx.Err())
 	case <-ps.parentCtx.Done():
 		return errors.New("subscription closed")
 	}
@@ -578,6 +588,8 @@ func (ps *pgSubscription) AddStream(_ context.Context, stream string) error {
 	select {
 	case err := <-done:
 		return err
+	case <-ctx.Done():
+		return oops.With("operation", "add stream").With("stream", stream).Wrap(ctx.Err())
 	case <-ps.parentCtx.Done():
 		return errors.New("subscription closed")
 	}
@@ -585,12 +597,14 @@ func (ps *pgSubscription) AddStream(_ context.Context, stream string) error {
 
 // RemoveStream stops LISTENing on the PG channel for the given stream.
 // The request is processed by the notification loop which owns the conn.
-func (ps *pgSubscription) RemoveStream(_ context.Context, stream string) error {
+func (ps *pgSubscription) RemoveStream(ctx context.Context, stream string) error {
 	done := make(chan error, 1)
-	ctrl := streamCtrl{stream: stream, add: false, done: done}
+	ctrl := streamCtrl{ctx: ctx, stream: stream, add: false, done: done}
 
 	select {
 	case ps.ctrlCh <- ctrl:
+	case <-ctx.Done():
+		return oops.With("operation", "remove stream").With("stream", stream).Wrap(ctx.Err())
 	case <-ps.parentCtx.Done():
 		return errors.New("subscription closed")
 	}
@@ -605,6 +619,8 @@ func (ps *pgSubscription) RemoveStream(_ context.Context, stream string) error {
 	select {
 	case err := <-done:
 		return err
+	case <-ctx.Done():
+		return oops.With("operation", "remove stream").With("stream", stream).Wrap(ctx.Err())
 	case <-ps.parentCtx.Done():
 		return errors.New("subscription closed")
 	}

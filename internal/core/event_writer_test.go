@@ -8,6 +8,7 @@ package core_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -33,6 +34,10 @@ func TestEventWriterSerializesAppends(t *testing.T) {
 	ctx := context.Background()
 	var wg sync.WaitGroup
 
+	// Collect errors from goroutines instead of calling require.NoError
+	// (which uses FailNow — unsafe in goroutines).
+	errCh := make(chan error, totalEvents)
+
 	for g := range numGoroutines {
 		wg.Add(1)
 		go func(goroutineIdx int) {
@@ -45,13 +50,18 @@ func TestEventWriterSerializesAppends(t *testing.T) {
 					Actor:   core.Actor{Kind: core.ActorCharacter, ID: "char-1"},
 					Payload: []byte(`{}`),
 				}
-				err := writer.Write(ctx, event)
-				require.NoError(t, err, "goroutine %d event %d", goroutineIdx, i)
+				if err := writer.Write(ctx, event); err != nil {
+					errCh <- fmt.Errorf("goroutine %d event %d: %w", goroutineIdx, i, err)
+				}
 			}
 		}(g)
 	}
 
 	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
 
 	events, err := store.Replay(ctx, "location:writer-test", ulid.ULID{}, totalEvents+1)
 	require.NoError(t, err)

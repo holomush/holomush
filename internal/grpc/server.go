@@ -765,6 +765,9 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	}
 
 	// Set up LISTEN subscriptions before any replay to avoid missing events.
+	// TODO(B7): Replace per-stream subscribeWithCancel with single SubscribeSession
+	// for I-14 compliance. The current approach creates separate legacy subscriptions
+	// per stream, which does not guarantee cross-stream commit-order delivery.
 	notifyCh := make(chan streamNotification, 100)
 	errCh := make(chan error, len(allStreams))
 	streamCancels := make(map[string]context.CancelFunc)

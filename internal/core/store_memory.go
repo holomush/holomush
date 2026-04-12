@@ -172,7 +172,8 @@ func (s *MemoryEventStore) Subscribe(ctx context.Context, stream string) (eventC
 
 // SubscribeSession creates a new session-wide subscription. Append-order
 // delivery across all added streams is guaranteed (memory equivalent of I-14).
-func (s *MemoryEventStore) SubscribeSession(_ context.Context) (Subscription, error) {
+// The subscription is automatically cleaned up when ctx is cancelled.
+func (s *MemoryEventStore) SubscribeSession(ctx context.Context) (Subscription, error) {
 	ms := &memorySubscription{
 		streams: make(map[string]struct{}),
 		notifCh: make(chan StreamNotification, 256),
@@ -182,6 +183,13 @@ func (s *MemoryEventStore) SubscribeSession(_ context.Context) (Subscription, er
 	s.mu.Lock()
 	s.sessionSubs = append(s.sessionSubs, ms)
 	s.mu.Unlock()
+
+	// Clean up when the caller's context is cancelled.
+	go func() {
+		<-ctx.Done()
+		_ = ms.Close()
+	}()
+
 	return ms, nil
 }
 

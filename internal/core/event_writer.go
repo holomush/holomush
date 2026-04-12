@@ -35,12 +35,13 @@ var ErrWriterClosed = errors.New("event writer is closed")
 // Throughput: ~1000 events/second (bounded by single-INSERT latency).
 // For a MUSH with ~200 concurrent players, this is ~100x headroom.
 type EventWriter struct {
-	store    EventStore
-	appendCh chan appendRequest
-	done     chan struct{}
-	stopped  chan struct{}
-	closed   atomic.Bool
-	once     sync.Once
+	store     EventStore
+	appendCh  chan appendRequest
+	done      chan struct{}
+	stopped   chan struct{}
+	closed    atomic.Bool
+	once      sync.Once
+	enqueueMu sync.Mutex // serializes closed-check + channel-send in Write vs Close
 }
 
 type appendRequest struct {
@@ -70,8 +71,27 @@ func NewEventWriter(store EventStore) *EventWriter {
 // order = commit order. Callers SHOULD leave event.ID zero; any pre-set
 // ID is overwritten.
 func (w *EventWriter) Write(ctx context.Context, event Event) error {
+	req, err := w.enqueue(ctx, event)
+	if err != nil {
+		return err
+	}
+	select {
+	case err := <-req.err:
+		return err
+	case <-ctx.Done():
+		return oops.Wrap(ctx.Err())
+	}
+}
+
+// enqueue atomically checks that the writer is open and sends the request
+// to the worker goroutine. enqueueMu serializes this with Close() to
+// prevent a write from blocking on appendCh after the worker has exited.
+func (w *EventWriter) enqueue(ctx context.Context, event Event) (appendRequest, error) {
+	w.enqueueMu.Lock()
+	defer w.enqueueMu.Unlock()
+
 	if w.closed.Load() {
-		return ErrWriterClosed
+		return appendRequest{}, ErrWriterClosed
 	}
 	req := appendRequest{
 		ctx:   ctx,
@@ -80,16 +100,11 @@ func (w *EventWriter) Write(ctx context.Context, event Event) error {
 	}
 	select {
 	case w.appendCh <- req:
+		return req, nil
 	case <-ctx.Done():
-		return oops.Wrap(ctx.Err())
+		return appendRequest{}, oops.Wrap(ctx.Err())
 	case <-w.done:
-		return ErrWriterClosed
-	}
-	select {
-	case err := <-req.err:
-		return err
-	case <-ctx.Done():
-		return oops.Wrap(ctx.Err())
+		return appendRequest{}, ErrWriterClosed
 	}
 }
 
@@ -136,23 +151,6 @@ func (w *EventWriter) SubscribeSession(ctx context.Context) (Subscription, error
 	return sub, nil
 }
 
-// Subscribe delegates to the underlying store's Subscribe method if the
-// store implements it. This supports the legacy per-stream subscription
-// path used by location-following until it is migrated to SubscribeSession.
-func (w *EventWriter) Subscribe(ctx context.Context, stream string) (eventCh <-chan ulid.ULID, errCh <-chan error, subErr error) {
-	type subscriber interface {
-		Subscribe(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error)
-	}
-	if s, ok := w.store.(subscriber); ok {
-		ch, ech, err := s.Subscribe(ctx, stream)
-		if err != nil {
-			return nil, nil, oops.Wrap(err)
-		}
-		return ch, ech, nil
-	}
-	return nil, nil, errors.New("underlying store does not support Subscribe")
-}
-
 // Compile-time interface check.
 var _ EventStore = (*EventWriter)(nil)
 
@@ -160,7 +158,9 @@ var _ EventStore = (*EventWriter)(nil)
 // before the goroutine exits.
 func (w *EventWriter) Close() {
 	w.once.Do(func() {
+		w.enqueueMu.Lock()
 		w.closed.Store(true)
+		w.enqueueMu.Unlock()
 		close(w.done)
 	})
 	<-w.stopped

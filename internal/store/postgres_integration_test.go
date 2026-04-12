@@ -618,6 +618,7 @@ var _ = Describe("PostgresEventStore", func() {
 			for g := range numGoroutines {
 				wg.Add(1)
 				go func(goroutineIdx int) {
+					defer GinkgoRecover()
 					defer wg.Done()
 					for i := range eventsPerGo {
 						streamIdx := (goroutineIdx*eventsPerGo + i) % numStreams
