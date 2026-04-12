@@ -67,6 +67,7 @@ type grpcSubsystem struct {
 	reaperCancel  context.CancelFunc
 	guestReaper   *auth.GuestReaper
 	sessionReaper *session.Reaper
+	eventWriter   *core.EventWriter
 }
 
 // newGRPCSubsystem returns a configured grpcSubsystem for the provided configuration.
@@ -97,7 +98,12 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	}
 
 	// Gather dependencies from subsystems.
-	eventStore := s.cfg.DB.EventStore()
+	rawEventStore := s.cfg.DB.EventStore()
+	s.eventWriter = core.NewEventWriter(rawEventStore)
+	// Use the EventWriter as the EventStore for all production code paths.
+	// EventWriter serializes Append calls (I-14 enforcement) and delegates
+	// reads to the underlying store.
+	eventStore := s.eventWriter
 	pool := s.cfg.DB.Pool()
 	policyEngine := s.cfg.ABAC.Engine()
 	worldService := s.cfg.World.Service()
@@ -290,6 +296,9 @@ func (s *grpcSubsystem) Stop(ctx context.Context) error {
 	}
 	if s.reaperCancel != nil {
 		s.reaperCancel()
+	}
+	if s.eventWriter != nil {
+		s.eventWriter.Close()
 	}
 	if s.listener != nil {
 		if err := s.listener.Close(); err != nil {

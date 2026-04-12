@@ -574,8 +574,8 @@ var _ = Describe("PostgresEventStore", func() {
 		})
 	})
 
-	Describe("Variant A Go/No-Go: Identical Cross-Stream Commit Order (I-14)", func() {
-		It("delivers events in identical order to multiple subscribers", func() {
+	Describe("Variant A Go/No-Go: Strict ULID-Ascending Cross-Stream Order (I-14)", func() {
+		It("delivers events in strict ULID-ascending order to multiple subscribers", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
@@ -590,6 +590,12 @@ var _ = Describe("PostgresEventStore", func() {
 			for i := range numStreams {
 				streams[i] = fmt.Sprintf("location:ordering-%d", i)
 			}
+
+			// Wrap the store with EventWriter to serialize appends.
+			// EventWriter stamps ULID + timestamp in its single goroutine,
+			// guaranteeing ULID generation order = commit order.
+			writer := core.NewEventWriter(eventStore)
+			defer writer.Close()
 
 			// Create 2 session subscriptions, both listening on all 4 streams.
 			sub1, err := eventStore.SubscribeSession(ctx)
@@ -606,8 +612,8 @@ var _ = Describe("PostgresEventStore", func() {
 			}
 
 			// Launch 10 goroutines, each appending 100 events spread
-			// across the 4 streams. All events use core.NewULID() for
-			// monotonic IDs.
+			// across the 4 streams via EventWriter. The writer stamps
+			// IDs serially, so ULID order = commit order.
 			var wg sync.WaitGroup
 			for g := range numGoroutines {
 				wg.Add(1)
@@ -616,14 +622,13 @@ var _ = Describe("PostgresEventStore", func() {
 					for i := range eventsPerGo {
 						streamIdx := (goroutineIdx*eventsPerGo + i) % numStreams
 						event := core.Event{
-							ID:        core.NewULID(),
-							Stream:    streams[streamIdx],
-							Type:      core.EventTypeSay,
-							Timestamp: time.Now(),
-							Actor:     core.Actor{Kind: core.ActorCharacter, ID: fmt.Sprintf("c%d", goroutineIdx)},
-							Payload:   []byte(fmt.Sprintf(`{"g":%d,"i":%d}`, goroutineIdx, i)),
+							// ID left zero — EventWriter stamps it.
+							Stream:  streams[streamIdx],
+							Type:    core.EventTypeSay,
+							Actor:   core.Actor{Kind: core.ActorCharacter, ID: fmt.Sprintf("c%d", goroutineIdx)},
+							Payload: []byte(fmt.Sprintf(`{"g":%d,"i":%d}`, goroutineIdx, i)),
 						}
-						err := eventStore.Append(ctx, event)
+						err := writer.Write(ctx, event)
 						Expect(err).NotTo(HaveOccurred())
 					}
 				}(g)
@@ -663,13 +668,20 @@ var _ = Describe("PostgresEventStore", func() {
 
 			// Both subscribers must have received events in identical order
 			// (same sequence of StreamNotification, element by element).
-			// This is the core I-14 invariant: all subscribers observe the
-			// same commit-order sequence. We do NOT assert ULID-ascending
-			// order because concurrent goroutines may generate ULIDs in a
-			// different order than their transactions commit (both cross-
-			// stream and within a single stream).
 			Expect(collected1).To(Equal(collected2),
 				"I-14 VIOLATION: subscribers received events in different order")
+
+			// RESTORED: strict ULID-ascending order. With EventWriter
+			// serializing all appends, ULID generation order = commit
+			// order = NOTIFY delivery order. Every event ID must be
+			// strictly greater than the previous one.
+			for i := 1; i < len(collected1); i++ {
+				Expect(collected1[i].EventID.Compare(collected1[i-1].EventID)).To(
+					BeNumerically(">", 0),
+					"I-14 ULID-ascending violation at index %d: %s must be > %s",
+					i, collected1[i].EventID, collected1[i-1].EventID,
+				)
+			}
 		})
 	})
 })
