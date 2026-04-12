@@ -5,6 +5,7 @@ package session
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -40,4 +41,23 @@ func TestInfo_IsActive(t *testing.T) {
 
 	info.Status = StatusDetached
 	assert.False(t, info.IsActive())
+}
+
+func TestInfo_IsExpired(t *testing.T) {
+	t.Run("returns false when ExpiresAt is nil", func(t *testing.T) {
+		info := &Info{ExpiresAt: nil}
+		assert.False(t, info.IsExpired())
+	})
+
+	t.Run("returns true when ExpiresAt is in the past", func(t *testing.T) {
+		past := time.Now().Add(-1 * time.Hour)
+		info := &Info{ExpiresAt: &past}
+		assert.True(t, info.IsExpired())
+	})
+
+	t.Run("returns false when ExpiresAt is in the future", func(t *testing.T) {
+		future := time.Now().Add(1 * time.Hour)
+		info := &Info{ExpiresAt: &future}
+		assert.False(t, info.IsExpired())
+	})
 }

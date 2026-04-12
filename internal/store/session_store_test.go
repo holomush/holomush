@@ -1215,6 +1215,332 @@ func TestPostgresSessionStore_AddConnection_InvalidClientType(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestPostgresSessionStore_Get_WithFocusMemberships(t *testing.T) {
+	info := testSessionInfo()
+	sceneID := core.NewULID()
+	info.FocusMemberships = []session.FocusMembership{
+		{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: info.CreatedAt},
+	}
+	info.PresentingFocus = &session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
+
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	rows := pgxmock.NewRows(sessionColumns()).AddRow(sessionRow(info)...)
+	mock.ExpectQuery(`SELECT .+ FROM sessions WHERE id = \$1`).
+		WithArgs("sess-abc").
+		WillReturnRows(rows)
+
+	store := NewPostgresSessionStore(mock)
+	got, err := store.Get(context.Background(), "sess-abc")
+
+	require.NoError(t, err)
+	require.Len(t, got.FocusMemberships, 1)
+	assert.Equal(t, session.FocusKindScene, got.FocusMemberships[0].Kind)
+	assert.Equal(t, sceneID, got.FocusMemberships[0].TargetID)
+	require.NotNil(t, got.PresentingFocus)
+	assert.Equal(t, session.FocusKindScene, got.PresentingFocus.Kind)
+	assert.Equal(t, sceneID, got.PresentingFocus.TargetID)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPostgresSessionStore_Set_WithFocusMemberships(t *testing.T) {
+	info := testSessionInfo()
+	sceneID := core.NewULID()
+	info.FocusMemberships = []session.FocusMembership{
+		{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: info.CreatedAt},
+	}
+	info.PresentingFocus = &session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
+
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	mock.ExpectExec(`INSERT INTO sessions`).
+		WithArgs(
+			pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
+			pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
+			pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
+			pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
+			pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
+			pgxmock.AnyArg(), pgxmock.AnyArg(),
+			pgxmock.AnyArg(), pgxmock.AnyArg(),
+		).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+
+	store := NewPostgresSessionStore(mock)
+	err = store.Set(context.Background(), "sess-abc", info)
+	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPostgresSessionStore_UpdateFocusMemberships(t *testing.T) {
+	sceneID := core.NewULID()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	// Common helpers for focus memberships mock rows.
+	focusSelectCols := []string{"status", "focus_memberships", "presenting_focus"}
+
+	t.Run("happy path applies mutator and commits", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		currentMemberships := []session.FocusMembership{
+			{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: now},
+		}
+		currentJSON, _ := json.Marshal(currentMemberships)
+
+		mock.ExpectBegin()
+		mock.ExpectQuery(`SELECT status, focus_memberships, presenting_focus FROM sessions WHERE id = \$1 FOR UPDATE`).
+			WithArgs("sess-abc").
+			WillReturnRows(pgxmock.NewRows(focusSelectCols).AddRow("active", currentJSON, nil))
+		mock.ExpectExec(`UPDATE sessions SET focus_memberships = \$1::jsonb, presenting_focus = \$2::jsonb, updated_at = now\(\) WHERE id = \$3`).
+			WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), "sess-abc").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+		mock.ExpectCommit()
+		mock.ExpectRollback()
+
+		store := NewPostgresSessionStore(mock)
+		mutator := session.NewFocusMutator(func(
+			current []session.FocusMembership,
+			presenting *session.FocusKey,
+		) ([]session.FocusMembership, *session.FocusKey, error) {
+			return current, presenting, nil
+		})
+
+		err = store.UpdateFocusMemberships(context.Background(), "sess-abc", mutator)
+		require.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("session not found returns SESSION_NOT_FOUND", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		mock.ExpectBegin()
+		mock.ExpectQuery(`SELECT status, focus_memberships, presenting_focus FROM sessions WHERE id = \$1 FOR UPDATE`).
+			WithArgs("sess-missing").
+			WillReturnError(pgx.ErrNoRows)
+		mock.ExpectRollback()
+
+		store := NewPostgresSessionStore(mock)
+		mutator := session.NewFocusMutator(func(
+			current []session.FocusMembership,
+			presenting *session.FocusKey,
+		) ([]session.FocusMembership, *session.FocusKey, error) {
+			return current, presenting, nil
+		})
+
+		err = store.UpdateFocusMemberships(context.Background(), "sess-missing", mutator)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "SESSION_NOT_FOUND")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("expired session returns SESSION_EXPIRED", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		mock.ExpectBegin()
+		mock.ExpectQuery(`SELECT status, focus_memberships, presenting_focus FROM sessions WHERE id = \$1 FOR UPDATE`).
+			WithArgs("sess-expired").
+			WillReturnRows(pgxmock.NewRows(focusSelectCols).AddRow("expired", nil, nil))
+		mock.ExpectRollback()
+
+		store := NewPostgresSessionStore(mock)
+		mutator := session.NewFocusMutator(func(
+			current []session.FocusMembership,
+			presenting *session.FocusKey,
+		) ([]session.FocusMembership, *session.FocusKey, error) {
+			return current, presenting, nil
+		})
+
+		err = store.UpdateFocusMemberships(context.Background(), "sess-expired", mutator)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "SESSION_EXPIRED")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("mutator error returns FOCUS_MUTATOR_ERROR and rolls back", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		mock.ExpectBegin()
+		mock.ExpectQuery(`SELECT status, focus_memberships, presenting_focus FROM sessions WHERE id = \$1 FOR UPDATE`).
+			WithArgs("sess-abc").
+			WillReturnRows(pgxmock.NewRows(focusSelectCols).AddRow("active", nil, nil))
+		mock.ExpectRollback()
+
+		store := NewPostgresSessionStore(mock)
+		mutator := session.NewFocusMutator(func(
+			current []session.FocusMembership,
+			presenting *session.FocusKey,
+		) ([]session.FocusMembership, *session.FocusKey, error) {
+			return nil, nil, errors.New("mutator exploded")
+		})
+
+		err = store.UpdateFocusMemberships(context.Background(), "sess-abc", mutator)
+		require.Error(t, err)
+		errutil.AssertErrorCode(t, err, "FOCUS_MUTATOR_ERROR")
+		assert.Contains(t, err.Error(), "mutator exploded")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("begin error propagates", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		mock.ExpectBegin().WillReturnError(errors.New("cannot begin tx"))
+
+		store := NewPostgresSessionStore(mock)
+		mutator := session.NewFocusMutator(func(
+			current []session.FocusMembership,
+			presenting *session.FocusKey,
+		) ([]session.FocusMembership, *session.FocusKey, error) {
+			return current, presenting, nil
+		})
+
+		err = store.UpdateFocusMemberships(context.Background(), "sess-abc", mutator)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot begin tx")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("select error propagates", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		mock.ExpectBegin()
+		mock.ExpectQuery(`SELECT status, focus_memberships, presenting_focus FROM sessions WHERE id = \$1 FOR UPDATE`).
+			WithArgs("sess-abc").
+			WillReturnError(errors.New("connection lost"))
+		mock.ExpectRollback()
+
+		store := NewPostgresSessionStore(mock)
+		mutator := session.NewFocusMutator(func(
+			current []session.FocusMembership,
+			presenting *session.FocusKey,
+		) ([]session.FocusMembership, *session.FocusKey, error) {
+			return current, presenting, nil
+		})
+
+		err = store.UpdateFocusMemberships(context.Background(), "sess-abc", mutator)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "connection lost")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("update exec error propagates", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		mock.ExpectBegin()
+		mock.ExpectQuery(`SELECT status, focus_memberships, presenting_focus FROM sessions WHERE id = \$1 FOR UPDATE`).
+			WithArgs("sess-abc").
+			WillReturnRows(pgxmock.NewRows(focusSelectCols).AddRow("active", nil, nil))
+		mock.ExpectExec(`UPDATE sessions SET focus_memberships = \$1::jsonb, presenting_focus = \$2::jsonb, updated_at = now\(\) WHERE id = \$3`).
+			WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), "sess-abc").
+			WillReturnError(errors.New("write failed"))
+		mock.ExpectRollback()
+
+		store := NewPostgresSessionStore(mock)
+		mutator := session.NewFocusMutator(func(
+			current []session.FocusMembership,
+			presenting *session.FocusKey,
+		) ([]session.FocusMembership, *session.FocusKey, error) {
+			return []session.FocusMembership{}, nil, nil
+		})
+
+		err = store.UpdateFocusMemberships(context.Background(), "sess-abc", mutator)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "write failed")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("commit error propagates", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		mock.ExpectBegin()
+		mock.ExpectQuery(`SELECT status, focus_memberships, presenting_focus FROM sessions WHERE id = \$1 FOR UPDATE`).
+			WithArgs("sess-abc").
+			WillReturnRows(pgxmock.NewRows(focusSelectCols).AddRow("active", nil, nil))
+		mock.ExpectExec(`UPDATE sessions SET focus_memberships = \$1::jsonb, presenting_focus = \$2::jsonb, updated_at = now\(\) WHERE id = \$3`).
+			WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), "sess-abc").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+		mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
+		mock.ExpectRollback()
+
+		store := NewPostgresSessionStore(mock)
+		mutator := session.NewFocusMutator(func(
+			current []session.FocusMembership,
+			presenting *session.FocusKey,
+		) ([]session.FocusMembership, *session.FocusKey, error) {
+			return []session.FocusMembership{}, nil, nil
+		})
+
+		err = store.UpdateFocusMemberships(context.Background(), "sess-abc", mutator)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "commit failed")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("mutator with presenting focus round-trips correctly", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		presentingKey := session.FocusKey{Kind: session.FocusKindScene, TargetID: sceneID}
+		presentingJSON, _ := json.Marshal(presentingKey)
+		currentMemberships := []session.FocusMembership{
+			{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: now},
+		}
+		currentJSON, _ := json.Marshal(currentMemberships)
+
+		mock.ExpectBegin()
+		mock.ExpectQuery(`SELECT status, focus_memberships, presenting_focus FROM sessions WHERE id = \$1 FOR UPDATE`).
+			WithArgs("sess-abc").
+			WillReturnRows(pgxmock.NewRows(focusSelectCols).AddRow("active", currentJSON, presentingJSON))
+		mock.ExpectExec(`UPDATE sessions SET focus_memberships = \$1::jsonb, presenting_focus = \$2::jsonb, updated_at = now\(\) WHERE id = \$3`).
+			WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), "sess-abc").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+		mock.ExpectCommit()
+		mock.ExpectRollback()
+
+		var receivedMemberships []session.FocusMembership
+		var receivedPresenting *session.FocusKey
+
+		store := NewPostgresSessionStore(mock)
+		mutator := session.NewFocusMutator(func(
+			current []session.FocusMembership,
+			presenting *session.FocusKey,
+		) ([]session.FocusMembership, *session.FocusKey, error) {
+			receivedMemberships = current
+			receivedPresenting = presenting
+			return current, presenting, nil
+		})
+
+		err = store.UpdateFocusMemberships(context.Background(), "sess-abc", mutator)
+		require.NoError(t, err)
+		require.Len(t, receivedMemberships, 1)
+		assert.Equal(t, session.FocusKindScene, receivedMemberships[0].Kind)
+		assert.Equal(t, sceneID, receivedMemberships[0].TargetID)
+		require.NotNil(t, receivedPresenting)
+		assert.Equal(t, session.FocusKindScene, receivedPresenting.Kind)
+		assert.Equal(t, sceneID, receivedPresenting.TargetID)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
 func TestPostgresSessionStore_CountConnectionsByType(t *testing.T) {
 	tests := []struct {
 		name       string
