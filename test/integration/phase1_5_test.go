@@ -47,15 +47,12 @@ func (n *noopEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, er
 	return ulid.ULID{}, nil
 }
 
-func (n *noopEventStore) Subscribe(ctx context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
-	events := make(chan ulid.ULID)
-	errs := make(chan error)
-	go func() {
-		<-ctx.Done()
-		close(events)
-		close(errs)
-	}()
-	return events, errs, nil
+func (n *noopEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time) ([]core.Event, error) {
+	return nil, nil
+}
+
+func (n *noopEventStore) SubscribeSession(_ context.Context) (core.Subscription, error) {
+	return nil, nil
 }
 
 // newMinimalDispatcher creates a dispatcher with no registered commands for tests

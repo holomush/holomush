@@ -373,19 +373,36 @@ func (s *PostgresEventStore) Subscribe(ctx context.Context, stream string) (even
 	return events, errs, nil
 }
 
+// streamCtrl is a control message sent to the notification loop to
+// issue LISTEN/UNLISTEN on the conn it exclusively owns.
+type streamCtrl struct {
+	stream string
+	add    bool
+	done   chan error
+}
+
 // pgSubscription implements core.Subscription using a single dedicated
 // pgx.Conn with multi-channel LISTEN. This is Variant A: all notifications
 // from all streams arrive on one PG connection in commit order, which
 // structurally enforces invariant I-14.
+//
+// The notification loop is the sole owner of conn. AddStream/RemoveStream
+// communicate via ctrlCh and wake the loop by cancelling the current
+// WaitForNotification context.
 type pgSubscription struct {
-	conn     connIface
-	mu       sync.Mutex
+	conn       connIface
+	parentCtx  context.Context //nolint:containedctx // lifetime scoped to subscription
+	notifCh    chan core.StreamNotification
+	errCh      chan error
+	ctrlCh     chan streamCtrl
+	cancelWait context.CancelFunc // cancels the current WaitForNotification
+	waitMu     sync.Mutex         // protects cancelWait
+	cancel     context.CancelFunc // cancels parentCtx
+	loopDone   chan struct{}       // closed when notificationLoop exits
+
+	// streams/channels are only accessed inside notificationLoop (sole owner).
 	streams  map[string]string // stream name -> channel name
 	channels map[string]string // channel name -> stream name (reverse lookup)
-	notifCh  chan core.StreamNotification
-	errCh    chan error
-	cancel   context.CancelFunc
-	closed   bool
 }
 
 // SubscribeSession opens a dedicated PG connection for a session-wide
@@ -405,35 +422,74 @@ func (s *PostgresEventStore) SubscribeSession(ctx context.Context) (core.Subscri
 	subCtx, cancel := context.WithCancel(ctx)
 
 	ps := &pgSubscription{
-		conn:     conn,
-		streams:  make(map[string]string),
-		channels: make(map[string]string),
-		notifCh:  make(chan core.StreamNotification, 256),
-		errCh:    make(chan error, 1),
-		cancel:   cancel,
+		conn:      conn,
+		parentCtx: subCtx,
+		streams:   make(map[string]string),
+		channels:  make(map[string]string),
+		notifCh:   make(chan core.StreamNotification, 256),
+		errCh:     make(chan error, 1),
+		ctrlCh:    make(chan streamCtrl, 16),
+		cancel:    cancel,
+		loopDone:  make(chan struct{}),
 	}
 
-	go ps.notificationLoop(subCtx)
+	go ps.notificationLoop()
 	return ps, nil
 }
 
-// notificationLoop reads PG notifications and translates them to
-// StreamNotification values on the shared channel. Runs until the
-// context is cancelled or an unrecoverable error occurs.
-func (ps *pgSubscription) notificationLoop(ctx context.Context) {
+// notificationLoop is the sole goroutine that touches conn. It processes
+// control messages (LISTEN/UNLISTEN) and reads PG notifications, forwarding
+// them to notifCh. Runs until parentCtx is cancelled or an unrecoverable
+// error occurs.
+func (ps *pgSubscription) notificationLoop() {
 	defer close(ps.notifCh)
 	defer close(ps.errCh)
+	defer close(ps.loopDone)
 
 	for {
-		notification, err := ps.conn.WaitForNotification(ctx)
+		// 1. Drain all pending control messages (non-blocking).
+		ps.processCtrlMessages()
+
+		// 2. Check if we should exit.
+		if ps.parentCtx.Err() != nil {
+			return
+		}
+
+		// 3. Create a cancellable context for WaitForNotification so
+		//    AddStream/RemoveStream can wake us.
+		waitCtx, waitCancel := context.WithCancel(ps.parentCtx)
+		ps.waitMu.Lock()
+		ps.cancelWait = waitCancel
+		ps.waitMu.Unlock()
+
+		// 3b. Re-check for ctrl messages that arrived between step 1 and
+		//     the cancelWait assignment. If any are pending, cancel immediately
+		//     to avoid blocking in WaitForNotification while a ctrl sits in ctrlCh.
+		if len(ps.ctrlCh) > 0 {
+			waitCancel()
+			continue
+		}
+
+		// 4. Block on the next PG notification.
+		notification, err := ps.conn.WaitForNotification(waitCtx)
+		waitCancel() // release resources
+
 		if err != nil {
-			if ctx.Err() != nil {
+			// Interrupted by AddStream/RemoveStream — loop back to
+			// process the control message.
+			if waitCtx.Err() != nil && ps.parentCtx.Err() == nil {
+				continue
+			}
+			// Parent context cancelled — clean exit.
+			if ps.parentCtx.Err() != nil {
 				return
 			}
+			// Real error from PG.
 			ps.errCh <- oops.With("operation", "wait for session notification").Wrap(err)
 			return
 		}
 
+		// 5. Parse and dispatch the notification.
 		eventID, err := ulid.Parse(notification.Payload)
 		if err != nil {
 			ps.errCh <- oops.With("operation", "parse event ID from session notification").
@@ -441,66 +497,117 @@ func (ps *pgSubscription) notificationLoop(ctx context.Context) {
 			return
 		}
 
-		ps.mu.Lock()
 		stream, ok := ps.channels[notification.Channel]
-		ps.mu.Unlock()
-
 		if !ok {
-			// Notification for a channel we already unlistened but
-			// was buffered. Safe to skip.
+			// Notification for a channel we already unlistened but was
+			// buffered. Safe to skip.
 			continue
 		}
 
 		select {
 		case ps.notifCh <- core.StreamNotification{Stream: stream, EventID: eventID}:
-		case <-ctx.Done():
+		case <-ps.parentCtx.Done():
 			return
 		}
 	}
 }
 
-// AddStream starts LISTENing on the PG channel for the given stream.
-// Idempotent: if the stream is already added, returns nil immediately.
-func (ps *pgSubscription) AddStream(ctx context.Context, stream string) error {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-
-	if ps.closed {
-		return errors.New("subscription closed")
+// processCtrlMessages drains all pending control messages from ctrlCh,
+// executing LISTEN/UNLISTEN on conn (which we exclusively own).
+func (ps *pgSubscription) processCtrlMessages() {
+	for {
+		select {
+		case ctrl := <-ps.ctrlCh:
+			ctrl.done <- ps.handleCtrl(ctrl)
+		default:
+			return
+		}
 	}
-	if _, exists := ps.streams[stream]; exists {
+}
+
+// handleCtrl executes a single LISTEN or UNLISTEN on conn.
+func (ps *pgSubscription) handleCtrl(ctrl streamCtrl) error {
+	if ctrl.add {
+		if _, exists := ps.streams[ctrl.stream]; exists {
+			return nil // idempotent
+		}
+		channel := streamToChannel(ctrl.stream)
+		_, err := ps.conn.Exec(ps.parentCtx, "LISTEN "+pgx.Identifier{channel}.Sanitize())
+		if err != nil {
+			return oops.With("operation", "listen").With("channel", channel).With("stream", ctrl.stream).Wrap(err)
+		}
+		ps.streams[ctrl.stream] = channel
+		ps.channels[channel] = ctrl.stream
 		return nil
 	}
 
-	channel := streamToChannel(stream)
-	_, err := ps.conn.Exec(ctx, "LISTEN "+pgx.Identifier{channel}.Sanitize())
-	if err != nil {
-		return oops.With("operation", "listen").With("channel", channel).With("stream", stream).Wrap(err)
-	}
-
-	ps.streams[stream] = channel
-	ps.channels[channel] = stream
-	return nil
-}
-
-// RemoveStream stops LISTENing on the PG channel for the given stream.
-func (ps *pgSubscription) RemoveStream(ctx context.Context, stream string) error {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-
-	channel, exists := ps.streams[stream]
+	// Remove.
+	channel, exists := ps.streams[ctrl.stream]
 	if !exists {
 		return nil
 	}
-
-	_, err := ps.conn.Exec(ctx, "UNLISTEN "+pgx.Identifier{channel}.Sanitize())
+	_, err := ps.conn.Exec(ps.parentCtx, "UNLISTEN "+pgx.Identifier{channel}.Sanitize())
 	if err != nil {
-		return oops.With("operation", "unlisten").With("channel", channel).With("stream", stream).Wrap(err)
+		return oops.With("operation", "unlisten").With("channel", channel).With("stream", ctrl.stream).Wrap(err)
 	}
-
-	delete(ps.streams, stream)
+	delete(ps.streams, ctrl.stream)
 	delete(ps.channels, channel)
 	return nil
+}
+
+// AddStream starts LISTENing on the PG channel for the given stream.
+// Idempotent: if the stream is already added, returns nil immediately.
+// The request is processed by the notification loop which owns the conn.
+func (ps *pgSubscription) AddStream(_ context.Context, stream string) error {
+	done := make(chan error, 1)
+	ctrl := streamCtrl{stream: stream, add: true, done: done}
+
+	select {
+	case ps.ctrlCh <- ctrl:
+	case <-ps.parentCtx.Done():
+		return errors.New("subscription closed")
+	}
+
+	// Wake the notification loop if it's blocked in WaitForNotification.
+	ps.waitMu.Lock()
+	if ps.cancelWait != nil {
+		ps.cancelWait()
+	}
+	ps.waitMu.Unlock()
+
+	select {
+	case err := <-done:
+		return err
+	case <-ps.parentCtx.Done():
+		return errors.New("subscription closed")
+	}
+}
+
+// RemoveStream stops LISTENing on the PG channel for the given stream.
+// The request is processed by the notification loop which owns the conn.
+func (ps *pgSubscription) RemoveStream(_ context.Context, stream string) error {
+	done := make(chan error, 1)
+	ctrl := streamCtrl{stream: stream, add: false, done: done}
+
+	select {
+	case ps.ctrlCh <- ctrl:
+	case <-ps.parentCtx.Done():
+		return errors.New("subscription closed")
+	}
+
+	// Wake the notification loop if it's blocked in WaitForNotification.
+	ps.waitMu.Lock()
+	if ps.cancelWait != nil {
+		ps.cancelWait()
+	}
+	ps.waitMu.Unlock()
+
+	select {
+	case err := <-done:
+		return err
+	case <-ps.parentCtx.Done():
+		return errors.New("subscription closed")
+	}
 }
 
 // Notifications returns the unified notification channel.
@@ -515,15 +622,8 @@ func (ps *pgSubscription) Errors() <-chan error {
 
 // Close releases the dedicated PG connection and cancels the notification loop.
 func (ps *pgSubscription) Close() error {
-	ps.mu.Lock()
-	if ps.closed {
-		ps.mu.Unlock()
-		return nil
-	}
-	ps.closed = true
-	ps.mu.Unlock()
-
 	ps.cancel()
+	<-ps.loopDone // wait for the notification loop to exit
 	if err := ps.conn.Close(context.Background()); err != nil {
 		slog.Error("failed to close session subscription connection", "error", err)
 		return oops.With("operation", "close session subscription connection").Wrap(err)

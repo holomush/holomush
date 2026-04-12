@@ -77,8 +77,12 @@ func (s *stubEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, er
 	return ulid.ULID{}, nil
 }
 
-func (s *stubEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
-	return nil, nil, nil
+func (s *stubEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time) ([]core.Event, error) {
+	return nil, nil
+}
+
+func (s *stubEventStore) SubscribeSession(_ context.Context) (core.Subscription, error) {
+	return nil, nil
 }
 
 var _ = Describe("Rate Limiting Integration", func() {
