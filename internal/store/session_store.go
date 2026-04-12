@@ -42,12 +42,13 @@ const sessionSelectColumns = `id, character_id, player_id, character_name, locat
 	is_guest, status, grid_present, event_cursors,
 	command_history, ttl_seconds, max_history,
 	detached_at, expires_at, created_at, updated_at,
-	last_paged, last_whispered`
+	last_paged, last_whispered,
+	focus_memberships, presenting_focus`
 
 // parseSessionRow parses the scalar fields scanned from a session row into a
 // session.Info. Both scanSession and scanSessions call Scan with the same
 // variable set and then delegate here to avoid duplicating the parse logic.
-func parseSessionRow(info *session.Info, charIDStr, playerIDStr, locIDStr, statusStr string, cursorsJSON []byte) error {
+func parseSessionRow(info *session.Info, charIDStr, playerIDStr, locIDStr, statusStr string, cursorsJSON, focusMembershipsJSON, presentingFocusJSON []byte) error {
 	charID, err := ulid.Parse(charIDStr)
 	if err != nil {
 		return oops.With("operation", "parse character_id").With("raw_id", charIDStr).Wrap(err)
@@ -84,6 +85,22 @@ func parseSessionRow(info *session.Info, charIDStr, playerIDStr, locIDStr, statu
 		info.EventCursors = cursors
 	}
 
+	if len(focusMembershipsJSON) > 0 {
+		var memberships []session.FocusMembership
+		if err := json.Unmarshal(focusMembershipsJSON, &memberships); err != nil {
+			return oops.With("operation", "unmarshal focus_memberships").Wrap(err)
+		}
+		info.FocusMemberships = memberships
+	}
+
+	if len(presentingFocusJSON) > 0 {
+		var key session.FocusKey
+		if err := json.Unmarshal(presentingFocusJSON, &key); err != nil {
+			return oops.With("operation", "unmarshal presenting_focus").Wrap(err)
+		}
+		info.PresentingFocus = &key
+	}
+
 	return nil
 }
 
@@ -92,6 +109,7 @@ func scanSession(row pgx.Row) (*session.Info, error) {
 	var info session.Info
 	var charIDStr, playerIDStr, locIDStr, statusStr string
 	var cursorsJSON []byte
+	var focusMembershipsJSON, presentingFocusJSON []byte
 
 	err := row.Scan(
 		&info.ID,
@@ -112,12 +130,14 @@ func scanSession(row pgx.Row) (*session.Info, error) {
 		&info.UpdatedAt,
 		&info.LastPaged,
 		&info.LastWhispered,
+		&focusMembershipsJSON,
+		&presentingFocusJSON,
 	)
 	if err != nil {
 		return nil, oops.With("operation", "scan session row").Wrap(err)
 	}
 
-	if err := parseSessionRow(&info, charIDStr, playerIDStr, locIDStr, statusStr, cursorsJSON); err != nil {
+	if err := parseSessionRow(&info, charIDStr, playerIDStr, locIDStr, statusStr, cursorsJSON, focusMembershipsJSON, presentingFocusJSON); err != nil {
 		return nil, err
 	}
 
@@ -132,6 +152,7 @@ func scanSessions(rows pgx.Rows) ([]*session.Info, error) {
 		var info session.Info
 		var charIDStr, playerIDStr, locIDStr, statusStr string
 		var cursorsJSON []byte
+		var focusMembershipsJSON, presentingFocusJSON []byte
 
 		err := rows.Scan(
 			&info.ID,
@@ -152,12 +173,14 @@ func scanSessions(rows pgx.Rows) ([]*session.Info, error) {
 			&info.UpdatedAt,
 			&info.LastPaged,
 			&info.LastWhispered,
+			&focusMembershipsJSON,
+			&presentingFocusJSON,
 		)
 		if err != nil {
 			return nil, oops.With("operation", "scan session row").Wrap(err)
 		}
 
-		if err := parseSessionRow(&info, charIDStr, playerIDStr, locIDStr, statusStr, cursorsJSON); err != nil {
+		if err := parseSessionRow(&info, charIDStr, playerIDStr, locIDStr, statusStr, cursorsJSON, focusMembershipsJSON, presentingFocusJSON); err != nil {
 			return nil, err
 		}
 
@@ -198,13 +221,27 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 		cmdHistory = []string{}
 	}
 
+	focusMembershipsJSON, err := json.Marshal(info.FocusMemberships)
+	if err != nil {
+		return oops.With("operation", "marshal focus_memberships").With("session_id", id).Wrap(err)
+	}
+
+	var presentingFocusJSON []byte
+	if info.PresentingFocus != nil {
+		presentingFocusJSON, err = json.Marshal(info.PresentingFocus)
+		if err != nil {
+			return oops.With("operation", "marshal presenting_focus").With("session_id", id).Wrap(err)
+		}
+	}
+
 	_, err = s.pool.Exec(ctx,
 		`INSERT INTO sessions (id, character_id, player_id, character_name, location_id,
 			is_guest, status, grid_present, event_cursors,
 			command_history, ttl_seconds, max_history,
 			detached_at, expires_at, created_at,
-			last_paged, last_whispered)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17)
+			last_paged, last_whispered,
+			focus_memberships, presenting_focus)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET
 			character_id = EXCLUDED.character_id,
 			player_id = EXCLUDED.player_id,
@@ -221,6 +258,8 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 			expires_at = EXCLUDED.expires_at,
 			last_paged = EXCLUDED.last_paged,
 			last_whispered = EXCLUDED.last_whispered,
+			focus_memberships = EXCLUDED.focus_memberships,
+			presenting_focus = EXCLUDED.presenting_focus,
 			updated_at = now()`,
 		id,
 		info.CharacterID.String(),
@@ -239,6 +278,8 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 		info.CreatedAt,
 		info.LastPaged,
 		info.LastWhispered,
+		focusMembershipsJSON,
+		presentingFocusJSON,
 	)
 	if err != nil {
 		return oops.With("operation", "set session").With("session_id", id).Wrap(err)
@@ -601,4 +642,92 @@ func (s *PostgresSessionStore) UpdateLastWhispered(ctx context.Context, sessionI
 		return oops.Code("SESSION_NOT_FOUND").With("session_id", sessionID).Errorf("session not found")
 	}
 	return nil
+}
+
+// UpdateFocusMemberships atomically applies the mutator callback to the
+// session's focus memberships and presenting focus. Uses a transaction
+// to ensure atomicity: reads current state, calls the mutator, and writes
+// the result. On mutator error, the transaction is rolled back.
+func (s *PostgresSessionStore) UpdateFocusMemberships(ctx context.Context, sessionID string, m session.FocusMutator) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return oops.With("operation", "begin tx for update focus memberships").Wrap(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback on commit is a no-op
+
+	// Read current state under the transaction.
+	var statusStr string
+	var focusMembershipsJSON, presentingFocusJSON []byte
+	err = tx.QueryRow(ctx,
+		`SELECT status, focus_memberships, presenting_focus FROM sessions WHERE id = $1 FOR UPDATE`,
+		sessionID,
+	).Scan(&statusStr, &focusMembershipsJSON, &presentingFocusJSON)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.Code("SESSION_NOT_FOUND").
+			With("session_id", sessionID).
+			Errorf("session not found")
+	}
+	if err != nil {
+		return oops.With("operation", "read session for focus mutation").
+			With("session_id", sessionID).Wrap(err)
+	}
+
+	if statusStr == string(session.StatusExpired) {
+		return oops.Code("SESSION_EXPIRED").
+			With("session_id", sessionID).
+			Errorf("cannot mutate focus on expired session")
+	}
+
+	// Unmarshal current state.
+	var currentMemberships []session.FocusMembership
+	if len(focusMembershipsJSON) > 0 {
+		if err := json.Unmarshal(focusMembershipsJSON, &currentMemberships); err != nil {
+			return oops.With("operation", "unmarshal focus_memberships").Wrap(err)
+		}
+	}
+
+	var currentPresenting *session.FocusKey
+	if len(presentingFocusJSON) > 0 {
+		var key session.FocusKey
+		if err := json.Unmarshal(presentingFocusJSON, &key); err != nil {
+			return oops.With("operation", "unmarshal presenting_focus").Wrap(err)
+		}
+		currentPresenting = &key
+	}
+
+	// Call the mutator.
+	nextMemberships, nextPresenting, mutErr := m.Mutate(currentMemberships, currentPresenting)
+	if mutErr != nil {
+		return oops.Code("FOCUS_MUTATOR_ERROR").
+			With("session_id", sessionID).
+			Wrap(mutErr)
+	}
+
+	// Marshal next state.
+	if nextMemberships == nil {
+		nextMemberships = []session.FocusMembership{}
+	}
+	nextMembershipsJSON, err := json.Marshal(nextMemberships)
+	if err != nil {
+		return oops.With("operation", "marshal next focus_memberships").Wrap(err)
+	}
+
+	var nextPresentingJSON []byte
+	if nextPresenting != nil {
+		nextPresentingJSON, err = json.Marshal(nextPresenting)
+		if err != nil {
+			return oops.With("operation", "marshal next presenting_focus").Wrap(err)
+		}
+	}
+
+	// Write back.
+	_, err = tx.Exec(ctx,
+		`UPDATE sessions SET focus_memberships = $1::jsonb, presenting_focus = $2::jsonb, updated_at = now() WHERE id = $3`,
+		nextMembershipsJSON, nextPresentingJSON, sessionID)
+	if err != nil {
+		return oops.With("operation", "write focus memberships").
+			With("session_id", sessionID).Wrap(err)
+	}
+
+	return tx.Commit(ctx)
 }

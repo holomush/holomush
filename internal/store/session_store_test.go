@@ -51,12 +51,18 @@ func sessionColumns() []string {
 		"command_history", "ttl_seconds", "max_history",
 		"detached_at", "expires_at", "created_at", "updated_at",
 		"last_paged", "last_whispered",
+		"focus_memberships", "presenting_focus",
 	}
 }
 
 // sessionRow creates a pgxmock row from a session.Info.
 func sessionRow(info *session.Info) []any {
 	cursorsJSON, _ := json.Marshal(info.EventCursors)
+	focusMembershipsJSON, _ := json.Marshal(info.FocusMemberships)
+	var presentingFocusJSON []byte
+	if info.PresentingFocus != nil {
+		presentingFocusJSON, _ = json.Marshal(info.PresentingFocus)
+	}
 	return []any{
 		info.ID,
 		info.CharacterID.String(),
@@ -76,6 +82,8 @@ func sessionRow(info *session.Info) []any {
 		info.UpdatedAt,
 		info.LastPaged,
 		info.LastWhispered,
+		focusMembershipsJSON,
+		presentingFocusJSON,
 	}
 }
 
@@ -201,6 +209,8 @@ func TestPostgresSessionStore_Set(t *testing.T) {
 						pgxmock.AnyArg(), // created_at
 						pgxmock.AnyArg(), // last_paged
 						pgxmock.AnyArg(), // last_whispered
+						pgxmock.AnyArg(), // focus_memberships
+						pgxmock.AnyArg(), // presenting_focus
 					).
 					WillReturnResult(pgxmock.NewResult("INSERT", 1))
 			},
@@ -217,6 +227,7 @@ func TestPostgresSessionStore_Set(t *testing.T) {
 						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
+						pgxmock.AnyArg(), pgxmock.AnyArg(),
 						pgxmock.AnyArg(), pgxmock.AnyArg(),
 					).
 					WillReturnError(errors.New("disk full"))
@@ -288,6 +299,8 @@ func TestPostgresSessionStore_Set_NilCommandHistory(t *testing.T) {
 			pgxmock.AnyArg(),     // created_at
 			pgxmock.AnyArg(),     // last_paged
 			pgxmock.AnyArg(),     // last_whispered
+			pgxmock.AnyArg(),     // focus_memberships
+			pgxmock.AnyArg(),     // presenting_focus
 		).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
 

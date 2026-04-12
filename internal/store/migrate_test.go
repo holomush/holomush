@@ -263,17 +263,17 @@ func TestMigratorCloseIsIdempotent(t *testing.T) {
 }
 
 func TestMigratorPendingMigrationsReturnsMigrationsAboveCurrentVersion(t *testing.T) {
-	// At version 0, migrations 1-5 should be pending (baseline + is_guest +
-	// alias_source + session_player_id + audit_source_component)
+	// At version 0, migrations 1-6 should be pending (baseline + is_guest +
+	// alias_source + session_player_id + audit_source_component + session_focus)
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5}, pending)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6}, pending)
 }
 
 func TestMigratorPendingMigrationsReturnsEmptyAtLatestVersion(t *testing.T) {
-	// At version 5 (latest), no migrations should be pending
-	m := &Migrator{m: &mockMigrate{versionVal: 5}}
+	// At version 6 (latest), no migrations should be pending
+	m := &Migrator{m: &mockMigrate{versionVal: 6}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
 	assert.Empty(t, pending)
@@ -304,11 +304,11 @@ func TestMigratorAppliedMigrationsReturnsEmptyAtVersionZero(t *testing.T) {
 }
 
 func TestMigratorAppliedMigrationsReturnsAllAtLatestVersion(t *testing.T) {
-	// At version 5 (latest), all migrations applied
-	m := &Migrator{m: &mockMigrate{versionVal: 5}}
+	// At version 6 (latest), all migrations applied
+	m := &Migrator{m: &mockMigrate{versionVal: 6}}
 	applied, err := m.AppliedMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5}, applied)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6}, applied)
 }
 
 func TestMigratorAppliedMigrationsReturnsErrorWhenVersionFails(t *testing.T) {

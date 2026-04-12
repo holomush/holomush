@@ -532,4 +532,122 @@ var _ = Describe("PostgresSessionStore", func() {
 			Expect(err.Error()).To(ContainSubstring("multi-key cursor updates are not supported"))
 		})
 	})
+
+	Describe("UpdateFocusMemberships", func() {
+		It("adds a membership and sets presenting focus", func() {
+			ctx := context.Background()
+			info := newTestSession("sess-ufm-add")
+			Expect(sessionStore.Set(ctx, info.ID, info)).To(Succeed())
+
+			targetID := ulid.Make()
+			mutator := session.NewFocusMutator(func(
+				current []session.FocusMembership,
+				presenting *session.FocusKey,
+			) ([]session.FocusMembership, *session.FocusKey, error) {
+				Expect(current).To(BeEmpty())
+				Expect(presenting).To(BeNil())
+				m := session.FocusMembership{
+					Kind:     session.FocusKindScene,
+					TargetID: targetID,
+					JoinedAt: time.Now().UTC().Truncate(time.Microsecond),
+				}
+				key := &session.FocusKey{Kind: session.FocusKindScene, TargetID: targetID}
+				return []session.FocusMembership{m}, key, nil
+			})
+
+			Expect(sessionStore.UpdateFocusMemberships(ctx, info.ID, mutator)).To(Succeed())
+
+			got, err := sessionStore.Get(ctx, info.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.FocusMemberships).To(HaveLen(1))
+			Expect(got.FocusMemberships[0].Kind).To(Equal(session.FocusKindScene))
+			Expect(got.FocusMemberships[0].TargetID).To(Equal(targetID))
+			Expect(got.PresentingFocus).NotTo(BeNil())
+			Expect(got.PresentingFocus.TargetID).To(Equal(targetID))
+		})
+
+		It("returns SESSION_NOT_FOUND for missing session", func() {
+			ctx := context.Background()
+			mutator := session.NewFocusMutator(func(
+				current []session.FocusMembership,
+				presenting *session.FocusKey,
+			) ([]session.FocusMembership, *session.FocusKey, error) {
+				return current, presenting, nil
+			})
+
+			err := sessionStore.UpdateFocusMemberships(ctx, "nonexistent", mutator)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("rejects mutation on expired session", func() {
+			ctx := context.Background()
+			info := newTestSession("sess-ufm-expired")
+			info.Status = session.StatusExpired
+			Expect(sessionStore.Set(ctx, info.ID, info)).To(Succeed())
+
+			mutator := session.NewFocusMutator(func(
+				current []session.FocusMembership,
+				presenting *session.FocusKey,
+			) ([]session.FocusMembership, *session.FocusKey, error) {
+				return current, presenting, nil
+			})
+
+			err := sessionStore.UpdateFocusMemberships(ctx, info.ID, mutator)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("rolls back on mutator error", func() {
+			ctx := context.Background()
+			info := newTestSession("sess-ufm-rollback")
+			Expect(sessionStore.Set(ctx, info.ID, info)).To(Succeed())
+
+			mutator := session.NewFocusMutator(func(
+				current []session.FocusMembership,
+				presenting *session.FocusKey,
+			) ([]session.FocusMembership, *session.FocusKey, error) {
+				return nil, nil, fmt.Errorf("intentional error")
+			})
+
+			err := sessionStore.UpdateFocusMemberships(ctx, info.ID, mutator)
+			Expect(err).To(HaveOccurred())
+
+			got, gErr := sessionStore.Get(ctx, info.ID)
+			Expect(gErr).NotTo(HaveOccurred())
+			Expect(got.FocusMemberships).To(BeEmpty())
+			Expect(got.PresentingFocus).To(BeNil())
+		})
+
+		It("round-trips JSONB serialization for FocusMemberships", func() {
+			ctx := context.Background()
+			info := newTestSession("sess-ufm-jsonb-rt")
+			Expect(sessionStore.Set(ctx, info.ID, info)).To(Succeed())
+
+			target1 := ulid.Make()
+			target2 := ulid.Make()
+			now := time.Now().UTC().Truncate(time.Microsecond)
+
+			mutator := session.NewFocusMutator(func(
+				current []session.FocusMembership,
+				presenting *session.FocusKey,
+			) ([]session.FocusMembership, *session.FocusKey, error) {
+				memberships := []session.FocusMembership{
+					{Kind: session.FocusKindScene, TargetID: target1, JoinedAt: now},
+					{Kind: session.FocusKindScene, TargetID: target2, JoinedAt: now.Add(time.Second)},
+				}
+				key := &session.FocusKey{Kind: session.FocusKindScene, TargetID: target1}
+				return memberships, key, nil
+			})
+
+			Expect(sessionStore.UpdateFocusMemberships(ctx, info.ID, mutator)).To(Succeed())
+
+			got, err := sessionStore.Get(ctx, info.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.FocusMemberships).To(HaveLen(2))
+			Expect(got.FocusMemberships[0].TargetID).To(Equal(target1))
+			Expect(got.FocusMemberships[1].TargetID).To(Equal(target2))
+			Expect(got.FocusMemberships[0].JoinedAt).To(BeTemporally("~", now, time.Millisecond))
+			Expect(got.PresentingFocus).NotTo(BeNil())
+			Expect(got.PresentingFocus.TargetID).To(Equal(target1))
+		})
+	})
 })
