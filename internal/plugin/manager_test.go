@@ -1039,6 +1039,7 @@ lua-plugin:
 	err := mgr.LoadAll(context.Background())
 	require.Error(t, err, "load should fail when capability uses an undeclared action")
 	assert.Contains(t, err.Error(), "join")
+	assert.Empty(t, mgr.ListPlugins(), "no plugins should be registered after a load failure")
 }
 
 func TestManagerLoadAllAcceptsCapabilityWithDeclaredAction(t *testing.T) {
