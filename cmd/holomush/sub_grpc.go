@@ -24,6 +24,9 @@ import (
 	"github.com/holomush/holomush/internal/content"
 	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	holoFocus "github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/grpc/focus/scenepolicy"
+	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/naming"
 	plugins "github.com/holomush/holomush/internal/plugin"
@@ -229,6 +232,30 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	if s.cfg.StreamRegistry != nil {
 		coreServerOpts = append(coreServerOpts, holoGRPC.WithStreamRegistry(s.cfg.StreamRegistry))
 	}
+
+	// 8a. Create focus.Coordinator.
+	gameSettings := settings.NewGameSettings(&settings.SystemInfoAdapter{
+		Store:       rawEventStore,
+		NotFoundErr: store.ErrSystemInfoNotFound,
+	})
+	focusCoordOpts := []holoFocus.CoordinatorOption{
+		holoFocus.WithSessionStore(sessionStore),
+		holoFocus.WithEventStore(eventStore),
+		holoFocus.WithKindPolicy(scenepolicy.New()),
+		holoFocus.WithGameSettings(gameSettings),
+		holoFocus.WithPlayerPreferences(holoFocus.NewPlayerPrefsAdapter(authPlayerRepo)),
+	}
+	if s.cfg.StreamRegistry != nil {
+		focusCoordOpts = append(focusCoordOpts,
+			holoFocus.WithStreamSender(holoGRPC.NewStreamSenderAdapter(s.cfg.StreamRegistry)),
+		)
+	}
+	focusCoord, focusErr := holoFocus.NewCoordinator(focusCoordOpts...)
+	if focusErr != nil {
+		return oops.Code("FOCUS_COORDINATOR_FAILED").Wrap(focusErr)
+	}
+	coreServerOpts = append(coreServerOpts, holoGRPC.WithFocusCoordinator(focusCoord))
+
 	coreServer := holoGRPC.NewCoreServer(engine, sessionStore, cmdDispatcher, cmdServices, coreServerOpts...)
 	corev1.RegisterCoreServiceServer(s.grpcServer, coreServer)
 

@@ -6,14 +6,20 @@ package grpc
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/grpc/focus"
 )
 
 // sessionStreamUpdate is sent on a session's control channel to add or remove a stream.
 type sessionStreamUpdate struct {
-	stream string
-	add    bool // true = subscribe, false = unsubscribe
+	stream     string
+	add        bool             // true = subscribe, false = unsubscribe
+	replayMode focus.ReplayMode // only meaningful when add == true
+	tailCount  int       //nolint:unused // forward-declared for B7 live-loop replay dispatch
+	notBefore  time.Time //nolint:unused // forward-declared for B7 live-loop replay dispatch
 }
 
 // SessionStreamRegistry maps active session IDs to their Subscribe control channels.
@@ -84,10 +90,30 @@ func (r *SessionStreamRegistry) Send(sessionID string, update sessionStreamUpdat
 
 // AddStream implements plugins.StreamRegistry. Subscribes a session to a stream.
 func (r *SessionStreamRegistry) AddStream(_ context.Context, sessionID, stream string) error {
-	return r.Send(sessionID, sessionStreamUpdate{stream: stream, add: true})
+	return r.Send(sessionID, sessionStreamUpdate{stream: stream, add: true, replayMode: focus.ReplayModeFromCursor})
 }
 
 // RemoveStream implements plugins.StreamRegistry. Unsubscribes a session from a stream.
 func (r *SessionStreamRegistry) RemoveStream(_ context.Context, sessionID, stream string) error {
 	return r.Send(sessionID, sessionStreamUpdate{stream: stream, add: false})
+}
+
+// StreamSenderAdapter wraps SessionStreamRegistry to satisfy focus.StreamSender.
+// It calls Send directly (not AddStream) to pass explicit ReplayMode values.
+type StreamSenderAdapter struct {
+	registry *SessionStreamRegistry
+}
+
+// NewStreamSenderAdapter creates a StreamSenderAdapter.
+func NewStreamSenderAdapter(r *SessionStreamRegistry) *StreamSenderAdapter {
+	return &StreamSenderAdapter{registry: r}
+}
+
+// Send implements focus.StreamSender.
+func (a *StreamSenderAdapter) Send(sessionID, stream string, add bool, mode focus.ReplayMode) error {
+	return a.registry.Send(sessionID, sessionStreamUpdate{
+		stream:     stream,
+		add:        add,
+		replayMode: mode,
+	})
 }
