@@ -418,6 +418,9 @@ func (m *Manifest) Validate() error {
 	// Validate actions: no empty strings, no duplicates.
 	// All plugin types may declare actions (unlike resource_types, actions
 	// have no structural coupling to AttributeResolverService).
+	// Note: no format constraint on action names — actions are free-form identifiers
+	// and may re-declare core actions (unlike resource_types which checks namePattern
+	// and ProtectedResourceTypes).
 	if len(m.Actions) > 0 {
 		seen := make(map[string]bool, len(m.Actions))
 		for _, a := range m.Actions {

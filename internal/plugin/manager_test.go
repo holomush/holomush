@@ -882,6 +882,62 @@ func TestCollectResourceTypesReturnsNewMapPerCall(t *testing.T) {
 	assert.False(t, second["mutated"], "subsequent calls must not see prior mutations")
 }
 
+// CollectActions is the exported test seam that backs the
+// cross-plugin action collection used during LoadAll.
+
+func TestCollectActionsIncludesCoreActions(t *testing.T) {
+	known := plugins.CollectActions(nil)
+	for _, action := range []string{"read", "write", "emit", "enter", "use", "delete", "execute", "admin"} {
+		assert.True(t, known[action], "core action %q must be included", action)
+	}
+}
+
+func TestCollectActionsMergesExplicitManifestActions(t *testing.T) {
+	discovered := []*plugins.DiscoveredPlugin{
+		{Manifest: &plugins.Manifest{Name: "p1", Actions: []string{"join"}}},
+		{Manifest: &plugins.Manifest{Name: "p2", Actions: []string{"leave", "vote"}}},
+	}
+	known := plugins.CollectActions(discovered)
+	assert.True(t, known["join"], "declared 'join' should be present")
+	assert.True(t, known["leave"], "declared 'leave' should be present")
+	assert.True(t, known["vote"], "declared 'vote' should be present")
+	assert.True(t, known["read"], "core actions should still be present after merge")
+}
+
+func TestCollectActionsDeduplicatesAcrossPlugins(t *testing.T) {
+	discovered := []*plugins.DiscoveredPlugin{
+		{Manifest: &plugins.Manifest{Name: "p1", Actions: []string{"join"}}},
+		{Manifest: &plugins.Manifest{Name: "p2", Actions: []string{"join"}}},
+	}
+	known := plugins.CollectActions(discovered)
+	assert.True(t, known["join"], "'join' declared by two plugins should be present once")
+}
+
+func TestCollectActionsReturnsNewMapPerCall(t *testing.T) {
+	first := plugins.CollectActions(nil)
+	first["mutated"] = true
+	second := plugins.CollectActions(nil)
+	assert.False(t, second["mutated"], "subsequent calls must not see prior mutations")
+}
+
+func TestCollectActionsIgnoresCapabilityActionsNotInActionsField(t *testing.T) {
+	// Only the explicit Actions manifest field feeds CollectActions.
+	// Action strings in command capabilities are NOT auto-promoted.
+	discovered := []*plugins.DiscoveredPlugin{
+		{Manifest: &plugins.Manifest{
+			Name: "p1",
+			Commands: []plugins.CommandSpec{
+				{Name: "channel", Capabilities: []command.Capability{
+					{Action: "join", Resource: "channel"},
+				}},
+			},
+			// No Actions field declared.
+		}},
+	}
+	known := plugins.CollectActions(discovered)
+	assert.False(t, known["join"], "'join' in capabilities but not in actions field must not appear")
+}
+
 // Semantic capability validation: loadPlugin must reject manifests whose
 // commands declare capabilities on resource types that aren't in the
 // cross-plugin known set.

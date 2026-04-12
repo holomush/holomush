@@ -452,6 +452,20 @@ func CollectResourceTypes(discovered []*DiscoveredPlugin) map[string]bool {
 	return known
 }
 
+// CollectActions builds the full set of known ABAC actions: core actions plus
+// all actions explicitly declared across discovered plugins. This cross-plugin
+// context is needed for semantic validation during loadPlugin. Exported as a
+// test seam so callers can verify the merge logic without driving LoadAll.
+func CollectActions(discovered []*DiscoveredPlugin) map[string]bool {
+	known := command.CoreActions()
+	for _, dp := range discovered {
+		for _, a := range dp.Manifest.Actions {
+			known[a] = true
+		}
+	}
+	return known
+}
+
 // resolveLoadOrder returns plugins in the order they should be loaded.
 // When a registry is configured, it uses DAG-based dependency resolution.
 // Falls back to priority sort if DAG resolution fails or no registry is set.
