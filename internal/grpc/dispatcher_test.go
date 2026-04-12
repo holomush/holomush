@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -43,14 +42,12 @@ func registerTestCommands(t *testing.T, reg *command.Registry) {
 				"character_name": exec.CharacterName(),
 				"message":        exec.Args,
 			})
-			event := core.Event{
-				ID:        core.NewULID(),
-				Type:      core.EventTypeSay,
-				Stream:    "location:" + exec.LocationID().String(),
-				Timestamp: time.Now(),
-				Actor:     core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
-				Payload:   payload,
-			}
+			event := core.NewEvent(
+				"location:"+exec.LocationID().String(),
+				core.EventTypeSay,
+				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+				payload,
+			)
 			return exec.Services().Events().Append(ctx, event)
 		},
 	})
@@ -62,14 +59,12 @@ func registerTestCommands(t *testing.T, reg *command.Registry) {
 				"character_name": exec.CharacterName(),
 				"action":         exec.Args,
 			})
-			event := core.Event{
-				ID:        core.NewULID(),
-				Type:      core.EventTypePose,
-				Stream:    "location:" + exec.LocationID().String(),
-				Timestamp: time.Now(),
-				Actor:     core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
-				Payload:   payload,
-			}
+			event := core.NewEvent(
+				"location:"+exec.LocationID().String(),
+				core.EventTypePose,
+				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+				payload,
+			)
 			return exec.Services().Events().Append(ctx, event)
 		},
 	})
@@ -82,14 +77,12 @@ func registerTestCommands(t *testing.T, reg *command.Registry) {
 				Message:       exec.Args,
 				Style:         "say",
 			})
-			event := core.Event{
-				ID:        core.NewULID(),
-				Type:      core.EventTypeOOC,
-				Stream:    "location:" + exec.LocationID().String(),
-				Timestamp: time.Now(),
-				Actor:     core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
-				Payload:   payload,
-			}
+			event := core.NewEvent(
+				"location:"+exec.LocationID().String(),
+				core.EventTypeOOC,
+				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
+				payload,
+			)
 			return exec.Services().Events().Append(ctx, event)
 		},
 	})
