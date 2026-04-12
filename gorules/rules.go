@@ -14,14 +14,22 @@ package gorules
 
 import "github.com/quasilyte/go-ruleguard/dsl"
 
-// EventIDMustBeMonotonic ensures core.Event{} literals use core.NewULID()
-// (monotonic-within-millisecond entropy), not idgen.New() (fresh random
-// per call). Non-monotonic event IDs silently break PostgresEventStore.Replay
-// (WHERE id > afterID ORDER BY id) and PostgresSessionStore cursor
-// monotonicity. See internal/core/ulid.go for the invariant documentation.
+// EventIDMustBeMonotonic ensures events are constructed via core.NewEvent(),
+// not via raw core.Event{} struct literals. core.NewEvent() assigns the ID
+// from core.NewULID() (monotonic-within-millisecond), enforcing invariant
+// I-16 from the focus-substrate design spec. Raw struct literals risk using
+// idgen.New() or ulid.Make() which produce non-monotonic IDs that silently
+// break PostgresEventStore.Replay and cursor CAS advances.
+//
+// The rule catches ANY core.Event{} literal. The only legitimate construction
+// site is core.NewEvent() itself (in internal/core/event.go), which is
+// excluded via the Where clause filtering on the file path.
+//
+// See docs/superpowers/specs/2026-04-11-focus-substrate-design.md section 3.1 I-16.
 func EventIDMustBeMonotonic(m dsl.Matcher) {
-	m.Match(`core.Event{$*_, ID: idgen.New(), $*_}`).
-		Report(`event IDs must use core.NewULID() (monotonic), not idgen.New() (random) — see internal/core/ulid.go`)
+	m.Match(`core.Event{$*_}`).
+		Where(!m.File().Name.Matches(`event\.go$`)).
+		Report(`use core.NewEvent() instead of raw core.Event{} literal -- see I-16 in focus-substrate spec`)
 }
 
 // ULIDMakeForbidden forbids ulid.Make() in production code. ulid.Make()
