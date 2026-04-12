@@ -120,6 +120,14 @@ func (m *mockEventStore) Subscribe(ctx context.Context, stream string) (<-chan u
 	return eventCh, errCh, nil
 }
 
+func (m *mockEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time) ([]core.Event, error) {
+	return nil, nil
+}
+
+func (m *mockEventStore) SubscribeSession(_ context.Context) (core.Subscription, error) {
+	return nil, nil
+}
+
 // mockSubscribeStream implements grpc.ServerStreamingServer[corev1.SubscribeResponse] for testing.
 type mockSubscribeStream struct {
 	grpc.ServerStream
@@ -3078,20 +3086,20 @@ func (m *mockStreamContributor) QuerySessionStreams(_ context.Context, _ plugins
 
 // trackingEventStore wraps core.MemoryEventStore and records Subscribe calls.
 type trackingEventStore struct {
-	core.EventStore
+	*core.MemoryEventStore
 	mu              sync.Mutex
 	subscribedNames []string
 }
 
 func newTrackingEventStore() *trackingEventStore {
-	return &trackingEventStore{EventStore: core.NewMemoryEventStore()}
+	return &trackingEventStore{MemoryEventStore: core.NewMemoryEventStore()}
 }
 
 func (t *trackingEventStore) Subscribe(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error) {
 	t.mu.Lock()
 	t.subscribedNames = append(t.subscribedNames, stream)
 	t.mu.Unlock()
-	return t.EventStore.Subscribe(ctx, stream)
+	return t.MemoryEventStore.Subscribe(ctx, stream)
 }
 
 func (t *trackingEventStore) subscribedStreams() []string {

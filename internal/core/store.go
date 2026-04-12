@@ -26,12 +26,6 @@ type EventStore interface {
 	// LastEventID returns the most recent event ID for a stream.
 	LastEventID(ctx context.Context, stream string) (ulid.ULID, error)
 
-	// Subscribe starts listening for new events on the given stream.
-	// Returns a channel of event IDs and an error channel.
-	// The caller should use Replay() to fetch full events by ID.
-	// Channels are closed when context is cancelled.
-	Subscribe(ctx context.Context, stream string) (eventCh <-chan ulid.ULID, errCh <-chan error, err error)
-
 	// ReplayTail returns up to count most recent events on stream,
 	// ordered ascending by event ID. If notBefore is non-zero, events
 	// with timestamps before it are excluded. Count is capped server-side

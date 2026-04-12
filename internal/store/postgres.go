@@ -526,7 +526,7 @@ func (ps *pgSubscription) Close() error {
 	ps.cancel()
 	if err := ps.conn.Close(context.Background()); err != nil {
 		slog.Error("failed to close session subscription connection", "error", err)
-		return err
+		return oops.With("operation", "close session subscription connection").Wrap(err)
 	}
 	return nil
 }

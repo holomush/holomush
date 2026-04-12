@@ -214,6 +214,14 @@ func (m *mockEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULI
 	return nil, nil, nil
 }
 
+func (m *mockEventStore) ReplayTail(context.Context, string, int, time.Time) ([]core.Event, error) {
+	return nil, nil
+}
+
+func (m *mockEventStore) SubscribeSession(context.Context) (core.Subscription, error) {
+	return nil, nil
+}
+
 func TestCommandHandlerSignature(t *testing.T) {
 	// Verify CommandHandler can be assigned a function with the correct signature
 	var handler CommandHandler = func(_ context.Context, _ *CommandExecution) error {
@@ -824,4 +832,12 @@ func (c *captureEventStore) Replay(context.Context, string, ulid.ULID, int) ([]c
 
 func (c *captureEventStore) LastEventID(context.Context, string) (ulid.ULID, error) {
 	return ulid.ULID{}, errors.New("captureEventStore.LastEventID not implemented")
+}
+
+func (c *captureEventStore) ReplayTail(context.Context, string, int, time.Time) ([]core.Event, error) {
+	return nil, nil
+}
+
+func (c *captureEventStore) SubscribeSession(context.Context) (core.Subscription, error) {
+	return nil, nil
 }

@@ -532,10 +532,17 @@ func eventToProto(ev core.Event) *corev1.SubscribeResponse {
 	}
 }
 
+// legacySubscriber is a transitional interface for callers that still use
+// the per-stream Subscribe method. Removed in B7 when the handler is
+// rewritten to use SubscribeSession.
+type legacySubscriber interface {
+	Subscribe(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error)
+}
+
 // subscribeStream sets up a LISTEN subscription on a stream and starts a
 // relay goroutine that forwards ULID notifications to notifyCh. Subscription
 // errors are forwarded to errCh. Returns an error if the LISTEN setup fails.
-func subscribeStream(ctx context.Context, store core.EventStore, stream string, notifyCh chan<- streamNotification, errCh chan<- error) error {
+func subscribeStream(ctx context.Context, store legacySubscriber, stream string, notifyCh chan<- streamNotification, errCh chan<- error) error {
 	eventCh, subErrCh, err := store.Subscribe(ctx, stream)
 	if err != nil {
 		return oops.With("stream", stream).Wrap(err)
@@ -763,7 +770,12 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	streamCancels := make(map[string]context.CancelFunc)
 	subscribeWithCancel := func(sn string) error {
 		sctx, cancel := context.WithCancel(ctx)
-		if err := subscribeStream(sctx, s.eventStore, sn, notifyCh, errCh); err != nil {
+		ls, ok := s.eventStore.(legacySubscriber)
+		if !ok {
+			cancel()
+			return oops.Errorf("event store does not support legacy Subscribe")
+		}
+		if err := subscribeStream(sctx, ls, sn, notifyCh, errCh); err != nil {
 			cancel()
 			return err
 		}
