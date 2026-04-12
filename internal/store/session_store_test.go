@@ -1378,8 +1378,8 @@ func TestPostgresSessionStore_UpdateFocusMemberships(t *testing.T) {
 
 		store := NewPostgresSessionStore(mock)
 		mutator := session.NewFocusMutator(func(
-			current []session.FocusMembership,
-			presenting *session.FocusKey,
+			_ []session.FocusMembership,
+			_ *session.FocusKey,
 		) ([]session.FocusMembership, *session.FocusKey, error) {
 			return nil, nil, errors.New("mutator exploded")
 		})
@@ -1453,8 +1453,8 @@ func TestPostgresSessionStore_UpdateFocusMemberships(t *testing.T) {
 
 		store := NewPostgresSessionStore(mock)
 		mutator := session.NewFocusMutator(func(
-			current []session.FocusMembership,
-			presenting *session.FocusKey,
+			_ []session.FocusMembership,
+			_ *session.FocusKey,
 		) ([]session.FocusMembership, *session.FocusKey, error) {
 			return []session.FocusMembership{}, nil, nil
 		})
@@ -1482,8 +1482,8 @@ func TestPostgresSessionStore_UpdateFocusMemberships(t *testing.T) {
 
 		store := NewPostgresSessionStore(mock)
 		mutator := session.NewFocusMutator(func(
-			current []session.FocusMembership,
-			presenting *session.FocusKey,
+			_ []session.FocusMembership,
+			_ *session.FocusKey,
 		) ([]session.FocusMembership, *session.FocusKey, error) {
 			return []session.FocusMembership{}, nil, nil
 		})
