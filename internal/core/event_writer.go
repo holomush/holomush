@@ -158,12 +158,16 @@ func (w *EventWriter) SubscribeSession(ctx context.Context) (Subscription, error
 //
 // TODO(B7): Remove this method when the Subscribe handler is rewritten to
 // use SubscribeSession exclusively.
-func (w *EventWriter) Subscribe(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error) {
+func (w *EventWriter) Subscribe(ctx context.Context, stream string) (eventCh <-chan ulid.ULID, errCh <-chan error, err error) {
 	type subscriber interface {
 		Subscribe(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error)
 	}
 	if s, ok := w.store.(subscriber); ok {
-		return s.Subscribe(ctx, stream)
+		eventCh, errCh, err = s.Subscribe(ctx, stream)
+		if err != nil {
+			return nil, nil, oops.With("stream", stream).Wrap(err)
+		}
+		return eventCh, errCh, nil
 	}
 	return nil, nil, oops.Errorf("underlying store does not support legacy Subscribe")
 }
