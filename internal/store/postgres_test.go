@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -816,6 +817,144 @@ func (m *mockConn) Close(_ context.Context) error {
 		return m.closeFunc(context.Background())
 	}
 	return nil
+}
+
+func TestPostgresEventStore_SubscribeSession_ConnectionError(t *testing.T) {
+	store := &PostgresEventStore{
+		dsn: "test-dsn",
+		connector: func(_ context.Context, _ string) (connIface, error) {
+			return nil, errors.New("connection refused")
+		},
+	}
+
+	ctx := context.Background()
+	sub, err := store.SubscribeSession(ctx)
+	require.Error(t, err)
+	assert.Nil(t, sub)
+	assert.Contains(t, err.Error(), "connection refused")
+}
+
+func TestPostgresEventStore_SubscribeSession_AddStream_ListenError(t *testing.T) {
+	store := &PostgresEventStore{
+		dsn: "test-dsn",
+		connector: func(_ context.Context, _ string) (connIface, error) {
+			return &mockConn{
+				execFunc: func(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
+					if strings.Contains(sql, "LISTEN") {
+						return pgconn.CommandTag{}, errors.New("LISTEN failed")
+					}
+					return pgconn.CommandTag{}, nil
+				},
+			}, nil
+		},
+	}
+
+	ctx := context.Background()
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, sub)
+	defer func() { _ = sub.Close() }()
+
+	err = sub.AddStream(ctx, "location:test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "LISTEN failed")
+}
+
+func TestPostgresEventStore_SubscribeSession_AddStreamIdempotent(t *testing.T) {
+	listenCount := 0
+	store := &PostgresEventStore{
+		dsn: "test-dsn",
+		connector: func(_ context.Context, _ string) (connIface, error) {
+			return &mockConn{
+				execFunc: func(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
+					if strings.Contains(sql, "LISTEN") {
+						listenCount++
+					}
+					return pgconn.CommandTag{}, nil
+				},
+			}, nil
+		},
+	}
+
+	ctx := context.Background()
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+	defer func() { _ = sub.Close() }()
+
+	require.NoError(t, sub.AddStream(ctx, "location:test"))
+	require.NoError(t, sub.AddStream(ctx, "location:test"))
+	assert.Equal(t, 1, listenCount, "idempotent AddStream should LISTEN only once")
+}
+
+func TestPostgresEventStore_SubscribeSession_RemoveStream_UnlistenError(t *testing.T) {
+	store := &PostgresEventStore{
+		dsn: "test-dsn",
+		connector: func(_ context.Context, _ string) (connIface, error) {
+			return &mockConn{
+				execFunc: func(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
+					if strings.Contains(sql, "UNLISTEN") {
+						return pgconn.CommandTag{}, errors.New("UNLISTEN failed")
+					}
+					return pgconn.CommandTag{}, nil
+				},
+			}, nil
+		},
+	}
+
+	ctx := context.Background()
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+	defer func() { _ = sub.Close() }()
+
+	require.NoError(t, sub.AddStream(ctx, "location:test"))
+	err = sub.RemoveStream(ctx, "location:test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "UNLISTEN failed")
+}
+
+func TestPostgresEventStore_SubscribeSession_NotificationsDelivered(t *testing.T) {
+	validULID := core.NewULID()
+	notifReady := make(chan struct{})
+
+	store := &PostgresEventStore{
+		dsn: "test-dsn",
+		connector: func(_ context.Context, _ string) (connIface, error) {
+			return &mockConn{
+				waitForNotificationFunc: func(ctx context.Context) (*pgconn.Notification, error) {
+					select {
+					case <-notifReady:
+						return &pgconn.Notification{
+							Channel: "events_location_test",
+							Payload: validULID.String(),
+						}, nil
+					case <-ctx.Done():
+						return nil, ctx.Err()
+					}
+				},
+			}, nil
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+	defer func() { _ = sub.Close() }()
+
+	require.NoError(t, sub.AddStream(ctx, "location:test"))
+
+	close(notifReady)
+
+	select {
+	case n := <-sub.Notifications():
+		assert.Equal(t, validULID, n.EventID)
+		assert.Equal(t, "location:test", n.Stream)
+	case err := <-sub.Errors():
+		t.Fatalf("unexpected error: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for notification")
+	}
 }
 
 func TestPostgresEventStore_Subscribe_ConnectionError(t *testing.T) {

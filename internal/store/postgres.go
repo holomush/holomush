@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/exaring/otelpgx"
@@ -370,4 +371,162 @@ func (s *PostgresEventStore) Subscribe(ctx context.Context, stream string) (even
 	}()
 
 	return events, errs, nil
+}
+
+// pgSubscription implements core.Subscription using a single dedicated
+// pgx.Conn with multi-channel LISTEN. This is Variant A: all notifications
+// from all streams arrive on one PG connection in commit order, which
+// structurally enforces invariant I-14.
+type pgSubscription struct {
+	conn     connIface
+	mu       sync.Mutex
+	streams  map[string]string // stream name -> channel name
+	channels map[string]string // channel name -> stream name (reverse lookup)
+	notifCh  chan core.StreamNotification
+	errCh    chan error
+	cancel   context.CancelFunc
+	closed   bool
+}
+
+// SubscribeSession opens a dedicated PG connection for a session-wide
+// subscription. The returned Subscription supports dynamic AddStream/
+// RemoveStream while delivering notifications in strict commit order
+// across all subscribed streams (invariant I-14).
+func (s *PostgresEventStore) SubscribeSession(ctx context.Context) (core.Subscription, error) {
+	connector := s.connector
+	if connector == nil {
+		connector = defaultConnector
+	}
+	conn, err := connector(ctx, s.dsn)
+	if err != nil {
+		return nil, oops.With("operation", "connect for session subscription").Wrap(err)
+	}
+
+	subCtx, cancel := context.WithCancel(ctx)
+
+	ps := &pgSubscription{
+		conn:     conn,
+		streams:  make(map[string]string),
+		channels: make(map[string]string),
+		notifCh:  make(chan core.StreamNotification, 256),
+		errCh:    make(chan error, 1),
+		cancel:   cancel,
+	}
+
+	go ps.notificationLoop(subCtx)
+	return ps, nil
+}
+
+// notificationLoop reads PG notifications and translates them to
+// StreamNotification values on the shared channel. Runs until the
+// context is cancelled or an unrecoverable error occurs.
+func (ps *pgSubscription) notificationLoop(ctx context.Context) {
+	defer close(ps.notifCh)
+	defer close(ps.errCh)
+
+	for {
+		notification, err := ps.conn.WaitForNotification(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			ps.errCh <- oops.With("operation", "wait for session notification").Wrap(err)
+			return
+		}
+
+		eventID, err := ulid.Parse(notification.Payload)
+		if err != nil {
+			ps.errCh <- oops.With("operation", "parse event ID from session notification").
+				With("payload", notification.Payload).Wrap(err)
+			return
+		}
+
+		ps.mu.Lock()
+		stream, ok := ps.channels[notification.Channel]
+		ps.mu.Unlock()
+
+		if !ok {
+			// Notification for a channel we already unlistened but
+			// was buffered. Safe to skip.
+			continue
+		}
+
+		select {
+		case ps.notifCh <- core.StreamNotification{Stream: stream, EventID: eventID}:
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// AddStream starts LISTENing on the PG channel for the given stream.
+// Idempotent: if the stream is already added, returns nil immediately.
+func (ps *pgSubscription) AddStream(ctx context.Context, stream string) error {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
+	if ps.closed {
+		return errors.New("subscription closed")
+	}
+	if _, exists := ps.streams[stream]; exists {
+		return nil
+	}
+
+	channel := streamToChannel(stream)
+	_, err := ps.conn.Exec(ctx, "LISTEN "+pgx.Identifier{channel}.Sanitize())
+	if err != nil {
+		return oops.With("operation", "listen").With("channel", channel).With("stream", stream).Wrap(err)
+	}
+
+	ps.streams[stream] = channel
+	ps.channels[channel] = stream
+	return nil
+}
+
+// RemoveStream stops LISTENing on the PG channel for the given stream.
+func (ps *pgSubscription) RemoveStream(ctx context.Context, stream string) error {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
+	channel, exists := ps.streams[stream]
+	if !exists {
+		return nil
+	}
+
+	_, err := ps.conn.Exec(ctx, "UNLISTEN "+pgx.Identifier{channel}.Sanitize())
+	if err != nil {
+		return oops.With("operation", "unlisten").With("channel", channel).With("stream", stream).Wrap(err)
+	}
+
+	delete(ps.streams, stream)
+	delete(ps.channels, channel)
+	return nil
+}
+
+// Notifications returns the unified notification channel.
+func (ps *pgSubscription) Notifications() <-chan core.StreamNotification {
+	return ps.notifCh
+}
+
+// Errors returns the error channel.
+func (ps *pgSubscription) Errors() <-chan error {
+	return ps.errCh
+}
+
+// Close releases the dedicated PG connection and cancels the notification loop.
+func (ps *pgSubscription) Close() error {
+	ps.mu.Lock()
+	if ps.closed {
+		ps.mu.Unlock()
+		return nil
+	}
+	ps.closed = true
+	ps.mu.Unlock()
+
+	ps.cancel()
+	if err := ps.conn.Close(context.Background()); err != nil {
+		slog.Error("failed to close session subscription connection", "error", err)
+		return err
+	}
+	return nil
 }
