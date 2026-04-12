@@ -7,7 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"math"
+
 	"strconv"
 	"time"
 
@@ -106,9 +106,10 @@ func (j *jsonMapSettings) IntN(ctx context.Context, key string) (int, bool) {
 		return 0, false
 	}
 	// Try native JSON number first.
-	var n float64
-	if err := json.Unmarshal(raw, &n); err == nil {
-		if math.Floor(n) != n {
+	var num json.Number
+	if err := json.Unmarshal(raw, &num); err == nil {
+		n, err := num.Int64()
+		if err != nil {
 			return 0, false
 		}
 		return int(n), true

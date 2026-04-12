@@ -157,6 +157,12 @@ func TestPlayerSettingsSetStringPersistsValidKey(t *testing.T) {
 
 	err := store.SetString(ctx, pid, "scenes.focus.replay_tail_default", "8")
 	assert.NoError(t, err)
+
+	// Read the value back and assert it was persisted.
+	s := store.For(ctx, pid)
+	val, ok := s.StringN(ctx, "scenes.focus.replay_tail_default")
+	assert.True(t, ok, "value should be readable after SetString")
+	assert.Equal(t, "8", val)
 }
 
 func TestPlayerSettingsSetStringRejectsInvalidNamespace(t *testing.T) {

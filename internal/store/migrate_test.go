@@ -59,6 +59,7 @@ type mockMigrate struct {
 	upErr          error
 	downErr        error
 	stepsErr       error
+	migrateErr     error
 	versionVal     uint
 	versionErr     error
 	dirty          bool
@@ -70,7 +71,7 @@ type mockMigrate struct {
 func (m *mockMigrate) Up() error                    { return m.upErr }
 func (m *mockMigrate) Down() error                  { return m.downErr }
 func (m *mockMigrate) Steps(_ int) error            { return m.stepsErr }
-func (m *mockMigrate) Migrate(_ uint) error         { return nil }
+func (m *mockMigrate) Migrate(_ uint) error         { return m.migrateErr }
 func (m *mockMigrate) Version() (uint, bool, error) { return m.versionVal, m.dirty, m.versionErr }
 func (m *mockMigrate) Force(_ int) error            { return m.forceErr }
 func (m *mockMigrate) Close() (error, error)        { return m.closeSourceErr, m.closeDbErr }
@@ -111,6 +112,19 @@ func TestMigratorDownReturnsWrappedErrorOnFailure(t *testing.T) {
 	err := m.Down()
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "MIGRATION_DOWN_FAILED")
+}
+
+func TestMigratorMigrateSucceedsWhenUnderlyingReturnsNil(t *testing.T) {
+	m := &Migrator{m: &mockMigrate{}}
+	err := m.Migrate(5)
+	require.NoError(t, err)
+}
+
+func TestMigratorMigrateReturnsErrorWhenUnderlyingFails(t *testing.T) {
+	m := &Migrator{m: &mockMigrate{migrateErr: errors.New("target version not found")}}
+	err := m.Migrate(99)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "MIGRATION_MIGRATE_FAILED")
 }
 
 func TestMigratorStepsAppliesNMigrations(t *testing.T) {
