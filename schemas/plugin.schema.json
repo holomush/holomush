@@ -143,6 +143,37 @@
       "type": "array",
       "description": "Commands provided by this plugin"
     },
+    "verbs": {
+      "items": {
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "display_target": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "category",
+          "format",
+          "display_target"
+        ]
+      },
+      "type": "array",
+      "description": "Verb registrations contributed by this plugin"
+    },
     "priority": {
       "type": "integer",
       "description": "Load priority (lower loads first)"

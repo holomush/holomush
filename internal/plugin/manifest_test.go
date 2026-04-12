@@ -4,6 +4,7 @@
 package plugins_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -2014,4 +2015,225 @@ setting:
 			}
 		})
 	}
+}
+
+func TestManifestAcceptsLuaPluginWithVerbs(t *testing.T) {
+	data := []byte(`
+name: channels
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+verbs:
+  - type: channel.say
+    category: communication
+    format: speech
+    label: says
+    display_target: terminal
+  - type: channel.pose
+    category: communication
+    format: action
+    display_target: both
+`)
+	m, err := plugins.ParseManifest(data)
+	require.NoError(t, err)
+	require.Len(t, m.Verbs, 2)
+
+	assert.Equal(t, "channel.say", m.Verbs[0].Type)
+	assert.Equal(t, "communication", m.Verbs[0].Category)
+	assert.Equal(t, "speech", m.Verbs[0].Format)
+	assert.Equal(t, "says", m.Verbs[0].Label)
+	assert.Equal(t, "terminal", m.Verbs[0].DisplayTarget)
+
+	assert.Equal(t, "channel.pose", m.Verbs[1].Type)
+	assert.Equal(t, "action", m.Verbs[1].Format)
+	assert.Equal(t, "both", m.Verbs[1].DisplayTarget)
+}
+
+func TestManifestAcceptsBinaryPluginWithVerbs(t *testing.T) {
+	data := []byte(`
+name: scenes
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: scenes
+verbs:
+  - type: scene.narrate
+    category: state
+    format: narrative
+    display_target: terminal
+`)
+	m, err := plugins.ParseManifest(data)
+	require.NoError(t, err)
+	require.Len(t, m.Verbs, 1)
+	assert.Equal(t, "scene.narrate", m.Verbs[0].Type)
+}
+
+func TestManifestRejectsSettingPluginWithVerbs(t *testing.T) {
+	data := []byte(`
+name: my-setting
+version: 1.0.0
+type: setting
+setting:
+  display_name: My Setting
+  content_dir: content
+  starting_location: start
+verbs:
+  - type: custom.say
+    category: communication
+    format: speech
+    label: says
+    display_target: terminal
+`)
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "setting plugins must not declare verbs")
+}
+
+func TestManifestRejectsVerbWithEmptyType(t *testing.T) {
+	data := []byte(`
+name: channels
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+verbs:
+  - type: ""
+    category: communication
+    format: action
+    display_target: terminal
+`)
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "verb type must not be empty")
+}
+
+func TestManifestRejectsVerbWithUnknownCategory(t *testing.T) {
+	data := []byte(`
+name: channels
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+verbs:
+  - type: channel.say
+    category: unknown-category
+    format: speech
+    label: says
+    display_target: terminal
+`)
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown verb category")
+}
+
+func TestManifestRejectsVerbWithUnknownFormat(t *testing.T) {
+	data := []byte(`
+name: channels
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+verbs:
+  - type: channel.say
+    category: communication
+    format: unknown-format
+    display_target: terminal
+`)
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown verb format")
+}
+
+func TestManifestRejectsVerbWithUnknownDisplayTarget(t *testing.T) {
+	data := []byte(`
+name: channels
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+verbs:
+  - type: channel.say
+    category: communication
+    format: action
+    display_target: unknown-target
+`)
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown verb display_target")
+}
+
+func TestManifestRejectsSpeechVerbWithoutLabel(t *testing.T) {
+	data := []byte(`
+name: channels
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+verbs:
+  - type: channel.say
+    category: communication
+    format: speech
+    display_target: terminal
+`)
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "label is required when verb format is speech")
+}
+
+func TestManifestRejectsDuplicateVerbType(t *testing.T) {
+	data := []byte(`
+name: channels
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+verbs:
+  - type: channel.say
+    category: communication
+    format: action
+    display_target: terminal
+  - type: channel.say
+    category: communication
+    format: narrative
+    display_target: both
+`)
+	_, err := plugins.ParseManifest(data)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate verb type")
+}
+
+func TestManifestDisplayTargetCaseInsensitive(t *testing.T) {
+	targets := []string{"terminal", "TERMINAL", "Terminal", "state", "STATE", "State", "both", "BOTH", "Both"}
+	for _, target := range targets {
+		t.Run(fmt.Sprintf("accepts display_target %s", target), func(t *testing.T) {
+			data := []byte(fmt.Sprintf(`
+name: channels
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+verbs:
+  - type: channel.say
+    category: communication
+    format: action
+    display_target: %s
+`, target))
+			_, err := plugins.ParseManifest(data)
+			require.NoError(t, err, "display_target %q should be accepted", target)
+		})
+	}
+}
+
+func TestManifestAcceptsPluginWithNoVerbs(t *testing.T) {
+	data := []byte(`
+name: channels
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`)
+	m, err := plugins.ParseManifest(data)
+	require.NoError(t, err)
+	assert.Empty(t, m.Verbs)
 }

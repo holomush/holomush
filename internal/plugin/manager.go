@@ -20,6 +20,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
 
 // RegisterPluginProviderFunc is a callback that registers a PluginAttributeProvider
@@ -62,6 +63,7 @@ type Manager struct {
 	gracefulDegradation bool                         // if true, LoadAll continues despite plugin failures
 	aliasSeeder         AliasSeeder
 	aliasCache          *command.AliasCache
+	verbRegistry        *core.VerbRegistry
 	eventEmitter        *PluginEventEmitter
 	loaded              map[string]*DiscoveredPlugin
 	inflight            map[string]*DiscoveredPlugin
@@ -143,6 +145,13 @@ func WithTrustAllowlist(names []string) ManagerOption {
 func WithGracefulDegradation() ManagerOption {
 	return func(m *Manager) {
 		m.gracefulDegradation = true
+	}
+}
+
+// WithVerbRegistry sets the VerbRegistry for plugin verb registration.
+func WithVerbRegistry(reg *core.VerbRegistry) ManagerOption {
+	return func(m *Manager) {
+		m.verbRegistry = reg
 	}
 }
 
@@ -667,6 +676,31 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 		}
 	}
 
+	// Register plugin-declared verbs in the VerbRegistry.
+	if m.verbRegistry != nil && len(dp.Manifest.Verbs) > 0 {
+		for _, vs := range dp.Manifest.Verbs {
+			regErr := m.verbRegistry.Register(core.VerbRegistration{
+				Type:          vs.Type,
+				Category:      vs.Category,
+				Format:        vs.Format,
+				Label:         vs.Label,
+				DisplayTarget: displayTargetFromString(vs.DisplayTarget),
+				Source:        dp.Manifest.Name,
+			})
+			if regErr != nil {
+				// Clean up any verbs already registered from this plugin.
+				m.verbRegistry.UnregisterBySource(dp.Manifest.Name)
+				m.unregisterPluginProviders(dp.Manifest.Name, dp.Manifest.ResourceTypes, len(dp.Manifest.ResourceTypes))
+				if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
+					slog.Error("failed to rollback plugin load after verb registration failure",
+						"plugin", dp.Manifest.Name, "error", unloadErr)
+				}
+				return oops.In("manager").With("plugin", dp.Manifest.Name).
+					With("verb", vs.Type).Wrapf(regErr, "register plugin verb")
+			}
+		}
+	}
+
 	// Register plugin-provided services in the service registry.
 	// Registration failures are treated as hard errors — dependents resolved
 	// by ResolveDependencyOrder rely on the Provides contract being satisfied.
@@ -1036,5 +1070,21 @@ func (m *Manager) RegisterPluginCommands(registry *command.Registry) {
 					"error", regErr)
 			}
 		}
+	}
+}
+
+// displayTargetFromString converts a manifest display_target string to the
+// proto enum. Returns EVENT_CHANNEL_UNSPECIFIED for unknown values (validation
+// should catch these before this is called).
+func displayTargetFromString(s string) webv1.EventChannel {
+	switch strings.ToLower(s) {
+	case "terminal":
+		return webv1.EventChannel_EVENT_CHANNEL_TERMINAL
+	case "state":
+		return webv1.EventChannel_EVENT_CHANNEL_STATE
+	case "both":
+		return webv1.EventChannel_EVENT_CHANNEL_BOTH
+	default:
+		return webv1.EventChannel_EVENT_CHANNEL_UNSPECIFIED
 	}
 }

@@ -77,6 +77,7 @@ type Manifest struct {
 	Emits          []string          `yaml:"emits,omitempty" json:"emits,omitempty"`
 	Policies       []ManifestPolicy  `yaml:"policies,omitempty" json:"policies,omitempty"`
 	Commands       []CommandSpec     `yaml:"commands,omitempty" json:"commands,omitempty" jsonschema:"description=Commands provided by this plugin"`
+	Verbs          []VerbSpec        `yaml:"verbs,omitempty" json:"verbs,omitempty" jsonschema:"description=Verb registrations contributed by this plugin"`
 	Priority       *LoadPriority     `yaml:"priority,omitempty" json:"priority,omitempty" jsonschema:"description=Load priority (lower loads first)"`
 	SessionStreams bool              `yaml:"session_streams,omitempty" json:"session_streams,omitempty" jsonschema:"description=Plugin contributes streams to session subscriptions via QuerySessionStreams"`
 	LuaPlugin      *LuaConfig        `yaml:"lua-plugin,omitempty" json:"lua-plugin,omitempty"`
@@ -127,6 +128,28 @@ type SettingConfig struct {
 	WorldDir         string `yaml:"world_dir" json:"world_dir"`
 	Theme            string `yaml:"theme" json:"theme"`
 	StartingLocation string `yaml:"starting_location" json:"starting_location"`
+}
+
+// VerbSpec declares a verb registration contributed by a plugin.
+type VerbSpec struct {
+	Type          string `yaml:"type" json:"type" jsonschema:"required"`
+	Category      string `yaml:"category" json:"category" jsonschema:"required"`
+	Format        string `yaml:"format" json:"format" jsonschema:"required"`
+	Label         string `yaml:"label,omitempty" json:"label,omitempty"`
+	DisplayTarget string `yaml:"display_target" json:"display_target" jsonschema:"required"`
+}
+
+var validVerbCategories = map[string]bool{
+	"communication": true, "movement": true, "state": true, "system": true, "command": true,
+}
+
+var validVerbFormats = map[string]bool{
+	"speech": true, "action": true, "narrative": true, "notification": true,
+	"error": true, "snapshot": true, "delta": true,
+}
+
+var validDisplayTargets = map[string]bool{
+	"terminal": true, "state": true, "both": true,
 }
 
 // CommandSpec declares a command provided by a plugin.
@@ -314,6 +337,9 @@ func (m *Manifest) Validate() error {
 		if len(m.Commands) > 0 {
 			return oops.In("manifest").With("name", m.Name).New("setting plugins must not declare commands")
 		}
+		if len(m.Verbs) > 0 {
+			return oops.In("manifest").With("name", m.Name).New("setting plugins must not declare verbs")
+		}
 		if m.LuaPlugin != nil {
 			return oops.In("manifest").With("name", m.Name).New("setting plugins must not specify lua-plugin")
 		}
@@ -370,6 +396,36 @@ func (m *Manifest) Validate() error {
 			return oops.In("manifest").With("plugin", m.Name).With("command", m.Commands[i].Name).New("duplicate command name")
 		}
 		seenCommands[m.Commands[i].Name] = true
+	}
+
+	// Validate verbs and check for duplicates.
+	seenVerbs := make(map[string]bool)
+	for i, v := range m.Verbs {
+		if v.Type == "" {
+			return oops.In("manifest").With("plugin", m.Name).With("verb_index", i).
+				New("verb type must not be empty")
+		}
+		if !validVerbCategories[v.Category] {
+			return oops.In("manifest").With("plugin", m.Name).With("verb", v.Type).
+				With("category", v.Category).New("unknown verb category")
+		}
+		if !validVerbFormats[v.Format] {
+			return oops.In("manifest").With("plugin", m.Name).With("verb", v.Type).
+				With("format", v.Format).New("unknown verb format")
+		}
+		if !validDisplayTargets[strings.ToLower(v.DisplayTarget)] {
+			return oops.In("manifest").With("plugin", m.Name).With("verb", v.Type).
+				With("display_target", v.DisplayTarget).New("unknown verb display_target")
+		}
+		if v.Format == "speech" && v.Label == "" {
+			return oops.In("manifest").With("plugin", m.Name).With("verb", v.Type).
+				New("label is required when verb format is speech")
+		}
+		if seenVerbs[v.Type] {
+			return oops.In("manifest").With("plugin", m.Name).With("verb", v.Type).
+				New("duplicate verb type")
+		}
+		seenVerbs[v.Type] = true
 	}
 
 	// Validate provides — only binary plugins can provide services.

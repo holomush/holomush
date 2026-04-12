@@ -19,6 +19,7 @@ import (
 
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/plugin/mocks"
@@ -1559,4 +1560,175 @@ func TestManagerQuerySessionStreamsReturnsEarlyOnContextCancellation(t *testing.
 	})
 	// Should return empty/partial results instead of blocking
 	assert.Empty(t, result)
+}
+
+func TestManagerLoadAllRegistersVerbsFromManifest(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	echoDir := filepath.Join(pluginsDir, "chat-plugin")
+	mkdirAll(t, echoDir)
+	manifest := `name: chat-plugin
+version: 1.0.0
+type: lua
+verbs:
+  - type: whisper
+    category: communication
+    format: speech
+    label: whispers to
+    display_target: terminal
+  - type: shout
+    category: communication
+    format: speech
+    label: shouts
+    display_target: both
+lua-plugin:
+  entry: main.lua`
+	writeFile(t, filepath.Join(echoDir, "plugin.yaml"), []byte(manifest))
+	writeFile(t, filepath.Join(echoDir, "main.lua"), []byte("function on_event(e) end"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	reg := core.NewVerbRegistry()
+	mgr := plugins.NewManager(pluginsDir,
+		plugins.WithLuaHost(luaHost),
+		plugins.WithVerbRegistry(reg),
+	)
+	require.NoError(t, mgr.LoadAll(context.Background()))
+
+	whisper, ok := reg.Lookup("whisper")
+	require.True(t, ok, "whisper verb should be registered")
+	assert.Equal(t, "communication", whisper.Category)
+	assert.Equal(t, "speech", whisper.Format)
+	assert.Equal(t, "whispers to", whisper.Label)
+	assert.Equal(t, "chat-plugin", whisper.Source)
+
+	shout, ok := reg.Lookup("shout")
+	require.True(t, ok, "shout verb should be registered")
+	assert.Equal(t, "chat-plugin", shout.Source)
+}
+
+func TestManagerLoadAllRejectsPluginWithDuplicateVerbType(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	plugDir := filepath.Join(pluginsDir, "dup-plugin")
+	mkdirAll(t, plugDir)
+	manifest := `name: dup-plugin
+version: 1.0.0
+type: lua
+verbs:
+  - type: existing_verb
+    category: communication
+    format: action
+    display_target: terminal
+lua-plugin:
+  entry: main.lua`
+	writeFile(t, filepath.Join(plugDir, "plugin.yaml"), []byte(manifest))
+	writeFile(t, filepath.Join(plugDir, "main.lua"), []byte("function on_event(e) end"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	reg := core.NewVerbRegistry()
+	// Pre-register a verb that the plugin also declares.
+	require.NoError(t, reg.Register(core.VerbRegistration{
+		Type:     "existing_verb",
+		Category: "state",
+		Format:   "snapshot",
+		Source:   "builtin",
+	}))
+
+	mgr := plugins.NewManager(pluginsDir,
+		plugins.WithLuaHost(luaHost),
+		plugins.WithVerbRegistry(reg),
+	)
+	err := mgr.LoadAll(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "register plugin verb")
+	errutil.AssertErrorCode(t, err, "DUPLICATE_REGISTRATION")
+}
+
+func TestManagerLoadAllCleansUpVerbsOnPartialFailure(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	plugDir := filepath.Join(pluginsDir, "partial-plugin")
+	mkdirAll(t, plugDir)
+	manifest := `name: partial-plugin
+version: 1.0.0
+type: lua
+verbs:
+  - type: good_verb
+    category: communication
+    format: action
+    display_target: terminal
+  - type: conflict
+    category: state
+    format: snapshot
+    display_target: state
+lua-plugin:
+  entry: main.lua`
+	writeFile(t, filepath.Join(plugDir, "plugin.yaml"), []byte(manifest))
+	writeFile(t, filepath.Join(plugDir, "main.lua"), []byte("function on_event(e) end"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	reg := core.NewVerbRegistry()
+	// Pre-register the conflict verb so the second registration fails.
+	require.NoError(t, reg.Register(core.VerbRegistration{
+		Type:     "conflict",
+		Category: "state",
+		Format:   "snapshot",
+		Source:   "builtin",
+	}))
+
+	mgr := plugins.NewManager(pluginsDir,
+		plugins.WithLuaHost(luaHost),
+		plugins.WithVerbRegistry(reg),
+	)
+	err := mgr.LoadAll(context.Background())
+	require.Error(t, err)
+
+	// good_verb should have been cleaned up via UnregisterBySource.
+	_, ok := reg.Lookup("good_verb")
+	assert.False(t, ok, "good_verb should have been cleaned up after partial failure")
+
+	// The pre-existing conflict verb should remain (owned by builtin, not the plugin).
+	conflict, ok := reg.Lookup("conflict")
+	require.True(t, ok, "builtin conflict verb should still exist")
+	assert.Equal(t, "builtin", conflict.Source)
+}
+
+func TestManagerLoadAllWithoutVerbRegistrySkipsVerbRegistration(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	plugDir := filepath.Join(pluginsDir, "verby-plugin")
+	mkdirAll(t, plugDir)
+	manifest := `name: verby-plugin
+version: 1.0.0
+type: lua
+verbs:
+  - type: some_verb
+    category: communication
+    format: action
+    display_target: terminal
+lua-plugin:
+  entry: main.lua`
+	writeFile(t, filepath.Join(plugDir, "plugin.yaml"), []byte(manifest))
+	writeFile(t, filepath.Join(plugDir, "main.lua"), []byte("function on_event(e) end"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	// No WithVerbRegistry — verb registration should be silently skipped.
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	err := mgr.LoadAll(context.Background())
+	require.NoError(t, err)
+
+	loaded := mgr.ListPlugins()
+	assert.Contains(t, loaded, "verby-plugin")
 }
