@@ -160,3 +160,90 @@ func TestChainImplementsSettingsInterface(t *testing.T) {
 	// Compile-time check that Chain satisfies Settings.
 	var _ settings.Settings = settings.NewChain()
 }
+
+func TestChainResolutionOrderMatchesSpecCharacterPlayerGame(t *testing.T) {
+	ctx := context.Background()
+
+	char := newStub()
+	char.ints["scenes.focus.replay_tail_default"] = 2
+	player := newStub()
+	player.ints["scenes.focus.replay_tail_default"] = 5
+	game := newStub()
+	game.ints["scenes.focus.replay_tail_default"] = 3
+
+	chain := settings.NewChain(char, player, game)
+	v, ok := chain.IntN(ctx, "scenes.focus.replay_tail_default")
+	assert.True(t, ok)
+	assert.Equal(t, 2, v, "character scope (first) must win")
+}
+
+func TestChainResolutionSkipsCharacterFallsToPlayer(t *testing.T) {
+	ctx := context.Background()
+
+	char := newStub() // no value
+	player := newStub()
+	player.ints["scenes.focus.replay_tail_default"] = 5
+	game := newStub()
+	game.ints["scenes.focus.replay_tail_default"] = 3
+
+	chain := settings.NewChain(char, player, game)
+	v, ok := chain.IntN(ctx, "scenes.focus.replay_tail_default")
+	assert.True(t, ok)
+	assert.Equal(t, 5, v, "player scope must win when character unset")
+}
+
+func TestChainResolutionSkipsCharacterAndPlayerFallsToGame(t *testing.T) {
+	ctx := context.Background()
+
+	char := newStub()   // no value
+	player := newStub() // no value
+	game := newStub()
+	game.ints["scenes.focus.replay_tail_default"] = 3
+
+	chain := settings.NewChain(char, player, game)
+	v, ok := chain.IntN(ctx, "scenes.focus.replay_tail_default")
+	assert.True(t, ok)
+	assert.Equal(t, 3, v, "game scope must win when character and player unset")
+}
+
+func TestChainResolutionAllUnsetReturnsFalse(t *testing.T) {
+	ctx := context.Background()
+
+	chain := settings.NewChain(newStub(), newStub(), newStub())
+	_, ok := chain.IntN(ctx, "scenes.focus.replay_tail_default")
+	assert.False(t, ok, "all-unset chain must return false")
+}
+
+func TestChainWithNilCharacterScopeFallsToPlayer(t *testing.T) {
+	ctx := context.Background()
+
+	player := newStub()
+	player.ints["scenes.focus.replay_tail_default"] = 7
+	game := newStub()
+	game.ints["scenes.focus.replay_tail_default"] = 3
+
+	// nil simulates CharacterSettingsStore.For returning nil
+	chain := settings.NewChain(nil, player, game)
+	v, ok := chain.IntN(ctx, "scenes.focus.replay_tail_default")
+	assert.True(t, ok)
+	assert.Equal(t, 7, v)
+}
+
+func TestChainTypeMixStringFromCharIntFromGame(t *testing.T) {
+	ctx := context.Background()
+
+	char := newStub()
+	char.strings["scenes.focus.mode"] = "bounded"
+	game := newStub()
+	game.ints["scenes.focus.replay_tail_default"] = 3
+
+	chain := settings.NewChain(char, game)
+
+	mode, ok := chain.StringN(ctx, "scenes.focus.mode")
+	assert.True(t, ok)
+	assert.Equal(t, "bounded", mode)
+
+	tail, ok := chain.IntN(ctx, "scenes.focus.replay_tail_default")
+	assert.True(t, ok)
+	assert.Equal(t, 3, tail)
+}
