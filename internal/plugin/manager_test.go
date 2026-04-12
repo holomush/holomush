@@ -1111,6 +1111,34 @@ lua-plugin:
 	assert.Contains(t, mgr.ListPlugins(), "action-consumer")
 }
 
+func TestManagerLoadAllAcceptsPluginRedeclaringCoreAction(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	pluginDir := filepath.Join(pluginsDir, "reader-plugin")
+	mkdirAll(t, pluginDir)
+	writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(`name: reader-plugin
+version: 1.0.0
+type: lua
+actions: [read]
+commands:
+  - name: look
+    capabilities:
+      - action: read
+        resource: location
+lua-plugin:
+  entry: main.lua`))
+	writeFile(t, filepath.Join(pluginDir, "main.lua"), []byte("function on_event(e) end"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	err := mgr.LoadAll(context.Background())
+	require.NoError(t, err, "re-declaring a core action in the actions field should not prevent loading")
+	assert.Contains(t, mgr.ListPlugins(), "reader-plugin")
+}
+
 // WithTrustAllowlist is plumbed through but only takes effect when policies
 // install. The option itself is verified by ensuring no panic / no behavior
 // change for plugins that don't request escalation.
