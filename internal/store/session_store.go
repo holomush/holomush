@@ -681,16 +681,16 @@ func (s *PostgresSessionStore) UpdateFocusMemberships(ctx context.Context, sessi
 	// Unmarshal current state.
 	var currentMemberships []session.FocusMembership
 	if len(focusMembershipsJSON) > 0 {
-		if err := json.Unmarshal(focusMembershipsJSON, &currentMemberships); err != nil {
-			return oops.With("operation", "unmarshal focus_memberships").Wrap(err)
+		if unmarshalErr := json.Unmarshal(focusMembershipsJSON, &currentMemberships); unmarshalErr != nil {
+			return oops.With("operation", "unmarshal focus_memberships").Wrap(unmarshalErr)
 		}
 	}
 
 	var currentPresenting *session.FocusKey
 	if len(presentingFocusJSON) > 0 {
 		var key session.FocusKey
-		if err := json.Unmarshal(presentingFocusJSON, &key); err != nil {
-			return oops.With("operation", "unmarshal presenting_focus").Wrap(err)
+		if unmarshalErr := json.Unmarshal(presentingFocusJSON, &key); unmarshalErr != nil {
+			return oops.With("operation", "unmarshal presenting_focus").Wrap(unmarshalErr)
 		}
 		currentPresenting = &key
 	}
@@ -729,5 +729,9 @@ func (s *PostgresSessionStore) UpdateFocusMemberships(ctx context.Context, sessi
 			With("session_id", sessionID).Wrap(err)
 	}
 
-	return tx.Commit(ctx)
+	if commitErr := tx.Commit(ctx); commitErr != nil {
+		return oops.With("operation", "commit focus memberships").
+			With("session_id", sessionID).Wrap(commitErr)
+	}
+	return nil
 }

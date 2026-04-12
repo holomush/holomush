@@ -618,8 +618,8 @@ func TestMemStore_UpdateFocusMemberships_MutatorErrorRollsBack(t *testing.T) {
 	require.NoError(t, store.Set(ctx, info.ID, info))
 
 	mutator := NewFocusMutator(func(
-		current []FocusMembership,
-		presenting *FocusKey,
+		_ []FocusMembership,
+		_ *FocusKey,
 	) ([]FocusMembership, *FocusKey, error) {
 		return nil, nil, fmt.Errorf("intentional mutator error")
 	})
