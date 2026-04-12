@@ -86,15 +86,23 @@ func TestMigration000005AuditSourceComponentRollbackReturnsSchemaToOriginalShape
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
-	// Sanity: after Up, the new shape is present.
+	// Sanity: after Up, 000005 is applied and the new shape is present.
+	migratorCheck, err := store.NewMigrator(pgEnv.ConnStr)
+	require.NoError(t, err)
+	version, dirty, err := migratorCheck.Version()
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, version, uint(5), "000005 must be applied before testing rollback")
+	assert.False(t, dirty)
+	require.NoError(t, migratorCheck.Close())
 	assertColumnExists(t, db, "access_audit_log", "event_id")
 	assertColumnExists(t, db, "access_audit_log", "source")
 
-	// Roll back 000006 (session focus) then 000005 (audit source component)
-	// to restore the pre-000005 audit schema shape.
+	// Migrate down to version 4 (just before 000005_audit_source_component)
+	// to restore the pre-000005 audit schema shape. Using Migrate(4) instead
+	// of Steps(-N) so the test doesn't break when new migrations are added.
 	migratorDown, err := store.NewMigrator(pgEnv.ConnStr)
 	require.NoError(t, err)
-	require.NoError(t, migratorDown.Steps(-2))
+	require.NoError(t, migratorDown.Migrate(4))
 	require.NoError(t, migratorDown.Close())
 
 	// After down, the original shape is restored.

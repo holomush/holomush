@@ -59,6 +59,7 @@ type mockMigrate struct {
 	upErr          error
 	downErr        error
 	stepsErr       error
+	migrateErr     error
 	versionVal     uint
 	versionErr     error
 	dirty          bool
@@ -70,6 +71,7 @@ type mockMigrate struct {
 func (m *mockMigrate) Up() error                    { return m.upErr }
 func (m *mockMigrate) Down() error                  { return m.downErr }
 func (m *mockMigrate) Steps(_ int) error            { return m.stepsErr }
+func (m *mockMigrate) Migrate(_ uint) error         { return m.migrateErr }
 func (m *mockMigrate) Version() (uint, bool, error) { return m.versionVal, m.dirty, m.versionErr }
 func (m *mockMigrate) Force(_ int) error            { return m.forceErr }
 func (m *mockMigrate) Close() (error, error)        { return m.closeSourceErr, m.closeDbErr }
@@ -110,6 +112,19 @@ func TestMigratorDownReturnsWrappedErrorOnFailure(t *testing.T) {
 	err := m.Down()
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "MIGRATION_DOWN_FAILED")
+}
+
+func TestMigratorMigrateSucceedsWhenUnderlyingReturnsNil(t *testing.T) {
+	m := &Migrator{m: &mockMigrate{}}
+	err := m.Migrate(5)
+	require.NoError(t, err)
+}
+
+func TestMigratorMigrateReturnsErrorWhenUnderlyingFails(t *testing.T) {
+	m := &Migrator{m: &mockMigrate{migrateErr: errors.New("target version not found")}}
+	err := m.Migrate(99)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "MIGRATION_MIGRATE_FAILED")
 }
 
 func TestMigratorStepsAppliesNMigrations(t *testing.T) {
@@ -263,17 +278,17 @@ func TestMigratorCloseIsIdempotent(t *testing.T) {
 }
 
 func TestMigratorPendingMigrationsReturnsMigrationsAboveCurrentVersion(t *testing.T) {
-	// At version 0, migrations 1-6 should be pending (baseline + is_guest +
-	// alias_source + session_player_id + audit_source_component + session_focus)
+	// At version 0, migrations 1-7 should be pending (baseline + is_guest +
+	// alias_source + session_player_id + audit_source_component + session_focus + seed_scene_defaults)
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6}, pending)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7}, pending)
 }
 
 func TestMigratorPendingMigrationsReturnsEmptyAtLatestVersion(t *testing.T) {
-	// At version 6 (latest), no migrations should be pending
-	m := &Migrator{m: &mockMigrate{versionVal: 6}}
+	// At version 7 (latest), no migrations should be pending
+	m := &Migrator{m: &mockMigrate{versionVal: 7}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
 	assert.Empty(t, pending)
@@ -304,11 +319,11 @@ func TestMigratorAppliedMigrationsReturnsEmptyAtVersionZero(t *testing.T) {
 }
 
 func TestMigratorAppliedMigrationsReturnsAllAtLatestVersion(t *testing.T) {
-	// At version 6 (latest), all migrations applied
-	m := &Migrator{m: &mockMigrate{versionVal: 6}}
+	// At version 7 (latest), all migrations applied
+	m := &Migrator{m: &mockMigrate{versionVal: 7}}
 	applied, err := m.AppliedMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6}, applied)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7}, applied)
 }
 
 func TestMigratorAppliedMigrationsReturnsErrorWhenVersionFails(t *testing.T) {
@@ -355,6 +370,12 @@ func (m *closedMock) Version() (uint, bool, error) {
 	return 1, false, nil
 }
 
+func (m *closedMock) Migrate(_ uint) error {
+	if m.closed {
+		return errMigratorClosed
+	}
+	return nil
+}
 func (m *closedMock) Force(_ int) error {
 	if m.closed {
 		return errMigratorClosed
@@ -449,7 +470,7 @@ func TestMigrationName(t *testing.T) {
 		{3, "000003_alias_source", false},
 		{4, "000004_session_player_id", false},
 		{5, "000005_audit_source_component", false},
-		{7, "", false},   // No migration 7 after collapse
+		{7, "000007_seed_scene_defaults", false},
 		{999, "", false}, // Unknown version returns empty string and nil error (not found is expected)
 	}
 
