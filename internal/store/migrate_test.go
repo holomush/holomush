@@ -70,6 +70,7 @@ type mockMigrate struct {
 func (m *mockMigrate) Up() error                    { return m.upErr }
 func (m *mockMigrate) Down() error                  { return m.downErr }
 func (m *mockMigrate) Steps(_ int) error            { return m.stepsErr }
+func (m *mockMigrate) Migrate(_ uint) error         { return nil }
 func (m *mockMigrate) Version() (uint, bool, error) { return m.versionVal, m.dirty, m.versionErr }
 func (m *mockMigrate) Force(_ int) error            { return m.forceErr }
 func (m *mockMigrate) Close() (error, error)        { return m.closeSourceErr, m.closeDbErr }
@@ -355,6 +356,12 @@ func (m *closedMock) Version() (uint, bool, error) {
 	return 1, false, nil
 }
 
+func (m *closedMock) Migrate(_ uint) error {
+	if m.closed {
+		return errMigratorClosed
+	}
+	return nil
+}
 func (m *closedMock) Force(_ int) error {
 	if m.closed {
 		return errMigratorClosed

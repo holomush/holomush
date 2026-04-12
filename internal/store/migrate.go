@@ -43,6 +43,7 @@ type migrateIface interface {
 	Up() error
 	Down() error
 	Steps(n int) error
+	Migrate(version uint) error
 	Version() (version uint, dirty bool, err error)
 	Force(version int) error
 	Close() (source error, database error)
@@ -106,6 +107,17 @@ func (m *Migrator) Down() error {
 func (m *Migrator) Steps(n int) error {
 	if err := m.m.Steps(n); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return oops.Code("MIGRATION_STEPS_FAILED").With("steps", n).Wrap(err)
+	}
+	return nil
+}
+
+// Migrate migrates to the specified version. If the current version is
+// higher, it runs down migrations; if lower, up migrations. This is more
+// stable than Steps(-N) for targeting a specific schema state because it
+// does not depend on knowing how many migrations exist above the target.
+func (m *Migrator) Migrate(version uint) error {
+	if err := m.m.Migrate(version); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return oops.Code("MIGRATION_MIGRATE_FAILED").With("target_version", version).Wrap(err)
 	}
 	return nil
 }
