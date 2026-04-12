@@ -6,6 +6,7 @@ package core
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 )
@@ -30,4 +31,11 @@ type EventStore interface {
 	// The caller should use Replay() to fetch full events by ID.
 	// Channels are closed when context is cancelled.
 	Subscribe(ctx context.Context, stream string) (eventCh <-chan ulid.ULID, errCh <-chan error, err error)
+
+	// ReplayTail returns up to count most recent events on stream,
+	// ordered ascending by event ID. If notBefore is non-zero, events
+	// with timestamps before it are excluded. Count is capped server-side
+	// at 500. Used by FocusKindPolicy implementations for bounded-tail
+	// reads and by QueryStreamHistory for client scrollback.
+	ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time) ([]Event, error)
 }
