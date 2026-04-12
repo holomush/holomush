@@ -418,6 +418,49 @@ func (m *MemStore) UpdateLastPaged(_ context.Context, id, name string) error {
 	return nil
 }
 
+// UpdateFocusMemberships atomically applies the mutator callback to the
+// session's focus memberships and presenting focus. The mutator receives
+// copies of the current state and returns the desired state. On mutator
+// error, the session is left unchanged.
+func (m *MemStore) UpdateFocusMemberships(_ context.Context, sessionID string, mut FocusMutator) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	info, ok := m.sessions[sessionID]
+	if !ok {
+		return oops.Code("SESSION_NOT_FOUND").
+			With("session_id", sessionID).
+			Errorf("session not found")
+	}
+	if info.Status == StatusExpired {
+		return oops.Code("SESSION_EXPIRED").
+			With("session_id", sessionID).
+			Errorf("cannot mutate focus on expired session")
+	}
+
+	// Snapshot current state for the mutator (defensive copies).
+	currentMemberships := make([]FocusMembership, len(info.FocusMemberships))
+	copy(currentMemberships, info.FocusMemberships)
+
+	var currentPresenting *FocusKey
+	if info.PresentingFocus != nil {
+		cp := *info.PresentingFocus
+		currentPresenting = &cp
+	}
+
+	nextMemberships, nextPresenting, err := mut.Mutate(currentMemberships, currentPresenting)
+	if err != nil {
+		return oops.Code("FOCUS_MUTATOR_ERROR").
+			With("session_id", sessionID).
+			Wrap(err)
+	}
+
+	info.FocusMemberships = nextMemberships
+	info.PresentingFocus = nextPresenting
+	info.UpdatedAt = time.Now()
+	return nil
+}
+
 // UpdateLastWhispered records the name of the character most recently whispered to.
 func (m *MemStore) UpdateLastWhispered(_ context.Context, id, name string) error {
 	m.mu.Lock()
@@ -443,8 +486,18 @@ func copyInfo(info *Info) *Info {
 	history := make([]string, len(info.CommandHistory))
 	copy(history, info.CommandHistory)
 
+	memberships := make([]FocusMembership, len(info.FocusMemberships))
+	copy(memberships, info.FocusMemberships)
+
 	cp := *info
 	cp.EventCursors = cursors
 	cp.CommandHistory = history
+	cp.FocusMemberships = memberships
+
+	if info.PresentingFocus != nil {
+		pf := *info.PresentingFocus
+		cp.PresentingFocus = &pf
+	}
+
 	return &cp
 }

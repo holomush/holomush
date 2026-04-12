@@ -453,6 +453,188 @@ func TestMemStoreUpdateCursorsRejectsRegression(t *testing.T) {
 		"MemStore must preserve the higher cursor on regression attempts")
 }
 
+func TestFocusMembershipTypesExist(t *testing.T) {
+	// Verify the type system is wired correctly. This test serves as
+	// a compile-time canary — if the types are removed or renamed,
+	// this fails to compile.
+	key := FocusKey{
+		Kind:     FocusKindScene,
+		TargetID: ulid.Make(),
+	}
+	mem := FocusMembership{
+		Kind:     key.Kind,
+		TargetID: key.TargetID,
+		JoinedAt: time.Now(),
+	}
+	assert.Equal(t, FocusKindScene, mem.Kind)
+	assert.Equal(t, key.TargetID, mem.TargetID)
+	assert.NotZero(t, mem.JoinedAt)
+
+	// Verify FocusKey equality semantics.
+	key2 := FocusKey{Kind: FocusKindScene, TargetID: key.TargetID}
+	assert.Equal(t, key, key2)
+
+	key3 := FocusKey{Kind: FocusKindScene, TargetID: ulid.Make()}
+	assert.NotEqual(t, key, key3)
+}
+
+func TestFocusMutatorHasMutateField(t *testing.T) {
+	// FocusMutator is a struct with a Mutate callback. We cannot construct
+	// it from outside grpc/focus (the sentinel field is unexported), but we
+	// can verify the type exists and document the Mutate signature via
+	// reflection. This test exists purely as a compile-time canary.
+	var m FocusMutator
+	assert.Nil(t, m.Mutate, "zero-value FocusMutator should have nil Mutate")
+}
+
+func TestMemStore_FocusMembershipsRoundTrip(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+	targetID := ulid.Make()
+	now := time.Now().Truncate(time.Millisecond)
+
+	presenting := &FocusKey{Kind: FocusKindScene, TargetID: targetID}
+	info := &Info{
+		ID:            "session-focus-rt",
+		CharacterID:   ulid.Make(),
+		CharacterName: "FocusChar",
+		Status:        StatusActive,
+		EventCursors:  map[string]ulid.ULID{},
+		FocusMemberships: []FocusMembership{
+			{Kind: FocusKindScene, TargetID: targetID, JoinedAt: now},
+		},
+		PresentingFocus: presenting,
+	}
+
+	require.NoError(t, store.Set(ctx, info.ID, info))
+
+	got, err := store.Get(ctx, info.ID)
+	require.NoError(t, err)
+	require.Len(t, got.FocusMemberships, 1)
+	assert.Equal(t, FocusKindScene, got.FocusMemberships[0].Kind)
+	assert.Equal(t, targetID, got.FocusMemberships[0].TargetID)
+	assert.Equal(t, now, got.FocusMemberships[0].JoinedAt)
+	require.NotNil(t, got.PresentingFocus)
+	assert.Equal(t, *presenting, *got.PresentingFocus)
+
+	// Verify defensive copy — mutating the returned value must not affect the store.
+	got.FocusMemberships = nil
+	got.PresentingFocus = nil
+	got2, err := store.Get(ctx, info.ID)
+	require.NoError(t, err)
+	require.Len(t, got2.FocusMemberships, 1, "defensive copy must protect store state")
+	require.NotNil(t, got2.PresentingFocus, "defensive copy must protect store state")
+}
+
+func TestMemStore_UpdateFocusMemberships_AddsAndPresents(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+	targetID := ulid.Make()
+
+	info := &Info{
+		ID:           "session-ufm-add",
+		CharacterID:  ulid.Make(),
+		Status:       StatusActive,
+		EventCursors: map[string]ulid.ULID{},
+	}
+	require.NoError(t, store.Set(ctx, info.ID, info))
+
+	mutator := NewFocusMutator(func(
+		current []FocusMembership,
+		presenting *FocusKey,
+	) ([]FocusMembership, *FocusKey, error) {
+		require.Empty(t, current)
+		require.Nil(t, presenting)
+		newMem := FocusMembership{
+			Kind:     FocusKindScene,
+			TargetID: targetID,
+			JoinedAt: time.Now(),
+		}
+		newKey := &FocusKey{Kind: FocusKindScene, TargetID: targetID}
+		return []FocusMembership{newMem}, newKey, nil
+	})
+
+	require.NoError(t, store.UpdateFocusMemberships(ctx, info.ID, mutator))
+
+	got, err := store.Get(ctx, info.ID)
+	require.NoError(t, err)
+	require.Len(t, got.FocusMemberships, 1)
+	assert.Equal(t, FocusKindScene, got.FocusMemberships[0].Kind)
+	assert.Equal(t, targetID, got.FocusMemberships[0].TargetID)
+	require.NotNil(t, got.PresentingFocus)
+	assert.Equal(t, targetID, got.PresentingFocus.TargetID)
+}
+
+func TestMemStore_UpdateFocusMemberships_NotFound(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+
+	mutator := NewFocusMutator(func(
+		current []FocusMembership,
+		presenting *FocusKey,
+	) ([]FocusMembership, *FocusKey, error) {
+		return current, presenting, nil
+	})
+
+	err := store.UpdateFocusMemberships(ctx, "nonexistent", mutator)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "session not found")
+}
+
+func TestMemStore_UpdateFocusMemberships_RejectsExpiredSession(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+
+	info := &Info{
+		ID:           "session-ufm-expired",
+		CharacterID:  ulid.Make(),
+		Status:       StatusExpired,
+		EventCursors: map[string]ulid.ULID{},
+	}
+	require.NoError(t, store.Set(ctx, info.ID, info))
+
+	mutator := NewFocusMutator(func(
+		current []FocusMembership,
+		presenting *FocusKey,
+	) ([]FocusMembership, *FocusKey, error) {
+		return current, presenting, nil
+	})
+
+	err := store.UpdateFocusMemberships(ctx, info.ID, mutator)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "expired")
+}
+
+func TestMemStore_UpdateFocusMemberships_MutatorErrorRollsBack(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+
+	info := &Info{
+		ID:           "session-ufm-err",
+		CharacterID:  ulid.Make(),
+		Status:       StatusActive,
+		EventCursors: map[string]ulid.ULID{},
+	}
+	require.NoError(t, store.Set(ctx, info.ID, info))
+
+	mutator := NewFocusMutator(func(
+		current []FocusMembership,
+		presenting *FocusKey,
+	) ([]FocusMembership, *FocusKey, error) {
+		return nil, nil, fmt.Errorf("intentional mutator error")
+	})
+
+	err := store.UpdateFocusMemberships(ctx, info.ID, mutator)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "intentional mutator error")
+
+	// State unchanged after error.
+	got, err := store.Get(ctx, info.ID)
+	require.NoError(t, err)
+	assert.Empty(t, got.FocusMemberships)
+	assert.Nil(t, got.PresentingFocus)
+}
+
 // mustNewULID mints a ulid.ULID via ulid.Make for tests that need distinct,
 // lex-sortable IDs. The session test package cannot import internal/core
 // without creating a cycle (core imports session indirectly via engine
