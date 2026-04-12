@@ -1519,16 +1519,9 @@ func TestCommandSpec_Validate_InvalidCapability(t *testing.T) {
 		cmd    plugins.CommandSpec
 		errMsg string
 	}{
-		{
-			name: "invalid action in capability",
-			cmd: plugins.CommandSpec{
-				Name:         "teleport",
-				Capabilities: []command.Capability{{Action: "destroy", Resource: "location"}},
-			},
-			errMsg: "action",
-		},
-		// Note: unknown resource type is NOT checked by Validate() — resource type
-		// validation happens during loadPlugin with cross-plugin context.
+		// Note: unknown action strings are now allowed — Capability.Validate() only
+		// requires non-empty action. Cross-plugin validation of action membership
+		// happens during loadPlugin with context from plugin manifests.
 		{
 			name: "invalid scope in capability",
 			cmd: plugins.CommandSpec{
@@ -1545,6 +1538,8 @@ func TestCommandSpec_Validate_InvalidCapability(t *testing.T) {
 			},
 			errMsg: "action",
 		},
+		// Note: unknown resource type is NOT checked by Validate() — resource type
+		// validation happens during loadPlugin with cross-plugin context.
 		// "second capability invalid resource" removed — resource type validation
 		// is deferred to loadPlugin with cross-plugin context.
 	}
@@ -1566,7 +1561,7 @@ type: lua
 commands:
   - name: teleport
     capabilities:
-      - action: destroy
+      - action: ""
         resource: location
 lua-plugin:
   entry: main.lua
@@ -1822,6 +1817,72 @@ trust:
 			check: func(t *testing.T, m *plugins.Manifest) {
 				require.NotNil(t, m.Trust)
 				assert.True(t, m.Trust.AllPrincipals)
+			},
+		},
+		{
+			name: "parses actions when declared on a binary plugin",
+			yaml: `
+name: test-plugin
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: test-plugin
+actions: [join, leave]
+`,
+			check: func(t *testing.T, m *plugins.Manifest) {
+				assert.Equal(t, []string{"join", "leave"}, m.Actions)
+			},
+		},
+		{
+			name: "parses actions when declared on a Lua plugin",
+			yaml: `
+name: test-plugin
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+actions: [craft]
+`,
+			check: func(t *testing.T, m *plugins.Manifest) {
+				assert.Equal(t, []string{"craft"}, m.Actions)
+			},
+		},
+		{
+			name:    "rejects actions with an empty entry",
+			wantErr: "action",
+			yaml: `
+name: test-plugin
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+actions: [""]
+`,
+		},
+		{
+			name:    "rejects actions with duplicate entries",
+			wantErr: "duplicate",
+			yaml: `
+name: test-plugin
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: test-plugin
+actions: [join, join]
+`,
+		},
+		{
+			name: "accepts actions that re-declare a core action",
+			yaml: `
+name: test-plugin
+version: 1.0.0
+type: binary
+binary-plugin:
+  executable: test-plugin
+actions: [read]
+`,
+			check: func(t *testing.T, m *plugins.Manifest) {
+				assert.Equal(t, []string{"read"}, m.Actions)
 			},
 		},
 	}

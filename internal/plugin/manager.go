@@ -343,6 +343,7 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 
 	// Phase 2: Collect cross-plugin context.
 	knownResourceTypes := CollectResourceTypes(discovered)
+	knownActions := CollectActions(discovered)
 
 	// Phase 3: Resolve load order.
 	ordered := m.resolveLoadOrder(discovered)
@@ -350,7 +351,7 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 	// Phase 4: Load each plugin with full context.
 	var loadErrors []error
 	for _, dp := range ordered {
-		if err := m.loadPlugin(ctx, dp, knownResourceTypes); err != nil {
+		if err := m.loadPlugin(ctx, dp, knownResourceTypes, knownActions); err != nil {
 			slog.Error("failed to load plugin",
 				"plugin", dp.Manifest.Name,
 				"priority", dp.Manifest.EffectivePriority(),
@@ -452,6 +453,20 @@ func CollectResourceTypes(discovered []*DiscoveredPlugin) map[string]bool {
 	return known
 }
 
+// CollectActions builds the full set of known ABAC actions: core actions plus
+// all actions explicitly declared across discovered plugins. This cross-plugin
+// context is needed for semantic validation during loadPlugin. Exported as a
+// test seam so callers can verify the merge logic without driving LoadAll.
+func CollectActions(discovered []*DiscoveredPlugin) map[string]bool {
+	known := command.CoreActions()
+	for _, dp := range discovered {
+		for _, a := range dp.Manifest.Actions {
+			known[a] = true
+		}
+	}
+	return known
+}
+
 // resolveLoadOrder returns plugins in the order they should be loaded.
 // When a registry is configured, it uses DAG-based dependency resolution.
 // Falls back to priority sort if DAG resolution fails or no registry is set.
@@ -517,19 +532,10 @@ func (m *Manager) unregisterPluginProviders(pluginName string, resourceTypes []s
 // Design: Returns nil (not error) for unsupported configurations to support
 // graceful degradation. This allows running without Lua support or before
 // binary plugin support is implemented. The warning logs provide visibility.
-func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownResourceTypes map[string]bool) error {
-	// Semantic validation: check capability resource types against the full known set.
-	for i := range dp.Manifest.Commands {
-		cmd := &dp.Manifest.Commands[i]
-		for _, cap := range cmd.Capabilities {
-			if err := cap.ValidateResourceType(knownResourceTypes); err != nil {
-				return oops.In("manager").With("plugin", dp.Manifest.Name).
-					With("command", cmd.Name).Wrap(err)
-			}
-		}
-	}
-
-	// Resolve the host for this plugin type.
+func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownResourceTypes, knownActions map[string]bool) error {
+	// Resolve the host for this plugin type first — unsupported configurations
+	// are skipped here before any semantic validation so that graceful degradation
+	// (e.g., no binary host configured) is not blocked by capability checks.
 	// For backward compatibility, TypeLua falls back to the dedicated luaHost field.
 	var host Host
 	switch dp.Manifest.Type {
@@ -555,6 +561,32 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 			"plugin", dp.Manifest.Name,
 			"type", dp.Manifest.Type)
 		return nil
+	}
+
+	// Semantic validation: check capability resource types and actions against the full known sets.
+	coreActions := command.CoreActions()
+	ownActions := make(map[string]bool, len(dp.Manifest.Actions))
+	for _, a := range dp.Manifest.Actions {
+		ownActions[a] = true
+	}
+	for i := range dp.Manifest.Commands {
+		cmd := &dp.Manifest.Commands[i]
+		for _, cap := range cmd.Capabilities {
+			if err := cap.ValidateResourceType(knownResourceTypes); err != nil {
+				return oops.In("manager").With("plugin", dp.Manifest.Name).
+					With("command", cmd.Name).Wrap(err)
+			}
+			if err := cap.ValidateAction(knownActions); err != nil {
+				return oops.In("manager").With("plugin", dp.Manifest.Name).
+					With("command", cmd.Name).Wrap(err)
+			}
+			if !coreActions[cap.Action] && !ownActions[cap.Action] {
+				slog.Warn("capability uses action not declared by this plugin",
+					"plugin", dp.Manifest.Name,
+					"command", cmd.Name,
+					"action", cap.Action)
+			}
+		}
 	}
 
 	// Reject duplicate plugin names before loading to prevent the second plugin

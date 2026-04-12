@@ -19,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestCommandEntryHasRequiredFields(t *testing.T) {
@@ -595,7 +596,6 @@ func TestCapability_ValidateInvalid(t *testing.T) {
 	}{
 		{"empty action", Capability{Action: "", Resource: "location"}, "action"},
 		{"empty resource", Capability{Action: "read", Resource: ""}, "resource"},
-		{"unknown action", Capability{Action: "destroy", Resource: "location"}, "action"},
 		// Note: unknown resource type is NOT checked by Validate() — it's checked
 		// by ValidateResourceType() at load time with cross-plugin context.
 		{"invalid scope", Capability{Action: "read", Resource: "location", Scope: "everywhere"}, "scope"},
@@ -616,6 +616,13 @@ func TestCapability_ValidateAcceptsUnknownResourceType(t *testing.T) {
 	assert.NoError(t, c.Validate())
 }
 
+func TestCapability_ValidateAcceptsUnknownAction(t *testing.T) {
+	// Validate() is structural only — unknown actions pass here.
+	// ValidateAction() checks membership at load time with cross-plugin context.
+	c := Capability{Action: "destroy", Resource: "location"}
+	assert.NoError(t, c.Validate())
+}
+
 func TestCapability_ValidateResourceTypeKnown(t *testing.T) {
 	known := map[string]bool{"location": true, "widget": true}
 	assert.NoError(t, Capability{Action: "read", Resource: "widget"}.ValidateResourceType(known))
@@ -627,6 +634,7 @@ func TestCapability_ValidateResourceTypeUnknown(t *testing.T) {
 	err := Capability{Action: "read", Resource: "spaceship"}.ValidateResourceType(known)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "spaceship")
+	errutil.AssertErrorCode(t, err, "INVALID_CAPABILITY")
 }
 
 func TestCoreResourceTypesReturnsCopy(t *testing.T) {
@@ -637,6 +645,41 @@ func TestCoreResourceTypesReturnsCopy(t *testing.T) {
 	types["spaceship"] = true
 	types2 := CoreResourceTypes()
 	assert.False(t, types2["spaceship"])
+}
+
+func TestCoreActionsContainsExpectedDefaults(t *testing.T) {
+	actions := CoreActions()
+	for _, expected := range []string{"read", "write", "emit", "enter", "use", "delete", "execute", "admin"} {
+		assert.True(t, actions[expected], "core action %q must be present", expected)
+	}
+}
+
+func TestCoreActionsReturnsCopy(t *testing.T) {
+	actions := CoreActions()
+	assert.True(t, actions["read"])
+	// Mutating the copy must not affect a second call.
+	actions["invent"] = true
+	actions2 := CoreActions()
+	assert.False(t, actions2["invent"], "subsequent calls must not see prior mutations")
+}
+
+func TestCapability_ValidateActionWithKnownAction(t *testing.T) {
+	known := map[string]bool{"join": true, "read": true}
+	assert.NoError(t, Capability{Action: "join", Resource: "channel"}.ValidateAction(known))
+	assert.NoError(t, Capability{Action: "read", Resource: "location"}.ValidateAction(known))
+}
+
+func TestCapability_ValidateActionWithUnknownAction(t *testing.T) {
+	known := map[string]bool{"read": true}
+	err := Capability{Action: "join", Resource: "channel"}.ValidateAction(known)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "join")
+	errutil.AssertErrorCode(t, err, "INVALID_CAPABILITY")
+}
+
+func TestCapability_ValidateActionBoundaryEmptyKnownMap(t *testing.T) {
+	err := Capability{Action: "read", Resource: "location"}.ValidateAction(map[string]bool{})
+	require.Error(t, err, "empty known map must reject any action")
 }
 
 func TestCapabilityEffectiveScope(t *testing.T) {
@@ -653,11 +696,6 @@ func TestNewCommandEntry_InvalidCapabilityReturnsError(t *testing.T) {
 		caps []Capability
 		want string
 	}{
-		{
-			name: "unknown action",
-			caps: []Capability{{Action: "destroy", Resource: "location"}},
-			want: "action",
-		},
 		// Note: unknown resource type is NOT checked by Validate() at construction
 		// time — resource type validation happens at load time via ValidateResourceType().
 		{

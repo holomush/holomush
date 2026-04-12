@@ -94,6 +94,7 @@ type Manifest struct {
 
 	// ABAC trust boundary fields
 	ResourceTypes []string     `yaml:"resource_types,omitempty" json:"resource_types,omitempty"`
+	Actions       []string     `yaml:"actions,omitempty" json:"actions,omitempty"`
 	Trust         *TrustConfig `yaml:"trust,omitempty" json:"trust,omitempty"`
 
 	emitsDeclared bool `yaml:"-" json:"-" jsonschema:"-"`
@@ -411,6 +412,27 @@ func (m *Manifest) Validate() error {
 					New("duplicate resource type")
 			}
 			seen[rt] = true
+		}
+	}
+
+	// Validate actions: no empty strings, no duplicates.
+	// All plugin types may declare actions (unlike resource_types, actions
+	// have no structural coupling to AttributeResolverService).
+	// Note: no format constraint on action names — actions are free-form identifiers
+	// and may re-declare core actions (unlike resource_types which checks namePattern
+	// and ProtectedResourceTypes).
+	if len(m.Actions) > 0 {
+		seen := make(map[string]bool, len(m.Actions))
+		for _, a := range m.Actions {
+			if strings.TrimSpace(a) == "" {
+				return oops.In("manifest").With("name", m.Name).
+					New("action entry must not be empty")
+			}
+			if seen[a] {
+				return oops.In("manifest").With("name", m.Name).With("action", a).
+					New("duplicate action")
+			}
+			seen[a] = true
 		}
 	}
 

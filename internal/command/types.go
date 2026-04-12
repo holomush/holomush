@@ -110,6 +110,9 @@ const (
 //
 // Thread safety: this map is initialized at package load time and never
 // modified afterward. Concurrent reads without writes are safe in Go.
+// CoreActions() returns a defensive copy for external mutation.
+// ValidateAction() accepts a separate "known" map parameter rather
+// than reading this global, keeping plugin-contributed types isolated.
 var validActions = map[string]bool{
 	"read": true, "write": true, "emit": true, "enter": true,
 	"use": true, "delete": true, "execute": true, "admin": true,
@@ -144,17 +147,12 @@ type Capability struct {
 	Scope    string `yaml:"scope,omitempty" json:"scope,omitempty"`
 }
 
-// Validate checks structural validity: action is known, resource is non-empty,
-// scope is valid. Does NOT check resource type membership — that requires
-// cross-plugin context and is deferred to ValidateResourceType at load time.
+// Validate checks structural validity: action is non-empty, resource is non-empty,
+// scope is valid. Does NOT check action or resource type membership — that requires
+// cross-plugin context and is deferred to ValidateAction/ValidateResourceType at load time.
 func (c Capability) Validate() error {
 	if c.Action == "" {
 		return oops.Code("INVALID_CAPABILITY").Errorf("action is required")
-	}
-	if !validActions[c.Action] {
-		return oops.Code("INVALID_CAPABILITY").
-			With("action", c.Action).
-			Errorf("unknown action %q", c.Action)
 	}
 	if c.Resource == "" {
 		return oops.Code("INVALID_CAPABILITY").Errorf("resource is required")
@@ -179,7 +177,7 @@ func (c Capability) ValidateResourceType(known map[string]bool) error {
 	return nil
 }
 
-// CoreResourceTypes returns a copy of the core resource type set.
+// CoreResourceTypes returns a defensive copy of the core resource type set.
 // Used by the plugin manager to build the full known-types map.
 func CoreResourceTypes() map[string]bool {
 	result := make(map[string]bool, len(validResourceTypes))
@@ -187,6 +185,28 @@ func CoreResourceTypes() map[string]bool {
 		result[k] = v
 	}
 	return result
+}
+
+// CoreActions returns a defensive copy of the built-in action set.
+// Used by the plugin manager to build the full known-actions map.
+func CoreActions() map[string]bool {
+	result := make(map[string]bool, len(validActions))
+	for k, v := range validActions {
+		result[k] = v
+	}
+	return result
+}
+
+// ValidateAction checks that the capability's action is in the provided set.
+// Called during plugin load with a set that includes both core actions and
+// plugin-declared actions.
+func (c Capability) ValidateAction(known map[string]bool) error {
+	if !known[c.Action] {
+		return oops.Code("INVALID_CAPABILITY").
+			With("action", c.Action).
+			Errorf("unknown action %q", c.Action)
+	}
+	return nil
 }
 
 // EffectiveScope returns the scope, defaulting to ScopeSelf if empty.

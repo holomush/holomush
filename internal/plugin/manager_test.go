@@ -882,6 +882,62 @@ func TestCollectResourceTypesReturnsNewMapPerCall(t *testing.T) {
 	assert.False(t, second["mutated"], "subsequent calls must not see prior mutations")
 }
 
+// CollectActions is the exported test seam that backs the
+// cross-plugin action collection used during LoadAll.
+
+func TestCollectActionsIncludesCoreActions(t *testing.T) {
+	known := plugins.CollectActions(nil)
+	for _, action := range []string{"read", "write", "emit", "enter", "use", "delete", "execute", "admin"} {
+		assert.True(t, known[action], "core action %q must be included", action)
+	}
+}
+
+func TestCollectActionsMergesExplicitManifestActions(t *testing.T) {
+	discovered := []*plugins.DiscoveredPlugin{
+		{Manifest: &plugins.Manifest{Name: "p1", Actions: []string{"join"}}},
+		{Manifest: &plugins.Manifest{Name: "p2", Actions: []string{"leave", "vote"}}},
+	}
+	known := plugins.CollectActions(discovered)
+	assert.True(t, known["join"], "declared 'join' should be present")
+	assert.True(t, known["leave"], "declared 'leave' should be present")
+	assert.True(t, known["vote"], "declared 'vote' should be present")
+	assert.True(t, known["read"], "core actions should still be present after merge")
+}
+
+func TestCollectActionsDeduplicatesAcrossPlugins(t *testing.T) {
+	discovered := []*plugins.DiscoveredPlugin{
+		{Manifest: &plugins.Manifest{Name: "p1", Actions: []string{"join"}}},
+		{Manifest: &plugins.Manifest{Name: "p2", Actions: []string{"join"}}},
+	}
+	known := plugins.CollectActions(discovered)
+	assert.True(t, known["join"], "'join' declared by two plugins should be present once")
+}
+
+func TestCollectActionsReturnsNewMapPerCall(t *testing.T) {
+	first := plugins.CollectActions(nil)
+	first["mutated"] = true
+	second := plugins.CollectActions(nil)
+	assert.False(t, second["mutated"], "subsequent calls must not see prior mutations")
+}
+
+func TestCollectActionsIgnoresCapabilityActionsNotInActionsField(t *testing.T) {
+	// Only the explicit Actions manifest field feeds CollectActions.
+	// Action strings in command capabilities are NOT auto-promoted.
+	discovered := []*plugins.DiscoveredPlugin{
+		{Manifest: &plugins.Manifest{
+			Name: "p1",
+			Commands: []plugins.CommandSpec{
+				{Name: "channel", Capabilities: []command.Capability{
+					{Action: "join", Resource: "channel"},
+				}},
+			},
+			// No Actions field declared.
+		}},
+	}
+	known := plugins.CollectActions(discovered)
+	assert.False(t, known["join"], "'join' in capabilities but not in actions field must not appear")
+}
+
 // Semantic capability validation: loadPlugin must reject manifests whose
 // commands declare capabilities on resource types that aren't in the
 // cross-plugin known set.
@@ -953,6 +1009,135 @@ lua-plugin:
 	err := mgr.LoadAll(context.Background())
 	require.NoError(t, err, "consumer should validate against declarer's resource type")
 	assert.Contains(t, mgr.ListPlugins(), "widget-consumer")
+}
+
+// Semantic action validation: loadPlugin must reject manifests whose commands
+// declare capabilities on actions that aren't in the cross-plugin known set.
+
+func TestManagerLoadAllRejectsCommandCapabilityOnUnknownAction(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	pluginDir := filepath.Join(pluginsDir, "channel-plugin")
+	mkdirAll(t, pluginDir)
+	writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(`name: channel-plugin
+version: 1.0.0
+type: lua
+commands:
+  - name: channel
+    capabilities:
+      - action: join
+        resource: location
+lua-plugin:
+  entry: main.lua`))
+	writeFile(t, filepath.Join(pluginDir, "main.lua"), []byte("function on_event(e) end"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	err := mgr.LoadAll(context.Background())
+	require.Error(t, err, "load should fail when capability uses an undeclared action")
+	assert.Contains(t, err.Error(), "join")
+	assert.Empty(t, mgr.ListPlugins(), "no plugins should be registered after a load failure")
+}
+
+func TestManagerLoadAllAcceptsCapabilityWithDeclaredAction(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	pluginDir := filepath.Join(pluginsDir, "channel-plugin")
+	mkdirAll(t, pluginDir)
+	writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(`name: channel-plugin
+version: 1.0.0
+type: lua
+actions: [join, leave]
+commands:
+  - name: channel
+    capabilities:
+      - action: join
+        resource: location
+      - action: leave
+        resource: location
+lua-plugin:
+  entry: main.lua`))
+	writeFile(t, filepath.Join(pluginDir, "main.lua"), []byte("function on_event(e) end"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	err := mgr.LoadAll(context.Background())
+	require.NoError(t, err, "load should succeed when action is declared in the plugin manifest")
+	assert.Contains(t, mgr.ListPlugins(), "channel-plugin")
+}
+
+func TestManagerLoadAllAcceptsCapabilityOnAnotherPluginsAction(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	// Plugin A declares the "join" action so Plugin B's capability is valid.
+	declarerDir := filepath.Join(pluginsDir, "action-declarer")
+	mkdirAll(t, declarerDir)
+	writeFile(t, filepath.Join(declarerDir, "plugin.yaml"), []byte(`name: action-declarer
+version: 1.0.0
+type: binary
+actions: [join]
+binary-plugin:
+  executable: action-declarer`))
+
+	// Plugin B uses "join" declared by Plugin A.
+	consumerDir := filepath.Join(pluginsDir, "action-consumer")
+	mkdirAll(t, consumerDir)
+	writeFile(t, filepath.Join(consumerDir, "plugin.yaml"), []byte(`name: action-consumer
+version: 1.0.0
+type: lua
+commands:
+  - name: channel
+    capabilities:
+      - action: join
+        resource: location
+lua-plugin:
+  entry: main.lua`))
+	writeFile(t, filepath.Join(consumerDir, "main.lua"), []byte("function on_event(e) end"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	// No binary host — declarer is silently skipped, but its actions still
+	// feed CollectActions during Phase 2.
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	err := mgr.LoadAll(context.Background())
+	require.NoError(t, err, "consumer should validate against declarer's action")
+	assert.Contains(t, mgr.ListPlugins(), "action-consumer")
+}
+
+func TestManagerLoadAllAcceptsPluginRedeclaringCoreAction(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	pluginDir := filepath.Join(pluginsDir, "reader-plugin")
+	mkdirAll(t, pluginDir)
+	writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(`name: reader-plugin
+version: 1.0.0
+type: lua
+actions: [read]
+commands:
+  - name: look
+    capabilities:
+      - action: read
+        resource: location
+lua-plugin:
+  entry: main.lua`))
+	writeFile(t, filepath.Join(pluginDir, "main.lua"), []byte("function on_event(e) end"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	err := mgr.LoadAll(context.Background())
+	require.NoError(t, err, "re-declaring a core action in the actions field should not prevent loading")
+	assert.Contains(t, mgr.ListPlugins(), "reader-plugin")
 }
 
 // WithTrustAllowlist is plumbed through but only takes effect when policies
