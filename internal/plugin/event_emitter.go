@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
-	"time"
 
 	"github.com/holomush/holomush/internal/core"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -74,14 +73,7 @@ func (e *PluginEventEmitter) Emit(ctx context.Context, pluginName string, intent
 			New("event payload must be valid JSON")
 	}
 
-	event := core.Event{
-		ID:        core.NewULID(),
-		Stream:    intent.Stream,
-		Type:      core.EventType(intent.Type),
-		Timestamp: time.Now().UTC(),
-		Actor:     actor,
-		Payload:   []byte(intent.Payload),
-	}
+	event := core.NewEvent(intent.Stream, core.EventType(intent.Type), actor, []byte(intent.Payload))
 
 	if err := e.store.Append(ctx, event); err != nil {
 		return oops.With("plugin", pluginName).With("stream", intent.Stream).Wrap(err)
