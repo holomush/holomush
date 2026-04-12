@@ -744,6 +744,51 @@ func TestStreamToChannel(t *testing.T) {
 	}
 }
 
+func TestPostgresEventStore_ReplayTail_Success(t *testing.T) {
+	id1 := core.NewULID()
+	id2 := core.NewULID()
+	ts := time.Now().UTC().Truncate(time.Microsecond)
+
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	// ReplayTail without notBefore uses the subquery without created_at filter.
+	rows := pgxmock.NewRows([]string{"id", "stream", "type", "actor_kind", "actor_id", "payload", "created_at"}).
+		AddRow(id1.String(), "location:test", "say", core.ActorCharacter, "c1", []byte(`{}`), ts).
+		AddRow(id2.String(), "location:test", "say", core.ActorCharacter, "c1", []byte(`{}`), ts.Add(time.Minute))
+	mock.ExpectQuery(`SELECT id, stream, type, actor_kind, actor_id, payload, created_at FROM \(.*ORDER BY id DESC LIMIT.*\) sub ORDER BY id ASC`).
+		WithArgs("location:test", 5).
+		WillReturnRows(rows)
+
+	store := &PostgresEventStore{pool: mock}
+	events, err := store.ReplayTail(context.Background(), "location:test", 5, time.Time{})
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	// Results should be in ascending order (subquery re-sorts).
+	assert.Equal(t, id1, events[0].ID)
+	assert.Equal(t, id2, events[1].ID)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPostgresEventStore_ReplayTail_WithNotBefore(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	notBefore := time.Date(2026, 4, 12, 0, 0, 0, 0, time.UTC)
+	rows := pgxmock.NewRows([]string{"id", "stream", "type", "actor_kind", "actor_id", "payload", "created_at"})
+	mock.ExpectQuery(`SELECT id, stream, type, actor_kind, actor_id, payload, created_at FROM \(.*created_at >= \$2.*ORDER BY id DESC LIMIT.*\) sub ORDER BY id ASC`).
+		WithArgs("location:test", notBefore, 5).
+		WillReturnRows(rows)
+
+	store := &PostgresEventStore{pool: mock}
+	events, err := store.ReplayTail(context.Background(), "location:test", 5, notBefore)
+	require.NoError(t, err)
+	assert.Empty(t, events)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 // mockConn implements connIface for testing Subscribe.
 type mockConn struct {
 	execFunc                func(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)

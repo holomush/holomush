@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5"
@@ -231,6 +232,69 @@ func (s *PostgresEventStore) InitGameID(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return gameID, nil
+}
+
+// maxReplayTailCount is the server-side cap for ReplayTail count parameter.
+const maxReplayTailCount = 500
+
+// ReplayTail returns up to count most recent events on stream, ascending by
+// event ID. If notBefore is non-zero, events with timestamps before it are
+// excluded. Count is capped at 500.
+func (s *PostgresEventStore) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time) ([]core.Event, error) {
+	if count > maxReplayTailCount {
+		count = maxReplayTailCount
+	}
+	if count <= 0 {
+		return nil, nil
+	}
+
+	var rows pgx.Rows
+	var err error
+
+	if notBefore.IsZero() {
+		rows, err = s.pool.Query(ctx,
+			`SELECT id, stream, type, actor_kind, actor_id, payload, created_at
+			 FROM (
+			     SELECT id, stream, type, actor_kind, actor_id, payload, created_at
+			     FROM events WHERE stream = $1
+			     ORDER BY id DESC LIMIT $2
+			 ) sub ORDER BY id ASC`,
+			stream, count)
+	} else {
+		rows, err = s.pool.Query(ctx,
+			`SELECT id, stream, type, actor_kind, actor_id, payload, created_at
+			 FROM (
+			     SELECT id, stream, type, actor_kind, actor_id, payload, created_at
+			     FROM events WHERE stream = $1 AND created_at >= $2
+			     ORDER BY id DESC LIMIT $3
+			 ) sub ORDER BY id ASC`,
+			stream, notBefore, count)
+	}
+	if err != nil {
+		return nil, oops.With("operation", "replay tail").With("stream", stream).Wrap(err)
+	}
+	defer rows.Close()
+
+	var events []core.Event
+	for rows.Next() {
+		var e core.Event
+		var idStr string
+		var typeStr string
+		if scanErr := rows.Scan(&idStr, &e.Stream, &typeStr, &e.Actor.Kind, &e.Actor.ID, &e.Payload, &e.Timestamp); scanErr != nil {
+			return nil, oops.With("operation", "scan replay tail row").With("stream", stream).Wrap(scanErr)
+		}
+		parsed, parseErr := ulid.Parse(idStr)
+		if parseErr != nil {
+			return nil, oops.With("operation", "parse replay tail event ID").With("raw_id", idStr).Wrap(parseErr)
+		}
+		e.ID = parsed
+		e.Type = core.EventType(typeStr)
+		events = append(events, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.With("operation", "iterate replay tail").With("stream", stream).Wrap(err)
+	}
+	return events, nil
 }
 
 // streamToChannel converts a stream name to a PostgreSQL notification channel name.

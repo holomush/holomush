@@ -315,6 +315,74 @@ var _ = Describe("PostgresEventStore", func() {
 		})
 	})
 
+	Describe("ReplayTail", func() {
+		const stream = "location:replay-tail-test"
+
+		It("returns last N events in ascending order", func() {
+			ctx := context.Background()
+			baseTime := time.Date(2026, 4, 12, 0, 0, 0, 0, time.UTC)
+
+			ids := make([]ulid.ULID, 10)
+			for i := range 10 {
+				ids[i] = core.NewULID()
+				event := core.Event{
+					ID:        ids[i],
+					Stream:    stream,
+					Type:      core.EventTypeSay,
+					Timestamp: baseTime.Add(time.Duration(i) * time.Minute),
+					Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
+					Payload:   []byte(`{}`),
+				}
+				err := eventStore.Append(ctx, event)
+				Expect(err).NotTo(HaveOccurred())
+				time.Sleep(time.Millisecond)
+			}
+
+			events, err := eventStore.ReplayTail(ctx, stream, 3, time.Time{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(events).To(HaveLen(3))
+			Expect(events[0].ID).To(Equal(ids[7]))
+			Expect(events[1].ID).To(Equal(ids[8]))
+			Expect(events[2].ID).To(Equal(ids[9]))
+		})
+
+		It("filters events before notBefore", func() {
+			ctx := context.Background()
+			streamNB := "location:replay-tail-nb"
+			baseTime := time.Date(2026, 4, 12, 12, 0, 0, 0, time.UTC)
+
+			ids := make([]ulid.ULID, 5)
+			for i := range 5 {
+				ids[i] = core.NewULID()
+				event := core.Event{
+					ID:        ids[i],
+					Stream:    streamNB,
+					Type:      core.EventTypeSay,
+					Timestamp: baseTime.Add(time.Duration(i) * time.Minute),
+					Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
+					Payload:   []byte(`{}`),
+				}
+				err := eventStore.Append(ctx, event)
+				Expect(err).NotTo(HaveOccurred())
+				time.Sleep(time.Millisecond)
+			}
+
+			// notBefore = baseTime+3m excludes first 3 events.
+			events, err := eventStore.ReplayTail(ctx, streamNB, 10, baseTime.Add(3*time.Minute))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(events).To(HaveLen(2))
+			Expect(events[0].ID).To(Equal(ids[3]))
+			Expect(events[1].ID).To(Equal(ids[4]))
+		})
+
+		It("returns empty for nonexistent stream", func() {
+			ctx := context.Background()
+			events, err := eventStore.ReplayTail(ctx, "location:nonexistent-tail", 10, time.Time{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(events).To(BeEmpty())
+		})
+	})
+
 	Describe("Subscribe", func() {
 		const stream = "location:subscribe-test"
 
