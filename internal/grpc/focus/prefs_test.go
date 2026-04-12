@@ -27,7 +27,8 @@ func TestBuildPolicyContextUsesSubstrateDefaultWhenNoSettings(t *testing.T) {
 	coord, _ := newTestCoordinator(t, map[string]*session.Info{
 		"sess-1": {CharacterID: ulid.Make(), PlayerID: ulid.Make(), Status: session.StatusActive},
 	})
-	info, _ := coord.sessionStore.Get(context.Background(), "sess-1")
+	info, err := coord.sessionStore.Get(context.Background(), "sess-1")
+	require.NoError(t, err)
 	pctx := coord.buildPolicyContext(context.Background(), info, session.FocusKey{
 		Kind: session.FocusKindScene, TargetID: ulid.Make(),
 	})
@@ -48,7 +49,8 @@ func TestBuildPolicyContextUsesPlayerPreferenceWhenSet(t *testing.T) {
 	)
 	require.NoError(t, err)
 	dc := coord.(*defaultCoordinator)
-	info, _ := dc.sessionStore.Get(ctx, "sess-1")
+	info, infoErr := dc.sessionStore.Get(ctx, "sess-1")
+	require.NoError(t, infoErr)
 	pctx := dc.buildPolicyContext(ctx, info, session.FocusKey{
 		Kind: session.FocusKindScene, TargetID: ulid.Make(),
 	})
@@ -68,7 +70,8 @@ func TestBuildPolicyContextClampsPlayerPreference(t *testing.T) {
 	)
 	require.NoError(t, err)
 	dc := coord.(*defaultCoordinator)
-	info, _ := dc.sessionStore.Get(ctx, "sess-1")
+	info, infoErr := dc.sessionStore.Get(ctx, "sess-1")
+	require.NoError(t, infoErr)
 	pctx := dc.buildPolicyContext(ctx, info, session.FocusKey{
 		Kind: session.FocusKindScene, TargetID: ulid.Make(),
 	})

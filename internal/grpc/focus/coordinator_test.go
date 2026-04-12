@@ -80,6 +80,23 @@ func TestNewCoordinatorFailsWithoutSessionStore(t *testing.T) {
 	assert.Contains(t, err.Error(), "session store")
 }
 
+func TestNewCoordinatorAcceptsAllOptions(t *testing.T) {
+	store := session.NewMemStore()
+	sender := &capturingSender{}
+	coord, err := NewCoordinator(
+		WithSessionStore(store),
+		WithStreamSender(sender),
+		WithCursorLocker(nil),
+		WithGameSettings(nil),
+		WithPlayerSettings(nil),
+		WithCharacterSettings(nil),
+		WithPlayerPreferences(nil),
+		WithKindPolicy(NewNullPolicy(session.FocusKindScene)),
+	)
+	require.NoError(t, err)
+	assert.NotNil(t, coord)
+}
+
 func TestNewCoordinatorRegistersKindPolicy(t *testing.T) {
 	store := session.NewMemStore()
 	null := NewNullPolicy(session.FocusKindScene)

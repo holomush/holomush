@@ -486,3 +486,14 @@ func TestSendAndCommitEventSkipsHookWhenNil(t *testing.T) {
 		context.Background(), info, streamName, ev, stream, nil))
 	assert.Equal(t, 0, s.CursorLockRefCount(sessionID))
 }
+
+func TestCursorLockerAdapterLocksAndUnlocks(t *testing.T) {
+	m := newCursorLockMap()
+	adapter := NewCursorLockerAdapter(m)
+
+	unlock := adapter.Lock("sess-1")
+	assert.Equal(t, 1, m.refCount("sess-1"))
+
+	unlock()
+	assert.Equal(t, 0, m.refCount("sess-1"))
+}

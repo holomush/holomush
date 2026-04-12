@@ -84,6 +84,43 @@ func TestSessionStreamRegistryRemoveStreamDelegatesToSend(t *testing.T) {
 	assert.False(t, update.add)
 }
 
+func TestStreamSenderAdapterSendPassesModeToRegistry(t *testing.T) {
+	reg := NewSessionStreamRegistry()
+	ch := make(chan sessionStreamUpdate, 1)
+	reg.Register("sess-1", ch)
+	defer reg.Deregister("sess-1", ch)
+
+	adapter := NewStreamSenderAdapter(reg)
+	err := adapter.Send("sess-1", "scene:abc:ic", true, focus.ReplayModeBoundedTail)
+	require.NoError(t, err)
+
+	update := <-ch
+	assert.Equal(t, "scene:abc:ic", update.stream)
+	assert.True(t, update.add)
+	assert.Equal(t, focus.ReplayModeBoundedTail, update.replayMode)
+}
+
+func TestStreamSenderAdapterSendReturnsErrorForMissingSession(t *testing.T) {
+	reg := NewSessionStreamRegistry()
+	adapter := NewStreamSenderAdapter(reg)
+	err := adapter.Send("nonexistent", "stream", true, focus.ReplayModeFromCursor)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SESSION_NOT_FOUND")
+}
+
+func TestAddStreamDefaultsToFromCursor(t *testing.T) {
+	reg := NewSessionStreamRegistry()
+	ch := make(chan sessionStreamUpdate, 1)
+	reg.Register("sess-1", ch)
+	defer reg.Deregister("sess-1", ch)
+
+	err := reg.AddStream(context.Background(), "sess-1", "character:abc")
+	require.NoError(t, err)
+
+	update := <-ch
+	assert.Equal(t, focus.ReplayModeFromCursor, update.replayMode)
+}
+
 func TestSendCarriesReplayMode(t *testing.T) {
 	reg := NewSessionStreamRegistry()
 	ch := make(chan sessionStreamUpdate, 1)

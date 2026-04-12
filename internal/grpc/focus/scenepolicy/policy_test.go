@@ -86,10 +86,12 @@ func TestScenePolicyIsPureAcrossDifferentTargets(t *testing.T) {
 	id1, id2 := ulid.Make(), ulid.Make()
 
 	pctx.Target = session.FocusKey{Kind: session.FocusKindScene, TargetID: id1}
-	result1, _ := p.OnJoin(pctx)
+	result1, err := p.OnJoin(pctx)
+	require.NoError(t, err)
 
 	pctx.Target = session.FocusKey{Kind: session.FocusKindScene, TargetID: id2}
-	result2, _ := p.OnJoin(pctx)
+	result2, err := p.OnJoin(pctx)
+	require.NoError(t, err)
 
 	require.Len(t, result1, len(result2))
 	for i := range result1 {
