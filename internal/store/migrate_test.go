@@ -263,17 +263,17 @@ func TestMigratorCloseIsIdempotent(t *testing.T) {
 }
 
 func TestMigratorPendingMigrationsReturnsMigrationsAboveCurrentVersion(t *testing.T) {
-	// At version 0, migrations 1-6 should be pending (baseline + is_guest +
-	// alias_source + session_player_id + audit_source_component + session_focus)
+	// At version 0, migrations 1-7 should be pending (baseline + is_guest +
+	// alias_source + session_player_id + audit_source_component + session_focus + seed_scene_defaults)
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6}, pending)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7}, pending)
 }
 
 func TestMigratorPendingMigrationsReturnsEmptyAtLatestVersion(t *testing.T) {
-	// At version 6 (latest), no migrations should be pending
-	m := &Migrator{m: &mockMigrate{versionVal: 6}}
+	// At version 7 (latest), no migrations should be pending
+	m := &Migrator{m: &mockMigrate{versionVal: 7}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
 	assert.Empty(t, pending)
@@ -304,11 +304,11 @@ func TestMigratorAppliedMigrationsReturnsEmptyAtVersionZero(t *testing.T) {
 }
 
 func TestMigratorAppliedMigrationsReturnsAllAtLatestVersion(t *testing.T) {
-	// At version 6 (latest), all migrations applied
-	m := &Migrator{m: &mockMigrate{versionVal: 6}}
+	// At version 7 (latest), all migrations applied
+	m := &Migrator{m: &mockMigrate{versionVal: 7}}
 	applied, err := m.AppliedMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6}, applied)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7}, applied)
 }
 
 func TestMigratorAppliedMigrationsReturnsErrorWhenVersionFails(t *testing.T) {
@@ -449,7 +449,7 @@ func TestMigrationName(t *testing.T) {
 		{3, "000003_alias_source", false},
 		{4, "000004_session_player_id", false},
 		{5, "000005_audit_source_component", false},
-		{7, "", false},   // No migration 7 after collapse
+		{7, "000007_seed_scene_defaults", false},
 		{999, "", false}, // Unknown version returns empty string and nil error (not found is expected)
 	}
 

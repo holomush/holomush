@@ -58,7 +58,7 @@ func (c *Chain) IntN(ctx context.Context, key string) (int, bool) {
 }
 
 // BoolN returns the first non-absent bool value across scopes.
-func (c *Chain) BoolN(ctx context.Context, key string) (bool, bool) {
+func (c *Chain) BoolN(ctx context.Context, key string) (value, ok bool) {
 	for _, s := range c.scopes {
 		if v, ok := s.BoolN(ctx, key); ok {
 			return v, true

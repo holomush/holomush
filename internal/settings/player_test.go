@@ -169,6 +169,6 @@ func TestPlayerSettingsSetStringRejectsInvalidNamespace(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown namespace")
 }
 
-func TestPlayerSettingsStoreImplementsInterface(t *testing.T) {
-	var _ settings.PlayerSettingsStore = settings.NewPlayerSettingsStore(newMockPlayerPrefsReader())
+func TestPlayerSettingsStoreImplementsInterface(_ *testing.T) {
+	var _ settings.PlayerSettingsStore = settings.NewPlayerSettingsStore(newMockPlayerPrefsReader()) //nolint:staticcheck // intentional interface check
 }

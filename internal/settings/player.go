@@ -63,7 +63,10 @@ func (s *playerSettingsStore) SetString(
 	if err := ValidateNamespace(key); err != nil {
 		return oops.With("key", key).Wrap(err)
 	}
-	return s.reader.SetPlayerPreferenceKey(ctx, playerID, key, value)
+	if err := s.reader.SetPlayerPreferenceKey(ctx, playerID, key, value); err != nil {
+		return oops.With("key", key).With("player_id", playerID.String()).Wrap(err)
+	}
+	return nil
 }
 
 // jsonMapSettings implements Settings backed by a flat JSON map. Values may
@@ -110,7 +113,7 @@ func (j *jsonMapSettings) IntN(ctx context.Context, key string) (int, bool) {
 	return v, true
 }
 
-func (j *jsonMapSettings) BoolN(ctx context.Context, key string) (bool, bool) {
+func (j *jsonMapSettings) BoolN(ctx context.Context, key string) (value, ok bool) {
 	raw, ok := j.data[key]
 	if !ok {
 		return false, false
@@ -149,7 +152,7 @@ type emptySettings struct{}
 
 func (e *emptySettings) StringN(context.Context, string) (string, bool)           { return "", false }
 func (e *emptySettings) IntN(context.Context, string) (int, bool)                 { return 0, false }
-func (e *emptySettings) BoolN(context.Context, string) (bool, bool)               { return false, false }
+func (e *emptySettings) BoolN(context.Context, string) (value, ok bool)           { return false, false }
 func (e *emptySettings) DurationN(context.Context, string) (time.Duration, bool)  { return 0, false }
 
 // Compile-time interface checks.

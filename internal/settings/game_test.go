@@ -184,6 +184,6 @@ func TestGameSettingsSetStringReturnsStoreError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestGameSettingsImplementsGameSettingsInterface(t *testing.T) {
-	var _ settings.GameSettings = settings.NewGameSettings(newMockSystemInfoStore())
+func TestGameSettingsImplementsGameSettingsInterface(_ *testing.T) {
+	var _ settings.GameSettings = settings.NewGameSettings(newMockSystemInfoStore()) //nolint:staticcheck // intentional interface check
 }

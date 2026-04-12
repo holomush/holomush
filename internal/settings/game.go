@@ -38,12 +38,18 @@ func (a *SystemInfoAdapter) GetSystemInfo(ctx context.Context, key string) (stri
 	if err != nil && a.NotFoundErr != nil && errors.Is(err, a.NotFoundErr) {
 		return "", ErrNotFound
 	}
-	return v, err
+	if err != nil {
+		return "", oops.With("key", key).Wrap(err)
+	}
+	return v, nil
 }
 
 // SetSystemInfo delegates to the underlying store.
 func (a *SystemInfoAdapter) SetSystemInfo(ctx context.Context, key, value string) error {
-	return a.Store.SetSystemInfo(ctx, key, value)
+	if err := a.Store.SetSystemInfo(ctx, key, value); err != nil {
+		return oops.With("key", key).Wrap(err)
+	}
+	return nil
 }
 
 // postgresGameSettings implements GameSettings backed by holomush_system_info.
@@ -82,7 +88,7 @@ func (g *postgresGameSettings) IntN(ctx context.Context, key string) (int, bool)
 	return v, true
 }
 
-func (g *postgresGameSettings) BoolN(ctx context.Context, key string) (bool, bool) {
+func (g *postgresGameSettings) BoolN(ctx context.Context, key string) (value, ok bool) {
 	s, ok := g.StringN(ctx, key)
 	if !ok {
 		return false, false
@@ -114,5 +120,8 @@ func (g *postgresGameSettings) SetString(ctx context.Context, key, value string)
 	if err := ValidateNamespace(key); err != nil {
 		return oops.With("key", key).Wrap(err)
 	}
-	return g.store.SetSystemInfo(ctx, key, value)
+	if err := g.store.SetSystemInfo(ctx, key, value); err != nil {
+		return oops.With("key", key).Wrap(err)
+	}
+	return nil
 }

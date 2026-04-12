@@ -156,7 +156,7 @@ func TestChainEmptyScopesReturnsFalse(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestChainImplementsSettingsInterface(t *testing.T) {
+func TestChainImplementsSettingsInterface(_ *testing.T) {
 	// Compile-time check that Chain satisfies Settings.
 	var _ settings.Settings = settings.NewChain()
 }

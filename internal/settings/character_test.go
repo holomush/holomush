@@ -52,6 +52,6 @@ func TestNullCharacterSettingsSetStringReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "not implemented")
 }
 
-func TestNullCharacterSettingsStoreImplementsInterface(t *testing.T) {
-	var _ settings.CharacterSettingsStore = settings.NewNullCharacterSettingsStore()
+func TestNullCharacterSettingsStoreImplementsInterface(_ *testing.T) {
+	var _ settings.CharacterSettingsStore = settings.NewNullCharacterSettingsStore() //nolint:staticcheck // intentional interface check
 }
