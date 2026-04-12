@@ -86,9 +86,19 @@ func NewGuestPlayer(username string) (*Player, error) {
 
 // PlayerPreferences contains player-specific settings.
 type PlayerPreferences struct {
-	AutoLogin     bool   `json:"auto_login,omitempty"`
-	MaxCharacters int    `json:"max_characters,omitempty"`
-	Theme         string `json:"theme,omitempty"`
+	AutoLogin     bool                   `json:"auto_login,omitempty"`
+	MaxCharacters int                    `json:"max_characters,omitempty"`
+	Theme         string                 `json:"theme,omitempty"`
+	Scenes        ScenePlayerPreferences `json:"scenes,omitempty"`
+}
+
+// ScenePlayerPreferences holds scene-related per-player configuration.
+type ScenePlayerPreferences struct {
+	// FocusReplayTail is the number of most recent IC contributions
+	// replayed to the session when it focus-switches into a scene.
+	// Pointer type distinguishes "unset" (nil) from "explicitly 0
+	// (disable catch-up)."
+	FocusReplayTail *int `json:"focus_replay_tail,omitempty"`
 }
 
 // EffectiveMaxCharacters returns the character limit, using default if not set.

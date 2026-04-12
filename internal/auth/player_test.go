@@ -4,6 +4,7 @@
 package auth_test
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -157,6 +158,41 @@ func TestPlayerPreferences(t *testing.T) {
 		prefs := auth.PlayerPreferences{MaxCharacters: -1}
 		assert.Equal(t, auth.DefaultMaxCharacters, prefs.EffectiveMaxCharacters())
 	})
+}
+
+func TestScenePlayerPreferencesRoundTripsJSON(t *testing.T) {
+	tail := 5
+	prefs := auth.PlayerPreferences{
+		Scenes: auth.ScenePlayerPreferences{FocusReplayTail: &tail},
+	}
+	data, err := json.Marshal(prefs)
+	require.NoError(t, err)
+
+	var decoded auth.PlayerPreferences
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	require.NotNil(t, decoded.Scenes.FocusReplayTail)
+	assert.Equal(t, 5, *decoded.Scenes.FocusReplayTail)
+}
+
+func TestScenePlayerPreferencesOmitsNilTail(t *testing.T) {
+	prefs := auth.PlayerPreferences{}
+	data, err := json.Marshal(prefs)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "focus_replay_tail")
+}
+
+func TestScenePlayerPreferencesExplicitZeroIsPreserved(t *testing.T) {
+	zero := 0
+	prefs := auth.PlayerPreferences{
+		Scenes: auth.ScenePlayerPreferences{FocusReplayTail: &zero},
+	}
+	data, err := json.Marshal(prefs)
+	require.NoError(t, err)
+
+	var decoded auth.PlayerPreferences
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	require.NotNil(t, decoded.Scenes.FocusReplayTail)
+	assert.Equal(t, 0, *decoded.Scenes.FocusReplayTail)
 }
 
 func TestPlayer_Fields(t *testing.T) {
