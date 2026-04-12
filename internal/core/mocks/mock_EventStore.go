@@ -11,6 +11,8 @@ import (
 	core "github.com/holomush/holomush/internal/core"
 	mock "github.com/stretchr/testify/mock"
 
+	time "time"
+
 	ulid "github.com/oklog/ulid/v2"
 )
 
@@ -194,6 +196,67 @@ func (_c *MockEventStore_Replay_Call) RunAndReturn(run func(context.Context, str
 	return _c
 }
 
+// ReplayTail provides a mock function with given fields: ctx, stream, count, notBefore
+func (_m *MockEventStore) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time) ([]core.Event, error) {
+	ret := _m.Called(ctx, stream, count, notBefore)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReplayTail")
+	}
+
+	var r0 []core.Event
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, int, time.Time) ([]core.Event, error)); ok {
+		return rf(ctx, stream, count, notBefore)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, int, time.Time) []core.Event); ok {
+		r0 = rf(ctx, stream, count, notBefore)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]core.Event)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, int, time.Time) error); ok {
+		r1 = rf(ctx, stream, count, notBefore)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockEventStore_ReplayTail_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReplayTail'
+type MockEventStore_ReplayTail_Call struct {
+	*mock.Call
+}
+
+// ReplayTail is a helper method to define mock.On call
+//   - ctx context.Context
+//   - stream string
+//   - count int
+//   - notBefore time.Time
+func (_e *MockEventStore_Expecter) ReplayTail(ctx interface{}, stream interface{}, count interface{}, notBefore interface{}) *MockEventStore_ReplayTail_Call {
+	return &MockEventStore_ReplayTail_Call{Call: _e.mock.On("ReplayTail", ctx, stream, count, notBefore)}
+}
+
+func (_c *MockEventStore_ReplayTail_Call) Run(run func(ctx context.Context, stream string, count int, notBefore time.Time)) *MockEventStore_ReplayTail_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(int), args[3].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockEventStore_ReplayTail_Call) Return(_a0 []core.Event, _a1 error) *MockEventStore_ReplayTail_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockEventStore_ReplayTail_Call) RunAndReturn(run func(context.Context, string, int, time.Time) ([]core.Event, error)) *MockEventStore_ReplayTail_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Subscribe provides a mock function with given fields: ctx, stream
 func (_m *MockEventStore) Subscribe(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error) {
 	ret := _m.Called(ctx, stream)
@@ -258,6 +321,64 @@ func (_c *MockEventStore_Subscribe_Call) Return(eventCh <-chan ulid.ULID, errCh 
 }
 
 func (_c *MockEventStore_Subscribe_Call) RunAndReturn(run func(context.Context, string) (<-chan ulid.ULID, <-chan error, error)) *MockEventStore_Subscribe_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SubscribeSession provides a mock function with given fields: ctx
+func (_m *MockEventStore) SubscribeSession(ctx context.Context) (core.Subscription, error) {
+	ret := _m.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SubscribeSession")
+	}
+
+	var r0 core.Subscription
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context) (core.Subscription, error)); ok {
+		return rf(ctx)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context) core.Subscription); ok {
+		r0 = rf(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(core.Subscription)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = rf(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockEventStore_SubscribeSession_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SubscribeSession'
+type MockEventStore_SubscribeSession_Call struct {
+	*mock.Call
+}
+
+// SubscribeSession is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockEventStore_Expecter) SubscribeSession(ctx interface{}) *MockEventStore_SubscribeSession_Call {
+	return &MockEventStore_SubscribeSession_Call{Call: _e.mock.On("SubscribeSession", ctx)}
+}
+
+func (_c *MockEventStore_SubscribeSession_Call) Run(run func(ctx context.Context)) *MockEventStore_SubscribeSession_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *MockEventStore_SubscribeSession_Call) Return(_a0 core.Subscription, _a1 error) *MockEventStore_SubscribeSession_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockEventStore_SubscribeSession_Call) RunAndReturn(run func(context.Context) (core.Subscription, error)) *MockEventStore_SubscribeSession_Call {
 	_c.Call.Return(run)
 	return _c
 }
