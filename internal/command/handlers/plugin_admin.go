@@ -96,6 +96,13 @@ func handlePluginInfo(ctx context.Context, exec *command.CommandExecution, liste
 		}
 		fmt.Fprintf(&sb, "\nCommands: %s", strings.Join(cmdNames, ", "))
 	}
+	if len(m.Verbs) > 0 {
+		verbDescs := make([]string, len(m.Verbs))
+		for i, v := range m.Verbs {
+			verbDescs[i] = fmt.Sprintf("%s (%s/%s)", v.Type, v.Category, v.Format)
+		}
+		fmt.Fprintf(&sb, "\nVerbs: %s", strings.Join(verbDescs, ", "))
+	}
 
 	writeOutput(ctx, exec, pluginCommandName, sb.String())
 	return nil

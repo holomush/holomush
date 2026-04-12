@@ -19,6 +19,7 @@ type VerbRegistration struct {
 	Label         string // "says", "telepathically sends" -- required when Format is "speech"
 	DisplayTarget webv1.EventChannel
 	MetadataKeys  []MetadataKey
+	Source        string // "builtin" or plugin name -- tracks ownership for unload
 }
 
 // MetadataKey declares a well-known metadata field for an event type.
@@ -85,4 +86,30 @@ func (r *VerbRegistry) All() []VerbRegistration {
 		result = append(result, reg)
 	}
 	return result
+}
+
+// Unregister removes a single verb by event type. Returns true if found.
+func (r *VerbRegistry) Unregister(eventType string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.types[eventType]; !exists {
+		return false
+	}
+	delete(r.types, eventType)
+	return true
+}
+
+// UnregisterBySource removes all verbs registered by a given source.
+// Returns the count of removed entries.
+func (r *VerbRegistry) UnregisterBySource(source string) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	count := 0
+	for key, reg := range r.types {
+		if reg.Source == source {
+			delete(r.types, key)
+			count++
+		}
+	}
+	return count
 }

@@ -109,6 +109,67 @@ func TestVerbRegistryConcurrentAccessIsSafe(t *testing.T) {
 	}
 }
 
+func TestVerbRegistrySourceFieldPreservedThroughRegisterLookup(t *testing.T) {
+	r := NewVerbRegistry()
+	err := r.Register(VerbRegistration{
+		Type: "custom", Category: "communication", Format: "action", Source: "my-plugin",
+	})
+	require.NoError(t, err)
+
+	reg, ok := r.Lookup("custom")
+	require.True(t, ok)
+	assert.Equal(t, "my-plugin", reg.Source)
+}
+
+func TestVerbRegistryUnregisterRemovesEntry(t *testing.T) {
+	r := NewVerbRegistry()
+	err := r.Register(VerbRegistration{
+		Type: "temp", Category: "system", Format: "notification", Source: "test",
+	})
+	require.NoError(t, err)
+
+	removed := r.Unregister("temp")
+	assert.True(t, removed)
+
+	_, ok := r.Lookup("temp")
+	assert.False(t, ok)
+}
+
+func TestVerbRegistryUnregisterNonexistentReturnsFalse(t *testing.T) {
+	r := NewVerbRegistry()
+	removed := r.Unregister("nonexistent")
+	assert.False(t, removed)
+}
+
+func TestVerbRegistryUnregisterBySourceRemovesAllFromSource(t *testing.T) {
+	r := NewVerbRegistry()
+	require.NoError(t, r.Register(VerbRegistration{
+		Type: "a", Category: "communication", Format: "action", Source: "plugin-x",
+	}))
+	require.NoError(t, r.Register(VerbRegistration{
+		Type: "b", Category: "system", Format: "notification", Source: "plugin-x",
+	}))
+	require.NoError(t, r.Register(VerbRegistration{
+		Type: "c", Category: "command", Format: "narrative", Source: "builtin",
+	}))
+
+	count := r.UnregisterBySource("plugin-x")
+	assert.Equal(t, 2, count)
+
+	_, ok := r.Lookup("a")
+	assert.False(t, ok)
+	_, ok = r.Lookup("b")
+	assert.False(t, ok)
+	_, ok = r.Lookup("c")
+	assert.True(t, ok)
+}
+
+func TestVerbRegistryUnregisterBySourceUnknownReturnsZero(t *testing.T) {
+	r := NewVerbRegistry()
+	count := r.UnregisterBySource("nonexistent")
+	assert.Equal(t, 0, count)
+}
+
 func TestRegisterBuiltinTypesRegistersAllKnownEventTypes(t *testing.T) {
 	r := NewVerbRegistry()
 	err := RegisterBuiltinTypes(r)
@@ -132,4 +193,16 @@ func TestRegisterBuiltinTypesRegistersAllKnownEventTypes(t *testing.T) {
 
 	_, ok = r.Lookup("location_state")
 	assert.True(t, ok)
+}
+
+func TestRegisterBuiltinTypesDoesNotIncludeChannelTypes(t *testing.T) {
+	r := NewVerbRegistry()
+	err := RegisterBuiltinTypes(r)
+	require.NoError(t, err)
+
+	channelTypes := []string{"channel_say", "channel_pose", "channel_system"}
+	for _, ct := range channelTypes {
+		_, ok := r.Lookup(ct)
+		assert.False(t, ok, "builtin registry should not include %s", ct)
+	}
 }

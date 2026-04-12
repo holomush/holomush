@@ -187,6 +187,40 @@ func TestPluginInfoOmitsEmptyOptionalFields(t *testing.T) {
 	assert.NotContains(t, output, "Provides:")
 }
 
+func TestPluginInfoShowsVerbRegistrations(t *testing.T) {
+	ts := newPluginTestSetup()
+	m := luaPlugin()
+	m.Verbs = []plugins.VerbSpec{
+		{Type: "custom_say", Category: "communication", Format: "speech", Label: "says", DisplayTarget: "terminal"},
+		{Type: "custom_action", Category: "communication", Format: "action", DisplayTarget: "both"},
+	}
+	lister := newPluginListerWithPlugins(
+		&plugins.DiscoveredPlugin{Manifest: m},
+	)
+
+	handler := NewPluginHandler(lister)
+	err := handler(context.Background(), ts.makeExec(t, "info core-communication"))
+
+	require.NoError(t, err)
+	output := ts.buf.String()
+	assert.Contains(t, output, "Verbs:")
+	assert.Contains(t, output, "custom_say (communication/speech)")
+	assert.Contains(t, output, "custom_action (communication/action)")
+}
+
+func TestPluginInfoOmitsVerbsWhenEmpty(t *testing.T) {
+	ts := newPluginTestSetup()
+	lister := newPluginListerWithPlugins(
+		&plugins.DiscoveredPlugin{Manifest: luaPlugin()},
+	)
+
+	handler := NewPluginHandler(lister)
+	err := handler(context.Background(), ts.makeExec(t, "info core-communication"))
+
+	require.NoError(t, err)
+	assert.NotContains(t, ts.buf.String(), "Verbs:")
+}
+
 func TestPluginShowsUsageForInvalidSubcommands(t *testing.T) {
 	cases := []struct {
 		name string
