@@ -532,7 +532,7 @@ func (m *Manager) unregisterPluginProviders(pluginName string, resourceTypes []s
 // Design: Returns nil (not error) for unsupported configurations to support
 // graceful degradation. This allows running without Lua support or before
 // binary plugin support is implemented. The warning logs provide visibility.
-func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownResourceTypes map[string]bool, knownActions map[string]bool) error {
+func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownResourceTypes, knownActions map[string]bool) error {
 	// Semantic validation: check capability resource types and actions against the full known sets.
 	coreActions := command.CoreActions()
 	ownActions := make(map[string]bool, len(dp.Manifest.Actions))
