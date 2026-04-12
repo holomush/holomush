@@ -6,12 +6,19 @@ package focus
 import (
 	"context"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/settings"
 )
+
+// PlayerPreferencesReader provides read access to player preferences.
+// Narrow interface to decouple from the full auth.PlayerRepository.
+type PlayerPreferencesReader interface {
+	SceneFocusReplayTail(ctx context.Context, playerID ulid.ULID) *int
+}
 
 // StreamSender delivers stream subscription updates to the live loop.
 // Decouples the coordinator from the concrete SessionStreamRegistry
@@ -54,6 +61,9 @@ type defaultCoordinator struct {
 	gameSettings      settings.Settings
 	playerSettings    settings.PlayerSettingsStore
 	characterSettings settings.CharacterSettingsStore
+
+	// Typed player preference reader (highest precedence in resolution).
+	playerPrefs PlayerPreferencesReader
 }
 
 // CoordinatorOption configures a defaultCoordinator.
@@ -99,6 +109,11 @@ func WithPlayerSettings(ps settings.PlayerSettingsStore) CoordinatorOption {
 // WithCharacterSettings sets the character settings store.
 func WithCharacterSettings(cs settings.CharacterSettingsStore) CoordinatorOption {
 	return func(c *defaultCoordinator) { c.characterSettings = cs }
+}
+
+// WithPlayerPreferences sets the player preference reader.
+func WithPlayerPreferences(pr PlayerPreferencesReader) CoordinatorOption {
+	return func(c *defaultCoordinator) { c.playerPrefs = pr }
 }
 
 // NewCoordinator constructs a defaultCoordinator. sessionStore is required.
@@ -168,6 +183,13 @@ func (c *defaultCoordinator) buildPolicyContext(
 		chain := settings.NewChain(scopes...)
 		if tail, ok := chain.IntN(ctx, "scenes.focus.replay_tail_default"); ok {
 			pctx.SceneFocusReplayTail = clamp(tail, 0, 10)
+		}
+	}
+
+	// Layer 2: typed player preference override (highest precedence).
+	if c.playerPrefs != nil {
+		if tail := c.playerPrefs.SceneFocusReplayTail(ctx, info.PlayerID); tail != nil {
+			pctx.SceneFocusReplayTail = clamp(*tail, 0, 10)
 		}
 	}
 
