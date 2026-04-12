@@ -489,6 +489,49 @@ func TestMemoryEventStoreSubscribeSessionCloseStopsNotifications(t *testing.T) {
 	}
 }
 
+func TestMemoryEventStoreSubscribeSessionAddStreamOnClosedSubscriptionReturnsError(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+	require.NoError(t, sub.Close())
+
+	err = sub.AddStream(ctx, "location:A")
+	assert.Error(t, err, "AddStream on closed subscription should return error")
+}
+
+func TestMemoryEventStoreSubscribeSessionDoubleCloseIsIdempotent(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, sub.Close())
+	require.NoError(t, sub.Close(), "second Close should not error")
+}
+
+func TestMemoryEventStoreSubscribeSessionNotifyIgnoresClosedSubscription(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, sub.AddStream(ctx, "location:A"))
+	require.NoError(t, sub.Close())
+
+	// Append after close should not panic.
+	require.NotPanics(t, func() {
+		_ = store.Append(ctx, Event{
+			ID: NewULID(), Stream: "location:A", Type: EventTypeSay,
+			Timestamp: time.Now(), Actor: Actor{Kind: ActorCharacter, ID: "c1"},
+			Payload: []byte(`{}`),
+		})
+	})
+}
+
 func TestMemoryEventStoreSubscribeClosesChannelOnContextCancel(t *testing.T) {
 	store := NewMemoryEventStore()
 	ctx, cancel := context.WithCancel(context.Background())

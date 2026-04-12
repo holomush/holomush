@@ -151,6 +151,200 @@ func TestEventWriterRespectsContextCancellation(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
+func TestEventWriterDoubleCloseDoesNotPanic(t *testing.T) {
+	store := core.NewMemoryEventStore()
+	writer := core.NewEventWriter(store)
+
+	require.NotPanics(t, func() {
+		writer.Close()
+		writer.Close()
+	})
+}
+
+func TestEventWriterSubscribeDelegatesToUnderlyingStore(t *testing.T) {
+	store := core.NewMemoryEventStore()
+	writer := core.NewEventWriter(store)
+	defer writer.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	eventCh, errCh, err := writer.Subscribe(ctx, "location:sub-test")
+	require.NoError(t, err)
+	require.NotNil(t, eventCh)
+	require.NotNil(t, errCh)
+
+	// Write an event and verify the subscription receives it.
+	event := core.Event{
+		Stream:  "location:sub-test",
+		Type:    core.EventTypeSay,
+		Actor:   core.Actor{Kind: core.ActorCharacter, ID: "char-1"},
+		Payload: []byte(`{}`),
+	}
+	require.NoError(t, writer.Write(context.Background(), event))
+
+	select {
+	case id := <-eventCh:
+		assert.NotEqual(t, ulid.ULID{}, id)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for subscribe notification")
+	}
+}
+
+func TestEventWriterSubscribeReturnsErrorWhenStoreDoesNotSupportIt(t *testing.T) {
+	store := &failingStore{err: errors.New("not supported")}
+	writer := core.NewEventWriter(store)
+	defer writer.Close()
+
+	_, _, err := writer.Subscribe(context.Background(), "location:test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not support legacy Subscribe")
+}
+
+func TestEventWriterReplayDelegatesToUnderlyingStore(t *testing.T) {
+	store := core.NewMemoryEventStore()
+	writer := core.NewEventWriter(store)
+	defer writer.Close()
+
+	ctx := context.Background()
+	require.NoError(t, writer.Write(ctx, core.Event{
+		Stream: "location:replay-test", Type: core.EventTypeSay,
+		Actor: core.Actor{Kind: core.ActorCharacter, ID: "char-1"}, Payload: []byte(`{}`),
+	}))
+
+	events, err := writer.Replay(ctx, "location:replay-test", ulid.ULID{}, 10)
+	require.NoError(t, err)
+	assert.Len(t, events, 1)
+}
+
+func TestEventWriterReplayPropagatesStoreError(t *testing.T) {
+	expectedErr := errors.New("replay failure")
+	store := &failingStore{err: expectedErr}
+	writer := core.NewEventWriter(store)
+	defer writer.Close()
+
+	_, err := writer.Replay(context.Background(), "location:test", ulid.ULID{}, 10)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, expectedErr)
+}
+
+func TestEventWriterLastEventIDDelegatesToUnderlyingStore(t *testing.T) {
+	store := core.NewMemoryEventStore()
+	writer := core.NewEventWriter(store)
+	defer writer.Close()
+
+	ctx := context.Background()
+	require.NoError(t, writer.Write(ctx, core.Event{
+		Stream: "location:last-id-test", Type: core.EventTypeSay,
+		Actor: core.Actor{Kind: core.ActorCharacter, ID: "char-1"}, Payload: []byte(`{}`),
+	}))
+
+	id, err := writer.LastEventID(ctx, "location:last-id-test")
+	require.NoError(t, err)
+	assert.NotEqual(t, ulid.ULID{}, id)
+}
+
+func TestEventWriterLastEventIDPropagatesStoreError(t *testing.T) {
+	expectedErr := errors.New("last-id failure")
+	store := &failingStore{err: expectedErr}
+	writer := core.NewEventWriter(store)
+	defer writer.Close()
+
+	_, err := writer.LastEventID(context.Background(), "location:test")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, expectedErr)
+}
+
+func TestEventWriterReplayTailDelegatesToUnderlyingStore(t *testing.T) {
+	store := core.NewMemoryEventStore()
+	writer := core.NewEventWriter(store)
+	defer writer.Close()
+
+	ctx := context.Background()
+	require.NoError(t, writer.Write(ctx, core.Event{
+		Stream: "location:tail-test", Type: core.EventTypeSay,
+		Actor: core.Actor{Kind: core.ActorCharacter, ID: "char-1"}, Payload: []byte(`{}`),
+	}))
+
+	events, err := writer.ReplayTail(ctx, "location:tail-test", 10, time.Time{})
+	require.NoError(t, err)
+	assert.Len(t, events, 1)
+}
+
+func TestEventWriterReplayTailPropagatesStoreError(t *testing.T) {
+	expectedErr := errors.New("tail failure")
+	store := &failingStore{err: expectedErr}
+	writer := core.NewEventWriter(store)
+	defer writer.Close()
+
+	_, err := writer.ReplayTail(context.Background(), "location:test", 10, time.Time{})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, expectedErr)
+}
+
+func TestEventWriterSubscribeSessionDelegatesToUnderlyingStore(t *testing.T) {
+	store := core.NewMemoryEventStore()
+	writer := core.NewEventWriter(store)
+	defer writer.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sub, err := writer.SubscribeSession(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, sub)
+	_ = sub.Close()
+}
+
+func TestEventWriterSubscribeSessionPropagatesStoreError(t *testing.T) {
+	expectedErr := errors.New("session failure")
+	store := &failingStore{err: expectedErr}
+	writer := core.NewEventWriter(store)
+	defer writer.Close()
+
+	_, err := writer.SubscribeSession(context.Background())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, expectedErr)
+}
+
+func TestEventWriterConcurrentWriteAndCloseDoesNotPanic(t *testing.T) {
+	store := core.NewMemoryEventStore()
+	writer := core.NewEventWriter(store)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	errCh := make(chan error, 100)
+	go func() {
+		defer wg.Done()
+		for range 100 {
+			err := writer.Write(context.Background(), core.Event{
+				Stream:  "location:race-test",
+				Type:    core.EventTypeSay,
+				Actor:   core.Actor{Kind: core.ActorCharacter, ID: "char-1"},
+				Payload: []byte(`{}`),
+			})
+			if err != nil {
+				errCh <- err
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		time.Sleep(time.Millisecond)
+		writer.Close()
+	}()
+
+	wg.Wait()
+	close(errCh)
+
+	// After Close, remaining writes should return ErrWriterClosed.
+	for err := range errCh {
+		assert.ErrorIs(t, err, core.ErrWriterClosed)
+	}
+}
+
 func TestEventWriterStampsIDAndTimestamp(t *testing.T) {
 	store := core.NewMemoryEventStore()
 	writer := core.NewEventWriter(store)
