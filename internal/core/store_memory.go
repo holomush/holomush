@@ -7,6 +7,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -15,9 +16,10 @@ import (
 
 // MemoryEventStore is an in-memory EventStore for testing.
 type MemoryEventStore struct {
-	mu      sync.RWMutex
-	streams map[string][]Event
-	subs    map[string][]chan ulid.ULID
+	mu          sync.RWMutex
+	streams     map[string][]Event
+	subs        map[string][]chan ulid.ULID
+	sessionSubs []*memorySubscription
 }
 
 // NewMemoryEventStore creates a new in-memory event store.
@@ -38,6 +40,9 @@ func (s *MemoryEventStore) Append(_ context.Context, event Event) error {
 		case ch <- event.ID:
 		default:
 		}
+	}
+	for _, ss := range s.sessionSubs {
+		ss.notify(event.Stream, event.ID)
 	}
 	return nil
 }
@@ -163,4 +168,104 @@ func (s *MemoryEventStore) Subscribe(ctx context.Context, stream string) (eventC
 	}()
 
 	return events, errs, nil
+}
+
+// SubscribeSession creates a new session-wide subscription. Append-order
+// delivery across all added streams is guaranteed (memory equivalent of I-14).
+func (s *MemoryEventStore) SubscribeSession(_ context.Context) (Subscription, error) {
+	ms := &memorySubscription{
+		streams: make(map[string]struct{}),
+		notifCh: make(chan StreamNotification, 256),
+		errCh:   make(chan error, 1),
+		store:   s,
+	}
+	s.mu.Lock()
+	s.sessionSubs = append(s.sessionSubs, ms)
+	s.mu.Unlock()
+	return ms, nil
+}
+
+func (s *MemoryEventStore) removeSessionSub(ms *memorySubscription) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, sub := range s.sessionSubs {
+		if sub == ms {
+			s.sessionSubs = append(s.sessionSubs[:i], s.sessionSubs[i+1:]...)
+			return
+		}
+	}
+}
+
+// memorySubscription implements Subscription for MemoryEventStore.
+// It maintains a set of subscribed streams and receives notifications
+// from the store's Append method. Delivery order matches append order
+// across all streams (in-memory equivalent of I-14).
+type memorySubscription struct {
+	mu      sync.RWMutex
+	streams map[string]struct{}
+	notifCh chan StreamNotification
+	errCh   chan error
+	closed  bool
+	store   *MemoryEventStore
+}
+
+// AddStream adds a stream to the subscription. Idempotent.
+func (ms *memorySubscription) AddStream(_ context.Context, stream string) error {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	if ms.closed {
+		return errors.New("subscription closed")
+	}
+	ms.streams[stream] = struct{}{}
+	return nil
+}
+
+// RemoveStream removes a stream from the subscription.
+func (ms *memorySubscription) RemoveStream(_ context.Context, stream string) error {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	delete(ms.streams, stream)
+	return nil
+}
+
+// Notifications returns the channel of stream notifications.
+func (ms *memorySubscription) Notifications() <-chan StreamNotification {
+	return ms.notifCh
+}
+
+// Errors returns the error channel.
+func (ms *memorySubscription) Errors() <-chan error {
+	return ms.errCh
+}
+
+// Close unregisters the subscription from the store and closes channels.
+func (ms *memorySubscription) Close() error {
+	ms.mu.Lock()
+	if ms.closed {
+		ms.mu.Unlock()
+		return nil
+	}
+	ms.closed = true
+	ms.mu.Unlock()
+
+	ms.store.removeSessionSub(ms)
+	close(ms.notifCh)
+	close(ms.errCh)
+	return nil
+}
+
+// notify is called by the store under its lock for each appended event.
+func (ms *memorySubscription) notify(stream string, eventID ulid.ULID) {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+	if ms.closed {
+		return
+	}
+	if _, ok := ms.streams[stream]; !ok {
+		return
+	}
+	select {
+	case ms.notifCh <- StreamNotification{Stream: stream, EventID: eventID}:
+	default:
+	}
 }

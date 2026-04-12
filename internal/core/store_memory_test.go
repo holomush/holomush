@@ -335,6 +335,160 @@ func TestMemoryEventStoreReplayTailZeroCountReturnsEmpty(t *testing.T) {
 	assert.Empty(t, events)
 }
 
+func TestMemoryEventStoreSubscribeSessionDeliversEventsAcrossStreams(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+	defer func() { _ = sub.Close() }()
+
+	require.NoError(t, sub.AddStream(ctx, "location:A"))
+	require.NoError(t, sub.AddStream(ctx, "location:B"))
+
+	e1 := Event{
+		ID: NewULID(), Stream: "location:A", Type: EventTypeSay,
+		Timestamp: time.Now(), Actor: Actor{Kind: ActorCharacter, ID: "c1"},
+		Payload: []byte(`{}`),
+	}
+	time.Sleep(time.Millisecond)
+	e2 := Event{
+		ID: NewULID(), Stream: "location:B", Type: EventTypeSay,
+		Timestamp: time.Now(), Actor: Actor{Kind: ActorCharacter, ID: "c2"},
+		Payload: []byte(`{}`),
+	}
+	require.NoError(t, store.Append(ctx, e1))
+	require.NoError(t, store.Append(ctx, e2))
+
+	// Should receive both events in append order.
+	notifCh := sub.Notifications()
+
+	select {
+	case n := <-notifCh:
+		assert.Equal(t, "location:A", n.Stream)
+		assert.Equal(t, e1.ID, n.EventID)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for first notification")
+	}
+
+	select {
+	case n := <-notifCh:
+		assert.Equal(t, "location:B", n.Stream)
+		assert.Equal(t, e2.ID, n.EventID)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for second notification")
+	}
+}
+
+func TestMemoryEventStoreSubscribeSessionAddStreamIsIdempotent(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+	defer func() { _ = sub.Close() }()
+
+	require.NoError(t, sub.AddStream(ctx, "location:A"))
+	require.NoError(t, sub.AddStream(ctx, "location:A")) // idempotent
+
+	e := Event{
+		ID: NewULID(), Stream: "location:A", Type: EventTypeSay,
+		Timestamp: time.Now(), Actor: Actor{Kind: ActorCharacter, ID: "c1"},
+		Payload: []byte(`{}`),
+	}
+	require.NoError(t, store.Append(ctx, e))
+
+	// Should receive exactly one notification, not two.
+	notifCh := sub.Notifications()
+	select {
+	case n := <-notifCh:
+		assert.Equal(t, e.ID, n.EventID)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for notification")
+	}
+
+	select {
+	case <-notifCh:
+		t.Fatal("should not receive duplicate notification from idempotent AddStream")
+	case <-time.After(100 * time.Millisecond):
+		// expected
+	}
+}
+
+func TestMemoryEventStoreSubscribeSessionRemoveStreamStopsDelivery(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+	defer func() { _ = sub.Close() }()
+
+	require.NoError(t, sub.AddStream(ctx, "location:A"))
+	require.NoError(t, sub.RemoveStream(ctx, "location:A"))
+
+	e := Event{
+		ID: NewULID(), Stream: "location:A", Type: EventTypeSay,
+		Timestamp: time.Now(), Actor: Actor{Kind: ActorCharacter, ID: "c1"},
+		Payload: []byte(`{}`),
+	}
+	require.NoError(t, store.Append(ctx, e))
+
+	select {
+	case <-sub.Notifications():
+		t.Fatal("should not receive notification after RemoveStream")
+	case <-time.After(100 * time.Millisecond):
+		// expected
+	}
+}
+
+func TestMemoryEventStoreSubscribeSessionIgnoresUnsubscribedStreams(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+	defer func() { _ = sub.Close() }()
+
+	require.NoError(t, sub.AddStream(ctx, "location:A"))
+
+	e := Event{
+		ID: NewULID(), Stream: "location:B", Type: EventTypeSay,
+		Timestamp: time.Now(), Actor: Actor{Kind: ActorCharacter, ID: "c1"},
+		Payload: []byte(`{}`),
+	}
+	require.NoError(t, store.Append(ctx, e))
+
+	select {
+	case <-sub.Notifications():
+		t.Fatal("should not receive notification for unsubscribed stream")
+	case <-time.After(100 * time.Millisecond):
+		// expected
+	}
+}
+
+func TestMemoryEventStoreSubscribeSessionCloseStopsNotifications(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, sub.AddStream(ctx, "location:A"))
+	require.NoError(t, sub.Close())
+
+	// Notifications channel should be closed or no longer receive.
+	select {
+	case _, ok := <-sub.Notifications():
+		assert.False(t, ok, "notifications channel should be closed after Close")
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for notifications channel to close")
+	}
+}
+
 func TestMemoryEventStoreSubscribeClosesChannelOnContextCancel(t *testing.T) {
 	store := NewMemoryEventStore()
 	ctx, cancel := context.WithCancel(context.Background())

@@ -135,6 +135,10 @@ func (f *failingEventStore) ReplayTail(_ context.Context, _ string, _ int, _ tim
 	return nil, errStoreFailure
 }
 
+func (f *failingEventStore) SubscribeSession(_ context.Context) (Subscription, error) {
+	return nil, errStoreFailure
+}
+
 var errStoreFailure = &storeError{msg: "store failure"}
 
 type storeError struct {
