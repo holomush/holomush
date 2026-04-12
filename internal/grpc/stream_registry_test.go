@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
@@ -81,4 +82,23 @@ func TestSessionStreamRegistryRemoveStreamDelegatesToSend(t *testing.T) {
 	update := <-ch
 	assert.Equal(t, "channel:abc", update.stream)
 	assert.False(t, update.add)
+}
+
+func TestSendCarriesReplayMode(t *testing.T) {
+	reg := NewSessionStreamRegistry()
+	ch := make(chan sessionStreamUpdate, 1)
+	reg.Register("sess-1", ch)
+	defer reg.Deregister("sess-1", ch)
+
+	err := reg.Send("sess-1", sessionStreamUpdate{
+		stream:     "scene:abc:ic",
+		add:        true,
+		replayMode: focus.ReplayModeBoundedTail,
+	})
+	require.NoError(t, err)
+
+	update := <-ch
+	assert.Equal(t, "scene:abc:ic", update.stream)
+	assert.True(t, update.add)
+	assert.Equal(t, focus.ReplayModeBoundedTail, update.replayMode)
 }

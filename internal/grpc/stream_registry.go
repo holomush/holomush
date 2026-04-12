@@ -6,14 +6,20 @@ package grpc
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/grpc/focus"
 )
 
 // sessionStreamUpdate is sent on a session's control channel to add or remove a stream.
 type sessionStreamUpdate struct {
-	stream string
-	add    bool // true = subscribe, false = unsubscribe
+	stream     string
+	add        bool             // true = subscribe, false = unsubscribe
+	replayMode focus.ReplayMode // only meaningful when add == true
+	tailCount  int              // valid when replayMode == focus.ReplayModeBoundedTail
+	notBefore  time.Time        // valid when replayMode == focus.ReplayModeBoundedTail
 }
 
 // SessionStreamRegistry maps active session IDs to their Subscribe control channels.
@@ -84,7 +90,7 @@ func (r *SessionStreamRegistry) Send(sessionID string, update sessionStreamUpdat
 
 // AddStream implements plugins.StreamRegistry. Subscribes a session to a stream.
 func (r *SessionStreamRegistry) AddStream(_ context.Context, sessionID, stream string) error {
-	return r.Send(sessionID, sessionStreamUpdate{stream: stream, add: true})
+	return r.Send(sessionID, sessionStreamUpdate{stream: stream, add: true, replayMode: focus.ReplayModeFromCursor})
 }
 
 // RemoveStream implements plugins.StreamRegistry. Unsubscribes a session from a stream.
