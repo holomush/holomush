@@ -7,6 +7,8 @@ package store_test
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -569,6 +571,113 @@ var _ = Describe("PostgresEventStore", func() {
 
 			// Should not receive event from other stream
 			Consistently(eventCh, 500*time.Millisecond).ShouldNot(Receive())
+		})
+	})
+
+	Describe("Variant A Go/No-Go: Strict Cross-Stream Ordering (I-14)", func() {
+		It("delivers events in identical strict ULID order to multiple subscribers", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			const (
+				numStreams    = 4
+				numEvents     = 1000
+				numGoroutines = 10
+				eventsPerGo   = numEvents / numGoroutines
+			)
+
+			streams := make([]string, numStreams)
+			for i := range numStreams {
+				streams[i] = fmt.Sprintf("location:ordering-%d", i)
+			}
+
+			// Create 2 session subscriptions, both listening on all 4 streams.
+			sub1, err := eventStore.SubscribeSession(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = sub1.Close() }()
+
+			sub2, err := eventStore.SubscribeSession(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = sub2.Close() }()
+
+			for _, s := range streams {
+				Expect(sub1.AddStream(ctx, s)).To(Succeed())
+				Expect(sub2.AddStream(ctx, s)).To(Succeed())
+			}
+
+			// Launch 10 goroutines, each appending 100 events spread
+			// across the 4 streams. All events use core.NewULID() for
+			// monotonic IDs.
+			var wg sync.WaitGroup
+			for g := range numGoroutines {
+				wg.Add(1)
+				go func(goroutineIdx int) {
+					defer wg.Done()
+					for i := range eventsPerGo {
+						streamIdx := (goroutineIdx*eventsPerGo + i) % numStreams
+						event := core.Event{
+							ID:        core.NewULID(),
+							Stream:    streams[streamIdx],
+							Type:      core.EventTypeSay,
+							Timestamp: time.Now(),
+							Actor:     core.Actor{Kind: core.ActorCharacter, ID: fmt.Sprintf("c%d", goroutineIdx)},
+							Payload:   []byte(fmt.Sprintf(`{"g":%d,"i":%d}`, goroutineIdx, i)),
+						}
+						err := eventStore.Append(ctx, event)
+						Expect(err).NotTo(HaveOccurred())
+					}
+				}(g)
+			}
+
+			// Collect notifications from both subscribers.
+			collected1 := make([]core.StreamNotification, 0, numEvents)
+			collected2 := make([]core.StreamNotification, 0, numEvents)
+
+			collect := func(sub core.Subscription, out *[]core.StreamNotification) {
+				for len(*out) < numEvents {
+					select {
+					case n, ok := <-sub.Notifications():
+						if !ok {
+							return
+						}
+						*out = append(*out, n)
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+
+			var collectWg sync.WaitGroup
+			collectWg.Add(2)
+			go func() { defer collectWg.Done(); collect(sub1, &collected1) }()
+			go func() { defer collectWg.Done(); collect(sub2, &collected2) }()
+
+			wg.Wait()        // Wait for all appends to finish.
+			collectWg.Wait() // Wait for both collectors to receive all events.
+
+			// Both subscribers must have received all events.
+			Expect(collected1).To(HaveLen(numEvents),
+				"subscriber 1 did not receive all events")
+			Expect(collected2).To(HaveLen(numEvents),
+				"subscriber 2 did not receive all events")
+
+			// Extract event IDs from both and compare: identical order.
+			ids1 := make([]ulid.ULID, numEvents)
+			ids2 := make([]ulid.ULID, numEvents)
+			for i := range numEvents {
+				ids1[i] = collected1[i].EventID
+				ids2[i] = collected2[i].EventID
+			}
+			Expect(ids1).To(Equal(ids2),
+				"I-14 VIOLATION: subscribers received events in different order")
+
+			// Verify that the order is strictly ascending by ULID
+			// (PG commit order with monotonic ULIDs).
+			for i := 1; i < numEvents; i++ {
+				Expect(ids1[i].Compare(ids1[i-1])).To(BeNumerically(">", 0),
+					"event %d (ID %s) is not after event %d (ID %s)",
+					i, ids1[i], i-1, ids1[i-1])
+			}
 		})
 	})
 })
