@@ -90,11 +90,12 @@ func TestMigration000005AuditSourceComponentRollbackReturnsSchemaToOriginalShape
 	assertColumnExists(t, db, "access_audit_log", "event_id")
 	assertColumnExists(t, db, "access_audit_log", "source")
 
-	// Roll back 000007 (seed scene defaults), 000006 (session focus), then
-	// 000005 (audit source component) to restore the pre-000005 audit schema shape.
+	// Migrate down to version 4 (just before 000005_audit_source_component)
+	// to restore the pre-000005 audit schema shape. Using Migrate(4) instead
+	// of Steps(-N) so the test doesn't break when new migrations are added.
 	migratorDown, err := store.NewMigrator(pgEnv.ConnStr)
 	require.NoError(t, err)
-	require.NoError(t, migratorDown.Steps(-3))
+	require.NoError(t, migratorDown.Migrate(4))
 	require.NoError(t, migratorDown.Close())
 
 	// After down, the original shape is restored.
