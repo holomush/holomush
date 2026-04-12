@@ -12,15 +12,15 @@
 
 ## File Map
 
-| File | Change |
-|---|---|
-| `internal/command/types.go` | Remove `!validActions` check from `Validate()`; add `CoreActions()`, `ValidateAction()` |
-| `internal/command/types_test.go` | Update "unknown action" test cases; add `CoreActions` and `ValidateAction` tests |
-| `internal/plugin/manifest.go` | Add `Actions []string` field; validate in `Manifest.Validate()` |
-| `internal/plugin/manifest_test.go` | Add table-driven cases to `TestParseManifestResourceTypesAndTrust` for `actions` |
-| `internal/plugin/manager.go` | Add `CollectActions()`; update `loadPlugin` signature and body; update `LoadAll` Phase 2 |
-| `internal/plugin/manager_test.go` | Add `CollectActions` unit tests; add `LoadAll` action validation integration tests |
-| `test/integration/plugin/extensible_actions_test.go` | New Ginkgo integration test: custom actions end-to-end through LoadAll |
+| File                                                     | Change                                                                                    |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `internal/command/types.go`                              | Remove `!validActions` check from `Validate()`; add `CoreActions()`, `ValidateAction()`  |
+| `internal/command/types_test.go`                         | Update "unknown action" test cases; add `CoreActions` and `ValidateAction` tests          |
+| `internal/plugin/manifest.go`                            | Add `Actions []string` field; validate in `Manifest.Validate()`                          |
+| `internal/plugin/manifest_test.go`                       | Add table-driven cases to `TestParseManifestResourceTypesAndTrust` for `actions`         |
+| `internal/plugin/manager.go`                             | Add `CollectActions()`; update `loadPlugin` signature and body; update `LoadAll` Phase 2 |
+| `internal/plugin/manager_test.go`                        | Add `CollectActions` unit tests; add `LoadAll` action validation integration tests        |
+| `test/integration/plugin/extensible_actions_test.go`     | New Ginkgo integration test: custom actions end-to-end through `LoadAll`                 |
 
 ---
 

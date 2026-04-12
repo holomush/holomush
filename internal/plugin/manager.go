@@ -533,33 +533,9 @@ func (m *Manager) unregisterPluginProviders(pluginName string, resourceTypes []s
 // graceful degradation. This allows running without Lua support or before
 // binary plugin support is implemented. The warning logs provide visibility.
 func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownResourceTypes, knownActions map[string]bool) error {
-	// Semantic validation: check capability resource types and actions against the full known sets.
-	coreActions := command.CoreActions()
-	ownActions := make(map[string]bool, len(dp.Manifest.Actions))
-	for _, a := range dp.Manifest.Actions {
-		ownActions[a] = true
-	}
-	for i := range dp.Manifest.Commands {
-		cmd := &dp.Manifest.Commands[i]
-		for _, cap := range cmd.Capabilities {
-			if err := cap.ValidateResourceType(knownResourceTypes); err != nil {
-				return oops.In("manager").With("plugin", dp.Manifest.Name).
-					With("command", cmd.Name).Wrap(err)
-			}
-			if err := cap.ValidateAction(knownActions); err != nil {
-				return oops.In("manager").With("plugin", dp.Manifest.Name).
-					With("command", cmd.Name).Wrap(err)
-			}
-			if !coreActions[cap.Action] && !ownActions[cap.Action] {
-				slog.Warn("capability uses action not declared by this plugin",
-					"plugin", dp.Manifest.Name,
-					"command", cmd.Name,
-					"action", cap.Action)
-			}
-		}
-	}
-
-	// Resolve the host for this plugin type.
+	// Resolve the host for this plugin type first — unsupported configurations
+	// are skipped here before any semantic validation so that graceful degradation
+	// (e.g., no binary host configured) is not blocked by capability checks.
 	// For backward compatibility, TypeLua falls back to the dedicated luaHost field.
 	var host Host
 	switch dp.Manifest.Type {
@@ -585,6 +561,32 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 			"plugin", dp.Manifest.Name,
 			"type", dp.Manifest.Type)
 		return nil
+	}
+
+	// Semantic validation: check capability resource types and actions against the full known sets.
+	coreActions := command.CoreActions()
+	ownActions := make(map[string]bool, len(dp.Manifest.Actions))
+	for _, a := range dp.Manifest.Actions {
+		ownActions[a] = true
+	}
+	for i := range dp.Manifest.Commands {
+		cmd := &dp.Manifest.Commands[i]
+		for _, cap := range cmd.Capabilities {
+			if err := cap.ValidateResourceType(knownResourceTypes); err != nil {
+				return oops.In("manager").With("plugin", dp.Manifest.Name).
+					With("command", cmd.Name).Wrap(err)
+			}
+			if err := cap.ValidateAction(knownActions); err != nil {
+				return oops.In("manager").With("plugin", dp.Manifest.Name).
+					With("command", cmd.Name).Wrap(err)
+			}
+			if !coreActions[cap.Action] && !ownActions[cap.Action] {
+				slog.Warn("capability uses action not declared by this plugin",
+					"plugin", dp.Manifest.Name,
+					"command", cmd.Name,
+					"action", cap.Action)
+			}
+		}
 	}
 
 	// Reject duplicate plugin names before loading to prevent the second plugin

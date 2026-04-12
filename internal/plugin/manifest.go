@@ -424,7 +424,7 @@ func (m *Manifest) Validate() error {
 	if len(m.Actions) > 0 {
 		seen := make(map[string]bool, len(m.Actions))
 		for _, a := range m.Actions {
-			if a == "" {
+			if strings.TrimSpace(a) == "" {
 				return oops.In("manifest").With("name", m.Name).
 					New("action entry must not be empty")
 			}
