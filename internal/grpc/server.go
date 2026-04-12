@@ -128,7 +128,7 @@ type CoreServer struct {
 
 	// focusCoordinator manages session focus memberships and replay policy.
 	// Nil until the Subscribe handler refactor (B7) wires it into the live loop.
-	focusCoordinator focus.FocusCoordinator
+	focusCoordinator focus.Coordinator
 
 	// afterLISTENHook fires between LISTEN setup and replay — used in tests.
 	afterLISTENHook func()
@@ -232,7 +232,7 @@ func WithStreamRegistry(r *SessionStreamRegistry) CoreServerOption {
 }
 
 // WithFocusCoordinator sets the focus coordinator for session focus management.
-func WithFocusCoordinator(fc focus.FocusCoordinator) CoreServerOption {
+func WithFocusCoordinator(fc focus.Coordinator) CoreServerOption {
 	return func(s *CoreServer) { s.focusCoordinator = fc }
 }
 

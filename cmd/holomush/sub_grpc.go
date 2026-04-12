@@ -231,7 +231,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		coreServerOpts = append(coreServerOpts, holoGRPC.WithStreamRegistry(s.cfg.StreamRegistry))
 	}
 
-	// 8a. Create FocusCoordinator.
+	// 8a. Create focus.Coordinator.
 	focusCoordOpts := []holoFocus.CoordinatorOption{
 		holoFocus.WithSessionStore(sessionStore),
 		holoFocus.WithEventStore(eventStore),

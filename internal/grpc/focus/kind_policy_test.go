@@ -47,7 +47,7 @@ func TestNullPolicyStreamsForReturnsEmpty(t *testing.T) {
 
 func TestNullPolicyOnJoinReturnsEmpty(t *testing.T) {
 	p := NewNullPolicy(session.FocusKindScene)
-	result, err := p.OnJoin(FocusPolicyContext{
+	result, err := p.OnJoin(PolicyContext{
 		SessionID: "sess-1",
 		Target:    session.FocusKey{Kind: session.FocusKindScene, TargetID: ulid.Make()},
 	})
@@ -57,7 +57,7 @@ func TestNullPolicyOnJoinReturnsEmpty(t *testing.T) {
 
 func TestNullPolicyOnRestoreReturnsEmpty(t *testing.T) {
 	p := NewNullPolicy(session.FocusKindScene)
-	result, err := p.OnRestore(FocusPolicyContext{
+	result, err := p.OnRestore(PolicyContext{
 		SessionID: "sess-1",
 		Target:    session.FocusKey{Kind: session.FocusKindScene, TargetID: ulid.Make()},
 	})

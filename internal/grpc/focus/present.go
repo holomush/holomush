@@ -18,7 +18,7 @@ func (c *defaultCoordinator) PresentFocus(ctx context.Context, sessionID string,
 		return err
 	}
 
-	return c.sessionStore.UpdateFocusMemberships(ctx, sessionID, session.NewFocusMutator(
+	mutErr := c.sessionStore.UpdateFocusMemberships(ctx, sessionID, session.NewFocusMutator(
 		func(current []session.FocusMembership, _ *session.FocusKey) ([]session.FocusMembership, *session.FocusKey, error) {
 			found := false
 			for _, m := range current {
@@ -34,4 +34,8 @@ func (c *defaultCoordinator) PresentFocus(ctx context.Context, sessionID string,
 			return current, &target, nil
 		},
 	))
+	if mutErr != nil {
+		return oops.With("session_id", sessionID).Wrap(mutErr)
+	}
+	return nil
 }

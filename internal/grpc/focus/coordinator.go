@@ -26,9 +26,9 @@ type CursorLocker interface {
 	Lock(sessionID string) (unlock func())
 }
 
-// FocusCoordinator is the sole authoritative mutator of a session's
+// Coordinator is the sole authoritative mutator of a session's
 // focused-context state.
-type FocusCoordinator interface {
+type Coordinator interface {
 	JoinFocus(ctx context.Context, sessionID string, target session.FocusKey) error
 	LeaveFocus(ctx context.Context, sessionID string, target session.FocusKey) error
 	PresentFocus(ctx context.Context, sessionID string, target session.FocusKey) error
@@ -42,13 +42,13 @@ type RestorePlan struct {
 	PresentingStream string // empty if no presenting focus
 }
 
-// defaultCoordinator is the production FocusCoordinator implementation.
+// defaultCoordinator is the production Coordinator implementation.
 type defaultCoordinator struct {
 	sessionStore session.Store
 	eventStore   core.EventStore
 	streamSender StreamSender
 	cursorLocker CursorLocker
-	policies     map[session.FocusKind]FocusKindPolicy
+	policies     map[session.FocusKind]KindPolicy
 
 	// Settings stores for preference resolution.
 	gameSettings      settings.Settings
@@ -79,8 +79,8 @@ func WithCursorLocker(locker CursorLocker) CoordinatorOption {
 	return func(c *defaultCoordinator) { c.cursorLocker = locker }
 }
 
-// WithKindPolicy registers a FocusKindPolicy for its kind.
-func WithKindPolicy(policy FocusKindPolicy) CoordinatorOption {
+// WithKindPolicy registers a KindPolicy for its kind.
+func WithKindPolicy(policy KindPolicy) CoordinatorOption {
 	return func(c *defaultCoordinator) {
 		c.policies[policy.Kind()] = policy
 	}
@@ -102,9 +102,9 @@ func WithCharacterSettings(cs settings.CharacterSettingsStore) CoordinatorOption
 }
 
 // NewCoordinator constructs a defaultCoordinator. sessionStore is required.
-func NewCoordinator(opts ...CoordinatorOption) (FocusCoordinator, error) {
+func NewCoordinator(opts ...CoordinatorOption) (Coordinator, error) {
 	c := &defaultCoordinator{
-		policies: make(map[session.FocusKind]FocusKindPolicy),
+		policies: make(map[session.FocusKind]KindPolicy),
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -115,13 +115,13 @@ func NewCoordinator(opts ...CoordinatorOption) (FocusCoordinator, error) {
 	return c, nil
 }
 
-// policyFor looks up the registered FocusKindPolicy for the given kind.
-func (c *defaultCoordinator) policyFor(kind session.FocusKind) (FocusKindPolicy, error) {
+// policyFor looks up the registered KindPolicy for the given kind.
+func (c *defaultCoordinator) policyFor(kind session.FocusKind) (KindPolicy, error) {
 	p, ok := c.policies[kind]
 	if !ok {
 		return nil, oops.Code("FOCUS_KIND_UNREGISTERED").
 			With("kind", string(kind)).
-			Errorf("no FocusKindPolicy registered for kind %q", kind)
+			Errorf("no KindPolicy registered for kind %q", kind)
 	}
 	return p, nil
 }
@@ -147,8 +147,8 @@ func (c *defaultCoordinator) buildPolicyContext(
 	ctx context.Context,
 	info *session.Info,
 	target session.FocusKey,
-) FocusPolicyContext {
-	pctx := FocusPolicyContext{
+) PolicyContext {
+	pctx := PolicyContext{
 		SessionID:            info.ID,
 		Target:               target,
 		SceneFocusReplayTail: 3, // substrate default

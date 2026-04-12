@@ -41,17 +41,17 @@ func (c *defaultCoordinator) JoinFocus(ctx context.Context, sessionID string, ta
 						Errorf("session %s already has membership for %s:%s", sessionID, target.Kind, target.TargetID)
 				}
 			}
-			next := append(current, session.FocusMembership{Kind: target.Kind, TargetID: target.TargetID, JoinedAt: now})
-			return next, presenting, nil
+			current = append(current, session.FocusMembership{Kind: target.Kind, TargetID: target.TargetID, JoinedAt: now})
+			return current, presenting, nil
 		},
 	))
 	if mutErr != nil {
-		return mutErr
+		return oops.With("session_id", sessionID).Wrap(mutErr)
 	}
 
 	if c.streamSender != nil {
 		for _, sw := range joinStreams {
-			_ = c.streamSender.Send(sessionID, sw.Stream, true, sw.Mode)
+			_ = c.streamSender.Send(sessionID, sw.Stream, true, sw.Mode) //nolint:errcheck // best-effort: SESSION_NOT_FOUND means no live subscriber
 		}
 	}
 

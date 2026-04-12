@@ -13,7 +13,7 @@ import (
 	"github.com/holomush/holomush/internal/session"
 )
 
-// stubPolicy is a test FocusKindPolicy that returns configurable streams.
+// stubPolicy is a test KindPolicy that returns configurable streams.
 type stubPolicy struct {
 	kind      session.FocusKind
 	streams   []string
@@ -24,8 +24,8 @@ type stubPolicy struct {
 
 func (p *stubPolicy) Kind() session.FocusKind                               { return p.kind }
 func (p *stubPolicy) StreamsFor(_ session.FocusKey) []string                { return p.streams }
-func (p *stubPolicy) OnJoin(_ FocusPolicyContext) ([]StreamWithMode, error) { return p.onJoin, p.onJoinErr }
-func (p *stubPolicy) OnRestore(_ FocusPolicyContext) ([]StreamWithMode, error) {
+func (p *stubPolicy) OnJoin(_ PolicyContext) ([]StreamWithMode, error) { return p.onJoin, p.onJoinErr }
+func (p *stubPolicy) OnRestore(_ PolicyContext) ([]StreamWithMode, error) {
 	return p.onRestore, nil
 }
 
@@ -46,7 +46,7 @@ func (s *capturingSender) Send(sessionID, stream string, add bool, mode ReplayMo
 	return nil
 }
 
-func newTestCoordinator(t *testing.T, sessions map[string]*session.Info, policies ...FocusKindPolicy) (*defaultCoordinator, *capturingSender) {
+func newTestCoordinator(t *testing.T, sessions map[string]*session.Info, policies ...KindPolicy) (*defaultCoordinator, *capturingSender) {
 	t.Helper()
 	store := session.NewMemStore()
 	ctx := context.Background()
@@ -57,10 +57,8 @@ func newTestCoordinator(t *testing.T, sessions map[string]*session.Info, policie
 		require.NoError(t, store.Set(ctx, id, info))
 	}
 	sender := &capturingSender{}
-	opts := []CoordinatorOption{
-		WithSessionStore(store),
-		WithStreamSender(sender),
-	}
+	opts := make([]CoordinatorOption, 0, 2+len(policies))
+	opts = append(opts, WithSessionStore(store), WithStreamSender(sender))
 	for _, p := range policies {
 		opts = append(opts, WithKindPolicy(p))
 	}

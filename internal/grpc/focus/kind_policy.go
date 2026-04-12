@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-// Package focus implements the FocusCoordinator — the sole authoritative
+// Package focus implements the Coordinator — the sole authoritative
 // mutator of a session's focused-context state. It encapsulates transition
 // semantics (join, leave, present, restore) and dispatches per-kind replay
-// policy to FocusKindPolicy implementations.
+// policy to KindPolicy implementations.
 //
 // ReplayMode is defined here (not in the parent internal/grpc package)
 // because the dependency graph is grpc → focus. Defining the type in the
@@ -62,10 +62,10 @@ type StreamWithMode struct {
 	NotBefore time.Time // for ReplayModeBoundedTail
 }
 
-// FocusPolicyContext carries the preference-resolved inputs a kind policy
+// PolicyContext carries the preference-resolved inputs a kind policy
 // needs. Constructed by the coordinator before dispatching to the policy,
 // so the policy remains stateless and test-pure.
-type FocusPolicyContext struct {
+type PolicyContext struct {
 	SessionID string
 	Target    session.FocusKey
 
@@ -75,14 +75,14 @@ type FocusPolicyContext struct {
 	SceneFocusReplayTail int
 }
 
-// FocusKindPolicy encapsulates the per-kind replay policy for a focused
+// KindPolicy encapsulates the per-kind replay policy for a focused
 // context. Implementations MUST be stateless (invariant I-9). Instances
 // are registered in the coordinator constructor keyed by FocusKind.
 //
-// Implementations are pure functions: they take inputs from FocusPolicyContext
+// Implementations are pure functions: they take inputs from PolicyContext
 // and return decisions as StreamWithMode values. No side effects, no store
 // access, no registry access.
-type FocusKindPolicy interface {
+type KindPolicy interface {
 	// Kind returns the FocusKind this policy handles.
 	Kind() session.FocusKind
 
@@ -93,14 +93,14 @@ type FocusKindPolicy interface {
 
 	// OnJoin returns the per-stream replay policy to apply when the
 	// membership is first created.
-	OnJoin(pctx FocusPolicyContext) ([]StreamWithMode, error)
+	OnJoin(pctx PolicyContext) ([]StreamWithMode, error)
 
 	// OnRestore returns the per-stream replay policy to apply when the
 	// membership is restored on reconnect.
-	OnRestore(pctx FocusPolicyContext) ([]StreamWithMode, error)
+	OnRestore(pctx PolicyContext) ([]StreamWithMode, error)
 }
 
-// NullPolicy is a bootstrapping FocusKindPolicy that returns empty streams
+// NullPolicy is a bootstrapping KindPolicy that returns empty streams
 // for all operations. It allows the coordinator to construct and pass tests
 // before real kind policies (ScenePolicy) are registered.
 type NullPolicy struct {
@@ -119,7 +119,7 @@ func (p *NullPolicy) Kind() session.FocusKind { return p.kind }
 func (p *NullPolicy) StreamsFor(_ session.FocusKey) []string { return nil }
 
 // OnJoin returns nil — no replay for null policy.
-func (p *NullPolicy) OnJoin(_ FocusPolicyContext) ([]StreamWithMode, error) { return nil, nil }
+func (p *NullPolicy) OnJoin(_ PolicyContext) ([]StreamWithMode, error) { return nil, nil }
 
 // OnRestore returns nil — no replay for null policy.
-func (p *NullPolicy) OnRestore(_ FocusPolicyContext) ([]StreamWithMode, error) { return nil, nil }
+func (p *NullPolicy) OnRestore(_ PolicyContext) ([]StreamWithMode, error) { return nil, nil }
