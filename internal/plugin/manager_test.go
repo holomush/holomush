@@ -1011,6 +1011,106 @@ lua-plugin:
 	assert.Contains(t, mgr.ListPlugins(), "widget-consumer")
 }
 
+// Semantic action validation: loadPlugin must reject manifests whose commands
+// declare capabilities on actions that aren't in the cross-plugin known set.
+
+func TestManagerLoadAllRejectsCommandCapabilityOnUnknownAction(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	pluginDir := filepath.Join(pluginsDir, "channel-plugin")
+	mkdirAll(t, pluginDir)
+	writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(`name: channel-plugin
+version: 1.0.0
+type: lua
+commands:
+  - name: channel
+    capabilities:
+      - action: join
+        resource: location
+lua-plugin:
+  entry: main.lua`))
+	writeFile(t, filepath.Join(pluginDir, "main.lua"), []byte("function on_event(e) end"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	err := mgr.LoadAll(context.Background())
+	require.Error(t, err, "load should fail when capability uses an undeclared action")
+	assert.Contains(t, err.Error(), "join")
+}
+
+func TestManagerLoadAllAcceptsCapabilityWithDeclaredAction(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	pluginDir := filepath.Join(pluginsDir, "channel-plugin")
+	mkdirAll(t, pluginDir)
+	writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(`name: channel-plugin
+version: 1.0.0
+type: lua
+actions: [join, leave]
+commands:
+  - name: channel
+    capabilities:
+      - action: join
+        resource: location
+      - action: leave
+        resource: location
+lua-plugin:
+  entry: main.lua`))
+	writeFile(t, filepath.Join(pluginDir, "main.lua"), []byte("function on_event(e) end"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	err := mgr.LoadAll(context.Background())
+	require.NoError(t, err, "load should succeed when action is declared in the plugin manifest")
+	assert.Contains(t, mgr.ListPlugins(), "channel-plugin")
+}
+
+func TestManagerLoadAllAcceptsCapabilityOnAnotherPluginsAction(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	// Plugin A declares the "join" action so Plugin B's capability is valid.
+	declarerDir := filepath.Join(pluginsDir, "action-declarer")
+	mkdirAll(t, declarerDir)
+	writeFile(t, filepath.Join(declarerDir, "plugin.yaml"), []byte(`name: action-declarer
+version: 1.0.0
+type: binary
+actions: [join]
+binary-plugin:
+  executable: action-declarer`))
+
+	// Plugin B uses "join" declared by Plugin A.
+	consumerDir := filepath.Join(pluginsDir, "action-consumer")
+	mkdirAll(t, consumerDir)
+	writeFile(t, filepath.Join(consumerDir, "plugin.yaml"), []byte(`name: action-consumer
+version: 1.0.0
+type: lua
+commands:
+  - name: channel
+    capabilities:
+      - action: join
+        resource: location
+lua-plugin:
+  entry: main.lua`))
+	writeFile(t, filepath.Join(consumerDir, "main.lua"), []byte("function on_event(e) end"))
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	// No binary host — declarer is silently skipped, but its actions still
+	// feed CollectActions during Phase 2.
+	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	err := mgr.LoadAll(context.Background())
+	require.NoError(t, err, "consumer should validate against declarer's action")
+	assert.Contains(t, mgr.ListPlugins(), "action-consumer")
+}
+
 // WithTrustAllowlist is plumbed through but only takes effect when policies
 // install. The option itself is verified by ensuring no panic / no behavior
 // change for plugins that don't request escalation.
