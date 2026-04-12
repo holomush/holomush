@@ -264,7 +264,7 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 	assert.Equal(t, "Alice", payload.Present[0].Name)
 }
 
-func TestLocationFollower_SwitchLocationSubscription_SucceedsWithLegacyStore(t *testing.T) {
+func TestSwitchLocationSubscriptionSucceedsWithLegacyStore(t *testing.T) {
 	charID := ulid.Make()
 	oldLocID := ulid.Make()
 	newLocID := ulid.Make()
@@ -303,7 +303,7 @@ type nonLegacyStore struct {
 	core.EventStore
 }
 
-func TestLocationFollower_SwitchLocationSubscription_ErrorsWithoutLegacyStore(t *testing.T) {
+func TestSwitchLocationSubscriptionReturnsNilWithNonLegacyStore(t *testing.T) {
 	charID := ulid.Make()
 	locID := ulid.Make()
 	newLocID := ulid.Make()
@@ -334,12 +334,12 @@ func TestLocationFollower_SwitchLocationSubscription_ErrorsWithoutLegacyStore(t 
 	}
 }
 
-func TestLocationFollower_SwitchLocationSubscription_NilStoreIsNoOp(t *testing.T) {
+func TestSwitchLocationSubscriptionIsNoOpWhenEventStoreIsNil(t *testing.T) {
 	lf := &locationFollower{
 		characterID:  ulid.Make(),
 		currentLocID: ulid.Make(),
 		eventStore:   nil,
-		notifyCh:     nil,
+		notifyCh:     make(chan streamNotification, 1),
 	}
 
 	require.NotPanics(t, func() {
