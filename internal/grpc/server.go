@@ -26,6 +26,7 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/world"
@@ -124,6 +125,10 @@ type CoreServer struct {
 	// Plugin stream contribution and mid-session stream control.
 	streamContributor SessionStreamContributor
 	streamRegistry    *SessionStreamRegistry
+
+	// focusCoordinator manages session focus memberships and replay policy.
+	// Nil until the Subscribe handler refactor (B7) wires it into the live loop.
+	focusCoordinator focus.FocusCoordinator
 
 	// afterLISTENHook fires between LISTEN setup and replay — used in tests.
 	afterLISTENHook func()
@@ -224,6 +229,11 @@ func WithStreamContributor(c SessionStreamContributor) CoreServerOption {
 // WithStreamRegistry sets the session stream registry for mid-session stream control.
 func WithStreamRegistry(r *SessionStreamRegistry) CoreServerOption {
 	return func(s *CoreServer) { s.streamRegistry = r }
+}
+
+// WithFocusCoordinator sets the focus coordinator for session focus management.
+func WithFocusCoordinator(fc focus.FocusCoordinator) CoreServerOption {
+	return func(s *CoreServer) { s.focusCoordinator = fc }
 }
 
 // WithAfterLISTENHook sets a callback fired between LISTEN setup and replay.

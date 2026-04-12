@@ -97,3 +97,23 @@ func (r *SessionStreamRegistry) AddStream(_ context.Context, sessionID, stream s
 func (r *SessionStreamRegistry) RemoveStream(_ context.Context, sessionID, stream string) error {
 	return r.Send(sessionID, sessionStreamUpdate{stream: stream, add: false})
 }
+
+// StreamSenderAdapter wraps SessionStreamRegistry to satisfy focus.StreamSender.
+// It calls Send directly (not AddStream) to pass explicit ReplayMode values.
+type StreamSenderAdapter struct {
+	registry *SessionStreamRegistry
+}
+
+// NewStreamSenderAdapter creates a StreamSenderAdapter.
+func NewStreamSenderAdapter(r *SessionStreamRegistry) *StreamSenderAdapter {
+	return &StreamSenderAdapter{registry: r}
+}
+
+// Send implements focus.StreamSender.
+func (a *StreamSenderAdapter) Send(sessionID, stream string, add bool, mode focus.ReplayMode) error {
+	return a.registry.Send(sessionID, sessionStreamUpdate{
+		stream:     stream,
+		add:        add,
+		replayMode: mode,
+	})
+}

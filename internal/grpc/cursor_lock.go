@@ -3,7 +3,11 @@
 
 package grpc
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/holomush/holomush/internal/grpc/focus"
+)
 
 // sessionCursorLock is a per-session mutex with a reference count.
 //
@@ -127,3 +131,21 @@ func (m *cursorLockMap) refCount(sessionID string) int {
 	}
 	return 0
 }
+
+// CursorLockerAdapter wraps cursorLockMap to satisfy focus.CursorLocker.
+type CursorLockerAdapter struct {
+	locks *cursorLockMap
+}
+
+// NewCursorLockerAdapter creates a CursorLockerAdapter.
+func NewCursorLockerAdapter(m *cursorLockMap) *CursorLockerAdapter {
+	return &CursorLockerAdapter{locks: m}
+}
+
+// Lock implements focus.CursorLocker.
+func (a *CursorLockerAdapter) Lock(sessionID string) func() {
+	return a.locks.lock(sessionID)
+}
+
+// Ensure CursorLockerAdapter satisfies the focus.CursorLocker interface at compile time.
+var _ focus.CursorLocker = (*CursorLockerAdapter)(nil)
