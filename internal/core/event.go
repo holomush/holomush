@@ -158,3 +158,26 @@ type Event struct {
 	Actor     Actor
 	Payload   []byte // JSON
 }
+
+// NewEvent constructs an Event with a monotonic ULID (from NewULID) and
+// the current timestamp. This is the ONLY blessed construction path for
+// events that will be appended to an EventStore.
+//
+// Invariant I-16 (Event ID Monotonicity): every event appended to
+// EventStore MUST be constructed via NewEvent, which assigns the ID from
+// NewULID() -- a monotonic-within-millisecond generator. idgen.New() and
+// ulid.Make() are forbidden for event IDs because they produce
+// non-monotonic IDs that silently break PostgresEventStore.Replay
+// (WHERE id > afterID ORDER BY id) and cursor CAS advances.
+//
+// See docs/superpowers/specs/2026-04-11-focus-substrate-design.md section 3.1.
+func NewEvent(stream string, eventType EventType, actor Actor, payload []byte) Event {
+	return Event{
+		ID:        NewULID(),
+		Stream:    stream,
+		Type:      eventType,
+		Timestamp: time.Now(),
+		Actor:     actor,
+		Payload:   payload,
+	}
+}

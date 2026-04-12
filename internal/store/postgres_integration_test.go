@@ -71,14 +71,9 @@ var _ = Describe("PostgresEventStore", func() {
 	Describe("Append", func() {
 		It("stores events correctly", func() {
 			ctx := context.Background()
-			event := core.Event{
-				ID:        core.NewULID(),
-				Stream:    "location:test-room",
-				Type:      core.EventTypeSay,
-				Timestamp: time.Now(),
-				Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
-				Payload:   []byte(`{"message":"Hello, world!"}`),
-			}
+			event := core.NewEvent("location:test-room", core.EventTypeSay, core.Actor{
+				Kind: core.ActorCharacter, ID: "char-123",
+			}, []byte(`{"message":"Hello, world!"}`))
 
 			err := eventStore.Append(ctx, event)
 			Expect(err).NotTo(HaveOccurred())
@@ -99,15 +94,10 @@ var _ = Describe("PostgresEventStore", func() {
 			ctx := context.Background()
 			ids = make([]ulid.ULID, 5)
 			for i := range 5 {
-				ids[i] = core.NewULID()
-				event := core.Event{
-					ID:        ids[i],
-					Stream:    stream,
-					Type:      core.EventTypeSay,
-					Timestamp: time.Now(),
-					Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
-					Payload:   []byte(`{"message":"test"}`),
-				}
+				event := core.NewEvent(stream, core.EventTypeSay, core.Actor{
+					Kind: core.ActorCharacter, ID: "char-123",
+				}, []byte(`{"message":"test"}`))
+				ids[i] = event.ID
 				err := eventStore.Append(ctx, event)
 				Expect(err).NotTo(HaveOccurred())
 				time.Sleep(time.Millisecond) // Ensure ULID ordering
@@ -158,15 +148,10 @@ var _ = Describe("PostgresEventStore", func() {
 			BeforeEach(func() {
 				ctx := context.Background()
 				for i := range 3 {
-					lastID = core.NewULID()
-					event := core.Event{
-						ID:        lastID,
-						Stream:    stream,
-						Type:      core.EventTypeSay,
-						Timestamp: time.Now(),
-						Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
-						Payload:   []byte(`{}`),
-					}
+					event := core.NewEvent(stream, core.EventTypeSay, core.Actor{
+						Kind: core.ActorCharacter, ID: "char-123",
+					}, []byte(`{}`))
+					lastID = event.ID
 					err := eventStore.Append(ctx, event)
 					Expect(err).NotTo(HaveOccurred(), "Append %d failed", i)
 					time.Sleep(time.Millisecond)
@@ -196,14 +181,9 @@ var _ = Describe("PostgresEventStore", func() {
 			}
 
 			for _, et := range eventTypes {
-				event := core.Event{
-					ID:        core.NewULID(),
-					Stream:    stream,
-					Type:      et,
-					Timestamp: time.Now(),
-					Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
-					Payload:   []byte(`{}`),
-				}
+				event := core.NewEvent(stream, et, core.Actor{
+					Kind: core.ActorCharacter, ID: "char-123",
+				}, []byte(`{}`))
 				err := eventStore.Append(ctx, event)
 				Expect(err).NotTo(HaveOccurred())
 			}
@@ -230,14 +210,9 @@ var _ = Describe("PostgresEventStore", func() {
 			}
 
 			for _, ak := range actorKinds {
-				event := core.Event{
-					ID:        core.NewULID(),
-					Stream:    stream,
-					Type:      core.EventTypeSay,
-					Timestamp: time.Now(),
-					Actor:     core.Actor{Kind: ak, ID: "test-actor"},
-					Payload:   []byte(`{}`),
-				}
+				event := core.NewEvent(stream, core.EventTypeSay, core.Actor{
+					Kind: ak, ID: "test-actor",
+				}, []byte(`{}`))
 				err := eventStore.Append(ctx, event)
 				Expect(err).NotTo(HaveOccurred())
 			}
@@ -327,14 +302,9 @@ var _ = Describe("PostgresEventStore", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Append an event
-			event := core.Event{
-				ID:        core.NewULID(),
-				Stream:    stream,
-				Type:      core.EventTypeSay,
-				Timestamp: time.Now(),
-				Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
-				Payload:   []byte(`{"message":"Hello via NOTIFY!"}`),
-			}
+			event := core.NewEvent(stream, core.EventTypeSay, core.Actor{
+				Kind: core.ActorCharacter, ID: "char-123",
+			}, []byte(`{"message":"Hello via NOTIFY!"}`))
 			err = eventStore.Append(ctx, event)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -355,15 +325,10 @@ var _ = Describe("PostgresEventStore", func() {
 			// Append multiple events
 			ids := make([]ulid.ULID, 3)
 			for i := range 3 {
-				ids[i] = core.NewULID()
-				event := core.Event{
-					ID:        ids[i],
-					Stream:    stream,
-					Type:      core.EventTypeSay,
-					Timestamp: time.Now(),
-					Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
-					Payload:   []byte(`{}`),
-				}
+				event := core.NewEvent(stream, core.EventTypeSay, core.Actor{
+					Kind: core.ActorCharacter, ID: "char-123",
+				}, []byte(`{}`))
+				ids[i] = event.ID
 				err := eventStore.Append(ctx, event)
 				Expect(err).NotTo(HaveOccurred())
 				time.Sleep(10 * time.Millisecond) // Ensure ordering
@@ -399,14 +364,9 @@ var _ = Describe("PostgresEventStore", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Append to a different stream
-			event := core.Event{
-				ID:        core.NewULID(),
-				Stream:    "location:stream-b",
-				Type:      core.EventTypeSay,
-				Timestamp: time.Now(),
-				Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
-				Payload:   []byte(`{}`),
-			}
+			event := core.NewEvent("location:stream-b", core.EventTypeSay, core.Actor{
+				Kind: core.ActorCharacter, ID: "char-123",
+			}, []byte(`{}`))
 			err = eventStore.Append(ctx, event)
 			Expect(err).NotTo(HaveOccurred())
 

@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
-	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -617,20 +616,10 @@ func (s *Services) BroadcastSystemMessage(ctx context.Context, stream, message s
 		"message": message,
 	})
 
-	event := core.Event{
-		// Event IDs MUST be monotonic for PostgresEventStore.Replay
-		// (WHERE id > afterID ORDER BY id) and the PostgresSessionStore
-		// cursor CAS. idgen.New() is non-monotonic. See internal/core/ulid.go.
-		ID:        core.NewULID(),
-		Stream:    stream,
-		Type:      core.EventTypeSystem,
-		Timestamp: time.Now(),
-		Actor: core.Actor{
-			Kind: core.ActorSystem,
-			ID:   "system",
-		},
-		Payload: payload,
-	}
+	event := core.NewEvent(stream, core.EventTypeSystem, core.Actor{
+		Kind: core.ActorSystem,
+		ID:   "system",
+	}, payload)
 
 	if err := s.events.Append(ctx, event); err != nil {
 		slog.WarnContext(ctx, "BroadcastSystemMessage: failed to append event",

@@ -92,12 +92,7 @@ func TestLocationFollower_HandleEvent_DetectsCharacterMove(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	event := core.Event{
-		ID:      ulid.Make(),
-		Stream:  world.CharacterStream(charID),
-		Type:    core.EventTypeMove,
-		Payload: movePayload,
-	}
+	event := core.NewEvent(world.CharacterStream(charID), core.EventTypeMove, core.Actor{}, movePayload)
 
 	stream := &capturingStream{ctx: context.Background()}
 	handled := lf.handleEvent(context.Background(), event, stream)
@@ -120,10 +115,7 @@ func TestLocationFollower_HandleEvent_IgnoresNonMoveEvents(t *testing.T) {
 		worldQuerier: &mockWorldQuerier{},
 	}
 
-	event := core.Event{
-		ID:   ulid.Make(),
-		Type: core.EventTypeSay,
-	}
+	event := core.NewEvent("", core.EventTypeSay, core.Actor{}, nil)
 
 	stream := &capturingStream{ctx: context.Background()}
 	handled := lf.handleEvent(context.Background(), event, stream)
@@ -154,11 +146,7 @@ func TestLocationFollower_HandleEvent_IgnoresOtherCharacterMoves(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	event := core.Event{
-		ID:      ulid.Make(),
-		Type:    core.EventTypeMove,
-		Payload: movePayload,
-	}
+	event := core.NewEvent("", core.EventTypeMove, core.Actor{}, movePayload)
 
 	stream := &capturingStream{ctx: context.Background()}
 	handled := lf.handleEvent(context.Background(), event, stream)
@@ -190,11 +178,7 @@ func TestLocationFollower_HandleEvent_IgnoresObjectMoves(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	event := core.Event{
-		ID:      ulid.Make(),
-		Type:    core.EventTypeMove,
-		Payload: movePayload,
-	}
+	event := core.NewEvent("", core.EventTypeMove, core.Actor{}, movePayload)
 
 	stream := &capturingStream{ctx: context.Background()}
 	handled := lf.handleEvent(context.Background(), event, stream)
@@ -210,10 +194,7 @@ func TestLocationFollower_HandleEvent_NilWorldQuerier(t *testing.T) {
 		worldQuerier: nil,
 	}
 
-	event := core.Event{
-		ID:   ulid.Make(),
-		Type: core.EventTypeMove,
-	}
+	event := core.NewEvent("", core.EventTypeMove, core.Actor{}, nil)
 
 	stream := &capturingStream{ctx: context.Background()}
 	handled := lf.handleEvent(context.Background(), event, stream)

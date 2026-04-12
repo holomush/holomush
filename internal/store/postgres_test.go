@@ -21,14 +21,10 @@ import (
 
 // testEvent creates a test event with the given parameters.
 func testEvent(stream string, eventType core.EventType) core.Event {
-	return core.Event{
-		ID:        core.NewULID(),
-		Stream:    stream,
-		Type:      eventType,
-		Timestamp: time.Now().UTC().Truncate(time.Microsecond),
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
-		Payload:   []byte(`{"message":"test"}`),
-	}
+	return core.NewEvent(stream, eventType, core.Actor{
+		Kind: core.ActorCharacter,
+		ID:   "char-123",
+	}, []byte(`{"message":"test"}`))
 }
 
 func TestPostgresEventStore_Append(t *testing.T) {

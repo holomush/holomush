@@ -240,14 +240,12 @@ func TestCoreServer_Subscribe_SendsEvents(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Send an event through the event store (triggers Subscribe notification)
-	testEvent := core.Event{
-		ID:        core.NewULID(),
-		Stream:    "location:" + locationID.String(),
-		Type:      core.EventTypeSay,
-		Timestamp: time.Now(),
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
-		Payload:   []byte(`{"message":"test"}`),
-	}
+	testEvent := core.NewEvent(
+		"location:"+locationID.String(),
+		core.EventTypeSay,
+		core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
+		[]byte(`{"message":"test"}`),
+	)
 	require.NoError(t, eventStore.Append(ctx, testEvent))
 
 	// Give time for event to be sent
@@ -788,14 +786,12 @@ func TestCoreServer_Subscribe_SendError(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Send an event that will cause send error
-	testEvent := core.Event{
-		ID:        core.NewULID(),
-		Stream:    "location:" + locationID.String(),
-		Type:      core.EventTypeSay,
-		Timestamp: time.Now(),
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
-		Payload:   []byte(`{"message":"test"}`),
-	}
+	testEvent := core.NewEvent(
+		"location:"+locationID.String(),
+		core.EventTypeSay,
+		core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
+		[]byte(`{"message":"test"}`),
+	)
 	require.NoError(t, eventStore.Append(ctx, testEvent))
 
 	select {
@@ -1281,14 +1277,12 @@ func TestCoreServer_Subscribe_ContextCancellationCleanup(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Verify subscription is active by sending an event
-	testEvent := core.Event{
-		ID:        core.NewULID(),
-		Stream:    streamName,
-		Type:      core.EventTypeSay,
-		Timestamp: time.Now(),
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
-		Payload:   []byte(`{"message":"test"}`),
-	}
+	testEvent := core.NewEvent(
+		streamName,
+		core.EventTypeSay,
+		core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
+		[]byte(`{"message":"test"}`),
+	)
 	require.NoError(t, eventStore.Append(ctx, testEvent))
 
 	// Give time for event to be received
@@ -1440,14 +1434,12 @@ func TestCoreServer_Subscribe_TimeoutDuringEventSend(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 
 	// Send an event that will block
-	testEvent := core.Event{
-		ID:        core.NewULID(),
-		Stream:    streamName,
-		Type:      core.EventTypeSay,
-		Timestamp: time.Now(),
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
-		Payload:   []byte(`{"message":"test"}`),
-	}
+	testEvent := core.NewEvent(
+		streamName,
+		core.EventTypeSay,
+		core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
+		[]byte(`{"message":"test"}`),
+	)
 	require.NoError(t, eventStore.Append(ctx, testEvent))
 
 	// Wait for send to be called
@@ -2290,33 +2282,20 @@ func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
 	ctx := context.Background()
 
 	// Prepopulate store: cursor event + 2 historical events
-	cursorEvent := core.Event{
-		ID:     core.NewULID(),
-		Stream: streamName, Type: core.EventTypeSay,
-		Timestamp: time.Now().Add(-3 * time.Second),
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor0"},
-		Payload:   []byte(`{"message":"cursor"}`),
-	}
+	cursorEvent := core.NewEvent(streamName, core.EventTypeSay, core.Actor{
+		Kind: core.ActorCharacter, ID: "actor0",
+	}, []byte(`{"message":"cursor"}`))
 	require.NoError(t, eventStore.Append(ctx, cursorEvent))
 
-	historicalID1 := core.NewULID()
-	historicalID2 := core.NewULID()
-	for _, ev := range []core.Event{
-		{
-			ID: historicalID1, Stream: streamName, Type: core.EventTypeSay,
-			Timestamp: time.Now().Add(-2 * time.Second),
-			Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor1"},
-			Payload:   []byte(`{"message":"missed-1"}`),
-		},
-		{
-			ID: historicalID2, Stream: streamName, Type: core.EventTypeSay,
-			Timestamp: time.Now().Add(-1 * time.Second),
-			Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor2"},
-			Payload:   []byte(`{"message":"missed-2"}`),
-		},
-	} {
-		require.NoError(t, eventStore.Append(ctx, ev))
-	}
+	historical1 := core.NewEvent(streamName, core.EventTypeSay, core.Actor{
+		Kind: core.ActorCharacter, ID: "actor1",
+	}, []byte(`{"message":"missed-1"}`))
+	require.NoError(t, eventStore.Append(ctx, historical1))
+
+	historical2 := core.NewEvent(streamName, core.EventTypeSay, core.Actor{
+		Kind: core.ActorCharacter, ID: "actor2",
+	}, []byte(`{"message":"missed-2"}`))
+	require.NoError(t, eventStore.Append(ctx, historical2))
 
 	server := &CoreServer{
 		engine: core.NewEngine(eventStore),
@@ -2355,15 +2334,9 @@ func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Send a live event after replay
-	liveID := core.NewULID()
-	liveEvent := core.Event{
-		ID:        liveID,
-		Stream:    streamName,
-		Type:      core.EventTypeSay,
-		Timestamp: time.Now(),
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor3"},
-		Payload:   []byte(`{"message":"live"}`),
-	}
+	liveEvent := core.NewEvent(streamName, core.EventTypeSay, core.Actor{
+		Kind: core.ActorCharacter, ID: "actor3",
+	}, []byte(`{"message":"live"}`))
 	require.NoError(t, eventStore.Append(subCtx, liveEvent))
 
 	// Give time for live event delivery
@@ -2386,11 +2359,11 @@ func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
 		}
 	}
 	require.GreaterOrEqual(t, len(sayEvents), 2, "expected at least 2 replayed say events")
-	assert.Equal(t, historicalID1.String(), sayEvents[0].GetEvent().GetId(), "first say event should be historical")
-	assert.Equal(t, historicalID2.String(), sayEvents[1].GetEvent().GetId(), "second say event should be historical")
+	assert.Equal(t, historical1.ID.String(), sayEvents[0].GetEvent().GetId(), "first say event should be historical")
+	assert.Equal(t, historical2.ID.String(), sayEvents[1].GetEvent().GetId(), "second say event should be historical")
 
 	if len(sayEvents) >= 3 {
-		assert.Equal(t, liveID.String(), sayEvents[2].GetEvent().GetId(), "third say event should be the live one")
+		assert.Equal(t, liveEvent.ID.String(), sayEvents[2].GetEvent().GetId(), "third say event should be the live one")
 	}
 }
 
@@ -2407,21 +2380,14 @@ func TestCoreServer_Subscribe_ReplayDeduplicatesLiveEvents(t *testing.T) {
 	ctx := context.Background()
 
 	// Prepopulate: cursor + one historical event
-	cursorEvent := core.Event{
-		ID: core.NewULID(), Stream: streamName, Type: core.EventTypeSay,
-		Timestamp: time.Now().Add(-2 * time.Second),
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor0"},
-		Payload:   []byte(`{"message":"cursor"}`),
-	}
+	cursorEvent := core.NewEvent(streamName, core.EventTypeSay, core.Actor{
+		Kind: core.ActorCharacter, ID: "actor0",
+	}, []byte(`{"message":"cursor"}`))
 	require.NoError(t, eventStore.Append(ctx, cursorEvent))
 
-	historicalID := core.NewULID()
-	historicalEvent := core.Event{
-		ID: historicalID, Stream: streamName, Type: core.EventTypeSay,
-		Timestamp: time.Now().Add(-1 * time.Second),
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor1"},
-		Payload:   []byte(`{"message":"historical"}`),
-	}
+	historicalEvent := core.NewEvent(streamName, core.EventTypeSay, core.Actor{
+		Kind: core.ActorCharacter, ID: "actor1",
+	}, []byte(`{"message":"historical"}`))
 	require.NoError(t, eventStore.Append(ctx, historicalEvent))
 
 	server := &CoreServer{
@@ -2470,7 +2436,7 @@ func TestCoreServer_Subscribe_ReplayDeduplicatesLiveEvents(t *testing.T) {
 	// Count how many times the historical event appears (should be exactly once)
 	count := 0
 	for _, ev := range stream.events {
-		if ef := ev.GetEvent(); ef != nil && ef.GetId() == historicalID.String() {
+		if ef := ev.GetEvent(); ef != nil && ef.GetId() == historicalEvent.ID.String() {
 			count++
 		}
 	}
@@ -2610,24 +2576,14 @@ func TestCoreServer_Subscribe_EmitsReplayCompleteControlFrame(t *testing.T) {
 	ctx := context.Background()
 
 	// Prepopulate store: cursor event + 1 historical event after it
-	cursorEvent := core.Event{
-		ID:        core.NewULID(),
-		Stream:    streamName,
-		Type:      core.EventTypeSay,
-		Timestamp: time.Now().Add(-2 * time.Second),
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor0"},
-		Payload:   []byte(`{"message":"before-cursor"}`),
-	}
+	cursorEvent := core.NewEvent(streamName, core.EventTypeSay, core.Actor{
+		Kind: core.ActorCharacter, ID: "actor0",
+	}, []byte(`{"message":"before-cursor"}`))
 	require.NoError(t, eventStore.Append(ctx, cursorEvent))
 
-	historicalEvent := core.Event{
-		ID:        core.NewULID(),
-		Stream:    streamName,
-		Type:      core.EventTypeSay,
-		Timestamp: time.Now().Add(-1 * time.Second),
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "actor1"},
-		Payload:   []byte(`{"message":"missed"}`),
-	}
+	historicalEvent := core.NewEvent(streamName, core.EventTypeSay, core.Actor{
+		Kind: core.ActorCharacter, ID: "actor1",
+	}, []byte(`{"message":"missed"}`))
 	require.NoError(t, eventStore.Append(ctx, historicalEvent))
 
 	server := &CoreServer{
@@ -2801,28 +2757,21 @@ replayComplete:
 }
 
 func TestEventToProto(t *testing.T) {
-	id := core.NewULID()
-	ts := time.Now()
-	ev := core.Event{
-		ID:        id,
-		Stream:    "location:test",
-		Type:      core.EventTypeSay,
-		Timestamp: ts,
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-1"},
-		Payload:   []byte(`{"msg":"hello"}`),
-	}
+	ev := core.NewEvent("location:test", core.EventTypeSay, core.Actor{
+		Kind: core.ActorCharacter, ID: "char-1",
+	}, []byte(`{"msg":"hello"}`))
 
 	proto := eventToProto(ev)
 	ef := proto.GetEvent()
 	require.NotNil(t, ef)
 
-	assert.Equal(t, id.String(), ef.GetId())
+	assert.Equal(t, ev.ID.String(), ef.GetId())
 	assert.Equal(t, "location:test", ef.GetStream())
 	assert.Equal(t, "say", ef.GetType())
 	assert.Equal(t, "character", ef.GetActorType())
 	assert.Equal(t, "char-1", ef.GetActorId())
 	assert.Equal(t, []byte(`{"msg":"hello"}`), ef.GetPayload())
-	assert.Equal(t, ts.UnixNano()/1e9, ef.GetTimestamp().AsTime().UnixNano()/1e9)
+	assert.Equal(t, ev.Timestamp.UnixNano()/1e9, ef.GetTimestamp().AsTime().UnixNano()/1e9)
 }
 
 // =============================================================================

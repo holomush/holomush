@@ -466,14 +466,10 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 	if isError {
 		eventType = core.EventTypeCommandError
 	}
-	event := core.Event{
-		ID:        core.NewULID(),
-		Stream:    world.CharacterStream(char.ID),
-		Type:      eventType,
-		Timestamp: time.Now(),
-		Actor:     core.Actor{Kind: core.ActorSystem, ID: "system"},
-		Payload:   payload,
-	}
+	event := core.NewEvent(world.CharacterStream(char.ID), eventType, core.Actor{
+		Kind: core.ActorSystem,
+		ID:   "system",
+	}, payload)
 
 	if s.eventStore == nil {
 		slog.DebugContext(ctx, "emitCommandResponse: eventStore not configured, event not emitted")
