@@ -187,7 +187,7 @@ func (s *MemoryEventStore) SubscribeSession(ctx context.Context) (Subscription, 
 	// Clean up when the caller's context is cancelled.
 	go func() {
 		<-ctx.Done()
-		_ = ms.Close()
+		ms.Close() //nolint:errcheck // best-effort cleanup on context cancellation
 	}()
 
 	return ms, nil
