@@ -225,6 +225,313 @@ func TestMemoryEventStoreReplayZeroLimitReturnsEmpty(t *testing.T) {
 	assert.Empty(t, events, "zero limit should return empty slice")
 }
 
+func TestMemoryEventStoreReplayTailReturnsLastNEventsAscending(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	// Append 10 events with increasing timestamps.
+	ids := make([]ulid.ULID, 10)
+	baseTime := time.Date(2026, 4, 12, 0, 0, 0, 0, time.UTC)
+	for i := range 10 {
+		event := Event{
+			ID:        NewULID(),
+			Stream:    "location:tail-test",
+			Type:      EventTypeSay,
+			Timestamp: baseTime.Add(time.Duration(i) * time.Minute),
+			Actor:     Actor{Kind: ActorCharacter, ID: "char1"},
+			Payload:   []byte(`{}`),
+		}
+		ids[i] = event.ID
+		require.NoError(t, store.Append(ctx, event))
+		time.Sleep(time.Millisecond) // ensure distinct ULIDs
+	}
+
+	// Tail of 3 should return last 3 events in ascending order.
+	events, err := store.ReplayTail(ctx, "location:tail-test", 3, time.Time{})
+	require.NoError(t, err)
+	require.Len(t, events, 3)
+	assert.Equal(t, ids[7], events[0].ID)
+	assert.Equal(t, ids[8], events[1].ID)
+	assert.Equal(t, ids[9], events[2].ID)
+}
+
+func TestMemoryEventStoreReplayTailRespectsNotBefore(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	baseTime := time.Date(2026, 4, 12, 0, 0, 0, 0, time.UTC)
+	ids := make([]ulid.ULID, 5)
+	for i := range 5 {
+		event := Event{
+			ID:        NewULID(),
+			Stream:    "location:tail-nb",
+			Type:      EventTypeSay,
+			Timestamp: baseTime.Add(time.Duration(i) * time.Minute),
+			Actor:     Actor{Kind: ActorCharacter, ID: "char1"},
+			Payload:   []byte(`{}`),
+		}
+		ids[i] = event.ID
+		require.NoError(t, store.Append(ctx, event))
+		time.Sleep(time.Millisecond)
+	}
+
+	// notBefore = baseTime+3m excludes events at 0m, 1m, 2m.
+	// Only events at 3m and 4m qualify. Requesting tail of 10.
+	events, err := store.ReplayTail(ctx, "location:tail-nb", 10, baseTime.Add(3*time.Minute))
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	assert.Equal(t, ids[3], events[0].ID)
+	assert.Equal(t, ids[4], events[1].ID)
+}
+
+func TestMemoryEventStoreReplayTailEmptyStreamReturnsNil(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	events, err := store.ReplayTail(ctx, "nonexistent", 10, time.Time{})
+	require.NoError(t, err)
+	assert.Nil(t, events)
+}
+
+func TestMemoryEventStoreReplayTailCapsCountAt500(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	// Append 5 events, request 1000 (should be capped to 500, but
+	// only 5 exist so we get 5).
+	for range 5 {
+		event := Event{
+			ID:        NewULID(),
+			Stream:    "location:tail-cap",
+			Type:      EventTypeSay,
+			Timestamp: time.Now(),
+			Actor:     Actor{Kind: ActorCharacter, ID: "char1"},
+			Payload:   []byte(`{}`),
+		}
+		require.NoError(t, store.Append(ctx, event))
+	}
+
+	events, err := store.ReplayTail(ctx, "location:tail-cap", 1000, time.Time{})
+	require.NoError(t, err)
+	assert.Len(t, events, 5, "capped count should still return all available events")
+}
+
+func TestMemoryEventStoreReplayTailZeroCountReturnsEmpty(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	event := Event{
+		ID:        NewULID(),
+		Stream:    "location:tail-zero",
+		Type:      EventTypeSay,
+		Timestamp: time.Now(),
+		Actor:     Actor{Kind: ActorCharacter, ID: "char1"},
+		Payload:   []byte(`{}`),
+	}
+	require.NoError(t, store.Append(ctx, event))
+
+	events, err := store.ReplayTail(ctx, "location:tail-zero", 0, time.Time{})
+	require.NoError(t, err)
+	assert.Empty(t, events)
+}
+
+func TestMemoryEventStoreSubscribeSessionDeliversEventsAcrossStreams(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+	defer func() { _ = sub.Close() }()
+
+	require.NoError(t, sub.AddStream(ctx, "location:A"))
+	require.NoError(t, sub.AddStream(ctx, "location:B"))
+
+	e1 := Event{
+		ID: NewULID(), Stream: "location:A", Type: EventTypeSay,
+		Timestamp: time.Now(), Actor: Actor{Kind: ActorCharacter, ID: "c1"},
+		Payload: []byte(`{}`),
+	}
+	time.Sleep(time.Millisecond)
+	e2 := Event{
+		ID: NewULID(), Stream: "location:B", Type: EventTypeSay,
+		Timestamp: time.Now(), Actor: Actor{Kind: ActorCharacter, ID: "c2"},
+		Payload: []byte(`{}`),
+	}
+	require.NoError(t, store.Append(ctx, e1))
+	require.NoError(t, store.Append(ctx, e2))
+
+	// Should receive both events in append order.
+	notifCh := sub.Notifications()
+
+	select {
+	case n := <-notifCh:
+		assert.Equal(t, "location:A", n.Stream)
+		assert.Equal(t, e1.ID, n.EventID)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for first notification")
+	}
+
+	select {
+	case n := <-notifCh:
+		assert.Equal(t, "location:B", n.Stream)
+		assert.Equal(t, e2.ID, n.EventID)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for second notification")
+	}
+}
+
+func TestMemoryEventStoreSubscribeSessionAddStreamIsIdempotent(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+	defer func() { _ = sub.Close() }()
+
+	require.NoError(t, sub.AddStream(ctx, "location:A"))
+	require.NoError(t, sub.AddStream(ctx, "location:A")) // idempotent
+
+	e := Event{
+		ID: NewULID(), Stream: "location:A", Type: EventTypeSay,
+		Timestamp: time.Now(), Actor: Actor{Kind: ActorCharacter, ID: "c1"},
+		Payload: []byte(`{}`),
+	}
+	require.NoError(t, store.Append(ctx, e))
+
+	// Should receive exactly one notification, not two.
+	notifCh := sub.Notifications()
+	select {
+	case n := <-notifCh:
+		assert.Equal(t, e.ID, n.EventID)
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for notification")
+	}
+
+	select {
+	case <-notifCh:
+		t.Fatal("should not receive duplicate notification from idempotent AddStream")
+	case <-time.After(100 * time.Millisecond):
+		// expected
+	}
+}
+
+func TestMemoryEventStoreSubscribeSessionRemoveStreamStopsDelivery(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+	defer func() { _ = sub.Close() }()
+
+	require.NoError(t, sub.AddStream(ctx, "location:A"))
+	require.NoError(t, sub.RemoveStream(ctx, "location:A"))
+
+	e := Event{
+		ID: NewULID(), Stream: "location:A", Type: EventTypeSay,
+		Timestamp: time.Now(), Actor: Actor{Kind: ActorCharacter, ID: "c1"},
+		Payload: []byte(`{}`),
+	}
+	require.NoError(t, store.Append(ctx, e))
+
+	select {
+	case <-sub.Notifications():
+		t.Fatal("should not receive notification after RemoveStream")
+	case <-time.After(100 * time.Millisecond):
+		// expected
+	}
+}
+
+func TestMemoryEventStoreSubscribeSessionIgnoresUnsubscribedStreams(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+	defer func() { _ = sub.Close() }()
+
+	require.NoError(t, sub.AddStream(ctx, "location:A"))
+
+	e := Event{
+		ID: NewULID(), Stream: "location:B", Type: EventTypeSay,
+		Timestamp: time.Now(), Actor: Actor{Kind: ActorCharacter, ID: "c1"},
+		Payload: []byte(`{}`),
+	}
+	require.NoError(t, store.Append(ctx, e))
+
+	select {
+	case <-sub.Notifications():
+		t.Fatal("should not receive notification for unsubscribed stream")
+	case <-time.After(100 * time.Millisecond):
+		// expected
+	}
+}
+
+func TestMemoryEventStoreSubscribeSessionCloseStopsNotifications(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, sub.AddStream(ctx, "location:A"))
+	require.NoError(t, sub.Close())
+
+	// Notifications channel should be closed or no longer receive.
+	select {
+	case _, ok := <-sub.Notifications():
+		assert.False(t, ok, "notifications channel should be closed after Close")
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for notifications channel to close")
+	}
+}
+
+func TestMemoryEventStoreSubscribeSessionAddStreamOnClosedSubscriptionReturnsError(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+	require.NoError(t, sub.Close())
+
+	err = sub.AddStream(ctx, "location:A")
+	assert.Error(t, err, "AddStream on closed subscription should return error")
+}
+
+func TestMemoryEventStoreSubscribeSessionDoubleCloseIsIdempotent(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, sub.Close())
+	require.NoError(t, sub.Close(), "second Close should not error")
+}
+
+func TestMemoryEventStoreSubscribeSessionNotifyIgnoresClosedSubscription(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	sub, err := store.SubscribeSession(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, sub.AddStream(ctx, "location:A"))
+	require.NoError(t, sub.Close())
+
+	// Append after close should not panic.
+	require.NotPanics(t, func() {
+		_ = store.Append(ctx, Event{
+			ID: NewULID(), Stream: "location:A", Type: EventTypeSay,
+			Timestamp: time.Now(), Actor: Actor{Kind: ActorCharacter, ID: "c1"},
+			Payload: []byte(`{}`),
+		})
+	})
+}
+
 func TestMemoryEventStoreSubscribeClosesChannelOnContextCancel(t *testing.T) {
 	store := NewMemoryEventStore()
 	ctx, cancel := context.WithCancel(context.Background())

@@ -130,7 +130,18 @@ func (lf *locationFollower) switchLocationSubscription(ctx context.Context, newL
 
 	// Subscribe to the new stream BEFORE cancelling the old one.
 	locCtx, locCancel := context.WithCancel(ctx)
-	eventCh, subErrCh, err := lf.eventStore.Subscribe(locCtx, newStreamName)
+	ls, ok := lf.eventStore.(legacySubscriber)
+	if !ok {
+		locCancel()
+		slog.WarnContext(ctx, "location-following: event store does not support legacy Subscribe",
+			"stream", newStreamName)
+		select {
+		case lf.errCh <- oops.Errorf("event store does not support legacy Subscribe"):
+		default:
+		}
+		return
+	}
+	eventCh, subErrCh, err := ls.Subscribe(locCtx, newStreamName)
 	if err != nil {
 		locCancel()
 		slog.WarnContext(ctx, "location-following: subscribe failed",

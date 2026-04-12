@@ -245,6 +245,89 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 	assert.Equal(t, "Alice", payload.Present[0].Name)
 }
 
+func TestSwitchLocationSubscriptionSucceedsWithLegacyStore(t *testing.T) {
+	charID := ulid.Make()
+	oldLocID := ulid.Make()
+	newLocID := ulid.Make()
+
+	store := core.NewMemoryEventStore()
+	notifyCh := make(chan streamNotification, 10)
+	errCh := make(chan error, 1)
+
+	lf := &locationFollower{
+		characterID:   charID,
+		currentLocID:  oldLocID,
+		eventStore:    store,
+		locStreamName: world.LocationStream(oldLocID),
+		notifyCh:      notifyCh,
+		errCh:         errCh,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	lf.switchLocationSubscription(ctx, newLocID)
+
+	assert.Equal(t, world.LocationStream(newLocID), lf.locStreamName)
+	assert.NotNil(t, lf.locCancel)
+
+	// Verify no error was sent.
+	select {
+	case err := <-errCh:
+		t.Fatalf("unexpected error: %v", err)
+	default:
+	}
+}
+
+// nonLegacyStore implements EventStore but NOT legacySubscriber (no Subscribe method).
+type nonLegacyStore struct {
+	core.EventStore
+}
+
+func TestSwitchLocationSubscriptionReturnsNilWithNonLegacyStore(t *testing.T) {
+	charID := ulid.Make()
+	locID := ulid.Make()
+	newLocID := ulid.Make()
+
+	notifyCh := make(chan streamNotification, 10)
+	errCh := make(chan error, 1)
+
+	lf := &locationFollower{
+		characterID:   charID,
+		currentLocID:  locID,
+		eventStore:    &nonLegacyStore{},
+		locStreamName: world.LocationStream(locID),
+		notifyCh:      notifyCh,
+		errCh:         errCh,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	lf.switchLocationSubscription(ctx, newLocID)
+
+	// Should send error since the store doesn't support legacy Subscribe.
+	select {
+	case err := <-errCh:
+		assert.Contains(t, err.Error(), "does not support legacy Subscribe")
+	default:
+		t.Fatal("expected error for non-legacy store")
+	}
+}
+
+func TestSwitchLocationSubscriptionIsNoOpWhenEventStoreIsNil(t *testing.T) {
+	lf := &locationFollower{
+		characterID:  ulid.Make(),
+		currentLocID: ulid.Make(),
+		eventStore:   nil,
+		notifyCh:     make(chan streamNotification, 1),
+	}
+
+	require.NotPanics(t, func() {
+		lf.switchLocationSubscription(context.Background(), ulid.Make())
+	})
+}
+
 func TestConvertExits_GRPCPackage(t *testing.T) {
 	exits := []*world.Exit{
 		{Name: "north", Locked: false},

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -57,6 +58,14 @@ func (s *recordingEventStore) LastEventID(_ context.Context, stream string) (uli
 
 func (s *recordingEventStore) Subscribe(context.Context, string) (<-chan ulid.ULID, <-chan error, error) {
 	return nil, nil, nil
+}
+
+func (s *recordingEventStore) ReplayTail(context.Context, string, int, time.Time) ([]core.Event, error) {
+	return nil, nil
+}
+
+func (s *recordingEventStore) SubscribeSession(context.Context) (core.Subscription, error) {
+	return nil, nil
 }
 
 func TestPluginEventEmitterStampsHostOwnedFields(t *testing.T) {
@@ -360,4 +369,12 @@ func (s *failingEventStore) LastEventID(context.Context, string) (ulid.ULID, err
 
 func (s *failingEventStore) Subscribe(context.Context, string) (<-chan ulid.ULID, <-chan error, error) {
 	return nil, nil, nil
+}
+
+func (s *failingEventStore) ReplayTail(context.Context, string, int, time.Time) ([]core.Event, error) {
+	return nil, nil
+}
+
+func (s *failingEventStore) SubscribeSession(context.Context) (core.Subscription, error) {
+	return nil, nil
 }

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/prometheus/client_golang/prometheus"
@@ -90,6 +91,14 @@ func (s *stubEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, er
 
 func (s *stubEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
 	return nil, nil, nil
+}
+
+func (s *stubEventStore) ReplayTail(context.Context, string, int, time.Time) ([]core.Event, error) {
+	return nil, nil
+}
+
+func (s *stubEventStore) SubscribeSession(context.Context) (core.Subscription, error) {
+	return nil, nil
 }
 
 func TestDispatcherDispatch(t *testing.T) {
@@ -2149,6 +2158,14 @@ func (s *appendCountingEventStore) LastEventID(_ context.Context, _ string) (uli
 
 func (s *appendCountingEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
 	return nil, nil, nil
+}
+
+func (s *appendCountingEventStore) ReplayTail(context.Context, string, int, time.Time) ([]core.Event, error) {
+	return nil, nil
+}
+
+func (s *appendCountingEventStore) SubscribeSession(context.Context) (core.Subscription, error) {
+	return nil, nil
 }
 
 func TestDispatcherAttachesAuditContextToDispatchContext(t *testing.T) {

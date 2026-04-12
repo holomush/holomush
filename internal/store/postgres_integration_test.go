@@ -7,6 +7,8 @@ package store_test
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -290,6 +292,163 @@ var _ = Describe("PostgresEventStore", func() {
 		})
 	})
 
+	Describe("ReplayTail", func() {
+		const stream = "location:replay-tail-test"
+
+		It("returns last N events in ascending order", func() {
+			ctx := context.Background()
+			baseTime := time.Date(2026, 4, 12, 0, 0, 0, 0, time.UTC)
+
+			ids := make([]ulid.ULID, 10)
+			for i := range 10 {
+				ids[i] = core.NewULID()
+				event := core.Event{
+					ID:        ids[i],
+					Stream:    stream,
+					Type:      core.EventTypeSay,
+					Timestamp: baseTime.Add(time.Duration(i) * time.Minute),
+					Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
+					Payload:   []byte(`{}`),
+				}
+				err := eventStore.Append(ctx, event)
+				Expect(err).NotTo(HaveOccurred())
+				time.Sleep(time.Millisecond)
+			}
+
+			events, err := eventStore.ReplayTail(ctx, stream, 3, time.Time{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(events).To(HaveLen(3))
+			Expect(events[0].ID).To(Equal(ids[7]))
+			Expect(events[1].ID).To(Equal(ids[8]))
+			Expect(events[2].ID).To(Equal(ids[9]))
+		})
+
+		It("filters events before notBefore", func() {
+			ctx := context.Background()
+			streamNB := "location:replay-tail-nb"
+			baseTime := time.Date(2026, 4, 12, 12, 0, 0, 0, time.UTC)
+
+			ids := make([]ulid.ULID, 5)
+			for i := range 5 {
+				ids[i] = core.NewULID()
+				event := core.Event{
+					ID:        ids[i],
+					Stream:    streamNB,
+					Type:      core.EventTypeSay,
+					Timestamp: baseTime.Add(time.Duration(i) * time.Minute),
+					Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-123"},
+					Payload:   []byte(`{}`),
+				}
+				err := eventStore.Append(ctx, event)
+				Expect(err).NotTo(HaveOccurred())
+				time.Sleep(time.Millisecond)
+			}
+
+			// notBefore = baseTime+3m excludes first 3 events.
+			events, err := eventStore.ReplayTail(ctx, streamNB, 10, baseTime.Add(3*time.Minute))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(events).To(HaveLen(2))
+			Expect(events[0].ID).To(Equal(ids[3]))
+			Expect(events[1].ID).To(Equal(ids[4]))
+		})
+
+		It("returns empty for nonexistent stream", func() {
+			ctx := context.Background()
+			events, err := eventStore.ReplayTail(ctx, "location:nonexistent-tail", 10, time.Time{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(events).To(BeEmpty())
+		})
+	})
+
+	Describe("SubscribeSession", func() {
+		It("delivers notifications for added streams", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			sub, err := eventStore.SubscribeSession(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = sub.Close() }()
+
+			Expect(sub.AddStream(ctx, "location:ss-a")).To(Succeed())
+			Expect(sub.AddStream(ctx, "location:ss-b")).To(Succeed())
+
+			e1 := core.Event{
+				ID: core.NewULID(), Stream: "location:ss-a",
+				Type: core.EventTypeSay, Timestamp: time.Now(),
+				Actor: core.Actor{Kind: core.ActorCharacter, ID: "c1"},
+				Payload: []byte(`{}`),
+			}
+			time.Sleep(time.Millisecond)
+			e2 := core.Event{
+				ID: core.NewULID(), Stream: "location:ss-b",
+				Type: core.EventTypeSay, Timestamp: time.Now(),
+				Actor: core.Actor{Kind: core.ActorCharacter, ID: "c2"},
+				Payload: []byte(`{}`),
+			}
+
+			Expect(eventStore.Append(ctx, e1)).To(Succeed())
+			Expect(eventStore.Append(ctx, e2)).To(Succeed())
+
+			notifCh := sub.Notifications()
+			Eventually(notifCh, 2*time.Second).Should(Receive(Equal(
+				core.StreamNotification{Stream: "location:ss-a", EventID: e1.ID},
+			)))
+			Eventually(notifCh, 2*time.Second).Should(Receive(Equal(
+				core.StreamNotification{Stream: "location:ss-b", EventID: e2.ID},
+			)))
+		})
+
+		It("does not deliver for removed streams", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			sub, err := eventStore.SubscribeSession(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = sub.Close() }()
+
+			Expect(sub.AddStream(ctx, "location:ss-remove")).To(Succeed())
+			Expect(sub.RemoveStream(ctx, "location:ss-remove")).To(Succeed())
+
+			e := core.Event{
+				ID: core.NewULID(), Stream: "location:ss-remove",
+				Type: core.EventTypeSay, Timestamp: time.Now(),
+				Actor: core.Actor{Kind: core.ActorCharacter, ID: "c1"},
+				Payload: []byte(`{}`),
+			}
+			Expect(eventStore.Append(ctx, e)).To(Succeed())
+
+			Consistently(sub.Notifications(), 500*time.Millisecond).ShouldNot(Receive())
+		})
+
+		It("isolates sessions from each other", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			sub1, err := eventStore.SubscribeSession(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = sub1.Close() }()
+
+			sub2, err := eventStore.SubscribeSession(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = sub2.Close() }()
+
+			Expect(sub1.AddStream(ctx, "location:iso-a")).To(Succeed())
+			Expect(sub2.AddStream(ctx, "location:iso-b")).To(Succeed())
+
+			e := core.Event{
+				ID: core.NewULID(), Stream: "location:iso-a",
+				Type: core.EventTypeSay, Timestamp: time.Now(),
+				Actor: core.Actor{Kind: core.ActorCharacter, ID: "c1"},
+				Payload: []byte(`{}`),
+			}
+			Expect(eventStore.Append(ctx, e)).To(Succeed())
+
+			// sub1 should receive; sub2 should not.
+			Eventually(sub1.Notifications(), 2*time.Second).Should(Receive())
+			Consistently(sub2.Notifications(), 500*time.Millisecond).ShouldNot(Receive())
+		})
+	})
+
 	Describe("Subscribe", func() {
 		const stream = "location:subscribe-test"
 
@@ -372,6 +531,118 @@ var _ = Describe("PostgresEventStore", func() {
 
 			// Should not receive event from other stream
 			Consistently(eventCh, 500*time.Millisecond).ShouldNot(Receive())
+		})
+	})
+
+	Describe("Variant A Go/No-Go: Strict ULID-Ascending Cross-Stream Order (I-14)", func() {
+		It("delivers events in strict ULID-ascending order to multiple subscribers", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			const (
+				numStreams    = 4
+				numEvents    = 1000
+				numGoroutines = 10
+				eventsPerGo  = numEvents / numGoroutines
+			)
+
+			streams := make([]string, numStreams)
+			for i := range numStreams {
+				streams[i] = fmt.Sprintf("location:ordering-%d", i)
+			}
+
+			// Wrap the store with EventWriter to serialize appends.
+			// EventWriter stamps ULID + timestamp in its single goroutine,
+			// guaranteeing ULID generation order = commit order.
+			writer := core.NewEventWriter(eventStore)
+			defer writer.Close()
+
+			// Create 2 session subscriptions, both listening on all 4 streams.
+			sub1, err := eventStore.SubscribeSession(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = sub1.Close() }()
+
+			sub2, err := eventStore.SubscribeSession(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = sub2.Close() }()
+
+			for _, s := range streams {
+				Expect(sub1.AddStream(ctx, s)).To(Succeed())
+				Expect(sub2.AddStream(ctx, s)).To(Succeed())
+			}
+
+			// Launch 10 goroutines, each appending 100 events spread
+			// across the 4 streams via EventWriter. The writer stamps
+			// IDs serially, so ULID order = commit order.
+			var wg sync.WaitGroup
+			for g := range numGoroutines {
+				wg.Add(1)
+				go func(goroutineIdx int) {
+					defer GinkgoRecover()
+					defer wg.Done()
+					for i := range eventsPerGo {
+						streamIdx := (goroutineIdx*eventsPerGo + i) % numStreams
+						event := core.Event{
+							// ID left zero — EventWriter stamps it.
+							Stream:  streams[streamIdx],
+							Type:    core.EventTypeSay,
+							Actor:   core.Actor{Kind: core.ActorCharacter, ID: fmt.Sprintf("c%d", goroutineIdx)},
+							Payload: []byte(fmt.Sprintf(`{"g":%d,"i":%d}`, goroutineIdx, i)),
+						}
+						err := writer.Write(ctx, event)
+						Expect(err).NotTo(HaveOccurred())
+					}
+				}(g)
+			}
+
+			// Collect notifications from both subscribers.
+			collected1 := make([]core.StreamNotification, 0, numEvents)
+			collected2 := make([]core.StreamNotification, 0, numEvents)
+
+			collect := func(sub core.Subscription, out *[]core.StreamNotification) {
+				for len(*out) < numEvents {
+					select {
+					case n, ok := <-sub.Notifications():
+						if !ok {
+							return
+						}
+						*out = append(*out, n)
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+
+			var collectWg sync.WaitGroup
+			collectWg.Add(2)
+			go func() { defer collectWg.Done(); collect(sub1, &collected1) }()
+			go func() { defer collectWg.Done(); collect(sub2, &collected2) }()
+
+			wg.Wait()        // Wait for all appends to finish.
+			collectWg.Wait() // Wait for both collectors to receive all events.
+
+			// Both subscribers must have received all events.
+			Expect(collected1).To(HaveLen(numEvents),
+				"subscriber 1 did not receive all events")
+			Expect(collected2).To(HaveLen(numEvents),
+				"subscriber 2 did not receive all events")
+
+			// Both subscribers must have received events in identical order
+			// (same sequence of StreamNotification, element by element).
+			Expect(collected1).To(Equal(collected2),
+				"I-14 VIOLATION: subscribers received events in different order")
+
+			// RESTORED: strict ULID-ascending order. With EventWriter
+			// serializing all appends, ULID generation order = commit
+			// order = NOTIFY delivery order. Every event ID must be
+			// strictly greater than the previous one.
+			for i := 1; i < len(collected1); i++ {
+				Expect(collected1[i].EventID.Compare(collected1[i-1].EventID)).To(
+					BeNumerically(">", 0),
+					"I-14 ULID-ascending violation at index %d: %s must be > %s",
+					i, collected1[i].EventID, collected1[i-1].EventID,
+				)
+			}
 		})
 	})
 })

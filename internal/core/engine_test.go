@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -126,8 +127,12 @@ func (f *failingEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID,
 	return ulid.ULID{}, errStoreFailure
 }
 
-func (f *failingEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
-	return nil, nil, errStoreFailure
+func (f *failingEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time) ([]Event, error) {
+	return nil, errStoreFailure
+}
+
+func (f *failingEventStore) SubscribeSession(_ context.Context) (Subscription, error) {
+	return nil, errStoreFailure
 }
 
 var errStoreFailure = &storeError{msg: "store failure"}
