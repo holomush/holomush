@@ -8,6 +8,7 @@ package core
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 )
@@ -85,6 +86,52 @@ func (s *MemoryEventStore) LastEventID(_ context.Context, stream string) (ulid.U
 		return ulid.ULID{}, ErrStreamEmpty
 	}
 	return events[len(events)-1].ID, nil
+}
+
+// maxReplayTailCount is the server-side cap for ReplayTail count parameter.
+const maxReplayTailCount = 500
+
+// ReplayTail returns the most recent count events on stream, ascending by ID.
+// Events with timestamps before notBefore are excluded. Count is capped at 500.
+func (s *MemoryEventStore) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time) ([]Event, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if count > maxReplayTailCount {
+		count = maxReplayTailCount
+	}
+	if count <= 0 {
+		return nil, nil
+	}
+
+	events := s.streams[stream]
+	if len(events) == 0 {
+		return nil, nil
+	}
+
+	// Filter by notBefore if set, scanning from the end.
+	var eligible []Event
+	if !notBefore.IsZero() {
+		for i := len(events) - 1; i >= 0 && len(eligible) < count; i-- {
+			if !events[i].Timestamp.Before(notBefore) {
+				eligible = append(eligible, events[i])
+			}
+		}
+	} else {
+		start := len(events) - count
+		if start < 0 {
+			start = 0
+		}
+		eligible = make([]Event, len(events)-start)
+		copy(eligible, events[start:])
+		return eligible, nil
+	}
+
+	// Reverse eligible to get ascending order.
+	for i, j := 0, len(eligible)-1; i < j; i, j = i+1, j-1 {
+		eligible[i], eligible[j] = eligible[j], eligible[i]
+	}
+	return eligible, nil
 }
 
 // Subscribe returns channels that receive event IDs when Append is called on the stream.
