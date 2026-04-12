@@ -134,9 +134,11 @@ Pass `knownActions` into each `loadPlugin` call.
 ### `internal/command/types_test.go`
 
 **Updates:**
+
 - Remove or invert tests that assert `Capability.Validate()` rejects unknown action strings. A non-empty unknown action now passes `Validate()`.
 
 **Additions:**
+
 - `TestCoreActionsContainsExpectedDefaults` — invariant: returned map always contains `read`, `write`, `emit`, `enter`, `use`, `delete`, `execute`, `admin`.
 - `TestCoreActionsReturnsCopy` — mutating the returned map does not affect a second call.
 - `TestCapability_ValidateActionWithKnownAction` — action present in provided map returns nil.
@@ -154,6 +156,7 @@ Pass `knownActions` into each `loadPlugin` call.
 ### `internal/plugin/manager_test.go`
 
 **`CollectActions` unit tests:**
+
 - `TestCollectActionsIncludesCoreActions` — `CollectActions(nil)` returns all core actions.
 - `TestCollectActionsMergesExplicitManifestActions` — plugin declaring `actions: [join]` causes `join` in result.
 - `TestCollectActionsDeduplicatesAcrossPlugins` — two plugins declaring the same action produce one entry.
@@ -161,6 +164,7 @@ Pass `knownActions` into each `loadPlugin` call.
 - `TestCollectActionsIgnoresCapabilityActionsNotInActionsField` — action appearing only in capabilities (not in `actions` field) does not appear in result.
 
 **Load integration tests:**
+
 - Plugin with `actions: [join]` and `action: join` in a capability loads successfully.
 - Plugin with `action: join` in a capability but no `actions: [join]` in any discovered plugin fails with INVALID_CAPABILITY.
 - Plugin using an action declared by a different plugin loads with a warning logged.

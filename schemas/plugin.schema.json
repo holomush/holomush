@@ -230,6 +230,12 @@
       },
       "type": "array"
     },
+    "actions": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
     "trust": {
       "properties": {
         "all_principals": {

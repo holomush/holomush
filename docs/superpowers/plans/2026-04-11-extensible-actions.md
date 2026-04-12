@@ -29,6 +29,7 @@
 The test `TestCapability_ValidateInvalid` has an `"unknown action"` case that must be removed. `TestNewCommandEntry_InvalidCapabilityReturnsError` has the same. A new positive test asserts that unknown actions pass `Validate()`. Only then do we remove the `!validActions` check.
 
 **Files:**
+
 - Modify: `internal/command/types_test.go`
 - Modify: `internal/command/types.go:150-157`
 
@@ -142,6 +143,7 @@ The test `TestCapability_ValidateInvalid` has an `"unknown action"` case that mu
 ## Task 2: Add `CoreActions()` and `ValidateAction()`
 
 **Files:**
+
 - Modify: `internal/command/types_test.go`
 - Modify: `internal/command/types.go`
 
@@ -241,6 +243,7 @@ The test `TestCapability_ValidateInvalid` has an `"unknown action"` case that mu
 ## Task 3: Add `actions` field to Manifest
 
 **Files:**
+
 - Modify: `internal/plugin/manifest.go`
 - Modify: `internal/plugin/manifest_test.go`
 
@@ -379,6 +382,7 @@ The test `TestCapability_ValidateInvalid` has an `"unknown action"` case that mu
 ## Task 4: Add `CollectActions()` to the plugin manager
 
 **Files:**
+
 - Modify: `internal/plugin/manager.go`
 - Modify: `internal/plugin/manager_test.go`
 
@@ -495,6 +499,7 @@ The test `TestCapability_ValidateInvalid` has an `"unknown action"` case that mu
 This is the integration point. `loadPlugin` gains a `knownActions` parameter. `LoadAll` Phase 2 collects actions alongside resource types. `loadPlugin` validates each capability action and warns when borrowing from another plugin.
 
 **Files:**
+
 - Modify: `internal/plugin/manager.go`
 - Modify: `internal/plugin/manager_test.go`
 
@@ -728,6 +733,7 @@ This is the integration point. `loadPlugin` gains a `knownActions` parameter. `L
 A new Ginkgo test file in `test/integration/plugin/` exercises the full LoadAll pipeline with real plugin manifests on disk.
 
 **Files:**
+
 - Create: `test/integration/plugin/extensible_actions_test.go`
 
 - [ ] **Step 1: Create `test/integration/plugin/extensible_actions_test.go`**
