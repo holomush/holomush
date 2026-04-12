@@ -26,6 +26,7 @@ var ErrSystemInfoNotFound = errors.New("system info key not found")
 // poolIface defines the pgxpool methods used by PostgresEventStore.
 // This interface enables testing with mocks.
 type poolIface interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row

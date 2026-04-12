@@ -438,3 +438,7 @@ func (m *mockSessionStore) UpdateLastPaged(_ context.Context, id string, _ strin
 func (m *mockSessionStore) UpdateLastWhispered(_ context.Context, id string, _ string) error {
 	return fmt.Errorf("mockSessionStore.UpdateLastWhispered(%q): not implemented", id)
 }
+
+func (m *mockSessionStore) UpdateFocusMemberships(_ context.Context, id string, _ session.FocusMutator) error {
+	return fmt.Errorf("mockSessionStore.UpdateFocusMemberships(%q): not implemented", id)
+}

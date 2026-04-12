@@ -38,6 +38,80 @@ func (s Status) String() string {
 	return string(s)
 }
 
+// FocusKind enumerates the types of focused contexts a character can
+// participate in. The substrate dispatches replay policy by Kind via the
+// FocusKindPolicy interface (see internal/grpc/focus). Adding a new kind
+// requires: (a) a new constant here, (b) a new FocusKindPolicy
+// implementation registered in the coordinator's constructor, and (c)
+// corresponding plugin proto enum value.
+type FocusKind string
+
+const (
+	// FocusKindScene marks a focus membership as a scene participation.
+	// Streams derived by ScenePolicy: "scene:<id>:ic" and "scene:<id>:ooc".
+	FocusKindScene FocusKind = "scene"
+)
+
+// FocusKey uniquely identifies a focus membership within a session. Two
+// memberships with the same FocusKey are forbidden by invariant I-1
+// (Focus Membership Uniqueness).
+type FocusKey struct {
+	Kind     FocusKind
+	TargetID ulid.ULID
+}
+
+// FocusMembership records that a character is actively participating in a
+// focused context. A session's FocusMemberships is mutated only through
+// FocusCoordinator (invariant I-6). Each membership implies one or more
+// stream subscriptions, derived by the kind's FocusKindPolicy.StreamsFor.
+type FocusMembership struct {
+	Kind     FocusKind
+	TargetID ulid.ULID
+	JoinedAt time.Time
+}
+
+// focusMutatorSentinel is an unexported type that prevents construction of
+// FocusMutator from outside the internal/grpc/focus package. This enforces
+// invariant I-6 (Server-Authoritative Mutation) at compile time.
+type focusMutatorSentinel struct{}
+
+// FocusMutator is the mutation callback type for Store.UpdateFocusMemberships.
+// Its unexported focusMutatorSentinel field makes construction impossible
+// outside the internal/grpc/focus package, enforcing invariant I-6 at
+// compile time. Any code attempting to construct a FocusMutator from
+// outside grpc/focus fails to compile.
+type FocusMutator struct {
+	_ focusMutatorSentinel // unexported type blocks external construction
+	Mutate func(
+		current []FocusMembership,
+		presenting *FocusKey,
+	) (
+		next []FocusMembership,
+		nextPresenting *FocusKey,
+		err error,
+	)
+}
+
+// NewFocusMutator creates a FocusMutator. This function is callable from
+// any package, but the result can only be meaningfully constructed where
+// this function is visible. The focusMutatorSentinel field is embedded at
+// zero value and does not need explicit initialization.
+//
+// NOTE: This constructor exists in the session package so that grpc/focus
+// can call it. Code outside grpc/focus SHOULD NOT call this — the
+// coordinator is the only sanctioned consumer. Enforcement: lint rule +
+// compile-fail documentation test.
+func NewFocusMutator(fn func(
+	current []FocusMembership,
+	presenting *FocusKey,
+) (
+	next []FocusMembership,
+	nextPresenting *FocusKey,
+	err error,
+)) FocusMutator {
+	return FocusMutator{Mutate: fn}
+}
+
 // Info contains all state for a persistent game session.
 type Info struct {
 	ID             string
@@ -58,6 +132,19 @@ type Info struct {
 	UpdatedAt      time.Time
 	LastPaged      string
 	LastWhispered  string
+
+	// FocusMemberships is the set of focused contexts this session is
+	// actively participating in. Mutated only via FocusCoordinator
+	// (invariant I-6). Survives disconnect; used by reconnect-resume
+	// to restore the session's exact participation state.
+	FocusMemberships []FocusMembership
+
+	// PresentingFocus, if non-nil, points to the FocusMembership whose
+	// stream should be foregrounded on reconnect. Used primarily by
+	// telnet's single-pane reconnect UX. Web clients may update this
+	// lazily or skip updating. Must either be nil or reference an
+	// existing entry in FocusMemberships (invariant I-2).
+	PresentingFocus *FocusKey
 }
 
 // IsActive returns true if the session is in active status.
@@ -208,4 +295,16 @@ type Store interface {
 
 	// UpdateLastWhispered records the name of the character most recently whispered to.
 	UpdateLastWhispered(ctx context.Context, sessionID string, name string) error
+
+	// UpdateFocusMemberships atomically applies the mutator callback under
+	// a single transaction. The mutator receives the current memberships
+	// and presenting focus, and returns the desired state. Monotonic cursor
+	// invariants (I-5) are the caller's responsibility — this method does
+	// NOT mutate cursors.
+	//
+	// Errors:
+	//   SESSION_NOT_FOUND   — sessionID does not match.
+	//   SESSION_EXPIRED     — session status is "expired".
+	//   FOCUS_MUTATOR_ERROR — mutator returned an error; underlying wrapped.
+	UpdateFocusMemberships(ctx context.Context, sessionID string, m FocusMutator) error
 }
