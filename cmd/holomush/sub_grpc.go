@@ -25,6 +25,8 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	holoFocus "github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/grpc/focus/scenepolicy"
+	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/naming"
 	plugins "github.com/holomush/holomush/internal/plugin"
@@ -232,9 +234,16 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	}
 
 	// 8a. Create focus.Coordinator.
+	gameSettings := settings.NewGameSettings(&settings.SystemInfoAdapter{
+		Store:       rawEventStore,
+		NotFoundErr: store.ErrSystemInfoNotFound,
+	})
 	focusCoordOpts := []holoFocus.CoordinatorOption{
 		holoFocus.WithSessionStore(sessionStore),
 		holoFocus.WithEventStore(eventStore),
+		holoFocus.WithKindPolicy(scenepolicy.New()),
+		holoFocus.WithGameSettings(gameSettings),
+		holoFocus.WithPlayerPreferences(holoFocus.NewPlayerPrefsAdapter(authPlayerRepo)),
 	}
 	if s.cfg.StreamRegistry != nil {
 		focusCoordOpts = append(focusCoordOpts,
