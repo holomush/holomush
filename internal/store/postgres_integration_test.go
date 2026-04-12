@@ -383,6 +383,95 @@ var _ = Describe("PostgresEventStore", func() {
 		})
 	})
 
+	Describe("SubscribeSession", func() {
+		It("delivers notifications for added streams", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			sub, err := eventStore.SubscribeSession(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = sub.Close() }()
+
+			Expect(sub.AddStream(ctx, "location:ss-a")).To(Succeed())
+			Expect(sub.AddStream(ctx, "location:ss-b")).To(Succeed())
+
+			e1 := core.Event{
+				ID: core.NewULID(), Stream: "location:ss-a",
+				Type: core.EventTypeSay, Timestamp: time.Now(),
+				Actor: core.Actor{Kind: core.ActorCharacter, ID: "c1"},
+				Payload: []byte(`{}`),
+			}
+			time.Sleep(time.Millisecond)
+			e2 := core.Event{
+				ID: core.NewULID(), Stream: "location:ss-b",
+				Type: core.EventTypeSay, Timestamp: time.Now(),
+				Actor: core.Actor{Kind: core.ActorCharacter, ID: "c2"},
+				Payload: []byte(`{}`),
+			}
+
+			Expect(eventStore.Append(ctx, e1)).To(Succeed())
+			Expect(eventStore.Append(ctx, e2)).To(Succeed())
+
+			notifCh := sub.Notifications()
+			Eventually(notifCh, 2*time.Second).Should(Receive(Equal(
+				core.StreamNotification{Stream: "location:ss-a", EventID: e1.ID},
+			)))
+			Eventually(notifCh, 2*time.Second).Should(Receive(Equal(
+				core.StreamNotification{Stream: "location:ss-b", EventID: e2.ID},
+			)))
+		})
+
+		It("does not deliver for removed streams", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			sub, err := eventStore.SubscribeSession(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = sub.Close() }()
+
+			Expect(sub.AddStream(ctx, "location:ss-remove")).To(Succeed())
+			Expect(sub.RemoveStream(ctx, "location:ss-remove")).To(Succeed())
+
+			e := core.Event{
+				ID: core.NewULID(), Stream: "location:ss-remove",
+				Type: core.EventTypeSay, Timestamp: time.Now(),
+				Actor: core.Actor{Kind: core.ActorCharacter, ID: "c1"},
+				Payload: []byte(`{}`),
+			}
+			Expect(eventStore.Append(ctx, e)).To(Succeed())
+
+			Consistently(sub.Notifications(), 500*time.Millisecond).ShouldNot(Receive())
+		})
+
+		It("isolates sessions from each other", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			sub1, err := eventStore.SubscribeSession(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = sub1.Close() }()
+
+			sub2, err := eventStore.SubscribeSession(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			defer func() { _ = sub2.Close() }()
+
+			Expect(sub1.AddStream(ctx, "location:iso-a")).To(Succeed())
+			Expect(sub2.AddStream(ctx, "location:iso-b")).To(Succeed())
+
+			e := core.Event{
+				ID: core.NewULID(), Stream: "location:iso-a",
+				Type: core.EventTypeSay, Timestamp: time.Now(),
+				Actor: core.Actor{Kind: core.ActorCharacter, ID: "c1"},
+				Payload: []byte(`{}`),
+			}
+			Expect(eventStore.Append(ctx, e)).To(Succeed())
+
+			// sub1 should receive; sub2 should not.
+			Eventually(sub1.Notifications(), 2*time.Second).Should(Receive())
+			Consistently(sub2.Notifications(), 500*time.Millisecond).ShouldNot(Receive())
+		})
+	})
+
 	Describe("Subscribe", func() {
 		const stream = "location:subscribe-test"
 
