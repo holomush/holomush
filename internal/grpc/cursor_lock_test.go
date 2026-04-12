@@ -343,12 +343,7 @@ func TestSendAndCommitEventFiresHookBetweenSendAndCommit(t *testing.T) {
 	// Send and BEFORE UpdateCursors, under the per-session lock.
 	sessionID := core.NewULID().String()
 	streamName := "location:test"
-	ev := core.Event{
-		ID:      core.NewULID(),
-		Stream:  streamName,
-		Type:    core.EventTypeSay,
-		Payload: []byte(`{"message":"hi"}`),
-	}
+	ev := core.NewEvent(streamName, core.EventTypeSay, core.Actor{}, []byte(`{"message":"hi"}`))
 
 	// The MemStore requires a pre-existing session for UpdateCursors
 	// to take effect. Populate one with an empty cursor map.
@@ -419,12 +414,7 @@ func TestSendAndCommitEventPropagatesSendErrorAndReleasesLock(t *testing.T) {
 	//   (3) release the per-session lock (no leaked refcount)
 	sessionID := core.NewULID().String()
 	streamName := "location:test"
-	ev := core.Event{
-		ID:      core.NewULID(),
-		Stream:  streamName,
-		Type:    core.EventTypeSay,
-		Payload: []byte(`{"message":"hi"}`),
-	}
+	ev := core.NewEvent(streamName, core.EventTypeSay, core.Actor{}, []byte(`{"message":"hi"}`))
 
 	store := newTestSessionStore(t, map[string]*session.Info{
 		sessionID: {
@@ -471,12 +461,7 @@ func TestSendAndCommitEventPropagatesSendErrorAndReleasesLock(t *testing.T) {
 func TestSendAndCommitEventSkipsHookWhenNil(t *testing.T) {
 	sessionID := core.NewULID().String()
 	streamName := "location:test"
-	ev := core.Event{
-		ID:      core.NewULID(),
-		Stream:  streamName,
-		Type:    core.EventTypeSay,
-		Payload: []byte(`{"message":"hi"}`),
-	}
+	ev := core.NewEvent(streamName, core.EventTypeSay, core.Actor{}, []byte(`{"message":"hi"}`))
 
 	store := newTestSessionStore(t, map[string]*session.Info{
 		sessionID: {
