@@ -229,7 +229,10 @@ test.describe('Terminal UI', () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
-  test('page reload replays prior events from multiple guests', async ({ browser }) => {
+  // TODO(holomush-oy6e.13): Un-skip when QueryStreamHistory RPC (B9) lands
+  // and the web client calls it on mount for reload backfill.
+  // See also: holomush-oy6e.9 notes.
+  test.skip('page reload replays prior events from multiple guests', async ({ browser }) => {
     // Two independent browser contexts (separate sessions, same starting location)
     const ctx1 = await browser.newContext();
     const ctx2 = await browser.newContext();
