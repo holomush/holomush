@@ -40,17 +40,32 @@ func (c *defaultCoordinator) RestoreFocus(ctx context.Context, sessionID string)
 	// channel, not by RestoreFocus.
 	ambientMode := ReplayModeFromCursor
 
+	// Build the seen set from policy-contributed streams so ambient and
+	// plugin streams are deduplicated against them.
+	seen := make(map[string]bool, len(plan.Streams))
+	for _, sm := range plan.Streams {
+		seen[sm.Stream] = true
+	}
+
 	if !info.CharacterID.IsZero() {
-		plan.Streams = append(plan.Streams, StreamWithMode{
-			Stream: world.CharacterStream(info.CharacterID),
-			Mode:   ambientMode,
-		})
+		charStream := world.CharacterStream(info.CharacterID)
+		if !seen[charStream] {
+			plan.Streams = append(plan.Streams, StreamWithMode{
+				Stream: charStream,
+				Mode:   ambientMode,
+			})
+			seen[charStream] = true
+		}
 	}
 	if !info.LocationID.IsZero() {
-		plan.Streams = append(plan.Streams, StreamWithMode{
-			Stream: world.LocationStream(info.LocationID),
-			Mode:   ambientMode,
-		})
+		locStream := world.LocationStream(info.LocationID)
+		if !seen[locStream] {
+			plan.Streams = append(plan.Streams, StreamWithMode{
+				Stream: locStream,
+				Mode:   ambientMode,
+			})
+			seen[locStream] = true
+		}
 	}
 
 	// Plugin-contributed streams.
@@ -64,10 +79,6 @@ func (c *defaultCoordinator) RestoreFocus(ctx context.Context, sessionID string)
 			PlayerID:    playerID,
 			SessionID:   info.ID,
 		})
-		seen := make(map[string]bool, len(plan.Streams))
-		for _, sm := range plan.Streams {
-			seen[sm.Stream] = true
-		}
 		for _, ps := range pluginStreams {
 			if seen[ps] {
 				continue

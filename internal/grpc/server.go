@@ -677,9 +677,13 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		// is wired (the coordinator handles this internally when
 		// present).
 		if s.streamContributor != nil {
+			playerID := ""
+			if !info.PlayerID.IsZero() {
+				playerID = info.PlayerID.String()
+			}
 			pluginStreams := s.streamContributor.QuerySessionStreams(ctx, plugins.SessionStreamsRequest{
 				CharacterID: info.CharacterID.String(),
-				PlayerID:    info.PlayerID.String(),
+				PlayerID:    playerID,
 				SessionID:   info.ID,
 			})
 			for _, ps := range pluginStreams {

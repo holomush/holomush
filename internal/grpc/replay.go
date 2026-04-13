@@ -111,6 +111,12 @@ func (s *CoreServer) fetchForMode(
 			slog.ErrorContext(ctx, "live-only cursor advance failed",
 				"session_id", info.ID, "stream", sm.Stream, "error", updateErr)
 		}
+		// Also update in-memory cursor so the live loop does not
+		// replay from zero for this stream on the next notification.
+		if info.EventCursors == nil {
+			info.EventCursors = make(map[string]ulid.ULID)
+		}
+		info.EventCursors[sm.Stream] = tailID
 		return nil, nil
 
 	default:
@@ -152,10 +158,14 @@ func (s *CoreServer) applyCtrlUpdate(
 				"session_id", info.ID, "stream", ctrl.stream, "error", fetchErr)
 			return nil
 		}
+		if info.EventCursors == nil {
+			info.EventCursors = make(map[string]ulid.ULID)
+		}
 		for _, ev := range events {
 			if sendErr := s.sendAndCommitEvent(ctx, info, ctrl.stream, ev, stream, lf); sendErr != nil {
 				return sendErr
 			}
+			info.EventCursors[ctrl.stream] = ev.ID
 		}
 	} else {
 		if removeErr := sub.RemoveStream(ctx, ctrl.stream); removeErr != nil {

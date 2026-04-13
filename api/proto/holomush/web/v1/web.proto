@@ -74,7 +74,7 @@ message SendCommandResponse {
 
 message StreamEventsRequest {
   string session_id = 1;
-  // Field 2 (replay_from_cursor) removed — server always replays from cursor.
+  // Field 2 (replay_from_cursor) removed — server chooses replay policy.
   reserved 2;
   reserved "replay_from_cursor";
 }

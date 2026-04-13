@@ -309,6 +309,72 @@ func TestSwitchLocationSubscriptionIsNoOpWhenSubIsNil(t *testing.T) {
 	})
 }
 
+func TestSendSyntheticSendsLocationStateForCurrentLocation(t *testing.T) {
+	locID := ulid.Make()
+	wq := &mockWorldQuerier{
+		location: &world.Location{
+			ID:          locID,
+			Name:        "Library",
+			Description: "A quiet library.",
+		},
+		exits: []*world.Exit{},
+	}
+	lf := &locationFollower{
+		currentLocID: locID,
+		worldQuerier: wq,
+		sessionStore: session.NewMemStore(),
+	}
+
+	stream := &capturingStream{ctx: context.Background()}
+	err := lf.sendSynthetic(context.Background(), stream)
+	require.NoError(t, err)
+
+	require.Len(t, stream.sent, 1)
+	assert.Equal(t, string(core.EventTypeLocationState), stream.sent[0].GetEvent().GetType())
+}
+
+func TestSendSyntheticReturnsNilWhenWorldQuerierNil(t *testing.T) {
+	lf := &locationFollower{
+		currentLocID: ulid.Make(),
+		worldQuerier: nil,
+	}
+
+	stream := &capturingStream{ctx: context.Background()}
+	err := lf.sendSynthetic(context.Background(), stream)
+	assert.NoError(t, err)
+	assert.Empty(t, stream.sent)
+}
+
+func TestSendSyntheticReturnsNilWhenLocationIDZero(t *testing.T) {
+	lf := &locationFollower{
+		worldQuerier: &mockWorldQuerier{},
+	}
+
+	stream := &capturingStream{ctx: context.Background()}
+	err := lf.sendSynthetic(context.Background(), stream)
+	assert.NoError(t, err)
+	assert.Empty(t, stream.sent)
+}
+
+func TestSwitchLocationSubscriptionSkipsRemoveWhenNoOldStream(t *testing.T) {
+	mockSub := newMockSubscription()
+
+	lf := &locationFollower{
+		characterID:   ulid.Make(),
+		currentLocID:  ulid.Make(),
+		locStreamName: "", // no old stream name set
+		sub:           mockSub,
+	}
+
+	newLocID := ulid.Make()
+	lf.switchLocationSubscription(context.Background(), newLocID)
+
+	// Should add new but not remove any (no old stream).
+	require.Len(t, mockSub.addedStreams, 1)
+	assert.Equal(t, world.LocationStream(newLocID), mockSub.addedStreams[0])
+	assert.Empty(t, mockSub.removedStreams)
+}
+
 func TestConvertExits_GRPCPackage(t *testing.T) {
 	exits := []*world.Exit{
 		{Name: "north", Locked: false},

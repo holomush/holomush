@@ -91,6 +91,71 @@ func TestRestoreFocusIncludesPresentingStream(t *testing.T) {
 	assert.Equal(t, streamName, plan.PresentingStream)
 }
 
+// stubContributor implements StreamContributor for dedup tests.
+type stubContributor struct {
+	streams []string
+}
+
+func (c *stubContributor) QuerySessionStreams(_ context.Context, _ StreamContributorRequest) []string {
+	return c.streams
+}
+
+func TestRestoreFocusDeduplicatesAmbientStreamsAgainstPolicyStreams(t *testing.T) {
+	charID := ulid.MustNew(ulid.Now(), nil)
+	locID := ulid.MustNew(ulid.Now(), nil)
+	targetID := ulid.MustNew(ulid.Now(), nil)
+
+	// The policy returns a stream that matches the character ambient stream.
+	charStream := "character:" + charID.String()
+	locStream := "location:" + locID.String()
+
+	policy := &stubPolicy{
+		kind:    session.FocusKindScene,
+		streams: []string{charStream},
+		onRestore: []StreamWithMode{
+			{Stream: charStream, Mode: ReplayModeFromCursor},
+			{Stream: locStream, Mode: ReplayModeFromCursor},
+		},
+	}
+
+	// Plugin also returns the character stream — should be deduplicated.
+	contributor := &stubContributor{streams: []string{charStream, "plugin:extra"}}
+
+	store := session.NewMemStore()
+	ctx := context.Background()
+	info := &session.Info{
+		ID:          "sess-dedup",
+		Status:      session.StatusActive,
+		CharacterID: charID,
+		LocationID:  locID,
+		FocusMemberships: []session.FocusMembership{
+			{Kind: session.FocusKindScene, TargetID: targetID, JoinedAt: time.Now()},
+		},
+	}
+	require.NoError(t, store.Set(ctx, info.ID, info))
+
+	coord, err := NewCoordinator(
+		WithSessionStore(store),
+		WithKindPolicy(policy),
+		WithStreamContributor(contributor),
+	)
+	require.NoError(t, err)
+
+	plan, planErr := coord.RestoreFocus(ctx, info.ID)
+	require.NoError(t, planErr)
+
+	// Count how many times each stream appears.
+	counts := make(map[string]int)
+	for _, sm := range plan.Streams {
+		counts[sm.Stream]++
+	}
+
+	// Character and location streams should appear exactly once (no duplicates).
+	assert.Equal(t, 1, counts[charStream], "character stream should not be duplicated")
+	assert.Equal(t, 1, counts[locStream], "location stream should not be duplicated")
+	assert.Equal(t, 1, counts["plugin:extra"], "plugin stream should appear once")
+}
+
 func TestRestoreFocusRejectsExpiredSession(t *testing.T) {
 	coord, _ := newTestCoordinator(t,
 		map[string]*session.Info{
