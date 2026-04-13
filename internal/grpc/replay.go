@@ -5,6 +5,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sort"
 	"strings"
@@ -54,7 +55,8 @@ func (s *CoreServer) replayRestorePlan(
 		return all[i].event.ID.Compare(all[j].event.ID) < 0
 	})
 
-	for _, te := range all {
+	for i := range all {
+		te := &all[i]
 		if sendErr := s.sendAndCommitEvent(ctx, info, te.stream, te.event, stream, lf); sendErr != nil {
 			return oops.Code("SEND_FAILED").With("session_id", info.ID).Wrap(sendErr)
 		}
@@ -75,10 +77,12 @@ func (s *CoreServer) fetchForMode(
 		if c, ok := info.EventCursors[sm.Stream]; ok {
 			cursor = c
 		}
-		return s.eventStore.Replay(ctx, sm.Stream, cursor, s.maxReplay())
+		events, err := s.eventStore.Replay(ctx, sm.Stream, cursor, s.maxReplay())
+		return events, oops.With("stream", sm.Stream).Wrap(err)
 
 	case focus.ReplayModeBoundedTail:
-		return s.eventStore.ReplayTail(ctx, sm.Stream, sm.TailCount, sm.NotBefore)
+		events, err := s.eventStore.ReplayTail(ctx, sm.Stream, sm.TailCount, sm.NotBefore)
+		return events, oops.With("stream", sm.Stream).Wrap(err)
 
 	case focus.ReplayModeLiveOnly:
 		// Advance cursor to stream tail without replaying. LastEventID returns
@@ -86,10 +90,10 @@ func (s *CoreServer) fetchForMode(
 		// from the right point.
 		tailID, err := s.eventStore.LastEventID(ctx, sm.Stream)
 		if err != nil {
-			if err == core.ErrStreamEmpty {
+			if errors.Is(err, core.ErrStreamEmpty) {
 				return nil, nil
 			}
-			return nil, err
+			return nil, oops.With("stream", sm.Stream).Wrap(err)
 		}
 		commitCtx, cancel := context.WithTimeout(context.Background(), cursorCommitTimeout)
 		defer cancel()

@@ -431,21 +431,6 @@ func isUserFacingError(err error) bool {
 	return msg != "Something went wrong. Try again."
 }
 
-// isValidSessionStreamName validates a plugin-contributed stream name.
-// Stream names must be non-empty, contain at least one colon, have no whitespace,
-// and be at most 256 characters long. Mirrors internal/plugin/manager.isValidStreamName.
-func isValidSessionStreamName(name string) bool {
-	if name == "" || len(name) > 256 {
-		return false
-	}
-	for _, r := range name {
-		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
-			return false
-		}
-	}
-	return strings.Contains(name, ":")
-}
-
 // emitCommandResponse emits a command_response or command_error event to the
 // character's personal stream. Returns an error if the event could not be emitted.
 func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.CharacterRef, text string, isError bool) error {
@@ -681,7 +666,11 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	if subErr != nil {
 		return oops.Code("SUBSCRIBE_FAILED").With("session_id", req.SessionId).Wrap(subErr)
 	}
-	defer sub.Close()
+	defer func() {
+		if closeErr := sub.Close(); closeErr != nil {
+			slog.WarnContext(ctx, "subscription close failed", "session_id", req.SessionId, "error", closeErr)
+		}
+	}()
 
 	// 5. Add all streams from plan.
 	for _, sm := range plan.Streams {

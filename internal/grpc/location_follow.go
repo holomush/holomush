@@ -130,7 +130,10 @@ func (lf *locationFollower) switchLocationSubscription(ctx context.Context, newL
 		return
 	}
 	if lf.locStreamName != "" && lf.locStreamName != newStreamName {
-		_ = lf.sub.RemoveStream(ctx, lf.locStreamName)
+		if removeErr := lf.sub.RemoveStream(ctx, lf.locStreamName); removeErr != nil {
+			slog.WarnContext(ctx, "location-following: remove old stream failed",
+				"stream", lf.locStreamName, "error", removeErr)
+		}
 	}
 	lf.locStreamName = newStreamName
 }
@@ -146,9 +149,9 @@ func (lf *locationFollower) sendSynthetic(
 	}
 	locState, err := lf.buildLocationState(ctx, lf.currentLocID)
 	if err != nil {
-		return nil // best-effort
+		return nil //nolint:nilerr // best-effort: synthetic location_state failure is non-fatal
 	}
-	return stream.Send(locState)
+	return oops.Wrap(stream.Send(locState))
 }
 
 // buildLocationState queries the world service for location data and builds
