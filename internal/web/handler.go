@@ -181,8 +181,7 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 	// (which has direct access to WorldService). The gateway just forwards it.
 
 	sub, err := h.client.Subscribe(ctx, &corev1.SubscribeRequest{
-		SessionId:        sessionID,
-		ReplayFromCursor: req.Msg.GetReplayFromCursor(),
+		SessionId: sessionID,
 	})
 	if err != nil {
 		return connect.NewError(connect.CodeInternal,

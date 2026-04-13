@@ -26,19 +26,15 @@ import (
 const systemSubjectID = "system"
 
 // locationFollower tracks the character's current location and handles
-// location-following when move events are detected. It also manages
-// dynamic eventStore subscriptions so the client receives events
-// from the new location after a move.
+// location-following when move events are detected. It uses the session-wide
+// Subscription to dynamically add/remove location streams on move.
 type locationFollower struct {
 	characterID   ulid.ULID
 	currentLocID  ulid.ULID
 	worldQuerier  WorldQuerier
 	sessionStore  session.Store
-	eventStore    core.EventStore
 	locStreamName string
-	locCancel     context.CancelFunc
-	notifyCh      chan<- streamNotification
-	errCh         chan<- error
+	sub           core.Subscription // session-wide subscription
 }
 
 // handleEvent checks if the event is a character move for the tracked character.
@@ -113,67 +109,46 @@ func (lf *locationFollower) handleEvent(
 	return true
 }
 
-// switchLocationSubscription subscribes to the new location stream, then
-// cancels the old one. Subscribing first ensures the stream always has an
-// active location feed — if the new subscribe fails, the old stays alive
-// and the error terminates the stream via errCh.
+// switchLocationSubscription uses the session-wide Subscription to add the
+// new location stream and remove the old one. Adding first ensures continuous
+// location feed — if AddStream fails the old stream remains active.
 //
 // Catch-up replay for the new location is handled by the caller: the first
 // LISTEN notification triggers replayAndSend with lastSentID[newStream]=zero,
 // replaying from the beginning of the destination stream.
 func (lf *locationFollower) switchLocationSubscription(ctx context.Context, newLocID ulid.ULID) {
-	if lf.eventStore == nil || lf.notifyCh == nil {
+	if lf.sub == nil {
 		return
 	}
 
 	newStreamName := world.LocationStream(newLocID)
 
-	// Subscribe to the new stream BEFORE cancelling the old one.
-	locCtx, locCancel := context.WithCancel(ctx)
-	ls, ok := lf.eventStore.(legacySubscriber)
-	if !ok {
-		locCancel()
-		slog.WarnContext(ctx, "location-following: event store does not support legacy Subscribe",
-			"stream", newStreamName)
-		select {
-		case lf.errCh <- oops.Errorf("event store does not support legacy Subscribe"):
-		default:
-		}
-		return
-	}
-	eventCh, subErrCh, err := ls.Subscribe(locCtx, newStreamName)
-	if err != nil {
-		locCancel()
-		slog.WarnContext(ctx, "location-following: subscribe failed",
+	// Add new before removing old — ensures continuous location feed.
+	if err := lf.sub.AddStream(ctx, newStreamName); err != nil {
+		slog.WarnContext(ctx, "location-following: add stream failed",
 			"stream", newStreamName, "error", err)
-		select {
-		case lf.errCh <- oops.With("stream", newStreamName).Wrap(err):
-		default:
-		}
 		return
 	}
-
-	// New subscription succeeded — tear down the old one.
-	if lf.locCancel != nil {
-		lf.locCancel()
+	if lf.locStreamName != "" && lf.locStreamName != newStreamName {
+		_ = lf.sub.RemoveStream(ctx, lf.locStreamName)
 	}
-	lf.locCancel = locCancel
 	lf.locStreamName = newStreamName
+}
 
-	startNotificationRelay(locCtx, newStreamName, eventCh, lf.notifyCh)
-
-	go func() {
-		select {
-		case e, ok := <-subErrCh:
-			if ok && e != nil {
-				select {
-				case lf.errCh <- e:
-				default:
-				}
-			}
-		case <-locCtx.Done():
-		}
-	}()
+// sendSynthetic sends the initial synthetic location_state for the current
+// location. Best-effort: errors are logged and swallowed.
+func (lf *locationFollower) sendSynthetic(
+	ctx context.Context,
+	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
+) error {
+	if lf.worldQuerier == nil || lf.currentLocID.IsZero() {
+		return nil
+	}
+	locState, err := lf.buildLocationState(ctx, lf.currentLocID)
+	if err != nil {
+		return nil // best-effort
+	}
+	return stream.Send(locState)
 }
 
 // buildLocationState queries the world service for location data and builds

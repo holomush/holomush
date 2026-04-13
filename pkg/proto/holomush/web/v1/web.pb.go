@@ -291,11 +291,10 @@ func (x *SendCommandResponse) GetErrorMessage() string {
 }
 
 type StreamEventsRequest struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	SessionId        string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	ReplayFromCursor bool                   `protobuf:"varint,2,opt,name=replay_from_cursor,json=replayFromCursor,proto3" json:"replay_from_cursor,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StreamEventsRequest) Reset() {
@@ -333,13 +332,6 @@ func (x *StreamEventsRequest) GetSessionId() string {
 		return x.SessionId
 	}
 	return ""
-}
-
-func (x *StreamEventsRequest) GetReplayFromCursor() bool {
-	if x != nil {
-		return x.ReplayFromCursor
-	}
-	return false
 }
 
 type GameEvent struct {
@@ -2067,11 +2059,10 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x13SendCommandResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
 	"\x06output\x18\x02 \x01(\tR\x06output\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"b\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"N\n" +
 	"\x13StreamEventsRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12,\n" +
-	"\x12replay_from_cursor\x18\x02 \x01(\bR\x10replayFromCursor\"\x96\x02\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionIdJ\x04\b\x02\x10\x03R\x12replay_from_cursor\"\x96\x02\n" +
 	"\tGameEvent\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1a\n" +
 	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x16\n" +

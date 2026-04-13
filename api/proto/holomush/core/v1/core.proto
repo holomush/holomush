@@ -82,8 +82,11 @@ message HandleCommandResponse {
 message SubscribeRequest {
   RequestMeta meta = 1;
   string session_id = 2;
-  repeated string streams = 3;
-  bool replay_from_cursor = 4;
+  // Fields 3 (streams) and 4 (replay_from_cursor) removed in focus
+  // substrate clean break. Server determines streams and replay policy
+  // via FocusCoordinator.RestoreFocus.
+  reserved 3, 4;
+  reserved "streams", "replay_from_cursor";
 }
 
 message EventFrame {

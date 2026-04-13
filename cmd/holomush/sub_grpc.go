@@ -244,6 +244,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		holoFocus.WithKindPolicy(scenepolicy.New()),
 		holoFocus.WithGameSettings(gameSettings),
 		holoFocus.WithPlayerPreferences(holoFocus.NewPlayerPrefsAdapter(authPlayerRepo)),
+		holoFocus.WithStreamContributor(&focusStreamContributorAdapter{pm: pluginManager}),
 	}
 	if s.cfg.StreamRegistry != nil {
 		focusCoordOpts = append(focusCoordOpts,
@@ -343,4 +344,19 @@ func (s *grpcSubsystem) Stop(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// focusStreamContributorAdapter bridges plugins.Manager.QuerySessionStreams
+// to focus.StreamContributor by converting the request type.
+type focusStreamContributorAdapter struct {
+	pm *plugins.Manager
+}
+
+// QuerySessionStreams implements focus.StreamContributor.
+func (a *focusStreamContributorAdapter) QuerySessionStreams(ctx context.Context, req holoFocus.StreamContributorRequest) []string {
+	return a.pm.QuerySessionStreams(ctx, plugins.SessionStreamsRequest{
+		CharacterID: req.CharacterID,
+		PlayerID:    req.PlayerID,
+		SessionID:   req.SessionID,
+	})
 }

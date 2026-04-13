@@ -27,6 +27,19 @@ type StreamSender interface {
 	Send(sessionID string, stream string, add bool, mode ReplayMode) error
 }
 
+// StreamContributor collects plugin-contributed stream names for a session.
+// Used by RestoreFocus to include ambient plugin streams in the plan.
+type StreamContributor interface {
+	QuerySessionStreams(ctx context.Context, req StreamContributorRequest) []string
+}
+
+// StreamContributorRequest carries identifiers for a stream query.
+type StreamContributorRequest struct {
+	CharacterID string
+	PlayerID    string
+	SessionID   string
+}
+
 // CursorLocker provides per-session mutex access for serializing focus
 // transitions against live-loop cursor commits.
 type CursorLocker interface {
@@ -51,11 +64,12 @@ type RestorePlan struct {
 
 // defaultCoordinator is the production Coordinator implementation.
 type defaultCoordinator struct {
-	sessionStore session.Store
-	eventStore   core.EventStore
-	streamSender StreamSender
-	cursorLocker CursorLocker
-	policies     map[session.FocusKind]KindPolicy
+	sessionStore      session.Store
+	eventStore        core.EventStore
+	streamSender      StreamSender
+	cursorLocker      CursorLocker
+	streamContributor StreamContributor
+	policies          map[session.FocusKind]KindPolicy
 
 	// Settings stores for preference resolution.
 	gameSettings      settings.Settings
@@ -114,6 +128,11 @@ func WithCharacterSettings(cs settings.CharacterSettingsStore) CoordinatorOption
 // WithPlayerPreferences sets the player preference reader.
 func WithPlayerPreferences(pr PlayerPreferencesReader) CoordinatorOption {
 	return func(c *defaultCoordinator) { c.playerPrefs = pr }
+}
+
+// WithStreamContributor sets the plugin stream contributor for ambient streams.
+func WithStreamContributor(sc StreamContributor) CoordinatorOption {
+	return func(c *defaultCoordinator) { c.streamContributor = sc }
 }
 
 // NewCoordinator constructs a defaultCoordinator. sessionStore is required.
