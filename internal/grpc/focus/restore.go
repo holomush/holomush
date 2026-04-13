@@ -34,12 +34,11 @@ func (c *defaultCoordinator) RestoreFocus(ctx context.Context, sessionID string)
 	}
 
 	// Ambient streams: character, location, plugin-contributed.
-	// Mode depends on whether this is initial attach (no memberships +
-	// all cursors zero) or reconnect (detached or has cursors).
-	ambientMode := ReplayModeLiveOnly
-	if info.Status == session.StatusDetached || len(info.EventCursors) > 0 {
-		ambientMode = ReplayModeFromCursor
-	}
+	// Always use FromCursor — on initial attach the cursor is zero ULID,
+	// so Replay returns events from the beginning (which is correct).
+	// LiveOnly is only used by mid-session channel joins via the control
+	// channel, not by RestoreFocus.
+	ambientMode := ReplayModeFromCursor
 
 	if !info.CharacterID.IsZero() {
 		plan.Streams = append(plan.Streams, StreamWithMode{

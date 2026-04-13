@@ -653,12 +653,41 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	}
 
 	// 3. RestoreFocus — produces the full stream list and replay modes.
-	plan, planErr := s.focusCoordinator.RestoreFocus(ctx, req.SessionId)
-	if planErr != nil {
-		slog.WarnContext(ctx, "RestoreFocus failed, falling back to empty plan",
-			"session_id", req.SessionId, "error", planErr)
-		// Empty plan: no replay, live-only. Character and location streams
-		// still get added below via locationFollower.
+	var plan focus.RestorePlan
+	if s.focusCoordinator != nil {
+		var planErr error
+		plan, planErr = s.focusCoordinator.RestoreFocus(ctx, req.SessionId)
+		if planErr != nil {
+			slog.WarnContext(ctx, "RestoreFocus failed, falling back to empty plan",
+				"session_id", req.SessionId, "error", planErr)
+		}
+	}
+
+	// Ensure ambient streams are present even without a coordinator.
+	if len(plan.Streams) == 0 {
+		plan.Streams = append(plan.Streams,
+			focus.StreamWithMode{Stream: world.CharacterStream(info.CharacterID), Mode: focus.ReplayModeFromCursor},
+		)
+		if !info.LocationID.IsZero() {
+			plan.Streams = append(plan.Streams,
+				focus.StreamWithMode{Stream: world.LocationStream(info.LocationID), Mode: focus.ReplayModeFromCursor},
+			)
+		}
+		// Query plugin-contributed streams when no FocusCoordinator
+		// is wired (the coordinator handles this internally when
+		// present).
+		if s.streamContributor != nil {
+			pluginStreams := s.streamContributor.QuerySessionStreams(ctx, plugins.SessionStreamsRequest{
+				CharacterID: info.CharacterID.String(),
+				PlayerID:    info.PlayerID.String(),
+				SessionID:   info.ID,
+			})
+			for _, ps := range pluginStreams {
+				plan.Streams = append(plan.Streams,
+					focus.StreamWithMode{Stream: ps, Mode: focus.ReplayModeFromCursor},
+				)
+			}
+		}
 	}
 
 	// 4. SubscribeSession (Variant A — strict cross-stream ordering via single PG connection).

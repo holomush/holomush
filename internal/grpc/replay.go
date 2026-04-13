@@ -55,11 +55,20 @@ func (s *CoreServer) replayRestorePlan(
 		return all[i].event.ID.Compare(all[j].event.ID) < 0
 	})
 
+	if info.EventCursors == nil {
+		info.EventCursors = make(map[string]ulid.ULID, len(plan.Streams))
+	}
 	for i := range all {
 		te := &all[i]
 		if sendErr := s.sendAndCommitEvent(ctx, info, te.stream, te.event, stream, lf); sendErr != nil {
 			return oops.Code("SEND_FAILED").With("session_id", info.ID).Wrap(sendErr)
 		}
+		// Advance the in-memory cursor so the live loop does not
+		// re-replay events that were already sent during this
+		// restore phase.  The per-event cursor is also persisted
+		// inside sendAndCommitEvent, but the live loop reads from
+		// info.EventCursors, not from the store.
+		info.EventCursors[te.stream] = te.event.ID
 	}
 	return nil
 }
