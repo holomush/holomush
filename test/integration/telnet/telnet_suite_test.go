@@ -12,7 +12,10 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 )
 
+var suiteT *testing.T
+
 func TestTelnetE2E(t *testing.T) {
+	suiteT = t
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Telnet Vertical Slice E2E Suite")
 }

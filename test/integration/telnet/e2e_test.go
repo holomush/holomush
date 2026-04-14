@@ -21,7 +21,6 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/samber/oops"
-	"github.com/testcontainers/testcontainers-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
@@ -121,9 +120,14 @@ func (a *authCharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.UL
 
 // Package-level vars so Event Persistence tests can access them.
 var (
+	sharedPG      *testutil.PostgresEnv
 	startLocation ulid.ULID
 	eventStore    *store.PostgresEventStore
 )
+
+var _ = BeforeSuite(func() {
+	sharedPG = testutil.SharedPostgres(suiteT)
+})
 
 // registerTestCommands adds say and pose handlers for E2E tests.
 // These replicate the behavior of the core plugins via the old handler interface
@@ -263,7 +267,6 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 	var (
 		testCtx      context.Context
 		testCancel   context.CancelFunc
-		container    testcontainers.Container
 		grpcServer   *grpc.Server
 		grpcListener net.Listener
 		grpcCli      *grpcpkg.Client
@@ -276,20 +279,11 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 	BeforeEach(func() {
 		testCtx, testCancel = context.WithTimeout(context.Background(), 2*time.Minute)
 
-		// 1. Start PostgreSQL container
+		// 1. Fresh migrated database from shared container
+		connStr := testutil.FreshDatabase(suiteT, sharedPG)
+
+		// 2. Create event store
 		var err error
-		pgEnv, err := testutil.StartPostgres(testCtx)
-		Expect(err).NotTo(HaveOccurred())
-		container = pgEnv.Container
-		connStr := pgEnv.ConnStr
-
-		// 2. Run migrations
-		migrator, err := store.NewMigrator(connStr)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(migrator.Up()).To(Succeed())
-		_ = migrator.Close()
-
-		// 3. Create event store
 		eventStore, err = store.NewPostgresEventStore(testCtx, connStr)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -436,9 +430,6 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		}
 		if eventStore != nil {
 			eventStore.Close()
-		}
-		if container != nil {
-			_ = container.Terminate(context.Background())
 		}
 		if testCancel != nil {
 			testCancel()
