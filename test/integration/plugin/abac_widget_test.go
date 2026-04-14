@@ -18,8 +18,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"github.com/testcontainers/testcontainers-go"
-
 	policy "github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
@@ -27,7 +25,6 @@ import (
 	"github.com/holomush/holomush/internal/audit"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
-	"github.com/holomush/holomush/internal/store"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"github.com/holomush/holomush/test/testutil"
 )
@@ -116,10 +113,9 @@ var _ = Describe("Plugin ABAC Trust Boundary", func() {
 	// ---------------------------------------------------------------
 	Describe("plugin load and policy installation", func() {
 		var (
-			ctx       context.Context
-			cancel    context.CancelFunc
-			container testcontainers.Container
-			connStr   string
+			ctx     context.Context
+			cancel  context.CancelFunc
+			connStr string
 		)
 
 		BeforeEach(func() {
@@ -135,22 +131,10 @@ var _ = Describe("Plugin ABAC Trust Boundary", func() {
 			}
 
 			ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
-
-			pgEnv, err := testutil.StartPostgres(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			container = pgEnv.Container
-			connStr = pgEnv.ConnStr
-
-			migrator, err := store.NewMigrator(connStr)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(migrator.Up()).To(Succeed())
-			_ = migrator.Close()
+			connStr = testutil.FreshDatabase(suiteT, sharedPG)
 		})
 
 		AfterEach(func() {
-			if container != nil {
-				_ = container.Terminate(context.Background())
-			}
 			if cancel != nil {
 				cancel()
 			}
@@ -227,7 +211,6 @@ var _ = Describe("Plugin ABAC Trust Boundary", func() {
 		var (
 			ctx         context.Context
 			cancel      context.CancelFunc
-			container   testcontainers.Container
 			connStr     string
 			host        *goplugin.Host
 			ps          *policystore.PostgresStore
@@ -249,20 +232,11 @@ var _ = Describe("Plugin ABAC Trust Boundary", func() {
 			}
 
 			ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
-
-			// Start postgres and run migrations.
-			pgEnv, err := testutil.StartPostgres(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			container = pgEnv.Container
-			connStr = pgEnv.ConnStr
-
-			migrator, err := store.NewMigrator(connStr)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(migrator.Up()).To(Succeed())
-			_ = migrator.Close()
+			connStr = testutil.FreshDatabase(suiteT, sharedPG)
 
 			// Load the plugin binary. The provisioner must outlive BeforeEach
 			// so the host can use it during the spec — closed in AfterEach.
+			var err error
 			provisioner = plugins.NewSchemaProvisioner(connStr)
 			Expect(provisioner.Init(ctx)).To(Succeed())
 
@@ -332,9 +306,6 @@ var _ = Describe("Plugin ABAC Trust Boundary", func() {
 			if pool != nil {
 				pool.Close()
 			}
-			if container != nil {
-				_ = container.Terminate(context.Background())
-			}
 			if cancel != nil {
 				cancel()
 			}
@@ -388,7 +359,6 @@ var _ = Describe("Plugin ABAC Trust Boundary", func() {
 		var (
 			ctx         context.Context
 			cancel      context.CancelFunc
-			container   testcontainers.Container
 			connStr     string
 			host        *goplugin.Host
 			ps          *policystore.PostgresStore
@@ -411,17 +381,9 @@ var _ = Describe("Plugin ABAC Trust Boundary", func() {
 			}
 
 			ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
+			connStr = testutil.FreshDatabase(suiteT, sharedPG)
 
-			pgEnv, err := testutil.StartPostgres(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			container = pgEnv.Container
-			connStr = pgEnv.ConnStr
-
-			migrator, err := store.NewMigrator(connStr)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(migrator.Up()).To(Succeed())
-			_ = migrator.Close()
-
+			var err error
 			provisioner = plugins.NewSchemaProvisioner(connStr)
 			Expect(provisioner.Init(ctx)).To(Succeed())
 
@@ -487,9 +449,6 @@ var _ = Describe("Plugin ABAC Trust Boundary", func() {
 			if pool != nil {
 				pool.Close()
 			}
-			if container != nil {
-				_ = container.Terminate(context.Background())
-			}
 			if cancel != nil {
 				cancel()
 			}
@@ -535,10 +494,9 @@ var _ = Describe("Plugin ABAC Trust Boundary", func() {
 	// ---------------------------------------------------------------
 	Describe("manifest policy schema validation at load time", func() {
 		var (
-			ctx       context.Context
-			cancel    context.CancelFunc
-			container testcontainers.Container
-			connStr   string
+			ctx     context.Context
+			cancel  context.CancelFunc
+			connStr string
 		)
 
 		BeforeEach(func() {
@@ -549,22 +507,10 @@ var _ = Describe("Plugin ABAC Trust Boundary", func() {
 			}
 
 			ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
-
-			pgEnv, err := testutil.StartPostgres(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			container = pgEnv.Container
-			connStr = pgEnv.ConnStr
-
-			migrator, err := store.NewMigrator(connStr)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(migrator.Up()).To(Succeed())
-			_ = migrator.Close()
+			connStr = testutil.FreshDatabase(suiteT, sharedPG)
 		})
 
 		AfterEach(func() {
-			if container != nil {
-				_ = container.Terminate(context.Background())
-			}
 			if cancel != nil {
 				cancel()
 			}
