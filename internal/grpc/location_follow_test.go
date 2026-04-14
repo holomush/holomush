@@ -249,8 +249,8 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 type mockSubscription struct {
 	addedStreams   []string
 	removedStreams []string
-	notifCh       chan core.StreamNotification
-	errCh         chan error
+	notifCh        chan core.StreamNotification
+	errCh          chan error
 }
 
 func newMockSubscription() *mockSubscription {
@@ -271,8 +271,8 @@ func (m *mockSubscription) RemoveStream(_ context.Context, stream string) error 
 }
 
 func (m *mockSubscription) Notifications() <-chan core.StreamNotification { return m.notifCh }
-func (m *mockSubscription) Errors() <-chan error                         { return m.errCh }
-func (m *mockSubscription) Close() error                                 { return nil }
+func (m *mockSubscription) Errors() <-chan error                          { return m.errCh }
+func (m *mockSubscription) Close() error                                  { return nil }
 
 func TestSwitchLocationSubscriptionAddsNewAndRemovesOldStream(t *testing.T) {
 	charID := ulid.Make()

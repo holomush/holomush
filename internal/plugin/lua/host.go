@@ -14,14 +14,19 @@ import (
 	"github.com/samber/oops"
 	lua "github.com/yuin/gopher-lua"
 
+	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/pkg/holo"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
-// Compile-time interface check.
-var _ plugins.Host = (*Host)(nil)
+// Compile-time interface checks.
+var (
+	_ plugins.Host                = (*Host)(nil)
+	_ plugins.FocusDepsConfigurer = (*Host)(nil)
+)
 
 // luaPlugin holds compiled Lua code for a plugins.
 type luaPlugin struct {
@@ -57,6 +62,22 @@ func NewHostWithFunctions(hf *hostfunc.Functions) *Host {
 		factory:   NewStateFactory(),
 		hostFuncs: hf,
 		plugins:   make(map[string]*luaPlugin),
+	}
+}
+
+// SetFocusCoordinator injects the focus coordinator into the underlying
+// hostfunc bridge. The coordinator satisfies hostfunc.FocusOps.
+func (h *Host) SetFocusCoordinator(fc focus.Coordinator) {
+	if h.hostFuncs != nil {
+		h.hostFuncs.SetFocusOps(fc)
+	}
+}
+
+// SetEventStore injects the event store into the underlying hostfunc bridge.
+// The event store satisfies hostfunc.HistoryReader.
+func (h *Host) SetEventStore(es core.EventStore) {
+	if h.hostFuncs != nil {
+		h.hostFuncs.SetHistoryReader(es)
 	}
 }
 

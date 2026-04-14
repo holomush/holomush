@@ -400,7 +400,7 @@ type pgSubscription struct {
 	cancelWait context.CancelFunc // cancels the current WaitForNotification
 	waitMu     sync.Mutex         // protects cancelWait
 	cancel     context.CancelFunc // cancels parentCtx
-	loopDone   chan struct{}       // closed when notificationLoop exits
+	loopDone   chan struct{}      // closed when notificationLoop exits
 
 	// streams/channels are only accessed inside notificationLoop (sole owner).
 	streams  map[string]string // stream name -> channel name

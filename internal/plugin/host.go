@@ -7,6 +7,9 @@ package plugins
 import (
 	"context"
 
+	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/session"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
@@ -24,9 +27,11 @@ type SessionStreamsRequest struct {
 
 // StreamRegistry allows plugins to modify session stream subscriptions mid-session.
 type StreamRegistry interface {
-	// AddStream subscribes a session to an additional stream.
+	// AddStream subscribes a session to an additional stream with default FROM_CURSOR replay.
 	// Returns an error (code SESSION_NOT_FOUND) if the session is not active.
 	AddStream(ctx context.Context, sessionID, stream string) error
+	// AddStreamWithMode subscribes with an explicit replay mode (e.g., LIVE_ONLY for channels).
+	AddStreamWithMode(ctx context.Context, sessionID, stream string, mode session.ReplayMode) error
 	// RemoveStream unsubscribes a session from a stream. Idempotent.
 	RemoveStream(ctx context.Context, sessionID, stream string) error
 }
@@ -86,4 +91,12 @@ type PluginIntentEmitter interface {
 // shared plugin event emitter injected after construction.
 type EventEmitterConfigurer interface {
 	SetEventEmitter(emitter PluginIntentEmitter)
+}
+
+// FocusDepsConfigurer is an optional interface for hosts that need the focus
+// coordinator and event store injected after construction. These dependencies
+// are created during gRPC subsystem Start, which runs after plugin loading.
+type FocusDepsConfigurer interface {
+	SetFocusCoordinator(fc focus.Coordinator)
+	SetEventStore(es core.EventStore)
 }

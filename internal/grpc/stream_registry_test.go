@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
@@ -119,6 +120,21 @@ func TestAddStreamDefaultsToFromCursor(t *testing.T) {
 
 	update := <-ch
 	assert.Equal(t, focus.ReplayModeFromCursor, update.replayMode)
+}
+
+func TestAddStreamWithModeSendsReplayModeToControlChannel(t *testing.T) {
+	reg := NewSessionStreamRegistry()
+	ch := make(chan sessionStreamUpdate, 4)
+	reg.Register("sess-1", ch)
+	defer reg.Deregister("sess-1", ch)
+
+	err := reg.AddStreamWithMode(context.Background(), "sess-1", "channel:x", session.ReplayModeLiveOnly)
+	require.NoError(t, err)
+
+	update := <-ch
+	assert.Equal(t, "channel:x", update.stream)
+	assert.True(t, update.add)
+	assert.Equal(t, session.ReplayModeLiveOnly, update.replayMode)
 }
 
 func TestSendCarriesReplayMode(t *testing.T) {

@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/grpc/focus"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
@@ -243,6 +244,27 @@ func (m *Manager) ConfigureEventEmitter(store core.EventStore) {
 	if m.luaHost != nil {
 		if configurer := findOptional[EventEmitterConfigurer](m.luaHost); configurer != nil {
 			configurer.SetEventEmitter(m.eventEmitter)
+		}
+	}
+}
+
+// ConfigureFocusDeps injects the focus coordinator and event store into all
+// registered hosts. Production startup MUST call this before plugins handle
+// focus-related RPCs or host functions. Called from the gRPC subsystem's
+// Start after creating the FocusCoordinator and EventWriter.
+func (m *Manager) ConfigureFocusDeps(fc focus.Coordinator, es core.EventStore) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, host := range m.hosts {
+		if configurer := findOptional[FocusDepsConfigurer](host); configurer != nil {
+			configurer.SetFocusCoordinator(fc)
+			configurer.SetEventStore(es)
+		}
+	}
+	if m.luaHost != nil {
+		if configurer := findOptional[FocusDepsConfigurer](m.luaHost); configurer != nil {
+			configurer.SetFocusCoordinator(fc)
+			configurer.SetEventStore(es)
 		}
 	}
 }

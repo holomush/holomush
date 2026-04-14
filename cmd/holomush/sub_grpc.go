@@ -26,13 +26,13 @@ import (
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	holoFocus "github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/grpc/focus/scenepolicy"
-	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/naming"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
 	"github.com/holomush/holomush/internal/session"
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
+	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/telnet"
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
@@ -256,6 +256,13 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		return oops.Code("FOCUS_COORDINATOR_FAILED").Wrap(focusErr)
 	}
 	coreServerOpts = append(coreServerOpts, holoGRPC.WithFocusCoordinator(focusCoord))
+
+	// 8b. Inject focus coordinator + event store into plugin hosts (late-binding).
+	// The plugin subsystem started before gRPC, so these deps were not available
+	// at host construction time. Binary plugins use them for JoinFocus/LeaveFocus/
+	// PresentFocus/QueryStreamHistory RPCs; Lua plugins use them for holomush.*
+	// hostfuncs.
+	pluginManager.ConfigureFocusDeps(focusCoord, eventStore)
 
 	coreServer := holoGRPC.NewCoreServer(engine, sessionStore, cmdDispatcher, cmdServices, coreServerOpts...)
 	corev1.RegisterCoreServiceServer(s.grpcServer, coreServer)

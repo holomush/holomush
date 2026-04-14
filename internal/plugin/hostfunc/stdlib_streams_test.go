@@ -14,6 +14,7 @@ import (
 
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
+	"github.com/holomush/holomush/internal/session"
 )
 
 // mockStreamRegistry records calls for assertion.
@@ -25,6 +26,11 @@ type mockStreamRegistry struct {
 }
 
 func (m *mockStreamRegistry) AddStream(_ context.Context, sessionID, stream string) error {
+	m.addCalls = append(m.addCalls, struct{ sessionID, stream string }{sessionID, stream})
+	return m.addErr
+}
+
+func (m *mockStreamRegistry) AddStreamWithMode(_ context.Context, sessionID, stream string, _ session.ReplayMode) error {
 	m.addCalls = append(m.addCalls, struct{ sessionID, stream string }{sessionID, stream})
 	return m.addErr
 }

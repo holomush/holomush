@@ -46,6 +46,8 @@ type Functions struct {
 	sessionAccess    session.Access
 	capabilities     *CapabilityRegistry
 	streamRegistry   plugins.StreamRegistry
+	focusOps         FocusOps
+	historyReader    HistoryReader
 }
 
 // Option configures Functions.
@@ -88,6 +90,30 @@ func WithStreamRegistry(r plugins.StreamRegistry) Option {
 	return func(f *Functions) {
 		f.streamRegistry = r
 	}
+}
+
+// WithFocusOps sets the focus coordinator for join/leave/present focus host functions.
+func WithFocusOps(fo FocusOps) Option {
+	return func(f *Functions) { f.focusOps = fo }
+}
+
+// WithHistoryReader sets the event store reader for query_stream_history host function.
+func WithHistoryReader(hr HistoryReader) Option {
+	return func(f *Functions) { f.historyReader = hr }
+}
+
+// SetFocusOps sets the focus coordinator for join/leave/present focus host
+// functions. Supports late-binding: the coordinator is created during gRPC
+// subsystem Start, which runs after plugin loading. Lua VMs are created
+// per-event delivery, so the value is read at Register time.
+func (f *Functions) SetFocusOps(fo FocusOps) {
+	f.focusOps = fo
+}
+
+// SetHistoryReader sets the event store reader for query_stream_history host
+// function. Same late-binding rationale as SetFocusOps.
+func (f *Functions) SetHistoryReader(hr HistoryReader) {
+	f.historyReader = hr
 }
 
 // New creates host functions with dependencies.
@@ -155,6 +181,9 @@ func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...stri
 
 	// Register stream management functions (always; guard against nil registry inside).
 	RegisterStreamFuncs(ls, mod, f.streamRegistry)
+
+	// Register focus management functions.
+	RegisterFocusFuncs(ls, mod, f.focusOps, f.historyReader)
 
 	ls.SetGlobal("holomush", mod)
 

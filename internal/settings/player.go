@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-
 	"strconv"
 	"time"
 
@@ -168,10 +167,10 @@ func (j *jsonMapSettings) DurationN(ctx context.Context, key string) (time.Durat
 // emptySettings always returns (zero, false) for all reads.
 type emptySettings struct{}
 
-func (e *emptySettings) StringN(context.Context, string) (string, bool)           { return "", false }
-func (e *emptySettings) IntN(context.Context, string) (int, bool)                 { return 0, false }
-func (e *emptySettings) BoolN(context.Context, string) (value, ok bool)           { return false, false }
-func (e *emptySettings) DurationN(context.Context, string) (time.Duration, bool)  { return 0, false }
+func (e *emptySettings) StringN(context.Context, string) (string, bool)          { return "", false }
+func (e *emptySettings) IntN(context.Context, string) (int, bool)                { return 0, false }
+func (e *emptySettings) BoolN(context.Context, string) (value, ok bool)          { return false, false }
+func (e *emptySettings) DurationN(context.Context, string) (time.Duration, bool) { return 0, false }
 
 // Compile-time interface checks.
 var (

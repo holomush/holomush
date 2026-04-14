@@ -20,9 +20,12 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/plugin/mocks"
+	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -1731,4 +1734,50 @@ lua-plugin:
 
 	loaded := mgr.ListPlugins()
 	assert.Contains(t, loaded, "verby-plugin")
+}
+
+// stubFocusCoordinator is a minimal focus.Coordinator for manager tests.
+type stubFocusCoordinator struct{}
+
+func (s *stubFocusCoordinator) JoinFocus(_ context.Context, _ string, _ session.FocusKey) error {
+	return nil
+}
+
+func (s *stubFocusCoordinator) LeaveFocus(_ context.Context, _ string, _ session.FocusKey) error {
+	return nil
+}
+
+func (s *stubFocusCoordinator) PresentFocus(_ context.Context, _ string, _ session.FocusKey) error {
+	return nil
+}
+
+func (s *stubFocusCoordinator) RestoreFocus(_ context.Context, _ string) (focus.RestorePlan, error) {
+	return focus.RestorePlan{}, nil
+}
+
+var _ focus.Coordinator = (*stubFocusCoordinator)(nil)
+
+func TestConfigureFocusDepsInjectsCoordinatorIntoLuaHost(t *testing.T) {
+	hf := hostfunc.New(nil)
+	luaHost := pluginlua.NewHostWithFunctions(hf)
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	mgr := plugins.NewManager(t.TempDir(), plugins.WithLuaHost(luaHost))
+
+	fc := &stubFocusCoordinator{}
+	var es core.EventStore // nil — acceptable for this test
+
+	// Must not panic; calls SetFocusCoordinator and SetEventStore on all
+	// FocusDepsConfigurer hosts registered in the manager.
+	require.NotPanics(t, func() {
+		mgr.ConfigureFocusDeps(fc, es)
+	})
+}
+
+func TestConfigureFocusDepsWithNilLuaHostDoesNotPanic(t *testing.T) {
+	// Manager without a Lua host — ConfigureFocusDeps must handle nil luaHost.
+	mgr := plugins.NewManager(t.TempDir())
+	require.NotPanics(t, func() {
+		mgr.ConfigureFocusDeps(nil, nil)
+	})
 }

@@ -8,7 +8,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
+import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceJoinFocusRequest, PluginHostServiceJoinFocusResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLeaveFocusRequest, PluginHostServiceLeaveFocusResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServicePresentFocusRequest, PluginHostServicePresentFocusResponse, PluginHostServiceQueryStreamHistoryRequest, PluginHostServiceQueryStreamHistoryResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -157,6 +157,54 @@ export const PluginHostService = {
       name: "RemoveSessionStream",
       I: PluginHostServiceRemoveSessionStreamRequest,
       O: PluginHostServiceRemoveSessionStreamResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * JoinFocus adds a focus membership to an active or detached session.
+     * Plugins declare intent; the server applies kind-specific replay policy.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.JoinFocus
+     */
+    joinFocus: {
+      name: "JoinFocus",
+      I: PluginHostServiceJoinFocusRequest,
+      O: PluginHostServiceJoinFocusResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * LeaveFocus removes a focus membership. Idempotent on non-member.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.LeaveFocus
+     */
+    leaveFocus: {
+      name: "LeaveFocus",
+      I: PluginHostServiceLeaveFocusRequest,
+      O: PluginHostServiceLeaveFocusResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * PresentFocus updates the session's PresentingFocus pointer.
+     * Target MUST already exist in FocusMemberships.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.PresentFocus
+     */
+    presentFocus: {
+      name: "PresentFocus",
+      I: PluginHostServicePresentFocusRequest,
+      O: PluginHostServicePresentFocusResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * QueryStreamHistory reads the tail of a stream for plugin-side display.
+     * Read-only: does not advance cursors or affect session state.
+     * Count capped at 500 server-side.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.QueryStreamHistory
+     */
+    queryStreamHistory: {
+      name: "QueryStreamHistory",
+      I: PluginHostServiceQueryStreamHistoryRequest,
+      O: PluginHostServiceQueryStreamHistoryResponse,
       kind: MethodKind.Unary,
     },
   }

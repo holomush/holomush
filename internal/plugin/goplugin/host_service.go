@@ -5,11 +5,14 @@ package goplugin
 
 import (
 	"context"
+	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/session"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -64,6 +67,151 @@ func (s *pluginHostServiceServer) EmitEvent(ctx context.Context, req *pluginv1.P
 	}
 
 	return &pluginv1.PluginHostServiceEmitEventResponse{}, nil
+}
+
+func (s *pluginHostServiceServer) JoinFocus(ctx context.Context, req *pluginv1.PluginHostServiceJoinFocusRequest) (*pluginv1.PluginHostServiceJoinFocusResponse, error) {
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	fc := s.host.FocusCoordinator()
+	if fc == nil {
+		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
+	}
+
+	key, err := protoToFocusKey(req.GetTarget())
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
+	}
+
+	if err := fc.JoinFocus(ctx, req.GetSessionId(), key); err != nil {
+		return nil, oops.With("plugin", s.pluginName).With("session_id", req.GetSessionId()).Wrap(err)
+	}
+	return &pluginv1.PluginHostServiceJoinFocusResponse{}, nil
+}
+
+func (s *pluginHostServiceServer) LeaveFocus(ctx context.Context, req *pluginv1.PluginHostServiceLeaveFocusRequest) (*pluginv1.PluginHostServiceLeaveFocusResponse, error) {
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	fc := s.host.FocusCoordinator()
+	if fc == nil {
+		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
+	}
+
+	key, err := protoToFocusKey(req.GetTarget())
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
+	}
+
+	if err := fc.LeaveFocus(ctx, req.GetSessionId(), key); err != nil {
+		return nil, oops.With("plugin", s.pluginName).With("session_id", req.GetSessionId()).Wrap(err)
+	}
+	return &pluginv1.PluginHostServiceLeaveFocusResponse{}, nil
+}
+
+func (s *pluginHostServiceServer) PresentFocus(ctx context.Context, req *pluginv1.PluginHostServicePresentFocusRequest) (*pluginv1.PluginHostServicePresentFocusResponse, error) {
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	fc := s.host.FocusCoordinator()
+	if fc == nil {
+		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
+	}
+
+	key, err := protoToFocusKey(req.GetTarget())
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
+	}
+
+	if err := fc.PresentFocus(ctx, req.GetSessionId(), key); err != nil {
+		return nil, oops.With("plugin", s.pluginName).With("session_id", req.GetSessionId()).Wrap(err)
+	}
+	return &pluginv1.PluginHostServicePresentFocusResponse{}, nil
+}
+
+// protoToFocusKey converts a proto FocusKey to the session.FocusKey domain type.
+func protoToFocusKey(pk *pluginv1.FocusKey) (session.FocusKey, error) {
+	if pk == nil {
+		return session.FocusKey{}, oops.Code("INVALID_ARGUMENT").
+			Errorf("focus key is required")
+	}
+
+	targetID, err := ulid.Parse(pk.GetTargetId())
+	if err != nil {
+		return session.FocusKey{}, oops.Code("INVALID_ARGUMENT").
+			With("target_id", pk.GetTargetId()).
+			Wrap(err)
+	}
+
+	kind, err := protoToFocusKind(pk.GetKind())
+	if err != nil {
+		return session.FocusKey{}, err
+	}
+
+	return session.FocusKey{Kind: kind, TargetID: targetID}, nil
+}
+
+// protoToFocusKind maps proto FocusKind to session.FocusKind.
+func protoToFocusKind(pk pluginv1.FocusKind) (session.FocusKind, error) {
+	switch pk {
+	case pluginv1.FocusKind_FOCUS_KIND_SCENE:
+		return session.FocusKindScene, nil
+	default:
+		return "", oops.Code("FOCUS_KIND_UNREGISTERED").
+			With("kind", pk.String()).
+			Errorf("unsupported focus kind: %s", pk.String())
+	}
+}
+
+const maxQueryStreamHistoryCount = 500
+
+func (s *pluginHostServiceServer) QueryStreamHistory(ctx context.Context, req *pluginv1.PluginHostServiceQueryStreamHistoryRequest) (*pluginv1.PluginHostServiceQueryStreamHistoryResponse, error) {
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	es := s.host.EventStore()
+	if es == nil {
+		return nil, oops.With("plugin", s.pluginName).New("event store not configured")
+	}
+
+	count := int(req.GetCount())
+	if count < 0 {
+		return nil, oops.Code("INVALID_ARGUMENT").
+			With("count", req.GetCount()).
+			Errorf("count must be non-negative")
+	}
+	if count > maxQueryStreamHistoryCount {
+		count = maxQueryStreamHistoryCount
+	}
+
+	var notBefore time.Time
+	if req.GetNotBeforeMs() > 0 {
+		notBefore = time.UnixMilli(req.GetNotBeforeMs()).UTC()
+	}
+
+	events, err := es.ReplayTail(ctx, req.GetStream(), count, notBefore)
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).With("stream", req.GetStream()).Wrap(err)
+	}
+
+	protoEvents := make([]*pluginv1.Event, 0, len(events))
+	for _, e := range events {
+		protoEvents = append(protoEvents, coreEventToProto(e))
+	}
+	return &pluginv1.PluginHostServiceQueryStreamHistoryResponse{Events: protoEvents}, nil
+}
+
+// coreEventToProto converts a core.Event to the plugin proto Event.
+func coreEventToProto(e core.Event) *pluginv1.Event {
+	return &pluginv1.Event{
+		Id:        e.ID.String(),
+		Stream:    e.Stream,
+		Type:      string(e.Type),
+		Timestamp: e.Timestamp.UnixMilli(),
+		ActorKind: e.Actor.Kind.String(),
+		ActorId:   e.Actor.ID,
+		Payload:   string(e.Payload),
+	}
 }
 
 func sdkActorKindToCore(kind pluginsdk.ActorKind) core.ActorKind {

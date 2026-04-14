@@ -342,7 +342,7 @@ var _ = Describe("Session Persistence", func() {
 			replayCtx, replayCancel := context.WithTimeout(testCtx, 5*time.Second)
 			defer replayCancel()
 			replayStream, err := grpcCli.Subscribe(replayCtx, &corev1.SubscribeRequest{
-				SessionId:        sessionID,
+				SessionId: sessionID,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -594,7 +594,7 @@ var _ = Describe("Session Persistence", func() {
 			subBCtx, subBCancel := context.WithCancel(testCtx)
 			defer subBCancel()
 			streamB, err := grpcCli.Subscribe(subBCtx, &corev1.SubscribeRequest{
-				SessionId:        sessionID,
+				SessionId: sessionID,
 			})
 			Expect(err).NotTo(HaveOccurred())
 

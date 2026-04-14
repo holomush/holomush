@@ -755,3 +755,47 @@ func (s *slowKVStore) Delete(ctx context.Context, _, _ string) error {
 		return fmt.Errorf("slow kv delete: %w", ctx.Err())
 	}
 }
+
+func TestSetFocusOpsLateBindingMakesCallsAvailable(t *testing.T) {
+	hf := hostfunc.New(nil)
+
+	// Before SetFocusOps, calls are no-ops (nil focus ops).
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+	targetID := ulid.Make()
+	require.NoError(t, L.DoString(`holomush.join_focus("s", "scene", "`+targetID.String()+`")`))
+
+	// After SetFocusOps, calls route to the new ops.
+	fo := &mockFocusOps{}
+	hf.SetFocusOps(fo)
+
+	L2 := lua.NewState()
+	defer L2.Close()
+	hf.Register(L2, "test-plugin")
+	targetID2 := ulid.Make()
+	require.NoError(t, L2.DoString(`holomush.join_focus("sess-1", "scene", "`+targetID2.String()+`")`))
+	require.Len(t, fo.joinCalls, 1)
+	assert.Equal(t, "sess-1", fo.joinCalls[0].sessionID)
+}
+
+func TestSetHistoryReaderLateBindingMakesCallsAvailable(t *testing.T) {
+	hf := hostfunc.New(nil)
+
+	// Before SetHistoryReader, calls are no-ops (nil reader).
+	L := lua.NewState()
+	defer L.Close()
+	hf.Register(L, "test-plugin")
+	require.NoError(t, L.DoString(`holomush.query_stream_history("scene:abc:ic", 10)`))
+
+	// After SetHistoryReader, calls route to the new reader.
+	hr := &mockHistoryReader{}
+	hf.SetHistoryReader(hr)
+
+	L2 := lua.NewState()
+	defer L2.Close()
+	hf.Register(L2, "test-plugin")
+	require.NoError(t, L2.DoString(`holomush.query_stream_history("scene:abc:ic", 10)`))
+	require.Len(t, hr.calls, 1)
+	assert.Equal(t, "scene:abc:ic", hr.calls[0].stream)
+}
