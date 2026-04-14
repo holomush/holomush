@@ -48,9 +48,14 @@ func (e *PostgresEnv) Terminate(ctx context.Context) error {
 	return nil
 }
 
-// StartPostgres starts a PostgreSQL 18 container with a non-superuser
-// holomush role (LOGIN, CREATEROLE). The returned ConnStr uses
-// holomush:holomush credentials against the holomush_test database.
+// StartPostgres starts a dedicated PostgreSQL 18 container with a
+// non-superuser holomush role (LOGIN, CREATEROLE). The returned
+// ConnStr uses holomush:holomush credentials.
+//
+// Most tests should use SharedPostgres + FreshDatabase instead,
+// which shares a single container per test binary and creates
+// per-test databases via template copy. Use StartPostgres only
+// when a test needs complete process-level container isolation.
 //
 // Callers are responsible for running migrations via store.NewMigrator.
 func StartPostgres(ctx context.Context) (*PostgresEnv, error) {
@@ -279,17 +284,17 @@ func ensureTemplate(t testing.TB, env *PostgresEnv) {
 			return
 		}
 
-		migrator, err := store.NewMigrator(tmplConnStr)
-		if err != nil {
-			templateErr = fmt.Errorf("create migrator: %w", err)
+		migrator, migErr := store.NewMigrator(tmplConnStr)
+		if migErr != nil {
+			templateErr = fmt.Errorf("create migrator: %w", migErr)
 			return
 		}
-		if err := migrator.Up(); err != nil {
-			_ = migrator.Close()
-			templateErr = fmt.Errorf("run migrations: %w", err)
+		if migErr = migrator.Up(); migErr != nil {
+			migrator.Close() //nolint:errcheck // best-effort cleanup
+			templateErr = fmt.Errorf("run migrations: %w", migErr)
 			return
 		}
-		_ = migrator.Close()
+		migrator.Close() //nolint:errcheck // best-effort cleanup
 
 		alterSQL := ddlMarkTemplate(templateName)
 		_, err = conn.Exec(ctx, alterSQL)
@@ -344,7 +349,7 @@ func ddlMarkTemplate(name string) string {
 
 func randomDBName() string {
 	b := make([]byte, 4)
-	_, _ = rand.Read(b) //nolint:errcheck // crypto/rand.Read never errors
+	_, _ = rand.Read(b)
 	return fmt.Sprintf("test_%x", b)
 }
 

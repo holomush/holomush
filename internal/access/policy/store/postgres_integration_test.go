@@ -14,38 +14,33 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/samber/oops"
-	"github.com/testcontainers/testcontainers-go"
 
 	"github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
-	istore "github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/test/testutil"
 )
 
+var suiteT *testing.T
+
 func TestPolicyStore(t *testing.T) {
+	suiteT = t
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Policy Store Integration Suite")
 }
 
 var (
-	pool      *pgxpool.Pool
-	container testcontainers.Container
-	ps        *store.PostgresStore
+	pool *pgxpool.Pool
+	ps   *store.PostgresStore
 )
 
 var _ = BeforeSuite(func() {
 	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	Expect(err).NotTo(HaveOccurred())
-	container = pgEnv.Container
+	shared := testutil.SharedPostgres(suiteT)
+	connStr := testutil.FreshDatabase(suiteT, shared)
 
-	migrator, err := istore.NewMigrator(pgEnv.ConnStr)
-	Expect(err).NotTo(HaveOccurred())
-	Expect(migrator.Up()).To(Succeed())
-	_ = migrator.Close()
-
-	pool, err = pgxpool.New(ctx, pgEnv.ConnStr)
+	var err error
+	pool, err = pgxpool.New(ctx, connStr)
 	Expect(err).NotTo(HaveOccurred())
 
 	ps = store.NewPostgresStore(pool)
@@ -54,9 +49,6 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	if pool != nil {
 		pool.Close()
-	}
-	if container != nil {
-		_ = container.Terminate(context.Background())
 	}
 })
 
