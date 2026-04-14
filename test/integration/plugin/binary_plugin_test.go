@@ -84,10 +84,9 @@ func configureBinaryHostEventEmitter(host *goplugin.Host, eventStore core.EventS
 
 var _ = Describe("Binary Plugin Lifecycle", func() {
 	var (
-		ctx       context.Context
-		cancel    context.CancelFunc
-		container testcontainers.Container
-		connStr   string
+		ctx     context.Context
+		cancel  context.CancelFunc
+		connStr string
 	)
 
 	BeforeEach(func() {
@@ -102,24 +101,10 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 		}
 
 		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
-
-		// Start PostgreSQL via testcontainers
-		pgEnv, err := testutil.StartPostgres(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		container = pgEnv.Container
-		connStr = pgEnv.ConnStr
-
-		// Run core server migrations (needed for the base schema)
-		migrator, err := store.NewMigrator(connStr)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(migrator.Up()).To(Succeed())
-		_ = migrator.Close()
+		connStr = testutil.FreshDatabase(suiteT, sharedPG)
 	})
 
 	AfterEach(func() {
-		if container != nil {
-			_ = container.Terminate(context.Background())
-		}
 		if cancel != nil {
 			cancel()
 		}
@@ -369,7 +354,6 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 		var (
 			abacCtx         context.Context
 			abacCancel      context.CancelFunc
-			abacContainer   testcontainers.Container
 			abacConnStr     string
 			abacHost        *goplugin.Host
 			abacPs          *policystore.PostgresStore
@@ -387,21 +371,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			}
 
 			abacCtx, abacCancel = context.WithTimeout(context.Background(), 2*time.Minute)
-
-			// Postgres + migrator — use suite-local handles so the outer
-			// `container`/`connStr` vars are not clobbered. This keeps the
-			// outer Describe block's Postgres instance reachable in its own
-			// AfterEach instead of being terminated twice (once here, never
-			// at the outer level).
-			pgEnv, err := testutil.StartPostgres(abacCtx)
-			Expect(err).NotTo(HaveOccurred())
-			abacContainer = pgEnv.Container
-			abacConnStr = pgEnv.ConnStr
-
-			migrator, err := store.NewMigrator(abacConnStr)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(migrator.Up()).To(Succeed())
-			_ = migrator.Close()
+			abacConnStr = testutil.FreshDatabase(suiteT, sharedPG)
 
 			// Provisioner outlives BeforeEach (closed in AfterEach)
 			abacProvisioner = plugins.NewSchemaProvisioner(abacConnStr)
