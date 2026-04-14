@@ -13,20 +13,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"github.com/testcontainers/testcontainers-go"
 
 	"github.com/holomush/holomush/internal/bootstrap"
 	"github.com/holomush/holomush/internal/content"
 	plugins "github.com/holomush/holomush/internal/plugin"
-	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/test/testutil"
 )
 
 // testEnv holds shared resources for the content integration suite.
 type testEnv struct {
-	ctx       context.Context
-	pool      *pgxpool.Pool
-	container testcontainers.Container
+	ctx  context.Context
+	pool *pgxpool.Pool
 }
 
 var env *testEnv
@@ -34,23 +31,15 @@ var env *testEnv
 var _ = BeforeSuite(func() {
 	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	Expect(err).NotTo(HaveOccurred())
-	container := pgEnv.Container
-	connStr := pgEnv.ConnStr
-
-	migrator, err := store.NewMigrator(connStr)
-	Expect(err).NotTo(HaveOccurred())
-	Expect(migrator.Up()).To(Succeed())
-	_ = migrator.Close()
+	shared := testutil.SharedPostgres(suiteT)
+	connStr := testutil.FreshDatabase(suiteT, shared)
 
 	pool, err := pgxpool.New(ctx, connStr)
 	Expect(err).NotTo(HaveOccurred())
 
 	env = &testEnv{
-		ctx:       ctx,
-		pool:      pool,
-		container: container,
+		ctx:  ctx,
+		pool: pool,
 	}
 })
 
@@ -60,9 +49,6 @@ var _ = AfterSuite(func() {
 	}
 	if env.pool != nil {
 		env.pool.Close()
-	}
-	if env.container != nil {
-		_ = env.container.Terminate(env.ctx)
 	}
 })
 

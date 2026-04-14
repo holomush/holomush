@@ -14,7 +14,6 @@ import (
 	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"github.com/testcontainers/testcontainers-go"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/store"
@@ -23,7 +22,10 @@ import (
 	"github.com/holomush/holomush/test/testutil"
 )
 
+var suiteT *testing.T
+
 func TestWorld(t *testing.T) {
+	suiteT = t
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "World Model Integration Suite")
 }
@@ -32,7 +34,6 @@ func TestWorld(t *testing.T) {
 type testEnv struct {
 	ctx        context.Context
 	pool       *pgxpool.Pool
-	container  testcontainers.Container
 	eventStore *store.PostgresEventStore
 
 	// Repositories
@@ -60,43 +61,23 @@ var _ = AfterSuite(func() {
 func setupWorldTestEnv() (*testEnv, error) {
 	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	if err != nil {
-		return nil, err
-	}
-	container := pgEnv.Container
-	connStr := pgEnv.ConnStr
-
-	// Run migrations using the new Migrator
-	migrator, err := store.NewMigrator(connStr)
-	if err != nil {
-		_ = container.Terminate(ctx)
-		return nil, err
-	}
-	if err := migrator.Up(); err != nil {
-		_ = migrator.Close()
-		_ = container.Terminate(ctx)
-		return nil, err
-	}
-	_ = migrator.Close()
+	shared := testutil.SharedPostgres(suiteT)
+	connStr := testutil.FreshDatabase(suiteT, shared)
 
 	eventStore, err := store.NewPostgresEventStore(ctx, connStr)
 	if err != nil {
-		_ = container.Terminate(ctx)
 		return nil, err
 	}
 
 	pool, err := pgxpool.New(ctx, connStr)
 	if err != nil {
 		eventStore.Close()
-		_ = container.Terminate(ctx)
 		return nil, err
 	}
 
 	return &testEnv{
 		ctx:        ctx,
 		pool:       pool,
-		container:  container,
 		eventStore: eventStore,
 		Locations:  worldpg.NewLocationRepository(pool),
 		Exits:      worldpg.NewExitRepository(pool),
@@ -112,9 +93,6 @@ func (e *testEnv) cleanup() {
 	}
 	if e.eventStore != nil {
 		e.eventStore.Close()
-	}
-	if e.container != nil {
-		_ = e.container.Terminate(e.ctx)
 	}
 }
 

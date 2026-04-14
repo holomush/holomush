@@ -17,28 +17,28 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"github.com/testcontainers/testcontainers-go"
 
 	"github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/audit"
-	"github.com/holomush/holomush/internal/store"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/test/testutil"
 )
 
+var suiteT *testing.T
+
 func TestAccessIntegration(t *testing.T) {
+	suiteT = t
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "ABAC Integration Suite")
 }
 
 type accessTestEnv struct {
-	ctx         context.Context
-	pool        *pgxpool.Pool
-	container   testcontainers.Container
-	engine      *policy.Engine
+	ctx    context.Context
+	pool   *pgxpool.Pool
+	engine *policy.Engine
 	pStore      policystore.PolicyStore
 	cache       *policy.Cache
 	charRepo    *worldpg.CharacterRepository
@@ -119,28 +119,11 @@ var _ = AfterSuite(func() {
 func setupAccessTestEnv() (*accessTestEnv, error) {
 	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	if err != nil {
-		return nil, err
-	}
-	container := pgEnv.Container
-	connStr := pgEnv.ConnStr
-
-	migrator, err := store.NewMigrator(connStr)
-	if err != nil {
-		_ = container.Terminate(ctx)
-		return nil, err
-	}
-	if err := migrator.Up(); err != nil {
-		_ = migrator.Close()
-		_ = container.Terminate(ctx)
-		return nil, err
-	}
-	_ = migrator.Close()
+	shared := testutil.SharedPostgres(suiteT)
+	connStr := testutil.FreshDatabase(suiteT, shared)
 
 	pool, err := pgxpool.New(ctx, connStr)
 	if err != nil {
-		_ = container.Terminate(ctx)
 		return nil, err
 	}
 
@@ -156,14 +139,12 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 	charProvider := attribute.NewCharacterProvider(charRepo, roleResolver)
 	if err := resolver.RegisterProvider(charProvider); err != nil {
 		pool.Close()
-		_ = container.Terminate(ctx)
 		return nil, err
 	}
 
 	locProvider := attribute.NewLocationProvider(locRepo)
 	if err := resolver.RegisterProvider(locProvider); err != nil {
 		pool.Close()
-		_ = container.Terminate(ctx)
 		return nil, err
 	}
 
@@ -172,14 +153,12 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	if err := policy.Bootstrap(ctx, &noopPartitionCreator{}, pStore, compiler, logger, policy.BootstrapOptions{}); err != nil {
 		pool.Close()
-		_ = container.Terminate(ctx)
 		return nil, err
 	}
 
 	cache := policy.NewCache(pStore, compiler)
 	if err := cache.Reload(ctx); err != nil {
 		pool.Close()
-		_ = container.Terminate(ctx)
 		return nil, err
 	}
 
@@ -192,7 +171,6 @@ func setupAccessTestEnv() (*accessTestEnv, error) {
 	return &accessTestEnv{
 		ctx:         ctx,
 		pool:        pool,
-		container:   container,
 		engine:      engine,
 		pStore:      pStore,
 		cache:       cache,
@@ -209,9 +187,6 @@ func (e *accessTestEnv) cleanup() {
 	}
 	if e.pool != nil {
 		e.pool.Close()
-	}
-	if e.container != nil {
-		_ = e.container.Terminate(e.ctx)
 	}
 }
 
