@@ -7,7 +7,9 @@ package plugin_test
 
 import (
 	"context"
+	"fmt"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -28,15 +30,52 @@ func replaceUser(t *testing.T, connStr, user, password string) string {
 	return u.String()
 }
 
+// setupSchemaTestDB creates a raw database with holomush role access,
+// matching production StartPostgres setup. Returns holomush-role and
+// superuser connection strings.
+func setupSchemaTestDB(t *testing.T) (holomushConnStr, adminConnStr string) {
+	t.Helper()
+	shared := testutil.SharedPostgres(t)
+	adminConnStr = testutil.RawDatabase(t, shared)
+
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, adminConnStr)
+	require.NoError(t, err)
+	defer conn.Close(ctx)
+
+	// The holomush role already exists at the cluster level from SharedPostgres.
+	// Grant it access to this specific database and own the public schema.
+	dbName := extractDBName(t, adminConnStr)
+	_, err = conn.Exec(ctx, ddlGrantToHolomush(dbName))
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "ALTER SCHEMA public OWNER TO holomush")
+	require.NoError(t, err)
+
+	holomushConnStr = replaceUser(t, adminConnStr, "holomush", "holomush")
+	return holomushConnStr, adminConnStr
+}
+
+func extractDBName(t *testing.T, connStr string) string {
+	t.Helper()
+	u, err := url.Parse(connStr)
+	require.NoError(t, err)
+	return strings.TrimPrefix(u.Path, "/")
+}
+
+// ddlGrantToHolomush builds a GRANT DDL statement. DDL does not support
+// parameterized queries; dbName is hex-encoded crypto/rand output from
+// randomDBName(), not user input.
+func ddlGrantToHolomush(dbName string) string {
+	return fmt.Sprintf("GRANT ALL ON DATABASE %s TO holomush", dbName)
+}
+
 func TestSchemaProvisionerInitFailsWithoutCreaterole(t *testing.T) {
 	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgEnv.Terminate(ctx) })
+	_, adminConnStr := setupSchemaTestDB(t)
 
 	// Create a restricted role WITHOUT CREATEROLE.
-	adminConn, err := pgx.Connect(ctx, pgEnv.ConnStr)
+	adminConn, err := pgx.Connect(ctx, adminConnStr)
 	require.NoError(t, err)
 	defer adminConn.Close(ctx)
 
@@ -44,7 +83,7 @@ func TestSchemaProvisionerInitFailsWithoutCreaterole(t *testing.T) {
 	require.NoError(t, err)
 	adminConn.Close(ctx)
 
-	restrictedConnStr := replaceUser(t, pgEnv.ConnStr, "restricted", "restricted")
+	restrictedConnStr := replaceUser(t, adminConnStr, "restricted", "restricted")
 
 	sp := plugins.NewSchemaProvisioner(restrictedConnStr)
 	defer sp.Close()
@@ -57,33 +96,29 @@ func TestSchemaProvisionerInitFailsWithoutCreaterole(t *testing.T) {
 func TestSchemaProvisionerInitSucceedsWithCreaterole(t *testing.T) {
 	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgEnv.Terminate(ctx) })
+	holomushConnStr, _ := setupSchemaTestDB(t)
 
-	sp := plugins.NewSchemaProvisioner(pgEnv.ConnStr)
+	sp := plugins.NewSchemaProvisioner(holomushConnStr)
 	defer sp.Close()
 
-	err = sp.Init(ctx)
+	err := sp.Init(ctx)
 	require.NoError(t, err)
 }
 
 func TestProvisionSchemaCreatesRoleAndSchema(t *testing.T) {
 	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgEnv.Terminate(ctx) })
+	holomushConnStr, _ := setupSchemaTestDB(t)
 
-	sp := plugins.NewSchemaProvisioner(pgEnv.ConnStr)
+	sp := plugins.NewSchemaProvisioner(holomushConnStr)
 	defer sp.Close()
 	require.NoError(t, sp.Init(ctx))
 
-	_, err = sp.ProvisionSchema(ctx, "test-plugin")
+	_, err := sp.ProvisionSchema(ctx, "test-plugin")
 	require.NoError(t, err)
 
 	// Verify role properties.
-	pool, err := pgxpool.New(ctx, pgEnv.ConnStr)
+	pool, err := pgxpool.New(ctx, holomushConnStr)
 	require.NoError(t, err)
 	defer pool.Close()
 
@@ -113,11 +148,9 @@ func TestProvisionSchemaCreatesRoleAndSchema(t *testing.T) {
 func TestPluginRoleCanCreateTablesInOwnSchema(t *testing.T) {
 	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgEnv.Terminate(ctx) })
+	holomushConnStr, _ := setupSchemaTestDB(t)
 
-	sp := plugins.NewSchemaProvisioner(pgEnv.ConnStr)
+	sp := plugins.NewSchemaProvisioner(holomushConnStr)
 	defer sp.Close()
 	require.NoError(t, sp.Init(ctx))
 
@@ -144,12 +177,10 @@ func TestPluginRoleCanCreateTablesInOwnSchema(t *testing.T) {
 func TestPluginRoleCannotAccessPublicSchema(t *testing.T) {
 	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgEnv.Terminate(ctx) })
+	holomushConnStr, _ := setupSchemaTestDB(t)
 
 	// Create a table in public schema as holomush.
-	adminConn, err := pgx.Connect(ctx, pgEnv.ConnStr)
+	adminConn, err := pgx.Connect(ctx, holomushConnStr)
 	require.NoError(t, err)
 	_, err = adminConn.Exec(ctx, "CREATE TABLE public.secrets (id serial, data text)")
 	require.NoError(t, err)
@@ -157,7 +188,7 @@ func TestPluginRoleCannotAccessPublicSchema(t *testing.T) {
 	require.NoError(t, err)
 	adminConn.Close(ctx)
 
-	sp := plugins.NewSchemaProvisioner(pgEnv.ConnStr)
+	sp := plugins.NewSchemaProvisioner(holomushConnStr)
 	defer sp.Close()
 	require.NoError(t, sp.Init(ctx))
 
@@ -178,11 +209,9 @@ func TestPluginRoleCannotAccessPublicSchema(t *testing.T) {
 func TestCrossPluginIsolation(t *testing.T) {
 	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgEnv.Terminate(ctx) })
+	holomushConnStr, _ := setupSchemaTestDB(t)
 
-	sp := plugins.NewSchemaProvisioner(pgEnv.ConnStr)
+	sp := plugins.NewSchemaProvisioner(holomushConnStr)
 	defer sp.Close()
 	require.NoError(t, sp.Init(ctx))
 
@@ -217,11 +246,9 @@ func TestCrossPluginIsolation(t *testing.T) {
 func TestIdempotentProvisionRefreshesPassword(t *testing.T) {
 	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgEnv.Terminate(ctx) })
+	holomushConnStr, _ := setupSchemaTestDB(t)
 
-	sp := plugins.NewSchemaProvisioner(pgEnv.ConnStr)
+	sp := plugins.NewSchemaProvisioner(holomushConnStr)
 	defer sp.Close()
 	require.NoError(t, sp.Init(ctx))
 
@@ -259,11 +286,9 @@ func TestIdempotentProvisionRefreshesPassword(t *testing.T) {
 func TestPurgeSchemaRemovesRoleAndSchema(t *testing.T) {
 	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pgEnv.Terminate(ctx) })
+	holomushConnStr, _ := setupSchemaTestDB(t)
 
-	sp := plugins.NewSchemaProvisioner(pgEnv.ConnStr)
+	sp := plugins.NewSchemaProvisioner(holomushConnStr)
 	defer sp.Close()
 	require.NoError(t, sp.Init(ctx))
 
@@ -282,7 +307,7 @@ func TestPurgeSchemaRemovesRoleAndSchema(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify role is gone.
-	pool, err := pgxpool.New(ctx, pgEnv.ConnStr)
+	pool, err := pgxpool.New(ctx, holomushConnStr)
 	require.NoError(t, err)
 	defer pool.Close()
 
