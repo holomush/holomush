@@ -26,21 +26,15 @@ import (
 // columns, new source/component/message columns (NOT NULL), the old policy_id/
 // policy_name columns gone, and the idx_audit_log_source_component index created.
 func TestMigration000005AuditSourceComponentAppliesCleanly(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
+	shared := testutil.SharedPostgres(t)
+	connStr := testutil.RawDatabase(t, shared)
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = pgEnv.Terminate(context.Background())
-	})
-
-	migrator, err := store.NewMigrator(pgEnv.ConnStr)
+	migrator, err := store.NewMigrator(connStr)
 	require.NoError(t, err)
 	require.NoError(t, migrator.Up())
 	require.NoError(t, migrator.Close())
 
-	db, err := sql.Open("pgx", pgEnv.ConnStr)
+	db, err := sql.Open("pgx", connStr)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -67,27 +61,21 @@ func TestMigration000005AuditSourceComponentAppliesCleanly(t *testing.T) {
 // policy_id/policy_name restored, source/component/message gone, and the
 // idx_audit_log_source_component index dropped.
 func TestMigration000005AuditSourceComponentRollbackReturnsSchemaToOriginalShape(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	pgEnv, err := testutil.StartPostgres(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = pgEnv.Terminate(context.Background())
-	})
+	shared := testutil.SharedPostgres(t)
+	connStr := testutil.RawDatabase(t, shared)
 
 	// Apply all migrations (including 000005).
-	migratorUp, err := store.NewMigrator(pgEnv.ConnStr)
+	migratorUp, err := store.NewMigrator(connStr)
 	require.NoError(t, err)
 	require.NoError(t, migratorUp.Up())
 	require.NoError(t, migratorUp.Close())
 
-	db, err := sql.Open("pgx", pgEnv.ConnStr)
+	db, err := sql.Open("pgx", connStr)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
 	// Sanity: after Up, 000005 is applied and the new shape is present.
-	migratorCheck, err := store.NewMigrator(pgEnv.ConnStr)
+	migratorCheck, err := store.NewMigrator(connStr)
 	require.NoError(t, err)
 	version, dirty, err := migratorCheck.Version()
 	require.NoError(t, err)
@@ -100,7 +88,7 @@ func TestMigration000005AuditSourceComponentRollbackReturnsSchemaToOriginalShape
 	// Migrate down to version 4 (just before 000005_audit_source_component)
 	// to restore the pre-000005 audit schema shape. Using Migrate(4) instead
 	// of Steps(-N) so the test doesn't break when new migrations are added.
-	migratorDown, err := store.NewMigrator(pgEnv.ConnStr)
+	migratorDown, err := store.NewMigrator(connStr)
 	require.NoError(t, err)
 	require.NoError(t, migratorDown.Migrate(4))
 	require.NoError(t, migratorDown.Close())
@@ -135,21 +123,18 @@ func TestMigration000005AuditSourceComponentBackfillsExistingRows(t *testing.T) 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = pgEnv.Terminate(context.Background())
-	})
+	shared := testutil.SharedPostgres(t)
+	connStr := testutil.RawDatabase(t, shared)
 
 	// Apply migrations up to and including 000004 (but NOT 000005).
 	// The project's Migrator does not have a Migrate(version) method; it
 	// exposes Steps(n), so we apply exactly 4 steps from a fresh database.
-	migratorEarly, err := store.NewMigrator(pgEnv.ConnStr)
+	migratorEarly, err := store.NewMigrator(connStr)
 	require.NoError(t, err)
 	require.NoError(t, migratorEarly.Steps(4))
 	require.NoError(t, migratorEarly.Close())
 
-	db, err := sql.Open("pgx", pgEnv.ConnStr)
+	db, err := sql.Open("pgx", connStr)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -183,7 +168,7 @@ func TestMigration000005AuditSourceComponentBackfillsExistingRows(t *testing.T) 
 	require.NoError(t, err)
 
 	// Now apply 000005.
-	migratorFinal, err := store.NewMigrator(pgEnv.ConnStr)
+	migratorFinal, err := store.NewMigrator(connStr)
 	require.NoError(t, err)
 	require.NoError(t, migratorFinal.Up())
 	require.NoError(t, migratorFinal.Close())
