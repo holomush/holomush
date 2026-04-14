@@ -20,7 +20,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"github.com/testcontainers/testcontainers-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -476,9 +475,6 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			if abacPool != nil {
 				abacPool.Close()
 			}
-			if abacContainer != nil {
-				_ = abacContainer.Terminate(context.Background())
-			}
 			if abacCancel != nil {
 				abacCancel()
 			}
@@ -518,12 +514,11 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 	Describe("scene plugin lifecycle: state machine", func() {
 		var (
-			lifecyclectx       context.Context
-			lifecyclecancel    context.CancelFunc
-			lifecyclecontainer testcontainers.Container
-			lifecyclehost      *goplugin.Host
-			lifecyclepool      *pgxpool.Pool
-			lifecyclesceneID   string
+			lifecyclectx     context.Context
+			lifecyclecancel  context.CancelFunc
+			lifecyclehost    *goplugin.Host
+			lifecyclepool    *pgxpool.Pool
+			lifecyclesceneID string
 		)
 
 		BeforeEach(func() {
@@ -533,17 +528,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			}
 
 			lifecyclectx, lifecyclecancel = context.WithTimeout(context.Background(), 2*time.Minute)
-
-			// Postgres + core migrations (so the policy store schema exists)
-			pgEnv, err := testutil.StartPostgres(lifecyclectx)
-			Expect(err).NotTo(HaveOccurred())
-			lifecyclecontainer = pgEnv.Container
-			pgConnStr := pgEnv.ConnStr
-
-			migrator, err := store.NewMigrator(pgConnStr)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(migrator.Up()).To(Succeed())
-			_ = migrator.Close()
+			pgConnStr := testutil.FreshDatabase(suiteT, sharedPG)
 
 			// Provisioner + host
 			provisioner := plugins.NewSchemaProvisioner(pgConnStr)
@@ -601,9 +586,6 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			}
 			if lifecyclepool != nil {
 				lifecyclepool.Close()
-			}
-			if lifecyclecontainer != nil {
-				_ = lifecyclecontainer.Terminate(context.Background())
 			}
 			if lifecyclecancel != nil {
 				lifecyclecancel()
@@ -822,12 +804,11 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 	Describe("Phase 3 Membership", func() {
 		var (
-			membershipCtx       context.Context
-			membershipCancel    context.CancelFunc
-			membershipContainer testcontainers.Container
-			membershipHost      *goplugin.Host
-			membershipPool      *pgxpool.Pool
-			membershipClient    scenev1.SceneServiceClient
+			membershipCtx    context.Context
+			membershipCancel context.CancelFunc
+			membershipHost   *goplugin.Host
+			membershipPool   *pgxpool.Pool
+			membershipClient scenev1.SceneServiceClient
 		)
 
 		BeforeEach(func() {
@@ -837,17 +818,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			}
 
 			membershipCtx, membershipCancel = context.WithTimeout(context.Background(), 2*time.Minute)
-
-			// Postgres + core migrations
-			pgEnv, err := testutil.StartPostgres(membershipCtx)
-			Expect(err).NotTo(HaveOccurred())
-			membershipContainer = pgEnv.Container
-			pgConnStr := pgEnv.ConnStr
-
-			migrator, err := store.NewMigrator(pgConnStr)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(migrator.Up()).To(Succeed())
-			_ = migrator.Close()
+			pgConnStr := testutil.FreshDatabase(suiteT, sharedPG)
 
 			// Provisioner + host (matches the lifecycle suite pattern)
 			provisioner := plugins.NewSchemaProvisioner(pgConnStr)
@@ -897,9 +868,6 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			}
 			if membershipPool != nil {
 				membershipPool.Close()
-			}
-			if membershipContainer != nil {
-				_ = membershipContainer.Terminate(context.Background())
 			}
 			if membershipCancel != nil {
 				membershipCancel()
