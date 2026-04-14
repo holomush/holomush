@@ -13,7 +13,10 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 )
 
+var suiteT *testing.T
+
 func TestIntegration(t *testing.T) {
+	suiteT = t
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Integration Suite")
 }
