@@ -248,8 +248,16 @@ var _ = Describe("Session Persistence", func() {
 		if grpcCli != nil {
 			_ = grpcCli.Close()
 		}
+		// Use Stop instead of GracefulStop for test cleanup.
+		// GracefulStop waits for in-flight Subscribe handlers to
+		// return, but client-side context cancellation may not
+		// propagate to the server-side stream context quickly
+		// enough, causing a hang that outlasts the test timeout.
+		// Tests that need GracefulStop as a server-side barrier
+		// (e.g., cursor commit specs) call it explicitly in the
+		// test body and set grpcServer = nil to skip this path.
 		if grpcServer != nil {
-			grpcServer.GracefulStop()
+			grpcServer.Stop()
 		}
 		if testCancel != nil {
 			testCancel()
@@ -335,7 +343,6 @@ var _ = Describe("Session Persistence", func() {
 			defer replayCancel()
 			replayStream, err := grpcCli.Subscribe(replayCtx, &corev1.SubscribeRequest{
 				SessionId:        sessionID,
-				ReplayFromCursor: true,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -588,7 +595,6 @@ var _ = Describe("Session Persistence", func() {
 			defer subBCancel()
 			streamB, err := grpcCli.Subscribe(subBCtx, &corev1.SubscribeRequest{
 				SessionId:        sessionID,
-				ReplayFromCursor: true,
 			})
 			Expect(err).NotTo(HaveOccurred())
 

@@ -356,7 +356,6 @@ func TestClient_Subscribe(t *testing.T) {
 			Timestamp: timestamppb.Now(),
 		},
 		SessionId: "test-session",
-		Streams:   []string{"location:test"},
 	})
 	require.NoError(t, err)
 
@@ -516,7 +515,6 @@ func TestClient_Subscribe_StreamError(t *testing.T) {
 			Timestamp: timestamppb.Now(),
 		},
 		SessionId: "invalid-session",
-		Streams:   []string{"location:test"},
 	})
 	require.NoError(t, err)
 

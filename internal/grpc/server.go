@@ -51,41 +51,29 @@ const defaultMaxReplay = 1000
 // behavior, never worse.
 const cursorCommitTimeout = 1 * time.Second
 
-// streamNotification wraps a ULID event notification with the stream
-// it came from. Relay goroutines send these to a shared channel so the
-// live loop can select on a single source.
-type streamNotification struct {
-	stream  string
-	eventID ulid.ULID
+// replayCompleteFrame returns a SubscribeResponse containing the
+// REPLAY_COMPLETE control signal.
+func replayCompleteFrame() *corev1.SubscribeResponse {
+	return &corev1.SubscribeResponse{
+		Frame: &corev1.SubscribeResponse_Control{
+			Control: &corev1.ControlFrame{
+				Signal: corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE,
+			},
+		},
+	}
 }
 
-// startNotificationRelay starts a goroutine that reads ULID notifications
-// from a subscription channel and forwards them as streamNotifications to
-// the shared notifyCh. The goroutine exits when the source channel closes
-// or ctx is cancelled.
-func startNotificationRelay(
-	ctx context.Context,
-	stream string,
-	source <-chan ulid.ULID,
-	notifyCh chan<- streamNotification,
-) {
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case id, ok := <-source:
-				if !ok {
-					return
-				}
-				select {
-				case notifyCh <- streamNotification{stream: stream, eventID: id}:
-				case <-ctx.Done():
-					return
-				}
-			}
-		}
-	}()
+// streamClosedFrame returns a SubscribeResponse containing the
+// STREAM_CLOSED control signal with the given message.
+func streamClosedFrame(msg string) *corev1.SubscribeResponse {
+	return &corev1.SubscribeResponse{
+		Frame: &corev1.SubscribeResponse_Control{
+			Control: &corev1.ControlFrame{
+				Signal:  corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED,
+				Message: msg,
+			},
+		},
+	}
 }
 
 // WorldQuerier provides read-only access to world model data for building
@@ -443,21 +431,6 @@ func isUserFacingError(err error) bool {
 	return msg != "Something went wrong. Try again."
 }
 
-// isValidSessionStreamName validates a plugin-contributed stream name.
-// Stream names must be non-empty, contain at least one colon, have no whitespace,
-// and be at most 256 characters long. Mirrors internal/plugin/manager.isValidStreamName.
-func isValidSessionStreamName(name string) bool {
-	if name == "" || len(name) > 256 {
-		return false
-	}
-	for _, r := range name {
-		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
-			return false
-		}
-	}
-	return strings.Contains(name, ":")
-}
-
 // emitCommandResponse emits a command_response or command_error event to the
 // character's personal stream. Returns an error if the event could not be emitted.
 func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.CharacterRef, text string, isError bool) error {
@@ -536,37 +509,6 @@ func eventToProto(ev core.Event) *corev1.SubscribeResponse {
 			},
 		},
 	}
-}
-
-// legacySubscriber is a transitional interface for callers that still use
-// the per-stream Subscribe method. Removed in B7 when the handler is
-// rewritten to use SubscribeSession.
-type legacySubscriber interface {
-	Subscribe(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error)
-}
-
-// subscribeStream sets up a LISTEN subscription on a stream and starts a
-// relay goroutine that forwards ULID notifications to notifyCh. Subscription
-// errors are forwarded to errCh. Returns an error if the LISTEN setup fails.
-func subscribeStream(ctx context.Context, store legacySubscriber, stream string, notifyCh chan<- streamNotification, errCh chan<- error) error {
-	eventCh, subErrCh, err := store.Subscribe(ctx, stream)
-	if err != nil {
-		return oops.With("stream", stream).Wrap(err)
-	}
-	startNotificationRelay(ctx, stream, eventCh, notifyCh)
-	go func() {
-		select {
-		case e, ok := <-subErrCh:
-			if ok && e != nil {
-				select {
-				case errCh <- e:
-				default:
-				}
-			}
-		case <-ctx.Done():
-		}
-	}()
-	return nil
 }
 
 // replayAndSend fetches events after afterID on the given stream and sends
@@ -681,20 +623,13 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	slog.DebugContext(ctx, "subscribe request",
 		"request_id", requestID,
 		"session_id", req.SessionId,
-		"streams", req.Streams,
 	)
 
 	if s.eventStore == nil {
 		return oops.Code("NOT_CONFIGURED").Errorf("event store not configured")
 	}
 
-	// Acquire the per-session cursor lock around the session Get so the
-	// EventCursors map we capture here reflects any in-flight commit by a
-	// previous Subscribe handler for this session. Releasing the lock
-	// before the rest of the handler runs keeps the read-side critical
-	// section to a single DB SELECT — the absolute minimum needed to
-	// close the Finding 1 race (holomush-9ues). The captured cursors
-	// are immutable thereafter from this handler's perspective.
+	// 1. Session lookup under cursor lock (Finding 1 closure).
 	info, err := func() (*session.Info, error) {
 		unlock := s.cursorLocks.lock(req.SessionId)
 		defer unlock()
@@ -704,136 +639,98 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
 	}
 
-	// Determine requested streams; default to the session's location.
-	streams := req.Streams
-	if len(streams) == 0 {
-		streams = []string{world.LocationStream(info.LocationID)}
-	}
-
-	// Separate location stream (dynamically swapped on move) from static streams.
-	var locStreamName string
-	var staticStreams []string
-	for _, sn := range streams {
-		if strings.HasPrefix(sn, world.StreamPrefixLocation) {
-			locStreamName = sn
-		} else {
-			staticStreams = append(staticStreams, sn)
+	// 2. Reattach if detached.
+	if info.Status == session.StatusDetached {
+		ok, casErr := s.sessionStore.ReattachCAS(ctx, req.SessionId)
+		if casErr != nil {
+			return oops.Code("SESSION_REATTACH_FAILED").With("session_id", req.SessionId).Wrap(casErr)
 		}
-	}
-	charStreamName := world.CharacterStream(info.CharacterID)
-	alreadyHasCharStream := false
-	for _, sn := range staticStreams {
-		if sn == charStreamName {
-			alreadyHasCharStream = true
-			break
-		}
-	}
-	if !alreadyHasCharStream {
-		staticStreams = append(staticStreams, charStreamName)
-	}
-
-	// Collect plugin-contributed streams (before LISTEN setup to preserve ordering invariant).
-	if s.streamContributor != nil {
-		contribCtx, contribCancel := context.WithTimeout(ctx, 2*time.Second)
-		playerID := ""
-		if !info.PlayerID.IsZero() {
-			playerID = info.PlayerID.String()
-		}
-		pluginStreams := s.streamContributor.QuerySessionStreams(contribCtx, plugins.SessionStreamsRequest{
-			CharacterID: info.CharacterID.String(),
-			PlayerID:    playerID,
-			SessionID:   info.ID,
-		})
-		contribCancel()
-		seen := make(map[string]bool, len(staticStreams))
-		for _, sn := range staticStreams {
-			seen[sn] = true
-		}
-		for _, ps := range pluginStreams {
-			if strings.HasPrefix(ps, world.StreamPrefixLocation) || seen[ps] {
-				continue
-			}
-			if !isValidSessionStreamName(ps) {
-				slog.WarnContext(ctx, "plugin contributed malformed stream name — skipping",
-					"session_id", info.ID, "stream", ps)
-				continue
-			}
-			staticStreams = append(staticStreams, ps)
-			seen[ps] = true
-		}
-	}
-
-	// All streams = static + location.
-	allStreams := make([]string, 0, len(staticStreams)+1)
-	allStreams = append(allStreams, staticStreams...)
-	if locStreamName != "" {
-		allStreams = append(allStreams, locStreamName)
-	}
-
-	// Set up LISTEN subscriptions before any replay to avoid missing events.
-	// TODO(B7): Replace per-stream subscribeWithCancel with single SubscribeSession
-	// for I-14 compliance. The current approach creates separate legacy subscriptions
-	// per stream, which does not guarantee cross-stream commit-order delivery.
-	notifyCh := make(chan streamNotification, 100)
-	errCh := make(chan error, len(allStreams))
-	streamCancels := make(map[string]context.CancelFunc)
-	subscribeWithCancel := func(sn string) error {
-		sctx, cancel := context.WithCancel(ctx)
-		ls, ok := s.eventStore.(legacySubscriber)
 		if !ok {
-			cancel()
-			return oops.Errorf("event store does not support legacy Subscribe")
+			return oops.Code("SESSION_REATTACH_LOST").
+				With("session_id", req.SessionId).
+				Errorf("session reattach CAS lost — another handler won the race")
 		}
-		if err := subscribeStream(sctx, ls, sn, notifyCh, errCh); err != nil {
-			cancel()
-			return err
+	}
+
+	// 3. RestoreFocus — produces the full stream list and replay modes.
+	var plan focus.RestorePlan
+	if s.focusCoordinator != nil {
+		var planErr error
+		plan, planErr = s.focusCoordinator.RestoreFocus(ctx, req.SessionId)
+		if planErr != nil {
+			slog.WarnContext(ctx, "RestoreFocus failed, falling back to empty plan",
+				"session_id", req.SessionId, "error", planErr)
 		}
-		streamCancels[sn] = cancel
-		return nil
+	}
+
+	// Ensure ambient streams are present even without a coordinator.
+	if len(plan.Streams) == 0 {
+		plan.Streams = append(plan.Streams,
+			focus.StreamWithMode{Stream: world.CharacterStream(info.CharacterID), Mode: focus.ReplayModeFromCursor},
+		)
+		if !info.LocationID.IsZero() {
+			plan.Streams = append(plan.Streams,
+				focus.StreamWithMode{Stream: world.LocationStream(info.LocationID), Mode: focus.ReplayModeFromCursor},
+			)
+		}
+		// Query plugin-contributed streams when no FocusCoordinator
+		// is wired (the coordinator handles this internally when
+		// present).
+		if s.streamContributor != nil {
+			playerID := ""
+			if !info.PlayerID.IsZero() {
+				playerID = info.PlayerID.String()
+			}
+			pluginStreams := s.streamContributor.QuerySessionStreams(ctx, plugins.SessionStreamsRequest{
+				CharacterID: info.CharacterID.String(),
+				PlayerID:    playerID,
+				SessionID:   info.ID,
+			})
+			for _, ps := range pluginStreams {
+				plan.Streams = append(plan.Streams,
+					focus.StreamWithMode{Stream: ps, Mode: focus.ReplayModeFromCursor},
+				)
+			}
+		}
+	}
+
+	// 4. SubscribeSession (Variant A — strict cross-stream ordering via single PG connection).
+	sub, subErr := s.eventStore.SubscribeSession(ctx)
+	if subErr != nil {
+		return oops.Code("SUBSCRIBE_FAILED").With("session_id", req.SessionId).Wrap(subErr)
 	}
 	defer func() {
-		for _, cancel := range streamCancels {
-			cancel()
+		if closeErr := sub.Close(); closeErr != nil {
+			slog.WarnContext(ctx, "subscription close failed", "session_id", req.SessionId, "error", closeErr)
 		}
 	}()
-	for _, sn := range allStreams {
-		if subErr := subscribeWithCancel(sn); subErr != nil {
-			return oops.Code("SUBSCRIBE_FAILED").With("session_id", req.SessionId).With("stream", sn).Wrap(subErr)
+
+	// 5. Add all streams from plan.
+	for _, sm := range plan.Streams {
+		if addErr := sub.AddStream(ctx, sm.Stream); addErr != nil {
+			slog.WarnContext(ctx, "failed to add stream from plan",
+				"session_id", req.SessionId, "stream", sm.Stream, "error", addErr)
 		}
 	}
 
-	// Synthetic location_state so the client has location context immediately.
-	if s.worldQuerier != nil && !info.LocationID.IsZero() {
-		syntheticLF := &locationFollower{
-			characterID:  info.CharacterID,
-			currentLocID: info.LocationID,
-			worldQuerier: s.worldQuerier,
-			sessionStore: s.sessionStore,
-		}
-		if locState, rsErr := syntheticLF.buildLocationState(ctx, info.LocationID); rsErr == nil {
-			if sendErr := stream.Send(locState); sendErr != nil {
-				return oops.Code("SEND_FAILED").With("session_id", req.SessionId).Wrap(sendErr)
-			}
-		}
+	// 6. locationFollower
+	locStreamName := ""
+	if !info.LocationID.IsZero() {
+		locStreamName = world.LocationStream(info.LocationID)
 	}
-
 	lf := &locationFollower{
 		characterID:   info.CharacterID,
 		currentLocID:  info.LocationID,
 		worldQuerier:  s.worldQuerier,
 		sessionStore:  s.sessionStore,
-		eventStore:    s.eventStore,
 		locStreamName: locStreamName,
-		notifyCh:      notifyCh,
-		errCh:         errCh,
+		sub:           sub,
 	}
-	defer func() {
-		if lf.locCancel != nil {
-			lf.locCancel()
-		}
-	}()
+	if sendErr := lf.sendSynthetic(ctx, stream); sendErr != nil {
+		return oops.Code("SEND_FAILED").With("session_id", req.SessionId).Wrap(sendErr)
+	}
 
-	// Register session control channel for mid-session stream updates.
+	// 7. Control channel for mid-session stream updates.
 	ctrlCh := make(chan sessionStreamUpdate, 16)
 	if s.streamRegistry != nil {
 		s.streamRegistry.Register(info.ID, ctrlCh)
@@ -844,43 +741,24 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		s.afterLISTENHook()
 	}
 
-	// Single replay pass: catches both historical cursor-based events
-	// (reconnection) and events appended during LISTEN setup (race window).
-	lastSentID := make(map[string]ulid.ULID)
-	for _, sn := range allStreams {
-		cursor := lastSentID[sn]
-		if req.ReplayFromCursor {
-			if c, ok := info.EventCursors[sn]; ok {
-				cursor = c
-			}
-		}
-		last, sendErr := s.replayAndSend(ctx, info, sn, cursor, stream, lf)
-		if sendErr != nil {
-			return oops.Code("SEND_FAILED").With("session_id", info.ID).Wrap(sendErr)
-		}
-		lastSentID[sn] = last
+	// 8. Merge-sort replay (I-15).
+	if replayErr := s.replayRestorePlan(ctx, info, plan, stream, lf); replayErr != nil {
+		return replayErr
 	}
 
-	// Signal to the client that the replay phase is complete.
-	if err := stream.Send(&corev1.SubscribeResponse{
-		Frame: &corev1.SubscribeResponse_Control{
-			Control: &corev1.ControlFrame{
-				Signal: corev1.ControlSignal_CONTROL_SIGNAL_REPLAY_COMPLETE,
-			},
-		},
-	}); err != nil {
+	// 9. REPLAY_COMPLETE
+	if err := stream.Send(replayCompleteFrame()); err != nil {
 		return oops.With("session_id", req.SessionId).Wrap(err)
 	}
 
-	// Watch for session destruction so we can emit STREAM_CLOSED.
+	// 10. WatchSession for lifecycle events.
 	sessionCh, watchErr := s.sessionStore.WatchSession(ctx, req.SessionId)
 	if watchErr != nil {
 		slog.Warn("failed to watch session lifecycle",
 			"session_id", req.SessionId, "error", watchErr)
-		// sessionCh is nil — the case will never be selected (graceful degradation).
 	}
 
-	// Live event loop: select on notifications, replay from lastSentID.
+	// 11. Live loop — single select on Subscription notifications + control + session.
 	for {
 		select {
 		case <-ctx.Done():
@@ -889,31 +767,27 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 			}
 			return oops.Code("SUBSCRIPTION_CANCELLED").With("session_id", req.SessionId).Wrap(ctx.Err())
 
-		case subErr := <-errCh:
-			return oops.Code("SUBSCRIPTION_ERROR").With("session_id", req.SessionId).Wrap(subErr)
+		case subLoopErr := <-sub.Errors():
+			return oops.Code("SUBSCRIPTION_ERROR").With("session_id", req.SessionId).Wrap(subLoopErr)
 
-		case notif := <-notifyCh:
-			last, sendErr := s.replayAndSend(ctx, info, notif.stream, lastSentID[notif.stream], stream, lf)
+		case notif := <-sub.Notifications():
+			cursor := ulid.ULID{}
+			if c, ok := info.EventCursors[notif.Stream]; ok {
+				cursor = c
+			}
+			last, sendErr := s.replayAndSend(ctx, info, notif.Stream, cursor, stream, lf)
 			if sendErr != nil {
 				return oops.Code("SEND_FAILED").With("session_id", req.SessionId).Wrap(sendErr)
 			}
-			lastSentID[notif.stream] = last
+			info.EventCursors[notif.Stream] = last
 
 		case ev, ok := <-sessionCh:
 			if !ok {
-				return nil // channel closed without event
+				return nil
 			}
 			if ev.Type == session.Destroyed {
-				// Best-effort: send STREAM_CLOSED, ignore send errors.
 				//nolint:errcheck // best-effort: client may already be disconnected
-				_ = stream.Send(&corev1.SubscribeResponse{
-					Frame: &corev1.SubscribeResponse_Control{
-						Control: &corev1.ControlFrame{
-							Signal:  corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED,
-							Message: ev.Message,
-						},
-					},
-				})
+				_ = stream.Send(streamClosedFrame(ev.Message))
 				return nil
 			}
 
@@ -921,38 +795,8 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 			if !ok {
 				return nil
 			}
-			if ctrl.add {
-				if _, exists := streamCancels[ctrl.stream]; exists {
-					continue // already subscribed — idempotent
-				}
-				if strings.HasPrefix(ctrl.stream, world.StreamPrefixLocation) {
-					slog.WarnContext(ctx, "plugin attempted to add location stream — rejected",
-						"session_id", info.ID, "stream", ctrl.stream)
-					continue
-				}
-				if subErr := subscribeWithCancel(ctrl.stream); subErr != nil {
-					slog.WarnContext(ctx, "mid-session stream add failed",
-						"session_id", info.ID, "stream", ctrl.stream, "error", subErr)
-				} else {
-					cursor := lastSentID[ctrl.stream]
-					if cursor.IsZero() && info.EventCursors != nil {
-						if c, ok := info.EventCursors[ctrl.stream]; ok {
-							cursor = c
-						}
-					}
-					last, sendErr := s.replayAndSend(ctx, info, ctrl.stream, cursor, stream, lf)
-					if sendErr != nil {
-						return oops.Code("SEND_FAILED").With("session_id", info.ID).Wrap(sendErr)
-					}
-					if !last.IsZero() {
-						lastSentID[ctrl.stream] = last
-					}
-				}
-			} else {
-				if cancel, exists := streamCancels[ctrl.stream]; exists {
-					cancel()
-					delete(streamCancels, ctrl.stream)
-				}
+			if ctrlErr := s.applyCtrlUpdate(ctx, info, sub, ctrl, stream, lf); ctrlErr != nil {
+				return oops.Code("SEND_FAILED").With("session_id", info.ID).Wrap(ctrlErr)
 			}
 		}
 	}

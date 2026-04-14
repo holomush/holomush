@@ -301,13 +301,11 @@ func (x *HandleCommandResponse) GetError() string {
 }
 
 type SubscribeRequest struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Meta             *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	SessionId        string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Streams          []string               `protobuf:"bytes,3,rep,name=streams,proto3" json:"streams,omitempty"`
-	ReplayFromCursor bool                   `protobuf:"varint,4,opt,name=replay_from_cursor,json=replayFromCursor,proto3" json:"replay_from_cursor,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubscribeRequest) Reset() {
@@ -352,20 +350,6 @@ func (x *SubscribeRequest) GetSessionId() string {
 		return x.SessionId
 	}
 	return ""
-}
-
-func (x *SubscribeRequest) GetStreams() []string {
-	if x != nil {
-		return x.Streams
-	}
-	return nil
-}
-
-func (x *SubscribeRequest) GetReplayFromCursor() bool {
-	if x != nil {
-		return x.ReplayFromCursor
-	}
-	return false
 }
 
 type EventFrame struct {
@@ -2019,13 +2003,11 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x15HandleCommandResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x04 \x01(\tR\x05errorJ\x04\b\x03\x10\x04\"\xac\x01\n" +
+	"\x05error\x18\x04 \x01(\tR\x05errorJ\x04\b\x03\x10\x04\"\x8d\x01\n" +
 	"\x10SubscribeRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x18\n" +
-	"\astreams\x18\x03 \x03(\tR\astreams\x12,\n" +
-	"\x12replay_from_cursor\x18\x04 \x01(\bR\x10replayFromCursor\"\xd6\x01\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionIdJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\astreamsR\x12replay_from_cursor\"\xd6\x01\n" +
 	"\n" +
 	"EventFrame\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +

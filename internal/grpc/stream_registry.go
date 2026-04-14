@@ -18,8 +18,8 @@ type sessionStreamUpdate struct {
 	stream     string
 	add        bool             // true = subscribe, false = unsubscribe
 	replayMode focus.ReplayMode // only meaningful when add == true
-	tailCount  int       //nolint:unused // forward-declared for B7 live-loop replay dispatch
-	notBefore  time.Time //nolint:unused // forward-declared for B7 live-loop replay dispatch
+	tailCount  int              // for ReplayModeBoundedTail
+	notBefore  time.Time        // for ReplayModeBoundedTail
 }
 
 // SessionStreamRegistry maps active session IDs to their Subscribe control channels.

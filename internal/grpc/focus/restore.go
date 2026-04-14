@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/internal/world"
 )
 
 // RestoreFocus derives the ordered stream-plus-mode list for the initial
@@ -30,6 +31,64 @@ func (c *defaultCoordinator) RestoreFocus(ctx context.Context, sessionID string)
 			continue
 		}
 		plan.Streams = append(plan.Streams, streams...)
+	}
+
+	// Ambient streams: character, location, plugin-contributed.
+	// Always use FromCursor — on initial attach the cursor is zero ULID,
+	// so Replay returns events from the beginning (which is correct).
+	// LiveOnly is only used by mid-session channel joins via the control
+	// channel, not by RestoreFocus.
+	ambientMode := ReplayModeFromCursor
+
+	// Build the seen set from policy-contributed streams so ambient and
+	// plugin streams are deduplicated against them.
+	seen := make(map[string]bool, len(plan.Streams))
+	for _, sm := range plan.Streams {
+		seen[sm.Stream] = true
+	}
+
+	if !info.CharacterID.IsZero() {
+		charStream := world.CharacterStream(info.CharacterID)
+		if !seen[charStream] {
+			plan.Streams = append(plan.Streams, StreamWithMode{
+				Stream: charStream,
+				Mode:   ambientMode,
+			})
+			seen[charStream] = true
+		}
+	}
+	if !info.LocationID.IsZero() {
+		locStream := world.LocationStream(info.LocationID)
+		if !seen[locStream] {
+			plan.Streams = append(plan.Streams, StreamWithMode{
+				Stream: locStream,
+				Mode:   ambientMode,
+			})
+			seen[locStream] = true
+		}
+	}
+
+	// Plugin-contributed streams.
+	if c.streamContributor != nil {
+		playerID := ""
+		if !info.PlayerID.IsZero() {
+			playerID = info.PlayerID.String()
+		}
+		pluginStreams := c.streamContributor.QuerySessionStreams(ctx, StreamContributorRequest{
+			CharacterID: info.CharacterID.String(),
+			PlayerID:    playerID,
+			SessionID:   info.ID,
+		})
+		for _, ps := range pluginStreams {
+			if seen[ps] {
+				continue
+			}
+			plan.Streams = append(plan.Streams, StreamWithMode{
+				Stream: ps,
+				Mode:   ambientMode,
+			})
+			seen[ps] = true
+		}
 	}
 
 	if info.PresentingFocus != nil {

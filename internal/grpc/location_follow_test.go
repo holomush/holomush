@@ -245,87 +245,134 @@ func TestLocationFollower_BuildLocationState(t *testing.T) {
 	assert.Equal(t, "Alice", payload.Present[0].Name)
 }
 
-func TestSwitchLocationSubscriptionSucceedsWithLegacyStore(t *testing.T) {
+// mockSubscription implements core.Subscription for tests.
+type mockSubscription struct {
+	addedStreams   []string
+	removedStreams []string
+	notifCh       chan core.StreamNotification
+	errCh         chan error
+}
+
+func newMockSubscription() *mockSubscription {
+	return &mockSubscription{
+		notifCh: make(chan core.StreamNotification, 10),
+		errCh:   make(chan error, 1),
+	}
+}
+
+func (m *mockSubscription) AddStream(_ context.Context, stream string) error {
+	m.addedStreams = append(m.addedStreams, stream)
+	return nil
+}
+
+func (m *mockSubscription) RemoveStream(_ context.Context, stream string) error {
+	m.removedStreams = append(m.removedStreams, stream)
+	return nil
+}
+
+func (m *mockSubscription) Notifications() <-chan core.StreamNotification { return m.notifCh }
+func (m *mockSubscription) Errors() <-chan error                         { return m.errCh }
+func (m *mockSubscription) Close() error                                 { return nil }
+
+func TestSwitchLocationSubscriptionAddsNewAndRemovesOldStream(t *testing.T) {
 	charID := ulid.Make()
 	oldLocID := ulid.Make()
 	newLocID := ulid.Make()
 
-	store := core.NewMemoryEventStore()
-	notifyCh := make(chan streamNotification, 10)
-	errCh := make(chan error, 1)
+	mockSub := newMockSubscription()
 
 	lf := &locationFollower{
 		characterID:   charID,
 		currentLocID:  oldLocID,
-		eventStore:    store,
 		locStreamName: world.LocationStream(oldLocID),
-		notifyCh:      notifyCh,
-		errCh:         errCh,
+		sub:           mockSub,
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	lf.switchLocationSubscription(ctx, newLocID)
+	lf.switchLocationSubscription(context.Background(), newLocID)
 
 	assert.Equal(t, world.LocationStream(newLocID), lf.locStreamName)
-	assert.NotNil(t, lf.locCancel)
-
-	// Verify no error was sent.
-	select {
-	case err := <-errCh:
-		t.Fatalf("unexpected error: %v", err)
-	default:
-	}
+	require.Len(t, mockSub.addedStreams, 1)
+	assert.Equal(t, world.LocationStream(newLocID), mockSub.addedStreams[0])
+	require.Len(t, mockSub.removedStreams, 1)
+	assert.Equal(t, world.LocationStream(oldLocID), mockSub.removedStreams[0])
 }
 
-// nonLegacyStore implements EventStore but NOT legacySubscriber (no Subscribe method).
-type nonLegacyStore struct {
-	core.EventStore
-}
-
-func TestSwitchLocationSubscriptionReturnsNilWithNonLegacyStore(t *testing.T) {
-	charID := ulid.Make()
-	locID := ulid.Make()
-	newLocID := ulid.Make()
-
-	notifyCh := make(chan streamNotification, 10)
-	errCh := make(chan error, 1)
-
-	lf := &locationFollower{
-		characterID:   charID,
-		currentLocID:  locID,
-		eventStore:    &nonLegacyStore{},
-		locStreamName: world.LocationStream(locID),
-		notifyCh:      notifyCh,
-		errCh:         errCh,
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	lf.switchLocationSubscription(ctx, newLocID)
-
-	// Should send error since the store doesn't support legacy Subscribe.
-	select {
-	case err := <-errCh:
-		assert.Contains(t, err.Error(), "does not support legacy Subscribe")
-	default:
-		t.Fatal("expected error for non-legacy store")
-	}
-}
-
-func TestSwitchLocationSubscriptionIsNoOpWhenEventStoreIsNil(t *testing.T) {
+func TestSwitchLocationSubscriptionIsNoOpWhenSubIsNil(t *testing.T) {
 	lf := &locationFollower{
 		characterID:  ulid.Make(),
 		currentLocID: ulid.Make(),
-		eventStore:   nil,
-		notifyCh:     make(chan streamNotification, 1),
+		sub:          nil,
 	}
 
 	require.NotPanics(t, func() {
 		lf.switchLocationSubscription(context.Background(), ulid.Make())
 	})
+}
+
+func TestSendSyntheticSendsLocationStateForCurrentLocation(t *testing.T) {
+	locID := ulid.Make()
+	wq := &mockWorldQuerier{
+		location: &world.Location{
+			ID:          locID,
+			Name:        "Library",
+			Description: "A quiet library.",
+		},
+		exits: []*world.Exit{},
+	}
+	lf := &locationFollower{
+		currentLocID: locID,
+		worldQuerier: wq,
+		sessionStore: session.NewMemStore(),
+	}
+
+	stream := &capturingStream{ctx: context.Background()}
+	err := lf.sendSynthetic(context.Background(), stream)
+	require.NoError(t, err)
+
+	require.Len(t, stream.sent, 1)
+	assert.Equal(t, string(core.EventTypeLocationState), stream.sent[0].GetEvent().GetType())
+}
+
+func TestSendSyntheticReturnsNilWhenWorldQuerierNil(t *testing.T) {
+	lf := &locationFollower{
+		currentLocID: ulid.Make(),
+		worldQuerier: nil,
+	}
+
+	stream := &capturingStream{ctx: context.Background()}
+	err := lf.sendSynthetic(context.Background(), stream)
+	assert.NoError(t, err)
+	assert.Empty(t, stream.sent)
+}
+
+func TestSendSyntheticReturnsNilWhenLocationIDZero(t *testing.T) {
+	lf := &locationFollower{
+		worldQuerier: &mockWorldQuerier{},
+	}
+
+	stream := &capturingStream{ctx: context.Background()}
+	err := lf.sendSynthetic(context.Background(), stream)
+	assert.NoError(t, err)
+	assert.Empty(t, stream.sent)
+}
+
+func TestSwitchLocationSubscriptionSkipsRemoveWhenNoOldStream(t *testing.T) {
+	mockSub := newMockSubscription()
+
+	lf := &locationFollower{
+		characterID:   ulid.Make(),
+		currentLocID:  ulid.Make(),
+		locStreamName: "", // no old stream name set
+		sub:           mockSub,
+	}
+
+	newLocID := ulid.Make()
+	lf.switchLocationSubscription(context.Background(), newLocID)
+
+	// Should add new but not remove any (no old stream).
+	require.Len(t, mockSub.addedStreams, 1)
+	assert.Equal(t, world.LocationStream(newLocID), mockSub.addedStreams[0])
+	assert.Empty(t, mockSub.removedStreams)
 }
 
 func TestConvertExits_GRPCPackage(t *testing.T) {

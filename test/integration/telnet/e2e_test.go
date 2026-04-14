@@ -562,7 +562,11 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 			connectAsGuest(client)
 
 			client.SendLine("quit")
-			line := client.ReadLine()
+			// The Subscribe stream may replay the arrive event before the
+			// quit response reaches the client.  Use ReadUntil so that any
+			// interleaved replay frames (e.g. "Name has arrived.") are
+			// drained before asserting on "Goodbye!".
+			line := client.ReadUntil("Goodbye!", 5*time.Second)
 			Expect(line).To(Equal("Goodbye!"))
 		})
 
@@ -586,7 +590,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 
 			// A quits
 			clientA.SendLine("quit")
-			_ = clientA.ReadLine() // Goodbye!
+			_ = clientA.ReadUntil("Goodbye!", 5*time.Second)
 			clientA.Close()
 
 			// C connects and says something — B should receive
@@ -664,7 +668,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 
 			connectAsGuest(client)
 			client.SendLine("quit")
-			_ = client.ReadLine() // Goodbye
+			_ = client.ReadUntil("Goodbye!", 5*time.Second)
 			client.Close()
 
 			// Leave event should appear in the location stream
@@ -696,7 +700,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 
 			// Disconnect
 			c.SendLine("quit")
-			_ = c.ReadLine() // Goodbye
+			_ = c.ReadUntil("Goodbye!", 5*time.Second)
 			c.Close()
 
 			// Wait for disconnect RPC + hook to fire
