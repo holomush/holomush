@@ -23,34 +23,24 @@ import (
 	"github.com/holomush/holomush/test/testutil"
 )
 
-// newTestStore starts a Postgres testcontainer and opens a SceneStore against
-// it. Cleanup is registered via t.Cleanup in two phases (container, then
-// store) so the container is released even if NewSceneStore fails. Container
-// termination uses a fresh, short-lived context so teardown does not inherit
-// the 2-minute setup deadline.
+// newTestStore opens a SceneStore against a fresh database on the shared
+// Postgres container. Plugin-specific migrations are applied internally by
+// NewSceneStore via storage.RunMigrationsFS.
 //
-// Note: testutil.PostgresEnv exposes the connection string via the ConnStr
-// field (no "ing" suffix). The holomush role owns the public schema, so
-// the plugin's migrations create the scenes table directly in public.
-// Schema isolation via SchemaProvisioner is exercised by the end-to-end
-// test in test/integration/plugin/core_scenes_test.go (Task 13), not here.
+// Uses RawDatabase (not FreshDatabase) because the core baseline migration
+// creates a legacy scene_participants table with FK to locations(id), which
+// conflicts with the plugin's scene_participants that references scenes(id).
+// A blank database avoids the conflict and lets the plugin own its schema.
 func newTestStore(t *testing.T) *SceneStore {
 	t.Helper()
 
 	setupCtx, cancelSetup := context.WithTimeout(context.Background(), 2*time.Minute)
 	t.Cleanup(cancelSetup)
 
-	pgEnv, err := testutil.StartPostgres(setupCtx)
-	require.NoError(t, err, "failed to start postgres testcontainer")
-	// Register container termination immediately so a subsequent
-	// NewSceneStore failure cannot leak the container.
-	t.Cleanup(func() {
-		termCtx, cancelTerm := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancelTerm()
-		_ = pgEnv.Terminate(termCtx)
-	})
+	shared := testutil.SharedPostgres(t)
+	connStr := testutil.RawDatabase(t, shared)
 
-	store, err := NewSceneStore(setupCtx, pgEnv.ConnStr)
+	store, err := NewSceneStore(setupCtx, connStr)
 	require.NoError(t, err, "failed to open scene store")
 	t.Cleanup(store.Close)
 

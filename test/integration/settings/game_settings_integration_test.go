@@ -11,7 +11,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"github.com/testcontainers/testcontainers-go"
 
 	"github.com/holomush/holomush/internal/settings"
 	"github.com/holomush/holomush/internal/store"
@@ -24,22 +23,16 @@ var _ = Describe("GameSettings with real Postgres", func() {
 		cancel     context.CancelFunc
 		eventStore *store.PostgresEventStore
 		gs         settings.GameSettings
-		container  testcontainers.Container
 	)
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
 
-		pgEnv, err := testutil.StartPostgres(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		container = pgEnv.Container
+		shared := testutil.SharedPostgres(suiteT)
+		connStr := testutil.FreshDatabase(suiteT, shared)
 
-		migrator, err := store.NewMigrator(pgEnv.ConnStr)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(migrator.Up()).To(Succeed())
-		_ = migrator.Close()
-
-		eventStore, err = store.NewPostgresEventStore(ctx, pgEnv.ConnStr)
+		var err error
+		eventStore, err = store.NewPostgresEventStore(ctx, connStr)
 		Expect(err).NotTo(HaveOccurred())
 
 		gs = settings.NewGameSettings(&settings.SystemInfoAdapter{
@@ -53,9 +46,6 @@ var _ = Describe("GameSettings with real Postgres", func() {
 			eventStore.Close()
 		}
 		cancel()
-		if container != nil {
-			_ = container.Terminate(context.Background())
-		}
 	})
 
 	Describe("Seeded defaults", func() {

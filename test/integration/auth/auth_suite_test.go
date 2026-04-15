@@ -14,7 +14,6 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/samber/oops"
-	"github.com/testcontainers/testcontainers-go"
 
 	"github.com/holomush/holomush/internal/auth"
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
@@ -24,16 +23,18 @@ import (
 	"github.com/holomush/holomush/test/testutil"
 )
 
+var suiteT *testing.T
+
 func TestPlayerSessionLifecycle(t *testing.T) {
+	suiteT = t
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Player Session Lifecycle Integration Suite")
 }
 
 // testEnv holds all resources needed for integration tests.
 type testEnv struct {
-	ctx       context.Context
-	pool      *pgxpool.Pool
-	container testcontainers.Container
+	ctx  context.Context
+	pool *pgxpool.Pool
 
 	// Stores / repos
 	playerSessionStore *store.PostgresPlayerSessionStore
@@ -65,28 +66,11 @@ var _ = AfterSuite(func() {
 func setupTestEnv() (*testEnv, error) {
 	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	if err != nil {
-		return nil, err
-	}
-	container := pgEnv.Container
-	connStr := pgEnv.ConnStr
-
-	migrator, err := store.NewMigrator(connStr)
-	if err != nil {
-		_ = container.Terminate(ctx)
-		return nil, err
-	}
-	if err := migrator.Up(); err != nil {
-		_ = migrator.Close()
-		_ = container.Terminate(ctx)
-		return nil, err
-	}
-	_ = migrator.Close()
+	shared := testutil.SharedPostgres(suiteT)
+	connStr := testutil.FreshDatabase(suiteT, shared)
 
 	eventStore, err := store.NewPostgresEventStore(ctx, connStr)
 	if err != nil {
-		_ = container.Terminate(ctx)
 		return nil, err
 	}
 
@@ -99,14 +83,12 @@ func setupTestEnv() (*testEnv, error) {
 	authService, err := auth.NewAuthService(playerRepo, playerSessionStore, hasher)
 	if err != nil {
 		eventStore.Close()
-		_ = container.Terminate(ctx)
 		return nil, err
 	}
 
 	return &testEnv{
 		ctx:                ctx,
 		pool:               pool,
-		container:          container,
 		playerSessionStore: playerSessionStore,
 		playerRepo:         playerRepo,
 		charRepo:           &authCharRepoAdapter{pool: pool, charRepo: worldpg.NewCharacterRepository(pool)},
@@ -121,9 +103,6 @@ func setupTestEnv() (*testEnv, error) {
 func (e *testEnv) cleanup() {
 	if e.eventStore != nil {
 		e.eventStore.Close()
-	}
-	if e.container != nil {
-		_ = e.container.Terminate(e.ctx)
 	}
 }
 

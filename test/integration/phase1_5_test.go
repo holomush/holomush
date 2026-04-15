@@ -18,7 +18,6 @@ import (
 	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"github.com/testcontainers/testcontainers-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
@@ -71,7 +70,6 @@ func newMinimalDispatcher() (*command.Dispatcher, *command.Services) {
 type testEnv struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
-	container     testcontainers.Container
 	store         *store.PostgresEventStore
 	certsDir      string
 	runtimeDir    string
@@ -113,32 +111,12 @@ func setupTestEnv() (*testEnv, error) {
 	// Set XDG env vars for control socket
 	os.Setenv("XDG_RUNTIME_DIR", tmpDir)
 
-	// Start PostgreSQL container
-	pgEnv, err := testutil.StartPostgres(ctx)
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-	env.container = pgEnv.Container
-	connStr := pgEnv.ConnStr
-
-	// Run migrations using the new Migrator
-	migrator, err := store.NewMigrator(connStr)
-	if err != nil {
-		_ = pgEnv.Terminate(ctx)
-		return nil, err
-	}
-	if err := migrator.Up(); err != nil {
-		_ = migrator.Close()
-		_ = pgEnv.Terminate(ctx)
-		return nil, err
-	}
-	_ = migrator.Close()
+	shared := testutil.SharedPostgres(suiteT)
+	connStr := testutil.FreshDatabase(suiteT, shared)
 
 	// Create event store
 	env.store, err = store.NewPostgresEventStore(ctx, connStr)
 	if err != nil {
-		_ = pgEnv.Terminate(ctx)
 		return nil, err
 	}
 
@@ -164,10 +142,6 @@ func (env *testEnv) cleanup() {
 
 	if env.store != nil {
 		env.store.Close()
-	}
-
-	if env.container != nil {
-		_ = env.container.Terminate(ctx)
 	}
 
 	env.cancel()

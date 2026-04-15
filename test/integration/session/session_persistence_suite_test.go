@@ -20,7 +20,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"github.com/testcontainers/testcontainers-go"
 
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
@@ -29,19 +28,21 @@ import (
 	"github.com/holomush/holomush/test/testutil"
 )
 
+var suiteT *testing.T
+
 func TestSessionPersistence(t *testing.T) {
+	suiteT = t
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Session Persistence Integration Suite")
 }
 
 // suiteEnv holds the resources shared across all specs in the suite.
-// The Postgres container, pool, and stateless repositories are created
-// once in BeforeSuite. Per-spec state (engine, gRPC server, reaper) is
-// constructed in BeforeEach against the shared pool.
+// The shared Postgres container and a fresh per-suite database are
+// obtained once in BeforeSuite. Per-spec state (engine, gRPC server,
+// reaper) is constructed in BeforeEach against the shared pool.
 type suiteEnv struct {
-	ctx       context.Context
-	container testcontainers.Container
-	pool      *pgxpool.Pool
+	ctx  context.Context
+	pool *pgxpool.Pool
 
 	eventStore         *store.PostgresEventStore
 	sessionStore       *store.PostgresSessionStore
@@ -56,15 +57,10 @@ var env *suiteEnv
 var _ = BeforeSuite(func() {
 	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	Expect(err).NotTo(HaveOccurred())
+	shared := testutil.SharedPostgres(suiteT)
+	connStr := testutil.FreshDatabase(suiteT, shared)
 
-	migrator, err := store.NewMigrator(pgEnv.ConnStr)
-	Expect(err).NotTo(HaveOccurred())
-	Expect(migrator.Up()).To(Succeed())
-	_ = migrator.Close()
-
-	eventStore, err := store.NewPostgresEventStore(ctx, pgEnv.ConnStr)
+	eventStore, err := store.NewPostgresEventStore(ctx, connStr)
 	Expect(err).NotTo(HaveOccurred())
 
 	pool := eventStore.Pool()
@@ -72,7 +68,6 @@ var _ = BeforeSuite(func() {
 
 	env = &suiteEnv{
 		ctx:                ctx,
-		container:          pgEnv.Container,
 		pool:               pool,
 		eventStore:         eventStore,
 		sessionStore:       store.NewPostgresSessionStore(pool),
@@ -89,9 +84,6 @@ var _ = AfterSuite(func() {
 	}
 	if env.eventStore != nil {
 		env.eventStore.Close()
-	}
-	if env.container != nil {
-		_ = env.container.Terminate(env.ctx)
 	}
 })
 

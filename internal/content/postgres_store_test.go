@@ -15,30 +15,23 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/content"
-	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/test/testutil"
 )
 
-// setupPool starts a Postgres container, runs migrations, and returns a pool
-// with a cleanup function.
+// setupPool returns a pool connected to a fresh database on the shared
+// Postgres container. Migrations are applied by FreshDatabase.
 func setupPool(t *testing.T) (*pgxpool.Pool, func()) {
 	t.Helper()
 	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	require.NoError(t, err)
+	shared := testutil.SharedPostgres(t)
+	connStr := testutil.FreshDatabase(t, shared)
 
-	migrator, err := store.NewMigrator(pgEnv.ConnStr)
-	require.NoError(t, err)
-	require.NoError(t, migrator.Up())
-	_ = migrator.Close()
-
-	pool, err := pgxpool.New(ctx, pgEnv.ConnStr)
+	pool, err := pgxpool.New(ctx, connStr)
 	require.NoError(t, err)
 
 	cleanup := func() {
 		pool.Close()
-		_ = pgEnv.Terminate(ctx)
 	}
 	return pool, cleanup
 }

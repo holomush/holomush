@@ -41,39 +41,26 @@ func findRepoPluginsDir() (string, error) {
 
 var _ = Describe("Plugin Alias Seeding Integration", func() {
 	var (
-		pgEnv   *testutil.PostgresEnv
-		pool    *pgxpool.Pool
-		repo    *store.PostgresAliasRepository
-		cache   *command.AliasCache
-		cleanup func()
+		pool  *pgxpool.Pool
+		repo  *store.PostgresAliasRepository
+		cache *command.AliasCache
 	)
 
 	BeforeEach(func() {
 		ctx := context.Background()
+		connStr := testutil.FreshDatabase(suiteT, sharedPG)
+
 		var err error
-		pgEnv, err = testutil.StartPostgres(ctx)
-		Expect(err).NotTo(HaveOccurred())
-
-		migrator, err := store.NewMigrator(pgEnv.ConnStr)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(migrator.Up()).To(Succeed())
-		_ = migrator.Close()
-
-		pool, err = pgxpool.New(ctx, pgEnv.ConnStr)
+		pool, err = pgxpool.New(ctx, connStr)
 		Expect(err).NotTo(HaveOccurred())
 
 		repo = store.NewPostgresAliasRepository(pool)
 		cache = command.NewAliasCache()
-
-		cleanup = func() {
-			pool.Close()
-			_ = pgEnv.Terminate(ctx)
-		}
 	})
 
 	AfterEach(func() {
-		if cleanup != nil {
-			cleanup()
+		if pool != nil {
+			pool.Close()
 		}
 	})
 

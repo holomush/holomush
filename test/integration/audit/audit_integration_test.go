@@ -18,44 +18,38 @@ import (
 	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"github.com/testcontainers/testcontainers-go"
 
 	"github.com/holomush/holomush/internal/access"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/audit"
 	"github.com/holomush/holomush/internal/command"
-	"github.com/holomush/holomush/internal/store"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	"github.com/holomush/holomush/test/testutil"
 )
 
+var suiteT *testing.T
+
 func TestAuditIntegration(t *testing.T) {
+	suiteT = t
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Audit Subsystem Integration")
 }
 
 var _ = Describe("Plugin-emitted audit events reaching access_audit_log", func() {
 	var (
-		ctx       context.Context
-		cancel    context.CancelFunc
-		container testcontainers.Container
-		db        *sql.DB
-		logger    *audit.Logger
+		ctx    context.Context
+		cancel context.CancelFunc
+		db     *sql.DB
+		logger *audit.Logger
 	)
 
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
 
-		pgEnv, err := testutil.StartPostgres(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		container = pgEnv.Container
-		connStr := pgEnv.ConnStr
+		shared := testutil.SharedPostgres(suiteT)
+		connStr := testutil.FreshDatabase(suiteT, shared)
 
-		migrator, err := store.NewMigrator(connStr)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(migrator.Up()).To(Succeed())
-		_ = migrator.Close()
-
+		var err error
 		db, err = sql.Open("pgx", connStr)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -81,10 +75,6 @@ var _ = Describe("Plugin-emitted audit events reaching access_audit_log", func()
 		if db != nil {
 			_ = db.Close()
 			db = nil
-		}
-		if container != nil {
-			_ = container.Terminate(context.Background())
-			container = nil
 		}
 		if cancel != nil {
 			cancel()

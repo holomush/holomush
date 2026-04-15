@@ -20,7 +20,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"github.com/testcontainers/testcontainers-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -84,10 +83,9 @@ func configureBinaryHostEventEmitter(host *goplugin.Host, eventStore core.EventS
 
 var _ = Describe("Binary Plugin Lifecycle", func() {
 	var (
-		ctx       context.Context
-		cancel    context.CancelFunc
-		container testcontainers.Container
-		connStr   string
+		ctx     context.Context
+		cancel  context.CancelFunc
+		connStr string
 	)
 
 	BeforeEach(func() {
@@ -102,24 +100,10 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 		}
 
 		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
-
-		// Start PostgreSQL via testcontainers
-		pgEnv, err := testutil.StartPostgres(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		container = pgEnv.Container
-		connStr = pgEnv.ConnStr
-
-		// Run core server migrations (needed for the base schema)
-		migrator, err := store.NewMigrator(connStr)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(migrator.Up()).To(Succeed())
-		_ = migrator.Close()
+		connStr = testutil.FreshDatabase(suiteT, sharedPG)
 	})
 
 	AfterEach(func() {
-		if container != nil {
-			_ = container.Terminate(context.Background())
-		}
 		if cancel != nil {
 			cancel()
 		}
@@ -369,7 +353,6 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 		var (
 			abacCtx         context.Context
 			abacCancel      context.CancelFunc
-			abacContainer   testcontainers.Container
 			abacConnStr     string
 			abacHost        *goplugin.Host
 			abacPs          *policystore.PostgresStore
@@ -387,21 +370,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			}
 
 			abacCtx, abacCancel = context.WithTimeout(context.Background(), 2*time.Minute)
-
-			// Postgres + migrator — use suite-local handles so the outer
-			// `container`/`connStr` vars are not clobbered. This keeps the
-			// outer Describe block's Postgres instance reachable in its own
-			// AfterEach instead of being terminated twice (once here, never
-			// at the outer level).
-			pgEnv, err := testutil.StartPostgres(abacCtx)
-			Expect(err).NotTo(HaveOccurred())
-			abacContainer = pgEnv.Container
-			abacConnStr = pgEnv.ConnStr
-
-			migrator, err := store.NewMigrator(abacConnStr)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(migrator.Up()).To(Succeed())
-			_ = migrator.Close()
+			abacConnStr = testutil.FreshDatabase(suiteT, sharedPG)
 
 			// Provisioner outlives BeforeEach (closed in AfterEach)
 			abacProvisioner = plugins.NewSchemaProvisioner(abacConnStr)
@@ -506,9 +475,6 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			if abacPool != nil {
 				abacPool.Close()
 			}
-			if abacContainer != nil {
-				_ = abacContainer.Terminate(context.Background())
-			}
 			if abacCancel != nil {
 				abacCancel()
 			}
@@ -548,12 +514,11 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 	Describe("scene plugin lifecycle: state machine", func() {
 		var (
-			lifecyclectx       context.Context
-			lifecyclecancel    context.CancelFunc
-			lifecyclecontainer testcontainers.Container
-			lifecyclehost      *goplugin.Host
-			lifecyclepool      *pgxpool.Pool
-			lifecyclesceneID   string
+			lifecyclectx     context.Context
+			lifecyclecancel  context.CancelFunc
+			lifecyclehost    *goplugin.Host
+			lifecyclepool    *pgxpool.Pool
+			lifecyclesceneID string
 		)
 
 		BeforeEach(func() {
@@ -563,17 +528,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			}
 
 			lifecyclectx, lifecyclecancel = context.WithTimeout(context.Background(), 2*time.Minute)
-
-			// Postgres + core migrations (so the policy store schema exists)
-			pgEnv, err := testutil.StartPostgres(lifecyclectx)
-			Expect(err).NotTo(HaveOccurred())
-			lifecyclecontainer = pgEnv.Container
-			pgConnStr := pgEnv.ConnStr
-
-			migrator, err := store.NewMigrator(pgConnStr)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(migrator.Up()).To(Succeed())
-			_ = migrator.Close()
+			pgConnStr := testutil.FreshDatabase(suiteT, sharedPG)
 
 			// Provisioner + host
 			provisioner := plugins.NewSchemaProvisioner(pgConnStr)
@@ -631,9 +586,6 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			}
 			if lifecyclepool != nil {
 				lifecyclepool.Close()
-			}
-			if lifecyclecontainer != nil {
-				_ = lifecyclecontainer.Terminate(context.Background())
 			}
 			if lifecyclecancel != nil {
 				lifecyclecancel()
@@ -852,12 +804,11 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 
 	Describe("Phase 3 Membership", func() {
 		var (
-			membershipCtx       context.Context
-			membershipCancel    context.CancelFunc
-			membershipContainer testcontainers.Container
-			membershipHost      *goplugin.Host
-			membershipPool      *pgxpool.Pool
-			membershipClient    scenev1.SceneServiceClient
+			membershipCtx    context.Context
+			membershipCancel context.CancelFunc
+			membershipHost   *goplugin.Host
+			membershipPool   *pgxpool.Pool
+			membershipClient scenev1.SceneServiceClient
 		)
 
 		BeforeEach(func() {
@@ -867,17 +818,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			}
 
 			membershipCtx, membershipCancel = context.WithTimeout(context.Background(), 2*time.Minute)
-
-			// Postgres + core migrations
-			pgEnv, err := testutil.StartPostgres(membershipCtx)
-			Expect(err).NotTo(HaveOccurred())
-			membershipContainer = pgEnv.Container
-			pgConnStr := pgEnv.ConnStr
-
-			migrator, err := store.NewMigrator(pgConnStr)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(migrator.Up()).To(Succeed())
-			_ = migrator.Close()
+			pgConnStr := testutil.FreshDatabase(suiteT, sharedPG)
 
 			// Provisioner + host (matches the lifecycle suite pattern)
 			provisioner := plugins.NewSchemaProvisioner(pgConnStr)
@@ -927,9 +868,6 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			}
 			if membershipPool != nil {
 				membershipPool.Close()
-			}
-			if membershipContainer != nil {
-				_ = membershipContainer.Terminate(context.Background())
 			}
 			if membershipCancel != nil {
 				membershipCancel()

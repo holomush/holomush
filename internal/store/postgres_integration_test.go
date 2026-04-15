@@ -20,39 +20,22 @@ import (
 	"github.com/holomush/holomush/test/testutil"
 )
 
-// setupPostgresContainer starts a PostgreSQL container for testing.
+// setupPostgresContainer returns a PostgresEventStore backed by a fresh,
+// pre-migrated database cloned from the shared template.
 func setupPostgresContainer() (*store.PostgresEventStore, func(), error) {
 	ctx := context.Background()
 
-	pgEnv, err := testutil.StartPostgres(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
+	shared := testutil.SharedPostgres(suiteT)
+	connStr := testutil.FreshDatabase(suiteT, shared)
 
-	// Run migrations using the new Migrator
-	migrator, err := store.NewMigrator(pgEnv.ConnStr)
+	eventStore, err := store.NewPostgresEventStore(ctx, connStr)
 	if err != nil {
-		_ = pgEnv.Terminate(ctx)
-		return nil, nil, err
-	}
-	if err := migrator.Up(); err != nil {
-		_ = migrator.Close()
-		_ = pgEnv.Terminate(ctx)
-		return nil, nil, err
-	}
-	_ = migrator.Close()
-
-	eventStore, err := store.NewPostgresEventStore(ctx, pgEnv.ConnStr)
-	if err != nil {
-		_ = pgEnv.Terminate(ctx)
 		return nil, nil, err
 	}
 
 	cleanup := func() {
 		eventStore.Close()
-		_ = pgEnv.Terminate(ctx)
 	}
-
 	return eventStore, cleanup, nil
 }
 

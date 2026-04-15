@@ -12,7 +12,10 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 )
 
+var suiteT *testing.T
+
 func TestStore(t *testing.T) {
+	suiteT = t
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Store Suite")
 }
