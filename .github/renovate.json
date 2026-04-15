@@ -32,28 +32,38 @@
     },
     {
       "description": "Group OpenTelemetry packages",
-      "matchPackagePrefixes": ["go.opentelemetry.io/otel"],
-      "groupName": "OpenTelemetry"
+      "groupName": "OpenTelemetry",
+      "matchPackageNames": [
+        "go.opentelemetry.io/otel{/,}**"
+      ]
     },
     {
       "description": "Group pgx packages",
-      "matchPackagePrefixes": ["github.com/jackc/pgx"],
-      "groupName": "pgx"
+      "groupName": "pgx",
+      "matchPackageNames": [
+        "github.com/jackc/pgx{/,}**"
+      ]
     },
     {
       "description": "Group testify packages",
-      "matchPackagePrefixes": ["github.com/stretchr/testify"],
-      "groupName": "testify"
+      "groupName": "testify",
+      "matchPackageNames": [
+        "github.com/stretchr/testify{/,}**"
+      ]
     },
     {
       "description": "Group golang.org/x packages",
-      "matchPackagePrefixes": ["golang.org/x/"],
-      "groupName": "golang.org/x"
+      "groupName": "golang.org/x",
+      "matchPackageNames": [
+        "golang.org/x/{/,}**"
+      ]
     },
     {
       "description": "Group Google packages (grpc, protobuf)",
-      "matchPackagePrefixes": ["google.golang.org/"],
-      "groupName": "Google Go"
+      "groupName": "Google Go",
+      "matchPackageNames": [
+        "google.golang.org/{/,}**"
+      ]
     },
     {
       "description": "Major version bumps require manual review",
