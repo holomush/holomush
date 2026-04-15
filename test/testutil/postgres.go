@@ -28,15 +28,15 @@ type PostgresEnv struct {
 	Container    testcontainers.Container
 	ConnStr      string
 	AdminConnStr string
-}
-
-var (
-	sharedOnce sync.Once
-	sharedEnv  *PostgresEnv
-	sharedErr  error
 
 	templateOnce sync.Once
 	templateErr  error
+}
+
+var (
+	sharedOnce   sync.Once
+	sharedEnv    *PostgresEnv
+	sharedErr    error
 	templateName = "holomush_template"
 )
 
@@ -201,7 +201,7 @@ func FreshDatabase(t testing.TB, env *PostgresEnv) string {
 	t.Helper()
 	ensureTemplate(t, env)
 
-	dbName := randomDBName()
+	dbName := randomDBName(t)
 	ctx := context.Background()
 
 	conn, err := pgx.Connect(ctx, env.AdminConnStr)
@@ -233,7 +233,7 @@ func FreshDatabase(t testing.TB, env *PostgresEnv) string {
 func RawDatabase(t testing.TB, env *PostgresEnv) string {
 	t.Helper()
 
-	dbName := randomDBName()
+	dbName := randomDBName(t)
 	ctx := context.Background()
 
 	conn, err := pgx.Connect(ctx, env.AdminConnStr)
@@ -261,12 +261,12 @@ func RawDatabase(t testing.TB, env *PostgresEnv) string {
 
 func ensureTemplate(t testing.TB, env *PostgresEnv) {
 	t.Helper()
-	templateOnce.Do(func() {
+	env.templateOnce.Do(func() {
 		ctx := context.Background()
 
 		conn, err := pgx.Connect(ctx, env.AdminConnStr)
 		if err != nil {
-			templateErr = fmt.Errorf("connect as superuser: %w", err)
+			env.templateErr = fmt.Errorf("connect as superuser: %w", err)
 			return
 		}
 		defer func() { _ = conn.Close(ctx) }() //nolint:errcheck // best-effort cleanup
@@ -274,24 +274,24 @@ func ensureTemplate(t testing.TB, env *PostgresEnv) {
 		createSQL := ddlCreateDB(templateName)
 		_, err = conn.Exec(ctx, createSQL)
 		if err != nil {
-			templateErr = fmt.Errorf("create template database: %w", err)
+			env.templateErr = fmt.Errorf("create template database: %w", err)
 			return
 		}
 
 		tmplConnStr, err := replaceDatabase(env.ConnStr, templateName)
 		if err != nil {
-			templateErr = fmt.Errorf("build template connection string: %w", err)
+			env.templateErr = fmt.Errorf("build template connection string: %w", err)
 			return
 		}
 
 		migrator, migErr := store.NewMigrator(tmplConnStr)
 		if migErr != nil {
-			templateErr = fmt.Errorf("create migrator: %w", migErr)
+			env.templateErr = fmt.Errorf("create migrator: %w", migErr)
 			return
 		}
 		if migErr = migrator.Up(); migErr != nil {
 			migrator.Close() //nolint:errcheck // best-effort cleanup
-			templateErr = fmt.Errorf("run migrations: %w", migErr)
+			env.templateErr = fmt.Errorf("run migrations: %w", migErr)
 			return
 		}
 		migrator.Close() //nolint:errcheck // best-effort cleanup
@@ -299,12 +299,12 @@ func ensureTemplate(t testing.TB, env *PostgresEnv) {
 		alterSQL := ddlMarkTemplate(templateName)
 		_, err = conn.Exec(ctx, alterSQL)
 		if err != nil {
-			templateErr = fmt.Errorf("mark template: %w", err)
+			env.templateErr = fmt.Errorf("mark template: %w", err)
 			return
 		}
 	})
-	if templateErr != nil {
-		t.Fatalf("ensureTemplate: %v", templateErr)
+	if env.templateErr != nil {
+		t.Fatalf("ensureTemplate: %v", env.templateErr)
 	}
 }
 
@@ -347,9 +347,12 @@ func ddlMarkTemplate(name string) string {
 	return fmt.Sprintf("ALTER DATABASE %s IS_TEMPLATE true", name)
 }
 
-func randomDBName() string {
+func randomDBName(t testing.TB) string {
+	t.Helper()
 	b := make([]byte, 4)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatalf("randomDBName: crypto/rand failed: %v", err)
+	}
 	return fmt.Sprintf("test_%x", b)
 }
 

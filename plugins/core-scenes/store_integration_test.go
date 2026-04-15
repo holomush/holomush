@@ -26,6 +26,11 @@ import (
 // newTestStore opens a SceneStore against a fresh database on the shared
 // Postgres container. Plugin-specific migrations are applied internally by
 // NewSceneStore via storage.RunMigrationsFS.
+//
+// Uses RawDatabase (not FreshDatabase) because the core baseline migration
+// creates a legacy scene_participants table with FK to locations(id), which
+// conflicts with the plugin's scene_participants that references scenes(id).
+// A blank database avoids the conflict and lets the plugin own its schema.
 func newTestStore(t *testing.T) *SceneStore {
 	t.Helper()
 
@@ -33,7 +38,7 @@ func newTestStore(t *testing.T) *SceneStore {
 	t.Cleanup(cancelSetup)
 
 	shared := testutil.SharedPostgres(t)
-	connStr := testutil.FreshDatabase(t, shared)
+	connStr := testutil.RawDatabase(t, shared)
 
 	store, err := NewSceneStore(setupCtx, connStr)
 	require.NoError(t, err, "failed to open scene store")
