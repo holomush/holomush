@@ -237,12 +237,14 @@ func (s *PostgresEventStore) InitGameID(ctx context.Context) (string, error) {
 }
 
 // maxReplayTailCount is the server-side cap for ReplayTail count parameter.
-const maxReplayTailCount = 500
+// Set to 501 so the QueryStreamHistory handler's "count+1 for has_more
+// detection" probe works at the user-facing ceiling (count=500).
+const maxReplayTailCount = 501
 
 // ReplayTail returns up to count most recent events on stream, ascending by
 // event ID. If notBefore is non-zero, events with timestamps before it are
 // excluded. If beforeID is non-zero, events with id >= beforeID are excluded
-// (cursor-based pagination). Count is capped at 500.
+// (cursor-based pagination). Count is capped at maxReplayTailCount.
 func (s *PostgresEventStore) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
 	if count > maxReplayTailCount {
 		count = maxReplayTailCount

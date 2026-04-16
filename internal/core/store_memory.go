@@ -94,11 +94,13 @@ func (s *MemoryEventStore) LastEventID(_ context.Context, stream string) (ulid.U
 }
 
 // maxReplayTailCount is the server-side cap for ReplayTail count parameter.
-const maxReplayTailCount = 500
+// Set to 501 so the QueryStreamHistory handler's "count+1 for has_more
+// detection" probe works at the user-facing ceiling (count=500).
+const maxReplayTailCount = 501
 
 // ReplayTail returns the most recent count events on stream, ascending by ID.
 // Events with timestamps before notBefore are excluded. If beforeID is non-zero,
-// events with ID >= beforeID are excluded. Count is capped at 500.
+// events with ID >= beforeID are excluded. Count is capped at maxReplayTailCount.
 func (s *MemoryEventStore) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]Event, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
