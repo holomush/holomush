@@ -30,8 +30,8 @@ import (
 // with code "SESSION_NOT_FOUND". sessionNotFoundOopsError constructs that
 // shape for use in mock expectations.
 var (
-	playerAID = ulid.MustParse("01HZZZZZZZZZZZZZZZZZZZZZZZ")
-	playerBID = ulid.MustParse("01J0000000000000000PLAYRB0")
+	playerAID = ulid.MustParseStrict("01HZZZZZZZZZZZZZZZZZZZZZZZ")
+	playerBID = ulid.MustParseStrict("01J00000000000000000PYARBB")
 )
 
 // newSessionNotFoundErr mirrors the error shape returned by

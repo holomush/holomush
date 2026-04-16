@@ -1243,6 +1243,7 @@ func TestListPlayerSessionsReturnsCallersOwnSessionsWithIsCurrentFlag(t *testing
 
 	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
 	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).Return(ps1, nil)
+	sessionRepo.EXPECT().RefreshTTL(mock.Anything, ps1.ID, auth.PlayerSessionTTL).Return(nil)
 	sessionRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
 		Return([]*auth.PlayerSession{ps1, ps2}, nil)
 
@@ -1348,6 +1349,7 @@ func TestRevokePlayerSessionRevokesOwnOtherSession(t *testing.T) {
 
 	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
 	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).Return(callerPS, nil)
+	sessionRepo.EXPECT().RefreshTTL(mock.Anything, callerPS.ID, auth.PlayerSessionTTL).Return(nil)
 	sessionRepo.EXPECT().GetByID(mock.Anything, targetPS.ID).Return(targetPS, nil)
 	sessionRepo.EXPECT().Delete(mock.Anything, targetPS.ID).Return(nil)
 
@@ -1390,6 +1392,7 @@ func TestRevokePlayerSessionRejectsForeignSession(t *testing.T) {
 
 	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
 	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).Return(callerPS, nil)
+	sessionRepo.EXPECT().RefreshTTL(mock.Anything, callerPS.ID, auth.PlayerSessionTTL).Return(nil)
 	sessionRepo.EXPECT().GetByID(mock.Anything, bPS.ID).Return(bPS, nil)
 	// Delete MUST NOT be called for a foreign session - the mock would fail the test
 	// if an unexpected call were made.
@@ -1446,6 +1449,7 @@ func TestRevokePlayerSessionRejectsInvalidTargetID(t *testing.T) {
 
 	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
 	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).Return(callerPS, nil)
+	sessionRepo.EXPECT().RefreshTTL(mock.Anything, callerPS.ID, auth.PlayerSessionTTL).Return(nil)
 
 	server := &CoreServer{
 		engine:            core.NewEngine(core.NewMemoryEventStore()),
@@ -1497,6 +1501,7 @@ func TestRevokeOtherPlayerSessionsKeepsCallerDeletesRest(t *testing.T) {
 
 	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
 	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).Return(callerPS, nil)
+	sessionRepo.EXPECT().RefreshTTL(mock.Anything, callerPS.ID, auth.PlayerSessionTTL).Return(nil)
 	sessionRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
 		Return([]*auth.PlayerSession{callerPS, other1, other2}, nil)
 	// Caller's own session MUST NOT be deleted; only the other two.
@@ -1552,6 +1557,7 @@ func TestRevokeOtherPlayerSessionsSucceedsWithNoOtherSessions(t *testing.T) {
 
 	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
 	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).Return(callerPS, nil)
+	sessionRepo.EXPECT().RefreshTTL(mock.Anything, callerPS.ID, auth.PlayerSessionTTL).Return(nil)
 	sessionRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
 		Return([]*auth.PlayerSession{callerPS}, nil)
 
@@ -1567,6 +1573,94 @@ func TestRevokeOtherPlayerSessionsSucceedsWithNoOtherSessions(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, resp.Success)
 	assert.EqualValues(t, 0, resp.RevokedCount)
+}
+
+// --- TTL refresh on session-management RPCs ---
+
+// TestSessionManagementRPCsRefreshCallerTTL verifies that the three
+// session-management RPCs (ListPlayerSessions, RevokePlayerSession,
+// RevokeOtherPlayerSessions) refresh the caller's session TTL so that an
+// actively-managing user cannot have their session expire mid-use.
+func TestSessionManagementRPCsRefreshCallerTTL(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+
+	newCaller := func() *auth.PlayerSession {
+		return &auth.PlayerSession{
+			ID:        ulid.Make(),
+			PlayerID:  playerID,
+			TokenHash: auth.HashSessionToken(validToken),
+			ExpiresAt: time.Now().Add(auth.PlayerSessionTTL),
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+	}
+
+	t.Run("ListPlayerSessions refreshes TTL", func(t *testing.T) {
+		caller := newCaller()
+		repo := authmocks.NewMockPlayerSessionRepository(t)
+		repo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).Return(caller, nil)
+		repo.EXPECT().RefreshTTL(mock.Anything, caller.ID, auth.PlayerSessionTTL).Return(nil).Once()
+		repo.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*auth.PlayerSession{caller}, nil)
+
+		server := &CoreServer{
+			engine: core.NewEngine(core.NewMemoryEventStore()), sessionStore: session.NewMemStore(),
+			playerSessionRepo: repo,
+		}
+		_, err := server.ListPlayerSessions(ctx, &corev1.ListPlayerSessionsRequest{PlayerSessionToken: validToken})
+		require.NoError(t, err)
+	})
+
+	t.Run("RevokePlayerSession refreshes TTL", func(t *testing.T) {
+		caller := newCaller()
+		target := &auth.PlayerSession{ID: ulid.Make(), PlayerID: playerID, ExpiresAt: time.Now().Add(time.Hour)}
+		repo := authmocks.NewMockPlayerSessionRepository(t)
+		repo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).Return(caller, nil)
+		repo.EXPECT().RefreshTTL(mock.Anything, caller.ID, auth.PlayerSessionTTL).Return(nil).Once()
+		repo.EXPECT().GetByID(mock.Anything, target.ID).Return(target, nil)
+		repo.EXPECT().Delete(mock.Anything, target.ID).Return(nil)
+
+		server := &CoreServer{
+			engine: core.NewEngine(core.NewMemoryEventStore()), sessionStore: session.NewMemStore(),
+			playerSessionRepo: repo,
+		}
+		_, err := server.RevokePlayerSession(ctx, &corev1.RevokePlayerSessionRequest{
+			PlayerSessionToken: validToken, TargetSessionId: target.ID.String(),
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("RevokeOtherPlayerSessions refreshes TTL", func(t *testing.T) {
+		caller := newCaller()
+		repo := authmocks.NewMockPlayerSessionRepository(t)
+		repo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).Return(caller, nil)
+		repo.EXPECT().RefreshTTL(mock.Anything, caller.ID, auth.PlayerSessionTTL).Return(nil).Once()
+		repo.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*auth.PlayerSession{caller}, nil)
+
+		server := &CoreServer{
+			engine: core.NewEngine(core.NewMemoryEventStore()), sessionStore: session.NewMemStore(),
+			playerSessionRepo: repo,
+		}
+		_, err := server.RevokeOtherPlayerSessions(ctx, &corev1.RevokeOtherPlayerSessionsRequest{PlayerSessionToken: validToken})
+		require.NoError(t, err)
+	})
+
+	t.Run("RefreshTTL error is swallowed and does not fail the RPC", func(t *testing.T) {
+		// Best-effort: RefreshTTL failures must not break the RPC.
+		caller := newCaller()
+		repo := authmocks.NewMockPlayerSessionRepository(t)
+		repo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).Return(caller, nil)
+		repo.EXPECT().RefreshTTL(mock.Anything, caller.ID, auth.PlayerSessionTTL).Return(errors.New("db down"))
+		repo.EXPECT().ListByPlayer(mock.Anything, playerID).Return([]*auth.PlayerSession{caller}, nil)
+
+		server := &CoreServer{
+			engine: core.NewEngine(core.NewMemoryEventStore()), sessionStore: session.NewMemStore(),
+			playerSessionRepo: repo,
+		}
+		resp, err := server.ListPlayerSessions(ctx, &corev1.ListPlayerSessionsRequest{PlayerSessionToken: validToken})
+		require.NoError(t, err)
+		require.Len(t, resp.Sessions, 1)
+	})
 }
 
 // oopsCoded is a small helper that builds an oops error with arbitrary

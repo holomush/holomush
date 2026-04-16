@@ -238,8 +238,6 @@ var _ = Describe("Plugin Session Stream Contribution", func() {
 		}
 	})
 
-	// authenticate performs the two-phase guest login (CreateGuest + SelectCharacter)
-	// and returns the resulting game session ID.
 	// authenticate performs the two-phase guest login and returns both the
 	// resulting session_id AND the player_session_token. Subscribe
 	// validates ownership (bd-jv7z), so callers must forward the token.

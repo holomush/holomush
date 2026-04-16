@@ -534,6 +534,8 @@ func (s *CoreServer) ListPlayerSessions(ctx context.Context, req *corev1.ListPla
 		// has 0 sessions".
 		return &corev1.ListPlayerSessionsResponse{}, nil //nolint:nilerr // intentional: enumeration-safe auth-failure response
 	}
+	// Best-effort TTL refresh — active session management keeps the session alive.
+	s.playerSessionRepo.RefreshTTL(ctx, caller.ID, auth.PlayerSessionTTL) //nolint:errcheck // best-effort
 
 	sessions, err := s.playerSessionRepo.ListByPlayer(ctx, caller.PlayerID)
 	if err != nil {
@@ -568,6 +570,8 @@ func (s *CoreServer) RevokePlayerSession(ctx context.Context, req *corev1.Revoke
 		//nolint:nilerr // intentional: enumeration-safe - all auth failures collapse to "session not found"
 		return &corev1.RevokePlayerSessionResponse{Success: false, ErrorMessage: "session not found"}, nil
 	}
+	// Best-effort TTL refresh — active session management keeps the session alive.
+	s.playerSessionRepo.RefreshTTL(ctx, caller.ID, auth.PlayerSessionTTL) //nolint:errcheck // best-effort
 
 	targetID, err := ulid.Parse(req.GetTargetSessionId())
 	if err != nil {
@@ -608,6 +612,8 @@ func (s *CoreServer) RevokeOtherPlayerSessions(ctx context.Context, req *corev1.
 		//nolint:nilerr // intentional: enumeration-safe auth-failure response
 		return &corev1.RevokeOtherPlayerSessionsResponse{Success: false}, nil
 	}
+	// Best-effort TTL refresh — active session management keeps the session alive.
+	s.playerSessionRepo.RefreshTTL(ctx, caller.ID, auth.PlayerSessionTTL) //nolint:errcheck // best-effort
 
 	sessions, err := s.playerSessionRepo.ListByPlayer(ctx, caller.PlayerID)
 	if err != nil {
