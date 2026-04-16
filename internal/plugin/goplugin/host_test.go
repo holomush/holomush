@@ -4,8 +4,10 @@
 package goplugin
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,6 +19,7 @@ import (
 	hashiplug "github.com/hashicorp/go-plugin"
 	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	tlscerts "github.com/holomush/holomush/internal/tls"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
@@ -158,6 +161,47 @@ func newMockHost(t *testing.T) (*Host, *mockPluginClient) {
 func TestNewHost(t *testing.T) {
 	host := NewHost()
 	require.NotNil(t, host, "NewHost returned nil")
+}
+
+// captureLogs swaps slog.Default for the duration of the test and returns a
+// buffer capturing all emitted records. The previous default is restored via
+// t.Cleanup.
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	orig := slog.Default()
+	slog.SetDefault(slog.New(handler))
+	t.Cleanup(func() { slog.SetDefault(orig) })
+	return &buf
+}
+
+func TestNewHostWithoutCALogsMTLSDisabledWarning(t *testing.T) {
+	buf := captureLogs(t)
+
+	host := NewHost()
+	require.NotNil(t, host)
+
+	out := buf.String()
+	assert.Contains(t, out, "level=WARN", "expected a WARN-level log record")
+	assert.Contains(t, out, "binary plugin mTLS disabled",
+		"expected mTLS-disabled warning when host is constructed without a CA")
+	assert.Contains(t, out, "mtls=disabled",
+		"expected structured mtls=disabled attribute on warning")
+}
+
+func TestNewHostWithCADoesNotLogMTLSDisabledWarning(t *testing.T) {
+	buf := captureLogs(t)
+
+	ca, err := tlscerts.GenerateCA("test-game")
+	require.NoError(t, err, "failed to generate test CA")
+
+	host := NewHostWithFactory(&mockClientFactory{}, WithCA(ca, "test-game"))
+	require.NotNil(t, host)
+
+	out := buf.String()
+	assert.NotContains(t, out, "binary plugin mTLS disabled",
+		"mTLS-disabled warning must not fire when a CA is configured")
 }
 
 func TestNewHostWithFactoryNilFactory(t *testing.T) {

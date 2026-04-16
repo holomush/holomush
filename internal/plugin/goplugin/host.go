@@ -177,6 +177,17 @@ func NewHostWithFactory(factory ClientFactory, opts ...HostOption) *Host {
 			panic("goplugin: failed to generate host TLS cert: " + certErr.Error())
 		}
 		h.hostClientCert = cert
+	} else {
+		// Loud one-shot warning: without a CA, go-plugin falls back to its
+		// default unencrypted, unauthenticated gRPC transport between the
+		// host and each plugin subprocess. Production deployments MUST
+		// configure WithCA; surface the misconfiguration in operator logs
+		// so it cannot silently slip through.
+		slog.WarnContext(context.Background(),
+			"binary plugin mTLS disabled: gRPC channel with plugin subprocess is unauthenticated and unencrypted; configure WithCA for production deployments",
+			"component", "goplugin.Host",
+			"mtls", "disabled",
+		)
 	}
 	return h
 }
