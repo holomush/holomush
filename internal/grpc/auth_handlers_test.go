@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	samberOops "github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -1076,4 +1077,144 @@ func (m *mockResetServiceForHandlers) ResetPassword(ctx context.Context, token, 
 	}
 	m.t.Fatal("unexpected call to ResetPassword")
 	return nil
+}
+
+// --- Sanitized error-message tests (bd-nscu) ---
+//
+// These tests assert that the three handlers previously leaking raw
+// err.Error() strings now return only a fixed, user-facing message derived
+// from the oops error code. The raw error remains available server-side via
+// slog but MUST NOT reach the client.
+
+func TestCreatePlayerReturnsSanitizedMessageForUsernameTaken(t *testing.T) {
+	ctx := context.Background()
+
+	authSvc := newMockAuthService(t)
+	authSvc.createPlayerFunc = func(_ context.Context, _, _, _ string) (*auth.Player, *auth.PlayerSession, string, error) {
+		return nil, nil, "", oopsCoded("REGISTER_USERNAME_TAKEN",
+			"username \"alice\" is already taken in schema auth_v3",
+			"operation", "check username availability")
+	}
+
+	playerSessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      session.NewMemStore(),
+		authService:       authSvc,
+		playerSessionRepo: playerSessionRepo,
+	}
+
+	resp, err := server.CreatePlayer(ctx, &corev1.CreatePlayerRequest{
+		Username: "alice",
+		Password: "strongpass1",
+	})
+	require.NoError(t, err)
+
+	assert.False(t, resp.Success)
+	assert.Equal(t, msgRegisterUsernameTaken, resp.ErrorMessage)
+	assert.NotContains(t, resp.ErrorMessage, "schema")
+	assert.NotContains(t, resp.ErrorMessage, "operation")
+}
+
+func TestCreatePlayerReturnsGenericMessageForUnknownError(t *testing.T) {
+	ctx := context.Background()
+
+	authSvc := newMockAuthService(t)
+	authSvc.createPlayerFunc = func(_ context.Context, _, _, _ string) (*auth.Player, *auth.PlayerSession, string, error) {
+		// Plain error — no oops code. Client MUST NOT see the raw message.
+		return nil, nil, "", errors.New("pq: relation \"players_private_v3\" does not exist")
+	}
+
+	playerSessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      session.NewMemStore(),
+		authService:       authSvc,
+		playerSessionRepo: playerSessionRepo,
+	}
+
+	resp, err := server.CreatePlayer(ctx, &corev1.CreatePlayerRequest{
+		Username: "alice",
+		Password: "strongpass1",
+	})
+	require.NoError(t, err)
+
+	assert.False(t, resp.Success)
+	assert.Equal(t, msgGenericRequestFailed, resp.ErrorMessage)
+	assert.NotContains(t, resp.ErrorMessage, "players_private_v3")
+	assert.NotContains(t, resp.ErrorMessage, "pq:")
+}
+
+func TestCreateCharacterReturnsSanitizedMessageForNameTaken(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	charSvc := newMockCharacterService(t)
+	charSvc.createFunc = func(_ context.Context, _ ulid.ULID, _ string) (*world.Character, error) {
+		return nil, oopsCoded("CHARACTER_NAME_TAKEN",
+			"character \"Hero\" is already taken in shard char_shard_3",
+			"shard", "char_shard_3")
+	}
+
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      session.NewMemStore(),
+		playerSessionRepo: sessionRepo,
+		characterService:  charSvc,
+	}
+
+	resp, err := server.CreateCharacter(ctx, &corev1.CreateCharacterRequest{
+		PlayerSessionToken: validToken,
+		CharacterName:      "Hero",
+	})
+	require.NoError(t, err)
+
+	assert.False(t, resp.Success)
+	assert.Equal(t, msgCharacterNameTaken, resp.ErrorMessage)
+	assert.NotContains(t, resp.ErrorMessage, "char_shard_3")
+	assert.NotContains(t, resp.ErrorMessage, "shard")
+}
+
+func TestConfirmPasswordResetReturnsSanitizedMessageForInvalidToken(t *testing.T) {
+	ctx := context.Background()
+
+	resetSvc := newMockResetService(t)
+	resetSvc.resetPasswordFunc = func(_ context.Context, _, _ string) error {
+		return oopsCoded("RESET_TOKEN_INVALID",
+			"reset token not found in table password_resets on host db.internal.svc:5432",
+			"host", "db.internal.svc:5432")
+	}
+
+	server := &CoreServer{
+		engine:       core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore: session.NewMemStore(),
+		resetService: resetSvc,
+	}
+
+	resp, err := server.ConfirmPasswordReset(ctx, &corev1.ConfirmPasswordResetRequest{
+		Token:       "bad-token",
+		NewPassword: "newstrongpass",
+	})
+	require.NoError(t, err)
+
+	assert.False(t, resp.Success)
+	assert.Equal(t, msgResetTokenInvalid, resp.ErrorMessage)
+	assert.NotContains(t, resp.ErrorMessage, "db.internal.svc")
+	assert.NotContains(t, resp.ErrorMessage, "password_resets")
+}
+
+// oopsCoded is a small helper that builds an oops error with arbitrary
+// structured context alongside a raw message, so tests can assert nothing
+// in the context leaks to the client.
+func oopsCoded(code, msg string, kv ...string) error {
+	b := samberOops.Code(code)
+	for i := 0; i+1 < len(kv); i += 2 {
+		b = b.With(kv[i], kv[i+1])
+	}
+	return b.Errorf("%s", msg)
 }
