@@ -554,6 +554,47 @@ func (s *CoreServer) ListPlayerSessions(ctx context.Context, req *corev1.ListPla
 	return &corev1.ListPlayerSessionsResponse{Sessions: out}, nil
 }
 
+// RevokePlayerSession deletes a specific PlayerSession owned by the caller.
+// Attempts to revoke another player's session return SESSION_NOT_FOUND (same
+// enumeration-prevention pattern as the post-auth ownership fixes). Cross-
+// player attempts log WARN for security auditing.
+func (s *CoreServer) RevokePlayerSession(ctx context.Context, req *corev1.RevokePlayerSessionRequest) (*corev1.RevokePlayerSessionResponse, error) {
+	if s.playerSessionRepo == nil {
+		return &corev1.RevokePlayerSessionResponse{Success: false, ErrorMessage: "session not found"}, nil
+	}
+
+	caller, err := s.playerSessionRepo.GetByTokenHash(ctx, auth.HashSessionToken(req.GetPlayerSessionToken()))
+	if err != nil || caller.IsExpired() {
+		//nolint:nilerr // intentional: enumeration-safe - all auth failures collapse to "session not found"
+		return &corev1.RevokePlayerSessionResponse{Success: false, ErrorMessage: "session not found"}, nil
+	}
+
+	targetID, err := ulid.Parse(req.GetTargetSessionId())
+	if err != nil {
+		//nolint:nilerr // intentional: enumeration-safe
+		return &corev1.RevokePlayerSessionResponse{Success: false, ErrorMessage: "session not found"}, nil
+	}
+
+	target, err := s.playerSessionRepo.GetByID(ctx, targetID)
+	if err != nil {
+		//nolint:nilerr // intentional: enumeration-safe
+		return &corev1.RevokePlayerSessionResponse{Success: false, ErrorMessage: "session not found"}, nil
+	}
+	if target.PlayerID.Compare(caller.PlayerID) != 0 {
+		slog.WarnContext(ctx, "revoke player session: cross-player attempt",
+			"caller_id", caller.PlayerID.String(),
+			"target_owner", target.PlayerID.String(),
+			"target_id", targetID.String(),
+		)
+		return &corev1.RevokePlayerSessionResponse{Success: false, ErrorMessage: "session not found"}, nil
+	}
+
+	if err := s.playerSessionRepo.Delete(ctx, target.ID); err != nil {
+		return nil, oops.Code("REVOKE_PLAYER_SESSION_FAILED").Wrap(err)
+	}
+	return &corev1.RevokePlayerSessionResponse{Success: true}, nil
+}
+
 // buildCharacterSummaries lists characters for a player and enriches with session status.
 func (s *CoreServer) buildCharacterSummaries(ctx context.Context, playerID ulid.ULID) ([]*corev1.CharacterSummary, error) {
 	if s.charRepo == nil {
