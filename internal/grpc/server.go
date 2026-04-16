@@ -34,6 +34,32 @@ import (
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
+// gRPC server resource limits. These bound the memory and stream
+// concurrency a single client connection can consume.
+//
+// Size limits are a tradeoff: too small breaks legitimate use, too large
+// lets a single request allocate arbitrary server memory. gRPC's built-in
+// defaults are 4 MiB recv and ~math.MaxInt32 (~2 GiB) send, with unlimited
+// concurrent streams per HTTP/2 connection — a single client could open
+// unlimited Subscribe streams and exhaust server resources.
+const (
+	// MaxRecvMsgSize caps inbound unary/stream messages at 4 MiB. Matches
+	// gRPC's built-in default but states the limit explicitly in-tree so
+	// future gRPC default changes do not silently alter server behavior.
+	MaxRecvMsgSize = 4 * 1024 * 1024
+
+	// MaxSendMsgSize caps outbound messages at 16 MiB. Replay batches and
+	// bootstrap history payloads can exceed the 4 MiB recv cap, so send is
+	// allowed 4x recv while still bounded far below the unsafe ~2 GiB default.
+	MaxSendMsgSize = 16 * 1024 * 1024
+
+	// MaxConcurrentStreams caps concurrent HTTP/2 streams per connection at
+	// 100. Subscribe, Presence, and command RPCs each consume a stream; a
+	// well-behaved client needs ~3-5, so 100 leaves comfortable headroom
+	// while preventing unbounded stream allocation from a single connection.
+	MaxConcurrentStreams uint32 = 100
+)
+
 // SessionDefaults configures default values for new sessions.
 type SessionDefaults struct {
 	TTL        time.Duration
@@ -1005,23 +1031,33 @@ func responseMeta(requestID string) *corev1.ResponseMeta {
 }
 
 // NewGRPCServer creates a new gRPC server with mTLS credentials.
+// Applies explicit message size and concurrent-stream limits (see
+// MaxRecvMsgSize, MaxSendMsgSize, MaxConcurrentStreams).
 func NewGRPCServer(tlsConfig *tls.Config) *grpc.Server {
 	creds := credentials.NewTLS(tlsConfig)
 	return grpc.NewServer(
 		grpc.Creds(creds),
+		grpc.MaxRecvMsgSize(MaxRecvMsgSize),
+		grpc.MaxSendMsgSize(MaxSendMsgSize),
+		grpc.MaxConcurrentStreams(MaxConcurrentStreams),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
 }
 
 // NewGRPCServerInsecure creates a new gRPC server without TLS (for testing).
 // Includes a permissive keepalive enforcement policy to prevent "too_many_pings"
-// rejections during long-running integration tests.
+// rejections during long-running integration tests. Applies the same message
+// size and concurrent-stream limits as the TLS-enabled server so tests exercise
+// the same resource bounds as production.
 func NewGRPCServerInsecure() *grpc.Server {
 	return grpc.NewServer(
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
 			MinTime:             10 * time.Second,
 			PermitWithoutStream: true,
 		}),
+		grpc.MaxRecvMsgSize(MaxRecvMsgSize),
+		grpc.MaxSendMsgSize(MaxSendMsgSize),
+		grpc.MaxConcurrentStreams(MaxConcurrentStreams),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
 }

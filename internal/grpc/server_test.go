@@ -864,6 +864,20 @@ func TestNewGRPCServerInsecure(t *testing.T) {
 	server.Stop()
 }
 
+// TestResourceLimitConstantsMatchSecurityBaseline pins the resource-limit
+// constants to their expected values. Weakening these bounds (raising the
+// recv limit, disabling concurrent-stream caps) is a security regression:
+// without these caps a single connection could exhaust server memory or
+// open unlimited Subscribe streams.
+func TestResourceLimitConstantsMatchSecurityBaseline(t *testing.T) {
+	assert.Equal(t, 4*1024*1024, MaxRecvMsgSize,
+		"MaxRecvMsgSize changed — review security implications before updating this test")
+	assert.Equal(t, 16*1024*1024, MaxSendMsgSize,
+		"MaxSendMsgSize changed — review security implications before updating this test")
+	assert.Equal(t, uint32(100), MaxConcurrentStreams,
+		"MaxConcurrentStreams changed — review security implications before updating this test")
+}
+
 func TestNewGRPCServer(t *testing.T) {
 	tmpDir := t.TempDir()
 	gameID := "test-game-grpc"
