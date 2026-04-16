@@ -157,16 +157,16 @@ func (s *PasswordResetService) ValidateToken(ctx context.Context, token string) 
 // Validates the token, hashes the new password, updates the player's password,
 // and deletes all reset tokens for the player.
 func (s *PasswordResetService) ResetPassword(ctx context.Context, token, newPassword string) error {
-	// Validate password first (defense in depth - hasher also checks, but be explicit)
+	// SECURITY: enforce the same length policy as registration and login.
+	// A valid reset token must not be a backdoor to set a weak (or oversized)
+	// password. ValidatePassword checks both MinPasswordLength (prevents weak
+	// credentials) and MaxPasswordLength (prevents Argon2id DoS — ~64 MB per
+	// hash over the entire input). Run this before any token lookup or hashing.
 	if newPassword == "" {
 		return oops.Code("RESET_PASSWORD_EMPTY").Errorf("new password cannot be empty")
 	}
-	// SECURITY: reject oversized passwords before hashing. Argon2id allocates
-	// ~64 MB per call over the entire input, so multi-MB inputs enable DoS.
-	if len(newPassword) > MaxPasswordLength {
-		return oops.Code("RESET_PASSWORD_TOO_LONG").
-			With("max", MaxPasswordLength).
-			Errorf("new password must be at most %d characters", MaxPasswordLength)
+	if err := ValidatePassword(newPassword); err != nil {
+		return err
 	}
 
 	playerID, err := s.ValidateToken(ctx, token)

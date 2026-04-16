@@ -377,7 +377,26 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		oversized := strings.Repeat("a", auth.MaxPasswordLength+1)
 		resetErr := svc.ResetPassword(ctx, "sometoken", oversized)
 		require.Error(t, resetErr)
-		errutil.AssertErrorCode(t, resetErr, "RESET_PASSWORD_TOO_LONG")
+		errutil.AssertErrorCode(t, resetErr, "AUTH_INVALID_PASSWORD")
+
+		// Verify no repository/hasher calls were made (password checked first)
+		resetRepo.AssertNotCalled(t, "GetByTokenHash")
+		hasher.AssertNotCalled(t, "Hash")
+	})
+
+	t.Run("rejects password shorter than minimum length", func(t *testing.T) {
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockPlayerSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
+		require.NoError(t, err)
+
+		// 3 chars — well below MinPasswordLength (8). Must be rejected by
+		// ValidatePassword before any token lookup or hashing.
+		resetErr := svc.ResetPassword(ctx, "sometoken", "abc")
+		require.Error(t, resetErr)
+		errutil.AssertErrorCode(t, resetErr, "AUTH_INVALID_PASSWORD")
 
 		// Verify no repository/hasher calls were made (password checked first)
 		resetRepo.AssertNotCalled(t, "GetByTokenHash")
