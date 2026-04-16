@@ -258,18 +258,19 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 	}
 
 	sessionInfo := &session.Info{
-		ID:            sessionID.String(),
-		CharacterID:   charID,
-		PlayerID:      playerSession.PlayerID,
-		CharacterName: selectedChar.Name,
-		LocationID:    locationID,
-		Status:        session.StatusActive,
-		GridPresent:   true,
-		EventCursors:  map[string]ulid.ULID{},
-		TTLSeconds:    ttlSeconds,
-		MaxHistory:    maxHistory,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:              sessionID.String(),
+		CharacterID:     charID,
+		PlayerID:        playerSession.PlayerID,
+		PlayerSessionID: playerSession.ID,
+		CharacterName:   selectedChar.Name,
+		LocationID:      locationID,
+		Status:          session.StatusActive,
+		GridPresent:     true,
+		EventCursors:    map[string]ulid.ULID{},
+		TTLSeconds:      ttlSeconds,
+		MaxHistory:      maxHistory,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 
 	if err := s.sessionStore.Set(ctx, sessionID.String(), sessionInfo); err != nil {

@@ -1020,6 +1020,41 @@ var _ = Describe("Session Persistence", func() {
 				"empty-token caller must not receive any history entries")
 		})
 	})
+
+	Describe("player_session_id linkage (bd-urbq)", func() {
+		It("game session rows carry player_session_id after SelectCharacter", func() {
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
+
+			// Look up the PlayerSession row created by the guest flow so
+			// we can assert the game session's player_session_id FK points
+			// at the right parent.
+			ps, err := env.playerSessionStore.GetByTokenHash(testCtx, auth.HashSessionToken(token))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ps).NotTo(BeNil())
+
+			row, err := env.sessionStore.Get(testCtx, sessionID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(row.PlayerSessionID).To(Equal(ps.ID),
+				"SelectCharacter must populate player_session_id on new game sessions")
+		})
+
+		It("deleting a PlayerSession cascades to its game sessions", func() {
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
+
+			ps, err := env.playerSessionStore.GetByTokenHash(testCtx, auth.HashSessionToken(token))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ps).NotTo(BeNil())
+
+			// Delete the parent PlayerSession directly via the store. The
+			// sessions.player_session_id FK is ON DELETE CASCADE, so the
+			// game session row should be gone afterwards.
+			Expect(env.playerSessionStore.Delete(testCtx, ps.ID)).To(Succeed())
+
+			_, err = env.sessionStore.Get(testCtx, sessionID)
+			Expect(err).To(HaveOccurred(),
+				"game session must be removed when its parent PlayerSession is deleted")
+		})
+	})
 })
 
 // drainUntilReplayComplete reads frames from the given stream until a

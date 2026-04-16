@@ -24,29 +24,31 @@ import (
 func testSessionInfo() *session.Info {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	return &session.Info{
-		ID:             "sess-abc",
-		CharacterID:    core.NewULID(),
-		PlayerID:       core.NewULID(),
-		CharacterName:  "TestChar",
-		LocationID:     core.NewULID(),
-		IsGuest:        false,
-		Status:         session.StatusActive,
-		GridPresent:    true,
-		EventCursors:   map[string]ulid.ULID{"location:room-1": core.NewULID()},
-		CommandHistory: []string{"look", "say hello"},
-		TTLSeconds:     3600,
-		MaxHistory:     50,
-		DetachedAt:     nil,
-		ExpiresAt:      nil,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:              "sess-abc",
+		CharacterID:     core.NewULID(),
+		PlayerID:        core.NewULID(),
+		PlayerSessionID: core.NewULID(),
+		CharacterName:   "TestChar",
+		LocationID:      core.NewULID(),
+		IsGuest:         false,
+		Status:          session.StatusActive,
+		GridPresent:     true,
+		EventCursors:    map[string]ulid.ULID{"location:room-1": core.NewULID()},
+		CommandHistory:  []string{"look", "say hello"},
+		TTLSeconds:      3600,
+		MaxHistory:      50,
+		DetachedAt:      nil,
+		ExpiresAt:       nil,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 }
 
 // sessionColumns returns the column names for session SELECT queries.
 func sessionColumns() []string {
 	return []string{
-		"id", "character_id", "player_id", "character_name", "location_id",
+		"id", "character_id", "player_id", "player_session_id",
+		"character_name", "location_id",
 		"is_guest", "status", "grid_present", "event_cursors",
 		"command_history", "ttl_seconds", "max_history",
 		"detached_at", "expires_at", "created_at", "updated_at",
@@ -63,10 +65,17 @@ func sessionRow(info *session.Info) []any {
 	if info.PresentingFocus != nil {
 		presentingFocusJSON, _ = json.Marshal(info.PresentingFocus)
 	}
+	// Legacy rows have NULL for player_session_id; the COALESCE in the
+	// SELECT list maps NULL to "" so the scanner parses it as zero ULID.
+	var playerSessionIDStr string
+	if info.PlayerSessionID.Compare(ulid.ULID{}) != 0 {
+		playerSessionIDStr = info.PlayerSessionID.String()
+	}
 	return []any{
 		info.ID,
 		info.CharacterID.String(),
 		info.PlayerID.String(),
+		playerSessionIDStr,
 		info.CharacterName,
 		info.LocationID.String(),
 		info.IsGuest,
@@ -195,6 +204,7 @@ func TestPostgresSessionStore_Set(t *testing.T) {
 						pgxmock.AnyArg(), // id
 						pgxmock.AnyArg(), // character_id
 						pgxmock.AnyArg(), // player_id
+						pgxmock.AnyArg(), // player_session_id
 						pgxmock.AnyArg(), // character_name
 						pgxmock.AnyArg(), // location_id
 						pgxmock.AnyArg(), // is_guest
@@ -227,7 +237,7 @@ func TestPostgresSessionStore_Set(t *testing.T) {
 						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
-						pgxmock.AnyArg(), pgxmock.AnyArg(),
+						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 						pgxmock.AnyArg(), pgxmock.AnyArg(),
 					).
 					WillReturnError(errors.New("disk full"))
@@ -285,6 +295,7 @@ func TestPostgresSessionStore_Set_NilCommandHistory(t *testing.T) {
 			pgxmock.AnyArg(),     // id
 			pgxmock.AnyArg(),     // character_id
 			pgxmock.AnyArg(),     // player_id
+			pgxmock.AnyArg(),     // player_session_id
 			pgxmock.AnyArg(),     // character_name
 			pgxmock.AnyArg(),     // location_id
 			pgxmock.AnyArg(),     // is_guest
@@ -1264,7 +1275,7 @@ func TestPostgresSessionStore_Set_WithFocusMemberships(t *testing.T) {
 			pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 			pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 			pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
-			pgxmock.AnyArg(), pgxmock.AnyArg(),
+			pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 			pgxmock.AnyArg(), pgxmock.AnyArg(),
 		).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))

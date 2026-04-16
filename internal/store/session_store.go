@@ -38,7 +38,9 @@ var (
 	_ session.Access = (*PostgresSessionStore)(nil)
 )
 
-const sessionSelectColumns = `id, character_id, player_id, character_name, location_id,
+const sessionSelectColumns = `id, character_id, player_id,
+	COALESCE(player_session_id, '') AS player_session_id,
+	character_name, location_id,
 	is_guest, status, grid_present, event_cursors,
 	command_history, ttl_seconds, max_history,
 	detached_at, expires_at, created_at, updated_at,
@@ -48,7 +50,7 @@ const sessionSelectColumns = `id, character_id, player_id, character_name, locat
 // parseSessionRow parses the scalar fields scanned from a session row into a
 // session.Info. Both scanSession and scanSessions call Scan with the same
 // variable set and then delegate here to avoid duplicating the parse logic.
-func parseSessionRow(info *session.Info, charIDStr, playerIDStr, locIDStr, statusStr string, cursorsJSON, focusMembershipsJSON, presentingFocusJSON []byte) error {
+func parseSessionRow(info *session.Info, charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr string, cursorsJSON, focusMembershipsJSON, presentingFocusJSON []byte) error {
 	charID, err := ulid.Parse(charIDStr)
 	if err != nil {
 		return oops.With("operation", "parse character_id").With("raw_id", charIDStr).Wrap(err)
@@ -62,6 +64,17 @@ func parseSessionRow(info *session.Info, charIDStr, playerIDStr, locIDStr, statu
 			return oops.With("operation", "parse player_id").With("raw_id", playerIDStr).Wrap(parseErr)
 		}
 		info.PlayerID = playerID
+	}
+
+	// PlayerSessionID is NULL for legacy sessions created before the
+	// player_session_id column existed. COALESCE in the SELECT maps NULL
+	// to the empty string, which we parse as the zero ULID.
+	if playerSessionIDStr != "" {
+		playerSessionID, parseErr := ulid.Parse(playerSessionIDStr)
+		if parseErr != nil {
+			return oops.With("operation", "parse player_session_id").With("raw_id", playerSessionIDStr).Wrap(parseErr)
+		}
+		info.PlayerSessionID = playerSessionID
 	}
 
 	locID, err := ulid.Parse(locIDStr)
@@ -107,7 +120,7 @@ func parseSessionRow(info *session.Info, charIDStr, playerIDStr, locIDStr, statu
 // scanSession scans a pgx.Row into a session.Info.
 func scanSession(row pgx.Row) (*session.Info, error) {
 	var info session.Info
-	var charIDStr, playerIDStr, locIDStr, statusStr string
+	var charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr string
 	var cursorsJSON []byte
 	var focusMembershipsJSON, presentingFocusJSON []byte
 
@@ -115,6 +128,7 @@ func scanSession(row pgx.Row) (*session.Info, error) {
 		&info.ID,
 		&charIDStr,
 		&playerIDStr,
+		&playerSessionIDStr,
 		&info.CharacterName,
 		&locIDStr,
 		&info.IsGuest,
@@ -137,7 +151,7 @@ func scanSession(row pgx.Row) (*session.Info, error) {
 		return nil, oops.With("operation", "scan session row").Wrap(err)
 	}
 
-	if err := parseSessionRow(&info, charIDStr, playerIDStr, locIDStr, statusStr, cursorsJSON, focusMembershipsJSON, presentingFocusJSON); err != nil {
+	if err := parseSessionRow(&info, charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr, cursorsJSON, focusMembershipsJSON, presentingFocusJSON); err != nil {
 		return nil, err
 	}
 
@@ -150,7 +164,7 @@ func scanSessions(rows pgx.Rows) ([]*session.Info, error) {
 	var result []*session.Info
 	for rows.Next() {
 		var info session.Info
-		var charIDStr, playerIDStr, locIDStr, statusStr string
+		var charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr string
 		var cursorsJSON []byte
 		var focusMembershipsJSON, presentingFocusJSON []byte
 
@@ -158,6 +172,7 @@ func scanSessions(rows pgx.Rows) ([]*session.Info, error) {
 			&info.ID,
 			&charIDStr,
 			&playerIDStr,
+			&playerSessionIDStr,
 			&info.CharacterName,
 			&locIDStr,
 			&info.IsGuest,
@@ -180,7 +195,7 @@ func scanSessions(rows pgx.Rows) ([]*session.Info, error) {
 			return nil, oops.With("operation", "scan session row").Wrap(err)
 		}
 
-		if err := parseSessionRow(&info, charIDStr, playerIDStr, locIDStr, statusStr, cursorsJSON, focusMembershipsJSON, presentingFocusJSON); err != nil {
+		if err := parseSessionRow(&info, charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr, cursorsJSON, focusMembershipsJSON, presentingFocusJSON); err != nil {
 			return nil, err
 		}
 
@@ -234,17 +249,27 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 		}
 	}
 
+	// player_session_id is nullable so that legacy sessions (created before
+	// the FK was added) do not get zero-ULID strings written to the column.
+	// Pass NULL when the field is the zero ULID; otherwise pass the string.
+	var playerSessionIDArg any
+	if info.PlayerSessionID.Compare(ulid.ULID{}) != 0 {
+		playerSessionIDArg = info.PlayerSessionID.String()
+	}
+
 	_, err = s.pool.Exec(ctx,
-		`INSERT INTO sessions (id, character_id, player_id, character_name, location_id,
+		`INSERT INTO sessions (id, character_id, player_id, player_session_id,
+			character_name, location_id,
 			is_guest, status, grid_present, event_cursors,
 			command_history, ttl_seconds, max_history,
 			detached_at, expires_at, created_at,
 			last_paged, last_whispered,
 			focus_memberships, presenting_focus)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET
 			character_id = EXCLUDED.character_id,
 			player_id = EXCLUDED.player_id,
+			player_session_id = EXCLUDED.player_session_id,
 			character_name = EXCLUDED.character_name,
 			location_id = EXCLUDED.location_id,
 			is_guest = EXCLUDED.is_guest,
@@ -264,6 +289,7 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 		id,
 		info.CharacterID.String(),
 		info.PlayerID.String(),
+		playerSessionIDArg,
 		info.CharacterName,
 		info.LocationID.String(),
 		info.IsGuest,
