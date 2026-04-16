@@ -111,7 +111,7 @@ Expected: compiles with no errors (runs no tests since the pattern matches nothi
 
 - [ ] **Step 4: Commit**
 
-```
+```text
 feat(testutil): add SharedPostgres singleton for container reuse
 
 Introduces a sync.Once-guarded SharedPostgres(t) that returns
@@ -278,7 +278,7 @@ Expected: compiles with no errors
 
 - [ ] **Step 4: Commit**
 
-```
+```text
 feat(testutil): add FreshDatabase with template optimization
 
 FreshDatabase creates a per-test database by copying a pre-migrated
@@ -349,7 +349,7 @@ Expected: compiles with no errors
 
 - [ ] **Step 3: Commit**
 
-```
+```text
 feat(testutil): add RawDatabase for migration and schema isolation tests
 
 RawDatabase creates a blank database with superuser access — no
@@ -495,7 +495,7 @@ Expected: all 5 tests pass
 
 - [ ] **Step 3: Commit**
 
-```
+```text
 test(testutil): add integration tests for SharedPostgres, FreshDatabase, RawDatabase
 
 Verifies singleton behavior, template-based database creation,
@@ -566,6 +566,7 @@ Replace `StartPostgres` + `t.Cleanup(Terminate)` in each test with the new helpe
 Example for `TestSchemaProvisionerInitFailsWithoutCreaterole`:
 
 Before:
+
 ```go
 func TestSchemaProvisionerInitFailsWithoutCreaterole(t *testing.T) {
 	ctx := context.Background()
@@ -579,6 +580,7 @@ func TestSchemaProvisionerInitFailsWithoutCreaterole(t *testing.T) {
 ```
 
 After:
+
 ```go
 func TestSchemaProvisionerInitFailsWithoutCreaterole(t *testing.T) {
 	ctx := context.Background()
@@ -590,6 +592,7 @@ func TestSchemaProvisionerInitFailsWithoutCreaterole(t *testing.T) {
 ```
 
 Apply the same pattern to all 8 test functions:
+
 - `TestSchemaProvisionerInitFailsWithoutCreaterole` — uses `adminConnStr` to create a restricted role
 - `TestSchemaProvisionerInitSucceedsWithCreaterole` — uses `holomushConnStr` for SchemaProvisioner
 - `TestProvisionSchemaCreatesRoleAndSchema` — uses `holomushConnStr` for SchemaProvisioner + assertions via `holomushConnStr`
@@ -602,6 +605,7 @@ Apply the same pattern to all 8 test functions:
 For tests that only need `holomushConnStr`, the conversion is:
 
 Before:
+
 ```go
 pgEnv, err := testutil.StartPostgres(ctx)
 require.NoError(t, err)
@@ -611,6 +615,7 @@ sp := plugins.NewSchemaProvisioner(pgEnv.ConnStr)
 ```
 
 After:
+
 ```go
 holomushConnStr, _ := setupSchemaTestDB(t)
 
@@ -634,7 +639,7 @@ Expected: all 8 tests pass
 
 - [ ] **Step 6: Commit**
 
-```
+```text
 refactor(test): share container in schema isolation tests (8 → 0 new containers)
 
 All schema isolation tests now use SharedPostgres + RawDatabase
@@ -715,7 +720,7 @@ Expected: all tests pass (may take a while due to binary plugin compilation)
 
 - [ ] **Step 5: Commit**
 
-```
+```text
 refactor(test): share container in binary plugin tests (4 → 0 new containers)
 
 All Describe blocks in binary_plugin_test.go now use SharedPostgres +
@@ -746,7 +751,7 @@ Expected: all tests pass
 
 - [ ] **Step 4: Commit**
 
-```
+```text
 refactor(test): share container in ABAC widget tests (4 → 0 new containers)
 ```
 
@@ -807,7 +812,7 @@ Expected: all E2E tests pass
 
 - [ ] **Step 6: Commit**
 
-```
+```text
 refactor(test): share container in telnet E2E tests (N → 0 new containers)
 
 Lifts PostgreSQL container to BeforeSuite. Each test case gets a
@@ -828,6 +833,7 @@ These migration tests need `RawDatabase` since they test migration shape at spec
 - [ ] **Step 1: Convert all 3 test functions**
 
 Each test currently does:
+
 ```go
 pgEnv, err := testutil.StartPostgres(ctx)
 require.NoError(t, err)
@@ -837,6 +843,7 @@ migrator, err := store.NewMigrator(pgEnv.ConnStr)
 ```
 
 Replace with:
+
 ```go
 shared := testutil.SharedPostgres(t)
 connStr := testutil.RawDatabase(t, shared)
@@ -845,6 +852,7 @@ migrator, err := store.NewMigrator(connStr)
 ```
 
 Apply to:
+
 - `TestMigration000005AuditSourceComponentAppliesCleanly` (line 28)
 - `TestMigration000005AuditSourceComponentRollbackReturnsSchemaToOriginalShape` (line 69)
 - `TestMigration000005AuditSourceComponentBackfillsExistingRows` (line 134)
@@ -858,7 +866,7 @@ Expected: all 3 tests pass
 
 - [ ] **Step 3: Commit**
 
-```
+```text
 refactor(test): share container in migration shape tests (3 → 0 new containers)
 
 Migration tests use SharedPostgres + RawDatabase for full control
@@ -880,6 +888,7 @@ This file has a `setupPostgresContainer` helper used by Ginkgo specs.
 Replace the body of `setupPostgresContainer`:
 
 Before:
+
 ```go
 func setupPostgresContainer() (*store.PostgresEventStore, func(), error) {
 	ctx := context.Background()
@@ -894,6 +903,7 @@ func setupPostgresContainer() (*store.PostgresEventStore, func(), error) {
 ```
 
 After:
+
 ```go
 func setupPostgresContainer() (*store.PostgresEventStore, func(), error) {
 	ctx := context.Background()
@@ -921,7 +931,7 @@ Expected: all tests pass
 
 - [ ] **Step 3: Commit**
 
-```
+```text
 refactor(test): share container in postgres event store tests (1 → 0 new containers)
 ```
 
@@ -938,6 +948,7 @@ This uses `TestMain` to start one container for the package.
 - [ ] **Step 1: Rewrite `TestMain`**
 
 Before:
+
 ```go
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -997,6 +1008,7 @@ Same as Task 11 — `TestMain` pattern, already one container per package, no sa
 - [ ] **Step 1: Rewrite `setupPool` helper**
 
 Before:
+
 ```go
 func setupPool(t *testing.T) (*pgxpool.Pool, func()) {
 	t.Helper()
@@ -1017,6 +1029,7 @@ func setupPool(t *testing.T) (*pgxpool.Pool, func()) {
 ```
 
 After:
+
 ```go
 func setupPool(t *testing.T) (*pgxpool.Pool, func()) {
 	t.Helper()
@@ -1045,7 +1058,7 @@ Expected: all tests pass
 
 - [ ] **Step 3: Commit**
 
-```
+```text
 refactor(test): share container in content store tests (1 → 0 new containers)
 ```
 
@@ -1088,7 +1101,7 @@ Expected: all tests pass
 
 - [ ] **Step 3: Commit**
 
-```
+```text
 refactor(test): share container in core-scenes plugin tests (1 → 0 new containers)
 ```
 
@@ -1111,6 +1124,7 @@ All follow the same pattern. Each suite's `BeforeSuite` calls `StartPostgres`, r
 - [ ] **Step 1: Convert world suite (`world_suite_test.go`)**
 
 In `setupWorldTestEnv`, replace:
+
 ```go
 pgEnv, err := testutil.StartPostgres(ctx)
 if err != nil {
@@ -1124,6 +1138,7 @@ migrator, err := store.NewMigrator(connStr)
 ```
 
 With:
+
 ```go
 shared := testutil.SharedPostgres(GinkgoT())
 connStr := testutil.FreshDatabase(GinkgoT(), shared)
@@ -1132,6 +1147,7 @@ connStr := testutil.FreshDatabase(GinkgoT(), shared)
 Remove `container` from the `testEnv` struct and `cleanup()` method. Remove `testcontainers` import.
 
 Update `cleanup()`:
+
 ```go
 func (e *testEnv) cleanup() {
     if e.pool != nil {
@@ -1175,7 +1191,7 @@ Expected: all integration tests pass
 
 - [ ] **Step 9: Commit**
 
-```
+```text
 refactor(test): share container across all Ginkgo integration suites
 
 Converts 7 Ginkgo suites to use SharedPostgres + FreshDatabase.
@@ -1207,7 +1223,7 @@ Expected: all tests pass
 
 - [ ] **Step 4: Commit**
 
-```
+```text
 refactor(test): share container in remaining integration tests
 ```
 
@@ -1239,7 +1255,7 @@ func StartPostgres(ctx context.Context) (*PostgresEnv, error) {
 
 - [ ] **Step 2: Commit**
 
-```
+```text
 docs(testutil): update StartPostgres comment to recommend SharedPostgres
 ```
 

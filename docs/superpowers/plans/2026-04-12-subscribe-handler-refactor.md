@@ -349,12 +349,14 @@ func (s *CoreServer) applyCtrlUpdate(
 - [ ] **Step 3: Write tests for replayRestorePlan**
 
 Test cases:
+
 - `TestReplayRestorePlanMergeSortsAcrossStreams` — 2 streams with interleaved events → delivery in global ULID order
 - `TestReplayRestorePlanHandlesEmptyPlan` — empty plan → no events, no error
 - `TestReplayRestorePlanLiveOnlyAdvancesCursorWithoutReplay` — LiveOnly stream → cursor advanced, zero events delivered
 - `TestReplayRestorePlanBoundedTailUsesReplayTail` — BoundedTail → calls ReplayTail with correct count
 
 Test cases for `applyCtrlUpdate`:
+
 - `TestApplyCtrlUpdateAddsStreamAndReplays` — add with FromCursor → stream added + replayed
 - `TestApplyCtrlUpdateRemovesStream` — remove → stream removed from Subscription
 
@@ -382,6 +384,7 @@ The core refactor. Replace the ~280-line handler with the ~120-line target shape
 - [ ] **Step 1: Remove dead code**
 
 Remove from `server.go`:
+
 - `startNotificationRelay` function (lines ~66-90)
 - `streamNotification` struct
 - `subscribeStream` function
@@ -537,6 +540,7 @@ Check for import cycles — `world` should not import `focus`.
 - [ ] **Step 4: Update restore tests**
 
 Add tests for:
+
 - `TestRestoreFocusIncludesAmbientStreams` — active session with location → plan includes character + location streams
 - `TestRestoreFocusIncludesPluginContributedStreams` — stub contributor returns streams → plan includes them
 - `TestRestoreFocusUsesLiveOnlyForInitialAttach` — no memberships + zero cursors → ambient mode is LiveOnly
@@ -597,6 +601,7 @@ Search and replace — every `SubscribeRequest` that passes `Streams:` or `Repla
 - [ ] **Step 2: Update test helpers**
 
 Tests that construct `CoreServer` instances manually may need:
+
 - A `FocusCoordinator` (use a simple one with `NullPolicy`)
 - An `EventStore` that implements `SubscribeSession()` (the `MemoryEventStore` already does)
 
@@ -605,11 +610,13 @@ Update `newTestSessionStore` and similar helpers if needed.
 - [ ] **Step 3: Remove or rewrite obsolete tests**
 
 Some tests are now obsolete:
+
 - `TestCoreServer_MalformedRequest_InvalidSubscribeStreams` — streams field gone
 - `TestCoreServer_Subscribe_NoReplayWhenNotRequested` — replay is always done by server
 - Tests that assert specific stream selection behavior — server decides now
 
 Rewrite or remove as appropriate. The new behavior to test:
+
 - Subscribe with valid session → events delivered
 - Subscribe with invalid session → error
 - Subscribe with detached session → reattach + replay

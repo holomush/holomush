@@ -69,6 +69,7 @@ CREATEROLE tests.
   if needed
 
 Use cases:
+
 - `internal/store/migrations_audit_shape_integration_test.go` — tests
   migration shape at specific versions
 - `test/integration/plugin/schema_isolation_test.go` — tests CREATEROLE

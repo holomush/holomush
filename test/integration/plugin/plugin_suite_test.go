@@ -14,8 +14,10 @@ import (
 	"github.com/holomush/holomush/test/testutil"
 )
 
-var suiteT *testing.T
-var sharedPG *testutil.PostgresEnv
+var (
+	suiteT   *testing.T
+	sharedPG *testutil.PostgresEnv
+)
 
 func TestBinaryPlugin(t *testing.T) {
 	suiteT = t

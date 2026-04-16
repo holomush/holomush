@@ -15,9 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
-	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	policy "github.com/holomush/holomush/internal/access/policy"
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	policystore "github.com/holomush/holomush/internal/access/policy/store"
@@ -27,6 +24,9 @@ import (
 	"github.com/holomush/holomush/internal/plugin/goplugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"github.com/holomush/holomush/test/testutil"
+	"github.com/jackc/pgx/v5/pgxpool"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 )
 
 // abacWidgetBinaryPath returns the plugin directory and binary path for the

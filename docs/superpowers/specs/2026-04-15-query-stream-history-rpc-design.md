@@ -169,7 +169,7 @@ message WebQueryStreamHistoryResponse {
 
 ### 4.1 CoreServer handler (`internal/grpc/`)
 
-```
+```text
 QueryStreamHistory(ctx, req):
   0. Guard                   → reject if eventStore is nil (INTERNAL)
   1. Validate session_id    → sessionStore.Get(); reject NOT_FOUND / expired
@@ -283,7 +283,7 @@ data" reasoning.
 
 ### 5.4 Seed policy: `seed:player-location-stream-read`
 
-```
+```text
 permit(principal is character, action in ["read"], resource is stream)
   when { resource.stream.name like "location:*"
       && resource.stream.location == principal.character.location };
