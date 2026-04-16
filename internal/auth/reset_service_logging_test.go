@@ -46,6 +46,22 @@ func (m *mockSessionRepoForReset) RefreshTTL(_ context.Context, _ ulid.ULID, _ t
 	return nil
 }
 
+func (m *mockSessionRepoForReset) GetByID(_ context.Context, _ ulid.ULID) (*auth.PlayerSession, error) {
+	return nil, auth.ErrNotFound
+}
+
+func (m *mockSessionRepoForReset) CountActiveByPlayer(_ context.Context, _ ulid.ULID) (int, error) {
+	return 0, nil
+}
+
+func (m *mockSessionRepoForReset) ListByPlayer(_ context.Context, _ ulid.ULID) ([]*auth.PlayerSession, error) {
+	return nil, nil
+}
+
+func (m *mockSessionRepoForReset) DeleteOldestForPlayer(_ context.Context, _ ulid.ULID) (*auth.PlayerSession, error) {
+	return nil, nil
+}
+
 // mockResetRepoLogging is a mock that can fail on DeleteByPlayer for testing logging.
 type mockResetRepoLogging struct {
 	reset          *auth.PasswordReset

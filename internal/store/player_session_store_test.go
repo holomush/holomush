@@ -431,6 +431,324 @@ func TestPostgresPlayerSessionStore_DeleteExpired(t *testing.T) {
 	}
 }
 
+func TestPostgresPlayerSessionStore_GetByID(t *testing.T) {
+	ps := testPlayerSession()
+
+	tests := []struct {
+		name      string
+		id        ulid.ULID
+		setupMock func(mock pgxmock.PgxPoolIface)
+		wantErr   bool
+		errCode   string
+		errMsg    string
+		check     func(t *testing.T, got *auth.PlayerSession)
+	}{
+		{
+			name: "happy path",
+			id:   ps.ID,
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows(playerSessionColumns()).AddRow(playerSessionRow(ps)...)
+				mock.ExpectQuery(`SELECT .+ FROM player_sessions WHERE id = \$1`).
+					WithArgs(ps.ID.String()).
+					WillReturnRows(rows)
+			},
+			check: func(t *testing.T, got *auth.PlayerSession) {
+				t.Helper()
+				assert.Equal(t, ps.ID, got.ID)
+				assert.Equal(t, ps.PlayerID, got.PlayerID)
+				assert.Equal(t, ps.TokenHash, got.TokenHash)
+			},
+		},
+		{
+			name: "not found",
+			id:   ps.ID,
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectQuery(`SELECT .+ FROM player_sessions WHERE id = \$1`).
+					WithArgs(ps.ID.String()).
+					WillReturnError(pgx.ErrNoRows)
+			},
+			wantErr: true,
+			errCode: "PLAYER_SESSION_NOT_FOUND",
+		},
+		{
+			name: "database error",
+			id:   ps.ID,
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectQuery(`SELECT .+ FROM player_sessions WHERE id = \$1`).
+					WithArgs(ps.ID.String()).
+					WillReturnError(errors.New("connection lost"))
+			},
+			wantErr: true,
+			errCode: "PLAYER_SESSION_GET_BY_ID_FAILED",
+			errMsg:  "connection lost",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			require.NoError(t, err)
+			defer mock.Close()
+
+			tt.setupMock(mock)
+
+			s := NewPostgresPlayerSessionStore(mock)
+			got, err := s.GetByID(context.Background(), tt.id)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errCode != "" {
+					errutil.AssertErrorCode(t, err, tt.errCode)
+				}
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				require.NoError(t, err)
+				if tt.check != nil {
+					tt.check(t, got)
+				}
+			}
+
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestPostgresPlayerSessionStore_CountActiveByPlayer(t *testing.T) {
+	playerID := core.NewULID()
+
+	tests := []struct {
+		name      string
+		setupMock func(mock pgxmock.PgxPoolIface)
+		wantCount int
+		wantErr   bool
+		errCode   string
+	}{
+		{
+			name: "returns active session count",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows([]string{"count"}).AddRow(3)
+				mock.ExpectQuery(`SELECT COUNT\(\*\) FROM player_sessions WHERE player_id = \$1 AND expires_at > now\(\)`).
+					WithArgs(playerID.String()).
+					WillReturnRows(rows)
+			},
+			wantCount: 3,
+		},
+		{
+			name: "returns zero for no sessions",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows([]string{"count"}).AddRow(0)
+				mock.ExpectQuery(`SELECT COUNT\(\*\) FROM player_sessions WHERE player_id = \$1 AND expires_at > now\(\)`).
+					WithArgs(playerID.String()).
+					WillReturnRows(rows)
+			},
+			wantCount: 0,
+		},
+		{
+			name: "database error",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectQuery(`SELECT COUNT\(\*\) FROM player_sessions WHERE player_id = \$1 AND expires_at > now\(\)`).
+					WithArgs(playerID.String()).
+					WillReturnError(errors.New("connection lost"))
+			},
+			wantErr: true,
+			errCode: "PLAYER_SESSION_COUNT_FAILED",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			require.NoError(t, err)
+			defer mock.Close()
+
+			tt.setupMock(mock)
+
+			s := NewPostgresPlayerSessionStore(mock)
+			count, err := s.CountActiveByPlayer(context.Background(), playerID)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errCode != "" {
+					errutil.AssertErrorCode(t, err, tt.errCode)
+				}
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantCount, count)
+			}
+
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestPostgresPlayerSessionStore_ListByPlayer(t *testing.T) {
+	playerID := core.NewULID()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	newer := &auth.PlayerSession{
+		ID: core.NewULID(), PlayerID: playerID, TokenHash: "hash-new",
+		UserAgent: "agent", IPAddress: "127.0.0.1",
+		ExpiresAt: now.Add(time.Hour), CreatedAt: now, UpdatedAt: now,
+	}
+	older := &auth.PlayerSession{
+		ID: core.NewULID(), PlayerID: playerID, TokenHash: "hash-old",
+		UserAgent: "agent", IPAddress: "127.0.0.1",
+		ExpiresAt: now.Add(time.Hour), CreatedAt: now.Add(-time.Hour), UpdatedAt: now.Add(-time.Hour),
+	}
+
+	tests := []struct {
+		name      string
+		setupMock func(mock pgxmock.PgxPoolIface)
+		wantLen   int
+		wantErr   bool
+		errCode   string
+		check     func(t *testing.T, got []*auth.PlayerSession)
+	}{
+		{
+			name: "returns sessions newest-first",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows(playerSessionColumns()).
+					AddRow(playerSessionRow(newer)...).
+					AddRow(playerSessionRow(older)...)
+				mock.ExpectQuery(`SELECT .+ FROM player_sessions\s+WHERE player_id = \$1 AND expires_at > now\(\)\s+ORDER BY created_at DESC`).
+					WithArgs(playerID.String()).
+					WillReturnRows(rows)
+			},
+			wantLen: 2,
+			check: func(t *testing.T, got []*auth.PlayerSession) {
+				t.Helper()
+				assert.Equal(t, newer.ID, got[0].ID)
+				assert.Equal(t, older.ID, got[1].ID)
+			},
+		},
+		{
+			name: "returns empty list for no sessions",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows(playerSessionColumns())
+				mock.ExpectQuery(`SELECT .+ FROM player_sessions\s+WHERE player_id = \$1`).
+					WithArgs(playerID.String()).
+					WillReturnRows(rows)
+			},
+			wantLen: 0,
+		},
+		{
+			name: "database error",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectQuery(`SELECT .+ FROM player_sessions\s+WHERE player_id = \$1`).
+					WithArgs(playerID.String()).
+					WillReturnError(errors.New("connection lost"))
+			},
+			wantErr: true,
+			errCode: "PLAYER_SESSION_LIST_FAILED",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			require.NoError(t, err)
+			defer mock.Close()
+
+			tt.setupMock(mock)
+
+			s := NewPostgresPlayerSessionStore(mock)
+			got, err := s.ListByPlayer(context.Background(), playerID)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errCode != "" {
+					errutil.AssertErrorCode(t, err, tt.errCode)
+				}
+			} else {
+				require.NoError(t, err)
+				assert.Len(t, got, tt.wantLen)
+				if tt.check != nil {
+					tt.check(t, got)
+				}
+			}
+
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestPostgresPlayerSessionStore_DeleteOldestForPlayer(t *testing.T) {
+	playerID := core.NewULID()
+	sessionID := core.NewULID()
+
+	tests := []struct {
+		name      string
+		setupMock func(mock pgxmock.PgxPoolIface)
+		wantNil   bool
+		wantID    ulid.ULID
+		wantErr   bool
+		errCode   string
+	}{
+		{
+			name: "deletes and returns oldest session",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				rows := pgxmock.NewRows([]string{"id"}).AddRow(sessionID.String())
+				mock.ExpectQuery(`DELETE FROM player_sessions\s+WHERE id = \(\s+SELECT id FROM player_sessions\s+WHERE player_id = \$1 AND expires_at > now\(\)\s+ORDER BY created_at ASC\s+LIMIT 1\s+\)\s+RETURNING id`).
+					WithArgs(playerID.String()).
+					WillReturnRows(rows)
+			},
+			wantID: sessionID,
+		},
+		{
+			name: "returns nil,nil when player has no active sessions",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectQuery(`DELETE FROM player_sessions`).
+					WithArgs(playerID.String()).
+					WillReturnError(pgx.ErrNoRows)
+			},
+			wantNil: true,
+		},
+		{
+			name: "database error",
+			setupMock: func(mock pgxmock.PgxPoolIface) {
+				mock.ExpectQuery(`DELETE FROM player_sessions`).
+					WithArgs(playerID.String()).
+					WillReturnError(errors.New("connection lost"))
+			},
+			wantErr: true,
+			errCode: "PLAYER_SESSION_DELETE_OLDEST_FAILED",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			require.NoError(t, err)
+			defer mock.Close()
+
+			tt.setupMock(mock)
+
+			s := NewPostgresPlayerSessionStore(mock)
+			got, err := s.DeleteOldestForPlayer(context.Background(), playerID)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errCode != "" {
+					errutil.AssertErrorCode(t, err, tt.errCode)
+				}
+			} else {
+				require.NoError(t, err)
+				if tt.wantNil {
+					assert.Nil(t, got)
+				} else {
+					require.NotNil(t, got)
+					assert.Equal(t, tt.wantID, got.ID)
+					assert.Equal(t, playerID, got.PlayerID)
+				}
+			}
+
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
 func TestPostgresPlayerSessionStore_RefreshTTL(t *testing.T) {
 	sessionID := core.NewULID()
 	ttl := 24 * time.Hour

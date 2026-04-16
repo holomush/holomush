@@ -7,6 +7,7 @@ package auth_test
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -442,6 +443,139 @@ var _ = Describe("Player Session Lifecycle", func() {
 			retrieved, err := env.playerSessionStore.GetByTokenHash(ctx, validHash)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(retrieved.ID).To(Equal(validSession.ID))
+		})
+	})
+
+	Describe("PlayerSessionRepository extended methods", func() {
+		var player *auth.Player
+
+		BeforeEach(func() {
+			player = createTestPlayer(ctx, "extended_methods_player", "securepassword123")
+		})
+
+		// createSessionForPlayer inserts a session with a specific created_at/expires_at
+		// so tests can control ordering and expiry deterministically.
+		createSessionForPlayer := func(createdAt, expiresAt time.Time) *auth.PlayerSession {
+			_, tokenHash, err := auth.GenerateSessionToken()
+			Expect(err).NotTo(HaveOccurred())
+
+			ps, err := auth.NewPlayerSession(player.ID, tokenHash, "", "", auth.PlayerSessionTTL)
+			Expect(err).NotTo(HaveOccurred())
+			ps.CreatedAt = createdAt
+			ps.UpdatedAt = createdAt
+			ps.ExpiresAt = expiresAt
+			err = env.playerSessionStore.Create(ctx, ps)
+			Expect(err).NotTo(HaveOccurred())
+			return ps
+		}
+
+		It("CountActiveByPlayer returns the number of non-expired sessions", func() {
+			now := time.Now().UTC()
+			createSessionForPlayer(now.Add(-3*time.Hour), now.Add(time.Hour))
+			createSessionForPlayer(now.Add(-2*time.Hour), now.Add(time.Hour))
+			createSessionForPlayer(now.Add(-1*time.Hour), now.Add(time.Hour))
+
+			n, err := env.playerSessionStore.CountActiveByPlayer(ctx, player.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(3))
+
+			// Expire the oldest session via direct UPDATE with subquery (Postgres
+			// doesn't support LIMIT in a plain UPDATE).
+			_, err = env.pool.Exec(ctx, `
+				UPDATE player_sessions SET expires_at = now() - interval '1 minute'
+				WHERE id = (
+					SELECT id FROM player_sessions
+					WHERE player_id = $1 AND expires_at > now()
+					ORDER BY created_at ASC
+					LIMIT 1
+				)
+			`, player.ID.String())
+			Expect(err).NotTo(HaveOccurred())
+
+			n, err = env.playerSessionStore.CountActiveByPlayer(ctx, player.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(2))
+		})
+
+		It("CountActiveByPlayer returns 0 for a player with no sessions", func() {
+			other := createTestPlayer(ctx, "no_sessions_player", "securepassword123")
+			n, err := env.playerSessionStore.CountActiveByPlayer(ctx, other.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(0))
+		})
+
+		It("ListByPlayer returns non-expired sessions newest-first", func() {
+			now := time.Now().UTC()
+			oldest := createSessionForPlayer(now.Add(-3*time.Hour), now.Add(time.Hour))
+			middle := createSessionForPlayer(now.Add(-2*time.Hour), now.Add(time.Hour))
+			newest := createSessionForPlayer(now.Add(-1*time.Hour), now.Add(time.Hour))
+			// Expired — should be excluded.
+			createSessionForPlayer(now.Add(-4*time.Hour), now.Add(-time.Minute))
+
+			sessions, err := env.playerSessionStore.ListByPlayer(ctx, player.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sessions).To(HaveLen(3))
+			Expect(sessions[0].ID).To(Equal(newest.ID))
+			Expect(sessions[1].ID).To(Equal(middle.ID))
+			Expect(sessions[2].ID).To(Equal(oldest.ID))
+		})
+
+		It("ListByPlayer returns empty list for player with no sessions", func() {
+			other := createTestPlayer(ctx, "empty_list_player", "securepassword123")
+			sessions, err := env.playerSessionStore.ListByPlayer(ctx, other.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sessions).To(BeEmpty())
+		})
+
+		It("DeleteOldestForPlayer removes the oldest non-expired session and returns it", func() {
+			now := time.Now().UTC()
+			oldest := createSessionForPlayer(now.Add(-3*time.Hour), now.Add(time.Hour))
+			middle := createSessionForPlayer(now.Add(-2*time.Hour), now.Add(time.Hour))
+			newest := createSessionForPlayer(now.Add(-1*time.Hour), now.Add(time.Hour))
+
+			deleted, err := env.playerSessionStore.DeleteOldestForPlayer(ctx, player.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deleted).NotTo(BeNil())
+			Expect(deleted.ID).To(Equal(oldest.ID))
+			Expect(deleted.PlayerID).To(Equal(player.ID))
+
+			// Remaining two are middle + newest.
+			remaining, err := env.playerSessionStore.ListByPlayer(ctx, player.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remaining).To(HaveLen(2))
+			ids := []ulid.ULID{remaining[0].ID, remaining[1].ID}
+			Expect(ids).To(ContainElement(middle.ID))
+			Expect(ids).To(ContainElement(newest.ID))
+		})
+
+		It("DeleteOldestForPlayer returns nil,nil for a player with no active sessions", func() {
+			deleted, err := env.playerSessionStore.DeleteOldestForPlayer(ctx, ulid.Make())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deleted).To(BeNil())
+		})
+
+		It("GetByID returns the row for a known id", func() {
+			_, tokenHash, err := auth.GenerateSessionToken()
+			Expect(err).NotTo(HaveOccurred())
+			ps, err := auth.NewPlayerSession(player.ID, tokenHash, "Mozilla/5.0", "10.0.0.1", auth.PlayerSessionTTL)
+			Expect(err).NotTo(HaveOccurred())
+			err = env.playerSessionStore.Create(ctx, ps)
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := env.playerSessionStore.GetByID(ctx, ps.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.ID).To(Equal(ps.ID))
+			Expect(got.PlayerID).To(Equal(player.ID))
+			Expect(got.TokenHash).To(Equal(tokenHash))
+			Expect(got.UserAgent).To(Equal("Mozilla/5.0"))
+			Expect(got.IPAddress).To(Equal("10.0.0.1"))
+		})
+
+		It("GetByID returns ErrNotFound for an unknown id", func() {
+			got, err := env.playerSessionStore.GetByID(ctx, ulid.Make())
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, auth.ErrNotFound)).To(BeTrue())
+			Expect(got).To(BeNil())
 		})
 	})
 

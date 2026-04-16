@@ -87,6 +87,94 @@ func (s *PostgresPlayerSessionStore) GetByTokenHash(ctx context.Context, tokenHa
 	return &ps, nil
 }
 
+// GetByID retrieves a player session by its ULID primary key.
+// Returns auth.ErrNotFound if no row exists.
+func (s *PostgresPlayerSessionStore) GetByID(ctx context.Context, id ulid.ULID) (*auth.PlayerSession, error) {
+	var ps auth.PlayerSession
+	var idStr, playerIDStr string
+
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, player_id, token_hash, user_agent, ip_address, expires_at, created_at, updated_at FROM player_sessions WHERE id = $1`,
+		id.String(),
+	).Scan(&idStr, &playerIDStr, &ps.TokenHash, &ps.UserAgent, &ps.IPAddress, &ps.ExpiresAt, &ps.CreatedAt, &ps.UpdatedAt)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.Code("PLAYER_SESSION_NOT_FOUND").With("session_id", id.String()).Wrap(auth.ErrNotFound)
+	}
+	if err != nil {
+		return nil, oops.Code("PLAYER_SESSION_GET_BY_ID_FAILED").With("session_id", id.String()).Wrap(err)
+	}
+
+	parsedID, err := ulid.Parse(idStr)
+	if err != nil {
+		return nil, oops.With("operation", "parse session id").With("raw_id", idStr).Wrap(err)
+	}
+	ps.ID = parsedID
+
+	playerID, err := ulid.Parse(playerIDStr)
+	if err != nil {
+		return nil, oops.With("operation", "parse player_id").With("raw_id", playerIDStr).Wrap(err)
+	}
+	ps.PlayerID = playerID
+
+	return &ps, nil
+}
+
+// CountActiveByPlayer returns the number of non-expired sessions for a player.
+func (s *PostgresPlayerSessionStore) CountActiveByPlayer(ctx context.Context, playerID ulid.ULID) (int, error) {
+	var n int
+	err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM player_sessions WHERE player_id = $1 AND expires_at > now()`,
+		playerID.String(),
+	).Scan(&n)
+	if err != nil {
+		return 0, oops.Code("PLAYER_SESSION_COUNT_FAILED").With("player_id", playerID.String()).Wrap(err)
+	}
+	return n, nil
+}
+
+// ListByPlayer returns all non-expired sessions for a player, newest first.
+func (s *PostgresPlayerSessionStore) ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*auth.PlayerSession, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, player_id, token_hash, user_agent, ip_address, expires_at, created_at, updated_at
+		 FROM player_sessions
+		 WHERE player_id = $1 AND expires_at > now()
+		 ORDER BY created_at DESC`,
+		playerID.String(),
+	)
+	if err != nil {
+		return nil, oops.Code("PLAYER_SESSION_LIST_FAILED").With("player_id", playerID.String()).Wrap(err)
+	}
+	defer rows.Close()
+
+	var sessions []*auth.PlayerSession
+	for rows.Next() {
+		var ps auth.PlayerSession
+		var idStr, playerIDStr string
+		if scanErr := rows.Scan(
+			&idStr, &playerIDStr, &ps.TokenHash, &ps.UserAgent, &ps.IPAddress,
+			&ps.ExpiresAt, &ps.CreatedAt, &ps.UpdatedAt,
+		); scanErr != nil {
+			return nil, oops.Code("PLAYER_SESSION_LIST_SCAN_FAILED").With("player_id", playerID.String()).Wrap(scanErr)
+		}
+		parsedID, parseErr := ulid.Parse(idStr)
+		if parseErr != nil {
+			return nil, oops.With("operation", "parse session id").With("raw_id", idStr).Wrap(parseErr)
+		}
+		ps.ID = parsedID
+		parsedPlayerID, parseErr := ulid.Parse(playerIDStr)
+		if parseErr != nil {
+			return nil, oops.With("operation", "parse player_id").With("raw_id", playerIDStr).Wrap(parseErr)
+		}
+		ps.PlayerID = parsedPlayerID
+		sessions = append(sessions, &ps)
+	}
+	if rows.Err() != nil {
+		return nil, oops.Code("PLAYER_SESSION_LIST_FAILED").With("player_id", playerID.String()).Wrap(rows.Err())
+	}
+	return sessions, nil
+}
+
 // Delete removes a single session by ID.
 func (s *PostgresPlayerSessionStore) Delete(ctx context.Context, id ulid.ULID) error {
 	_, err := s.pool.Exec(ctx, `DELETE FROM player_sessions WHERE id = $1`, id.String())
@@ -103,6 +191,35 @@ func (s *PostgresPlayerSessionStore) DeleteByPlayer(ctx context.Context, playerI
 		return oops.With("operation", "delete player sessions by player").With("player_id", playerID.String()).Wrap(err)
 	}
 	return nil
+}
+
+// DeleteOldestForPlayer deletes the single oldest non-expired session for the
+// player using a single-round-trip DELETE ... WHERE id = (SELECT ...). Returns
+// the deleted session (for logging) or (nil, nil) if the player had no active
+// sessions.
+func (s *PostgresPlayerSessionStore) DeleteOldestForPlayer(ctx context.Context, playerID ulid.ULID) (*auth.PlayerSession, error) {
+	var idStr string
+	err := s.pool.QueryRow(ctx, `
+		DELETE FROM player_sessions
+		WHERE id = (
+			SELECT id FROM player_sessions
+			WHERE player_id = $1 AND expires_at > now()
+			ORDER BY created_at ASC
+			LIMIT 1
+		)
+		RETURNING id
+	`, playerID.String()).Scan(&idStr)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil //nolint:nilnil // explicit "no rows" signal per interface contract
+	}
+	if err != nil {
+		return nil, oops.Code("PLAYER_SESSION_DELETE_OLDEST_FAILED").With("player_id", playerID.String()).Wrap(err)
+	}
+	deletedID, parseErr := ulid.Parse(idStr)
+	if parseErr != nil {
+		return nil, oops.Code("PLAYER_SESSION_DELETE_OLDEST_PARSE_FAILED").With("raw_id", idStr).Wrap(parseErr)
+	}
+	return &auth.PlayerSession{ID: deletedID, PlayerID: playerID}, nil
 }
 
 // DeleteExpired removes all sessions whose expiry time has passed and returns
