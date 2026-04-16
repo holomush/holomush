@@ -22,6 +22,7 @@ import (
 // AuthServiceProvider defines the auth.Service methods used by auth handlers.
 type AuthServiceProvider interface {
 	ValidateCredentials(ctx context.Context, username, password string) (*auth.Player, error)
+	AuthenticatePlayer(ctx context.Context, username, password, userAgent, ipAddress string) (string, *auth.Player, error)
 	CreatePlayer(ctx context.Context, username, password, email string) (*auth.Player, *auth.PlayerSession, string, error)
 	Logout(ctx context.Context, tokenHash string) (ulid.ULID, error)
 }
@@ -137,28 +138,16 @@ func (s *CoreServer) AuthenticatePlayer(ctx context.Context, req *corev1.Authent
 		}, nil
 	}
 
-	player, validateErr := s.authService.ValidateCredentials(ctx, req.Username, req.Password)
-	if validateErr != nil {
+	// AuthenticatePlayer validates credentials, enforces the per-player session
+	// cap (evicting the oldest session if needed), and persists a new
+	// PlayerSession in a single service call.
+	rawToken, player, authErr := s.authService.AuthenticatePlayer(ctx, req.Username, req.Password, "", "")
+	if authErr != nil {
 		//nolint:nilerr // intentional: return user-facing error in response body
 		return &corev1.AuthenticatePlayerResponse{
 			Success:      false,
 			ErrorMessage: "invalid username or password",
 		}, nil
-	}
-
-	// Create a durable player session.
-	rawToken, tokenHash, tokenErr := auth.GenerateSessionToken()
-	if tokenErr != nil {
-		return nil, oops.Code("TOKEN_GENERATION_FAILED").Wrap(tokenErr)
-	}
-
-	playerSession, sessionErr := auth.NewPlayerSession(player.ID, tokenHash, "", "", auth.PlayerSessionTTL)
-	if sessionErr != nil {
-		return nil, oops.Code("SESSION_CREATE_FAILED").Wrap(sessionErr)
-	}
-
-	if storeErr := s.playerSessionRepo.Create(ctx, playerSession); storeErr != nil {
-		return nil, oops.Code("SESSION_STORE_FAILED").Wrap(storeErr)
 	}
 
 	characters, err := s.buildCharacterSummaries(ctx, player.ID)

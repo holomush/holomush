@@ -26,6 +26,13 @@ type PoolProvider interface {
 // AuthSubsystemConfig configures the auth subsystem.
 type AuthSubsystemConfig struct {
 	DB PoolProvider
+
+	// MaxSessionsPerPlayer caps concurrent authenticated PlayerSessions per
+	// player. A value <= 0 disables enforcement. On login exceeding the cap,
+	// the oldest active PlayerSession is evicted before the new session is
+	// persisted; the sessions.player_session_id FK cascade then removes the
+	// evicted session's game sessions and terminates their Subscribe streams.
+	MaxSessionsPerPlayer int
 }
 
 // AuthSubsystem manages authentication services and repositories.
@@ -67,6 +74,7 @@ func (s *AuthSubsystem) Start(_ context.Context) error {
 	if err != nil {
 		return oops.Code("AUTH_SETUP_FAILED").Wrap(err)
 	}
+	authSvc.SetMaxSessionsPerPlayer(s.cfg.MaxSessionsPerPlayer)
 	s.authService = authSvc
 
 	resetSvc, err := auth.NewPasswordResetServiceWithLogger(s.playerRepo, s.resetRepo, s.playerSessionStore, s.hasher, slog.Default())

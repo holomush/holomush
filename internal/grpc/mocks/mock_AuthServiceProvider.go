@@ -28,6 +28,75 @@ func (_m *MockAuthServiceProvider) EXPECT() *MockAuthServiceProvider_Expecter {
 	return &MockAuthServiceProvider_Expecter{mock: &_m.Mock}
 }
 
+// AuthenticatePlayer provides a mock function with given fields: ctx, username, password, userAgent, ipAddress
+func (_m *MockAuthServiceProvider) AuthenticatePlayer(ctx context.Context, username string, password string, userAgent string, ipAddress string) (string, *auth.Player, error) {
+	ret := _m.Called(ctx, username, password, userAgent, ipAddress)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AuthenticatePlayer")
+	}
+
+	var r0 string
+	var r1 *auth.Player
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, string) (string, *auth.Player, error)); ok {
+		return rf(ctx, username, password, userAgent, ipAddress)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, string) string); ok {
+		r0 = rf(ctx, username, password, userAgent, ipAddress)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, string, string) *auth.Player); ok {
+		r1 = rf(ctx, username, password, userAgent, ipAddress)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(*auth.Player)
+		}
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, string, string, string, string) error); ok {
+		r2 = rf(ctx, username, password, userAgent, ipAddress)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// MockAuthServiceProvider_AuthenticatePlayer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AuthenticatePlayer'
+type MockAuthServiceProvider_AuthenticatePlayer_Call struct {
+	*mock.Call
+}
+
+// AuthenticatePlayer is a helper method to define mock.On call
+//   - ctx context.Context
+//   - username string
+//   - password string
+//   - userAgent string
+//   - ipAddress string
+func (_e *MockAuthServiceProvider_Expecter) AuthenticatePlayer(ctx interface{}, username interface{}, password interface{}, userAgent interface{}, ipAddress interface{}) *MockAuthServiceProvider_AuthenticatePlayer_Call {
+	return &MockAuthServiceProvider_AuthenticatePlayer_Call{Call: _e.mock.On("AuthenticatePlayer", ctx, username, password, userAgent, ipAddress)}
+}
+
+func (_c *MockAuthServiceProvider_AuthenticatePlayer_Call) Run(run func(ctx context.Context, username string, password string, userAgent string, ipAddress string)) *MockAuthServiceProvider_AuthenticatePlayer_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string), args[4].(string))
+	})
+	return _c
+}
+
+func (_c *MockAuthServiceProvider_AuthenticatePlayer_Call) Return(_a0 string, _a1 *auth.Player, _a2 error) *MockAuthServiceProvider_AuthenticatePlayer_Call {
+	_c.Call.Return(_a0, _a1, _a2)
+	return _c
+}
+
+func (_c *MockAuthServiceProvider_AuthenticatePlayer_Call) RunAndReturn(run func(context.Context, string, string, string, string) (string, *auth.Player, error)) *MockAuthServiceProvider_AuthenticatePlayer_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CreatePlayer provides a mock function with given fields: ctx, username, password, email
 func (_m *MockAuthServiceProvider) CreatePlayer(ctx context.Context, username string, password string, email string) (*auth.Player, *auth.PlayerSession, string, error) {
 	ret := _m.Called(ctx, username, password, email)

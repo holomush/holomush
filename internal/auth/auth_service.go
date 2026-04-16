@@ -14,14 +14,16 @@ import (
 
 // Service provides authentication operations.
 type Service struct {
-	players        PlayerRepository
-	playerSessions PlayerSessionRepository
-	hasher         PasswordHasher
-	logger         *slog.Logger
+	players              PlayerRepository
+	playerSessions       PlayerSessionRepository
+	hasher               PasswordHasher
+	logger               *slog.Logger
+	maxSessionsPerPlayer int
 }
 
 // NewAuthService creates a new Service with a no-op logger.
 // Returns an error if any required dependency is nil.
+// Session cap enforcement is disabled (use SetMaxSessionsPerPlayer to enable).
 func NewAuthService(players PlayerRepository, playerSessions PlayerSessionRepository, hasher PasswordHasher) (*Service, error) {
 	if players == nil {
 		return nil, oops.Errorf("players repository is required")
@@ -42,6 +44,7 @@ func NewAuthService(players PlayerRepository, playerSessions PlayerSessionReposi
 
 // NewAuthServiceWithLogger creates a new Service with the provided logger.
 // Returns an error if any required dependency is nil.
+// Session cap enforcement is disabled (use SetMaxSessionsPerPlayer to enable).
 func NewAuthServiceWithLogger(players PlayerRepository, playerSessions PlayerSessionRepository, hasher PasswordHasher, logger *slog.Logger) (*Service, error) {
 	if players == nil {
 		return nil, oops.Errorf("players repository is required")
@@ -63,6 +66,15 @@ func NewAuthServiceWithLogger(players PlayerRepository, playerSessions PlayerSes
 	}, nil
 }
 
+// SetMaxSessionsPerPlayer configures the per-player active session cap.
+// A value <= 0 disables cap enforcement. When enabled, AuthenticatePlayer
+// will evict the oldest active PlayerSession for the player before creating
+// a new one whenever the player already has maxSessionsPerPlayer active
+// sessions.
+func (s *Service) SetMaxSessionsPerPlayer(n int) {
+	s.maxSessionsPerPlayer = n
+}
+
 // dummyPasswordHash is used when a user doesn't exist to prevent timing attacks.
 // We still run password verification to make response time consistent.
 // This is NOT a real credential - it's a fake hash that will never match any password.
@@ -73,6 +85,75 @@ func NewAuthServiceWithLogger(players PlayerRepository, playerSessions PlayerSes
 //
 //nolint:gosec // G101: This is an intentionally fake hash for timing attack prevention, not a credential.
 const dummyPasswordHash = "$argon2id$v=19$m=65536,t=1,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
+// AuthenticatePlayer validates credentials and creates a new PlayerSession.
+// When the per-player session cap is enabled (maxSessionsPerPlayer > 0) and the
+// player already has at least that many active PlayerSessions, the oldest
+// active PlayerSession is deleted before the new one is persisted. The
+// ON DELETE CASCADE on sessions.player_session_id ensures game sessions
+// spawned by the evicted PlayerSession are removed atomically, terminating
+// their Subscribe streams.
+//
+// Returns the raw (plaintext) session token and the authenticated Player on
+// success. The caller is responsible for returning the raw token to the client
+// exactly once; only the hash is persisted server-side.
+func (s *Service) AuthenticatePlayer(ctx context.Context, username, password, userAgent, ipAddress string) (string, *Player, error) {
+	player, err := s.ValidateCredentials(ctx, username, password)
+	if err != nil {
+		// ValidateCredentials already produces oops errors with codes
+		// (AUTH_INVALID_CREDENTIALS, AUTH_ACCOUNT_LOCKED, AUTH_LOGIN_FAILED);
+		// preserve them verbatim so callers can discriminate on code.
+		return "", nil, err
+	}
+
+	// Enforce session cap if configured.
+	if s.maxSessionsPerPlayer > 0 {
+		n, countErr := s.playerSessions.CountActiveByPlayer(ctx, player.ID)
+		if countErr != nil {
+			return "", nil, oops.Code("AUTH_CAP_CHECK_FAILED").
+				With("player_id", player.ID.String()).
+				Wrap(countErr)
+		}
+		if n >= s.maxSessionsPerPlayer {
+			evicted, delErr := s.playerSessions.DeleteOldestForPlayer(ctx, player.ID)
+			if delErr != nil {
+				return "", nil, oops.Code("AUTH_CAP_EVICT_FAILED").
+					With("player_id", player.ID.String()).
+					Wrap(delErr)
+			}
+			if evicted != nil {
+				s.logger.InfoContext(ctx, "session cap evicted oldest session",
+					"event", "session_cap_evicted",
+					"player_id", player.ID.String(),
+					"evicted_id", evicted.ID.String(),
+					"cap", s.maxSessionsPerPlayer,
+				)
+			}
+		}
+	}
+
+	rawToken, tokenHash, err := GenerateSessionToken()
+	if err != nil {
+		return "", nil, oops.Code("AUTH_LOGIN_FAILED").
+			With("operation", "generate session token").
+			Wrap(err)
+	}
+
+	session, err := NewPlayerSession(player.ID, tokenHash, userAgent, ipAddress, PlayerSessionTTL)
+	if err != nil {
+		return "", nil, oops.Code("AUTH_LOGIN_FAILED").
+			With("operation", "create player session").
+			Wrap(err)
+	}
+
+	if err := s.playerSessions.Create(ctx, session); err != nil {
+		return "", nil, oops.Code("AUTH_LOGIN_FAILED").
+			With("operation", "persist player session").
+			Wrap(err)
+	}
+
+	return rawToken, player, nil
+}
 
 // Logout invalidates a player session by token hash.
 // Returns the player ID of the logged-out session.

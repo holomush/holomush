@@ -59,10 +59,10 @@ func TestAuthenticatePlayer_Success(t *testing.T) {
 	locID := ulid.Make()
 
 	authSvc := newMockAuthService(t)
-	authSvc.validateCredentialsFunc = func(_ context.Context, username, password string) (*auth.Player, error) {
+	authSvc.authenticatePlayerFunc = func(_ context.Context, username, password, _, _ string) (string, *auth.Player, error) {
 		require.Equal(t, "alice", username)
 		require.Equal(t, "password123", password)
-		return &auth.Player{
+		return "raw-token", &auth.Player{
 			ID:                 playerID,
 			Username:           "alice",
 			DefaultCharacterID: &charID,
@@ -70,8 +70,6 @@ func TestAuthenticatePlayer_Success(t *testing.T) {
 	}
 
 	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
-	sessionRepo.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.PlayerSession")).
-		Return(nil)
 
 	charRepo := authmocks.NewMockCharacterRepository(t)
 	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
@@ -97,7 +95,7 @@ func TestAuthenticatePlayer_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, resp.Success)
-	assert.NotEmpty(t, resp.PlayerSessionToken)
+	assert.Equal(t, "raw-token", resp.PlayerSessionToken)
 	assert.Len(t, resp.Characters, 1)
 	assert.Equal(t, charID.String(), resp.Characters[0].CharacterId)
 	assert.Equal(t, "Alice", resp.Characters[0].CharacterName)
@@ -108,15 +106,16 @@ func TestAuthenticatePlayer_InvalidCredentials(t *testing.T) {
 	ctx := context.Background()
 
 	authSvc := newMockAuthService(t)
-	authSvc.validateCredentialsFunc = func(_ context.Context, _, _ string) (*auth.Player, error) {
-		return nil, auth.ErrNotFound
+	authSvc.authenticatePlayerFunc = func(_ context.Context, _, _, _, _ string) (string, *auth.Player, error) {
+		return "", nil, auth.ErrNotFound
 	}
 
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore: session.NewMemStore(),
-		authService:  authSvc,
+		sessionStore:      session.NewMemStore(),
+		authService:       authSvc,
+		playerSessionRepo: authmocks.NewMockPlayerSessionRepository(t),
 	}
 
 	resp, err := server.AuthenticatePlayer(ctx, &corev1.AuthenticatePlayerRequest{
@@ -970,30 +969,27 @@ func TestCheckPlayerSession(t *testing.T) {
 
 func TestAuthenticatePlayer_SessionRepoCreateFails(t *testing.T) {
 	ctx := context.Background()
-	playerID := ulid.Make()
 
 	authSvc := newMockAuthService(t)
-	authSvc.validateCredentialsFunc = func(_ context.Context, _, _ string) (*auth.Player, error) {
-		return &auth.Player{ID: playerID, Username: "alice"}, nil
+	authSvc.authenticatePlayerFunc = func(_ context.Context, _, _, _, _ string) (string, *auth.Player, error) {
+		return "", nil, errors.New("connection refused")
 	}
-
-	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
-	sessionRepo.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.PlayerSession")).
-		Return(errors.New("connection refused"))
 
 	server := &CoreServer{
 		engine:            core.NewEngine(core.NewMemoryEventStore()),
 		sessionStore:      session.NewMemStore(),
 		authService:       authSvc,
-		playerSessionRepo: sessionRepo,
+		playerSessionRepo: authmocks.NewMockPlayerSessionRepository(t),
 	}
 
-	_, err := server.AuthenticatePlayer(ctx, &corev1.AuthenticatePlayerRequest{
+	// The service wraps store errors in user-facing response messages — the
+	// handler surfaces them as Success:false rather than returning an error.
+	resp, err := server.AuthenticatePlayer(ctx, &corev1.AuthenticatePlayerRequest{
 		Username: "alice",
 		Password: "password123",
 	})
-	require.Error(t, err, "should propagate session store error")
-	assert.Contains(t, err.Error(), "connection refused")
+	require.NoError(t, err)
+	assert.False(t, resp.Success)
 }
 
 // --- Test helper mocks (lightweight, function-based) ---
@@ -1002,6 +998,7 @@ func TestAuthenticatePlayer_SessionRepoCreateFails(t *testing.T) {
 type mockAuthServiceForHandlers struct {
 	t                       *testing.T
 	validateCredentialsFunc func(ctx context.Context, username, password string) (*auth.Player, error)
+	authenticatePlayerFunc  func(ctx context.Context, username, password, userAgent, ipAddress string) (string, *auth.Player, error)
 	createPlayerFunc        func(ctx context.Context, username, password, email string) (*auth.Player, *auth.PlayerSession, string, error)
 	logoutFunc              func(ctx context.Context, tokenHash string) (ulid.ULID, error)
 }
@@ -1016,6 +1013,14 @@ func (m *mockAuthServiceForHandlers) ValidateCredentials(ctx context.Context, us
 	}
 	m.t.Fatal("unexpected call to ValidateCredentials")
 	return nil, nil
+}
+
+func (m *mockAuthServiceForHandlers) AuthenticatePlayer(ctx context.Context, username, password, userAgent, ipAddress string) (string, *auth.Player, error) {
+	if m.authenticatePlayerFunc != nil {
+		return m.authenticatePlayerFunc(ctx, username, password, userAgent, ipAddress)
+	}
+	m.t.Fatal("unexpected call to AuthenticatePlayer")
+	return "", nil, nil
 }
 
 func (m *mockAuthServiceForHandlers) CreatePlayer(ctx context.Context, username, password, email string) (*auth.Player, *auth.PlayerSession, string, error) {
