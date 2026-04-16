@@ -38,16 +38,20 @@ func TestCoreClient_SatisfiedByGRPCClient(t *testing.T) {
 type mockCoreClient struct {
 	cmdResp *corev1.HandleCommandResponse
 	cmdErr  error
+	cmdReq  *corev1.HandleCommandRequest // captured for assertion
 
 	subStream corev1.CoreService_SubscribeClient
 	subErr    error
+	subReq    *corev1.SubscribeRequest // captured for assertion
 
 	discResp *corev1.DisconnectResponse
 	discErr  error
+	discReq  *corev1.DisconnectRequest // captured for assertion
 
 	cmdHistory       []string
-	cmdHistoryErr    error // application-level failure (Success=false)
-	cmdHistoryRPCErr error // transport/RPC-level failure (nil response)
+	cmdHistoryErr    error                            // application-level failure (Success=false)
+	cmdHistoryRPCErr error                            // transport/RPC-level failure (nil response)
+	cmdHistoryReq    *corev1.GetCommandHistoryRequest // captured for assertion
 
 	// Auth RPC fields
 	authPlayerResp     *corev1.AuthenticatePlayerResponse
@@ -76,19 +80,23 @@ type mockCoreClient struct {
 	queryStreamHistoryReq  *corev1.QueryStreamHistoryRequest // captured for assertion
 }
 
-func (m *mockCoreClient) HandleCommand(_ context.Context, _ *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
+func (m *mockCoreClient) HandleCommand(_ context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
+	m.cmdReq = req
 	return m.cmdResp, m.cmdErr
 }
 
-func (m *mockCoreClient) Subscribe(_ context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+func (m *mockCoreClient) Subscribe(_ context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+	m.subReq = req
 	return m.subStream, m.subErr
 }
 
-func (m *mockCoreClient) Disconnect(_ context.Context, _ *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error) {
+func (m *mockCoreClient) Disconnect(_ context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error) {
+	m.discReq = req
 	return m.discResp, m.discErr
 }
 
-func (m *mockCoreClient) GetCommandHistory(_ context.Context, _ *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
+func (m *mockCoreClient) GetCommandHistory(_ context.Context, req *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
+	m.cmdHistoryReq = req
 	if m.cmdHistoryRPCErr != nil {
 		return nil, m.cmdHistoryRPCErr
 	}
@@ -582,4 +590,101 @@ func TestWebQueryStreamHistoryPropagatesRequestFields(t *testing.T) {
 	assert.Equal(t, int32(50), req.GetCount())
 	assert.Equal(t, int64(1700000000000), req.GetNotBeforeMs())
 	assert.Equal(t, "01CURSOR", req.GetBeforeId())
+}
+
+// Post-auth RPC token forwarding (bd-jv7z, Task 7).
+//
+// The gateway MUST forward the X-Session-Token header (injected by
+// CookieMiddleware) to core on every post-auth RPC. Without this,
+// server-side ValidateSessionOwnership (Tasks 9-12) cannot enforce that
+// the caller owns session_id and requests would be rejected.
+
+func TestSendCommandForwardsPlayerSessionToken(t *testing.T) {
+	const token = "tok-send-command"
+	client := &mockCoreClient{
+		cmdResp: &corev1.HandleCommandResponse{Success: true},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.SendCommandRequest{
+		SessionId: "sess-1",
+		Text:      "look",
+	})
+	req.Header().Set(headerInjectSessionToken, token)
+
+	_, err := h.SendCommand(context.Background(), req)
+	require.NoError(t, err)
+
+	require.NotNil(t, client.cmdReq, "HandleCommand should have been called")
+	assert.Equal(t, token, client.cmdReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-1", client.cmdReq.GetSessionId())
+}
+
+func TestStreamEventsForwardsPlayerSessionToken(t *testing.T) {
+	const token = "tok-stream-events"
+	sub := &mockSubscribeStream{
+		responses: []*corev1.SubscribeResponse{
+			{
+				Frame: &corev1.SubscribeResponse_Control{
+					Control: &corev1.ControlFrame{
+						Signal: corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED,
+					},
+				},
+			},
+		},
+	}
+	client := &mockCoreClient{subStream: sub}
+	wsc, cleanup := newStreamEventsServer(t, client)
+	defer cleanup()
+
+	streamReq := connect.NewRequest(&webv1.StreamEventsRequest{SessionId: "sess-2"})
+	streamReq.Header().Set(headerInjectSessionToken, token)
+
+	stream, err := wsc.StreamEvents(context.Background(), streamReq)
+	require.NoError(t, err)
+	defer stream.Close()
+
+	// Drain until server ends the stream via STREAM_CLOSED.
+	for stream.Receive() {
+	}
+
+	require.NotNil(t, client.subReq, "Subscribe should have been called")
+	assert.Equal(t, token, client.subReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-2", client.subReq.GetSessionId())
+}
+
+func TestDisconnectForwardsPlayerSessionToken(t *testing.T) {
+	const token = "tok-disconnect"
+	client := &mockCoreClient{
+		discResp: &corev1.DisconnectResponse{Success: true},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.DisconnectRequest{SessionId: "sess-3"})
+	req.Header().Set(headerInjectSessionToken, token)
+
+	_, err := h.Disconnect(context.Background(), req)
+	require.NoError(t, err)
+
+	require.NotNil(t, client.discReq, "Disconnect should have been called")
+	assert.Equal(t, token, client.discReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-3", client.discReq.GetSessionId())
+}
+
+func TestGetCommandHistoryForwardsPlayerSessionToken(t *testing.T) {
+	const token = "tok-cmd-history"
+	client := &mockCoreClient{
+		cmdHistory: []string{"look"},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.GetCommandHistoryRequest{SessionId: "sess-4"})
+	req.Header().Set(headerInjectSessionToken, token)
+
+	_, err := h.GetCommandHistory(context.Background(), req)
+	require.NoError(t, err)
+
+	require.NotNil(t, client.cmdHistoryReq, "GetCommandHistory should have been called")
+	assert.Equal(t, token, client.cmdHistoryReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-4", client.cmdHistoryReq.GetSessionId())
 }

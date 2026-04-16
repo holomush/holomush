@@ -110,12 +110,19 @@ func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.Se
 		"command", req.Msg.GetText(),
 	)
 
+	// Read the token directly (Get returns "" if absent). Server-side
+	// validation (Tasks 9-12) will reject empty tokens; until then an
+	// empty value is harmless and we don't want to bounce the caller
+	// from the gateway.
+	token := req.Header().Get(headerInjectSessionToken)
+
 	cmdCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
 	resp, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
-		SessionId: req.Msg.GetSessionId(),
-		Command:   req.Msg.GetText(),
+		SessionId:          req.Msg.GetSessionId(),
+		Command:            req.Msg.GetText(),
+		PlayerSessionToken: token,
 	})
 	if err != nil {
 		slog.Error("web: handle command RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
@@ -138,6 +145,11 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 	slog.DebugContext(ctx, "web: StreamEvents", "session_id", req.Msg.GetSessionId())
 
 	sessionID := req.Msg.GetSessionId()
+	// Read the token directly (Get returns "" if absent). Server-side
+	// validation (Tasks 9-12) will reject empty tokens; until then an
+	// empty value is harmless and we don't want to bounce the caller
+	// from the gateway.
+	token := req.Header().Get(headerInjectSessionToken)
 
 	// Register connection for the duration of the stream
 	if h.sessionStore != nil {
@@ -182,7 +194,8 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 	// (which has direct access to WorldService). The gateway just forwards it.
 
 	sub, err := h.client.Subscribe(ctx, &corev1.SubscribeRequest{
-		SessionId: sessionID,
+		SessionId:          sessionID,
+		PlayerSessionToken: token,
 	})
 	if err != nil {
 		return connect.NewError(connect.CodeInternal,
@@ -306,11 +319,18 @@ func (h *Handler) forwardFrame(
 func (h *Handler) Disconnect(ctx context.Context, req *connect.Request[webv1.DisconnectRequest]) (*connect.Response[webv1.DisconnectResponse], error) {
 	slog.DebugContext(ctx, "web: Disconnect", "session_id", req.Msg.GetSessionId())
 
+	// Read the token directly (Get returns "" if absent). Server-side
+	// validation (Tasks 9-12) will reject empty tokens; until then an
+	// empty value is harmless and we don't want to bounce the caller
+	// from the gateway.
+	token := req.Header().Get(headerInjectSessionToken)
+
 	discCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
 	if _, err := h.client.Disconnect(discCtx, &corev1.DisconnectRequest{
-		SessionId: req.Msg.GetSessionId(),
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
 	}); err != nil {
 		slog.Error("web: disconnect RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
 	}
@@ -325,11 +345,18 @@ func (h *Handler) Disconnect(ctx context.Context, req *connect.Request[webv1.Dis
 func (h *Handler) GetCommandHistory(ctx context.Context, req *connect.Request[webv1.GetCommandHistoryRequest]) (*connect.Response[webv1.GetCommandHistoryResponse], error) {
 	slog.DebugContext(ctx, "web: GetCommandHistory", "session_id", req.Msg.GetSessionId())
 
+	// Read the token directly (Get returns "" if absent). Server-side
+	// validation (Tasks 9-12) will reject empty tokens; until then an
+	// empty value is harmless and we don't want to bounce the caller
+	// from the gateway.
+	token := req.Header().Get(headerInjectSessionToken)
+
 	cmdCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
 	resp, err := h.client.GetCommandHistory(cmdCtx, &corev1.GetCommandHistoryRequest{
-		SessionId: req.Msg.GetSessionId(),
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
 	})
 	if err != nil {
 		slog.Error("web: get command history RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
