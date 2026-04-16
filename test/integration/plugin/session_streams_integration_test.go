@@ -240,7 +240,10 @@ var _ = Describe("Plugin Session Stream Contribution", func() {
 
 	// authenticate performs the two-phase guest login (CreateGuest + SelectCharacter)
 	// and returns the resulting game session ID.
-	authenticate := func() string {
+	// authenticate performs the two-phase guest login and returns both the
+	// resulting session_id AND the player_session_token. Subscribe
+	// validates ownership (bd-jv7z), so callers must forward the token.
+	authenticate := func() (sessionID, token string) {
 		GinkgoHelper()
 		guestResp, err := grpcCli.CreateGuest(testCtx, &corev1.CreateGuestRequest{})
 		Expect(err).NotTo(HaveOccurred())
@@ -253,7 +256,7 @@ var _ = Describe("Plugin Session Stream Contribution", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(selectResp.Success).To(BeTrue(), "character selection should succeed: %s", selectResp.ErrorMessage)
-		return selectResp.SessionId
+		return selectResp.SessionId, guestResp.PlayerSessionToken
 	}
 
 	// appendEvent appends a test event on the given stream.
@@ -274,13 +277,14 @@ var _ = Describe("Plugin Session Stream Contribution", func() {
 			// Append event to channel:general before subscribing.
 			appendEvent("channel:general")
 
-			sessionID := authenticate()
+			sessionID, token := authenticate()
 
 			subCtx, subCancel := context.WithTimeout(testCtx, 10*time.Second)
 			defer subCancel()
 
 			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -291,13 +295,14 @@ var _ = Describe("Plugin Session Stream Contribution", func() {
 
 		It("proceeds normally when contributor returns no streams", func() {
 			// contributor returns no streams (default).
-			sessionID := authenticate()
+			sessionID, token := authenticate()
 
 			subCtx, subCancel := context.WithTimeout(testCtx, 10*time.Second)
 			defer subCancel()
 
 			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -309,13 +314,14 @@ var _ = Describe("Plugin Session Stream Contribution", func() {
 	Describe("UC2: mid-session subscription changes", func() {
 		It("receives messages on a stream added mid-session without reconnecting", func() {
 			// Start with no plugin streams.
-			sessionID := authenticate()
+			sessionID, token := authenticate()
 
 			subCtx, subCancel := context.WithTimeout(testCtx, 15*time.Second)
 			defer subCancel()
 
 			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -353,13 +359,14 @@ var _ = Describe("Plugin Session Stream Contribution", func() {
 
 		It("stops forwarding messages after stream removed mid-session", func() {
 			contributor.SetStreams("channel:active")
-			sessionID := authenticate()
+			sessionID, token := authenticate()
 
 			subCtx, subCancel := context.WithTimeout(testCtx, 15*time.Second)
 			defer subCancel()
 
 			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -406,13 +413,14 @@ var _ = Describe("Plugin Session Stream Contribution", func() {
 				appendEvent("channel:race")
 			}
 
-			sessionID := authenticate()
+			sessionID, token := authenticate()
 
 			subCtx, subCancel := context.WithTimeout(testCtx, 10*time.Second)
 			defer subCancel()
 
 			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 

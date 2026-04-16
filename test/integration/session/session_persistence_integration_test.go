@@ -276,7 +276,8 @@ var _ = Describe("Session Persistence", func() {
 			// emitted by SelectCharacter, then enter the live loop.
 			subCtx, subCancel := context.WithCancel(testCtx)
 			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -347,7 +348,8 @@ var _ = Describe("Session Persistence", func() {
 			replayCtx, replayCancel := context.WithTimeout(testCtx, 5*time.Second)
 			defer replayCancel()
 			replayStream, err := grpcCli.Subscribe(replayCtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -401,7 +403,8 @@ var _ = Describe("Session Persistence", func() {
 
 			subCtx, subCancel := context.WithCancel(testCtx)
 			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -454,7 +457,8 @@ var _ = Describe("Session Persistence", func() {
 
 			subCtx, subCancel := context.WithCancel(testCtx)
 			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -523,7 +527,8 @@ var _ = Describe("Session Persistence", func() {
 			subACtx, subACancel := context.WithCancel(testCtx)
 			defer subACancel()
 			streamA, err := grpcCli.Subscribe(subACtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -602,7 +607,8 @@ var _ = Describe("Session Persistence", func() {
 			subBCtx, subBCancel := context.WithCancel(testCtx)
 			defer subBCancel()
 			streamB, err := grpcCli.Subscribe(subBCtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -802,6 +808,74 @@ var _ = Describe("Session Persistence", func() {
 			Expect(resp.GetSuccess()).To(BeFalse(),
 				"empty token must not authorize a command")
 			Expect(resp.GetError()).To(Equal("session not found"),
+				"response must be enumeration-safe — same string as ownership mismatch")
+		})
+	})
+
+	// Subscribe ownership enforcement — bd-jv7z.
+	//
+	// Closes the IDOR surface where Player A could open an event stream
+	// against Player B's session_id. The core server now calls
+	// auth.ValidateSessionOwnership at stream open; validation failure
+	// terminates the stream with the enumeration-safe SESSION_NOT_FOUND
+	// error. Ongoing revocation propagates via the existing control-frame
+	// mechanism on session deletion.
+	Describe("Subscribe ownership enforcement (bd-jv7z)", func() {
+		It("rejects a cross-player Subscribe with session not found", func() {
+			sessionA, _, tokenA := loginAsGuest(testCtx, grpcCli)
+			sessionB, _, tokenB := loginAsGuest(testCtx, grpcCli)
+			Expect(sessionA).NotTo(Equal(sessionB))
+			Expect(tokenA).NotTo(Equal(tokenB))
+
+			// Attack: Player A's token with Player B's session_id.
+			subCtx, subCancel := context.WithTimeout(testCtx, 5*time.Second)
+			defer subCancel()
+			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
+				SessionId:          sessionB,
+				PlayerSessionToken: tokenA,
+			})
+			Expect(err).NotTo(HaveOccurred(),
+				"stream-opening RPC returns nil; validation error surfaces on Recv")
+
+			// First Recv should fail with a session-not-found-style error.
+			_, recvErr := stream.Recv()
+			Expect(recvErr).To(HaveOccurred(),
+				"cross-player Subscribe must fail on first Recv")
+			Expect(recvErr.Error()).To(ContainSubstring("session not found"),
+				"response must be enumeration-safe — same string as unknown session id")
+		})
+
+		It("permits Subscribe when the player owns the session", func() {
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
+
+			subCtx, subCancel := context.WithCancel(testCtx)
+			defer subCancel()
+			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Drain until REPLAY_COMPLETE arrives — proves the stream opened
+			// and the live loop is running for the legitimate owner.
+			drainUntilReplayComplete(stream)
+		})
+
+		It("rejects Subscribe with empty token even for a valid session id", func() {
+			sessionID, _, _ := loginAsGuest(testCtx, grpcCli)
+
+			subCtx, subCancel := context.WithTimeout(testCtx, 5*time.Second)
+			defer subCancel()
+			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
+				SessionId: sessionID,
+				// PlayerSessionToken intentionally empty.
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, recvErr := stream.Recv()
+			Expect(recvErr).To(HaveOccurred(),
+				"empty token must not authorize a subscription")
+			Expect(recvErr.Error()).To(ContainSubstring("session not found"),
 				"response must be enumeration-safe — same string as ownership mismatch")
 		})
 	})

@@ -128,7 +128,7 @@ func newDispatcherTestServerWithAliases(t *testing.T, store core.EventStore, opt
 	allOpts := make([]CoreServerOption, 0, 2+len(opts))
 	allOpts = append(allOpts,
 		WithEventStore(store),
-		WithPlayerSessionRepo(newFakePlayerSessionRepo(testPlayerSessionToken, ulid.ULID{})),
+		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
 	)
 	allOpts = append(allOpts, opts...)
 

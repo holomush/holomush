@@ -50,9 +50,13 @@ type fakePlayerSessionRepo struct {
 	playerID  ulid.ULID
 }
 
-func newFakePlayerSessionRepo(token string, playerID ulid.ULID) *fakePlayerSessionRepo {
+// newFakePlayerSessionRepo constructs a fakePlayerSessionRepo seeded to
+// accept testPlayerSessionToken and return the given PlayerID. All unit
+// tests use the same canonical token constant; the PlayerID varies per
+// test to exercise ownership-match and ownership-mismatch cases.
+func newFakePlayerSessionRepo(playerID ulid.ULID) *fakePlayerSessionRepo {
 	return &fakePlayerSessionRepo{
-		tokenHash: auth.HashSessionToken(token),
+		tokenHash: auth.HashSessionToken(testPlayerSessionToken),
 		playerID:  playerID,
 	}
 }
@@ -158,7 +162,7 @@ func newHandleCommandServer(t *testing.T, store core.EventStore, sessStore sessi
 	allOpts := make([]CoreServerOption, 0, 2+len(opts))
 	allOpts = append(allOpts,
 		WithEventStore(store),
-		WithPlayerSessionRepo(newFakePlayerSessionRepo(testPlayerSessionToken, ulid.ULID{})),
+		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
 	)
 	allOpts = append(allOpts, opts...)
 
@@ -238,17 +242,25 @@ func (m *mockSubscribeStream) Send(event *corev1.SubscribeResponse) error {
 // newSubscribeTestServer builds a CoreServer suitable for Subscribe tests.
 // It sets up cursorLocks and a minimal focusCoordinator with the given session
 // store, which the Subscribe handler requires after the B7 refactor.
+//
+// The server is pre-wired with a fakePlayerSessionRepo seeded for
+// testPlayerSessionToken → zero-ULID PlayerID. Every unit test's
+// session.Info seeded via newTestSessionStore has a zero-ULID PlayerID,
+// so Subscribe's ValidateSessionOwnership accepts testPlayerSessionToken.
+// Callers passing an empty or different token get an enumeration-safe
+// SESSION_NOT_FOUND error.
 func newSubscribeTestServer(t *testing.T, eventStore core.EventStore, sessStore session.Store, opts ...func(*CoreServer)) *CoreServer {
 	t.Helper()
 	coord, err := focus.NewCoordinator(focus.WithSessionStore(sessStore))
 	require.NoError(t, err)
 
 	s := &CoreServer{
-		engine:           core.NewEngine(eventStore),
-		eventStore:       eventStore,
-		sessionStore:     sessStore,
-		cursorLocks:      newCursorLockMap(),
-		focusCoordinator: coord,
+		engine:            core.NewEngine(eventStore),
+		eventStore:        eventStore,
+		sessionStore:      sessStore,
+		cursorLocks:       newCursorLockMap(),
+		focusCoordinator:  coord,
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -390,7 +402,7 @@ func TestCoreServer_HandleCommand_RejectsCrossPlayerSession(t *testing.T) {
 	// Swap the default fake repo for one seeded with playerA's ID — so
 	// the token validates but ownership check fails.
 	server := newHandleCommandServer(t, store, sessStore,
-		WithPlayerSessionRepo(newFakePlayerSessionRepo(testPlayerSessionToken, playerA)),
+		WithPlayerSessionRepo(newFakePlayerSessionRepo(playerA)),
 	)
 
 	resp, err := server.HandleCommand(context.Background(), &corev1.HandleCommandRequest{
@@ -432,7 +444,8 @@ func TestCoreServer_Subscribe_SendsEvents(t *testing.T) {
 			RequestId: "sub-request-id",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	// Run Subscribe in a goroutine since it blocks
@@ -899,8 +912,9 @@ func TestCoreServer_Subscribe_NilMeta(t *testing.T) {
 	stream := &mockSubscribeStream{ctx: ctx}
 
 	req := &corev1.SubscribeRequest{
-		Meta:      nil, // No meta
-		SessionId: sessionID.String(),
+		Meta:               nil, // No meta
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -972,7 +986,8 @@ func TestCoreServer_Subscribe_SendError(t *testing.T) {
 			RequestId: "send-error-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	// The new Subscribe sends a synthetic location_state first, which will
@@ -1122,7 +1137,8 @@ func TestCoreServer_SessionExpirationOnContextTimeout(t *testing.T) {
 			RequestId: "timeout-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -1459,7 +1475,8 @@ func TestCoreServer_Subscribe_ContextCancellationCleanup(t *testing.T) {
 			RequestId: "cancel-sub-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -1615,7 +1632,8 @@ func TestCoreServer_Subscribe_TimeoutDuringEventSend(t *testing.T) {
 			RequestId: "timeout-send-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -2434,7 +2452,8 @@ func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
 			RequestId: "replay-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -2520,7 +2539,8 @@ func TestCoreServer_Subscribe_ReplayDeduplicatesLiveEvents(t *testing.T) {
 			RequestId: "dedup-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -2575,7 +2595,8 @@ func TestCoreServer_Subscribe_NoReplayWithoutCursors(t *testing.T) {
 			RequestId: "no-cursor-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -2644,7 +2665,8 @@ func TestCoreServer_Subscribe_EmitsReplayCompleteControlFrame(t *testing.T) {
 			RequestId: "replay-complete-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -2738,7 +2760,8 @@ func TestCoreServer_Subscribe_EmitsStreamClosedOnSessionDestroy(t *testing.T) {
 			RequestId: "stream-closed-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error, 1)
@@ -3084,7 +3107,8 @@ func TestSubscribeIncludesPluginContributedStreams(t *testing.T) {
 	stream := &mockSubscribeStream{ctx: ctx}
 
 	req := &corev1.SubscribeRequest{
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -3146,7 +3170,8 @@ func TestSubscribeDeregistersRegistryOnExit(t *testing.T) {
 	stream := &mockSubscribeStream{ctx: ctx}
 
 	req := &corev1.SubscribeRequest{
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	// Use afterLISTENHook to verify the session IS registered just before replay.

@@ -657,6 +657,16 @@ func (s *CoreServer) sendAndCommitEvent(
 }
 
 // Subscribe opens a stream of events for the session.
+//
+// SECURITY (bd-jv7z): Before opening the stream, the caller's
+// player_session_token is validated against the target session via
+// auth.ValidateSessionOwnership. Any failure — missing/invalid token,
+// expired token, unknown session, or ownership mismatch — collapses to
+// the enumeration-safe SESSION_NOT_FOUND error. This closes the IDOR
+// surface where one player could subscribe to another player's event
+// stream. Ongoing revocation (session deletion, cap eviction)
+// propagates via the existing control-frame mechanism — validation runs
+// once at stream open.
 func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerStreamingServer[corev1.SubscribeResponse]) error {
 	ctx := stream.Context()
 	requestID := ""
@@ -671,6 +681,23 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 
 	if s.eventStore == nil {
 		return oops.Code("NOT_CONFIGURED").Errorf("event store not configured")
+	}
+
+	// Validate session ownership before any other work. Enumeration-safe:
+	// every failure mode collapses to the same SESSION_NOT_FOUND error.
+	if _, err := auth.ValidateSessionOwnership(
+		ctx,
+		s.playerSessionRepo,
+		s.sessionStore,
+		req.GetPlayerSessionToken(),
+		req.GetSessionId(),
+	); err != nil {
+		slog.DebugContext(ctx, "subscribe session ownership validation failed",
+			"request_id", requestID,
+			"session_id", req.SessionId,
+			"error", err,
+		)
+		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
 	}
 
 	// 1. Session lookup under cursor lock (Finding 1 closure).
