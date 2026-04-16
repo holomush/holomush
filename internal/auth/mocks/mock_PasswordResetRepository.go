@@ -28,6 +28,65 @@ func (_m *MockPasswordResetRepository) EXPECT() *MockPasswordResetRepository_Exp
 	return &MockPasswordResetRepository_Expecter{mock: &_m.Mock}
 }
 
+// ConsumeByTokenHash provides a mock function with given fields: ctx, tokenHash
+func (_m *MockPasswordResetRepository) ConsumeByTokenHash(ctx context.Context, tokenHash string) (*auth.PasswordReset, error) {
+	ret := _m.Called(ctx, tokenHash)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ConsumeByTokenHash")
+	}
+
+	var r0 *auth.PasswordReset
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) (*auth.PasswordReset, error)); ok {
+		return rf(ctx, tokenHash)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) *auth.PasswordReset); ok {
+		r0 = rf(ctx, tokenHash)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*auth.PasswordReset)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, tokenHash)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockPasswordResetRepository_ConsumeByTokenHash_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ConsumeByTokenHash'
+type MockPasswordResetRepository_ConsumeByTokenHash_Call struct {
+	*mock.Call
+}
+
+// ConsumeByTokenHash is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tokenHash string
+func (_e *MockPasswordResetRepository_Expecter) ConsumeByTokenHash(ctx interface{}, tokenHash interface{}) *MockPasswordResetRepository_ConsumeByTokenHash_Call {
+	return &MockPasswordResetRepository_ConsumeByTokenHash_Call{Call: _e.mock.On("ConsumeByTokenHash", ctx, tokenHash)}
+}
+
+func (_c *MockPasswordResetRepository_ConsumeByTokenHash_Call) Run(run func(ctx context.Context, tokenHash string)) *MockPasswordResetRepository_ConsumeByTokenHash_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockPasswordResetRepository_ConsumeByTokenHash_Call) Return(_a0 *auth.PasswordReset, _a1 error) *MockPasswordResetRepository_ConsumeByTokenHash_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockPasswordResetRepository_ConsumeByTokenHash_Call) RunAndReturn(run func(context.Context, string) (*auth.PasswordReset, error)) *MockPasswordResetRepository_ConsumeByTokenHash_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Create provides a mock function with given fields: ctx, reset
 func (_m *MockPasswordResetRepository) Create(ctx context.Context, reset *auth.PasswordReset) error {
 	ret := _m.Called(ctx, reset)

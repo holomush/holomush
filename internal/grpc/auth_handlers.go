@@ -176,6 +176,7 @@ func (s *CoreServer) AuthenticatePlayer(ctx context.Context, req *corev1.Authent
 		PlayerSessionToken: rawToken,
 		Characters:         characters,
 		DefaultCharacterId: defaultCharID,
+		SessionTtlSeconds:  int64(auth.PlayerSessionTTL.Seconds()),
 	}, nil
 }
 
@@ -319,10 +320,15 @@ func (s *CoreServer) CreatePlayer(ctx context.Context, req *corev1.CreatePlayerR
 
 	player, playerSession, rawToken, createErr := s.authService.CreatePlayer(ctx, req.Username, req.Password, req.Email)
 	if createErr != nil {
-		//nolint:nilerr // intentional: return user-facing error in response body
+		// SECURITY: log full error server-side; return sanitized message only.
+		// Raw err.Error() on oops errors leaks structured context (operation
+		// names, parameter values) including schema/constraint details.
+		slog.WarnContext(ctx, "grpc: CreatePlayer failed",
+			"username", req.GetUsername(),
+			"error", createErr)
 		return &corev1.CreatePlayerResponse{
 			Success:      false,
-			ErrorMessage: createErr.Error(),
+			ErrorMessage: sanitizeAuthError(createErr),
 		}, nil
 	}
 
@@ -337,6 +343,7 @@ func (s *CoreServer) CreatePlayer(ctx context.Context, req *corev1.CreatePlayerR
 		Success:            true,
 		PlayerSessionToken: rawToken,
 		Characters:         []*corev1.CharacterSummary{}, // new player has no characters
+		SessionTtlSeconds:  int64(auth.PlayerSessionTTL.Seconds()),
 	}, nil
 }
 
@@ -363,10 +370,14 @@ func (s *CoreServer) CreateCharacter(ctx context.Context, req *corev1.CreateChar
 
 	char, createErr := s.characterService.Create(ctx, playerSession.PlayerID, req.CharacterName)
 	if createErr != nil {
-		//nolint:nilerr // intentional: return user-facing error in response body
+		// SECURITY: log full error server-side; return sanitized message only.
+		slog.WarnContext(ctx, "grpc: CreateCharacter failed",
+			"player_id", playerSession.PlayerID.String(),
+			"character_name", req.GetCharacterName(),
+			"error", createErr)
 		return &corev1.CreateCharacterResponse{
 			Success:      false,
-			ErrorMessage: createErr.Error(),
+			ErrorMessage: sanitizeAuthError(createErr),
 		}, nil
 	}
 
@@ -422,10 +433,12 @@ func (s *CoreServer) ConfirmPasswordReset(ctx context.Context, req *corev1.Confi
 	}
 
 	if resetErr := s.resetService.ResetPassword(ctx, req.Token, req.NewPassword); resetErr != nil {
-		//nolint:nilerr // intentional: return user-facing error in response body
+		// SECURITY: log full error server-side; return sanitized message only.
+		// Never log the raw token value.
+		slog.WarnContext(ctx, "grpc: ConfirmPasswordReset failed", "error", resetErr)
 		return &corev1.ConfirmPasswordResetResponse{
 			Success:      false,
-			ErrorMessage: resetErr.Error(),
+			ErrorMessage: sanitizeAuthError(resetErr),
 		}, nil
 	}
 
@@ -506,6 +519,7 @@ func (s *CoreServer) CreateGuest(ctx context.Context, _ *corev1.CreateGuestReque
 		PlayerSessionToken: result.RawToken,
 		Characters:         []*corev1.CharacterSummary{charSummary},
 		DefaultCharacterId: result.Character.ID.String(),
+		SessionTtlSeconds:  int64(auth.GuestSessionTTL.Seconds()),
 	}, nil
 }
 

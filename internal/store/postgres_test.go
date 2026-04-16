@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // testEvent creates a test event with the given parameters.
@@ -1184,4 +1185,57 @@ func TestPostgresEventStore_Subscribe_ContextCancelled(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for channel close")
 	}
+}
+
+func TestPostgresEventStoreAppendRejectsOversizedPayloadBeforeInsert(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err, "failed to create mock")
+	defer mock.Close()
+
+	// No pool expectations set: if Append touches the pool at all, the
+	// unmet-expectations assertion at the end fails.
+
+	store := &PostgresEventStore{pool: mock}
+
+	event := core.NewEvent("location:room-1", core.EventTypeSay, core.Actor{
+		Kind: core.ActorCharacter,
+		ID:   "char-123",
+	}, make([]byte, core.MaxPayloadSize+1))
+
+	err = store.Append(context.Background(), event)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVENT_PAYLOAD_TOO_LARGE")
+	assert.NoError(t, mock.ExpectationsWereMet(),
+		"Append must not touch the DB pool when payload is oversized")
+}
+
+func TestPostgresEventStoreAppendAcceptsPayloadAtMaxPayloadSize(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err, "failed to create mock")
+	defer mock.Close()
+
+	mock.ExpectExec(`INSERT INTO events`).
+		WithArgs(
+			pgxmock.AnyArg(),
+			pgxmock.AnyArg(),
+			pgxmock.AnyArg(),
+			pgxmock.AnyArg(),
+			pgxmock.AnyArg(),
+			pgxmock.AnyArg(),
+			pgxmock.AnyArg(),
+		).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec(`SELECT pg_notify`).
+		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WillReturnResult(pgxmock.NewResult("SELECT", 1))
+
+	store := &PostgresEventStore{pool: mock}
+
+	event := core.NewEvent("location:room-1", core.EventTypeSay, core.Actor{
+		Kind: core.ActorCharacter,
+		ID:   "char-123",
+	}, make([]byte, core.MaxPayloadSize))
+
+	require.NoError(t, store.Append(context.Background(), event))
+	assert.NoError(t, mock.ExpectationsWereMet())
 }

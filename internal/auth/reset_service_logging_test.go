@@ -63,6 +63,16 @@ func (m *mockResetRepoLogging) GetByTokenHash(_ context.Context, _ string) (*aut
 	return m.reset, nil
 }
 
+func (m *mockResetRepoLogging) ConsumeByTokenHash(_ context.Context, _ string) (*auth.PasswordReset, error) {
+	if m.reset == nil {
+		return nil, auth.ErrNotFound
+	}
+	// Simulate one-shot consumption: subsequent calls see ErrNotFound.
+	r := m.reset
+	m.reset = nil
+	return r, nil
+}
+
 func (m *mockResetRepoLogging) DeleteByPlayer(_ context.Context, _ ulid.ULID) error {
 	return m.deleteByPlayer
 }

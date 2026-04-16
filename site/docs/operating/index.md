@@ -30,5 +30,7 @@ Run one or both depending on your player base.
 - [Configuration](configuration.md) -- Flags, config files, and environment variables
 - [Database](database.md) -- PostgreSQL setup, migrations, and maintenance
 - [Authentication](authentication.md) -- Security properties, rate limiting, and session management
+- [Telnet Security](telnet-security.md) -- Risks of cleartext telnet logins and how to mitigate them
+- [CA Rotation](ca-rotation.md) -- When and how to rotate the internal mTLS certificate authority
 - [Operations](operations.md) -- Health checks, metrics, monitoring, and troubleshooting
 - [Verifying Releases](verifying-releases.md) -- Signature and provenance verification

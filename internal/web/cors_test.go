@@ -63,3 +63,40 @@ func TestCORS_NoOrigins_Passthrough(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	assert.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"))
 }
+
+func TestCORSSetsVaryOriginOnAllowedOriginResponse(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := CORSMiddleware([]string{"http://localhost:5173"}, inner)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Origin", "http://localhost:5173")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Contains(t, rec.Header().Values("Vary"), "Origin")
+}
+
+func TestCORSSetsVaryOriginOnBlockedOriginResponse(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := CORSMiddleware([]string{"http://localhost:5173"}, inner)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Origin", "http://evil.com")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Contains(t, rec.Header().Values("Vary"), "Origin")
+}
+
+func TestCORSSetsVaryOriginOnPreflightResponse(t *testing.T) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := CORSMiddleware([]string{"http://localhost:5173"}, inner)
+	req := httptest.NewRequest(http.MethodOptions, "/", nil)
+	req.Header.Set("Origin", "http://localhost:5173")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Contains(t, rec.Header().Values("Vary"), "Origin")
+}

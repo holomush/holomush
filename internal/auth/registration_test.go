@@ -8,6 +8,7 @@ package auth_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,6 +48,23 @@ func TestValidatePassword(t *testing.T) {
 		{
 			name:        "empty password",
 			password:    "",
+			expectError: true,
+			errorCode:   "AUTH_INVALID_PASSWORD",
+		},
+		{
+			name:        "password at max length is valid",
+			password:    strings.Repeat("a", auth.MaxPasswordLength),
+			expectError: false,
+		},
+		{
+			name:        "password exceeding max length is rejected",
+			password:    strings.Repeat("a", auth.MaxPasswordLength+1),
+			expectError: true,
+			errorCode:   "AUTH_INVALID_PASSWORD",
+		},
+		{
+			name:        "multi-megabyte password rejected without hashing",
+			password:    strings.Repeat("a", 10*1024*1024),
 			expectError: true,
 			errorCode:   "AUTH_INVALID_PASSWORD",
 		},
@@ -129,6 +147,20 @@ func TestService_ValidateCredentials(t *testing.T) {
 		hasher.On("Verify", "password123", mock.AnythingOfType("string")).Return(false, nil)
 
 		result, err := svc.ValidateCredentials(ctx, "unknown", "password123")
+		require.Error(t, err)
+		assert.Nil(t, result)
+		errutil.AssertErrorCode(t, err, "AUTH_INVALID_CREDENTIALS")
+	})
+
+	t.Run("oversized password rejected before hashing", func(t *testing.T) {
+		// No Verify expectation — hasher MUST NOT be called for oversized input.
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, mocks.NewMockPlayerSessionRepository(t), hasher)
+		require.NoError(t, err)
+
+		oversized := strings.Repeat("a", auth.MaxPasswordLength+1)
+		result, err := svc.ValidateCredentials(ctx, "testuser", oversized)
 		require.Error(t, err)
 		assert.Nil(t, result)
 		errutil.AssertErrorCode(t, err, "AUTH_INVALID_CREDENTIALS")
@@ -245,6 +277,22 @@ func TestService_CreatePlayer(t *testing.T) {
 
 		// Password too short (< 8 chars)
 		player, session, rawToken, err := svc.CreatePlayer(ctx, "validuser", "short", "")
+		require.Error(t, err)
+		assert.Nil(t, player)
+		assert.Nil(t, session)
+		assert.Empty(t, rawToken)
+		errutil.AssertErrorCode(t, err, "REGISTER_INVALID_PASSWORD")
+	})
+
+	t.Run("oversized password rejected before hashing", func(t *testing.T) {
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		// No Hash() expectation — hasher MUST NOT be called for oversized input.
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewAuthService(playerRepo, mocks.NewMockPlayerSessionRepository(t), hasher)
+		require.NoError(t, err)
+
+		oversized := strings.Repeat("a", auth.MaxPasswordLength+1)
+		player, session, rawToken, err := svc.CreatePlayer(ctx, "validuser", oversized, "")
 		require.Error(t, err)
 		assert.Nil(t, player)
 		assert.Nil(t, session)

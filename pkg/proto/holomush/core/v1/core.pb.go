@@ -969,8 +969,12 @@ type AuthenticatePlayerResponse struct {
 	ErrorMessage       string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	Characters         []*CharacterSummary    `protobuf:"bytes,4,rep,name=characters,proto3" json:"characters,omitempty"`
 	DefaultCharacterId string                 `protobuf:"bytes,5,opt,name=default_character_id,json=defaultCharacterId,proto3" json:"default_character_id,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Session TTL in seconds. Used by the web gateway to set cookie MaxAge so
+	// the cookie expires when the underlying session expires (prevents stale
+	// cookies outliving 2h guest sessions).
+	SessionTtlSeconds int64 `protobuf:"varint,6,opt,name=session_ttl_seconds,json=sessionTtlSeconds,proto3" json:"session_ttl_seconds,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *AuthenticatePlayerResponse) Reset() {
@@ -1036,6 +1040,13 @@ func (x *AuthenticatePlayerResponse) GetDefaultCharacterId() string {
 		return x.DefaultCharacterId
 	}
 	return ""
+}
+
+func (x *AuthenticatePlayerResponse) GetSessionTtlSeconds() int64 {
+	if x != nil {
+		return x.SessionTtlSeconds
+	}
+	return 0
 }
 
 type SelectCharacterRequest struct {
@@ -1240,8 +1251,10 @@ type CreatePlayerResponse struct {
 	PlayerSessionToken string                 `protobuf:"bytes,2,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
 	Characters         []*CharacterSummary    `protobuf:"bytes,3,rep,name=characters,proto3" json:"characters,omitempty"`
 	ErrorMessage       string                 `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Session TTL in seconds (see AuthenticatePlayerResponse).
+	SessionTtlSeconds int64 `protobuf:"varint,5,opt,name=session_ttl_seconds,json=sessionTtlSeconds,proto3" json:"session_ttl_seconds,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *CreatePlayerResponse) Reset() {
@@ -1302,6 +1315,13 @@ func (x *CreatePlayerResponse) GetErrorMessage() string {
 	return ""
 }
 
+func (x *CreatePlayerResponse) GetSessionTtlSeconds() int64 {
+	if x != nil {
+		return x.SessionTtlSeconds
+	}
+	return 0
+}
+
 type CreateGuestRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1345,8 +1365,11 @@ type CreateGuestResponse struct {
 	PlayerSessionToken string                 `protobuf:"bytes,3,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
 	Characters         []*CharacterSummary    `protobuf:"bytes,4,rep,name=characters,proto3" json:"characters,omitempty"`
 	DefaultCharacterId string                 `protobuf:"bytes,5,opt,name=default_character_id,json=defaultCharacterId,proto3" json:"default_character_id,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Session TTL in seconds (see AuthenticatePlayerResponse). For guest
+	// sessions this is 2h, not the 24h regular-player TTL.
+	SessionTtlSeconds int64 `protobuf:"varint,6,opt,name=session_ttl_seconds,json=sessionTtlSeconds,proto3" json:"session_ttl_seconds,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *CreateGuestResponse) Reset() {
@@ -1412,6 +1435,13 @@ func (x *CreateGuestResponse) GetDefaultCharacterId() string {
 		return x.DefaultCharacterId
 	}
 	return ""
+}
+
+func (x *CreateGuestResponse) GetSessionTtlSeconds() int64 {
+	if x != nil {
+		return x.SessionTtlSeconds
+	}
+	return 0
 }
 
 type CreateCharacterRequest struct {
@@ -2198,7 +2228,7 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x12#\n" +
 	"\rcaptcha_token\x18\x03 \x01(\tR\fcaptchaToken\x12\x1f\n" +
 	"\vremember_me\x18\x04 \x01(\bR\n" +
-	"rememberMe\"\x83\x02\n" +
+	"rememberMe\"\xb3\x02\n" +
 	"\x1aAuthenticatePlayerResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x120\n" +
 	"\x14player_session_token\x18\x02 \x01(\tR\x12playerSessionToken\x12#\n" +
@@ -2206,7 +2236,8 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\n" +
 	"characters\x18\x04 \x03(\v2\".holomush.core.v1.CharacterSummaryR\n" +
 	"characters\x120\n" +
-	"\x14default_character_id\x18\x05 \x01(\tR\x12defaultCharacterId\"m\n" +
+	"\x14default_character_id\x18\x05 \x01(\tR\x12defaultCharacterId\x12.\n" +
+	"\x13session_ttl_seconds\x18\x06 \x01(\x03R\x11sessionTtlSeconds\"m\n" +
 	"\x16SelectCharacterRequest\x120\n" +
 	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\x12!\n" +
 	"\fcharacter_id\x18\x02 \x01(\tR\vcharacterId\"\xbe\x01\n" +
@@ -2223,15 +2254,16 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x12\x14\n" +
 	"\x05email\x18\x03 \x01(\tR\x05email\x12#\n" +
-	"\rcaptcha_token\x18\x04 \x01(\tR\fcaptchaToken\"\xcb\x01\n" +
+	"\rcaptcha_token\x18\x04 \x01(\tR\fcaptchaToken\"\xfb\x01\n" +
 	"\x14CreatePlayerResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x120\n" +
 	"\x14player_session_token\x18\x02 \x01(\tR\x12playerSessionToken\x12B\n" +
 	"\n" +
 	"characters\x18\x03 \x03(\v2\".holomush.core.v1.CharacterSummaryR\n" +
 	"characters\x12#\n" +
-	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"\x14\n" +
-	"\x12CreateGuestRequest\"\xfc\x01\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\x12.\n" +
+	"\x13session_ttl_seconds\x18\x05 \x01(\x03R\x11sessionTtlSeconds\"\x14\n" +
+	"\x12CreateGuestRequest\"\xac\x02\n" +
 	"\x13CreateGuestResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x120\n" +
@@ -2239,7 +2271,8 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\n" +
 	"characters\x18\x04 \x03(\v2\".holomush.core.v1.CharacterSummaryR\n" +
 	"characters\x120\n" +
-	"\x14default_character_id\x18\x05 \x01(\tR\x12defaultCharacterId\"q\n" +
+	"\x14default_character_id\x18\x05 \x01(\tR\x12defaultCharacterId\x12.\n" +
+	"\x13session_ttl_seconds\x18\x06 \x01(\x03R\x11sessionTtlSeconds\"q\n" +
 	"\x16CreateCharacterRequest\x120\n" +
 	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\x12%\n" +
 	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\"\xa2\x01\n" +

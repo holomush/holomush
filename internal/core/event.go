@@ -8,7 +8,29 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 )
+
+// MaxPayloadSize is the maximum allowed size (in bytes) of an event payload.
+// Events exceeding this size are rejected before they reach the store to
+// prevent DoS, disk-space, and bandwidth-amplification attacks originating
+// from buggy or malicious plugins. 64 KiB comfortably accommodates every
+// legitimate in-tree event payload.
+const MaxPayloadSize = 64 * 1024
+
+// ValidatePayload returns a structured oops error with code
+// "EVENT_PAYLOAD_TOO_LARGE" when payload exceeds MaxPayloadSize, and nil
+// otherwise. Call sites that accept plugin- or network-sourced events MUST
+// invoke this prior to calling EventStore.Append.
+func ValidatePayload(payload []byte) error {
+	if len(payload) > MaxPayloadSize {
+		return oops.Code("EVENT_PAYLOAD_TOO_LARGE").
+			With("payload_size", len(payload)).
+			With("max_payload_size", MaxPayloadSize).
+			Errorf("event payload exceeds maximum size")
+	}
+	return nil
+}
 
 // EventType identifies the kind of event.
 type EventType string

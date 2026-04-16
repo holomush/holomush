@@ -84,6 +84,30 @@ func (r *PasswordResetRepository) GetByTokenHash(ctx context.Context, tokenHash 
 	return reset, nil
 }
 
+// ConsumeByTokenHash atomically deletes and returns the reset request matching
+// the given token hash. Uses DELETE ... RETURNING so exactly one concurrent
+// caller observes the row; the others receive ErrNotFound. This is the
+// atomicity guarantee ResetPassword relies on to prevent token reuse across
+// a validate-then-delete race window.
+func (r *PasswordResetRepository) ConsumeByTokenHash(ctx context.Context, tokenHash string) (*auth.PasswordReset, error) {
+	row := r.pool.QueryRow(ctx, `
+		DELETE FROM password_resets
+		WHERE token_hash = $1
+		RETURNING id, player_id, token_hash, expires_at, created_at
+	`, tokenHash)
+
+	reset, err := r.scanReset(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.Code("RESET_NOT_FOUND").Wrap(auth.ErrNotFound)
+	}
+	if err != nil {
+		return nil, oops.Code("RESET_CONSUME_FAILED").
+			With("operation", "consume reset by token hash").
+			Wrap(err)
+	}
+	return reset, nil
+}
+
 // Delete removes a password reset request.
 func (r *PasswordResetRepository) Delete(ctx context.Context, id ulid.ULID) error {
 	result, err := r.pool.Exec(ctx, `

@@ -147,6 +147,12 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 			MinTime:             10 * time.Second,
 			PermitWithoutStream: true,
 		}),
+		// Resource limits — see internal/grpc package constants for rationale.
+		// Bounds memory per request and caps concurrent streams per connection
+		// so a single client cannot open unlimited Subscribe streams.
+		grpc.MaxRecvMsgSize(holoGRPC.MaxRecvMsgSize),
+		grpc.MaxSendMsgSize(holoGRPC.MaxSendMsgSize),
+		grpc.MaxConcurrentStreams(holoGRPC.MaxConcurrentStreams),
 		grpcProxy.Handler(),
 	)
 

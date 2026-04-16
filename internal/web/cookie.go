@@ -6,41 +6,57 @@ package web
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 )
 
 const (
 	cookieName   = "holomush_session"
-	cookieMaxAge = 86400 // 24 hours
+	cookieMaxAge = 86400 // 24 hours (default, used when caller supplies no TTL)
 )
 
-// SetSessionCookie writes an HTTP session cookie to the response with a 24h
-// lifetime. The Secure flag and SameSite policy are adjusted based on the
-// secure param.
-func SetSessionCookie(w http.ResponseWriter, token string, secure bool) {
-	sameSite := http.SameSiteStrictMode
-	if !secure {
-		sameSite = http.SameSiteLaxMode
+// SetSessionCookie writes an HTTP session cookie to the response. The cookie's
+// MaxAge matches the session's TTL (in seconds) so the cookie expires when the
+// underlying session does — guest sessions (2h TTL) must not get a 24h cookie,
+// or the cookie outlives the session and users see stale-session errors for
+// hours. A non-positive maxAge falls back to the 24h default so legacy callers
+// that don't thread the TTL still get a reasonable value.
+//
+// The Secure flag and SameSite policy are adjusted based on the secure param.
+func SetSessionCookie(w http.ResponseWriter, token string, secure bool, maxAge int) {
+	if maxAge <= 0 {
+		maxAge = cookieMaxAge
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     cookieName,
-		Value:    token,
-		Path:     "/",
-		MaxAge:   cookieMaxAge,
-		HttpOnly: true,
-		Secure:   secure,
-		SameSite: sameSite,
-	})
+	http.SetCookie(w, sessionCookie(token, maxAge, secure))
 }
 
-// ClearSessionCookie expires the session cookie immediately.
-func ClearSessionCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
+// ClearSessionCookie expires the session cookie immediately. The Secure flag
+// and SameSite policy MUST match the original SetSessionCookie call so that
+// browsers consistently remove the cookie; mismatched attributes can leave
+// stale cookies in place.
+func ClearSessionCookie(w http.ResponseWriter, secure bool) {
+	http.SetCookie(w, sessionCookie("", -1, secure))
+}
+
+// sessionCookie builds the session cookie with Secure and SameSite attributes
+// derived from the secure flag. Constructed with Secure=true by default;
+// dev-mode (secure=false) downgrades the flag after construction so browsers
+// accept the cookie over plain HTTP on localhost. A startup WARN (see server
+// init) makes the misconfiguration obvious if this path is hit in production.
+func sessionCookie(value string, maxAge int, secure bool) *http.Cookie {
+	c := &http.Cookie{
 		Name:     cookieName,
-		Value:    "",
+		Value:    value,
 		Path:     "/",
-		MaxAge:   -1,
+		MaxAge:   maxAge,
 		HttpOnly: true,
-	})
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	}
+	if !secure {
+		c.Secure = false
+		c.SameSite = http.SameSiteLaxMode
+	}
+	return c
 }
 
 // GetSessionToken extracts the session token from the request cookie.
@@ -122,12 +138,28 @@ func (cw *cookieWriter) applyCookieHeaders() {
 	h := cw.Header()
 
 	if token := h.Get(headerSetSessionToken); token != "" {
-		SetSessionCookie(cw.ResponseWriter, token, cw.secure)
+		maxAge := parseMaxAgeHeader(h.Get(headerSetSessionMaxAge))
+		SetSessionCookie(cw.ResponseWriter, token, cw.secure, maxAge)
 		h.Del(headerSetSessionToken)
+		h.Del(headerSetSessionMaxAge)
 	}
 
 	if h.Get(headerClearSession) == "true" {
-		ClearSessionCookie(cw.ResponseWriter)
+		ClearSessionCookie(cw.ResponseWriter, cw.secure)
 		h.Del(headerClearSession)
 	}
+}
+
+// parseMaxAgeHeader returns the integer MaxAge signalled by the handler, or 0
+// if the header is missing/invalid. SetSessionCookie falls back to the 24h
+// default on non-positive values.
+func parseMaxAgeHeader(raw string) int {
+	if raw == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
 }

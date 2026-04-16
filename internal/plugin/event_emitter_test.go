@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
@@ -326,6 +327,71 @@ func TestPluginEventEmitterRejectsMissingEventStoreWithoutAppending(t *testing.T
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "event store")
+}
+
+func TestPluginEventEmitterAcceptsPayloadAtMaxPayloadSize(t *testing.T) {
+	store := newRecordingEventStore()
+	emitter := NewPluginEventEmitter(
+		store,
+		func(string) *Manifest { return &Manifest{Name: "core-scenes", Emits: []string{"scene"}} },
+		func(context.Context, string) (core.Actor, error) {
+			return core.Actor{Kind: core.ActorPlugin, ID: "core-scenes"}, nil
+		},
+	)
+
+	// Build JSON-valid payload that lands exactly at MaxPayloadSize.
+	prefix := []byte(`{"text":"`)
+	suffix := []byte(`"}`)
+	filler := make([]byte, core.MaxPayloadSize-len(prefix)-len(suffix))
+	for i := range filler {
+		filler[i] = 'a'
+	}
+	payload := append(append(prefix, filler...), suffix...)
+	require.Len(t, payload, core.MaxPayloadSize)
+
+	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
+		Stream:  "scene:01TEST:ic",
+		Type:    pluginsdk.EventTypeSay,
+		Payload: string(payload),
+	})
+	require.NoError(t, err)
+
+	events, replayErr := store.Replay(context.Background(), "scene:01TEST:ic", ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1)
+}
+
+func TestPluginEventEmitterRejectsOversizedPayloadWithoutAppending(t *testing.T) {
+	store := newRecordingEventStore()
+	emitter := NewPluginEventEmitter(
+		store,
+		func(string) *Manifest { return &Manifest{Name: "core-scenes", Emits: []string{"scene"}} },
+		func(context.Context, string) (core.Actor, error) {
+			return core.Actor{Kind: core.ActorPlugin, ID: "core-scenes"}, nil
+		},
+	)
+
+	// MaxPayloadSize + 1 byte -- valid JSON shape, but over the limit.
+	prefix := []byte(`{"text":"`)
+	suffix := []byte(`"}`)
+	filler := make([]byte, core.MaxPayloadSize-len(prefix)-len(suffix)+1)
+	for i := range filler {
+		filler[i] = 'a'
+	}
+	payload := append(append(prefix, filler...), suffix...)
+	require.Len(t, payload, core.MaxPayloadSize+1)
+
+	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
+		Stream:  "scene:01TEST:ic",
+		Type:    pluginsdk.EventTypeSay,
+		Payload: string(payload),
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVENT_PAYLOAD_TOO_LARGE")
+
+	events, replayErr := store.Replay(context.Background(), "scene:01TEST:ic", ulid.ULID{}, 10)
+	require.NoError(t, replayErr)
+	assert.Empty(t, events)
 }
 
 func TestPluginEventEmitterRejectsInvalidJSONPayloadWithoutAppending(t *testing.T) {

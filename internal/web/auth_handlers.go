@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"connectrpc.com/connect"
 
@@ -15,9 +16,21 @@ import (
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
 
+// signalSessionCookie sets the signal headers that CookieMiddleware translates
+// into a Set-Cookie header. Always sets the session token; sets MaxAge from
+// the core RPC's session_ttl_seconds so guest cookies (2h TTL) do not outlive
+// their sessions. A zero/missing TTL falls back to the cookie default.
+func signalSessionCookie(h http.Header, token string, ttlSeconds int64) {
+	h.Set(headerSetSessionToken, token)
+	if ttlSeconds > 0 {
+		h.Set(headerSetSessionMaxAge, strconv.FormatInt(ttlSeconds, 10))
+	}
+}
+
 // Cookie signal headers used to communicate between handlers and CookieMiddleware.
 const (
 	headerSetSessionToken    = "X-Set-Session-Token" //nolint:gosec // not a credential, just a header name
+	headerSetSessionMaxAge   = "X-Set-Session-Max-Age"
 	headerClearSession       = "X-Clear-Session"
 	headerInjectSessionToken = "X-Session-Token"
 )
@@ -62,7 +75,7 @@ func (h *Handler) WebAuthenticatePlayer(ctx context.Context, req *connect.Reques
 		Characters:         translateCharacterSummaries(coreResp.GetCharacters()),
 		DefaultCharacterId: coreResp.GetDefaultCharacterId(),
 	})
-	resp.Header().Set(headerSetSessionToken, coreResp.GetPlayerSessionToken())
+	signalSessionCookie(resp.Header(), coreResp.GetPlayerSessionToken(), coreResp.GetSessionTtlSeconds())
 	return resp, nil
 }
 
@@ -130,7 +143,7 @@ func (h *Handler) WebCreatePlayer(ctx context.Context, req *connect.Request[webv
 		Success:    true,
 		Characters: translateCharacterSummaries(coreResp.GetCharacters()),
 	})
-	resp.Header().Set(headerSetSessionToken, coreResp.GetPlayerSessionToken())
+	signalSessionCookie(resp.Header(), coreResp.GetPlayerSessionToken(), coreResp.GetSessionTtlSeconds())
 	return resp, nil
 }
 
@@ -316,7 +329,7 @@ func (h *Handler) WebCreateGuest(ctx context.Context, _ *connect.Request[webv1.W
 		Characters:         translateCharacterSummaries(coreResp.GetCharacters()),
 		DefaultCharacterId: coreResp.GetDefaultCharacterId(),
 	})
-	resp.Header().Set(headerSetSessionToken, coreResp.GetPlayerSessionToken())
+	signalSessionCookie(resp.Header(), coreResp.GetPlayerSessionToken(), coreResp.GetSessionTtlSeconds())
 	return resp, nil
 }
 

@@ -318,6 +318,11 @@ func (h *GatewayHandler) handleConnectGuest(ctx context.Context) <-chan *corev1.
 }
 
 // handleConnectPlayer handles the two-phase registered player login.
+//
+// SECURITY: The password arrives here in cleartext because telnet has no
+// native encryption. Operators are expected to front the telnet listener
+// with a TLS-terminating proxy (stunnel/haproxy) or recommend the web
+// client for credential submission. See site/docs/operating/telnet-security.md.
 func (h *GatewayHandler) handleConnectPlayer(ctx context.Context, username, password string) <-chan *corev1.SubscribeResponse {
 	authCtx, authCancel := context.WithTimeout(ctx, rpcTimeout)
 	defer authCancel()
@@ -718,7 +723,7 @@ func (h *GatewayHandler) drainUntilClosed(eventRecv <-chan *corev1.SubscribeResp
 }
 
 func (h *GatewayHandler) send(msg string) {
-	if _, err := fmt.Fprintln(h.conn, msg); err != nil {
+	if _, err := fmt.Fprintln(h.conn, sanitizeTelnetOutput(msg)); err != nil {
 		slog.Debug("gateway: failed to send message", "error", err)
 	}
 }

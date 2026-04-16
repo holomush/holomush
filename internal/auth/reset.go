@@ -118,6 +118,13 @@ type PasswordResetRepository interface {
 	// GetByTokenHash retrieves a reset request by its token hash.
 	GetByTokenHash(ctx context.Context, tokenHash string) (*PasswordReset, error)
 
+	// ConsumeByTokenHash atomically deletes and returns the reset request
+	// matching the token hash. Exactly one caller succeeds for a given token;
+	// concurrent or subsequent callers receive ErrNotFound. This closes the
+	// validate-then-delete race in ResetPassword by making token consumption
+	// atomic with validation (implemented as DELETE ... RETURNING).
+	ConsumeByTokenHash(ctx context.Context, tokenHash string) (*PasswordReset, error)
+
 	// Delete removes a password reset request.
 	Delete(ctx context.Context, id ulid.ULID) error
 
