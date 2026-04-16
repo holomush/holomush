@@ -130,4 +130,52 @@ test.describe('Session Security (bd-urbq)', () => {
     await ctxA.close();
     await ctxB.close();
   });
+
+  test('11th login evicts the oldest session', async ({ browser }) => {
+    // DefaultMaxPlayerSessionsPerPlayer is 10; the 11th login must evict
+    // the oldest PlayerSession via the session cap enforcement path.
+    const cap = 10;
+
+    // First login: register a fresh player (context 0). This creates the
+    // "oldest" PlayerSession.
+    const ctx0 = await browser.newContext();
+    const page0 = await ctx0.newPage();
+    const { username, password } = await registerAndEnterTerminal(page0, 'e2ecap', 'Cap');
+
+    // Open (cap - 1) additional concurrent logins, keeping the session at
+    // exactly cap. No eviction should happen yet.
+    const extras: { ctx: BrowserContext; page: Page }[] = [];
+    for (let i = 1; i < cap; i++) {
+      extras.push(await loginIntoNewContext(browser, username, password));
+    }
+
+    // Everyone is still authenticated.
+    await page0.goto('/terminal');
+    await expect(page0).toHaveURL(/\/terminal/, { timeout: 10000 });
+
+    // The (cap + 1)-th login triggers eviction of the oldest session, which
+    // is the one in ctx0.
+    const { ctx: ctxNewest, page: pageNewest } = await loginIntoNewContext(
+      browser,
+      username,
+      password,
+    );
+
+    // Context 0's PlayerSession has been evicted. Re-navigating triggers the
+    // authed layout's webCheckSession, which fails and redirects to /login.
+    await page0.goto('/terminal');
+    await expect(page0).toHaveURL(/\/login|\/$/, { timeout: 20000 });
+
+    // The newest context is still authenticated.
+    await pageNewest.goto('/terminal');
+    await expect(pageNewest).toHaveURL(/\/terminal/, { timeout: 10000 });
+    await expect(pageNewest.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+
+    // Cleanup.
+    await ctx0.close();
+    for (const { ctx } of extras) {
+      await ctx.close();
+    }
+    await ctxNewest.close();
+  });
 });
