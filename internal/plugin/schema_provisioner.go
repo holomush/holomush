@@ -192,11 +192,41 @@ func (sp *SchemaProvisioner) PurgeSchema(ctx context.Context, pluginName string)
 	return nil
 }
 
+// validatePostgresPasswordLiteral rejects passwords that cannot be safely
+// interpolated into a single-quoted PostgreSQL string literal. This is a
+// defense-in-depth check: generatePassword currently produces base64url
+// output (charset A-Za-z0-9-_) which has none of these characters, but if
+// the generator ever changes, SQL injection via CREATE/ALTER ROLE DDL
+// becomes possible. Rejects single quote, backslash, and NULL bytes.
+func validatePostgresPasswordLiteral(pw string) error {
+	for i := 0; i < len(pw); i++ {
+		switch pw[i] {
+		case '\'':
+			return oops.Code("PASSWORD_UNSAFE_LITERAL").
+				With("reason", "contains single quote").
+				Errorf("password contains characters unsafe for SQL literal interpolation")
+		case '\\':
+			return oops.Code("PASSWORD_UNSAFE_LITERAL").
+				With("reason", "contains backslash").
+				Errorf("password contains characters unsafe for SQL literal interpolation")
+		case 0x00:
+			return oops.Code("PASSWORD_UNSAFE_LITERAL").
+				With("reason", "contains NULL byte").
+				Errorf("password contains characters unsafe for SQL literal interpolation")
+		}
+	}
+	return nil
+}
+
 // ensureRole creates the plugin role if it doesn't exist, or refreshes
 // the ephemeral password if it does. After creation, grants the new role
 // to the current user so that ALTER SCHEMA OWNER TO succeeds on
 // PostgreSQL 16+ (where CREATEROLE no longer implies membership).
 func (sp *SchemaProvisioner) ensureRole(ctx context.Context, roleName, password string) error {
+	if err := validatePostgresPasswordLiteral(password); err != nil {
+		return err
+	}
+
 	roleID := pgx.Identifier{roleName}
 
 	var exists bool
