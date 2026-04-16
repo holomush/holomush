@@ -36,6 +36,7 @@ const (
 	CoreService_ConfirmPasswordReset_FullMethodName = "/holomush.core.v1.CoreService/ConfirmPasswordReset"
 	CoreService_Logout_FullMethodName               = "/holomush.core.v1.CoreService/Logout"
 	CoreService_CheckPlayerSession_FullMethodName   = "/holomush.core.v1.CoreService/CheckPlayerSession"
+	CoreService_QueryStreamHistory_FullMethodName   = "/holomush.core.v1.CoreService/QueryStreamHistory"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -72,6 +73,11 @@ type CoreServiceClient interface {
 	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error)
 	// Validate a player session token. Used by web gateway for cookie-based auth checks.
 	CheckPlayerSession(ctx context.Context, in *CheckPlayerSessionRequest, opts ...grpc.CallOption) (*CheckPlayerSessionResponse, error)
+	// QueryStreamHistory reads paginated event history from a stream.
+	// Two-layer authorization: membership gate (I-17) for private streams,
+	// ABAC policy evaluation for public streams.
+	// Pure read — does not mutate session cursors (invariant I-13).
+	QueryStreamHistory(ctx context.Context, in *QueryStreamHistoryRequest, opts ...grpc.CallOption) (*QueryStreamHistoryResponse, error)
 }
 
 type coreServiceClient struct {
@@ -231,6 +237,16 @@ func (c *coreServiceClient) CheckPlayerSession(ctx context.Context, in *CheckPla
 	return out, nil
 }
 
+func (c *coreServiceClient) QueryStreamHistory(ctx context.Context, in *QueryStreamHistoryRequest, opts ...grpc.CallOption) (*QueryStreamHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueryStreamHistoryResponse)
+	err := c.cc.Invoke(ctx, CoreService_QueryStreamHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -265,6 +281,11 @@ type CoreServiceServer interface {
 	Logout(context.Context, *LogoutRequest) (*LogoutResponse, error)
 	// Validate a player session token. Used by web gateway for cookie-based auth checks.
 	CheckPlayerSession(context.Context, *CheckPlayerSessionRequest) (*CheckPlayerSessionResponse, error)
+	// QueryStreamHistory reads paginated event history from a stream.
+	// Two-layer authorization: membership gate (I-17) for private streams,
+	// ABAC policy evaluation for public streams.
+	// Pure read — does not mutate session cursors (invariant I-13).
+	QueryStreamHistory(context.Context, *QueryStreamHistoryRequest) (*QueryStreamHistoryResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -316,6 +337,9 @@ func (UnimplementedCoreServiceServer) Logout(context.Context, *LogoutRequest) (*
 }
 func (UnimplementedCoreServiceServer) CheckPlayerSession(context.Context, *CheckPlayerSessionRequest) (*CheckPlayerSessionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CheckPlayerSession not implemented")
+}
+func (UnimplementedCoreServiceServer) QueryStreamHistory(context.Context, *QueryStreamHistoryRequest) (*QueryStreamHistoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method QueryStreamHistory not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -583,6 +607,24 @@ func _CoreService_CheckPlayerSession_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_QueryStreamHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryStreamHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).QueryStreamHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_QueryStreamHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).QueryStreamHistory(ctx, req.(*QueryStreamHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -641,6 +683,10 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CheckPlayerSession",
 			Handler:    _CoreService_CheckPlayerSession_Handler,
+		},
+		{
+			MethodName: "QueryStreamHistory",
+			Handler:    _CoreService_QueryStreamHistory_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

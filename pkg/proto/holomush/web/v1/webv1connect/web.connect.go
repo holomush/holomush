@@ -80,6 +80,9 @@ const (
 	// WebServiceWebListContentProcedure is the fully-qualified name of the WebService's WebListContent
 	// RPC.
 	WebServiceWebListContentProcedure = "/holomush.web.v1.WebService/WebListContent"
+	// WebServiceWebQueryStreamHistoryProcedure is the fully-qualified name of the WebService's
+	// WebQueryStreamHistory RPC.
+	WebServiceWebQueryStreamHistoryProcedure = "/holomush.web.v1.WebService/WebQueryStreamHistory"
 )
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
@@ -109,6 +112,9 @@ type WebServiceClient interface {
 	// Content store access (public, no auth required).
 	WebGetContent(context.Context, *connect.Request[v1.WebGetContentRequest]) (*connect.Response[v1.WebGetContentResponse], error)
 	WebListContent(context.Context, *connect.Request[v1.WebListContentRequest]) (*connect.Response[v1.WebListContentResponse], error)
+	// WebQueryStreamHistory reads paginated event history for the web client.
+	// Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
+	WebQueryStreamHistory(context.Context, *connect.Request[v1.WebQueryStreamHistoryRequest]) (*connect.Response[v1.WebQueryStreamHistoryResponse], error)
 }
 
 // NewWebServiceClient constructs a client for the holomush.web.v1.WebService service. By default,
@@ -218,6 +224,12 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebListContent")),
 			connect.WithClientOptions(opts...),
 		),
+		webQueryStreamHistory: connect.NewClient[v1.WebQueryStreamHistoryRequest, v1.WebQueryStreamHistoryResponse](
+			httpClient,
+			baseURL+WebServiceWebQueryStreamHistoryProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebQueryStreamHistory")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -239,6 +251,7 @@ type webServiceClient struct {
 	webCheckSession         *connect.Client[v1.WebCheckSessionRequest, v1.WebCheckSessionResponse]
 	webGetContent           *connect.Client[v1.WebGetContentRequest, v1.WebGetContentResponse]
 	webListContent          *connect.Client[v1.WebListContentRequest, v1.WebListContentResponse]
+	webQueryStreamHistory   *connect.Client[v1.WebQueryStreamHistoryRequest, v1.WebQueryStreamHistoryResponse]
 }
 
 // SendCommand calls holomush.web.v1.WebService.SendCommand.
@@ -321,6 +334,11 @@ func (c *webServiceClient) WebListContent(ctx context.Context, req *connect.Requ
 	return c.webListContent.CallUnary(ctx, req)
 }
 
+// WebQueryStreamHistory calls holomush.web.v1.WebService.WebQueryStreamHistory.
+func (c *webServiceClient) WebQueryStreamHistory(ctx context.Context, req *connect.Request[v1.WebQueryStreamHistoryRequest]) (*connect.Response[v1.WebQueryStreamHistoryResponse], error) {
+	return c.webQueryStreamHistory.CallUnary(ctx, req)
+}
+
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
 	// Send a game command (say, pose, quit, etc.)
@@ -348,6 +366,9 @@ type WebServiceHandler interface {
 	// Content store access (public, no auth required).
 	WebGetContent(context.Context, *connect.Request[v1.WebGetContentRequest]) (*connect.Response[v1.WebGetContentResponse], error)
 	WebListContent(context.Context, *connect.Request[v1.WebListContentRequest]) (*connect.Response[v1.WebListContentResponse], error)
+	// WebQueryStreamHistory reads paginated event history for the web client.
+	// Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
+	WebQueryStreamHistory(context.Context, *connect.Request[v1.WebQueryStreamHistoryRequest]) (*connect.Response[v1.WebQueryStreamHistoryResponse], error)
 }
 
 // NewWebServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -453,6 +474,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebListContent")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebQueryStreamHistoryHandler := connect.NewUnaryHandler(
+		WebServiceWebQueryStreamHistoryProcedure,
+		svc.WebQueryStreamHistory,
+		connect.WithSchema(webServiceMethods.ByName("WebQueryStreamHistory")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.web.v1.WebService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WebServiceSendCommandProcedure:
@@ -487,6 +514,8 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebGetContentHandler.ServeHTTP(w, r)
 		case WebServiceWebListContentProcedure:
 			webServiceWebListContentHandler.ServeHTTP(w, r)
+		case WebServiceWebQueryStreamHistoryProcedure:
+			webServiceWebQueryStreamHistoryHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -558,4 +587,8 @@ func (UnimplementedWebServiceHandler) WebGetContent(context.Context, *connect.Re
 
 func (UnimplementedWebServiceHandler) WebListContent(context.Context, *connect.Request[v1.WebListContentRequest]) (*connect.Response[v1.WebListContentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListContent is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebQueryStreamHistory(context.Context, *connect.Request[v1.WebQueryStreamHistoryRequest]) (*connect.Response[v1.WebQueryStreamHistoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebQueryStreamHistory is not implemented"))
 }

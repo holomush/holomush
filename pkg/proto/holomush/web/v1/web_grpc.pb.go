@@ -38,6 +38,7 @@ const (
 	WebService_WebCheckSession_FullMethodName         = "/holomush.web.v1.WebService/WebCheckSession"
 	WebService_WebGetContent_FullMethodName           = "/holomush.web.v1.WebService/WebGetContent"
 	WebService_WebListContent_FullMethodName          = "/holomush.web.v1.WebService/WebListContent"
+	WebService_WebQueryStreamHistory_FullMethodName   = "/holomush.web.v1.WebService/WebQueryStreamHistory"
 )
 
 // WebServiceClient is the client API for WebService service.
@@ -69,6 +70,9 @@ type WebServiceClient interface {
 	// Content store access (public, no auth required).
 	WebGetContent(ctx context.Context, in *WebGetContentRequest, opts ...grpc.CallOption) (*WebGetContentResponse, error)
 	WebListContent(ctx context.Context, in *WebListContentRequest, opts ...grpc.CallOption) (*WebListContentResponse, error)
+	// WebQueryStreamHistory reads paginated event history for the web client.
+	// Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
+	WebQueryStreamHistory(ctx context.Context, in *WebQueryStreamHistoryRequest, opts ...grpc.CallOption) (*WebQueryStreamHistoryResponse, error)
 }
 
 type webServiceClient struct {
@@ -248,6 +252,16 @@ func (c *webServiceClient) WebListContent(ctx context.Context, in *WebListConten
 	return out, nil
 }
 
+func (c *webServiceClient) WebQueryStreamHistory(ctx context.Context, in *WebQueryStreamHistoryRequest, opts ...grpc.CallOption) (*WebQueryStreamHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebQueryStreamHistoryResponse)
+	err := c.cc.Invoke(ctx, WebService_WebQueryStreamHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WebServiceServer is the server API for WebService service.
 // All implementations must embed UnimplementedWebServiceServer
 // for forward compatibility.
@@ -277,6 +291,9 @@ type WebServiceServer interface {
 	// Content store access (public, no auth required).
 	WebGetContent(context.Context, *WebGetContentRequest) (*WebGetContentResponse, error)
 	WebListContent(context.Context, *WebListContentRequest) (*WebListContentResponse, error)
+	// WebQueryStreamHistory reads paginated event history for the web client.
+	// Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
+	WebQueryStreamHistory(context.Context, *WebQueryStreamHistoryRequest) (*WebQueryStreamHistoryResponse, error)
 	mustEmbedUnimplementedWebServiceServer()
 }
 
@@ -334,6 +351,9 @@ func (UnimplementedWebServiceServer) WebGetContent(context.Context, *WebGetConte
 }
 func (UnimplementedWebServiceServer) WebListContent(context.Context, *WebListContentRequest) (*WebListContentResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebListContent not implemented")
+}
+func (UnimplementedWebServiceServer) WebQueryStreamHistory(context.Context, *WebQueryStreamHistoryRequest) (*WebQueryStreamHistoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebQueryStreamHistory not implemented")
 }
 func (UnimplementedWebServiceServer) mustEmbedUnimplementedWebServiceServer() {}
 func (UnimplementedWebServiceServer) testEmbeddedByValue()                    {}
@@ -637,6 +657,24 @@ func _WebService_WebListContent_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebQueryStreamHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebQueryStreamHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebQueryStreamHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebQueryStreamHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebQueryStreamHistory(ctx, req.(*WebQueryStreamHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WebService_ServiceDesc is the grpc.ServiceDesc for WebService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -703,6 +741,10 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebListContent",
 			Handler:    _WebService_WebListContent_Handler,
+		},
+		{
+			MethodName: "WebQueryStreamHistory",
+			Handler:    _WebService_WebQueryStreamHistory_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
