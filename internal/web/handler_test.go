@@ -477,8 +477,13 @@ func TestWebQueryStreamHistoryProxiesToCoreService(t *testing.T) {
 }
 
 func TestWebQueryStreamHistoryPropagatesError(t *testing.T) {
+	// The proxy MUST return upstream errors unchanged so ConnectRPC preserves
+	// the original gRPC status code (SESSION_EXPIRED, STREAM_ACCESS_DENIED,
+	// INVALID_ARGUMENT, etc.). Wrapping as connect.CodeInternal would collapse
+	// all of these into one opaque server error.
+	upstream := errors.New("core unavailable")
 	client := &mockCoreClient{
-		queryStreamHistoryErr: errors.New("core unavailable"),
+		queryStreamHistoryErr: upstream,
 	}
 	h := NewHandler(client)
 
@@ -487,9 +492,7 @@ func TestWebQueryStreamHistoryPropagatesError(t *testing.T) {
 		Stream:    "main",
 	}))
 	require.Error(t, err)
-	var connectErr *connect.Error
-	require.ErrorAs(t, err, &connectErr)
-	assert.Equal(t, connect.CodeInternal, connectErr.Code())
+	assert.ErrorIs(t, err, upstream, "proxy must return the upstream error unchanged")
 }
 
 func TestWebQueryStreamHistoryPopulatesTypeAndTimestamp(t *testing.T) {

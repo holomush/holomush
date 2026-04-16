@@ -362,19 +362,26 @@ var _ = Describe("PostgresEventStore", func() {
 			ctx := context.Background()
 			stream := "location:int-both-" + ulid.Make().String()
 			var ids []ulid.ULID
-			baseTime := time.Now().Add(-10 * time.Minute).UTC()
+			var insertTimes []time.Time
 			for range 5 {
 				e := core.NewEvent(stream, core.EventType("test"), core.Actor{Kind: core.ActorCharacter, ID: "char-1"}, []byte(`{}`))
 				Expect(eventStore.Append(ctx, e)).To(Succeed())
 				ids = append(ids, e.ID)
+				insertTimes = append(insertTimes, e.Timestamp)
 				time.Sleep(10 * time.Millisecond)
 			}
 
-			// beforeID excludes last event; notBefore is far in the past so includes all remaining
-			events, err := eventStore.ReplayTail(ctx, stream, 10, baseTime, ids[4])
+			// notBefore set BETWEEN events (after ids[1], before ids[2]) so it
+			// genuinely filters out the first two events. beforeID excludes the
+			// last event. The only events that satisfy BOTH predicates are
+			// ids[2] and ids[3]. If the combined SQL branch accidentally drops
+			// either filter, this assertion fails.
+			notBefore := insertTimes[2].Add(-time.Millisecond)
+			events, err := eventStore.ReplayTail(ctx, stream, 10, notBefore, ids[4])
 			Expect(err).NotTo(HaveOccurred())
-			Expect(events).To(HaveLen(4))
-			Expect(events[3].ID).To(Equal(ids[3]))
+			Expect(events).To(HaveLen(2))
+			Expect(events[0].ID).To(Equal(ids[2]))
+			Expect(events[1].ID).To(Equal(ids[3]))
 		})
 
 		It("ignores zero beforeID", func() {

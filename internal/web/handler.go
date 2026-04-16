@@ -396,7 +396,7 @@ func (h *Handler) WebQueryStreamHistory(ctx context.Context, req *connect.Reques
 	if err != nil {
 		slog.ErrorContext(ctx, "web: query stream history RPC failed",
 			"session_id", req.Msg.GetSessionId(), "error", err)
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is so clients can distinguish SESSION_EXPIRED / STREAM_ACCESS_DENIED / INVALID_ARGUMENT.
 	}
 
 	gameEvents := make([]*webv1.GameEvent, 0, len(resp.GetEvents()))

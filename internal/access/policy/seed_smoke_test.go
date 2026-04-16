@@ -216,7 +216,7 @@ func TestSeedSmokePlayerStreamEmit(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
 		Subject:  "character:01CHAR01",
 		Action:   "emit",
-		Resource: "stream:location-01LOC000",
+		Resource: "stream:location:01LOC000",
 	})
 	require.NoError(t, err)
 	assert.True(t, decision.IsAllowed(), "player should emit to co-located stream; got: %s — %s", decision.Effect(), decision.Reason())
@@ -225,12 +225,17 @@ func TestSeedSmokePlayerStreamEmit(t *testing.T) {
 func TestSeedSmokePlayerCanReadCoLocatedLocationStream(t *testing.T) {
 	locID := "01LOC000GGGGGGGGGGGGGGGGGG"
 
+	// Use the real StreamProvider so the test exercises parser + policy
+	// together — catches regressions in StreamProvider registration or
+	// resource ID parsing (the stub-based alternative would pass even if
+	// the real provider were misconfigured, hiding bugs like the one
+	// caught by B9's E2E test when StreamProvider was not registered).
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
 			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": locID},
 			nil,
 		),
-		streamProvider(map[string]any{"name": "location:" + locID, "location": locID}),
+		attribute.NewStreamProvider(),
 	})
 
 	// Reading history of co-located location stream → permit
@@ -238,7 +243,7 @@ func TestSeedSmokePlayerCanReadCoLocatedLocationStream(t *testing.T) {
 	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
 		Subject:  "character:01CHAR01",
 		Action:   "read",
-		Resource: "stream:location-" + locID,
+		Resource: "stream:location:" + locID,
 	})
 	require.NoError(t, err)
 	assert.True(t, decision.IsAllowed(), "co-located character should read location stream; got: %s — %s", decision.Effect(), decision.Reason())
@@ -248,19 +253,20 @@ func TestSeedSmokePlayerCannotReadNonCoLocatedLocationStream(t *testing.T) {
 	currentLocID := "01LOC000HHHHHHHHHHHHHHHHHH"
 	otherLocID := "01LOC000IIIIIIIIIIIIIIIIII"
 
+	// Real StreamProvider — see rationale in
+	// TestSeedSmokePlayerCanReadCoLocatedLocationStream.
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(
 			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": currentLocID},
 			nil,
 		),
-		// The stream being queried has a different location than the character.
-		streamProvider(map[string]any{"name": "location:" + otherLocID, "location": otherLocID}),
+		attribute.NewStreamProvider(),
 	})
 
 	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
 		Subject:  "character:01CHAR01",
 		Action:   "read",
-		Resource: "stream:location-" + otherLocID,
+		Resource: "stream:location:" + otherLocID,
 	})
 	require.NoError(t, err)
 	assert.False(t, decision.IsAllowed(), "non-co-located character should NOT read location stream; got: %s — %s", decision.Effect(), decision.Reason())

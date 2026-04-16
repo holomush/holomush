@@ -929,7 +929,7 @@ func TestQueryStreamHistoryRejectsEmptySessionID(t *testing.T) {
 
 (Continue with all tests from spec §8.1-8.3. Each test follows the pattern above — create server with appropriate mocked deps, call `QueryStreamHistory`, assert response.)
 
-Due to plan length constraints, the full test file content is specified in the spec's test tables. The implementor MUST write all tests listed in §8.1 (unit), §8.2 (invariant), and §8.3 (boundary) before implementing the handler.
+Due to plan length constraints, the full test file content is specified in the spec's test tables. The implementer MUST write all tests listed in §8.1 (unit), §8.2 (invariant), and §8.3 (boundary) before implementing the handler.
 
 - [ ] **Step 3: Run tests to verify they fail**
 
@@ -1165,7 +1165,7 @@ func TestWebQueryStreamHistoryPropagatesError(t *testing.T) {
 }
 ```
 
-The implementor should follow the pattern of existing proxy tests in this file (e.g., `TestSendCommand`).
+The implementer should follow the pattern of existing proxy tests in this file (e.g., `TestSendCommand`).
 
 - [ ] **Step 3: Run tests to verify they fail**
 
@@ -1288,7 +1288,7 @@ Create `test/integration/stream_history/query_stream_history_test.go` with Ginkg
 
 Follow the patterns in `test/integration/phase1_5_test.go` for test setup.
 
-The implementor MUST write all tests listed in spec §8.9:
+The implementer MUST write all tests listed in spec §8.9:
 
 - `QueryStreamHistoryReturnsEventsForSubscribedStream`
 - `QueryStreamHistoryDeniesNonMemberSceneStream`
