@@ -170,6 +170,10 @@ message AuthenticatePlayerResponse {
   string error_message = 3;
   repeated CharacterSummary characters = 4;
   string default_character_id = 5;
+  // Session TTL in seconds. Used by the web gateway to set cookie MaxAge so
+  // the cookie expires when the underlying session expires (prevents stale
+  // cookies outliving 2h guest sessions).
+  int64 session_ttl_seconds = 6;
 }
 
 message SelectCharacterRequest {
@@ -197,6 +201,8 @@ message CreatePlayerResponse {
   string player_session_token = 2;
   repeated CharacterSummary characters = 3;
   string error_message = 4;
+  // Session TTL in seconds (see AuthenticatePlayerResponse).
+  int64 session_ttl_seconds = 5;
 }
 
 message CreateGuestRequest {}
@@ -207,6 +213,9 @@ message CreateGuestResponse {
   string player_session_token = 3;
   repeated CharacterSummary characters = 4;
   string default_character_id = 5;
+  // Session TTL in seconds (see AuthenticatePlayerResponse). For guest
+  // sessions this is 2h, not the 24h regular-player TTL.
+  int64 session_ttl_seconds = 6;
 }
 
 message CreateCharacterRequest {

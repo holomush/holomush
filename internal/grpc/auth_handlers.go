@@ -176,6 +176,7 @@ func (s *CoreServer) AuthenticatePlayer(ctx context.Context, req *corev1.Authent
 		PlayerSessionToken: rawToken,
 		Characters:         characters,
 		DefaultCharacterId: defaultCharID,
+		SessionTtlSeconds:  int64(auth.PlayerSessionTTL.Seconds()),
 	}, nil
 }
 
@@ -342,6 +343,7 @@ func (s *CoreServer) CreatePlayer(ctx context.Context, req *corev1.CreatePlayerR
 		Success:            true,
 		PlayerSessionToken: rawToken,
 		Characters:         []*corev1.CharacterSummary{}, // new player has no characters
+		SessionTtlSeconds:  int64(auth.PlayerSessionTTL.Seconds()),
 	}, nil
 }
 
@@ -517,6 +519,7 @@ func (s *CoreServer) CreateGuest(ctx context.Context, _ *corev1.CreateGuestReque
 		PlayerSessionToken: result.RawToken,
 		Characters:         []*corev1.CharacterSummary{charSummary},
 		DefaultCharacterId: result.Character.ID.String(),
+		SessionTtlSeconds:  int64(auth.GuestSessionTTL.Seconds()),
 	}, nil
 }
 
