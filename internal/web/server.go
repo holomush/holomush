@@ -66,6 +66,10 @@ func NewServer(cfg Config) (*Server, error) {
 		handler = CORSMiddleware(cfg.CORSOrigins, handler)
 	}
 
+	// Wrap with security headers OUTSIDE cookie/CORS so every response —
+	// including CORS preflight 204s and early errors — carries the headers.
+	handler = SecurityHeadersMiddleware(cfg.Secure, handler)
+
 	// Wrap with OpenTelemetry HTTP instrumentation
 	handler = otelhttp.NewHandler(handler, "holomush-gateway")
 
