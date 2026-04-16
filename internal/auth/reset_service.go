@@ -161,6 +161,13 @@ func (s *PasswordResetService) ResetPassword(ctx context.Context, token, newPass
 	if newPassword == "" {
 		return oops.Code("RESET_PASSWORD_EMPTY").Errorf("new password cannot be empty")
 	}
+	// SECURITY: reject oversized passwords before hashing. Argon2id allocates
+	// ~64 MB per call over the entire input, so multi-MB inputs enable DoS.
+	if len(newPassword) > MaxPasswordLength {
+		return oops.Code("RESET_PASSWORD_TOO_LONG").
+			With("max", MaxPasswordLength).
+			Errorf("new password must be at most %d characters", MaxPasswordLength)
+	}
 
 	playerID, err := s.ValidateToken(ctx, token)
 	if err != nil {

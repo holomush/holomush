@@ -14,13 +14,27 @@ import (
 // MinPasswordLength is the minimum allowed password length.
 const MinPasswordLength = 8
 
-// ValidatePassword validates a password against rules.
-// Returns an error if the password is less than MinPasswordLength characters.
+// MaxPasswordLength is the maximum allowed password length.
+//
+// SECURITY: Argon2id hashes the entire input using ~64 MB of memory per call.
+// Without an upper bound, an attacker could submit multi-megabyte passwords to
+// cause memory/CPU exhaustion (DoS). 128 bytes is well above any realistic
+// human-chosen passphrase length while bounding per-request hash cost.
+const MaxPasswordLength = 128
+
+// ValidatePassword validates a password against length bounds.
+// Returns an error if the password is shorter than MinPasswordLength or
+// longer than MaxPasswordLength.
 func ValidatePassword(password string) error {
 	if len(password) < MinPasswordLength {
 		return oops.Code("AUTH_INVALID_PASSWORD").
 			With("min", MinPasswordLength).
 			Errorf("password must be at least %d characters", MinPasswordLength)
+	}
+	if len(password) > MaxPasswordLength {
+		return oops.Code("AUTH_INVALID_PASSWORD").
+			With("max", MaxPasswordLength).
+			Errorf("password must be at most %d characters", MaxPasswordLength)
 	}
 	return nil
 }
@@ -29,6 +43,16 @@ func ValidatePassword(password string) error {
 // It uses the same constant-time verification as Login to prevent timing attacks.
 // Returns the authenticated Player on success.
 func (s *Service) ValidateCredentials(ctx context.Context, username, password string) (*Player, error) {
+	// SECURITY: reject oversized passwords before any hashing work. Argon2id
+	// hashes the full input with 64 MB of memory, so accepting multi-MB inputs
+	// allows trivial memory/CPU exhaustion. Return the generic invalid-credentials
+	// code to avoid distinguishing this case from wrong-password for enumeration.
+	if len(password) > MaxPasswordLength {
+		return nil, oops.Code("AUTH_INVALID_CREDENTIALS").
+			With("max", MaxPasswordLength).
+			Errorf("invalid username or password")
+	}
+
 	player, lookupErr := s.players.GetByUsername(ctx, username)
 
 	var targetHash string

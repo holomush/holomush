@@ -7,6 +7,7 @@ package auth_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -361,6 +362,24 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		errutil.AssertErrorCode(t, resetErr, "RESET_PASSWORD_EMPTY")
 
 		// Verify no repository calls were made (password checked first)
+		resetRepo.AssertNotCalled(t, "GetByTokenHash")
+		hasher.AssertNotCalled(t, "Hash")
+	})
+
+	t.Run("rejects oversized password before hashing", func(t *testing.T) {
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockPlayerSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
+		require.NoError(t, err)
+
+		oversized := strings.Repeat("a", auth.MaxPasswordLength+1)
+		resetErr := svc.ResetPassword(ctx, "sometoken", oversized)
+		require.Error(t, resetErr)
+		errutil.AssertErrorCode(t, resetErr, "RESET_PASSWORD_TOO_LONG")
+
+		// Verify no repository/hasher calls were made (password checked first)
 		resetRepo.AssertNotCalled(t, "GetByTokenHash")
 		hasher.AssertNotCalled(t, "Hash")
 	})
