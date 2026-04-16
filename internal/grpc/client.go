@@ -223,6 +223,15 @@ func (c *Client) CreateGuest(ctx context.Context, req *corev1.CreateGuestRequest
 	return resp, nil
 }
 
+// QueryStreamHistory reads paginated event history from a stream.
+func (c *Client) QueryStreamHistory(ctx context.Context, req *corev1.QueryStreamHistoryRequest) (*corev1.QueryStreamHistoryResponse, error) {
+	resp, err := c.client.QueryStreamHistory(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "QueryStreamHistory").Wrap(err)
+	}
+	return resp, nil
+}
+
 // GetContent retrieves a single content item by key from the content service.
 func (c *Client) GetContent(ctx context.Context, req *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error) {
 	resp, err := c.contentClient.GetContent(ctx, req)
