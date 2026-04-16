@@ -169,10 +169,31 @@ func (s *PasswordResetService) ResetPassword(ctx context.Context, token, newPass
 		return err
 	}
 
-	playerID, err := s.ValidateToken(ctx, token)
-	if err != nil {
-		return err // Already has appropriate error code
+	// SECURITY: consume the token atomically (DELETE ... RETURNING) so that
+	// exactly one caller receives the player_id and proceeds. A previous
+	// implementation did ValidateToken -> UpdatePassword -> DeleteByPlayer as
+	// separate operations; two concurrent requests with the same token could
+	// both observe it as valid before either deletion landed. Atomic consume
+	// closes that race: losers of the DELETE see ErrNotFound.
+	if token == "" {
+		return oops.Code("RESET_TOKEN_EMPTY").Errorf("reset token cannot be empty")
 	}
+	hash := hashResetToken(token)
+	reset, err := s.resetRepo.ConsumeByTokenHash(ctx, hash)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return oops.Code("RESET_TOKEN_INVALID").Errorf("reset token not found")
+		}
+		return oops.Code("RESET_VALIDATE_FAILED").
+			With("operation", "ConsumeByTokenHash").
+			Wrap(err)
+	}
+	// Expiry is enforced AFTER consumption: the token is burned either way, so
+	// an expired token cannot be reused to probe timing or be replayed later.
+	if reset.IsExpired() {
+		return oops.Code("RESET_TOKEN_EXPIRED").Errorf("reset token has expired")
+	}
+	playerID := reset.PlayerID
 
 	hashedPassword, err := s.hasher.Hash(newPassword)
 	if err != nil {
@@ -201,8 +222,9 @@ func (s *PasswordResetService) ResetPassword(ctx context.Context, token, newPass
 		)
 	}
 
-	// Delete all reset tokens for the player.
-	// This is cleanup - if it fails, the password was still updated successfully.
+	// Delete any sibling reset tokens for the player (the consumed one is
+	// already gone). Best-effort cleanup — failure here does not fail the
+	// reset, since the token actually used has been atomically consumed.
 	if err := s.resetRepo.DeleteByPlayer(ctx, playerID); err != nil {
 		s.logger.Warn("best-effort token cleanup failed",
 			"event", "token_cleanup_failed",

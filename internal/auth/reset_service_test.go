@@ -8,10 +8,13 @@ package auth_test
 import (
 	"context"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -290,7 +293,7 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		newPassword := "newSecurePassword123"
 		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash"
 
-		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil)
+		resetRepo.On("ConsumeByTokenHash", ctx, tokenHash).Return(reset, nil)
 		hasher.On("Hash", newPassword).Return(hashedPassword, nil)
 		playerRepo.On("UpdatePassword", ctx, playerID, hashedPassword).Return(nil)
 		sessionRepo.On("DeleteByPlayer", ctx, playerID).Return(nil)
@@ -313,7 +316,7 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		token := "invalidtoken0123456789abcdef0123456789abcdef0123456789abcdef"
 		newPassword := "newSecurePassword123"
 
-		resetRepo.On("GetByTokenHash", ctx, mock.AnythingOfType("string")).Return(nil, auth.ErrNotFound)
+		resetRepo.On("ConsumeByTokenHash", ctx, mock.AnythingOfType("string")).Return(nil, auth.ErrNotFound)
 
 		resetErr := svc.ResetPassword(ctx, token, newPassword)
 		require.Error(t, resetErr)
@@ -341,7 +344,9 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		}
 		newPassword := "newSecurePassword123"
 
-		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil)
+		// Consume still burns the token (atomic DELETE ... RETURNING) even when
+		// it is expired — the token is one-shot regardless of expiry.
+		resetRepo.On("ConsumeByTokenHash", ctx, tokenHash).Return(reset, nil)
 
 		err = svc.ResetPassword(ctx, token, newPassword)
 		require.Error(t, err)
@@ -362,7 +367,7 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		errutil.AssertErrorCode(t, resetErr, "RESET_PASSWORD_EMPTY")
 
 		// Verify no repository calls were made (password checked first)
-		resetRepo.AssertNotCalled(t, "GetByTokenHash")
+		resetRepo.AssertNotCalled(t, "ConsumeByTokenHash")
 		hasher.AssertNotCalled(t, "Hash")
 	})
 
@@ -380,7 +385,7 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		errutil.AssertErrorCode(t, resetErr, "AUTH_INVALID_PASSWORD")
 
 		// Verify no repository/hasher calls were made (password checked first)
-		resetRepo.AssertNotCalled(t, "GetByTokenHash")
+		resetRepo.AssertNotCalled(t, "ConsumeByTokenHash")
 		hasher.AssertNotCalled(t, "Hash")
 	})
 
@@ -399,7 +404,7 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		errutil.AssertErrorCode(t, resetErr, "AUTH_INVALID_PASSWORD")
 
 		// Verify no repository/hasher calls were made (password checked first)
-		resetRepo.AssertNotCalled(t, "GetByTokenHash")
+		resetRepo.AssertNotCalled(t, "ConsumeByTokenHash")
 		hasher.AssertNotCalled(t, "Hash")
 	})
 
@@ -424,7 +429,7 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		}
 		newPassword := "newSecurePassword123"
 
-		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil)
+		resetRepo.On("ConsumeByTokenHash", ctx, tokenHash).Return(reset, nil)
 		hasher.On("Hash", newPassword).Return("", assert.AnError)
 
 		err = svc.ResetPassword(ctx, token, newPassword)
@@ -454,7 +459,7 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		newPassword := "newSecurePassword123"
 		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash"
 
-		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil)
+		resetRepo.On("ConsumeByTokenHash", ctx, tokenHash).Return(reset, nil)
 		hasher.On("Hash", newPassword).Return(hashedPassword, nil)
 		playerRepo.On("UpdatePassword", ctx, playerID, hashedPassword).Return(assert.AnError)
 
@@ -486,7 +491,7 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		newPassword := "newSecurePassword123"
 		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash"
 
-		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil)
+		resetRepo.On("ConsumeByTokenHash", ctx, tokenHash).Return(reset, nil)
 		hasher.On("Hash", newPassword).Return(hashedPassword, nil)
 		playerRepo.On("UpdatePassword", ctx, playerID, hashedPassword).Return(nil)
 		sessionRepo.On("DeleteByPlayer", ctx, playerID).Return(nil)
@@ -520,8 +525,8 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		newPassword2 := "anotherPassword456"
 		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash"
 
-		// First reset succeeds - token is found
-		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil).Once()
+		// First reset succeeds - token is consumed atomically
+		resetRepo.On("ConsumeByTokenHash", ctx, tokenHash).Return(reset, nil).Once()
 		hasher.On("Hash", newPassword1).Return(hashedPassword, nil)
 		playerRepo.On("UpdatePassword", ctx, playerID, hashedPassword).Return(nil)
 		sessionRepo.On("DeleteByPlayer", ctx, playerID).Return(nil)
@@ -530,12 +535,89 @@ func TestPasswordResetService_ResetPassword(t *testing.T) {
 		err = svc.ResetPassword(ctx, token, newPassword1)
 		require.NoError(t, err)
 
-		// Second reset with same token fails - token was deleted
-		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(nil, auth.ErrNotFound).Once()
+		// Second reset with same token fails - token was atomically consumed
+		resetRepo.On("ConsumeByTokenHash", ctx, tokenHash).Return(nil, auth.ErrNotFound).Once()
 
 		err = svc.ResetPassword(ctx, token, newPassword2)
 		require.Error(t, err)
 		errutil.AssertErrorCode(t, err, "RESET_TOKEN_INVALID")
+	})
+
+	t.Run("concurrent reset with same token: exactly one caller succeeds", func(t *testing.T) {
+		// Two goroutines call ResetPassword with the same token. The atomic
+		// ConsumeByTokenHash guarantees exactly one observes the reset record;
+		// the other receives ErrNotFound and must fail with RESET_TOKEN_INVALID.
+		// This is the regression test for the validate-then-delete race window.
+		playerRepo := mocks.NewMockPlayerRepository(t)
+		resetRepo := mocks.NewMockPasswordResetRepository(t)
+		sessionRepo := mocks.NewMockPlayerSessionRepository(t)
+		hasher := mocks.NewMockPasswordHasher(t)
+		svc, err := auth.NewPasswordResetService(playerRepo, resetRepo, sessionRepo, hasher)
+		require.NoError(t, err)
+
+		token, tokenHash, err := auth.GenerateResetToken()
+		require.NoError(t, err)
+
+		playerID := ulid.Make()
+		reset := &auth.PasswordReset{
+			ID:        ulid.Make(),
+			PlayerID:  playerID,
+			TokenHash: tokenHash,
+			ExpiresAt: time.Now().Add(time.Hour),
+		}
+		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash"
+
+		// Simulate atomicity: exactly one ConsumeByTokenHash call wins (returns
+		// the record), all subsequent callers see ErrNotFound. A real database
+		// provides this via DELETE ... RETURNING; here a single atomic CAS
+		// computes the whole return pair in one closure.
+		var consumed atomic.Bool
+		resetRepo.EXPECT().ConsumeByTokenHash(ctx, tokenHash).RunAndReturn(
+			func(context.Context, string) (*auth.PasswordReset, error) {
+				if consumed.CompareAndSwap(false, true) {
+					return reset, nil
+				}
+				return nil, auth.ErrNotFound
+			},
+		).Maybe()
+
+		// Only the winning caller reaches Hash / UpdatePassword / cleanups.
+		hasher.On("Hash", mock.AnythingOfType("string")).Return(hashedPassword, nil).Once()
+		playerRepo.On("UpdatePassword", ctx, playerID, hashedPassword).Return(nil).Once()
+		sessionRepo.On("DeleteByPlayer", ctx, playerID).Return(nil).Once()
+		resetRepo.On("DeleteByPlayer", ctx, playerID).Return(nil).Once()
+
+		const goroutines = 8
+		errs := make([]error, goroutines)
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		for i := range goroutines {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				<-start
+				errs[idx] = svc.ResetPassword(ctx, token, "newPassword"+strings.Repeat("x", 8))
+			}(i)
+		}
+		close(start)
+		wg.Wait()
+
+		successes := 0
+		invalids := 0
+		for _, e := range errs {
+			if e == nil {
+				successes++
+				continue
+			}
+			oopsErr, ok := oops.AsOops(e)
+			if ok && oopsErr.Code() == "RESET_TOKEN_INVALID" {
+				invalids++
+				continue
+			}
+			t.Fatalf("unexpected error: %v", e)
+		}
+		assert.Equal(t, 1, successes, "exactly one caller must succeed")
+		assert.Equal(t, goroutines-1, invalids, "all losers must see RESET_TOKEN_INVALID")
 	})
 }
 
@@ -563,7 +645,7 @@ func TestPasswordResetService_ResetPassword_InvalidatesSessions(t *testing.T) {
 		newPassword := "newSecurePassword123"
 		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash"
 
-		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil)
+		resetRepo.On("ConsumeByTokenHash", ctx, tokenHash).Return(reset, nil)
 		hasher.On("Hash", newPassword).Return(hashedPassword, nil)
 		playerRepo.On("UpdatePassword", ctx, playerID, hashedPassword).Return(nil)
 		// Expect session invalidation with the correct playerID
@@ -598,7 +680,7 @@ func TestPasswordResetService_ResetPassword_InvalidatesSessions(t *testing.T) {
 		newPassword := "newSecurePassword123"
 		hashedPassword := "$argon2id$v=19$m=65536,t=1,p=4$salt$hash"
 
-		resetRepo.On("GetByTokenHash", ctx, tokenHash).Return(reset, nil)
+		resetRepo.On("ConsumeByTokenHash", ctx, tokenHash).Return(reset, nil)
 		hasher.On("Hash", newPassword).Return(hashedPassword, nil)
 		playerRepo.On("UpdatePassword", ctx, playerID, hashedPassword).Return(nil)
 		// Session invalidation fails
