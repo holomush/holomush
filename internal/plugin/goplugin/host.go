@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -50,6 +51,7 @@ var (
 	_ plugins.ServiceConnProvider       = (*Host)(nil)
 	_ plugins.AttributeResolverProvider = (*Host)(nil)
 	_ plugins.EventEmitterConfigurer    = (*Host)(nil)
+	_ plugins.FocusDepsConfigurer       = (*Host)(nil)
 )
 
 // PluginClient wraps go-plugin client for testability.
@@ -106,6 +108,18 @@ func WithServiceRegistry(r *plugins.ServiceRegistry) HostOption {
 	return func(h *Host) { h.registry = r }
 }
 
+// WithFocusCoordinator configures the host to inject a focus coordinator
+// into the plugin host service for JoinFocus/LeaveFocus/PresentFocus RPCs.
+func WithFocusCoordinator(fc focus.Coordinator) HostOption {
+	return func(h *Host) { h.focusCoordinator = fc }
+}
+
+// WithEventStore configures the host to inject an event store for
+// QueryStreamHistory RPCs.
+func WithEventStore(es core.EventStore) HostOption {
+	return func(h *Host) { h.eventStore = es }
+}
+
 // Host manages binary plugins via HashiCorp go-plugins.
 type Host struct {
 	clientFactory     ClientFactory
@@ -116,6 +130,8 @@ type Host struct {
 	hostBrokerCert    *tlscerts.ServerCert
 	hostClientCert    *tlscerts.ClientCert
 	eventEmitter      plugins.PluginIntentEmitter
+	focusCoordinator  focus.Coordinator
+	eventStore        core.EventStore
 	plugins           map[string]*loadedPlugin
 	mu                sync.RWMutex
 	closed            bool
@@ -171,6 +187,39 @@ func (h *Host) SetEventEmitter(emitter plugins.PluginIntentEmitter) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.eventEmitter = emitter
+}
+
+// SetFocusCoordinator injects the focus coordinator after construction.
+// This supports late-binding: the plugin subsystem starts before gRPC,
+// so the coordinator is not available at Host construction time. The
+// coordinator is resolved lazily by the plugin host service when a
+// plugin calls JoinFocus/LeaveFocus/PresentFocus.
+func (h *Host) SetFocusCoordinator(fc focus.Coordinator) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.focusCoordinator = fc
+}
+
+// FocusCoordinator returns the current focus coordinator, or nil if not set.
+func (h *Host) FocusCoordinator() focus.Coordinator {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.focusCoordinator
+}
+
+// SetEventStore injects the event store after construction.
+// Same late-binding rationale as SetFocusCoordinator.
+func (h *Host) SetEventStore(es core.EventStore) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.eventStore = es
+}
+
+// EventStore returns the current event store, or nil if not set.
+func (h *Host) EventStore() core.EventStore {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.eventStore
 }
 
 // Load initializes a plugin from its manifest.

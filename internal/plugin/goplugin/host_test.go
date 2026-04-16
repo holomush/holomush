@@ -1730,3 +1730,39 @@ func TestGopluginHostQuerySessionStreamsReturnsErrorForUnknownPlugin(t *testing.
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrPluginNotLoaded)
 }
+
+func TestHostFocusCoordinatorReturnsNilByDefault(t *testing.T) {
+	host := NewHost()
+	assert.Nil(t, host.FocusCoordinator())
+}
+
+func TestHostEventStoreReturnsNilByDefault(t *testing.T) {
+	host := NewHost()
+	assert.Nil(t, host.EventStore())
+}
+
+func TestHostSetFocusCoordinatorStoresAndReturnsCoordinator(t *testing.T) {
+	host := NewHost()
+	fc := &stubCoordinator{}
+	host.SetFocusCoordinator(fc)
+	assert.Equal(t, fc, host.FocusCoordinator())
+}
+
+func TestHostSetEventStoreStoresAndReturnsEventStore(t *testing.T) {
+	host := NewHost()
+	es := &stubEventStore{}
+	host.SetEventStore(es)
+	assert.Equal(t, es, host.EventStore())
+}
+
+func TestHostWithFocusCoordinatorOptionSetsCoordinator(t *testing.T) {
+	fc := &stubCoordinator{}
+	host := NewHost(WithFocusCoordinator(fc))
+	assert.Equal(t, fc, host.FocusCoordinator())
+}
+
+func TestHostWithEventStoreOptionSetsEventStore(t *testing.T) {
+	es := &stubEventStore{}
+	host := NewHost(WithEventStore(es))
+	assert.Equal(t, es, host.EventStore())
+}

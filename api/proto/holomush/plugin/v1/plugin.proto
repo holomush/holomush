@@ -49,6 +49,22 @@ service PluginHostService {
   // RemoveSessionStream unsubscribes an active session from a stream.
   // Idempotent: returns success if stream is not subscribed.
   rpc RemoveSessionStream(PluginHostServiceRemoveSessionStreamRequest) returns (PluginHostServiceRemoveSessionStreamResponse);
+
+  // JoinFocus adds a focus membership to an active or detached session.
+  // Plugins declare intent; the server applies kind-specific replay policy.
+  rpc JoinFocus(PluginHostServiceJoinFocusRequest) returns (PluginHostServiceJoinFocusResponse);
+
+  // LeaveFocus removes a focus membership. Idempotent on non-member.
+  rpc LeaveFocus(PluginHostServiceLeaveFocusRequest) returns (PluginHostServiceLeaveFocusResponse);
+
+  // PresentFocus updates the session's PresentingFocus pointer.
+  // Target MUST already exist in FocusMemberships.
+  rpc PresentFocus(PluginHostServicePresentFocusRequest) returns (PluginHostServicePresentFocusResponse);
+
+  // QueryStreamHistory reads the tail of a stream for plugin-side display.
+  // Read-only: does not advance cursors or affect session state.
+  // Count capped at 500 server-side.
+  rpc QueryStreamHistory(PluginHostServiceQueryStreamHistoryRequest) returns (PluginHostServiceQueryStreamHistoryResponse);
 }
 
 // ServiceConfig carries initialization data from the host to the plugin.
@@ -264,33 +280,24 @@ message PluginHostServiceKVDeleteRequest {
 
 message PluginHostServiceKVDeleteResponse {}
 
-// PluginHostServiceAddSessionStreamRequest specifies which session and stream to add.
 message PluginHostServiceAddSessionStreamRequest {
   // Active session identifier.
-  string session_id = 1;
+  string session_id = 1 [(buf.validate.field).string.min_len = 1];
   // Stream name to subscribe to (format: "prefix:id").
-  string stream = 2;
+  string stream = 2 [(buf.validate.field).string.min_len = 1];
+  // replay_mode controls initial replay. Optional; defaults to
+  // FROM_CURSOR if unspecified for backwards compatibility.
+  StreamReplayMode replay_mode = 3;
 }
 
-// PluginHostServiceAddSessionStreamResponse indicates success or failure.
-message PluginHostServiceAddSessionStreamResponse {
-  // Whether the stream was successfully added.
-  bool success = 1;
-}
+message PluginHostServiceAddSessionStreamResponse {}
 
-// PluginHostServiceRemoveSessionStreamRequest specifies which stream to remove.
 message PluginHostServiceRemoveSessionStreamRequest {
-  // Active session identifier.
-  string session_id = 1;
-  // Stream name to unsubscribe from.
-  string stream = 2;
+  string session_id = 1 [(buf.validate.field).string.min_len = 1];
+  string stream = 2 [(buf.validate.field).string.min_len = 1];
 }
 
-// PluginHostServiceRemoveSessionStreamResponse indicates success or failure.
-message PluginHostServiceRemoveSessionStreamResponse {
-  // Whether the stream was successfully removed (true even if not subscribed).
-  bool success = 1;
-}
+message PluginHostServiceRemoveSessionStreamResponse {}
 
 // QuerySessionStreamsRequest provides session context for stream contribution.
 message QuerySessionStreamsRequest {
@@ -308,4 +315,57 @@ message QuerySessionStreamsResponse {
   repeated string streams = 1;
   // Non-empty indicates a plugin-reported error. Host degrades (logs + skips).
   string error = 2;
+}
+
+// FocusKind enumerates the types of focused contexts a character can
+// participate in. Adding a new kind requires: (a) a new constant here,
+// (b) a matching session.FocusKind constant in Go, (c) a new
+// FocusKindPolicy implementation registered in the coordinator.
+enum FocusKind {
+  FOCUS_KIND_UNSPECIFIED = 0;
+  FOCUS_KIND_SCENE = 1;
+}
+
+// FocusKey identifies a focus membership within a session. A session's
+// focus memberships are unique by (kind, target_id) pair.
+message FocusKey {
+  FocusKind kind = 1;
+  string target_id = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+// StreamReplayMode controls how a stream subscription's initial replay
+// behaves when added via AddSessionStream.
+enum StreamReplayMode {
+  STREAM_REPLAY_MODE_UNSPECIFIED = 0;
+  STREAM_REPLAY_MODE_FROM_CURSOR = 1;
+  STREAM_REPLAY_MODE_LIVE_ONLY = 2;
+}
+
+message PluginHostServiceJoinFocusRequest {
+  string session_id = 1 [(buf.validate.field).string.min_len = 1];
+  FocusKey target = 2;
+}
+message PluginHostServiceJoinFocusResponse {}
+
+message PluginHostServiceLeaveFocusRequest {
+  string session_id = 1 [(buf.validate.field).string.min_len = 1];
+  FocusKey target = 2;
+}
+message PluginHostServiceLeaveFocusResponse {}
+
+message PluginHostServicePresentFocusRequest {
+  string session_id = 1 [(buf.validate.field).string.min_len = 1];
+  FocusKey target = 2;
+}
+message PluginHostServicePresentFocusResponse {}
+
+message PluginHostServiceQueryStreamHistoryRequest {
+  string stream = 1 [(buf.validate.field).string.min_len = 1];
+  int32 count = 2;
+  // Epoch milliseconds. Events before this time are excluded. 0 means no lower bound.
+  int64 not_before_ms = 3;
+}
+
+message PluginHostServiceQueryStreamHistoryResponse {
+  repeated Event events = 1;
 }

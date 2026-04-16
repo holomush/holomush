@@ -376,6 +376,7 @@ func (m *closedMock) Migrate(_ uint) error {
 	}
 	return nil
 }
+
 func (m *closedMock) Force(_ int) error {
 	if m.closed {
 		return errMigratorClosed

@@ -69,6 +69,18 @@ const (
 	// PluginHostServiceRemoveSessionStreamProcedure is the fully-qualified name of the
 	// PluginHostService's RemoveSessionStream RPC.
 	PluginHostServiceRemoveSessionStreamProcedure = "/holomush.plugin.v1.PluginHostService/RemoveSessionStream"
+	// PluginHostServiceJoinFocusProcedure is the fully-qualified name of the PluginHostService's
+	// JoinFocus RPC.
+	PluginHostServiceJoinFocusProcedure = "/holomush.plugin.v1.PluginHostService/JoinFocus"
+	// PluginHostServiceLeaveFocusProcedure is the fully-qualified name of the PluginHostService's
+	// LeaveFocus RPC.
+	PluginHostServiceLeaveFocusProcedure = "/holomush.plugin.v1.PluginHostService/LeaveFocus"
+	// PluginHostServicePresentFocusProcedure is the fully-qualified name of the PluginHostService's
+	// PresentFocus RPC.
+	PluginHostServicePresentFocusProcedure = "/holomush.plugin.v1.PluginHostService/PresentFocus"
+	// PluginHostServiceQueryStreamHistoryProcedure is the fully-qualified name of the
+	// PluginHostService's QueryStreamHistory RPC.
+	PluginHostServiceQueryStreamHistoryProcedure = "/holomush.plugin.v1.PluginHostService/QueryStreamHistory"
 )
 
 // PluginServiceClient is a client for the holomush.plugin.v1.PluginService service.
@@ -253,6 +265,18 @@ type PluginHostServiceClient interface {
 	// RemoveSessionStream unsubscribes an active session from a stream.
 	// Idempotent: returns success if stream is not subscribed.
 	RemoveSessionStream(context.Context, *connect.Request[v1.PluginHostServiceRemoveSessionStreamRequest]) (*connect.Response[v1.PluginHostServiceRemoveSessionStreamResponse], error)
+	// JoinFocus adds a focus membership to an active or detached session.
+	// Plugins declare intent; the server applies kind-specific replay policy.
+	JoinFocus(context.Context, *connect.Request[v1.PluginHostServiceJoinFocusRequest]) (*connect.Response[v1.PluginHostServiceJoinFocusResponse], error)
+	// LeaveFocus removes a focus membership. Idempotent on non-member.
+	LeaveFocus(context.Context, *connect.Request[v1.PluginHostServiceLeaveFocusRequest]) (*connect.Response[v1.PluginHostServiceLeaveFocusResponse], error)
+	// PresentFocus updates the session's PresentingFocus pointer.
+	// Target MUST already exist in FocusMemberships.
+	PresentFocus(context.Context, *connect.Request[v1.PluginHostServicePresentFocusRequest]) (*connect.Response[v1.PluginHostServicePresentFocusResponse], error)
+	// QueryStreamHistory reads the tail of a stream for plugin-side display.
+	// Read-only: does not advance cursors or affect session state.
+	// Count capped at 500 server-side.
+	QueryStreamHistory(context.Context, *connect.Request[v1.PluginHostServiceQueryStreamHistoryRequest]) (*connect.Response[v1.PluginHostServiceQueryStreamHistoryResponse], error)
 }
 
 // NewPluginHostServiceClient constructs a client for the holomush.plugin.v1.PluginHostService
@@ -308,6 +332,30 @@ func NewPluginHostServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(pluginHostServiceMethods.ByName("RemoveSessionStream")),
 			connect.WithClientOptions(opts...),
 		),
+		joinFocus: connect.NewClient[v1.PluginHostServiceJoinFocusRequest, v1.PluginHostServiceJoinFocusResponse](
+			httpClient,
+			baseURL+PluginHostServiceJoinFocusProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("JoinFocus")),
+			connect.WithClientOptions(opts...),
+		),
+		leaveFocus: connect.NewClient[v1.PluginHostServiceLeaveFocusRequest, v1.PluginHostServiceLeaveFocusResponse](
+			httpClient,
+			baseURL+PluginHostServiceLeaveFocusProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("LeaveFocus")),
+			connect.WithClientOptions(opts...),
+		),
+		presentFocus: connect.NewClient[v1.PluginHostServicePresentFocusRequest, v1.PluginHostServicePresentFocusResponse](
+			httpClient,
+			baseURL+PluginHostServicePresentFocusProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("PresentFocus")),
+			connect.WithClientOptions(opts...),
+		),
+		queryStreamHistory: connect.NewClient[v1.PluginHostServiceQueryStreamHistoryRequest, v1.PluginHostServiceQueryStreamHistoryResponse](
+			httpClient,
+			baseURL+PluginHostServiceQueryStreamHistoryProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("QueryStreamHistory")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -320,6 +368,10 @@ type pluginHostServiceClient struct {
 	kVDelete            *connect.Client[v1.PluginHostServiceKVDeleteRequest, v1.PluginHostServiceKVDeleteResponse]
 	addSessionStream    *connect.Client[v1.PluginHostServiceAddSessionStreamRequest, v1.PluginHostServiceAddSessionStreamResponse]
 	removeSessionStream *connect.Client[v1.PluginHostServiceRemoveSessionStreamRequest, v1.PluginHostServiceRemoveSessionStreamResponse]
+	joinFocus           *connect.Client[v1.PluginHostServiceJoinFocusRequest, v1.PluginHostServiceJoinFocusResponse]
+	leaveFocus          *connect.Client[v1.PluginHostServiceLeaveFocusRequest, v1.PluginHostServiceLeaveFocusResponse]
+	presentFocus        *connect.Client[v1.PluginHostServicePresentFocusRequest, v1.PluginHostServicePresentFocusResponse]
+	queryStreamHistory  *connect.Client[v1.PluginHostServiceQueryStreamHistoryRequest, v1.PluginHostServiceQueryStreamHistoryResponse]
 }
 
 // EmitEvent calls holomush.plugin.v1.PluginHostService.EmitEvent.
@@ -357,6 +409,26 @@ func (c *pluginHostServiceClient) RemoveSessionStream(ctx context.Context, req *
 	return c.removeSessionStream.CallUnary(ctx, req)
 }
 
+// JoinFocus calls holomush.plugin.v1.PluginHostService.JoinFocus.
+func (c *pluginHostServiceClient) JoinFocus(ctx context.Context, req *connect.Request[v1.PluginHostServiceJoinFocusRequest]) (*connect.Response[v1.PluginHostServiceJoinFocusResponse], error) {
+	return c.joinFocus.CallUnary(ctx, req)
+}
+
+// LeaveFocus calls holomush.plugin.v1.PluginHostService.LeaveFocus.
+func (c *pluginHostServiceClient) LeaveFocus(ctx context.Context, req *connect.Request[v1.PluginHostServiceLeaveFocusRequest]) (*connect.Response[v1.PluginHostServiceLeaveFocusResponse], error) {
+	return c.leaveFocus.CallUnary(ctx, req)
+}
+
+// PresentFocus calls holomush.plugin.v1.PluginHostService.PresentFocus.
+func (c *pluginHostServiceClient) PresentFocus(ctx context.Context, req *connect.Request[v1.PluginHostServicePresentFocusRequest]) (*connect.Response[v1.PluginHostServicePresentFocusResponse], error) {
+	return c.presentFocus.CallUnary(ctx, req)
+}
+
+// QueryStreamHistory calls holomush.plugin.v1.PluginHostService.QueryStreamHistory.
+func (c *pluginHostServiceClient) QueryStreamHistory(ctx context.Context, req *connect.Request[v1.PluginHostServiceQueryStreamHistoryRequest]) (*connect.Response[v1.PluginHostServiceQueryStreamHistoryResponse], error) {
+	return c.queryStreamHistory.CallUnary(ctx, req)
+}
+
 // PluginHostServiceHandler is an implementation of the holomush.plugin.v1.PluginHostService
 // service.
 type PluginHostServiceHandler interface {
@@ -376,6 +448,18 @@ type PluginHostServiceHandler interface {
 	// RemoveSessionStream unsubscribes an active session from a stream.
 	// Idempotent: returns success if stream is not subscribed.
 	RemoveSessionStream(context.Context, *connect.Request[v1.PluginHostServiceRemoveSessionStreamRequest]) (*connect.Response[v1.PluginHostServiceRemoveSessionStreamResponse], error)
+	// JoinFocus adds a focus membership to an active or detached session.
+	// Plugins declare intent; the server applies kind-specific replay policy.
+	JoinFocus(context.Context, *connect.Request[v1.PluginHostServiceJoinFocusRequest]) (*connect.Response[v1.PluginHostServiceJoinFocusResponse], error)
+	// LeaveFocus removes a focus membership. Idempotent on non-member.
+	LeaveFocus(context.Context, *connect.Request[v1.PluginHostServiceLeaveFocusRequest]) (*connect.Response[v1.PluginHostServiceLeaveFocusResponse], error)
+	// PresentFocus updates the session's PresentingFocus pointer.
+	// Target MUST already exist in FocusMemberships.
+	PresentFocus(context.Context, *connect.Request[v1.PluginHostServicePresentFocusRequest]) (*connect.Response[v1.PluginHostServicePresentFocusResponse], error)
+	// QueryStreamHistory reads the tail of a stream for plugin-side display.
+	// Read-only: does not advance cursors or affect session state.
+	// Count capped at 500 server-side.
+	QueryStreamHistory(context.Context, *connect.Request[v1.PluginHostServiceQueryStreamHistoryRequest]) (*connect.Response[v1.PluginHostServiceQueryStreamHistoryResponse], error)
 }
 
 // NewPluginHostServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -427,6 +511,30 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 		connect.WithSchema(pluginHostServiceMethods.ByName("RemoveSessionStream")),
 		connect.WithHandlerOptions(opts...),
 	)
+	pluginHostServiceJoinFocusHandler := connect.NewUnaryHandler(
+		PluginHostServiceJoinFocusProcedure,
+		svc.JoinFocus,
+		connect.WithSchema(pluginHostServiceMethods.ByName("JoinFocus")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pluginHostServiceLeaveFocusHandler := connect.NewUnaryHandler(
+		PluginHostServiceLeaveFocusProcedure,
+		svc.LeaveFocus,
+		connect.WithSchema(pluginHostServiceMethods.ByName("LeaveFocus")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pluginHostServicePresentFocusHandler := connect.NewUnaryHandler(
+		PluginHostServicePresentFocusProcedure,
+		svc.PresentFocus,
+		connect.WithSchema(pluginHostServiceMethods.ByName("PresentFocus")),
+		connect.WithHandlerOptions(opts...),
+	)
+	pluginHostServiceQueryStreamHistoryHandler := connect.NewUnaryHandler(
+		PluginHostServiceQueryStreamHistoryProcedure,
+		svc.QueryStreamHistory,
+		connect.WithSchema(pluginHostServiceMethods.ByName("QueryStreamHistory")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.plugin.v1.PluginHostService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PluginHostServiceEmitEventProcedure:
@@ -443,6 +551,14 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 			pluginHostServiceAddSessionStreamHandler.ServeHTTP(w, r)
 		case PluginHostServiceRemoveSessionStreamProcedure:
 			pluginHostServiceRemoveSessionStreamHandler.ServeHTTP(w, r)
+		case PluginHostServiceJoinFocusProcedure:
+			pluginHostServiceJoinFocusHandler.ServeHTTP(w, r)
+		case PluginHostServiceLeaveFocusProcedure:
+			pluginHostServiceLeaveFocusHandler.ServeHTTP(w, r)
+		case PluginHostServicePresentFocusProcedure:
+			pluginHostServicePresentFocusHandler.ServeHTTP(w, r)
+		case PluginHostServiceQueryStreamHistoryProcedure:
+			pluginHostServiceQueryStreamHistoryHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -478,4 +594,20 @@ func (UnimplementedPluginHostServiceHandler) AddSessionStream(context.Context, *
 
 func (UnimplementedPluginHostServiceHandler) RemoveSessionStream(context.Context, *connect.Request[v1.PluginHostServiceRemoveSessionStreamRequest]) (*connect.Response[v1.PluginHostServiceRemoveSessionStreamResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.RemoveSessionStream is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) JoinFocus(context.Context, *connect.Request[v1.PluginHostServiceJoinFocusRequest]) (*connect.Response[v1.PluginHostServiceJoinFocusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.JoinFocus is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) LeaveFocus(context.Context, *connect.Request[v1.PluginHostServiceLeaveFocusRequest]) (*connect.Response[v1.PluginHostServiceLeaveFocusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.LeaveFocus is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) PresentFocus(context.Context, *connect.Request[v1.PluginHostServicePresentFocusRequest]) (*connect.Response[v1.PluginHostServicePresentFocusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.PresentFocus is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) QueryStreamHistory(context.Context, *connect.Request[v1.PluginHostServiceQueryStreamHistoryRequest]) (*connect.Response[v1.PluginHostServiceQueryStreamHistoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.QueryStreamHistory is not implemented"))
 }

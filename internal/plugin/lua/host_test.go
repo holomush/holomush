@@ -14,9 +14,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
+	"github.com/holomush/holomush/internal/session"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
@@ -1650,4 +1652,67 @@ end
 	})
 	require.NoError(t, err)
 	assert.Nil(t, streams)
+}
+
+// stubLuaTestCoordinator implements focus.Coordinator for lua host tests.
+type stubLuaTestCoordinator struct{}
+
+func (s *stubLuaTestCoordinator) JoinFocus(_ context.Context, _ string, _ session.FocusKey) error {
+	return nil
+}
+
+func (s *stubLuaTestCoordinator) LeaveFocus(_ context.Context, _ string, _ session.FocusKey) error {
+	return nil
+}
+
+func (s *stubLuaTestCoordinator) PresentFocus(_ context.Context, _ string, _ session.FocusKey) error {
+	return nil
+}
+
+func (s *stubLuaTestCoordinator) RestoreFocus(_ context.Context, _ string) (focus.RestorePlan, error) {
+	return focus.RestorePlan{}, nil
+}
+
+var _ focus.Coordinator = (*stubLuaTestCoordinator)(nil)
+
+func TestLuaHostSetFocusCoordinatorWithNilHostFuncsIsNoOp(t *testing.T) {
+	// NewHost() creates a host without hostFuncs — SetFocusCoordinator must not panic.
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	require.NotPanics(t, func() {
+		host.SetFocusCoordinator(&stubLuaTestCoordinator{})
+	})
+}
+
+func TestLuaHostSetEventStoreWithNilHostFuncsIsNoOp(t *testing.T) {
+	// NewHost() creates a host without hostFuncs — SetEventStore must not panic.
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	require.NotPanics(t, func() {
+		host.SetEventStore(nil)
+	})
+}
+
+func TestLuaHostSetFocusCoordinatorWithHostFuncsInjectsOps(t *testing.T) {
+	hf := hostfunc.New(nil)
+	host := pluginlua.NewHostWithFunctions(hf)
+	defer closeHost(t, host)
+
+	fc := &stubLuaTestCoordinator{}
+	require.NotPanics(t, func() {
+		host.SetFocusCoordinator(fc)
+	})
+}
+
+func TestLuaHostSetEventStoreWithHostFuncsInjectsReader(t *testing.T) {
+	hf := hostfunc.New(nil)
+	host := pluginlua.NewHostWithFunctions(hf)
+	defer closeHost(t, host)
+
+	// nil event store is valid (late-binding to clear or defer injection).
+	require.NotPanics(t, func() {
+		host.SetEventStore(nil)
+	})
 }

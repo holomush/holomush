@@ -5,53 +5,25 @@
 // mutator of a session's focused-context state. It encapsulates transition
 // semantics (join, leave, present, restore) and dispatches per-kind replay
 // policy to KindPolicy implementations.
-//
-// ReplayMode is defined here (not in the parent internal/grpc package)
-// because the dependency graph is grpc → focus. Defining the type in the
-// lower-level package that produces replay decisions avoids duplication
-// and lets grpc use focus.ReplayMode directly.
 package focus
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/holomush/holomush/internal/session"
 )
 
-// ReplayMode controls how the live loop replays events when processing a
-// stream addition. The coordinator and kind policies produce ReplayMode
-// values; the live loop in internal/grpc consumes them.
-type ReplayMode int
+// ReplayMode is an alias for session.ReplayMode. Defined here for
+// backward compatibility with existing focus package consumers.
+// New code SHOULD import session.ReplayMode directly.
+type ReplayMode = session.ReplayMode
 
+// Re-export constants so existing focus.ReplayModeXxx references compile.
 const (
-	// ReplayModeFromCursor replays from the stored per-stream cursor in
-	// session.Info.EventCursors, or from ULID zero if no cursor is set.
-	ReplayModeFromCursor ReplayMode = iota
-
-	// ReplayModeBoundedTail replays the most recent TailCount events on
-	// the stream (optionally bounded by NotBefore), then advances the
-	// cursor to the tail. Used by scene focus-switch IC catch-up.
-	ReplayModeBoundedTail
-
-	// ReplayModeLiveOnly advances the cursor to the current stream tail
-	// without replaying anything. Used by channels for mid-session joins.
-	ReplayModeLiveOnly
+	ReplayModeFromCursor  = session.ReplayModeFromCursor
+	ReplayModeBoundedTail = session.ReplayModeBoundedTail
+	ReplayModeLiveOnly    = session.ReplayModeLiveOnly
 )
-
-// String returns a human-readable name for the replay mode.
-func (m ReplayMode) String() string {
-	switch m {
-	case ReplayModeFromCursor:
-		return "from_cursor"
-	case ReplayModeBoundedTail:
-		return "bounded_tail"
-	case ReplayModeLiveOnly:
-		return "live_only"
-	default:
-		return fmt.Sprintf("unknown(%d)", int(m))
-	}
-}
 
 // StreamWithMode pairs a stream name with its replay mode and optional
 // mode-specific parameters.

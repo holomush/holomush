@@ -11,6 +11,7 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/session"
 )
 
 // sessionStreamUpdate is sent on a session's control channel to add or remove a stream.
@@ -91,6 +92,11 @@ func (r *SessionStreamRegistry) Send(sessionID string, update sessionStreamUpdat
 // AddStream implements plugins.StreamRegistry. Subscribes a session to a stream.
 func (r *SessionStreamRegistry) AddStream(_ context.Context, sessionID, stream string) error {
 	return r.Send(sessionID, sessionStreamUpdate{stream: stream, add: true, replayMode: focus.ReplayModeFromCursor})
+}
+
+// AddStreamWithMode implements plugins.StreamRegistry. Subscribes with explicit replay mode.
+func (r *SessionStreamRegistry) AddStreamWithMode(_ context.Context, sessionID, stream string, mode session.ReplayMode) error {
+	return r.Send(sessionID, sessionStreamUpdate{stream: stream, add: true, replayMode: mode})
 }
 
 // RemoveStream implements plugins.StreamRegistry. Unsubscribes a session from a stream.

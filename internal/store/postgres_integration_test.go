@@ -358,14 +358,14 @@ var _ = Describe("PostgresEventStore", func() {
 			e1 := core.Event{
 				ID: core.NewULID(), Stream: "location:ss-a",
 				Type: core.EventTypeSay, Timestamp: time.Now(),
-				Actor: core.Actor{Kind: core.ActorCharacter, ID: "c1"},
+				Actor:   core.Actor{Kind: core.ActorCharacter, ID: "c1"},
 				Payload: []byte(`{}`),
 			}
 			time.Sleep(time.Millisecond)
 			e2 := core.Event{
 				ID: core.NewULID(), Stream: "location:ss-b",
 				Type: core.EventTypeSay, Timestamp: time.Now(),
-				Actor: core.Actor{Kind: core.ActorCharacter, ID: "c2"},
+				Actor:   core.Actor{Kind: core.ActorCharacter, ID: "c2"},
 				Payload: []byte(`{}`),
 			}
 
@@ -395,7 +395,7 @@ var _ = Describe("PostgresEventStore", func() {
 			e := core.Event{
 				ID: core.NewULID(), Stream: "location:ss-remove",
 				Type: core.EventTypeSay, Timestamp: time.Now(),
-				Actor: core.Actor{Kind: core.ActorCharacter, ID: "c1"},
+				Actor:   core.Actor{Kind: core.ActorCharacter, ID: "c1"},
 				Payload: []byte(`{}`),
 			}
 			Expect(eventStore.Append(ctx, e)).To(Succeed())
@@ -421,7 +421,7 @@ var _ = Describe("PostgresEventStore", func() {
 			e := core.Event{
 				ID: core.NewULID(), Stream: "location:iso-a",
 				Type: core.EventTypeSay, Timestamp: time.Now(),
-				Actor: core.Actor{Kind: core.ActorCharacter, ID: "c1"},
+				Actor:   core.Actor{Kind: core.ActorCharacter, ID: "c1"},
 				Payload: []byte(`{}`),
 			}
 			Expect(eventStore.Append(ctx, e)).To(Succeed())
@@ -524,9 +524,9 @@ var _ = Describe("PostgresEventStore", func() {
 
 			const (
 				numStreams    = 4
-				numEvents    = 1000
+				numEvents     = 1000
 				numGoroutines = 10
-				eventsPerGo  = numEvents / numGoroutines
+				eventsPerGo   = numEvents / numGoroutines
 			)
 
 			streams := make([]string, numStreams)

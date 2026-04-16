@@ -81,7 +81,7 @@ type focusMutatorSentinel struct{}
 // compile time. Any code attempting to construct a FocusMutator from
 // outside grpc/focus fails to compile.
 type FocusMutator struct {
-	_ focusMutatorSentinel // unexported type blocks external construction
+	_      focusMutatorSentinel // unexported type blocks external construction
 	Mutate func(
 		current []FocusMembership,
 		presenting *FocusKey,
@@ -108,7 +108,8 @@ func NewFocusMutator(fn func(
 	next []FocusMembership,
 	nextPresenting *FocusKey,
 	err error,
-)) FocusMutator {
+),
+) FocusMutator {
 	return FocusMutator{Mutate: fn}
 }
 

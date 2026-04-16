@@ -269,6 +269,10 @@ const (
 	PluginHostService_KVDelete_FullMethodName            = "/holomush.plugin.v1.PluginHostService/KVDelete"
 	PluginHostService_AddSessionStream_FullMethodName    = "/holomush.plugin.v1.PluginHostService/AddSessionStream"
 	PluginHostService_RemoveSessionStream_FullMethodName = "/holomush.plugin.v1.PluginHostService/RemoveSessionStream"
+	PluginHostService_JoinFocus_FullMethodName           = "/holomush.plugin.v1.PluginHostService/JoinFocus"
+	PluginHostService_LeaveFocus_FullMethodName          = "/holomush.plugin.v1.PluginHostService/LeaveFocus"
+	PluginHostService_PresentFocus_FullMethodName        = "/holomush.plugin.v1.PluginHostService/PresentFocus"
+	PluginHostService_QueryStreamHistory_FullMethodName  = "/holomush.plugin.v1.PluginHostService/QueryStreamHistory"
 )
 
 // PluginHostServiceClient is the client API for PluginHostService service.
@@ -294,6 +298,18 @@ type PluginHostServiceClient interface {
 	// RemoveSessionStream unsubscribes an active session from a stream.
 	// Idempotent: returns success if stream is not subscribed.
 	RemoveSessionStream(ctx context.Context, in *PluginHostServiceRemoveSessionStreamRequest, opts ...grpc.CallOption) (*PluginHostServiceRemoveSessionStreamResponse, error)
+	// JoinFocus adds a focus membership to an active or detached session.
+	// Plugins declare intent; the server applies kind-specific replay policy.
+	JoinFocus(ctx context.Context, in *PluginHostServiceJoinFocusRequest, opts ...grpc.CallOption) (*PluginHostServiceJoinFocusResponse, error)
+	// LeaveFocus removes a focus membership. Idempotent on non-member.
+	LeaveFocus(ctx context.Context, in *PluginHostServiceLeaveFocusRequest, opts ...grpc.CallOption) (*PluginHostServiceLeaveFocusResponse, error)
+	// PresentFocus updates the session's PresentingFocus pointer.
+	// Target MUST already exist in FocusMemberships.
+	PresentFocus(ctx context.Context, in *PluginHostServicePresentFocusRequest, opts ...grpc.CallOption) (*PluginHostServicePresentFocusResponse, error)
+	// QueryStreamHistory reads the tail of a stream for plugin-side display.
+	// Read-only: does not advance cursors or affect session state.
+	// Count capped at 500 server-side.
+	QueryStreamHistory(ctx context.Context, in *PluginHostServiceQueryStreamHistoryRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryStreamHistoryResponse, error)
 }
 
 type pluginHostServiceClient struct {
@@ -374,6 +390,46 @@ func (c *pluginHostServiceClient) RemoveSessionStream(ctx context.Context, in *P
 	return out, nil
 }
 
+func (c *pluginHostServiceClient) JoinFocus(ctx context.Context, in *PluginHostServiceJoinFocusRequest, opts ...grpc.CallOption) (*PluginHostServiceJoinFocusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceJoinFocusResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_JoinFocus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginHostServiceClient) LeaveFocus(ctx context.Context, in *PluginHostServiceLeaveFocusRequest, opts ...grpc.CallOption) (*PluginHostServiceLeaveFocusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceLeaveFocusResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_LeaveFocus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginHostServiceClient) PresentFocus(ctx context.Context, in *PluginHostServicePresentFocusRequest, opts ...grpc.CallOption) (*PluginHostServicePresentFocusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServicePresentFocusResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_PresentFocus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginHostServiceClient) QueryStreamHistory(ctx context.Context, in *PluginHostServiceQueryStreamHistoryRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryStreamHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceQueryStreamHistoryResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_QueryStreamHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginHostServiceServer is the server API for PluginHostService service.
 // All implementations must embed UnimplementedPluginHostServiceServer
 // for forward compatibility.
@@ -397,6 +453,18 @@ type PluginHostServiceServer interface {
 	// RemoveSessionStream unsubscribes an active session from a stream.
 	// Idempotent: returns success if stream is not subscribed.
 	RemoveSessionStream(context.Context, *PluginHostServiceRemoveSessionStreamRequest) (*PluginHostServiceRemoveSessionStreamResponse, error)
+	// JoinFocus adds a focus membership to an active or detached session.
+	// Plugins declare intent; the server applies kind-specific replay policy.
+	JoinFocus(context.Context, *PluginHostServiceJoinFocusRequest) (*PluginHostServiceJoinFocusResponse, error)
+	// LeaveFocus removes a focus membership. Idempotent on non-member.
+	LeaveFocus(context.Context, *PluginHostServiceLeaveFocusRequest) (*PluginHostServiceLeaveFocusResponse, error)
+	// PresentFocus updates the session's PresentingFocus pointer.
+	// Target MUST already exist in FocusMemberships.
+	PresentFocus(context.Context, *PluginHostServicePresentFocusRequest) (*PluginHostServicePresentFocusResponse, error)
+	// QueryStreamHistory reads the tail of a stream for plugin-side display.
+	// Read-only: does not advance cursors or affect session state.
+	// Count capped at 500 server-side.
+	QueryStreamHistory(context.Context, *PluginHostServiceQueryStreamHistoryRequest) (*PluginHostServiceQueryStreamHistoryResponse, error)
 	mustEmbedUnimplementedPluginHostServiceServer()
 }
 
@@ -427,6 +495,18 @@ func (UnimplementedPluginHostServiceServer) AddSessionStream(context.Context, *P
 }
 func (UnimplementedPluginHostServiceServer) RemoveSessionStream(context.Context, *PluginHostServiceRemoveSessionStreamRequest) (*PluginHostServiceRemoveSessionStreamResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveSessionStream not implemented")
+}
+func (UnimplementedPluginHostServiceServer) JoinFocus(context.Context, *PluginHostServiceJoinFocusRequest) (*PluginHostServiceJoinFocusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method JoinFocus not implemented")
+}
+func (UnimplementedPluginHostServiceServer) LeaveFocus(context.Context, *PluginHostServiceLeaveFocusRequest) (*PluginHostServiceLeaveFocusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LeaveFocus not implemented")
+}
+func (UnimplementedPluginHostServiceServer) PresentFocus(context.Context, *PluginHostServicePresentFocusRequest) (*PluginHostServicePresentFocusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PresentFocus not implemented")
+}
+func (UnimplementedPluginHostServiceServer) QueryStreamHistory(context.Context, *PluginHostServiceQueryStreamHistoryRequest) (*PluginHostServiceQueryStreamHistoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method QueryStreamHistory not implemented")
 }
 func (UnimplementedPluginHostServiceServer) mustEmbedUnimplementedPluginHostServiceServer() {}
 func (UnimplementedPluginHostServiceServer) testEmbeddedByValue()                           {}
@@ -575,6 +655,78 @@ func _PluginHostService_RemoveSessionStream_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginHostService_JoinFocus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceJoinFocusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).JoinFocus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_JoinFocus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).JoinFocus(ctx, req.(*PluginHostServiceJoinFocusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginHostService_LeaveFocus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceLeaveFocusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).LeaveFocus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_LeaveFocus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).LeaveFocus(ctx, req.(*PluginHostServiceLeaveFocusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginHostService_PresentFocus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServicePresentFocusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).PresentFocus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_PresentFocus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).PresentFocus(ctx, req.(*PluginHostServicePresentFocusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginHostService_QueryStreamHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceQueryStreamHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).QueryStreamHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_QueryStreamHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).QueryStreamHistory(ctx, req.(*PluginHostServiceQueryStreamHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginHostService_ServiceDesc is the grpc.ServiceDesc for PluginHostService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -609,6 +761,22 @@ var PluginHostService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveSessionStream",
 			Handler:    _PluginHostService_RemoveSessionStream_Handler,
+		},
+		{
+			MethodName: "JoinFocus",
+			Handler:    _PluginHostService_JoinFocus_Handler,
+		},
+		{
+			MethodName: "LeaveFocus",
+			Handler:    _PluginHostService_LeaveFocus_Handler,
+		},
+		{
+			MethodName: "PresentFocus",
+			Handler:    _PluginHostService_PresentFocus_Handler,
+		},
+		{
+			MethodName: "QueryStreamHistory",
+			Handler:    _PluginHostService_QueryStreamHistory_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
