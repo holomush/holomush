@@ -718,7 +718,7 @@ func (h *GatewayHandler) drainUntilClosed(eventRecv <-chan *corev1.SubscribeResp
 }
 
 func (h *GatewayHandler) send(msg string) {
-	if _, err := fmt.Fprintln(h.conn, msg); err != nil {
+	if _, err := fmt.Fprintln(h.conn, sanitizeTelnetOutput(msg)); err != nil {
 		slog.Debug("gateway: failed to send message", "error", err)
 	}
 }
