@@ -298,7 +298,7 @@ var _ = Describe("PostgresEventStore", func() {
 				time.Sleep(time.Millisecond)
 			}
 
-			events, err := eventStore.ReplayTail(ctx, stream, 3, time.Time{})
+			events, err := eventStore.ReplayTail(ctx, stream, 3, time.Time{}, ulid.ULID{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(events).To(HaveLen(3))
 			Expect(events[0].ID).To(Equal(ids[7]))
@@ -328,7 +328,7 @@ var _ = Describe("PostgresEventStore", func() {
 			}
 
 			// notBefore = baseTime+3m excludes first 3 events.
-			events, err := eventStore.ReplayTail(ctx, streamNB, 10, baseTime.Add(3*time.Minute))
+			events, err := eventStore.ReplayTail(ctx, streamNB, 10, baseTime.Add(3*time.Minute), ulid.ULID{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(events).To(HaveLen(2))
 			Expect(events[0].ID).To(Equal(ids[3]))
@@ -337,9 +337,57 @@ var _ = Describe("PostgresEventStore", func() {
 
 		It("returns empty for nonexistent stream", func() {
 			ctx := context.Background()
-			events, err := eventStore.ReplayTail(ctx, "location:nonexistent-tail", 10, time.Time{})
+			events, err := eventStore.ReplayTail(ctx, "location:nonexistent-tail", 10, time.Time{}, ulid.ULID{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(events).To(BeEmpty())
+		})
+
+		It("returns only events before beforeID", func() {
+			ctx := context.Background()
+			stream := "location:int-before-id-" + ulid.Make().String()
+			var ids []ulid.ULID
+			for range 5 {
+				e := core.NewEvent(stream, core.EventType("test"), core.Actor{Kind: core.ActorCharacter, ID: "char-1"}, []byte(`{}`))
+				Expect(eventStore.Append(ctx, e)).To(Succeed())
+				ids = append(ids, e.ID)
+			}
+
+			events, err := eventStore.ReplayTail(ctx, stream, 10, time.Time{}, ids[3])
+			Expect(err).NotTo(HaveOccurred())
+			Expect(events).To(HaveLen(3))
+			Expect(events[2].ID).To(Equal(ids[2]))
+		})
+
+		It("combines beforeID and notBefore filters", func() {
+			ctx := context.Background()
+			stream := "location:int-both-" + ulid.Make().String()
+			var ids []ulid.ULID
+			baseTime := time.Now().Add(-10 * time.Minute).UTC()
+			for range 5 {
+				e := core.NewEvent(stream, core.EventType("test"), core.Actor{Kind: core.ActorCharacter, ID: "char-1"}, []byte(`{}`))
+				Expect(eventStore.Append(ctx, e)).To(Succeed())
+				ids = append(ids, e.ID)
+				time.Sleep(10 * time.Millisecond)
+			}
+
+			// beforeID excludes last event; notBefore is far in the past so includes all remaining
+			events, err := eventStore.ReplayTail(ctx, stream, 10, baseTime, ids[4])
+			Expect(err).NotTo(HaveOccurred())
+			Expect(events).To(HaveLen(4))
+			Expect(events[3].ID).To(Equal(ids[3]))
+		})
+
+		It("ignores zero beforeID", func() {
+			ctx := context.Background()
+			stream := "location:int-zero-before-" + ulid.Make().String()
+			for range 3 {
+				e := core.NewEvent(stream, core.EventType("test"), core.Actor{Kind: core.ActorCharacter, ID: "char-1"}, []byte(`{}`))
+				Expect(eventStore.Append(ctx, e)).To(Succeed())
+			}
+
+			events, err := eventStore.ReplayTail(ctx, stream, 10, time.Time{}, ulid.ULID{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(events).To(HaveLen(3))
 		})
 	})
 
