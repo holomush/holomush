@@ -30,9 +30,10 @@ type EventStore interface {
 	// ordered ascending by event ID. If notBefore is non-zero, events
 	// with timestamps before it are excluded. If beforeID is non-zero,
 	// events with ID >= beforeID are excluded (cursor-based pagination).
-	// Count is capped server-side at 500. Used by FocusKindPolicy
-	// implementations for bounded-tail reads and by QueryStreamHistory
-	// for client scrollback.
+	// Count is capped server-side at 501 (one greater than the handler's
+	// user-facing 500-event page size, to accommodate the count+1 has_more
+	// probe). Used by FocusKindPolicy implementations for bounded-tail
+	// reads and by QueryStreamHistory for client scrollback.
 	ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]Event, error)
 
 	// SubscribeSession opens a new session-wide subscription on a dedicated
