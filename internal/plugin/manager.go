@@ -351,6 +351,37 @@ func (m *Manager) Discover(_ context.Context) ([]*DiscoveredPlugin, error) {
 	return plugins, nil
 }
 
+// warnUnknownTrustAllowlistEntries logs a slog.Warn for each entry in the
+// trust allowlist that does not match a discovered plugin name. Called from
+// LoadAll after Discover. Intended to surface operator typos or stale config
+// that would otherwise silently fail to grant trust to the intended plugin
+// — or reserve the allowlist slot for a future crafted plugin with that name.
+func (m *Manager) warnUnknownTrustAllowlistEntries(discovered []*DiscoveredPlugin) {
+	if len(m.trustAllowlist) == 0 {
+		return
+	}
+	discoveredNames := make(map[string]bool, len(discovered))
+	for _, dp := range discovered {
+		discoveredNames[dp.Manifest.Name] = true
+	}
+	// Sort so log output is deterministic across runs.
+	unknown := make([]string, 0, len(m.trustAllowlist))
+	for name := range m.trustAllowlist {
+		if !discoveredNames[name] {
+			unknown = append(unknown, name)
+		}
+	}
+	if len(unknown) == 0 {
+		return
+	}
+	sort.Strings(unknown)
+	for _, name := range unknown {
+		slog.Warn("trust-allowlisted plugin not discovered",
+			"plugin", name,
+			"hint", "check for typos in plugin_trust_allowlist config or remove stale entries")
+	}
+}
+
 // LoadAll discovers and loads all plugins in the plugins directory.
 //
 // When a ServiceRegistry is configured (via WithServiceRegistry), LoadAll uses
@@ -371,6 +402,13 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	// Surface trust-allowlist misconfigurations: an allowlisted name that
+	// matches no discovered plugin is almost certainly a typo or stale
+	// config. Left silent, it either grants no trust to the plugin the
+	// operator intended, or reserves the slot for a crafted future plugin
+	// with that name. Warn per unknown entry so the operator sees it.
+	m.warnUnknownTrustAllowlistEntries(discovered)
 
 	// Phase 2: Collect cross-plugin context.
 	knownResourceTypes := CollectResourceTypes(discovered)

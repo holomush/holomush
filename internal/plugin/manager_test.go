@@ -4,11 +4,14 @@
 package plugins_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/samber/oops"
@@ -1158,6 +1161,69 @@ func TestManagerWithTrustAllowlistDoesNotInterfereWithBasicLoad(t *testing.T) {
 	)
 	// LoadAll on an empty plugins dir should still succeed.
 	require.NoError(t, mgr.LoadAll(context.Background()))
+}
+
+// A trust-allowlisted plugin name that does not match any discovered plugin
+// is almost certainly a typo or stale operator config — it silently grants
+// no trust to the intended plugin, and reserves the allowlist slot for a
+// future plugin that might be crafted with that name. LoadAll MUST log a
+// slog.Warn naming each unknown entry so the misconfiguration surfaces.
+func TestManagerLoadAllWarnsOnTrustAllowlistedPluginNotDiscovered(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+	mkdirAll(t, pluginsDir)
+
+	// Capture slog output for the duration of LoadAll.
+	var buf bytes.Buffer
+	oldDefault := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	defer slog.SetDefault(oldDefault)
+
+	mgr := plugins.NewManager(pluginsDir,
+		plugins.WithTrustAllowlist([]string{"ghost-plugin", "phantom-plugin"}),
+	)
+	require.NoError(t, mgr.LoadAll(context.Background()))
+
+	logs := buf.String()
+	// A single warning enumerating the unknown names is acceptable; so is
+	// one warning per name. Either way the operator needs to see each name.
+	assert.True(t, strings.Contains(logs, "level=WARN"),
+		"expected a slog.Warn entry, got: %s", logs)
+	assert.Contains(t, logs, "ghost-plugin",
+		"warning should mention unknown trust-allowlisted plugin name")
+	assert.Contains(t, logs, "phantom-plugin",
+		"warning should mention unknown trust-allowlisted plugin name")
+}
+
+// When every trust-allowlisted name matches a discovered plugin, LoadAll
+// MUST NOT emit an "unknown trust-allowlisted plugin" warning.
+func TestManagerLoadAllDoesNotWarnWhenAllowlistMatchesDiscoveredPlugin(t *testing.T) {
+	dir := t.TempDir()
+	pluginsDir := filepath.Join(dir, "plugins")
+
+	// Minimal valid Lua plugin named "trusted-one".
+	pluginDir := filepath.Join(pluginsDir, "trusted-one")
+	mkdirAll(t, pluginDir)
+	writeFile(t, filepath.Join(pluginDir, "plugin.yaml"), []byte(
+		"name: trusted-one\nversion: 1.0.0\ntype: lua\nlua-plugin:\n  entry: main.lua"))
+	writeFile(t, filepath.Join(pluginDir, "main.lua"), []byte("function on_event(e) end"))
+
+	var buf bytes.Buffer
+	oldDefault := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	defer slog.SetDefault(oldDefault)
+
+	luaHost := pluginlua.NewHost()
+	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
+
+	mgr := plugins.NewManager(pluginsDir,
+		plugins.WithLuaHost(luaHost),
+		plugins.WithTrustAllowlist([]string{"trusted-one"}),
+	)
+	require.NoError(t, mgr.LoadAll(context.Background()))
+
+	assert.NotContains(t, buf.String(), "trust-allowlisted plugin not discovered",
+		"no unknown-allowlist warning should fire when every entry matches")
 }
 
 // LoadAll strict mode error joining: a single failing plugin produces a
