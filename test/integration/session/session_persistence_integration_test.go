@@ -692,7 +692,8 @@ var _ = Describe("Session Persistence", func() {
 			// Verify via the gRPC GetCommandHistory RPC. This exercises the
 			// full server → store → driver path that unit tests cannot.
 			histResp, err := grpcCli.GetCommandHistory(testCtx, &corev1.GetCommandHistoryRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(histResp.Success).To(BeTrue(), "GetCommandHistory failed: %s", histResp.Error)
@@ -942,6 +943,81 @@ var _ = Describe("Session Persistence", func() {
 			Expect(getErr).NotTo(HaveOccurred(),
 				"session must survive an unauthorized disconnect attempt")
 			Expect(info.Status).To(Equal(session.StatusActive))
+		})
+	})
+
+	// GetCommandHistory ownership enforcement — bd-jv7z.
+	//
+	// Closes the IDOR surface where Player A could read Player B's
+	// typed command history with just the session_id. The core server
+	// now calls auth.ValidateSessionOwnership before returning history;
+	// any failure collapses to the enumeration-safe "session not found"
+	// response (success=false) with an empty command list.
+	Describe("GetCommandHistory ownership enforcement (bd-jv7z)", func() {
+		It("rejects a cross-player GetCommandHistory with empty commands", func() {
+			sessionA, _, tokenA := loginAsGuest(testCtx, grpcCli)
+			sessionB, _, tokenB := loginAsGuest(testCtx, grpcCli)
+			Expect(sessionA).NotTo(Equal(sessionB))
+			Expect(tokenA).NotTo(Equal(tokenB))
+
+			// Player B issues a command so there is something in history.
+			cmdResp, err := grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
+				SessionId:          sessionB,
+				Command:            "look",
+				PlayerSessionToken: tokenB,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cmdResp.GetSuccess()).To(BeTrue(),
+				"owner-authorized HandleCommand must succeed: %s", cmdResp.GetError())
+
+			// Attack: Player A's token with Player B's session_id.
+			resp, err := grpcCli.GetCommandHistory(testCtx, &corev1.GetCommandHistoryRequest{
+				SessionId:          sessionB,
+				PlayerSessionToken: tokenA,
+			})
+			Expect(err).NotTo(HaveOccurred(),
+				"RPC returns normally — error is in the response payload")
+			Expect(resp.GetSuccess()).To(BeFalse(),
+				"cross-player GetCommandHistory must be rejected")
+			Expect(resp.GetCommands()).To(BeEmpty(),
+				"attacker must not receive any history entries")
+		})
+
+		It("returns commands for the legitimate owner", func() {
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
+
+			cmdResp, err := grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
+				SessionId:          sessionID,
+				Command:            "look",
+				PlayerSessionToken: token,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cmdResp.GetSuccess()).To(BeTrue(),
+				"owner-authorized HandleCommand must succeed: %s", cmdResp.GetError())
+
+			resp, err := grpcCli.GetCommandHistory(testCtx, &corev1.GetCommandHistoryRequest{
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.GetSuccess()).To(BeTrue(),
+				"owner-authorized GetCommandHistory must succeed: %s", resp.GetError())
+			Expect(resp.GetCommands()).To(ContainElement("look"),
+				"owner must see the command they just issued")
+		})
+
+		It("rejects GetCommandHistory with empty token even for a valid session id", func() {
+			sessionID, _, _ := loginAsGuest(testCtx, grpcCli)
+
+			resp, err := grpcCli.GetCommandHistory(testCtx, &corev1.GetCommandHistoryRequest{
+				SessionId: sessionID,
+				// PlayerSessionToken intentionally empty.
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.GetSuccess()).To(BeFalse(),
+				"empty token must not authorize a GetCommandHistory call")
+			Expect(resp.GetCommands()).To(BeEmpty(),
+				"empty-token caller must not receive any history entries")
 		})
 	})
 })

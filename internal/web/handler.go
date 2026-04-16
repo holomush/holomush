@@ -341,15 +341,15 @@ func (h *Handler) Disconnect(ctx context.Context, req *connect.Request[webv1.Dis
 
 // GetCommandHistory returns the command history for a session.
 // Proxies through the core gRPC service (gateway boundary invariant).
-// TODO: Add full authorization when two-phase login is implemented —
-// verify the caller's player token owns the requested session.
+// Authorization (bd-jv7z) is enforced server-side in CoreServer via
+// auth.ValidateSessionOwnership; the gateway just forwards the
+// player_session_token header.
 func (h *Handler) GetCommandHistory(ctx context.Context, req *connect.Request[webv1.GetCommandHistoryRequest]) (*connect.Response[webv1.GetCommandHistoryResponse], error) {
 	slog.DebugContext(ctx, "web: GetCommandHistory", "session_id", req.Msg.GetSessionId())
 
-	// Read the token directly (Get returns "" if absent). Server-side
-	// validation (Tasks 9-12) will reject empty tokens; until then an
-	// empty value is harmless and we don't want to bounce the caller
-	// from the gateway.
+	// Forward the session token header. The core server enforces
+	// ownership; an empty or wrong token produces a success=false
+	// response which we surface as an empty history payload below.
 	token := req.Header().Get(headerInjectSessionToken)
 
 	cmdCtx, cancel := context.WithTimeout(ctx, rpcTimeout)

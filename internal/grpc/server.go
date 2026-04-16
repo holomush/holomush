@@ -1048,32 +1048,44 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 }
 
 // GetCommandHistory retrieves command history for a session.
+//
+// SECURITY (bd-jv7z): Before returning history, the caller's
+// player_session_token is validated against the target session via
+// auth.ValidateSessionOwnership. Any failure — missing/invalid token,
+// expired token, unknown session, or ownership mismatch — returns the
+// enumeration-safe "session not found" response (success=false) with
+// an empty command list. This closes the IDOR surface where one player
+// could read another player's typed command history with just the
+// session_id.
 func (s *CoreServer) GetCommandHistory(ctx context.Context, req *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
 	requestID := ""
 	if req.Meta != nil {
 		requestID = req.Meta.RequestId
 	}
 
-	sessionID := req.GetSessionId()
-	if sessionID == "" {
+	// Validate session ownership before any store read.
+	// Enumeration-safe: every failure mode collapses to the same
+	// "session not found" response with no commands.
+	if _, err := auth.ValidateSessionOwnership(
+		ctx,
+		s.playerSessionRepo,
+		s.sessionStore,
+		req.GetPlayerSessionToken(),
+		req.GetSessionId(),
+	); err != nil {
+		slog.DebugContext(ctx, "get_command_history session ownership validation failed",
+			"request_id", requestID,
+			"session_id", req.GetSessionId(),
+			"error", err,
+		)
 		return &corev1.GetCommandHistoryResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
-			Error:   "session_id is required",
+			Error:   "session not found",
 		}, nil
 	}
 
-	if _, err := s.sessionStore.Get(ctx, sessionID); err != nil {
-		if oopsErr, ok := oops.AsOops(err); ok && oopsErr.Code() == "SESSION_NOT_FOUND" {
-			return &corev1.GetCommandHistoryResponse{
-				Meta:    responseMeta(requestID),
-				Success: false,
-				Error:   "session not found",
-			}, nil
-		}
-		return nil, oops.Code("COMMAND_HISTORY_FAILED").With("session_id", sessionID).Wrap(err)
-	}
-
+	sessionID := req.GetSessionId()
 	history, err := s.sessionStore.GetCommandHistory(ctx, sessionID)
 	if err != nil {
 		return nil, oops.Code("COMMAND_HISTORY_FAILED").With("session_id", sessionID).Wrap(err)

@@ -3042,13 +3042,15 @@ func TestCoreServer_GetCommandHistory(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore: store,
+		sessionStore:      store,
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
 	t.Run("returns commands for valid session", func(t *testing.T) {
 		resp, err := server.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
-			Meta:      &corev1.RequestMeta{RequestId: "hist-1", Timestamp: timestamppb.Now()},
-			SessionId: sessionID.String(),
+			Meta:               &corev1.RequestMeta{RequestId: "hist-1", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.Success)
@@ -3056,19 +3058,24 @@ func TestCoreServer_GetCommandHistory(t *testing.T) {
 		assert.Equal(t, "hist-1", resp.Meta.RequestId)
 	})
 
-	t.Run("returns error for missing session_id", func(t *testing.T) {
+	t.Run("returns session not found for missing session_id", func(t *testing.T) {
+		// bd-jv7z: ownership validation runs before the old
+		// "session_id is required" branch, so an empty session_id
+		// collapses to the enumeration-safe response.
 		resp, err := server.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
-			Meta: &corev1.RequestMeta{RequestId: "hist-2"},
+			Meta:               &corev1.RequestMeta{RequestId: "hist-2"},
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.False(t, resp.Success)
-		assert.Equal(t, "session_id is required", resp.Error)
+		assert.Equal(t, "session not found", resp.Error)
 	})
 
 	t.Run("returns error for unknown session", func(t *testing.T) {
 		resp, err := server.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
-			Meta:      &corev1.RequestMeta{RequestId: "hist-3"},
-			SessionId: "nonexistent",
+			Meta:               &corev1.RequestMeta{RequestId: "hist-3"},
+			SessionId:          "nonexistent",
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.False(t, resp.Success)
@@ -3085,10 +3092,48 @@ func TestCoreServer_GetCommandHistory(t *testing.T) {
 		}))
 
 		resp, err := server.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
-			SessionId: emptySessionID.String(),
+			SessionId:          emptySessionID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.Success)
+		assert.Empty(t, resp.Commands)
+	})
+
+	t.Run("rejects request with empty token", func(t *testing.T) {
+		resp, err := server.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
+			Meta:      &corev1.RequestMeta{RequestId: "hist-empty-token"},
+			SessionId: sessionID.String(),
+			// PlayerSessionToken intentionally empty.
+		})
+		require.NoError(t, err)
+		assert.False(t, resp.Success)
+		assert.Equal(t, "session not found", resp.Error)
+		assert.Empty(t, resp.Commands)
+	})
+
+	t.Run("rejects request with token for a different player", func(t *testing.T) {
+		// Server keyed on zero-ULID PlayerID; seed the session's
+		// PlayerID to a non-zero value so ValidateSessionOwnership
+		// returns a mismatch.
+		mismatchSessionID := core.NewULID()
+		otherPlayer := core.NewULID()
+		require.NoError(t, store.Set(ctx, mismatchSessionID.String(), &session.Info{
+			ID:          mismatchSessionID.String(),
+			CharacterID: core.NewULID(),
+			PlayerID:    otherPlayer,
+			Status:      session.StatusActive,
+			MaxHistory:  100,
+		}))
+
+		resp, err := server.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
+			Meta:               &corev1.RequestMeta{RequestId: "hist-mismatch"},
+			SessionId:          mismatchSessionID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
+		})
+		require.NoError(t, err)
+		assert.False(t, resp.Success)
+		assert.Equal(t, "session not found", resp.Error)
 		assert.Empty(t, resp.Commands)
 	})
 }
