@@ -13,6 +13,28 @@ services:
       POSTGRES_USER: holomush
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: holomush
+    # Enable TLS so DATABASE_URL can use sslmode=require. A self-signed
+    # certificate is generated on first boot and stored on the data
+    # volume. Connections from core use sslmode=require (encrypt, but
+    # do not verify CA), which is appropriate for an intra-stack
+    # backend network. Operators who need verify-full SHOULD mount
+    # their own CA-signed cert at /var/lib/postgresql/data/server.crt|key
+    # and set sslmode=verify-full in DATABASE_URL.
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        CRT=/var/lib/postgresql/data/server.crt
+        KEY=/var/lib/postgresql/data/server.key
+        if [ ! -s "$$CRT" ] || [ ! -s "$$KEY" ]; then
+          apk add --no-cache openssl >/dev/null
+          openssl req -new -x509 -days 3650 -nodes -subj "/CN=holomush-postgres" -out "$$CRT" -keyout "$$KEY"
+          chown 70:70 "$$CRT" "$$KEY"
+          chmod 600 "$$KEY"
+          chmod 644 "$$CRT"
+        fi
+        exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=$$CRT -c ssl_key_file=$$KEY
     volumes:
       - ${DATA_DIR:-/opt/holomush/data}/postgres:/var/lib/postgresql/data
     networks:
@@ -32,7 +54,7 @@ services:
       - --metrics-addr=0.0.0.0:9100
       - --log-format=json
     environment:
-      DATABASE_URL: postgres://holomush:${POSTGRES_PASSWORD}@postgres:5432/holomush?sslmode=disable
+      DATABASE_URL: postgres://holomush:${POSTGRES_PASSWORD}@postgres:5432/holomush?sslmode=require
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://localhost:4317}
     volumes:
       - ${CONFIG_DIR:-/opt/holomush/config}/certs:/home/holomush/.config/holomush/certs
