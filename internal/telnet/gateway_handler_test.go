@@ -53,16 +53,19 @@ type mockCoreClient struct {
 	createCharResp *corev1.CreateCharacterResponse
 	createCharErr  error
 
-	cmdResp *corev1.HandleCommandResponse
-	cmdErr  error
-	cmdFn   func(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error)
+	cmdResp              *corev1.HandleCommandResponse
+	cmdErr               error
+	cmdFn                func(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error)
+	lastHandleCommandReq *corev1.HandleCommandRequest
 
-	subStream   corev1.CoreService_SubscribeClient
-	subErr      error
-	subscribeFn func(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error)
+	subStream        corev1.CoreService_SubscribeClient
+	subErr           error
+	subscribeFn      func(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error)
+	lastSubscribeReq *corev1.SubscribeRequest
 
-	discResp *corev1.DisconnectResponse
-	discErr  error
+	discResp          *corev1.DisconnectResponse
+	discErr           error
+	lastDisconnectReq *corev1.DisconnectRequest
 
 	logoutResp    *corev1.LogoutResponse
 	logoutErr     error
@@ -120,6 +123,7 @@ func (m *mockCoreClient) CreateGuest(_ context.Context, _ *corev1.CreateGuestReq
 }
 
 func (m *mockCoreClient) HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
+	m.lastHandleCommandReq = req
 	if m.cmdFn != nil {
 		return m.cmdFn(ctx, req)
 	}
@@ -127,13 +131,15 @@ func (m *mockCoreClient) HandleCommand(ctx context.Context, req *corev1.HandleCo
 }
 
 func (m *mockCoreClient) Subscribe(ctx context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+	m.lastSubscribeReq = req
 	if m.subscribeFn != nil {
 		return m.subscribeFn(ctx, req)
 	}
 	return m.subStream, m.subErr
 }
 
-func (m *mockCoreClient) Disconnect(_ context.Context, _ *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error) {
+func (m *mockCoreClient) Disconnect(_ context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error) {
+	m.lastDisconnectReq = req
 	return m.discResp, m.discErr
 }
 
@@ -1939,4 +1945,165 @@ func TestPlayerSessionTokenSurvivesPlay(t *testing.T) {
 
 	cancel()
 	<-done
+}
+
+// Post-auth RPC token forwarding (bd-jv7z, Task 8).
+//
+// The telnet gateway MUST forward the player_session_token (captured at
+// AuthenticatePlayer / CreateGuest and preserved through SelectCharacter)
+// on every post-auth RPC call. Without this, server-side
+// ValidateSessionOwnership cannot enforce that the caller owns session_id.
+
+// newForwardingTestHandler builds a minimal GatewayHandler suitable for
+// directly invoking post-auth methods. The connection pair isn't driven
+// via telnet input; the test exercises the RPC call path only.
+func newForwardingTestHandler(t *testing.T, client CoreClient, token, sessionID string) (*GatewayHandler, func()) {
+	t.Helper()
+	serverConn, clientConn := net.Pipe()
+	h := NewGatewayHandler(serverConn, client, testRegistry())
+	h.playerSessionToken = token
+	h.sessionID = sessionID
+	h.connectionID = "conn-forward-1"
+	h.authed = true
+	cleanup := func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	}
+	// Drain anything the handler writes so send() doesn't block.
+	go func() {
+		buf := make([]byte, 256)
+		for {
+			if _, err := clientConn.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+	return h, cleanup
+}
+
+func TestGatewayHandlerForwardsPlayerSessionTokenOnHandleCommandSay(t *testing.T) {
+	const token = "tok-telnet-say"
+	client := &mockCoreClient{
+		cmdResp: &corev1.HandleCommandResponse{Success: true},
+	}
+	h, cleanup := newForwardingTestHandler(t, client, token, "sess-say")
+	defer cleanup()
+
+	h.handleSay(context.Background(), "hello")
+
+	require.NotNil(t, client.lastHandleCommandReq)
+	assert.Equal(t, token, client.lastHandleCommandReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-say", client.lastHandleCommandReq.GetSessionId())
+}
+
+func TestGatewayHandlerForwardsPlayerSessionTokenOnHandleCommandPose(t *testing.T) {
+	const token = "tok-telnet-pose"
+	client := &mockCoreClient{
+		cmdResp: &corev1.HandleCommandResponse{Success: true},
+	}
+	h, cleanup := newForwardingTestHandler(t, client, token, "sess-pose")
+	defer cleanup()
+
+	h.handlePose(context.Background(), "waves")
+
+	require.NotNil(t, client.lastHandleCommandReq)
+	assert.Equal(t, token, client.lastHandleCommandReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-pose", client.lastHandleCommandReq.GetSessionId())
+}
+
+func TestGatewayHandlerForwardsPlayerSessionTokenOnHandleCommandGeneric(t *testing.T) {
+	const token = "tok-telnet-generic"
+	client := &mockCoreClient{
+		cmdResp: &corev1.HandleCommandResponse{Success: true},
+	}
+	h, cleanup := newForwardingTestHandler(t, client, token, "sess-generic")
+	defer cleanup()
+
+	h.handleGenericCommand(context.Background(), "look", "")
+
+	require.NotNil(t, client.lastHandleCommandReq)
+	assert.Equal(t, token, client.lastHandleCommandReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-generic", client.lastHandleCommandReq.GetSessionId())
+}
+
+func TestGatewayHandlerForwardsPlayerSessionTokenOnHandleCommandQuit(t *testing.T) {
+	const token = "tok-telnet-quit"
+	client := &mockCoreClient{
+		cmdResp: &corev1.HandleCommandResponse{Success: true},
+	}
+	h, cleanup := newForwardingTestHandler(t, client, token, "sess-quit")
+	defer cleanup()
+
+	h.handleQuit(context.Background())
+
+	require.NotNil(t, client.lastHandleCommandReq)
+	assert.Equal(t, token, client.lastHandleCommandReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-quit", client.lastHandleCommandReq.GetSessionId())
+}
+
+func TestGatewayHandlerForwardsPlayerSessionTokenOnSubscribe(t *testing.T) {
+	const token = "tok-telnet-subscribe"
+	// subscribeFn returns an error so the handler doesn't start the
+	// reader goroutine — we only care that the request was captured.
+	client := &mockCoreClient{
+		subscribeFn: func(_ context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+			return nil, errors.New("no stream in this test")
+		},
+	}
+	h, cleanup := newForwardingTestHandler(t, client, token, "sess-sub")
+	defer cleanup()
+
+	_ = h.subscribeAndEnter(context.Background())
+
+	require.NotNil(t, client.lastSubscribeReq)
+	assert.Equal(t, token, client.lastSubscribeReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-sub", client.lastSubscribeReq.GetSessionId())
+}
+
+func TestGatewayHandlerForwardsPlayerSessionTokenOnDisconnect(t *testing.T) {
+	const token = "tok-telnet-disconnect"
+	client := &mockCoreClient{
+		createGuestResp: &corev1.CreateGuestResponse{
+			Success:            true,
+			PlayerSessionToken: token,
+			Characters:         []*corev1.CharacterSummary{{CharacterId: "char-d", CharacterName: "Discon"}},
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
+			Success:       true,
+			SessionId:     "sess-disc",
+			CharacterName: "Discon",
+		},
+		subErr:   errors.New("no subscribe in this test"),
+		discResp: &corev1.DisconnectResponse{Success: true},
+	}
+
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.Handle(ctx)
+	}()
+
+	r := bufio.NewReader(clientConn)
+	readLines(t, r, 2) // banner
+
+	_, err := clientConn.Write([]byte("connect guest\n"))
+	require.NoError(t, err)
+	// Consume welcome line.
+	_, err = r.ReadString('\n')
+	require.NoError(t, err)
+
+	// Disconnect — triggers the deferred Disconnect RPC.
+	cancel()
+	<-done
+
+	require.NotNil(t, client.lastDisconnectReq)
+	assert.Equal(t, token, client.lastDisconnectReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-disc", client.lastDisconnectReq.GetSessionId())
 }

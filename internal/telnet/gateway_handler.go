@@ -107,8 +107,9 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 			disconnCtx, disconnCancel := context.WithTimeout(context.Background(), rpcTimeout)
 			defer disconnCancel()
 			if _, err := h.client.Disconnect(disconnCtx, &corev1.DisconnectRequest{
-				SessionId:    h.sessionID,
-				ConnectionId: h.connectionID,
+				SessionId:          h.sessionID,
+				ConnectionId:       h.connectionID,
+				PlayerSessionToken: h.playerSessionToken,
 			}); err != nil {
 				slog.DebugContext(ctx, "gateway: disconnect RPC failed", "session_id", h.sessionID, "error", err)
 			}
@@ -482,7 +483,8 @@ func (h *GatewayHandler) selectCharacter(ctx context.Context, ch *corev1.Charact
 // the event channel. Called after successful auth (both guest and two-phase).
 func (h *GatewayHandler) subscribeAndEnter(ctx context.Context) <-chan *corev1.SubscribeResponse {
 	stream, err := h.client.Subscribe(ctx, &corev1.SubscribeRequest{
-		SessionId: h.sessionID,
+		SessionId:          h.sessionID,
+		PlayerSessionToken: h.playerSessionToken,
 	})
 	if err != nil {
 		slog.Warn("gateway: subscribe RPC failed — no live events", "session_id", h.sessionID, "error", err)
@@ -539,8 +541,9 @@ func (h *GatewayHandler) handleSay(ctx context.Context, message string) {
 	defer cmdCancel()
 
 	resp, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
-		SessionId: h.sessionID,
-		Command:   "say " + message,
+		SessionId:          h.sessionID,
+		Command:            "say " + message,
+		PlayerSessionToken: h.playerSessionToken,
 	})
 	if err != nil {
 		slog.Error("gateway: say command failed", "session_id", h.sessionID, "error", err)
@@ -577,8 +580,9 @@ func (h *GatewayHandler) handlePose(ctx context.Context, action string) {
 	defer cmdCancel()
 
 	resp, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
-		SessionId: h.sessionID,
-		Command:   "pose " + action,
+		SessionId:          h.sessionID,
+		Command:            "pose " + action,
+		PlayerSessionToken: h.playerSessionToken,
 	})
 	if err != nil {
 		slog.Error("gateway: pose command failed", "session_id", h.sessionID, "error", err)
@@ -621,8 +625,9 @@ func (h *GatewayHandler) handleGenericCommand(ctx context.Context, cmd, arg stri
 	defer cmdCancel()
 
 	if _, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
-		SessionId: h.sessionID,
-		Command:   fullCmd,
+		SessionId:          h.sessionID,
+		Command:            fullCmd,
+		PlayerSessionToken: h.playerSessionToken,
 	}); err != nil {
 		slog.Error("gateway: command failed", "session_id", h.sessionID, "command", cmd, "error", err)
 		h.send("Error processing command.")
@@ -646,8 +651,9 @@ func (h *GatewayHandler) handleQuit(ctx context.Context) {
 		defer cmdCancel()
 
 		if _, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
-			SessionId: h.sessionID,
-			Command:   "quit",
+			SessionId:          h.sessionID,
+			Command:            "quit",
+			PlayerSessionToken: h.playerSessionToken,
 		}); err != nil {
 			slog.Warn("gateway: quit command failed", "session_id", h.sessionID, "error", err)
 		}
