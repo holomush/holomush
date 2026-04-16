@@ -32,12 +32,27 @@ func TestSetSessionCookie_Insecure(t *testing.T) {
 	assert.False(t, cookies[0].Secure)
 }
 
-func TestClearSessionCookie(t *testing.T) {
+func TestClearSessionCookieSecureSetsSecureAndStrictSameSite(t *testing.T) {
 	w := httptest.NewRecorder()
-	ClearSessionCookie(w)
+	ClearSessionCookie(w, true)
+	cookies := w.Result().Cookies()
+	require.Len(t, cookies, 1)
+	assert.Equal(t, "holomush_session", cookies[0].Name)
+	assert.Equal(t, -1, cookies[0].MaxAge)
+	assert.True(t, cookies[0].HttpOnly)
+	assert.True(t, cookies[0].Secure, "Secure flag MUST match SetSessionCookie so browsers reliably clear the cookie")
+	assert.Equal(t, http.SameSiteStrictMode, cookies[0].SameSite)
+}
+
+func TestClearSessionCookieInsecureSetsLaxSameSiteAndNoSecure(t *testing.T) {
+	w := httptest.NewRecorder()
+	ClearSessionCookie(w, false)
 	cookies := w.Result().Cookies()
 	require.Len(t, cookies, 1)
 	assert.Equal(t, -1, cookies[0].MaxAge)
+	assert.True(t, cookies[0].HttpOnly)
+	assert.False(t, cookies[0].Secure)
+	assert.Equal(t, http.SameSiteLaxMode, cookies[0].SameSite)
 }
 
 func TestGetSessionToken(t *testing.T) {

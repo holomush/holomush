@@ -4,8 +4,11 @@
 package web
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,6 +43,47 @@ func TestServer_StartsAndServes(t *testing.T) {
 	for err := range errCh {
 		t.Errorf("unexpected server error: %v", err)
 	}
+}
+
+func TestNewServerLogsWarningWhenSecureIsFalse(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	mock := &mockCoreClient{}
+	handler := NewHandler(mock)
+
+	_, err := NewServer(Config{
+		Addr:    "127.0.0.1:0",
+		Handler: handler,
+		Secure:  false,
+	})
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, "level=WARN")
+	assert.Contains(t, out, "WITHOUT Secure flag")
+}
+
+func TestNewServerDoesNotWarnWhenSecureIsTrue(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	mock := &mockCoreClient{}
+	handler := NewHandler(mock)
+
+	_, err := NewServer(Config{
+		Addr:    "127.0.0.1:0",
+		Handler: handler,
+		Secure:  true,
+	})
+	require.NoError(t, err)
+
+	assert.False(t, strings.Contains(buf.String(), "WITHOUT Secure flag"),
+		"server should not warn about insecure cookies when Secure=true")
 }
 
 func TestServer_ConnectRPCRouting(t *testing.T) {

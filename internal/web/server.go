@@ -36,6 +36,19 @@ type Server struct {
 
 // NewServer creates a web server with ConnectRPC handler and static file server.
 func NewServer(cfg Config) (*Server, error) {
+	if !cfg.Secure {
+		// SECURITY: Warn loudly when cookies are emitted without the Secure
+		// flag. This is only appropriate for local development over plain
+		// HTTP; any production deployment MUST set Secure=true so session
+		// cookies are never transmitted over unencrypted channels.
+		slog.Warn(
+			"web: session cookies will be issued WITHOUT Secure flag; "+
+				"this is unsafe for production. Set Config.Secure=true when serving over TLS.",
+			"secure", cfg.Secure,
+			"same_site", "Lax",
+		)
+	}
+
 	mux := http.NewServeMux()
 
 	// Register ConnectRPC handler

@@ -32,14 +32,23 @@ func SetSessionCookie(w http.ResponseWriter, token string, secure bool) {
 	})
 }
 
-// ClearSessionCookie expires the session cookie immediately.
-func ClearSessionCookie(w http.ResponseWriter) {
+// ClearSessionCookie expires the session cookie immediately. The Secure flag
+// and SameSite policy MUST match the original SetSessionCookie call so that
+// browsers consistently remove the cookie; mismatched attributes can leave
+// stale cookies in place.
+func ClearSessionCookie(w http.ResponseWriter, secure bool) {
+	sameSite := http.SameSiteStrictMode
+	if !secure {
+		sameSite = http.SameSiteLaxMode
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   secure,
+		SameSite: sameSite,
 	})
 }
 
@@ -127,7 +136,7 @@ func (cw *cookieWriter) applyCookieHeaders() {
 	}
 
 	if h.Get(headerClearSession) == "true" {
-		ClearSessionCookie(cw.ResponseWriter)
+		ClearSessionCookie(cw.ResponseWriter, cw.secure)
 		h.Del(headerClearSession)
 	}
 }
