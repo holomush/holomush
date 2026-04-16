@@ -222,6 +222,50 @@ func TestSeedSmokePlayerStreamEmit(t *testing.T) {
 	assert.True(t, decision.IsAllowed(), "player should emit to co-located stream; got: %s — %s", decision.Effect(), decision.Reason())
 }
 
+func TestSeedSmokePlayerCanReadCoLocatedLocationStream(t *testing.T) {
+	locID := "01LOC000GGGGGGGGGGGGGGGGGG"
+
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		characterProvider(
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": locID},
+			nil,
+		),
+		streamProvider(map[string]any{"name": "location:" + locID, "location": locID}),
+	})
+
+	// Reading history of co-located location stream → permit
+	// (seed:player-location-stream-read)
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:  "character:01CHAR01",
+		Action:   "read",
+		Resource: "stream:location-" + locID,
+	})
+	require.NoError(t, err)
+	assert.True(t, decision.IsAllowed(), "co-located character should read location stream; got: %s — %s", decision.Effect(), decision.Reason())
+}
+
+func TestSeedSmokePlayerCannotReadNonCoLocatedLocationStream(t *testing.T) {
+	currentLocID := "01LOC000HHHHHHHHHHHHHHHHHH"
+	otherLocID := "01LOC000IIIIIIIIIIIIIIIIII"
+
+	engine := createSeedEngine(t, []attribute.AttributeProvider{
+		characterProvider(
+			map[string]any{"id": "01CHAR01", "roles": []string{"player"}, "location": currentLocID},
+			nil,
+		),
+		// The stream being queried has a different location than the character.
+		streamProvider(map[string]any{"name": "location:" + otherLocID, "location": otherLocID}),
+	})
+
+	decision, err := engine.Evaluate(context.Background(), types.AccessRequest{
+		Subject:  "character:01CHAR01",
+		Action:   "read",
+		Resource: "stream:location-" + otherLocID,
+	})
+	require.NoError(t, err)
+	assert.False(t, decision.IsAllowed(), "non-co-located character should NOT read location stream; got: %s — %s", decision.Effect(), decision.Reason())
+}
+
 func TestSeedSmokePlayerMovement(t *testing.T) {
 	engine := createSeedEngine(t, []attribute.AttributeProvider{
 		characterProvider(

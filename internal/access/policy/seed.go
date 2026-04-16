@@ -11,7 +11,7 @@ type SeedPolicy struct {
 	SeedVersion int
 }
 
-// SeedPolicies returns the complete set of 25 seed policies (24 permit, 1 forbid).
+// SeedPolicies returns the complete set of 26 seed policies (25 permit, 1 forbid).
 // The initial 18 (T22) minus 2 removed command policies, plus 5 gap-fill policies (T22b: G1-G4),
 // 1 phase-2 command policy, and 2 system bootstrap policies.
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
@@ -61,6 +61,12 @@ func SeedPolicies() []SeedPolicy {
 			Description: "Characters can emit to co-located location streams",
 			DSLText:     `permit(principal is character, action in ["emit"], resource is stream) when { resource.stream.name like "location:*" && resource.stream.location == principal.character.location };`,
 			SeedVersion: 2,
+		},
+		{
+			Name:        "seed:player-location-stream-read",
+			Description: "Characters can read history of their current location stream",
+			DSLText:     `permit(principal is character, action in ["read"], resource is stream) when { resource.stream.name like "location:*" && resource.stream.location == principal.character.location };`,
+			SeedVersion: 1,
 		},
 		{
 			Name:        "seed:player-movement",
