@@ -48,6 +48,7 @@ Operating = [
   "operating/configuration.md",
   "operating/database.md",
   "operating/authentication.md",
+  "operating/ca-rotation.md",
   "operating/operations.md",
   "operating/verifying-releases.md",
 ]
