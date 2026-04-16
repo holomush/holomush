@@ -76,6 +76,11 @@ message HandleCommandRequest {
   RequestMeta meta = 1;
   string session_id = 2;
   string command = 3;
+
+  // player_session_token proves the caller owns session_id. Required
+  // for all post-auth RPCs. Must match the player_id of session_id
+  // or the request is rejected with SESSION_NOT_FOUND.
+  string player_session_token = 4;
 }
 
 message HandleCommandResponse {
@@ -93,6 +98,18 @@ message SubscribeRequest {
   // via FocusCoordinator.RestoreFocus.
   reserved 3, 4;
   reserved "streams", "replay_from_cursor";
+
+  // player_session_token proves the caller owns session_id.
+  string player_session_token = 5;
+
+  // connection_id identifies this specific client attachment. Gateway
+  // generates a fresh ULID per stream. Required so core can register
+  // and deregister connections atomically with the stream lifecycle.
+  string connection_id = 6;
+
+  // client_type describes the connecting client for observability and
+  // routing: "terminal", "telnet", or future client types.
+  string client_type = 7;
 }
 
 message EventFrame {
@@ -127,6 +144,11 @@ message DisconnectRequest {
   RequestMeta meta = 1;
   string session_id = 2;
   string connection_id = 3; // optional: remove specific connection
+
+  // player_session_token proves the caller owns session_id. Required
+  // for all post-auth RPCs. Must match the player_id of session_id
+  // or the request is rejected with SESSION_NOT_FOUND.
+  string player_session_token = 4;
 }
 
 message DisconnectResponse {
@@ -137,6 +159,11 @@ message DisconnectResponse {
 message GetCommandHistoryRequest {
   RequestMeta meta = 1;
   string session_id = 2;
+
+  // player_session_token proves the caller owns session_id. Required
+  // for all post-auth RPCs. Must match the player_id of session_id
+  // or the request is rejected with SESSION_NOT_FOUND.
+  string player_session_token = 3;
 }
 
 message GetCommandHistoryResponse {

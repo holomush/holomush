@@ -181,12 +181,16 @@ func (x *ResponseMeta) GetTimestamp() *timestamppb.Timestamp {
 }
 
 type HandleCommandRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Command       string                 `protobuf:"bytes,3,opt,name=command,proto3" json:"command,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Meta      *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Command   string                 `protobuf:"bytes,3,opt,name=command,proto3" json:"command,omitempty"`
+	// player_session_token proves the caller owns session_id. Required
+	// for all post-auth RPCs. Must match the player_id of session_id
+	// or the request is rejected with SESSION_NOT_FOUND.
+	PlayerSessionToken string `protobuf:"bytes,4,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *HandleCommandRequest) Reset() {
@@ -236,6 +240,13 @@ func (x *HandleCommandRequest) GetSessionId() string {
 func (x *HandleCommandRequest) GetCommand() string {
 	if x != nil {
 		return x.Command
+	}
+	return ""
+}
+
+func (x *HandleCommandRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
 	}
 	return ""
 }
@@ -301,9 +312,18 @@ func (x *HandleCommandResponse) GetError() string {
 }
 
 type SubscribeRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Meta      *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// player_session_token proves the caller owns session_id.
+	PlayerSessionToken string `protobuf:"bytes,5,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	// connection_id identifies this specific client attachment. Gateway
+	// generates a fresh ULID per stream. Required so core can register
+	// and deregister connections atomically with the stream lifecycle.
+	ConnectionId string `protobuf:"bytes,6,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// client_type describes the connecting client for observability and
+	// routing: "terminal", "telnet", or future client types.
+	ClientType    string `protobuf:"bytes,7,opt,name=client_type,json=clientType,proto3" json:"client_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -348,6 +368,27 @@ func (x *SubscribeRequest) GetMeta() *RequestMeta {
 func (x *SubscribeRequest) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
+	}
+	return ""
+}
+
+func (x *SubscribeRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
+	}
+	return ""
+}
+
+func (x *SubscribeRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *SubscribeRequest) GetClientType() string {
+	if x != nil {
+		return x.ClientType
 	}
 	return ""
 }
@@ -579,12 +620,16 @@ func (*SubscribeResponse_Event) isSubscribeResponse_Frame() {}
 func (*SubscribeResponse_Control) isSubscribeResponse_Frame() {}
 
 type DisconnectRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	ConnectionId  string                 `protobuf:"bytes,3,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"` // optional: remove specific connection
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Meta         *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId    string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	ConnectionId string                 `protobuf:"bytes,3,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"` // optional: remove specific connection
+	// player_session_token proves the caller owns session_id. Required
+	// for all post-auth RPCs. Must match the player_id of session_id
+	// or the request is rejected with SESSION_NOT_FOUND.
+	PlayerSessionToken string `protobuf:"bytes,4,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *DisconnectRequest) Reset() {
@@ -634,6 +679,13 @@ func (x *DisconnectRequest) GetSessionId() string {
 func (x *DisconnectRequest) GetConnectionId() string {
 	if x != nil {
 		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *DisconnectRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
 	}
 	return ""
 }
@@ -691,11 +743,15 @@ func (x *DisconnectResponse) GetSuccess() bool {
 }
 
 type GetCommandHistoryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Meta      *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// player_session_token proves the caller owns session_id. Required
+	// for all post-auth RPCs. Must match the player_id of session_id
+	// or the request is rejected with SESSION_NOT_FOUND.
+	PlayerSessionToken string `protobuf:"bytes,3,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *GetCommandHistoryRequest) Reset() {
@@ -738,6 +794,13 @@ func (x *GetCommandHistoryRequest) GetMeta() *RequestMeta {
 func (x *GetCommandHistoryRequest) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
+	}
+	return ""
+}
+
+func (x *GetCommandHistoryRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
 	}
 	return ""
 }
@@ -2168,20 +2231,25 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\fResponseMeta\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x128\n" +
-	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\x82\x01\n" +
+	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xb4\x01\n" +
 	"\x14HandleCommandRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x18\n" +
-	"\acommand\x18\x03 \x01(\tR\acommand\"\x81\x01\n" +
+	"\acommand\x18\x03 \x01(\tR\acommand\x120\n" +
+	"\x14player_session_token\x18\x04 \x01(\tR\x12playerSessionToken\"\x81\x01\n" +
 	"\x15HandleCommandResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x04 \x01(\tR\x05errorJ\x04\b\x03\x10\x04\"\x8d\x01\n" +
+	"\x05error\x18\x04 \x01(\tR\x05errorJ\x04\b\x03\x10\x04\"\x85\x02\n" +
 	"\x10SubscribeRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x02 \x01(\tR\tsessionIdJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\astreamsR\x12replay_from_cursor\"\xd6\x01\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x120\n" +
+	"\x14player_session_token\x18\x05 \x01(\tR\x12playerSessionToken\x12#\n" +
+	"\rconnection_id\x18\x06 \x01(\tR\fconnectionId\x12\x1f\n" +
+	"\vclient_type\x18\a \x01(\tR\n" +
+	"clientTypeJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\astreamsR\x12replay_from_cursor\"\xd6\x01\n" +
 	"\n" +
 	"EventFrame\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
@@ -2198,19 +2266,21 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x11SubscribeResponse\x124\n" +
 	"\x05event\x18\x01 \x01(\v2\x1c.holomush.core.v1.EventFrameH\x00R\x05event\x12:\n" +
 	"\acontrol\x18\x02 \x01(\v2\x1e.holomush.core.v1.ControlFrameH\x00R\acontrolB\a\n" +
-	"\x05frame\"\x8a\x01\n" +
+	"\x05frame\"\xbc\x01\n" +
 	"\x11DisconnectRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x12#\n" +
-	"\rconnection_id\x18\x03 \x01(\tR\fconnectionId\"b\n" +
+	"\rconnection_id\x18\x03 \x01(\tR\fconnectionId\x120\n" +
+	"\x14player_session_token\x18\x04 \x01(\tR\x12playerSessionToken\"b\n" +
 	"\x12DisconnectResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x12\x18\n" +
-	"\asuccess\x18\x02 \x01(\bR\asuccess\"l\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess\"\x9e\x01\n" +
 	"\x18GetCommandHistoryRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x02 \x01(\tR\tsessionId\"\x9b\x01\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x120\n" +
+	"\x14player_session_token\x18\x03 \x01(\tR\x12playerSessionToken\"\x9b\x01\n" +
 	"\x19GetCommandHistoryResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x1a\n" +
