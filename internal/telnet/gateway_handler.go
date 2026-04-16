@@ -481,10 +481,16 @@ func (h *GatewayHandler) selectCharacter(ctx context.Context, ch *corev1.Charact
 
 // subscribeAndEnter subscribes to events for the current session and returns
 // the event channel. Called after successful auth (both guest and two-phase).
+// Generates a per-connection connection_id and passes it to core's Subscribe
+// RPC so core can register the connection in the session store (bd-j2xj).
+// The same connection_id is reused for the deferred Disconnect on exit.
 func (h *GatewayHandler) subscribeAndEnter(ctx context.Context) <-chan *corev1.SubscribeResponse {
+	h.connectionID = core.NewULID().String()
 	stream, err := h.client.Subscribe(ctx, &corev1.SubscribeRequest{
 		SessionId:          h.sessionID,
 		PlayerSessionToken: h.playerSessionToken,
+		ConnectionId:       h.connectionID,
+		ClientType:         "telnet",
 	})
 	if err != nil {
 		slog.Warn("gateway: subscribe RPC failed — no live events", "session_id", h.sessionID, "error", err)

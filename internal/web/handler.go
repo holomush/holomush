@@ -16,7 +16,6 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/core"
-	"github.com/holomush/holomush/internal/session"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
@@ -62,11 +61,12 @@ type ContentClient interface {
 // Handler implements WebServiceHandler by delegating to the core gRPC client.
 // The gateway is a protocol translation layer only — it MUST NOT access
 // WorldService or other internal services directly. All game state flows
-// through core server RPCs.
+// through core server RPCs. The gateway process can run without any
+// database credentials (bd-j2xj); per-connection registration happens
+// inside the core Subscribe RPC.
 type Handler struct {
 	client        CoreClient
 	contentClient ContentClient
-	sessionStore  session.Store
 	verbRegistry  *core.VerbRegistry
 }
 
@@ -75,11 +75,6 @@ var _ webv1connect.WebServiceHandler = (*Handler)(nil)
 
 // HandlerOption configures optional Handler dependencies.
 type HandlerOption func(*Handler)
-
-// WithSessionStore sets the session store for session-related RPCs.
-func WithSessionStore(store session.Store) HandlerOption {
-	return func(h *Handler) { h.sessionStore = store }
-}
 
 // WithContentClient sets the content service client for content RPCs.
 func WithContentClient(c ContentClient) HandlerOption {
@@ -139,8 +134,10 @@ func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.Se
 }
 
 // StreamEvents subscribes to core events for a session and forwards them to
-// the client as GameEvent messages. Registers a connection for the duration
-// of the stream and cleans it up when the stream closes.
+// the client as GameEvent messages. A per-stream connection_id is generated
+// locally and passed to core's Subscribe RPC, which performs the actual
+// session-store registration/deregistration (bd-j2xj). The gateway no
+// longer touches the session store directly.
 func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.StreamEventsRequest], stream *connect.ServerStream[webv1.StreamEventsResponse]) error {
 	slog.DebugContext(ctx, "web: StreamEvents", "session_id", req.Msg.GetSessionId())
 
@@ -151,45 +148,32 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 	// from the gateway.
 	token := req.Header().Get(headerInjectSessionToken)
 
-	// Register connection for the duration of the stream
-	if h.sessionStore != nil {
-		connID := core.NewULID()
-		// ClientType is "terminal" because StreamEvents is the terminal-mode
-		// streaming endpoint. A future comms_hub client type would be registered
-		// via a separate route.
-		conn := &session.Connection{
-			ID:          connID,
-			SessionID:   sessionID,
-			ClientType:  "terminal",
-			ConnectedAt: time.Now(),
-		}
-		if err := h.sessionStore.AddConnection(ctx, conn); err != nil {
-			slog.WarnContext(ctx, "web: failed to register stream connection",
+	// Generate a per-stream connection_id. Core's Subscribe handler
+	// registers this connection in the session store and deregisters
+	// it on any stream exit (client disconnect, context cancel, error,
+	// STREAM_CLOSED). ClientType is "terminal" because StreamEvents is
+	// the terminal-mode streaming endpoint.
+	connID := core.NewULID()
+
+	// Disconnect on stream exit triggers core-side session lifecycle
+	// (detach/delete based on remaining connection count). Connection
+	// removal is handled by core's Subscribe defer path; the idempotent
+	// RemoveConnection in Disconnect is a no-op by then.
+	defer func() {
+		disconnCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, disconnErr := h.client.Disconnect(disconnCtx, &corev1.DisconnectRequest{
+			SessionId:          sessionID,
+			ConnectionId:       connID.String(),
+			PlayerSessionToken: token,
+		}); disconnErr != nil {
+			slog.Warn("web: disconnect RPC failed on stream close",
 				"session_id", sessionID,
-				"error", err,
+				"connection_id", connID.String(),
+				"error", disconnErr,
 			)
-		} else {
-			defer func() {
-				// Call Disconnect on core — this removes the connection AND
-				// runs session lifecycle logic (detach/delete based on
-				// remaining connection count). Using a fresh context because
-				// the stream context is already cancelled.
-				disconnCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if _, disconnErr := h.client.Disconnect(disconnCtx, &corev1.DisconnectRequest{
-					SessionId:          sessionID,
-					ConnectionId:       connID.String(),
-					PlayerSessionToken: token,
-				}); disconnErr != nil {
-					slog.Warn("web: disconnect RPC failed on stream close",
-						"session_id", sessionID,
-						"connection_id", connID.String(),
-						"error", disconnErr,
-					)
-				}
-			}()
 		}
-	}
+	}()
 
 	// Synthetic location_state is injected by the core server's Subscribe handler
 	// (which has direct access to WorldService). The gateway just forwards it.
@@ -197,6 +181,8 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 	sub, err := h.client.Subscribe(ctx, &corev1.SubscribeRequest{
 		SessionId:          sessionID,
 		PlayerSessionToken: token,
+		ConnectionId:       connID.String(),
+		ClientType:         "terminal",
 	})
 	if err != nil {
 		return connect.NewError(connect.CodeInternal,

@@ -2060,6 +2060,33 @@ func TestGatewayHandlerForwardsPlayerSessionTokenOnSubscribe(t *testing.T) {
 	assert.Equal(t, "sess-sub", client.lastSubscribeReq.GetSessionId())
 }
 
+// TestGatewayHandlerPassesConnectionIDAndClientTypeOnSubscribe asserts that
+// the telnet gateway generates a connection_id and passes it (plus
+// client_type "telnet") on its Subscribe call so core can register the
+// connection in the session store (bd-j2xj). The same connection_id is
+// reused by the deferred Disconnect in Handle so the terminate path
+// removes the correct per-connection entry.
+func TestGatewayHandlerPassesConnectionIDAndClientTypeOnSubscribe(t *testing.T) {
+	const token = "tok-telnet-connid"
+	client := &mockCoreClient{
+		subscribeFn: func(_ context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+			return nil, errors.New("no stream in this test")
+		},
+	}
+	h, cleanup := newForwardingTestHandler(t, client, token, "sess-connid")
+	defer cleanup()
+
+	_ = h.subscribeAndEnter(context.Background())
+
+	require.NotNil(t, client.lastSubscribeReq)
+	assert.NotEmpty(t, client.lastSubscribeReq.GetConnectionId(),
+		"Subscribe must carry a connection_id so core can register the connection")
+	assert.Equal(t, "telnet", client.lastSubscribeReq.GetClientType(),
+		"telnet gateway must declare client_type = %q", "telnet")
+	assert.Equal(t, client.lastSubscribeReq.GetConnectionId(), h.connectionID,
+		"handler must persist the connection_id so the deferred Disconnect uses the same value")
+}
+
 func TestGatewayHandlerForwardsPlayerSessionTokenOnDisconnect(t *testing.T) {
 	const token = "tok-telnet-disconnect"
 	client := &mockCoreClient{

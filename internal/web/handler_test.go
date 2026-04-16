@@ -6,7 +6,6 @@ package web
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,14 +13,12 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
-	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
@@ -242,10 +239,20 @@ func TestHandler_GetCommandHistory_NotSuccess(t *testing.T) {
 	assert.Empty(t, resp.Msg.GetCommands(), "non-success response should return empty commands")
 }
 
-func TestNewHandler_WithOptions(t *testing.T) {
-	store := &mockSessionStore{}
-	h := NewHandler(&mockCoreClient{}, WithSessionStore(store))
-	assert.NotNil(t, h.sessionStore)
+// TestHandlerHasNoSessionStoreField asserts at compile time that the Handler
+// struct does not hold a session.Store reference. The web gateway is a pure
+// protocol-translation layer (bd-j2xj) and must run without database
+// credentials; per-connection registration happens inside core's Subscribe
+// RPC, not via a direct session-store call from the gateway.
+func TestHandlerHasNoSessionStoreField(t *testing.T) {
+	h := NewHandler(&mockCoreClient{})
+	require.NotNil(t, h)
+	// Use reflection would be overkill; the constructor signature and
+	// the absence of WithSessionStore in this package are the real
+	// compile-time guarantees. This test exists so a reviewer grepping
+	// for sessionStore usage in the web package sees a single sentinel.
+	assert.Nil(t, h.contentClient, "no options configured")
+	assert.Nil(t, h.verbRegistry, "no options configured")
 }
 
 // mockSubscribeStream is a test double for corev1.CoreService_SubscribeClient.
@@ -280,6 +287,50 @@ func newStreamEventsServer(t *testing.T, client CoreClient) (webv1connect.WebSer
 	srv := httptest.NewServer(h)
 	wsc := webv1connect.NewWebServiceClient(http.DefaultClient, srv.URL)
 	return wsc, srv.Close
+}
+
+// TestStreamEventsPassesConnectionIDAndClientTypeOnSubscribe asserts that the
+// web gateway generates a connection_id and passes it (plus client_type
+// "terminal") on its Subscribe call so core can register the connection in
+// the session store (bd-j2xj). Previously the gateway called AddConnection
+// directly; now that wiring lives inside core's Subscribe handler.
+func TestStreamEventsPassesConnectionIDAndClientTypeOnSubscribe(t *testing.T) {
+	sub := &mockSubscribeStream{
+		responses: []*corev1.SubscribeResponse{
+			{
+				Frame: &corev1.SubscribeResponse_Control{
+					Control: &corev1.ControlFrame{
+						Signal: corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED,
+					},
+				},
+			},
+		},
+	}
+	client := &mockCoreClient{
+		subStream: sub,
+		discResp:  &corev1.DisconnectResponse{Success: true},
+	}
+	wsc, cleanup := newStreamEventsServer(t, client)
+	defer cleanup()
+
+	stream, err := wsc.StreamEvents(context.Background(), connect.NewRequest(&webv1.StreamEventsRequest{
+		SessionId: "sess-conn",
+	}))
+	require.NoError(t, err)
+	for stream.Receive() {
+		// drain until server closes
+	}
+	require.NoError(t, stream.Close())
+
+	require.Eventually(t, func() bool {
+		return client.subReq != nil
+	}, 2*time.Second, 10*time.Millisecond, "Subscribe should have been called")
+
+	assert.Equal(t, "sess-conn", client.subReq.GetSessionId())
+	assert.NotEmpty(t, client.subReq.GetConnectionId(),
+		"Subscribe must carry a connection_id so core can register the connection")
+	assert.Equal(t, "terminal", client.subReq.GetClientType(),
+		"StreamEvents is the terminal-mode endpoint; client_type must be %q", "terminal")
 }
 
 func TestStreamEvents_ForwardsControlFrame(t *testing.T) {
@@ -348,121 +399,6 @@ func TestStreamEvents_StreamClosedEndsStream(t *testing.T) {
 	// Stream should now be done.
 	ok = stream.Receive()
 	assert.False(t, ok, "stream should be closed after STREAM_CLOSED")
-}
-
-// mockSessionStore is a minimal test double for session.Store.
-// Only Get and GetCommandHistory are implemented; all other methods panic.
-type mockSessionStore struct {
-	commandHistory       []string
-	commandHistoryErr    error
-	getErr               error
-	addConnectionSuccess bool
-}
-
-func (m *mockSessionStore) Get(_ context.Context, id string) (*session.Info, error) {
-	if m.getErr != nil {
-		return nil, m.getErr
-	}
-	return &session.Info{ID: id, Status: session.StatusActive}, nil
-}
-
-func (m *mockSessionStore) Set(_ context.Context, id string, _ *session.Info) error {
-	return fmt.Errorf("mockSessionStore.Set(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) Delete(_ context.Context, id string, _ string) error {
-	return fmt.Errorf("mockSessionStore.Delete(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) WatchSession(_ context.Context, sessionID string) (<-chan session.Event, error) {
-	return nil, fmt.Errorf("mockSessionStore.WatchSession(%q): not implemented", sessionID)
-}
-
-func (m *mockSessionStore) FindByCharacter(_ context.Context, id ulid.ULID) (*session.Info, error) {
-	return nil, fmt.Errorf("mockSessionStore.FindByCharacter(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) ListByPlayer(_ context.Context, id ulid.ULID) ([]*session.Info, error) {
-	return nil, fmt.Errorf("mockSessionStore.ListByPlayer(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) ListExpired(_ context.Context) ([]*session.Info, error) {
-	return nil, errors.New("mockSessionStore.ListExpired: not implemented")
-}
-
-func (m *mockSessionStore) UpdateStatus(_ context.Context, id string, _ session.Status, _ *time.Time, _ *time.Time) error {
-	return fmt.Errorf("mockSessionStore.UpdateStatus(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) ReattachCAS(_ context.Context, id string) (bool, error) {
-	return false, fmt.Errorf("mockSessionStore.ReattachCAS(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) UpdateCursors(_ context.Context, id string, _ map[string]ulid.ULID) error {
-	return fmt.Errorf("mockSessionStore.UpdateCursors(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) AppendCommand(_ context.Context, id string, _ string, _ int) error {
-	return fmt.Errorf("mockSessionStore.AppendCommand(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) GetCommandHistory(_ context.Context, _ string) ([]string, error) {
-	return m.commandHistory, m.commandHistoryErr
-}
-
-func (m *mockSessionStore) AddConnection(_ context.Context, conn *session.Connection) error {
-	if m.addConnectionSuccess {
-		return nil
-	}
-	return fmt.Errorf("mockSessionStore.AddConnection(%q): not implemented", conn.ID)
-}
-
-func (m *mockSessionStore) RemoveConnection(_ context.Context, id ulid.ULID) error {
-	return fmt.Errorf("mockSessionStore.RemoveConnection(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) CountConnections(_ context.Context, id string) (int, error) {
-	return 0, fmt.Errorf("mockSessionStore.CountConnections(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) CountConnectionsByType(_ context.Context, id string, _ string) (int, error) {
-	return 0, fmt.Errorf("mockSessionStore.CountConnectionsByType(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) UpdateGridPresent(_ context.Context, id string, _ bool) error {
-	return fmt.Errorf("mockSessionStore.UpdateGridPresent(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) ListActiveByLocation(_ context.Context, _ ulid.ULID) ([]*session.Info, error) {
-	return nil, fmt.Errorf("mockSessionStore.ListActiveByLocation: not implemented")
-}
-
-func (m *mockSessionStore) ListActive(_ context.Context) ([]*session.Info, error) {
-	return nil, fmt.Errorf("mockSessionStore.ListActive: not implemented")
-}
-
-func (m *mockSessionStore) DeleteByCharacter(_ context.Context, id ulid.ULID, _ string) (*session.Info, error) {
-	return nil, fmt.Errorf("mockSessionStore.DeleteByCharacter(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) UpdateActivity(_ context.Context, id string) error {
-	return fmt.Errorf("mockSessionStore.UpdateActivity(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) FindByCharacterName(_ context.Context, name string) (*session.Info, error) {
-	return nil, fmt.Errorf("mockSessionStore.FindByCharacterName(%q): not implemented", name)
-}
-
-func (m *mockSessionStore) UpdateLastPaged(_ context.Context, id string, _ string) error {
-	return fmt.Errorf("mockSessionStore.UpdateLastPaged(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) UpdateLastWhispered(_ context.Context, id string, _ string) error {
-	return fmt.Errorf("mockSessionStore.UpdateLastWhispered(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) UpdateFocusMemberships(_ context.Context, id string, _ session.FocusMutator) error {
-	return fmt.Errorf("mockSessionStore.UpdateFocusMemberships(%q): not implemented", id)
 }
 
 func TestWebQueryStreamHistoryProxiesToCoreService(t *testing.T) {
@@ -679,9 +615,8 @@ func TestStreamEventsForwardsPlayerSessionTokenOnStreamCloseCleanup(t *testing.T
 		subStream: sub,
 		discResp:  &corev1.DisconnectResponse{Success: true},
 	}
-	store := &mockSessionStore{addConnectionSuccess: true}
 
-	handler := NewHandler(client, WithSessionStore(store))
+	handler := NewHandler(client)
 	_, h := webv1connect.NewWebServiceHandler(handler)
 	srv := httptest.NewServer(h)
 	defer srv.Close()
