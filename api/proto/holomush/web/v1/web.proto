@@ -59,6 +59,10 @@ service WebService {
   // Content store access (public, no auth required).
   rpc WebGetContent(WebGetContentRequest) returns (WebGetContentResponse);
   rpc WebListContent(WebListContentRequest) returns (WebListContentResponse);
+
+  // WebQueryStreamHistory reads paginated event history for the web client.
+  // Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
+  rpc WebQueryStreamHistory(WebQueryStreamHistoryRequest) returns (WebQueryStreamHistoryResponse);
 }
 
 message SendCommandRequest {
@@ -239,4 +243,17 @@ message WebContentItem {
   string content_type = 2;
   bytes body = 3;
   map<string, string> metadata = 4;
+}
+
+message WebQueryStreamHistoryRequest {
+  string session_id = 1;
+  string stream = 2;
+  int32 count = 3; // page size; 0 = default (150), max 500, negative rejected
+  int64 not_before_ms = 4; // epoch ms time floor; 0 = no lower bound
+  string before_id = 5; // ULID pagination cursor; events older than this; empty = latest
+}
+
+message WebQueryStreamHistoryResponse {
+  repeated GameEvent events = 1;
+  bool has_more = 2;
 }

@@ -64,6 +64,12 @@ service CoreService {
 
   // Validate a player session token. Used by web gateway for cookie-based auth checks.
   rpc CheckPlayerSession(CheckPlayerSessionRequest) returns (CheckPlayerSessionResponse);
+
+  // QueryStreamHistory reads paginated event history from a stream.
+  // Two-layer authorization: membership gate (I-17) for private streams,
+  // ABAC policy evaluation for public streams.
+  // Pure read — does not mutate session cursors (invariant I-13).
+  rpc QueryStreamHistory(QueryStreamHistoryRequest) returns (QueryStreamHistoryResponse);
 }
 
 message HandleCommandRequest {
@@ -253,4 +259,19 @@ message CheckPlayerSessionRequest {
 
 message CheckPlayerSessionResponse {
   string player_name = 1;
+}
+
+message QueryStreamHistoryRequest {
+  RequestMeta meta = 1;
+  string session_id = 2;
+  string stream = 3;
+  int32 count = 4; // page size; 0 = default (150), max 500, negative rejected
+  int64 not_before_ms = 5; // epoch ms time floor; 0 = no lower bound
+  string before_id = 6; // ULID pagination cursor; events older than this; empty = latest
+}
+
+message QueryStreamHistoryResponse {
+  ResponseMeta meta = 1;
+  repeated EventFrame events = 2;
+  bool has_more = 3;
 }

@@ -196,9 +196,9 @@ func (_c *MockEventStore_Replay_Call) RunAndReturn(run func(context.Context, str
 	return _c
 }
 
-// ReplayTail provides a mock function with given fields: ctx, stream, count, notBefore
-func (_m *MockEventStore) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time) ([]core.Event, error) {
-	ret := _m.Called(ctx, stream, count, notBefore)
+// ReplayTail provides a mock function with given fields: ctx, stream, count, notBefore, beforeID
+func (_m *MockEventStore) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
+	ret := _m.Called(ctx, stream, count, notBefore, beforeID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ReplayTail")
@@ -206,19 +206,19 @@ func (_m *MockEventStore) ReplayTail(ctx context.Context, stream string, count i
 
 	var r0 []core.Event
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, int, time.Time) ([]core.Event, error)); ok {
-		return rf(ctx, stream, count, notBefore)
+	if rf, ok := ret.Get(0).(func(context.Context, string, int, time.Time, ulid.ULID) ([]core.Event, error)); ok {
+		return rf(ctx, stream, count, notBefore, beforeID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, int, time.Time) []core.Event); ok {
-		r0 = rf(ctx, stream, count, notBefore)
+	if rf, ok := ret.Get(0).(func(context.Context, string, int, time.Time, ulid.ULID) []core.Event); ok {
+		r0 = rf(ctx, stream, count, notBefore, beforeID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]core.Event)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, int, time.Time) error); ok {
-		r1 = rf(ctx, stream, count, notBefore)
+	if rf, ok := ret.Get(1).(func(context.Context, string, int, time.Time, ulid.ULID) error); ok {
+		r1 = rf(ctx, stream, count, notBefore, beforeID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -236,13 +236,14 @@ type MockEventStore_ReplayTail_Call struct {
 //   - stream string
 //   - count int
 //   - notBefore time.Time
-func (_e *MockEventStore_Expecter) ReplayTail(ctx interface{}, stream interface{}, count interface{}, notBefore interface{}) *MockEventStore_ReplayTail_Call {
-	return &MockEventStore_ReplayTail_Call{Call: _e.mock.On("ReplayTail", ctx, stream, count, notBefore)}
+//   - beforeID ulid.ULID
+func (_e *MockEventStore_Expecter) ReplayTail(ctx interface{}, stream interface{}, count interface{}, notBefore interface{}, beforeID interface{}) *MockEventStore_ReplayTail_Call {
+	return &MockEventStore_ReplayTail_Call{Call: _e.mock.On("ReplayTail", ctx, stream, count, notBefore, beforeID)}
 }
 
-func (_c *MockEventStore_ReplayTail_Call) Run(run func(ctx context.Context, stream string, count int, notBefore time.Time)) *MockEventStore_ReplayTail_Call {
+func (_c *MockEventStore_ReplayTail_Call) Run(run func(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID)) *MockEventStore_ReplayTail_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(int), args[3].(time.Time))
+		run(args[0].(context.Context), args[1].(string), args[2].(int), args[3].(time.Time), args[4].(ulid.ULID))
 	})
 	return _c
 }
@@ -252,7 +253,7 @@ func (_c *MockEventStore_ReplayTail_Call) Return(_a0 []core.Event, _a1 error) *M
 	return _c
 }
 
-func (_c *MockEventStore_ReplayTail_Call) RunAndReturn(run func(context.Context, string, int, time.Time) ([]core.Event, error)) *MockEventStore_ReplayTail_Call {
+func (_c *MockEventStore_ReplayTail_Call) RunAndReturn(run func(context.Context, string, int, time.Time, ulid.ULID) ([]core.Event, error)) *MockEventStore_ReplayTail_Call {
 	_c.Call.Return(run)
 	return _c
 }

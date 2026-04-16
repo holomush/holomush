@@ -120,7 +120,7 @@ func (m *mockEventStore) Subscribe(ctx context.Context, stream string) (<-chan u
 	return eventCh, errCh, nil
 }
 
-func (m *mockEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time) ([]core.Event, error) {
+func (m *mockEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ ulid.ULID) ([]core.Event, error) {
 	return nil, nil
 }
 

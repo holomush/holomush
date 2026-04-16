@@ -90,7 +90,7 @@ func (s *CoreServer) fetchForMode(
 		return events, oops.With("stream", sm.Stream).Wrap(err)
 
 	case focus.ReplayModeBoundedTail:
-		events, err := s.eventStore.ReplayTail(ctx, sm.Stream, sm.TailCount, sm.NotBefore)
+		events, err := s.eventStore.ReplayTail(ctx, sm.Stream, sm.TailCount, sm.NotBefore, ulid.ULID{})
 		return events, oops.With("stream", sm.Stream).Wrap(err)
 
 	case focus.ReplayModeLiveOnly:

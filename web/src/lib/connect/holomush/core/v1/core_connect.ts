@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreateGuestRequest, CreateGuestResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListCharactersRequest, ListCharactersResponse, LogoutRequest, LogoutResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
+import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreateGuestRequest, CreateGuestResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListCharactersRequest, ListCharactersResponse, LogoutRequest, LogoutResponse, QueryStreamHistoryRequest, QueryStreamHistoryResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -169,6 +169,20 @@ export const CoreService = {
       name: "CheckPlayerSession",
       I: CheckPlayerSessionRequest,
       O: CheckPlayerSessionResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * QueryStreamHistory reads paginated event history from a stream.
+     * Two-layer authorization: membership gate (I-17) for private streams,
+     * ABAC policy evaluation for public streams.
+     * Pure read — does not mutate session cursors (invariant I-13).
+     *
+     * @generated from rpc holomush.core.v1.CoreService.QueryStreamHistory
+     */
+    queryStreamHistory: {
+      name: "QueryStreamHistory",
+      I: QueryStreamHistoryRequest,
+      O: QueryStreamHistoryResponse,
       kind: MethodKind.Unary,
     },
   }

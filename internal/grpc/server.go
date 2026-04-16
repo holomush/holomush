@@ -23,6 +23,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	accessTypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
@@ -117,6 +118,10 @@ type CoreServer struct {
 	// focusCoordinator manages session focus memberships and replay policy.
 	// Nil until the Subscribe handler refactor (B7) wires it into the live loop.
 	focusCoordinator focus.Coordinator
+
+	// accessEngine evaluates ABAC policies for stream read authorization (Layer 2).
+	// Nil if ABAC is not configured (public stream reads will be denied).
+	accessEngine accessTypes.AccessPolicyEngine
 
 	// afterLISTENHook fires between LISTEN setup and replay — used in tests.
 	afterLISTENHook func()
@@ -222,6 +227,11 @@ func WithStreamRegistry(r *SessionStreamRegistry) CoreServerOption {
 // WithFocusCoordinator sets the focus coordinator for session focus management.
 func WithFocusCoordinator(fc focus.Coordinator) CoreServerOption {
 	return func(s *CoreServer) { s.focusCoordinator = fc }
+}
+
+// WithAccessEngine sets the ABAC policy engine for stream read authorization.
+func WithAccessEngine(engine accessTypes.AccessPolicyEngine) CoreServerOption {
+	return func(s *CoreServer) { s.accessEngine = engine }
 }
 
 // WithAfterLISTENHook sets a callback fired between LISTEN setup and replay.

@@ -237,12 +237,15 @@ func (s *PostgresEventStore) InitGameID(ctx context.Context) (string, error) {
 }
 
 // maxReplayTailCount is the server-side cap for ReplayTail count parameter.
-const maxReplayTailCount = 500
+// Set to 501 so the QueryStreamHistory handler's "count+1 for has_more
+// detection" probe works at the user-facing ceiling (count=500).
+const maxReplayTailCount = 501
 
 // ReplayTail returns up to count most recent events on stream, ascending by
 // event ID. If notBefore is non-zero, events with timestamps before it are
-// excluded. Count is capped at 500.
-func (s *PostgresEventStore) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time) ([]core.Event, error) {
+// excluded. If beforeID is non-zero, events with id >= beforeID are excluded
+// (cursor-based pagination). Count is capped at maxReplayTailCount.
+func (s *PostgresEventStore) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
 	if count > maxReplayTailCount {
 		count = maxReplayTailCount
 	}
@@ -250,10 +253,15 @@ func (s *PostgresEventStore) ReplayTail(ctx context.Context, stream string, coun
 		return nil, nil
 	}
 
+	zeroID := ulid.ULID{}
+	hasNotBefore := !notBefore.IsZero()
+	hasBeforeID := beforeID != zeroID
+
 	var rows pgx.Rows
 	var err error
 
-	if notBefore.IsZero() {
+	switch {
+	case !hasNotBefore && !hasBeforeID:
 		rows, err = s.pool.Query(ctx,
 			`SELECT id, stream, type, actor_kind, actor_id, payload, created_at
 			 FROM (
@@ -262,7 +270,7 @@ func (s *PostgresEventStore) ReplayTail(ctx context.Context, stream string, coun
 			     ORDER BY id DESC LIMIT $2
 			 ) sub ORDER BY id ASC`,
 			stream, count)
-	} else {
+	case hasNotBefore && !hasBeforeID:
 		rows, err = s.pool.Query(ctx,
 			`SELECT id, stream, type, actor_kind, actor_id, payload, created_at
 			 FROM (
@@ -271,6 +279,24 @@ func (s *PostgresEventStore) ReplayTail(ctx context.Context, stream string, coun
 			     ORDER BY id DESC LIMIT $3
 			 ) sub ORDER BY id ASC`,
 			stream, notBefore, count)
+	case !hasNotBefore && hasBeforeID:
+		rows, err = s.pool.Query(ctx,
+			`SELECT id, stream, type, actor_kind, actor_id, payload, created_at
+			 FROM (
+			     SELECT id, stream, type, actor_kind, actor_id, payload, created_at
+			     FROM events WHERE stream = $1 AND id < $2
+			     ORDER BY id DESC LIMIT $3
+			 ) sub ORDER BY id ASC`,
+			stream, beforeID.String(), count)
+	case hasNotBefore && hasBeforeID:
+		rows, err = s.pool.Query(ctx,
+			`SELECT id, stream, type, actor_kind, actor_id, payload, created_at
+			 FROM (
+			     SELECT id, stream, type, actor_kind, actor_id, payload, created_at
+			     FROM events WHERE stream = $1 AND created_at >= $2 AND id < $3
+			     ORDER BY id DESC LIMIT $4
+			 ) sub ORDER BY id ASC`,
+			stream, notBefore, beforeID.String(), count)
 	}
 	if err != nil {
 		return nil, oops.With("operation", "replay tail").With("stream", stream).Wrap(err)

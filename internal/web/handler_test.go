@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/session"
@@ -69,6 +70,10 @@ type mockCoreClient struct {
 	checkSessionErr    error
 	createGuestResp    *corev1.CreateGuestResponse
 	createGuestErr     error
+
+	queryStreamHistoryResp *corev1.QueryStreamHistoryResponse
+	queryStreamHistoryErr  error
+	queryStreamHistoryReq  *corev1.QueryStreamHistoryRequest // captured for assertion
 }
 
 func (m *mockCoreClient) HandleCommand(_ context.Context, _ *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
@@ -140,6 +145,11 @@ func (m *mockCoreClient) CheckPlayerSession(_ context.Context, _ *corev1.CheckPl
 
 func (m *mockCoreClient) CreateGuest(_ context.Context, _ *corev1.CreateGuestRequest) (*corev1.CreateGuestResponse, error) {
 	return m.createGuestResp, m.createGuestErr
+}
+
+func (m *mockCoreClient) QueryStreamHistory(_ context.Context, req *corev1.QueryStreamHistoryRequest) (*corev1.QueryStreamHistoryResponse, error) {
+	m.queryStreamHistoryReq = req
+	return m.queryStreamHistoryResp, m.queryStreamHistoryErr
 }
 
 func TestHandler_SendCommand_Success(t *testing.T) {
@@ -441,4 +451,135 @@ func (m *mockSessionStore) UpdateLastWhispered(_ context.Context, id string, _ s
 
 func (m *mockSessionStore) UpdateFocusMemberships(_ context.Context, id string, _ session.FocusMutator) error {
 	return fmt.Errorf("mockSessionStore.UpdateFocusMemberships(%q): not implemented", id)
+}
+
+func TestWebQueryStreamHistoryProxiesToCoreService(t *testing.T) {
+	now := timestamppb.Now()
+	client := &mockCoreClient{
+		queryStreamHistoryResp: &corev1.QueryStreamHistoryResponse{
+			Events: []*corev1.EventFrame{
+				{Type: "say", Timestamp: now, Payload: []byte(`{"character_name":"Alice","message":"Hello!"}`)},
+				{Type: "pose", Timestamp: now, Payload: []byte(`{"character_name":"Bob","action":"waves."}`)},
+			},
+			HasMore: true,
+		},
+	}
+	h := NewHandler(client)
+
+	resp, err := h.WebQueryStreamHistory(context.Background(), connect.NewRequest(&webv1.WebQueryStreamHistoryRequest{
+		SessionId: "sess-abc",
+		Stream:    "main",
+		Count:     2,
+	}))
+	require.NoError(t, err)
+	assert.Len(t, resp.Msg.GetEvents(), 2)
+	assert.True(t, resp.Msg.GetHasMore())
+}
+
+func TestWebQueryStreamHistoryPropagatesError(t *testing.T) {
+	// The proxy MUST return upstream errors unchanged so ConnectRPC preserves
+	// the original gRPC status code (SESSION_EXPIRED, STREAM_ACCESS_DENIED,
+	// INVALID_ARGUMENT, etc.). Wrapping as connect.CodeInternal would collapse
+	// all of these into one opaque server error.
+	upstream := errors.New("core unavailable")
+	client := &mockCoreClient{
+		queryStreamHistoryErr: upstream,
+	}
+	h := NewHandler(client)
+
+	_, err := h.WebQueryStreamHistory(context.Background(), connect.NewRequest(&webv1.WebQueryStreamHistoryRequest{
+		SessionId: "sess-abc",
+		Stream:    "main",
+	}))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, upstream, "proxy must return the upstream error unchanged")
+}
+
+func TestWebQueryStreamHistoryPopulatesTypeAndTimestamp(t *testing.T) {
+	ts := timestamppb.New(timestamppb.Now().AsTime())
+	client := &mockCoreClient{
+		queryStreamHistoryResp: &corev1.QueryStreamHistoryResponse{
+			Events: []*corev1.EventFrame{
+				{
+					Id:        "01ABCDEF",
+					Stream:    "main",
+					Type:      "say",
+					Timestamp: ts,
+					ActorId:   "char-1",
+					Payload:   []byte(`{"character_name":"Alice","message":"Hello!"}`),
+				},
+			},
+			HasMore: false,
+		},
+	}
+	h := NewHandler(client)
+
+	resp, err := h.WebQueryStreamHistory(context.Background(), connect.NewRequest(&webv1.WebQueryStreamHistoryRequest{
+		SessionId: "sess-abc",
+		Stream:    "main",
+	}))
+	require.NoError(t, err)
+	require.Len(t, resp.Msg.GetEvents(), 1)
+	ge := resp.Msg.GetEvents()[0]
+	assert.Equal(t, "say", ge.GetType())
+	assert.Equal(t, ts.GetSeconds(), ge.GetTimestamp())
+}
+
+func TestWebQueryStreamHistoryPropagatesHasMore(t *testing.T) {
+	now := timestamppb.Now()
+	payload := []byte(`{"character_name":"Alice","message":"Hi"}`)
+
+	t.Run("has_more true is forwarded", func(t *testing.T) {
+		client := &mockCoreClient{
+			queryStreamHistoryResp: &corev1.QueryStreamHistoryResponse{
+				Events:  []*corev1.EventFrame{{Type: "say", Timestamp: now, Payload: payload}},
+				HasMore: true,
+			},
+		}
+		h := NewHandler(client)
+		resp, err := h.WebQueryStreamHistory(context.Background(), connect.NewRequest(&webv1.WebQueryStreamHistoryRequest{
+			SessionId: "sess-1", Stream: "main",
+		}))
+		require.NoError(t, err)
+		assert.True(t, resp.Msg.GetHasMore())
+	})
+
+	t.Run("has_more false is forwarded", func(t *testing.T) {
+		client := &mockCoreClient{
+			queryStreamHistoryResp: &corev1.QueryStreamHistoryResponse{
+				Events:  []*corev1.EventFrame{{Type: "say", Timestamp: now, Payload: payload}},
+				HasMore: false,
+			},
+		}
+		h := NewHandler(client)
+		resp, err := h.WebQueryStreamHistory(context.Background(), connect.NewRequest(&webv1.WebQueryStreamHistoryRequest{
+			SessionId: "sess-1", Stream: "main",
+		}))
+		require.NoError(t, err)
+		assert.False(t, resp.Msg.GetHasMore())
+	})
+}
+
+func TestWebQueryStreamHistoryPropagatesRequestFields(t *testing.T) {
+	client := &mockCoreClient{
+		queryStreamHistoryResp: &corev1.QueryStreamHistoryResponse{},
+	}
+	h := NewHandler(client)
+
+	_, err := h.WebQueryStreamHistory(context.Background(), connect.NewRequest(&webv1.WebQueryStreamHistoryRequest{
+		SessionId:   "sess-xyz",
+		Stream:      "location:abc",
+		Count:       50,
+		NotBeforeMs: 1700000000000,
+		BeforeId:    "01CURSOR",
+	}))
+	require.NoError(t, err)
+
+	req := client.queryStreamHistoryReq
+	require.NotNil(t, req, "QueryStreamHistory should have been called")
+	assert.Equal(t, "sess-xyz", req.GetSessionId())
+	assert.Equal(t, "location:abc", req.GetStream())
+	assert.Equal(t, int32(50), req.GetCount())
+	assert.Equal(t, int64(1700000000000), req.GetNotBeforeMs())
+	assert.Equal(t, "01CURSOR", req.GetBeforeId())
 }

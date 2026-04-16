@@ -67,10 +67,11 @@ type replayTailCall struct {
 	stream    string
 	count     int
 	notBefore time.Time
+	beforeID  ulid.ULID
 }
 
-func (s *stubEventStore) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time) ([]core.Event, error) {
-	s.replayTailCalls = append(s.replayTailCalls, replayTailCall{stream, count, notBefore})
+func (s *stubEventStore) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
+	s.replayTailCalls = append(s.replayTailCalls, replayTailCall{stream, count, notBefore, beforeID})
 	return s.replayTailResult, s.replayTailErr
 }
 

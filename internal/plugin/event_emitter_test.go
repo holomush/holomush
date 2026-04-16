@@ -60,7 +60,7 @@ func (s *recordingEventStore) Subscribe(context.Context, string) (<-chan ulid.UL
 	return nil, nil, nil
 }
 
-func (s *recordingEventStore) ReplayTail(context.Context, string, int, time.Time) ([]core.Event, error) {
+func (s *recordingEventStore) ReplayTail(context.Context, string, int, time.Time, ulid.ULID) ([]core.Event, error) {
 	return nil, nil
 }
 
@@ -371,7 +371,7 @@ func (s *failingEventStore) Subscribe(context.Context, string) (<-chan ulid.ULID
 	return nil, nil, nil
 }
 
-func (s *failingEventStore) ReplayTail(context.Context, string, int, time.Time) ([]core.Event, error) {
+func (s *failingEventStore) ReplayTail(context.Context, string, int, time.Time, ulid.ULID) ([]core.Event, error) {
 	return nil, nil
 }
 

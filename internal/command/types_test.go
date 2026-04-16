@@ -215,7 +215,7 @@ func (m *mockEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULI
 	return nil, nil, nil
 }
 
-func (m *mockEventStore) ReplayTail(context.Context, string, int, time.Time) ([]core.Event, error) {
+func (m *mockEventStore) ReplayTail(context.Context, string, int, time.Time, ulid.ULID) ([]core.Event, error) {
 	return nil, nil
 }
 
@@ -872,7 +872,7 @@ func (c *captureEventStore) LastEventID(context.Context, string) (ulid.ULID, err
 	return ulid.ULID{}, errors.New("captureEventStore.LastEventID not implemented")
 }
 
-func (c *captureEventStore) ReplayTail(context.Context, string, int, time.Time) ([]core.Event, error) {
+func (c *captureEventStore) ReplayTail(context.Context, string, int, time.Time, ulid.ULID) ([]core.Event, error) {
 	return nil, nil
 }
 

@@ -49,6 +49,7 @@ type CoreClient interface {
 	Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1.LogoutResponse, error)
 	CheckPlayerSession(ctx context.Context, req *corev1.CheckPlayerSessionRequest) (*corev1.CheckPlayerSessionResponse, error)
 	CreateGuest(ctx context.Context, req *corev1.CreateGuestRequest) (*corev1.CreateGuestResponse, error)
+	QueryStreamHistory(ctx context.Context, req *corev1.QueryStreamHistoryRequest) (*corev1.QueryStreamHistoryResponse, error)
 }
 
 // ContentClient is the gRPC interface used by Handler to communicate with the
@@ -371,6 +372,44 @@ func (h *Handler) WebGetContent(ctx context.Context, req *connect.Request[webv1.
 			Body:        item.GetBody(),
 			Metadata:    item.GetMetadata(),
 		},
+	}), nil
+}
+
+// WebQueryStreamHistory proxies paginated event history requests to CoreService.
+// Authorization is enforced by the core service; the gateway is a translation layer.
+func (h *Handler) WebQueryStreamHistory(ctx context.Context, req *connect.Request[webv1.WebQueryStreamHistoryRequest]) (*connect.Response[webv1.WebQueryStreamHistoryResponse], error) {
+	slog.DebugContext(ctx, "web: WebQueryStreamHistory",
+		"session_id", req.Msg.GetSessionId(),
+		"stream", req.Msg.GetStream(),
+	)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.client.QueryStreamHistory(rpcCtx, &corev1.QueryStreamHistoryRequest{
+		SessionId:   req.Msg.GetSessionId(),
+		Stream:      req.Msg.GetStream(),
+		Count:       req.Msg.GetCount(),
+		NotBeforeMs: req.Msg.GetNotBeforeMs(),
+		BeforeId:    req.Msg.GetBeforeId(),
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "web: query stream history RPC failed",
+			"session_id", req.Msg.GetSessionId(), "error", err)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through as-is so clients can distinguish SESSION_EXPIRED / STREAM_ACCESS_DENIED / INVALID_ARGUMENT.
+	}
+
+	gameEvents := make([]*webv1.GameEvent, 0, len(resp.GetEvents()))
+	for _, ef := range resp.GetEvents() {
+		ge := h.translateEvent(ef)
+		if ge != nil {
+			gameEvents = append(gameEvents, ge)
+		}
+	}
+
+	return connect.NewResponse(&webv1.WebQueryStreamHistoryResponse{
+		Events:  gameEvents,
+		HasMore: resp.GetHasMore(),
 	}), nil
 }
 

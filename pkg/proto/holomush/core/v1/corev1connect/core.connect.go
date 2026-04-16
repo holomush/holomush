@@ -74,6 +74,9 @@ const (
 	// CoreServiceCheckPlayerSessionProcedure is the fully-qualified name of the CoreService's
 	// CheckPlayerSession RPC.
 	CoreServiceCheckPlayerSessionProcedure = "/holomush.core.v1.CoreService/CheckPlayerSession"
+	// CoreServiceQueryStreamHistoryProcedure is the fully-qualified name of the CoreService's
+	// QueryStreamHistory RPC.
+	CoreServiceQueryStreamHistoryProcedure = "/holomush.core.v1.CoreService/QueryStreamHistory"
 )
 
 // CoreServiceClient is a client for the holomush.core.v1.CoreService service.
@@ -106,6 +109,11 @@ type CoreServiceClient interface {
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
 	// Validate a player session token. Used by web gateway for cookie-based auth checks.
 	CheckPlayerSession(context.Context, *connect.Request[v1.CheckPlayerSessionRequest]) (*connect.Response[v1.CheckPlayerSessionResponse], error)
+	// QueryStreamHistory reads paginated event history from a stream.
+	// Two-layer authorization: membership gate (I-17) for private streams,
+	// ABAC policy evaluation for public streams.
+	// Pure read — does not mutate session cursors (invariant I-13).
+	QueryStreamHistory(context.Context, *connect.Request[v1.QueryStreamHistoryRequest]) (*connect.Response[v1.QueryStreamHistoryResponse], error)
 }
 
 // NewCoreServiceClient constructs a client for the holomush.core.v1.CoreService service. By
@@ -203,6 +211,12 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(coreServiceMethods.ByName("CheckPlayerSession")),
 			connect.WithClientOptions(opts...),
 		),
+		queryStreamHistory: connect.NewClient[v1.QueryStreamHistoryRequest, v1.QueryStreamHistoryResponse](
+			httpClient,
+			baseURL+CoreServiceQueryStreamHistoryProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("QueryStreamHistory")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -222,6 +236,7 @@ type coreServiceClient struct {
 	confirmPasswordReset *connect.Client[v1.ConfirmPasswordResetRequest, v1.ConfirmPasswordResetResponse]
 	logout               *connect.Client[v1.LogoutRequest, v1.LogoutResponse]
 	checkPlayerSession   *connect.Client[v1.CheckPlayerSessionRequest, v1.CheckPlayerSessionResponse]
+	queryStreamHistory   *connect.Client[v1.QueryStreamHistoryRequest, v1.QueryStreamHistoryResponse]
 }
 
 // HandleCommand calls holomush.core.v1.CoreService.HandleCommand.
@@ -294,6 +309,11 @@ func (c *coreServiceClient) CheckPlayerSession(ctx context.Context, req *connect
 	return c.checkPlayerSession.CallUnary(ctx, req)
 }
 
+// QueryStreamHistory calls holomush.core.v1.CoreService.QueryStreamHistory.
+func (c *coreServiceClient) QueryStreamHistory(ctx context.Context, req *connect.Request[v1.QueryStreamHistoryRequest]) (*connect.Response[v1.QueryStreamHistoryResponse], error) {
+	return c.queryStreamHistory.CallUnary(ctx, req)
+}
+
 // CoreServiceHandler is an implementation of the holomush.core.v1.CoreService service.
 type CoreServiceHandler interface {
 	// HandleCommand processes a game command.
@@ -324,6 +344,11 @@ type CoreServiceHandler interface {
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
 	// Validate a player session token. Used by web gateway for cookie-based auth checks.
 	CheckPlayerSession(context.Context, *connect.Request[v1.CheckPlayerSessionRequest]) (*connect.Response[v1.CheckPlayerSessionResponse], error)
+	// QueryStreamHistory reads paginated event history from a stream.
+	// Two-layer authorization: membership gate (I-17) for private streams,
+	// ABAC policy evaluation for public streams.
+	// Pure read — does not mutate session cursors (invariant I-13).
+	QueryStreamHistory(context.Context, *connect.Request[v1.QueryStreamHistoryRequest]) (*connect.Response[v1.QueryStreamHistoryResponse], error)
 }
 
 // NewCoreServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -417,6 +442,12 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(coreServiceMethods.ByName("CheckPlayerSession")),
 		connect.WithHandlerOptions(opts...),
 	)
+	coreServiceQueryStreamHistoryHandler := connect.NewUnaryHandler(
+		CoreServiceQueryStreamHistoryProcedure,
+		svc.QueryStreamHistory,
+		connect.WithSchema(coreServiceMethods.ByName("QueryStreamHistory")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.core.v1.CoreService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CoreServiceHandleCommandProcedure:
@@ -447,6 +478,8 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 			coreServiceLogoutHandler.ServeHTTP(w, r)
 		case CoreServiceCheckPlayerSessionProcedure:
 			coreServiceCheckPlayerSessionHandler.ServeHTTP(w, r)
+		case CoreServiceQueryStreamHistoryProcedure:
+			coreServiceQueryStreamHistoryHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -510,4 +543,8 @@ func (UnimplementedCoreServiceHandler) Logout(context.Context, *connect.Request[
 
 func (UnimplementedCoreServiceHandler) CheckPlayerSession(context.Context, *connect.Request[v1.CheckPlayerSessionRequest]) (*connect.Response[v1.CheckPlayerSessionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.CheckPlayerSession is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) QueryStreamHistory(context.Context, *connect.Request[v1.QueryStreamHistoryRequest]) (*connect.Response[v1.QueryStreamHistoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.QueryStreamHistory is not implemented"))
 }

@@ -189,7 +189,7 @@ func (s *pluginHostServiceServer) QueryStreamHistory(ctx context.Context, req *p
 		notBefore = time.UnixMilli(req.GetNotBeforeMs()).UTC()
 	}
 
-	events, err := es.ReplayTail(ctx, req.GetStream(), count, notBefore)
+	events, err := es.ReplayTail(ctx, req.GetStream(), count, notBefore, ulid.ULID{})
 	if err != nil {
 		return nil, oops.With("plugin", s.pluginName).With("stream", req.GetStream()).Wrap(err)
 	}

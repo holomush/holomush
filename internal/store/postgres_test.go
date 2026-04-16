@@ -759,7 +759,7 @@ func TestPostgresEventStore_ReplayTail_Success(t *testing.T) {
 		WillReturnRows(rows)
 
 	store := &PostgresEventStore{pool: mock}
-	events, err := store.ReplayTail(context.Background(), "location:test", 5, time.Time{})
+	events, err := store.ReplayTail(context.Background(), "location:test", 5, time.Time{}, ulid.ULID{})
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 	// Results should be in ascending order (subquery re-sorts).
@@ -780,7 +780,52 @@ func TestPostgresEventStore_ReplayTail_WithNotBefore(t *testing.T) {
 		WillReturnRows(rows)
 
 	store := &PostgresEventStore{pool: mock}
-	events, err := store.ReplayTail(context.Background(), "location:test", 5, notBefore)
+	events, err := store.ReplayTail(context.Background(), "location:test", 5, notBefore, ulid.ULID{})
+	require.NoError(t, err)
+	assert.Empty(t, events)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPostgresEventStore_ReplayTail_WithBeforeID(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	id1 := core.NewULID()
+	id2 := core.NewULID()
+	ts := time.Now().UTC().Truncate(time.Microsecond)
+	beforeID := core.NewULID()
+
+	rows := pgxmock.NewRows([]string{"id", "stream", "type", "actor_kind", "actor_id", "payload", "created_at"}).
+		AddRow(id1.String(), "location:test", "say", core.ActorCharacter, "c1", []byte(`{}`), ts).
+		AddRow(id2.String(), "location:test", "say", core.ActorCharacter, "c1", []byte(`{}`), ts.Add(time.Minute))
+	mock.ExpectQuery(`SELECT id, stream, type, actor_kind, actor_id, payload, created_at FROM \(.*id < \$2.*ORDER BY id DESC LIMIT.*\) sub ORDER BY id ASC`).
+		WithArgs("location:test", beforeID.String(), 5).
+		WillReturnRows(rows)
+
+	store := &PostgresEventStore{pool: mock}
+	events, err := store.ReplayTail(context.Background(), "location:test", 5, time.Time{}, beforeID)
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	assert.Equal(t, id1, events[0].ID)
+	assert.Equal(t, id2, events[1].ID)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPostgresEventStore_ReplayTail_WithNotBeforeAndBeforeID(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	notBefore := time.Date(2026, 4, 12, 0, 0, 0, 0, time.UTC)
+	beforeID := core.NewULID()
+	rows := pgxmock.NewRows([]string{"id", "stream", "type", "actor_kind", "actor_id", "payload", "created_at"})
+	mock.ExpectQuery(`SELECT id, stream, type, actor_kind, actor_id, payload, created_at FROM \(.*created_at >= \$2.*id < \$3.*ORDER BY id DESC LIMIT.*\) sub ORDER BY id ASC`).
+		WithArgs("location:test", notBefore, beforeID.String(), 5).
+		WillReturnRows(rows)
+
+	store := &PostgresEventStore{pool: mock}
+	events, err := store.ReplayTail(context.Background(), "location:test", 5, notBefore, beforeID)
 	require.NoError(t, err)
 	assert.Empty(t, events)
 	assert.NoError(t, mock.ExpectationsWereMet())

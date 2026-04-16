@@ -228,6 +228,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		}),
 		holoGRPC.WithGuestService(guestService),
 		holoGRPC.WithStreamContributor(pluginManager),
+		holoGRPC.WithAccessEngine(policyEngine),
 	}
 	if s.cfg.StreamRegistry != nil {
 		coreServerOpts = append(coreServerOpts, holoGRPC.WithStreamRegistry(s.cfg.StreamRegistry))

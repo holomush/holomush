@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebCheckSessionRequest, WebCheckSessionResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreateGuestRequest, WebCreateGuestResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebGetContentRequest, WebGetContentResponse, WebListCharactersRequest, WebListCharactersResponse, WebListContentRequest, WebListContentResponse, WebLogoutRequest, WebLogoutResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebSelectCharacterRequest, WebSelectCharacterResponse } from "./web_pb.js";
+import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebCheckSessionRequest, WebCheckSessionResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreateGuestRequest, WebCreateGuestResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebGetContentRequest, WebGetContentResponse, WebListCharactersRequest, WebListCharactersResponse, WebListContentRequest, WebListContentResponse, WebLogoutRequest, WebLogoutResponse, WebQueryStreamHistoryRequest, WebQueryStreamHistoryResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebSelectCharacterRequest, WebSelectCharacterResponse } from "./web_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -174,6 +174,18 @@ export const WebService = {
       name: "WebListContent",
       I: WebListContentRequest,
       O: WebListContentResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * WebQueryStreamHistory reads paginated event history for the web client.
+     * Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebQueryStreamHistory
+     */
+    webQueryStreamHistory: {
+      name: "WebQueryStreamHistory",
+      I: WebQueryStreamHistoryRequest,
+      O: WebQueryStreamHistoryResponse,
       kind: MethodKind.Unary,
     },
   }

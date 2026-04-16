@@ -36,9 +36,9 @@ func TestAccessIntegration(t *testing.T) {
 }
 
 type accessTestEnv struct {
-	ctx    context.Context
-	pool   *pgxpool.Pool
-	engine *policy.Engine
+	ctx         context.Context
+	pool        *pgxpool.Pool
+	engine      *policy.Engine
 	pStore      policystore.PolicyStore
 	cache       *policy.Cache
 	charRepo    *worldpg.CharacterRepository

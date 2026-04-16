@@ -266,7 +266,7 @@ func TestEventWriterReplayTailDelegatesToUnderlyingStore(t *testing.T) {
 		Actor: core.Actor{Kind: core.ActorCharacter, ID: "char-1"}, Payload: []byte(`{}`),
 	}))
 
-	events, err := writer.ReplayTail(ctx, "location:tail-test", 10, time.Time{})
+	events, err := writer.ReplayTail(ctx, "location:tail-test", 10, time.Time{}, ulid.ULID{})
 	require.NoError(t, err)
 	assert.Len(t, events, 1)
 }
@@ -277,7 +277,7 @@ func TestEventWriterReplayTailPropagatesStoreError(t *testing.T) {
 	writer := core.NewEventWriter(store)
 	defer writer.Close()
 
-	_, err := writer.ReplayTail(context.Background(), "location:test", 10, time.Time{})
+	_, err := writer.ReplayTail(context.Background(), "location:test", 10, time.Time{}, ulid.ULID{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, expectedErr)
 }
@@ -388,7 +388,7 @@ func (f *failingStore) LastEventID(_ context.Context, _ string) (ulid.ULID, erro
 	return ulid.ULID{}, f.err
 }
 
-func (f *failingStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time) ([]core.Event, error) {
+func (f *failingStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ ulid.ULID) ([]core.Event, error) {
 	return nil, f.err
 }
 

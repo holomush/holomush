@@ -134,8 +134,8 @@ func (w *EventWriter) LastEventID(ctx context.Context, stream string) (ulid.ULID
 }
 
 // ReplayTail delegates to the underlying EventStore.
-func (w *EventWriter) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time) ([]Event, error) {
-	events, err := w.store.ReplayTail(ctx, stream, count, notBefore)
+func (w *EventWriter) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]Event, error) {
+	events, err := w.store.ReplayTail(ctx, stream, count, notBefore, beforeID)
 	if err != nil {
 		return nil, oops.Wrap(err)
 	}

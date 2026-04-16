@@ -247,7 +247,7 @@ func TestMemoryEventStoreReplayTailReturnsLastNEventsAscending(t *testing.T) {
 	}
 
 	// Tail of 3 should return last 3 events in ascending order.
-	events, err := store.ReplayTail(ctx, "location:tail-test", 3, time.Time{})
+	events, err := store.ReplayTail(ctx, "location:tail-test", 3, time.Time{}, ulid.ULID{})
 	require.NoError(t, err)
 	require.Len(t, events, 3)
 	assert.Equal(t, ids[7], events[0].ID)
@@ -277,7 +277,7 @@ func TestMemoryEventStoreReplayTailRespectsNotBefore(t *testing.T) {
 
 	// notBefore = baseTime+3m excludes events at 0m, 1m, 2m.
 	// Only events at 3m and 4m qualify. Requesting tail of 10.
-	events, err := store.ReplayTail(ctx, "location:tail-nb", 10, baseTime.Add(3*time.Minute))
+	events, err := store.ReplayTail(ctx, "location:tail-nb", 10, baseTime.Add(3*time.Minute), ulid.ULID{})
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 	assert.Equal(t, ids[3], events[0].ID)
@@ -288,7 +288,7 @@ func TestMemoryEventStoreReplayTailEmptyStreamReturnsNil(t *testing.T) {
 	store := NewMemoryEventStore()
 	ctx := context.Background()
 
-	events, err := store.ReplayTail(ctx, "nonexistent", 10, time.Time{})
+	events, err := store.ReplayTail(ctx, "nonexistent", 10, time.Time{}, ulid.ULID{})
 	require.NoError(t, err)
 	assert.Nil(t, events)
 }
@@ -311,7 +311,7 @@ func TestMemoryEventStoreReplayTailCapsCountAt500(t *testing.T) {
 		require.NoError(t, store.Append(ctx, event))
 	}
 
-	events, err := store.ReplayTail(ctx, "location:tail-cap", 1000, time.Time{})
+	events, err := store.ReplayTail(ctx, "location:tail-cap", 1000, time.Time{}, ulid.ULID{})
 	require.NoError(t, err)
 	assert.Len(t, events, 5, "capped count should still return all available events")
 }
@@ -330,9 +330,121 @@ func TestMemoryEventStoreReplayTailZeroCountReturnsEmpty(t *testing.T) {
 	}
 	require.NoError(t, store.Append(ctx, event))
 
-	events, err := store.ReplayTail(ctx, "location:tail-zero", 0, time.Time{})
+	events, err := store.ReplayTail(ctx, "location:tail-zero", 0, time.Time{}, ulid.ULID{})
 	require.NoError(t, err)
 	assert.Empty(t, events)
+}
+
+func TestReplayTailWithBeforeIDExcludesNewerEvents(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	ids := make([]ulid.ULID, 5)
+	for i := range 5 {
+		event := Event{
+			ID:        NewULID(),
+			Stream:    "location:before-id",
+			Type:      EventTypeSay,
+			Timestamp: time.Now(),
+			Actor:     Actor{Kind: ActorCharacter, ID: "char1"},
+			Payload:   []byte(`{}`),
+		}
+		ids[i] = event.ID
+		require.NoError(t, store.Append(ctx, event))
+		time.Sleep(time.Millisecond)
+	}
+
+	// beforeID=ids[3] excludes ids[3] and ids[4], returns first 3.
+	events, err := store.ReplayTail(ctx, "location:before-id", 10, time.Time{}, ids[3])
+	require.NoError(t, err)
+	require.Len(t, events, 3)
+	assert.Equal(t, ids[0], events[0].ID)
+	assert.Equal(t, ids[1], events[1].ID)
+	assert.Equal(t, ids[2], events[2].ID)
+}
+
+func TestReplayTailWithZeroBeforeIDReturnsAll(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	ids := make([]ulid.ULID, 3)
+	for i := range 3 {
+		event := Event{
+			ID:        NewULID(),
+			Stream:    "location:zero-before",
+			Type:      EventTypeSay,
+			Timestamp: time.Now(),
+			Actor:     Actor{Kind: ActorCharacter, ID: "char1"},
+			Payload:   []byte(`{}`),
+		}
+		ids[i] = event.ID
+		require.NoError(t, store.Append(ctx, event))
+		time.Sleep(time.Millisecond)
+	}
+
+	// Zero beforeID means no upper bound — all 3 events returned.
+	events, err := store.ReplayTail(ctx, "location:zero-before", 10, time.Time{}, ulid.ULID{})
+	require.NoError(t, err)
+	require.Len(t, events, 3)
+	assert.Equal(t, ids[0], events[0].ID)
+	assert.Equal(t, ids[1], events[1].ID)
+	assert.Equal(t, ids[2], events[2].ID)
+}
+
+func TestReplayTailWithBeforeIDAndNotBefore(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	baseTime := time.Date(2026, 4, 15, 0, 0, 0, 0, time.UTC)
+	ids := make([]ulid.ULID, 5)
+	for i := range 5 {
+		event := Event{
+			ID:        NewULID(),
+			Stream:    "location:both-filters",
+			Type:      EventTypeSay,
+			Timestamp: baseTime.Add(time.Duration(i) * time.Minute),
+			Actor:     Actor{Kind: ActorCharacter, ID: "char1"},
+			Payload:   []byte(`{}`),
+		}
+		ids[i] = event.ID
+		require.NoError(t, store.Append(ctx, event))
+		time.Sleep(time.Millisecond)
+	}
+
+	// notBefore=baseTime+1m excludes ids[0] (0m).
+	// beforeID=ids[3] excludes ids[3] (3m) and ids[4] (4m).
+	// Middle 2: ids[1] (1m) and ids[2] (2m).
+	events, err := store.ReplayTail(ctx, "location:both-filters", 10, baseTime.Add(time.Minute), ids[3])
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	assert.Equal(t, ids[1], events[0].ID)
+	assert.Equal(t, ids[2], events[1].ID)
+}
+
+func TestReplayTailBeforeIDAtBoundaryExcludesExact(t *testing.T) {
+	store := NewMemoryEventStore()
+	ctx := context.Background()
+
+	ids := make([]ulid.ULID, 3)
+	for i := range 3 {
+		event := Event{
+			ID:        NewULID(),
+			Stream:    "location:boundary",
+			Type:      EventTypeSay,
+			Timestamp: time.Now(),
+			Actor:     Actor{Kind: ActorCharacter, ID: "char1"},
+			Payload:   []byte(`{}`),
+		}
+		ids[i] = event.ID
+		require.NoError(t, store.Append(ctx, event))
+		time.Sleep(time.Millisecond)
+	}
+
+	// beforeID=ids[1] excludes ids[1] and ids[2], returns only ids[0].
+	events, err := store.ReplayTail(ctx, "location:boundary", 10, time.Time{}, ids[1])
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, ids[0], events[0].ID)
 }
 
 func TestMemoryEventStoreSubscribeSessionDeliversEventsAcrossStreams(t *testing.T) {
