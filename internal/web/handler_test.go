@@ -353,9 +353,10 @@ func TestStreamEvents_StreamClosedEndsStream(t *testing.T) {
 // mockSessionStore is a minimal test double for session.Store.
 // Only Get and GetCommandHistory are implemented; all other methods panic.
 type mockSessionStore struct {
-	commandHistory    []string
-	commandHistoryErr error
-	getErr            error
+	commandHistory       []string
+	commandHistoryErr    error
+	getErr               error
+	addConnectionSuccess bool
 }
 
 func (m *mockSessionStore) Get(_ context.Context, id string) (*session.Info, error) {
@@ -410,6 +411,9 @@ func (m *mockSessionStore) GetCommandHistory(_ context.Context, _ string) ([]str
 }
 
 func (m *mockSessionStore) AddConnection(_ context.Context, conn *session.Connection) error {
+	if m.addConnectionSuccess {
+		return nil
+	}
 	return fmt.Errorf("mockSessionStore.AddConnection(%q): not implemented", conn.ID)
 }
 
@@ -651,6 +655,58 @@ func TestStreamEventsForwardsPlayerSessionToken(t *testing.T) {
 	require.NotNil(t, client.subReq, "Subscribe should have been called")
 	assert.Equal(t, token, client.subReq.GetPlayerSessionToken())
 	assert.Equal(t, "sess-2", client.subReq.GetSessionId())
+}
+
+// TestStreamEventsForwardsPlayerSessionTokenOnStreamCloseCleanup verifies that
+// when StreamEvents closes (stream end/context cancel), the internal cleanup
+// Disconnect RPC forwards the player session token. Without the token the
+// server-side ownership gate would skip the cleanup (connection remove,
+// detach/delete, disconnect hooks).
+func TestStreamEventsForwardsPlayerSessionTokenOnStreamCloseCleanup(t *testing.T) {
+	const token = "tok-stream-cleanup"
+	sub := &mockSubscribeStream{
+		responses: []*corev1.SubscribeResponse{
+			{
+				Frame: &corev1.SubscribeResponse_Control{
+					Control: &corev1.ControlFrame{
+						Signal: corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED,
+					},
+				},
+			},
+		},
+	}
+	client := &mockCoreClient{
+		subStream: sub,
+		discResp:  &corev1.DisconnectResponse{Success: true},
+	}
+	store := &mockSessionStore{addConnectionSuccess: true}
+
+	handler := NewHandler(client, WithSessionStore(store))
+	_, h := webv1connect.NewWebServiceHandler(handler)
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	wsc := webv1connect.NewWebServiceClient(http.DefaultClient, srv.URL)
+
+	streamReq := connect.NewRequest(&webv1.StreamEventsRequest{SessionId: "sess-cleanup"})
+	streamReq.Header().Set(headerInjectSessionToken, token)
+
+	stream, err := wsc.StreamEvents(context.Background(), streamReq)
+	require.NoError(t, err)
+	// Drain until server ends the stream via STREAM_CLOSED, which triggers
+	// the deferred cleanup Disconnect.
+	for stream.Receive() {
+	}
+	require.NoError(t, stream.Close())
+
+	// The cleanup Disconnect runs in a deferred goroutine on the server side.
+	// Poll briefly to give it time to fire before asserting.
+	require.Eventually(t, func() bool {
+		return client.discReq != nil
+	}, 2*time.Second, 10*time.Millisecond, "cleanup Disconnect should have been called")
+
+	assert.Equal(t, "sess-cleanup", client.discReq.GetSessionId())
+	assert.Equal(t, token, client.discReq.GetPlayerSessionToken(),
+		"cleanup Disconnect must forward the player session token so the ownership gate passes")
 }
 
 func TestDisconnectForwardsPlayerSessionToken(t *testing.T) {

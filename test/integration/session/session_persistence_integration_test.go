@@ -879,6 +879,71 @@ var _ = Describe("Session Persistence", func() {
 				"response must be enumeration-safe — same string as ownership mismatch")
 		})
 	})
+
+	// Disconnect ownership enforcement — bd-jv7z.
+	//
+	// Closes the IDOR surface where Player A could forcibly disconnect
+	// Player B's session with just the session_id. The core server now
+	// calls auth.ValidateSessionOwnership before acting on the session;
+	// any failure collapses to the enumeration-safe "session not found"
+	// response (success=false), and Player B's session remains untouched.
+	Describe("Disconnect ownership enforcement (bd-jv7z)", func() {
+		It("rejects a cross-player Disconnect with session not found", func() {
+			sessionA, _, tokenA := loginAsGuest(testCtx, grpcCli)
+			sessionB, _, tokenB := loginAsGuest(testCtx, grpcCli)
+			Expect(sessionA).NotTo(Equal(sessionB))
+			Expect(tokenA).NotTo(Equal(tokenB))
+
+			// Attack: Player A's token with Player B's session_id.
+			resp, err := grpcCli.Disconnect(testCtx, &corev1.DisconnectRequest{
+				SessionId:          sessionB,
+				ConnectionId:       "",
+				PlayerSessionToken: tokenA,
+			})
+			Expect(err).NotTo(HaveOccurred(),
+				"RPC returns normally — error is in the response payload")
+			Expect(resp.GetSuccess()).To(BeFalse(),
+				"cross-player disconnect must be rejected")
+
+			// Player B's session must still exist and be active.
+			info, getErr := env.sessionStore.Get(testCtx, sessionB)
+			Expect(getErr).NotTo(HaveOccurred(),
+				"victim session must survive an unauthorized disconnect attempt")
+			Expect(info.Status).To(Equal(session.StatusActive),
+				"victim session status must not have changed")
+		})
+
+		It("permits Disconnect when the player owns the session", func() {
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
+
+			resp, err := grpcCli.Disconnect(testCtx, &corev1.DisconnectRequest{
+				SessionId:          sessionID,
+				ConnectionId:       "",
+				PlayerSessionToken: token,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.GetSuccess()).To(BeTrue(),
+				"owner-authorized disconnect must succeed")
+		})
+
+		It("rejects Disconnect with empty token even for a valid session id", func() {
+			sessionID, _, _ := loginAsGuest(testCtx, grpcCli)
+
+			resp, err := grpcCli.Disconnect(testCtx, &corev1.DisconnectRequest{
+				SessionId: sessionID,
+				// PlayerSessionToken intentionally empty.
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.GetSuccess()).To(BeFalse(),
+				"empty token must not authorize a disconnect")
+
+			// Session must still exist.
+			info, getErr := env.sessionStore.Get(testCtx, sessionID)
+			Expect(getErr).NotTo(HaveOccurred(),
+				"session must survive an unauthorized disconnect attempt")
+			Expect(info.Status).To(Equal(session.StatusActive))
+		})
+	})
 })
 
 // drainUntilReplayComplete reads frames from the given stream until a

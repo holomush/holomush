@@ -878,6 +878,14 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 // character phases out (leave event) but the session stays active.
 // When ALL connections close, non-guest sessions detach with TTL;
 // guest sessions are deleted immediately.
+//
+// SECURITY (bd-jv7z): Before acting, the caller's player_session_token is
+// validated against the target session via auth.ValidateSessionOwnership.
+// Any failure — missing/invalid token, expired token, unknown session, or
+// ownership mismatch — returns the enumeration-safe "session not found"
+// response (success=false) with no state change. This closes the IDOR
+// surface where one player could forcibly disconnect another player's
+// session with just the session_id.
 func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error) {
 	requestID := ""
 	if req.Meta != nil {
@@ -889,6 +897,27 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		"session_id", req.SessionId,
 		"connection_id", req.ConnectionId,
 	)
+
+	// Validate session ownership before any state-changing work.
+	// Enumeration-safe: every failure mode collapses to the same
+	// "session not found" response.
+	if _, err := auth.ValidateSessionOwnership(
+		ctx,
+		s.playerSessionRepo,
+		s.sessionStore,
+		req.GetPlayerSessionToken(),
+		req.GetSessionId(),
+	); err != nil {
+		slog.DebugContext(ctx, "disconnect session ownership validation failed",
+			"request_id", requestID,
+			"session_id", req.SessionId,
+			"error", err,
+		)
+		return &corev1.DisconnectResponse{
+			Meta:    responseMeta(requestID),
+			Success: false,
+		}, nil
+	}
 
 	// Remove specific connection if provided
 	if req.ConnectionId != "" {

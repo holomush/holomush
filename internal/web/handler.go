@@ -177,8 +177,9 @@ func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.S
 				disconnCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if _, disconnErr := h.client.Disconnect(disconnCtx, &corev1.DisconnectRequest{
-					SessionId:    sessionID,
-					ConnectionId: connID.String(),
+					SessionId:          sessionID,
+					ConnectionId:       connID.String(),
+					PlayerSessionToken: token,
 				}); disconnErr != nil {
 					slog.Warn("web: disconnect RPC failed on stream close",
 						"session_id", sessionID,

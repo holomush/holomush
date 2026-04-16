@@ -501,7 +501,8 @@ func TestCoreServer_Disconnect(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore: sessStore,
+		sessionStore:      sessStore,
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
 	req := &corev1.DisconnectRequest{
@@ -509,7 +510,8 @@ func TestCoreServer_Disconnect(t *testing.T) {
 			RequestId: "disconnect-request-id",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.Disconnect(ctx, req)
@@ -1019,12 +1021,14 @@ func TestCoreServer_Disconnect_NilMeta(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore: sessStore,
+		sessionStore:      sessStore,
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
 	req := &corev1.DisconnectRequest{
-		Meta:      nil, // No meta
-		SessionId: sessionID.String(),
+		Meta:               nil, // No meta
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.Disconnect(ctx, req)
@@ -1042,7 +1046,8 @@ func TestCoreServer_Disconnect_NonExistentSession(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore: session.NewMemStore(),
+		sessionStore:      session.NewMemStore(),
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
 	ctx := context.Background()
@@ -1051,14 +1056,19 @@ func TestCoreServer_Disconnect_NonExistentSession(t *testing.T) {
 			RequestId: "non-existent-disc",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: "non-existent-session",
+		SessionId:          "non-existent-session",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.Disconnect(ctx, req)
 	require.NoError(t, err)
 
-	// Should succeed even for non-existent session (idempotent)
-	assert.True(t, resp.Success, "expected success for non-existent session (idempotent)")
+	// bd-jv7z: unknown session_id collapses to the enumeration-safe
+	// "session not found" response (success=false). Previously Disconnect
+	// returned success=true for any unknown session (idempotent); the
+	// ownership-validation gate now refuses to confirm existence to a
+	// caller whose token doesn't match.
+	assert.False(t, resp.Success, "non-existent session must not confirm existence via success=true")
 }
 
 func TestNewGRPCServerInsecure(t *testing.T) {
@@ -1174,7 +1184,8 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 		server := &CoreServer{
 			engine: core.NewEngine(core.NewMemoryEventStore()),
 
-			sessionStore: sessionStore,
+			sessionStore:      sessionStore,
+			playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 		}
 
 		_, err := sessionStore.Get(ctx, sessionID.String())
@@ -1185,7 +1196,8 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 				RequestId: "cleanup-test-guest",
 				Timestamp: timestamppb.Now(),
 			},
-			SessionId: sessionID.String(),
+			SessionId:          sessionID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 
 		resp, err := server.Disconnect(ctx, req)
@@ -1212,7 +1224,8 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 		server := &CoreServer{
 			engine: core.NewEngine(core.NewMemoryEventStore()),
 
-			sessionStore: sessionStore,
+			sessionStore:      sessionStore,
+			playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 		}
 
 		_, err := sessionStore.Get(ctx, sessionID.String())
@@ -1223,7 +1236,8 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 				RequestId: "cleanup-test-nonguest",
 				Timestamp: timestamppb.Now(),
 			},
-			SessionId: sessionID.String(),
+			SessionId:          sessionID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 
 		resp, err := server.Disconnect(ctx, req)
@@ -1312,8 +1326,9 @@ func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		eventStore:   eventStore,
-		sessionStore: sessionStore,
+		eventStore:        eventStore,
+		sessionStore:      sessionStore,
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
 	// Disconnect only session 1
@@ -1322,7 +1337,8 @@ func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
 			RequestId: "multi-session-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: session1ID.String(),
+		SessionId:          session1ID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.Disconnect(ctx, req)
@@ -1844,8 +1860,9 @@ func TestCoreServer_MalformedRequest_NilMeta(t *testing.T) {
 
 	t.Run("DisconnectRequest with nil Meta", func(t *testing.T) {
 		req := &corev1.DisconnectRequest{
-			Meta:      nil,
-			SessionId: sessionID.String(),
+			Meta:               nil,
+			SessionId:          sessionID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 
 		defer func() {
@@ -2083,8 +2100,9 @@ func TestCoreServer_DisconnectHook(t *testing.T) {
 		Status:        session.StatusActive,
 	}))
 	req := &corev1.DisconnectRequest{
-		Meta:      &corev1.RequestMeta{RequestId: "hook-test", Timestamp: timestamppb.Now()},
-		SessionId: sessionID.String(),
+		Meta:               &corev1.RequestMeta{RequestId: "hook-test", Timestamp: timestamppb.Now()},
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.Disconnect(ctx, req)
@@ -2104,9 +2122,10 @@ func TestCoreServer_DisconnectHook_PanicRecovery(t *testing.T) {
 
 	hookCallCount := 0
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore()),
-		eventStore:   core.NewMemoryEventStore(),
-		sessionStore: session.NewMemStore(),
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		eventStore:        core.NewMemoryEventStore(),
+		sessionStore:      session.NewMemStore(),
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 		disconnectHooks: []func(session.Info){
 			func(_ session.Info) { panic("hook panic") },
 			func(_ session.Info) { hookCallCount++ },
@@ -2126,8 +2145,9 @@ func TestCoreServer_DisconnectHook_PanicRecovery(t *testing.T) {
 
 	// Disconnect should not panic — recovery catches it
 	discResp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
-		SessionId: sessionID.String(),
-		Meta:      &corev1.RequestMeta{RequestId: "test"},
+		SessionId:          sessionID.String(),
+		Meta:               &corev1.RequestMeta{RequestId: "test"},
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err)
 	require.True(t, discResp.Success)
@@ -2156,8 +2176,9 @@ func TestCoreServer_Disconnect_NonGuest_NoEndSession(t *testing.T) {
 	}))
 
 	req := &corev1.DisconnectRequest{
-		Meta:      &corev1.RequestMeta{RequestId: "non-guest-test", Timestamp: timestamppb.Now()},
-		SessionId: sessionID.String(),
+		Meta:               &corev1.RequestMeta{RequestId: "non-guest-test", Timestamp: timestamppb.Now()},
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.Disconnect(ctx, req)
@@ -2310,8 +2331,9 @@ func TestCoreServer_Disconnect_EmitsLeaveEvent(t *testing.T) {
 		}))
 
 		req := &corev1.DisconnectRequest{
-			Meta:      &corev1.RequestMeta{RequestId: "leave-test-guest", Timestamp: timestamppb.Now()},
-			SessionId: sessionID.String(),
+			Meta:               &corev1.RequestMeta{RequestId: "leave-test-guest", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 
 		resp, err := server.Disconnect(ctx, req)
@@ -2343,8 +2365,9 @@ func TestCoreServer_Disconnect_EmitsLeaveEvent(t *testing.T) {
 		}))
 
 		req := &corev1.DisconnectRequest{
-			Meta:      &corev1.RequestMeta{RequestId: "leave-test-nonguest", Timestamp: timestamppb.Now()},
-			SessionId: sessionID.String(),
+			Meta:               &corev1.RequestMeta{RequestId: "leave-test-nonguest", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 
 		resp, err := server.Disconnect(ctx, req)
@@ -2361,7 +2384,8 @@ func TestCoreServer_MalformedRequest_DisconnectInvalidSession(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore: session.NewMemStore(),
+		sessionStore:      session.NewMemStore(),
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
 	ctx := context.Background()
@@ -2383,7 +2407,8 @@ func TestCoreServer_MalformedRequest_DisconnectInvalidSession(t *testing.T) {
 					RequestId: "invalid-disconnect",
 					Timestamp: timestamppb.Now(),
 				},
-				SessionId: tt.sessionID,
+				SessionId:          tt.sessionID,
+				PlayerSessionToken: testPlayerSessionToken,
 			}
 
 			// Should not panic
@@ -2398,9 +2423,12 @@ func TestCoreServer_MalformedRequest_DisconnectInvalidSession(t *testing.T) {
 				// gRPC error is acceptable
 				return
 			}
-			// Disconnect should be idempotent - always succeeds
-			if !resp.Success {
-				t.Error("Expected success for disconnect")
+			// bd-jv7z: unknown/malformed session_id collapses to the
+			// enumeration-safe "session not found" response (success=false).
+			// The ownership-validation gate refuses to confirm existence to
+			// a caller whose token doesn't match a real session.
+			if resp.Success {
+				t.Error("expected success=false for unknown/malformed session_id")
 			}
 		})
 	}
@@ -2864,9 +2892,10 @@ func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 
 		// Disconnect with terminal connection ID
 		resp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
-			Meta:         &corev1.RequestMeta{RequestId: "phase-test", Timestamp: timestamppb.Now()},
-			SessionId:    sessionID.String(),
-			ConnectionId: termConnID.String(),
+			Meta:               &corev1.RequestMeta{RequestId: "phase-test", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			ConnectionId:       termConnID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.Success)
@@ -2914,9 +2943,10 @@ func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 
 		// Disconnect it
 		resp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
-			Meta:         &corev1.RequestMeta{RequestId: "detach-test", Timestamp: timestamppb.Now()},
-			SessionId:    sessionID.String(),
-			ConnectionId: termConnID.String(),
+			Meta:               &corev1.RequestMeta{RequestId: "detach-test", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			ConnectionId:       termConnID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.Success)
@@ -2968,9 +2998,10 @@ func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 
 		// Disconnect first terminal
 		resp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
-			Meta:         &corev1.RequestMeta{RequestId: "multi-term-test", Timestamp: timestamppb.Now()},
-			SessionId:    sessionID.String(),
-			ConnectionId: termConnID1.String(),
+			Meta:               &corev1.RequestMeta{RequestId: "multi-term-test", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			ConnectionId:       termConnID1.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.Success)
