@@ -65,6 +65,21 @@ service CoreService {
   // Validate a player session token. Used by web gateway for cookie-based auth checks.
   rpc CheckPlayerSession(CheckPlayerSessionRequest) returns (CheckPlayerSessionResponse);
 
+  // ListPlayerSessions returns the caller's active PlayerSessions
+  // (the rows of player_sessions for the caller's player_id). Tokens
+  // are not returned — only metadata useful for user-visible session
+  // management ("you are signed in on these devices").
+  rpc ListPlayerSessions(ListPlayerSessionsRequest) returns (ListPlayerSessionsResponse);
+
+  // RevokePlayerSession deletes a specific PlayerSession. Ownership is
+  // verified — a player cannot revoke another player's sessions.
+  rpc RevokePlayerSession(RevokePlayerSessionRequest) returns (RevokePlayerSessionResponse);
+
+  // RevokeOtherPlayerSessions deletes all PlayerSessions for the caller
+  // except the current one. Convenience bulk operation equivalent to
+  // listing and calling RevokePlayerSession for each.
+  rpc RevokeOtherPlayerSessions(RevokeOtherPlayerSessionsRequest) returns (RevokeOtherPlayerSessionsResponse);
+
   // QueryStreamHistory reads paginated event history from a stream.
   // Two-layer authorization: membership gate (I-17) for private streams,
   // ABAC policy evaluation for public streams.
@@ -295,6 +310,51 @@ message CheckPlayerSessionRequest {
 
 message CheckPlayerSessionResponse {
   string player_name = 1;
+}
+
+message ListPlayerSessionsRequest {
+  string player_session_token = 1;
+}
+
+message PlayerSessionInfo {
+  // id is the PlayerSession.id (ULID). Safe to show the user - this is
+  // a resource handle, not a secret. Used as the target_session_id
+  // argument to RevokePlayerSession.
+  string id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  // last_active is sourced from player_sessions.updated_at, which is
+  // bumped whenever the session is refreshed.
+  google.protobuf.Timestamp last_active = 3;
+  string user_agent = 4;
+  string ip_address = 5;
+  // is_current is true for exactly the PlayerSession that made the
+  // ListPlayerSessions request - supports "This device" UX.
+  bool is_current = 6;
+}
+
+message ListPlayerSessionsResponse {
+  repeated PlayerSessionInfo sessions = 1;
+}
+
+message RevokePlayerSessionRequest {
+  string player_session_token = 1;
+  // target_session_id is the PlayerSession.id (ULID) to revoke -
+  // NOT the game session_id. Different concept.
+  string target_session_id = 2;
+}
+
+message RevokePlayerSessionResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message RevokeOtherPlayerSessionsRequest {
+  string player_session_token = 1;
+}
+
+message RevokeOtherPlayerSessionsResponse {
+  bool success = 1;
+  int32 revoked_count = 2;
 }
 
 message QueryStreamHistoryRequest {

@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreateGuestRequest, CreateGuestResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListCharactersRequest, ListCharactersResponse, LogoutRequest, LogoutResponse, QueryStreamHistoryRequest, QueryStreamHistoryResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
+import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreateGuestRequest, CreateGuestResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListCharactersRequest, ListCharactersResponse, ListPlayerSessionsRequest, ListPlayerSessionsResponse, LogoutRequest, LogoutResponse, QueryStreamHistoryRequest, QueryStreamHistoryResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, RevokeOtherPlayerSessionsRequest, RevokeOtherPlayerSessionsResponse, RevokePlayerSessionRequest, RevokePlayerSessionResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -169,6 +169,45 @@ export const CoreService = {
       name: "CheckPlayerSession",
       I: CheckPlayerSessionRequest,
       O: CheckPlayerSessionResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * ListPlayerSessions returns the caller's active PlayerSessions
+     * (the rows of player_sessions for the caller's player_id). Tokens
+     * are not returned — only metadata useful for user-visible session
+     * management ("you are signed in on these devices").
+     *
+     * @generated from rpc holomush.core.v1.CoreService.ListPlayerSessions
+     */
+    listPlayerSessions: {
+      name: "ListPlayerSessions",
+      I: ListPlayerSessionsRequest,
+      O: ListPlayerSessionsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * RevokePlayerSession deletes a specific PlayerSession. Ownership is
+     * verified — a player cannot revoke another player's sessions.
+     *
+     * @generated from rpc holomush.core.v1.CoreService.RevokePlayerSession
+     */
+    revokePlayerSession: {
+      name: "RevokePlayerSession",
+      I: RevokePlayerSessionRequest,
+      O: RevokePlayerSessionResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * RevokeOtherPlayerSessions deletes all PlayerSessions for the caller
+     * except the current one. Convenience bulk operation equivalent to
+     * listing and calling RevokePlayerSession for each.
+     *
+     * @generated from rpc holomush.core.v1.CoreService.RevokeOtherPlayerSessions
+     */
+    revokeOtherPlayerSessions: {
+      name: "RevokeOtherPlayerSessions",
+      I: RevokeOtherPlayerSessionsRequest,
+      O: RevokeOtherPlayerSessionsResponse,
       kind: MethodKind.Unary,
     },
     /**

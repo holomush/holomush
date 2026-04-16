@@ -22,21 +22,24 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CoreService_HandleCommand_FullMethodName        = "/holomush.core.v1.CoreService/HandleCommand"
-	CoreService_Subscribe_FullMethodName            = "/holomush.core.v1.CoreService/Subscribe"
-	CoreService_Disconnect_FullMethodName           = "/holomush.core.v1.CoreService/Disconnect"
-	CoreService_GetCommandHistory_FullMethodName    = "/holomush.core.v1.CoreService/GetCommandHistory"
-	CoreService_AuthenticatePlayer_FullMethodName   = "/holomush.core.v1.CoreService/AuthenticatePlayer"
-	CoreService_SelectCharacter_FullMethodName      = "/holomush.core.v1.CoreService/SelectCharacter"
-	CoreService_CreatePlayer_FullMethodName         = "/holomush.core.v1.CoreService/CreatePlayer"
-	CoreService_CreateGuest_FullMethodName          = "/holomush.core.v1.CoreService/CreateGuest"
-	CoreService_CreateCharacter_FullMethodName      = "/holomush.core.v1.CoreService/CreateCharacter"
-	CoreService_ListCharacters_FullMethodName       = "/holomush.core.v1.CoreService/ListCharacters"
-	CoreService_RequestPasswordReset_FullMethodName = "/holomush.core.v1.CoreService/RequestPasswordReset"
-	CoreService_ConfirmPasswordReset_FullMethodName = "/holomush.core.v1.CoreService/ConfirmPasswordReset"
-	CoreService_Logout_FullMethodName               = "/holomush.core.v1.CoreService/Logout"
-	CoreService_CheckPlayerSession_FullMethodName   = "/holomush.core.v1.CoreService/CheckPlayerSession"
-	CoreService_QueryStreamHistory_FullMethodName   = "/holomush.core.v1.CoreService/QueryStreamHistory"
+	CoreService_HandleCommand_FullMethodName             = "/holomush.core.v1.CoreService/HandleCommand"
+	CoreService_Subscribe_FullMethodName                 = "/holomush.core.v1.CoreService/Subscribe"
+	CoreService_Disconnect_FullMethodName                = "/holomush.core.v1.CoreService/Disconnect"
+	CoreService_GetCommandHistory_FullMethodName         = "/holomush.core.v1.CoreService/GetCommandHistory"
+	CoreService_AuthenticatePlayer_FullMethodName        = "/holomush.core.v1.CoreService/AuthenticatePlayer"
+	CoreService_SelectCharacter_FullMethodName           = "/holomush.core.v1.CoreService/SelectCharacter"
+	CoreService_CreatePlayer_FullMethodName              = "/holomush.core.v1.CoreService/CreatePlayer"
+	CoreService_CreateGuest_FullMethodName               = "/holomush.core.v1.CoreService/CreateGuest"
+	CoreService_CreateCharacter_FullMethodName           = "/holomush.core.v1.CoreService/CreateCharacter"
+	CoreService_ListCharacters_FullMethodName            = "/holomush.core.v1.CoreService/ListCharacters"
+	CoreService_RequestPasswordReset_FullMethodName      = "/holomush.core.v1.CoreService/RequestPasswordReset"
+	CoreService_ConfirmPasswordReset_FullMethodName      = "/holomush.core.v1.CoreService/ConfirmPasswordReset"
+	CoreService_Logout_FullMethodName                    = "/holomush.core.v1.CoreService/Logout"
+	CoreService_CheckPlayerSession_FullMethodName        = "/holomush.core.v1.CoreService/CheckPlayerSession"
+	CoreService_ListPlayerSessions_FullMethodName        = "/holomush.core.v1.CoreService/ListPlayerSessions"
+	CoreService_RevokePlayerSession_FullMethodName       = "/holomush.core.v1.CoreService/RevokePlayerSession"
+	CoreService_RevokeOtherPlayerSessions_FullMethodName = "/holomush.core.v1.CoreService/RevokeOtherPlayerSessions"
+	CoreService_QueryStreamHistory_FullMethodName        = "/holomush.core.v1.CoreService/QueryStreamHistory"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -73,6 +76,18 @@ type CoreServiceClient interface {
 	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error)
 	// Validate a player session token. Used by web gateway for cookie-based auth checks.
 	CheckPlayerSession(ctx context.Context, in *CheckPlayerSessionRequest, opts ...grpc.CallOption) (*CheckPlayerSessionResponse, error)
+	// ListPlayerSessions returns the caller's active PlayerSessions
+	// (the rows of player_sessions for the caller's player_id). Tokens
+	// are not returned — only metadata useful for user-visible session
+	// management ("you are signed in on these devices").
+	ListPlayerSessions(ctx context.Context, in *ListPlayerSessionsRequest, opts ...grpc.CallOption) (*ListPlayerSessionsResponse, error)
+	// RevokePlayerSession deletes a specific PlayerSession. Ownership is
+	// verified — a player cannot revoke another player's sessions.
+	RevokePlayerSession(ctx context.Context, in *RevokePlayerSessionRequest, opts ...grpc.CallOption) (*RevokePlayerSessionResponse, error)
+	// RevokeOtherPlayerSessions deletes all PlayerSessions for the caller
+	// except the current one. Convenience bulk operation equivalent to
+	// listing and calling RevokePlayerSession for each.
+	RevokeOtherPlayerSessions(ctx context.Context, in *RevokeOtherPlayerSessionsRequest, opts ...grpc.CallOption) (*RevokeOtherPlayerSessionsResponse, error)
 	// QueryStreamHistory reads paginated event history from a stream.
 	// Two-layer authorization: membership gate (I-17) for private streams,
 	// ABAC policy evaluation for public streams.
@@ -237,6 +252,36 @@ func (c *coreServiceClient) CheckPlayerSession(ctx context.Context, in *CheckPla
 	return out, nil
 }
 
+func (c *coreServiceClient) ListPlayerSessions(ctx context.Context, in *ListPlayerSessionsRequest, opts ...grpc.CallOption) (*ListPlayerSessionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListPlayerSessionsResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListPlayerSessions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) RevokePlayerSession(ctx context.Context, in *RevokePlayerSessionRequest, opts ...grpc.CallOption) (*RevokePlayerSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokePlayerSessionResponse)
+	err := c.cc.Invoke(ctx, CoreService_RevokePlayerSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) RevokeOtherPlayerSessions(ctx context.Context, in *RevokeOtherPlayerSessionsRequest, opts ...grpc.CallOption) (*RevokeOtherPlayerSessionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeOtherPlayerSessionsResponse)
+	err := c.cc.Invoke(ctx, CoreService_RevokeOtherPlayerSessions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *coreServiceClient) QueryStreamHistory(ctx context.Context, in *QueryStreamHistoryRequest, opts ...grpc.CallOption) (*QueryStreamHistoryResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(QueryStreamHistoryResponse)
@@ -281,6 +326,18 @@ type CoreServiceServer interface {
 	Logout(context.Context, *LogoutRequest) (*LogoutResponse, error)
 	// Validate a player session token. Used by web gateway for cookie-based auth checks.
 	CheckPlayerSession(context.Context, *CheckPlayerSessionRequest) (*CheckPlayerSessionResponse, error)
+	// ListPlayerSessions returns the caller's active PlayerSessions
+	// (the rows of player_sessions for the caller's player_id). Tokens
+	// are not returned — only metadata useful for user-visible session
+	// management ("you are signed in on these devices").
+	ListPlayerSessions(context.Context, *ListPlayerSessionsRequest) (*ListPlayerSessionsResponse, error)
+	// RevokePlayerSession deletes a specific PlayerSession. Ownership is
+	// verified — a player cannot revoke another player's sessions.
+	RevokePlayerSession(context.Context, *RevokePlayerSessionRequest) (*RevokePlayerSessionResponse, error)
+	// RevokeOtherPlayerSessions deletes all PlayerSessions for the caller
+	// except the current one. Convenience bulk operation equivalent to
+	// listing and calling RevokePlayerSession for each.
+	RevokeOtherPlayerSessions(context.Context, *RevokeOtherPlayerSessionsRequest) (*RevokeOtherPlayerSessionsResponse, error)
 	// QueryStreamHistory reads paginated event history from a stream.
 	// Two-layer authorization: membership gate (I-17) for private streams,
 	// ABAC policy evaluation for public streams.
@@ -337,6 +394,15 @@ func (UnimplementedCoreServiceServer) Logout(context.Context, *LogoutRequest) (*
 }
 func (UnimplementedCoreServiceServer) CheckPlayerSession(context.Context, *CheckPlayerSessionRequest) (*CheckPlayerSessionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CheckPlayerSession not implemented")
+}
+func (UnimplementedCoreServiceServer) ListPlayerSessions(context.Context, *ListPlayerSessionsRequest) (*ListPlayerSessionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListPlayerSessions not implemented")
+}
+func (UnimplementedCoreServiceServer) RevokePlayerSession(context.Context, *RevokePlayerSessionRequest) (*RevokePlayerSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokePlayerSession not implemented")
+}
+func (UnimplementedCoreServiceServer) RevokeOtherPlayerSessions(context.Context, *RevokeOtherPlayerSessionsRequest) (*RevokeOtherPlayerSessionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeOtherPlayerSessions not implemented")
 }
 func (UnimplementedCoreServiceServer) QueryStreamHistory(context.Context, *QueryStreamHistoryRequest) (*QueryStreamHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method QueryStreamHistory not implemented")
@@ -607,6 +673,60 @@ func _CoreService_CheckPlayerSession_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_ListPlayerSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPlayerSessionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListPlayerSessions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListPlayerSessions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListPlayerSessions(ctx, req.(*ListPlayerSessionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_RevokePlayerSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokePlayerSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).RevokePlayerSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_RevokePlayerSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).RevokePlayerSession(ctx, req.(*RevokePlayerSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_RevokeOtherPlayerSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeOtherPlayerSessionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).RevokeOtherPlayerSessions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_RevokeOtherPlayerSessions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).RevokeOtherPlayerSessions(ctx, req.(*RevokeOtherPlayerSessionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _CoreService_QueryStreamHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(QueryStreamHistoryRequest)
 	if err := dec(in); err != nil {
@@ -683,6 +803,18 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CheckPlayerSession",
 			Handler:    _CoreService_CheckPlayerSession_Handler,
+		},
+		{
+			MethodName: "ListPlayerSessions",
+			Handler:    _CoreService_ListPlayerSessions_Handler,
+		},
+		{
+			MethodName: "RevokePlayerSession",
+			Handler:    _CoreService_RevokePlayerSession_Handler,
+		},
+		{
+			MethodName: "RevokeOtherPlayerSessions",
+			Handler:    _CoreService_RevokeOtherPlayerSessions_Handler,
 		},
 		{
 			MethodName: "QueryStreamHistory",
