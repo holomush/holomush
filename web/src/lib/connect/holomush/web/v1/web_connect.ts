@@ -178,6 +178,7 @@ export const WebService = {
     },
     /**
      * WebQueryStreamHistory reads paginated event history for the web client.
+     * Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
      *
      * @generated from rpc holomush.web.v1.WebService.WebQueryStreamHistory
      */

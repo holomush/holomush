@@ -110,6 +110,13 @@ func BuildABACStack(ctx context.Context, cfg ABACConfig) (*ABACStack, error) {
 		return nil, eb.Wrapf(err, "register command provider")
 	}
 
+	// 9a. Stream provider (resolves resource.stream.{name,location} for
+	// seed:player-stream-emit and seed:player-location-stream-read policies).
+	streamProvider := attribute.NewStreamProvider()
+	if err := resolver.RegisterProvider(streamProvider); err != nil {
+		return nil, eb.Wrapf(err, "register stream provider")
+	}
+
 	// 10. Plugin provider (nil registry — two-phase init)
 	pluginProvider := attribute.NewPluginProvider(nil)
 	if err := resolver.RegisterProvider(pluginProvider); err != nil {

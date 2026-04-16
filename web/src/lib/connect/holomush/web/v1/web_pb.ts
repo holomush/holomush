@@ -846,16 +846,22 @@ export type WebQueryStreamHistoryRequest = Message<"holomush.web.v1.WebQueryStre
   stream: string;
 
   /**
+   * page size; 0 = default (150), max 500, negative rejected
+   *
    * @generated from field: int32 count = 3;
    */
   count: number;
 
   /**
+   * epoch ms time floor; 0 = no lower bound
+   *
    * @generated from field: int64 not_before_ms = 4;
    */
   notBeforeMs: bigint;
 
   /**
+   * ULID pagination cursor; events older than this; empty = latest
+   *
    * @generated from field: string before_id = 5;
    */
   beforeId: string;
@@ -1098,6 +1104,7 @@ export const WebService: GenService<{
   },
   /**
    * WebQueryStreamHistory reads paginated event history for the web client.
+   * Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
    *
    * @generated from rpc holomush.web.v1.WebService.WebQueryStreamHistory
    */

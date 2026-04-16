@@ -229,6 +229,60 @@ test.describe('Terminal UI', () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
+  // B9: WebQueryStreamHistory is reachable through the web gateway and proxies
+  // to CoreService.QueryStreamHistory with ABAC enforcement. The web client
+  // does not yet call this RPC on mount (that's B13 scope), so this test
+  // invokes it directly via fetch() inside the page context to exercise the
+  // full stack: browser -> gateway -> core -> ABAC -> PostgresEventStore.
+  test('WebQueryStreamHistory returns events through the web gateway', async ({ page }) => {
+    await connectAsGuest(page);
+    const sessionId = await getClientSessionId(page);
+    expect(sessionId).toBeTruthy();
+
+    const session = await db.getSessionById(sessionId!);
+    expect(session).not.toBeNull();
+    const stream = `location:${session!.location_id}`;
+
+    // Emit a say event so there is at least one row on the location stream.
+    const token = `history-${Date.now()}`;
+    const input = page.locator('textarea');
+    await input.fill(`say ${token}`);
+    await input.press('Enter');
+    await expect(
+      page.locator('[data-testid="event"]').filter({ hasText: token }),
+    ).toBeVisible({ timeout: 10000 });
+
+    // Call WebQueryStreamHistory through the gateway using the Connect
+    // JSON protocol. Cookies are carried automatically by the browser so the
+    // gateway's auth middleware accepts the call.
+    const resp = await page.evaluate(
+      async ({ sid, streamName }: { sid: string; streamName: string }) => {
+        const r = await fetch('/holomush.web.v1.WebService/WebQueryStreamHistory', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: sid, stream: streamName, count: 50 }),
+        });
+        const body = await r.text();
+        return { status: r.status, body };
+      },
+      { sid: sessionId!, streamName: stream },
+    );
+
+    expect(resp.status, `unexpected status; body: ${resp.body}`).toBe(200);
+    const payload = JSON.parse(resp.body) as {
+      events?: Array<{ type?: string; payload?: unknown }>;
+      hasMore?: boolean;
+    };
+    expect(Array.isArray(payload.events)).toBe(true);
+
+    // At least our freshly-emitted say event must be in the history.
+    const matched = (payload.events ?? []).some((e) =>
+      JSON.stringify(e).includes(token),
+    );
+    expect(matched, `expected event with "${token}" in history response`).toBe(true);
+  });
+
   // TODO(holomush-oy6e.13): Un-skip when QueryStreamHistory RPC (B9) lands
   // and the web client calls it on mount for reload backfill.
   // See also: holomush-oy6e.9 notes.
