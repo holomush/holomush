@@ -1716,3 +1716,109 @@ func TestLuaHostSetEventStoreWithHostFuncsInjectsReader(t *testing.T) {
 		host.SetEventStore(nil)
 	})
 }
+
+func TestLuaHostLoadEntryPathTraversalRejected(t *testing.T) {
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	tmpDir := t.TempDir()
+
+	// Create a file in the parent directory (outside plugin dir)
+	parentFile := filepath.Join(filepath.Dir(tmpDir), "escaped.lua")
+	err := os.WriteFile(parentFile, []byte(`function on_event(event) return nil end`), 0o600)
+	require.NoError(t, err, "failed to create escaped entry file")
+	t.Cleanup(func() { _ = os.Remove(parentFile) })
+
+	manifest := &plugins.Manifest{
+		Name:      "malicious",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "../escaped.lua"},
+	}
+
+	err = host.Load(context.Background(), manifest, tmpDir)
+	require.Error(t, err, "expected error when entry path escapes plugin directory")
+	assert.Contains(t, err.Error(), "escapes plugin directory")
+}
+
+func TestLuaHostLoadEntryAbsolutePathRejected(t *testing.T) {
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	tmpDir := t.TempDir()
+
+	// Absolute path targeting a system file outside the plugin directory.
+	// filepath.Join(dir, "/etc/passwd") normalizes to dir/etc/passwd which
+	// does not exist, so this exercises the "file not found" branch rather
+	// than the containment branch, but either way must be rejected.
+	manifest := &plugins.Manifest{
+		Name:      "abs-path",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "/etc/passwd"},
+	}
+
+	err := host.Load(context.Background(), manifest, tmpDir)
+	require.Error(t, err, "expected error when entry path is absolute")
+}
+
+func TestLuaHostLoadEntrySymlinkEscapeRejected(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("skipping test when running as root")
+	}
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	tmpDir := t.TempDir()
+	pluginDir := filepath.Join(tmpDir, "plugin")
+	//nolint:gosec // G301 - needs execute permission to enter directory
+	err := os.Mkdir(pluginDir, 0o755)
+	require.NoError(t, err, "failed to create plugin dir")
+
+	// Create a Lua file outside the plugin directory
+	outsideFile := filepath.Join(tmpDir, "outside.lua")
+	err = os.WriteFile(outsideFile, []byte(`function on_event(event) return nil end`), 0o600)
+	require.NoError(t, err, "failed to create outside entry file")
+
+	// Create a symlink inside plugin dir that points outside
+	symlinkPath := filepath.Join(pluginDir, "main.lua")
+	err = os.Symlink(outsideFile, symlinkPath)
+	require.NoError(t, err, "failed to create symlink")
+
+	manifest := &plugins.Manifest{
+		Name:      "symlink-escape",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+
+	err = host.Load(context.Background(), manifest, pluginDir)
+	require.Error(t, err, "expected error when entry symlink escapes plugin directory")
+	assert.Contains(t, err.Error(), "escapes plugin directory")
+}
+
+func TestLuaHostLoadEntryLegitimatePathSucceeds(t *testing.T) {
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	// Nested subdirectory inside plugin dir - legitimate containment
+	tmpDir := t.TempDir()
+	subDir := filepath.Join(tmpDir, "sub")
+	//nolint:gosec // G301 - needs execute permission to enter directory
+	err := os.Mkdir(subDir, 0o755)
+	require.NoError(t, err, "failed to create sub dir")
+	err = os.WriteFile(filepath.Join(subDir, "main.lua"),
+		[]byte(`function on_event(event) return nil end`), 0o600)
+	require.NoError(t, err, "failed to write legitimate entry file")
+
+	manifest := &plugins.Manifest{
+		Name:      "nested",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "sub/main.lua"},
+	}
+
+	err = host.Load(context.Background(), manifest, tmpDir)
+	require.NoError(t, err, "legitimate nested entry path should load successfully")
+}

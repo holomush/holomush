@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/samber/oops"
@@ -91,9 +92,30 @@ func (h *Host) Load(ctx context.Context, manifest *plugins.Manifest, dir string)
 	}
 
 	entryPath := filepath.Join(dir, manifest.LuaPlugin.Entry)
-	code, err := os.ReadFile(filepath.Clean(entryPath))
+
+	// Verify resolved path is within the plugin directory (prevent path traversal).
+	// Use EvalSymlinks to resolve symlinks and prevent symlink-based escapes.
+	realDir, err := filepath.EvalSymlinks(dir)
 	if err != nil {
-		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").With("path", entryPath).Hint("failed to read entry file").Wrap(err)
+		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").With("dir", dir).Hint("cannot resolve plugin directory").Wrap(err)
+	}
+	realEntry, err := filepath.EvalSymlinks(entryPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").With("path", entryPath).Hint("plugin entry file not found").Wrap(err)
+		}
+		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").With("path", entryPath).Hint("cannot resolve entry path").Wrap(err)
+	}
+	// Use filepath.Rel for robust cross-platform path containment check.
+	rel, err := filepath.Rel(realDir, realEntry)
+	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").With("entry", manifest.LuaPlugin.Entry).New("plugin entry path escapes plugin directory")
+	}
+
+	// Use realEntry (resolved symlink) for ReadFile to prevent TOCTOU attacks.
+	code, err := os.ReadFile(realEntry)
+	if err != nil {
+		return oops.In("lua").With("plugin", manifest.Name).With("operation", "load").With("path", realEntry).Hint("failed to read entry file").Wrap(err)
 	}
 
 	// Validate syntax by compiling in a throwaway state
