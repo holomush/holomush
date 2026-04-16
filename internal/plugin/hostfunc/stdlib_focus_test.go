@@ -60,7 +60,7 @@ type historyCall struct {
 	notBefore time.Time
 }
 
-func (m *mockHistoryReader) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time) ([]core.Event, error) {
+func (m *mockHistoryReader) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, _ ulid.ULID) ([]core.Event, error) {
 	m.calls = append(m.calls, historyCall{stream, count, notBefore})
 	return m.result, m.err
 }

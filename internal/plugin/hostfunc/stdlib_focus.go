@@ -30,7 +30,7 @@ type FocusOps interface {
 
 // HistoryReader provides read-only event history access for Lua plugins.
 type HistoryReader interface {
-	ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time) ([]core.Event, error)
+	ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error)
 }
 
 // RegisterFocusFuncs adds holomush.join_focus, leave_focus, present_focus,
@@ -235,7 +235,7 @@ func queryStreamHistoryFn(ls *lua.LState) int {
 	ctx, cancel := context.WithTimeout(ctx, defaultPluginQueryTimeout)
 	defer cancel()
 
-	events, err := hr.ReplayTail(ctx, stream, count, notBefore)
+	events, err := hr.ReplayTail(ctx, stream, count, notBefore, ulid.ULID{})
 	if err != nil {
 		slog.WarnContext(ctx, "holomush.query_stream_history failed",
 			"stream", stream, "error", err)

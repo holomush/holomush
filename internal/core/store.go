@@ -28,10 +28,12 @@ type EventStore interface {
 
 	// ReplayTail returns up to count most recent events on stream,
 	// ordered ascending by event ID. If notBefore is non-zero, events
-	// with timestamps before it are excluded. Count is capped server-side
-	// at 500. Used by FocusKindPolicy implementations for bounded-tail
-	// reads and by QueryStreamHistory for client scrollback.
-	ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time) ([]Event, error)
+	// with timestamps before it are excluded. If beforeID is non-zero,
+	// events with ID >= beforeID are excluded (cursor-based pagination).
+	// Count is capped server-side at 500. Used by FocusKindPolicy
+	// implementations for bounded-tail reads and by QueryStreamHistory
+	// for client scrollback.
+	ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]Event, error)
 
 	// SubscribeSession opens a new session-wide subscription on a dedicated
 	// pgx.Conn. The returned Subscription supports dynamic add/remove of

@@ -77,7 +77,7 @@ func (s *stubEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, er
 	return ulid.ULID{}, nil
 }
 
-func (s *stubEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time) ([]core.Event, error) {
+func (s *stubEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ ulid.ULID) ([]core.Event, error) {
 	return nil, nil
 }
 

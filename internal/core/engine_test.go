@@ -127,7 +127,7 @@ func (f *failingEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID,
 	return ulid.ULID{}, errStoreFailure
 }
 
-func (f *failingEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time) ([]Event, error) {
+func (f *failingEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ ulid.ULID) ([]Event, error) {
 	return nil, errStoreFailure
 }
 

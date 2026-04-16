@@ -759,7 +759,7 @@ func TestPostgresEventStore_ReplayTail_Success(t *testing.T) {
 		WillReturnRows(rows)
 
 	store := &PostgresEventStore{pool: mock}
-	events, err := store.ReplayTail(context.Background(), "location:test", 5, time.Time{})
+	events, err := store.ReplayTail(context.Background(), "location:test", 5, time.Time{}, ulid.ULID{})
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 	// Results should be in ascending order (subquery re-sorts).
@@ -780,7 +780,7 @@ func TestPostgresEventStore_ReplayTail_WithNotBefore(t *testing.T) {
 		WillReturnRows(rows)
 
 	store := &PostgresEventStore{pool: mock}
-	events, err := store.ReplayTail(context.Background(), "location:test", 5, notBefore)
+	events, err := store.ReplayTail(context.Background(), "location:test", 5, notBefore, ulid.ULID{})
 	require.NoError(t, err)
 	assert.Empty(t, events)
 	assert.NoError(t, mock.ExpectationsWereMet())

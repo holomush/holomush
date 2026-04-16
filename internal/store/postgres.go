@@ -241,8 +241,11 @@ const maxReplayTailCount = 500
 
 // ReplayTail returns up to count most recent events on stream, ascending by
 // event ID. If notBefore is non-zero, events with timestamps before it are
-// excluded. Count is capped at 500.
-func (s *PostgresEventStore) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time) ([]core.Event, error) {
+// excluded. If beforeID is non-zero, events with id >= beforeID are excluded.
+// Count is capped at 500. The beforeID filter is not yet implemented in SQL
+// (placeholder for Task 2); callers passing a non-zero beforeID will get an
+// unfiltered result set until Task 2 lands.
+func (s *PostgresEventStore) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, _ ulid.ULID) ([]core.Event, error) {
 	if count > maxReplayTailCount {
 		count = maxReplayTailCount
 	}

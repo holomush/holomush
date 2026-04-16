@@ -97,8 +97,9 @@ func (s *MemoryEventStore) LastEventID(_ context.Context, stream string) (ulid.U
 const maxReplayTailCount = 500
 
 // ReplayTail returns the most recent count events on stream, ascending by ID.
-// Events with timestamps before notBefore are excluded. Count is capped at 500.
-func (s *MemoryEventStore) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time) ([]Event, error) {
+// Events with timestamps before notBefore are excluded. If beforeID is non-zero,
+// events with ID >= beforeID are excluded. Count is capped at 500.
+func (s *MemoryEventStore) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]Event, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -114,22 +115,17 @@ func (s *MemoryEventStore) ReplayTail(_ context.Context, stream string, count in
 		return nil, nil
 	}
 
-	// Filter by notBefore if set, scanning from the end.
+	// Scan from the end, applying both filters, collecting up to count events.
 	var eligible []Event
-	if !notBefore.IsZero() {
-		for i := len(events) - 1; i >= 0 && len(eligible) < count; i-- {
-			if !events[i].Timestamp.Before(notBefore) {
-				eligible = append(eligible, events[i])
-			}
+	for i := len(events) - 1; i >= 0 && len(eligible) < count; i-- {
+		e := events[i]
+		if !beforeID.IsZero() && e.ID.Compare(beforeID) >= 0 {
+			continue
 		}
-	} else {
-		start := len(events) - count
-		if start < 0 {
-			start = 0
+		if !notBefore.IsZero() && e.Timestamp.Before(notBefore) {
+			continue
 		}
-		eligible = make([]Event, len(events)-start)
-		copy(eligible, events[start:])
-		return eligible, nil
+		eligible = append(eligible, e)
 	}
 
 	// Reverse eligible to get ascending order.
