@@ -1213,6 +1213,114 @@ func TestConfirmPasswordResetReturnsSanitizedMessageForInvalidToken(t *testing.T
 	assert.NotContains(t, resp.ErrorMessage, "password_resets")
 }
 
+// --- ListPlayerSessions ---
+
+func TestListPlayerSessionsReturnsCallersOwnSessionsWithIsCurrentFlag(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+
+	// Two PlayerSessions for the same player - caller's current session is ps1.
+	ps1 := &auth.PlayerSession{
+		ID:        ulid.Make(),
+		PlayerID:  playerID,
+		TokenHash: auth.HashSessionToken(validToken),
+		UserAgent: "agent-1",
+		IPAddress: "10.0.0.1",
+		ExpiresAt: time.Now().Add(auth.PlayerSessionTTL),
+		CreatedAt: time.Now().Add(-time.Hour),
+		UpdatedAt: time.Now().Add(-30 * time.Minute),
+	}
+	ps2 := &auth.PlayerSession{
+		ID:        ulid.Make(),
+		PlayerID:  playerID,
+		TokenHash: "other-hash",
+		UserAgent: "agent-2",
+		IPAddress: "10.0.0.2",
+		ExpiresAt: time.Now().Add(auth.PlayerSessionTTL),
+		CreatedAt: time.Now().Add(-2 * time.Hour),
+		UpdatedAt: time.Now().Add(-15 * time.Minute),
+	}
+
+	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).Return(ps1, nil)
+	sessionRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*auth.PlayerSession{ps1, ps2}, nil)
+
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      session.NewMemStore(),
+		playerSessionRepo: sessionRepo,
+	}
+
+	resp, err := server.ListPlayerSessions(ctx, &corev1.ListPlayerSessionsRequest{
+		PlayerSessionToken: validToken,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, resp.Sessions, 2)
+	var currents int
+	var currentID string
+	for _, s := range resp.Sessions {
+		if s.IsCurrent {
+			currents++
+			currentID = s.Id
+		}
+	}
+	assert.Equal(t, 1, currents, "exactly one session should be is_current")
+	assert.Equal(t, ps1.ID.String(), currentID, "current session must match the caller's PlayerSession ID")
+}
+
+func TestListPlayerSessionsReturnsEmptyForInvalidToken(t *testing.T) {
+	ctx := context.Background()
+
+	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken("tok-not-valid")).
+		Return(nil, auth.ErrNotFound)
+
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      session.NewMemStore(),
+		playerSessionRepo: sessionRepo,
+	}
+
+	resp, err := server.ListPlayerSessions(ctx, &corev1.ListPlayerSessionsRequest{
+		PlayerSessionToken: "tok-not-valid",
+	})
+	require.NoError(t, err)
+	// Empty list on auth failure - enumeration-safe (no "token invalid" signal).
+	assert.Empty(t, resp.Sessions)
+}
+
+func TestListPlayerSessionsReturnsEmptyForExpiredSession(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+
+	expiredPS := &auth.PlayerSession{
+		ID:        ulid.Make(),
+		PlayerID:  playerID,
+		TokenHash: auth.HashSessionToken(validToken),
+		ExpiresAt: time.Now().Add(-time.Hour), // expired
+		CreatedAt: time.Now().Add(-2 * time.Hour),
+		UpdatedAt: time.Now().Add(-time.Hour),
+	}
+
+	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, auth.HashSessionToken(validToken)).
+		Return(expiredPS, nil)
+
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      session.NewMemStore(),
+		playerSessionRepo: sessionRepo,
+	}
+
+	resp, err := server.ListPlayerSessions(ctx, &corev1.ListPlayerSessionsRequest{
+		PlayerSessionToken: validToken,
+	})
+	require.NoError(t, err)
+	assert.Empty(t, resp.Sessions)
+}
+
 // oopsCoded is a small helper that builds an oops error with arbitrary
 // structured context alongside a raw message, so tests can assert nothing
 // in the context leaks to the client.

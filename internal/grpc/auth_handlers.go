@@ -11,6 +11,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/core"
@@ -511,6 +512,46 @@ func (s *CoreServer) CreateGuest(ctx context.Context, _ *corev1.CreateGuestReque
 		DefaultCharacterId: result.Character.ID.String(),
 		SessionTtlSeconds:  int64(auth.GuestSessionTTL.Seconds()),
 	}, nil
+}
+
+// ListPlayerSessions returns the caller's active PlayerSessions with metadata.
+// Tokens are never included in the response - each PlayerSessionInfo is
+// identified by its ULID only. Exactly one entry has is_current=true (the
+// session that made this request) to support "this device" UX.
+//
+// SECURITY: On any auth failure (invalid token, expired session, repo error)
+// returns an empty list - callers cannot distinguish "invalid token" from
+// "player has zero sessions", preventing enumeration.
+func (s *CoreServer) ListPlayerSessions(ctx context.Context, req *corev1.ListPlayerSessionsRequest) (*corev1.ListPlayerSessionsResponse, error) {
+	if s.playerSessionRepo == nil {
+		return &corev1.ListPlayerSessionsResponse{}, nil
+	}
+
+	caller, err := s.playerSessionRepo.GetByTokenHash(ctx, auth.HashSessionToken(req.GetPlayerSessionToken()))
+	if err != nil || caller.IsExpired() {
+		// SECURITY: empty response on auth failure is the enumeration-safe
+		// signal - callers cannot distinguish "invalid token" from "player
+		// has 0 sessions".
+		return &corev1.ListPlayerSessionsResponse{}, nil //nolint:nilerr // intentional: enumeration-safe auth-failure response
+	}
+
+	sessions, err := s.playerSessionRepo.ListByPlayer(ctx, caller.PlayerID)
+	if err != nil {
+		return nil, oops.Code("LIST_PLAYER_SESSIONS_FAILED").Wrap(err)
+	}
+
+	out := make([]*corev1.PlayerSessionInfo, 0, len(sessions))
+	for _, ps := range sessions {
+		out = append(out, &corev1.PlayerSessionInfo{
+			Id:         ps.ID.String(),
+			CreatedAt:  timestamppb.New(ps.CreatedAt),
+			LastActive: timestamppb.New(ps.UpdatedAt),
+			UserAgent:  ps.UserAgent,
+			IpAddress:  ps.IPAddress,
+			IsCurrent:  ps.ID.Compare(caller.ID) == 0,
+		})
+	}
+	return &corev1.ListPlayerSessionsResponse{Sessions: out}, nil
 }
 
 // buildCharacterSummaries lists characters for a player and enriches with session status.
