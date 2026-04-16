@@ -710,6 +710,50 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
 	}
 
+	// Register the caller's connection in core (bd-j2xj). Connection
+	// lifecycle belongs in the Subscribe RPC, not in the web gateway.
+	//
+	// Transitional gate: only runs when connection_id is non-empty. The
+	// telnet gateway passes connection_id + client_type after Task 8; the
+	// web gateway still calls AddConnection itself and does NOT pass a
+	// connection_id yet. Task 14 makes connection_id required and removes
+	// the web gateway's direct AddConnection call, retiring this gate.
+	if req.GetConnectionId() != "" {
+		connID, parseErr := ulid.Parse(req.GetConnectionId())
+		if parseErr != nil || req.GetClientType() == "" {
+			return oops.Code("SUBSCRIBE_INVALID_CONNECTION").
+				With("session_id", req.GetSessionId()).
+				Errorf("subscribe: connection_id must be a valid ULID and client_type must be set")
+		}
+		conn := &session.Connection{
+			ID:          connID,
+			SessionID:   req.GetSessionId(),
+			ClientType:  req.GetClientType(),
+			ConnectedAt: time.Now(),
+		}
+		if addErr := s.sessionStore.AddConnection(ctx, conn); addErr != nil {
+			return oops.Code("SUBSCRIBE_ADD_CONNECTION_FAILED").
+				With("session_id", req.GetSessionId()).
+				With("connection_id", req.GetConnectionId()).
+				Wrap(addErr)
+		}
+		// Deferred cleanup fires on any exit path: client disconnect,
+		// context cancel, error return, STREAM_CLOSED. Uses a fresh
+		// context so a cancelled stream context does not abort the
+		// removal (same pattern as cursor commit).
+		defer func() {
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), cursorCommitTimeout)
+			defer cancel()
+			if rmErr := s.sessionStore.RemoveConnection(cleanupCtx, connID); rmErr != nil {
+				slog.WarnContext(ctx, "subscribe: failed to remove connection on stream close",
+					"connection_id", connID.String(),
+					"session_id", req.GetSessionId(),
+					"error", rmErr,
+				)
+			}
+		}()
+	}
+
 	// 2. Reattach if detached.
 	if info.Status == session.StatusDetached {
 		ok, casErr := s.sessionStore.ReattachCAS(ctx, req.SessionId)

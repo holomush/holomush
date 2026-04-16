@@ -3284,3 +3284,66 @@ func TestSubscribeDeregistersRegistryOnExit(t *testing.T) {
 	require.Error(t, err, "registry should return SESSION_NOT_FOUND after Subscribe exits")
 	errutil.AssertErrorCode(t, err, "SESSION_NOT_FOUND")
 }
+
+// TestSubscribeRegistersConnectionWithClientTypeFromRequest asserts that the
+// core Subscribe handler registers the caller's connection into the session
+// store at stream open (using the connection_id + client_type from the
+// request) and deregisters it when the stream exits. Closes bd-j2xj's
+// gateway-boundary surface: connection lifecycle belongs in core, not the
+// web gateway.
+func TestSubscribeRegistersConnectionWithClientTypeFromRequest(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+
+	eventStore := core.NewMemoryEventStore()
+	sessStore := newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			ID:          sessionID.String(),
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	})
+
+	server := newSubscribeTestServer(t, eventStore, sessStore)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := &mockSubscribeStream{ctx: ctx}
+
+	connID := core.NewULID()
+	req := &corev1.SubscribeRequest{
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
+		ConnectionId:       connID.String(),
+		ClientType:         "terminal",
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	// Registration should appear before the stream reaches its live loop.
+	require.Eventually(t, func() bool {
+		total, err := sessStore.CountConnections(context.Background(), sessionID.String())
+		if err != nil || total != 1 {
+			return false
+		}
+		termCount, err := sessStore.CountConnectionsByType(context.Background(), sessionID.String(), "terminal")
+		return err == nil && termCount == 1
+	}, 2*time.Second, 10*time.Millisecond, "connection should be registered by Subscribe")
+
+	// Closing the stream should deregister the connection.
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Subscribe did not return after context cancellation")
+	}
+
+	require.Eventually(t, func() bool {
+		total, err := sessStore.CountConnections(context.Background(), sessionID.String())
+		return err == nil && total == 0
+	}, 2*time.Second, 10*time.Millisecond, "connection should be deregistered on stream close")
+}
