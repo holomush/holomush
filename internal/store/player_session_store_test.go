@@ -831,3 +831,144 @@ func TestPostgresPlayerSessionStore_RefreshTTL(t *testing.T) {
 		})
 	}
 }
+
+func TestPostgresPlayerSessionStore_CreateWithCap(t *testing.T) {
+	ps := testPlayerSession()
+
+	t.Run("inserts and trims within a single transaction when cap is positive", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		const capN = 3
+		mock.ExpectBegin()
+		mock.ExpectExec(`SELECT pg_advisory_xact_lock`).
+			WithArgs(ps.PlayerID.String()).
+			WillReturnResult(pgxmock.NewResult("SELECT", 1))
+		mock.ExpectExec(`INSERT INTO player_sessions`).
+			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
+			WillReturnResult(pgxmock.NewResult("INSERT", 1))
+		mock.ExpectExec(`DELETE FROM player_sessions`).
+			WithArgs(ps.PlayerID.String(), ps.ID.String(), capN-1).
+			WillReturnResult(pgxmock.NewResult("DELETE", 2))
+		mock.ExpectCommit()
+		mock.ExpectRollback()
+
+		store := NewPostgresPlayerSessionStore(mock)
+		trimmed, err := store.CreateWithCap(context.Background(), ps, capN)
+		require.NoError(t, err)
+		assert.Equal(t, 2, trimmed)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("skips trim when cap is zero (disabled)", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		mock.ExpectBegin()
+		mock.ExpectExec(`SELECT pg_advisory_xact_lock`).
+			WithArgs(ps.PlayerID.String()).
+			WillReturnResult(pgxmock.NewResult("SELECT", 1))
+		mock.ExpectExec(`INSERT INTO player_sessions`).
+			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
+			WillReturnResult(pgxmock.NewResult("INSERT", 1))
+		// No DELETE expected when cap <= 0.
+		mock.ExpectCommit()
+		mock.ExpectRollback()
+
+		store := NewPostgresPlayerSessionStore(mock)
+		trimmed, err := store.CreateWithCap(context.Background(), ps, 0)
+		require.NoError(t, err)
+		assert.Equal(t, 0, trimmed)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("rolls back on insert failure", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		mock.ExpectBegin()
+		mock.ExpectExec(`SELECT pg_advisory_xact_lock`).
+			WithArgs(ps.PlayerID.String()).
+			WillReturnResult(pgxmock.NewResult("SELECT", 1))
+		mock.ExpectExec(`INSERT INTO player_sessions`).
+			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
+			WillReturnError(errors.New("insert failed"))
+		mock.ExpectRollback()
+
+		store := NewPostgresPlayerSessionStore(mock)
+		trimmed, err := store.CreateWithCap(context.Background(), ps, 3)
+		require.Error(t, err)
+		assert.Equal(t, 0, trimmed)
+		errutil.AssertErrorCode(t, err, "PLAYER_SESSION_CREATE_FAILED")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("rolls back on trim failure", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		mock.ExpectBegin()
+		mock.ExpectExec(`SELECT pg_advisory_xact_lock`).
+			WithArgs(ps.PlayerID.String()).
+			WillReturnResult(pgxmock.NewResult("SELECT", 1))
+		mock.ExpectExec(`INSERT INTO player_sessions`).
+			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
+			WillReturnResult(pgxmock.NewResult("INSERT", 1))
+		mock.ExpectExec(`DELETE FROM player_sessions`).
+			WithArgs(ps.PlayerID.String(), ps.ID.String(), 2).
+			WillReturnError(errors.New("delete failed"))
+		mock.ExpectRollback()
+
+		store := NewPostgresPlayerSessionStore(mock)
+		trimmed, err := store.CreateWithCap(context.Background(), ps, 3)
+		require.Error(t, err)
+		assert.Equal(t, 0, trimmed)
+		errutil.AssertErrorCode(t, err, "PLAYER_SESSION_TRIM_FAILED")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("returns begin error", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		mock.ExpectBegin().WillReturnError(errors.New("cannot begin tx"))
+
+		store := NewPostgresPlayerSessionStore(mock)
+		trimmed, err := store.CreateWithCap(context.Background(), ps, 3)
+		require.Error(t, err)
+		assert.Equal(t, 0, trimmed)
+		errutil.AssertErrorCode(t, err, "PLAYER_SESSION_TX_BEGIN_FAILED")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("returns commit error", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		mock.ExpectBegin()
+		mock.ExpectExec(`SELECT pg_advisory_xact_lock`).
+			WithArgs(ps.PlayerID.String()).
+			WillReturnResult(pgxmock.NewResult("SELECT", 1))
+		mock.ExpectExec(`INSERT INTO player_sessions`).
+			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
+			WillReturnResult(pgxmock.NewResult("INSERT", 1))
+		mock.ExpectExec(`DELETE FROM player_sessions`).
+			WithArgs(ps.PlayerID.String(), ps.ID.String(), 2).
+			WillReturnResult(pgxmock.NewResult("DELETE", 0))
+		mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
+		mock.ExpectRollback()
+
+		store := NewPostgresPlayerSessionStore(mock)
+		trimmed, err := store.CreateWithCap(context.Background(), ps, 3)
+		require.Error(t, err)
+		assert.Equal(t, 0, trimmed)
+		errutil.AssertErrorCode(t, err, "PLAYER_SESSION_TX_COMMIT_FAILED")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}

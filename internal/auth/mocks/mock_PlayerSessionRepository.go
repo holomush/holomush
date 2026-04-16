@@ -134,6 +134,64 @@ func (_c *MockPlayerSessionRepository_Create_Call) RunAndReturn(run func(context
 	return _c
 }
 
+// CreateWithCap provides a mock function with given fields: ctx, session, maxActive
+func (_m *MockPlayerSessionRepository) CreateWithCap(ctx context.Context, session *auth.PlayerSession, maxActive int) (int, error) {
+	ret := _m.Called(ctx, session, maxActive)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateWithCap")
+	}
+
+	var r0 int
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *auth.PlayerSession, int) (int, error)); ok {
+		return rf(ctx, session, maxActive)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *auth.PlayerSession, int) int); ok {
+		r0 = rf(ctx, session, maxActive)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *auth.PlayerSession, int) error); ok {
+		r1 = rf(ctx, session, maxActive)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockPlayerSessionRepository_CreateWithCap_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateWithCap'
+type MockPlayerSessionRepository_CreateWithCap_Call struct {
+	*mock.Call
+}
+
+// CreateWithCap is a helper method to define mock.On call
+//   - ctx context.Context
+//   - session *auth.PlayerSession
+//   - maxActive int
+func (_e *MockPlayerSessionRepository_Expecter) CreateWithCap(ctx interface{}, session interface{}, maxActive interface{}) *MockPlayerSessionRepository_CreateWithCap_Call {
+	return &MockPlayerSessionRepository_CreateWithCap_Call{Call: _e.mock.On("CreateWithCap", ctx, session, maxActive)}
+}
+
+func (_c *MockPlayerSessionRepository_CreateWithCap_Call) Run(run func(ctx context.Context, session *auth.PlayerSession, maxActive int)) *MockPlayerSessionRepository_CreateWithCap_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*auth.PlayerSession), args[2].(int))
+	})
+	return _c
+}
+
+func (_c *MockPlayerSessionRepository_CreateWithCap_Call) Return(_a0 int, _a1 error) *MockPlayerSessionRepository_CreateWithCap_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockPlayerSessionRepository_CreateWithCap_Call) RunAndReturn(run func(context.Context, *auth.PlayerSession, int) (int, error)) *MockPlayerSessionRepository_CreateWithCap_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Delete provides a mock function with given fields: ctx, id
 func (_m *MockPlayerSessionRepository) Delete(ctx context.Context, id ulid.ULID) error {
 	ret := _m.Called(ctx, id)

@@ -182,19 +182,17 @@ func TestAuthService_Logout(t *testing.T) {
 	})
 }
 
-func TestAuthenticatePlayerEvictsOldestWhenCapExceeded(t *testing.T) {
+func TestAuthenticatePlayerCallsCreateWithCapWhenCapExceeded(t *testing.T) {
 	ctx := context.Background()
 	const capN = 3
 
 	svc, playerRepo, sessionRepo, hasher := newTestAuthServiceWithCap(t, capN)
 	player := testPlayerWithCredentials(t, playerRepo, hasher, "alice")
 
-	// Cap is reached: player already has `capN` active sessions.
-	sessionRepo.On("CountActiveByPlayer", ctx, player.ID).Return(capN, nil).Once()
-
-	evicted := &auth.PlayerSession{ID: ulid.Make(), PlayerID: player.ID}
-	sessionRepo.On("DeleteOldestForPlayer", ctx, player.ID).Return(evicted, nil).Once()
-	sessionRepo.On("Create", ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
+	// Repository receives configured cap and atomically trims. Return trimmed > 0
+	// to simulate the player having been over the cap prior to this call.
+	sessionRepo.On("CreateWithCap", ctx, mock.AnythingOfType("*auth.PlayerSession"), capN).
+		Return(1, nil).Once()
 
 	tok, gotPlayer, err := svc.AuthenticatePlayer(ctx, "alice", "password", "ua", "ip")
 	require.NoError(t, err)
@@ -203,17 +201,16 @@ func TestAuthenticatePlayerEvictsOldestWhenCapExceeded(t *testing.T) {
 	assert.Equal(t, player.ID, gotPlayer.ID)
 }
 
-func TestAuthenticatePlayerDoesNotEvictWhenBelowCap(t *testing.T) {
+func TestAuthenticatePlayerDoesNotTrimWhenBelowCap(t *testing.T) {
 	ctx := context.Background()
 	const capN = 5
 
 	svc, playerRepo, sessionRepo, hasher := newTestAuthServiceWithCap(t, capN)
 	player := testPlayerWithCredentials(t, playerRepo, hasher, "bob")
 
-	// Below the cap: two existing sessions, room for more.
-	sessionRepo.On("CountActiveByPlayer", ctx, player.ID).Return(2, nil).Once()
-	// DeleteOldestForPlayer MUST NOT be called — no expectation scripted.
-	sessionRepo.On("Create", ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
+	// Below the cap: CreateWithCap returns trimmed=0 (nothing to trim).
+	sessionRepo.On("CreateWithCap", ctx, mock.AnythingOfType("*auth.PlayerSession"), capN).
+		Return(0, nil).Once()
 
 	tok, gotPlayer, err := svc.AuthenticatePlayer(ctx, "bob", "password", "ua", "ip")
 	require.NoError(t, err)
@@ -222,19 +219,19 @@ func TestAuthenticatePlayerDoesNotEvictWhenBelowCap(t *testing.T) {
 	assert.Equal(t, player.ID, gotPlayer.ID)
 }
 
-func TestAuthenticatePlayerDoesNotCapWhenDisabled(t *testing.T) {
+func TestAuthenticatePlayerPassesDisabledCapToRepository(t *testing.T) {
 	ctx := context.Background()
 	const capDisabled = 0 // <= 0 disables enforcement
 
 	svc, playerRepo, sessionRepo, hasher := newTestAuthServiceWithCap(t, capDisabled)
 	testPlayerWithCredentials(t, playerRepo, hasher, "carol")
 
-	// With cap disabled, CountActiveByPlayer/DeleteOldestForPlayer MUST NOT be
-	// called. Asserting the absence of those expectations on the mock (via
-	// mockery's strict mode) is sufficient.
-	sessionRepo.On("Create", ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil)
+	// When cap is disabled, the service still routes through CreateWithCap
+	// (single code path) and the repository's cap <= 0 branch skips trimming.
+	sessionRepo.On("CreateWithCap", ctx, mock.AnythingOfType("*auth.PlayerSession"), capDisabled).
+		Return(0, nil)
 
-	// Authenticate many times; none should trigger cap logic.
+	// Authenticate many times; none should trigger trimming.
 	for i := 0; i < 10; i++ {
 		tok, gotPlayer, err := svc.AuthenticatePlayer(ctx, "carol", "password", "ua", "ip")
 		require.NoError(t, err)
@@ -244,37 +241,21 @@ func TestAuthenticatePlayerDoesNotCapWhenDisabled(t *testing.T) {
 	}
 }
 
-func TestAuthenticatePlayerPropagatesCountError(t *testing.T) {
+func TestAuthenticatePlayerPropagatesCreateWithCapError(t *testing.T) {
 	ctx := context.Background()
 	const capN = 3
 
 	svc, playerRepo, sessionRepo, hasher := newTestAuthServiceWithCap(t, capN)
-	player := testPlayerWithCredentials(t, playerRepo, hasher, "alice")
+	testPlayerWithCredentials(t, playerRepo, hasher, "alice")
 
-	sessionRepo.On("CountActiveByPlayer", ctx, player.ID).Return(0, errors.New("db down")).Once()
+	sessionRepo.On("CreateWithCap", ctx, mock.AnythingOfType("*auth.PlayerSession"), capN).
+		Return(0, errors.New("db down")).Once()
 
 	tok, gotPlayer, err := svc.AuthenticatePlayer(ctx, "alice", "password", "ua", "ip")
 	require.Error(t, err)
 	assert.Empty(t, tok)
 	assert.Nil(t, gotPlayer)
-	errutil.AssertErrorCode(t, err, "AUTH_CAP_CHECK_FAILED")
-}
-
-func TestAuthenticatePlayerPropagatesEvictError(t *testing.T) {
-	ctx := context.Background()
-	const capN = 3
-
-	svc, playerRepo, sessionRepo, hasher := newTestAuthServiceWithCap(t, capN)
-	player := testPlayerWithCredentials(t, playerRepo, hasher, "alice")
-
-	sessionRepo.On("CountActiveByPlayer", ctx, player.ID).Return(capN, nil).Once()
-	sessionRepo.On("DeleteOldestForPlayer", ctx, player.ID).Return(nil, errors.New("db down")).Once()
-
-	tok, gotPlayer, err := svc.AuthenticatePlayer(ctx, "alice", "password", "ua", "ip")
-	require.Error(t, err)
-	assert.Empty(t, tok)
-	assert.Nil(t, gotPlayer)
-	errutil.AssertErrorCode(t, err, "AUTH_CAP_EVICT_FAILED")
+	errutil.AssertErrorCode(t, err, "AUTH_LOGIN_FAILED")
 }
 
 func TestAuthenticatePlayerReturnsErrorOnInvalidCredentials(t *testing.T) {

@@ -65,6 +65,10 @@ func (f *fakePlayerSessionRepo) Create(_ context.Context, _ *auth.PlayerSession)
 	panic("fakePlayerSessionRepo: Create not implemented")
 }
 
+func (f *fakePlayerSessionRepo) CreateWithCap(_ context.Context, _ *auth.PlayerSession, _ int) (int, error) {
+	panic("fakePlayerSessionRepo: CreateWithCap not implemented")
+}
+
 func (f *fakePlayerSessionRepo) GetByTokenHash(_ context.Context, tokenHash string) (*auth.PlayerSession, error) {
 	if tokenHash != f.tokenHash {
 		return nil, auth.ErrNotFound

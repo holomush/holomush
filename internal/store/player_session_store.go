@@ -47,6 +47,77 @@ func (s *PostgresPlayerSessionStore) Create(ctx context.Context, session *auth.P
 	return nil
 }
 
+// CreateWithCap atomically inserts the new session and trims oldest non-expired
+// sessions for the same player so the total active count is at most maxActive.
+// A maxActive value <= 0 disables trimming (equivalent to Create). Returns the
+// number of rows trimmed.
+//
+// The INSERT + trim DELETE execute in a single transaction so any failure
+// rolls back both. The DELETE uses ORDER BY created_at DESC + OFFSET
+// (maxActive - 1) to skip the newest (maxActive - 1) other sessions (which we
+// keep alongside the just-inserted one) and deletes the rest — i.e. the oldest
+// sessions beyond the cap. Combined with id != $new_id this guarantees the
+// just-inserted session is never trimmed, leaving the player with exactly
+// min(maxActive, total) active sessions.
+func (s *PostgresPlayerSessionStore) CreateWithCap(ctx context.Context, session *auth.PlayerSession, maxActive int) (int, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, oops.Code("PLAYER_SESSION_TX_BEGIN_FAILED").
+			With("player_id", session.PlayerID.String()).Wrap(err)
+	}
+	// Rollback is a no-op once Commit succeeds.
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
+
+	// Serialize concurrent CreateWithCap calls for the same player via a
+	// transaction-scoped advisory lock keyed on the player_id hash. Without
+	// this, two concurrent transactions at READ COMMITTED each see the
+	// pre-insert snapshot, each trim to cap-1, each insert → the player ends
+	// up above cap. The lock is released automatically at COMMIT/ROLLBACK.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, session.PlayerID.String()); err != nil {
+		return 0, oops.Code("PLAYER_SESSION_LOCK_FAILED").
+			With("player_id", session.PlayerID.String()).Wrap(err)
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO player_sessions (id, player_id, token_hash, user_agent, ip_address, expires_at, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+		session.ID.String(),
+		session.PlayerID.String(),
+		session.TokenHash,
+		session.UserAgent,
+		session.IPAddress,
+		session.ExpiresAt,
+		session.CreatedAt,
+		session.UpdatedAt,
+	); err != nil {
+		return 0, oops.Code("PLAYER_SESSION_CREATE_FAILED").
+			With("player_id", session.PlayerID.String()).Wrap(err)
+	}
+
+	trimmed := 0
+	if maxActive > 0 {
+		tag, err := tx.Exec(ctx, `
+			DELETE FROM player_sessions
+			WHERE id IN (
+				SELECT id FROM player_sessions
+				WHERE player_id = $1 AND id != $2 AND expires_at > now()
+				ORDER BY created_at DESC
+				OFFSET $3
+			)
+		`, session.PlayerID.String(), session.ID.String(), maxActive-1)
+		if err != nil {
+			return 0, oops.Code("PLAYER_SESSION_TRIM_FAILED").
+				With("player_id", session.PlayerID.String()).Wrap(err)
+		}
+		trimmed = int(tag.RowsAffected())
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, oops.Code("PLAYER_SESSION_TX_COMMIT_FAILED").
+			With("player_id", session.PlayerID.String()).Wrap(err)
+	}
+	return trimmed, nil
+}
+
 // GetByTokenHash retrieves a player session by its token hash.
 // If the session exists but is expired, it is deleted and PLAYER_SESSION_EXPIRED is returned.
 func (s *PostgresPlayerSessionStore) GetByTokenHash(ctx context.Context, tokenHash string) (*auth.PlayerSession, error) {

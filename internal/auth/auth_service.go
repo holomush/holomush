@@ -87,12 +87,22 @@ func (s *Service) SetMaxSessionsPerPlayer(n int) {
 const dummyPasswordHash = "$argon2id$v=19$m=65536,t=1,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 // AuthenticatePlayer validates credentials and creates a new PlayerSession.
-// When the per-player session cap is enabled (maxSessionsPerPlayer > 0) and the
-// player already has at least that many active PlayerSessions, the oldest
-// active PlayerSession is deleted before the new one is persisted. The
-// ON DELETE CASCADE on sessions.player_session_id ensures game sessions
-// spawned by the evicted PlayerSession are removed atomically, terminating
-// their Subscribe streams.
+// When the per-player session cap is enabled (maxSessionsPerPlayer > 0),
+// CreateWithCap atomically inserts the new session and trims the oldest
+// non-expired sessions so the total active count is at most the configured
+// cap. The INSERT + trim run in a single transaction which closes three
+// correctness gaps of a separate Count + DeleteOldest + Create flow:
+//
+//   - Two concurrent logins at cap each observe count == cap, each evict
+//     once, each insert, leaving the player at cap + 1.
+//   - Lowering the operator-configured cap below the current count only
+//     trims one session per login instead of catching up.
+//   - A Create failure after a successful eviction silently strands the
+//     player below cap with no replacement session.
+//
+// The ON DELETE CASCADE on sessions.player_session_id still ensures game
+// sessions spawned by a trimmed PlayerSession are removed atomically,
+// terminating their Subscribe streams.
 //
 // Returns the raw (plaintext) session token and the authenticated Player on
 // success. The caller is responsible for returning the raw token to the client
@@ -104,32 +114,6 @@ func (s *Service) AuthenticatePlayer(ctx context.Context, username, password, us
 		// (AUTH_INVALID_CREDENTIALS, AUTH_ACCOUNT_LOCKED, AUTH_LOGIN_FAILED);
 		// preserve them verbatim so callers can discriminate on code.
 		return "", nil, err
-	}
-
-	// Enforce session cap if configured.
-	if s.maxSessionsPerPlayer > 0 {
-		n, countErr := s.playerSessions.CountActiveByPlayer(ctx, player.ID)
-		if countErr != nil {
-			return "", nil, oops.Code("AUTH_CAP_CHECK_FAILED").
-				With("player_id", player.ID.String()).
-				Wrap(countErr)
-		}
-		if n >= s.maxSessionsPerPlayer {
-			evicted, delErr := s.playerSessions.DeleteOldestForPlayer(ctx, player.ID)
-			if delErr != nil {
-				return "", nil, oops.Code("AUTH_CAP_EVICT_FAILED").
-					With("player_id", player.ID.String()).
-					Wrap(delErr)
-			}
-			if evicted != nil {
-				s.logger.InfoContext(ctx, "session cap evicted oldest session",
-					"event", "session_cap_evicted",
-					"player_id", player.ID.String(),
-					"evicted_id", evicted.ID.String(),
-					"cap", s.maxSessionsPerPlayer,
-				)
-			}
-		}
 	}
 
 	rawToken, tokenHash, err := GenerateSessionToken()
@@ -146,10 +130,19 @@ func (s *Service) AuthenticatePlayer(ctx context.Context, username, password, us
 			Wrap(err)
 	}
 
-	if err := s.playerSessions.Create(ctx, session); err != nil {
+	trimmed, err := s.playerSessions.CreateWithCap(ctx, session, s.maxSessionsPerPlayer)
+	if err != nil {
 		return "", nil, oops.Code("AUTH_LOGIN_FAILED").
-			With("operation", "persist player session").
+			With("operation", "persist player session with cap").
 			Wrap(err)
+	}
+	if trimmed > 0 {
+		s.logger.InfoContext(ctx, "session cap trimmed oldest sessions",
+			"event", "session_cap_trimmed",
+			"player_id", player.ID.String(),
+			"trimmed_count", trimmed,
+			"cap", s.maxSessionsPerPlayer,
+		)
 	}
 
 	return rawToken, player, nil

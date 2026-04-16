@@ -579,6 +579,122 @@ var _ = Describe("Player Session Lifecycle", func() {
 		})
 	})
 
+	Describe("CreateWithCap atomic session cap enforcement", func() {
+		var player *auth.Player
+
+		BeforeEach(func() {
+			player = createTestPlayer(ctx, "cap_player", "securepassword123")
+		})
+
+		// buildSession produces a fresh non-expired PlayerSession for the test
+		// player but does NOT persist it. Callers choose whether to insert it
+		// directly (Create) or atomically via CreateWithCap.
+		buildSession := func(createdAt, expiresAt time.Time) *auth.PlayerSession {
+			_, tokenHash, err := auth.GenerateSessionToken()
+			Expect(err).NotTo(HaveOccurred())
+			ps, err := auth.NewPlayerSession(player.ID, tokenHash, "", "", auth.PlayerSessionTTL)
+			Expect(err).NotTo(HaveOccurred())
+			ps.CreatedAt = createdAt
+			ps.UpdatedAt = createdAt
+			ps.ExpiresAt = expiresAt
+			return ps
+		}
+
+		It("trims oldest non-expired sessions so total equals cap", func() {
+			now := time.Now().UTC()
+			// Pre-populate exactly cap sessions so the new one + cap existing = cap+1.
+			const capN = 3
+			existing := make([]*auth.PlayerSession, 0, capN)
+			for i := 0; i < capN; i++ {
+				ps := buildSession(now.Add(time.Duration(-(capN-i))*time.Hour), now.Add(time.Hour))
+				Expect(env.playerSessionStore.Create(ctx, ps)).To(Succeed())
+				existing = append(existing, ps)
+			}
+
+			// New session created via CreateWithCap with cap=capN should trim
+			// the oldest one, leaving exactly capN total.
+			newPS := buildSession(now, now.Add(time.Hour))
+			trimmed, err := env.playerSessionStore.CreateWithCap(ctx, newPS, capN)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(trimmed).To(Equal(1))
+
+			remaining, err := env.playerSessionStore.ListByPlayer(ctx, player.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remaining).To(HaveLen(capN))
+
+			// The oldest session must have been trimmed; the newly-inserted one
+			// must be present.
+			ids := make(map[ulid.ULID]struct{}, len(remaining))
+			for _, ps := range remaining {
+				ids[ps.ID] = struct{}{}
+			}
+			Expect(ids).To(HaveKey(newPS.ID))
+			Expect(ids).NotTo(HaveKey(existing[0].ID)) // oldest evicted
+		})
+
+		It("catches up when cap is lowered below current active count", func() {
+			now := time.Now().UTC()
+			// Simulate a player who accumulated 6 sessions under an older, higher cap.
+			const priorCount = 6
+			for i := 0; i < priorCount; i++ {
+				ps := buildSession(now.Add(time.Duration(-(priorCount-i))*time.Hour), now.Add(time.Hour))
+				Expect(env.playerSessionStore.Create(ctx, ps)).To(Succeed())
+			}
+
+			// Operator lowers cap to 2. A single new login must bring the player
+			// down to exactly 2 total sessions.
+			const newCap = 2
+			newPS := buildSession(now, now.Add(time.Hour))
+			trimmed, err := env.playerSessionStore.CreateWithCap(ctx, newPS, newCap)
+			Expect(err).NotTo(HaveOccurred())
+			// priorCount existing + 1 new - newCap = 5 trimmed.
+			Expect(trimmed).To(Equal(priorCount + 1 - newCap))
+
+			remaining, err := env.playerSessionStore.ListByPlayer(ctx, player.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remaining).To(HaveLen(newCap))
+		})
+
+		It("leaves no more than cap sessions under concurrent logins", func() {
+			// This is the race CodeRabbit flagged: two parallel logins at cap
+			// both evict once, both insert → cap+1. With CreateWithCap running
+			// in a single transaction, Postgres serializes the two, so the
+			// invariant remaining count <= cap must hold.
+			const capN = 2
+			// Pre-populate capN sessions to put the player exactly at cap.
+			now := time.Now().UTC()
+			for i := 0; i < capN; i++ {
+				ps := buildSession(now.Add(time.Duration(-(capN-i))*time.Hour), now.Add(time.Hour))
+				Expect(env.playerSessionStore.Create(ctx, ps)).To(Succeed())
+			}
+
+			// Fire N concurrent CreateWithCap calls, each inserting a distinct
+			// new session. Every call independently enforces cap=capN.
+			const concurrency = 8
+			errCh := make(chan error, concurrency)
+			start := make(chan struct{})
+			for i := 0; i < concurrency; i++ {
+				ps := buildSession(now.Add(time.Duration(i)*time.Millisecond), now.Add(time.Hour))
+				go func(ps *auth.PlayerSession) {
+					<-start
+					_, err := env.playerSessionStore.CreateWithCap(ctx, ps, capN)
+					errCh <- err
+				}(ps)
+			}
+			close(start)
+			for i := 0; i < concurrency; i++ {
+				Expect(<-errCh).NotTo(HaveOccurred())
+			}
+
+			// Invariant: after all concurrent cap-enforcing inserts, the active
+			// session count is at most capN. No race window can leave the
+			// player above cap.
+			count, err := env.playerSessionStore.CountActiveByPlayer(ctx, player.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(count).To(BeNumerically("<=", capN))
+		})
+	})
+
 	Describe("Registration flow with player session", func() {
 		It("creates a player and player session atomically", func() {
 			player, ps, rawToken, err := env.authService.CreatePlayer(ctx, "new_player", "securepassword123", "")
