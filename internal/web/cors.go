@@ -28,6 +28,11 @@ func CORSMiddleware(origins []string, next http.Handler) http.Handler {
 	allowHeaders := strings.Join(connectHeaders, ", ")
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Always advertise that the response varies by Origin so intermediary
+		// caches (CDNs, reverse proxies) do not serve a response with one
+		// Access-Control-Allow-Origin value to requests from a different origin.
+		w.Header().Add("Vary", "Origin")
+
 		origin := r.Header.Get("Origin")
 		if origin == "" || !slices.Contains(origins, origin) {
 			next.ServeHTTP(w, r)
