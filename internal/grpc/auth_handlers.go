@@ -595,6 +595,40 @@ func (s *CoreServer) RevokePlayerSession(ctx context.Context, req *corev1.Revoke
 	return &corev1.RevokePlayerSessionResponse{Success: true}, nil
 }
 
+// RevokeOtherPlayerSessions bulk-revokes all PlayerSessions owned by the
+// caller except the current one. Useful after a suspected compromise or
+// password reset.
+func (s *CoreServer) RevokeOtherPlayerSessions(ctx context.Context, req *corev1.RevokeOtherPlayerSessionsRequest) (*corev1.RevokeOtherPlayerSessionsResponse, error) {
+	if s.playerSessionRepo == nil {
+		return &corev1.RevokeOtherPlayerSessionsResponse{Success: false}, nil
+	}
+
+	caller, err := s.playerSessionRepo.GetByTokenHash(ctx, auth.HashSessionToken(req.GetPlayerSessionToken()))
+	if err != nil || caller.IsExpired() {
+		//nolint:nilerr // intentional: enumeration-safe auth-failure response
+		return &corev1.RevokeOtherPlayerSessionsResponse{Success: false}, nil
+	}
+
+	sessions, err := s.playerSessionRepo.ListByPlayer(ctx, caller.PlayerID)
+	if err != nil {
+		return nil, oops.Code("REVOKE_OTHER_LIST_FAILED").Wrap(err)
+	}
+
+	var count int32
+	for _, ps := range sessions {
+		if ps.ID.Compare(caller.ID) == 0 {
+			continue
+		}
+		if delErr := s.playerSessionRepo.Delete(ctx, ps.ID); delErr != nil {
+			return nil, oops.Code("REVOKE_OTHER_DELETE_FAILED").
+				With("target_id", ps.ID.String()).Wrap(delErr)
+		}
+		count++
+	}
+
+	return &corev1.RevokeOtherPlayerSessionsResponse{Success: true, RevokedCount: count}, nil
+}
+
 // buildCharacterSummaries lists characters for a player and enriches with session status.
 func (s *CoreServer) buildCharacterSummaries(ctx context.Context, playerID ulid.ULID) ([]*corev1.CharacterSummary, error) {
 	if s.charRepo == nil {
