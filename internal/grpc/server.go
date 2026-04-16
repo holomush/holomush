@@ -725,10 +725,16 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 				With("session_id", req.GetSessionId()).
 				Errorf("subscribe: connection_id must be a valid ULID and client_type must be set")
 		}
+		// Streams is initialized to an empty slice (not nil) because the
+		// session_connections.streams column is NOT NULL; pgx serializes a
+		// Go nil []string as SQL NULL, which would fail the insert.
+		// Per-stream subscriptions are tracked in memory by the Subscribe
+		// loop; the column is a placeholder for future queries.
 		conn := &session.Connection{
 			ID:          connID,
 			SessionID:   req.GetSessionId(),
 			ClientType:  req.GetClientType(),
+			Streams:     []string{},
 			ConnectedAt: time.Now(),
 		}
 		if addErr := s.sessionStore.AddConnection(ctx, conn); addErr != nil {
