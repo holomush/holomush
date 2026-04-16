@@ -72,3 +72,9 @@ packages:
       PlayerSessionRepository:
       GuestNamer:
       GuestCharacterRepository:
+  github.com/holomush/holomush/internal/session:
+    config:
+      dir: "{{.InterfaceDir}}/mocks"
+      outpkg: mocks
+    interfaces:
+      Store:
