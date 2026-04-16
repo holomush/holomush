@@ -95,6 +95,20 @@ func (s *PostgresEventStore) Pool() *pgxpool.Pool {
 
 // Append persists an event and notifies subscribers via NOTIFY.
 func (s *PostgresEventStore) Append(ctx context.Context, event core.Event) error {
+	// Defense in depth: reject oversized payloads before hitting the DB.
+	// Primary validation lives at ingress (plugin emit path); this guards
+	// against any ingress path that bypasses core.ValidatePayload.
+	if err := core.ValidatePayload(event.Payload); err != nil {
+		slog.Error("rejected oversized event payload at store boundary",
+			"event_id", event.ID.String(),
+			"stream", event.Stream,
+			"payload_size", len(event.Payload),
+			"max_payload_size", core.MaxPayloadSize)
+		return oops.With("operation", "append event").
+			With("event_id", event.ID.String()).
+			With("stream", event.Stream).Wrap(err)
+	}
+
 	_, err := s.pool.Exec(ctx,
 		`INSERT INTO events (id, stream, type, actor_kind, actor_id, payload, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,

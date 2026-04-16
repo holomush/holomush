@@ -68,12 +68,16 @@ func (e *PluginEventEmitter) Emit(ctx context.Context, pluginName string, intent
 		return oops.With("plugin", pluginName).With("stream", intent.Stream).
 			New("plugin event store is not configured")
 	}
-	if !json.Valid([]byte(intent.Payload)) {
+	payload := []byte(intent.Payload)
+	if err := core.ValidatePayload(payload); err != nil {
+		return oops.With("plugin", pluginName).With("stream", intent.Stream).Wrap(err)
+	}
+	if !json.Valid(payload) {
 		return oops.With("plugin", pluginName).With("stream", intent.Stream).
 			New("event payload must be valid JSON")
 	}
 
-	event := core.NewEvent(intent.Stream, core.EventType(intent.Type), actor, []byte(intent.Payload))
+	event := core.NewEvent(intent.Stream, core.EventType(intent.Type), actor, payload)
 
 	if err := e.store.Append(ctx, event); err != nil {
 		return oops.With("plugin", pluginName).With("stream", intent.Stream).Wrap(err)
