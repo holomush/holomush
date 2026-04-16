@@ -101,13 +101,17 @@ func registerTestSayCommand(reg *command.Registry) {
 }
 
 // loginAsGuest performs the two-phase guest login (CreateGuest + SelectCharacter)
-// and returns the resulting game session ID and character name.
-func loginAsGuest(ctx context.Context, cli *grpcpkg.Client) (sessionID, charName string) {
+// and returns the resulting game session ID, character name, and
+// player_session_token. The token is required by HandleCommand after
+// bd-jv7z landed server-side ownership enforcement — calls that omit
+// the token are rejected with "session not found".
+func loginAsGuest(ctx context.Context, cli *grpcpkg.Client) (sessionID, charName, token string) {
 	guestResp, err := cli.CreateGuest(ctx, &corev1.CreateGuestRequest{})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(guestResp.Success).To(BeTrue(), "guest creation should succeed: %s", guestResp.ErrorMessage)
 	Expect(guestResp.Characters).To(HaveLen(1))
 	Expect(guestResp.DefaultCharacterId).NotTo(BeEmpty())
+	Expect(guestResp.PlayerSessionToken).NotTo(BeEmpty())
 
 	selectResp, err := cli.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
 		PlayerSessionToken: guestResp.PlayerSessionToken,
@@ -118,7 +122,7 @@ func loginAsGuest(ctx context.Context, cli *grpcpkg.Client) (sessionID, charName
 		"character selection should succeed: %s", selectResp.ErrorMessage)
 	Expect(selectResp.SessionId).NotTo(BeEmpty())
 
-	return selectResp.SessionId, selectResp.CharacterName
+	return selectResp.SessionId, selectResp.CharacterName, guestResp.PlayerSessionToken
 }
 
 var _ = Describe("Session Persistence", func() {
@@ -266,7 +270,7 @@ var _ = Describe("Session Persistence", func() {
 
 	Describe("Reconnect flow", func() {
 		It("replays missed events when client resubscribes after disconnect", func() {
-			sessionID, _ := loginAsGuest(testCtx, grpcCli)
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
 
 			// Open the first subscription. It will replay the `arrive` event
 			// emitted by SelectCharacter, then enter the live loop.
@@ -279,8 +283,9 @@ var _ = Describe("Session Persistence", func() {
 			// Issue a say command. The handler appends a `say` event to the
 			// location stream, which the live loop forwards to the client.
 			_, err = grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
-				SessionId: sessionID,
-				Command:   "say hello",
+				SessionId:          sessionID,
+				Command:            "say hello",
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -392,7 +397,7 @@ var _ = Describe("Session Persistence", func() {
 			// guarantees handler exit (ClientStream.Recv() returning a
 			// local Canceled error does NOT imply server handler exit;
 			// grpc-go aborts the client stream locally on context cancel).
-			sessionID, _ := loginAsGuest(testCtx, grpcCli)
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
 
 			subCtx, subCancel := context.WithCancel(testCtx)
 			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
@@ -401,8 +406,9 @@ var _ = Describe("Session Persistence", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
-				SessionId: sessionID,
-				Command:   "say hello",
+				SessionId:          sessionID,
+				Command:            "say hello",
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -444,7 +450,7 @@ var _ = Describe("Session Persistence", func() {
 		})
 
 		It("commits cursor before grpcServer.GracefulStop returns (no lost writes on shutdown)", func() {
-			sessionID, _ := loginAsGuest(testCtx, grpcCli)
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
 
 			subCtx, subCancel := context.WithCancel(testCtx)
 			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
@@ -453,8 +459,9 @@ var _ = Describe("Session Persistence", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
-				SessionId: sessionID,
-				Command:   "say hello",
+				SessionId:          sessionID,
+				Command:            "say hello",
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -511,7 +518,7 @@ var _ = Describe("Session Persistence", func() {
 			// 1) Establish a session and drain its initial replay so the
 			//    hook fires on the *next* event (the live say) rather
 			//    than the arrive event from SelectCharacter.
-			sessionID, _ := loginAsGuest(testCtx, grpcCli)
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
 
 			subACtx, subACancel := context.WithCancel(testCtx)
 			defer subACancel()
@@ -554,8 +561,9 @@ var _ = Describe("Session Persistence", func() {
 			// 3) Trigger a live event. The handler will Send the say to
 			//    streamA, then enter the hook with the cursor lock held.
 			_, err = grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
-				SessionId: sessionID,
-				Command:   "say hello",
+				SessionId:          sessionID,
+				Command:            "say hello",
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -662,13 +670,14 @@ var _ = Describe("Session Persistence", func() {
 
 	Describe("Command history", func() {
 		It("persists commands across HandleCommand calls and exposes them via GetCommandHistory", func() {
-			sessionID, _ := loginAsGuest(testCtx, grpcCli)
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
 
 			commands := []string{"say hello", "say world"}
 			for _, cmd := range commands {
 				resp, err := grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
-					SessionId: sessionID,
-					Command:   cmd,
+					SessionId:          sessionID,
+					Command:            cmd,
+					PlayerSessionToken: token,
 				})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.Success).To(BeTrue(), "command %q failed: %s", cmd, resp.Error)
@@ -687,7 +696,7 @@ var _ = Describe("Session Persistence", func() {
 
 	Describe("TTL expiration", func() {
 		It("deletes detached session and emits leave event when reaper observes expired ttl", func() {
-			sessionID, _ := loginAsGuest(testCtx, grpcCli)
+			sessionID, _, _ := loginAsGuest(testCtx, grpcCli)
 
 			// Capture session details before forcing expiry — once the reaper
 			// runs the session row is gone and Get returns an error.
@@ -736,6 +745,64 @@ var _ = Describe("Session Persistence", func() {
 				return false
 			}).WithTimeout(5*time.Second).WithPolling(50*time.Millisecond).Should(BeTrue(),
 				"expected a leave event for the expired character on the location stream")
+		})
+	})
+
+	// HandleCommand ownership enforcement — bd-jv7z.
+	//
+	// Closes the IDOR surface where Player A could submit a command with
+	// their valid player_session_token but against Player B's session_id.
+	// The core server now calls auth.ValidateSessionOwnership before
+	// executing, and any failure collapses to the enumeration-safe
+	// "session not found" response.
+	Describe("HandleCommand ownership enforcement (bd-jv7z)", func() {
+		It("rejects a cross-player HandleCommand with session not found", func() {
+			// Two independent guest logins — distinct players, tokens, sessions.
+			sessionA, _, tokenA := loginAsGuest(testCtx, grpcCli)
+			sessionB, _, tokenB := loginAsGuest(testCtx, grpcCli)
+			Expect(sessionA).NotTo(Equal(sessionB))
+			Expect(tokenA).NotTo(Equal(tokenB))
+
+			// Attack: Player A's token with Player B's session_id.
+			resp, err := grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
+				SessionId:          sessionB,
+				Command:            "say stolen",
+				PlayerSessionToken: tokenA,
+			})
+			Expect(err).NotTo(HaveOccurred(),
+				"RPC returns normally — error is in the response payload")
+			Expect(resp.GetSuccess()).To(BeFalse(),
+				"cross-player command must be rejected")
+			Expect(resp.GetError()).To(Equal("session not found"),
+				"response must be enumeration-safe — same string as unknown session id")
+		})
+
+		It("permits HandleCommand when the player owns the session", func() {
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
+
+			resp, err := grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
+				SessionId:          sessionID,
+				Command:            "say hi",
+				PlayerSessionToken: token,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.GetSuccess()).To(BeTrue(),
+				"authorized command must succeed, got error: %s", resp.GetError())
+		})
+
+		It("rejects HandleCommand with empty token even for a valid session id", func() {
+			sessionID, _, _ := loginAsGuest(testCtx, grpcCli)
+
+			resp, err := grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
+				SessionId: sessionID,
+				Command:   "say hi",
+				// PlayerSessionToken intentionally empty.
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.GetSuccess()).To(BeFalse(),
+				"empty token must not authorize a command")
+			Expect(resp.GetError()).To(Equal("session not found"),
+				"response must be enumeration-safe — same string as ownership mismatch")
 		})
 	})
 })

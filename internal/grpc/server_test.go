@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/grpc/focus"
@@ -28,6 +29,84 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
+
+// testPlayerSessionToken is the canonical token unit tests pass in
+// HandleCommandRequest.PlayerSessionToken. The fakePlayerSessionRepo
+// installed by newHandleCommandServer is seeded to match this token
+// hash and return a PlayerSession whose PlayerID is the zero ULID —
+// which lines up with the zero PlayerID on session.Info seeded by the
+// map literals used throughout the unit tests. That makes ownership
+// validation succeed for these tests without requiring them to seed
+// matching PlayerIDs.
+const testPlayerSessionToken = "unit-test-player-session-token"
+
+// fakePlayerSessionRepo is a minimal auth.PlayerSessionRepository impl
+// used by the HandleCommand unit test helpers. GetByTokenHash returns
+// a PlayerSession whose PlayerID matches playerID and whose expiry is
+// in the future, for any hash that equals the pre-seeded hash. All
+// other methods panic — unit tests exercise only GetByTokenHash.
+type fakePlayerSessionRepo struct {
+	tokenHash string
+	playerID  ulid.ULID
+}
+
+func newFakePlayerSessionRepo(token string, playerID ulid.ULID) *fakePlayerSessionRepo {
+	return &fakePlayerSessionRepo{
+		tokenHash: auth.HashSessionToken(token),
+		playerID:  playerID,
+	}
+}
+
+func (f *fakePlayerSessionRepo) Create(_ context.Context, _ *auth.PlayerSession) error {
+	panic("fakePlayerSessionRepo: Create not implemented")
+}
+
+func (f *fakePlayerSessionRepo) GetByTokenHash(_ context.Context, tokenHash string) (*auth.PlayerSession, error) {
+	if tokenHash != f.tokenHash {
+		return nil, auth.ErrNotFound
+	}
+	return &auth.PlayerSession{
+		ID:        ulid.ULID{},
+		PlayerID:  f.playerID,
+		TokenHash: tokenHash,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	}, nil
+}
+
+func (f *fakePlayerSessionRepo) GetByID(_ context.Context, _ ulid.ULID) (*auth.PlayerSession, error) {
+	panic("fakePlayerSessionRepo: GetByID not implemented")
+}
+
+func (f *fakePlayerSessionRepo) CountActiveByPlayer(_ context.Context, _ ulid.ULID) (int, error) {
+	panic("fakePlayerSessionRepo: CountActiveByPlayer not implemented")
+}
+
+func (f *fakePlayerSessionRepo) ListByPlayer(_ context.Context, _ ulid.ULID) ([]*auth.PlayerSession, error) {
+	panic("fakePlayerSessionRepo: ListByPlayer not implemented")
+}
+
+func (f *fakePlayerSessionRepo) Delete(_ context.Context, _ ulid.ULID) error {
+	panic("fakePlayerSessionRepo: Delete not implemented")
+}
+
+func (f *fakePlayerSessionRepo) DeleteByPlayer(_ context.Context, _ ulid.ULID) error {
+	panic("fakePlayerSessionRepo: DeleteByPlayer not implemented")
+}
+
+func (f *fakePlayerSessionRepo) DeleteOldestForPlayer(_ context.Context, _ ulid.ULID) (*auth.PlayerSession, error) {
+	panic("fakePlayerSessionRepo: DeleteOldestForPlayer not implemented")
+}
+
+func (f *fakePlayerSessionRepo) DeleteExpired(_ context.Context) (int64, error) {
+	panic("fakePlayerSessionRepo: DeleteExpired not implemented")
+}
+
+func (f *fakePlayerSessionRepo) RefreshTTL(_ context.Context, _ ulid.ULID, _ time.Duration) error {
+	panic("fakePlayerSessionRepo: RefreshTTL not implemented")
+}
+
+// Compile-time interface check.
+var _ auth.PlayerSessionRepository = (*fakePlayerSessionRepo)(nil)
 
 // newTestSessionStore creates a session.MemStore pre-populated with the given sessions.
 func newTestSessionStore(t *testing.T, sessions map[string]*session.Info) session.Store {
@@ -70,8 +149,17 @@ func newHandleCommandServer(t *testing.T, store core.EventStore, sessStore sessi
 	dispatcher, err := command.NewDispatcher(reg, policyEngine)
 	require.NoError(t, err)
 
-	allOpts := make([]CoreServerOption, 0, 1+len(opts))
-	allOpts = append(allOpts, WithEventStore(store))
+	// Install a fake PlayerSessionRepo keyed on testPlayerSessionToken
+	// returning the zero-ULID PlayerID. Every unit test's session.Info
+	// seeded via newTestSessionStore has a zero-ULID PlayerID, so
+	// HandleCommand's ValidateSessionOwnership accepts
+	// testPlayerSessionToken. Callers passing an empty or different
+	// token get an enumeration-safe "session not found" response.
+	allOpts := make([]CoreServerOption, 0, 2+len(opts))
+	allOpts = append(allOpts,
+		WithEventStore(store),
+		WithPlayerSessionRepo(newFakePlayerSessionRepo(testPlayerSessionToken, ulid.ULID{})),
+	)
 	allOpts = append(allOpts, opts...)
 
 	return NewCoreServer(engine, sessStore, dispatcher, svc, allOpts...)
@@ -195,8 +283,9 @@ func TestCoreServer_HandleCommand_Say(t *testing.T) {
 			RequestId: "cmd-request-id",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "say Hello, world!",
+		SessionId:          sessionID.String(),
+		Command:            "say Hello, world!",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -215,8 +304,9 @@ func TestCoreServer_HandleCommand_InvalidSession(t *testing.T) {
 			RequestId: "cmd-request-id",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: "invalid-session",
-		Command:   "say Hello",
+		SessionId:          "invalid-session",
+		Command:            "say Hello",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -224,6 +314,97 @@ func TestCoreServer_HandleCommand_InvalidSession(t *testing.T) {
 
 	assert.False(t, resp.Success, "expected failure for invalid session")
 	assert.NotEmpty(t, resp.Error, "error message should be present")
+}
+
+// TestCoreServer_HandleCommand_RejectsEmptyToken asserts that a caller
+// who omits player_session_token gets the enumeration-safe
+// "session not found" response — not an execution of the command.
+// Regression guard for bd-jv7z (IDOR surface).
+func TestCoreServer_HandleCommand_RejectsEmptyToken(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+
+	var appendedEvents []core.Event
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, event core.Event) error {
+			appendedEvents = append(appendedEvents, event)
+			return nil
+		},
+	}
+	server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	}))
+
+	resp, err := server.HandleCommand(context.Background(), &corev1.HandleCommandRequest{
+		SessionId: sessionID.String(),
+		Command:   "say hi",
+		// PlayerSessionToken intentionally empty.
+	})
+	require.NoError(t, err)
+
+	assert.False(t, resp.Success, "empty token must not authorize a command")
+	assert.Equal(t, "session not found", resp.GetError(),
+		"response must be enumeration-safe")
+	assert.Empty(t, appendedEvents,
+		"no event should be appended when ownership validation fails")
+}
+
+// TestCoreServer_HandleCommand_RejectsCrossPlayerSession simulates the
+// IDOR attack from bd-jv7z: Player A's valid token is used against
+// Player B's session_id. The call must return "session not found" and
+// must not execute the command. The attack is deterministic here
+// because the fake PlayerSessionRepo returns PlayerA's PlayerID but
+// the seeded session belongs to PlayerB.
+func TestCoreServer_HandleCommand_RejectsCrossPlayerSession(t *testing.T) {
+	// Player A — holds the token.
+	playerA := core.NewULID()
+	// Player B — owns the target session.
+	playerB := core.NewULID()
+
+	charB := core.NewULID()
+	sessionIDB := core.NewULID()
+	locationB := core.NewULID()
+
+	var appendedEvents []core.Event
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, event core.Event) error {
+			appendedEvents = append(appendedEvents, event)
+			return nil
+		},
+	}
+
+	sessStore := newTestSessionStore(t, map[string]*session.Info{
+		sessionIDB.String(): {
+			CharacterID: charB,
+			PlayerID:    playerB, // Session B belongs to player B.
+			LocationID:  locationB,
+			Status:      session.StatusActive,
+		},
+	})
+
+	// Swap the default fake repo for one seeded with playerA's ID — so
+	// the token validates but ownership check fails.
+	server := newHandleCommandServer(t, store, sessStore,
+		WithPlayerSessionRepo(newFakePlayerSessionRepo(testPlayerSessionToken, playerA)),
+	)
+
+	resp, err := server.HandleCommand(context.Background(), &corev1.HandleCommandRequest{
+		SessionId:          sessionIDB.String(),
+		Command:            "say stolen",
+		PlayerSessionToken: testPlayerSessionToken,
+	})
+	require.NoError(t, err)
+
+	assert.False(t, resp.Success, "cross-player session attack must be rejected")
+	assert.Equal(t, "session not found", resp.GetError(),
+		"response must be enumeration-safe on ownership mismatch")
+	assert.Empty(t, appendedEvents,
+		"no event should be appended when ownership check fails")
 }
 
 func TestCoreServer_Subscribe_SendsEvents(t *testing.T) {
@@ -400,9 +581,10 @@ func TestCoreServer_HandleCommand_NilMeta(t *testing.T) {
 
 	ctx := context.Background()
 	req := &corev1.HandleCommandRequest{
-		Meta:      nil, // No meta
-		SessionId: sessionID.String(),
-		Command:   "say Hello",
+		Meta:               nil, // No meta
+		SessionId:          sessionID.String(),
+		Command:            "say Hello",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -440,8 +622,9 @@ func TestCoreServer_HandleCommand_Pose(t *testing.T) {
 			RequestId: "pose-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "pose waves hello",
+		SessionId:          sessionID.String(),
+		Command:            "pose waves hello",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -456,8 +639,9 @@ func TestCoreServer_HandleCommand_Pose(t *testing.T) {
 			RequestId: "colon-pose-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   ": nods",
+		SessionId:          sessionID.String(),
+		Command:            ": nods",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp2, err := server.HandleCommand(ctx, req2)
@@ -488,8 +672,9 @@ func TestCoreServer_HandleCommand_UnknownCommand(t *testing.T) {
 			RequestId: "unknown-cmd-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "unknowncommand args",
+		SessionId:          sessionID.String(),
+		Command:            "unknowncommand args",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -535,8 +720,9 @@ func TestCoreServer_HandleCommand_SayFails(t *testing.T) {
 			RequestId: "say-fail-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "say Hello",
+		SessionId:          sessionID.String(),
+		Command:            "say Hello",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -571,8 +757,9 @@ func TestCoreServer_HandleCommand_PoseFails(t *testing.T) {
 			RequestId: "pose-fail-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "pose waves",
+		SessionId:          sessionID.String(),
+		Command:            "pose waves",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -613,8 +800,9 @@ func TestCoreServer_HandleCommand_Quit(t *testing.T) {
 			RequestId: "quit-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "quit",
+		SessionId:          sessionID.String(),
+		Command:            "quit",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -1064,8 +1252,9 @@ func TestCoreServer_SessionRefreshOnActivity(t *testing.T) {
 				RequestId: fmt.Sprintf("activity-test-%d", i),
 				Timestamp: timestamppb.Now(),
 			},
-			SessionId: sessionID.String(),
-			Command:   fmt.Sprintf("say Message %d", i),
+			SessionId:          sessionID.String(),
+			Command:            fmt.Sprintf("say Message %d", i),
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 
 		resp, err := server.HandleCommand(ctx, req)
@@ -1174,8 +1363,9 @@ func TestCoreServer_HandleCommand_ContextTimeout(t *testing.T) {
 			RequestId: "timeout-cmd-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "say This should timeout",
+		SessionId:          sessionID.String(),
+		Command:            "say This should timeout",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -1218,8 +1408,9 @@ func TestCoreServer_HandleCommand_ContextCancellation(t *testing.T) {
 			RequestId: "cancel-cmd-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "say This will be cancelled",
+		SessionId:          sessionID.String(),
+		Command:            "say This will be cancelled",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	// Start command in goroutine
@@ -1363,8 +1554,9 @@ func TestCoreServer_HandleCommand_TimeoutErrorMessage(t *testing.T) {
 					RequestId: "timeout-error-test",
 					Timestamp: timestamppb.Now(),
 				},
-				SessionId: sessionID.String(),
-				Command:   "say Hello",
+				SessionId:          sessionID.String(),
+				Command:            "say Hello",
+				PlayerSessionToken: testPlayerSessionToken,
 			}
 
 			resp, err := server.HandleCommand(ctx, req)
@@ -1472,8 +1664,9 @@ func TestCoreServer_HandleCommand_EmptyCommandWithTimeout(t *testing.T) {
 			RequestId: "empty-cmd-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "",
+		SessionId:          sessionID.String(),
+		Command:            "",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -1511,8 +1704,9 @@ func TestCoreServer_MalformedRequest_InvalidSessionID(t *testing.T) {
 					RequestId: "invalid-session-test",
 					Timestamp: timestamppb.Now(),
 				},
-				SessionId: tt.sessionID,
-				Command:   "say hello",
+				SessionId:          tt.sessionID,
+				Command:            "say hello",
+				PlayerSessionToken: testPlayerSessionToken,
 			}
 
 			// Should not panic
@@ -1569,8 +1763,9 @@ func TestCoreServer_MalformedRequest_InvalidCommand(t *testing.T) {
 					RequestId: "malformed-cmd-test",
 					Timestamp: timestamppb.Now(),
 				},
-				SessionId: sessionID.String(),
-				Command:   tt.command,
+				SessionId:          sessionID.String(),
+				Command:            tt.command,
+				PlayerSessionToken: testPlayerSessionToken,
 			}
 
 			// Should not panic
@@ -1612,9 +1807,10 @@ func TestCoreServer_MalformedRequest_NilMeta(t *testing.T) {
 	// All requests with nil Meta should not panic
 	t.Run("CommandRequest with nil Meta", func(t *testing.T) {
 		req := &corev1.HandleCommandRequest{
-			Meta:      nil,
-			SessionId: sessionID.String(),
-			Command:   "say hello",
+			Meta:               nil,
+			SessionId:          sessionID.String(),
+			Command:            "say hello",
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 
 		defer func() {
@@ -1692,8 +1888,9 @@ func TestCoreServer_MalformedRequest_ConcurrentMalformedRequests(t *testing.T) {
 						RequestId: fmt.Sprintf("concurrent-%d", idx),
 						Timestamp: timestamppb.Now(),
 					},
-					SessionId: sessionID.String(),
-					Command:   "say hello",
+					SessionId:          sessionID.String(),
+					Command:            "say hello",
+					PlayerSessionToken: testPlayerSessionToken,
 				}
 			case 1:
 				// Invalid session
@@ -1702,8 +1899,9 @@ func TestCoreServer_MalformedRequest_ConcurrentMalformedRequests(t *testing.T) {
 						RequestId: fmt.Sprintf("concurrent-%d", idx),
 						Timestamp: timestamppb.Now(),
 					},
-					SessionId: "invalid-session",
-					Command:   "say hello",
+					SessionId:          "invalid-session",
+					Command:            "say hello",
+					PlayerSessionToken: testPlayerSessionToken,
 				}
 			default:
 				// Empty command
@@ -1712,8 +1910,9 @@ func TestCoreServer_MalformedRequest_ConcurrentMalformedRequests(t *testing.T) {
 						RequestId: fmt.Sprintf("concurrent-%d", idx),
 						Timestamp: timestamppb.Now(),
 					},
-					SessionId: sessionID.String(),
-					Command:   "",
+					SessionId:          sessionID.String(),
+					Command:            "",
+					PlayerSessionToken: testPlayerSessionToken,
 				}
 			}
 
@@ -1753,8 +1952,9 @@ func TestCoreServer_MalformedRequest_VeryLargePayload(t *testing.T) {
 			RequestId: "large-payload-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   largeCommand,
+		SessionId:          sessionID.String(),
+		Command:            largeCommand,
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	// Should not panic, may succeed or fail based on limits
@@ -1815,8 +2015,9 @@ func TestCoreServer_MalformedRequest_SpecialCharacters(t *testing.T) {
 					RequestId: "special-chars-test",
 					Timestamp: timestamppb.Now(),
 				},
-				SessionId: sessionID.String(),
-				Command:   tt.command,
+				SessionId:          sessionID.String(),
+				Command:            tt.command,
+				PlayerSessionToken: testPlayerSessionToken,
 			}
 
 			// Should not panic
@@ -1981,9 +2182,10 @@ func TestCoreServer_HandleCommand_RecordsHistory(t *testing.T) {
 	commands := []string{"say hello", "pose waves", "say goodbye"}
 	for _, cmd := range commands {
 		req := &corev1.HandleCommandRequest{
-			Meta:      &corev1.RequestMeta{RequestId: "history-test", Timestamp: timestamppb.Now()},
-			SessionId: sessionID.String(),
-			Command:   cmd,
+			Meta:               &corev1.RequestMeta{RequestId: "history-test", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			Command:            cmd,
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 		resp, err := server.HandleCommand(ctx, req)
 		require.NoError(t, err)
@@ -2020,9 +2222,10 @@ func TestCoreServer_HandleCommand_HistoryEnforcedCap(t *testing.T) {
 	// Send more commands than maxHistory
 	for i := 0; i < 5; i++ {
 		req := &corev1.HandleCommandRequest{
-			Meta:      &corev1.RequestMeta{RequestId: fmt.Sprintf("cap-test-%d", i), Timestamp: timestamppb.Now()},
-			SessionId: sessionID.String(),
-			Command:   fmt.Sprintf("say message %d", i),
+			Meta:               &corev1.RequestMeta{RequestId: fmt.Sprintf("cap-test-%d", i), Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			Command:            fmt.Sprintf("say message %d", i),
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 		resp, err := server.HandleCommand(ctx, req)
 		require.NoError(t, err)
@@ -2059,9 +2262,10 @@ func TestCoreServer_HandleCommand_HistoryBestEffort(t *testing.T) {
 	server := newHandleCommandServer(t, store, realStore)
 
 	req := &corev1.HandleCommandRequest{
-		Meta:      &corev1.RequestMeta{RequestId: "best-effort-test", Timestamp: timestamppb.Now()},
-		SessionId: sessionID.String(),
-		Command:   "say hello",
+		Meta:               &corev1.RequestMeta{RequestId: "best-effort-test", Timestamp: timestamppb.Now()},
+		SessionId:          sessionID.String(),
+		Command:            "say hello",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)

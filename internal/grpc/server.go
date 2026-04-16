@@ -291,6 +291,13 @@ func NewCoreServer(engine *core.Engine, sessionStore session.Store, dispatcher *
 }
 
 // HandleCommand processes a game command.
+//
+// SECURITY (bd-jv7z): Before executing, the caller's player_session_token is
+// validated against the target session via auth.ValidateSessionOwnership.
+// Any failure — missing/invalid token, expired token, unknown session, or
+// ownership mismatch — returns the enumeration-safe "session not found"
+// response. This closes the IDOR surface where one player could submit a
+// command against another player's session id.
 func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
 	requestID := ""
 	if req.Meta != nil {
@@ -303,22 +310,23 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleComman
 		"command", req.Command,
 	)
 
-	// Look up session — distinguish not-found from other store errors.
-	info, err := s.sessionStore.Get(ctx, req.SessionId)
+	info, err := auth.ValidateSessionOwnership(
+		ctx,
+		s.playerSessionRepo,
+		s.sessionStore,
+		req.GetPlayerSessionToken(),
+		req.GetSessionId(),
+	)
 	if err != nil {
-		errMsg := "session not found"
-		if oopsErr, ok := oops.AsOops(err); !ok || oopsErr.Code() != "SESSION_NOT_FOUND" {
-			errMsg = "session lookup failed"
-			slog.ErrorContext(ctx, "session store error",
-				"request_id", requestID,
-				"session_id", req.SessionId,
-				"error", err,
-			)
-		}
+		slog.DebugContext(ctx, "session ownership validation failed",
+			"request_id", requestID,
+			"session_id", req.SessionId,
+			"error", err,
+		)
 		return &corev1.HandleCommandResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
-			Error:   errMsg,
+			Error:   "session not found",
 		}, nil
 	}
 
