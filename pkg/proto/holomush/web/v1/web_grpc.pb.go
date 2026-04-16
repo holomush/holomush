@@ -22,23 +22,26 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	WebService_SendCommand_FullMethodName             = "/holomush.web.v1.WebService/SendCommand"
-	WebService_StreamEvents_FullMethodName            = "/holomush.web.v1.WebService/StreamEvents"
-	WebService_Disconnect_FullMethodName              = "/holomush.web.v1.WebService/Disconnect"
-	WebService_GetCommandHistory_FullMethodName       = "/holomush.web.v1.WebService/GetCommandHistory"
-	WebService_WebAuthenticatePlayer_FullMethodName   = "/holomush.web.v1.WebService/WebAuthenticatePlayer"
-	WebService_WebSelectCharacter_FullMethodName      = "/holomush.web.v1.WebService/WebSelectCharacter"
-	WebService_WebCreatePlayer_FullMethodName         = "/holomush.web.v1.WebService/WebCreatePlayer"
-	WebService_WebCreateGuest_FullMethodName          = "/holomush.web.v1.WebService/WebCreateGuest"
-	WebService_WebCreateCharacter_FullMethodName      = "/holomush.web.v1.WebService/WebCreateCharacter"
-	WebService_WebListCharacters_FullMethodName       = "/holomush.web.v1.WebService/WebListCharacters"
-	WebService_WebLogout_FullMethodName               = "/holomush.web.v1.WebService/WebLogout"
-	WebService_WebRequestPasswordReset_FullMethodName = "/holomush.web.v1.WebService/WebRequestPasswordReset"
-	WebService_WebConfirmPasswordReset_FullMethodName = "/holomush.web.v1.WebService/WebConfirmPasswordReset"
-	WebService_WebCheckSession_FullMethodName         = "/holomush.web.v1.WebService/WebCheckSession"
-	WebService_WebGetContent_FullMethodName           = "/holomush.web.v1.WebService/WebGetContent"
-	WebService_WebListContent_FullMethodName          = "/holomush.web.v1.WebService/WebListContent"
-	WebService_WebQueryStreamHistory_FullMethodName   = "/holomush.web.v1.WebService/WebQueryStreamHistory"
+	WebService_SendCommand_FullMethodName                  = "/holomush.web.v1.WebService/SendCommand"
+	WebService_StreamEvents_FullMethodName                 = "/holomush.web.v1.WebService/StreamEvents"
+	WebService_Disconnect_FullMethodName                   = "/holomush.web.v1.WebService/Disconnect"
+	WebService_GetCommandHistory_FullMethodName            = "/holomush.web.v1.WebService/GetCommandHistory"
+	WebService_WebAuthenticatePlayer_FullMethodName        = "/holomush.web.v1.WebService/WebAuthenticatePlayer"
+	WebService_WebSelectCharacter_FullMethodName           = "/holomush.web.v1.WebService/WebSelectCharacter"
+	WebService_WebCreatePlayer_FullMethodName              = "/holomush.web.v1.WebService/WebCreatePlayer"
+	WebService_WebCreateGuest_FullMethodName               = "/holomush.web.v1.WebService/WebCreateGuest"
+	WebService_WebCreateCharacter_FullMethodName           = "/holomush.web.v1.WebService/WebCreateCharacter"
+	WebService_WebListCharacters_FullMethodName            = "/holomush.web.v1.WebService/WebListCharacters"
+	WebService_WebLogout_FullMethodName                    = "/holomush.web.v1.WebService/WebLogout"
+	WebService_WebRequestPasswordReset_FullMethodName      = "/holomush.web.v1.WebService/WebRequestPasswordReset"
+	WebService_WebConfirmPasswordReset_FullMethodName      = "/holomush.web.v1.WebService/WebConfirmPasswordReset"
+	WebService_WebCheckSession_FullMethodName              = "/holomush.web.v1.WebService/WebCheckSession"
+	WebService_WebGetContent_FullMethodName                = "/holomush.web.v1.WebService/WebGetContent"
+	WebService_WebListContent_FullMethodName               = "/holomush.web.v1.WebService/WebListContent"
+	WebService_WebQueryStreamHistory_FullMethodName        = "/holomush.web.v1.WebService/WebQueryStreamHistory"
+	WebService_WebListPlayerSessions_FullMethodName        = "/holomush.web.v1.WebService/WebListPlayerSessions"
+	WebService_WebRevokePlayerSession_FullMethodName       = "/holomush.web.v1.WebService/WebRevokePlayerSession"
+	WebService_WebRevokeOtherPlayerSessions_FullMethodName = "/holomush.web.v1.WebService/WebRevokeOtherPlayerSessions"
 )
 
 // WebServiceClient is the client API for WebService service.
@@ -73,6 +76,11 @@ type WebServiceClient interface {
 	// WebQueryStreamHistory reads paginated event history for the web client.
 	// Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
 	WebQueryStreamHistory(ctx context.Context, in *WebQueryStreamHistoryRequest, opts ...grpc.CallOption) (*WebQueryStreamHistoryResponse, error)
+	// Session-management RPCs. The caller is identified via the X-Session-Token
+	// cookie header injected by CookieMiddleware; no token field in the request.
+	WebListPlayerSessions(ctx context.Context, in *WebListPlayerSessionsRequest, opts ...grpc.CallOption) (*WebListPlayerSessionsResponse, error)
+	WebRevokePlayerSession(ctx context.Context, in *WebRevokePlayerSessionRequest, opts ...grpc.CallOption) (*WebRevokePlayerSessionResponse, error)
+	WebRevokeOtherPlayerSessions(ctx context.Context, in *WebRevokeOtherPlayerSessionsRequest, opts ...grpc.CallOption) (*WebRevokeOtherPlayerSessionsResponse, error)
 }
 
 type webServiceClient struct {
@@ -262,6 +270,36 @@ func (c *webServiceClient) WebQueryStreamHistory(ctx context.Context, in *WebQue
 	return out, nil
 }
 
+func (c *webServiceClient) WebListPlayerSessions(ctx context.Context, in *WebListPlayerSessionsRequest, opts ...grpc.CallOption) (*WebListPlayerSessionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebListPlayerSessionsResponse)
+	err := c.cc.Invoke(ctx, WebService_WebListPlayerSessions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebRevokePlayerSession(ctx context.Context, in *WebRevokePlayerSessionRequest, opts ...grpc.CallOption) (*WebRevokePlayerSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebRevokePlayerSessionResponse)
+	err := c.cc.Invoke(ctx, WebService_WebRevokePlayerSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *webServiceClient) WebRevokeOtherPlayerSessions(ctx context.Context, in *WebRevokeOtherPlayerSessionsRequest, opts ...grpc.CallOption) (*WebRevokeOtherPlayerSessionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebRevokeOtherPlayerSessionsResponse)
+	err := c.cc.Invoke(ctx, WebService_WebRevokeOtherPlayerSessions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WebServiceServer is the server API for WebService service.
 // All implementations must embed UnimplementedWebServiceServer
 // for forward compatibility.
@@ -294,6 +332,11 @@ type WebServiceServer interface {
 	// WebQueryStreamHistory reads paginated event history for the web client.
 	// Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
 	WebQueryStreamHistory(context.Context, *WebQueryStreamHistoryRequest) (*WebQueryStreamHistoryResponse, error)
+	// Session-management RPCs. The caller is identified via the X-Session-Token
+	// cookie header injected by CookieMiddleware; no token field in the request.
+	WebListPlayerSessions(context.Context, *WebListPlayerSessionsRequest) (*WebListPlayerSessionsResponse, error)
+	WebRevokePlayerSession(context.Context, *WebRevokePlayerSessionRequest) (*WebRevokePlayerSessionResponse, error)
+	WebRevokeOtherPlayerSessions(context.Context, *WebRevokeOtherPlayerSessionsRequest) (*WebRevokeOtherPlayerSessionsResponse, error)
 	mustEmbedUnimplementedWebServiceServer()
 }
 
@@ -354,6 +397,15 @@ func (UnimplementedWebServiceServer) WebListContent(context.Context, *WebListCon
 }
 func (UnimplementedWebServiceServer) WebQueryStreamHistory(context.Context, *WebQueryStreamHistoryRequest) (*WebQueryStreamHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebQueryStreamHistory not implemented")
+}
+func (UnimplementedWebServiceServer) WebListPlayerSessions(context.Context, *WebListPlayerSessionsRequest) (*WebListPlayerSessionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebListPlayerSessions not implemented")
+}
+func (UnimplementedWebServiceServer) WebRevokePlayerSession(context.Context, *WebRevokePlayerSessionRequest) (*WebRevokePlayerSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebRevokePlayerSession not implemented")
+}
+func (UnimplementedWebServiceServer) WebRevokeOtherPlayerSessions(context.Context, *WebRevokeOtherPlayerSessionsRequest) (*WebRevokeOtherPlayerSessionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebRevokeOtherPlayerSessions not implemented")
 }
 func (UnimplementedWebServiceServer) mustEmbedUnimplementedWebServiceServer() {}
 func (UnimplementedWebServiceServer) testEmbeddedByValue()                    {}
@@ -675,6 +727,60 @@ func _WebService_WebQueryStreamHistory_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebListPlayerSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebListPlayerSessionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebListPlayerSessions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebListPlayerSessions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebListPlayerSessions(ctx, req.(*WebListPlayerSessionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebRevokePlayerSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebRevokePlayerSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebRevokePlayerSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebRevokePlayerSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebRevokePlayerSession(ctx, req.(*WebRevokePlayerSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WebService_WebRevokeOtherPlayerSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebRevokeOtherPlayerSessionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebRevokeOtherPlayerSessions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebRevokeOtherPlayerSessions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebRevokeOtherPlayerSessions(ctx, req.(*WebRevokeOtherPlayerSessionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WebService_ServiceDesc is the grpc.ServiceDesc for WebService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -745,6 +851,18 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebQueryStreamHistory",
 			Handler:    _WebService_WebQueryStreamHistory_Handler,
+		},
+		{
+			MethodName: "WebListPlayerSessions",
+			Handler:    _WebService_WebListPlayerSessions_Handler,
+		},
+		{
+			MethodName: "WebRevokePlayerSession",
+			Handler:    _WebService_WebRevokePlayerSession_Handler,
+		},
+		{
+			MethodName: "WebRevokeOtherPlayerSessions",
+			Handler:    _WebService_WebRevokeOtherPlayerSessions_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

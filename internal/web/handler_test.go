@@ -75,6 +75,19 @@ type mockCoreClient struct {
 	queryStreamHistoryResp *corev1.QueryStreamHistoryResponse
 	queryStreamHistoryErr  error
 	queryStreamHistoryReq  *corev1.QueryStreamHistoryRequest // captured for assertion
+
+	// Session management fields
+	listSessionsResp *corev1.ListPlayerSessionsResponse
+	listSessionsErr  error
+	listSessionsReq  *corev1.ListPlayerSessionsRequest // captured for assertion
+
+	revokeSessionResp *corev1.RevokePlayerSessionResponse
+	revokeSessionErr  error
+	revokeSessionReq  *corev1.RevokePlayerSessionRequest // captured for assertion
+
+	revokeOtherResp *corev1.RevokeOtherPlayerSessionsResponse
+	revokeOtherErr  error
+	revokeOtherReq  *corev1.RevokeOtherPlayerSessionsRequest // captured for assertion
 }
 
 func (m *mockCoreClient) HandleCommand(_ context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
@@ -155,6 +168,21 @@ func (m *mockCoreClient) CreateGuest(_ context.Context, _ *corev1.CreateGuestReq
 func (m *mockCoreClient) QueryStreamHistory(_ context.Context, req *corev1.QueryStreamHistoryRequest) (*corev1.QueryStreamHistoryResponse, error) {
 	m.queryStreamHistoryReq = req
 	return m.queryStreamHistoryResp, m.queryStreamHistoryErr
+}
+
+func (m *mockCoreClient) ListPlayerSessions(_ context.Context, req *corev1.ListPlayerSessionsRequest) (*corev1.ListPlayerSessionsResponse, error) {
+	m.listSessionsReq = req
+	return m.listSessionsResp, m.listSessionsErr
+}
+
+func (m *mockCoreClient) RevokePlayerSession(_ context.Context, req *corev1.RevokePlayerSessionRequest) (*corev1.RevokePlayerSessionResponse, error) {
+	m.revokeSessionReq = req
+	return m.revokeSessionResp, m.revokeSessionErr
+}
+
+func (m *mockCoreClient) RevokeOtherPlayerSessions(_ context.Context, req *corev1.RevokeOtherPlayerSessionsRequest) (*corev1.RevokeOtherPlayerSessionsResponse, error) {
+	m.revokeOtherReq = req
+	return m.revokeOtherResp, m.revokeOtherErr
 }
 
 func TestHandler_SendCommand_Success(t *testing.T) {
