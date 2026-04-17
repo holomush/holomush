@@ -259,7 +259,11 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		// For gateway, we're ready once telnet listener is up
 		obsServer = deps.ObservabilityServerFactory(cfg.MetricsAddr, func() bool { return true })
 		// Register command package metrics with the observability server
-		obsServer.MustRegister(command.CommandExecutions, command.CommandDuration, command.AliasExpansions)
+		obsServer.MustRegister(
+			command.CommandExecutions, command.CommandDuration, command.AliasExpansions,
+			telnet.ConnectionsActive, telnet.ConnectionsRefusedTotal,
+			telnet.PreAuthTimeoutsTotal, telnet.IdleTimeoutsTotal,
+		)
 		var obsErrChan <-chan error
 		obsErrChan, err = obsServer.Start()
 		if err != nil {
@@ -322,8 +326,16 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigChan)
 
-	// Start accepting telnet connections in goroutine with backoff on errors
-	go runTelnetAcceptLoop(ctx, telnetListener, grpcClient, verbRegistry, cancel)
+	// Start accepting telnet connections in goroutine with backoff on errors.
+	// The slots channel bounds concurrent handler goroutines; a full channel
+	// causes new accepts to be refused immediately via RefuseOverCapacity.
+	slots := make(chan struct{}, cfg.TelnetMaxConns)
+	limits := telnet.Limits{
+		IdleReadTimeout: cfg.TelnetIdleTimeout,
+		WriteTimeout:    cfg.TelnetWriteTimeout,
+		PreAuthTimeout:  cfg.TelnetPreAuthTimeout,
+	}
+	go runTelnetAcceptLoop(ctx, telnetListener, grpcClient, verbRegistry, cancel, slots, limits)
 
 	cmd.Println("Gateway process started")
 	slog.Info("gateway process ready",
@@ -413,8 +425,18 @@ func (b *acceptBackoff) wait() time.Duration {
 }
 
 // runTelnetAcceptLoop accepts telnet connections with exponential backoff on errors.
-// The cancel function is called on panic to trigger graceful shutdown.
-func runTelnetAcceptLoop(ctx context.Context, listener net.Listener, client GRPCClient, registry *core.VerbRegistry, cancel func()) {
+// slots bounds the number of concurrent handler goroutines; a full slots channel
+// triggers immediate refusal via RefuseOverCapacity. The cancel function is called
+// on panic to trigger graceful shutdown.
+func runTelnetAcceptLoop(
+	ctx context.Context,
+	listener net.Listener,
+	client GRPCClient,
+	registry *core.VerbRegistry,
+	cancel func(),
+	slots chan struct{},
+	limits telnet.Limits,
+) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("panic in telnet accept loop, triggering shutdown",
@@ -449,7 +471,20 @@ func runTelnetAcceptLoop(ctx context.Context, listener net.Listener, client GRPC
 			}
 		}
 		backoff.success()
-		handler := telnet.NewGatewayHandler(conn, client, registry, telnet.DefaultLimits)
-		go handler.Handle(ctx)
+
+		select {
+		case slots <- struct{}{}:
+			telnet.IncConnectionsActive()
+			handler := telnet.NewGatewayHandler(conn, client, registry, limits)
+			go func() {
+				defer func() {
+					<-slots
+					telnet.DecConnectionsActive()
+				}()
+				handler.Handle(ctx)
+			}()
+		default:
+			telnet.RefuseOverCapacity(conn, limits.WriteTimeout)
+		}
 	}
 }

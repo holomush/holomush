@@ -16,12 +16,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/telnet"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	"github.com/holomush/holomush/pkg/errutil"
 )
@@ -690,7 +692,8 @@ func TestTelnetAcceptLoop_BackoffOnErrors(t *testing.T) {
 	// Run the accept loop in a goroutine
 	done := make(chan struct{})
 	go func() {
-		runTelnetAcceptLoop(ctx, mock, &mockGRPCClient{}, registry, cancel)
+		slots := make(chan struct{}, 100)
+		runTelnetAcceptLoop(ctx, mock, &mockGRPCClient{}, registry, cancel, slots, telnet.DefaultLimits)
 		close(done)
 	}()
 
@@ -914,4 +917,114 @@ func TestGatewayCommand_ConfigFileLoading(t *testing.T) {
 	assert.Equal(t, ":5555", cfg.TelnetAddr)
 	assert.Equal(t, "core.local:9000", cfg.CoreAddr)
 	assert.Equal(t, "text", cfg.LogFormat)
+}
+
+// TestAcceptLoopRefusesAtCapacity verifies that the accept loop sends a
+// refusal line and increments the refused counter when the slot channel is
+// full, without spawning a handler goroutine.
+func TestAcceptLoopRefusesAtCapacity(t *testing.T) {
+	before := testutil.ToFloat64(telnet.ConnectionsRefusedTotal)
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	registry := core.NewVerbRegistry()
+	require.NoError(t, core.RegisterBuiltinTypes(registry))
+
+	limits := telnet.DefaultLimits
+	limits.IdleReadTimeout = 5 * time.Second
+	limits.PreAuthTimeout = 5 * time.Second
+
+	slots := make(chan struct{}, 2) // MaxConns=2
+
+	loopDone := make(chan struct{})
+	go func() {
+		runTelnetAcceptLoop(ctx, ln, &mockGRPCClient{}, registry, cancel, slots, limits)
+		close(loopDone)
+	}()
+
+	// Open 2 connections that we keep alive.
+	c1, err := net.Dial("tcp", ln.Addr().String())
+	require.NoError(t, err)
+	defer func() { _ = c1.Close() }()
+	c2, err := net.Dial("tcp", ln.Addr().String())
+	require.NoError(t, err)
+	defer func() { _ = c2.Close() }()
+
+	// Wait until both slots are occupied by polling the gauge.
+	require.Eventually(t, func() bool {
+		return testutil.ToFloat64(telnet.ConnectionsActive) >= 2
+	}, 2*time.Second, 10*time.Millisecond)
+
+	// Open a third connection — it should get the refusal line and close.
+	c3, err := net.Dial("tcp", ln.Addr().String())
+	require.NoError(t, err)
+	defer func() { _ = c3.Close() }()
+
+	_ = c3.SetReadDeadline(time.Now().Add(1 * time.Second))
+	buf := make([]byte, 128)
+	n, _ := c3.Read(buf)
+	assert.Contains(t, strings.ToLower(string(buf[:n])), "capacity",
+		"third connection must receive refusal line")
+
+	assert.Equal(t, before+1, testutil.ToFloat64(telnet.ConnectionsRefusedTotal),
+		"refused counter must increment exactly once")
+
+	cancel()
+	_ = ln.Close()
+	<-loopDone
+}
+
+// TestAcceptLoopReleasesSlotOnHandlerExit verifies that when a handler
+// goroutine exits, its slot is released back to the semaphore so later
+// accepts can proceed.
+func TestAcceptLoopReleasesSlotOnHandlerExit(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	registry := core.NewVerbRegistry()
+	require.NoError(t, core.RegisterBuiltinTypes(registry))
+
+	limits := telnet.DefaultLimits
+	limits.IdleReadTimeout = 200 * time.Millisecond
+	limits.PreAuthTimeout = 200 * time.Millisecond
+
+	slots := make(chan struct{}, 1)
+
+	loopDone := make(chan struct{})
+	go func() {
+		runTelnetAcceptLoop(ctx, ln, &mockGRPCClient{}, registry, cancel, slots, limits)
+		close(loopDone)
+	}()
+
+	// Open and immediately close to cycle the slot.
+	c, err := net.Dial("tcp", ln.Addr().String())
+	require.NoError(t, err)
+	_ = c.Close()
+
+	// Wait for slot to free.
+	require.Eventually(t, func() bool {
+		return testutil.ToFloat64(telnet.ConnectionsActive) == 0
+	}, 2*time.Second, 10*time.Millisecond)
+
+	// Second connection MUST succeed (slot was freed).
+	c2, err := net.Dial("tcp", ln.Addr().String())
+	require.NoError(t, err)
+	defer func() { _ = c2.Close() }()
+
+	require.Eventually(t, func() bool {
+		return testutil.ToFloat64(telnet.ConnectionsActive) >= 1
+	}, 2*time.Second, 10*time.Millisecond)
+
+	cancel()
+	_ = ln.Close()
+	<-loopDone
 }
