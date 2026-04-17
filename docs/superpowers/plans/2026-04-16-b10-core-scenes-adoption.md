@@ -62,7 +62,7 @@ Files by responsibility (per spec §8):
 
 Phases are bite-sized enough to execute independently. Dependencies:
 
-```
+```text
 Phase 0 (preflight)
    ↓
 Phase 1 (SDK FocusClient)      ←— Opus; single-session; design decisions
@@ -116,7 +116,7 @@ Expected: both show `"status": "closed"`.
 
 Run from main repo dir:
 
-```
+```text
 cd /Volumes/Code/github.com/holomush/holomush && \
 bd create \
   --title "Host-side LeaveFocusByTarget(FocusKey) sweep for scene-end fan-out" \
@@ -1952,7 +1952,7 @@ Note: `-r @-` because `@` is always an empty new change after `jj commit`; `@-` 
 
 Run (heredoc to preserve formatting):
 
-```
+```text
 gh pr create --head b10-core-scenes-adoption --title "feat(scenes): B10 — core-scenes plugin adoption (focus substrate)" --body "$(cat <<'EOF'
 ## Summary
 
@@ -2076,9 +2076,11 @@ Expected: bead marked closed.
 - [ ] **Step 2: Append a session note to the epic.**
 
 Run: `cd /Volumes/Code/github.com/holomush/holomush && bd update holomush-oy6e --notes "$(cat <<'EOF'
+
 ## Session 2026-04-?? — B10 closed (PR #???)
 
-### B10 (holomush-oy6e.10) — core-scenes plugin adoption:
+### B10 (holomush-oy6e.10) — core-scenes plugin adoption
+
 - SDK FocusClient facade in pkg/plugin (parallel to EventSink), single shared conn with broker dialer.
 - Command-path-only wiring in plugins/core-scenes (DB first, focus second, no compensating writes).
 - scene switch subcommand added.
@@ -2086,6 +2088,7 @@ Run: `cd /Volumes/Code/github.com/holomush/holomush && bd update holomush-oy6e -
 - Multi-session EndScene fan-out deferred to follow-up bead <ID> (LeaveFocusByTarget).
 
 ### Epic progress: 10/13 beads complete (77%)
+
 - B10 closed. Scenes Phase 4 (holomush-5rh.13) now unblocked.
 - Next: B11 (core-channels adoption), B12 (architecture doc overhaul), B13 (web client QueryStreamHistory).
 EOF

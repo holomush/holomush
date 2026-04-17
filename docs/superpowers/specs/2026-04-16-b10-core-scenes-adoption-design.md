@@ -29,12 +29,12 @@ this document are to be interpreted as described in RFC 2119.
    existing `EventSink` facade.
 2. `core-scenes` command-path wiring — DB first, focus second, symmetric
    across all state-changing commands:
-    - `scene join <id>` → `service.JoinScene` (DB), then `focusClient.JoinFocus`.
-    - `scene leave <id>` → `service.LeaveScene` (DB), then `focusClient.LeaveFocus`.
-    - `scene end <id>` → `service.EndScene` (DB), then `focusClient.LeaveFocus`
-      for the calling (owner's) session.
-    - `scene switch <id>` — new subcommand — `focusClient.PresentFocus` (no DB
-      write).
+   - `scene join <id>` → `service.JoinScene` (DB), then `focusClient.JoinFocus`.
+   - `scene leave <id>` → `service.LeaveScene` (DB), then `focusClient.LeaveFocus`.
+   - `scene end <id>` → `service.EndScene` (DB), then `focusClient.LeaveFocus`
+     for the calling (owner's) session.
+   - `scene switch <id>` — new subcommand — `focusClient.PresentFocus` (no DB
+     write).
 3. Plugin-local test doubles for `FocusClient` (a `fakeFocusClient` parallel
    to the existing `fakeEventSink` pattern).
 4. The Phase 4 §7.2 acceptance tests that are reachable at B10 scope.
@@ -195,6 +195,7 @@ arriving at the plugin is therefore rigorously trusted as owned by the
 authenticated player. Scene plugin adoption rides on this.
 
 Adding `session_id` to scene proto requests now would:
+
 - Solve a non-problem (no current caller needs it).
 - Diverge from the established "external → HandleCommand" pattern.
 - Couple scene proto evolution to session-identity decisions.
@@ -212,7 +213,7 @@ that time; do not pre-wire.
 
 #### 3.2.1 `scene join <scene-id>`
 
-```
+```text
 handleJoin(ctx, req, args):
     service.JoinScene(ctx, {character_id: req.CharacterID, scene_id: id})
       ├── OK            → continue
@@ -231,6 +232,7 @@ handleJoin(ctx, req, args):
 **Failure-window analysis.** Between `service.JoinScene` success and
 `focusClient.JoinFocus` failure, the DB says the character is a scene
 member but the session has no `FocusMembership`. Consequences:
+
 - Pose events emitted on `scene:<id>:ic` are NOT delivered to this
   session (it's not subscribed).
 - Reconnect-restore does NOT heal the gap, because `RestoreFocus`
@@ -246,7 +248,7 @@ write is required.
 
 #### 3.2.2 `scene leave <scene-id>`
 
-```
+```text
 handleLeave(ctx, req, args):
     service.LeaveScene(ctx, {character_id: req.CharacterID, scene_id: id})
       ├── OK          → continue
@@ -277,7 +279,7 @@ handleLeave(ctx, req, args):
 
 #### 3.2.3 `scene end <scene-id>`
 
-```
+```text
 handleEnd(ctx, req, args):
     service.EndScene(ctx, {character_id, scene_id})
       └── error → return pluginsdk.Errorf(...)
@@ -292,7 +294,7 @@ participants are NOT fanned-out in B10; see §1.2 and §6.1.
 
 #### 3.2.4 `scene switch <scene-id>` — new subcommand
 
-```
+```text
 handleSwitch(ctx, req, args):
     focusClient.PresentFocus(ctx, req.SessionID, FocusKey{Kind: Scene, TargetID: id})
       ├── OK               → return OK("Switched to scene %s.", id)
@@ -396,8 +398,8 @@ Reachable at B10 scope (have a running substrate + scene plugin + telnet):
 | `TestFocusSwitchFallsBackToGameSetting` | covered by B6 coordinator tests | — |
 | `TestFocusSwitchClampsOutOfRange` | covered by B6 coordinator tests | — |
 | `TestMultiSceneMembershipReconnect` | ✓ stretch | `test/integration/scenes/` |
-| `TestPoseOrderConsistentAcrossAllParticipants` | ✗ — requires Phase 4 pose-order wiring, deferred to `holomush-5rh.13` |
-| `TestChannelJoinLiveOnlyAndHistoryDisplay` | ✗ — channels, deferred to B11 |
+| `TestPoseOrderConsistentAcrossAllParticipants` | ✗ — requires Phase 4 pose-order wiring, deferred to `holomush-5rh.13` |  |
+| `TestChannelJoinLiveOnlyAndHistoryDisplay` | ✗ — channels, deferred to B11 |  |
 
 Each integration test uses testcontainers Postgres, creates players +
 characters + a scene via the plugin host, sends commands through the
@@ -459,6 +461,7 @@ is a pure host operation (coordinator + session store); no plugin broker
 plumbing needed except exposing the RPC.
 
 **Work.** File a follow-up bead, P2, depends on `holomush-oy6e.10`:
+
 - Add `FocusCoordinator.LeaveFocusByTarget(ctx, target) (count int, err error)`.
 - Add `PluginHostService.LeaveFocusByTarget` RPC.
 - Extend SDK `FocusClient` with the new method.
@@ -540,11 +543,11 @@ covered by prior beads (B2, B4, B6, B7, B8). B10 does not affect them.
 - [ ] `EventSink` and `FocusClient` share a single `grpc.ClientConn` in-process.
 - [ ] `plugins/core-scenes/main.go` implements `FocusClientAware`.
 - [ ] `plugins/core-scenes/commands.go`:
-    - [ ] `handleJoin` calls `service.JoinScene` then `focusClient.JoinFocus`.
-    - [ ] `handleLeave` calls `service.LeaveScene` then `focusClient.LeaveFocus`.
-    - [ ] `handleEnd` calls `service.EndScene` then `focusClient.LeaveFocus` for owner session.
-    - [ ] `handleSwitch` added, calls `focusClient.PresentFocus`.
-    - [ ] `dispatchCommand` switch and usage-help text updated for `switch`.
+  - [ ] `handleJoin` calls `service.JoinScene` then `focusClient.JoinFocus`.
+  - [ ] `handleLeave` calls `service.LeaveScene` then `focusClient.LeaveFocus`.
+  - [ ] `handleEnd` calls `service.EndScene` then `focusClient.LeaveFocus` for owner session.
+  - [ ] `handleSwitch` added, calls `focusClient.PresentFocus`.
+  - [ ] `dispatchCommand` switch and usage-help text updated for `switch`.
 - [ ] All 11 unit tests in §5.1 present and passing.
 - [ ] 5 Phase 4 §7.2 integration tests from §5.2 present and passing.
 - [ ] `task lint` clean.
