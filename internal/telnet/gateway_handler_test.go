@@ -2236,3 +2236,44 @@ Keepalive:
 		// still running, as expected
 	}
 }
+
+// mockDeadlineTrackingConn records SetWriteDeadline calls without a real socket.
+type mockDeadlineTrackingConn struct {
+	net.Conn
+	writeDeadlines []time.Time
+	writeBuf       []byte
+}
+
+func (m *mockDeadlineTrackingConn) SetWriteDeadline(t time.Time) error {
+	m.writeDeadlines = append(m.writeDeadlines, t)
+	return nil
+}
+
+func (m *mockDeadlineTrackingConn) Write(p []byte) (int, error) {
+	m.writeBuf = append(m.writeBuf, p...)
+	return len(p), nil
+}
+
+func (m *mockDeadlineTrackingConn) SetReadDeadline(t time.Time) error { return nil }
+func (m *mockDeadlineTrackingConn) Close() error                      { return nil }
+func (m *mockDeadlineTrackingConn) RemoteAddr() net.Addr              { return &net.TCPAddr{} }
+
+func TestSendSetsWriteDeadline(t *testing.T) {
+	mc := &mockDeadlineTrackingConn{}
+	h := &GatewayHandler{
+		conn:   mc,
+		limits: Limits{WriteTimeout: 30 * time.Second},
+	}
+
+	start := time.Now()
+	h.send("hello world")
+
+	require.Len(t, mc.writeDeadlines, 1, "send must set exactly one write deadline")
+	delta := mc.writeDeadlines[0].Sub(start)
+	assert.GreaterOrEqual(t, delta, 30*time.Second,
+		"deadline must be at least WriteTimeout into the future")
+	assert.Less(t, delta, 31*time.Second,
+		"deadline must not be absurdly far in the future")
+	assert.Contains(t, string(mc.writeBuf), "hello world",
+		"send must actually write the message body")
+}

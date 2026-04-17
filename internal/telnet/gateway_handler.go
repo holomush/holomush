@@ -745,6 +745,10 @@ func (h *GatewayHandler) drainUntilClosed(eventRecv <-chan *corev1.SubscribeResp
 }
 
 func (h *GatewayHandler) send(msg string) {
+	if err := h.conn.SetWriteDeadline(time.Now().Add(h.limits.WriteTimeout)); err != nil {
+		slog.Debug("gateway: failed to set write deadline", "error", err)
+		return
+	}
 	if _, err := fmt.Fprintln(h.conn, sanitizeTelnetOutput(msg)); err != nil {
 		slog.Debug("gateway: failed to send message", "error", err)
 	}
