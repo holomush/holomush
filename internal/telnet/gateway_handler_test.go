@@ -30,6 +30,13 @@ func testRegistry() *core.VerbRegistry {
 	return r
 }
 
+// newTestHandler wraps NewGatewayHandler with DefaultLimits so existing
+// tests remain a single line and don't grow noise from the new parameter.
+// Tests that need custom limits call NewGatewayHandler directly.
+func newTestHandler(conn net.Conn, client CoreClient) *GatewayHandler {
+	return NewGatewayHandler(conn, client, testRegistry(), DefaultLimits)
+}
+
 // TestCoreClient_SatisfiedByGRPCClient verifies at compile time that
 // *holoGRPC.Client implements the CoreClient interface.
 func TestCoreClient_SatisfiedByGRPCClient(t *testing.T) {
@@ -186,7 +193,7 @@ func TestGatewayHandler_GuestConnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -248,7 +255,7 @@ func TestGatewayHandler_SayCommand(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -340,7 +347,7 @@ func TestGatewayHandler_SendProtoEvent_CommandResponse(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -406,7 +413,7 @@ func TestGatewayHandler_SendProtoEvent_CorruptCommandResponse(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -471,7 +478,7 @@ func TestGatewayHandler_StreamClosed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -532,7 +539,7 @@ func TestGatewayHandler_HandleGenericCommand_RPCError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -575,7 +582,7 @@ func TestGatewayHandler_RejectsCommandsBeforeAuth(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -665,7 +672,7 @@ func TestGatewayHandler_TwoPhase_SingleCharAutoSelect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -709,7 +716,7 @@ func TestGatewayHandler_TwoPhase_MultiChar_ShowsListEntersSelectMode(t *testing.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -759,7 +766,7 @@ func TestGatewayHandler_TwoPhase_PlayByIndex(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -816,7 +823,7 @@ func TestGatewayHandler_TwoPhase_PlayByName(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -870,7 +877,7 @@ func TestGatewayHandler_TwoPhase_PlayReattach(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -929,7 +936,7 @@ func TestGatewayHandler_TwoPhase_CreateCharacter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -976,7 +983,7 @@ func TestGatewayHandler_TwoPhase_InvalidCommandInSelectMode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1024,7 +1031,7 @@ func TestGatewayHandler_TwoPhase_AuthFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1343,7 +1350,7 @@ func TestQuitWhilePlaying_ReturnsToSelectMode(t *testing.T) {
 		discResp:     &corev1.DisconnectResponse{Success: true},
 	}
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1400,7 +1407,7 @@ func TestQuitInSelectMode_LogsOut(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1476,7 +1483,7 @@ func TestLogoutWhilePlaying(t *testing.T) {
 		discResp: &corev1.DisconnectResponse{Success: true},
 	}
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1537,7 +1544,7 @@ func TestHandleLogout_WhenNotAuthed_GuestPath(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1591,7 +1598,7 @@ func TestHandleLogout_LogoutRPCError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1671,7 +1678,7 @@ func TestRefreshCharacterList_Success(t *testing.T) {
 		discResp:     &corev1.DisconnectResponse{Success: true},
 	}
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1741,7 +1748,7 @@ func TestRefreshCharacterList_Error(t *testing.T) {
 		discResp:    &corev1.DisconnectResponse{Success: true},
 	}
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1793,7 +1800,7 @@ func TestLogoutCommand_InSelectMode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1860,7 +1867,7 @@ func TestServerInitiated_StreamClosed_ReturnsToSelectMode(t *testing.T) {
 		discResp:     &corev1.DisconnectResponse{Success: true},
 	}
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1918,7 +1925,7 @@ func TestPlayerSessionTokenSurvivesPlay(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1960,7 +1967,7 @@ func TestPlayerSessionTokenSurvivesPlay(t *testing.T) {
 func newForwardingTestHandler(t *testing.T, client CoreClient, token, sessionID string) (*GatewayHandler, func()) {
 	t.Helper()
 	serverConn, clientConn := net.Pipe()
-	h := NewGatewayHandler(serverConn, client, testRegistry())
+	h := newTestHandler(serverConn, client)
 	h.playerSessionToken = token
 	h.sessionID = sessionID
 	h.connectionID = "conn-forward-1"
@@ -2110,7 +2117,7 @@ func TestGatewayHandlerForwardsPlayerSessionTokenOnDisconnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

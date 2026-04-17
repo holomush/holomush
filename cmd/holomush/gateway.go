@@ -425,7 +425,7 @@ func runTelnetAcceptLoop(ctx context.Context, listener net.Listener, client GRPC
 			}
 		}
 		backoff.success()
-		handler := telnet.NewGatewayHandler(conn, client, registry)
+		handler := telnet.NewGatewayHandler(conn, client, registry, telnet.DefaultLimits)
 		go handler.Handle(ctx)
 	}
 }

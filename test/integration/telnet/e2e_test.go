@@ -406,7 +406,7 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 				if err != nil {
 					return
 				}
-				handler := telnet.NewGatewayHandler(conn, grpcCli, sharedRegistry)
+				handler := telnet.NewGatewayHandler(conn, grpcCli, sharedRegistry, telnet.DefaultLimits)
 				go handler.Handle(acceptCtx)
 			}
 		}()

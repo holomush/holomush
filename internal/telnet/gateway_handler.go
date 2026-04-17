@@ -71,6 +71,8 @@ type GatewayHandler struct {
 	quitting     bool
 	eventCh      chan *corev1.SubscribeResponse
 
+	limits Limits
+
 	// Two-phase auth state.
 	playerSessionToken string                     // set after AuthenticatePlayer, persists across character selection
 	characters         []*corev1.CharacterSummary // available characters while in selectMode
@@ -79,12 +81,15 @@ type GatewayHandler struct {
 }
 
 // NewGatewayHandler creates a new GatewayHandler for the given connection.
-func NewGatewayHandler(conn net.Conn, client CoreClient, registry *core.VerbRegistry) *GatewayHandler {
+// limits bounds per-connection resource usage; callers SHOULD pass
+// DefaultLimits unless they have a specific reason to deviate.
+func NewGatewayHandler(conn net.Conn, client CoreClient, registry *core.VerbRegistry, limits Limits) *GatewayHandler {
 	return &GatewayHandler{
 		conn:         conn,
 		reader:       bufio.NewReader(conn),
 		client:       client,
 		verbRegistry: registry,
+		limits:       limits,
 	}
 }
 
