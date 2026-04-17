@@ -259,16 +259,20 @@ func TestSceneCommandJoinForwardsToServiceWithCorrectSceneID(t *testing.T) {
 		ID: "scene-cmd-j", OwnerID: "char-alice",
 		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
 	}))
-	plugin := &scenePlugin{service: NewSceneServiceImpl(store)}
+	fc := &fakeFocusClient{}
+	plugin := &scenePlugin{service: NewSceneServiceImpl(store), focusClient: fc}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:     "scene",
 		Args:        "join scene-cmd-j",
 		CharacterID: "char-bob",
+		SessionID:   "sess-bob",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 	assert.Contains(t, resp.Output, "Joined scene scene-cmd-j")
+	require.Len(t, fc.joinCalls, 1)
+	assert.Equal(t, "scene-cmd-j", fc.joinCalls[0].target.TargetID)
 }
 
 func TestSceneCommandLeaveRejectsMissingSceneID(t *testing.T) {
