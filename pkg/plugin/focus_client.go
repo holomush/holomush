@@ -135,11 +135,13 @@ func (c *pluginHostFocusClient) PresentFocus(ctx context.Context, sessionID stri
 	return wrapFocusError(err, "PresentFocus", sessionID, target)
 }
 
-// queryStreamHistoryCountMax matches the host-side clamp cap at 500. The
-// client does not enforce the clamp — the host does — but defensive bounds
-// keep int→int32 conversion safe even if a caller passes pathological
-// values.
-const queryStreamHistoryCountMax int32 = 1 << 30
+// queryStreamHistoryCountConversionMax is only a defensive int32 conversion
+// bound — it keeps pathological int inputs (negative overflow or values
+// larger than math.MaxInt32) from producing garbage on the wire. The
+// host applies the semantic 500-event clamp; this client does NOT attempt
+// to mirror that, intentionally, so the host remains the single source
+// of truth for the cap.
+const queryStreamHistoryCountConversionMax int32 = 1 << 30
 
 func (c *pluginHostFocusClient) QueryStreamHistory(ctx context.Context, req QueryStreamHistoryRequest) ([]Event, error) {
 	if c.client == nil {
@@ -153,8 +155,8 @@ func (c *pluginHostFocusClient) QueryStreamHistory(ctx context.Context, req Quer
 	switch {
 	case req.Count < 0:
 		count = 0
-	case int64(req.Count) > int64(queryStreamHistoryCountMax):
-		count = queryStreamHistoryCountMax
+	case int64(req.Count) > int64(queryStreamHistoryCountConversionMax):
+		count = queryStreamHistoryCountConversionMax
 	default:
 		count = int32(req.Count) // bounds-checked above
 	}
