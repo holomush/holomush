@@ -127,3 +127,37 @@ account lockout, scrubbed error messages. The rest is an operator decision.
 The recommended production posture is: web client for login, TLS-terminating
 proxy for players who insist on a telnet client, and a clearly documented
 warning for anyone who still wants a raw telnet session.
+
+## Resource limits
+
+The gateway enforces four operator-tunable limits on the telnet surface
+to prevent Slowloris, goroutine flooding, and unbounded pre-auth idle.
+
+| Flag | Default | What it bounds |
+| ---- | ------- | -------------- |
+| `--telnet-max-conns` | `1000` | Concurrent telnet connections; new accepts beyond this receive a refusal line and close |
+| `--telnet-idle-timeout` | `5m` | Time since the last byte read; an idle or drip-fed connection is closed |
+| `--telnet-write-timeout` | `30s` | Per-send write deadline; a stuck client's full send buffer cannot hold the handler |
+| `--telnet-pre-auth-timeout` | `2m` | Time from connect to successful character selection; unauthenticated clients are disconnected |
+
+### Tuning
+
+Size `--telnet-max-conns` to `peak concurrent players × 1.5`. Monitor
+`holomush_telnet_connections_active` and `holomush_telnet_connections_refused_total`
+via Prometheus; non-zero refusals under legitimate load mean the cap is
+too low.
+
+The timeouts are chosen for a typical MUSH; very slow-typing players at
+the character picker may trip `--telnet-pre-auth-timeout` on large
+character inventories — raise to `5m` if that affects legitimate users.
+
+### Metrics
+
+Four Prometheus metrics expose DoS state for operators:
+
+| Metric | Purpose |
+| ------ | ------- |
+| `holomush_telnet_connections_active` | Current open connection count; primary DoS signal when it pins near the cap |
+| `holomush_telnet_connections_refused_total` | Capacity refusals; sustained growth indicates attack or legitimate overload |
+| `holomush_telnet_idle_timeouts_total` | Read-deadline disconnects; sustained growth suggests Slowloris |
+| `holomush_telnet_preauth_timeouts_total` | Unauthenticated clients disconnected; expected non-zero from scanners |
