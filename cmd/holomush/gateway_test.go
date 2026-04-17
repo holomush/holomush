@@ -23,6 +23,7 @@ import (
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/core"
 	tlscerts "github.com/holomush/holomush/internal/tls"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestGatewayCommand_Flags(t *testing.T) {
@@ -184,10 +185,14 @@ func TestGatewayCommand_Help(t *testing.T) {
 func TestGatewayCommand_MissingCertificates(t *testing.T) {
 	// Gateway should poll for certs and eventually time out when they never appear.
 	cfg := &gatewayConfig{
-		TelnetAddr:  ":4201",
-		CoreAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9002",
-		LogFormat:   "json",
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		LogFormat:            "json",
+		TelnetMaxConns:       defaultTelnetMaxConns,
+		TelnetIdleTimeout:    defaultTelnetIdleTimeout,
+		TelnetWriteTimeout:   defaultTelnetWriteTimeout,
+		TelnetPreAuthTimeout: defaultTelnetPreAuthTimeout,
 	}
 
 	deps := &GatewayDeps{
@@ -278,10 +283,14 @@ func TestGatewayCommand_TLSLoadFails(t *testing.T) {
 	require.NoError(t, tlscerts.SaveCertificates(certsDir, ca, nil), "failed to save CA")
 
 	cfg := &gatewayConfig{
-		TelnetAddr:  ":4201",
-		CoreAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9002",
-		LogFormat:   "json",
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		LogFormat:            "json",
+		TelnetMaxConns:       defaultTelnetMaxConns,
+		TelnetIdleTimeout:    defaultTelnetIdleTimeout,
+		TelnetWriteTimeout:   defaultTelnetWriteTimeout,
+		TelnetPreAuthTimeout: defaultTelnetPreAuthTimeout,
 	}
 
 	deps := &GatewayDeps{
@@ -357,20 +366,28 @@ func TestGatewayConfig_Validate(t *testing.T) {
 		{
 			name: "valid config",
 			cfg: gatewayConfig{
-				TelnetAddr:  ":4201",
-				CoreAddr:    "localhost:9000",
-				ControlAddr: "127.0.0.1:9002",
-				LogFormat:   "json",
+				TelnetAddr:           ":4201",
+				CoreAddr:             "localhost:9000",
+				ControlAddr:          "127.0.0.1:9002",
+				LogFormat:            "json",
+				TelnetMaxConns:       1000,
+				TelnetIdleTimeout:    5 * time.Minute,
+				TelnetWriteTimeout:   30 * time.Second,
+				TelnetPreAuthTimeout: 2 * time.Minute,
 			},
 			wantError: false,
 		},
 		{
 			name: "valid config with text format",
 			cfg: gatewayConfig{
-				TelnetAddr:  ":4201",
-				CoreAddr:    "localhost:9000",
-				ControlAddr: "127.0.0.1:9002",
-				LogFormat:   "text",
+				TelnetAddr:           ":4201",
+				CoreAddr:             "localhost:9000",
+				ControlAddr:          "127.0.0.1:9002",
+				LogFormat:            "text",
+				TelnetMaxConns:       1000,
+				TelnetIdleTimeout:    5 * time.Minute,
+				TelnetWriteTimeout:   30 * time.Second,
+				TelnetPreAuthTimeout: 2 * time.Minute,
 			},
 			wantError: false,
 		},
@@ -440,6 +457,61 @@ func TestGatewayConfig_Validate(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestGatewayCommand_TelnetDoSLimitDefaults(t *testing.T) {
+	cmd := NewGatewayCmd()
+
+	maxConns, err := cmd.Flags().GetInt("telnet-max-conns")
+	require.NoError(t, err)
+	assert.Equal(t, 1000, maxConns, "default max conns per spec")
+
+	idle, err := cmd.Flags().GetDuration("telnet-idle-timeout")
+	require.NoError(t, err)
+	assert.Equal(t, 5*time.Minute, idle, "default idle timeout per spec")
+
+	write, err := cmd.Flags().GetDuration("telnet-write-timeout")
+	require.NoError(t, err)
+	assert.Equal(t, 30*time.Second, write, "default write timeout per spec")
+
+	preAuth, err := cmd.Flags().GetDuration("telnet-pre-auth-timeout")
+	require.NoError(t, err)
+	assert.Equal(t, 2*time.Minute, preAuth, "default pre-auth timeout per spec")
+}
+
+func TestGatewayConfig_ValidateRejectsNonPositiveTelnetLimits(t *testing.T) {
+	// Start from a fully-valid config, then flip each limit to zero and
+	// ensure Validate surfaces CONFIG_INVALID.
+	base := gatewayConfig{
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		LogFormat:            "json",
+		TelnetMaxConns:       1000,
+		TelnetIdleTimeout:    5 * time.Minute,
+		TelnetWriteTimeout:   30 * time.Second,
+		TelnetPreAuthTimeout: 2 * time.Minute,
+	}
+
+	cases := []struct {
+		field string
+		mut   func(c *gatewayConfig)
+	}{
+		{"TelnetMaxConns=0", func(c *gatewayConfig) { c.TelnetMaxConns = 0 }},
+		{"TelnetMaxConns<0", func(c *gatewayConfig) { c.TelnetMaxConns = -1 }},
+		{"TelnetIdleTimeout=0", func(c *gatewayConfig) { c.TelnetIdleTimeout = 0 }},
+		{"TelnetWriteTimeout=0", func(c *gatewayConfig) { c.TelnetWriteTimeout = 0 }},
+		{"TelnetPreAuthTimeout=0", func(c *gatewayConfig) { c.TelnetPreAuthTimeout = 0 }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.field, func(t *testing.T) {
+			cfg := base
+			tc.mut(&cfg)
+			err := cfg.Validate()
+			require.Error(t, err)
+			errutil.AssertErrorCode(t, err, "CONFIG_INVALID")
 		})
 	}
 }

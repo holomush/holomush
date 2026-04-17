@@ -16,7 +16,7 @@ import (
 // mockDeadlineConn is a minimal net.Conn stand-in that records every
 // SetReadDeadline call. Only Read + SetReadDeadline are exercised.
 type mockDeadlineConn struct {
-	net.Conn // embed for the methods we don't care about (they'll panic if touched)
+	net.Conn       // embed for the methods we don't care about (they'll panic if touched)
 	readErr        error
 	readBuf        []byte
 	reads          int

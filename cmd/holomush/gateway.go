@@ -31,14 +31,18 @@ import (
 
 // gatewayConfig holds configuration for the gateway command.
 type gatewayConfig struct {
-	TelnetAddr  string   `koanf:"telnet_addr"`
-	CoreAddr    string   `koanf:"core_addr"`
-	ControlAddr string   `koanf:"control_addr"`
-	MetricsAddr string   `koanf:"metrics_addr"`
-	LogFormat   string   `koanf:"log_format"`
-	WebAddr     string   `koanf:"web_addr"`
-	WebDir      string   `koanf:"web_dir"`
-	CORSOrigins []string `koanf:"cors_origins"`
+	TelnetAddr           string        `koanf:"telnet_addr"`
+	CoreAddr             string        `koanf:"core_addr"`
+	ControlAddr          string        `koanf:"control_addr"`
+	MetricsAddr          string        `koanf:"metrics_addr"`
+	LogFormat            string        `koanf:"log_format"`
+	WebAddr              string        `koanf:"web_addr"`
+	WebDir               string        `koanf:"web_dir"`
+	CORSOrigins          []string      `koanf:"cors_origins"`
+	TelnetMaxConns       int           `koanf:"telnet_max_conns"`
+	TelnetIdleTimeout    time.Duration `koanf:"telnet_idle_timeout"`
+	TelnetWriteTimeout   time.Duration `koanf:"telnet_write_timeout"`
+	TelnetPreAuthTimeout time.Duration `koanf:"telnet_pre_auth_timeout"`
 }
 
 // Validate checks that the configuration is valid.
@@ -55,16 +59,32 @@ func (cfg *gatewayConfig) Validate() error {
 	if cfg.LogFormat != "json" && cfg.LogFormat != "text" {
 		return oops.Code("CONFIG_INVALID").Errorf("log-format must be 'json' or 'text', got %q", cfg.LogFormat)
 	}
+	if cfg.TelnetMaxConns <= 0 {
+		return oops.Code("CONFIG_INVALID").Errorf("telnet-max-conns must be positive, got %d", cfg.TelnetMaxConns)
+	}
+	if cfg.TelnetIdleTimeout <= 0 {
+		return oops.Code("CONFIG_INVALID").Errorf("telnet-idle-timeout must be positive, got %s", cfg.TelnetIdleTimeout)
+	}
+	if cfg.TelnetWriteTimeout <= 0 {
+		return oops.Code("CONFIG_INVALID").Errorf("telnet-write-timeout must be positive, got %s", cfg.TelnetWriteTimeout)
+	}
+	if cfg.TelnetPreAuthTimeout <= 0 {
+		return oops.Code("CONFIG_INVALID").Errorf("telnet-pre-auth-timeout must be positive, got %s", cfg.TelnetPreAuthTimeout)
+	}
 	return nil
 }
 
 // Default values for gateway command flags.
 const (
-	defaultTelnetAddr         = ":4201"
-	defaultCoreAddr           = "localhost:9000"
-	defaultGatewayControlAddr = "127.0.0.1:9002"
-	defaultGatewayMetricsAddr = "127.0.0.1:9101"
-	defaultWebAddr            = ":8080"
+	defaultTelnetAddr           = ":4201"
+	defaultCoreAddr             = "localhost:9000"
+	defaultGatewayControlAddr   = "127.0.0.1:9002"
+	defaultGatewayMetricsAddr   = "127.0.0.1:9101"
+	defaultWebAddr              = ":8080"
+	defaultTelnetMaxConns       = 1000
+	defaultTelnetIdleTimeout    = 5 * time.Minute
+	defaultTelnetWriteTimeout   = 30 * time.Second
+	defaultTelnetPreAuthTimeout = 2 * time.Minute
 )
 
 // newGatewayCmd creates the gateway subcommand with all flags configured.
@@ -93,6 +113,10 @@ from telnet and web clients, forwarding commands to the core process.`,
 	cmd.Flags().StringVar(&cfg.WebAddr, "web-addr", defaultWebAddr, "web HTTP listen address")
 	cmd.Flags().StringVar(&cfg.WebDir, "web-dir", "", "override embedded static files with directory path")
 	cmd.Flags().StringSliceVar(&cfg.CORSOrigins, "cors-origins", nil, "allowed CORS origins (e.g., http://localhost:5173)")
+	cmd.Flags().IntVar(&cfg.TelnetMaxConns, "telnet-max-conns", defaultTelnetMaxConns, "max concurrent telnet connections")
+	cmd.Flags().DurationVar(&cfg.TelnetIdleTimeout, "telnet-idle-timeout", defaultTelnetIdleTimeout, "per-connection idle read timeout")
+	cmd.Flags().DurationVar(&cfg.TelnetWriteTimeout, "telnet-write-timeout", defaultTelnetWriteTimeout, "per-send write deadline")
+	cmd.Flags().DurationVar(&cfg.TelnetPreAuthTimeout, "telnet-pre-auth-timeout", defaultTelnetPreAuthTimeout, "disconnect unauthenticated clients after this duration")
 
 	return cmd
 }
