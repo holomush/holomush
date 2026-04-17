@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/samber/oops"
 	lua "github.com/yuin/gopher-lua"
@@ -37,33 +38,59 @@ type luaPlugin struct {
 
 // Host manages Lua plugins.
 type Host struct {
-	factory   *StateFactory
-	hostFuncs *hostfunc.Functions
-	plugins   map[string]*luaPlugin
-	mu        sync.RWMutex
-	closed    bool
+	factory    *StateFactory
+	hostFuncs  *hostfunc.Functions
+	plugins    map[string]*luaPlugin
+	mu         sync.RWMutex
+	closed     bool
+	cpuTimeout time.Duration // per-invocation deadline applied via context.WithTimeout
+}
+
+// HostOption customizes Host construction.
+type HostOption func(*Host)
+
+// WithCPUTimeout sets the per-invocation deadline applied to every
+// CallByParam dispatched through Host.invoke. Zero disables the cap
+// (unchanged context inheritance). Recommend the caller pass a positive
+// duration in production; zero is allowed only for tests.
+func WithCPUTimeout(d time.Duration) HostOption {
+	return func(h *Host) { h.cpuTimeout = d }
+}
+
+// WithStateFactory replaces the default StateFactory. Used by callers
+// that need a factory with non-default options (e.g. RegistryMaxSize).
+func WithStateFactory(f *StateFactory) HostOption {
+	return func(h *Host) { h.factory = f }
 }
 
 // NewHost creates a new Lua plugin host without host functions.
-func NewHost() *Host {
-	return &Host{
+func NewHost(opts ...HostOption) *Host {
+	h := &Host{
 		factory: NewStateFactory(),
 		plugins: make(map[string]*luaPlugin),
 	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 // NewHostWithFunctions creates a Lua plugin host with host functions.
 // The host functions enable plugins to call holomush.* APIs like log(), new_request_id(), and kv_*.
 // Panics if hf is nil (consistent with hostfunc.New).
-func NewHostWithFunctions(hf *hostfunc.Functions) *Host {
+func NewHostWithFunctions(hf *hostfunc.Functions, opts ...HostOption) *Host {
 	if hf == nil {
 		panic("lua.NewHostWithFunctions: hostFuncs cannot be nil")
 	}
-	return &Host{
+	h := &Host{
 		factory:   NewStateFactory(),
 		hostFuncs: hf,
 		plugins:   make(map[string]*luaPlugin),
 	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 // SetFocusCoordinator injects the focus coordinator into the underlying
