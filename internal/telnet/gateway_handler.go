@@ -128,6 +128,9 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 	h.send("Welcome to HoloMUSH!")
 	h.send("Use: connect guest")
 
+	preAuth := time.NewTimer(h.limits.PreAuthTimeout)
+	defer preAuth.Stop()
+
 	lineCh := make(chan string)
 	errCh := make(chan error, 1)
 
@@ -166,6 +169,14 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 		select {
 		case <-childCtx.Done():
 			return
+
+		case <-preAuth.C:
+			if !h.authed {
+				h.send("Authentication timeout.")
+				RecordPreAuthTimeout()
+				return
+			}
+			// authed — timer fired benignly, fall through to next iteration.
 
 		case err := <-errCh:
 			if !errors.Is(err, io.EOF) {

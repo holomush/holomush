@@ -2254,9 +2254,203 @@ func (m *mockDeadlineTrackingConn) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (m *mockDeadlineTrackingConn) SetReadDeadline(t time.Time) error { return nil }
+func (m *mockDeadlineTrackingConn) SetReadDeadline(_ time.Time) error { return nil }
 func (m *mockDeadlineTrackingConn) Close() error                      { return nil }
 func (m *mockDeadlineTrackingConn) RemoteAddr() net.Addr              { return &net.TCPAddr{} }
+
+// newEOFStream returns a SubscribeClient whose first Recv returns io.EOF.
+// Used by tests that care only about auth completing and the handler
+// entering the event-loop idle state.
+func newEOFStream() corev1.CoreService_SubscribeClient {
+	return &eofSubStream{}
+}
+
+type eofSubStream struct{}
+
+func (s *eofSubStream) Recv() (*corev1.SubscribeResponse, error) { return nil, io.EOF }
+func (s *eofSubStream) Context() context.Context                 { return context.Background() }
+func (s *eofSubStream) Header() (metadata.MD, error)             { return nil, nil }
+func (s *eofSubStream) Trailer() metadata.MD                     { return nil }
+func (s *eofSubStream) CloseSend() error                         { return nil }
+func (s *eofSubStream) SendMsg(any) error                        { return nil }
+func (s *eofSubStream) RecvMsg(any) error                        { return nil }
+
+func TestPreAuthTimerFiresForUnauthedClient(t *testing.T) {
+	before := testutil.ToFloat64(PreAuthTimeoutsTotal)
+
+	serverConn, clientConn := net.Pipe()
+	defer func() { _ = clientConn.Close() }()
+
+	client := &mockCoreClient{}
+	handler := NewGatewayHandler(serverConn, client, testRegistry(), Limits{
+		IdleReadTimeout: DefaultLimits.IdleReadTimeout,
+		WriteTimeout:    DefaultLimits.WriteTimeout,
+		PreAuthTimeout:  100 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		handler.Handle(ctx)
+		close(done)
+	}()
+
+	// Drain welcome banner + any output (including "Authentication timeout.")
+	// until EOF or deadline.
+	scanner := bufio.NewScanner(clientConn)
+	var sawTimeoutLine bool
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		for scanner.Scan() {
+			if strings.Contains(scanner.Text(), "Authentication timeout") {
+				sawTimeoutLine = true
+			}
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(1 * time.Second):
+		t.Fatal("handler did not exit on pre-auth timeout")
+	}
+	// Wait briefly for the reader goroutine to drain any buffered lines.
+	select {
+	case <-readDone:
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	assert.True(t, sawTimeoutLine, "client must receive 'Authentication timeout.'")
+	assert.Equal(t, before+1, testutil.ToFloat64(PreAuthTimeoutsTotal),
+		"preauth counter must increment")
+}
+
+func TestPreAuthTimerCancelledAfterGuestConnect(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer func() { _ = clientConn.Close() }()
+
+	// CreateGuest returns one character and a session token so the auto-
+	// select path marks the handler authed.
+	client := &mockCoreClient{
+		createGuestResp: &corev1.CreateGuestResponse{
+			Success:            true,
+			PlayerSessionToken: "guest-token",
+			Characters: []*corev1.CharacterSummary{
+				{CharacterId: "char-guest", CharacterName: "Guest-1"},
+			},
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
+			Success:       true,
+			SessionId:     "session-1",
+			CharacterName: "Guest-1",
+		},
+	}
+	client.subStream = newEOFStream()
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry(), Limits{
+		IdleReadTimeout: DefaultLimits.IdleReadTimeout,
+		WriteTimeout:    DefaultLimits.WriteTimeout,
+		PreAuthTimeout:  200 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		handler.Handle(ctx)
+		close(done)
+	}()
+
+	// Drain server output in a goroutine (net.Pipe is unbuffered; the
+	// handler will send Welcome / Use: connect guest / "Welcome, Guest-1!" / ...
+	go func() {
+		scanner := bufio.NewScanner(clientConn)
+		for scanner.Scan() {
+		}
+	}()
+
+	// Give the handler time to print banner and reach its main loop
+	// before we issue the command.
+	time.Sleep(50 * time.Millisecond)
+
+	// Issue connect guest.
+	_, err := clientConn.Write([]byte("connect guest\n"))
+	require.NoError(t, err)
+
+	// Wait past pre-auth timeout. Handler must still be alive.
+	time.Sleep(400 * time.Millisecond)
+
+	select {
+	case <-done:
+		t.Fatal("handler exited — pre-auth timer fired after successful auth")
+	default:
+	}
+
+	cancel() // clean shutdown
+	<-done
+}
+
+func TestPreAuthTimerCancelledAfterTwoPhaseSelect(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer func() { _ = clientConn.Close() }()
+
+	client := &mockCoreClient{
+		authPlayerResp: &corev1.AuthenticatePlayerResponse{
+			Success:            true,
+			PlayerSessionToken: "player-token",
+			Characters: []*corev1.CharacterSummary{
+				{CharacterId: "char-alice", CharacterName: "Alice"},
+			},
+			DefaultCharacterId: "char-alice",
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
+			Success:       true,
+			SessionId:     "session-1",
+			CharacterName: "Alice",
+		},
+	}
+	client.subStream = newEOFStream()
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry(), Limits{
+		IdleReadTimeout: DefaultLimits.IdleReadTimeout,
+		WriteTimeout:    DefaultLimits.WriteTimeout,
+		PreAuthTimeout:  200 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		handler.Handle(ctx)
+		close(done)
+	}()
+
+	go func() {
+		scanner := bufio.NewScanner(clientConn)
+		for scanner.Scan() {
+		}
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	_, err := clientConn.Write([]byte("connect alice password\n"))
+	require.NoError(t, err)
+
+	time.Sleep(400 * time.Millisecond)
+
+	select {
+	case <-done:
+		t.Fatal("handler exited — pre-auth timer fired after successful two-phase auth")
+	default:
+	}
+
+	cancel()
+	<-done
+}
 
 func TestSendSetsWriteDeadline(t *testing.T) {
 	mc := &mockDeadlineTrackingConn{}
