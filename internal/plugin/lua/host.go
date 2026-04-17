@@ -220,7 +220,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	if event.Type == "command" {
 		onCommand := L.GetGlobal("on_command")
 		if onCommand.Type() != lua.LTNil {
-			return h.callOnCommand(L, name, event, onCommand)
+			return h.callOnCommand(ctx, L, name, event, onCommand)
 		}
 		// Fall through to on_event if on_command not defined
 	}
@@ -237,8 +237,8 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	// Build event table
 	eventTable := h.buildEventTable(L, event)
 
-	// Call on_event(event)
-	if err := L.CallByParam(lua.P{
+	// Call on_event(event) via invoke for CPU-deadline + watchdog protection.
+	if err := h.invoke(ctx, L, name, "on_event", lua.P{
 		Fn:      onEvent,
 		NRet:    1,
 		Protect: true,
@@ -304,7 +304,7 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 
 	ctxTable := h.buildCommandRequestTable(L, cmd)
 
-	if err := L.CallByParam(lua.P{
+	if err := h.invoke(ctx, L, name, "on_command", lua.P{
 		Fn:      onCommand,
 		NRet:    1,
 		Protect: true,
@@ -368,7 +368,7 @@ func (h *Host) QuerySessionStreams(ctx context.Context, name string, req plugins
 		return nil, nil
 	}
 
-	if err := L.CallByParam(lua.P{
+	if err := h.invoke(ctx, L, name, "on_session_subscribe", lua.P{
 		Fn:      fn,
 		NRet:    1,
 		Protect: true,
@@ -411,15 +411,15 @@ func (h *Host) Close(_ context.Context) error {
 }
 
 // callOnCommand calls the on_command handler with a typed CommandContext.
-func (h *Host) callOnCommand(state *lua.LState, name string, event pluginsdk.Event, onCommand lua.LValue) ([]pluginsdk.EmitEvent, error) {
+func (h *Host) callOnCommand(ctx context.Context, state *lua.LState, name string, event pluginsdk.Event, onCommand lua.LValue) ([]pluginsdk.EmitEvent, error) {
 	// Parse command payload into CommandContext
 	cmdCtx := holo.ParseCommandPayload(event.Payload)
 
 	// Build Lua context table
 	ctxTable := h.buildContextTable(state, cmdCtx)
 
-	// Call on_command(ctx)
-	if err := state.CallByParam(lua.P{
+	// Call on_command(ctx) via invoke.
+	if err := h.invoke(ctx, state, name, "on_command", lua.P{
 		Fn:      onCommand,
 		NRet:    1,
 		Protect: true,
