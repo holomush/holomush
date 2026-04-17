@@ -84,9 +84,10 @@ type GatewayHandler struct {
 // limits bounds per-connection resource usage; callers SHOULD pass
 // DefaultLimits unless they have a specific reason to deviate.
 func NewGatewayHandler(conn net.Conn, client CoreClient, registry *core.VerbRegistry, limits Limits) *GatewayHandler {
+	dr := &deadlineReader{conn: conn, timeout: limits.IdleReadTimeout}
 	return &GatewayHandler{
 		conn:         conn,
-		reader:       bufio.NewReader(conn),
+		reader:       bufio.NewReader(dr),
 		client:       client,
 		verbRegistry: registry,
 		limits:       limits,
@@ -142,6 +143,10 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 			}
 		}
 		if err := scanner.Err(); err != nil {
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() {
+				RecordIdleTimeout()
+			}
 			select {
 			case errCh <- err:
 			case <-childCtx.Done():

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
@@ -2140,4 +2141,98 @@ func TestGatewayHandlerForwardsPlayerSessionTokenOnDisconnect(t *testing.T) {
 	require.NotNil(t, client.lastDisconnectReq)
 	assert.Equal(t, token, client.lastDisconnectReq.GetPlayerSessionToken())
 	assert.Equal(t, "sess-disc", client.lastDisconnectReq.GetSessionId())
+}
+
+func TestReadDeadlineFiresOnIdleClient(t *testing.T) {
+	before := testutil.ToFloat64(IdleTimeoutsTotal)
+
+	serverConn, clientConn := net.Pipe()
+	defer func() { _ = clientConn.Close() }()
+
+	client := &mockCoreClient{}
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry(), Limits{
+		IdleReadTimeout: 100 * time.Millisecond,
+		WriteTimeout:    DefaultLimits.WriteTimeout,
+		PreAuthTimeout:  DefaultLimits.PreAuthTimeout,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		handler.Handle(ctx)
+		close(done)
+	}()
+
+	// Drain BOTH welcome banner lines so the handler can proceed to the
+	// scanner goroutine (net.Pipe is unbuffered — an undrained send blocks
+	// the handler indefinitely).
+	br := bufio.NewReader(clientConn)
+	_, _ = br.ReadString('\n')
+	_, _ = br.ReadString('\n')
+
+	// Send NO bytes. Wait for handler to exit via idle timeout.
+	select {
+	case <-done:
+	case <-time.After(1 * time.Second):
+		t.Fatal("handler did not exit on idle deadline")
+	}
+
+	assert.Equal(t, before+1, testutil.ToFloat64(IdleTimeoutsTotal),
+		"idle timeout must increment the counter")
+}
+
+func TestReadDeadlineResetsOnByte(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer func() { _ = clientConn.Close() }()
+
+	client := &mockCoreClient{}
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry(), Limits{
+		IdleReadTimeout: 150 * time.Millisecond,
+		WriteTimeout:    DefaultLimits.WriteTimeout,
+		PreAuthTimeout:  DefaultLimits.PreAuthTimeout,
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		handler.Handle(ctx)
+		close(done)
+	}()
+
+	// Drain BOTH welcome banner lines so the handler can proceed to the
+	// scanner goroutine (net.Pipe is unbuffered).
+	br := bufio.NewReader(clientConn)
+	_, _ = br.ReadString('\n')
+	_, _ = br.ReadString('\n')
+
+	// Send a byte every 50 ms for 400 ms — total > 2 × IdleReadTimeout.
+	// If the deadline resets on each read, the handler stays alive.
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	stop := time.After(400 * time.Millisecond)
+Keepalive:
+	for {
+		select {
+		case <-ticker.C:
+			_, werr := clientConn.Write([]byte("a"))
+			if werr != nil {
+				break Keepalive
+			}
+		case <-stop:
+			break Keepalive
+		}
+	}
+
+	select {
+	case <-done:
+		t.Fatal("handler exited during keep-alive — deadline did not reset per read")
+	default:
+		// still running, as expected
+	}
 }
