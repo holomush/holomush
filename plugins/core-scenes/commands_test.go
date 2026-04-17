@@ -733,7 +733,10 @@ func TestSceneJoinReturnsErrorWhenFocusClientNotConfigured(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, pluginsdk.CommandError, resp.Status)
 	assert.Contains(t, resp.Output, "focus client not configured")
-	assert.Contains(t, resp.Output, "retry")
+	assert.Contains(t, resp.Output, "administrator",
+		"nil focusClient is a misconfiguration, not transient; message should direct operator, not user-retry")
+	assert.NotContains(t, resp.Output, "retry",
+		"nil focusClient retries hit the same guard; do not mislead the user")
 }
 
 func TestSceneSwitchReturnsErrorWhenFocusClientNotConfigured(t *testing.T) {

@@ -321,14 +321,18 @@ func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandReque
 	}
 
 	if p.focusClient == nil {
+		// Misconfiguration, not a transient error: retries will hit the
+		// same nil guard. Surface the operator-action hint rather than the
+		// user-retry hint used for transient JoinFocus failures below.
 		slog.WarnContext(ctx, "scene.command.join focus client not configured; subscription not updated",
 			"subject_id", req.CharacterID,
 			"session_id", req.SessionID,
 			"scene_id", sceneID,
 		)
 		return pluginsdk.Errorf(
-			"Joined scene in database, but your session could not subscribe (focus client not configured). "+
-				"Please retry `scene join %s`.", sceneID), nil
+			"Joined scene in database, but your session could not subscribe " +
+				"(focus client not configured — this is a server configuration error, " +
+				"please contact an administrator)."), nil
 	}
 
 	err := p.focusClient.JoinFocus(ctx, req.SessionID, pluginsdk.FocusKey{

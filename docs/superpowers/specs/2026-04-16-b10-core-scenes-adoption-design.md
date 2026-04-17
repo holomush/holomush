@@ -515,7 +515,19 @@ covered by prior beads (B2, B4, B6, B7, B8). B10 does not affect them.
 - `pkg/plugin/focus_client_test.go` — unit tests for impl (broker dial, error mapping).
 - `docs/superpowers/specs/2026-04-16-b10-core-scenes-adoption-design.md` — this document.
 - `docs/superpowers/plans/2026-04-16-b10-core-scenes-adoption.md` — implementation plan (next step via writing-plans).
-- `test/integration/scenes/focus_*_test.go` — Phase 4 acceptance tests.
+
+### Deferred (NOT added in this PR)
+
+- `test/integration/scenes/focus_*_test.go` — Phase 4 end-to-end acceptance
+  tests. Scoped out of B10 during execution because every invariant listed
+  in §5.2 that's reachable today is already covered by unit tests in
+  `internal/grpc/focus/` (B4/B6) and `pkg/plugin/` (B8). The remaining tests
+  (`TestTelnetReconnectResumesSceneWithUnseenEvents`, the full switch
+  catch-up flow, multi-scene merge-sort) exercise pose-order + stream
+  plumbing that is Phase 4's responsibility — they belong in
+  `holomush-5rh.13` alongside the pose-order work, not B10. The PR
+  description lists the specific unit-test locations that cover each
+  §5.2 invariant at unit level.
 
 ### Modified
 

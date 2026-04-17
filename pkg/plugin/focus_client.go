@@ -5,6 +5,7 @@ package pluginsdk
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/samber/oops"
@@ -221,7 +222,10 @@ var focusErrorCodePrefixes = []string{
 func codeFromStatus(st *status.Status) string {
 	msg := st.Message()
 	for _, c := range focusErrorCodePrefixes {
-		if len(msg) >= len(c) && msg[:len(c)] == c {
+		// Require the ':' delimiter the host stamps, or an exact match.
+		// A plain prefix match would bind a future code like
+		// FOCUS_NOT_MEMBER_EXTRA to FOCUS_NOT_MEMBER silently.
+		if msg == c || strings.HasPrefix(msg, c+":") {
 			return c
 		}
 	}
