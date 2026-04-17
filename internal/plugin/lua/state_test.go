@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	lua "github.com/yuin/gopher-lua"
 
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 )
@@ -122,6 +123,59 @@ func TestStateFactoryNewStateMultipleStates(t *testing.T) {
 
 	// L2 should not have the variable
 	assert.Equal(t, "nil", L2.GetGlobal("foo").Type().String(), "states should be independent - L2 should not have L1's variable")
+}
+
+// TestNewStateRegistryMaxSizeApplied verifies that a StateFactory configured
+// with a small RegistryMaxSize causes a table-allocation bomb to fail at the
+// registry cap (surfaced as a panic caught by CallByParam Protect=true).
+func TestNewStateRegistryMaxSizeApplied(t *testing.T) {
+	factory := pluginlua.NewStateFactory(pluginlua.WithRegistryMaxSize(1024))
+	L, err := factory.NewState(context.Background())
+	require.NoError(t, err)
+	defer L.Close()
+
+	// Load a script that grows an array aggressively.
+	bomb := `
+local function recurse(n)
+    if n <= 0 then return 0 end
+    local a, b, c, d, e, f, g, h = n, n, n, n, n, n, n, n
+    return recurse(n - 1) + a + b + c + d + e + f + g + h
+end
+return recurse(100000)
+`
+	// Use CallByParam with Protect=true to catch panics.
+	fn := L.NewFunction(func(innerL *lua.LState) int {
+		if innerErr := innerL.DoString(bomb); innerErr != nil {
+			innerL.RaiseError("%s", innerErr.Error())
+		}
+		return 0
+	})
+	err = L.CallByParam(lua.P{
+		Fn:      fn,
+		NRet:    0,
+		Protect: true,
+	})
+	assert.Error(t, err, "expected registry overflow to surface as an error")
+}
+
+// TestNewStateRegistryUnboundedWhenZero verifies the factory treats
+// RegistryMaxSize=0 (default) as "no cap configured" — many-value scripts
+// complete without error. This is the legacy behavior.
+func TestNewStateRegistryUnboundedWhenZero(t *testing.T) {
+	factory := pluginlua.NewStateFactory() // no option — zero default
+	L, err := factory.NewState(context.Background())
+	require.NoError(t, err)
+	defer L.Close()
+
+	script := `
+local t = {}
+for i = 1, 5000 do
+    t[#t + 1] = i
+end
+return #t
+`
+	err = L.DoString(script)
+	assert.NoError(t, err, "5000 values should fit in the default registry")
 }
 
 func TestStateFactoryNewStateBlocksFilesystemFunctions(t *testing.T) {

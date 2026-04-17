@@ -33,13 +33,30 @@ func defaultSafeLibraries() []safeLibrary {
 type StateFactory struct {
 	// libraries allows overriding the default safe libraries for testing.
 	libraries []safeLibrary
+	// registryMaxSize bounds the Lua value registry per state. Zero means
+	// "use gopher-lua default" (unbounded growth).
+	registryMaxSize int
+}
+
+// StateFactoryOption customizes StateFactory construction.
+type StateFactoryOption func(*StateFactory)
+
+// WithRegistryMaxSize sets the upper bound on the Lua value registry per
+// state. Overflow causes gopher-lua to panic; CallByParam(Protect=true)
+// catches it and returns an error. Zero disables the cap.
+func WithRegistryMaxSize(n int) StateFactoryOption {
+	return func(f *StateFactory) { f.registryMaxSize = n }
 }
 
 // NewStateFactory creates a new state factory.
-func NewStateFactory() *StateFactory {
-	return &StateFactory{
+func NewStateFactory(opts ...StateFactoryOption) *StateFactory {
+	f := &StateFactory{
 		libraries: defaultSafeLibraries(),
 	}
+	for _, opt := range opts {
+		opt(f)
+	}
+	return f
 }
 
 // unsafeBaseFunctions lists base library functions that must be blocked for security.
@@ -55,7 +72,8 @@ var unsafeBaseFunctions = []string{"dofile", "loadfile", "loadstring", "load"}
 // The ctx parameter is reserved for future cancellation/timeout support.
 func (f *StateFactory) NewState(_ context.Context) (*lua.LState, error) {
 	L := lua.NewState(lua.Options{
-		SkipOpenLibs: true, // Don't load any libraries by default
+		SkipOpenLibs:    true, // Don't load any libraries by default
+		RegistryMaxSize: f.registryMaxSize,
 	})
 
 	for _, lib := range f.libraries {
