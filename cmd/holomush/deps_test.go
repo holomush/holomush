@@ -299,11 +299,15 @@ func TestRunGatewayWithDeps_HappyPath(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	cfg := &gatewayConfig{
-		TelnetAddr:  ":4201",
-		CoreAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9002",
-		MetricsAddr: "", // Disable observability server for simplicity
-		LogFormat:   "json",
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		MetricsAddr:          "", // Disable observability server for simplicity
+		LogFormat:            "json",
+		TelnetMaxConns:       defaultTelnetMaxConns,
+		TelnetIdleTimeout:    defaultTelnetIdleTimeout,
+		TelnetWriteTimeout:   defaultTelnetWriteTimeout,
+		TelnetPreAuthTimeout: defaultTelnetPreAuthTimeout,
 	}
 
 	controlErrChan := make(chan error, 1)
@@ -366,10 +370,14 @@ func TestRunGatewayWithDeps_HappyPath(t *testing.T) {
 func TestRunGatewayWithDeps_ValidationError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		TelnetAddr:  "", // Invalid - required
-		CoreAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9002",
-		LogFormat:   "json",
+		TelnetAddr:           "", // Invalid - required
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		LogFormat:            "json",
+		TelnetMaxConns:       defaultTelnetMaxConns,
+		TelnetIdleTimeout:    defaultTelnetIdleTimeout,
+		TelnetWriteTimeout:   defaultTelnetWriteTimeout,
+		TelnetPreAuthTimeout: defaultTelnetPreAuthTimeout,
 	}
 
 	cmd := newMockCmd()
@@ -382,10 +390,14 @@ func TestRunGatewayWithDeps_ValidationError(t *testing.T) {
 func TestRunGatewayWithDeps_CertsDirError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		TelnetAddr:  ":4201",
-		CoreAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9002",
-		LogFormat:   "json",
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		LogFormat:            "json",
+		TelnetMaxConns:       defaultTelnetMaxConns,
+		TelnetIdleTimeout:    defaultTelnetIdleTimeout,
+		TelnetWriteTimeout:   defaultTelnetWriteTimeout,
+		TelnetPreAuthTimeout: defaultTelnetPreAuthTimeout,
 	}
 
 	deps := &GatewayDeps{
@@ -406,10 +418,14 @@ func TestRunGatewayWithDeps_CertsDirError(t *testing.T) {
 func TestRunGatewayWithDeps_GameIDExtractorError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		TelnetAddr:  ":4201",
-		CoreAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9002",
-		LogFormat:   "json",
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		LogFormat:            "json",
+		TelnetMaxConns:       defaultTelnetMaxConns,
+		TelnetIdleTimeout:    defaultTelnetIdleTimeout,
+		TelnetWriteTimeout:   defaultTelnetWriteTimeout,
+		TelnetPreAuthTimeout: defaultTelnetPreAuthTimeout,
 	}
 
 	deps := &GatewayDeps{
@@ -433,10 +449,14 @@ func TestRunGatewayWithDeps_GameIDExtractorError(t *testing.T) {
 func TestRunGatewayWithDeps_ClientTLSLoaderError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		TelnetAddr:  ":4201",
-		CoreAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9002",
-		LogFormat:   "json",
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		LogFormat:            "json",
+		TelnetMaxConns:       defaultTelnetMaxConns,
+		TelnetIdleTimeout:    defaultTelnetIdleTimeout,
+		TelnetWriteTimeout:   defaultTelnetWriteTimeout,
+		TelnetPreAuthTimeout: defaultTelnetPreAuthTimeout,
 	}
 
 	deps := &GatewayDeps{
@@ -463,10 +483,14 @@ func TestRunGatewayWithDeps_ClientTLSLoaderError(t *testing.T) {
 func TestRunGatewayWithDeps_GRPCClientFactoryError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		TelnetAddr:  ":4201",
-		CoreAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9002",
-		LogFormat:   "json",
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		LogFormat:            "json",
+		TelnetMaxConns:       defaultTelnetMaxConns,
+		TelnetIdleTimeout:    defaultTelnetIdleTimeout,
+		TelnetWriteTimeout:   defaultTelnetWriteTimeout,
+		TelnetPreAuthTimeout: defaultTelnetPreAuthTimeout,
 	}
 
 	deps := &GatewayDeps{
@@ -499,10 +523,14 @@ func TestRunGatewayWithDeps_GRPCClientFactoryError(t *testing.T) {
 func TestRunGatewayWithDeps_ControlTLSLoadError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		TelnetAddr:  ":4201",
-		CoreAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9002",
-		LogFormat:   "json",
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		LogFormat:            "json",
+		TelnetMaxConns:       defaultTelnetMaxConns,
+		TelnetIdleTimeout:    defaultTelnetIdleTimeout,
+		TelnetWriteTimeout:   defaultTelnetWriteTimeout,
+		TelnetPreAuthTimeout: defaultTelnetPreAuthTimeout,
 	}
 
 	deps := &GatewayDeps{
@@ -535,10 +563,14 @@ func TestRunGatewayWithDeps_ControlTLSLoadError(t *testing.T) {
 func TestRunGatewayWithDeps_ControlServerFactoryError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		TelnetAddr:  ":4201",
-		CoreAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9002",
-		LogFormat:   "json",
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		LogFormat:            "json",
+		TelnetMaxConns:       defaultTelnetMaxConns,
+		TelnetIdleTimeout:    defaultTelnetIdleTimeout,
+		TelnetWriteTimeout:   defaultTelnetWriteTimeout,
+		TelnetPreAuthTimeout: defaultTelnetPreAuthTimeout,
 	}
 
 	deps := &GatewayDeps{
@@ -574,10 +606,14 @@ func TestRunGatewayWithDeps_ControlServerFactoryError(t *testing.T) {
 func TestRunGatewayWithDeps_ControlServerStartError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		TelnetAddr:  ":4201",
-		CoreAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9002",
-		LogFormat:   "json",
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		LogFormat:            "json",
+		TelnetMaxConns:       defaultTelnetMaxConns,
+		TelnetIdleTimeout:    defaultTelnetIdleTimeout,
+		TelnetWriteTimeout:   defaultTelnetWriteTimeout,
+		TelnetPreAuthTimeout: defaultTelnetPreAuthTimeout,
 	}
 
 	deps := &GatewayDeps{
@@ -617,10 +653,14 @@ func TestRunGatewayWithDeps_ControlServerStartError(t *testing.T) {
 func TestRunGatewayWithDeps_ListenerFactoryError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		TelnetAddr:  ":4201",
-		CoreAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9002",
-		LogFormat:   "json",
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		LogFormat:            "json",
+		TelnetMaxConns:       defaultTelnetMaxConns,
+		TelnetIdleTimeout:    defaultTelnetIdleTimeout,
+		TelnetWriteTimeout:   defaultTelnetWriteTimeout,
+		TelnetPreAuthTimeout: defaultTelnetPreAuthTimeout,
 	}
 
 	controlErrChan := make(chan error, 1)
@@ -664,11 +704,15 @@ func TestRunGatewayWithDeps_ListenerFactoryError(t *testing.T) {
 func TestRunGatewayWithDeps_ObservabilityServerStartError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &gatewayConfig{
-		TelnetAddr:  ":4201",
-		CoreAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9002",
-		MetricsAddr: "127.0.0.1:9101",
-		LogFormat:   "json",
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		MetricsAddr:          "127.0.0.1:9101",
+		LogFormat:            "json",
+		TelnetMaxConns:       defaultTelnetMaxConns,
+		TelnetIdleTimeout:    defaultTelnetIdleTimeout,
+		TelnetWriteTimeout:   defaultTelnetWriteTimeout,
+		TelnetPreAuthTimeout: defaultTelnetPreAuthTimeout,
 	}
 
 	controlErrChan := make(chan error, 1)
@@ -722,11 +766,15 @@ func TestRunGatewayWithDeps_WithObservability(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	cfg := &gatewayConfig{
-		TelnetAddr:  ":4201",
-		CoreAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9002",
-		MetricsAddr: "127.0.0.1:9101",
-		LogFormat:   "json",
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		MetricsAddr:          "127.0.0.1:9101",
+		LogFormat:            "json",
+		TelnetMaxConns:       defaultTelnetMaxConns,
+		TelnetIdleTimeout:    defaultTelnetIdleTimeout,
+		TelnetWriteTimeout:   defaultTelnetWriteTimeout,
+		TelnetPreAuthTimeout: defaultTelnetPreAuthTimeout,
 	}
 
 	controlErrChan := make(chan error, 1)

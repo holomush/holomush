@@ -16,13 +16,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/telnet"
 	tlscerts "github.com/holomush/holomush/internal/tls"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestGatewayCommand_Flags(t *testing.T) {
@@ -184,10 +187,14 @@ func TestGatewayCommand_Help(t *testing.T) {
 func TestGatewayCommand_MissingCertificates(t *testing.T) {
 	// Gateway should poll for certs and eventually time out when they never appear.
 	cfg := &gatewayConfig{
-		TelnetAddr:  ":4201",
-		CoreAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9002",
-		LogFormat:   "json",
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		LogFormat:            "json",
+		TelnetMaxConns:       defaultTelnetMaxConns,
+		TelnetIdleTimeout:    defaultTelnetIdleTimeout,
+		TelnetWriteTimeout:   defaultTelnetWriteTimeout,
+		TelnetPreAuthTimeout: defaultTelnetPreAuthTimeout,
 	}
 
 	deps := &GatewayDeps{
@@ -278,10 +285,14 @@ func TestGatewayCommand_TLSLoadFails(t *testing.T) {
 	require.NoError(t, tlscerts.SaveCertificates(certsDir, ca, nil), "failed to save CA")
 
 	cfg := &gatewayConfig{
-		TelnetAddr:  ":4201",
-		CoreAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9002",
-		LogFormat:   "json",
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		LogFormat:            "json",
+		TelnetMaxConns:       defaultTelnetMaxConns,
+		TelnetIdleTimeout:    defaultTelnetIdleTimeout,
+		TelnetWriteTimeout:   defaultTelnetWriteTimeout,
+		TelnetPreAuthTimeout: defaultTelnetPreAuthTimeout,
 	}
 
 	deps := &GatewayDeps{
@@ -357,20 +368,28 @@ func TestGatewayConfig_Validate(t *testing.T) {
 		{
 			name: "valid config",
 			cfg: gatewayConfig{
-				TelnetAddr:  ":4201",
-				CoreAddr:    "localhost:9000",
-				ControlAddr: "127.0.0.1:9002",
-				LogFormat:   "json",
+				TelnetAddr:           ":4201",
+				CoreAddr:             "localhost:9000",
+				ControlAddr:          "127.0.0.1:9002",
+				LogFormat:            "json",
+				TelnetMaxConns:       1000,
+				TelnetIdleTimeout:    5 * time.Minute,
+				TelnetWriteTimeout:   30 * time.Second,
+				TelnetPreAuthTimeout: 2 * time.Minute,
 			},
 			wantError: false,
 		},
 		{
 			name: "valid config with text format",
 			cfg: gatewayConfig{
-				TelnetAddr:  ":4201",
-				CoreAddr:    "localhost:9000",
-				ControlAddr: "127.0.0.1:9002",
-				LogFormat:   "text",
+				TelnetAddr:           ":4201",
+				CoreAddr:             "localhost:9000",
+				ControlAddr:          "127.0.0.1:9002",
+				LogFormat:            "text",
+				TelnetMaxConns:       1000,
+				TelnetIdleTimeout:    5 * time.Minute,
+				TelnetWriteTimeout:   30 * time.Second,
+				TelnetPreAuthTimeout: 2 * time.Minute,
 			},
 			wantError: false,
 		},
@@ -440,6 +459,61 @@ func TestGatewayConfig_Validate(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestGatewayCommand_TelnetDoSLimitDefaults(t *testing.T) {
+	cmd := NewGatewayCmd()
+
+	maxConns, err := cmd.Flags().GetInt("telnet-max-conns")
+	require.NoError(t, err)
+	assert.Equal(t, 1000, maxConns, "default max conns per spec")
+
+	idle, err := cmd.Flags().GetDuration("telnet-idle-timeout")
+	require.NoError(t, err)
+	assert.Equal(t, 5*time.Minute, idle, "default idle timeout per spec")
+
+	write, err := cmd.Flags().GetDuration("telnet-write-timeout")
+	require.NoError(t, err)
+	assert.Equal(t, 30*time.Second, write, "default write timeout per spec")
+
+	preAuth, err := cmd.Flags().GetDuration("telnet-pre-auth-timeout")
+	require.NoError(t, err)
+	assert.Equal(t, 2*time.Minute, preAuth, "default pre-auth timeout per spec")
+}
+
+func TestGatewayConfig_ValidateRejectsNonPositiveTelnetLimits(t *testing.T) {
+	// Start from a fully-valid config, then flip each limit to zero and
+	// ensure Validate surfaces CONFIG_INVALID.
+	base := gatewayConfig{
+		TelnetAddr:           ":4201",
+		CoreAddr:             "localhost:9000",
+		ControlAddr:          "127.0.0.1:9002",
+		LogFormat:            "json",
+		TelnetMaxConns:       1000,
+		TelnetIdleTimeout:    5 * time.Minute,
+		TelnetWriteTimeout:   30 * time.Second,
+		TelnetPreAuthTimeout: 2 * time.Minute,
+	}
+
+	cases := []struct {
+		field string
+		mut   func(c *gatewayConfig)
+	}{
+		{"TelnetMaxConns=0", func(c *gatewayConfig) { c.TelnetMaxConns = 0 }},
+		{"TelnetMaxConns<0", func(c *gatewayConfig) { c.TelnetMaxConns = -1 }},
+		{"TelnetIdleTimeout=0", func(c *gatewayConfig) { c.TelnetIdleTimeout = 0 }},
+		{"TelnetWriteTimeout=0", func(c *gatewayConfig) { c.TelnetWriteTimeout = 0 }},
+		{"TelnetPreAuthTimeout=0", func(c *gatewayConfig) { c.TelnetPreAuthTimeout = 0 }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.field, func(t *testing.T) {
+			cfg := base
+			tc.mut(&cfg)
+			err := cfg.Validate()
+			require.Error(t, err)
+			errutil.AssertErrorCode(t, err, "CONFIG_INVALID")
 		})
 	}
 }
@@ -618,7 +692,8 @@ func TestTelnetAcceptLoop_BackoffOnErrors(t *testing.T) {
 	// Run the accept loop in a goroutine
 	done := make(chan struct{})
 	go func() {
-		runTelnetAcceptLoop(ctx, mock, &mockGRPCClient{}, registry, cancel)
+		slots := make(chan struct{}, 100)
+		runTelnetAcceptLoop(ctx, mock, &mockGRPCClient{}, registry, cancel, slots, telnet.DefaultLimits)
 		close(done)
 	}()
 
@@ -842,4 +917,114 @@ func TestGatewayCommand_ConfigFileLoading(t *testing.T) {
 	assert.Equal(t, ":5555", cfg.TelnetAddr)
 	assert.Equal(t, "core.local:9000", cfg.CoreAddr)
 	assert.Equal(t, "text", cfg.LogFormat)
+}
+
+// TestAcceptLoopRefusesAtCapacity verifies that the accept loop sends a
+// refusal line and increments the refused counter when the slot channel is
+// full, without spawning a handler goroutine.
+func TestAcceptLoopRefusesAtCapacity(t *testing.T) {
+	before := testutil.ToFloat64(telnet.ConnectionsRefusedTotal)
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	registry := core.NewVerbRegistry()
+	require.NoError(t, core.RegisterBuiltinTypes(registry))
+
+	limits := telnet.DefaultLimits
+	limits.IdleReadTimeout = 5 * time.Second
+	limits.PreAuthTimeout = 5 * time.Second
+
+	slots := make(chan struct{}, 2) // MaxConns=2
+
+	loopDone := make(chan struct{})
+	go func() {
+		runTelnetAcceptLoop(ctx, ln, &mockGRPCClient{}, registry, cancel, slots, limits)
+		close(loopDone)
+	}()
+
+	// Open 2 connections that we keep alive.
+	c1, err := net.Dial("tcp", ln.Addr().String())
+	require.NoError(t, err)
+	defer func() { _ = c1.Close() }()
+	c2, err := net.Dial("tcp", ln.Addr().String())
+	require.NoError(t, err)
+	defer func() { _ = c2.Close() }()
+
+	// Wait until both slots are occupied by polling the gauge.
+	require.Eventually(t, func() bool {
+		return testutil.ToFloat64(telnet.ConnectionsActive) >= 2
+	}, 2*time.Second, 10*time.Millisecond)
+
+	// Open a third connection — it should get the refusal line and close.
+	c3, err := net.Dial("tcp", ln.Addr().String())
+	require.NoError(t, err)
+	defer func() { _ = c3.Close() }()
+
+	_ = c3.SetReadDeadline(time.Now().Add(1 * time.Second))
+	buf := make([]byte, 128)
+	n, _ := c3.Read(buf)
+	assert.Contains(t, strings.ToLower(string(buf[:n])), "capacity",
+		"third connection must receive refusal line")
+
+	assert.Equal(t, before+1, testutil.ToFloat64(telnet.ConnectionsRefusedTotal),
+		"refused counter must increment exactly once")
+
+	cancel()
+	_ = ln.Close()
+	<-loopDone
+}
+
+// TestAcceptLoopReleasesSlotOnHandlerExit verifies that when a handler
+// goroutine exits, its slot is released back to the semaphore so later
+// accepts can proceed.
+func TestAcceptLoopReleasesSlotOnHandlerExit(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	registry := core.NewVerbRegistry()
+	require.NoError(t, core.RegisterBuiltinTypes(registry))
+
+	limits := telnet.DefaultLimits
+	limits.IdleReadTimeout = 200 * time.Millisecond
+	limits.PreAuthTimeout = 200 * time.Millisecond
+
+	slots := make(chan struct{}, 1)
+
+	loopDone := make(chan struct{})
+	go func() {
+		runTelnetAcceptLoop(ctx, ln, &mockGRPCClient{}, registry, cancel, slots, limits)
+		close(loopDone)
+	}()
+
+	// Open and immediately close to cycle the slot.
+	c, err := net.Dial("tcp", ln.Addr().String())
+	require.NoError(t, err)
+	_ = c.Close()
+
+	// Wait for slot to free.
+	require.Eventually(t, func() bool {
+		return testutil.ToFloat64(telnet.ConnectionsActive) == 0
+	}, 2*time.Second, 10*time.Millisecond)
+
+	// Second connection MUST succeed (slot was freed).
+	c2, err := net.Dial("tcp", ln.Addr().String())
+	require.NoError(t, err)
+	defer func() { _ = c2.Close() }()
+
+	require.Eventually(t, func() bool {
+		return testutil.ToFloat64(telnet.ConnectionsActive) >= 1
+	}, 2*time.Second, 10*time.Millisecond)
+
+	cancel()
+	_ = ln.Close()
+	<-loopDone
 }

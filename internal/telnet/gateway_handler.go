@@ -71,6 +71,8 @@ type GatewayHandler struct {
 	quitting     bool
 	eventCh      chan *corev1.SubscribeResponse
 
+	limits Limits
+
 	// Two-phase auth state.
 	playerSessionToken string                     // set after AuthenticatePlayer, persists across character selection
 	characters         []*corev1.CharacterSummary // available characters while in selectMode
@@ -79,12 +81,16 @@ type GatewayHandler struct {
 }
 
 // NewGatewayHandler creates a new GatewayHandler for the given connection.
-func NewGatewayHandler(conn net.Conn, client CoreClient, registry *core.VerbRegistry) *GatewayHandler {
+// limits bounds per-connection resource usage; callers SHOULD pass
+// DefaultLimits unless they have a specific reason to deviate.
+func NewGatewayHandler(conn net.Conn, client CoreClient, registry *core.VerbRegistry, limits Limits) *GatewayHandler {
+	dr := &deadlineReader{conn: conn, timeout: limits.IdleReadTimeout}
 	return &GatewayHandler{
 		conn:         conn,
-		reader:       bufio.NewReader(conn),
+		reader:       bufio.NewReader(dr),
 		client:       client,
 		verbRegistry: registry,
+		limits:       limits,
 	}
 }
 
@@ -122,6 +128,9 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 	h.send("Welcome to HoloMUSH!")
 	h.send("Use: connect guest")
 
+	preAuth := time.NewTimer(h.limits.PreAuthTimeout)
+	defer preAuth.Stop()
+
 	lineCh := make(chan string)
 	errCh := make(chan error, 1)
 
@@ -137,6 +146,10 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 			}
 		}
 		if err := scanner.Err(); err != nil {
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() {
+				RecordIdleTimeout()
+			}
 			select {
 			case errCh <- err:
 			case <-childCtx.Done():
@@ -156,6 +169,14 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 		select {
 		case <-childCtx.Done():
 			return
+
+		case <-preAuth.C:
+			if !h.authed {
+				h.send("Authentication timeout.")
+				RecordPreAuthTimeout()
+				return
+			}
+			// authed — timer fired benignly, fall through to next iteration.
 
 		case err := <-errCh:
 			if !errors.Is(err, io.EOF) {
@@ -735,6 +756,10 @@ func (h *GatewayHandler) drainUntilClosed(eventRecv <-chan *corev1.SubscribeResp
 }
 
 func (h *GatewayHandler) send(msg string) {
+	if err := h.conn.SetWriteDeadline(time.Now().Add(h.limits.WriteTimeout)); err != nil {
+		slog.Debug("gateway: failed to set write deadline", "error", err)
+		return
+	}
 	if _, err := fmt.Fprintln(h.conn, sanitizeTelnetOutput(msg)); err != nil {
 		slog.Debug("gateway: failed to send message", "error", err)
 	}

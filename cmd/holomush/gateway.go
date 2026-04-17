@@ -31,14 +31,18 @@ import (
 
 // gatewayConfig holds configuration for the gateway command.
 type gatewayConfig struct {
-	TelnetAddr  string   `koanf:"telnet_addr"`
-	CoreAddr    string   `koanf:"core_addr"`
-	ControlAddr string   `koanf:"control_addr"`
-	MetricsAddr string   `koanf:"metrics_addr"`
-	LogFormat   string   `koanf:"log_format"`
-	WebAddr     string   `koanf:"web_addr"`
-	WebDir      string   `koanf:"web_dir"`
-	CORSOrigins []string `koanf:"cors_origins"`
+	TelnetAddr           string        `koanf:"telnet_addr"`
+	CoreAddr             string        `koanf:"core_addr"`
+	ControlAddr          string        `koanf:"control_addr"`
+	MetricsAddr          string        `koanf:"metrics_addr"`
+	LogFormat            string        `koanf:"log_format"`
+	WebAddr              string        `koanf:"web_addr"`
+	WebDir               string        `koanf:"web_dir"`
+	CORSOrigins          []string      `koanf:"cors_origins"`
+	TelnetMaxConns       int           `koanf:"telnet_max_conns"`
+	TelnetIdleTimeout    time.Duration `koanf:"telnet_idle_timeout"`
+	TelnetWriteTimeout   time.Duration `koanf:"telnet_write_timeout"`
+	TelnetPreAuthTimeout time.Duration `koanf:"telnet_pre_auth_timeout"`
 }
 
 // Validate checks that the configuration is valid.
@@ -55,16 +59,32 @@ func (cfg *gatewayConfig) Validate() error {
 	if cfg.LogFormat != "json" && cfg.LogFormat != "text" {
 		return oops.Code("CONFIG_INVALID").Errorf("log-format must be 'json' or 'text', got %q", cfg.LogFormat)
 	}
+	if cfg.TelnetMaxConns <= 0 {
+		return oops.Code("CONFIG_INVALID").Errorf("telnet-max-conns must be positive, got %d", cfg.TelnetMaxConns)
+	}
+	if cfg.TelnetIdleTimeout <= 0 {
+		return oops.Code("CONFIG_INVALID").Errorf("telnet-idle-timeout must be positive, got %s", cfg.TelnetIdleTimeout)
+	}
+	if cfg.TelnetWriteTimeout <= 0 {
+		return oops.Code("CONFIG_INVALID").Errorf("telnet-write-timeout must be positive, got %s", cfg.TelnetWriteTimeout)
+	}
+	if cfg.TelnetPreAuthTimeout <= 0 {
+		return oops.Code("CONFIG_INVALID").Errorf("telnet-pre-auth-timeout must be positive, got %s", cfg.TelnetPreAuthTimeout)
+	}
 	return nil
 }
 
 // Default values for gateway command flags.
 const (
-	defaultTelnetAddr         = ":4201"
-	defaultCoreAddr           = "localhost:9000"
-	defaultGatewayControlAddr = "127.0.0.1:9002"
-	defaultGatewayMetricsAddr = "127.0.0.1:9101"
-	defaultWebAddr            = ":8080"
+	defaultTelnetAddr           = ":4201"
+	defaultCoreAddr             = "localhost:9000"
+	defaultGatewayControlAddr   = "127.0.0.1:9002"
+	defaultGatewayMetricsAddr   = "127.0.0.1:9101"
+	defaultWebAddr              = ":8080"
+	defaultTelnetMaxConns       = 1000
+	defaultTelnetIdleTimeout    = 5 * time.Minute
+	defaultTelnetWriteTimeout   = 30 * time.Second
+	defaultTelnetPreAuthTimeout = 2 * time.Minute
 )
 
 // newGatewayCmd creates the gateway subcommand with all flags configured.
@@ -93,6 +113,10 @@ from telnet and web clients, forwarding commands to the core process.`,
 	cmd.Flags().StringVar(&cfg.WebAddr, "web-addr", defaultWebAddr, "web HTTP listen address")
 	cmd.Flags().StringVar(&cfg.WebDir, "web-dir", "", "override embedded static files with directory path")
 	cmd.Flags().StringSliceVar(&cfg.CORSOrigins, "cors-origins", nil, "allowed CORS origins (e.g., http://localhost:5173)")
+	cmd.Flags().IntVar(&cfg.TelnetMaxConns, "telnet-max-conns", defaultTelnetMaxConns, "max concurrent telnet connections")
+	cmd.Flags().DurationVar(&cfg.TelnetIdleTimeout, "telnet-idle-timeout", defaultTelnetIdleTimeout, "per-connection idle read timeout")
+	cmd.Flags().DurationVar(&cfg.TelnetWriteTimeout, "telnet-write-timeout", defaultTelnetWriteTimeout, "per-send write deadline")
+	cmd.Flags().DurationVar(&cfg.TelnetPreAuthTimeout, "telnet-pre-auth-timeout", defaultTelnetPreAuthTimeout, "disconnect unauthenticated clients after this duration")
 
 	return cmd
 }
@@ -235,7 +259,11 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		// For gateway, we're ready once telnet listener is up
 		obsServer = deps.ObservabilityServerFactory(cfg.MetricsAddr, func() bool { return true })
 		// Register command package metrics with the observability server
-		obsServer.MustRegister(command.CommandExecutions, command.CommandDuration, command.AliasExpansions)
+		obsServer.MustRegister(
+			command.CommandExecutions, command.CommandDuration, command.AliasExpansions,
+			telnet.ConnectionsActive, telnet.ConnectionsRefusedTotal,
+			telnet.PreAuthTimeoutsTotal, telnet.IdleTimeoutsTotal,
+		)
 		var obsErrChan <-chan error
 		obsErrChan, err = obsServer.Start()
 		if err != nil {
@@ -298,8 +326,16 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigChan)
 
-	// Start accepting telnet connections in goroutine with backoff on errors
-	go runTelnetAcceptLoop(ctx, telnetListener, grpcClient, verbRegistry, cancel)
+	// Start accepting telnet connections in goroutine with backoff on errors.
+	// The slots channel bounds concurrent handler goroutines; a full channel
+	// causes new accepts to be refused immediately via RefuseOverCapacity.
+	slots := make(chan struct{}, cfg.TelnetMaxConns)
+	limits := telnet.Limits{
+		IdleReadTimeout: cfg.TelnetIdleTimeout,
+		WriteTimeout:    cfg.TelnetWriteTimeout,
+		PreAuthTimeout:  cfg.TelnetPreAuthTimeout,
+	}
+	go runTelnetAcceptLoop(ctx, telnetListener, grpcClient, verbRegistry, cancel, slots, limits)
 
 	cmd.Println("Gateway process started")
 	slog.Info("gateway process ready",
@@ -389,8 +425,18 @@ func (b *acceptBackoff) wait() time.Duration {
 }
 
 // runTelnetAcceptLoop accepts telnet connections with exponential backoff on errors.
-// The cancel function is called on panic to trigger graceful shutdown.
-func runTelnetAcceptLoop(ctx context.Context, listener net.Listener, client GRPCClient, registry *core.VerbRegistry, cancel func()) {
+// slots bounds the number of concurrent handler goroutines; a full slots channel
+// triggers immediate refusal via RefuseOverCapacity. The cancel function is called
+// on panic to trigger graceful shutdown.
+func runTelnetAcceptLoop(
+	ctx context.Context,
+	listener net.Listener,
+	client GRPCClient,
+	registry *core.VerbRegistry,
+	cancel func(),
+	slots chan struct{},
+	limits telnet.Limits,
+) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("panic in telnet accept loop, triggering shutdown",
@@ -425,7 +471,20 @@ func runTelnetAcceptLoop(ctx context.Context, listener net.Listener, client GRPC
 			}
 		}
 		backoff.success()
-		handler := telnet.NewGatewayHandler(conn, client, registry)
-		go handler.Handle(ctx)
+
+		select {
+		case slots <- struct{}{}:
+			telnet.IncConnectionsActive()
+			handler := telnet.NewGatewayHandler(conn, client, registry, limits)
+			go func() {
+				defer func() {
+					<-slots
+					telnet.DecConnectionsActive()
+				}()
+				handler.Handle(ctx)
+			}()
+		default:
+			telnet.RefuseOverCapacity(conn, limits.WriteTimeout)
+		}
 	}
 }

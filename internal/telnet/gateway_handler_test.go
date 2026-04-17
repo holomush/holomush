@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
@@ -28,6 +29,13 @@ func testRegistry() *core.VerbRegistry {
 	r := core.NewVerbRegistry()
 	_ = core.RegisterBuiltinTypes(r)
 	return r
+}
+
+// newTestHandler wraps NewGatewayHandler with DefaultLimits so existing
+// tests remain a single line and don't grow noise from the new parameter.
+// Tests that need custom limits call NewGatewayHandler directly.
+func newTestHandler(conn net.Conn, client CoreClient) *GatewayHandler {
+	return NewGatewayHandler(conn, client, testRegistry(), DefaultLimits)
 }
 
 // TestCoreClient_SatisfiedByGRPCClient verifies at compile time that
@@ -186,7 +194,7 @@ func TestGatewayHandler_GuestConnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -248,7 +256,7 @@ func TestGatewayHandler_SayCommand(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -340,7 +348,7 @@ func TestGatewayHandler_SendProtoEvent_CommandResponse(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -406,7 +414,7 @@ func TestGatewayHandler_SendProtoEvent_CorruptCommandResponse(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -471,7 +479,7 @@ func TestGatewayHandler_StreamClosed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -532,7 +540,7 @@ func TestGatewayHandler_HandleGenericCommand_RPCError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -575,7 +583,7 @@ func TestGatewayHandler_RejectsCommandsBeforeAuth(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -665,7 +673,7 @@ func TestGatewayHandler_TwoPhase_SingleCharAutoSelect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -709,7 +717,7 @@ func TestGatewayHandler_TwoPhase_MultiChar_ShowsListEntersSelectMode(t *testing.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -759,7 +767,7 @@ func TestGatewayHandler_TwoPhase_PlayByIndex(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -816,7 +824,7 @@ func TestGatewayHandler_TwoPhase_PlayByName(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -870,7 +878,7 @@ func TestGatewayHandler_TwoPhase_PlayReattach(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -929,7 +937,7 @@ func TestGatewayHandler_TwoPhase_CreateCharacter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -976,7 +984,7 @@ func TestGatewayHandler_TwoPhase_InvalidCommandInSelectMode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1024,7 +1032,7 @@ func TestGatewayHandler_TwoPhase_AuthFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1343,7 +1351,7 @@ func TestQuitWhilePlaying_ReturnsToSelectMode(t *testing.T) {
 		discResp:     &corev1.DisconnectResponse{Success: true},
 	}
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1400,7 +1408,7 @@ func TestQuitInSelectMode_LogsOut(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1476,7 +1484,7 @@ func TestLogoutWhilePlaying(t *testing.T) {
 		discResp: &corev1.DisconnectResponse{Success: true},
 	}
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1537,7 +1545,7 @@ func TestHandleLogout_WhenNotAuthed_GuestPath(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1591,7 +1599,7 @@ func TestHandleLogout_LogoutRPCError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1671,7 +1679,7 @@ func TestRefreshCharacterList_Success(t *testing.T) {
 		discResp:     &corev1.DisconnectResponse{Success: true},
 	}
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1741,7 +1749,7 @@ func TestRefreshCharacterList_Error(t *testing.T) {
 		discResp:    &corev1.DisconnectResponse{Success: true},
 	}
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1793,7 +1801,7 @@ func TestLogoutCommand_InSelectMode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1860,7 +1868,7 @@ func TestServerInitiated_StreamClosed_ReturnsToSelectMode(t *testing.T) {
 		discResp:     &corev1.DisconnectResponse{Success: true},
 	}
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1918,7 +1926,7 @@ func TestPlayerSessionTokenSurvivesPlay(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1960,7 +1968,7 @@ func TestPlayerSessionTokenSurvivesPlay(t *testing.T) {
 func newForwardingTestHandler(t *testing.T, client CoreClient, token, sessionID string) (*GatewayHandler, func()) {
 	t.Helper()
 	serverConn, clientConn := net.Pipe()
-	h := NewGatewayHandler(serverConn, client, testRegistry())
+	h := newTestHandler(serverConn, client)
 	h.playerSessionToken = token
 	h.sessionID = sessionID
 	h.connectionID = "conn-forward-1"
@@ -2110,7 +2118,7 @@ func TestGatewayHandlerForwardsPlayerSessionTokenOnDisconnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry())
+	handler := newTestHandler(serverConn, client)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -2133,4 +2141,333 @@ func TestGatewayHandlerForwardsPlayerSessionTokenOnDisconnect(t *testing.T) {
 	require.NotNil(t, client.lastDisconnectReq)
 	assert.Equal(t, token, client.lastDisconnectReq.GetPlayerSessionToken())
 	assert.Equal(t, "sess-disc", client.lastDisconnectReq.GetSessionId())
+}
+
+func TestReadDeadlineFiresOnIdleClient(t *testing.T) {
+	before := testutil.ToFloat64(IdleTimeoutsTotal)
+
+	serverConn, clientConn := net.Pipe()
+	defer func() { _ = clientConn.Close() }()
+
+	client := &mockCoreClient{}
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry(), Limits{
+		IdleReadTimeout: 100 * time.Millisecond,
+		WriteTimeout:    DefaultLimits.WriteTimeout,
+		PreAuthTimeout:  DefaultLimits.PreAuthTimeout,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		handler.Handle(ctx)
+		close(done)
+	}()
+
+	// Drain BOTH welcome banner lines so the handler can proceed to the
+	// scanner goroutine (net.Pipe is unbuffered — an undrained send blocks
+	// the handler indefinitely).
+	br := bufio.NewReader(clientConn)
+	_, _ = br.ReadString('\n')
+	_, _ = br.ReadString('\n')
+
+	// Send NO bytes. Wait for handler to exit via idle timeout.
+	select {
+	case <-done:
+	case <-time.After(1 * time.Second):
+		t.Fatal("handler did not exit on idle deadline")
+	}
+
+	assert.Equal(t, before+1, testutil.ToFloat64(IdleTimeoutsTotal),
+		"idle timeout must increment the counter")
+}
+
+func TestReadDeadlineResetsOnByte(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer func() { _ = clientConn.Close() }()
+
+	client := &mockCoreClient{}
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry(), Limits{
+		IdleReadTimeout: 150 * time.Millisecond,
+		WriteTimeout:    DefaultLimits.WriteTimeout,
+		PreAuthTimeout:  DefaultLimits.PreAuthTimeout,
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		handler.Handle(ctx)
+		close(done)
+	}()
+
+	// Drain BOTH welcome banner lines so the handler can proceed to the
+	// scanner goroutine (net.Pipe is unbuffered).
+	br := bufio.NewReader(clientConn)
+	_, _ = br.ReadString('\n')
+	_, _ = br.ReadString('\n')
+
+	// Send a byte every 50 ms for 400 ms — total > 2 × IdleReadTimeout.
+	// If the deadline resets on each read, the handler stays alive.
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	stop := time.After(400 * time.Millisecond)
+Keepalive:
+	for {
+		select {
+		case <-ticker.C:
+			_, werr := clientConn.Write([]byte("a"))
+			if werr != nil {
+				break Keepalive
+			}
+		case <-stop:
+			break Keepalive
+		}
+	}
+
+	select {
+	case <-done:
+		t.Fatal("handler exited during keep-alive — deadline did not reset per read")
+	default:
+		// still running, as expected
+	}
+}
+
+// mockDeadlineTrackingConn records SetWriteDeadline calls without a real socket.
+type mockDeadlineTrackingConn struct {
+	net.Conn
+	writeDeadlines []time.Time
+	writeBuf       []byte
+}
+
+func (m *mockDeadlineTrackingConn) SetWriteDeadline(t time.Time) error {
+	m.writeDeadlines = append(m.writeDeadlines, t)
+	return nil
+}
+
+func (m *mockDeadlineTrackingConn) Write(p []byte) (int, error) {
+	m.writeBuf = append(m.writeBuf, p...)
+	return len(p), nil
+}
+
+func (m *mockDeadlineTrackingConn) SetReadDeadline(_ time.Time) error { return nil }
+func (m *mockDeadlineTrackingConn) Close() error                      { return nil }
+func (m *mockDeadlineTrackingConn) RemoteAddr() net.Addr              { return &net.TCPAddr{} }
+
+// newEOFStream returns a SubscribeClient whose first Recv returns io.EOF.
+// Used by tests that care only about auth completing and the handler
+// entering the event-loop idle state.
+func newEOFStream() corev1.CoreService_SubscribeClient {
+	return &eofSubStream{}
+}
+
+type eofSubStream struct{}
+
+func (s *eofSubStream) Recv() (*corev1.SubscribeResponse, error) { return nil, io.EOF }
+func (s *eofSubStream) Context() context.Context                 { return context.Background() }
+func (s *eofSubStream) Header() (metadata.MD, error)             { return nil, nil }
+func (s *eofSubStream) Trailer() metadata.MD                     { return nil }
+func (s *eofSubStream) CloseSend() error                         { return nil }
+func (s *eofSubStream) SendMsg(any) error                        { return nil }
+func (s *eofSubStream) RecvMsg(any) error                        { return nil }
+
+func TestPreAuthTimerFiresForUnauthedClient(t *testing.T) {
+	before := testutil.ToFloat64(PreAuthTimeoutsTotal)
+
+	serverConn, clientConn := net.Pipe()
+	defer func() { _ = clientConn.Close() }()
+
+	client := &mockCoreClient{}
+	handler := NewGatewayHandler(serverConn, client, testRegistry(), Limits{
+		IdleReadTimeout: DefaultLimits.IdleReadTimeout,
+		WriteTimeout:    DefaultLimits.WriteTimeout,
+		PreAuthTimeout:  100 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		handler.Handle(ctx)
+		close(done)
+	}()
+
+	// Drain welcome banner + any output (including "Authentication timeout.")
+	// until EOF or deadline.
+	scanner := bufio.NewScanner(clientConn)
+	var sawTimeoutLine bool
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		for scanner.Scan() {
+			if strings.Contains(scanner.Text(), "Authentication timeout") {
+				sawTimeoutLine = true
+			}
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(1 * time.Second):
+		t.Fatal("handler did not exit on pre-auth timeout")
+	}
+	// Wait briefly for the reader goroutine to drain any buffered lines.
+	select {
+	case <-readDone:
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	assert.True(t, sawTimeoutLine, "client must receive 'Authentication timeout.'")
+	assert.Equal(t, before+1, testutil.ToFloat64(PreAuthTimeoutsTotal),
+		"preauth counter must increment")
+}
+
+func TestPreAuthTimerCancelledAfterGuestConnect(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer func() { _ = clientConn.Close() }()
+
+	// CreateGuest returns one character and a session token so the auto-
+	// select path marks the handler authed.
+	client := &mockCoreClient{
+		createGuestResp: &corev1.CreateGuestResponse{
+			Success:            true,
+			PlayerSessionToken: "guest-token",
+			Characters: []*corev1.CharacterSummary{
+				{CharacterId: "char-guest", CharacterName: "Guest-1"},
+			},
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
+			Success:       true,
+			SessionId:     "session-1",
+			CharacterName: "Guest-1",
+		},
+	}
+	client.subStream = newEOFStream()
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry(), Limits{
+		IdleReadTimeout: DefaultLimits.IdleReadTimeout,
+		WriteTimeout:    DefaultLimits.WriteTimeout,
+		PreAuthTimeout:  200 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		handler.Handle(ctx)
+		close(done)
+	}()
+
+	// Drain server output in a goroutine (net.Pipe is unbuffered; the
+	// handler will send Welcome / Use: connect guest / "Welcome, Guest-1!" / ...
+	go func() {
+		scanner := bufio.NewScanner(clientConn)
+		for scanner.Scan() {
+		}
+	}()
+
+	// Give the handler time to print banner and reach its main loop
+	// before we issue the command.
+	time.Sleep(50 * time.Millisecond)
+
+	// Issue connect guest.
+	_, err := clientConn.Write([]byte("connect guest\n"))
+	require.NoError(t, err)
+
+	// Wait past pre-auth timeout. Handler must still be alive.
+	time.Sleep(400 * time.Millisecond)
+
+	select {
+	case <-done:
+		t.Fatal("handler exited — pre-auth timer fired after successful auth")
+	default:
+	}
+
+	cancel() // clean shutdown
+	<-done
+}
+
+func TestPreAuthTimerCancelledAfterTwoPhaseSelect(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer func() { _ = clientConn.Close() }()
+
+	client := &mockCoreClient{
+		authPlayerResp: &corev1.AuthenticatePlayerResponse{
+			Success:            true,
+			PlayerSessionToken: "player-token",
+			Characters: []*corev1.CharacterSummary{
+				{CharacterId: "char-alice", CharacterName: "Alice"},
+			},
+			DefaultCharacterId: "char-alice",
+		},
+		selectCharResp: &corev1.SelectCharacterResponse{
+			Success:       true,
+			SessionId:     "session-1",
+			CharacterName: "Alice",
+		},
+	}
+	client.subStream = newEOFStream()
+
+	handler := NewGatewayHandler(serverConn, client, testRegistry(), Limits{
+		IdleReadTimeout: DefaultLimits.IdleReadTimeout,
+		WriteTimeout:    DefaultLimits.WriteTimeout,
+		PreAuthTimeout:  200 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		handler.Handle(ctx)
+		close(done)
+	}()
+
+	go func() {
+		scanner := bufio.NewScanner(clientConn)
+		for scanner.Scan() {
+		}
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	_, err := clientConn.Write([]byte("connect alice password\n"))
+	require.NoError(t, err)
+
+	time.Sleep(400 * time.Millisecond)
+
+	select {
+	case <-done:
+		t.Fatal("handler exited — pre-auth timer fired after successful two-phase auth")
+	default:
+	}
+
+	cancel()
+	<-done
+}
+
+func TestSendSetsWriteDeadline(t *testing.T) {
+	mc := &mockDeadlineTrackingConn{}
+	h := &GatewayHandler{
+		conn:   mc,
+		limits: Limits{WriteTimeout: 30 * time.Second},
+	}
+
+	start := time.Now()
+	h.send("hello world")
+
+	require.Len(t, mc.writeDeadlines, 1, "send must set exactly one write deadline")
+	delta := mc.writeDeadlines[0].Sub(start)
+	assert.GreaterOrEqual(t, delta, 30*time.Second,
+		"deadline must be at least WriteTimeout into the future")
+	assert.Less(t, delta, 31*time.Second,
+		"deadline must not be absurdly far in the future")
+	assert.Contains(t, string(mc.writeBuf), "hello world",
+		"send must actually write the message body")
 }
