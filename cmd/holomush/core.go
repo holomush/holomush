@@ -94,7 +94,11 @@ manages plugins, and handles game state.`,
 			if err := config.Load(configFile, cmd, &gameConfig, "game"); err != nil {
 				return err
 			}
-			return runCoreWithDeps(cmd.Context(), cfg, gameConfig, cmd, nil)
+			authConfig := config.DefaultAuthConfig()
+			if err := config.Load(configFile, cmd, &authConfig, "auth"); err != nil {
+				return err
+			}
+			return runCoreWithDeps(cmd.Context(), cfg, gameConfig, authConfig, cmd, nil)
 		},
 	}
 
@@ -119,7 +123,7 @@ manages plugins, and handles game state.`,
 // constructs and starts subsystems under an orchestrator, optionally starts observability, launches the control gRPC server,
 // waits for readiness, handles OS signals and context cancellation, and performs a graceful shutdown.
 // codecov:ignore — tested by integration and E2E tests
-func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.GameConfig, cmd *cobra.Command, deps *CoreDeps) error {
+func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.GameConfig, authConfig config.AuthConfig, cmd *cobra.Command, deps *CoreDeps) error {
 	if deps == nil {
 		deps = &CoreDeps{}
 	}
@@ -237,7 +241,8 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	})
 
 	authSub := authsetup.NewAuthSubsystem(authsetup.AuthSubsystemConfig{
-		DB: dbSub,
+		DB:                   dbSub,
+		MaxSessionsPerPlayer: authConfig.MaxPlayerSessionsPerPlayer,
 	})
 
 	worldSub := worldsetup.NewWorldSubsystem(worldsetup.WorldSubsystemConfig{

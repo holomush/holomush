@@ -6,6 +6,7 @@ syntax = "proto3";
 package holomush.web.v1;
 
 import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/web/v1;webv1";
 
@@ -63,6 +64,12 @@ service WebService {
   // WebQueryStreamHistory reads paginated event history for the web client.
   // Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
   rpc WebQueryStreamHistory(WebQueryStreamHistoryRequest) returns (WebQueryStreamHistoryResponse);
+
+  // Session-management RPCs. The caller is identified via the X-Session-Token
+  // cookie header injected by CookieMiddleware; no token field in the request.
+  rpc WebListPlayerSessions(WebListPlayerSessionsRequest) returns (WebListPlayerSessionsResponse);
+  rpc WebRevokePlayerSession(WebRevokePlayerSessionRequest) returns (WebRevokePlayerSessionResponse);
+  rpc WebRevokeOtherPlayerSessions(WebRevokeOtherPlayerSessionsRequest) returns (WebRevokeOtherPlayerSessionsResponse);
 }
 
 message SendCommandRequest {
@@ -256,4 +263,41 @@ message WebQueryStreamHistoryRequest {
 message WebQueryStreamHistoryResponse {
   repeated GameEvent events = 1;
   bool has_more = 2;
+}
+
+// --- Session management messages ---
+
+message WebListPlayerSessionsRequest {}
+
+message WebPlayerSessionInfo {
+  // id is the PlayerSession.id (ULID). Used as target_session_id when
+  // revoking. Safe to show - resource handle, not a secret.
+  string id = 1;
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp last_active = 3;
+  string user_agent = 4;
+  string ip_address = 5;
+  // is_current is true for the PlayerSession that made this request.
+  bool is_current = 6;
+}
+
+message WebListPlayerSessionsResponse {
+  repeated WebPlayerSessionInfo sessions = 1;
+}
+
+message WebRevokePlayerSessionRequest {
+  // target_session_id is the PlayerSession.id (ULID) to revoke.
+  string target_session_id = 1;
+}
+
+message WebRevokePlayerSessionResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message WebRevokeOtherPlayerSessionsRequest {}
+
+message WebRevokeOtherPlayerSessionsResponse {
+  bool success = 1;
+  int32 revoked_count = 2;
 }

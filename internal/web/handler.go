@@ -16,7 +16,6 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/core"
-	"github.com/holomush/holomush/internal/session"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
@@ -50,6 +49,10 @@ type CoreClient interface {
 	CheckPlayerSession(ctx context.Context, req *corev1.CheckPlayerSessionRequest) (*corev1.CheckPlayerSessionResponse, error)
 	CreateGuest(ctx context.Context, req *corev1.CreateGuestRequest) (*corev1.CreateGuestResponse, error)
 	QueryStreamHistory(ctx context.Context, req *corev1.QueryStreamHistoryRequest) (*corev1.QueryStreamHistoryResponse, error)
+	// Session management RPCs
+	ListPlayerSessions(ctx context.Context, req *corev1.ListPlayerSessionsRequest) (*corev1.ListPlayerSessionsResponse, error)
+	RevokePlayerSession(ctx context.Context, req *corev1.RevokePlayerSessionRequest) (*corev1.RevokePlayerSessionResponse, error)
+	RevokeOtherPlayerSessions(ctx context.Context, req *corev1.RevokeOtherPlayerSessionsRequest) (*corev1.RevokeOtherPlayerSessionsResponse, error)
 }
 
 // ContentClient is the gRPC interface used by Handler to communicate with the
@@ -62,11 +65,12 @@ type ContentClient interface {
 // Handler implements WebServiceHandler by delegating to the core gRPC client.
 // The gateway is a protocol translation layer only — it MUST NOT access
 // WorldService or other internal services directly. All game state flows
-// through core server RPCs.
+// through core server RPCs. The gateway process can run without any
+// database credentials (bd-j2xj); per-connection registration happens
+// inside the core Subscribe RPC.
 type Handler struct {
 	client        CoreClient
 	contentClient ContentClient
-	sessionStore  session.Store
 	verbRegistry  *core.VerbRegistry
 }
 
@@ -75,11 +79,6 @@ var _ webv1connect.WebServiceHandler = (*Handler)(nil)
 
 // HandlerOption configures optional Handler dependencies.
 type HandlerOption func(*Handler)
-
-// WithSessionStore sets the session store for session-related RPCs.
-func WithSessionStore(store session.Store) HandlerOption {
-	return func(h *Handler) { h.sessionStore = store }
-}
 
 // WithContentClient sets the content service client for content RPCs.
 func WithContentClient(c ContentClient) HandlerOption {
@@ -110,12 +109,19 @@ func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.Se
 		"command", req.Msg.GetText(),
 	)
 
+	// Read the token directly (Get returns "" if absent). Server-side
+	// validation (Tasks 9-12) will reject empty tokens; until then an
+	// empty value is harmless and we don't want to bounce the caller
+	// from the gateway.
+	token := req.Header().Get(headerInjectSessionToken)
+
 	cmdCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
 	resp, err := h.client.HandleCommand(cmdCtx, &corev1.HandleCommandRequest{
-		SessionId: req.Msg.GetSessionId(),
-		Command:   req.Msg.GetText(),
+		SessionId:          req.Msg.GetSessionId(),
+		Command:            req.Msg.GetText(),
+		PlayerSessionToken: token,
 	})
 	if err != nil {
 		slog.Error("web: handle command RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
@@ -132,57 +138,55 @@ func (h *Handler) SendCommand(ctx context.Context, req *connect.Request[webv1.Se
 }
 
 // StreamEvents subscribes to core events for a session and forwards them to
-// the client as GameEvent messages. Registers a connection for the duration
-// of the stream and cleans it up when the stream closes.
+// the client as GameEvent messages. A per-stream connection_id is generated
+// locally and passed to core's Subscribe RPC, which performs the actual
+// session-store registration/deregistration (bd-j2xj). The gateway no
+// longer touches the session store directly.
 func (h *Handler) StreamEvents(ctx context.Context, req *connect.Request[webv1.StreamEventsRequest], stream *connect.ServerStream[webv1.StreamEventsResponse]) error {
 	slog.DebugContext(ctx, "web: StreamEvents", "session_id", req.Msg.GetSessionId())
 
 	sessionID := req.Msg.GetSessionId()
+	// Read the token directly (Get returns "" if absent). Server-side
+	// validation (Tasks 9-12) will reject empty tokens; until then an
+	// empty value is harmless and we don't want to bounce the caller
+	// from the gateway.
+	token := req.Header().Get(headerInjectSessionToken)
 
-	// Register connection for the duration of the stream
-	if h.sessionStore != nil {
-		connID := core.NewULID()
-		// ClientType is "terminal" because StreamEvents is the terminal-mode
-		// streaming endpoint. A future comms_hub client type would be registered
-		// via a separate route.
-		conn := &session.Connection{
-			ID:          connID,
-			SessionID:   sessionID,
-			ClientType:  "terminal",
-			ConnectedAt: time.Now(),
-		}
-		if err := h.sessionStore.AddConnection(ctx, conn); err != nil {
-			slog.WarnContext(ctx, "web: failed to register stream connection",
+	// Generate a per-stream connection_id. Core's Subscribe handler
+	// registers this connection in the session store and deregisters
+	// it on any stream exit (client disconnect, context cancel, error,
+	// STREAM_CLOSED). ClientType is "terminal" because StreamEvents is
+	// the terminal-mode streaming endpoint.
+	connID := core.NewULID()
+
+	// Disconnect on stream exit triggers core-side session lifecycle
+	// (detach/delete based on remaining connection count). Connection
+	// removal is handled by core's Subscribe defer path; the idempotent
+	// RemoveConnection in Disconnect is a no-op by then.
+	defer func() {
+		disconnCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, disconnErr := h.client.Disconnect(disconnCtx, &corev1.DisconnectRequest{
+			SessionId:          sessionID,
+			ConnectionId:       connID.String(),
+			PlayerSessionToken: token,
+		}); disconnErr != nil {
+			slog.Warn("web: disconnect RPC failed on stream close",
 				"session_id", sessionID,
-				"error", err,
+				"connection_id", connID.String(),
+				"error", disconnErr,
 			)
-		} else {
-			defer func() {
-				// Call Disconnect on core — this removes the connection AND
-				// runs session lifecycle logic (detach/delete based on
-				// remaining connection count). Using a fresh context because
-				// the stream context is already cancelled.
-				disconnCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if _, disconnErr := h.client.Disconnect(disconnCtx, &corev1.DisconnectRequest{
-					SessionId:    sessionID,
-					ConnectionId: connID.String(),
-				}); disconnErr != nil {
-					slog.Warn("web: disconnect RPC failed on stream close",
-						"session_id", sessionID,
-						"connection_id", connID.String(),
-						"error", disconnErr,
-					)
-				}
-			}()
 		}
-	}
+	}()
 
 	// Synthetic location_state is injected by the core server's Subscribe handler
 	// (which has direct access to WorldService). The gateway just forwards it.
 
 	sub, err := h.client.Subscribe(ctx, &corev1.SubscribeRequest{
-		SessionId: sessionID,
+		SessionId:          sessionID,
+		PlayerSessionToken: token,
+		ConnectionId:       connID.String(),
+		ClientType:         "terminal",
 	})
 	if err != nil {
 		return connect.NewError(connect.CodeInternal,
@@ -306,11 +310,18 @@ func (h *Handler) forwardFrame(
 func (h *Handler) Disconnect(ctx context.Context, req *connect.Request[webv1.DisconnectRequest]) (*connect.Response[webv1.DisconnectResponse], error) {
 	slog.DebugContext(ctx, "web: Disconnect", "session_id", req.Msg.GetSessionId())
 
+	// Read the token directly (Get returns "" if absent). Server-side
+	// validation (Tasks 9-12) will reject empty tokens; until then an
+	// empty value is harmless and we don't want to bounce the caller
+	// from the gateway.
+	token := req.Header().Get(headerInjectSessionToken)
+
 	discCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
 	if _, err := h.client.Disconnect(discCtx, &corev1.DisconnectRequest{
-		SessionId: req.Msg.GetSessionId(),
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
 	}); err != nil {
 		slog.Error("web: disconnect RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)
 	}
@@ -320,16 +331,23 @@ func (h *Handler) Disconnect(ctx context.Context, req *connect.Request[webv1.Dis
 
 // GetCommandHistory returns the command history for a session.
 // Proxies through the core gRPC service (gateway boundary invariant).
-// TODO: Add full authorization when two-phase login is implemented —
-// verify the caller's player token owns the requested session.
+// Authorization (bd-jv7z) is enforced server-side in CoreServer via
+// auth.ValidateSessionOwnership; the gateway just forwards the
+// player_session_token header.
 func (h *Handler) GetCommandHistory(ctx context.Context, req *connect.Request[webv1.GetCommandHistoryRequest]) (*connect.Response[webv1.GetCommandHistoryResponse], error) {
 	slog.DebugContext(ctx, "web: GetCommandHistory", "session_id", req.Msg.GetSessionId())
+
+	// Forward the session token header. The core server enforces
+	// ownership; an empty or wrong token produces a success=false
+	// response which we surface as an empty history payload below.
+	token := req.Header().Get(headerInjectSessionToken)
 
 	cmdCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
 	resp, err := h.client.GetCommandHistory(cmdCtx, &corev1.GetCommandHistoryRequest{
-		SessionId: req.Msg.GetSessionId(),
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
 	})
 	if err != nil {
 		slog.Error("web: get command history RPC failed", "session_id", req.Msg.GetSessionId(), "error", err)

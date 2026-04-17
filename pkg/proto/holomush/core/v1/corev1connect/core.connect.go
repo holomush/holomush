@@ -74,6 +74,15 @@ const (
 	// CoreServiceCheckPlayerSessionProcedure is the fully-qualified name of the CoreService's
 	// CheckPlayerSession RPC.
 	CoreServiceCheckPlayerSessionProcedure = "/holomush.core.v1.CoreService/CheckPlayerSession"
+	// CoreServiceListPlayerSessionsProcedure is the fully-qualified name of the CoreService's
+	// ListPlayerSessions RPC.
+	CoreServiceListPlayerSessionsProcedure = "/holomush.core.v1.CoreService/ListPlayerSessions"
+	// CoreServiceRevokePlayerSessionProcedure is the fully-qualified name of the CoreService's
+	// RevokePlayerSession RPC.
+	CoreServiceRevokePlayerSessionProcedure = "/holomush.core.v1.CoreService/RevokePlayerSession"
+	// CoreServiceRevokeOtherPlayerSessionsProcedure is the fully-qualified name of the CoreService's
+	// RevokeOtherPlayerSessions RPC.
+	CoreServiceRevokeOtherPlayerSessionsProcedure = "/holomush.core.v1.CoreService/RevokeOtherPlayerSessions"
 	// CoreServiceQueryStreamHistoryProcedure is the fully-qualified name of the CoreService's
 	// QueryStreamHistory RPC.
 	CoreServiceQueryStreamHistoryProcedure = "/holomush.core.v1.CoreService/QueryStreamHistory"
@@ -109,6 +118,18 @@ type CoreServiceClient interface {
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
 	// Validate a player session token. Used by web gateway for cookie-based auth checks.
 	CheckPlayerSession(context.Context, *connect.Request[v1.CheckPlayerSessionRequest]) (*connect.Response[v1.CheckPlayerSessionResponse], error)
+	// ListPlayerSessions returns the caller's active PlayerSessions
+	// (the rows of player_sessions for the caller's player_id). Tokens
+	// are not returned — only metadata useful for user-visible session
+	// management ("you are signed in on these devices").
+	ListPlayerSessions(context.Context, *connect.Request[v1.ListPlayerSessionsRequest]) (*connect.Response[v1.ListPlayerSessionsResponse], error)
+	// RevokePlayerSession deletes a specific PlayerSession. Ownership is
+	// verified — a player cannot revoke another player's sessions.
+	RevokePlayerSession(context.Context, *connect.Request[v1.RevokePlayerSessionRequest]) (*connect.Response[v1.RevokePlayerSessionResponse], error)
+	// RevokeOtherPlayerSessions deletes all PlayerSessions for the caller
+	// except the current one. Convenience bulk operation equivalent to
+	// listing and calling RevokePlayerSession for each.
+	RevokeOtherPlayerSessions(context.Context, *connect.Request[v1.RevokeOtherPlayerSessionsRequest]) (*connect.Response[v1.RevokeOtherPlayerSessionsResponse], error)
 	// QueryStreamHistory reads paginated event history from a stream.
 	// Two-layer authorization: membership gate (I-17) for private streams,
 	// ABAC policy evaluation for public streams.
@@ -211,6 +232,24 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(coreServiceMethods.ByName("CheckPlayerSession")),
 			connect.WithClientOptions(opts...),
 		),
+		listPlayerSessions: connect.NewClient[v1.ListPlayerSessionsRequest, v1.ListPlayerSessionsResponse](
+			httpClient,
+			baseURL+CoreServiceListPlayerSessionsProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("ListPlayerSessions")),
+			connect.WithClientOptions(opts...),
+		),
+		revokePlayerSession: connect.NewClient[v1.RevokePlayerSessionRequest, v1.RevokePlayerSessionResponse](
+			httpClient,
+			baseURL+CoreServiceRevokePlayerSessionProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("RevokePlayerSession")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeOtherPlayerSessions: connect.NewClient[v1.RevokeOtherPlayerSessionsRequest, v1.RevokeOtherPlayerSessionsResponse](
+			httpClient,
+			baseURL+CoreServiceRevokeOtherPlayerSessionsProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("RevokeOtherPlayerSessions")),
+			connect.WithClientOptions(opts...),
+		),
 		queryStreamHistory: connect.NewClient[v1.QueryStreamHistoryRequest, v1.QueryStreamHistoryResponse](
 			httpClient,
 			baseURL+CoreServiceQueryStreamHistoryProcedure,
@@ -222,21 +261,24 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // coreServiceClient implements CoreServiceClient.
 type coreServiceClient struct {
-	handleCommand        *connect.Client[v1.HandleCommandRequest, v1.HandleCommandResponse]
-	subscribe            *connect.Client[v1.SubscribeRequest, v1.SubscribeResponse]
-	disconnect           *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
-	getCommandHistory    *connect.Client[v1.GetCommandHistoryRequest, v1.GetCommandHistoryResponse]
-	authenticatePlayer   *connect.Client[v1.AuthenticatePlayerRequest, v1.AuthenticatePlayerResponse]
-	selectCharacter      *connect.Client[v1.SelectCharacterRequest, v1.SelectCharacterResponse]
-	createPlayer         *connect.Client[v1.CreatePlayerRequest, v1.CreatePlayerResponse]
-	createGuest          *connect.Client[v1.CreateGuestRequest, v1.CreateGuestResponse]
-	createCharacter      *connect.Client[v1.CreateCharacterRequest, v1.CreateCharacterResponse]
-	listCharacters       *connect.Client[v1.ListCharactersRequest, v1.ListCharactersResponse]
-	requestPasswordReset *connect.Client[v1.RequestPasswordResetRequest, v1.RequestPasswordResetResponse]
-	confirmPasswordReset *connect.Client[v1.ConfirmPasswordResetRequest, v1.ConfirmPasswordResetResponse]
-	logout               *connect.Client[v1.LogoutRequest, v1.LogoutResponse]
-	checkPlayerSession   *connect.Client[v1.CheckPlayerSessionRequest, v1.CheckPlayerSessionResponse]
-	queryStreamHistory   *connect.Client[v1.QueryStreamHistoryRequest, v1.QueryStreamHistoryResponse]
+	handleCommand             *connect.Client[v1.HandleCommandRequest, v1.HandleCommandResponse]
+	subscribe                 *connect.Client[v1.SubscribeRequest, v1.SubscribeResponse]
+	disconnect                *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
+	getCommandHistory         *connect.Client[v1.GetCommandHistoryRequest, v1.GetCommandHistoryResponse]
+	authenticatePlayer        *connect.Client[v1.AuthenticatePlayerRequest, v1.AuthenticatePlayerResponse]
+	selectCharacter           *connect.Client[v1.SelectCharacterRequest, v1.SelectCharacterResponse]
+	createPlayer              *connect.Client[v1.CreatePlayerRequest, v1.CreatePlayerResponse]
+	createGuest               *connect.Client[v1.CreateGuestRequest, v1.CreateGuestResponse]
+	createCharacter           *connect.Client[v1.CreateCharacterRequest, v1.CreateCharacterResponse]
+	listCharacters            *connect.Client[v1.ListCharactersRequest, v1.ListCharactersResponse]
+	requestPasswordReset      *connect.Client[v1.RequestPasswordResetRequest, v1.RequestPasswordResetResponse]
+	confirmPasswordReset      *connect.Client[v1.ConfirmPasswordResetRequest, v1.ConfirmPasswordResetResponse]
+	logout                    *connect.Client[v1.LogoutRequest, v1.LogoutResponse]
+	checkPlayerSession        *connect.Client[v1.CheckPlayerSessionRequest, v1.CheckPlayerSessionResponse]
+	listPlayerSessions        *connect.Client[v1.ListPlayerSessionsRequest, v1.ListPlayerSessionsResponse]
+	revokePlayerSession       *connect.Client[v1.RevokePlayerSessionRequest, v1.RevokePlayerSessionResponse]
+	revokeOtherPlayerSessions *connect.Client[v1.RevokeOtherPlayerSessionsRequest, v1.RevokeOtherPlayerSessionsResponse]
+	queryStreamHistory        *connect.Client[v1.QueryStreamHistoryRequest, v1.QueryStreamHistoryResponse]
 }
 
 // HandleCommand calls holomush.core.v1.CoreService.HandleCommand.
@@ -309,6 +351,21 @@ func (c *coreServiceClient) CheckPlayerSession(ctx context.Context, req *connect
 	return c.checkPlayerSession.CallUnary(ctx, req)
 }
 
+// ListPlayerSessions calls holomush.core.v1.CoreService.ListPlayerSessions.
+func (c *coreServiceClient) ListPlayerSessions(ctx context.Context, req *connect.Request[v1.ListPlayerSessionsRequest]) (*connect.Response[v1.ListPlayerSessionsResponse], error) {
+	return c.listPlayerSessions.CallUnary(ctx, req)
+}
+
+// RevokePlayerSession calls holomush.core.v1.CoreService.RevokePlayerSession.
+func (c *coreServiceClient) RevokePlayerSession(ctx context.Context, req *connect.Request[v1.RevokePlayerSessionRequest]) (*connect.Response[v1.RevokePlayerSessionResponse], error) {
+	return c.revokePlayerSession.CallUnary(ctx, req)
+}
+
+// RevokeOtherPlayerSessions calls holomush.core.v1.CoreService.RevokeOtherPlayerSessions.
+func (c *coreServiceClient) RevokeOtherPlayerSessions(ctx context.Context, req *connect.Request[v1.RevokeOtherPlayerSessionsRequest]) (*connect.Response[v1.RevokeOtherPlayerSessionsResponse], error) {
+	return c.revokeOtherPlayerSessions.CallUnary(ctx, req)
+}
+
 // QueryStreamHistory calls holomush.core.v1.CoreService.QueryStreamHistory.
 func (c *coreServiceClient) QueryStreamHistory(ctx context.Context, req *connect.Request[v1.QueryStreamHistoryRequest]) (*connect.Response[v1.QueryStreamHistoryResponse], error) {
 	return c.queryStreamHistory.CallUnary(ctx, req)
@@ -344,6 +401,18 @@ type CoreServiceHandler interface {
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
 	// Validate a player session token. Used by web gateway for cookie-based auth checks.
 	CheckPlayerSession(context.Context, *connect.Request[v1.CheckPlayerSessionRequest]) (*connect.Response[v1.CheckPlayerSessionResponse], error)
+	// ListPlayerSessions returns the caller's active PlayerSessions
+	// (the rows of player_sessions for the caller's player_id). Tokens
+	// are not returned — only metadata useful for user-visible session
+	// management ("you are signed in on these devices").
+	ListPlayerSessions(context.Context, *connect.Request[v1.ListPlayerSessionsRequest]) (*connect.Response[v1.ListPlayerSessionsResponse], error)
+	// RevokePlayerSession deletes a specific PlayerSession. Ownership is
+	// verified — a player cannot revoke another player's sessions.
+	RevokePlayerSession(context.Context, *connect.Request[v1.RevokePlayerSessionRequest]) (*connect.Response[v1.RevokePlayerSessionResponse], error)
+	// RevokeOtherPlayerSessions deletes all PlayerSessions for the caller
+	// except the current one. Convenience bulk operation equivalent to
+	// listing and calling RevokePlayerSession for each.
+	RevokeOtherPlayerSessions(context.Context, *connect.Request[v1.RevokeOtherPlayerSessionsRequest]) (*connect.Response[v1.RevokeOtherPlayerSessionsResponse], error)
 	// QueryStreamHistory reads paginated event history from a stream.
 	// Two-layer authorization: membership gate (I-17) for private streams,
 	// ABAC policy evaluation for public streams.
@@ -442,6 +511,24 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(coreServiceMethods.ByName("CheckPlayerSession")),
 		connect.WithHandlerOptions(opts...),
 	)
+	coreServiceListPlayerSessionsHandler := connect.NewUnaryHandler(
+		CoreServiceListPlayerSessionsProcedure,
+		svc.ListPlayerSessions,
+		connect.WithSchema(coreServiceMethods.ByName("ListPlayerSessions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	coreServiceRevokePlayerSessionHandler := connect.NewUnaryHandler(
+		CoreServiceRevokePlayerSessionProcedure,
+		svc.RevokePlayerSession,
+		connect.WithSchema(coreServiceMethods.ByName("RevokePlayerSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	coreServiceRevokeOtherPlayerSessionsHandler := connect.NewUnaryHandler(
+		CoreServiceRevokeOtherPlayerSessionsProcedure,
+		svc.RevokeOtherPlayerSessions,
+		connect.WithSchema(coreServiceMethods.ByName("RevokeOtherPlayerSessions")),
+		connect.WithHandlerOptions(opts...),
+	)
 	coreServiceQueryStreamHistoryHandler := connect.NewUnaryHandler(
 		CoreServiceQueryStreamHistoryProcedure,
 		svc.QueryStreamHistory,
@@ -478,6 +565,12 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 			coreServiceLogoutHandler.ServeHTTP(w, r)
 		case CoreServiceCheckPlayerSessionProcedure:
 			coreServiceCheckPlayerSessionHandler.ServeHTTP(w, r)
+		case CoreServiceListPlayerSessionsProcedure:
+			coreServiceListPlayerSessionsHandler.ServeHTTP(w, r)
+		case CoreServiceRevokePlayerSessionProcedure:
+			coreServiceRevokePlayerSessionHandler.ServeHTTP(w, r)
+		case CoreServiceRevokeOtherPlayerSessionsProcedure:
+			coreServiceRevokeOtherPlayerSessionsHandler.ServeHTTP(w, r)
 		case CoreServiceQueryStreamHistoryProcedure:
 			coreServiceQueryStreamHistoryHandler.ServeHTTP(w, r)
 		default:
@@ -543,6 +636,18 @@ func (UnimplementedCoreServiceHandler) Logout(context.Context, *connect.Request[
 
 func (UnimplementedCoreServiceHandler) CheckPlayerSession(context.Context, *connect.Request[v1.CheckPlayerSessionRequest]) (*connect.Response[v1.CheckPlayerSessionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.CheckPlayerSession is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) ListPlayerSessions(context.Context, *connect.Request[v1.ListPlayerSessionsRequest]) (*connect.Response[v1.ListPlayerSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.ListPlayerSessions is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) RevokePlayerSession(context.Context, *connect.Request[v1.RevokePlayerSessionRequest]) (*connect.Response[v1.RevokePlayerSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.RevokePlayerSession is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) RevokeOtherPlayerSessions(context.Context, *connect.Request[v1.RevokeOtherPlayerSessionsRequest]) (*connect.Response[v1.RevokeOtherPlayerSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.RevokeOtherPlayerSessions is not implemented"))
 }
 
 func (UnimplementedCoreServiceHandler) QueryStreamHistory(context.Context, *connect.Request[v1.QueryStreamHistoryRequest]) (*connect.Response[v1.QueryStreamHistoryResponse], error) {

@@ -125,8 +125,11 @@ func newDispatcherTestServerWithAliases(t *testing.T, store core.EventStore, opt
 	)
 	require.NoError(t, err)
 
-	allOpts := make([]CoreServerOption, 0, 1+len(opts))
-	allOpts = append(allOpts, WithEventStore(store))
+	allOpts := make([]CoreServerOption, 0, 2+len(opts))
+	allOpts = append(allOpts,
+		WithEventStore(store),
+		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
+	)
 	allOpts = append(allOpts, opts...)
 
 	return NewCoreServer(engine, sessStore, dispatcher, svc, allOpts...)
@@ -157,9 +160,10 @@ func TestDispatcher_HandleCommand_Say(t *testing.T) {
 	}))
 
 	resp, err := server.HandleCommand(ctx, &corev1.HandleCommandRequest{
-		Meta:      &corev1.RequestMeta{RequestId: "say-test", Timestamp: timestamppb.Now()},
-		SessionId: sessionID.String(),
-		Command:   "say Hello, world!",
+		Meta:               &corev1.RequestMeta{RequestId: "say-test", Timestamp: timestamppb.Now()},
+		SessionId:          sessionID.String(),
+		Command:            "say Hello, world!",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.Success, "say should succeed: %s", resp.Error)
@@ -195,9 +199,10 @@ func TestDispatcher_HandleCommand_Pose(t *testing.T) {
 	}))
 
 	resp, err := server.HandleCommand(ctx, &corev1.HandleCommandRequest{
-		Meta:      &corev1.RequestMeta{RequestId: "pose-test", Timestamp: timestamppb.Now()},
-		SessionId: sessionID.String(),
-		Command:   "pose waves hello",
+		Meta:               &corev1.RequestMeta{RequestId: "pose-test", Timestamp: timestamppb.Now()},
+		SessionId:          sessionID.String(),
+		Command:            "pose waves hello",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.Success, "pose should succeed: %s", resp.Error)
@@ -231,9 +236,10 @@ func TestDispatcher_HandleCommand_ColonPrefix(t *testing.T) {
 	}))
 
 	resp, err := server.HandleCommand(ctx, &corev1.HandleCommandRequest{
-		Meta:      &corev1.RequestMeta{RequestId: "colon-test", Timestamp: timestamppb.Now()},
-		SessionId: sessionID.String(),
-		Command:   ": nods",
+		Meta:               &corev1.RequestMeta{RequestId: "colon-test", Timestamp: timestamppb.Now()},
+		SessionId:          sessionID.String(),
+		Command:            ": nods",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.Success, ": should expand to pose via alias: %s", resp.Error)
@@ -260,9 +266,10 @@ func TestDispatcher_HandleCommand_UnknownCommand(t *testing.T) {
 	}))
 
 	resp, err := server.HandleCommand(ctx, &corev1.HandleCommandRequest{
-		Meta:      &corev1.RequestMeta{RequestId: "unknown-test", Timestamp: timestamppb.Now()},
-		SessionId: sessionID.String(),
-		Command:   "unknowncommand args",
+		Meta:               &corev1.RequestMeta{RequestId: "unknown-test", Timestamp: timestamppb.Now()},
+		SessionId:          sessionID.String(),
+		Command:            "unknowncommand args",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.Success, "unknown command should succeed at RPC level")
@@ -302,9 +309,10 @@ func TestDispatcher_HandleCommand_Quit(t *testing.T) {
 	}))
 
 	resp, err := server.HandleCommand(ctx, &corev1.HandleCommandRequest{
-		Meta:      &corev1.RequestMeta{RequestId: "quit-test", Timestamp: timestamppb.Now()},
-		SessionId: sessionID.String(),
-		Command:   "quit",
+		Meta:               &corev1.RequestMeta{RequestId: "quit-test", Timestamp: timestamppb.Now()},
+		SessionId:          sessionID.String(),
+		Command:            "quit",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.Success)

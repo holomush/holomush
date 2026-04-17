@@ -6,7 +6,6 @@ package web
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,14 +13,12 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
-	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
@@ -38,16 +35,20 @@ func TestCoreClient_SatisfiedByGRPCClient(t *testing.T) {
 type mockCoreClient struct {
 	cmdResp *corev1.HandleCommandResponse
 	cmdErr  error
+	cmdReq  *corev1.HandleCommandRequest // captured for assertion
 
 	subStream corev1.CoreService_SubscribeClient
 	subErr    error
+	subReq    *corev1.SubscribeRequest // captured for assertion
 
 	discResp *corev1.DisconnectResponse
 	discErr  error
+	discReq  *corev1.DisconnectRequest // captured for assertion
 
 	cmdHistory       []string
-	cmdHistoryErr    error // application-level failure (Success=false)
-	cmdHistoryRPCErr error // transport/RPC-level failure (nil response)
+	cmdHistoryErr    error                            // application-level failure (Success=false)
+	cmdHistoryRPCErr error                            // transport/RPC-level failure (nil response)
+	cmdHistoryReq    *corev1.GetCommandHistoryRequest // captured for assertion
 
 	// Auth RPC fields
 	authPlayerResp     *corev1.AuthenticatePlayerResponse
@@ -74,21 +75,38 @@ type mockCoreClient struct {
 	queryStreamHistoryResp *corev1.QueryStreamHistoryResponse
 	queryStreamHistoryErr  error
 	queryStreamHistoryReq  *corev1.QueryStreamHistoryRequest // captured for assertion
+
+	// Session management fields
+	listSessionsResp *corev1.ListPlayerSessionsResponse
+	listSessionsErr  error
+	listSessionsReq  *corev1.ListPlayerSessionsRequest // captured for assertion
+
+	revokeSessionResp *corev1.RevokePlayerSessionResponse
+	revokeSessionErr  error
+	revokeSessionReq  *corev1.RevokePlayerSessionRequest // captured for assertion
+
+	revokeOtherResp *corev1.RevokeOtherPlayerSessionsResponse
+	revokeOtherErr  error
+	revokeOtherReq  *corev1.RevokeOtherPlayerSessionsRequest // captured for assertion
 }
 
-func (m *mockCoreClient) HandleCommand(_ context.Context, _ *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
+func (m *mockCoreClient) HandleCommand(_ context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
+	m.cmdReq = req
 	return m.cmdResp, m.cmdErr
 }
 
-func (m *mockCoreClient) Subscribe(_ context.Context, _ *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+func (m *mockCoreClient) Subscribe(_ context.Context, req *corev1.SubscribeRequest) (corev1.CoreService_SubscribeClient, error) {
+	m.subReq = req
 	return m.subStream, m.subErr
 }
 
-func (m *mockCoreClient) Disconnect(_ context.Context, _ *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error) {
+func (m *mockCoreClient) Disconnect(_ context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error) {
+	m.discReq = req
 	return m.discResp, m.discErr
 }
 
-func (m *mockCoreClient) GetCommandHistory(_ context.Context, _ *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
+func (m *mockCoreClient) GetCommandHistory(_ context.Context, req *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
+	m.cmdHistoryReq = req
 	if m.cmdHistoryRPCErr != nil {
 		return nil, m.cmdHistoryRPCErr
 	}
@@ -150,6 +168,21 @@ func (m *mockCoreClient) CreateGuest(_ context.Context, _ *corev1.CreateGuestReq
 func (m *mockCoreClient) QueryStreamHistory(_ context.Context, req *corev1.QueryStreamHistoryRequest) (*corev1.QueryStreamHistoryResponse, error) {
 	m.queryStreamHistoryReq = req
 	return m.queryStreamHistoryResp, m.queryStreamHistoryErr
+}
+
+func (m *mockCoreClient) ListPlayerSessions(_ context.Context, req *corev1.ListPlayerSessionsRequest) (*corev1.ListPlayerSessionsResponse, error) {
+	m.listSessionsReq = req
+	return m.listSessionsResp, m.listSessionsErr
+}
+
+func (m *mockCoreClient) RevokePlayerSession(_ context.Context, req *corev1.RevokePlayerSessionRequest) (*corev1.RevokePlayerSessionResponse, error) {
+	m.revokeSessionReq = req
+	return m.revokeSessionResp, m.revokeSessionErr
+}
+
+func (m *mockCoreClient) RevokeOtherPlayerSessions(_ context.Context, req *corev1.RevokeOtherPlayerSessionsRequest) (*corev1.RevokeOtherPlayerSessionsResponse, error) {
+	m.revokeOtherReq = req
+	return m.revokeOtherResp, m.revokeOtherErr
 }
 
 func TestHandler_SendCommand_Success(t *testing.T) {
@@ -234,10 +267,20 @@ func TestHandler_GetCommandHistory_NotSuccess(t *testing.T) {
 	assert.Empty(t, resp.Msg.GetCommands(), "non-success response should return empty commands")
 }
 
-func TestNewHandler_WithOptions(t *testing.T) {
-	store := &mockSessionStore{}
-	h := NewHandler(&mockCoreClient{}, WithSessionStore(store))
-	assert.NotNil(t, h.sessionStore)
+// TestHandlerHasNoSessionStoreField asserts at compile time that the Handler
+// struct does not hold a session.Store reference. The web gateway is a pure
+// protocol-translation layer (bd-j2xj) and must run without database
+// credentials; per-connection registration happens inside core's Subscribe
+// RPC, not via a direct session-store call from the gateway.
+func TestHandlerHasNoSessionStoreField(t *testing.T) {
+	h := NewHandler(&mockCoreClient{})
+	require.NotNil(t, h)
+	// Use reflection would be overkill; the constructor signature and
+	// the absence of WithSessionStore in this package are the real
+	// compile-time guarantees. This test exists so a reviewer grepping
+	// for sessionStore usage in the web package sees a single sentinel.
+	assert.Nil(t, h.contentClient, "no options configured")
+	assert.Nil(t, h.verbRegistry, "no options configured")
 }
 
 // mockSubscribeStream is a test double for corev1.CoreService_SubscribeClient.
@@ -272,6 +315,50 @@ func newStreamEventsServer(t *testing.T, client CoreClient) (webv1connect.WebSer
 	srv := httptest.NewServer(h)
 	wsc := webv1connect.NewWebServiceClient(http.DefaultClient, srv.URL)
 	return wsc, srv.Close
+}
+
+// TestStreamEventsPassesConnectionIDAndClientTypeOnSubscribe asserts that the
+// web gateway generates a connection_id and passes it (plus client_type
+// "terminal") on its Subscribe call so core can register the connection in
+// the session store (bd-j2xj). Previously the gateway called AddConnection
+// directly; now that wiring lives inside core's Subscribe handler.
+func TestStreamEventsPassesConnectionIDAndClientTypeOnSubscribe(t *testing.T) {
+	sub := &mockSubscribeStream{
+		responses: []*corev1.SubscribeResponse{
+			{
+				Frame: &corev1.SubscribeResponse_Control{
+					Control: &corev1.ControlFrame{
+						Signal: corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED,
+					},
+				},
+			},
+		},
+	}
+	client := &mockCoreClient{
+		subStream: sub,
+		discResp:  &corev1.DisconnectResponse{Success: true},
+	}
+	wsc, cleanup := newStreamEventsServer(t, client)
+	defer cleanup()
+
+	stream, err := wsc.StreamEvents(context.Background(), connect.NewRequest(&webv1.StreamEventsRequest{
+		SessionId: "sess-conn",
+	}))
+	require.NoError(t, err)
+	for stream.Receive() {
+		// drain until server closes
+	}
+	require.NoError(t, stream.Close())
+
+	require.Eventually(t, func() bool {
+		return client.subReq != nil
+	}, 2*time.Second, 10*time.Millisecond, "Subscribe should have been called")
+
+	assert.Equal(t, "sess-conn", client.subReq.GetSessionId())
+	assert.NotEmpty(t, client.subReq.GetConnectionId(),
+		"Subscribe must carry a connection_id so core can register the connection")
+	assert.Equal(t, "terminal", client.subReq.GetClientType(),
+		"StreamEvents is the terminal-mode endpoint; client_type must be %q", "terminal")
 }
 
 func TestStreamEvents_ForwardsControlFrame(t *testing.T) {
@@ -340,117 +427,6 @@ func TestStreamEvents_StreamClosedEndsStream(t *testing.T) {
 	// Stream should now be done.
 	ok = stream.Receive()
 	assert.False(t, ok, "stream should be closed after STREAM_CLOSED")
-}
-
-// mockSessionStore is a minimal test double for session.Store.
-// Only Get and GetCommandHistory are implemented; all other methods panic.
-type mockSessionStore struct {
-	commandHistory    []string
-	commandHistoryErr error
-	getErr            error
-}
-
-func (m *mockSessionStore) Get(_ context.Context, id string) (*session.Info, error) {
-	if m.getErr != nil {
-		return nil, m.getErr
-	}
-	return &session.Info{ID: id, Status: session.StatusActive}, nil
-}
-
-func (m *mockSessionStore) Set(_ context.Context, id string, _ *session.Info) error {
-	return fmt.Errorf("mockSessionStore.Set(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) Delete(_ context.Context, id string, _ string) error {
-	return fmt.Errorf("mockSessionStore.Delete(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) WatchSession(_ context.Context, sessionID string) (<-chan session.Event, error) {
-	return nil, fmt.Errorf("mockSessionStore.WatchSession(%q): not implemented", sessionID)
-}
-
-func (m *mockSessionStore) FindByCharacter(_ context.Context, id ulid.ULID) (*session.Info, error) {
-	return nil, fmt.Errorf("mockSessionStore.FindByCharacter(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) ListByPlayer(_ context.Context, id ulid.ULID) ([]*session.Info, error) {
-	return nil, fmt.Errorf("mockSessionStore.ListByPlayer(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) ListExpired(_ context.Context) ([]*session.Info, error) {
-	return nil, errors.New("mockSessionStore.ListExpired: not implemented")
-}
-
-func (m *mockSessionStore) UpdateStatus(_ context.Context, id string, _ session.Status, _ *time.Time, _ *time.Time) error {
-	return fmt.Errorf("mockSessionStore.UpdateStatus(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) ReattachCAS(_ context.Context, id string) (bool, error) {
-	return false, fmt.Errorf("mockSessionStore.ReattachCAS(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) UpdateCursors(_ context.Context, id string, _ map[string]ulid.ULID) error {
-	return fmt.Errorf("mockSessionStore.UpdateCursors(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) AppendCommand(_ context.Context, id string, _ string, _ int) error {
-	return fmt.Errorf("mockSessionStore.AppendCommand(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) GetCommandHistory(_ context.Context, _ string) ([]string, error) {
-	return m.commandHistory, m.commandHistoryErr
-}
-
-func (m *mockSessionStore) AddConnection(_ context.Context, conn *session.Connection) error {
-	return fmt.Errorf("mockSessionStore.AddConnection(%q): not implemented", conn.ID)
-}
-
-func (m *mockSessionStore) RemoveConnection(_ context.Context, id ulid.ULID) error {
-	return fmt.Errorf("mockSessionStore.RemoveConnection(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) CountConnections(_ context.Context, id string) (int, error) {
-	return 0, fmt.Errorf("mockSessionStore.CountConnections(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) CountConnectionsByType(_ context.Context, id string, _ string) (int, error) {
-	return 0, fmt.Errorf("mockSessionStore.CountConnectionsByType(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) UpdateGridPresent(_ context.Context, id string, _ bool) error {
-	return fmt.Errorf("mockSessionStore.UpdateGridPresent(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) ListActiveByLocation(_ context.Context, _ ulid.ULID) ([]*session.Info, error) {
-	return nil, fmt.Errorf("mockSessionStore.ListActiveByLocation: not implemented")
-}
-
-func (m *mockSessionStore) ListActive(_ context.Context) ([]*session.Info, error) {
-	return nil, fmt.Errorf("mockSessionStore.ListActive: not implemented")
-}
-
-func (m *mockSessionStore) DeleteByCharacter(_ context.Context, id ulid.ULID, _ string) (*session.Info, error) {
-	return nil, fmt.Errorf("mockSessionStore.DeleteByCharacter(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) UpdateActivity(_ context.Context, id string) error {
-	return fmt.Errorf("mockSessionStore.UpdateActivity(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) FindByCharacterName(_ context.Context, name string) (*session.Info, error) {
-	return nil, fmt.Errorf("mockSessionStore.FindByCharacterName(%q): not implemented", name)
-}
-
-func (m *mockSessionStore) UpdateLastPaged(_ context.Context, id string, _ string) error {
-	return fmt.Errorf("mockSessionStore.UpdateLastPaged(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) UpdateLastWhispered(_ context.Context, id string, _ string) error {
-	return fmt.Errorf("mockSessionStore.UpdateLastWhispered(%q): not implemented", id)
-}
-
-func (m *mockSessionStore) UpdateFocusMemberships(_ context.Context, id string, _ session.FocusMutator) error {
-	return fmt.Errorf("mockSessionStore.UpdateFocusMemberships(%q): not implemented", id)
 }
 
 func TestWebQueryStreamHistoryProxiesToCoreService(t *testing.T) {
@@ -582,4 +558,152 @@ func TestWebQueryStreamHistoryPropagatesRequestFields(t *testing.T) {
 	assert.Equal(t, int32(50), req.GetCount())
 	assert.Equal(t, int64(1700000000000), req.GetNotBeforeMs())
 	assert.Equal(t, "01CURSOR", req.GetBeforeId())
+}
+
+// Post-auth RPC token forwarding (bd-jv7z, Task 7).
+//
+// The gateway MUST forward the X-Session-Token header (injected by
+// CookieMiddleware) to core on every post-auth RPC. Without this,
+// server-side ValidateSessionOwnership (Tasks 9-12) cannot enforce that
+// the caller owns session_id and requests would be rejected.
+
+func TestSendCommandForwardsPlayerSessionToken(t *testing.T) {
+	const token = "tok-send-command"
+	client := &mockCoreClient{
+		cmdResp: &corev1.HandleCommandResponse{Success: true},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.SendCommandRequest{
+		SessionId: "sess-1",
+		Text:      "look",
+	})
+	req.Header().Set(headerInjectSessionToken, token)
+
+	_, err := h.SendCommand(context.Background(), req)
+	require.NoError(t, err)
+
+	require.NotNil(t, client.cmdReq, "HandleCommand should have been called")
+	assert.Equal(t, token, client.cmdReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-1", client.cmdReq.GetSessionId())
+}
+
+func TestStreamEventsForwardsPlayerSessionToken(t *testing.T) {
+	const token = "tok-stream-events"
+	sub := &mockSubscribeStream{
+		responses: []*corev1.SubscribeResponse{
+			{
+				Frame: &corev1.SubscribeResponse_Control{
+					Control: &corev1.ControlFrame{
+						Signal: corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED,
+					},
+				},
+			},
+		},
+	}
+	client := &mockCoreClient{subStream: sub}
+	wsc, cleanup := newStreamEventsServer(t, client)
+	defer cleanup()
+
+	streamReq := connect.NewRequest(&webv1.StreamEventsRequest{SessionId: "sess-2"})
+	streamReq.Header().Set(headerInjectSessionToken, token)
+
+	stream, err := wsc.StreamEvents(context.Background(), streamReq)
+	require.NoError(t, err)
+	defer stream.Close()
+
+	// Drain until server ends the stream via STREAM_CLOSED.
+	for stream.Receive() {
+	}
+
+	require.NotNil(t, client.subReq, "Subscribe should have been called")
+	assert.Equal(t, token, client.subReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-2", client.subReq.GetSessionId())
+}
+
+// TestStreamEventsForwardsPlayerSessionTokenOnStreamCloseCleanup verifies that
+// when StreamEvents closes (stream end/context cancel), the internal cleanup
+// Disconnect RPC forwards the player session token. Without the token the
+// server-side ownership gate would skip the cleanup (connection remove,
+// detach/delete, disconnect hooks).
+func TestStreamEventsForwardsPlayerSessionTokenOnStreamCloseCleanup(t *testing.T) {
+	const token = "tok-stream-cleanup"
+	sub := &mockSubscribeStream{
+		responses: []*corev1.SubscribeResponse{
+			{
+				Frame: &corev1.SubscribeResponse_Control{
+					Control: &corev1.ControlFrame{
+						Signal: corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED,
+					},
+				},
+			},
+		},
+	}
+	client := &mockCoreClient{
+		subStream: sub,
+		discResp:  &corev1.DisconnectResponse{Success: true},
+	}
+
+	handler := NewHandler(client)
+	_, h := webv1connect.NewWebServiceHandler(handler)
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	wsc := webv1connect.NewWebServiceClient(http.DefaultClient, srv.URL)
+
+	streamReq := connect.NewRequest(&webv1.StreamEventsRequest{SessionId: "sess-cleanup"})
+	streamReq.Header().Set(headerInjectSessionToken, token)
+
+	stream, err := wsc.StreamEvents(context.Background(), streamReq)
+	require.NoError(t, err)
+	// Drain until server ends the stream via STREAM_CLOSED, which triggers
+	// the deferred cleanup Disconnect.
+	for stream.Receive() {
+	}
+	require.NoError(t, stream.Close())
+
+	// The cleanup Disconnect runs in a deferred goroutine on the server side.
+	// Poll briefly to give it time to fire before asserting.
+	require.Eventually(t, func() bool {
+		return client.discReq != nil
+	}, 2*time.Second, 10*time.Millisecond, "cleanup Disconnect should have been called")
+
+	assert.Equal(t, "sess-cleanup", client.discReq.GetSessionId())
+	assert.Equal(t, token, client.discReq.GetPlayerSessionToken(),
+		"cleanup Disconnect must forward the player session token so the ownership gate passes")
+}
+
+func TestDisconnectForwardsPlayerSessionToken(t *testing.T) {
+	const token = "tok-disconnect"
+	client := &mockCoreClient{
+		discResp: &corev1.DisconnectResponse{Success: true},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.DisconnectRequest{SessionId: "sess-3"})
+	req.Header().Set(headerInjectSessionToken, token)
+
+	_, err := h.Disconnect(context.Background(), req)
+	require.NoError(t, err)
+
+	require.NotNil(t, client.discReq, "Disconnect should have been called")
+	assert.Equal(t, token, client.discReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-3", client.discReq.GetSessionId())
+}
+
+func TestGetCommandHistoryForwardsPlayerSessionToken(t *testing.T) {
+	const token = "tok-cmd-history"
+	client := &mockCoreClient{
+		cmdHistory: []string{"look"},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.GetCommandHistoryRequest{SessionId: "sess-4"})
+	req.Header().Set(headerInjectSessionToken, token)
+
+	_, err := h.GetCommandHistory(context.Background(), req)
+	require.NoError(t, err)
+
+	require.NotNil(t, client.cmdHistoryReq, "GetCommandHistory should have been called")
+	assert.Equal(t, token, client.cmdHistoryReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-4", client.cmdHistoryReq.GetSessionId())
 }

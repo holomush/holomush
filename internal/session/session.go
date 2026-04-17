@@ -115,24 +115,31 @@ func NewFocusMutator(fn func(
 
 // Info contains all state for a persistent game session.
 type Info struct {
-	ID             string
-	CharacterID    ulid.ULID
-	PlayerID       ulid.ULID
-	CharacterName  string
-	LocationID     ulid.ULID
-	IsGuest        bool
-	Status         Status
-	GridPresent    bool
-	EventCursors   map[string]ulid.ULID
-	CommandHistory []string
-	TTLSeconds     int
-	MaxHistory     int
-	DetachedAt     *time.Time
-	ExpiresAt      *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	LastPaged      string
-	LastWhispered  string
+	ID          string
+	CharacterID ulid.ULID
+	PlayerID    ulid.ULID
+	// PlayerSessionID is the ULID of the PlayerSession that created this
+	// game session. Used for cascade deletion: revoking or expiring a
+	// PlayerSession removes all of its child game sessions atomically
+	// via the sessions.player_session_id FK (ON DELETE CASCADE).
+	// Zero value indicates a legacy session created before this column
+	// existed.
+	PlayerSessionID ulid.ULID
+	CharacterName   string
+	LocationID      ulid.ULID
+	IsGuest         bool
+	Status          Status
+	GridPresent     bool
+	EventCursors    map[string]ulid.ULID
+	CommandHistory  []string
+	TTLSeconds      int
+	MaxHistory      int
+	DetachedAt      *time.Time
+	ExpiresAt       *time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	LastPaged       string
+	LastWhispered   string
 
 	// FocusMemberships is the set of focused contexts this session is
 	// actively participating in. Mutated only via FocusCoordinator

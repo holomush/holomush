@@ -232,6 +232,34 @@ func (c *Client) QueryStreamHistory(ctx context.Context, req *corev1.QueryStream
 	return resp, nil
 }
 
+// ListPlayerSessions returns the caller's active PlayerSessions.
+func (c *Client) ListPlayerSessions(ctx context.Context, req *corev1.ListPlayerSessionsRequest) (*corev1.ListPlayerSessionsResponse, error) {
+	resp, err := c.client.ListPlayerSessions(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ListPlayerSessions").Wrap(err)
+	}
+	return resp, nil
+}
+
+// RevokePlayerSession revokes a specific PlayerSession owned by the caller.
+func (c *Client) RevokePlayerSession(ctx context.Context, req *corev1.RevokePlayerSessionRequest) (*corev1.RevokePlayerSessionResponse, error) {
+	resp, err := c.client.RevokePlayerSession(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "RevokePlayerSession").Wrap(err)
+	}
+	return resp, nil
+}
+
+// RevokeOtherPlayerSessions revokes all PlayerSessions for the caller except
+// the current one.
+func (c *Client) RevokeOtherPlayerSessions(ctx context.Context, req *corev1.RevokeOtherPlayerSessionsRequest) (*corev1.RevokeOtherPlayerSessionsResponse, error) {
+	resp, err := c.client.RevokeOtherPlayerSessions(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "RevokeOtherPlayerSessions").Wrap(err)
+	}
+	return resp, nil
+}
+
 // GetContent retrieves a single content item by key from the content service.
 func (c *Client) GetContent(ctx context.Context, req *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error) {
 	resp, err := c.contentClient.GetContent(ctx, req)

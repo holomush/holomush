@@ -30,6 +30,63 @@ func (_m *MockPlayerSessionRepository) EXPECT() *MockPlayerSessionRepository_Exp
 	return &MockPlayerSessionRepository_Expecter{mock: &_m.Mock}
 }
 
+// CountActiveByPlayer provides a mock function with given fields: ctx, playerID
+func (_m *MockPlayerSessionRepository) CountActiveByPlayer(ctx context.Context, playerID ulid.ULID) (int, error) {
+	ret := _m.Called(ctx, playerID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CountActiveByPlayer")
+	}
+
+	var r0 int
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) (int, error)); ok {
+		return rf(ctx, playerID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) int); ok {
+		r0 = rf(ctx, playerID)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID) error); ok {
+		r1 = rf(ctx, playerID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockPlayerSessionRepository_CountActiveByPlayer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CountActiveByPlayer'
+type MockPlayerSessionRepository_CountActiveByPlayer_Call struct {
+	*mock.Call
+}
+
+// CountActiveByPlayer is a helper method to define mock.On call
+//   - ctx context.Context
+//   - playerID ulid.ULID
+func (_e *MockPlayerSessionRepository_Expecter) CountActiveByPlayer(ctx interface{}, playerID interface{}) *MockPlayerSessionRepository_CountActiveByPlayer_Call {
+	return &MockPlayerSessionRepository_CountActiveByPlayer_Call{Call: _e.mock.On("CountActiveByPlayer", ctx, playerID)}
+}
+
+func (_c *MockPlayerSessionRepository_CountActiveByPlayer_Call) Run(run func(ctx context.Context, playerID ulid.ULID)) *MockPlayerSessionRepository_CountActiveByPlayer_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(ulid.ULID))
+	})
+	return _c
+}
+
+func (_c *MockPlayerSessionRepository_CountActiveByPlayer_Call) Return(_a0 int, _a1 error) *MockPlayerSessionRepository_CountActiveByPlayer_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockPlayerSessionRepository_CountActiveByPlayer_Call) RunAndReturn(run func(context.Context, ulid.ULID) (int, error)) *MockPlayerSessionRepository_CountActiveByPlayer_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Create provides a mock function with given fields: ctx, session
 func (_m *MockPlayerSessionRepository) Create(ctx context.Context, session *auth.PlayerSession) error {
 	ret := _m.Called(ctx, session)
@@ -73,6 +130,64 @@ func (_c *MockPlayerSessionRepository_Create_Call) Return(_a0 error) *MockPlayer
 }
 
 func (_c *MockPlayerSessionRepository_Create_Call) RunAndReturn(run func(context.Context, *auth.PlayerSession) error) *MockPlayerSessionRepository_Create_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// CreateWithCap provides a mock function with given fields: ctx, session, maxActive
+func (_m *MockPlayerSessionRepository) CreateWithCap(ctx context.Context, session *auth.PlayerSession, maxActive int) (int, error) {
+	ret := _m.Called(ctx, session, maxActive)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateWithCap")
+	}
+
+	var r0 int
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *auth.PlayerSession, int) (int, error)); ok {
+		return rf(ctx, session, maxActive)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *auth.PlayerSession, int) int); ok {
+		r0 = rf(ctx, session, maxActive)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *auth.PlayerSession, int) error); ok {
+		r1 = rf(ctx, session, maxActive)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockPlayerSessionRepository_CreateWithCap_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateWithCap'
+type MockPlayerSessionRepository_CreateWithCap_Call struct {
+	*mock.Call
+}
+
+// CreateWithCap is a helper method to define mock.On call
+//   - ctx context.Context
+//   - session *auth.PlayerSession
+//   - maxActive int
+func (_e *MockPlayerSessionRepository_Expecter) CreateWithCap(ctx interface{}, session interface{}, maxActive interface{}) *MockPlayerSessionRepository_CreateWithCap_Call {
+	return &MockPlayerSessionRepository_CreateWithCap_Call{Call: _e.mock.On("CreateWithCap", ctx, session, maxActive)}
+}
+
+func (_c *MockPlayerSessionRepository_CreateWithCap_Call) Run(run func(ctx context.Context, session *auth.PlayerSession, maxActive int)) *MockPlayerSessionRepository_CreateWithCap_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*auth.PlayerSession), args[2].(int))
+	})
+	return _c
+}
+
+func (_c *MockPlayerSessionRepository_CreateWithCap_Call) Return(_a0 int, _a1 error) *MockPlayerSessionRepository_CreateWithCap_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockPlayerSessionRepository_CreateWithCap_Call) RunAndReturn(run func(context.Context, *auth.PlayerSession, int) (int, error)) *MockPlayerSessionRepository_CreateWithCap_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -227,6 +342,124 @@ func (_c *MockPlayerSessionRepository_DeleteExpired_Call) RunAndReturn(run func(
 	return _c
 }
 
+// DeleteOldestForPlayer provides a mock function with given fields: ctx, playerID
+func (_m *MockPlayerSessionRepository) DeleteOldestForPlayer(ctx context.Context, playerID ulid.ULID) (*auth.PlayerSession, error) {
+	ret := _m.Called(ctx, playerID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteOldestForPlayer")
+	}
+
+	var r0 *auth.PlayerSession
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) (*auth.PlayerSession, error)); ok {
+		return rf(ctx, playerID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) *auth.PlayerSession); ok {
+		r0 = rf(ctx, playerID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*auth.PlayerSession)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID) error); ok {
+		r1 = rf(ctx, playerID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockPlayerSessionRepository_DeleteOldestForPlayer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteOldestForPlayer'
+type MockPlayerSessionRepository_DeleteOldestForPlayer_Call struct {
+	*mock.Call
+}
+
+// DeleteOldestForPlayer is a helper method to define mock.On call
+//   - ctx context.Context
+//   - playerID ulid.ULID
+func (_e *MockPlayerSessionRepository_Expecter) DeleteOldestForPlayer(ctx interface{}, playerID interface{}) *MockPlayerSessionRepository_DeleteOldestForPlayer_Call {
+	return &MockPlayerSessionRepository_DeleteOldestForPlayer_Call{Call: _e.mock.On("DeleteOldestForPlayer", ctx, playerID)}
+}
+
+func (_c *MockPlayerSessionRepository_DeleteOldestForPlayer_Call) Run(run func(ctx context.Context, playerID ulid.ULID)) *MockPlayerSessionRepository_DeleteOldestForPlayer_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(ulid.ULID))
+	})
+	return _c
+}
+
+func (_c *MockPlayerSessionRepository_DeleteOldestForPlayer_Call) Return(_a0 *auth.PlayerSession, _a1 error) *MockPlayerSessionRepository_DeleteOldestForPlayer_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockPlayerSessionRepository_DeleteOldestForPlayer_Call) RunAndReturn(run func(context.Context, ulid.ULID) (*auth.PlayerSession, error)) *MockPlayerSessionRepository_DeleteOldestForPlayer_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetByID provides a mock function with given fields: ctx, id
+func (_m *MockPlayerSessionRepository) GetByID(ctx context.Context, id ulid.ULID) (*auth.PlayerSession, error) {
+	ret := _m.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetByID")
+	}
+
+	var r0 *auth.PlayerSession
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) (*auth.PlayerSession, error)); ok {
+		return rf(ctx, id)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) *auth.PlayerSession); ok {
+		r0 = rf(ctx, id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*auth.PlayerSession)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID) error); ok {
+		r1 = rf(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockPlayerSessionRepository_GetByID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetByID'
+type MockPlayerSessionRepository_GetByID_Call struct {
+	*mock.Call
+}
+
+// GetByID is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id ulid.ULID
+func (_e *MockPlayerSessionRepository_Expecter) GetByID(ctx interface{}, id interface{}) *MockPlayerSessionRepository_GetByID_Call {
+	return &MockPlayerSessionRepository_GetByID_Call{Call: _e.mock.On("GetByID", ctx, id)}
+}
+
+func (_c *MockPlayerSessionRepository_GetByID_Call) Run(run func(ctx context.Context, id ulid.ULID)) *MockPlayerSessionRepository_GetByID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(ulid.ULID))
+	})
+	return _c
+}
+
+func (_c *MockPlayerSessionRepository_GetByID_Call) Return(_a0 *auth.PlayerSession, _a1 error) *MockPlayerSessionRepository_GetByID_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockPlayerSessionRepository_GetByID_Call) RunAndReturn(run func(context.Context, ulid.ULID) (*auth.PlayerSession, error)) *MockPlayerSessionRepository_GetByID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetByTokenHash provides a mock function with given fields: ctx, tokenHash
 func (_m *MockPlayerSessionRepository) GetByTokenHash(ctx context.Context, tokenHash string) (*auth.PlayerSession, error) {
 	ret := _m.Called(ctx, tokenHash)
@@ -282,6 +515,65 @@ func (_c *MockPlayerSessionRepository_GetByTokenHash_Call) Return(_a0 *auth.Play
 }
 
 func (_c *MockPlayerSessionRepository_GetByTokenHash_Call) RunAndReturn(run func(context.Context, string) (*auth.PlayerSession, error)) *MockPlayerSessionRepository_GetByTokenHash_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListByPlayer provides a mock function with given fields: ctx, playerID
+func (_m *MockPlayerSessionRepository) ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*auth.PlayerSession, error) {
+	ret := _m.Called(ctx, playerID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListByPlayer")
+	}
+
+	var r0 []*auth.PlayerSession
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) ([]*auth.PlayerSession, error)); ok {
+		return rf(ctx, playerID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) []*auth.PlayerSession); ok {
+		r0 = rf(ctx, playerID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*auth.PlayerSession)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID) error); ok {
+		r1 = rf(ctx, playerID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockPlayerSessionRepository_ListByPlayer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListByPlayer'
+type MockPlayerSessionRepository_ListByPlayer_Call struct {
+	*mock.Call
+}
+
+// ListByPlayer is a helper method to define mock.On call
+//   - ctx context.Context
+//   - playerID ulid.ULID
+func (_e *MockPlayerSessionRepository_Expecter) ListByPlayer(ctx interface{}, playerID interface{}) *MockPlayerSessionRepository_ListByPlayer_Call {
+	return &MockPlayerSessionRepository_ListByPlayer_Call{Call: _e.mock.On("ListByPlayer", ctx, playerID)}
+}
+
+func (_c *MockPlayerSessionRepository_ListByPlayer_Call) Run(run func(ctx context.Context, playerID ulid.ULID)) *MockPlayerSessionRepository_ListByPlayer_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(ulid.ULID))
+	})
+	return _c
+}
+
+func (_c *MockPlayerSessionRepository_ListByPlayer_Call) Return(_a0 []*auth.PlayerSession, _a1 error) *MockPlayerSessionRepository_ListByPlayer_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockPlayerSessionRepository_ListByPlayer_Call) RunAndReturn(run func(context.Context, ulid.ULID) ([]*auth.PlayerSession, error)) *MockPlayerSessionRepository_ListByPlayer_Call {
 	_c.Call.Return(run)
 	return _c
 }

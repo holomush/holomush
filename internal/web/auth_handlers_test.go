@@ -9,10 +9,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
@@ -512,6 +514,181 @@ func TestWebConfirmPasswordReset_RPCError(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, resp.Msg.GetSuccess())
 	assert.Equal(t, "password reset error", resp.Msg.GetErrorMessage())
+}
+
+// --- WebListPlayerSessions ---
+
+func TestWebListPlayerSessionsForwardsTokenAndTranslatesResponse(t *testing.T) {
+	now := time.Now()
+	created := timestamppb.New(now.Add(-time.Hour))
+	lastActive := timestamppb.New(now)
+	client := &mockCoreClient{
+		listSessionsResp: &corev1.ListPlayerSessionsResponse{
+			Sessions: []*corev1.PlayerSessionInfo{
+				{
+					Id:         "s1",
+					CreatedAt:  created,
+					LastActive: lastActive,
+					UserAgent:  "chrome",
+					IpAddress:  "10.0.0.1",
+					IsCurrent:  true,
+				},
+				{
+					Id:        "s2",
+					UserAgent: "ff",
+					IsCurrent: false,
+				},
+			},
+		},
+	}
+	h := NewHandler(client)
+
+	resp, err := h.WebListPlayerSessions(context.Background(), requestWithToken(&webv1.WebListPlayerSessionsRequest{}, "tok-abc"))
+	require.NoError(t, err)
+	require.Len(t, resp.Msg.GetSessions(), 2)
+	assert.Equal(t, "s1", resp.Msg.GetSessions()[0].GetId())
+	assert.Equal(t, "chrome", resp.Msg.GetSessions()[0].GetUserAgent())
+	assert.Equal(t, "10.0.0.1", resp.Msg.GetSessions()[0].GetIpAddress())
+	assert.True(t, resp.Msg.GetSessions()[0].GetIsCurrent())
+	assert.Equal(t, created.AsTime().Unix(), resp.Msg.GetSessions()[0].GetCreatedAt().AsTime().Unix())
+	assert.Equal(t, lastActive.AsTime().Unix(), resp.Msg.GetSessions()[0].GetLastActive().AsTime().Unix())
+	assert.Equal(t, "s2", resp.Msg.GetSessions()[1].GetId())
+	assert.False(t, resp.Msg.GetSessions()[1].GetIsCurrent())
+
+	require.NotNil(t, client.listSessionsReq)
+	assert.Equal(t, "tok-abc", client.listSessionsReq.GetPlayerSessionToken())
+}
+
+func TestWebListPlayerSessions_MissingToken(t *testing.T) {
+	h := NewHandler(&mockCoreClient{})
+
+	_, err := h.WebListPlayerSessions(context.Background(), connect.NewRequest(&webv1.WebListPlayerSessionsRequest{}))
+	require.Error(t, err)
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
+}
+
+func TestWebListPlayerSessions_RPCError(t *testing.T) {
+	client := &mockCoreClient{
+		listSessionsErr: errors.New("core down"),
+	}
+	h := NewHandler(client)
+
+	_, err := h.WebListPlayerSessions(context.Background(), requestWithToken(&webv1.WebListPlayerSessionsRequest{}, "tok-abc"))
+	require.Error(t, err)
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	assert.Equal(t, connect.CodeInternal, connectErr.Code())
+}
+
+// --- WebRevokePlayerSession ---
+
+func TestWebRevokePlayerSessionForwardsTokenAndTargetID(t *testing.T) {
+	client := &mockCoreClient{
+		revokeSessionResp: &corev1.RevokePlayerSessionResponse{
+			Success: true,
+		},
+	}
+	h := NewHandler(client)
+
+	resp, err := h.WebRevokePlayerSession(context.Background(), requestWithToken(&webv1.WebRevokePlayerSessionRequest{
+		TargetSessionId: "sess-target",
+	}, "tok-abc"))
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.GetSuccess())
+	assert.Empty(t, resp.Msg.GetErrorMessage())
+
+	require.NotNil(t, client.revokeSessionReq)
+	assert.Equal(t, "tok-abc", client.revokeSessionReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-target", client.revokeSessionReq.GetTargetSessionId())
+}
+
+func TestWebRevokePlayerSessionPropagatesCoreFailure(t *testing.T) {
+	client := &mockCoreClient{
+		revokeSessionResp: &corev1.RevokePlayerSessionResponse{
+			Success:      false,
+			ErrorMessage: "not found",
+		},
+	}
+	h := NewHandler(client)
+
+	resp, err := h.WebRevokePlayerSession(context.Background(), requestWithToken(&webv1.WebRevokePlayerSessionRequest{
+		TargetSessionId: "sess-missing",
+	}, "tok-abc"))
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.GetSuccess())
+	assert.Equal(t, "not found", resp.Msg.GetErrorMessage())
+}
+
+func TestWebRevokePlayerSession_MissingToken(t *testing.T) {
+	h := NewHandler(&mockCoreClient{})
+
+	_, err := h.WebRevokePlayerSession(context.Background(), connect.NewRequest(&webv1.WebRevokePlayerSessionRequest{
+		TargetSessionId: "sess-target",
+	}))
+	require.Error(t, err)
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
+}
+
+func TestWebRevokePlayerSession_RPCError(t *testing.T) {
+	client := &mockCoreClient{
+		revokeSessionErr: errors.New("core down"),
+	}
+	h := NewHandler(client)
+
+	_, err := h.WebRevokePlayerSession(context.Background(), requestWithToken(&webv1.WebRevokePlayerSessionRequest{
+		TargetSessionId: "sess-target",
+	}, "tok-abc"))
+	require.Error(t, err)
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	assert.Equal(t, connect.CodeInternal, connectErr.Code())
+}
+
+// --- WebRevokeOtherPlayerSessions ---
+
+func TestWebRevokeOtherPlayerSessionsForwardsTokenAndReturnsCount(t *testing.T) {
+	client := &mockCoreClient{
+		revokeOtherResp: &corev1.RevokeOtherPlayerSessionsResponse{
+			Success:      true,
+			RevokedCount: 3,
+		},
+	}
+	h := NewHandler(client)
+
+	resp, err := h.WebRevokeOtherPlayerSessions(context.Background(), requestWithToken(&webv1.WebRevokeOtherPlayerSessionsRequest{}, "tok-abc"))
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.GetSuccess())
+	assert.Equal(t, int32(3), resp.Msg.GetRevokedCount())
+
+	require.NotNil(t, client.revokeOtherReq)
+	assert.Equal(t, "tok-abc", client.revokeOtherReq.GetPlayerSessionToken())
+}
+
+func TestWebRevokeOtherPlayerSessions_MissingToken(t *testing.T) {
+	h := NewHandler(&mockCoreClient{})
+
+	_, err := h.WebRevokeOtherPlayerSessions(context.Background(), connect.NewRequest(&webv1.WebRevokeOtherPlayerSessionsRequest{}))
+	require.Error(t, err)
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
+}
+
+func TestWebRevokeOtherPlayerSessions_RPCError(t *testing.T) {
+	client := &mockCoreClient{
+		revokeOtherErr: errors.New("core down"),
+	}
+	h := NewHandler(client)
+
+	_, err := h.WebRevokeOtherPlayerSessions(context.Background(), requestWithToken(&webv1.WebRevokeOtherPlayerSessionsRequest{}, "tok-abc"))
+	require.Error(t, err)
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	assert.Equal(t, connect.CodeInternal, connectErr.Code())
 }
 
 // --- translateCharacterSummaries ---

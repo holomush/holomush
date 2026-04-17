@@ -43,9 +43,10 @@ func TestPipelineRendering(t *testing.T) {
 
 		ctx := context.Background()
 		resp, err := server.HandleCommand(ctx, &corev1.HandleCommandRequest{
-			Meta:      &corev1.RequestMeta{RequestId: "say-pipeline", Timestamp: timestamppb.Now()},
-			SessionId: sessionID.String(),
-			Command:   "say Hello world",
+			Meta:               &corev1.RequestMeta{RequestId: "say-pipeline", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			Command:            "say Hello world",
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.Success, "say command should succeed: %s", resp.Error)
@@ -91,9 +92,10 @@ func TestPipelineRendering(t *testing.T) {
 
 		ctx := context.Background()
 		resp, err := server.HandleCommand(ctx, &corev1.HandleCommandRequest{
-			Meta:      &corev1.RequestMeta{RequestId: "pose-pipeline", Timestamp: timestamppb.Now()},
-			SessionId: sessionID.String(),
-			Command:   "pose waves cheerfully.",
+			Meta:               &corev1.RequestMeta{RequestId: "pose-pipeline", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			Command:            "pose waves cheerfully.",
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.Success, "pose command should succeed: %s", resp.Error)
@@ -136,9 +138,10 @@ func TestPipelineRendering(t *testing.T) {
 
 		ctx := context.Background()
 		resp, err := server.HandleCommand(ctx, &corev1.HandleCommandRequest{
-			Meta:      &corev1.RequestMeta{RequestId: "unknown-pipeline", Timestamp: timestamppb.Now()},
-			SessionId: sessionID.String(),
-			Command:   "xyzzy abracadabra",
+			Meta:               &corev1.RequestMeta{RequestId: "unknown-pipeline", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			Command:            "xyzzy abracadabra",
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		// Unknown commands succeed at the RPC level; error delivered via event.
@@ -183,9 +186,10 @@ func TestPipelineRendering(t *testing.T) {
 
 		ctx := context.Background()
 		resp, err := server.HandleCommand(ctx, &corev1.HandleCommandRequest{
-			Meta:      &corev1.RequestMeta{RequestId: "e2e-pipeline", Timestamp: timestamppb.Now()},
-			SessionId: sessionID.String(),
-			Command:   "say Testing the full pipeline",
+			Meta:               &corev1.RequestMeta{RequestId: "e2e-pipeline", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			Command:            "say Testing the full pipeline",
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.Success, "say command should succeed: %s", resp.Error)
@@ -229,9 +233,10 @@ func TestPipelineRendering(t *testing.T) {
 
 		ctx := context.Background()
 		resp, err := server.HandleCommand(ctx, &corev1.HandleCommandRequest{
-			Meta:      &corev1.RequestMeta{RequestId: "ooc-pipeline", Timestamp: timestamppb.Now()},
-			SessionId: sessionID.String(),
-			Command:   "ooc heading out for lunch",
+			Meta:               &corev1.RequestMeta{RequestId: "ooc-pipeline", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			Command:            "ooc heading out for lunch",
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.Success, "ooc command should succeed: %s", resp.Error)

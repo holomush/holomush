@@ -278,17 +278,18 @@ func TestMigratorCloseIsIdempotent(t *testing.T) {
 }
 
 func TestMigratorPendingMigrationsReturnsMigrationsAboveCurrentVersion(t *testing.T) {
-	// At version 0, migrations 1-7 should be pending (baseline + is_guest +
-	// alias_source + session_player_id + audit_source_component + session_focus + seed_scene_defaults)
+	// At version 0, migrations 1-8 should be pending (baseline + is_guest +
+	// alias_source + session_player_id + audit_source_component + session_focus +
+	// seed_scene_defaults + session_player_fk)
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7}, pending)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8}, pending)
 }
 
 func TestMigratorPendingMigrationsReturnsEmptyAtLatestVersion(t *testing.T) {
-	// At version 7 (latest), no migrations should be pending
-	m := &Migrator{m: &mockMigrate{versionVal: 7}}
+	// At version 8 (latest), no migrations should be pending
+	m := &Migrator{m: &mockMigrate{versionVal: 8}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
 	assert.Empty(t, pending)
@@ -319,11 +320,11 @@ func TestMigratorAppliedMigrationsReturnsEmptyAtVersionZero(t *testing.T) {
 }
 
 func TestMigratorAppliedMigrationsReturnsAllAtLatestVersion(t *testing.T) {
-	// At version 7 (latest), all migrations applied
-	m := &Migrator{m: &mockMigrate{versionVal: 7}}
+	// At version 8 (latest), all migrations applied
+	m := &Migrator{m: &mockMigrate{versionVal: 8}}
 	applied, err := m.AppliedMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7}, applied)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8}, applied)
 }
 
 func TestMigratorAppliedMigrationsReturnsErrorWhenVersionFails(t *testing.T) {
@@ -472,6 +473,7 @@ func TestMigrationName(t *testing.T) {
 		{4, "000004_session_player_id", false},
 		{5, "000005_audit_source_component", false},
 		{7, "000007_seed_scene_defaults", false},
+		{8, "000008_session_player_fk", false},
 		{999, "", false}, // Unknown version returns empty string and nil error (not found is expected)
 	}
 
@@ -557,7 +559,7 @@ func BenchmarkMigrationName(b *testing.B) {
 // BenchmarkMigrationName_MultipleVersions measures MigrationName performance
 // across multiple version lookups in a single iteration.
 func BenchmarkMigrationName_MultipleVersions(b *testing.B) {
-	versions := []uint{1, 2, 3, 4, 5, 6, 7}
+	versions := []uint{1, 2, 3, 4, 5, 6, 7, 8}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, v := range versions {

@@ -159,6 +159,26 @@ func TestLoadParsesGameConfigSection(t *testing.T) {
 	assert.Equal(t, "01JMHZ5H3ZSBVTGARX4MSS1MBH", cfg.GuestStartLocation)
 }
 
+func TestDefaultAuthConfigMaxPlayerSessionsIsTen(t *testing.T) {
+	cfg := DefaultAuthConfig()
+	assert.Equal(t, 10, cfg.MaxPlayerSessionsPerPlayer)
+	assert.Equal(t, DefaultMaxPlayerSessionsPerPlayer, cfg.MaxPlayerSessionsPerPlayer)
+}
+
+func TestLoadParsesAuthConfigMaxPlayerSessionsPerPlayer(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.yaml")
+	err := os.WriteFile(cfgFile, []byte("auth:\n  max_player_sessions_per_player: 3\n"), 0o600)
+	require.NoError(t, err)
+
+	cfg := DefaultAuthConfig()
+	cmd := &cobra.Command{Use: "test"}
+
+	err = Load(cfgFile, cmd, &cfg, "auth")
+	require.NoError(t, err)
+	assert.Equal(t, 3, cfg.MaxPlayerSessionsPerPlayer)
+}
+
 func TestLoadParsesPluginTrustAllowlist(t *testing.T) {
 	dir := t.TempDir()
 	cfgFile := filepath.Join(dir, "config.yaml")

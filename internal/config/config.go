@@ -29,6 +29,32 @@ type GameConfig struct {
 	PluginTrustAllowlist []string `koanf:"plugin_trust_allowlist"`
 }
 
+// AuthConfig holds authentication-related configuration read by the core
+// command from the "auth" YAML section.
+type AuthConfig struct {
+	// MaxPlayerSessionsPerPlayer caps concurrent authenticated sessions per
+	// player. On new login exceeding the cap, the oldest PlayerSession is
+	// evicted (deleted) — cascading through player_session_id FK to also
+	// remove all game sessions and terminate their Subscribe streams.
+	// A value <= 0 disables the cap (test configurations only).
+	MaxPlayerSessionsPerPlayer int `koanf:"max_player_sessions_per_player"`
+}
+
+// DefaultMaxPlayerSessionsPerPlayer is the default concurrent session cap
+// per player. Ten handles reasonable multi-device use (phone + laptop +
+// tablet + work machine + reserved capacity) without unbounded session
+// accumulation from buggy clients or forgotten tabs.
+const DefaultMaxPlayerSessionsPerPlayer = 10
+
+// DefaultAuthConfig returns an AuthConfig populated with documented defaults.
+// Call sites SHOULD start from this value and overlay YAML via Load so that
+// omitted keys retain the default instead of zeroing to Go's zero value.
+func DefaultAuthConfig() AuthConfig {
+	return AuthConfig{
+		MaxPlayerSessionsPerPlayer: DefaultMaxPlayerSessionsPerPlayer,
+	}
+}
+
 // Load reads configuration from a YAML file and overlays explicitly-set CLI flags.
 //
 // Precedence (lowest to highest): YAML config file -> CLI flags.

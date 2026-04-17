@@ -291,6 +291,13 @@ func NewCoreServer(engine *core.Engine, sessionStore session.Store, dispatcher *
 }
 
 // HandleCommand processes a game command.
+//
+// SECURITY (bd-jv7z): Before executing, the caller's player_session_token is
+// validated against the target session via auth.ValidateSessionOwnership.
+// Any failure — missing/invalid token, expired token, unknown session, or
+// ownership mismatch — returns the enumeration-safe "session not found"
+// response. This closes the IDOR surface where one player could submit a
+// command against another player's session id.
 func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleCommandRequest) (*corev1.HandleCommandResponse, error) {
 	requestID := ""
 	if req.Meta != nil {
@@ -303,22 +310,23 @@ func (s *CoreServer) HandleCommand(ctx context.Context, req *corev1.HandleComman
 		"command", req.Command,
 	)
 
-	// Look up session — distinguish not-found from other store errors.
-	info, err := s.sessionStore.Get(ctx, req.SessionId)
+	info, err := auth.ValidateSessionOwnership(
+		ctx,
+		s.playerSessionRepo,
+		s.sessionStore,
+		req.GetPlayerSessionToken(),
+		req.GetSessionId(),
+	)
 	if err != nil {
-		errMsg := "session not found"
-		if oopsErr, ok := oops.AsOops(err); !ok || oopsErr.Code() != "SESSION_NOT_FOUND" {
-			errMsg = "session lookup failed"
-			slog.ErrorContext(ctx, "session store error",
-				"request_id", requestID,
-				"session_id", req.SessionId,
-				"error", err,
-			)
-		}
+		slog.DebugContext(ctx, "session ownership validation failed",
+			"request_id", requestID,
+			"session_id", req.SessionId,
+			"error", err,
+		)
 		return &corev1.HandleCommandResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
-			Error:   errMsg,
+			Error:   "session not found",
 		}, nil
 	}
 
@@ -649,6 +657,16 @@ func (s *CoreServer) sendAndCommitEvent(
 }
 
 // Subscribe opens a stream of events for the session.
+//
+// SECURITY (bd-jv7z): Before opening the stream, the caller's
+// player_session_token is validated against the target session via
+// auth.ValidateSessionOwnership. Any failure — missing/invalid token,
+// expired token, unknown session, or ownership mismatch — collapses to
+// the enumeration-safe SESSION_NOT_FOUND error. This closes the IDOR
+// surface where one player could subscribe to another player's event
+// stream. Ongoing revocation (session deletion, cap eviction)
+// propagates via the existing control-frame mechanism — validation runs
+// once at stream open.
 func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerStreamingServer[corev1.SubscribeResponse]) error {
 	ctx := stream.Context()
 	requestID := ""
@@ -665,6 +683,23 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		return oops.Code("NOT_CONFIGURED").Errorf("event store not configured")
 	}
 
+	// Validate session ownership before any other work. Enumeration-safe:
+	// every failure mode collapses to the same SESSION_NOT_FOUND error.
+	if _, err := auth.ValidateSessionOwnership(
+		ctx,
+		s.playerSessionRepo,
+		s.sessionStore,
+		req.GetPlayerSessionToken(),
+		req.GetSessionId(),
+	); err != nil {
+		slog.DebugContext(ctx, "subscribe session ownership validation failed",
+			"request_id", requestID,
+			"session_id", req.SessionId,
+			"error", err,
+		)
+		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
+	}
+
 	// 1. Session lookup under cursor lock (Finding 1 closure).
 	info, err := func() (*session.Info, error) {
 		unlock := s.cursorLocks.lock(req.SessionId)
@@ -673,6 +708,56 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	}()
 	if err != nil {
 		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
+	}
+
+	// Register the caller's connection in core (bd-j2xj). Connection
+	// lifecycle belongs in the Subscribe RPC, not in the web gateway.
+	//
+	// Transitional gate: only runs when connection_id is non-empty. The
+	// telnet gateway passes connection_id + client_type after Task 8; the
+	// web gateway still calls AddConnection itself and does NOT pass a
+	// connection_id yet. Task 14 makes connection_id required and removes
+	// the web gateway's direct AddConnection call, retiring this gate.
+	if req.GetConnectionId() != "" {
+		connID, parseErr := ulid.Parse(req.GetConnectionId())
+		if parseErr != nil || req.GetClientType() == "" {
+			return oops.Code("SUBSCRIBE_INVALID_CONNECTION").
+				With("session_id", req.GetSessionId()).
+				Errorf("subscribe: connection_id must be a valid ULID and client_type must be set")
+		}
+		// Streams is initialized to an empty slice (not nil) because the
+		// session_connections.streams column is NOT NULL; pgx serializes a
+		// Go nil []string as SQL NULL, which would fail the insert.
+		// Per-stream subscriptions are tracked in memory by the Subscribe
+		// loop; the column is a placeholder for future queries.
+		conn := &session.Connection{
+			ID:          connID,
+			SessionID:   req.GetSessionId(),
+			ClientType:  req.GetClientType(),
+			Streams:     []string{},
+			ConnectedAt: time.Now(),
+		}
+		if addErr := s.sessionStore.AddConnection(ctx, conn); addErr != nil {
+			return oops.Code("SUBSCRIBE_ADD_CONNECTION_FAILED").
+				With("session_id", req.GetSessionId()).
+				With("connection_id", req.GetConnectionId()).
+				Wrap(addErr)
+		}
+		// Deferred cleanup fires on any exit path: client disconnect,
+		// context cancel, error return, STREAM_CLOSED. Uses a fresh
+		// context so a cancelled stream context does not abort the
+		// removal (same pattern as cursor commit).
+		defer func() {
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), cursorCommitTimeout)
+			defer cancel()
+			if rmErr := s.sessionStore.RemoveConnection(cleanupCtx, connID); rmErr != nil {
+				slog.WarnContext(ctx, "subscribe: failed to remove connection on stream close",
+					"connection_id", connID.String(),
+					"session_id", req.GetSessionId(),
+					"error", rmErr,
+				)
+			}
+		}()
 	}
 
 	// 2. Reattach if detached.
@@ -843,6 +928,14 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 // character phases out (leave event) but the session stays active.
 // When ALL connections close, non-guest sessions detach with TTL;
 // guest sessions are deleted immediately.
+//
+// SECURITY (bd-jv7z): Before acting, the caller's player_session_token is
+// validated against the target session via auth.ValidateSessionOwnership.
+// Any failure — missing/invalid token, expired token, unknown session, or
+// ownership mismatch — returns the enumeration-safe "session not found"
+// response (success=false) with no state change. This closes the IDOR
+// surface where one player could forcibly disconnect another player's
+// session with just the session_id.
 func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectRequest) (*corev1.DisconnectResponse, error) {
 	requestID := ""
 	if req.Meta != nil {
@@ -854,6 +947,27 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 		"session_id", req.SessionId,
 		"connection_id", req.ConnectionId,
 	)
+
+	// Validate session ownership before any state-changing work.
+	// Enumeration-safe: every failure mode collapses to the same
+	// "session not found" response.
+	if _, err := auth.ValidateSessionOwnership(
+		ctx,
+		s.playerSessionRepo,
+		s.sessionStore,
+		req.GetPlayerSessionToken(),
+		req.GetSessionId(),
+	); err != nil {
+		slog.DebugContext(ctx, "disconnect session ownership validation failed",
+			"request_id", requestID,
+			"session_id", req.SessionId,
+			"error", err,
+		)
+		return &corev1.DisconnectResponse{
+			Meta:    responseMeta(requestID),
+			Success: false,
+		}, nil
+	}
 
 	// Remove specific connection if provided
 	if req.ConnectionId != "" {
@@ -984,32 +1098,44 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 }
 
 // GetCommandHistory retrieves command history for a session.
+//
+// SECURITY (bd-jv7z): Before returning history, the caller's
+// player_session_token is validated against the target session via
+// auth.ValidateSessionOwnership. Any failure — missing/invalid token,
+// expired token, unknown session, or ownership mismatch — returns the
+// enumeration-safe "session not found" response (success=false) with
+// an empty command list. This closes the IDOR surface where one player
+// could read another player's typed command history with just the
+// session_id.
 func (s *CoreServer) GetCommandHistory(ctx context.Context, req *corev1.GetCommandHistoryRequest) (*corev1.GetCommandHistoryResponse, error) {
 	requestID := ""
 	if req.Meta != nil {
 		requestID = req.Meta.RequestId
 	}
 
-	sessionID := req.GetSessionId()
-	if sessionID == "" {
+	// Validate session ownership before any store read.
+	// Enumeration-safe: every failure mode collapses to the same
+	// "session not found" response with no commands.
+	if _, err := auth.ValidateSessionOwnership(
+		ctx,
+		s.playerSessionRepo,
+		s.sessionStore,
+		req.GetPlayerSessionToken(),
+		req.GetSessionId(),
+	); err != nil {
+		slog.DebugContext(ctx, "get_command_history session ownership validation failed",
+			"request_id", requestID,
+			"session_id", req.GetSessionId(),
+			"error", err,
+		)
 		return &corev1.GetCommandHistoryResponse{
 			Meta:    responseMeta(requestID),
 			Success: false,
-			Error:   "session_id is required",
+			Error:   "session not found",
 		}, nil
 	}
 
-	if _, err := s.sessionStore.Get(ctx, sessionID); err != nil {
-		if oopsErr, ok := oops.AsOops(err); ok && oopsErr.Code() == "SESSION_NOT_FOUND" {
-			return &corev1.GetCommandHistoryResponse{
-				Meta:    responseMeta(requestID),
-				Success: false,
-				Error:   "session not found",
-			}, nil
-		}
-		return nil, oops.Code("COMMAND_HISTORY_FAILED").With("session_id", sessionID).Wrap(err)
-	}
-
+	sessionID := req.GetSessionId()
 	history, err := s.sessionStore.GetCommandHistory(ctx, sessionID)
 	if err != nil {
 		return nil, oops.Code("COMMAND_HISTORY_FAILED").With("session_id", sessionID).Wrap(err)

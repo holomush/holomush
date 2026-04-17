@@ -153,6 +153,18 @@ func (m *mockGRPCClient) QueryStreamHistory(_ context.Context, _ *corev1.QuerySt
 	return nil, nil
 }
 
+func (m *mockGRPCClient) ListPlayerSessions(_ context.Context, _ *corev1.ListPlayerSessionsRequest) (*corev1.ListPlayerSessionsResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) RevokePlayerSession(_ context.Context, _ *corev1.RevokePlayerSessionRequest) (*corev1.RevokePlayerSessionResponse, error) {
+	return nil, nil
+}
+
+func (m *mockGRPCClient) RevokeOtherPlayerSessions(_ context.Context, _ *corev1.RevokeOtherPlayerSessionsRequest) (*corev1.RevokeOtherPlayerSessionsResponse, error) {
+	return nil, nil
+}
+
 func (m *mockGRPCClient) GetContent(_ context.Context, _ *contentv1.GetContentRequest) (*contentv1.GetContentResponse, error) {
 	return nil, nil
 }
@@ -248,7 +260,7 @@ func TestRunCoreWithDeps_ValidationError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, nil)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), cmd, nil)
 	require.Error(t, err, "expected validation error")
 	assert.Contains(t, err.Error(), "grpc-addr")
 }
@@ -269,7 +281,7 @@ func TestRunCoreWithDeps_DatabaseURLMissing(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), cmd, deps)
 	require.Error(t, err, "expected DATABASE_URL error")
 	assert.Contains(t, err.Error(), "DATABASE_URL")
 }

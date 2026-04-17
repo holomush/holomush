@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/grpc/focus"
@@ -28,6 +29,92 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
+
+// testPlayerSessionToken is the canonical token unit tests pass in
+// HandleCommandRequest.PlayerSessionToken. The fakePlayerSessionRepo
+// installed by newHandleCommandServer is seeded to match this token
+// hash and return a PlayerSession whose PlayerID is the zero ULID —
+// which lines up with the zero PlayerID on session.Info seeded by the
+// map literals used throughout the unit tests. That makes ownership
+// validation succeed for these tests without requiring them to seed
+// matching PlayerIDs.
+const testPlayerSessionToken = "unit-test-player-session-token"
+
+// fakePlayerSessionRepo is a minimal auth.PlayerSessionRepository impl
+// used by the HandleCommand unit test helpers. GetByTokenHash returns
+// a PlayerSession whose PlayerID matches playerID and whose expiry is
+// in the future, for any hash that equals the pre-seeded hash. All
+// other methods panic — unit tests exercise only GetByTokenHash.
+type fakePlayerSessionRepo struct {
+	tokenHash string
+	playerID  ulid.ULID
+}
+
+// newFakePlayerSessionRepo constructs a fakePlayerSessionRepo seeded to
+// accept testPlayerSessionToken and return the given PlayerID. All unit
+// tests use the same canonical token constant; the PlayerID varies per
+// test to exercise ownership-match and ownership-mismatch cases.
+func newFakePlayerSessionRepo(playerID ulid.ULID) *fakePlayerSessionRepo {
+	return &fakePlayerSessionRepo{
+		tokenHash: auth.HashSessionToken(testPlayerSessionToken),
+		playerID:  playerID,
+	}
+}
+
+func (f *fakePlayerSessionRepo) Create(_ context.Context, _ *auth.PlayerSession) error {
+	panic("fakePlayerSessionRepo: Create not implemented")
+}
+
+func (f *fakePlayerSessionRepo) CreateWithCap(_ context.Context, _ *auth.PlayerSession, _ int) (int, error) {
+	panic("fakePlayerSessionRepo: CreateWithCap not implemented")
+}
+
+func (f *fakePlayerSessionRepo) GetByTokenHash(_ context.Context, tokenHash string) (*auth.PlayerSession, error) {
+	if tokenHash != f.tokenHash {
+		return nil, auth.ErrNotFound
+	}
+	return &auth.PlayerSession{
+		ID:        ulid.ULID{},
+		PlayerID:  f.playerID,
+		TokenHash: tokenHash,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	}, nil
+}
+
+func (f *fakePlayerSessionRepo) GetByID(_ context.Context, _ ulid.ULID) (*auth.PlayerSession, error) {
+	panic("fakePlayerSessionRepo: GetByID not implemented")
+}
+
+func (f *fakePlayerSessionRepo) CountActiveByPlayer(_ context.Context, _ ulid.ULID) (int, error) {
+	panic("fakePlayerSessionRepo: CountActiveByPlayer not implemented")
+}
+
+func (f *fakePlayerSessionRepo) ListByPlayer(_ context.Context, _ ulid.ULID) ([]*auth.PlayerSession, error) {
+	panic("fakePlayerSessionRepo: ListByPlayer not implemented")
+}
+
+func (f *fakePlayerSessionRepo) Delete(_ context.Context, _ ulid.ULID) error {
+	panic("fakePlayerSessionRepo: Delete not implemented")
+}
+
+func (f *fakePlayerSessionRepo) DeleteByPlayer(_ context.Context, _ ulid.ULID) error {
+	panic("fakePlayerSessionRepo: DeleteByPlayer not implemented")
+}
+
+func (f *fakePlayerSessionRepo) DeleteOldestForPlayer(_ context.Context, _ ulid.ULID) (*auth.PlayerSession, error) {
+	panic("fakePlayerSessionRepo: DeleteOldestForPlayer not implemented")
+}
+
+func (f *fakePlayerSessionRepo) DeleteExpired(_ context.Context) (int64, error) {
+	panic("fakePlayerSessionRepo: DeleteExpired not implemented")
+}
+
+func (f *fakePlayerSessionRepo) RefreshTTL(_ context.Context, _ ulid.ULID, _ time.Duration) error {
+	panic("fakePlayerSessionRepo: RefreshTTL not implemented")
+}
+
+// Compile-time interface check.
+var _ auth.PlayerSessionRepository = (*fakePlayerSessionRepo)(nil)
 
 // newTestSessionStore creates a session.MemStore pre-populated with the given sessions.
 func newTestSessionStore(t *testing.T, sessions map[string]*session.Info) session.Store {
@@ -70,8 +157,17 @@ func newHandleCommandServer(t *testing.T, store core.EventStore, sessStore sessi
 	dispatcher, err := command.NewDispatcher(reg, policyEngine)
 	require.NoError(t, err)
 
-	allOpts := make([]CoreServerOption, 0, 1+len(opts))
-	allOpts = append(allOpts, WithEventStore(store))
+	// Install a fake PlayerSessionRepo keyed on testPlayerSessionToken
+	// returning the zero-ULID PlayerID. Every unit test's session.Info
+	// seeded via newTestSessionStore has a zero-ULID PlayerID, so
+	// HandleCommand's ValidateSessionOwnership accepts
+	// testPlayerSessionToken. Callers passing an empty or different
+	// token get an enumeration-safe "session not found" response.
+	allOpts := make([]CoreServerOption, 0, 2+len(opts))
+	allOpts = append(allOpts,
+		WithEventStore(store),
+		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
+	)
 	allOpts = append(allOpts, opts...)
 
 	return NewCoreServer(engine, sessStore, dispatcher, svc, allOpts...)
@@ -150,17 +246,25 @@ func (m *mockSubscribeStream) Send(event *corev1.SubscribeResponse) error {
 // newSubscribeTestServer builds a CoreServer suitable for Subscribe tests.
 // It sets up cursorLocks and a minimal focusCoordinator with the given session
 // store, which the Subscribe handler requires after the B7 refactor.
+//
+// The server is pre-wired with a fakePlayerSessionRepo seeded for
+// testPlayerSessionToken → zero-ULID PlayerID. Every unit test's
+// session.Info seeded via newTestSessionStore has a zero-ULID PlayerID,
+// so Subscribe's ValidateSessionOwnership accepts testPlayerSessionToken.
+// Callers passing an empty or different token get an enumeration-safe
+// SESSION_NOT_FOUND error.
 func newSubscribeTestServer(t *testing.T, eventStore core.EventStore, sessStore session.Store, opts ...func(*CoreServer)) *CoreServer {
 	t.Helper()
 	coord, err := focus.NewCoordinator(focus.WithSessionStore(sessStore))
 	require.NoError(t, err)
 
 	s := &CoreServer{
-		engine:           core.NewEngine(eventStore),
-		eventStore:       eventStore,
-		sessionStore:     sessStore,
-		cursorLocks:      newCursorLockMap(),
-		focusCoordinator: coord,
+		engine:            core.NewEngine(eventStore),
+		eventStore:        eventStore,
+		sessionStore:      sessStore,
+		cursorLocks:       newCursorLockMap(),
+		focusCoordinator:  coord,
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -195,8 +299,9 @@ func TestCoreServer_HandleCommand_Say(t *testing.T) {
 			RequestId: "cmd-request-id",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "say Hello, world!",
+		SessionId:          sessionID.String(),
+		Command:            "say Hello, world!",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -215,8 +320,9 @@ func TestCoreServer_HandleCommand_InvalidSession(t *testing.T) {
 			RequestId: "cmd-request-id",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: "invalid-session",
-		Command:   "say Hello",
+		SessionId:          "invalid-session",
+		Command:            "say Hello",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -224,6 +330,97 @@ func TestCoreServer_HandleCommand_InvalidSession(t *testing.T) {
 
 	assert.False(t, resp.Success, "expected failure for invalid session")
 	assert.NotEmpty(t, resp.Error, "error message should be present")
+}
+
+// TestCoreServer_HandleCommand_RejectsEmptyToken asserts that a caller
+// who omits player_session_token gets the enumeration-safe
+// "session not found" response — not an execution of the command.
+// Regression guard for bd-jv7z (IDOR surface).
+func TestCoreServer_HandleCommand_RejectsEmptyToken(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+
+	var appendedEvents []core.Event
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, event core.Event) error {
+			appendedEvents = append(appendedEvents, event)
+			return nil
+		},
+	}
+	server := newHandleCommandServer(t, store, newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	}))
+
+	resp, err := server.HandleCommand(context.Background(), &corev1.HandleCommandRequest{
+		SessionId: sessionID.String(),
+		Command:   "say hi",
+		// PlayerSessionToken intentionally empty.
+	})
+	require.NoError(t, err)
+
+	assert.False(t, resp.Success, "empty token must not authorize a command")
+	assert.Equal(t, "session not found", resp.GetError(),
+		"response must be enumeration-safe")
+	assert.Empty(t, appendedEvents,
+		"no event should be appended when ownership validation fails")
+}
+
+// TestCoreServer_HandleCommand_RejectsCrossPlayerSession simulates the
+// IDOR attack from bd-jv7z: Player A's valid token is used against
+// Player B's session_id. The call must return "session not found" and
+// must not execute the command. The attack is deterministic here
+// because the fake PlayerSessionRepo returns PlayerA's PlayerID but
+// the seeded session belongs to PlayerB.
+func TestCoreServer_HandleCommand_RejectsCrossPlayerSession(t *testing.T) {
+	// Player A — holds the token.
+	playerA := core.NewULID()
+	// Player B — owns the target session.
+	playerB := core.NewULID()
+
+	charB := core.NewULID()
+	sessionIDB := core.NewULID()
+	locationB := core.NewULID()
+
+	var appendedEvents []core.Event
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, event core.Event) error {
+			appendedEvents = append(appendedEvents, event)
+			return nil
+		},
+	}
+
+	sessStore := newTestSessionStore(t, map[string]*session.Info{
+		sessionIDB.String(): {
+			CharacterID: charB,
+			PlayerID:    playerB, // Session B belongs to player B.
+			LocationID:  locationB,
+			Status:      session.StatusActive,
+		},
+	})
+
+	// Swap the default fake repo for one seeded with playerA's ID — so
+	// the token validates but ownership check fails.
+	server := newHandleCommandServer(t, store, sessStore,
+		WithPlayerSessionRepo(newFakePlayerSessionRepo(playerA)),
+	)
+
+	resp, err := server.HandleCommand(context.Background(), &corev1.HandleCommandRequest{
+		SessionId:          sessionIDB.String(),
+		Command:            "say stolen",
+		PlayerSessionToken: testPlayerSessionToken,
+	})
+	require.NoError(t, err)
+
+	assert.False(t, resp.Success, "cross-player session attack must be rejected")
+	assert.Equal(t, "session not found", resp.GetError(),
+		"response must be enumeration-safe on ownership mismatch")
+	assert.Empty(t, appendedEvents,
+		"no event should be appended when ownership check fails")
 }
 
 func TestCoreServer_Subscribe_SendsEvents(t *testing.T) {
@@ -251,7 +448,8 @@ func TestCoreServer_Subscribe_SendsEvents(t *testing.T) {
 			RequestId: "sub-request-id",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	// Run Subscribe in a goroutine since it blocks
@@ -307,7 +505,8 @@ func TestCoreServer_Disconnect(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore: sessStore,
+		sessionStore:      sessStore,
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
 	req := &corev1.DisconnectRequest{
@@ -315,7 +514,8 @@ func TestCoreServer_Disconnect(t *testing.T) {
 			RequestId: "disconnect-request-id",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.Disconnect(ctx, req)
@@ -400,9 +600,10 @@ func TestCoreServer_HandleCommand_NilMeta(t *testing.T) {
 
 	ctx := context.Background()
 	req := &corev1.HandleCommandRequest{
-		Meta:      nil, // No meta
-		SessionId: sessionID.String(),
-		Command:   "say Hello",
+		Meta:               nil, // No meta
+		SessionId:          sessionID.String(),
+		Command:            "say Hello",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -440,8 +641,9 @@ func TestCoreServer_HandleCommand_Pose(t *testing.T) {
 			RequestId: "pose-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "pose waves hello",
+		SessionId:          sessionID.String(),
+		Command:            "pose waves hello",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -456,8 +658,9 @@ func TestCoreServer_HandleCommand_Pose(t *testing.T) {
 			RequestId: "colon-pose-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   ": nods",
+		SessionId:          sessionID.String(),
+		Command:            ": nods",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp2, err := server.HandleCommand(ctx, req2)
@@ -488,8 +691,9 @@ func TestCoreServer_HandleCommand_UnknownCommand(t *testing.T) {
 			RequestId: "unknown-cmd-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "unknowncommand args",
+		SessionId:          sessionID.String(),
+		Command:            "unknowncommand args",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -535,8 +739,9 @@ func TestCoreServer_HandleCommand_SayFails(t *testing.T) {
 			RequestId: "say-fail-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "say Hello",
+		SessionId:          sessionID.String(),
+		Command:            "say Hello",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -571,8 +776,9 @@ func TestCoreServer_HandleCommand_PoseFails(t *testing.T) {
 			RequestId: "pose-fail-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "pose waves",
+		SessionId:          sessionID.String(),
+		Command:            "pose waves",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -613,8 +819,9 @@ func TestCoreServer_HandleCommand_Quit(t *testing.T) {
 			RequestId: "quit-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "quit",
+		SessionId:          sessionID.String(),
+		Command:            "quit",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -711,8 +918,9 @@ func TestCoreServer_Subscribe_NilMeta(t *testing.T) {
 	stream := &mockSubscribeStream{ctx: ctx}
 
 	req := &corev1.SubscribeRequest{
-		Meta:      nil, // No meta
-		SessionId: sessionID.String(),
+		Meta:               nil, // No meta
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -784,7 +992,8 @@ func TestCoreServer_Subscribe_SendError(t *testing.T) {
 			RequestId: "send-error-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	// The new Subscribe sends a synthetic location_state first, which will
@@ -816,12 +1025,14 @@ func TestCoreServer_Disconnect_NilMeta(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore: sessStore,
+		sessionStore:      sessStore,
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
 	req := &corev1.DisconnectRequest{
-		Meta:      nil, // No meta
-		SessionId: sessionID.String(),
+		Meta:               nil, // No meta
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.Disconnect(ctx, req)
@@ -839,7 +1050,8 @@ func TestCoreServer_Disconnect_NonExistentSession(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore: session.NewMemStore(),
+		sessionStore:      session.NewMemStore(),
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
 	ctx := context.Background()
@@ -848,14 +1060,19 @@ func TestCoreServer_Disconnect_NonExistentSession(t *testing.T) {
 			RequestId: "non-existent-disc",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: "non-existent-session",
+		SessionId:          "non-existent-session",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.Disconnect(ctx, req)
 	require.NoError(t, err)
 
-	// Should succeed even for non-existent session (idempotent)
-	assert.True(t, resp.Success, "expected success for non-existent session (idempotent)")
+	// bd-jv7z: unknown session_id collapses to the enumeration-safe
+	// "session not found" response (success=false). Previously Disconnect
+	// returned success=true for any unknown session (idempotent); the
+	// ownership-validation gate now refuses to confirm existence to a
+	// caller whose token doesn't match.
+	assert.False(t, resp.Success, "non-existent session must not confirm existence via success=true")
 }
 
 func TestNewGRPCServerInsecure(t *testing.T) {
@@ -934,7 +1151,8 @@ func TestCoreServer_SessionExpirationOnContextTimeout(t *testing.T) {
 			RequestId: "timeout-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -970,7 +1188,8 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 		server := &CoreServer{
 			engine: core.NewEngine(core.NewMemoryEventStore()),
 
-			sessionStore: sessionStore,
+			sessionStore:      sessionStore,
+			playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 		}
 
 		_, err := sessionStore.Get(ctx, sessionID.String())
@@ -981,7 +1200,8 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 				RequestId: "cleanup-test-guest",
 				Timestamp: timestamppb.Now(),
 			},
-			SessionId: sessionID.String(),
+			SessionId:          sessionID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 
 		resp, err := server.Disconnect(ctx, req)
@@ -1008,7 +1228,8 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 		server := &CoreServer{
 			engine: core.NewEngine(core.NewMemoryEventStore()),
 
-			sessionStore: sessionStore,
+			sessionStore:      sessionStore,
+			playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 		}
 
 		_, err := sessionStore.Get(ctx, sessionID.String())
@@ -1019,7 +1240,8 @@ func TestCoreServer_SessionCleanupOnDisconnect(t *testing.T) {
 				RequestId: "cleanup-test-nonguest",
 				Timestamp: timestamppb.Now(),
 			},
-			SessionId: sessionID.String(),
+			SessionId:          sessionID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 
 		resp, err := server.Disconnect(ctx, req)
@@ -1064,8 +1286,9 @@ func TestCoreServer_SessionRefreshOnActivity(t *testing.T) {
 				RequestId: fmt.Sprintf("activity-test-%d", i),
 				Timestamp: timestamppb.Now(),
 			},
-			SessionId: sessionID.String(),
-			Command:   fmt.Sprintf("say Message %d", i),
+			SessionId:          sessionID.String(),
+			Command:            fmt.Sprintf("say Message %d", i),
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 
 		resp, err := server.HandleCommand(ctx, req)
@@ -1107,8 +1330,9 @@ func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		eventStore:   eventStore,
-		sessionStore: sessionStore,
+		eventStore:        eventStore,
+		sessionStore:      sessionStore,
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
 	// Disconnect only session 1
@@ -1117,7 +1341,8 @@ func TestCoreServer_MultipleSessionsIndependentExpiration(t *testing.T) {
 			RequestId: "multi-session-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: session1ID.String(),
+		SessionId:          session1ID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.Disconnect(ctx, req)
@@ -1174,8 +1399,9 @@ func TestCoreServer_HandleCommand_ContextTimeout(t *testing.T) {
 			RequestId: "timeout-cmd-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "say This should timeout",
+		SessionId:          sessionID.String(),
+		Command:            "say This should timeout",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -1218,8 +1444,9 @@ func TestCoreServer_HandleCommand_ContextCancellation(t *testing.T) {
 			RequestId: "cancel-cmd-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "say This will be cancelled",
+		SessionId:          sessionID.String(),
+		Command:            "say This will be cancelled",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	// Start command in goroutine
@@ -1268,7 +1495,8 @@ func TestCoreServer_Subscribe_ContextCancellationCleanup(t *testing.T) {
 			RequestId: "cancel-sub-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -1363,8 +1591,9 @@ func TestCoreServer_HandleCommand_TimeoutErrorMessage(t *testing.T) {
 					RequestId: "timeout-error-test",
 					Timestamp: timestamppb.Now(),
 				},
-				SessionId: sessionID.String(),
-				Command:   "say Hello",
+				SessionId:          sessionID.String(),
+				Command:            "say Hello",
+				PlayerSessionToken: testPlayerSessionToken,
 			}
 
 			resp, err := server.HandleCommand(ctx, req)
@@ -1423,7 +1652,8 @@ func TestCoreServer_Subscribe_TimeoutDuringEventSend(t *testing.T) {
 			RequestId: "timeout-send-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -1472,8 +1702,9 @@ func TestCoreServer_HandleCommand_EmptyCommandWithTimeout(t *testing.T) {
 			RequestId: "empty-cmd-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   "",
+		SessionId:          sessionID.String(),
+		Command:            "",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -1511,8 +1742,9 @@ func TestCoreServer_MalformedRequest_InvalidSessionID(t *testing.T) {
 					RequestId: "invalid-session-test",
 					Timestamp: timestamppb.Now(),
 				},
-				SessionId: tt.sessionID,
-				Command:   "say hello",
+				SessionId:          tt.sessionID,
+				Command:            "say hello",
+				PlayerSessionToken: testPlayerSessionToken,
 			}
 
 			// Should not panic
@@ -1569,8 +1801,9 @@ func TestCoreServer_MalformedRequest_InvalidCommand(t *testing.T) {
 					RequestId: "malformed-cmd-test",
 					Timestamp: timestamppb.Now(),
 				},
-				SessionId: sessionID.String(),
-				Command:   tt.command,
+				SessionId:          sessionID.String(),
+				Command:            tt.command,
+				PlayerSessionToken: testPlayerSessionToken,
 			}
 
 			// Should not panic
@@ -1612,9 +1845,10 @@ func TestCoreServer_MalformedRequest_NilMeta(t *testing.T) {
 	// All requests with nil Meta should not panic
 	t.Run("CommandRequest with nil Meta", func(t *testing.T) {
 		req := &corev1.HandleCommandRequest{
-			Meta:      nil,
-			SessionId: sessionID.String(),
-			Command:   "say hello",
+			Meta:               nil,
+			SessionId:          sessionID.String(),
+			Command:            "say hello",
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 
 		defer func() {
@@ -1630,8 +1864,9 @@ func TestCoreServer_MalformedRequest_NilMeta(t *testing.T) {
 
 	t.Run("DisconnectRequest with nil Meta", func(t *testing.T) {
 		req := &corev1.DisconnectRequest{
-			Meta:      nil,
-			SessionId: sessionID.String(),
+			Meta:               nil,
+			SessionId:          sessionID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 
 		defer func() {
@@ -1692,8 +1927,9 @@ func TestCoreServer_MalformedRequest_ConcurrentMalformedRequests(t *testing.T) {
 						RequestId: fmt.Sprintf("concurrent-%d", idx),
 						Timestamp: timestamppb.Now(),
 					},
-					SessionId: sessionID.String(),
-					Command:   "say hello",
+					SessionId:          sessionID.String(),
+					Command:            "say hello",
+					PlayerSessionToken: testPlayerSessionToken,
 				}
 			case 1:
 				// Invalid session
@@ -1702,8 +1938,9 @@ func TestCoreServer_MalformedRequest_ConcurrentMalformedRequests(t *testing.T) {
 						RequestId: fmt.Sprintf("concurrent-%d", idx),
 						Timestamp: timestamppb.Now(),
 					},
-					SessionId: "invalid-session",
-					Command:   "say hello",
+					SessionId:          "invalid-session",
+					Command:            "say hello",
+					PlayerSessionToken: testPlayerSessionToken,
 				}
 			default:
 				// Empty command
@@ -1712,8 +1949,9 @@ func TestCoreServer_MalformedRequest_ConcurrentMalformedRequests(t *testing.T) {
 						RequestId: fmt.Sprintf("concurrent-%d", idx),
 						Timestamp: timestamppb.Now(),
 					},
-					SessionId: sessionID.String(),
-					Command:   "",
+					SessionId:          sessionID.String(),
+					Command:            "",
+					PlayerSessionToken: testPlayerSessionToken,
 				}
 			}
 
@@ -1753,8 +1991,9 @@ func TestCoreServer_MalformedRequest_VeryLargePayload(t *testing.T) {
 			RequestId: "large-payload-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
-		Command:   largeCommand,
+		SessionId:          sessionID.String(),
+		Command:            largeCommand,
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	// Should not panic, may succeed or fail based on limits
@@ -1815,8 +2054,9 @@ func TestCoreServer_MalformedRequest_SpecialCharacters(t *testing.T) {
 					RequestId: "special-chars-test",
 					Timestamp: timestamppb.Now(),
 				},
-				SessionId: sessionID.String(),
-				Command:   tt.command,
+				SessionId:          sessionID.String(),
+				Command:            tt.command,
+				PlayerSessionToken: testPlayerSessionToken,
 			}
 
 			// Should not panic
@@ -1864,8 +2104,9 @@ func TestCoreServer_DisconnectHook(t *testing.T) {
 		Status:        session.StatusActive,
 	}))
 	req := &corev1.DisconnectRequest{
-		Meta:      &corev1.RequestMeta{RequestId: "hook-test", Timestamp: timestamppb.Now()},
-		SessionId: sessionID.String(),
+		Meta:               &corev1.RequestMeta{RequestId: "hook-test", Timestamp: timestamppb.Now()},
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.Disconnect(ctx, req)
@@ -1885,9 +2126,10 @@ func TestCoreServer_DisconnectHook_PanicRecovery(t *testing.T) {
 
 	hookCallCount := 0
 	server := &CoreServer{
-		engine:       core.NewEngine(core.NewMemoryEventStore()),
-		eventStore:   core.NewMemoryEventStore(),
-		sessionStore: session.NewMemStore(),
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		eventStore:        core.NewMemoryEventStore(),
+		sessionStore:      session.NewMemStore(),
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 		disconnectHooks: []func(session.Info){
 			func(_ session.Info) { panic("hook panic") },
 			func(_ session.Info) { hookCallCount++ },
@@ -1907,8 +2149,9 @@ func TestCoreServer_DisconnectHook_PanicRecovery(t *testing.T) {
 
 	// Disconnect should not panic — recovery catches it
 	discResp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
-		SessionId: sessionID.String(),
-		Meta:      &corev1.RequestMeta{RequestId: "test"},
+		SessionId:          sessionID.String(),
+		Meta:               &corev1.RequestMeta{RequestId: "test"},
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err)
 	require.True(t, discResp.Success)
@@ -1937,8 +2180,9 @@ func TestCoreServer_Disconnect_NonGuest_NoEndSession(t *testing.T) {
 	}))
 
 	req := &corev1.DisconnectRequest{
-		Meta:      &corev1.RequestMeta{RequestId: "non-guest-test", Timestamp: timestamppb.Now()},
-		SessionId: sessionID.String(),
+		Meta:               &corev1.RequestMeta{RequestId: "non-guest-test", Timestamp: timestamppb.Now()},
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.Disconnect(ctx, req)
@@ -1981,9 +2225,10 @@ func TestCoreServer_HandleCommand_RecordsHistory(t *testing.T) {
 	commands := []string{"say hello", "pose waves", "say goodbye"}
 	for _, cmd := range commands {
 		req := &corev1.HandleCommandRequest{
-			Meta:      &corev1.RequestMeta{RequestId: "history-test", Timestamp: timestamppb.Now()},
-			SessionId: sessionID.String(),
-			Command:   cmd,
+			Meta:               &corev1.RequestMeta{RequestId: "history-test", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			Command:            cmd,
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 		resp, err := server.HandleCommand(ctx, req)
 		require.NoError(t, err)
@@ -2020,9 +2265,10 @@ func TestCoreServer_HandleCommand_HistoryEnforcedCap(t *testing.T) {
 	// Send more commands than maxHistory
 	for i := 0; i < 5; i++ {
 		req := &corev1.HandleCommandRequest{
-			Meta:      &corev1.RequestMeta{RequestId: fmt.Sprintf("cap-test-%d", i), Timestamp: timestamppb.Now()},
-			SessionId: sessionID.String(),
-			Command:   fmt.Sprintf("say message %d", i),
+			Meta:               &corev1.RequestMeta{RequestId: fmt.Sprintf("cap-test-%d", i), Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			Command:            fmt.Sprintf("say message %d", i),
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 		resp, err := server.HandleCommand(ctx, req)
 		require.NoError(t, err)
@@ -2059,9 +2305,10 @@ func TestCoreServer_HandleCommand_HistoryBestEffort(t *testing.T) {
 	server := newHandleCommandServer(t, store, realStore)
 
 	req := &corev1.HandleCommandRequest{
-		Meta:      &corev1.RequestMeta{RequestId: "best-effort-test", Timestamp: timestamppb.Now()},
-		SessionId: sessionID.String(),
-		Command:   "say hello",
+		Meta:               &corev1.RequestMeta{RequestId: "best-effort-test", Timestamp: timestamppb.Now()},
+		SessionId:          sessionID.String(),
+		Command:            "say hello",
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	resp, err := server.HandleCommand(ctx, req)
@@ -2088,8 +2335,9 @@ func TestCoreServer_Disconnect_EmitsLeaveEvent(t *testing.T) {
 		}))
 
 		req := &corev1.DisconnectRequest{
-			Meta:      &corev1.RequestMeta{RequestId: "leave-test-guest", Timestamp: timestamppb.Now()},
-			SessionId: sessionID.String(),
+			Meta:               &corev1.RequestMeta{RequestId: "leave-test-guest", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 
 		resp, err := server.Disconnect(ctx, req)
@@ -2121,8 +2369,9 @@ func TestCoreServer_Disconnect_EmitsLeaveEvent(t *testing.T) {
 		}))
 
 		req := &corev1.DisconnectRequest{
-			Meta:      &corev1.RequestMeta{RequestId: "leave-test-nonguest", Timestamp: timestamppb.Now()},
-			SessionId: sessionID.String(),
+			Meta:               &corev1.RequestMeta{RequestId: "leave-test-nonguest", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		}
 
 		resp, err := server.Disconnect(ctx, req)
@@ -2139,7 +2388,8 @@ func TestCoreServer_MalformedRequest_DisconnectInvalidSession(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore: session.NewMemStore(),
+		sessionStore:      session.NewMemStore(),
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
 	ctx := context.Background()
@@ -2161,7 +2411,8 @@ func TestCoreServer_MalformedRequest_DisconnectInvalidSession(t *testing.T) {
 					RequestId: "invalid-disconnect",
 					Timestamp: timestamppb.Now(),
 				},
-				SessionId: tt.sessionID,
+				SessionId:          tt.sessionID,
+				PlayerSessionToken: testPlayerSessionToken,
 			}
 
 			// Should not panic
@@ -2176,9 +2427,12 @@ func TestCoreServer_MalformedRequest_DisconnectInvalidSession(t *testing.T) {
 				// gRPC error is acceptable
 				return
 			}
-			// Disconnect should be idempotent - always succeeds
-			if !resp.Success {
-				t.Error("Expected success for disconnect")
+			// bd-jv7z: unknown/malformed session_id collapses to the
+			// enumeration-safe "session not found" response (success=false).
+			// The ownership-validation gate refuses to confirm existence to
+			// a caller whose token doesn't match a real session.
+			if resp.Success {
+				t.Error("expected success=false for unknown/malformed session_id")
 			}
 		})
 	}
@@ -2230,7 +2484,8 @@ func TestCoreServer_Subscribe_ReplayFromCursor(t *testing.T) {
 			RequestId: "replay-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -2316,7 +2571,8 @@ func TestCoreServer_Subscribe_ReplayDeduplicatesLiveEvents(t *testing.T) {
 			RequestId: "dedup-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -2371,7 +2627,8 @@ func TestCoreServer_Subscribe_NoReplayWithoutCursors(t *testing.T) {
 			RequestId: "no-cursor-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -2440,7 +2697,8 @@ func TestCoreServer_Subscribe_EmitsReplayCompleteControlFrame(t *testing.T) {
 			RequestId: "replay-complete-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -2534,7 +2792,8 @@ func TestCoreServer_Subscribe_EmitsStreamClosedOnSessionDestroy(t *testing.T) {
 			RequestId: "stream-closed-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error, 1)
@@ -2637,9 +2896,10 @@ func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 
 		// Disconnect with terminal connection ID
 		resp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
-			Meta:         &corev1.RequestMeta{RequestId: "phase-test", Timestamp: timestamppb.Now()},
-			SessionId:    sessionID.String(),
-			ConnectionId: termConnID.String(),
+			Meta:               &corev1.RequestMeta{RequestId: "phase-test", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			ConnectionId:       termConnID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.Success)
@@ -2687,9 +2947,10 @@ func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 
 		// Disconnect it
 		resp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
-			Meta:         &corev1.RequestMeta{RequestId: "detach-test", Timestamp: timestamppb.Now()},
-			SessionId:    sessionID.String(),
-			ConnectionId: termConnID.String(),
+			Meta:               &corev1.RequestMeta{RequestId: "detach-test", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			ConnectionId:       termConnID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.Success)
@@ -2741,9 +3002,10 @@ func TestCoreServer_Disconnect_GridPresencePhaseOut(t *testing.T) {
 
 		// Disconnect first terminal
 		resp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
-			Meta:         &corev1.RequestMeta{RequestId: "multi-term-test", Timestamp: timestamppb.Now()},
-			SessionId:    sessionID.String(),
-			ConnectionId: termConnID1.String(),
+			Meta:               &corev1.RequestMeta{RequestId: "multi-term-test", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			ConnectionId:       termConnID1.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.Success)
@@ -2784,13 +3046,15 @@ func TestCoreServer_GetCommandHistory(t *testing.T) {
 	server := &CoreServer{
 		engine: core.NewEngine(core.NewMemoryEventStore()),
 
-		sessionStore: store,
+		sessionStore:      store,
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
 	t.Run("returns commands for valid session", func(t *testing.T) {
 		resp, err := server.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
-			Meta:      &corev1.RequestMeta{RequestId: "hist-1", Timestamp: timestamppb.Now()},
-			SessionId: sessionID.String(),
+			Meta:               &corev1.RequestMeta{RequestId: "hist-1", Timestamp: timestamppb.Now()},
+			SessionId:          sessionID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.Success)
@@ -2798,19 +3062,24 @@ func TestCoreServer_GetCommandHistory(t *testing.T) {
 		assert.Equal(t, "hist-1", resp.Meta.RequestId)
 	})
 
-	t.Run("returns error for missing session_id", func(t *testing.T) {
+	t.Run("returns session not found for missing session_id", func(t *testing.T) {
+		// bd-jv7z: ownership validation runs before the old
+		// "session_id is required" branch, so an empty session_id
+		// collapses to the enumeration-safe response.
 		resp, err := server.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
-			Meta: &corev1.RequestMeta{RequestId: "hist-2"},
+			Meta:               &corev1.RequestMeta{RequestId: "hist-2"},
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.False(t, resp.Success)
-		assert.Equal(t, "session_id is required", resp.Error)
+		assert.Equal(t, "session not found", resp.Error)
 	})
 
 	t.Run("returns error for unknown session", func(t *testing.T) {
 		resp, err := server.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
-			Meta:      &corev1.RequestMeta{RequestId: "hist-3"},
-			SessionId: "nonexistent",
+			Meta:               &corev1.RequestMeta{RequestId: "hist-3"},
+			SessionId:          "nonexistent",
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.False(t, resp.Success)
@@ -2827,10 +3096,48 @@ func TestCoreServer_GetCommandHistory(t *testing.T) {
 		}))
 
 		resp, err := server.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
-			SessionId: emptySessionID.String(),
+			SessionId:          emptySessionID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.Success)
+		assert.Empty(t, resp.Commands)
+	})
+
+	t.Run("rejects request with empty token", func(t *testing.T) {
+		resp, err := server.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
+			Meta:      &corev1.RequestMeta{RequestId: "hist-empty-token"},
+			SessionId: sessionID.String(),
+			// PlayerSessionToken intentionally empty.
+		})
+		require.NoError(t, err)
+		assert.False(t, resp.Success)
+		assert.Equal(t, "session not found", resp.Error)
+		assert.Empty(t, resp.Commands)
+	})
+
+	t.Run("rejects request with token for a different player", func(t *testing.T) {
+		// Server keyed on zero-ULID PlayerID; seed the session's
+		// PlayerID to a non-zero value so ValidateSessionOwnership
+		// returns a mismatch.
+		mismatchSessionID := core.NewULID()
+		otherPlayer := core.NewULID()
+		require.NoError(t, store.Set(ctx, mismatchSessionID.String(), &session.Info{
+			ID:          mismatchSessionID.String(),
+			CharacterID: core.NewULID(),
+			PlayerID:    otherPlayer,
+			Status:      session.StatusActive,
+			MaxHistory:  100,
+		}))
+
+		resp, err := server.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
+			Meta:               &corev1.RequestMeta{RequestId: "hist-mismatch"},
+			SessionId:          mismatchSessionID.String(),
+			PlayerSessionToken: testPlayerSessionToken,
+		})
+		require.NoError(t, err)
+		assert.False(t, resp.Success)
+		assert.Equal(t, "session not found", resp.Error)
 		assert.Empty(t, resp.Commands)
 	})
 }
@@ -2880,7 +3187,8 @@ func TestSubscribeIncludesPluginContributedStreams(t *testing.T) {
 	stream := &mockSubscribeStream{ctx: ctx}
 
 	req := &corev1.SubscribeRequest{
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	done := make(chan error)
@@ -2942,7 +3250,8 @@ func TestSubscribeDeregistersRegistryOnExit(t *testing.T) {
 	stream := &mockSubscribeStream{ctx: ctx}
 
 	req := &corev1.SubscribeRequest{
-		SessionId: sessionID.String(),
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
 	}
 
 	// Use afterLISTENHook to verify the session IS registered just before replay.
@@ -2978,4 +3287,67 @@ func TestSubscribeDeregistersRegistryOnExit(t *testing.T) {
 	err := registry.Send(sessionID.String(), sessionStreamUpdate{stream: "channel:test", add: false})
 	require.Error(t, err, "registry should return SESSION_NOT_FOUND after Subscribe exits")
 	errutil.AssertErrorCode(t, err, "SESSION_NOT_FOUND")
+}
+
+// TestSubscribeRegistersConnectionWithClientTypeFromRequest asserts that the
+// core Subscribe handler registers the caller's connection into the session
+// store at stream open (using the connection_id + client_type from the
+// request) and deregisters it when the stream exits. Closes bd-j2xj's
+// gateway-boundary surface: connection lifecycle belongs in core, not the
+// web gateway.
+func TestSubscribeRegistersConnectionWithClientTypeFromRequest(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+
+	eventStore := core.NewMemoryEventStore()
+	sessStore := newTestSessionStore(t, map[string]*session.Info{
+		sessionID.String(): {
+			ID:          sessionID.String(),
+			CharacterID: charID,
+			LocationID:  locationID,
+			Status:      session.StatusActive,
+		},
+	})
+
+	server := newSubscribeTestServer(t, eventStore, sessStore)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := &mockSubscribeStream{ctx: ctx}
+
+	connID := core.NewULID()
+	req := &corev1.SubscribeRequest{
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
+		ConnectionId:       connID.String(),
+		ClientType:         "terminal",
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	// Registration should appear before the stream reaches its live loop.
+	require.Eventually(t, func() bool {
+		total, err := sessStore.CountConnections(context.Background(), sessionID.String())
+		if err != nil || total != 1 {
+			return false
+		}
+		termCount, err := sessStore.CountConnectionsByType(context.Background(), sessionID.String(), "terminal")
+		return err == nil && termCount == 1
+	}, 2*time.Second, 10*time.Millisecond, "connection should be registered by Subscribe")
+
+	// Closing the stream should deregister the connection.
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Subscribe did not return after context cancellation")
+	}
+
+	require.Eventually(t, func() bool {
+		total, err := sessStore.CountConnections(context.Background(), sessionID.String())
+		return err == nil && total == 0
+	}, 2*time.Second, 10*time.Millisecond, "connection should be deregistered on stream close")
 }

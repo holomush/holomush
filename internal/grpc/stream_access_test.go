@@ -131,11 +131,11 @@ func TestStreamToFocusKey(t *testing.T) {
 	validID := ulid.Make()
 
 	tests := []struct {
-		name        string
-		stream      string
-		wantErr     bool
-		wantKind    session.FocusKind
-		wantTarget  ulid.ULID
+		name       string
+		stream     string
+		wantErr    bool
+		wantKind   session.FocusKind
+		wantTarget ulid.ULID
 	}{
 		{
 			name:       "parses scene IC stream",

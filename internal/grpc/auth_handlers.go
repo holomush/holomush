@@ -11,6 +11,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/core"
@@ -22,6 +23,7 @@ import (
 // AuthServiceProvider defines the auth.Service methods used by auth handlers.
 type AuthServiceProvider interface {
 	ValidateCredentials(ctx context.Context, username, password string) (*auth.Player, error)
+	AuthenticatePlayer(ctx context.Context, username, password, userAgent, ipAddress string) (string, *auth.Player, error)
 	CreatePlayer(ctx context.Context, username, password, email string) (*auth.Player, *auth.PlayerSession, string, error)
 	Logout(ctx context.Context, tokenHash string) (ulid.ULID, error)
 }
@@ -137,28 +139,16 @@ func (s *CoreServer) AuthenticatePlayer(ctx context.Context, req *corev1.Authent
 		}, nil
 	}
 
-	player, validateErr := s.authService.ValidateCredentials(ctx, req.Username, req.Password)
-	if validateErr != nil {
+	// AuthenticatePlayer validates credentials, enforces the per-player session
+	// cap (evicting the oldest session if needed), and persists a new
+	// PlayerSession in a single service call.
+	rawToken, player, authErr := s.authService.AuthenticatePlayer(ctx, req.Username, req.Password, "", "")
+	if authErr != nil {
 		//nolint:nilerr // intentional: return user-facing error in response body
 		return &corev1.AuthenticatePlayerResponse{
 			Success:      false,
 			ErrorMessage: "invalid username or password",
 		}, nil
-	}
-
-	// Create a durable player session.
-	rawToken, tokenHash, tokenErr := auth.GenerateSessionToken()
-	if tokenErr != nil {
-		return nil, oops.Code("TOKEN_GENERATION_FAILED").Wrap(tokenErr)
-	}
-
-	playerSession, sessionErr := auth.NewPlayerSession(player.ID, tokenHash, "", "", auth.PlayerSessionTTL)
-	if sessionErr != nil {
-		return nil, oops.Code("SESSION_CREATE_FAILED").Wrap(sessionErr)
-	}
-
-	if storeErr := s.playerSessionRepo.Create(ctx, playerSession); storeErr != nil {
-		return nil, oops.Code("SESSION_STORE_FAILED").Wrap(storeErr)
 	}
 
 	characters, err := s.buildCharacterSummaries(ctx, player.ID)
@@ -269,18 +259,19 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 	}
 
 	sessionInfo := &session.Info{
-		ID:            sessionID.String(),
-		CharacterID:   charID,
-		PlayerID:      playerSession.PlayerID,
-		CharacterName: selectedChar.Name,
-		LocationID:    locationID,
-		Status:        session.StatusActive,
-		GridPresent:   true,
-		EventCursors:  map[string]ulid.ULID{},
-		TTLSeconds:    ttlSeconds,
-		MaxHistory:    maxHistory,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:              sessionID.String(),
+		CharacterID:     charID,
+		PlayerID:        playerSession.PlayerID,
+		PlayerSessionID: playerSession.ID,
+		CharacterName:   selectedChar.Name,
+		LocationID:      locationID,
+		Status:          session.StatusActive,
+		GridPresent:     true,
+		EventCursors:    map[string]ulid.ULID{},
+		TTLSeconds:      ttlSeconds,
+		MaxHistory:      maxHistory,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 
 	if err := s.sessionStore.Set(ctx, sessionID.String(), sessionInfo); err != nil {
@@ -521,6 +512,127 @@ func (s *CoreServer) CreateGuest(ctx context.Context, _ *corev1.CreateGuestReque
 		DefaultCharacterId: result.Character.ID.String(),
 		SessionTtlSeconds:  int64(auth.GuestSessionTTL.Seconds()),
 	}, nil
+}
+
+// ListPlayerSessions returns the caller's active PlayerSessions with metadata.
+// Tokens are never included in the response - each PlayerSessionInfo is
+// identified by its ULID only. Exactly one entry has is_current=true (the
+// session that made this request) to support "this device" UX.
+//
+// SECURITY: On any auth failure (invalid token, expired session, repo error)
+// returns an empty list - callers cannot distinguish "invalid token" from
+// "player has zero sessions", preventing enumeration.
+func (s *CoreServer) ListPlayerSessions(ctx context.Context, req *corev1.ListPlayerSessionsRequest) (*corev1.ListPlayerSessionsResponse, error) {
+	if s.playerSessionRepo == nil {
+		return &corev1.ListPlayerSessionsResponse{}, nil
+	}
+
+	caller, err := s.playerSessionRepo.GetByTokenHash(ctx, auth.HashSessionToken(req.GetPlayerSessionToken()))
+	if err != nil || caller.IsExpired() {
+		// SECURITY: empty response on auth failure is the enumeration-safe
+		// signal - callers cannot distinguish "invalid token" from "player
+		// has 0 sessions".
+		return &corev1.ListPlayerSessionsResponse{}, nil //nolint:nilerr // intentional: enumeration-safe auth-failure response
+	}
+	// Best-effort TTL refresh — active session management keeps the session alive.
+	s.playerSessionRepo.RefreshTTL(ctx, caller.ID, auth.PlayerSessionTTL) //nolint:errcheck // best-effort
+
+	sessions, err := s.playerSessionRepo.ListByPlayer(ctx, caller.PlayerID)
+	if err != nil {
+		return nil, oops.Code("LIST_PLAYER_SESSIONS_FAILED").Wrap(err)
+	}
+
+	out := make([]*corev1.PlayerSessionInfo, 0, len(sessions))
+	for _, ps := range sessions {
+		out = append(out, &corev1.PlayerSessionInfo{
+			Id:         ps.ID.String(),
+			CreatedAt:  timestamppb.New(ps.CreatedAt),
+			LastActive: timestamppb.New(ps.UpdatedAt),
+			UserAgent:  ps.UserAgent,
+			IpAddress:  ps.IPAddress,
+			IsCurrent:  ps.ID.Compare(caller.ID) == 0,
+		})
+	}
+	return &corev1.ListPlayerSessionsResponse{Sessions: out}, nil
+}
+
+// RevokePlayerSession deletes a specific PlayerSession owned by the caller.
+// Attempts to revoke another player's session return SESSION_NOT_FOUND (same
+// enumeration-prevention pattern as the post-auth ownership fixes). Cross-
+// player attempts log WARN for security auditing.
+func (s *CoreServer) RevokePlayerSession(ctx context.Context, req *corev1.RevokePlayerSessionRequest) (*corev1.RevokePlayerSessionResponse, error) {
+	if s.playerSessionRepo == nil {
+		return &corev1.RevokePlayerSessionResponse{Success: false, ErrorMessage: "session not found"}, nil
+	}
+
+	caller, err := s.playerSessionRepo.GetByTokenHash(ctx, auth.HashSessionToken(req.GetPlayerSessionToken()))
+	if err != nil || caller.IsExpired() {
+		//nolint:nilerr // intentional: enumeration-safe - all auth failures collapse to "session not found"
+		return &corev1.RevokePlayerSessionResponse{Success: false, ErrorMessage: "session not found"}, nil
+	}
+	// Best-effort TTL refresh — active session management keeps the session alive.
+	s.playerSessionRepo.RefreshTTL(ctx, caller.ID, auth.PlayerSessionTTL) //nolint:errcheck // best-effort
+
+	targetID, err := ulid.Parse(req.GetTargetSessionId())
+	if err != nil {
+		//nolint:nilerr // intentional: enumeration-safe
+		return &corev1.RevokePlayerSessionResponse{Success: false, ErrorMessage: "session not found"}, nil
+	}
+
+	target, err := s.playerSessionRepo.GetByID(ctx, targetID)
+	if err != nil {
+		//nolint:nilerr // intentional: enumeration-safe
+		return &corev1.RevokePlayerSessionResponse{Success: false, ErrorMessage: "session not found"}, nil
+	}
+	if target.PlayerID.Compare(caller.PlayerID) != 0 {
+		slog.WarnContext(ctx, "revoke player session: cross-player attempt",
+			"caller_id", caller.PlayerID.String(),
+			"target_owner", target.PlayerID.String(),
+			"target_id", targetID.String(),
+		)
+		return &corev1.RevokePlayerSessionResponse{Success: false, ErrorMessage: "session not found"}, nil
+	}
+
+	if err := s.playerSessionRepo.Delete(ctx, target.ID); err != nil {
+		return nil, oops.Code("REVOKE_PLAYER_SESSION_FAILED").Wrap(err)
+	}
+	return &corev1.RevokePlayerSessionResponse{Success: true}, nil
+}
+
+// RevokeOtherPlayerSessions bulk-revokes all PlayerSessions owned by the
+// caller except the current one. Useful after a suspected compromise or
+// password reset.
+func (s *CoreServer) RevokeOtherPlayerSessions(ctx context.Context, req *corev1.RevokeOtherPlayerSessionsRequest) (*corev1.RevokeOtherPlayerSessionsResponse, error) {
+	if s.playerSessionRepo == nil {
+		return &corev1.RevokeOtherPlayerSessionsResponse{Success: false}, nil
+	}
+
+	caller, err := s.playerSessionRepo.GetByTokenHash(ctx, auth.HashSessionToken(req.GetPlayerSessionToken()))
+	if err != nil || caller.IsExpired() {
+		//nolint:nilerr // intentional: enumeration-safe auth-failure response
+		return &corev1.RevokeOtherPlayerSessionsResponse{Success: false}, nil
+	}
+	// Best-effort TTL refresh — active session management keeps the session alive.
+	s.playerSessionRepo.RefreshTTL(ctx, caller.ID, auth.PlayerSessionTTL) //nolint:errcheck // best-effort
+
+	sessions, err := s.playerSessionRepo.ListByPlayer(ctx, caller.PlayerID)
+	if err != nil {
+		return nil, oops.Code("REVOKE_OTHER_LIST_FAILED").Wrap(err)
+	}
+
+	var count int32
+	for _, ps := range sessions {
+		if ps.ID.Compare(caller.ID) == 0 {
+			continue
+		}
+		if delErr := s.playerSessionRepo.Delete(ctx, ps.ID); delErr != nil {
+			return nil, oops.Code("REVOKE_OTHER_DELETE_FAILED").
+				With("target_id", ps.ID.String()).Wrap(delErr)
+		}
+		count++
+	}
+
+	return &corev1.RevokeOtherPlayerSessionsResponse{Success: true, RevokedCount: count}, nil
 }
 
 // buildCharacterSummaries lists characters for a player and enriches with session status.

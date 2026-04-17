@@ -100,8 +100,9 @@ func TestNewClient_ConnectsToServer(t *testing.T) {
 			RequestId: "test-req-1",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: "test-session",
-		Command:   "look",
+		SessionId:          "test-session",
+		Command:            "look",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.GetSuccess(), "HandleCommand() success = false, want true")
@@ -136,8 +137,9 @@ func TestClient_HandleCommand(t *testing.T) {
 			RequestId: "cmd-1",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: "session-123",
-		Command:   "look",
+		SessionId:          "session-123",
+		Command:            "look",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.GetSuccess(), "HandleCommand() success = false, want true")
@@ -238,8 +240,9 @@ func TestClient_WithTLS(t *testing.T) {
 			RequestId: "tls-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: "test-session",
-		Command:   "look",
+		SessionId:          "test-session",
+		Command:            "look",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err, "HandleCommand() with TLS error")
 	assert.True(t, resp.GetSuccess(), "HandleCommand() with TLS success = false, want true")
@@ -277,8 +280,9 @@ func TestClient_KeepaliveConfig(t *testing.T) {
 			RequestId: "keepalive-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: "test-session",
-		Command:   "look",
+		SessionId:          "test-session",
+		Command:            "look",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.GetSuccess(), "HandleCommand() success = false, want true")
@@ -318,8 +322,9 @@ func TestClient_CoreClient(t *testing.T) {
 			RequestId: "direct-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: "test-session",
-		Command:   "look",
+		SessionId:          "test-session",
+		Command:            "look",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err, "CoreClient().HandleCommand() error")
 	assert.True(t, resp.GetSuccess(), "CoreClient().HandleCommand() success = false, want true")
@@ -437,8 +442,9 @@ func TestClient_HandleCommand_RPCError(t *testing.T) {
 			RequestId: "error-test",
 			Timestamp: timestamppb.Now(),
 		},
-		SessionId: "test-session",
-		Command:   "say hello",
+		SessionId:          "test-session",
+		Command:            "say hello",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	assert.Error(t, err, "HandleCommand() should return error when RPC fails")
 }

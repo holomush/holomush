@@ -101,13 +101,17 @@ func registerTestSayCommand(reg *command.Registry) {
 }
 
 // loginAsGuest performs the two-phase guest login (CreateGuest + SelectCharacter)
-// and returns the resulting game session ID and character name.
-func loginAsGuest(ctx context.Context, cli *grpcpkg.Client) (sessionID, charName string) {
+// and returns the resulting game session ID, character name, and
+// player_session_token. The token is required by HandleCommand after
+// bd-jv7z landed server-side ownership enforcement — calls that omit
+// the token are rejected with "session not found".
+func loginAsGuest(ctx context.Context, cli *grpcpkg.Client) (sessionID, charName, token string) {
 	guestResp, err := cli.CreateGuest(ctx, &corev1.CreateGuestRequest{})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(guestResp.Success).To(BeTrue(), "guest creation should succeed: %s", guestResp.ErrorMessage)
 	Expect(guestResp.Characters).To(HaveLen(1))
 	Expect(guestResp.DefaultCharacterId).NotTo(BeEmpty())
+	Expect(guestResp.PlayerSessionToken).NotTo(BeEmpty())
 
 	selectResp, err := cli.SelectCharacter(ctx, &corev1.SelectCharacterRequest{
 		PlayerSessionToken: guestResp.PlayerSessionToken,
@@ -118,7 +122,7 @@ func loginAsGuest(ctx context.Context, cli *grpcpkg.Client) (sessionID, charName
 		"character selection should succeed: %s", selectResp.ErrorMessage)
 	Expect(selectResp.SessionId).NotTo(BeEmpty())
 
-	return selectResp.SessionId, selectResp.CharacterName
+	return selectResp.SessionId, selectResp.CharacterName, guestResp.PlayerSessionToken
 }
 
 var _ = Describe("Session Persistence", func() {
@@ -266,21 +270,23 @@ var _ = Describe("Session Persistence", func() {
 
 	Describe("Reconnect flow", func() {
 		It("replays missed events when client resubscribes after disconnect", func() {
-			sessionID, _ := loginAsGuest(testCtx, grpcCli)
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
 
 			// Open the first subscription. It will replay the `arrive` event
 			// emitted by SelectCharacter, then enter the live loop.
 			subCtx, subCancel := context.WithCancel(testCtx)
 			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			// Issue a say command. The handler appends a `say` event to the
 			// location stream, which the live loop forwards to the client.
 			_, err = grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
-				SessionId: sessionID,
-				Command:   "say hello",
+				SessionId:          sessionID,
+				Command:            "say hello",
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -342,7 +348,8 @@ var _ = Describe("Session Persistence", func() {
 			replayCtx, replayCancel := context.WithTimeout(testCtx, 5*time.Second)
 			defer replayCancel()
 			replayStream, err := grpcCli.Subscribe(replayCtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -392,17 +399,19 @@ var _ = Describe("Session Persistence", func() {
 			// guarantees handler exit (ClientStream.Recv() returning a
 			// local Canceled error does NOT imply server handler exit;
 			// grpc-go aborts the client stream locally on context cancel).
-			sessionID, _ := loginAsGuest(testCtx, grpcCli)
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
 
 			subCtx, subCancel := context.WithCancel(testCtx)
 			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
-				SessionId: sessionID,
-				Command:   "say hello",
+				SessionId:          sessionID,
+				Command:            "say hello",
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -444,17 +453,19 @@ var _ = Describe("Session Persistence", func() {
 		})
 
 		It("commits cursor before grpcServer.GracefulStop returns (no lost writes on shutdown)", func() {
-			sessionID, _ := loginAsGuest(testCtx, grpcCli)
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
 
 			subCtx, subCancel := context.WithCancel(testCtx)
 			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
-				SessionId: sessionID,
-				Command:   "say hello",
+				SessionId:          sessionID,
+				Command:            "say hello",
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -511,12 +522,13 @@ var _ = Describe("Session Persistence", func() {
 			// 1) Establish a session and drain its initial replay so the
 			//    hook fires on the *next* event (the live say) rather
 			//    than the arrive event from SelectCharacter.
-			sessionID, _ := loginAsGuest(testCtx, grpcCli)
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
 
 			subACtx, subACancel := context.WithCancel(testCtx)
 			defer subACancel()
 			streamA, err := grpcCli.Subscribe(subACtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -554,8 +566,9 @@ var _ = Describe("Session Persistence", func() {
 			// 3) Trigger a live event. The handler will Send the say to
 			//    streamA, then enter the hook with the cursor lock held.
 			_, err = grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
-				SessionId: sessionID,
-				Command:   "say hello",
+				SessionId:          sessionID,
+				Command:            "say hello",
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -594,7 +607,8 @@ var _ = Describe("Session Persistence", func() {
 			subBCtx, subBCancel := context.WithCancel(testCtx)
 			defer subBCancel()
 			streamB, err := grpcCli.Subscribe(subBCtx, &corev1.SubscribeRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -662,13 +676,14 @@ var _ = Describe("Session Persistence", func() {
 
 	Describe("Command history", func() {
 		It("persists commands across HandleCommand calls and exposes them via GetCommandHistory", func() {
-			sessionID, _ := loginAsGuest(testCtx, grpcCli)
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
 
 			commands := []string{"say hello", "say world"}
 			for _, cmd := range commands {
 				resp, err := grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
-					SessionId: sessionID,
-					Command:   cmd,
+					SessionId:          sessionID,
+					Command:            cmd,
+					PlayerSessionToken: token,
 				})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.Success).To(BeTrue(), "command %q failed: %s", cmd, resp.Error)
@@ -677,7 +692,8 @@ var _ = Describe("Session Persistence", func() {
 			// Verify via the gRPC GetCommandHistory RPC. This exercises the
 			// full server → store → driver path that unit tests cannot.
 			histResp, err := grpcCli.GetCommandHistory(testCtx, &corev1.GetCommandHistoryRequest{
-				SessionId: sessionID,
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
 			})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(histResp.Success).To(BeTrue(), "GetCommandHistory failed: %s", histResp.Error)
@@ -687,7 +703,7 @@ var _ = Describe("Session Persistence", func() {
 
 	Describe("TTL expiration", func() {
 		It("deletes detached session and emits leave event when reaper observes expired ttl", func() {
-			sessionID, _ := loginAsGuest(testCtx, grpcCli)
+			sessionID, _, _ := loginAsGuest(testCtx, grpcCli)
 
 			// Capture session details before forcing expiry — once the reaper
 			// runs the session row is gone and Get returns an error.
@@ -736,6 +752,307 @@ var _ = Describe("Session Persistence", func() {
 				return false
 			}).WithTimeout(5*time.Second).WithPolling(50*time.Millisecond).Should(BeTrue(),
 				"expected a leave event for the expired character on the location stream")
+		})
+	})
+
+	// HandleCommand ownership enforcement — bd-jv7z.
+	//
+	// Closes the IDOR surface where Player A could submit a command with
+	// their valid player_session_token but against Player B's session_id.
+	// The core server now calls auth.ValidateSessionOwnership before
+	// executing, and any failure collapses to the enumeration-safe
+	// "session not found" response.
+	Describe("HandleCommand ownership enforcement (bd-jv7z)", func() {
+		It("rejects a cross-player HandleCommand with session not found", func() {
+			// Two independent guest logins — distinct players, tokens, sessions.
+			sessionA, _, tokenA := loginAsGuest(testCtx, grpcCli)
+			sessionB, _, tokenB := loginAsGuest(testCtx, grpcCli)
+			Expect(sessionA).NotTo(Equal(sessionB))
+			Expect(tokenA).NotTo(Equal(tokenB))
+
+			// Attack: Player A's token with Player B's session_id.
+			resp, err := grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
+				SessionId:          sessionB,
+				Command:            "say stolen",
+				PlayerSessionToken: tokenA,
+			})
+			Expect(err).NotTo(HaveOccurred(),
+				"RPC returns normally — error is in the response payload")
+			Expect(resp.GetSuccess()).To(BeFalse(),
+				"cross-player command must be rejected")
+			Expect(resp.GetError()).To(Equal("session not found"),
+				"response must be enumeration-safe — same string as unknown session id")
+		})
+
+		It("permits HandleCommand when the player owns the session", func() {
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
+
+			resp, err := grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
+				SessionId:          sessionID,
+				Command:            "say hi",
+				PlayerSessionToken: token,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.GetSuccess()).To(BeTrue(),
+				"authorized command must succeed, got error: %s", resp.GetError())
+		})
+
+		It("rejects HandleCommand with empty token even for a valid session id", func() {
+			sessionID, _, _ := loginAsGuest(testCtx, grpcCli)
+
+			resp, err := grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
+				SessionId: sessionID,
+				Command:   "say hi",
+				// PlayerSessionToken intentionally empty.
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.GetSuccess()).To(BeFalse(),
+				"empty token must not authorize a command")
+			Expect(resp.GetError()).To(Equal("session not found"),
+				"response must be enumeration-safe — same string as ownership mismatch")
+		})
+	})
+
+	// Subscribe ownership enforcement — bd-jv7z.
+	//
+	// Closes the IDOR surface where Player A could open an event stream
+	// against Player B's session_id. The core server now calls
+	// auth.ValidateSessionOwnership at stream open; validation failure
+	// terminates the stream with the enumeration-safe SESSION_NOT_FOUND
+	// error. Ongoing revocation propagates via the existing control-frame
+	// mechanism on session deletion.
+	Describe("Subscribe ownership enforcement (bd-jv7z)", func() {
+		It("rejects a cross-player Subscribe with session not found", func() {
+			sessionA, _, tokenA := loginAsGuest(testCtx, grpcCli)
+			sessionB, _, tokenB := loginAsGuest(testCtx, grpcCli)
+			Expect(sessionA).NotTo(Equal(sessionB))
+			Expect(tokenA).NotTo(Equal(tokenB))
+
+			// Attack: Player A's token with Player B's session_id.
+			subCtx, subCancel := context.WithTimeout(testCtx, 5*time.Second)
+			defer subCancel()
+			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
+				SessionId:          sessionB,
+				PlayerSessionToken: tokenA,
+			})
+			Expect(err).NotTo(HaveOccurred(),
+				"stream-opening RPC returns nil; validation error surfaces on Recv")
+
+			// First Recv should fail with a session-not-found-style error.
+			_, recvErr := stream.Recv()
+			Expect(recvErr).To(HaveOccurred(),
+				"cross-player Subscribe must fail on first Recv")
+			Expect(recvErr.Error()).To(ContainSubstring("session not found"),
+				"response must be enumeration-safe — same string as unknown session id")
+		})
+
+		It("permits Subscribe when the player owns the session", func() {
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
+
+			subCtx, subCancel := context.WithCancel(testCtx)
+			defer subCancel()
+			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Drain until REPLAY_COMPLETE arrives — proves the stream opened
+			// and the live loop is running for the legitimate owner.
+			drainUntilReplayComplete(stream)
+		})
+
+		It("rejects Subscribe with empty token even for a valid session id", func() {
+			sessionID, _, _ := loginAsGuest(testCtx, grpcCli)
+
+			subCtx, subCancel := context.WithTimeout(testCtx, 5*time.Second)
+			defer subCancel()
+			stream, err := grpcCli.Subscribe(subCtx, &corev1.SubscribeRequest{
+				SessionId: sessionID,
+				// PlayerSessionToken intentionally empty.
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, recvErr := stream.Recv()
+			Expect(recvErr).To(HaveOccurred(),
+				"empty token must not authorize a subscription")
+			Expect(recvErr.Error()).To(ContainSubstring("session not found"),
+				"response must be enumeration-safe — same string as ownership mismatch")
+		})
+	})
+
+	// Disconnect ownership enforcement — bd-jv7z.
+	//
+	// Closes the IDOR surface where Player A could forcibly disconnect
+	// Player B's session with just the session_id. The core server now
+	// calls auth.ValidateSessionOwnership before acting on the session;
+	// any failure collapses to the enumeration-safe "session not found"
+	// response (success=false), and Player B's session remains untouched.
+	Describe("Disconnect ownership enforcement (bd-jv7z)", func() {
+		It("rejects a cross-player Disconnect with session not found", func() {
+			sessionA, _, tokenA := loginAsGuest(testCtx, grpcCli)
+			sessionB, _, tokenB := loginAsGuest(testCtx, grpcCli)
+			Expect(sessionA).NotTo(Equal(sessionB))
+			Expect(tokenA).NotTo(Equal(tokenB))
+
+			// Attack: Player A's token with Player B's session_id.
+			resp, err := grpcCli.Disconnect(testCtx, &corev1.DisconnectRequest{
+				SessionId:          sessionB,
+				ConnectionId:       "",
+				PlayerSessionToken: tokenA,
+			})
+			Expect(err).NotTo(HaveOccurred(),
+				"RPC returns normally — error is in the response payload")
+			Expect(resp.GetSuccess()).To(BeFalse(),
+				"cross-player disconnect must be rejected")
+
+			// Player B's session must still exist and be active.
+			info, getErr := env.sessionStore.Get(testCtx, sessionB)
+			Expect(getErr).NotTo(HaveOccurred(),
+				"victim session must survive an unauthorized disconnect attempt")
+			Expect(info.Status).To(Equal(session.StatusActive),
+				"victim session status must not have changed")
+		})
+
+		It("permits Disconnect when the player owns the session", func() {
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
+
+			resp, err := grpcCli.Disconnect(testCtx, &corev1.DisconnectRequest{
+				SessionId:          sessionID,
+				ConnectionId:       "",
+				PlayerSessionToken: token,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.GetSuccess()).To(BeTrue(),
+				"owner-authorized disconnect must succeed")
+		})
+
+		It("rejects Disconnect with empty token even for a valid session id", func() {
+			sessionID, _, _ := loginAsGuest(testCtx, grpcCli)
+
+			resp, err := grpcCli.Disconnect(testCtx, &corev1.DisconnectRequest{
+				SessionId: sessionID,
+				// PlayerSessionToken intentionally empty.
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.GetSuccess()).To(BeFalse(),
+				"empty token must not authorize a disconnect")
+
+			// Session must still exist.
+			info, getErr := env.sessionStore.Get(testCtx, sessionID)
+			Expect(getErr).NotTo(HaveOccurred(),
+				"session must survive an unauthorized disconnect attempt")
+			Expect(info.Status).To(Equal(session.StatusActive))
+		})
+	})
+
+	// GetCommandHistory ownership enforcement — bd-jv7z.
+	//
+	// Closes the IDOR surface where Player A could read Player B's
+	// typed command history with just the session_id. The core server
+	// now calls auth.ValidateSessionOwnership before returning history;
+	// any failure collapses to the enumeration-safe "session not found"
+	// response (success=false) with an empty command list.
+	Describe("GetCommandHistory ownership enforcement (bd-jv7z)", func() {
+		It("rejects a cross-player GetCommandHistory with empty commands", func() {
+			sessionA, _, tokenA := loginAsGuest(testCtx, grpcCli)
+			sessionB, _, tokenB := loginAsGuest(testCtx, grpcCli)
+			Expect(sessionA).NotTo(Equal(sessionB))
+			Expect(tokenA).NotTo(Equal(tokenB))
+
+			// Player B issues a command so there is something in history.
+			cmdResp, err := grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
+				SessionId:          sessionB,
+				Command:            "look",
+				PlayerSessionToken: tokenB,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cmdResp.GetSuccess()).To(BeTrue(),
+				"owner-authorized HandleCommand must succeed: %s", cmdResp.GetError())
+
+			// Attack: Player A's token with Player B's session_id.
+			resp, err := grpcCli.GetCommandHistory(testCtx, &corev1.GetCommandHistoryRequest{
+				SessionId:          sessionB,
+				PlayerSessionToken: tokenA,
+			})
+			Expect(err).NotTo(HaveOccurred(),
+				"RPC returns normally — error is in the response payload")
+			Expect(resp.GetSuccess()).To(BeFalse(),
+				"cross-player GetCommandHistory must be rejected")
+			Expect(resp.GetCommands()).To(BeEmpty(),
+				"attacker must not receive any history entries")
+		})
+
+		It("returns commands for the legitimate owner", func() {
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
+
+			cmdResp, err := grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
+				SessionId:          sessionID,
+				Command:            "look",
+				PlayerSessionToken: token,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cmdResp.GetSuccess()).To(BeTrue(),
+				"owner-authorized HandleCommand must succeed: %s", cmdResp.GetError())
+
+			resp, err := grpcCli.GetCommandHistory(testCtx, &corev1.GetCommandHistoryRequest{
+				SessionId:          sessionID,
+				PlayerSessionToken: token,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.GetSuccess()).To(BeTrue(),
+				"owner-authorized GetCommandHistory must succeed: %s", resp.GetError())
+			Expect(resp.GetCommands()).To(ContainElement("look"),
+				"owner must see the command they just issued")
+		})
+
+		It("rejects GetCommandHistory with empty token even for a valid session id", func() {
+			sessionID, _, _ := loginAsGuest(testCtx, grpcCli)
+
+			resp, err := grpcCli.GetCommandHistory(testCtx, &corev1.GetCommandHistoryRequest{
+				SessionId: sessionID,
+				// PlayerSessionToken intentionally empty.
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.GetSuccess()).To(BeFalse(),
+				"empty token must not authorize a GetCommandHistory call")
+			Expect(resp.GetCommands()).To(BeEmpty(),
+				"empty-token caller must not receive any history entries")
+		})
+	})
+
+	Describe("player_session_id linkage (bd-urbq)", func() {
+		It("game session rows carry player_session_id after SelectCharacter", func() {
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
+
+			// Look up the PlayerSession row created by the guest flow so
+			// we can assert the game session's player_session_id FK points
+			// at the right parent.
+			ps, err := env.playerSessionStore.GetByTokenHash(testCtx, auth.HashSessionToken(token))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ps).NotTo(BeNil())
+
+			row, err := env.sessionStore.Get(testCtx, sessionID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(row.PlayerSessionID).To(Equal(ps.ID),
+				"SelectCharacter must populate player_session_id on new game sessions")
+		})
+
+		It("deleting a PlayerSession cascades to its game sessions", func() {
+			sessionID, _, token := loginAsGuest(testCtx, grpcCli)
+
+			ps, err := env.playerSessionStore.GetByTokenHash(testCtx, auth.HashSessionToken(token))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ps).NotTo(BeNil())
+
+			// Delete the parent PlayerSession directly via the store. The
+			// sessions.player_session_id FK is ON DELETE CASCADE, so the
+			// game session row should be gone afterwards.
+			Expect(env.playerSessionStore.Delete(testCtx, ps.ID)).To(Succeed())
+
+			_, err = env.sessionStore.Get(testCtx, sessionID)
+			Expect(err).To(HaveOccurred(),
+				"game session must be removed when its parent PlayerSession is deleted")
 		})
 	})
 })

@@ -83,6 +83,15 @@ const (
 	// WebServiceWebQueryStreamHistoryProcedure is the fully-qualified name of the WebService's
 	// WebQueryStreamHistory RPC.
 	WebServiceWebQueryStreamHistoryProcedure = "/holomush.web.v1.WebService/WebQueryStreamHistory"
+	// WebServiceWebListPlayerSessionsProcedure is the fully-qualified name of the WebService's
+	// WebListPlayerSessions RPC.
+	WebServiceWebListPlayerSessionsProcedure = "/holomush.web.v1.WebService/WebListPlayerSessions"
+	// WebServiceWebRevokePlayerSessionProcedure is the fully-qualified name of the WebService's
+	// WebRevokePlayerSession RPC.
+	WebServiceWebRevokePlayerSessionProcedure = "/holomush.web.v1.WebService/WebRevokePlayerSession"
+	// WebServiceWebRevokeOtherPlayerSessionsProcedure is the fully-qualified name of the WebService's
+	// WebRevokeOtherPlayerSessions RPC.
+	WebServiceWebRevokeOtherPlayerSessionsProcedure = "/holomush.web.v1.WebService/WebRevokeOtherPlayerSessions"
 )
 
 // WebServiceClient is a client for the holomush.web.v1.WebService service.
@@ -115,6 +124,11 @@ type WebServiceClient interface {
 	// WebQueryStreamHistory reads paginated event history for the web client.
 	// Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
 	WebQueryStreamHistory(context.Context, *connect.Request[v1.WebQueryStreamHistoryRequest]) (*connect.Response[v1.WebQueryStreamHistoryResponse], error)
+	// Session-management RPCs. The caller is identified via the X-Session-Token
+	// cookie header injected by CookieMiddleware; no token field in the request.
+	WebListPlayerSessions(context.Context, *connect.Request[v1.WebListPlayerSessionsRequest]) (*connect.Response[v1.WebListPlayerSessionsResponse], error)
+	WebRevokePlayerSession(context.Context, *connect.Request[v1.WebRevokePlayerSessionRequest]) (*connect.Response[v1.WebRevokePlayerSessionResponse], error)
+	WebRevokeOtherPlayerSessions(context.Context, *connect.Request[v1.WebRevokeOtherPlayerSessionsRequest]) (*connect.Response[v1.WebRevokeOtherPlayerSessionsResponse], error)
 }
 
 // NewWebServiceClient constructs a client for the holomush.web.v1.WebService service. By default,
@@ -230,28 +244,49 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebQueryStreamHistory")),
 			connect.WithClientOptions(opts...),
 		),
+		webListPlayerSessions: connect.NewClient[v1.WebListPlayerSessionsRequest, v1.WebListPlayerSessionsResponse](
+			httpClient,
+			baseURL+WebServiceWebListPlayerSessionsProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebListPlayerSessions")),
+			connect.WithClientOptions(opts...),
+		),
+		webRevokePlayerSession: connect.NewClient[v1.WebRevokePlayerSessionRequest, v1.WebRevokePlayerSessionResponse](
+			httpClient,
+			baseURL+WebServiceWebRevokePlayerSessionProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebRevokePlayerSession")),
+			connect.WithClientOptions(opts...),
+		),
+		webRevokeOtherPlayerSessions: connect.NewClient[v1.WebRevokeOtherPlayerSessionsRequest, v1.WebRevokeOtherPlayerSessionsResponse](
+			httpClient,
+			baseURL+WebServiceWebRevokeOtherPlayerSessionsProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebRevokeOtherPlayerSessions")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // webServiceClient implements WebServiceClient.
 type webServiceClient struct {
-	sendCommand             *connect.Client[v1.SendCommandRequest, v1.SendCommandResponse]
-	streamEvents            *connect.Client[v1.StreamEventsRequest, v1.StreamEventsResponse]
-	disconnect              *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
-	getCommandHistory       *connect.Client[v1.GetCommandHistoryRequest, v1.GetCommandHistoryResponse]
-	webAuthenticatePlayer   *connect.Client[v1.WebAuthenticatePlayerRequest, v1.WebAuthenticatePlayerResponse]
-	webSelectCharacter      *connect.Client[v1.WebSelectCharacterRequest, v1.WebSelectCharacterResponse]
-	webCreatePlayer         *connect.Client[v1.WebCreatePlayerRequest, v1.WebCreatePlayerResponse]
-	webCreateGuest          *connect.Client[v1.WebCreateGuestRequest, v1.WebCreateGuestResponse]
-	webCreateCharacter      *connect.Client[v1.WebCreateCharacterRequest, v1.WebCreateCharacterResponse]
-	webListCharacters       *connect.Client[v1.WebListCharactersRequest, v1.WebListCharactersResponse]
-	webLogout               *connect.Client[v1.WebLogoutRequest, v1.WebLogoutResponse]
-	webRequestPasswordReset *connect.Client[v1.WebRequestPasswordResetRequest, v1.WebRequestPasswordResetResponse]
-	webConfirmPasswordReset *connect.Client[v1.WebConfirmPasswordResetRequest, v1.WebConfirmPasswordResetResponse]
-	webCheckSession         *connect.Client[v1.WebCheckSessionRequest, v1.WebCheckSessionResponse]
-	webGetContent           *connect.Client[v1.WebGetContentRequest, v1.WebGetContentResponse]
-	webListContent          *connect.Client[v1.WebListContentRequest, v1.WebListContentResponse]
-	webQueryStreamHistory   *connect.Client[v1.WebQueryStreamHistoryRequest, v1.WebQueryStreamHistoryResponse]
+	sendCommand                  *connect.Client[v1.SendCommandRequest, v1.SendCommandResponse]
+	streamEvents                 *connect.Client[v1.StreamEventsRequest, v1.StreamEventsResponse]
+	disconnect                   *connect.Client[v1.DisconnectRequest, v1.DisconnectResponse]
+	getCommandHistory            *connect.Client[v1.GetCommandHistoryRequest, v1.GetCommandHistoryResponse]
+	webAuthenticatePlayer        *connect.Client[v1.WebAuthenticatePlayerRequest, v1.WebAuthenticatePlayerResponse]
+	webSelectCharacter           *connect.Client[v1.WebSelectCharacterRequest, v1.WebSelectCharacterResponse]
+	webCreatePlayer              *connect.Client[v1.WebCreatePlayerRequest, v1.WebCreatePlayerResponse]
+	webCreateGuest               *connect.Client[v1.WebCreateGuestRequest, v1.WebCreateGuestResponse]
+	webCreateCharacter           *connect.Client[v1.WebCreateCharacterRequest, v1.WebCreateCharacterResponse]
+	webListCharacters            *connect.Client[v1.WebListCharactersRequest, v1.WebListCharactersResponse]
+	webLogout                    *connect.Client[v1.WebLogoutRequest, v1.WebLogoutResponse]
+	webRequestPasswordReset      *connect.Client[v1.WebRequestPasswordResetRequest, v1.WebRequestPasswordResetResponse]
+	webConfirmPasswordReset      *connect.Client[v1.WebConfirmPasswordResetRequest, v1.WebConfirmPasswordResetResponse]
+	webCheckSession              *connect.Client[v1.WebCheckSessionRequest, v1.WebCheckSessionResponse]
+	webGetContent                *connect.Client[v1.WebGetContentRequest, v1.WebGetContentResponse]
+	webListContent               *connect.Client[v1.WebListContentRequest, v1.WebListContentResponse]
+	webQueryStreamHistory        *connect.Client[v1.WebQueryStreamHistoryRequest, v1.WebQueryStreamHistoryResponse]
+	webListPlayerSessions        *connect.Client[v1.WebListPlayerSessionsRequest, v1.WebListPlayerSessionsResponse]
+	webRevokePlayerSession       *connect.Client[v1.WebRevokePlayerSessionRequest, v1.WebRevokePlayerSessionResponse]
+	webRevokeOtherPlayerSessions *connect.Client[v1.WebRevokeOtherPlayerSessionsRequest, v1.WebRevokeOtherPlayerSessionsResponse]
 }
 
 // SendCommand calls holomush.web.v1.WebService.SendCommand.
@@ -339,6 +374,21 @@ func (c *webServiceClient) WebQueryStreamHistory(ctx context.Context, req *conne
 	return c.webQueryStreamHistory.CallUnary(ctx, req)
 }
 
+// WebListPlayerSessions calls holomush.web.v1.WebService.WebListPlayerSessions.
+func (c *webServiceClient) WebListPlayerSessions(ctx context.Context, req *connect.Request[v1.WebListPlayerSessionsRequest]) (*connect.Response[v1.WebListPlayerSessionsResponse], error) {
+	return c.webListPlayerSessions.CallUnary(ctx, req)
+}
+
+// WebRevokePlayerSession calls holomush.web.v1.WebService.WebRevokePlayerSession.
+func (c *webServiceClient) WebRevokePlayerSession(ctx context.Context, req *connect.Request[v1.WebRevokePlayerSessionRequest]) (*connect.Response[v1.WebRevokePlayerSessionResponse], error) {
+	return c.webRevokePlayerSession.CallUnary(ctx, req)
+}
+
+// WebRevokeOtherPlayerSessions calls holomush.web.v1.WebService.WebRevokeOtherPlayerSessions.
+func (c *webServiceClient) WebRevokeOtherPlayerSessions(ctx context.Context, req *connect.Request[v1.WebRevokeOtherPlayerSessionsRequest]) (*connect.Response[v1.WebRevokeOtherPlayerSessionsResponse], error) {
+	return c.webRevokeOtherPlayerSessions.CallUnary(ctx, req)
+}
+
 // WebServiceHandler is an implementation of the holomush.web.v1.WebService service.
 type WebServiceHandler interface {
 	// Send a game command (say, pose, quit, etc.)
@@ -369,6 +419,11 @@ type WebServiceHandler interface {
 	// WebQueryStreamHistory reads paginated event history for the web client.
 	// Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
 	WebQueryStreamHistory(context.Context, *connect.Request[v1.WebQueryStreamHistoryRequest]) (*connect.Response[v1.WebQueryStreamHistoryResponse], error)
+	// Session-management RPCs. The caller is identified via the X-Session-Token
+	// cookie header injected by CookieMiddleware; no token field in the request.
+	WebListPlayerSessions(context.Context, *connect.Request[v1.WebListPlayerSessionsRequest]) (*connect.Response[v1.WebListPlayerSessionsResponse], error)
+	WebRevokePlayerSession(context.Context, *connect.Request[v1.WebRevokePlayerSessionRequest]) (*connect.Response[v1.WebRevokePlayerSessionResponse], error)
+	WebRevokeOtherPlayerSessions(context.Context, *connect.Request[v1.WebRevokeOtherPlayerSessionsRequest]) (*connect.Response[v1.WebRevokeOtherPlayerSessionsResponse], error)
 }
 
 // NewWebServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -480,6 +535,24 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebQueryStreamHistory")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebListPlayerSessionsHandler := connect.NewUnaryHandler(
+		WebServiceWebListPlayerSessionsProcedure,
+		svc.WebListPlayerSessions,
+		connect.WithSchema(webServiceMethods.ByName("WebListPlayerSessions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebRevokePlayerSessionHandler := connect.NewUnaryHandler(
+		WebServiceWebRevokePlayerSessionProcedure,
+		svc.WebRevokePlayerSession,
+		connect.WithSchema(webServiceMethods.ByName("WebRevokePlayerSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	webServiceWebRevokeOtherPlayerSessionsHandler := connect.NewUnaryHandler(
+		WebServiceWebRevokeOtherPlayerSessionsProcedure,
+		svc.WebRevokeOtherPlayerSessions,
+		connect.WithSchema(webServiceMethods.ByName("WebRevokeOtherPlayerSessions")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.web.v1.WebService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WebServiceSendCommandProcedure:
@@ -516,6 +589,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebListContentHandler.ServeHTTP(w, r)
 		case WebServiceWebQueryStreamHistoryProcedure:
 			webServiceWebQueryStreamHistoryHandler.ServeHTTP(w, r)
+		case WebServiceWebListPlayerSessionsProcedure:
+			webServiceWebListPlayerSessionsHandler.ServeHTTP(w, r)
+		case WebServiceWebRevokePlayerSessionProcedure:
+			webServiceWebRevokePlayerSessionHandler.ServeHTTP(w, r)
+		case WebServiceWebRevokeOtherPlayerSessionsProcedure:
+			webServiceWebRevokeOtherPlayerSessionsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -591,4 +670,16 @@ func (UnimplementedWebServiceHandler) WebListContent(context.Context, *connect.R
 
 func (UnimplementedWebServiceHandler) WebQueryStreamHistory(context.Context, *connect.Request[v1.WebQueryStreamHistoryRequest]) (*connect.Response[v1.WebQueryStreamHistoryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebQueryStreamHistory is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebListPlayerSessions(context.Context, *connect.Request[v1.WebListPlayerSessionsRequest]) (*connect.Response[v1.WebListPlayerSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListPlayerSessions is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebRevokePlayerSession(context.Context, *connect.Request[v1.WebRevokePlayerSessionRequest]) (*connect.Response[v1.WebRevokePlayerSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebRevokePlayerSession is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebRevokeOtherPlayerSessions(context.Context, *connect.Request[v1.WebRevokeOtherPlayerSessionsRequest]) (*connect.Response[v1.WebRevokeOtherPlayerSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebRevokeOtherPlayerSessions is not implemented"))
 }

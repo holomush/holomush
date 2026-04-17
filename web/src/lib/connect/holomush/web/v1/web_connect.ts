@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebCheckSessionRequest, WebCheckSessionResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreateGuestRequest, WebCreateGuestResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebGetContentRequest, WebGetContentResponse, WebListCharactersRequest, WebListCharactersResponse, WebListContentRequest, WebListContentResponse, WebLogoutRequest, WebLogoutResponse, WebQueryStreamHistoryRequest, WebQueryStreamHistoryResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebSelectCharacterRequest, WebSelectCharacterResponse } from "./web_pb.js";
+import { DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, SendCommandRequest, SendCommandResponse, StreamEventsRequest, StreamEventsResponse, WebAuthenticatePlayerRequest, WebAuthenticatePlayerResponse, WebCheckSessionRequest, WebCheckSessionResponse, WebConfirmPasswordResetRequest, WebConfirmPasswordResetResponse, WebCreateCharacterRequest, WebCreateCharacterResponse, WebCreateGuestRequest, WebCreateGuestResponse, WebCreatePlayerRequest, WebCreatePlayerResponse, WebGetContentRequest, WebGetContentResponse, WebListCharactersRequest, WebListCharactersResponse, WebListContentRequest, WebListContentResponse, WebListPlayerSessionsRequest, WebListPlayerSessionsResponse, WebLogoutRequest, WebLogoutResponse, WebQueryStreamHistoryRequest, WebQueryStreamHistoryResponse, WebRequestPasswordResetRequest, WebRequestPasswordResetResponse, WebRevokeOtherPlayerSessionsRequest, WebRevokeOtherPlayerSessionsResponse, WebRevokePlayerSessionRequest, WebRevokePlayerSessionResponse, WebSelectCharacterRequest, WebSelectCharacterResponse } from "./web_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -186,6 +186,36 @@ export const WebService = {
       name: "WebQueryStreamHistory",
       I: WebQueryStreamHistoryRequest,
       O: WebQueryStreamHistoryResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Session-management RPCs. The caller is identified via the X-Session-Token
+     * cookie header injected by CookieMiddleware; no token field in the request.
+     *
+     * @generated from rpc holomush.web.v1.WebService.WebListPlayerSessions
+     */
+    webListPlayerSessions: {
+      name: "WebListPlayerSessions",
+      I: WebListPlayerSessionsRequest,
+      O: WebListPlayerSessionsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.web.v1.WebService.WebRevokePlayerSession
+     */
+    webRevokePlayerSession: {
+      name: "WebRevokePlayerSession",
+      I: WebRevokePlayerSessionRequest,
+      O: WebRevokePlayerSessionResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc holomush.web.v1.WebService.WebRevokeOtherPlayerSessions
+     */
+    webRevokeOtherPlayerSessions: {
+      name: "WebRevokeOtherPlayerSessions",
+      I: WebRevokeOtherPlayerSessionsRequest,
+      O: WebRevokeOtherPlayerSessionsResponse,
       kind: MethodKind.Unary,
     },
   }

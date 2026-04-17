@@ -333,6 +333,98 @@ func (h *Handler) WebCreateGuest(ctx context.Context, _ *connect.Request[webv1.W
 	return resp, nil
 }
 
+// WebListPlayerSessions returns the caller's active PlayerSessions. The
+// caller is identified via the X-Session-Token cookie header; the returned
+// sessions each include an is_current flag marking the calling session.
+func (h *Handler) WebListPlayerSessions(ctx context.Context, req *connect.Request[webv1.WebListPlayerSessionsRequest]) (*connect.Response[webv1.WebListPlayerSessionsResponse], error) {
+	slog.DebugContext(ctx, "web: WebListPlayerSessions")
+
+	token, err := playerTokenFromHeader(req.Header())
+	if err != nil {
+		return nil, err
+	}
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	coreResp, err := h.client.ListPlayerSessions(rpcCtx, &corev1.ListPlayerSessionsRequest{
+		PlayerSessionToken: token,
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "web: list player sessions RPC failed", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	sessions := make([]*webv1.WebPlayerSessionInfo, 0, len(coreResp.GetSessions()))
+	for _, s := range coreResp.GetSessions() {
+		sessions = append(sessions, &webv1.WebPlayerSessionInfo{
+			Id:         s.GetId(),
+			CreatedAt:  s.GetCreatedAt(),
+			LastActive: s.GetLastActive(),
+			UserAgent:  s.GetUserAgent(),
+			IpAddress:  s.GetIpAddress(),
+			IsCurrent:  s.GetIsCurrent(),
+		})
+	}
+	return connect.NewResponse(&webv1.WebListPlayerSessionsResponse{Sessions: sessions}), nil
+}
+
+// WebRevokePlayerSession revokes a specific PlayerSession owned by the caller.
+// The caller is identified via the X-Session-Token cookie header.
+func (h *Handler) WebRevokePlayerSession(ctx context.Context, req *connect.Request[webv1.WebRevokePlayerSessionRequest]) (*connect.Response[webv1.WebRevokePlayerSessionResponse], error) {
+	slog.DebugContext(ctx, "web: WebRevokePlayerSession", "target_session_id", req.Msg.GetTargetSessionId())
+
+	token, err := playerTokenFromHeader(req.Header())
+	if err != nil {
+		return nil, err
+	}
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	coreResp, err := h.client.RevokePlayerSession(rpcCtx, &corev1.RevokePlayerSessionRequest{
+		PlayerSessionToken: token,
+		TargetSessionId:    req.Msg.GetTargetSessionId(),
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "web: revoke player session RPC failed", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	return connect.NewResponse(&webv1.WebRevokePlayerSessionResponse{
+		Success:      coreResp.GetSuccess(),
+		ErrorMessage: coreResp.GetErrorMessage(),
+	}), nil
+}
+
+// WebRevokeOtherPlayerSessions revokes all PlayerSessions for the caller
+// except the current one. The caller is identified via the X-Session-Token
+// cookie header.
+func (h *Handler) WebRevokeOtherPlayerSessions(ctx context.Context, req *connect.Request[webv1.WebRevokeOtherPlayerSessionsRequest]) (*connect.Response[webv1.WebRevokeOtherPlayerSessionsResponse], error) {
+	slog.DebugContext(ctx, "web: WebRevokeOtherPlayerSessions")
+
+	token, err := playerTokenFromHeader(req.Header())
+	if err != nil {
+		return nil, err
+	}
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	coreResp, err := h.client.RevokeOtherPlayerSessions(rpcCtx, &corev1.RevokeOtherPlayerSessionsRequest{
+		PlayerSessionToken: token,
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "web: revoke other player sessions RPC failed", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	return connect.NewResponse(&webv1.WebRevokeOtherPlayerSessionsResponse{
+		Success:      coreResp.GetSuccess(),
+		RevokedCount: coreResp.GetRevokedCount(),
+	}), nil
+}
+
 // translateCharacterSummaries converts core proto CharacterSummary slices to web proto equivalents.
 func translateCharacterSummaries(core []*corev1.CharacterSummary) []*webv1.CharacterSummary {
 	if len(core) == 0 {

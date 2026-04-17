@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/core/v1/core.proto.
  */
 export const file_holomush_core_v1_core: GenFile = /*@__PURE__*/
-  fileDesc("Chtob2xvbXVzaC9jb3JlL3YxL2NvcmUucHJvdG8SEGhvbG9tdXNoLmNvcmUudjEiUAoLUmVxdWVzdE1ldGESEgoKcmVxdWVzdF9pZBgBIAEoCRItCgl0aW1lc3RhbXAYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlEKDFJlc3BvbnNlTWV0YRISCgpyZXF1ZXN0X2lkGAEgASgJEi0KCXRpbWVzdGFtcBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiaAoUSGFuZGxlQ29tbWFuZFJlcXVlc3QSKwoEbWV0YRgBIAEoCzIdLmhvbG9tdXNoLmNvcmUudjEuUmVxdWVzdE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIPCgdjb21tYW5kGAMgASgJImsKFUhhbmRsZUNvbW1hbmRSZXNwb25zZRIsCgRtZXRhGAEgASgLMh4uaG9sb211c2guY29yZS52MS5SZXNwb25zZU1ldGESDwoHc3VjY2VzcxgCIAEoCBINCgVlcnJvchgEIAEoCUoECAMQBCJ8ChBTdWJzY3JpYmVSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAlKBAgDEARKBAgEEAVSB3N0cmVhbXNSEnJlcGxheV9mcm9tX2N1cnNvciKcAQoKRXZlbnRGcmFtZRIKCgJpZBgBIAEoCRIOCgZzdHJlYW0YAiABKAkSDAoEdHlwZRgDIAEoCRItCgl0aW1lc3RhbXAYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmFjdG9yX3R5cGUYBSABKAkSEAoIYWN0b3JfaWQYBiABKAkSDwoHcGF5bG9hZBgHIAEoDCJQCgxDb250cm9sRnJhbWUSLwoGc2lnbmFsGAEgASgOMh8uaG9sb211c2guY29yZS52MS5Db250cm9sU2lnbmFsEg8KB21lc3NhZ2UYAiABKAkifgoRU3Vic2NyaWJlUmVzcG9uc2USLQoFZXZlbnQYASABKAsyHC5ob2xvbXVzaC5jb3JlLnYxLkV2ZW50RnJhbWVIABIxCgdjb250cm9sGAIgASgLMh4uaG9sb211c2guY29yZS52MS5Db250cm9sRnJhbWVIAEIHCgVmcmFtZSJrChFEaXNjb25uZWN0UmVxdWVzdBIrCgRtZXRhGAEgASgLMh0uaG9sb211c2guY29yZS52MS5SZXF1ZXN0TWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEhUKDWNvbm5lY3Rpb25faWQYAyABKAkiUwoSRGlzY29ubmVjdFJlc3BvbnNlEiwKBG1ldGEYASABKAsyHi5ob2xvbXVzaC5jb3JlLnYxLlJlc3BvbnNlTWV0YRIPCgdzdWNjZXNzGAIgASgIIlsKGEdldENvbW1hbmRIaXN0b3J5UmVxdWVzdBIrCgRtZXRhGAEgASgLMh0uaG9sb211c2guY29yZS52MS5SZXF1ZXN0TWV0YRISCgpzZXNzaW9uX2lkGAIgASgJInsKGUdldENvbW1hbmRIaXN0b3J5UmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEg8KB3N1Y2Nlc3MYAiABKAgSEAoIY29tbWFuZHMYAyADKAkSDQoFZXJyb3IYBCABKAkiowEKEENoYXJhY3RlclN1bW1hcnkSFAoMY2hhcmFjdGVyX2lkGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJEhoKEmhhc19hY3RpdmVfc2Vzc2lvbhgDIAEoCBIWCg5zZXNzaW9uX3N0YXR1cxgEIAEoCRIVCg1sYXN0X2xvY2F0aW9uGAUgASgJEhYKDmxhc3RfcGxheWVkX2F0GAYgASgDImsKGUF1dGhlbnRpY2F0ZVBsYXllclJlcXVlc3QSEAoIdXNlcm5hbWUYASABKAkSEAoIcGFzc3dvcmQYAiABKAkSFQoNY2FwdGNoYV90b2tlbhgDIAEoCRITCgtyZW1lbWJlcl9tZRgEIAEoCCLVAQoaQXV0aGVudGljYXRlUGxheWVyUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRIVCg1lcnJvcl9tZXNzYWdlGAMgASgJEjYKCmNoYXJhY3RlcnMYBCADKAsyIi5ob2xvbXVzaC5jb3JlLnYxLkNoYXJhY3RlclN1bW1hcnkSHAoUZGVmYXVsdF9jaGFyYWN0ZXJfaWQYBSABKAkSGwoTc2Vzc2lvbl90dGxfc2Vjb25kcxgGIAEoAyJMChZTZWxlY3RDaGFyYWN0ZXJSZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJEhQKDGNoYXJhY3Rlcl9pZBgCIAEoCSKBAQoXU2VsZWN0Q2hhcmFjdGVyUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBISCgpzZXNzaW9uX2lkGAIgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAMgASgJEhIKCnJlYXR0YWNoZWQYBCABKAgSFQoNZXJyb3JfbWVzc2FnZRgFIAEoCSJfChNDcmVhdGVQbGF5ZXJSZXF1ZXN0EhAKCHVzZXJuYW1lGAEgASgJEhAKCHBhc3N3b3JkGAIgASgJEg0KBWVtYWlsGAMgASgJEhUKDWNhcHRjaGFfdG9rZW4YBCABKAkisQEKFENyZWF0ZVBsYXllclJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAiABKAkSNgoKY2hhcmFjdGVycxgDIAMoCzIiLmhvbG9tdXNoLmNvcmUudjEuQ2hhcmFjdGVyU3VtbWFyeRIVCg1lcnJvcl9tZXNzYWdlGAQgASgJEhsKE3Nlc3Npb25fdHRsX3NlY29uZHMYBSABKAMiFAoSQ3JlYXRlR3Vlc3RSZXF1ZXN0Is4BChNDcmVhdGVHdWVzdFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFQoNZXJyb3JfbWVzc2FnZRgCIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgDIAEoCRI2CgpjaGFyYWN0ZXJzGAQgAygLMiIuaG9sb211c2guY29yZS52MS5DaGFyYWN0ZXJTdW1tYXJ5EhwKFGRlZmF1bHRfY2hhcmFjdGVyX2lkGAUgASgJEhsKE3Nlc3Npb25fdHRsX3NlY29uZHMYBiABKAMiTgoWQ3JlYXRlQ2hhcmFjdGVyUmVxdWVzdBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCRIWCg5jaGFyYWN0ZXJfbmFtZRgCIAEoCSJvChdDcmVhdGVDaGFyYWN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhQKDGNoYXJhY3Rlcl9pZBgCIAEoCRIWCg5jaGFyYWN0ZXJfbmFtZRgDIAEoCRIVCg1lcnJvcl9tZXNzYWdlGAQgASgJIjUKFUxpc3RDaGFyYWN0ZXJzUmVxdWVzdBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCSJQChZMaXN0Q2hhcmFjdGVyc1Jlc3BvbnNlEjYKCmNoYXJhY3RlcnMYASADKAsyIi5ob2xvbXVzaC5jb3JlLnYxLkNoYXJhY3RlclN1bW1hcnkiLAobUmVxdWVzdFBhc3N3b3JkUmVzZXRSZXF1ZXN0Eg0KBWVtYWlsGAEgASgJIi8KHFJlcXVlc3RQYXNzd29yZFJlc2V0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCJCChtDb25maXJtUGFzc3dvcmRSZXNldFJlcXVlc3QSDQoFdG9rZW4YASABKAkSFAoMbmV3X3Bhc3N3b3JkGAIgASgJIkYKHENvbmZpcm1QYXNzd29yZFJlc2V0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAIgASgJIi0KDUxvZ291dFJlcXVlc3QSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAkiEAoOTG9nb3V0UmVzcG9uc2UiOQoZQ2hlY2tQbGF5ZXJTZXNzaW9uUmVxdWVzdBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCSIxChpDaGVja1BsYXllclNlc3Npb25SZXNwb25zZRITCgtwbGF5ZXJfbmFtZRgBIAEoCSKlAQoZUXVlcnlTdHJlYW1IaXN0b3J5UmVxdWVzdBIrCgRtZXRhGAEgASgLMh0uaG9sb211c2guY29yZS52MS5SZXF1ZXN0TWV0YRISCgpzZXNzaW9uX2lkGAIgASgJEg4KBnN0cmVhbRgDIAEoCRINCgVjb3VudBgEIAEoBRIVCg1ub3RfYmVmb3JlX21zGAUgASgDEhEKCWJlZm9yZV9pZBgGIAEoCSKKAQoaUXVlcnlTdHJlYW1IaXN0b3J5UmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEiwKBmV2ZW50cxgCIAMoCzIcLmhvbG9tdXNoLmNvcmUudjEuRXZlbnRGcmFtZRIQCghoYXNfbW9yZRgDIAEoCCp1Cg1Db250cm9sU2lnbmFsEh4KGkNPTlRST0xfU0lHTkFMX1VOU1BFQ0lGSUVEEAASIgoeQ09OVFJPTF9TSUdOQUxfUkVQTEFZX0NPTVBMRVRFEAESIAocQ09OVFJPTF9TSUdOQUxfU1RSRUFNX0NMT1NFRBACMowMCgtDb3JlU2VydmljZRJgCg1IYW5kbGVDb21tYW5kEiYuaG9sb211c2guY29yZS52MS5IYW5kbGVDb21tYW5kUmVxdWVzdBonLmhvbG9tdXNoLmNvcmUudjEuSGFuZGxlQ29tbWFuZFJlc3BvbnNlElYKCVN1YnNjcmliZRIiLmhvbG9tdXNoLmNvcmUudjEuU3Vic2NyaWJlUmVxdWVzdBojLmhvbG9tdXNoLmNvcmUudjEuU3Vic2NyaWJlUmVzcG9uc2UwARJXCgpEaXNjb25uZWN0EiMuaG9sb211c2guY29yZS52MS5EaXNjb25uZWN0UmVxdWVzdBokLmhvbG9tdXNoLmNvcmUudjEuRGlzY29ubmVjdFJlc3BvbnNlEmwKEUdldENvbW1hbmRIaXN0b3J5EiouaG9sb211c2guY29yZS52MS5HZXRDb21tYW5kSGlzdG9yeVJlcXVlc3QaKy5ob2xvbXVzaC5jb3JlLnYxLkdldENvbW1hbmRIaXN0b3J5UmVzcG9uc2USbwoSQXV0aGVudGljYXRlUGxheWVyEisuaG9sb211c2guY29yZS52MS5BdXRoZW50aWNhdGVQbGF5ZXJSZXF1ZXN0GiwuaG9sb211c2guY29yZS52MS5BdXRoZW50aWNhdGVQbGF5ZXJSZXNwb25zZRJmCg9TZWxlY3RDaGFyYWN0ZXISKC5ob2xvbXVzaC5jb3JlLnYxLlNlbGVjdENoYXJhY3RlclJlcXVlc3QaKS5ob2xvbXVzaC5jb3JlLnYxLlNlbGVjdENoYXJhY3RlclJlc3BvbnNlEl0KDENyZWF0ZVBsYXllchIlLmhvbG9tdXNoLmNvcmUudjEuQ3JlYXRlUGxheWVyUmVxdWVzdBomLmhvbG9tdXNoLmNvcmUudjEuQ3JlYXRlUGxheWVyUmVzcG9uc2USWgoLQ3JlYXRlR3Vlc3QSJC5ob2xvbXVzaC5jb3JlLnYxLkNyZWF0ZUd1ZXN0UmVxdWVzdBolLmhvbG9tdXNoLmNvcmUudjEuQ3JlYXRlR3Vlc3RSZXNwb25zZRJmCg9DcmVhdGVDaGFyYWN0ZXISKC5ob2xvbXVzaC5jb3JlLnYxLkNyZWF0ZUNoYXJhY3RlclJlcXVlc3QaKS5ob2xvbXVzaC5jb3JlLnYxLkNyZWF0ZUNoYXJhY3RlclJlc3BvbnNlEmMKDkxpc3RDaGFyYWN0ZXJzEicuaG9sb211c2guY29yZS52MS5MaXN0Q2hhcmFjdGVyc1JlcXVlc3QaKC5ob2xvbXVzaC5jb3JlLnYxLkxpc3RDaGFyYWN0ZXJzUmVzcG9uc2USdQoUUmVxdWVzdFBhc3N3b3JkUmVzZXQSLS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RQYXNzd29yZFJlc2V0UmVxdWVzdBouLmhvbG9tdXNoLmNvcmUudjEuUmVxdWVzdFBhc3N3b3JkUmVzZXRSZXNwb25zZRJ1ChRDb25maXJtUGFzc3dvcmRSZXNldBItLmhvbG9tdXNoLmNvcmUudjEuQ29uZmlybVBhc3N3b3JkUmVzZXRSZXF1ZXN0Gi4uaG9sb211c2guY29yZS52MS5Db25maXJtUGFzc3dvcmRSZXNldFJlc3BvbnNlEksKBkxvZ291dBIfLmhvbG9tdXNoLmNvcmUudjEuTG9nb3V0UmVxdWVzdBogLmhvbG9tdXNoLmNvcmUudjEuTG9nb3V0UmVzcG9uc2USbwoSQ2hlY2tQbGF5ZXJTZXNzaW9uEisuaG9sb211c2guY29yZS52MS5DaGVja1BsYXllclNlc3Npb25SZXF1ZXN0GiwuaG9sb211c2guY29yZS52MS5DaGVja1BsYXllclNlc3Npb25SZXNwb25zZRJvChJRdWVyeVN0cmVhbUhpc3RvcnkSKy5ob2xvbXVzaC5jb3JlLnYxLlF1ZXJ5U3RyZWFtSGlzdG9yeVJlcXVlc3QaLC5ob2xvbXVzaC5jb3JlLnYxLlF1ZXJ5U3RyZWFtSGlzdG9yeVJlc3BvbnNlQkBaPmdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2NvcmUvdjE7Y29yZXYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("Chtob2xvbXVzaC9jb3JlL3YxL2NvcmUucHJvdG8SEGhvbG9tdXNoLmNvcmUudjEiUAoLUmVxdWVzdE1ldGESEgoKcmVxdWVzdF9pZBgBIAEoCRItCgl0aW1lc3RhbXAYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlEKDFJlc3BvbnNlTWV0YRISCgpyZXF1ZXN0X2lkGAEgASgJEi0KCXRpbWVzdGFtcBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAihgEKFEhhbmRsZUNvbW1hbmRSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSDwoHY29tbWFuZBgDIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgEIAEoCSJrChVIYW5kbGVDb21tYW5kUmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEg8KB3N1Y2Nlc3MYAiABKAgSDQoFZXJyb3IYBCABKAlKBAgDEAQixgEKEFN1YnNjcmliZVJlcXVlc3QSKwoEbWV0YRgBIAEoCzIdLmhvbG9tdXNoLmNvcmUudjEuUmVxdWVzdE1ldGESEgoKc2Vzc2lvbl9pZBgCIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgFIAEoCRIVCg1jb25uZWN0aW9uX2lkGAYgASgJEhMKC2NsaWVudF90eXBlGAcgASgJSgQIAxAESgQIBBAFUgdzdHJlYW1zUhJyZXBsYXlfZnJvbV9jdXJzb3IinAEKCkV2ZW50RnJhbWUSCgoCaWQYASABKAkSDgoGc3RyZWFtGAIgASgJEgwKBHR5cGUYAyABKAkSLQoJdGltZXN0YW1wGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgphY3Rvcl90eXBlGAUgASgJEhAKCGFjdG9yX2lkGAYgASgJEg8KB3BheWxvYWQYByABKAwiUAoMQ29udHJvbEZyYW1lEi8KBnNpZ25hbBgBIAEoDjIfLmhvbG9tdXNoLmNvcmUudjEuQ29udHJvbFNpZ25hbBIPCgdtZXNzYWdlGAIgASgJIn4KEVN1YnNjcmliZVJlc3BvbnNlEi0KBWV2ZW50GAEgASgLMhwuaG9sb211c2guY29yZS52MS5FdmVudEZyYW1lSAASMQoHY29udHJvbBgCIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuQ29udHJvbEZyYW1lSABCBwoFZnJhbWUiiQEKEURpc2Nvbm5lY3RSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSFQoNY29ubmVjdGlvbl9pZBgDIAEoCRIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgEIAEoCSJTChJEaXNjb25uZWN0UmVzcG9uc2USLAoEbWV0YRgBIAEoCzIeLmhvbG9tdXNoLmNvcmUudjEuUmVzcG9uc2VNZXRhEg8KB3N1Y2Nlc3MYAiABKAgieQoYR2V0Q29tbWFuZEhpc3RvcnlSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YAyABKAkiewoZR2V0Q29tbWFuZEhpc3RvcnlSZXNwb25zZRIsCgRtZXRhGAEgASgLMh4uaG9sb211c2guY29yZS52MS5SZXNwb25zZU1ldGESDwoHc3VjY2VzcxgCIAEoCBIQCghjb21tYW5kcxgDIAMoCRINCgVlcnJvchgEIAEoCSKjAQoQQ2hhcmFjdGVyU3VtbWFyeRIUCgxjaGFyYWN0ZXJfaWQYASABKAkSFgoOY2hhcmFjdGVyX25hbWUYAiABKAkSGgoSaGFzX2FjdGl2ZV9zZXNzaW9uGAMgASgIEhYKDnNlc3Npb25fc3RhdHVzGAQgASgJEhUKDWxhc3RfbG9jYXRpb24YBSABKAkSFgoObGFzdF9wbGF5ZWRfYXQYBiABKAMiawoZQXV0aGVudGljYXRlUGxheWVyUmVxdWVzdBIQCgh1c2VybmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRIVCg1jYXB0Y2hhX3Rva2VuGAMgASgJEhMKC3JlbWVtYmVyX21lGAQgASgIItUBChpBdXRoZW50aWNhdGVQbGF5ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAIgASgJEhUKDWVycm9yX21lc3NhZ2UYAyABKAkSNgoKY2hhcmFjdGVycxgEIAMoCzIiLmhvbG9tdXNoLmNvcmUudjEuQ2hhcmFjdGVyU3VtbWFyeRIcChRkZWZhdWx0X2NoYXJhY3Rlcl9pZBgFIAEoCRIbChNzZXNzaW9uX3R0bF9zZWNvbmRzGAYgASgDIkwKFlNlbGVjdENoYXJhY3RlclJlcXVlc3QSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAkSFAoMY2hhcmFjdGVyX2lkGAIgASgJIoEBChdTZWxlY3RDaGFyYWN0ZXJSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhIKCnNlc3Npb25faWQYAiABKAkSFgoOY2hhcmFjdGVyX25hbWUYAyABKAkSEgoKcmVhdHRhY2hlZBgEIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAUgASgJIl8KE0NyZWF0ZVBsYXllclJlcXVlc3QSEAoIdXNlcm5hbWUYASABKAkSEAoIcGFzc3dvcmQYAiABKAkSDQoFZW1haWwYAyABKAkSFQoNY2FwdGNoYV90b2tlbhgEIAEoCSKxAQoUQ3JlYXRlUGxheWVyUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgCIAEoCRI2CgpjaGFyYWN0ZXJzGAMgAygLMiIuaG9sb211c2guY29yZS52MS5DaGFyYWN0ZXJTdW1tYXJ5EhUKDWVycm9yX21lc3NhZ2UYBCABKAkSGwoTc2Vzc2lvbl90dGxfc2Vjb25kcxgFIAEoAyIUChJDcmVhdGVHdWVzdFJlcXVlc3QizgEKE0NyZWF0ZUd1ZXN0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAIgASgJEhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAMgASgJEjYKCmNoYXJhY3RlcnMYBCADKAsyIi5ob2xvbXVzaC5jb3JlLnYxLkNoYXJhY3RlclN1bW1hcnkSHAoUZGVmYXVsdF9jaGFyYWN0ZXJfaWQYBSABKAkSGwoTc2Vzc2lvbl90dGxfc2Vjb25kcxgGIAEoAyJOChZDcmVhdGVDaGFyYWN0ZXJSZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAIgASgJIm8KF0NyZWF0ZUNoYXJhY3RlclJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFAoMY2hhcmFjdGVyX2lkGAIgASgJEhYKDmNoYXJhY3Rlcl9uYW1lGAMgASgJEhUKDWVycm9yX21lc3NhZ2UYBCABKAkiNQoVTGlzdENoYXJhY3RlcnNSZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJIlAKFkxpc3RDaGFyYWN0ZXJzUmVzcG9uc2USNgoKY2hhcmFjdGVycxgBIAMoCzIiLmhvbG9tdXNoLmNvcmUudjEuQ2hhcmFjdGVyU3VtbWFyeSIsChtSZXF1ZXN0UGFzc3dvcmRSZXNldFJlcXVlc3QSDQoFZW1haWwYASABKAkiLwocUmVxdWVzdFBhc3N3b3JkUmVzZXRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIkIKG0NvbmZpcm1QYXNzd29yZFJlc2V0UmVxdWVzdBINCgV0b2tlbhgBIAEoCRIUCgxuZXdfcGFzc3dvcmQYAiABKAkiRgocQ29uZmlybVBhc3N3b3JkUmVzZXRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhUKDWVycm9yX21lc3NhZ2UYAiABKAkiLQoNTG9nb3V0UmVxdWVzdBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCSIQCg5Mb2dvdXRSZXNwb25zZSI5ChlDaGVja1BsYXllclNlc3Npb25SZXF1ZXN0EhwKFHBsYXllcl9zZXNzaW9uX3Rva2VuGAEgASgJIjEKGkNoZWNrUGxheWVyU2Vzc2lvblJlc3BvbnNlEhMKC3BsYXllcl9uYW1lGAEgASgJIjkKGUxpc3RQbGF5ZXJTZXNzaW9uc1JlcXVlc3QSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAkivAEKEVBsYXllclNlc3Npb25JbmZvEgoKAmlkGAEgASgJEi4KCmNyZWF0ZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2xhc3RfYWN0aXZlGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgp1c2VyX2FnZW50GAQgASgJEhIKCmlwX2FkZHJlc3MYBSABKAkSEgoKaXNfY3VycmVudBgGIAEoCCJTChpMaXN0UGxheWVyU2Vzc2lvbnNSZXNwb25zZRI1CghzZXNzaW9ucxgBIAMoCzIjLmhvbG9tdXNoLmNvcmUudjEuUGxheWVyU2Vzc2lvbkluZm8iVQoaUmV2b2tlUGxheWVyU2Vzc2lvblJlcXVlc3QSHAoUcGxheWVyX3Nlc3Npb25fdG9rZW4YASABKAkSGQoRdGFyZ2V0X3Nlc3Npb25faWQYAiABKAkiRQobUmV2b2tlUGxheWVyU2Vzc2lvblJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSFQoNZXJyb3JfbWVzc2FnZRgCIAEoCSJACiBSZXZva2VPdGhlclBsYXllclNlc3Npb25zUmVxdWVzdBIcChRwbGF5ZXJfc2Vzc2lvbl90b2tlbhgBIAEoCSJLCiFSZXZva2VPdGhlclBsYXllclNlc3Npb25zUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIVCg1yZXZva2VkX2NvdW50GAIgASgFIqUBChlRdWVyeVN0cmVhbUhpc3RvcnlSZXF1ZXN0EisKBG1ldGEYASABKAsyHS5ob2xvbXVzaC5jb3JlLnYxLlJlcXVlc3RNZXRhEhIKCnNlc3Npb25faWQYAiABKAkSDgoGc3RyZWFtGAMgASgJEg0KBWNvdW50GAQgASgFEhUKDW5vdF9iZWZvcmVfbXMYBSABKAMSEQoJYmVmb3JlX2lkGAYgASgJIooBChpRdWVyeVN0cmVhbUhpc3RvcnlSZXNwb25zZRIsCgRtZXRhGAEgASgLMh4uaG9sb211c2guY29yZS52MS5SZXNwb25zZU1ldGESLAoGZXZlbnRzGAIgAygLMhwuaG9sb211c2guY29yZS52MS5FdmVudEZyYW1lEhAKCGhhc19tb3JlGAMgASgIKnUKDUNvbnRyb2xTaWduYWwSHgoaQ09OVFJPTF9TSUdOQUxfVU5TUEVDSUZJRUQQABIiCh5DT05UUk9MX1NJR05BTF9SRVBMQVlfQ09NUExFVEUQARIgChxDT05UUk9MX1NJR05BTF9TVFJFQU1fQ0xPU0VEEAIy+A4KC0NvcmVTZXJ2aWNlEmAKDUhhbmRsZUNvbW1hbmQSJi5ob2xvbXVzaC5jb3JlLnYxLkhhbmRsZUNvbW1hbmRSZXF1ZXN0GicuaG9sb211c2guY29yZS52MS5IYW5kbGVDb21tYW5kUmVzcG9uc2USVgoJU3Vic2NyaWJlEiIuaG9sb211c2guY29yZS52MS5TdWJzY3JpYmVSZXF1ZXN0GiMuaG9sb211c2guY29yZS52MS5TdWJzY3JpYmVSZXNwb25zZTABElcKCkRpc2Nvbm5lY3QSIy5ob2xvbXVzaC5jb3JlLnYxLkRpc2Nvbm5lY3RSZXF1ZXN0GiQuaG9sb211c2guY29yZS52MS5EaXNjb25uZWN0UmVzcG9uc2USbAoRR2V0Q29tbWFuZEhpc3RvcnkSKi5ob2xvbXVzaC5jb3JlLnYxLkdldENvbW1hbmRIaXN0b3J5UmVxdWVzdBorLmhvbG9tdXNoLmNvcmUudjEuR2V0Q29tbWFuZEhpc3RvcnlSZXNwb25zZRJvChJBdXRoZW50aWNhdGVQbGF5ZXISKy5ob2xvbXVzaC5jb3JlLnYxLkF1dGhlbnRpY2F0ZVBsYXllclJlcXVlc3QaLC5ob2xvbXVzaC5jb3JlLnYxLkF1dGhlbnRpY2F0ZVBsYXllclJlc3BvbnNlEmYKD1NlbGVjdENoYXJhY3RlchIoLmhvbG9tdXNoLmNvcmUudjEuU2VsZWN0Q2hhcmFjdGVyUmVxdWVzdBopLmhvbG9tdXNoLmNvcmUudjEuU2VsZWN0Q2hhcmFjdGVyUmVzcG9uc2USXQoMQ3JlYXRlUGxheWVyEiUuaG9sb211c2guY29yZS52MS5DcmVhdGVQbGF5ZXJSZXF1ZXN0GiYuaG9sb211c2guY29yZS52MS5DcmVhdGVQbGF5ZXJSZXNwb25zZRJaCgtDcmVhdGVHdWVzdBIkLmhvbG9tdXNoLmNvcmUudjEuQ3JlYXRlR3Vlc3RSZXF1ZXN0GiUuaG9sb211c2guY29yZS52MS5DcmVhdGVHdWVzdFJlc3BvbnNlEmYKD0NyZWF0ZUNoYXJhY3RlchIoLmhvbG9tdXNoLmNvcmUudjEuQ3JlYXRlQ2hhcmFjdGVyUmVxdWVzdBopLmhvbG9tdXNoLmNvcmUudjEuQ3JlYXRlQ2hhcmFjdGVyUmVzcG9uc2USYwoOTGlzdENoYXJhY3RlcnMSJy5ob2xvbXVzaC5jb3JlLnYxLkxpc3RDaGFyYWN0ZXJzUmVxdWVzdBooLmhvbG9tdXNoLmNvcmUudjEuTGlzdENoYXJhY3RlcnNSZXNwb25zZRJ1ChRSZXF1ZXN0UGFzc3dvcmRSZXNldBItLmhvbG9tdXNoLmNvcmUudjEuUmVxdWVzdFBhc3N3b3JkUmVzZXRSZXF1ZXN0Gi4uaG9sb211c2guY29yZS52MS5SZXF1ZXN0UGFzc3dvcmRSZXNldFJlc3BvbnNlEnUKFENvbmZpcm1QYXNzd29yZFJlc2V0Ei0uaG9sb211c2guY29yZS52MS5Db25maXJtUGFzc3dvcmRSZXNldFJlcXVlc3QaLi5ob2xvbXVzaC5jb3JlLnYxLkNvbmZpcm1QYXNzd29yZFJlc2V0UmVzcG9uc2USSwoGTG9nb3V0Eh8uaG9sb211c2guY29yZS52MS5Mb2dvdXRSZXF1ZXN0GiAuaG9sb211c2guY29yZS52MS5Mb2dvdXRSZXNwb25zZRJvChJDaGVja1BsYXllclNlc3Npb24SKy5ob2xvbXVzaC5jb3JlLnYxLkNoZWNrUGxheWVyU2Vzc2lvblJlcXVlc3QaLC5ob2xvbXVzaC5jb3JlLnYxLkNoZWNrUGxheWVyU2Vzc2lvblJlc3BvbnNlEm8KEkxpc3RQbGF5ZXJTZXNzaW9ucxIrLmhvbG9tdXNoLmNvcmUudjEuTGlzdFBsYXllclNlc3Npb25zUmVxdWVzdBosLmhvbG9tdXNoLmNvcmUudjEuTGlzdFBsYXllclNlc3Npb25zUmVzcG9uc2UScgoTUmV2b2tlUGxheWVyU2Vzc2lvbhIsLmhvbG9tdXNoLmNvcmUudjEuUmV2b2tlUGxheWVyU2Vzc2lvblJlcXVlc3QaLS5ob2xvbXVzaC5jb3JlLnYxLlJldm9rZVBsYXllclNlc3Npb25SZXNwb25zZRKEAQoZUmV2b2tlT3RoZXJQbGF5ZXJTZXNzaW9ucxIyLmhvbG9tdXNoLmNvcmUudjEuUmV2b2tlT3RoZXJQbGF5ZXJTZXNzaW9uc1JlcXVlc3QaMy5ob2xvbXVzaC5jb3JlLnYxLlJldm9rZU90aGVyUGxheWVyU2Vzc2lvbnNSZXNwb25zZRJvChJRdWVyeVN0cmVhbUhpc3RvcnkSKy5ob2xvbXVzaC5jb3JlLnYxLlF1ZXJ5U3RyZWFtSGlzdG9yeVJlcXVlc3QaLC5ob2xvbXVzaC5jb3JlLnYxLlF1ZXJ5U3RyZWFtSGlzdG9yeVJlc3BvbnNlQkBaPmdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2NvcmUvdjE7Y29yZXYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * RequestMeta contains metadata for request correlation and debugging.
@@ -87,6 +87,15 @@ export type HandleCommandRequest = Message<"holomush.core.v1.HandleCommandReques
    * @generated from field: string command = 3;
    */
   command: string;
+
+  /**
+   * player_session_token proves the caller owns session_id. Required
+   * for all post-auth RPCs. Must match the player_id of session_id
+   * or the request is rejected with SESSION_NOT_FOUND.
+   *
+   * @generated from field: string player_session_token = 4;
+   */
+  playerSessionToken: string;
 };
 
 /**
@@ -136,6 +145,30 @@ export type SubscribeRequest = Message<"holomush.core.v1.SubscribeRequest"> & {
    * @generated from field: string session_id = 2;
    */
   sessionId: string;
+
+  /**
+   * player_session_token proves the caller owns session_id.
+   *
+   * @generated from field: string player_session_token = 5;
+   */
+  playerSessionToken: string;
+
+  /**
+   * connection_id identifies this specific client attachment. Gateway
+   * generates a fresh ULID per stream. Required so core can register
+   * and deregister connections atomically with the stream lifecycle.
+   *
+   * @generated from field: string connection_id = 6;
+   */
+  connectionId: string;
+
+  /**
+   * client_type describes the connecting client for observability and
+   * routing: "terminal", "telnet", or future client types.
+   *
+   * @generated from field: string client_type = 7;
+   */
+  clientType: string;
 };
 
 /**
@@ -263,6 +296,15 @@ export type DisconnectRequest = Message<"holomush.core.v1.DisconnectRequest"> & 
    * @generated from field: string connection_id = 3;
    */
   connectionId: string;
+
+  /**
+   * player_session_token proves the caller owns session_id. Required
+   * for all post-auth RPCs. Must match the player_id of session_id
+   * or the request is rejected with SESSION_NOT_FOUND.
+   *
+   * @generated from field: string player_session_token = 4;
+   */
+  playerSessionToken: string;
 };
 
 /**
@@ -307,6 +349,15 @@ export type GetCommandHistoryRequest = Message<"holomush.core.v1.GetCommandHisto
    * @generated from field: string session_id = 2;
    */
   sessionId: string;
+
+  /**
+   * player_session_token proves the caller owns session_id. Required
+   * for all post-auth RPCs. Must match the player_id of session_id
+   * or the request is rejected with SESSION_NOT_FOUND.
+   *
+   * @generated from field: string player_session_token = 3;
+   */
+  playerSessionToken: string;
 };
 
 /**
@@ -887,6 +938,178 @@ export const CheckPlayerSessionResponseSchema: GenMessage<CheckPlayerSessionResp
   messageDesc(file_holomush_core_v1_core, 32);
 
 /**
+ * @generated from message holomush.core.v1.ListPlayerSessionsRequest
+ */
+export type ListPlayerSessionsRequest = Message<"holomush.core.v1.ListPlayerSessionsRequest"> & {
+  /**
+   * @generated from field: string player_session_token = 1;
+   */
+  playerSessionToken: string;
+};
+
+/**
+ * Describes the message holomush.core.v1.ListPlayerSessionsRequest.
+ * Use `create(ListPlayerSessionsRequestSchema)` to create a new message.
+ */
+export const ListPlayerSessionsRequestSchema: GenMessage<ListPlayerSessionsRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_core_v1_core, 33);
+
+/**
+ * @generated from message holomush.core.v1.PlayerSessionInfo
+ */
+export type PlayerSessionInfo = Message<"holomush.core.v1.PlayerSessionInfo"> & {
+  /**
+   * id is the PlayerSession.id (ULID). Safe to show the user - this is
+   * a resource handle, not a secret. Used as the target_session_id
+   * argument to RevokePlayerSession.
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 2;
+   */
+  createdAt?: Timestamp;
+
+  /**
+   * last_active is sourced from player_sessions.updated_at, which is
+   * bumped whenever the session is refreshed.
+   *
+   * @generated from field: google.protobuf.Timestamp last_active = 3;
+   */
+  lastActive?: Timestamp;
+
+  /**
+   * @generated from field: string user_agent = 4;
+   */
+  userAgent: string;
+
+  /**
+   * @generated from field: string ip_address = 5;
+   */
+  ipAddress: string;
+
+  /**
+   * is_current is true for exactly the PlayerSession that made the
+   * ListPlayerSessions request - supports "This device" UX.
+   *
+   * @generated from field: bool is_current = 6;
+   */
+  isCurrent: boolean;
+};
+
+/**
+ * Describes the message holomush.core.v1.PlayerSessionInfo.
+ * Use `create(PlayerSessionInfoSchema)` to create a new message.
+ */
+export const PlayerSessionInfoSchema: GenMessage<PlayerSessionInfo> = /*@__PURE__*/
+  messageDesc(file_holomush_core_v1_core, 34);
+
+/**
+ * @generated from message holomush.core.v1.ListPlayerSessionsResponse
+ */
+export type ListPlayerSessionsResponse = Message<"holomush.core.v1.ListPlayerSessionsResponse"> & {
+  /**
+   * @generated from field: repeated holomush.core.v1.PlayerSessionInfo sessions = 1;
+   */
+  sessions: PlayerSessionInfo[];
+};
+
+/**
+ * Describes the message holomush.core.v1.ListPlayerSessionsResponse.
+ * Use `create(ListPlayerSessionsResponseSchema)` to create a new message.
+ */
+export const ListPlayerSessionsResponseSchema: GenMessage<ListPlayerSessionsResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_core_v1_core, 35);
+
+/**
+ * @generated from message holomush.core.v1.RevokePlayerSessionRequest
+ */
+export type RevokePlayerSessionRequest = Message<"holomush.core.v1.RevokePlayerSessionRequest"> & {
+  /**
+   * @generated from field: string player_session_token = 1;
+   */
+  playerSessionToken: string;
+
+  /**
+   * target_session_id is the PlayerSession.id (ULID) to revoke -
+   * NOT the game session_id. Different concept.
+   *
+   * @generated from field: string target_session_id = 2;
+   */
+  targetSessionId: string;
+};
+
+/**
+ * Describes the message holomush.core.v1.RevokePlayerSessionRequest.
+ * Use `create(RevokePlayerSessionRequestSchema)` to create a new message.
+ */
+export const RevokePlayerSessionRequestSchema: GenMessage<RevokePlayerSessionRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_core_v1_core, 36);
+
+/**
+ * @generated from message holomush.core.v1.RevokePlayerSessionResponse
+ */
+export type RevokePlayerSessionResponse = Message<"holomush.core.v1.RevokePlayerSessionResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+
+  /**
+   * @generated from field: string error_message = 2;
+   */
+  errorMessage: string;
+};
+
+/**
+ * Describes the message holomush.core.v1.RevokePlayerSessionResponse.
+ * Use `create(RevokePlayerSessionResponseSchema)` to create a new message.
+ */
+export const RevokePlayerSessionResponseSchema: GenMessage<RevokePlayerSessionResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_core_v1_core, 37);
+
+/**
+ * @generated from message holomush.core.v1.RevokeOtherPlayerSessionsRequest
+ */
+export type RevokeOtherPlayerSessionsRequest = Message<"holomush.core.v1.RevokeOtherPlayerSessionsRequest"> & {
+  /**
+   * @generated from field: string player_session_token = 1;
+   */
+  playerSessionToken: string;
+};
+
+/**
+ * Describes the message holomush.core.v1.RevokeOtherPlayerSessionsRequest.
+ * Use `create(RevokeOtherPlayerSessionsRequestSchema)` to create a new message.
+ */
+export const RevokeOtherPlayerSessionsRequestSchema: GenMessage<RevokeOtherPlayerSessionsRequest> = /*@__PURE__*/
+  messageDesc(file_holomush_core_v1_core, 38);
+
+/**
+ * @generated from message holomush.core.v1.RevokeOtherPlayerSessionsResponse
+ */
+export type RevokeOtherPlayerSessionsResponse = Message<"holomush.core.v1.RevokeOtherPlayerSessionsResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+
+  /**
+   * @generated from field: int32 revoked_count = 2;
+   */
+  revokedCount: number;
+};
+
+/**
+ * Describes the message holomush.core.v1.RevokeOtherPlayerSessionsResponse.
+ * Use `create(RevokeOtherPlayerSessionsResponseSchema)` to create a new message.
+ */
+export const RevokeOtherPlayerSessionsResponseSchema: GenMessage<RevokeOtherPlayerSessionsResponse> = /*@__PURE__*/
+  messageDesc(file_holomush_core_v1_core, 39);
+
+/**
  * @generated from message holomush.core.v1.QueryStreamHistoryRequest
  */
 export type QueryStreamHistoryRequest = Message<"holomush.core.v1.QueryStreamHistoryRequest"> & {
@@ -932,7 +1155,7 @@ export type QueryStreamHistoryRequest = Message<"holomush.core.v1.QueryStreamHis
  * Use `create(QueryStreamHistoryRequestSchema)` to create a new message.
  */
 export const QueryStreamHistoryRequestSchema: GenMessage<QueryStreamHistoryRequest> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 33);
+  messageDesc(file_holomush_core_v1_core, 40);
 
 /**
  * @generated from message holomush.core.v1.QueryStreamHistoryResponse
@@ -959,7 +1182,7 @@ export type QueryStreamHistoryResponse = Message<"holomush.core.v1.QueryStreamHi
  * Use `create(QueryStreamHistoryResponseSchema)` to create a new message.
  */
 export const QueryStreamHistoryResponseSchema: GenMessage<QueryStreamHistoryResponse> = /*@__PURE__*/
-  messageDesc(file_holomush_core_v1_core, 34);
+  messageDesc(file_holomush_core_v1_core, 41);
 
 /**
  * @generated from enum holomush.core.v1.ControlSignal
@@ -1132,6 +1355,42 @@ export const CoreService: GenService<{
     methodKind: "unary";
     input: typeof CheckPlayerSessionRequestSchema;
     output: typeof CheckPlayerSessionResponseSchema;
+  },
+  /**
+   * ListPlayerSessions returns the caller's active PlayerSessions
+   * (the rows of player_sessions for the caller's player_id). Tokens
+   * are not returned — only metadata useful for user-visible session
+   * management ("you are signed in on these devices").
+   *
+   * @generated from rpc holomush.core.v1.CoreService.ListPlayerSessions
+   */
+  listPlayerSessions: {
+    methodKind: "unary";
+    input: typeof ListPlayerSessionsRequestSchema;
+    output: typeof ListPlayerSessionsResponseSchema;
+  },
+  /**
+   * RevokePlayerSession deletes a specific PlayerSession. Ownership is
+   * verified — a player cannot revoke another player's sessions.
+   *
+   * @generated from rpc holomush.core.v1.CoreService.RevokePlayerSession
+   */
+  revokePlayerSession: {
+    methodKind: "unary";
+    input: typeof RevokePlayerSessionRequestSchema;
+    output: typeof RevokePlayerSessionResponseSchema;
+  },
+  /**
+   * RevokeOtherPlayerSessions deletes all PlayerSessions for the caller
+   * except the current one. Convenience bulk operation equivalent to
+   * listing and calling RevokePlayerSession for each.
+   *
+   * @generated from rpc holomush.core.v1.CoreService.RevokeOtherPlayerSessions
+   */
+  revokeOtherPlayerSessions: {
+    methodKind: "unary";
+    input: typeof RevokeOtherPlayerSessionsRequestSchema;
+    output: typeof RevokeOtherPlayerSessionsResponseSchema;
   },
   /**
    * QueryStreamHistory reads paginated event history from a stream.
