@@ -503,3 +503,109 @@ The host discovers plugins at startup by scanning the `plugins/` directory for
 | Function              | Purpose                                        |
 | --------------------- | ---------------------------------------------- |
 | `ParseBrokerServices` | Parse required_services map into broker IDs    |
+
+### EventSink
+
+The `EventSink` facade is the plugin-side entry point for emitting events on
+behalf of the plugin. Plugins that need to publish events to the host's event
+store (rather than returning them from `HandleEvent`) call `EventSink.Emit`
+directly. The SDK adapter detects `EventSinkAware` during `Init` and injects a
+broker-backed sink.
+
+#### Declaring EventSinkAware
+
+```go
+type myPlugin struct {
+    sink pluginsdk.EventSink
+}
+
+func (p *myPlugin) SetEventSink(sink pluginsdk.EventSink) {
+    p.sink = sink
+}
+
+func (p *myPlugin) someMethod(ctx context.Context, stream string) error {
+    return p.sink.Emit(ctx, pluginsdk.EmitIntent{
+        Stream:  stream,
+        Type:    "my_event",
+        Payload: `{"key":"value"}`,
+    })
+}
+```
+
+### FocusClient
+
+The `FocusClient` facade is the plugin-side entry point for driving
+server-owned session focus state. Plugins that need to declare a
+character's participation in a focused context — scenes today,
+mail/admin-views in the future — call `FocusClient` rather than
+mutating session state directly. All calls cross the plugin broker
+(mTLS) to the host's `PluginHostService`.
+
+#### Methods
+
+| Method | Purpose |
+| --- | --- |
+| `JoinFocus(ctx, sessionID, target)` | Add a focus membership. The server determines streams, replay mode, and cursor baselines based on the target's `FocusKind`. Idempotent — treat `FOCUS_ALREADY_MEMBER` as success. |
+| `LeaveFocus(ctx, sessionID, target)` | Remove a focus membership. Idempotent on non-member. Clears `PresentingFocus` if it pointed at the removed target. |
+| `PresentFocus(ctx, sessionID, target)` | Update the session's presenting-focus pointer. The target MUST already be a member; non-members get `FOCUS_NOT_MEMBER`. No replay or subscription change — pure bookkeeping. |
+| `QueryStreamHistory(ctx, req)` | Read the tail of a stream for plugin-side display (e.g., last 20 messages on join). Read-only — does not mutate cursors. The host clamps `Count` at 500. |
+
+#### Declaring FocusClientAware
+
+A plugin opts in by implementing `FocusClientAware`:
+
+```go
+type scenePlugin struct {
+    focusClient pluginsdk.FocusClient
+}
+
+func (p *scenePlugin) SetFocusClient(client pluginsdk.FocusClient) {
+    p.focusClient = client
+}
+
+func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+    sceneID := strings.TrimSpace(args)
+    // ... persist the DB row first ...
+
+    err := p.focusClient.JoinFocus(ctx, req.SessionID, pluginsdk.FocusKey{
+        Kind:     pluginsdk.FocusKindScene,
+        TargetID: sceneID,
+    })
+    if err != nil {
+        // Inspect oops error code; FOCUS_ALREADY_MEMBER is idempotent-success.
+        return pluginsdk.Errorf("failed to join scene: %v", err), nil
+    }
+    return pluginsdk.OK(fmt.Sprintf("Joined scene %s.", sceneID)), nil
+}
+```
+
+The SDK adapter detects `FocusClientAware` during `Init` and injects a
+broker-backed client. `EventSink` and `FocusClient` share a single
+`*grpc.ClientConn` to `PluginHostService`, so a plugin implementing both
+`EventSinkAware` and `FocusClientAware` opens ONE connection — not two.
+
+#### Error codes
+
+`FocusClient` methods return `oops`-coded errors; inspect via `errors.As`:
+
+| Code | Meaning |
+| --- | --- |
+| `SESSION_NOT_FOUND` | The session does not exist. |
+| `SESSION_EXPIRED` | The session is past its TTL. |
+| `FOCUS_ALREADY_MEMBER` | Membership already exists — treat as idempotent success. |
+| `FOCUS_KIND_UNREGISTERED` | The host has no policy registered for this `FocusKind`. |
+| `FOCUS_POLICY_FAILED` | The kind policy rejected the join. |
+| `FOCUS_NOT_MEMBER` | (`PresentFocus` only) Target is not in the session's memberships. |
+
+#### Invariants
+
+- Plugins MUST NOT mutate `session.FocusMemberships` directly. The facade is
+  the only sanctioned path.
+- Plugins MUST NOT declare replay modes or stream names on focus RPCs — the
+  server owns those decisions.
+- `QueryStreamHistory` is strictly read-only.
+
+#### References
+
+- Plugin adoption spec: [B10 core-scenes Adoption](../../../docs/superpowers/specs/2026-04-16-b10-core-scenes-adoption-design.md)
+- Implementation: `pkg/plugin/focus_client.go`

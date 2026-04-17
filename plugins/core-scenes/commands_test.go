@@ -5,9 +5,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -257,16 +259,20 @@ func TestSceneCommandJoinForwardsToServiceWithCorrectSceneID(t *testing.T) {
 		ID: "scene-cmd-j", OwnerID: "char-alice",
 		State: string(SceneStateActive), Visibility: string(SceneVisibilityOpen),
 	}))
-	plugin := &scenePlugin{service: NewSceneServiceImpl(store)}
+	fc := &fakeFocusClient{}
+	plugin := &scenePlugin{service: NewSceneServiceImpl(store), focusClient: fc}
 
 	resp, err := plugin.dispatchCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:     "scene",
 		Args:        "join scene-cmd-j",
 		CharacterID: "char-bob",
+		SessionID:   "sess-bob",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 	assert.Contains(t, resp.Output, "Joined scene scene-cmd-j")
+	require.Len(t, fc.joinCalls, 1)
+	assert.Equal(t, "scene-cmd-j", fc.joinCalls[0].target.TargetID)
 }
 
 func TestSceneCommandLeaveRejectsMissingSceneID(t *testing.T) {
@@ -436,4 +442,374 @@ func TestMembershipCommandsRejectExtraPositionalTokens(t *testing.T) {
 				"expected usage hint for args %q", tt.args)
 		})
 	}
+}
+
+// --- fakeFocusClient ---
+
+type focusCall struct {
+	sessionID string
+	target    pluginsdk.FocusKey
+}
+
+type fakeFocusClient struct {
+	joinCalls    []focusCall
+	leaveCalls   []focusCall
+	presentCalls []focusCall
+
+	joinErr    error
+	leaveErr   error
+	presentErr error
+}
+
+func (f *fakeFocusClient) JoinFocus(_ context.Context, sid string, t pluginsdk.FocusKey) error {
+	f.joinCalls = append(f.joinCalls, focusCall{sessionID: sid, target: t})
+	return f.joinErr
+}
+
+func (f *fakeFocusClient) LeaveFocus(_ context.Context, sid string, t pluginsdk.FocusKey) error {
+	f.leaveCalls = append(f.leaveCalls, focusCall{sessionID: sid, target: t})
+	return f.leaveErr
+}
+
+func (f *fakeFocusClient) PresentFocus(_ context.Context, sid string, t pluginsdk.FocusKey) error {
+	f.presentCalls = append(f.presentCalls, focusCall{sessionID: sid, target: t})
+	return f.presentErr
+}
+
+func (f *fakeFocusClient) QueryStreamHistory(_ context.Context, _ pluginsdk.QueryStreamHistoryRequest) ([]pluginsdk.Event, error) {
+	return nil, nil
+}
+
+// newTestPluginWithFocus returns a scenePlugin wired with a fakeFocusClient
+// and a fakeStore-backed SceneServiceImpl. Tests that exercise the
+// command-path focus wiring use this in place of newTestPlugin.
+func newTestPluginWithFocus() (*scenePlugin, *fakeFocusClient) {
+	p := newTestPlugin()
+	fc := &fakeFocusClient{}
+	p.focusClient = fc
+	return p, fc
+}
+
+// extractSceneID parses a "Scene created: <id>" output into the id substring.
+func extractSceneID(t *testing.T, output string) string {
+	t.Helper()
+	parts := strings.Split(output, "Scene created:")
+	require.Len(t, parts, 2)
+	return strings.TrimSpace(parts[1])
+}
+
+// --- scene join / leave / end / switch focus-wiring tests ---
+
+func TestSceneJoinCallsFocusClientJoinFocus(t *testing.T) {
+	p, fc := newTestPluginWithFocus()
+
+	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
+	})
+	require.NoError(t, err)
+	sceneID := extractSceneID(t, createResp.Output)
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "join " + sceneID,
+		CharacterID: "char-bob",
+		SessionID:   "sess-bob",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	require.Len(t, fc.joinCalls, 1)
+	assert.Equal(t, "sess-bob", fc.joinCalls[0].sessionID)
+	assert.Equal(t, pluginsdk.FocusKindScene, fc.joinCalls[0].target.Kind)
+	assert.Equal(t, sceneID, fc.joinCalls[0].target.TargetID)
+}
+
+func TestSceneJoinPropagatesJoinSceneError(t *testing.T) {
+	p, fc := newTestPluginWithFocus()
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "join scene-does-not-exist",
+		CharacterID: "char-bob",
+		SessionID:   "sess-bob",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Empty(t, fc.joinCalls, "JoinFocus MUST NOT run when service.JoinScene fails")
+}
+
+func TestSceneJoinHandlesJoinFocusError(t *testing.T) {
+	p, fc := newTestPluginWithFocus()
+	fc.joinErr = oops.Code("FOCUS_POLICY_FAILED").Errorf("policy rejected")
+
+	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
+	})
+	require.NoError(t, err)
+	sceneID := extractSceneID(t, createResp.Output)
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "join " + sceneID,
+		CharacterID: "char-bob",
+		SessionID:   "sess-bob",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "retry")
+}
+
+func TestSceneJoinTreatsFocusAlreadyMemberAsSuccess(t *testing.T) {
+	p, fc := newTestPluginWithFocus()
+	fc.joinErr = oops.Code("FOCUS_ALREADY_MEMBER").Errorf("duplicate")
+
+	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
+	})
+	require.NoError(t, err)
+	sceneID := extractSceneID(t, createResp.Output)
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "join " + sceneID,
+		CharacterID: "char-bob",
+		SessionID:   "sess-bob",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+}
+
+func TestSceneLeaveCallsLeaveScene(t *testing.T) {
+	p, fc := newTestPluginWithFocus()
+
+	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
+	})
+	require.NoError(t, err)
+	sceneID := extractSceneID(t, createResp.Output)
+
+	_, err = p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "join " + sceneID, CharacterID: "char-bob", SessionID: "sess-bob",
+	})
+	require.NoError(t, err)
+
+	fc.joinCalls = nil
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "leave " + sceneID, CharacterID: "char-bob", SessionID: "sess-bob",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	require.Len(t, fc.leaveCalls, 1)
+	assert.Equal(t, "sess-bob", fc.leaveCalls[0].sessionID)
+	assert.Equal(t, sceneID, fc.leaveCalls[0].target.TargetID)
+}
+
+func TestSceneLeaveRejectsOwnerBeforeFocusChange(t *testing.T) {
+	p, fc := newTestPluginWithFocus()
+
+	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
+	})
+	require.NoError(t, err)
+	sceneID := extractSceneID(t, createResp.Output)
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "leave " + sceneID, CharacterID: "char-owner", SessionID: "sess-owner",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Empty(t, fc.leaveCalls, "LeaveFocus MUST NOT run when owner-leave is rejected")
+}
+
+func TestSceneLeaveToleratesLeaveFocusError(t *testing.T) {
+	p, fc := newTestPluginWithFocus()
+	fc.leaveErr = errors.New("transient host error")
+
+	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
+	})
+	require.NoError(t, err)
+	sceneID := extractSceneID(t, createResp.Output)
+
+	_, err = p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "join " + sceneID, CharacterID: "char-bob", SessionID: "sess-bob",
+	})
+	require.NoError(t, err)
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "leave " + sceneID, CharacterID: "char-bob", SessionID: "sess-bob",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status, "DB leave succeeded; focus-side failure is logged, not surfaced")
+}
+
+func TestSceneEndCallsLeaveFocusForOwner(t *testing.T) {
+	p, fc := newTestPluginWithFocus()
+
+	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
+	})
+	require.NoError(t, err)
+	sceneID := extractSceneID(t, createResp.Output)
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "end " + sceneID, CharacterID: "char-owner", SessionID: "sess-owner",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	require.Len(t, fc.leaveCalls, 1)
+	assert.Equal(t, "sess-owner", fc.leaveCalls[0].sessionID)
+	assert.Equal(t, sceneID, fc.leaveCalls[0].target.TargetID)
+}
+
+func TestSceneSwitchCallsPresentFocus(t *testing.T) {
+	p, fc := newTestPluginWithFocus()
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "switch scene-01", CharacterID: "char-bob", SessionID: "sess-bob",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	require.Len(t, fc.presentCalls, 1)
+	assert.Equal(t, "sess-bob", fc.presentCalls[0].sessionID)
+	assert.Equal(t, pluginsdk.FocusKindScene, fc.presentCalls[0].target.Kind)
+	assert.Equal(t, "scene-01", fc.presentCalls[0].target.TargetID)
+}
+
+func TestSceneSwitchReturnsNotMemberError(t *testing.T) {
+	p, fc := newTestPluginWithFocus()
+	fc.presentErr = oops.Code("FOCUS_NOT_MEMBER").Errorf("not joined")
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "switch scene-01", CharacterID: "char-bob", SessionID: "sess-bob",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "not a member")
+	assert.Contains(t, resp.Output, "scene join")
+}
+
+func TestSceneSwitchStrictArity(t *testing.T) {
+	p, _ := newTestPluginWithFocus()
+
+	tests := []struct {
+		name string
+		args string
+	}{
+		{"rejects empty", "switch"},
+		{"rejects trailing tokens", "switch scene-01 trailing"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+				Command: "scene", Args: tt.args, CharacterID: "char-bob", SessionID: "sess-bob",
+			})
+			require.NoError(t, err)
+			assert.Equal(t, pluginsdk.CommandError, resp.Status)
+			assert.Contains(t, resp.Output, "Usage")
+		})
+	}
+}
+
+// --- Group C: focusClient-not-configured branches ---
+
+func TestSceneJoinReturnsErrorWhenFocusClientNotConfigured(t *testing.T) {
+	// newTestPlugin() has no focusClient wired in.
+	p := newTestPlugin()
+
+	// Create a scene first so JoinScene succeeds before hitting the nil-client guard.
+	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
+	})
+	require.NoError(t, err)
+	sceneID := extractSceneID(t, createResp.Output)
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "join " + sceneID,
+		CharacterID: "char-bob",
+		SessionID:   "sess-bob",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "focus client not configured")
+	assert.Contains(t, resp.Output, "administrator",
+		"nil focusClient is a misconfiguration, not transient; message should direct operator, not user-retry")
+	assert.NotContains(t, resp.Output, "retry",
+		"nil focusClient retries hit the same guard; do not mislead the user")
+}
+
+func TestSceneSwitchReturnsErrorWhenFocusClientNotConfigured(t *testing.T) {
+	p := newTestPlugin()
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "switch scene-01",
+		CharacterID: "char-bob",
+		SessionID:   "sess-bob",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.Contains(t, resp.Output, "focus client not configured")
+}
+
+func TestSceneSwitchReturnsGenericErrorForUnknownFailure(t *testing.T) {
+	p, fc := newTestPluginWithFocus()
+	fc.presentErr = errors.New("unexpected storage error")
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "switch scene-01",
+		CharacterID: "char-bob",
+		SessionID:   "sess-bob",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandError, resp.Status)
+	assert.True(t, strings.HasPrefix(resp.Output, "Failed to switch scene:"),
+		"output should start with 'Failed to switch scene:'; got: %q", resp.Output)
+}
+
+func TestSceneEndToleratesLeaveFocusError(t *testing.T) {
+	p, fc := newTestPluginWithFocus()
+
+	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
+	})
+	require.NoError(t, err)
+	sceneID := extractSceneID(t, createResp.Output)
+
+	// Set a transient focus error after the scene exists.
+	fc.leaveErr = errors.New("host blip")
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "end " + sceneID,
+		CharacterID: "char-owner",
+		SessionID:   "sess-owner",
+	})
+	require.NoError(t, err)
+	// DB write succeeded; focus error is logged, not surfaced.
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "ended")
+}
+
+func TestSceneEndReturnsOKWhenFocusClientNotConfigured(t *testing.T) {
+	// handleEnd skips LeaveFocus when focusClient is nil and returns OK.
+	p := newTestPlugin()
+
+	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
+	})
+	require.NoError(t, err)
+	sceneID := extractSceneID(t, createResp.Output)
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "end " + sceneID,
+		CharacterID: "char-owner",
+		SessionID:   "sess-owner",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "ended")
 }

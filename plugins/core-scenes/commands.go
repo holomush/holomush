@@ -5,9 +5,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
+	"github.com/samber/oops"
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
@@ -34,7 +37,7 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 	span.SetAttributes(attribute.String("subcommand", sub))
 
 	if sub == "" {
-		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, info, end, pause, resume, set, join, leave, invite, kick, transfer"), nil
+		return pluginsdk.Errorf("Usage: scene <subcommand> [args]\nKnown subcommands: create, end, info, invite, join, kick, leave, pause, resume, set, switch, transfer"), nil
 	}
 
 	switch sub {
@@ -60,8 +63,10 @@ func (p *scenePlugin) dispatchCommand(ctx context.Context, req pluginsdk.Command
 		return p.handleKick(ctx, req, rest)
 	case "transfer":
 		return p.handleTransfer(ctx, req, rest)
+	case "switch":
+		return p.handleSwitch(ctx, req, rest)
 	default:
-		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, info, end, pause, resume, set, join, leave, invite, kick, transfer.", sub), nil
+		return pluginsdk.Errorf("Unknown scene subcommand %q. Known subcommands: create, end, info, invite, join, kick, leave, pause, resume, set, switch, transfer.", sub), nil
 	}
 }
 
@@ -132,7 +137,9 @@ func (p *scenePlugin) handleInfo(ctx context.Context, req pluginsdk.CommandReque
 // handleEnd ends the specified scene. Owner ABAC enforcement is gateway-side
 // (the host's ABAC engine evaluates end-own-scene before this code runs in
 // production); in unit tests, ABAC is bypassed so the test must use the
-// scene owner's character ID.
+// scene owner's character ID. After the DB write, focusClient.LeaveFocus is
+// called for the owner's session only; multi-session fan-out is deferred to a
+// follow-up bead (spec §6.1).
 //
 //nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleEnd(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
@@ -141,12 +148,25 @@ func (p *scenePlugin) handleEnd(ctx context.Context, req pluginsdk.CommandReques
 		return pluginsdk.Errorf("Usage: scene end <scene id>"), nil
 	}
 
-	_, err := p.service.EndScene(ctx, &scenev1.EndSceneRequest{
+	if _, err := p.service.EndScene(ctx, &scenev1.EndSceneRequest{
 		CharacterId: req.CharacterID,
 		SceneId:     sceneID,
-	})
-	if err != nil {
+	}); err != nil {
 		return pluginsdk.Errorf("Failed to end scene: %v", err), nil
+	}
+
+	if p.focusClient != nil {
+		if err := p.focusClient.LeaveFocus(ctx, req.SessionID, pluginsdk.FocusKey{
+			Kind:     pluginsdk.FocusKindScene,
+			TargetID: sceneID,
+		}); err != nil {
+			slog.WarnContext(ctx, "scene.command.end focus leave failed for owner session",
+				"subject_id", req.CharacterID,
+				"session_id", req.SessionID,
+				"scene_id", sceneID,
+				"error", err,
+			)
+		}
 	}
 
 	return &pluginsdk.CommandResponse{
@@ -282,25 +302,60 @@ func splitSubcommand(args string) (sub, rest string) {
 	return args[:idx], strings.TrimSpace(args[idx+1:])
 }
 
-// handleJoin parses "scene join <scene-id>" and calls JoinScene.
+// handleJoin parses "scene join <scene-id>", calls JoinScene, then calls
+// focusClient.JoinFocus to register the session as a subscriber.
 //
 //nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
-	// Strict arity: reject empty args AND trailing tokens. Without this,
-	// `scene join scn123 typo` would pass "scn123 typo" as SceneId and
-	// produce a confusing RPC error instead of a usage message.
 	fields := strings.Fields(args)
 	if len(fields) != 1 {
 		return pluginsdk.Errorf("Usage: scene join <scene id>"), nil
 	}
 	sceneID := fields[0]
 
-	_, err := p.service.JoinScene(ctx, &scenev1.JoinSceneRequest{
+	if _, err := p.service.JoinScene(ctx, &scenev1.JoinSceneRequest{
 		CharacterId: req.CharacterID,
 		SceneId:     sceneID,
+	}); err != nil {
+		return pluginsdk.Errorf("Failed to join scene: %v", err), nil
+	}
+
+	if p.focusClient == nil {
+		// Misconfiguration, not a transient error: retries will hit the
+		// same nil guard. Surface the operator-action hint rather than the
+		// user-retry hint used for transient JoinFocus failures below.
+		slog.WarnContext(ctx, "scene.command.join focus client not configured; subscription not updated",
+			"subject_id", req.CharacterID,
+			"session_id", req.SessionID,
+			"scene_id", sceneID,
+		)
+		return pluginsdk.Errorf(
+			"Joined scene in database, but your session could not subscribe " +
+				"(focus client not configured — this is a server configuration error, " +
+				"please contact an administrator)."), nil
+	}
+
+	err := p.focusClient.JoinFocus(ctx, req.SessionID, pluginsdk.FocusKey{
+		Kind:     pluginsdk.FocusKindScene,
+		TargetID: sceneID,
 	})
 	if err != nil {
-		return pluginsdk.Errorf("Failed to join scene: %v", err), nil
+		var oe oops.OopsError
+		if errors.As(err, &oe) && oe.Code() == "FOCUS_ALREADY_MEMBER" {
+			return &pluginsdk.CommandResponse{
+				Status: pluginsdk.CommandOK,
+				Output: fmt.Sprintf("Joined scene %s.", sceneID),
+			}, nil
+		}
+		slog.WarnContext(ctx, "scene.command.join focus join failed",
+			"subject_id", req.CharacterID,
+			"session_id", req.SessionID,
+			"scene_id", sceneID,
+			"error", err,
+		)
+		return pluginsdk.Errorf(
+			"Joined scene in database, but your session could not subscribe (%v). "+
+				"Please retry `scene join %s`.", err, sceneID), nil
 	}
 
 	return &pluginsdk.CommandResponse{
@@ -309,23 +364,37 @@ func (p *scenePlugin) handleJoin(ctx context.Context, req pluginsdk.CommandReque
 	}, nil
 }
 
-// handleLeave parses "scene leave <scene-id>" and calls LeaveScene.
+// handleLeave parses "scene leave <scene-id>", calls LeaveScene, then calls
+// focusClient.LeaveFocus. Focus errors are logged but do not fail the command
+// since the DB is the source of truth for scene membership.
 //
 //nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleLeave(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
-	// Strict arity: reject empty args AND trailing tokens — see handleJoin.
 	fields := strings.Fields(args)
 	if len(fields) != 1 {
 		return pluginsdk.Errorf("Usage: scene leave <scene id>"), nil
 	}
 	sceneID := fields[0]
 
-	_, err := p.service.LeaveScene(ctx, &scenev1.LeaveSceneRequest{
+	if _, err := p.service.LeaveScene(ctx, &scenev1.LeaveSceneRequest{
 		CharacterId: req.CharacterID,
 		SceneId:     sceneID,
-	})
-	if err != nil {
+	}); err != nil {
 		return pluginsdk.Errorf("Failed to leave scene: %v", err), nil
+	}
+
+	if p.focusClient != nil {
+		if err := p.focusClient.LeaveFocus(ctx, req.SessionID, pluginsdk.FocusKey{
+			Kind:     pluginsdk.FocusKindScene,
+			TargetID: sceneID,
+		}); err != nil {
+			slog.WarnContext(ctx, "scene.command.leave focus leave failed",
+				"subject_id", req.CharacterID,
+				"session_id", req.SessionID,
+				"scene_id", sceneID,
+				"error", err,
+			)
+		}
 	}
 
 	return &pluginsdk.CommandResponse{
@@ -409,5 +478,52 @@ func (p *scenePlugin) handleTransfer(ctx context.Context, req pluginsdk.CommandR
 	return &pluginsdk.CommandResponse{
 		Status: pluginsdk.CommandOK,
 		Output: fmt.Sprintf("Transferred ownership of scene %s to %s.", sceneID, target),
+	}, nil
+}
+
+// handleSwitch implements `scene switch <scene id>`. The coordinator's
+// PresentFocus is a pure session-state column update; the session MUST
+// already be a member of the target scene (enforced server-side via
+// FOCUS_NOT_MEMBER). No DB write happens here — scene membership and
+// subscriptions are unchanged by switch.
+//
+//nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
+func (p *scenePlugin) handleSwitch(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
+	fields := strings.Fields(args)
+	if len(fields) != 1 {
+		return pluginsdk.Errorf("Usage: scene switch <scene id>"), nil
+	}
+	sceneID := fields[0]
+
+	if p.focusClient == nil {
+		slog.WarnContext(ctx, "scene.command.switch focus client not configured",
+			"subject_id", req.CharacterID,
+			"session_id", req.SessionID,
+			"scene_id", sceneID,
+		)
+		return pluginsdk.Errorf("Failed to switch scene: focus client not configured"), nil
+	}
+
+	if err := p.focusClient.PresentFocus(ctx, req.SessionID, pluginsdk.FocusKey{
+		Kind:     pluginsdk.FocusKindScene,
+		TargetID: sceneID,
+	}); err != nil {
+		var oe oops.OopsError
+		if errors.As(err, &oe) && oe.Code() == "FOCUS_NOT_MEMBER" {
+			return pluginsdk.Errorf(
+				"You are not a member of scene %s. Use `scene join %s` first.", sceneID, sceneID), nil
+		}
+		slog.WarnContext(ctx, "scene.command.switch focus present failed",
+			"subject_id", req.CharacterID,
+			"session_id", req.SessionID,
+			"scene_id", sceneID,
+			"error", err,
+		)
+		return pluginsdk.Errorf("Failed to switch scene: %v", err), nil
+	}
+
+	return &pluginsdk.CommandResponse{
+		Status: pluginsdk.CommandOK,
+		Output: fmt.Sprintf("Switched to scene %s.", sceneID),
 	}, nil
 }

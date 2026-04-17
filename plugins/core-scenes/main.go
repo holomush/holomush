@@ -29,9 +29,10 @@ import (
 // runs before Init) has valid receivers. Init wires the store into both
 // after NewSceneStore returns.
 type scenePlugin struct {
-	store    *SceneStore
-	service  *SceneServiceImpl
-	resolver *SceneResolver
+	store       *SceneStore
+	service     *SceneServiceImpl
+	resolver    *SceneResolver
+	focusClient pluginsdk.FocusClient
 }
 
 // HandleEvent is a no-op for Phase 1. The scene plugin does not subscribe
@@ -61,6 +62,14 @@ func (p *scenePlugin) RegisterServices(registrar grpc.ServiceRegistrar) {
 // during policy evaluation.
 func (p *scenePlugin) RegisterAttributeResolver(registrar grpc.ServiceRegistrar) {
 	pluginv1.RegisterAttributeResolverServiceServer(registrar, p.resolver)
+}
+
+// SetFocusClient is called by the SDK adapter during Init when the plugin
+// declares FocusClientAware. The client is used by command handlers to
+// drive session focus state via PluginHostService.{JoinFocus,LeaveFocus,
+// PresentFocus}.
+func (p *scenePlugin) SetFocusClient(client pluginsdk.FocusClient) {
+	p.focusClient = client
 }
 
 // SetEventSink forwards the SDK-injected event sink to the scene service so

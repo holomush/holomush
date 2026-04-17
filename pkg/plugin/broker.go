@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/samber/oops"
+	"google.golang.org/grpc"
 )
 
 const brokerPrefix = "broker:"
@@ -47,4 +50,24 @@ func BrokerServiceID(services map[string]string, serviceName string) (uint32, er
 		return 0, fmt.Errorf("service %q not found in required services", serviceName)
 	}
 	return id, nil
+}
+
+// dialPluginHost dials the plugin host service via the given broker and
+// returns a *grpc.ClientConn. Callers wrap the conn in service-specific
+// clients (EventSink, FocusClient). This helper exists so a single
+// plugin process holds one connection to the host for all host-facing
+// SDK facades.
+func dialPluginHost(broker brokerDialer, services map[string]string) (*grpc.ClientConn, error) {
+	if broker == nil {
+		return nil, oops.New("plugin host broker is not configured")
+	}
+	brokerID, err := BrokerServiceID(services, PluginHostServiceName)
+	if err != nil {
+		return nil, oops.With("service", PluginHostServiceName).Wrap(err)
+	}
+	conn, err := broker.DialWithOptions(brokerID, grpc.WithAuthority("holomush-plugin-host"))
+	if err != nil {
+		return nil, oops.With("service", PluginHostServiceName).Wrap(err)
+	}
+	return conn, nil
 }
