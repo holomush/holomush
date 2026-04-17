@@ -54,13 +54,9 @@ func newEventSinkFromBroker(broker brokerDialer, services map[string]string) (Ev
 	if broker == nil {
 		return nil, oops.New("plugin host broker is not configured")
 	}
-	brokerID, err := BrokerServiceID(services, PluginHostServiceName)
+	conn, err := dialPluginHost(broker, services)
 	if err != nil {
-		return nil, oops.With("service", PluginHostServiceName).Wrap(err)
-	}
-	conn, err := broker.DialWithOptions(brokerID, grpc.WithAuthority("holomush-plugin-host"))
-	if err != nil {
-		return nil, oops.With("service", PluginHostServiceName).Wrap(err)
+		return nil, err
 	}
 	return &pluginHostEventSink{
 		client: pluginv1.NewPluginHostServiceClient(conn),
