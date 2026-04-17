@@ -138,22 +138,49 @@ type pluginServerAdapter struct {
 
 // Init implements pluginv1.PluginServiceServer. When a ServiceProvider is set,
 // it delegates to the provider's Init; otherwise it returns an empty response.
+//
+// Before delegating to the provider, Init optionally injects host-facing SDK
+// facades based on which optional interfaces the provider implements:
+//
+//   - EventSinkAware  -> provider.SetEventSink(...)
+//   - FocusClientAware -> provider.SetFocusClient(...)
+//
+// To avoid opening one broker connection per facade, Init dials the plugin
+// host exactly once and shares that *grpc.ClientConn across every facade
+// the provider consents to receive. A plugin that opts into neither
+// interface pays no connection cost.
 func (a *pluginServerAdapter) Init(ctx context.Context, req *pluginv1.InitRequest) (*pluginv1.InitResponse, error) {
 	var config *pluginv1.ServiceConfig
 	if req != nil {
 		config = req.GetConfig()
 	}
-	if sinkAware, ok := a.serviceProvider.(EventSinkAware); ok {
+
+	_, wantsSink := a.serviceProvider.(EventSinkAware)
+	_, wantsFocus := a.serviceProvider.(FocusClientAware)
+
+	// Lazily dial a single plugin-host gRPC connection shared by every
+	// host-facing SDK facade the provider opts into. If the provider opts
+	// into none, we never dial.
+	var hostClient pluginv1.PluginHostServiceClient
+	if wantsSink || wantsFocus {
 		requiredServices := map[string]string(nil)
 		if config != nil {
 			requiredServices = config.GetRequiredServices()
 		}
-		sink, err := newEventSinkFromBroker(a.brokerDialer, requiredServices)
+		conn, err := dialPluginHost(a.brokerDialer, requiredServices)
 		if err != nil {
 			return nil, oops.With("phase", "init").With("service", PluginHostServiceName).Wrap(err)
 		}
-		sinkAware.SetEventSink(sink)
+		hostClient = pluginv1.NewPluginHostServiceClient(conn)
 	}
+
+	if sinkAware, ok := a.serviceProvider.(EventSinkAware); ok {
+		sinkAware.SetEventSink(&pluginHostEventSink{client: hostClient})
+	}
+	if focusAware, ok := a.serviceProvider.(FocusClientAware); ok {
+		focusAware.SetFocusClient(newPluginHostFocusClient(hostClient))
+	}
+
 	if a.serviceProvider == nil {
 		return &pluginv1.InitResponse{}, nil
 	}

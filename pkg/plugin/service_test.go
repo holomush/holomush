@@ -465,7 +465,7 @@ func startPluginHostServiceTestServer(t *testing.T, srv pluginv1.PluginHostServi
 		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
 			return listener.Dial()
 		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(insecure.NewCredentials()), // nosemgrep: go.grpc.tls.grpc-client-new-insecure-connection.grpc-client-new-insecure-connection -- bufconn test client
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
@@ -479,4 +479,89 @@ type testFullAdapterHandler struct {
 
 func (h *testFullAdapterHandler) HandleCommand(_ context.Context, req CommandRequest) (*CommandResponse, error) {
 	return OK("handled: " + req.Command), nil
+}
+
+// --- FocusClient injection ---
+
+type focusClientInitProvider struct {
+	initCalled  bool
+	focusClient FocusClient
+}
+
+func (p *focusClientInitProvider) RegisterServices(_ grpc.ServiceRegistrar) {}
+
+func (p *focusClientInitProvider) Init(ctx context.Context, _ *pluginv1.ServiceConfig) error {
+	p.initCalled = true
+	if p.focusClient == nil {
+		return errors.New("focus client not injected")
+	}
+	// Exercise the injected client to prove it reaches the host.
+	return p.focusClient.JoinFocus(ctx, "sess-1", FocusKey{Kind: FocusKindScene, TargetID: "scene-1"})
+}
+
+func (p *focusClientInitProvider) SetFocusClient(client FocusClient) {
+	p.focusClient = client
+}
+
+func TestPluginServerAdapterInitInjectsFocusClientIntoServiceProvider(t *testing.T) {
+	srv := &focusTestServer{}
+	hostConn := startPluginHostServiceTestServer(t, srv)
+
+	provider := &focusClientInitProvider{}
+	adapter := &pluginServerAdapter{
+		handler:         &adapterTestHandler{},
+		serviceProvider: provider,
+		brokerDialer: &testBrokerDialer{
+			conns: map[uint32]*grpc.ClientConn{7: hostConn},
+		},
+	}
+
+	_, err := adapter.Init(context.Background(), &pluginv1.InitRequest{
+		Config: &pluginv1.ServiceConfig{
+			RequiredServices: map[string]string{
+				PluginHostServiceName: "broker:7",
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, provider.initCalled, "expected provider.Init to run")
+	require.NotNil(t, provider.focusClient, "expected FocusClient to be injected")
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	require.Len(t, srv.joinReqs, 1, "expected the injected client's JoinFocus call to reach the host")
+	assert.Equal(t, "sess-1", srv.joinReqs[0].GetSessionId())
+}
+
+type dualAwareProvider struct {
+	focusClient FocusClient
+	sink        EventSink
+}
+
+func (p *dualAwareProvider) RegisterServices(_ grpc.ServiceRegistrar)                {}
+func (p *dualAwareProvider) Init(_ context.Context, _ *pluginv1.ServiceConfig) error { return nil }
+func (p *dualAwareProvider) SetEventSink(s EventSink)                                { p.sink = s }
+func (p *dualAwareProvider) SetFocusClient(c FocusClient)                            { p.focusClient = c }
+
+func TestPluginServerAdapterInitInjectsBothEventSinkAndFocusClient(t *testing.T) {
+	hostConn := startPluginHostServiceTestServer(t, &focusTestServer{})
+
+	provider := &dualAwareProvider{}
+	adapter := &pluginServerAdapter{
+		handler:         &adapterTestHandler{},
+		serviceProvider: provider,
+		brokerDialer: &testBrokerDialer{
+			conns: map[uint32]*grpc.ClientConn{7: hostConn},
+		},
+	}
+
+	_, err := adapter.Init(context.Background(), &pluginv1.InitRequest{
+		Config: &pluginv1.ServiceConfig{
+			RequiredServices: map[string]string{
+				PluginHostServiceName: "broker:7",
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.NotNil(t, provider.sink, "expected EventSink injection")
+	assert.NotNil(t, provider.focusClient, "expected FocusClient injection")
 }
