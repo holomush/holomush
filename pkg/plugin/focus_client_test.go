@@ -5,6 +5,8 @@ package pluginsdk
 
 import (
 	"context"
+	"errors"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -139,6 +141,221 @@ func TestNewFocusClientFromBroker_MissingHostService(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, c)
 	assert.Contains(t, err.Error(), PluginHostServiceName)
+}
+
+// --- Group A: nil-client guards for LeaveFocus, PresentFocus, QueryStreamHistory ---
+
+func TestPluginHostFocusClient_LeaveFocusNilClientReturnsError(t *testing.T) {
+	client := &pluginHostFocusClient{}
+	err := client.LeaveFocus(context.Background(), "sess-1", FocusKey{Kind: FocusKindScene, TargetID: "scene-1"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not configured")
+}
+
+func TestPluginHostFocusClient_PresentFocusNilClientReturnsError(t *testing.T) {
+	client := &pluginHostFocusClient{}
+	err := client.PresentFocus(context.Background(), "sess-1", FocusKey{Kind: FocusKindScene, TargetID: "scene-1"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not configured")
+}
+
+func TestPluginHostFocusClient_QueryStreamHistoryNilClientReturnsError(t *testing.T) {
+	client := &pluginHostFocusClient{}
+	events, err := client.QueryStreamHistory(context.Background(), QueryStreamHistoryRequest{Stream: "scene:1:ic", Count: 5})
+	require.Error(t, err)
+	assert.Nil(t, events)
+	assert.Contains(t, err.Error(), "not configured")
+}
+
+// --- Group A: QueryStreamHistory count clamping ---
+
+func TestPluginHostFocusClient_QueryStreamHistoryClampsNegativeCount(t *testing.T) {
+	srv := &focusTestServer{}
+	conn := startPluginHostServiceTestServer(t, srv)
+	client := &pluginHostFocusClient{client: pluginv1.NewPluginHostServiceClient(conn)}
+
+	_, err := client.QueryStreamHistory(context.Background(), QueryStreamHistoryRequest{
+		Stream: "scene:1:ic",
+		Count:  -5,
+	})
+	require.NoError(t, err)
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	require.Len(t, srv.historyReqs, 1)
+	assert.Equal(t, int32(0), srv.historyReqs[0].GetCount())
+}
+
+func TestPluginHostFocusClient_QueryStreamHistoryClampsOverflow(t *testing.T) {
+	srv := &focusTestServer{}
+	conn := startPluginHostServiceTestServer(t, srv)
+	client := &pluginHostFocusClient{client: pluginv1.NewPluginHostServiceClient(conn)}
+
+	_, err := client.QueryStreamHistory(context.Background(), QueryStreamHistoryRequest{
+		Stream: "scene:1:ic",
+		Count:  math.MaxInt,
+	})
+	require.NoError(t, err)
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	require.Len(t, srv.historyReqs, 1)
+	assert.Equal(t, int32(1<<30), srv.historyReqs[0].GetCount())
+}
+
+func TestPluginHostFocusClient_QueryStreamHistoryPropagatesHostError(t *testing.T) {
+	srv := &focusTestServer{historyErr: status.Error(codes.Internal, "storage failure")}
+	conn := startPluginHostServiceTestServer(t, srv)
+	client := &pluginHostFocusClient{client: pluginv1.NewPluginHostServiceClient(conn)}
+
+	events, err := client.QueryStreamHistory(context.Background(), QueryStreamHistoryRequest{
+		Stream: "scene:1:ic",
+		Count:  5,
+	})
+	require.Error(t, err)
+	assert.Nil(t, events)
+	// The stream name is attached as oops context, not embedded in the message string.
+	var oe oops.OopsError
+	require.ErrorAs(t, err, &oe)
+	assert.Equal(t, "scene:1:ic", oe.Context()["stream"])
+}
+
+// --- Group A: wrapFocusError unit tests ---
+
+func TestWrapFocusErrorNilErrorReturnsNil(t *testing.T) {
+	err := wrapFocusError(nil, "JoinFocus", "sess-1", FocusKey{Kind: FocusKindScene, TargetID: "scene-1"})
+	assert.NoError(t, err)
+}
+
+func TestWrapFocusErrorNonStatusErrorPassesThrough(t *testing.T) {
+	plain := errors.New("boom")
+	err := wrapFocusError(plain, "JoinFocus", "sess-1", FocusKey{Kind: FocusKindScene, TargetID: "scene-1"})
+	require.Error(t, err)
+	var oe oops.OopsError
+	require.ErrorAs(t, err, &oe)
+	// Non-status errors get context wrapping but no oops code (Code() returns nil).
+	assert.Nil(t, oe.Code())
+}
+
+// --- Group A: codeFromStatus gRPC-code fallbacks ---
+
+func TestCodeFromStatus_AllGRPCCodeFallbacks(t *testing.T) {
+	tests := []struct {
+		name         string
+		grpcCode     codes.Code
+		message      string
+		expectedCode string
+	}{
+		{
+			name:         "NotFound without prefix falls back to SESSION_NOT_FOUND",
+			grpcCode:     codes.NotFound,
+			message:      "generic not found",
+			expectedCode: "SESSION_NOT_FOUND",
+		},
+		{
+			name:         "AlreadyExists without prefix falls back to FOCUS_ALREADY_MEMBER",
+			grpcCode:     codes.AlreadyExists,
+			message:      "generic already exists",
+			expectedCode: "FOCUS_ALREADY_MEMBER",
+		},
+		{
+			name:         "FailedPrecondition without prefix falls back to SESSION_EXPIRED",
+			grpcCode:     codes.FailedPrecondition,
+			message:      "generic precondition",
+			expectedCode: "SESSION_EXPIRED",
+		},
+		{
+			name:         "InvalidArgument without prefix falls back to FOCUS_KIND_UNREGISTERED",
+			grpcCode:     codes.InvalidArgument,
+			message:      "generic invalid",
+			expectedCode: "FOCUS_KIND_UNREGISTERED",
+		},
+		{
+			name:         "Internal without prefix falls back to FOCUS_POLICY_FAILED",
+			grpcCode:     codes.Internal,
+			message:      "generic internal",
+			expectedCode: "FOCUS_POLICY_FAILED",
+		},
+		{
+			name:         "Unavailable without prefix returns empty code",
+			grpcCode:     codes.Unavailable,
+			message:      "generic unavailable",
+			expectedCode: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := status.New(tt.grpcCode, tt.message)
+			got := codeFromStatus(st)
+			assert.Equal(t, tt.expectedCode, got)
+		})
+	}
+}
+
+// --- Group A: JoinFocus gRPC-code mappings (FailedPrecondition, InvalidArgument, Internal) ---
+
+func TestPluginHostFocusClient_JoinFocusMapsSessionExpired(t *testing.T) {
+	srv := &focusTestServer{joinErr: status.Error(codes.FailedPrecondition, "SESSION_EXPIRED: ttl elapsed")}
+	conn := startPluginHostServiceTestServer(t, srv)
+	client := &pluginHostFocusClient{client: pluginv1.NewPluginHostServiceClient(conn)}
+
+	err := client.JoinFocus(context.Background(), "sess-1", FocusKey{Kind: FocusKindScene, TargetID: "scene-1"})
+	require.Error(t, err)
+	var oe oops.OopsError
+	require.ErrorAs(t, err, &oe)
+	assert.Equal(t, "SESSION_EXPIRED", oe.Code())
+}
+
+func TestPluginHostFocusClient_JoinFocusMapsFocusKindUnregistered(t *testing.T) {
+	srv := &focusTestServer{joinErr: status.Error(codes.InvalidArgument, "FOCUS_KIND_UNREGISTERED: no policy")}
+	conn := startPluginHostServiceTestServer(t, srv)
+	client := &pluginHostFocusClient{client: pluginv1.NewPluginHostServiceClient(conn)}
+
+	err := client.JoinFocus(context.Background(), "sess-1", FocusKey{Kind: FocusKindScene, TargetID: "scene-1"})
+	require.Error(t, err)
+	var oe oops.OopsError
+	require.ErrorAs(t, err, &oe)
+	assert.Equal(t, "FOCUS_KIND_UNREGISTERED", oe.Code())
+}
+
+func TestPluginHostFocusClient_JoinFocusMapsFocusPolicyFailed(t *testing.T) {
+	srv := &focusTestServer{joinErr: status.Error(codes.Internal, "FOCUS_POLICY_FAILED: rejected")}
+	conn := startPluginHostServiceTestServer(t, srv)
+	client := &pluginHostFocusClient{client: pluginv1.NewPluginHostServiceClient(conn)}
+
+	err := client.JoinFocus(context.Background(), "sess-1", FocusKey{Kind: FocusKindScene, TargetID: "scene-1"})
+	require.Error(t, err)
+	var oe oops.OopsError
+	require.ErrorAs(t, err, &oe)
+	assert.Equal(t, "FOCUS_POLICY_FAILED", oe.Code())
+}
+
+// --- Group A: toProtoFocusKind unknown kind ---
+
+func TestToProtoFocusKindUnknownReturnsUnspecified(t *testing.T) {
+	// Exercise toProtoFocusKind indirectly: pass an unknown FocusKind to JoinFocus
+	// and verify the server received FOCUS_KIND_UNSPECIFIED.
+	srv := &focusTestServer{}
+	conn := startPluginHostServiceTestServer(t, srv)
+	client := &pluginHostFocusClient{client: pluginv1.NewPluginHostServiceClient(conn)}
+
+	_ = client.JoinFocus(context.Background(), "sess-1", FocusKey{Kind: FocusKind("nonexistent"), TargetID: "target-1"})
+
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	require.Len(t, srv.joinReqs, 1)
+	assert.Equal(t, pluginv1.FocusKind_FOCUS_KIND_UNSPECIFIED, srv.joinReqs[0].GetTarget().GetKind())
+}
+
+// --- Group B: newFocusClientFromBroker dial failure ---
+
+func TestNewFocusClientFromBroker_DialFailureWrapsError(t *testing.T) {
+	// testBrokerDialer has no entry for the requested broker ID; dial will fail.
+	c, err := newFocusClientFromBroker(&testBrokerDialer{}, map[string]string{
+		PluginHostServiceName: "broker:99",
+	})
+	require.Error(t, err)
+	assert.Nil(t, c)
+	assert.Contains(t, err.Error(), "unknown broker id")
 }
 
 func TestQueryStreamHistoryRequestNotBeforeIsPassedThrough(t *testing.T) {
