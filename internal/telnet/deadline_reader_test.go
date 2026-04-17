@@ -5,6 +5,7 @@ package telnet
 
 import (
 	"errors"
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -84,4 +85,19 @@ func TestDeadlineReaderReturnsDeadlineErrorWithoutCallingRead(t *testing.T) {
 	assert.ErrorIs(t, err, sentinel, "wrapper must surface SetReadDeadline error")
 	assert.Zero(t, n, "no bytes read when deadline-set fails")
 	assert.Zero(t, mc.reads, "underlying Read must not be called when deadline-set fails")
+}
+
+// TestDeadlineReaderReturnsIoEOFUnwrapped guards the bufio.Scanner contract:
+// Scanner.Err() must return nil on clean EOF, which requires the reader to
+// return the untyped io.EOF, not a wrapped form. Wrapping io.EOF (even via
+// oops which preserves errors.Is chains) causes Scanner.Err() to surface a
+// non-nil error and trip error-only handling paths on normal disconnect.
+func TestDeadlineReaderReturnsIoEOFUnwrapped(t *testing.T) {
+	mc := &mockDeadlineConn{readErr: io.EOF}
+	r := &deadlineReader{conn: mc, timeout: 100 * time.Millisecond}
+
+	_, err := r.Read(make([]byte, 1))
+
+	assert.Equal(t, io.EOF, err,
+		"deadlineReader must return io.EOF unwrapped so bufio.Scanner.Err() stays nil on clean EOF")
 }

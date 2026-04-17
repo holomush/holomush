@@ -1912,43 +1912,28 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 1: Write the new section**
 
-Open `site/docs/operating/telnet-security.md` (create the file if it does not exist — check first). Append a new section at the bottom, before any trailing footer:
+Open `site/docs/operating/telnet-security.md` (create the file if it does not exist — check first). Append a new section at the bottom, before any trailing footer. The section contents are:
 
-```markdown
-## Resource limits
+A top-level heading `## Resource limits` followed by a paragraph explaining that the gateway enforces four operator-tunable limits on the telnet surface to prevent Slowloris, goroutine flooding, and unbounded pre-auth idle.
 
-The gateway enforces four operator-tunable limits on the telnet surface
-to prevent Slowloris, goroutine flooding, and unbounded pre-auth idle.
+Then a Markdown table with columns "Flag | Default | What it bounds" whose rows are:
 
-| Flag | Default | What it bounds |
-| ---- | ------- | -------------- |
-| `--telnet-max-conns` | `1000` | Concurrent telnet connections; new accepts beyond this receive a refusal line and close |
-| `--telnet-idle-timeout` | `5m` | Time since the last byte read; an idle or drip-fed connection is closed |
-| `--telnet-write-timeout` | `30s` | Per-send write deadline; a stuck client's full send buffer cannot hold the handler |
-| `--telnet-pre-auth-timeout` | `2m` | Time from connect to successful character selection; unauthenticated clients are disconnected |
+- `--telnet-max-conns` / `1000` — Concurrent telnet connections; new accepts beyond this receive a refusal line and close.
+- `--telnet-idle-timeout` / `5m` — Time since the last byte read; an idle or drip-fed connection is closed.
+- `--telnet-write-timeout` / `30s` — Per-send write deadline; a stuck client's full send buffer cannot hold the handler.
+- `--telnet-pre-auth-timeout` / `2m` — Time from connect to successful character selection; unauthenticated clients are disconnected.
 
-### Tuning
+Then a `### Tuning` subsection with two paragraphs:
 
-Size `--telnet-max-conns` to `peak concurrent players × 1.5`. Monitor
-`holomush_telnet_connections_active` and `holomush_telnet_connections_refused_total`
-via Prometheus; non-zero refusals under legitimate load mean the cap is
-too low.
+1. Size `--telnet-max-conns` to `peak concurrent players × 1.5`. Monitor `holomush_telnet_connections_active` and `holomush_telnet_connections_refused_total` via Prometheus; non-zero refusals under legitimate load mean the cap is too low.
+2. The timeouts are chosen for a typical MUSH; very slow-typing players at the character picker may trip `--telnet-pre-auth-timeout` on large character inventories — raise to `5m` if that affects legitimate users.
 
-The timeouts are chosen for a typical MUSH; very slow-typing players at
-the character picker may trip `--telnet-pre-auth-timeout` on large
-character inventories — raise to `5m` if that affects legitimate users.
+Then a `### Metrics` subsection introducing the four Prometheus metrics, followed by a Markdown table with columns "Metric | Purpose":
 
-### Metrics
-
-Four Prometheus metrics expose DoS state for operators:
-
-| Metric | Purpose |
-| ------ | ------- |
-| `holomush_telnet_connections_active` | Current open connection count; primary DoS signal when it pins near the cap |
-| `holomush_telnet_connections_refused_total` | Capacity refusals; sustained growth indicates attack or legitimate overload |
-| `holomush_telnet_idle_timeouts_total` | Read-deadline disconnects; sustained growth suggests Slowloris |
-| `holomush_telnet_preauth_timeouts_total` | Unauthenticated clients disconnected; expected non-zero from scanners |
-```
+- `holomush_telnet_connections_active` — Current open connection count; primary DoS signal when it pins near the cap.
+- `holomush_telnet_connections_refused_total` — Capacity refusals; sustained growth indicates attack or legitimate overload.
+- `holomush_telnet_idle_timeouts_total` — Read-deadline disconnects; sustained growth suggests Slowloris.
+- `holomush_telnet_preauth_timeouts_total` — Unauthenticated clients disconnected; expected non-zero from scanners.
 
 - [ ] **Step 2: Lint**
 
