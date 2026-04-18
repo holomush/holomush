@@ -283,10 +283,7 @@ test.describe('Terminal UI', () => {
     expect(matched, `expected event with "${token}" in history response`).toBe(true);
   });
 
-  // TODO(holomush-oy6e.13): Un-skip when QueryStreamHistory RPC (B9) lands
-  // and the web client calls it on mount for reload backfill.
-  // See also: holomush-oy6e.9 notes.
-  test.skip('page reload replays prior events from multiple guests', async ({ browser }) => {
+  test('page reload replays prior events from multiple guests', async ({ browser }) => {
     // Two independent browser contexts (separate sessions, same starting location)
     const ctx1 = await browser.newContext();
     const ctx2 = await browser.newContext();
@@ -373,6 +370,11 @@ test.describe('Terminal UI', () => {
       .count();
     expect(deltaDimmed).toBe(0);
 
+    // Separator between replayed and live events.
+    await expect(
+      page1.locator('.separator', { hasText: '--- LIVE ---' }),
+    ).toBeVisible({ timeout: 5000 });
+
     // DB: all 4 events exist on the location stream
     const sessionId = await getClientSessionId(page1);
     const session = await db.getSessionById(sessionId!);
@@ -383,6 +385,78 @@ test.describe('Terminal UI', () => {
         (e) => e.type === 'say' && JSON.stringify(e.payload).includes(`${label}-${token}`),
       );
       expect(found, `Expected say event "${label}-${token}" in stream ${stream}`).toBeDefined();
+    }
+
+    await ctx1.close();
+    await ctx2.close();
+  });
+
+  test('detach + accumulated events + reload produces no duplicate scrollback entries', async ({
+    browser,
+  }) => {
+    // Two guests in the same location.
+    const ctx1 = await browser.newContext();
+    const ctx2 = await browser.newContext();
+    const page1 = await ctx1.newPage();
+    const page2 = await ctx2.newPage();
+
+    await connectAsGuest(page1);
+    await connectAsGuest(page2);
+
+    // Guest 1 says one event to ensure its session is well-seeded.
+    const token = Date.now();
+    const input1 = page1.locator('textarea');
+    await input1.fill(`say seed-${token}`);
+    await input1.press('Enter');
+    await expect(
+      page1.locator('[data-testid="event"]').filter({ hasText: `seed-${token}` }),
+    ).toBeVisible({ timeout: 10000 });
+
+    // "Detach" page1 by capturing its sessionStorage (for re-seeding), then
+    // closing the tab. Guest 2 emits three events while page1 is gone.
+    const sessionId = await getClientSessionId(page1);
+    expect(sessionId).toBeTruthy();
+    const savedSession = await page1.evaluate(() =>
+      sessionStorage.getItem('holomush-session'),
+    );
+    expect(savedSession).toBeTruthy();
+    await page1.close();
+
+    const input2 = page2.locator('textarea');
+    for (const label of ['detached-a', 'detached-b', 'detached-c']) {
+      await input2.fill(`say ${label}-${token}`);
+      await input2.press('Enter');
+      await expect(
+        page2.locator('[data-testid="event"]').filter({ hasText: `${label}-${token}` }),
+      ).toBeVisible({ timeout: 10000 });
+    }
+
+    // Reopen page1 with the captured session re-seeded into sessionStorage
+    // BEFORE the SvelteKit auth guard runs. addInitScript fires on every
+    // navigation, including the initial goto below.
+    const page1Reopened = await ctx1.newPage();
+    await page1Reopened.addInitScript((session) => {
+      sessionStorage.setItem('holomush-session', session);
+    }, savedSession!);
+    await page1Reopened.goto('/terminal');
+    await expect(page1Reopened.locator('.terminal-layout')).toBeVisible({ timeout: 10000 });
+
+    // Wait for the detached events to appear via replay/backfill before
+    // asserting counts. Use the last event as the sync point.
+    await expect(
+      page1Reopened
+        .locator('[data-testid="event"]')
+        .filter({ hasText: `detached-c-${token}` }),
+    ).toBeVisible({ timeout: 10000 });
+
+    // Each detached-* event must appear EXACTLY ONCE, even though Subscribe's
+    // cursor-based replay AND QueryStreamHistory both deliver them.
+    for (const label of ['detached-a', 'detached-b', 'detached-c']) {
+      const count = await page1Reopened
+        .locator('[data-testid="event"]')
+        .filter({ hasText: `${label}-${token}` })
+        .count();
+      expect(count, `expected exactly one rendering of ${label}-${token}`).toBe(1);
     }
 
     await ctx1.close();

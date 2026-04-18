@@ -83,6 +83,9 @@ const (
 	// WebServiceWebQueryStreamHistoryProcedure is the fully-qualified name of the WebService's
 	// WebQueryStreamHistory RPC.
 	WebServiceWebQueryStreamHistoryProcedure = "/holomush.web.v1.WebService/WebQueryStreamHistory"
+	// WebServiceWebListSessionStreamsProcedure is the fully-qualified name of the WebService's
+	// WebListSessionStreams RPC.
+	WebServiceWebListSessionStreamsProcedure = "/holomush.web.v1.WebService/WebListSessionStreams"
 	// WebServiceWebListPlayerSessionsProcedure is the fully-qualified name of the WebService's
 	// WebListPlayerSessions RPC.
 	WebServiceWebListPlayerSessionsProcedure = "/holomush.web.v1.WebService/WebListPlayerSessions"
@@ -124,6 +127,10 @@ type WebServiceClient interface {
 	// WebQueryStreamHistory reads paginated event history for the web client.
 	// Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
 	WebQueryStreamHistory(context.Context, *connect.Request[v1.WebQueryStreamHistoryRequest]) (*connect.Response[v1.WebQueryStreamHistoryResponse], error)
+	// WebListSessionStreams returns the stream names the session is subscribed to.
+	// Proxies to CoreService.ListSessionStreams — authorization is enforced by core.
+	// Used by the web client to enumerate streams for reload-backfill.
+	WebListSessionStreams(context.Context, *connect.Request[v1.WebListSessionStreamsRequest]) (*connect.Response[v1.WebListSessionStreamsResponse], error)
 	// Session-management RPCs. The caller is identified via the X-Session-Token
 	// cookie header injected by CookieMiddleware; no token field in the request.
 	WebListPlayerSessions(context.Context, *connect.Request[v1.WebListPlayerSessionsRequest]) (*connect.Response[v1.WebListPlayerSessionsResponse], error)
@@ -244,6 +251,12 @@ func NewWebServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(webServiceMethods.ByName("WebQueryStreamHistory")),
 			connect.WithClientOptions(opts...),
 		),
+		webListSessionStreams: connect.NewClient[v1.WebListSessionStreamsRequest, v1.WebListSessionStreamsResponse](
+			httpClient,
+			baseURL+WebServiceWebListSessionStreamsProcedure,
+			connect.WithSchema(webServiceMethods.ByName("WebListSessionStreams")),
+			connect.WithClientOptions(opts...),
+		),
 		webListPlayerSessions: connect.NewClient[v1.WebListPlayerSessionsRequest, v1.WebListPlayerSessionsResponse](
 			httpClient,
 			baseURL+WebServiceWebListPlayerSessionsProcedure,
@@ -284,6 +297,7 @@ type webServiceClient struct {
 	webGetContent                *connect.Client[v1.WebGetContentRequest, v1.WebGetContentResponse]
 	webListContent               *connect.Client[v1.WebListContentRequest, v1.WebListContentResponse]
 	webQueryStreamHistory        *connect.Client[v1.WebQueryStreamHistoryRequest, v1.WebQueryStreamHistoryResponse]
+	webListSessionStreams        *connect.Client[v1.WebListSessionStreamsRequest, v1.WebListSessionStreamsResponse]
 	webListPlayerSessions        *connect.Client[v1.WebListPlayerSessionsRequest, v1.WebListPlayerSessionsResponse]
 	webRevokePlayerSession       *connect.Client[v1.WebRevokePlayerSessionRequest, v1.WebRevokePlayerSessionResponse]
 	webRevokeOtherPlayerSessions *connect.Client[v1.WebRevokeOtherPlayerSessionsRequest, v1.WebRevokeOtherPlayerSessionsResponse]
@@ -374,6 +388,11 @@ func (c *webServiceClient) WebQueryStreamHistory(ctx context.Context, req *conne
 	return c.webQueryStreamHistory.CallUnary(ctx, req)
 }
 
+// WebListSessionStreams calls holomush.web.v1.WebService.WebListSessionStreams.
+func (c *webServiceClient) WebListSessionStreams(ctx context.Context, req *connect.Request[v1.WebListSessionStreamsRequest]) (*connect.Response[v1.WebListSessionStreamsResponse], error) {
+	return c.webListSessionStreams.CallUnary(ctx, req)
+}
+
 // WebListPlayerSessions calls holomush.web.v1.WebService.WebListPlayerSessions.
 func (c *webServiceClient) WebListPlayerSessions(ctx context.Context, req *connect.Request[v1.WebListPlayerSessionsRequest]) (*connect.Response[v1.WebListPlayerSessionsResponse], error) {
 	return c.webListPlayerSessions.CallUnary(ctx, req)
@@ -419,6 +438,10 @@ type WebServiceHandler interface {
 	// WebQueryStreamHistory reads paginated event history for the web client.
 	// Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
 	WebQueryStreamHistory(context.Context, *connect.Request[v1.WebQueryStreamHistoryRequest]) (*connect.Response[v1.WebQueryStreamHistoryResponse], error)
+	// WebListSessionStreams returns the stream names the session is subscribed to.
+	// Proxies to CoreService.ListSessionStreams — authorization is enforced by core.
+	// Used by the web client to enumerate streams for reload-backfill.
+	WebListSessionStreams(context.Context, *connect.Request[v1.WebListSessionStreamsRequest]) (*connect.Response[v1.WebListSessionStreamsResponse], error)
 	// Session-management RPCs. The caller is identified via the X-Session-Token
 	// cookie header injected by CookieMiddleware; no token field in the request.
 	WebListPlayerSessions(context.Context, *connect.Request[v1.WebListPlayerSessionsRequest]) (*connect.Response[v1.WebListPlayerSessionsResponse], error)
@@ -535,6 +558,12 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(webServiceMethods.ByName("WebQueryStreamHistory")),
 		connect.WithHandlerOptions(opts...),
 	)
+	webServiceWebListSessionStreamsHandler := connect.NewUnaryHandler(
+		WebServiceWebListSessionStreamsProcedure,
+		svc.WebListSessionStreams,
+		connect.WithSchema(webServiceMethods.ByName("WebListSessionStreams")),
+		connect.WithHandlerOptions(opts...),
+	)
 	webServiceWebListPlayerSessionsHandler := connect.NewUnaryHandler(
 		WebServiceWebListPlayerSessionsProcedure,
 		svc.WebListPlayerSessions,
@@ -589,6 +618,8 @@ func NewWebServiceHandler(svc WebServiceHandler, opts ...connect.HandlerOption) 
 			webServiceWebListContentHandler.ServeHTTP(w, r)
 		case WebServiceWebQueryStreamHistoryProcedure:
 			webServiceWebQueryStreamHistoryHandler.ServeHTTP(w, r)
+		case WebServiceWebListSessionStreamsProcedure:
+			webServiceWebListSessionStreamsHandler.ServeHTTP(w, r)
 		case WebServiceWebListPlayerSessionsProcedure:
 			webServiceWebListPlayerSessionsHandler.ServeHTTP(w, r)
 		case WebServiceWebRevokePlayerSessionProcedure:
@@ -670,6 +701,10 @@ func (UnimplementedWebServiceHandler) WebListContent(context.Context, *connect.R
 
 func (UnimplementedWebServiceHandler) WebQueryStreamHistory(context.Context, *connect.Request[v1.WebQueryStreamHistoryRequest]) (*connect.Response[v1.WebQueryStreamHistoryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebQueryStreamHistory is not implemented"))
+}
+
+func (UnimplementedWebServiceHandler) WebListSessionStreams(context.Context, *connect.Request[v1.WebListSessionStreamsRequest]) (*connect.Response[v1.WebListSessionStreamsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.web.v1.WebService.WebListSessionStreams is not implemented"))
 }
 
 func (UnimplementedWebServiceHandler) WebListPlayerSessions(context.Context, *connect.Request[v1.WebListPlayerSessionsRequest]) (*connect.Response[v1.WebListPlayerSessionsResponse], error) {

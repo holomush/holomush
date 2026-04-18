@@ -345,6 +345,7 @@ type GameEvent struct {
 	Actor         string                 `protobuf:"bytes,6,opt,name=actor,proto3" json:"actor,omitempty"`
 	Text          string                 `protobuf:"bytes,7,opt,name=text,proto3" json:"text,omitempty"`
 	Metadata      *structpb.Struct       `protobuf:"bytes,8,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	EventId       string                 `protobuf:"bytes,9,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"` // ULID; populated from corev1.EventFrame.id
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -433,6 +434,13 @@ func (x *GameEvent) GetMetadata() *structpb.Struct {
 		return x.Metadata
 	}
 	return nil
+}
+
+func (x *GameEvent) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
 }
 
 type StreamEventsResponse struct {
@@ -2173,6 +2181,94 @@ func (x *WebQueryStreamHistoryResponse) GetHasMore() bool {
 	return false
 }
 
+type WebListSessionStreamsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebListSessionStreamsRequest) Reset() {
+	*x = WebListSessionStreamsRequest{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebListSessionStreamsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebListSessionStreamsRequest) ProtoMessage() {}
+
+func (x *WebListSessionStreamsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebListSessionStreamsRequest.ProtoReflect.Descriptor instead.
+func (*WebListSessionStreamsRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *WebListSessionStreamsRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+type WebListSessionStreamsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Streams       []string               `protobuf:"bytes,1,rep,name=streams,proto3" json:"streams,omitempty"` // event-store stream names (e.g. "location:<id>", "character:<id>")
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WebListSessionStreamsResponse) Reset() {
+	*x = WebListSessionStreamsResponse{}
+	mi := &file_holomush_web_v1_web_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebListSessionStreamsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebListSessionStreamsResponse) ProtoMessage() {}
+
+func (x *WebListSessionStreamsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_web_v1_web_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebListSessionStreamsResponse.ProtoReflect.Descriptor instead.
+func (*WebListSessionStreamsResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *WebListSessionStreamsResponse) GetStreams() []string {
+	if x != nil {
+		return x.Streams
+	}
+	return nil
+}
+
 type WebListPlayerSessionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -2181,7 +2277,7 @@ type WebListPlayerSessionsRequest struct {
 
 func (x *WebListPlayerSessionsRequest) Reset() {
 	*x = WebListPlayerSessionsRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[38]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2193,7 +2289,7 @@ func (x *WebListPlayerSessionsRequest) String() string {
 func (*WebListPlayerSessionsRequest) ProtoMessage() {}
 
 func (x *WebListPlayerSessionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[38]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2206,7 +2302,7 @@ func (x *WebListPlayerSessionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListPlayerSessionsRequest.ProtoReflect.Descriptor instead.
 func (*WebListPlayerSessionsRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{38}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{40}
 }
 
 type WebPlayerSessionInfo struct {
@@ -2226,7 +2322,7 @@ type WebPlayerSessionInfo struct {
 
 func (x *WebPlayerSessionInfo) Reset() {
 	*x = WebPlayerSessionInfo{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[39]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2238,7 +2334,7 @@ func (x *WebPlayerSessionInfo) String() string {
 func (*WebPlayerSessionInfo) ProtoMessage() {}
 
 func (x *WebPlayerSessionInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[39]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2251,7 +2347,7 @@ func (x *WebPlayerSessionInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebPlayerSessionInfo.ProtoReflect.Descriptor instead.
 func (*WebPlayerSessionInfo) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{39}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *WebPlayerSessionInfo) GetId() string {
@@ -2305,7 +2401,7 @@ type WebListPlayerSessionsResponse struct {
 
 func (x *WebListPlayerSessionsResponse) Reset() {
 	*x = WebListPlayerSessionsResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[40]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2317,7 +2413,7 @@ func (x *WebListPlayerSessionsResponse) String() string {
 func (*WebListPlayerSessionsResponse) ProtoMessage() {}
 
 func (x *WebListPlayerSessionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[40]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2330,7 +2426,7 @@ func (x *WebListPlayerSessionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebListPlayerSessionsResponse.ProtoReflect.Descriptor instead.
 func (*WebListPlayerSessionsResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{40}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *WebListPlayerSessionsResponse) GetSessions() []*WebPlayerSessionInfo {
@@ -2350,7 +2446,7 @@ type WebRevokePlayerSessionRequest struct {
 
 func (x *WebRevokePlayerSessionRequest) Reset() {
 	*x = WebRevokePlayerSessionRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[41]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2362,7 +2458,7 @@ func (x *WebRevokePlayerSessionRequest) String() string {
 func (*WebRevokePlayerSessionRequest) ProtoMessage() {}
 
 func (x *WebRevokePlayerSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[41]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2375,7 +2471,7 @@ func (x *WebRevokePlayerSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebRevokePlayerSessionRequest.ProtoReflect.Descriptor instead.
 func (*WebRevokePlayerSessionRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{41}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *WebRevokePlayerSessionRequest) GetTargetSessionId() string {
@@ -2395,7 +2491,7 @@ type WebRevokePlayerSessionResponse struct {
 
 func (x *WebRevokePlayerSessionResponse) Reset() {
 	*x = WebRevokePlayerSessionResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[42]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2407,7 +2503,7 @@ func (x *WebRevokePlayerSessionResponse) String() string {
 func (*WebRevokePlayerSessionResponse) ProtoMessage() {}
 
 func (x *WebRevokePlayerSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[42]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2420,7 +2516,7 @@ func (x *WebRevokePlayerSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebRevokePlayerSessionResponse.ProtoReflect.Descriptor instead.
 func (*WebRevokePlayerSessionResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{42}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *WebRevokePlayerSessionResponse) GetSuccess() bool {
@@ -2445,7 +2541,7 @@ type WebRevokeOtherPlayerSessionsRequest struct {
 
 func (x *WebRevokeOtherPlayerSessionsRequest) Reset() {
 	*x = WebRevokeOtherPlayerSessionsRequest{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[43]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2457,7 +2553,7 @@ func (x *WebRevokeOtherPlayerSessionsRequest) String() string {
 func (*WebRevokeOtherPlayerSessionsRequest) ProtoMessage() {}
 
 func (x *WebRevokeOtherPlayerSessionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[43]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2470,7 +2566,7 @@ func (x *WebRevokeOtherPlayerSessionsRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use WebRevokeOtherPlayerSessionsRequest.ProtoReflect.Descriptor instead.
 func (*WebRevokeOtherPlayerSessionsRequest) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{43}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{45}
 }
 
 type WebRevokeOtherPlayerSessionsResponse struct {
@@ -2483,7 +2579,7 @@ type WebRevokeOtherPlayerSessionsResponse struct {
 
 func (x *WebRevokeOtherPlayerSessionsResponse) Reset() {
 	*x = WebRevokeOtherPlayerSessionsResponse{}
-	mi := &file_holomush_web_v1_web_proto_msgTypes[44]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2495,7 +2591,7 @@ func (x *WebRevokeOtherPlayerSessionsResponse) String() string {
 func (*WebRevokeOtherPlayerSessionsResponse) ProtoMessage() {}
 
 func (x *WebRevokeOtherPlayerSessionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_holomush_web_v1_web_proto_msgTypes[44]
+	mi := &file_holomush_web_v1_web_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2508,7 +2604,7 @@ func (x *WebRevokeOtherPlayerSessionsResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use WebRevokeOtherPlayerSessionsResponse.ProtoReflect.Descriptor instead.
 func (*WebRevokeOtherPlayerSessionsResponse) Descriptor() ([]byte, []int) {
-	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{44}
+	return file_holomush_web_v1_web_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *WebRevokeOtherPlayerSessionsResponse) GetSuccess() bool {
@@ -2543,7 +2639,7 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"N\n" +
 	"\x13StreamEventsRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionIdJ\x04\b\x02\x10\x03R\x12replay_from_cursor\"\x96\x02\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionIdJ\x04\b\x02\x10\x03R\x12replay_from_cursor\"\xb1\x02\n" +
 	"\tGameEvent\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1a\n" +
 	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x16\n" +
@@ -2552,7 +2648,8 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\x12\x14\n" +
 	"\x05actor\x18\x06 \x01(\tR\x05actor\x12\x12\n" +
 	"\x04text\x18\a \x01(\tR\x04text\x123\n" +
-	"\bmetadata\x18\b \x01(\v2\x17.google.protobuf.StructR\bmetadata\"\x8e\x01\n" +
+	"\bmetadata\x18\b \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12\x19\n" +
+	"\bevent_id\x18\t \x01(\tR\aeventId\"\x8e\x01\n" +
 	"\x14StreamEventsResponse\x122\n" +
 	"\x05event\x18\x01 \x01(\v2\x1a.holomush.web.v1.GameEventH\x00R\x05event\x129\n" +
 	"\acontrol\x18\x02 \x01(\v2\x1d.holomush.web.v1.ControlFrameH\x00R\acontrolB\a\n" +
@@ -2671,7 +2768,12 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\tbefore_id\x18\x05 \x01(\tR\bbeforeId\"n\n" +
 	"\x1dWebQueryStreamHistoryResponse\x122\n" +
 	"\x06events\x18\x01 \x03(\v2\x1a.holomush.web.v1.GameEventR\x06events\x12\x19\n" +
-	"\bhas_more\x18\x02 \x01(\bR\ahasMore\"\x1e\n" +
+	"\bhas_more\x18\x02 \x01(\bR\ahasMore\"=\n" +
+	"\x1cWebListSessionStreamsRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"9\n" +
+	"\x1dWebListSessionStreamsResponse\x12\x18\n" +
+	"\astreams\x18\x01 \x03(\tR\astreams\"\x1e\n" +
 	"\x1cWebListPlayerSessionsRequest\"\xfb\x01\n" +
 	"\x14WebPlayerSessionInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x129\n" +
@@ -2704,7 +2806,7 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\rControlSignal\x12\x1e\n" +
 	"\x1aCONTROL_SIGNAL_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCONTROL_SIGNAL_REPLAY_COMPLETE\x10\x01\x12 \n" +
-	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x022\x85\x11\n" +
+	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x022\xfd\x11\n" +
 	"\n" +
 	"WebService\x12X\n" +
 	"\vSendCommand\x12#.holomush.web.v1.SendCommandRequest\x1a$.holomush.web.v1.SendCommandResponse\x12]\n" +
@@ -2725,6 +2827,7 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\rWebGetContent\x12%.holomush.web.v1.WebGetContentRequest\x1a&.holomush.web.v1.WebGetContentResponse\x12a\n" +
 	"\x0eWebListContent\x12&.holomush.web.v1.WebListContentRequest\x1a'.holomush.web.v1.WebListContentResponse\x12v\n" +
 	"\x15WebQueryStreamHistory\x12-.holomush.web.v1.WebQueryStreamHistoryRequest\x1a..holomush.web.v1.WebQueryStreamHistoryResponse\x12v\n" +
+	"\x15WebListSessionStreams\x12-.holomush.web.v1.WebListSessionStreamsRequest\x1a..holomush.web.v1.WebListSessionStreamsResponse\x12v\n" +
 	"\x15WebListPlayerSessions\x12-.holomush.web.v1.WebListPlayerSessionsRequest\x1a..holomush.web.v1.WebListPlayerSessionsResponse\x12y\n" +
 	"\x16WebRevokePlayerSession\x12..holomush.web.v1.WebRevokePlayerSessionRequest\x1a/.holomush.web.v1.WebRevokePlayerSessionResponse\x12\x8b\x01\n" +
 	"\x1cWebRevokeOtherPlayerSessions\x124.holomush.web.v1.WebRevokeOtherPlayerSessionsRequest\x1a5.holomush.web.v1.WebRevokeOtherPlayerSessionsResponseB\xbb\x01\n" +
@@ -2743,7 +2846,7 @@ func file_holomush_web_v1_web_proto_rawDescGZIP() []byte {
 }
 
 var file_holomush_web_v1_web_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_holomush_web_v1_web_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
+var file_holomush_web_v1_web_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
 var file_holomush_web_v1_web_proto_goTypes = []any{
 	(EventChannel)(0),                            // 0: holomush.web.v1.EventChannel
 	(ControlSignal)(0),                           // 1: holomush.web.v1.ControlSignal
@@ -2785,21 +2888,23 @@ var file_holomush_web_v1_web_proto_goTypes = []any{
 	(*WebContentItem)(nil),                       // 37: holomush.web.v1.WebContentItem
 	(*WebQueryStreamHistoryRequest)(nil),         // 38: holomush.web.v1.WebQueryStreamHistoryRequest
 	(*WebQueryStreamHistoryResponse)(nil),        // 39: holomush.web.v1.WebQueryStreamHistoryResponse
-	(*WebListPlayerSessionsRequest)(nil),         // 40: holomush.web.v1.WebListPlayerSessionsRequest
-	(*WebPlayerSessionInfo)(nil),                 // 41: holomush.web.v1.WebPlayerSessionInfo
-	(*WebListPlayerSessionsResponse)(nil),        // 42: holomush.web.v1.WebListPlayerSessionsResponse
-	(*WebRevokePlayerSessionRequest)(nil),        // 43: holomush.web.v1.WebRevokePlayerSessionRequest
-	(*WebRevokePlayerSessionResponse)(nil),       // 44: holomush.web.v1.WebRevokePlayerSessionResponse
-	(*WebRevokeOtherPlayerSessionsRequest)(nil),  // 45: holomush.web.v1.WebRevokeOtherPlayerSessionsRequest
-	(*WebRevokeOtherPlayerSessionsResponse)(nil), // 46: holomush.web.v1.WebRevokeOtherPlayerSessionsResponse
-	nil,                           // 47: holomush.web.v1.WebContentItem.MetadataEntry
-	(*structpb.Struct)(nil),       // 48: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil), // 49: google.protobuf.Timestamp
+	(*WebListSessionStreamsRequest)(nil),         // 40: holomush.web.v1.WebListSessionStreamsRequest
+	(*WebListSessionStreamsResponse)(nil),        // 41: holomush.web.v1.WebListSessionStreamsResponse
+	(*WebListPlayerSessionsRequest)(nil),         // 42: holomush.web.v1.WebListPlayerSessionsRequest
+	(*WebPlayerSessionInfo)(nil),                 // 43: holomush.web.v1.WebPlayerSessionInfo
+	(*WebListPlayerSessionsResponse)(nil),        // 44: holomush.web.v1.WebListPlayerSessionsResponse
+	(*WebRevokePlayerSessionRequest)(nil),        // 45: holomush.web.v1.WebRevokePlayerSessionRequest
+	(*WebRevokePlayerSessionResponse)(nil),       // 46: holomush.web.v1.WebRevokePlayerSessionResponse
+	(*WebRevokeOtherPlayerSessionsRequest)(nil),  // 47: holomush.web.v1.WebRevokeOtherPlayerSessionsRequest
+	(*WebRevokeOtherPlayerSessionsResponse)(nil), // 48: holomush.web.v1.WebRevokeOtherPlayerSessionsResponse
+	nil,                           // 49: holomush.web.v1.WebContentItem.MetadataEntry
+	(*structpb.Struct)(nil),       // 50: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil), // 51: google.protobuf.Timestamp
 }
 var file_holomush_web_v1_web_proto_depIdxs = []int32{
 	1,  // 0: holomush.web.v1.ControlFrame.signal:type_name -> holomush.web.v1.ControlSignal
 	0,  // 1: holomush.web.v1.GameEvent.display_target:type_name -> holomush.web.v1.EventChannel
-	48, // 2: holomush.web.v1.GameEvent.metadata:type_name -> google.protobuf.Struct
+	50, // 2: holomush.web.v1.GameEvent.metadata:type_name -> google.protobuf.Struct
 	6,  // 3: holomush.web.v1.StreamEventsResponse.event:type_name -> holomush.web.v1.GameEvent
 	2,  // 4: holomush.web.v1.StreamEventsResponse.control:type_name -> holomush.web.v1.ControlFrame
 	12, // 5: holomush.web.v1.WebAuthenticatePlayerResponse.characters:type_name -> holomush.web.v1.CharacterSummary
@@ -2808,11 +2913,11 @@ var file_holomush_web_v1_web_proto_depIdxs = []int32{
 	12, // 8: holomush.web.v1.WebListCharactersResponse.characters:type_name -> holomush.web.v1.CharacterSummary
 	37, // 9: holomush.web.v1.WebGetContentResponse.item:type_name -> holomush.web.v1.WebContentItem
 	37, // 10: holomush.web.v1.WebListContentResponse.items:type_name -> holomush.web.v1.WebContentItem
-	47, // 11: holomush.web.v1.WebContentItem.metadata:type_name -> holomush.web.v1.WebContentItem.MetadataEntry
+	49, // 11: holomush.web.v1.WebContentItem.metadata:type_name -> holomush.web.v1.WebContentItem.MetadataEntry
 	6,  // 12: holomush.web.v1.WebQueryStreamHistoryResponse.events:type_name -> holomush.web.v1.GameEvent
-	49, // 13: holomush.web.v1.WebPlayerSessionInfo.created_at:type_name -> google.protobuf.Timestamp
-	49, // 14: holomush.web.v1.WebPlayerSessionInfo.last_active:type_name -> google.protobuf.Timestamp
-	41, // 15: holomush.web.v1.WebListPlayerSessionsResponse.sessions:type_name -> holomush.web.v1.WebPlayerSessionInfo
+	51, // 13: holomush.web.v1.WebPlayerSessionInfo.created_at:type_name -> google.protobuf.Timestamp
+	51, // 14: holomush.web.v1.WebPlayerSessionInfo.last_active:type_name -> google.protobuf.Timestamp
+	43, // 15: holomush.web.v1.WebListPlayerSessionsResponse.sessions:type_name -> holomush.web.v1.WebPlayerSessionInfo
 	3,  // 16: holomush.web.v1.WebService.SendCommand:input_type -> holomush.web.v1.SendCommandRequest
 	5,  // 17: holomush.web.v1.WebService.StreamEvents:input_type -> holomush.web.v1.StreamEventsRequest
 	8,  // 18: holomush.web.v1.WebService.Disconnect:input_type -> holomush.web.v1.DisconnectRequest
@@ -2830,31 +2935,33 @@ var file_holomush_web_v1_web_proto_depIdxs = []int32{
 	33, // 30: holomush.web.v1.WebService.WebGetContent:input_type -> holomush.web.v1.WebGetContentRequest
 	35, // 31: holomush.web.v1.WebService.WebListContent:input_type -> holomush.web.v1.WebListContentRequest
 	38, // 32: holomush.web.v1.WebService.WebQueryStreamHistory:input_type -> holomush.web.v1.WebQueryStreamHistoryRequest
-	40, // 33: holomush.web.v1.WebService.WebListPlayerSessions:input_type -> holomush.web.v1.WebListPlayerSessionsRequest
-	43, // 34: holomush.web.v1.WebService.WebRevokePlayerSession:input_type -> holomush.web.v1.WebRevokePlayerSessionRequest
-	45, // 35: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:input_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsRequest
-	4,  // 36: holomush.web.v1.WebService.SendCommand:output_type -> holomush.web.v1.SendCommandResponse
-	7,  // 37: holomush.web.v1.WebService.StreamEvents:output_type -> holomush.web.v1.StreamEventsResponse
-	9,  // 38: holomush.web.v1.WebService.Disconnect:output_type -> holomush.web.v1.DisconnectResponse
-	11, // 39: holomush.web.v1.WebService.GetCommandHistory:output_type -> holomush.web.v1.GetCommandHistoryResponse
-	14, // 40: holomush.web.v1.WebService.WebAuthenticatePlayer:output_type -> holomush.web.v1.WebAuthenticatePlayerResponse
-	16, // 41: holomush.web.v1.WebService.WebSelectCharacter:output_type -> holomush.web.v1.WebSelectCharacterResponse
-	18, // 42: holomush.web.v1.WebService.WebCreatePlayer:output_type -> holomush.web.v1.WebCreatePlayerResponse
-	20, // 43: holomush.web.v1.WebService.WebCreateGuest:output_type -> holomush.web.v1.WebCreateGuestResponse
-	22, // 44: holomush.web.v1.WebService.WebCreateCharacter:output_type -> holomush.web.v1.WebCreateCharacterResponse
-	24, // 45: holomush.web.v1.WebService.WebListCharacters:output_type -> holomush.web.v1.WebListCharactersResponse
-	26, // 46: holomush.web.v1.WebService.WebLogout:output_type -> holomush.web.v1.WebLogoutResponse
-	28, // 47: holomush.web.v1.WebService.WebRequestPasswordReset:output_type -> holomush.web.v1.WebRequestPasswordResetResponse
-	30, // 48: holomush.web.v1.WebService.WebConfirmPasswordReset:output_type -> holomush.web.v1.WebConfirmPasswordResetResponse
-	32, // 49: holomush.web.v1.WebService.WebCheckSession:output_type -> holomush.web.v1.WebCheckSessionResponse
-	34, // 50: holomush.web.v1.WebService.WebGetContent:output_type -> holomush.web.v1.WebGetContentResponse
-	36, // 51: holomush.web.v1.WebService.WebListContent:output_type -> holomush.web.v1.WebListContentResponse
-	39, // 52: holomush.web.v1.WebService.WebQueryStreamHistory:output_type -> holomush.web.v1.WebQueryStreamHistoryResponse
-	42, // 53: holomush.web.v1.WebService.WebListPlayerSessions:output_type -> holomush.web.v1.WebListPlayerSessionsResponse
-	44, // 54: holomush.web.v1.WebService.WebRevokePlayerSession:output_type -> holomush.web.v1.WebRevokePlayerSessionResponse
-	46, // 55: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:output_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsResponse
-	36, // [36:56] is the sub-list for method output_type
-	16, // [16:36] is the sub-list for method input_type
+	40, // 33: holomush.web.v1.WebService.WebListSessionStreams:input_type -> holomush.web.v1.WebListSessionStreamsRequest
+	42, // 34: holomush.web.v1.WebService.WebListPlayerSessions:input_type -> holomush.web.v1.WebListPlayerSessionsRequest
+	45, // 35: holomush.web.v1.WebService.WebRevokePlayerSession:input_type -> holomush.web.v1.WebRevokePlayerSessionRequest
+	47, // 36: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:input_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsRequest
+	4,  // 37: holomush.web.v1.WebService.SendCommand:output_type -> holomush.web.v1.SendCommandResponse
+	7,  // 38: holomush.web.v1.WebService.StreamEvents:output_type -> holomush.web.v1.StreamEventsResponse
+	9,  // 39: holomush.web.v1.WebService.Disconnect:output_type -> holomush.web.v1.DisconnectResponse
+	11, // 40: holomush.web.v1.WebService.GetCommandHistory:output_type -> holomush.web.v1.GetCommandHistoryResponse
+	14, // 41: holomush.web.v1.WebService.WebAuthenticatePlayer:output_type -> holomush.web.v1.WebAuthenticatePlayerResponse
+	16, // 42: holomush.web.v1.WebService.WebSelectCharacter:output_type -> holomush.web.v1.WebSelectCharacterResponse
+	18, // 43: holomush.web.v1.WebService.WebCreatePlayer:output_type -> holomush.web.v1.WebCreatePlayerResponse
+	20, // 44: holomush.web.v1.WebService.WebCreateGuest:output_type -> holomush.web.v1.WebCreateGuestResponse
+	22, // 45: holomush.web.v1.WebService.WebCreateCharacter:output_type -> holomush.web.v1.WebCreateCharacterResponse
+	24, // 46: holomush.web.v1.WebService.WebListCharacters:output_type -> holomush.web.v1.WebListCharactersResponse
+	26, // 47: holomush.web.v1.WebService.WebLogout:output_type -> holomush.web.v1.WebLogoutResponse
+	28, // 48: holomush.web.v1.WebService.WebRequestPasswordReset:output_type -> holomush.web.v1.WebRequestPasswordResetResponse
+	30, // 49: holomush.web.v1.WebService.WebConfirmPasswordReset:output_type -> holomush.web.v1.WebConfirmPasswordResetResponse
+	32, // 50: holomush.web.v1.WebService.WebCheckSession:output_type -> holomush.web.v1.WebCheckSessionResponse
+	34, // 51: holomush.web.v1.WebService.WebGetContent:output_type -> holomush.web.v1.WebGetContentResponse
+	36, // 52: holomush.web.v1.WebService.WebListContent:output_type -> holomush.web.v1.WebListContentResponse
+	39, // 53: holomush.web.v1.WebService.WebQueryStreamHistory:output_type -> holomush.web.v1.WebQueryStreamHistoryResponse
+	41, // 54: holomush.web.v1.WebService.WebListSessionStreams:output_type -> holomush.web.v1.WebListSessionStreamsResponse
+	44, // 55: holomush.web.v1.WebService.WebListPlayerSessions:output_type -> holomush.web.v1.WebListPlayerSessionsResponse
+	46, // 56: holomush.web.v1.WebService.WebRevokePlayerSession:output_type -> holomush.web.v1.WebRevokePlayerSessionResponse
+	48, // 57: holomush.web.v1.WebService.WebRevokeOtherPlayerSessions:output_type -> holomush.web.v1.WebRevokeOtherPlayerSessionsResponse
+	37, // [37:58] is the sub-list for method output_type
+	16, // [16:37] is the sub-list for method input_type
 	16, // [16:16] is the sub-list for extension type_name
 	16, // [16:16] is the sub-list for extension extendee
 	0,  // [0:16] is the sub-list for field type_name
@@ -2875,7 +2982,7 @@ func file_holomush_web_v1_web_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_web_v1_web_proto_rawDesc), len(file_holomush_web_v1_web_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   46,
+			NumMessages:   48,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

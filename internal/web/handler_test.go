@@ -13,12 +13,14 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
@@ -75,6 +77,10 @@ type mockCoreClient struct {
 	queryStreamHistoryResp *corev1.QueryStreamHistoryResponse
 	queryStreamHistoryErr  error
 	queryStreamHistoryReq  *corev1.QueryStreamHistoryRequest // captured for assertion
+
+	listSessionStreamsResp *corev1.ListSessionStreamsResponse
+	listSessionStreamsErr  error
+	listSessionStreamsReq  *corev1.ListSessionStreamsRequest // captured for assertion
 
 	// Session management fields
 	listSessionsResp *corev1.ListPlayerSessionsResponse
@@ -168,6 +174,11 @@ func (m *mockCoreClient) CreateGuest(_ context.Context, _ *corev1.CreateGuestReq
 func (m *mockCoreClient) QueryStreamHistory(_ context.Context, req *corev1.QueryStreamHistoryRequest) (*corev1.QueryStreamHistoryResponse, error) {
 	m.queryStreamHistoryReq = req
 	return m.queryStreamHistoryResp, m.queryStreamHistoryErr
+}
+
+func (m *mockCoreClient) ListSessionStreams(_ context.Context, req *corev1.ListSessionStreamsRequest) (*corev1.ListSessionStreamsResponse, error) {
+	m.listSessionStreamsReq = req
+	return m.listSessionStreamsResp, m.listSessionStreamsErr
 }
 
 func (m *mockCoreClient) ListPlayerSessions(_ context.Context, req *corev1.ListPlayerSessionsRequest) (*corev1.ListPlayerSessionsResponse, error) {
@@ -706,4 +717,53 @@ func TestGetCommandHistoryForwardsPlayerSessionToken(t *testing.T) {
 	require.NotNil(t, client.cmdHistoryReq, "GetCommandHistory should have been called")
 	assert.Equal(t, token, client.cmdHistoryReq.GetPlayerSessionToken())
 	assert.Equal(t, "sess-4", client.cmdHistoryReq.GetSessionId())
+}
+
+func TestWebListSessionStreamsProxiesToCore(t *testing.T) {
+	client := &mockCoreClient{
+		listSessionStreamsResp: &corev1.ListSessionStreamsResponse{
+			Streams: []string{"character:c1", "location:l1"},
+		},
+	}
+	h := NewHandler(client)
+
+	resp, err := h.WebListSessionStreams(context.Background(),
+		connect.NewRequest(&webv1.WebListSessionStreamsRequest{SessionId: "s1"}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"character:c1", "location:l1"}, resp.Msg.GetStreams())
+
+	require.NotNil(t, client.listSessionStreamsReq, "ListSessionStreams should have been called")
+	assert.Equal(t, "s1", client.listSessionStreamsReq.GetSessionId())
+}
+
+func TestWebListSessionStreamsPassesErrorsThrough(t *testing.T) {
+	client := &mockCoreClient{
+		listSessionStreamsErr: oops.Code("SESSION_EXPIRED").Errorf("expired"),
+	}
+	h := NewHandler(client)
+
+	_, err := h.WebListSessionStreams(context.Background(),
+		connect.NewRequest(&webv1.WebListSessionStreamsRequest{SessionId: "s1"}))
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SESSION_EXPIRED")
+}
+
+func TestWebListSessionStreamsForwardsPlayerSessionToken(t *testing.T) {
+	const token = "tok-list-streams"
+	client := &mockCoreClient{
+		listSessionStreamsResp: &corev1.ListSessionStreamsResponse{
+			Streams: []string{"character:c1"},
+		},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebListSessionStreamsRequest{SessionId: "sess-5"})
+	req.Header().Set(headerInjectSessionToken, token)
+
+	_, err := h.WebListSessionStreams(context.Background(), req)
+	require.NoError(t, err)
+
+	require.NotNil(t, client.listSessionStreamsReq, "ListSessionStreams should have been called")
+	assert.Equal(t, token, client.listSessionStreamsReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-5", client.listSessionStreamsReq.GetSessionId())
 }

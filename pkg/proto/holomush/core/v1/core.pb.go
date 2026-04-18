@@ -2600,6 +2600,118 @@ func (x *QueryStreamHistoryResponse) GetHasMore() bool {
 	return false
 }
 
+type ListSessionStreamsRequest struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Meta               *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId          string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	PlayerSessionToken string                 `protobuf:"bytes,3,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *ListSessionStreamsRequest) Reset() {
+	*x = ListSessionStreamsRequest{}
+	mi := &file_holomush_core_v1_core_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSessionStreamsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSessionStreamsRequest) ProtoMessage() {}
+
+func (x *ListSessionStreamsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_core_v1_core_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSessionStreamsRequest.ProtoReflect.Descriptor instead.
+func (*ListSessionStreamsRequest) Descriptor() ([]byte, []int) {
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *ListSessionStreamsRequest) GetMeta() *RequestMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *ListSessionStreamsRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *ListSessionStreamsRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
+	}
+	return ""
+}
+
+type ListSessionStreamsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Streams       []string               `protobuf:"bytes,1,rep,name=streams,proto3" json:"streams,omitempty"`
+	Meta          *ResponseMeta          `protobuf:"bytes,2,opt,name=meta,proto3" json:"meta,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSessionStreamsResponse) Reset() {
+	*x = ListSessionStreamsResponse{}
+	mi := &file_holomush_core_v1_core_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSessionStreamsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSessionStreamsResponse) ProtoMessage() {}
+
+func (x *ListSessionStreamsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_holomush_core_v1_core_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSessionStreamsResponse.ProtoReflect.Descriptor instead.
+func (*ListSessionStreamsResponse) Descriptor() ([]byte, []int) {
+	return file_holomush_core_v1_core_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *ListSessionStreamsResponse) GetStreams() []string {
+	if x != nil {
+		return x.Streams
+	}
+	return nil
+}
+
+func (x *ListSessionStreamsResponse) GetMeta() *ResponseMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
 var File_holomush_core_v1_core_proto protoreflect.FileDescriptor
 
 const file_holomush_core_v1_core_proto_rawDesc = "" +
@@ -2794,11 +2906,19 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x1aQueryStreamHistoryResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x124\n" +
 	"\x06events\x18\x02 \x03(\v2\x1c.holomush.core.v1.EventFrameR\x06events\x12\x19\n" +
-	"\bhas_more\x18\x03 \x01(\bR\ahasMore*u\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\"\x9f\x01\n" +
+	"\x19ListSessionStreamsRequest\x121\n" +
+	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x120\n" +
+	"\x14player_session_token\x18\x03 \x01(\tR\x12playerSessionToken\"j\n" +
+	"\x1aListSessionStreamsResponse\x12\x18\n" +
+	"\astreams\x18\x01 \x03(\tR\astreams\x122\n" +
+	"\x04meta\x18\x02 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta*u\n" +
 	"\rControlSignal\x12\x1e\n" +
 	"\x1aCONTROL_SIGNAL_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCONTROL_SIGNAL_REPLAY_COMPLETE\x10\x01\x12 \n" +
-	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x022\xf8\x0e\n" +
+	"\x1cCONTROL_SIGNAL_STREAM_CLOSED\x10\x022\xe9\x0f\n" +
 	"\vCoreService\x12`\n" +
 	"\rHandleCommand\x12&.holomush.core.v1.HandleCommandRequest\x1a'.holomush.core.v1.HandleCommandResponse\x12V\n" +
 	"\tSubscribe\x12\".holomush.core.v1.SubscribeRequest\x1a#.holomush.core.v1.SubscribeResponse0\x01\x12W\n" +
@@ -2818,7 +2938,8 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x12ListPlayerSessions\x12+.holomush.core.v1.ListPlayerSessionsRequest\x1a,.holomush.core.v1.ListPlayerSessionsResponse\x12r\n" +
 	"\x13RevokePlayerSession\x12,.holomush.core.v1.RevokePlayerSessionRequest\x1a-.holomush.core.v1.RevokePlayerSessionResponse\x12\x84\x01\n" +
 	"\x19RevokeOtherPlayerSessions\x122.holomush.core.v1.RevokeOtherPlayerSessionsRequest\x1a3.holomush.core.v1.RevokeOtherPlayerSessionsResponse\x12o\n" +
-	"\x12QueryStreamHistory\x12+.holomush.core.v1.QueryStreamHistoryRequest\x1a,.holomush.core.v1.QueryStreamHistoryResponseB\xc3\x01\n" +
+	"\x12QueryStreamHistory\x12+.holomush.core.v1.QueryStreamHistoryRequest\x1a,.holomush.core.v1.QueryStreamHistoryResponse\x12o\n" +
+	"\x12ListSessionStreams\x12+.holomush.core.v1.ListSessionStreamsRequest\x1a,.holomush.core.v1.ListSessionStreamsResponseB\xc3\x01\n" +
 	"\x14com.holomush.core.v1B\tCoreProtoP\x01Z>github.com/holomush/holomush/pkg/proto/holomush/core/v1;corev1\xa2\x02\x03HCX\xaa\x02\x10Holomush.Core.V1\xca\x02\x10Holomush\\Core\\V1\xe2\x02\x1cHolomush\\Core\\V1\\GPBMetadata\xea\x02\x12Holomush::Core::V1b\x06proto3"
 
 var (
@@ -2834,7 +2955,7 @@ func file_holomush_core_v1_core_proto_rawDescGZIP() []byte {
 }
 
 var file_holomush_core_v1_core_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_holomush_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
+var file_holomush_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
 var file_holomush_core_v1_core_proto_goTypes = []any{
 	(ControlSignal)(0),                        // 0: holomush.core.v1.ControlSignal
 	(*RequestMeta)(nil),                       // 1: holomush.core.v1.RequestMeta
@@ -2879,15 +3000,17 @@ var file_holomush_core_v1_core_proto_goTypes = []any{
 	(*RevokeOtherPlayerSessionsResponse)(nil), // 40: holomush.core.v1.RevokeOtherPlayerSessionsResponse
 	(*QueryStreamHistoryRequest)(nil),         // 41: holomush.core.v1.QueryStreamHistoryRequest
 	(*QueryStreamHistoryResponse)(nil),        // 42: holomush.core.v1.QueryStreamHistoryResponse
-	(*timestamppb.Timestamp)(nil),             // 43: google.protobuf.Timestamp
+	(*ListSessionStreamsRequest)(nil),         // 43: holomush.core.v1.ListSessionStreamsRequest
+	(*ListSessionStreamsResponse)(nil),        // 44: holomush.core.v1.ListSessionStreamsResponse
+	(*timestamppb.Timestamp)(nil),             // 45: google.protobuf.Timestamp
 }
 var file_holomush_core_v1_core_proto_depIdxs = []int32{
-	43, // 0: holomush.core.v1.RequestMeta.timestamp:type_name -> google.protobuf.Timestamp
-	43, // 1: holomush.core.v1.ResponseMeta.timestamp:type_name -> google.protobuf.Timestamp
+	45, // 0: holomush.core.v1.RequestMeta.timestamp:type_name -> google.protobuf.Timestamp
+	45, // 1: holomush.core.v1.ResponseMeta.timestamp:type_name -> google.protobuf.Timestamp
 	1,  // 2: holomush.core.v1.HandleCommandRequest.meta:type_name -> holomush.core.v1.RequestMeta
 	2,  // 3: holomush.core.v1.HandleCommandResponse.meta:type_name -> holomush.core.v1.ResponseMeta
 	1,  // 4: holomush.core.v1.SubscribeRequest.meta:type_name -> holomush.core.v1.RequestMeta
-	43, // 5: holomush.core.v1.EventFrame.timestamp:type_name -> google.protobuf.Timestamp
+	45, // 5: holomush.core.v1.EventFrame.timestamp:type_name -> google.protobuf.Timestamp
 	0,  // 6: holomush.core.v1.ControlFrame.signal:type_name -> holomush.core.v1.ControlSignal
 	6,  // 7: holomush.core.v1.SubscribeResponse.event:type_name -> holomush.core.v1.EventFrame
 	7,  // 8: holomush.core.v1.SubscribeResponse.control:type_name -> holomush.core.v1.ControlFrame
@@ -2899,53 +3022,57 @@ var file_holomush_core_v1_core_proto_depIdxs = []int32{
 	13, // 14: holomush.core.v1.CreatePlayerResponse.characters:type_name -> holomush.core.v1.CharacterSummary
 	13, // 15: holomush.core.v1.CreateGuestResponse.characters:type_name -> holomush.core.v1.CharacterSummary
 	13, // 16: holomush.core.v1.ListCharactersResponse.characters:type_name -> holomush.core.v1.CharacterSummary
-	43, // 17: holomush.core.v1.PlayerSessionInfo.created_at:type_name -> google.protobuf.Timestamp
-	43, // 18: holomush.core.v1.PlayerSessionInfo.last_active:type_name -> google.protobuf.Timestamp
+	45, // 17: holomush.core.v1.PlayerSessionInfo.created_at:type_name -> google.protobuf.Timestamp
+	45, // 18: holomush.core.v1.PlayerSessionInfo.last_active:type_name -> google.protobuf.Timestamp
 	35, // 19: holomush.core.v1.ListPlayerSessionsResponse.sessions:type_name -> holomush.core.v1.PlayerSessionInfo
 	1,  // 20: holomush.core.v1.QueryStreamHistoryRequest.meta:type_name -> holomush.core.v1.RequestMeta
 	2,  // 21: holomush.core.v1.QueryStreamHistoryResponse.meta:type_name -> holomush.core.v1.ResponseMeta
 	6,  // 22: holomush.core.v1.QueryStreamHistoryResponse.events:type_name -> holomush.core.v1.EventFrame
-	3,  // 23: holomush.core.v1.CoreService.HandleCommand:input_type -> holomush.core.v1.HandleCommandRequest
-	5,  // 24: holomush.core.v1.CoreService.Subscribe:input_type -> holomush.core.v1.SubscribeRequest
-	9,  // 25: holomush.core.v1.CoreService.Disconnect:input_type -> holomush.core.v1.DisconnectRequest
-	11, // 26: holomush.core.v1.CoreService.GetCommandHistory:input_type -> holomush.core.v1.GetCommandHistoryRequest
-	14, // 27: holomush.core.v1.CoreService.AuthenticatePlayer:input_type -> holomush.core.v1.AuthenticatePlayerRequest
-	16, // 28: holomush.core.v1.CoreService.SelectCharacter:input_type -> holomush.core.v1.SelectCharacterRequest
-	18, // 29: holomush.core.v1.CoreService.CreatePlayer:input_type -> holomush.core.v1.CreatePlayerRequest
-	20, // 30: holomush.core.v1.CoreService.CreateGuest:input_type -> holomush.core.v1.CreateGuestRequest
-	22, // 31: holomush.core.v1.CoreService.CreateCharacter:input_type -> holomush.core.v1.CreateCharacterRequest
-	24, // 32: holomush.core.v1.CoreService.ListCharacters:input_type -> holomush.core.v1.ListCharactersRequest
-	26, // 33: holomush.core.v1.CoreService.RequestPasswordReset:input_type -> holomush.core.v1.RequestPasswordResetRequest
-	28, // 34: holomush.core.v1.CoreService.ConfirmPasswordReset:input_type -> holomush.core.v1.ConfirmPasswordResetRequest
-	30, // 35: holomush.core.v1.CoreService.Logout:input_type -> holomush.core.v1.LogoutRequest
-	32, // 36: holomush.core.v1.CoreService.CheckPlayerSession:input_type -> holomush.core.v1.CheckPlayerSessionRequest
-	34, // 37: holomush.core.v1.CoreService.ListPlayerSessions:input_type -> holomush.core.v1.ListPlayerSessionsRequest
-	37, // 38: holomush.core.v1.CoreService.RevokePlayerSession:input_type -> holomush.core.v1.RevokePlayerSessionRequest
-	39, // 39: holomush.core.v1.CoreService.RevokeOtherPlayerSessions:input_type -> holomush.core.v1.RevokeOtherPlayerSessionsRequest
-	41, // 40: holomush.core.v1.CoreService.QueryStreamHistory:input_type -> holomush.core.v1.QueryStreamHistoryRequest
-	4,  // 41: holomush.core.v1.CoreService.HandleCommand:output_type -> holomush.core.v1.HandleCommandResponse
-	8,  // 42: holomush.core.v1.CoreService.Subscribe:output_type -> holomush.core.v1.SubscribeResponse
-	10, // 43: holomush.core.v1.CoreService.Disconnect:output_type -> holomush.core.v1.DisconnectResponse
-	12, // 44: holomush.core.v1.CoreService.GetCommandHistory:output_type -> holomush.core.v1.GetCommandHistoryResponse
-	15, // 45: holomush.core.v1.CoreService.AuthenticatePlayer:output_type -> holomush.core.v1.AuthenticatePlayerResponse
-	17, // 46: holomush.core.v1.CoreService.SelectCharacter:output_type -> holomush.core.v1.SelectCharacterResponse
-	19, // 47: holomush.core.v1.CoreService.CreatePlayer:output_type -> holomush.core.v1.CreatePlayerResponse
-	21, // 48: holomush.core.v1.CoreService.CreateGuest:output_type -> holomush.core.v1.CreateGuestResponse
-	23, // 49: holomush.core.v1.CoreService.CreateCharacter:output_type -> holomush.core.v1.CreateCharacterResponse
-	25, // 50: holomush.core.v1.CoreService.ListCharacters:output_type -> holomush.core.v1.ListCharactersResponse
-	27, // 51: holomush.core.v1.CoreService.RequestPasswordReset:output_type -> holomush.core.v1.RequestPasswordResetResponse
-	29, // 52: holomush.core.v1.CoreService.ConfirmPasswordReset:output_type -> holomush.core.v1.ConfirmPasswordResetResponse
-	31, // 53: holomush.core.v1.CoreService.Logout:output_type -> holomush.core.v1.LogoutResponse
-	33, // 54: holomush.core.v1.CoreService.CheckPlayerSession:output_type -> holomush.core.v1.CheckPlayerSessionResponse
-	36, // 55: holomush.core.v1.CoreService.ListPlayerSessions:output_type -> holomush.core.v1.ListPlayerSessionsResponse
-	38, // 56: holomush.core.v1.CoreService.RevokePlayerSession:output_type -> holomush.core.v1.RevokePlayerSessionResponse
-	40, // 57: holomush.core.v1.CoreService.RevokeOtherPlayerSessions:output_type -> holomush.core.v1.RevokeOtherPlayerSessionsResponse
-	42, // 58: holomush.core.v1.CoreService.QueryStreamHistory:output_type -> holomush.core.v1.QueryStreamHistoryResponse
-	41, // [41:59] is the sub-list for method output_type
-	23, // [23:41] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	1,  // 23: holomush.core.v1.ListSessionStreamsRequest.meta:type_name -> holomush.core.v1.RequestMeta
+	2,  // 24: holomush.core.v1.ListSessionStreamsResponse.meta:type_name -> holomush.core.v1.ResponseMeta
+	3,  // 25: holomush.core.v1.CoreService.HandleCommand:input_type -> holomush.core.v1.HandleCommandRequest
+	5,  // 26: holomush.core.v1.CoreService.Subscribe:input_type -> holomush.core.v1.SubscribeRequest
+	9,  // 27: holomush.core.v1.CoreService.Disconnect:input_type -> holomush.core.v1.DisconnectRequest
+	11, // 28: holomush.core.v1.CoreService.GetCommandHistory:input_type -> holomush.core.v1.GetCommandHistoryRequest
+	14, // 29: holomush.core.v1.CoreService.AuthenticatePlayer:input_type -> holomush.core.v1.AuthenticatePlayerRequest
+	16, // 30: holomush.core.v1.CoreService.SelectCharacter:input_type -> holomush.core.v1.SelectCharacterRequest
+	18, // 31: holomush.core.v1.CoreService.CreatePlayer:input_type -> holomush.core.v1.CreatePlayerRequest
+	20, // 32: holomush.core.v1.CoreService.CreateGuest:input_type -> holomush.core.v1.CreateGuestRequest
+	22, // 33: holomush.core.v1.CoreService.CreateCharacter:input_type -> holomush.core.v1.CreateCharacterRequest
+	24, // 34: holomush.core.v1.CoreService.ListCharacters:input_type -> holomush.core.v1.ListCharactersRequest
+	26, // 35: holomush.core.v1.CoreService.RequestPasswordReset:input_type -> holomush.core.v1.RequestPasswordResetRequest
+	28, // 36: holomush.core.v1.CoreService.ConfirmPasswordReset:input_type -> holomush.core.v1.ConfirmPasswordResetRequest
+	30, // 37: holomush.core.v1.CoreService.Logout:input_type -> holomush.core.v1.LogoutRequest
+	32, // 38: holomush.core.v1.CoreService.CheckPlayerSession:input_type -> holomush.core.v1.CheckPlayerSessionRequest
+	34, // 39: holomush.core.v1.CoreService.ListPlayerSessions:input_type -> holomush.core.v1.ListPlayerSessionsRequest
+	37, // 40: holomush.core.v1.CoreService.RevokePlayerSession:input_type -> holomush.core.v1.RevokePlayerSessionRequest
+	39, // 41: holomush.core.v1.CoreService.RevokeOtherPlayerSessions:input_type -> holomush.core.v1.RevokeOtherPlayerSessionsRequest
+	41, // 42: holomush.core.v1.CoreService.QueryStreamHistory:input_type -> holomush.core.v1.QueryStreamHistoryRequest
+	43, // 43: holomush.core.v1.CoreService.ListSessionStreams:input_type -> holomush.core.v1.ListSessionStreamsRequest
+	4,  // 44: holomush.core.v1.CoreService.HandleCommand:output_type -> holomush.core.v1.HandleCommandResponse
+	8,  // 45: holomush.core.v1.CoreService.Subscribe:output_type -> holomush.core.v1.SubscribeResponse
+	10, // 46: holomush.core.v1.CoreService.Disconnect:output_type -> holomush.core.v1.DisconnectResponse
+	12, // 47: holomush.core.v1.CoreService.GetCommandHistory:output_type -> holomush.core.v1.GetCommandHistoryResponse
+	15, // 48: holomush.core.v1.CoreService.AuthenticatePlayer:output_type -> holomush.core.v1.AuthenticatePlayerResponse
+	17, // 49: holomush.core.v1.CoreService.SelectCharacter:output_type -> holomush.core.v1.SelectCharacterResponse
+	19, // 50: holomush.core.v1.CoreService.CreatePlayer:output_type -> holomush.core.v1.CreatePlayerResponse
+	21, // 51: holomush.core.v1.CoreService.CreateGuest:output_type -> holomush.core.v1.CreateGuestResponse
+	23, // 52: holomush.core.v1.CoreService.CreateCharacter:output_type -> holomush.core.v1.CreateCharacterResponse
+	25, // 53: holomush.core.v1.CoreService.ListCharacters:output_type -> holomush.core.v1.ListCharactersResponse
+	27, // 54: holomush.core.v1.CoreService.RequestPasswordReset:output_type -> holomush.core.v1.RequestPasswordResetResponse
+	29, // 55: holomush.core.v1.CoreService.ConfirmPasswordReset:output_type -> holomush.core.v1.ConfirmPasswordResetResponse
+	31, // 56: holomush.core.v1.CoreService.Logout:output_type -> holomush.core.v1.LogoutResponse
+	33, // 57: holomush.core.v1.CoreService.CheckPlayerSession:output_type -> holomush.core.v1.CheckPlayerSessionResponse
+	36, // 58: holomush.core.v1.CoreService.ListPlayerSessions:output_type -> holomush.core.v1.ListPlayerSessionsResponse
+	38, // 59: holomush.core.v1.CoreService.RevokePlayerSession:output_type -> holomush.core.v1.RevokePlayerSessionResponse
+	40, // 60: holomush.core.v1.CoreService.RevokeOtherPlayerSessions:output_type -> holomush.core.v1.RevokeOtherPlayerSessionsResponse
+	42, // 61: holomush.core.v1.CoreService.QueryStreamHistory:output_type -> holomush.core.v1.QueryStreamHistoryResponse
+	44, // 62: holomush.core.v1.CoreService.ListSessionStreams:output_type -> holomush.core.v1.ListSessionStreamsResponse
+	44, // [44:63] is the sub-list for method output_type
+	25, // [25:44] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_holomush_core_v1_core_proto_init() }
@@ -2963,7 +3090,7 @@ func file_holomush_core_v1_core_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_holomush_core_v1_core_proto_rawDesc), len(file_holomush_core_v1_core_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   42,
+			NumMessages:   44,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

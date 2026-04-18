@@ -371,3 +371,33 @@ func TestTranslateEvent_StateCorruptPayload(t *testing.T) {
 	got := h.translateEvent(ev)
 	assert.Nil(t, got)
 }
+
+func TestTranslateEvent_PopulatesEventIdForCommunicationEvents(t *testing.T) {
+	h := newTestHandler(t)
+	expectedID := core.NewULID().String()
+	ev := &corev1.EventFrame{
+		Id:        expectedID,
+		Type:      "say",
+		Timestamp: timestamppb.New(timestamppb.Now().AsTime()),
+		Payload:   mustMarshal(t, map[string]string{"character_name": "Alice", "message": "Hello!"}),
+	}
+
+	got := h.translateEvent(ev)
+	require.NotNil(t, got)
+	assert.Equal(t, expectedID, got.GetEventId())
+}
+
+func TestTranslateEvent_PopulatesEventIdForStateEvents(t *testing.T) {
+	h := newTestHandler(t)
+	expectedID := core.NewULID().String()
+	ev := &corev1.EventFrame{
+		Id:        expectedID,
+		Type:      "location_state",
+		Timestamp: timestamppb.New(timestamppb.Now().AsTime()),
+		Payload:   mustMarshal(t, map[string]any{"name": "Cafe", "description": "a place"}),
+	}
+
+	got := h.translateEvent(ev)
+	require.NotNil(t, got)
+	assert.Equal(t, expectedID, got.GetEventId())
+}

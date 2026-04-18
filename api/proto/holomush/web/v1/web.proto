@@ -65,6 +65,11 @@ service WebService {
   // Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
   rpc WebQueryStreamHistory(WebQueryStreamHistoryRequest) returns (WebQueryStreamHistoryResponse);
 
+  // WebListSessionStreams returns the stream names the session is subscribed to.
+  // Proxies to CoreService.ListSessionStreams — authorization is enforced by core.
+  // Used by the web client to enumerate streams for reload-backfill.
+  rpc WebListSessionStreams(WebListSessionStreamsRequest) returns (WebListSessionStreamsResponse);
+
   // Session-management RPCs. The caller is identified via the X-Session-Token
   // cookie header injected by CookieMiddleware; no token field in the request.
   rpc WebListPlayerSessions(WebListPlayerSessionsRequest) returns (WebListPlayerSessionsResponse);
@@ -99,6 +104,7 @@ message GameEvent {
   string actor = 6;
   string text = 7;
   google.protobuf.Struct metadata = 8;
+  string event_id = 9; // ULID; populated from corev1.EventFrame.id
 }
 
 message StreamEventsResponse {
@@ -263,6 +269,14 @@ message WebQueryStreamHistoryRequest {
 message WebQueryStreamHistoryResponse {
   repeated GameEvent events = 1;
   bool has_more = 2;
+}
+
+message WebListSessionStreamsRequest {
+  string session_id = 1;
+}
+
+message WebListSessionStreamsResponse {
+  repeated string streams = 1; // event-store stream names (e.g. "location:<id>", "character:<id>")
 }
 
 // --- Session management messages ---

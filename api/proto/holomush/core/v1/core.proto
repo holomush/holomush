@@ -85,6 +85,11 @@ service CoreService {
   // ABAC policy evaluation for public streams.
   // Pure read — does not mutate session cursors (invariant I-13).
   rpc QueryStreamHistory(QueryStreamHistoryRequest) returns (QueryStreamHistoryResponse);
+
+  // ListSessionStreams returns the set of streams the session is currently
+  // subscribed to, derived from focusCoordinator.RestoreFocus. Used by
+  // web clients to enumerate streams for backfill on reload. Pure read.
+  rpc ListSessionStreams(ListSessionStreamsRequest) returns (ListSessionStreamsResponse);
 }
 
 message HandleCommandRequest {
@@ -370,4 +375,15 @@ message QueryStreamHistoryResponse {
   ResponseMeta meta = 1;
   repeated EventFrame events = 2;
   bool has_more = 3;
+}
+
+message ListSessionStreamsRequest {
+  RequestMeta meta = 1;
+  string session_id = 2;
+  string player_session_token = 3;
+}
+
+message ListSessionStreamsResponse {
+  repeated string streams = 1;
+  ResponseMeta meta = 2;
 }

@@ -40,6 +40,7 @@ const (
 	CoreService_RevokePlayerSession_FullMethodName       = "/holomush.core.v1.CoreService/RevokePlayerSession"
 	CoreService_RevokeOtherPlayerSessions_FullMethodName = "/holomush.core.v1.CoreService/RevokeOtherPlayerSessions"
 	CoreService_QueryStreamHistory_FullMethodName        = "/holomush.core.v1.CoreService/QueryStreamHistory"
+	CoreService_ListSessionStreams_FullMethodName        = "/holomush.core.v1.CoreService/ListSessionStreams"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -93,6 +94,10 @@ type CoreServiceClient interface {
 	// ABAC policy evaluation for public streams.
 	// Pure read — does not mutate session cursors (invariant I-13).
 	QueryStreamHistory(ctx context.Context, in *QueryStreamHistoryRequest, opts ...grpc.CallOption) (*QueryStreamHistoryResponse, error)
+	// ListSessionStreams returns the set of streams the session is currently
+	// subscribed to, derived from focusCoordinator.RestoreFocus. Used by
+	// web clients to enumerate streams for backfill on reload. Pure read.
+	ListSessionStreams(ctx context.Context, in *ListSessionStreamsRequest, opts ...grpc.CallOption) (*ListSessionStreamsResponse, error)
 }
 
 type coreServiceClient struct {
@@ -292,6 +297,16 @@ func (c *coreServiceClient) QueryStreamHistory(ctx context.Context, in *QueryStr
 	return out, nil
 }
 
+func (c *coreServiceClient) ListSessionStreams(ctx context.Context, in *ListSessionStreamsRequest, opts ...grpc.CallOption) (*ListSessionStreamsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSessionStreamsResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListSessionStreams_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -343,6 +358,10 @@ type CoreServiceServer interface {
 	// ABAC policy evaluation for public streams.
 	// Pure read — does not mutate session cursors (invariant I-13).
 	QueryStreamHistory(context.Context, *QueryStreamHistoryRequest) (*QueryStreamHistoryResponse, error)
+	// ListSessionStreams returns the set of streams the session is currently
+	// subscribed to, derived from focusCoordinator.RestoreFocus. Used by
+	// web clients to enumerate streams for backfill on reload. Pure read.
+	ListSessionStreams(context.Context, *ListSessionStreamsRequest) (*ListSessionStreamsResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -406,6 +425,9 @@ func (UnimplementedCoreServiceServer) RevokeOtherPlayerSessions(context.Context,
 }
 func (UnimplementedCoreServiceServer) QueryStreamHistory(context.Context, *QueryStreamHistoryRequest) (*QueryStreamHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method QueryStreamHistory not implemented")
+}
+func (UnimplementedCoreServiceServer) ListSessionStreams(context.Context, *ListSessionStreamsRequest) (*ListSessionStreamsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSessionStreams not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -745,6 +767,24 @@ func _CoreService_QueryStreamHistory_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_ListSessionStreams_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSessionStreamsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListSessionStreams(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListSessionStreams_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListSessionStreams(ctx, req.(*ListSessionStreamsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -819,6 +859,10 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "QueryStreamHistory",
 			Handler:    _CoreService_QueryStreamHistory_Handler,
+		},
+		{
+			MethodName: "ListSessionStreams",
+			Handler:    _CoreService_ListSessionStreams_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
