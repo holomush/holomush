@@ -13,12 +13,14 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 	"github.com/holomush/holomush/pkg/proto/holomush/web/v1/webv1connect"
@@ -715,4 +717,33 @@ func TestGetCommandHistoryForwardsPlayerSessionToken(t *testing.T) {
 	require.NotNil(t, client.cmdHistoryReq, "GetCommandHistory should have been called")
 	assert.Equal(t, token, client.cmdHistoryReq.GetPlayerSessionToken())
 	assert.Equal(t, "sess-4", client.cmdHistoryReq.GetSessionId())
+}
+
+func TestWebListSessionStreamsProxiesToCore(t *testing.T) {
+	client := &mockCoreClient{
+		listSessionStreamsResp: &corev1.ListSessionStreamsResponse{
+			Streams: []string{"character:c1", "location:l1"},
+		},
+	}
+	h := NewHandler(client)
+
+	resp, err := h.WebListSessionStreams(context.Background(),
+		connect.NewRequest(&webv1.WebListSessionStreamsRequest{SessionId: "s1"}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"character:c1", "location:l1"}, resp.Msg.GetStreams())
+
+	require.NotNil(t, client.listSessionStreamsReq, "ListSessionStreams should have been called")
+	assert.Equal(t, "s1", client.listSessionStreamsReq.GetSessionId())
+}
+
+func TestWebListSessionStreamsPassesErrorsThrough(t *testing.T) {
+	client := &mockCoreClient{
+		listSessionStreamsErr: oops.Code("SESSION_EXPIRED").Errorf("expired"),
+	}
+	h := NewHandler(client)
+
+	_, err := h.WebListSessionStreams(context.Background(),
+		connect.NewRequest(&webv1.WebListSessionStreamsRequest{SessionId: "s1"}))
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SESSION_EXPIRED")
 }

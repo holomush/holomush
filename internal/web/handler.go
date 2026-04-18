@@ -432,6 +432,30 @@ func (h *Handler) WebQueryStreamHistory(ctx context.Context, req *connect.Reques
 	}), nil
 }
 
+// WebListSessionStreams proxies stream enumeration requests to CoreService.
+// Authorization is enforced by the core service.
+func (h *Handler) WebListSessionStreams(ctx context.Context, req *connect.Request[webv1.WebListSessionStreamsRequest]) (*connect.Response[webv1.WebListSessionStreamsResponse], error) {
+	slog.DebugContext(ctx, "web: WebListSessionStreams",
+		"session_id", req.Msg.GetSessionId(),
+	)
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.client.ListSessionStreams(rpcCtx, &corev1.ListSessionStreamsRequest{
+		SessionId: req.Msg.GetSessionId(),
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "web: list session streams RPC failed",
+			"session_id", req.Msg.GetSessionId(), "error", err)
+		return nil, err //nolint:wrapcheck // gRPC status errors pass through so clients can distinguish SESSION_EXPIRED / SESSION_NOT_FOUND / INVALID_ARGUMENT.
+	}
+
+	return connect.NewResponse(&webv1.WebListSessionStreamsResponse{
+		Streams: resp.GetStreams(),
+	}), nil
+}
+
 // WebListContent returns content items matching a key prefix.
 func (h *Handler) WebListContent(ctx context.Context, req *connect.Request[webv1.WebListContentRequest]) (*connect.Response[webv1.WebListContentResponse], error) {
 	slog.DebugContext(ctx, "web: WebListContent", "prefix", req.Msg.GetPrefix())
