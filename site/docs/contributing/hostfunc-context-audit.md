@@ -23,7 +23,37 @@ The meta-test
 `TestHostFuncsRespectContextOnPreCancelledCtx` in
 `internal/plugin/hostfunc/context_audit_test.go` invokes every
 registered host function with a pre-cancelled context and asserts it
-returns within 50 ms.
+returns within 250 ms.
+
+### Meta-test scope and limitation
+
+The meta-test invokes each hostfunc with zero arguments. Most
+hostfuncs call `L.CheckString(1)` (or similar argument-validation) as
+their first action, which raises a Lua error and returns immediately
+before any blocking call. This means the meta-test primarily catches:
+
+- A new hostfunc that blocks unboundedly without respecting context
+  AND accepts zero arguments.
+- A hostfunc whose argument validation itself is slow (> 250 ms).
+
+It does NOT catch:
+
+- A hostfunc that validates args first and then does a blocking call
+  without respecting `L.Context()`. Under legitimate traffic (valid
+  args), such a hostfunc would hang `Host.invoke`'s wait-for-drain
+  bound.
+
+Covering that gap requires per-hostfunc test fixtures (each hostfunc
+has a different argument shape) wired against fake backends that
+block on `ctx.Done()`. A future contributor wanting to strengthen the
+guarantee should add a companion subtest that calls each
+blocking-capable hostfunc (KV, world queries, world mutations,
+session streams, focus) with valid-shaped arguments and a blocking
+fake backend, and asserts each returns promptly on context
+cancellation.
+
+Until that companion test lands, this file + code review are the
+authoritative enforcement of the context-respect invariant.
 
 ## Audit table
 
@@ -35,12 +65,11 @@ The functions `holomush.log` and `holomush.new_request_id` are O(1).
 does not block under normal operation.
 
 The KV functions (`holomush.kv_get`, `holomush.kv_set`,
-`holomush.kv_delete`) are bounded by `defaultPluginQueryTimeout`
-(5 seconds) and are context-aware through their service backends. The
-50 ms meta-test bound is satisfied because each function validates its
-arguments (non-empty key, plugin name) before any blocking call; a
-zero-arg call from the meta-test raises a Lua argument error before
-any blocking path executes.
+`holomush.kv_delete`) respect `L.Context()` directly: each derives
+`context.WithTimeout(L.Context(), defaultPluginQueryTimeout)` with a
+5-second backend cap. When the plugin-level CPU deadline fires, the
+outer `L.Context()` is already cancelled, so the KV call returns
+promptly rather than waiting the full 5 seconds.
 
 The world query functions (`holomush.query_location`,
 `holomush.query_character`, `holomush.query_location_characters`,

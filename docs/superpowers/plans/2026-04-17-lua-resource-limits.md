@@ -4,7 +4,7 @@
 
 **Goal:** Add CPU timeout + registry cap + hostfunc audit to the Lua plugin dispatcher so malicious or buggy plugins cannot exhaust CPU, memory, or dispatcher threads.
 
-**Architecture:** `StateFactory` gains a `registryMaxSize` field wired into `lua.Options.RegistryMaxSize`. `Host` gains a `cpuTimeout` field and a new `invoke(parentCtx, L, handler, p, args...)` method that wraps `CallByParam` in a goroutine under `context.WithTimeout(parentCtx, cpuTimeout)`. The dispatcher stops waiting on `ctx.Done()`; the goroutine drains in the background (gopher-lua's per-instruction context check forces pure-Lua loops to exit; hostfuncs are audited to respect context). Three Prometheus `CounterVec`s (`invocations_total`, `timeouts_total`, `registry_full_total`) expose the controls with `{plugin,handler}` labels.
+**Architecture:** `StateFactory` gains a `registryMaxSize` field wired into `lua.Options.RegistryMaxSize`. `Host` gains a `cpuTimeout` field and a new `invoke(parentCtx, L, handler, p, args...)` method that wraps `CallByParam` in a goroutine under `context.WithTimeout(parentCtx, cpuTimeout)`. On `ctx.Done()` the dispatcher waits for the goroutine to drain before returning — bounded by gopher-lua's per-instruction context check (pure-Lua loops exit on the next instruction) and the hostfunc audit invariant (every registered hostfunc either is O(1) or respects `L.Context()`). Waiting ensures the state is no longer in use when the caller closes it. Three Prometheus `CounterVec`s (`invocations_total`, `timeouts_total`, `registry_full_total`) expose the controls with `{plugin,handler}` labels.
 
 **Tech Stack:** Go stdlib (context, time), `github.com/yuin/gopher-lua` (existing), `github.com/prometheus/client_golang` (existing), `github.com/samber/oops` for error codes, testify for assertions.
 
@@ -628,11 +628,13 @@ import (
 //   - The state L is NOT closed by invoke. Ownership stays with the caller,
 //     which closes it in the normal cleanup path (defer L.Close()) AFTER
 //     invoke returns.
-//   - When timeout fires, the goroutine drains in the background: gopher-lua's
-//     per-instruction context check (established by L.SetContext on the
-//     derived ctx) forces pure-Lua tight loops to RaiseError on the next
-//     instruction; hostfunc blocks are bounded by the hostfunc audit
-//     invariant that every registered hostfunc respects its context.
+//   - On ctx.Done(), invoke waits for the goroutine to drain before returning.
+//     The wait is bounded: gopher-lua's per-instruction context check
+//     (established by L.SetContext on the derived ctx) forces pure-Lua tight
+//     loops to RaiseError on the next instruction; hostfunc blocks are bounded
+//     by the hostfunc audit invariant that every registered hostfunc either is
+//     O(1) or respects L.Context(). Waiting ensures the state is no longer in
+//     use when the caller closes it (race-detector cleanliness).
 //   - invoke MUST NOT call L.Close() from its ctx.Done() branch. Concurrent
 //     Close with an in-flight CallByParam is undocumented in gopher-lua.
 func (h *Host) invoke(parentCtx context.Context, L *lua.LState, plugin, handler string, p lua.P, args ...lua.LValue) error {
@@ -656,6 +658,9 @@ func (h *Host) invoke(parentCtx context.Context, L *lua.LState, plugin, handler 
 		recordInvocationOutcome(plugin, handler, classifyError(err))
 		return err
 	case <-ctx.Done():
+		// Wait for the goroutine to drain (bounded by per-instruction
+		// context check + hostfunc audit invariant) before returning.
+		<-done
 		recordInvocationOutcome(plugin, handler, outcomeTimeout)
 		return oops.Code("PLUGIN_LUA_TIMEOUT").
 			With("plugin", plugin).
@@ -667,13 +672,16 @@ func (h *Host) invoke(parentCtx context.Context, L *lua.LState, plugin, handler 
 
 // classifyError maps a CallByParam error to an outcome label for metrics.
 // gopher-lua's registry-overflow panic (caught by Protect=true) contains
-// the substring "registry" in its message; any other non-nil error is
-// treated as a normal Lua-level error.
+// the substring "registry overflow" in its message; any other non-nil
+// error is treated as a normal Lua-level error.
 func classifyError(err error) string {
 	if err == nil {
 		return outcomeSuccess
 	}
-	if strings.Contains(err.Error(), "registry") {
+	// Match gopher-lua's specific panic text for RegistryMaxSize overflow
+	// rather than any error mentioning "registry" (which would misattribute
+	// legitimate plugin errors like error("registry lookup failed")).
+	if strings.Contains(err.Error(), "registry overflow") {
 		return outcomeRegistryFull
 	}
 	return outcomeError
@@ -698,12 +706,13 @@ JJ_EDITOR=true jj --no-pager describe -m "feat(plugin/lua): Host.invoke helper w
 NewHost / NewHostWithFunctions accept HostOption functional options. New
 WithCPUTimeout(d) option sets the per-invocation deadline. New invoke()
 method wraps CallByParam in a goroutine with context.WithTimeout; on
-ctx.Done the dispatcher returns PLUGIN_LUA_TIMEOUT and lets the goroutine
-drain via SetContext's per-instruction check.
+ctx.Done the dispatcher waits for the goroutine to drain (bounded by
+SetContext's per-instruction check and the hostfunc audit invariant),
+then returns PLUGIN_LUA_TIMEOUT.
 
 classifyError helper maps CallByParam errors to the outcome label used
-for metrics — 'registry' substring → registry_full, any other non-nil
-→ error, nil → success.
+for metrics — 'registry overflow' substring → registry_full, any other
+non-nil → error, nil → success.
 
 Not yet consumed by the dispatcher methods — next task migrates the four
 inline CallByParam sites.
@@ -1478,8 +1487,11 @@ unbounded heap growth.
 A third control, the watchdog goroutine, has no operator knob: every
 `CallByParam` runs in its own goroutine so a stuck host function cannot
 hang the dispatcher. If the CPU deadline fires while a host function is
-still running, the dispatcher returns the timeout and the goroutine
-drains in the background when the host function eventually returns.
+still running, the dispatcher waits for the goroutine to drain — bounded
+by gopher-lua's per-instruction context check (pure-Lua tight loops exit
+on the next instruction) and the hostfunc audit invariant (every
+registered hostfunc either is O(1) or respects `L.Context()`) — then
+returns the timeout error.
 
 ### Tuning
 

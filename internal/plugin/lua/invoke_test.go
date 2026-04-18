@@ -116,8 +116,15 @@ func TestInvokeReleasesDispatcherWhenHostFuncBlocks(t *testing.T) {
 func TestClassifyError(t *testing.T) {
 	assert.Equal(t, outcomeSuccess, classifyError(nil))
 
-	registryErr := errors.New("registry size limit reached")
+	// Tightened substring: classifyError now matches gopher-lua's exact
+	// "registry overflow" panic text, not any error mentioning "registry".
+	registryErr := errors.New("registry overflow")
 	assert.Equal(t, outcomeRegistryFull, classifyError(registryErr))
+
+	// Legitimate plugin errors that mention "registry" must NOT be
+	// misattributed to the registry-full metric.
+	pluginErr := errors.New("registry lookup failed")
+	assert.Equal(t, outcomeError, classifyError(pluginErr))
 
 	assert.Equal(t, outcomeError, classifyError(errors.New("something else")))
 }

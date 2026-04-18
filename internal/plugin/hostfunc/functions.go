@@ -336,7 +336,11 @@ func (f *Functions) kvGetFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
+		parentCtx := L.Context()
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
 		defer cancel()
 
 		value, err := f.kvStore.Get(ctx, pluginName, key)
@@ -382,7 +386,11 @@ func (f *Functions) kvSetFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
+		parentCtx := L.Context()
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
 		defer cancel()
 
 		if err := f.kvStore.Set(ctx, pluginName, key, []byte(value)); err != nil {
@@ -420,7 +428,11 @@ func (f *Functions) kvDeleteFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
+		parentCtx := L.Context()
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
 		defer cancel()
 
 		if err := f.kvStore.Delete(ctx, pluginName, key); err != nil {

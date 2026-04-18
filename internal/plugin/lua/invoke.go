@@ -53,13 +53,16 @@ func (h *Host) invoke(parentCtx context.Context, L *lua.LState, plugin, handler 
 
 // classifyError maps a CallByParam error to an outcome label for metrics.
 // gopher-lua's registry-overflow panic (caught by Protect=true) contains
-// the substring "registry" in its message; any other non-nil error is
-// treated as a normal Lua-level error.
+// the substring "registry overflow" in its message; any other non-nil
+// error is treated as a normal Lua-level error.
 func classifyError(err error) string {
 	if err == nil {
 		return outcomeSuccess
 	}
-	if strings.Contains(err.Error(), "registry") {
+	// Match gopher-lua's specific panic text for RegistryMaxSize overflow
+	// rather than any error mentioning "registry" (which would misattribute
+	// legitimate plugin errors like error("registry lookup failed")).
+	if strings.Contains(err.Error(), "registry overflow") {
 		return outcomeRegistryFull
 	}
 	return outcomeError
