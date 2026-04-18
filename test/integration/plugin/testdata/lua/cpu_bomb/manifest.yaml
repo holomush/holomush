@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+name: cpu-bomb
+version: 0.0.1
+type: lua
+lua-plugin:
+  entry: plugin.lua
