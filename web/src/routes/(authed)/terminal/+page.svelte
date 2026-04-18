@@ -12,7 +12,7 @@
   import { appendLine, clearLines, replayActive } from '$lib/stores/terminalStore';
   import { themePreferences, terminalBlackOverrideVars } from '$lib/stores/themeStore';
   import { setConnectionStatus } from '$lib/stores/connectionStore';
-  import { toggleSidebar, uiPrefs, setSidebarWidthPx } from '$lib/stores/uiPrefsStore';
+  import { uiPrefs, setSidebarWidthPx } from '$lib/stores/uiPrefsStore';
   import {
     composerDraft,
     setComposerDraft,
@@ -98,20 +98,7 @@
     wasComposerOpen = isOpen;
   });
 
-  function onKeydown(e: KeyboardEvent) {
-    if (e.ctrlKey && e.key === 'b') {
-      e.preventDefault();
-      toggleSidebar();
-    }
-    if (e.ctrlKey && e.key === 'l') {
-      e.preventDefault();
-      clearLines();
-    }
-  }
-
   onMount(() => {
-    window.addEventListener('keydown', onKeydown);
-
     registerComposerSubmit((cmd) => {
       pushCommand(cmd);
       sendCommand(cmd);
@@ -130,7 +117,6 @@
   });
 
   onDestroy(() => {
-    window.removeEventListener('keydown', onKeydown);
     registerComposerSubmit(null);
     abortController?.abort();
     // Best-effort server disconnect on component unmount (SPA navigation)
