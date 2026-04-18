@@ -87,6 +87,8 @@ All event appends in production go through `EventWriter` (`internal/core/event_w
 
 **Guardrail:** add either a type-level constraint (change `NewEngine`'s parameter type to `*EventWriter`) OR a startup assertion via concrete type check `_, ok := store.(*core.EventWriter)`. An interface-conformance check is insufficient because `*EventWriter` implements `EventStore` by wrapping — raw stores also satisfy the interface. The plan MUST pick one (see Design Decision #9).
 
+**Scope of I1.** The guardrail covers the `engine.Engine` constructor only. Any other code path that appends to the event store (e.g., plugin emit facilities introduced by the in-flight plugin architecture rework) MUST route through `EventWriter` as well; this is a project-wide invariant, not an engine-local one. **If a future plugin host gets its own reference to a non-writer `EventStore` and appends directly, I1 silently breaks and this spec's ordering guarantee collapses.** The plan MUST either (a) add an analogous concrete-type guard at the plugin emit entry point, or (b) document in the plugin architecture spec that plugin emit facilities MUST use the same EventWriter instance. Option (a) is preferred — a hard assertion is cheaper than documentation drift.
+
 ### I2 — SubscribeSession preserves append-order per connection
 
 `SubscribeSession` (`internal/grpc/server.go:819`) is "Variant A — strict cross-stream ordering via single PG connection." A single PostgreSQL session consuming LISTEN/NOTIFY receives notifications in commit order (PG documented guarantee). Combined with I1's serialized commits, notifications arrive in the exact order `EventWriter` wrote them.
@@ -155,6 +157,8 @@ func (e *Engine) EndSession(
 ```
 
 Implementation mirrors `HandleDisconnect`: marshal payload, construct event via `core.NewEvent` (stamps a monotonic ULID through `core.NewULID`, satisfying `EventIDMustBeMonotonic`), append to `character:{ID}` stream via the EventWriter-wrapped store (I1).
+
+**Context discipline — MUST decouple from caller ctx.** `EventWriter.Write` with a canceled ctx has non-deterministic persistence (caller unblocks but the append goroutine's success is not guaranteed). Since `EndSession` emits the audit-critical terminal event, `EndSession` MUST use a fresh context with a bounded timeout (pattern: `context.WithTimeout(context.Background(), sessionTerminalCommitTimeout)` — analogous to the cursor-commit at `server.go:646`). The caller's ctx is still honored for cancellation of pre-append work (marshal), but NOT for the append itself. Rationale: a client that hangs up mid-quit (ctx cancel) still needs the `session_ended` event persisted for audit and for any *other* Subscribers on the same session to receive STREAM_CLOSED. Dropping the event on caller-ctx cancel would reintroduce an orphaning bug.
 
 ### Subscribe loop changes
 
@@ -237,9 +241,36 @@ Apply the same pattern everywhere `sessionStore.Delete(ctx, id, reason)` is curr
 |---|---|---|
 | `internal/grpc/server.go:411` (quit handler) | `HandleDisconnect`(leave) + `Delete(id,"Goodbye!")` → `WatchSession` fires | `cause="quit"`, `reason="Goodbye!"` |
 | `internal/grpc/server.go:1041` (Disconnect RPC — all-connections-gone, guest session) | `HandleDisconnect`(leave) + `Delete(id,"Guest session ended")` | `cause="guest_end"`, `reason="Session ended."` |
-| `internal/session/reaper.go:82` (detached-session reaper) | `HandleDisconnect`(leave) + `Delete(id,"Session expired...")` — the reaper calls Delete, so `WatchSession` fires. **But reaper operates on `StatusDetached` sessions, which by definition have no live Subscribe: the signal has no listener.** Option D makes this observable via the persisted event. | `cause="reaped"`, `reason="Session expired due to inactivity."` |
+| `internal/session/reaper.go:82` (detached-session reaper) | `HandleDisconnect`(leave) + `Delete(id,"Session expired...")` — the reaper calls Delete, so `WatchSession` fires. **But reaper operates on `StatusDetached` sessions, which by definition have no live Subscribe: the signal has no listener.** Option D makes this observable via the persisted event. | `cause="reaped"`, `reason="Session expired due to inactivity."` — see § Reaper wiring below |
 | Admin boot path (`internal/grpc/server.go:457`, `HandleDisconnect(ctx, booted, "booted")`) | Emits leave event only. Session deletion happens via the boot RPC handler — verify exact flow during implementation. | `cause="kicked"`, `reason="You have been disconnected by an administrator."` |
 | **PlayerSession eviction** (11th login evicts oldest, `internal/auth/auth_service.go:89-149`) | Today: evicts `player_sessions` rows via `CreateWithCap`'s trimming logic. FK cascade (`migrations/000008_session_player_fk.up.sql`) removes child game `sessions` rows. **No Go code iterates child game sessions — no leave, no session_ended, no hooks.** Option D does NOT fix this automatically. | Requires a new task (see § Logout & eviction fanout) — `cause="evicted"`, `reason="Session evicted — you logged in elsewhere."` |
+
+### Reaper wiring
+
+`internal/session/reaper.go` is in the `session` package and has no access to `core.Engine` — it cannot call `engine.EndSession` directly. The injection point is `ReaperConfig.OnExpired` (`reaper.go:15`), configured at construction site. Today that site is `cmd/holomush/sub_grpc.go:285-301` which already closes over the engine. The plan MUST update that callback from:
+
+```go
+OnExpired: func(info *session.Info) {
+    char := core.CharacterRef{...}
+    engine.HandleDisconnect(reaperCtx, char, "session expired")
+    if info.IsGuest { guestAuth.ReleaseGuest(...) }
+}
+```
+
+to:
+
+```go
+OnExpired: func(info *session.Info) {
+    char := core.CharacterRef{...}
+    engine.HandleDisconnect(reaperCtx, char, "session expired")
+    engine.EndSession(reaperCtx, char, info.ID, "reaped", "Session expired due to inactivity.")
+    if info.IsGuest { guestAuth.ReleaseGuest(...) }
+}
+```
+
+The reaper does NOT call `sessionStore.Delete` itself — that happens inside the reaper loop (`reaper.go:50-95`). The loop's Delete becomes reason-less after the signature change (Design Decision #8 cutover).
+
+Note: `reaperCtx` is a long-lived background context (`sub_grpc.go:282`), separate from any request ctx, so the `EndSession` ctx-decoupling requirement is already satisfied at this site.
 
 ### Logout & eviction fanout (new)
 
@@ -286,7 +317,7 @@ The architectural change unlocks clean per-command semantics. Document the inten
 | Intent | Command | Primitive | Event(s) emitted | Effect |
 |---|---|---|---|---|
 | Close this surface, keep playing elsewhere | `disconnect` (new telnet command; web UI tab close signal) | `Disconnect(connectionID)` RPC | None from session lifecycle (wire close is in-band). If the closing connection was the last grid-present connection, existing `phase_out` emits a `leave` event. | That one wire dies; session continues; other surfaces unaffected; grid-present flips if this was the last grid connection |
-| End this play session | `quit` | `HandleDisconnect` + `EndSession` + `Delete` | `leave` on location; `session_ended` on character | All surfaces drop; player remains authenticated, returns to character selection |
+| End this play session | `quit` | `HandleDisconnect` + `EndSession` + `Delete` | `leave` on location; `session_ended` on character | All surfaces drop immediately; player remains authenticated, returns to character selection. *Multi-surface confirmation prompt is deferred to `holomush-pz68`; until that lands, `quit` is unconditional.* |
 | Sign out of account | `logout` | Iterate child game sessions → per-session fanout (see § Logout & eviction fanout) → `authService.Logout` | For each active child game session: `leave` on location + `session_ended` on character | All surfaces of all this player's active game sessions drop; player must re-authenticate |
 
 ### The `disconnect` telnet command
@@ -299,23 +330,11 @@ Add a new command word `disconnect` (or alias `/disconnect` in future rich UIs) 
 
 Zero new server primitives — `disconnect` is pure glue over the existing Disconnect RPC. The telnet handler already retains `h.playerSessionToken` (set at two-phase login, `internal/telnet/gateway_handler.go:77`) and reuses it for existing core RPCs; the new `disconnect` command path passes the same token. The plan has this as one telnet-side task + associated unit tests.
 
-### Multi-surface quit friction
+### Multi-surface quit friction — deferred
 
-When a player issues `quit` and their session has more than one active connection, the server MUST NOT immediately tear down. Instead:
+Moved to follow-up bead `holomush-pz68` (*Multi-surface quit confirmation UX*). The confirmation prompt's semantics are referenced below only to establish that the architectural primitives in this spec (`session_ended` event + `disconnect` command) are sufficient building blocks; no new store interface surface is introduced by this spec.
 
-1. **First `quit` with `> 1` connections:** emit a `command_response` event on the character stream with body: *`"You have N other surfaces connected. Type QUIT again within 30 seconds to end the session for all of them, or type DISCONNECT to close only this surface."`* Set a session-scoped flag `PendingQuitConfirmationUntil` to `now + 30s`.
-2. **Second `quit` within the TTL:** proceed with the full quit path (HandleDisconnect + EndSession + Delete).
-3. **Any other command or TTL expiry:** clear the flag. A subsequent `quit` re-enters step 1.
-
-**Storage:** `session.Info.PendingQuitConfirmationUntil *time.Time` is in-memory only (no migration). On process restart the flag clears — benign (user re-issues `quit`, sees prompt again). This is Design Decision #7.
-
-**Store mutation discipline:** `Store.Get` returns a defensive copy (`copyInfo` in `memstore.go:481`), so a `Get → mutate → Set` pattern would race with concurrent `Set` calls. The flag MUST be mutated in-place under the store's mutex. Add a new store method `SetPendingQuitConfirmation(ctx context.Context, sessionID string, until *time.Time) error` analogous to the existing `UpdateLastPaged` / `UpdateGridPresent` in-place mutators. Callers MUST use this method, not `Get → Set`.
-
-**Cross-surface visibility:** the confirmation prompt is emitted as a `command_response` event on the character stream, so all surfaces subscribed to the character see the message. The user can confirm on any surface. If two surfaces both race the second `quit` within the TTL, both proceed with teardown — the emitted `session_ended` events are idempotent from a Subscriber's perspective (first match terminates the stream; any subsequent matching events are moot because the stream has already returned). No CAS is required.
-
-**Interaction with `disconnect`:** the prompt explicitly tells the user to type `disconnect` if they only want to close one surface. `disconnect` does NOT clear `PendingQuitConfirmationUntil` (intentional — a user who types `quit` → `disconnect` is saying "not that, just this" and should be able to retry `quit` later without re-entering the prompt immediately; the TTL expiry handles this naturally).
-
-**TTL expiry does NOT emit events or invoke `runDisconnectHooks`.** It is pure state clear.
+Rationale for the split (per architect review round 3): adding `session.Info.PendingQuitConfirmationUntil` + a new `SetPendingQuitConfirmation` store method + command-dispatch changes + event-emission in the quit handler + associated tests is meaningful scope that reads more coherently as its own PR once the primitives exist. Until that follow-up lands, a `quit` from any surface ends the session immediately for all surfaces — documented current behavior, not a regression introduced by this spec.
 
 ---
 
@@ -332,15 +351,15 @@ When a player issues `quit` and their session has more than one active connectio
 ### Integration tests (Ginkgo/Gomega BDD per project convention, `//go:build integration`)
 
 - **Flake-proof quit regression:** replace the existing flaky "Player A disconnects cleanly via quit" test. Assertions: (a) `"Goodbye!"` received within 5s; (b) *no* `"Your characters:"` line appears in the stream (negative assertion on the specific symptom); (c) exactly one `session_ended` event on `character:{ID}` with matching `SessionID`, `cause="quit"`, reason `"Goodbye!"` in the event store after the test.
-- **Multi-surface fan-out:** open two Subscribe streams for the same `sessionID` from different `connectionID`s (existing `AddConnection` permits this; no new infra needed). Issue `quit` from one wire (after the multi-surface confirmation is resolved). Assert BOTH streams receive STREAM_CLOSED with matching reason and both return cleanly.
-- **Replay isolation:** guest A connects, quits, new guest on same character logic is guest-specific so use a registered player: player connects, quits, reconnects + resumes. Assert the new Subscribe does NOT self-terminate despite the prior `session_ended` being in replay history.
+- **Multi-surface fan-out:** open two Subscribe streams for the same `sessionID` from different `connectionID`s (existing `AddConnection` permits this; no new infra needed). Issue `quit` from one wire. Assert BOTH streams receive STREAM_CLOSED with matching reason and both return cleanly.
+- **Replay isolation:** registered player connects, quits, reconnects + resumes. Assert the new Subscribe does NOT self-terminate despite the prior `session_ended` being in replay history.
 - **Character + location ordering:** append `say` on location, `leave` on location, `session_ended` on character, verify the merge-sort replay delivers them in append order (I2 regression guard, analogous to `internal/store/postgres_integration_test.go:575`).
-- **Multi-surface quit confirmation:** two connections open; first `quit` emits confirmation prompt as `command_response` (no `session_ended` persisted yet); second `quit` within TTL triggers full flow. Variant: second `quit` after TTL → new prompt.
 - **Disconnect command isolation:** two connections open; `disconnect` from one closes that wire only; other wire continues to receive events; no `session_ended` in event store.
 - **Logout fanout:** player with two active game sessions (two characters); `Logout` emits `session_ended` on BOTH characters' streams; all live Subscribes drop; `player_sessions` row gone.
 - **PlayerSession eviction fanout:** login at cap → oldest PlayerSession's child game session emits `session_ended` before eviction completes.
 - **Reaper on detached session:** detached session gets reaped; `session_ended` with `cause="reaped"` is persisted (audit trail) even though no Subscribe was listening. Verifies I2's guarantee holds even without a consumer.
-- **Ctx cancel during terminate:** client ctx canceled mid-quit; `session_ended` is still persisted in the store; no `panic` or hang on the server.
+- **Ctx cancel during terminate:** client ctx canceled mid-quit; `session_ended` is still persisted in the store (the decoupled-ctx discipline in `EndSession` makes this guarantee — see § New engine method); no `panic` or hang on the server.
+- **EndSession ctx-decoupling regression:** unit test that cancels the caller ctx between `EndSession` invocation and `EventWriter` completion, asserts the event still persists within the bounded timeout.
 
 ### EventWriter coverage guard
 
@@ -367,6 +386,17 @@ Option D wins on:
 - **Surface area** — Option D deletes WatchSession + session.Event + session.Destroyed; Option A keeps them and adds draining complexity.
 
 **Kept as the documented fallback** if Option D encounters an unexpected blocker during implementation (e.g., a hidden consumer of WatchSession, a Postgres edge case we didn't anticipate). Option A is correct, just less good.
+
+### A'. gRPC server-streaming trailers / typed status codes
+
+Terminate the Subscribe stream by setting trailer metadata (`reason=Goodbye!`, `cause=quit`) via `stream.SetTrailer()` before returning `nil`. The telnet gateway translates the trailer to a wire message. This is the "use the transport's native termination channel" option — what gRPC was designed for — and combined with Option A (drain on Destroyed) it would close the race too.
+
+Option D wins on **two axes**:
+
+1. **Durable audit.** Trailers are ephemeral metadata on one stream; a `session_ended` event persists in the event store and is queryable via `QueryStreamHistory` forever.
+2. **Multi-surface fan-out.** Each Subscribe has its own trailer. A terminal event on `character:{ID}` reaches all Subscribers of that character via a single append — the event store is the natural fan-out medium.
+
+Cumulatively: audit + fan-out are real product requirements, not nice-to-haves. Trailers handle the race but not these. Option D handles all three concerns with less net code.
 
 ### B. Terminal marker in the event stream, separate from `session_ended`
 
@@ -411,35 +441,41 @@ The following were open questions during brainstorming; each is now decided and 
 
 6. **Backwards compatibility.** `session.Event`, `WatchSession`, and `session.Destroyed` are not exported from `pkg/`. Interface-method deletion is safe. All mocks MUST be regenerated.
 
-7. **Multi-surface quit confirmation flag storage.** In-memory only (`session.Info.PendingQuitConfirmationUntil *time.Time`). No migration. Process restart clears the flag; user re-issues `quit` and re-sees the prompt. Benign.
+7. **Cutover style.** Single-commit cutover (no transition period). `WatchSession` has exactly one real consumer (`server.go:876` Subscribe); everything else is mocks and tests. The plan deletes the interface method, regenerates mocks, and removes dead tests in one coherent change.
 
-8. **Cutover style.** Single-commit cutover (no transition period). `WatchSession` has exactly one real consumer (`server.go:876` Subscribe); everything else is mocks and tests. The plan deletes the interface method, regenerates mocks, and removes dead tests in one coherent change.
+8. **EventWriter guardrail.** Runtime startup check via concrete-type assertion — `if _, ok := store.(*core.EventWriter); !ok { /* fatal */ }` — in `NewEngine` and, per I1's scope note, mirrored at any plugin emit entry point the plan touches. Rationale for runtime over type-level: the engine's current signature takes the `EventStore` interface and many test constructors deliberately use a non-writer store for pure-logic tests; a type-level change ripples into test code that doesn't need the ordering guarantee. An interface-conformance check is insufficient because `*EventWriter` itself implements `EventStore` by wrapping — raw stores also satisfy the interface.
 
-9. **EventWriter guardrail.** Either type-level (`NewEngine` takes `*EventWriter`) or runtime (startup check asserting the engine's store is EventWriter-wrapped). Plan picks one and states why. Preference: runtime check, because the engine's current signature takes the `EventStore` interface and many test constructors deliberately use a non-writer store — a type-level change ripples into test code that doesn't need the ordering guarantee.
+9. **Plugin per-session state cleanup.** Plugin cleanup continues via `DisconnectHook`, not via `session_ended` event observers. Plugins that want to observe session termination for their own side effects MAY subscribe to the character stream and filter on `session_ended`, but this is optional; the authoritative cleanup path is hooks.
 
-   **Implementation note:** `*core.EventWriter` itself implements `core.EventStore` (by wrapping), so an interface-conformance check has no discriminating power. The runtime guard MUST do a concrete-type assertion: `if _, ok := store.(*core.EventWriter); !ok { /* panic or error */ }`. Production wiring at `cmd/holomush/sub_grpc.go` already constructs the EventWriter explicitly; the guard catches any regression where a future refactor bypasses it.
+10. **Durable-duplicate `session_ended` events.** Two paths can emit `session_ended` for the same session concurrently (e.g., a `quit` racing with a Logout fanout). Both appends succeed; the event log persists two events with the same `SessionID`. A Subscriber's filter terminates on the first match and is unreachable for the second (stream already returned). This is **audit-harmless** — both events are factually correct terminations recorded in order — and no deduplication is required. Query-side code that aggregates by `SessionID` should treat multiple `session_ended` records as a no-op duplicate, not an error.
 
-10. **Plugin per-session state cleanup.** Plugin cleanup continues via `DisconnectHook`, not via `session_ended` event observers. Plugins that want to observe session termination for their own side effects MAY subscribe to the character stream and filter on `session_ended`, but this is optional; the authoritative cleanup path is hooks.
+11. **ABAC on `session_ended` reads.** The Query Stream History RPC (merged) exposes event-store contents to authorized readers. `session_ended` events on `character:{ID}` inherit the character stream's existing ABAC scope (owner-only). The plan MUST verify this by reading the Query Stream History policy; if the character stream is readable by non-owners for any reason, `session_ended` would leak session timing and cause. Expected outcome: no new policy needed. Verification required.
+
+12. **Admin boot path (former Residual Question #1).** The admin boot RPC flow today calls `HandleDisconnect` (leave event) at `server.go:457`; the session-row deletion happens inside the boot RPC handler (exact line not captured during spec authoring). The target shape matches quit: `HandleDisconnect` + `EndSession(cause="kicked")` + `Delete` + `runDisconnectHooks`, with the `EndSession` call using the boot RPC's request ctx wrapped via the decoupling pattern. Exact insertion point is a plan-level read; no open architectural question.
+
+13. **Child-session enumeration for logout/eviction fanout (former Residual Question #2).** Add a new store method `ListByPlayerSession(ctx, playerSessionIDs []ulid.ULID) ([]*Info, error)` rather than filtering `ListByPlayer` in memory. Rationale: targeted query matches the established pattern (`ListByPlayer`, `ListByCharacter`, `ListExpired` all take scoped arguments), executes a single SQL `WHERE player_session_id IN (...)` rather than scanning all player sessions, and keeps the cap-enforcement code readable. Memory-filter would scale poorly once player session cardinality grows beyond a few thousand.
 
 ---
 
 ## Residual Open Questions
 
-Only genuinely plan-level questions remain. Implementation MUST resolve each before declaring the relevant task complete.
+All prior open questions resolved (see Design Decisions #12–13 for admin boot path and `ListByPlayerSession`). Remaining plan-level items:
 
-1. **Admin boot path exact shape.** `server.go:457` calls `HandleDisconnect` with reason `"booted"`; the full boot RPC flow (where is the session deletion?) needs one more read during plan authoring. Expected to be analogous to quit.
-2. **`ListByPlayerSession` vs. filtered `ListByPlayer`.** For the logout/eviction fanout, which API is cleanest? Current store has `ListByPlayer` (character ID filter); we need enumeration by `player_session_id`. Plan evaluates cost of adding a new method vs. filtering in memory.
-3. **Confirmation prompt wording finalization.** The literal string in § Multi-surface quit friction is a proposal; i18n and voice might want tuning. Not blocking implementation but blocking merge.
+1. **Exact insertion point for admin boot session deletion.** `server.go:457` calls `HandleDisconnect("booted")`; the session-row `Delete` lives in the boot RPC handler (line not captured during spec authoring). One code read during plan task authoring confirms the exact call site; the pattern is fixed (HandleDisconnect + EndSession + Delete + hooks).
+
+2. **ABAC read verification for `session_ended`** (Design Decision #11). Read the Query Stream History RPC policy to confirm character-stream owner-only scope applies. Expected: no change needed. Deliverable: one paragraph in the implementation plan documenting the confirmation.
 
 ---
 
 ## Out of Scope for This Spec
 
+- **Multi-surface quit confirmation UX** (bead `holomush-pz68`). Adds `session.Info.PendingQuitConfirmationUntil` + a new `SetPendingQuitConfirmation` in-place store mutator + confirmation-prompt dispatch in the quit handler + associated tests. Depends on the primitives this spec delivers (`session_ended` event + `disconnect` command).
 - Rich-web-ui "Connected surfaces" management UI (shows device types with "Close this device" buttons). Separate bead.
 - Per-surface focus state (currently all surfaces share session focus; changing that is a different architectural discussion).
 - Postgres session store TTL reaper refactor (separate work).
 - Post-Option-D observability follow-up: any `drainUntilClosed` timeout on the telnet gateway post-cutover indicates a different bug; add a WARN log in a tiny separate bead.
 - Session creation as an event (`session_started` on character stream). Symmetric with `session_ended` but not required to fix the flake; possible follow-up for audit completeness.
+- Gateway-side filtering of non-matching `session_ended` events on reconnect replay (so telnet users don't see stale prior-session `Goodbye!` lines). Server forwards the event per Design Decision #3; the gateway's display translation of stale events is a UX follow-up, not a correctness concern.
 
 ---
 
