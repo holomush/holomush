@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-import { writable, get } from 'svelte/store';
+import { writable } from 'svelte/store';
 
 export type Density = 'cozy' | 'compact';
 export type RailView = 'room';  // future: 'dm' | 'map' | 'notes'
@@ -63,9 +63,12 @@ export function hydrateUiPrefs() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw) as Partial<UiPrefs>;
+    // Narrow validation: density is an enum, reject anything else.
+    const density: Density = parsed.density === 'compact' ? 'compact' : 'cozy';
     uiPrefs.update((current) => ({
       ...current,
       ...parsed,
+      density,
       sidebarWidthPx: clampWidth(parsed.sidebarWidthPx ?? current.sidebarWidthPx),
     }));
   } catch { /* corrupt or invalid — keep defaults */ }
@@ -104,6 +107,3 @@ export const setComposerPos = (pos: { x: number; y: number }) =>
 
 export const setComposerSize = (size: { w: number; h: number }) =>
   mutate((p) => ({ ...p, composerSize: size }));
-
-// Helper for tests that need to inspect current value synchronously
-export const currentUiPrefs = () => get(uiPrefs);

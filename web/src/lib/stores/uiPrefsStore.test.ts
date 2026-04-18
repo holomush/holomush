@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import {
   uiPrefs,
@@ -15,6 +15,10 @@ import {
   setComposerSize,
   hydrateUiPrefs,
   resetUiPrefs,
+  openPalette,
+  closePalette,
+  openComposer,
+  closeComposer,
 } from './uiPrefsStore';
 
 describe('uiPrefsStore', () => {
@@ -45,6 +49,17 @@ describe('uiPrefsStore', () => {
     expect(get(uiPrefs).paletteOpen).toBe(true);
   });
 
+  it('open/close convenience helpers set explicit state', () => {
+    openComposer();
+    expect(get(uiPrefs).composerOpen).toBe(true);
+    closeComposer();
+    expect(get(uiPrefs).composerOpen).toBe(false);
+    openPalette();
+    expect(get(uiPrefs).paletteOpen).toBe(true);
+    closePalette();
+    expect(get(uiPrefs).paletteOpen).toBe(false);
+  });
+
   it('toggles density between cozy and compact', () => {
     expect(get(uiPrefs).density).toBe('cozy');
     toggleDensity();
@@ -69,11 +84,12 @@ describe('uiPrefsStore', () => {
     expect(get(uiPrefs).composerSize).toEqual({ w: 700, h: 400 });
   });
 
-  it('does NOT read localStorage during module init (SSR safety)', () => {
-    const spy = vi.spyOn(Storage.prototype, 'getItem');
-    resetUiPrefs();
-    expect(spy).not.toHaveBeenCalledWith('holomush-ui-prefs');
-    spy.mockRestore();
+  it('does NOT write to localStorage before hydrateUiPrefs runs', () => {
+    // Critical SSR-safety guarantee: if the server or pre-hydration client
+    // mutates the store (e.g. applying a default), we must not persist —
+    // otherwise we would overwrite the user's saved prefs with defaults.
+    toggleRail();
+    expect(localStorage.getItem('holomush-ui-prefs')).toBeNull();
   });
 
   it('hydrateUiPrefs loads from localStorage and merges with defaults', () => {
