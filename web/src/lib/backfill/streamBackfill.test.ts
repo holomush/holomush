@@ -18,4 +18,70 @@ describe('backfillStreams', () => {
 		expect(result.failedStreams).toEqual([]);
 		expect(client.webQueryStreamHistory).not.toHaveBeenCalled();
 	});
+
+	it('fetches a single stream and returns its events', async () => {
+		const client = makeClient();
+		client.webQueryStreamHistory.mockResolvedValueOnce({
+			events: [
+				{ eventId: 'e-a', timestamp: 100n, type: 'say' },
+				{ eventId: 'e-b', timestamp: 200n, type: 'say' },
+			],
+			hasMore: false,
+		});
+
+		const result = await backfillStreams(client as never, 'sess-1', ['location:l1']);
+		expect(result.events.map((e) => e.eventId)).toEqual(['e-a', 'e-b']);
+		expect(result.failedStreams).toEqual([]);
+		expect(client.webQueryStreamHistory).toHaveBeenCalledWith(
+			{ sessionId: 'sess-1', stream: 'location:l1', count: 150, beforeId: '', notBeforeMs: 0n },
+			expect.anything(),
+		);
+	});
+
+	it('merges events from multiple streams in ascending (timestamp, eventId) order', async () => {
+		const client = makeClient();
+		client.webQueryStreamHistory.mockImplementation((req: { stream: string }) => {
+			if (req.stream === 'character:c1') {
+				return Promise.resolve({
+					events: [{ eventId: 'e-mid', timestamp: 100n, type: 'say' }],
+					hasMore: false,
+				});
+			}
+			return Promise.resolve({
+				events: [
+					{ eventId: 'e-first', timestamp: 50n, type: 'say' },
+					{ eventId: 'e-last', timestamp: 200n, type: 'say' },
+				],
+				hasMore: false,
+			});
+		});
+
+		const result = await backfillStreams(client as never, 'sess-1', [
+			'character:c1',
+			'location:l1',
+		]);
+		expect(result.events.map((e) => e.eventId)).toEqual(['e-first', 'e-mid', 'e-last']);
+	});
+
+	it('uses eventId as tiebreaker for same-timestamp events', async () => {
+		const client = makeClient();
+		client.webQueryStreamHistory.mockImplementation((req: { stream: string }) => {
+			if (req.stream === 'character:c1') {
+				return Promise.resolve({
+					events: [{ eventId: 'e-beta', timestamp: 100n, type: 'say' }],
+					hasMore: false,
+				});
+			}
+			return Promise.resolve({
+				events: [{ eventId: 'e-alpha', timestamp: 100n, type: 'say' }],
+				hasMore: false,
+			});
+		});
+
+		const result = await backfillStreams(client as never, 'sess-1', [
+			'character:c1',
+			'location:l1',
+		]);
+		expect(result.events.map((e) => e.eventId)).toEqual(['e-alpha', 'e-beta']);
+	});
 });
