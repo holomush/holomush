@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/holomush/holomush/internal/bootstrap"
 	"github.com/holomush/holomush/internal/config"
@@ -76,10 +77,12 @@ func TestAutoMigrate_RunsByDefault(t *testing.T) {
 	}
 
 	cfg := &coreConfig{
-		GRPCAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9001",
-		MetricsAddr: "", // Disable metrics for this test
-		LogFormat:   "json",
+		GRPCAddr:           "localhost:9000",
+		ControlAddr:        "127.0.0.1:9001",
+		MetricsAddr:        "", // Disable metrics for this test
+		LogFormat:          "json",
+		LuaTimeout:         1 * time.Second,
+		LuaRegistryMaxSize: 65536,
 	}
 
 	// Cancel context immediately to prevent waiting for signals
@@ -130,10 +133,12 @@ func TestAutoMigrate_DisabledWhenEnvVarFalse(t *testing.T) {
 	}
 
 	cfg := &coreConfig{
-		GRPCAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9001",
-		MetricsAddr: "",
-		LogFormat:   "json",
+		GRPCAddr:           "localhost:9000",
+		ControlAddr:        "127.0.0.1:9001",
+		MetricsAddr:        "",
+		LogFormat:          "json",
+		LuaTimeout:         1 * time.Second,
+		LuaRegistryMaxSize: 65536,
 	}
 
 	cancel()
@@ -171,10 +176,12 @@ func TestAutoMigrate_ErrorSurfaced(t *testing.T) {
 	}
 
 	cfg := &coreConfig{
-		GRPCAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9001",
-		MetricsAddr: "",
-		LogFormat:   "json",
+		GRPCAddr:           "localhost:9000",
+		ControlAddr:        "127.0.0.1:9001",
+		MetricsAddr:        "",
+		LogFormat:          "json",
+		LuaTimeout:         1 * time.Second,
+		LuaRegistryMaxSize: 65536,
 	}
 
 	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), NewCoreCmd(), deps)
@@ -207,10 +214,12 @@ func TestAutoMigrate_MigratorCreationError(t *testing.T) {
 	}
 
 	cfg := &coreConfig{
-		GRPCAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9001",
-		MetricsAddr: "",
-		LogFormat:   "json",
+		GRPCAddr:           "localhost:9000",
+		ControlAddr:        "127.0.0.1:9001",
+		MetricsAddr:        "",
+		LogFormat:          "json",
+		LuaTimeout:         1 * time.Second,
+		LuaRegistryMaxSize: 65536,
 	}
 
 	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), NewCoreCmd(), deps)
