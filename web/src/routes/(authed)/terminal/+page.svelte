@@ -362,7 +362,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: calc(100vh - 32px);
+    height: calc(100vh - var(--topbar-h));
     gap: 16px;
     font-family: 'JetBrains Mono', monospace;
     background: var(--color-background, #0d0d1a);
@@ -387,7 +387,7 @@
   .terminal-layout {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 32px);
+    height: calc(100vh - var(--topbar-h));
     font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
     font-size: 15px;
     background: var(--color-background);
