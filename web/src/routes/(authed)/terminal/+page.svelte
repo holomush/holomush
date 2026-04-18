@@ -10,13 +10,13 @@
   import { ControlSignal } from '$lib/connect/holomush/web/v1/web_pb';
   import { routeEvent } from '$lib/stores/eventRouter';
   import { appendLine, clearLines, replayActive } from '$lib/stores/terminalStore';
-  import { toggleSidebar } from '$lib/stores/sidebarStore';
   import { themePreferences, terminalBlackOverrideVars } from '$lib/stores/themeStore';
+  import { setConnectionStatus } from '$lib/stores/connectionStore';
+  import { toggleSidebar } from '$lib/stores/uiPrefsStore';
   import * as Resizable from '$lib/components/ui/resizable';
   import { authState, clearAuth, clearCharacterSession } from '$lib/stores/authStore';
   import TerminalView from '$lib/components/terminal/TerminalView.svelte';
   import CommandInput from '$lib/components/terminal/CommandInput.svelte';
-  import StatusBar from '$lib/components/terminal/StatusBar.svelte';
   import Sidebar from '$lib/components/sidebar/Sidebar.svelte';
   import { goto } from '$app/navigation';
   import { trace, type Span } from '@opentelemetry/api';
@@ -39,11 +39,9 @@
     | null = null;
 
   let sessionId = $state('');
-  let characterName = $state('');
   let connected = $state(false);
   let error = $state('');
   let abortController: AbortController | null = null;
-  let isMobile = $state(false);
 
   function onKeydown(e: KeyboardEvent) {
     if (e.ctrlKey && e.key === 'b') {
@@ -57,16 +55,12 @@
   }
 
   onMount(() => {
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
     window.addEventListener('keydown', onKeydown);
 
     const sid = $authState.sessionId;
-    const name = $authState.characterName;
 
     if (sid) {
       sessionId = sid;
-      characterName = name ?? '';
       connected = true;
       hydrateAndStream();
     } else {
@@ -76,7 +70,6 @@
   });
 
   onDestroy(() => {
-    window.removeEventListener('resize', checkMobile);
     window.removeEventListener('keydown', onKeydown);
     abortController?.abort();
     // Best-effort server disconnect on component unmount (SPA navigation)
@@ -88,10 +81,6 @@
     streamSpan?.end();
     streamSpan = null;
   });
-
-  function checkMobile() {
-    isMobile = window.innerWidth < 768;
-  }
 
   function createStreamReadyGate(generation: number) {
     let resolve!: () => void;
@@ -135,6 +124,7 @@
     // gated on generation + localController.signal.aborted.
     const localController = abortController;
     clearLines();
+    setConnectionStatus('syncing');
     replayActive.set(true);
     const generation = ++streamGeneration;
     createStreamReadyGate(generation);
@@ -175,6 +165,7 @@
             const ctrl = response.frame.value;
             if (ctrl.signal === ControlSignal.REPLAY_COMPLETE) {
               resolveStreamReady(generation);
+              setConnectionStatus('connected');
             } else if (ctrl.signal === ControlSignal.STREAM_CLOSED) {
               // Stale-generation guard: if a later hydrate has started,
               // skip mutating shared state (connected, sessionId) and just
@@ -193,6 +184,7 @@
               connected = false;
               sessionId = '';
               rejectStreamReady(generation, new Error(ctrl.message || 'Stream closed'));
+              setConnectionStatus('disconnected');
               goto('/characters');
               return;
             }
@@ -218,6 +210,7 @@
         if (!isStale && e instanceof Error && e.name !== 'AbortError') {
           connected = false;
           error = 'Connection lost. Click "Reconnect" or refresh the page.';
+          setConnectionStatus('disconnected');
         }
         rejectStreamReady(generation, e);
       } finally {
@@ -326,6 +319,7 @@
     clearCharacterSession();
     connected = false;
     sessionId = '';
+    setConnectionStatus('disconnected');
     goto('/characters');
   }
 
@@ -349,33 +343,16 @@
   </div>
 {:else}
   <div class="terminal-layout" style={$themePreferences.terminalBlackBackground ? terminalBlackOverrideVars() : ''}>
-    <StatusBar
-      {characterName}
-      {connected}
-      syncing={$replayActive}
-      onToggleSidebar={toggleSidebar}
-      showHamburger={isMobile}
-    />
-    {#if !isMobile}
-      <Resizable.PaneGroup direction="horizontal" class="main-area">
-        <Resizable.Pane defaultSize={75} class="terminal-column">
-          <TerminalView />
-          <CommandInput {sessionId} onSend={sendCommand} />
-        </Resizable.Pane>
-        <Resizable.Handle withHandle />
-        <Resizable.Pane defaultSize={25}>
-          <Sidebar onExitClick={handleExitClick} resizable />
-        </Resizable.Pane>
-      </Resizable.PaneGroup>
-    {:else}
-      <div class="main-area">
-        <div class="terminal-column">
-          <TerminalView />
-          <CommandInput {sessionId} onSend={sendCommand} />
-        </div>
-        <Sidebar onExitClick={handleExitClick} overlay />
-      </div>
-    {/if}
+    <Resizable.PaneGroup direction="horizontal" class="main-area">
+      <Resizable.Pane defaultSize={75} class="terminal-column">
+        <TerminalView />
+        <CommandInput {sessionId} onSend={sendCommand} />
+      </Resizable.Pane>
+      <Resizable.Handle withHandle />
+      <Resizable.Pane defaultSize={25}>
+        <Sidebar onExitClick={handleExitClick} resizable />
+      </Resizable.Pane>
+    </Resizable.PaneGroup>
   </div>
 {/if}
 
@@ -415,18 +392,5 @@
     font-size: 15px;
     background: var(--color-background);
     color: var(--color-input-text);
-  }
-  .main-area {
-    flex: 1;
-    display: flex;
-    overflow: hidden;
-    position: relative;
-  }
-  .terminal-column {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    height: 100%;
   }
 </style>

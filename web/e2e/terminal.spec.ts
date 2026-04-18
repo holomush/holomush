@@ -20,7 +20,7 @@ test.describe('Terminal UI', () => {
   test('connects and displays events', async ({ page }) => {
     await connectAsGuest(page);
     // Guest characters get random themed names like "Beryl Helium"
-    await expect(page.locator('.status-bar .character')).toContainText(/\w+ \w+/);
+    await expect(page.locator('[data-testid="topbar-char-name"]')).toContainText(/\w+ \w+/);
 
     // DB: session is active with valid location at the starting location
     const sessionId = await getClientSessionId(page);
