@@ -93,25 +93,28 @@ is out of scope because the compute tier is not Cloudflare Workers.
 
 ### Compose stack
 
-A new `compose.sandbox.yaml` is derived from `compose.prod.yaml`. Key
-deviations:
+`compose.prod.yaml` (existing) is extended in place — no separate
+`compose.sandbox.yaml`. The existing services (`postgres`, `core`, `gateway`,
+`caddy`, `otel-collector`) stay as-is; new services are added under compose
+profiles so operators opt in.
 
-- **Two ingress profiles, exactly one active per operator choice:**
-  - `tunnel` — runs `cloudflared` container that connects to a Cloudflare
-    Tunnel; no public 80/443 on the host.
-  - `caddy` — runs Caddy on host ports 80/443 with automatic Let's Encrypt
-    TLS for the configured domain; no Cloudflare account required.
-- **OTel collector is dropped** from the default profile. Sandbox uses
-  container stdout and `docker logs`.
-- **A `backup` service is added under the `backups` profile** — alpine +
-  cron + awscli that runs `pg_dump` nightly and pushes to DO Spaces. Off by
-  default; enabled explicitly by the sandbox and by self-hosters who
-  configure a Spaces/S3 bucket.
+- **Default behaviour unchanged.** `docker compose up -d` still brings up the
+  Caddy + Let's Encrypt path documented today. Existing self-hosters are not
+  disrupted.
+- **New `tunnel` profile** runs a `cloudflared` container that terminates a
+  Cloudflare Tunnel to `gateway:8080`. Operators who enable it SHOULD also
+  stop the `caddy` service; the cloud-init handles this automatically.
+- **New `backups` profile** runs an alpine + cron + awscli container that
+  executes `pg_dump` nightly and pushes to an S3-compatible bucket (DO
+  Spaces or AWS S3). Off by default; enabled when the operator provides a
+  `BACKUP_S3_BUCKET` env var.
+- **`otel-collector` stays under its existing `observability` profile** —
+  not in scope here.
 
-Selecting a profile is a single environment variable
-(`HOLOMUSH_INGRESS=tunnel|caddy`) read by the cloud-init script, which then
-starts compose with the right `--profile` flags. The sandbox pins this to
-`tunnel`; self-hosters set it per their preference.
+Selecting ingress is one environment variable (`HOLOMUSH_INGRESS=tunnel|caddy`,
+default `caddy`) read by the cloud-init script, which then starts compose
+with the right `--profile` combination. The sandbox pins this to `tunnel`;
+self-hosters default to `caddy` or opt into `tunnel`.
 
 ### Ingress model
 
@@ -154,38 +157,48 @@ Self-hosters using the `caddy` profile:
 
 ## Cloud-Init First-Boot Recipe
 
-A new artifact `deploy/cloud-init/holomush.yaml` is the canonical "boot a
-HoloMUSH server" user-data file. It MUST:
+`scripts/cloud-init.sh` (existing) is extended in place — no new cloud-init
+artifact. The existing script already handles Docker install, `holomush`
+user creation, `/opt/holomush/` layout, random Postgres password generation,
+UFW firewall rules, and idempotency. The changes:
 
-- Install Docker Engine + compose plugin on a fresh Ubuntu 24.04 VM
-- Create a `holomush` system user that owns `/opt/holomush/`
-- Write `compose.sandbox.yaml` to `/opt/holomush/compose.yaml`
-- Render `.env` from user-data-supplied variables (see below)
-- Start compose with the correct ingress profile
-- Be idempotent (safe to re-run during node replacement)
+- **Read `HOLOMUSH_INGRESS` from the environment** (default `caddy`). When
+  `tunnel`, skip UFW rules for 80/443 and write `CLOUDFLARE_TUNNEL_TOKEN` to
+  `.env`.
+- **Read optional backup variables** (`BACKUP_S3_BUCKET`,
+  `BACKUP_S3_ACCESS_KEY`, `BACKUP_S3_SECRET_KEY`, `BACKUP_RETENTION_DAYS`)
+  and add them to `.env`. When set, the script adds `--profile backups` to
+  the compose invocation.
+- **Actually start compose.** Today the script prints "next steps" and
+  leaves compose to the operator. With the ingress and backups env passed
+  via user-data, the script can finish the deploy autonomously. Existing
+  operators who paste the script without those env vars still get the
+  manual-start flow because `DOMAIN` starts as `mush.example.com` which the
+  script detects and defers to manual.
+- **Drop the OTel collector download** — not used at sandbox scale; existing
+  users who want OTel can follow the original doc path.
 
-The recipe reads the following variables from `#cloud-config` user-data
-(operator-supplied at VM creation time):
+Variables consumed (all optional unless noted; operator supplies via DO
+droplet user-data env or by pre-editing `.env` before first boot):
 
-| Variable                        | Required when          | Purpose                                           |
-| ------------------------------- | ---------------------- | ------------------------------------------------- |
-| `HOLOMUSH_VERSION`              | always                 | Image tag, e.g. `v0.3.0` or `latest`              |
-| `HOLOMUSH_DOMAIN`               | always                 | Base domain, e.g. `game.example.com`              |
-| `HOLOMUSH_INGRESS`              | always                 | `tunnel` or `caddy`                               |
-| `POSTGRES_PASSWORD`             | always                 | DB password (operator-generated)                  |
+| Variable                        | Required when             | Purpose                                        |
+| ------------------------------- | ------------------------- | ---------------------------------------------- |
+| `HOLOMUSH_VERSION`              | always (defaults pinned)  | Image tag, e.g. `v0.3.0` or `latest`           |
+| `HOLOMUSH_DOMAIN`               | always (for autorun)      | Base domain, e.g. `game.example.com`           |
+| `HOLOMUSH_INGRESS`              | defaults `caddy`          | `tunnel` or `caddy`                            |
 | `CLOUDFLARE_TUNNEL_TOKEN`       | `HOLOMUSH_INGRESS=tunnel` | Tunnel connection token                        |
-| `LETSENCRYPT_EMAIL`             | `HOLOMUSH_INGRESS=caddy`  | ACME account contact                           |
-| `BACKUP_S3_BUCKET`              | optional               | Enables `backups` profile when set                |
-| `BACKUP_S3_ACCESS_KEY` / `_SECRET_KEY` | if bucket set   | Credentials for backup push (DO Spaces or S3)     |
-| `BACKUP_RETENTION_DAYS`         | optional               | Defaults to 14                                    |
+| `LETSENCRYPT_EMAIL`             | `HOLOMUSH_INGRESS=caddy`  | ACME account contact (Caddy reads from `.env`) |
+| `BACKUP_S3_BUCKET`              | optional                  | Enables `backups` profile when set             |
+| `BACKUP_S3_ENDPOINT_URL`        | if bucket is non-AWS      | e.g. `https://sfo3.digitaloceanspaces.com`     |
+| `BACKUP_S3_ACCESS_KEY` / `_SECRET_KEY` | if bucket set      | Credentials for backup push                    |
+| `BACKUP_RETENTION_DAYS`         | optional                  | Defaults to 14                                 |
 
-The recipe itself lives under `deploy/cloud-init/`, and a rendered
-"sandbox-flavoured" companion under
-`deploy/cloud-init/holomush-sandbox.env.example` shows exactly the values the
-internal `game.holomush.dev` deploy uses. The sandbox's `deploy-sandbox`
-workflow reads these values from GitHub Secrets and hands them to the
-cloud-init on first boot; re-provisioning the sandbox is a one-command DO
-droplet create with that user-data, verifying the recipe still works.
+A `scripts/sandbox.env.example` file shows exactly the values the internal
+`game.holomush.dev` deploy uses (with secrets redacted). The sandbox's
+`deploy-sandbox` workflow reads these from GitHub Secrets and hands them to
+the cloud-init on first boot; re-provisioning the sandbox is a one-command
+`doctl compute droplet create --user-data-file scripts/cloud-init.sh ...`
+that dogfoods the recipe self-hosters use.
 
 ## Deploy Flow
 
@@ -236,18 +249,21 @@ Its credentials JSON is stored in GitHub Secrets as
 The implementation MUST deliver these new capabilities before the environment
 is usable:
 
-1. **`compose.sandbox.yaml`** — new compose file with `tunnel`, `caddy`, and
-   `backups` profiles.
-2. **`deploy/cloud-init/holomush.yaml`** — first-boot recipe (the canonical
-   published artifact).
-3. **`deploy/cloud-init/holomush-sandbox.env.example`** — documented example
-   of the sandbox's own user-data values (with secrets redacted).
+1. **`compose.prod.yaml`** (modified) — add `tunnel` and `backups` profiles.
+   Existing services and default behaviour unchanged.
+2. **`scripts/cloud-init.sh`** (modified) — add ingress-profile selection
+   and backup wiring. Existing Caddy-default path unchanged.
+3. **`scripts/sandbox.env.example`** — documented example of the sandbox's
+   own user-data values (with secrets redacted).
 4. **`deploy/doctl/firewall-sandbox.json`** — DO cloud firewall definition
    applied via workflow.
 5. **`deploy/cloudflared/config.yml.tmpl`** — tunnel config rendered from
-   env at container start (used by the `tunnel` profile).
-6. **`deploy/caddy/Caddyfile.tmpl`** — Caddy config template read by the
-   `caddy` profile.
+   env at container start (used by the `tunnel` profile). Caddy config is
+   already handled inline in `compose.prod.yaml` and does not need a
+   separate template.
+6. **`docker/postgres-backup/`** — new alpine-based image (Dockerfile +
+   `backup.sh` + cron entry) for the `backup` service. Published as
+   `ghcr.io/holomush/postgres-backup:<version>` alongside the main image.
 7. **GitHub Secrets to add:**
    - `DIGITALOCEAN_ACCESS_TOKEN`
    - `DIGITALOCEAN_SSH_KEY_ID`
@@ -261,9 +277,11 @@ is usable:
    secret rotation, tunnel recreation.
 9. **Restore runbook** `site/docs/operating/sandbox-restore.md` — pull
    backup from Spaces, restore into fresh Postgres.
-10. **Self-hosting guide** `site/docs/operating/self-hosting.md` — step by
-    step: create a Ubuntu 24.04 VM anywhere, paste the cloud-init, provide
-    env vars, point DNS, done. Covers both ingress modes.
+10. **`site/docs/operating/deployment.md`** (modified) — existing page is
+    the self-hosting guide. Add a "Cloudflare Tunnel ingress" section
+    showing the `HOLOMUSH_INGRESS=tunnel` variant; add a "Automated
+    backups" section showing the `BACKUP_S3_*` variant. No new
+    self-hosting page.
 
 ## Security Considerations
 
@@ -326,22 +344,23 @@ run and show output for:
 
 | Path                                              | Purpose                                                |
 | ------------------------------------------------- | ------------------------------------------------------ |
-| `compose.sandbox.yaml`                            | Compose stack with `tunnel`/`caddy`/`backups` profiles |
-| `deploy/cloud-init/holomush.yaml`                 | Canonical first-boot recipe (published artifact)       |
-| `deploy/cloud-init/holomush-sandbox.env.example`  | Sandbox's own env values, for reference                |
-| `deploy/doctl/firewall-sandbox.json`              | DO firewall definition                                 |
-| `deploy/cloudflared/config.yml.tmpl`              | Tunnel config template                                 |
-| `deploy/caddy/Caddyfile.tmpl`                     | Caddy config template                                  |
+| `deploy/doctl/firewall-sandbox.json`              | DO firewall definition for the sandbox droplet         |
+| `deploy/cloudflared/config.yml.tmpl`              | Tunnel config template (used by `tunnel` profile)      |
+| `docker/postgres-backup/Dockerfile`               | Alpine + awscli + cron image for nightly backups       |
+| `docker/postgres-backup/backup.sh`                | pg_dump + S3 upload + retention script                 |
+| `scripts/sandbox.env.example`                     | Sandbox's own env values (secrets redacted)            |
 | `site/docs/operating/sandbox-operations.md`       | Sandbox runbook                                        |
 | `site/docs/operating/sandbox-restore.md`          | DB restore runbook                                     |
-| `site/docs/operating/self-hosting.md`             | Self-hosting guide (both ingress modes)                |
 
 ### Modified
 
 | Path                                     | Purpose                                                        |
 | ---------------------------------------- | -------------------------------------------------------------- |
+| `compose.prod.yaml`                      | Add `tunnel` and `backups` profiles; existing default unchanged|
+| `scripts/cloud-init.sh`                  | Add ingress-profile selection + backup env wiring              |
 | `.github/workflows/release.yaml`         | Add `deploy-sandbox` job wired after `verify-release`          |
-| `site/docs/operating/deployment.md`      | Add sandbox architecture section + link to runbooks            |
+| `.github/workflows/release.yaml` (build) | Add `postgres-backup` container to GoReleaser image matrix     |
+| `site/docs/operating/deployment.md`      | Tunnel + backups sections; link to sandbox runbooks            |
 | `CLAUDE.md`                              | One-line link to sandbox runbooks                              |
 
 ## Out-of-Scope Follow-Ups
