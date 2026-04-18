@@ -1,19 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import { appendLine, clearLines, lines } from './terminalStore';
 
 describe('terminalStore.appendLine', () => {
   beforeEach(() => {
-    // jsdom in this environment exposes `localStorage` as an object without
-    // methods; stub the API the store touches so tests focus on behavior.
-    vi.stubGlobal('localStorage', {
-      getItem: () => null,
-      setItem: () => undefined,
-      removeItem: () => undefined,
-    });
     clearLines();
   });
 
