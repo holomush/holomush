@@ -2894,7 +2894,7 @@ func TestSendAndCommitEventTerminatesStreamOnMatchingSessionEnded(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	streamName := "character:" + charID.String()
+	streamName := core.StreamPrefixCharacter + charID.String()
 	ev := core.NewEvent(
 		streamName,
 		core.EventTypeSessionEnded,
@@ -2904,7 +2904,7 @@ func TestSendAndCommitEventTerminatesStreamOnMatchingSessionEnded(t *testing.T) 
 
 	err = srv.sendAndCommitEvent(context.Background(), info, ev.Stream, ev, stream, nil)
 
-	assert.ErrorIs(t, err, errStreamTerminated, "matching session_ended must return sentinel")
+	require.ErrorIs(t, err, errStreamTerminated, "matching session_ended must return sentinel")
 	require.Len(t, stream.sent, 2, "expected event + STREAM_CLOSED frame")
 
 	// First frame is the session_ended event itself.
@@ -2934,7 +2934,7 @@ func TestSendAndCommitEventForwardsNonMatchingSessionEndedVerbatim(t *testing.T)
 	})
 	require.NoError(t, err)
 
-	streamName := "character:" + charID.String()
+	streamName := core.StreamPrefixCharacter + charID.String()
 	ev := core.NewEvent(
 		streamName,
 		core.EventTypeSessionEnded,

@@ -690,7 +690,10 @@ func (s *CoreServer) sendAndCommitEvent(
 	// session ended" UX value and guarantees cursors never stall.
 	if ev.Type == core.EventTypeSessionEnded {
 		var payload core.SessionEndedPayload
-		if unmarshalErr := json.Unmarshal(ev.Payload, &payload); unmarshalErr == nil && payload.SessionID == info.ID {
+		if unmarshalErr := json.Unmarshal(ev.Payload, &payload); unmarshalErr != nil {
+			slog.WarnContext(ctx, "grpc: session_ended payload unmarshal failed — stream left open",
+				"session_id", info.ID, "error", unmarshalErr)
+		} else if payload.SessionID == info.ID {
 			//nolint:errcheck // best-effort: client may already be disconnected
 			_ = grpcStream.Send(streamClosedFrame(payload.Reason))
 			return errStreamTerminated
