@@ -7,39 +7,60 @@
 
 HoloMUSH ships signed container images to `ghcr.io/holomush/holomush:<version>`
 via GoReleaser and provides `compose.prod.yaml` as an exemplary single-host
-deployment. What is missing is a **deployed target** the project can point a
-contributor, curious player, or demo link at: a long-running public sandbox
-at `game.holomush.dev` with a stable URL, data preserved across deploys, and
-recoverable backups.
+deployment. What is missing is:
 
-Hosting is **DigitalOcean** with a single droplet. Cloudflare fronts the web
-path for DNS, TLS, WAF, and origin protection via Cloudflare Tunnel. Telnet
-traffic reaches the droplet directly because Cloudflare's free/paid tiers do
-not proxy arbitrary TCP.
+1. A **deployed long-running sandbox** at `game.holomush.dev` — a stable URL
+   the project can point contributors, curious players, or demo links at.
+   Data is preserved across deploys and backed up.
+2. A **reusable first-boot recipe** that both the sandbox *and* third-party
+   self-hosters can use to stand up a HoloMUSH server from a blank cloud VM
+   in one step. Published as a cloud-init `user_data` file.
+
+Hosting for the sandbox is **DigitalOcean** with a single droplet. Cloudflare
+fronts the web path via Cloudflare Tunnel (no public 80/443 on the droplet).
+Telnet traffic reaches the droplet directly because Cloudflare's free/paid
+tiers do not proxy arbitrary TCP.
+
+For self-hosters, the same recipe supports **two ingress modes** — Cloudflare
+Tunnel or Caddy + Let's Encrypt — selected at provision time by environment
+variables. The sandbox itself uses Tunnel; supporting both modes in the
+published recipe broadens the self-hosting audience without requiring
+Cloudflare for operators who do not want it.
 
 Per-PR smoke testing is **out of scope**. The existing CI pipeline runs
 `compose.e2e.yaml` / `compose.e2e.cover.yaml` suites on GitHub Actions runners
 and provides adequate per-PR verification. Deploying per-PR sandboxes to DO
-would add operational surface (provisioning, teardown, DNS, tunnel lifecycle,
-orphan cleanup) without meaningfully raising CI confidence.
+would add operational surface without meaningfully raising CI confidence.
+
+Packer images and DO Marketplace listings are deferred. A cloud-init + compose
+recipe works on any cloud VM, has no per-release rebuild treadmill, and
+dogfoods itself via the sandbox's own first-boot path. Prebuilt images and
+marketplace listings can be added later if operator demand materializes.
 
 ## Goals
 
 - Automatic deployment of the long-running sandbox on release-tag push
 - Protocol parity with production: both telnet and web exercised end-to-end
 - Preserve long-running sandbox data across deploys with recoverable backups
+- A single first-boot recipe (cloud-init + compose) that serves both the
+  sandbox and third-party self-hosters
+- Operator-chosen ingress: Cloudflare Tunnel (zero-trust) or Caddy + Let's
+  Encrypt (public 443 with automatic TLS)
 - Zero-cost observability acceptable (stdout logs) for sandbox scale
-- Monthly cost under $30
+- Monthly cost under $30 for the sandbox
 
 ## Non-Goals
 
 - Per-PR ephemeral sandboxes on DigitalOcean (CI covers this)
+- Packer-built cloud images and DO Marketplace listings (deferred)
 - Multi-region or HA deployment (single droplet is sufficient)
 - Blue/green or canary deployment
 - Automated rollback (manual re-run with previous tag is acceptable)
 - Full observability stack (OTel collector, Grafana) — tracked separately
 - Off-box Postgres via DO Managed PG — graduate later if the single droplet
   becomes insufficient
+- Self-hosting support for clouds other than "generic Ubuntu 24.04 VM" — the
+  cloud-init recipe is portable in principle but only DO is actively tested
 - Replacement for local CI. `task pr-prep` remains the PR gate; this sandbox
   is a downstream deployment target, not a verification gate
 
@@ -75,20 +96,40 @@ is out of scope because the compute tier is not Cloudflare Workers.
 A new `compose.sandbox.yaml` is derived from `compose.prod.yaml`. Key
 deviations:
 
-- **Caddy is removed.** `cloudflared` handles web ingress, eliminating Let's
-  Encrypt complexity and avoiding public ports 80/443 on the droplet.
+- **Two ingress profiles, exactly one active per operator choice:**
+  - `tunnel` — runs `cloudflared` container that connects to a Cloudflare
+    Tunnel; no public 80/443 on the host.
+  - `caddy` — runs Caddy on host ports 80/443 with automatic Let's Encrypt
+    TLS for the configured domain; no Cloudflare account required.
 - **OTel collector is dropped** from the default profile. Sandbox uses
   container stdout and `docker logs`.
-- **A `backup` service is added** — alpine + cron + awscli that runs
-  `pg_dump` nightly and pushes to DO Spaces.
+- **A `backup` service is added under the `backups` profile** — alpine +
+  cron + awscli that runs `pg_dump` nightly and pushes to DO Spaces. Off by
+  default; enabled explicitly by the sandbox and by self-hosters who
+  configure a Spaces/S3 bucket.
+
+Selecting a profile is a single environment variable
+(`HOLOMUSH_INGRESS=tunnel|caddy`) read by the cloud-init script, which then
+starts compose with the right `--profile` flags. The sandbox pins this to
+`tunnel`; self-hosters set it per their preference.
 
 ### Ingress model
+
+Sandbox uses the `tunnel` profile:
 
 | Path   | Routing                                                                                 |
 | ------ | --------------------------------------------------------------------------------------- |
 | Web    | Cloudflare proxied CNAME → CF Tunnel → `cloudflared` container → `gateway:8080`         |
 | Telnet | DNS-only A record `telnet.game.holomush.dev` → droplet IPv4 → `gateway:4201`            |
 | SSH    | Key-only, allowlisted CIDRs (operator + GitHub Actions deploy-runner egress)            |
+
+Self-hosters using the `caddy` profile:
+
+| Path   | Routing                                                                                 |
+| ------ | --------------------------------------------------------------------------------------- |
+| Web    | Public A record → Caddy on host `:80`/`:443` → `gateway:8080`. Let's Encrypt via HTTP-01 |
+| Telnet | Public A record → droplet `:4201` → `gateway:4201`                                      |
+| SSH    | Operator's responsibility (cloud-init ships with key-only defaults)                     |
 
 ### Topology
 
@@ -111,19 +152,61 @@ deviations:
                 └──────────────────────────────────────────────────┘
 ```
 
+## Cloud-Init First-Boot Recipe
+
+A new artifact `deploy/cloud-init/holomush.yaml` is the canonical "boot a
+HoloMUSH server" user-data file. It MUST:
+
+- Install Docker Engine + compose plugin on a fresh Ubuntu 24.04 VM
+- Create a `holomush` system user that owns `/opt/holomush/`
+- Write `compose.sandbox.yaml` to `/opt/holomush/compose.yaml`
+- Render `.env` from user-data-supplied variables (see below)
+- Start compose with the correct ingress profile
+- Be idempotent (safe to re-run during node replacement)
+
+The recipe reads the following variables from `#cloud-config` user-data
+(operator-supplied at VM creation time):
+
+| Variable                        | Required when          | Purpose                                           |
+| ------------------------------- | ---------------------- | ------------------------------------------------- |
+| `HOLOMUSH_VERSION`              | always                 | Image tag, e.g. `v0.3.0` or `latest`              |
+| `HOLOMUSH_DOMAIN`               | always                 | Base domain, e.g. `game.example.com`              |
+| `HOLOMUSH_INGRESS`              | always                 | `tunnel` or `caddy`                               |
+| `POSTGRES_PASSWORD`             | always                 | DB password (operator-generated)                  |
+| `CLOUDFLARE_TUNNEL_TOKEN`       | `HOLOMUSH_INGRESS=tunnel` | Tunnel connection token                        |
+| `LETSENCRYPT_EMAIL`             | `HOLOMUSH_INGRESS=caddy`  | ACME account contact                           |
+| `BACKUP_S3_BUCKET`              | optional               | Enables `backups` profile when set                |
+| `BACKUP_S3_ACCESS_KEY` / `_SECRET_KEY` | if bucket set   | Credentials for backup push (DO Spaces or S3)     |
+| `BACKUP_RETENTION_DAYS`         | optional               | Defaults to 14                                    |
+
+The recipe itself lives under `deploy/cloud-init/`, and a rendered
+"sandbox-flavoured" companion under
+`deploy/cloud-init/holomush-sandbox.env.example` shows exactly the values the
+internal `game.holomush.dev` deploy uses. The sandbox's `deploy-sandbox`
+workflow reads these values from GitHub Secrets and hands them to the
+cloud-init on first boot; re-provisioning the sandbox is a one-command DO
+droplet create with that user-data, verifying the recipe still works.
+
 ## Deploy Flow
 
-**Trigger:** push of a release tag (`v*`) or `workflow_dispatch`.
+**First boot (one-time or when replacing the droplet):** the DO droplet is
+created with the cloud-init `user_data` described above. Cloud-init installs
+everything, renders `.env`, and brings the stack up. No SSH required for a
+green-field deploy.
+
+**Ongoing deploys — trigger:** push of a release tag (`v*`) or
+`workflow_dispatch`.
 
 A new job `deploy-sandbox` in `.github/workflows/release.yaml`, wired after
 `verify-release`, SHOULD:
 
 1. Take a pre-deploy Postgres safety snapshot via
    `docker compose exec postgres pg_dump | gzip | aws s3 cp - s3://holomush-sandbox-backups/pre-deploy/<tag>.sql.gz`
-2. `docker compose pull core gateway cloudflared`
+2. `docker compose pull core gateway` (plus `cloudflared` when on the tunnel
+   profile, or `caddy` on the caddy profile)
 3. `docker compose up -d --no-recreate postgres` (leave DB alone if healthy)
 4. `docker compose run --rm core migrate`
-5. `docker compose up -d core gateway cloudflared backup`
+5. `docker compose up -d`
 6. Probe `docker compose exec gateway curl -sf http://localhost:8080/healthz`
 7. On failure: fail the workflow. Rollback is manual — re-run with previous
    tag as input.
@@ -153,25 +236,34 @@ Its credentials JSON is stored in GitHub Secrets as
 The implementation MUST deliver these new capabilities before the environment
 is usable:
 
-1. **`compose.sandbox.yaml`** — new compose file with `cloudflared` +
-   `backup` services and no Caddy.
-2. **`deploy/doctl/firewall-sandbox.json`** — DO cloud firewall definition
+1. **`compose.sandbox.yaml`** — new compose file with `tunnel`, `caddy`, and
+   `backups` profiles.
+2. **`deploy/cloud-init/holomush.yaml`** — first-boot recipe (the canonical
+   published artifact).
+3. **`deploy/cloud-init/holomush-sandbox.env.example`** — documented example
+   of the sandbox's own user-data values (with secrets redacted).
+4. **`deploy/doctl/firewall-sandbox.json`** — DO cloud firewall definition
    applied via workflow.
-3. **`deploy/cloudflared/config.yml.tmpl`** — tunnel config rendered at
-   deploy time.
-4. **GitHub Secrets to add:**
+5. **`deploy/cloudflared/config.yml.tmpl`** — tunnel config rendered from
+   env at container start (used by the `tunnel` profile).
+6. **`deploy/caddy/Caddyfile.tmpl`** — Caddy config template read by the
+   `caddy` profile.
+7. **GitHub Secrets to add:**
    - `DIGITALOCEAN_ACCESS_TOKEN`
    - `DIGITALOCEAN_SSH_KEY_ID`
    - `DIGITALOCEAN_SSH_PRIVATE_KEY`
    - `CLOUDFLARE_API_TOKEN` (scope: DNS Edit, Tunnel management)
    - `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`
-   - `CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_TUNNEL_CREDENTIALS`
+   - `CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_TUNNEL_TOKEN`
    - `DO_SPACES_ACCESS_KEY`, `DO_SPACES_SECRET_KEY`
    - `HOLOMUSH_SANDBOX_POSTGRES_PASSWORD`
-5. **Runbook** `site/docs/operating/sandbox-operations.md` — SSH, logs,
+8. **Runbook** `site/docs/operating/sandbox-operations.md` — SSH, logs,
    secret rotation, tunnel recreation.
-6. **Restore runbook** `site/docs/operating/sandbox-restore.md` — pull
+9. **Restore runbook** `site/docs/operating/sandbox-restore.md` — pull
    backup from Spaces, restore into fresh Postgres.
+10. **Self-hosting guide** `site/docs/operating/self-hosting.md` — step by
+    step: create a Ubuntu 24.04 VM anywhere, paste the cloud-init, provide
+    env vars, point DNS, done. Covers both ingress modes.
 
 ## Security Considerations
 
@@ -203,36 +295,46 @@ negligible at this scale.
 Each component ships with an explicit verification step the implementer MUST
 run and show output for:
 
-1. **Manual one-time setup is reproducible from the runbook.** Tear down and
-   rebuild the droplet from scratch following only the runbook; confirm the
-   web UI and telnet both come back.
-2. **Deploy on tag:** tag a release. Observe `deploy-sandbox` run. Verify
+1. **First-boot reproducibility (sandbox).** Destroy the sandbox droplet.
+   Create a new one from scratch with the documented `doctl compute droplet
+   create --user-data-file deploy/cloud-init/holomush.yaml ...` invocation
+   and the sandbox's env values. Confirm the web UI and telnet both come up
+   without any SSH or manual steps.
+2. **Self-hosting walkthrough (caddy profile).** Follow
+   `site/docs/operating/self-hosting.md` end to end on a throwaway
+   non-Cloudflare domain. Confirm Caddy obtains a Let's Encrypt cert and the
+   web UI serves at `https://<domain>`.
+3. **Deploy on tag:** tag a release. Observe `deploy-sandbox` run. Verify
    the pre-deploy backup lands in Spaces, migrations run,
    `https://game.holomush.dev` serves the web UI via the tunnel, and
    `telnet telnet.game.holomush.dev 4201` connects and can create a guest.
-3. **Backup restore dry-run:** on a second throwaway droplet, pull the
+4. **Backup restore dry-run:** on a second throwaway droplet, pull the
    latest backup from Spaces and restore into a fresh Postgres. Document the
    commands and output in the restore runbook.
-4. **Tunnel failure:** stop the `cloudflared` container. Confirm Cloudflare
+5. **Tunnel failure:** stop the `cloudflared` container. Confirm Cloudflare
    serves a 530/1033 rather than routing to a broken origin. Restart and
    confirm recovery.
-5. **Gateway failure:** break `gateway` health. Confirm `cloudflared` logs
+6. **Gateway failure:** break `gateway` health. Confirm `cloudflared` logs
    show the health-probe failure and the edge serves a 521/522.
-6. **Firewall posture:** from an off-allowlist IP, confirm 22/tcp is
-   rejected; confirm 80/443 are closed (tunnel-only); confirm 4201/tcp is
-   open.
+7. **Firewall posture (sandbox):** from an off-allowlist IP, confirm 22/tcp
+   is rejected; confirm 80/443 are closed (tunnel-only); confirm 4201/tcp
+   is open.
 
 ## Critical Files
 
 ### New
 
-| Path                                        | Purpose                                                  |
-| ------------------------------------------- | -------------------------------------------------------- |
-| `compose.sandbox.yaml`                      | Sandbox compose stack with `cloudflared` + `backup`      |
-| `deploy/doctl/firewall-sandbox.json`        | DO firewall definition                                   |
-| `deploy/cloudflared/config.yml.tmpl`        | Tunnel config template                                   |
-| `site/docs/operating/sandbox-operations.md` | Runbook                                                  |
-| `site/docs/operating/sandbox-restore.md`    | DB restore runbook                                       |
+| Path                                              | Purpose                                                |
+| ------------------------------------------------- | ------------------------------------------------------ |
+| `compose.sandbox.yaml`                            | Compose stack with `tunnel`/`caddy`/`backups` profiles |
+| `deploy/cloud-init/holomush.yaml`                 | Canonical first-boot recipe (published artifact)       |
+| `deploy/cloud-init/holomush-sandbox.env.example`  | Sandbox's own env values, for reference                |
+| `deploy/doctl/firewall-sandbox.json`              | DO firewall definition                                 |
+| `deploy/cloudflared/config.yml.tmpl`              | Tunnel config template                                 |
+| `deploy/caddy/Caddyfile.tmpl`                     | Caddy config template                                  |
+| `site/docs/operating/sandbox-operations.md`       | Sandbox runbook                                        |
+| `site/docs/operating/sandbox-restore.md`          | DB restore runbook                                     |
+| `site/docs/operating/self-hosting.md`             | Self-hosting guide (both ingress modes)                |
 
 ### Modified
 
@@ -248,6 +350,9 @@ Track in beads if pursued:
 
 - Per-PR ephemeral sandboxes (revisit only if CI's `compose.e2e.cover.yaml`
   proves insufficient in practice)
+- Packer-built cloud images per cloud (DO/AWS/GCE/Azure) for sub-30s
+  provisioning — add when release cadence stabilizes
+- DO Marketplace 1-click app listing — a 1.0-graduation milestone item
 - Multi-region or HA for the long-running sandbox
 - Blue/green or canary deploys
 - Automated rollback on deploy failure
@@ -255,3 +360,4 @@ Track in beads if pursued:
 - Off-box Postgres via DO Managed PG
 - Basic uptime monitoring / alerting (UptimeRobot, BetterUptime) — decide
   separately from observability
+- Windows / non-Ubuntu host support for the cloud-init recipe
