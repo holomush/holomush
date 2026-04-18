@@ -102,12 +102,12 @@ test.describe('Terminal UI', () => {
     }).toPass({ timeout: 5000 });
   });
 
-  test('sidebar toggles with Ctrl+B', async ({ page }) => {
+  test('sidebar toggles with Cmd+.', async ({ page }) => {
     await connectAsGuest(page);
     await expect(page.locator('[data-testid="sidebar"][data-expanded="true"]')).toBeVisible();
-    await page.keyboard.press('Control+b');
+    await page.keyboard.press('ControlOrMeta+.');
     await expect(page.locator('[data-testid="sidebar"][data-expanded="false"]')).toBeAttached();
-    await page.keyboard.press('Control+b');
+    await page.keyboard.press('ControlOrMeta+.');
     await expect(page.locator('[data-testid="sidebar"][data-expanded="true"]')).toBeVisible();
   });
 
@@ -372,7 +372,7 @@ test.describe('Terminal UI', () => {
 
     // Separator between replayed and live events.
     await expect(
-      page1.locator('.separator', { hasText: '--- LIVE ---' }),
+      page1.locator('.sep-live').filter({ hasText: 'LIVE' }),
     ).toBeVisible({ timeout: 5000 });
 
     // DB: all 4 events exist on the location stream
