@@ -153,6 +153,10 @@ func (m *mockGRPCClient) QueryStreamHistory(_ context.Context, _ *corev1.QuerySt
 	return nil, nil
 }
 
+func (m *mockGRPCClient) ListSessionStreams(_ context.Context, _ *corev1.ListSessionStreamsRequest) (*corev1.ListSessionStreamsResponse, error) {
+	return nil, nil
+}
+
 func (m *mockGRPCClient) ListPlayerSessions(_ context.Context, _ *corev1.ListPlayerSessionsRequest) (*corev1.ListPlayerSessionsResponse, error) {
 	return nil, nil
 }

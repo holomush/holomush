@@ -76,6 +76,10 @@ type mockCoreClient struct {
 	queryStreamHistoryErr  error
 	queryStreamHistoryReq  *corev1.QueryStreamHistoryRequest // captured for assertion
 
+	listSessionStreamsResp *corev1.ListSessionStreamsResponse
+	listSessionStreamsErr  error
+	listSessionStreamsReq  *corev1.ListSessionStreamsRequest // captured for assertion
+
 	// Session management fields
 	listSessionsResp *corev1.ListPlayerSessionsResponse
 	listSessionsErr  error
@@ -168,6 +172,11 @@ func (m *mockCoreClient) CreateGuest(_ context.Context, _ *corev1.CreateGuestReq
 func (m *mockCoreClient) QueryStreamHistory(_ context.Context, req *corev1.QueryStreamHistoryRequest) (*corev1.QueryStreamHistoryResponse, error) {
 	m.queryStreamHistoryReq = req
 	return m.queryStreamHistoryResp, m.queryStreamHistoryErr
+}
+
+func (m *mockCoreClient) ListSessionStreams(_ context.Context, req *corev1.ListSessionStreamsRequest) (*corev1.ListSessionStreamsResponse, error) {
+	m.listSessionStreamsReq = req
+	return m.listSessionStreamsResp, m.listSessionStreamsErr
 }
 
 func (m *mockCoreClient) ListPlayerSessions(_ context.Context, req *corev1.ListPlayerSessionsRequest) (*corev1.ListPlayerSessionsResponse, error) {

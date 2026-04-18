@@ -150,7 +150,7 @@ export type GameEvent = Message<"holomush.web.v1.GameEvent"> & {
   metadata?: JsonObject;
 
   /**
-   * ULID; populated from corev1.Event.id
+   * ULID; populated from corev1.EventFrame.id
    *
    * @generated from field: string event_id = 9;
    */

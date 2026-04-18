@@ -86,6 +86,9 @@ const (
 	// CoreServiceQueryStreamHistoryProcedure is the fully-qualified name of the CoreService's
 	// QueryStreamHistory RPC.
 	CoreServiceQueryStreamHistoryProcedure = "/holomush.core.v1.CoreService/QueryStreamHistory"
+	// CoreServiceListSessionStreamsProcedure is the fully-qualified name of the CoreService's
+	// ListSessionStreams RPC.
+	CoreServiceListSessionStreamsProcedure = "/holomush.core.v1.CoreService/ListSessionStreams"
 )
 
 // CoreServiceClient is a client for the holomush.core.v1.CoreService service.
@@ -135,6 +138,10 @@ type CoreServiceClient interface {
 	// ABAC policy evaluation for public streams.
 	// Pure read — does not mutate session cursors (invariant I-13).
 	QueryStreamHistory(context.Context, *connect.Request[v1.QueryStreamHistoryRequest]) (*connect.Response[v1.QueryStreamHistoryResponse], error)
+	// ListSessionStreams returns the set of streams the session is currently
+	// subscribed to, derived from focusCoordinator.RestoreFocus. Used by
+	// web clients to enumerate streams for backfill on reload. Pure read.
+	ListSessionStreams(context.Context, *connect.Request[v1.ListSessionStreamsRequest]) (*connect.Response[v1.ListSessionStreamsResponse], error)
 }
 
 // NewCoreServiceClient constructs a client for the holomush.core.v1.CoreService service. By
@@ -256,6 +263,12 @@ func NewCoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(coreServiceMethods.ByName("QueryStreamHistory")),
 			connect.WithClientOptions(opts...),
 		),
+		listSessionStreams: connect.NewClient[v1.ListSessionStreamsRequest, v1.ListSessionStreamsResponse](
+			httpClient,
+			baseURL+CoreServiceListSessionStreamsProcedure,
+			connect.WithSchema(coreServiceMethods.ByName("ListSessionStreams")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -279,6 +292,7 @@ type coreServiceClient struct {
 	revokePlayerSession       *connect.Client[v1.RevokePlayerSessionRequest, v1.RevokePlayerSessionResponse]
 	revokeOtherPlayerSessions *connect.Client[v1.RevokeOtherPlayerSessionsRequest, v1.RevokeOtherPlayerSessionsResponse]
 	queryStreamHistory        *connect.Client[v1.QueryStreamHistoryRequest, v1.QueryStreamHistoryResponse]
+	listSessionStreams        *connect.Client[v1.ListSessionStreamsRequest, v1.ListSessionStreamsResponse]
 }
 
 // HandleCommand calls holomush.core.v1.CoreService.HandleCommand.
@@ -371,6 +385,11 @@ func (c *coreServiceClient) QueryStreamHistory(ctx context.Context, req *connect
 	return c.queryStreamHistory.CallUnary(ctx, req)
 }
 
+// ListSessionStreams calls holomush.core.v1.CoreService.ListSessionStreams.
+func (c *coreServiceClient) ListSessionStreams(ctx context.Context, req *connect.Request[v1.ListSessionStreamsRequest]) (*connect.Response[v1.ListSessionStreamsResponse], error) {
+	return c.listSessionStreams.CallUnary(ctx, req)
+}
+
 // CoreServiceHandler is an implementation of the holomush.core.v1.CoreService service.
 type CoreServiceHandler interface {
 	// HandleCommand processes a game command.
@@ -418,6 +437,10 @@ type CoreServiceHandler interface {
 	// ABAC policy evaluation for public streams.
 	// Pure read — does not mutate session cursors (invariant I-13).
 	QueryStreamHistory(context.Context, *connect.Request[v1.QueryStreamHistoryRequest]) (*connect.Response[v1.QueryStreamHistoryResponse], error)
+	// ListSessionStreams returns the set of streams the session is currently
+	// subscribed to, derived from focusCoordinator.RestoreFocus. Used by
+	// web clients to enumerate streams for backfill on reload. Pure read.
+	ListSessionStreams(context.Context, *connect.Request[v1.ListSessionStreamsRequest]) (*connect.Response[v1.ListSessionStreamsResponse], error)
 }
 
 // NewCoreServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -535,6 +558,12 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(coreServiceMethods.ByName("QueryStreamHistory")),
 		connect.WithHandlerOptions(opts...),
 	)
+	coreServiceListSessionStreamsHandler := connect.NewUnaryHandler(
+		CoreServiceListSessionStreamsProcedure,
+		svc.ListSessionStreams,
+		connect.WithSchema(coreServiceMethods.ByName("ListSessionStreams")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.core.v1.CoreService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CoreServiceHandleCommandProcedure:
@@ -573,6 +602,8 @@ func NewCoreServiceHandler(svc CoreServiceHandler, opts ...connect.HandlerOption
 			coreServiceRevokeOtherPlayerSessionsHandler.ServeHTTP(w, r)
 		case CoreServiceQueryStreamHistoryProcedure:
 			coreServiceQueryStreamHistoryHandler.ServeHTTP(w, r)
+		case CoreServiceListSessionStreamsProcedure:
+			coreServiceListSessionStreamsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -652,4 +683,8 @@ func (UnimplementedCoreServiceHandler) RevokeOtherPlayerSessions(context.Context
 
 func (UnimplementedCoreServiceHandler) QueryStreamHistory(context.Context, *connect.Request[v1.QueryStreamHistoryRequest]) (*connect.Response[v1.QueryStreamHistoryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.QueryStreamHistory is not implemented"))
+}
+
+func (UnimplementedCoreServiceHandler) ListSessionStreams(context.Context, *connect.Request[v1.ListSessionStreamsRequest]) (*connect.Response[v1.ListSessionStreamsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.core.v1.CoreService.ListSessionStreams is not implemented"))
 }

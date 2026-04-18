@@ -232,6 +232,15 @@ func (c *Client) QueryStreamHistory(ctx context.Context, req *corev1.QueryStream
 	return resp, nil
 }
 
+// ListSessionStreams returns the set of streams the session is subscribed to.
+func (c *Client) ListSessionStreams(ctx context.Context, req *corev1.ListSessionStreamsRequest) (*corev1.ListSessionStreamsResponse, error) {
+	resp, err := c.client.ListSessionStreams(ctx, req)
+	if err != nil {
+		return nil, oops.Code("RPC_FAILED").With("method", "ListSessionStreams").Wrap(err)
+	}
+	return resp, nil
+}
+
 // ListPlayerSessions returns the caller's active PlayerSessions.
 func (c *Client) ListPlayerSessions(ctx context.Context, req *corev1.ListPlayerSessionsRequest) (*corev1.ListPlayerSessionsResponse, error) {
 	resp, err := c.client.ListPlayerSessions(ctx, req)

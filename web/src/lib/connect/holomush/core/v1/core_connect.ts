@@ -6,7 +6,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreateGuestRequest, CreateGuestResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListCharactersRequest, ListCharactersResponse, ListPlayerSessionsRequest, ListPlayerSessionsResponse, LogoutRequest, LogoutResponse, QueryStreamHistoryRequest, QueryStreamHistoryResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, RevokeOtherPlayerSessionsRequest, RevokeOtherPlayerSessionsResponse, RevokePlayerSessionRequest, RevokePlayerSessionResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
+import { AuthenticatePlayerRequest, AuthenticatePlayerResponse, CheckPlayerSessionRequest, CheckPlayerSessionResponse, ConfirmPasswordResetRequest, ConfirmPasswordResetResponse, CreateCharacterRequest, CreateCharacterResponse, CreateGuestRequest, CreateGuestResponse, CreatePlayerRequest, CreatePlayerResponse, DisconnectRequest, DisconnectResponse, GetCommandHistoryRequest, GetCommandHistoryResponse, HandleCommandRequest, HandleCommandResponse, ListCharactersRequest, ListCharactersResponse, ListPlayerSessionsRequest, ListPlayerSessionsResponse, ListSessionStreamsRequest, ListSessionStreamsResponse, LogoutRequest, LogoutResponse, QueryStreamHistoryRequest, QueryStreamHistoryResponse, RequestPasswordResetRequest, RequestPasswordResetResponse, RevokeOtherPlayerSessionsRequest, RevokeOtherPlayerSessionsResponse, RevokePlayerSessionRequest, RevokePlayerSessionResponse, SelectCharacterRequest, SelectCharacterResponse, SubscribeRequest, SubscribeResponse } from "./core_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -222,6 +222,19 @@ export const CoreService = {
       name: "QueryStreamHistory",
       I: QueryStreamHistoryRequest,
       O: QueryStreamHistoryResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * ListSessionStreams returns the set of streams the session is currently
+     * subscribed to, derived from focusCoordinator.RestoreFocus. Used by
+     * web clients to enumerate streams for backfill on reload. Pure read.
+     *
+     * @generated from rpc holomush.core.v1.CoreService.ListSessionStreams
+     */
+    listSessionStreams: {
+      name: "ListSessionStreams",
+      I: ListSessionStreamsRequest,
+      O: ListSessionStreamsResponse,
       kind: MethodKind.Unary,
     },
   }
