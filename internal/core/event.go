@@ -67,6 +67,9 @@ const (
 	// UI state event types
 	EventTypeLocationState EventType = "location_state"
 	EventTypeExitUpdate    EventType = "exit_update"
+
+	// Session lifecycle
+	EventTypeSessionEnded EventType = "session_ended"
 )
 
 // LocationStatePayload is the JSON payload for location_state events, providing
