@@ -8,15 +8,16 @@
   import { initTelemetry, startNavigationSpan, endNavigationSpan } from '$lib/telemetry';
   import { restoreSession } from '$lib/stores/authStore';
   import { activeTheme, themeToCssVars } from '$lib/stores/themeStore';
+  import { uiPrefs, hydrateUiPrefs } from '$lib/stores/uiPrefsStore';
   import { beforeNavigate, afterNavigate } from '$app/navigation';
   import { onMount } from 'svelte';
-  import '../app.css';
 
   let { children } = $props();
 
   onMount(() => {
     initTelemetry();
     restoreSession();
+    hydrateUiPrefs();
   });
 
   beforeNavigate(({ to }) => {
@@ -28,7 +29,11 @@
   });
 </script>
 
-<div class="app-root" style={themeToCssVars($activeTheme.colors)}>
+<div
+  class="app-root"
+  data-density={$uiPrefs.density}
+  style={themeToCssVars($activeTheme.colors)}
+>
   <TopBar />
   <main>{@render children()}</main>
 </div>
