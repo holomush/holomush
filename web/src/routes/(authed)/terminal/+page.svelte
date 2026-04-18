@@ -12,7 +12,7 @@
   import { appendLine, clearLines, replayActive } from '$lib/stores/terminalStore';
   import { themePreferences, terminalBlackOverrideVars } from '$lib/stores/themeStore';
   import { setConnectionStatus } from '$lib/stores/connectionStore';
-  import { toggleSidebar } from '$lib/stores/uiPrefsStore';
+  import { toggleSidebar, uiPrefs, setSidebarWidthPx } from '$lib/stores/uiPrefsStore';
   import * as Resizable from '$lib/components/ui/resizable';
   import { authState, clearAuth, clearCharacterSession } from '$lib/stores/authStore';
   import TerminalView from '$lib/components/terminal/TerminalView.svelte';
@@ -47,6 +47,33 @@
   let injectText = $state<string | undefined>(undefined);
   function handleInject(cmd: string) { injectText = cmd; }
   function handleInjectConsumed() { injectText = undefined; }
+
+  let paneGroupEl: HTMLDivElement | undefined = $state(undefined);
+  let containerWidth = $state(0);
+
+  function pctFromPx(px: number, cw: number): number {
+    if (cw <= 0) return 25;
+    return Math.min(Math.max((px / cw) * 100, 5), 60);
+  }
+
+  let widthCommitTimer: ReturnType<typeof setTimeout> | undefined;
+  function handleSidebarResize(pct: number) {
+    clearTimeout(widthCommitTimer);
+    widthCommitTimer = setTimeout(() => {
+      if (containerWidth > 0) setSidebarWidthPx(Math.round((pct / 100) * containerWidth));
+    }, 200);
+  }
+
+  $effect(() => {
+    if (!paneGroupEl) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) containerWidth = e.contentRect.width;
+    });
+    ro.observe(paneGroupEl);
+    return () => ro.disconnect();
+  });
+
+  let sidebarDefaultPct = $derived(pctFromPx($uiPrefs.sidebarWidthPx, containerWidth || 1120));
 
   function onKeydown(e: KeyboardEvent) {
     if (e.ctrlKey && e.key === 'b') {
@@ -349,21 +376,26 @@
 {:else}
   <div class="terminal-layout" style={$themePreferences.terminalBlackBackground ? terminalBlackOverrideVars() : ''}>
     <Rail />
-    <Resizable.PaneGroup direction="horizontal" class="main-area">
-      <Resizable.Pane defaultSize={75} class="terminal-column">
-        <TerminalView />
-        <CommandInput
-          {sessionId}
-          onSend={sendCommand}
-          {injectText}
-          onInjectConsumed={handleInjectConsumed}
-        />
-      </Resizable.Pane>
-      <Resizable.Handle withHandle />
-      <Resizable.Pane defaultSize={25}>
-        <Sidebar onExitClick={handleExitClick} onInject={handleInject} resizable />
-      </Resizable.Pane>
-    </Resizable.PaneGroup>
+    <div class="main-area" bind:this={paneGroupEl}>
+      <Resizable.PaneGroup direction="horizontal">
+        <Resizable.Pane defaultSize={100 - sidebarDefaultPct} class="terminal-column">
+          <TerminalView />
+          <CommandInput
+            {sessionId}
+            onSend={sendCommand}
+            {injectText}
+            onInjectConsumed={handleInjectConsumed}
+          />
+        </Resizable.Pane>
+        <Resizable.Handle withHandle />
+        <Resizable.Pane
+          defaultSize={sidebarDefaultPct}
+          onResize={handleSidebarResize}
+        >
+          <Sidebar onExitClick={handleExitClick} onInject={handleInject} resizable />
+        </Resizable.Pane>
+      </Resizable.PaneGroup>
+    </div>
   </div>
 {/if}
 
@@ -403,6 +435,18 @@
     font-size: 15px;
     background: var(--color-background);
     color: var(--color-input-text);
+  }
+  .main-area {
+    flex: 1;
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .main-area > :global(*) {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
   }
   :global(.terminal-column) {
     flex: 1;
