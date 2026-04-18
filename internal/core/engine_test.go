@@ -244,9 +244,8 @@ func TestNewEnginePanicsWhenStoreIsNotEventWriterInProductionMode(t *testing.T) 
 	NewEngine(rawStore, WithProductionGuardrail())
 }
 
-func TestNewEngineAcceptsRawStoreInTestMode(t *testing.T) {
+func TestNewEngineAcceptsAnyStoreWhenProductionGuardrailOmitted(t *testing.T) {
 	rawStore := NewMemoryEventStore()
-	// No WithProductionGuardrail — test default is permissive.
 	e := NewEngine(rawStore)
 	assert.NotNil(t, e)
 }
