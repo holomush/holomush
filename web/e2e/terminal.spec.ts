@@ -283,10 +283,7 @@ test.describe('Terminal UI', () => {
     expect(matched, `expected event with "${token}" in history response`).toBe(true);
   });
 
-  // TODO(holomush-oy6e.13): Un-skip when QueryStreamHistory RPC (B9) lands
-  // and the web client calls it on mount for reload backfill.
-  // See also: holomush-oy6e.9 notes.
-  test.skip('page reload replays prior events from multiple guests', async ({ browser }) => {
+  test('page reload replays prior events from multiple guests', async ({ browser }) => {
     // Two independent browser contexts (separate sessions, same starting location)
     const ctx1 = await browser.newContext();
     const ctx2 = await browser.newContext();
@@ -372,6 +369,11 @@ test.describe('Terminal UI', () => {
       .filter({ hasText: `delta-${token}` })
       .count();
     expect(deltaDimmed).toBe(0);
+
+    // Separator between replayed and live events.
+    await expect(
+      page1.locator('.separator', { hasText: '--- LIVE ---' }),
+    ).toBeVisible({ timeout: 5000 });
 
     // DB: all 4 events exist on the location stream
     const sessionId = await getClientSessionId(page1);
