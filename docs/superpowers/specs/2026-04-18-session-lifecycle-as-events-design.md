@@ -85,7 +85,7 @@ All event appends in production go through `EventWriter` (`internal/core/event_w
 
 **Implication for this work:** `engine.EndSession` MUST append through the same path as `engine.HandleDisconnect` — i.e., via the store the engine was constructed with, which in production is the EventWriter-wrapped `PostgresEventStore`. Any construction of `engine.Engine` with a raw store in production would silently break ordering and re-introduce a different race.
 
-**Guardrail:** add either a type-level constraint (change `NewEngine`'s parameter type to `*EventWriter`) OR a startup assertion checking the store implements EventWriter's interface. The plan MUST pick one.
+**Guardrail:** add either a type-level constraint (change `NewEngine`'s parameter type to `*EventWriter`) OR a startup assertion via concrete type check `_, ok := store.(*core.EventWriter)`. An interface-conformance check is insufficient because `*EventWriter` implements `EventStore` by wrapping — raw stores also satisfy the interface. The plan MUST pick one (see Design Decision #9).
 
 ### I2 — SubscribeSession preserves append-order per connection
 
@@ -297,7 +297,7 @@ Add a new command word `disconnect` (or alias `/disconnect` in future rich UIs) 
 - Client UX: server responds with a brief confirmation (`"Disconnected. Other surfaces remain active."` or similar) before closing the telnet wire.
 - Web UI: tab close / page unload fires a `Disconnect(connID)` via the web gateway. This is an existing affordance already in place for graceful TCP close; the `disconnect` command word is the explicit counterpart for telnet users who cannot close a tab.
 
-Zero new server primitives — `disconnect` is pure glue over the existing Disconnect RPC. The plan has this as one telnet-side task + associated unit tests.
+Zero new server primitives — `disconnect` is pure glue over the existing Disconnect RPC. The telnet handler already retains `h.playerSessionToken` (set at two-phase login, `internal/telnet/gateway_handler.go:77`) and reuses it for existing core RPCs; the new `disconnect` command path passes the same token. The plan has this as one telnet-side task + associated unit tests.
 
 ### Multi-surface quit friction
 
@@ -309,7 +309,9 @@ When a player issues `quit` and their session has more than one active connectio
 
 **Storage:** `session.Info.PendingQuitConfirmationUntil *time.Time` is in-memory only (no migration). On process restart the flag clears — benign (user re-issues `quit`, sees prompt again). This is Design Decision #7.
 
-**Cross-surface visibility:** the confirmation prompt is emitted as a `command_response` event on the character stream, so all surfaces subscribed to the character see the message. The user can confirm on any surface. `PendingQuitConfirmationUntil` is authoritative — whichever surface issues the second `quit` first wins the race; the others see `session_ended` on fanout and drop.
+**Store mutation discipline:** `Store.Get` returns a defensive copy (`copyInfo` in `memstore.go:481`), so a `Get → mutate → Set` pattern would race with concurrent `Set` calls. The flag MUST be mutated in-place under the store's mutex. Add a new store method `SetPendingQuitConfirmation(ctx context.Context, sessionID string, until *time.Time) error` analogous to the existing `UpdateLastPaged` / `UpdateGridPresent` in-place mutators. Callers MUST use this method, not `Get → Set`.
+
+**Cross-surface visibility:** the confirmation prompt is emitted as a `command_response` event on the character stream, so all surfaces subscribed to the character see the message. The user can confirm on any surface. If two surfaces both race the second `quit` within the TTL, both proceed with teardown — the emitted `session_ended` events are idempotent from a Subscriber's perspective (first match terminates the stream; any subsequent matching events are moot because the stream has already returned). No CAS is required.
 
 **Interaction with `disconnect`:** the prompt explicitly tells the user to type `disconnect` if they only want to close one surface. `disconnect` does NOT clear `PendingQuitConfirmationUntil` (intentional — a user who types `quit` → `disconnect` is saying "not that, just this" and should be able to retry `quit` later without re-entering the prompt immediately; the TTL expiry handles this naturally).
 
@@ -414,6 +416,8 @@ The following were open questions during brainstorming; each is now decided and 
 8. **Cutover style.** Single-commit cutover (no transition period). `WatchSession` has exactly one real consumer (`server.go:876` Subscribe); everything else is mocks and tests. The plan deletes the interface method, regenerates mocks, and removes dead tests in one coherent change.
 
 9. **EventWriter guardrail.** Either type-level (`NewEngine` takes `*EventWriter`) or runtime (startup check asserting the engine's store is EventWriter-wrapped). Plan picks one and states why. Preference: runtime check, because the engine's current signature takes the `EventStore` interface and many test constructors deliberately use a non-writer store — a type-level change ripples into test code that doesn't need the ordering guarantee.
+
+   **Implementation note:** `*core.EventWriter` itself implements `core.EventStore` (by wrapping), so an interface-conformance check has no discriminating power. The runtime guard MUST do a concrete-type assertion: `if _, ok := store.(*core.EventWriter); !ok { /* panic or error */ }`. Production wiring at `cmd/holomush/sub_grpc.go` already constructs the EventWriter explicitly; the guard catches any regression where a future refactor bypasses it.
 
 10. **Plugin per-session state cleanup.** Plugin cleanup continues via `DisconnectHook`, not via `session_ended` event observers. Plugins that want to observe session termination for their own side effects MAY subscribe to the character stream and filter on `session_ended`, but this is optional; the authoritative cleanup path is hooks.
 
