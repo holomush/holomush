@@ -262,8 +262,11 @@ is usable:
    already handled inline in `compose.prod.yaml` and does not need a
    separate template.
 6. **`docker/postgres-backup/`** — new alpine-based image (Dockerfile +
-   `backup.sh` + cron entry) for the `backup` service. Published as
-   `ghcr.io/holomush/postgres-backup:<version>` alongside the main image.
+   `backup.sh`) for the `backup` service. Built inline via the compose
+   `build:` directive on the deploy host. Keeps the sandbox scope focused
+   and avoids adding a second publishable image to the release pipeline.
+   Graduate to a goreleaser-published `ghcr.io/holomush/postgres-backup`
+   image if self-host adoption creates demand.
 7. **GitHub Secrets to add:**
    - `DIGITALOCEAN_ACCESS_TOKEN`
    - `DIGITALOCEAN_SSH_KEY_ID`
@@ -359,7 +362,6 @@ run and show output for:
 | `compose.prod.yaml`                      | Add `tunnel` and `backups` profiles; existing default unchanged|
 | `scripts/cloud-init.sh`                  | Add ingress-profile selection + backup env wiring              |
 | `.github/workflows/release.yaml`         | Add `deploy-sandbox` job wired after `verify-release`          |
-| `.github/workflows/release.yaml` (build) | Add `postgres-backup` container to GoReleaser image matrix     |
 | `site/docs/operating/deployment.md`      | Tunnel + backups sections; link to sandbox runbooks            |
 | `CLAUDE.md`                              | One-line link to sandbox runbooks                              |
 
