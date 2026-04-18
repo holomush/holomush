@@ -284,6 +284,8 @@ func (h *GatewayHandler) processLine(ctx context.Context, line string) <-chan *c
 		h.handleQuit(ctx)
 	case "logout":
 		h.handleLogout(ctx)
+	case "disconnect":
+		h.handleDisconnect(ctx)
 	default:
 		if cmd != "" {
 			h.handleGenericCommand(ctx, cmd, arg)
@@ -676,6 +678,32 @@ func (h *GatewayHandler) handleGenericCommand(ctx context.Context, cmd, arg stri
 		h.send("Error processing command.")
 	}
 	// Output (or error) comes via command_response event on the character stream.
+}
+
+// handleDisconnect closes this wire without ending the session. Other
+// surfaces subscribed to the same session remain active.
+func (h *GatewayHandler) handleDisconnect(ctx context.Context) {
+	if !h.authed || h.sessionID == "" || h.connectionID == "" {
+		h.send("You are not currently connected to a character.")
+		return
+	}
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	_, err := h.client.Disconnect(rpcCtx, &corev1.DisconnectRequest{
+		SessionId:          h.sessionID,
+		ConnectionId:       h.connectionID,
+		PlayerSessionToken: h.playerSessionToken,
+	})
+	if err != nil {
+		slog.WarnContext(ctx, "gateway: disconnect RPC failed",
+			"session_id", h.sessionID, "error", err)
+	}
+
+	h.send("Disconnected. Other surfaces remain active.")
+	h.quitting = true
+	h.loggingOut = true // skip the "return to character picker" branch
 }
 
 func (h *GatewayHandler) handleQuit(ctx context.Context) {

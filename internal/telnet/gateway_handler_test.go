@@ -2452,6 +2452,181 @@ func TestPreAuthTimerCancelledAfterTwoPhaseSelect(t *testing.T) {
 	<-done
 }
 
+// TestGatewayHandlerDisconnect verifies that the "disconnect" command calls
+// the Disconnect RPC with the correct session/connection/token fields, sends
+// a confirmation to the wire, and exits the handler cleanly (quitting +
+// loggingOut so the character picker is skipped).
+func TestGatewayHandlerDisconnect(t *testing.T) {
+	const (
+		token    = "tok-telnet-disconnect-cmd"
+		sessID   = "sess-disconnect-cmd"
+		connID   = "conn-disconnect-cmd"
+	)
+	client := &mockCoreClient{
+		discResp: &corev1.DisconnectResponse{Success: true},
+	}
+
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	h := newTestHandler(serverConn, client)
+	h.playerSessionToken = token
+	h.sessionID = sessID
+	h.connectionID = connID
+	h.authed = true
+
+	// Capture wire output so we can assert the confirmation message.
+	wireOutput := make(chan []byte, 1)
+	go func() {
+		var accumulated []byte
+		buf := make([]byte, 256)
+		for {
+			n, err := clientConn.Read(buf)
+			if n > 0 {
+				accumulated = append(accumulated, buf[:n]...)
+			}
+			if err != nil {
+				wireOutput <- accumulated
+				return
+			}
+		}
+	}()
+
+	h.handleDisconnect(context.Background())
+	serverConn.Close() // signal EOF to the capture goroutine
+
+	output := <-wireOutput
+
+	require.NotNil(t, client.lastDisconnectReq, "Disconnect RPC must be called")
+	assert.Equal(t, sessID, client.lastDisconnectReq.GetSessionId())
+	assert.Equal(t, connID, client.lastDisconnectReq.GetConnectionId())
+	assert.Equal(t, token, client.lastDisconnectReq.GetPlayerSessionToken())
+
+	assert.Contains(t, string(output), "Disconnected", "confirmation message must be sent to the wire")
+
+	assert.True(t, h.quitting, "quitting must be set so the handler exits")
+	assert.True(t, h.loggingOut, "loggingOut must be set to skip the character picker")
+}
+
+// TestGatewayHandlerDisconnect_WhenNotAuthed verifies that "disconnect" before
+// authentication sends an error message and does not call the Disconnect RPC.
+func TestGatewayHandlerDisconnect_WhenNotAuthed(t *testing.T) {
+	client := &mockCoreClient{}
+
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	h := newTestHandler(serverConn, client)
+	// Not authed — leave all fields at zero values.
+
+	go func() {
+		buf := make([]byte, 256)
+		for {
+			if _, err := clientConn.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	h.handleDisconnect(context.Background())
+
+	assert.Nil(t, client.lastDisconnectReq, "Disconnect RPC must NOT be called when not authed")
+	assert.False(t, h.quitting, "quitting must not be set when guard fires")
+}
+
+// TestDisconnectCommand_DispatchedFromProcessLine verifies that the string
+// "disconnect" is recognized by processLine and calls handleDisconnect.
+func TestDisconnectCommand_DispatchedFromProcessLine(t *testing.T) {
+	const (
+		token  = "tok-dispatch"
+		sessID = "sess-dispatch"
+		connID = "conn-dispatch"
+	)
+	client := &mockCoreClient{
+		discResp: &corev1.DisconnectResponse{Success: true},
+	}
+
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	h := newTestHandler(serverConn, client)
+	h.playerSessionToken = token
+	h.sessionID = sessID
+	h.connectionID = connID
+	h.authed = true
+
+	go func() {
+		buf := make([]byte, 256)
+		for {
+			if _, err := clientConn.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+
+	h.processLine(context.Background(), "disconnect")
+
+	require.NotNil(t, client.lastDisconnectReq,
+		"processLine('disconnect') must trigger the Disconnect RPC")
+	assert.Equal(t, sessID, client.lastDisconnectReq.GetSessionId())
+	assert.Equal(t, token, client.lastDisconnectReq.GetPlayerSessionToken())
+}
+
+// TestGatewayHandlerDisconnect_RPCError verifies that when the Disconnect RPC
+// returns an error, the handler logs the error but still sends the confirmation
+// message and marks quitting/loggingOut — the error is not fatal.
+func TestGatewayHandlerDisconnect_RPCError(t *testing.T) {
+	const (
+		token  = "tok-disconnect-rpc-error"
+		sessID = "sess-disconnect-rpc-error"
+		connID = "conn-disconnect-rpc-error"
+	)
+	client := &mockCoreClient{
+		discErr: errors.New("server unavailable"),
+	}
+
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	h := newTestHandler(serverConn, client)
+	h.playerSessionToken = token
+	h.sessionID = sessID
+	h.connectionID = connID
+	h.authed = true
+
+	wireOutput := make(chan []byte, 1)
+	go func() {
+		var accumulated []byte
+		buf := make([]byte, 256)
+		for {
+			n, readErr := clientConn.Read(buf)
+			if n > 0 {
+				accumulated = append(accumulated, buf[:n]...)
+			}
+			if readErr != nil {
+				wireOutput <- accumulated
+				return
+			}
+		}
+	}()
+
+	h.handleDisconnect(context.Background())
+	serverConn.Close()
+
+	output := <-wireOutput
+
+	// RPC was attempted.
+	require.NotNil(t, client.lastDisconnectReq, "Disconnect RPC must be called even on error")
+
+	// Confirmation message still sent (error is non-fatal).
+	assert.Contains(t, string(output), "Disconnected",
+		"confirmation message must be sent even when RPC fails")
+
+	// State flags still set so the handler exits cleanly.
+	assert.True(t, h.quitting, "quitting must be set even when RPC fails")
+	assert.True(t, h.loggingOut, "loggingOut must be set even when RPC fails")
+}
+
 func TestSendSetsWriteDeadline(t *testing.T) {
 	mc := &mockDeadlineTrackingConn{}
 	h := &GatewayHandler{

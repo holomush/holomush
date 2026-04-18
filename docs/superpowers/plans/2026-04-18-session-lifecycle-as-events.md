@@ -2493,3 +2493,20 @@ Type consistency:
 - `engine.EndSession(ctx, char, sessionID, cause, reason)` signature consistent across Tasks 2, 8, 10, 11, 13.
 - `CreateWithCap` returns `[]ulid.ULID` after Task 11 — test call sites updated in same task.
 - `errStreamTerminated` sentinel name consistent across Tasks 4, 5, 6.
+
+### ABAC verification (Design Decision #11)
+
+Confirmed during Task 14: `QueryStreamHistory` enforces owner-only reads on
+character streams via `sessionHasMembership` in
+`internal/grpc/stream_access.go:39-50`.
+
+`character:{ID}` streams are classified as private by `isPrivateStream`
+(`internal/grpc/stream_access.go:24`). Access is gated exclusively by
+`sessionHasMembership` — the ABAC engine is never consulted (I-17). The
+membership check for character streams asserts that
+`info.CharacterID.String() == charID` (`stream_access.go:49`), enforcing
+owner-only reads: a session may only read its own character stream.
+
+`session_ended` events are appended to `character:{ID}` streams and therefore
+inherit this scope automatically. No new policy addition is needed; the gate
+already prevents cross-character stream reads.

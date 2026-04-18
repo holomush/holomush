@@ -50,7 +50,8 @@ func (s *PostgresPlayerSessionStore) Create(ctx context.Context, session *auth.P
 // CreateWithCap atomically inserts the new session and trims oldest non-expired
 // sessions for the same player so the total active count is at most maxActive.
 // A maxActive value <= 0 disables trimming (equivalent to Create). Returns the
-// number of rows trimmed.
+// ULIDs of the trimmed PlayerSessions so callers can emit session_ended events
+// for child game sessions before they cascade-delete.
 //
 // The INSERT + trim DELETE execute in a single transaction so any failure
 // rolls back both. The DELETE uses ORDER BY created_at DESC + OFFSET
@@ -59,10 +60,10 @@ func (s *PostgresPlayerSessionStore) Create(ctx context.Context, session *auth.P
 // sessions beyond the cap. Combined with id != $new_id this guarantees the
 // just-inserted session is never trimmed, leaving the player with exactly
 // min(maxActive, total) active sessions.
-func (s *PostgresPlayerSessionStore) CreateWithCap(ctx context.Context, session *auth.PlayerSession, maxActive int) (int, error) {
+func (s *PostgresPlayerSessionStore) CreateWithCap(ctx context.Context, session *auth.PlayerSession, maxActive int) ([]ulid.ULID, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return 0, oops.Code("PLAYER_SESSION_TX_BEGIN_FAILED").
+		return nil, oops.Code("PLAYER_SESSION_TX_BEGIN_FAILED").
 			With("player_id", session.PlayerID.String()).Wrap(err)
 	}
 	// Rollback is a no-op once Commit succeeds.
@@ -74,7 +75,7 @@ func (s *PostgresPlayerSessionStore) CreateWithCap(ctx context.Context, session 
 	// pre-insert snapshot, each trim to cap-1, each insert → the player ends
 	// up above cap. The lock is released automatically at COMMIT/ROLLBACK.
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, session.PlayerID.String()); err != nil {
-		return 0, oops.Code("PLAYER_SESSION_LOCK_FAILED").
+		return nil, oops.Code("PLAYER_SESSION_LOCK_FAILED").
 			With("player_id", session.PlayerID.String()).Wrap(err)
 	}
 
@@ -89,13 +90,13 @@ func (s *PostgresPlayerSessionStore) CreateWithCap(ctx context.Context, session 
 		session.CreatedAt,
 		session.UpdatedAt,
 	); err != nil {
-		return 0, oops.Code("PLAYER_SESSION_CREATE_FAILED").
+		return nil, oops.Code("PLAYER_SESSION_CREATE_FAILED").
 			With("player_id", session.PlayerID.String()).Wrap(err)
 	}
 
-	trimmed := 0
+	var trimmedIDs []ulid.ULID
 	if maxActive > 0 {
-		tag, err := tx.Exec(ctx, `
+		rows, trimErr := tx.Query(ctx, `
 			DELETE FROM player_sessions
 			WHERE id IN (
 				SELECT id FROM player_sessions
@@ -103,19 +104,37 @@ func (s *PostgresPlayerSessionStore) CreateWithCap(ctx context.Context, session 
 				ORDER BY created_at DESC
 				OFFSET $3
 			)
+			RETURNING id
 		`, session.PlayerID.String(), session.ID.String(), maxActive-1)
-		if err != nil {
-			return 0, oops.Code("PLAYER_SESSION_TRIM_FAILED").
-				With("player_id", session.PlayerID.String()).Wrap(err)
+		if trimErr != nil {
+			return nil, oops.Code("PLAYER_SESSION_TRIM_FAILED").
+				With("player_id", session.PlayerID.String()).Wrap(trimErr)
 		}
-		trimmed = int(tag.RowsAffected())
+		defer rows.Close()
+		for rows.Next() {
+			var idStr string
+			if scanErr := rows.Scan(&idStr); scanErr != nil {
+				return nil, oops.Code("PLAYER_SESSION_TRIM_SCAN_FAILED").
+					With("player_id", session.PlayerID.String()).Wrap(scanErr)
+			}
+			parsedID, parseErr := ulid.Parse(idStr)
+			if parseErr != nil {
+				return nil, oops.Code("PLAYER_SESSION_TRIM_PARSE_FAILED").
+					With("raw_id", idStr).Wrap(parseErr)
+			}
+			trimmedIDs = append(trimmedIDs, parsedID)
+		}
+		if rows.Err() != nil {
+			return nil, oops.Code("PLAYER_SESSION_TRIM_FAILED").
+				With("player_id", session.PlayerID.String()).Wrap(rows.Err())
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return 0, oops.Code("PLAYER_SESSION_TX_COMMIT_FAILED").
+		return nil, oops.Code("PLAYER_SESSION_TX_COMMIT_FAILED").
 			With("player_id", session.PlayerID.String()).Wrap(err)
 	}
-	return trimmed, nil
+	return trimmedIDs, nil
 }
 
 // GetByTokenHash retrieves a player session by its token hash.

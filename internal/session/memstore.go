@@ -18,7 +18,6 @@ type MemStore struct {
 	mu          sync.RWMutex
 	sessions    map[string]*Info
 	connections map[ulid.ULID]*Connection // keyed by connection ID
-	watchers    map[string][]chan Event
 }
 
 // NewMemStore creates a new in-memory session store.
@@ -26,7 +25,6 @@ func NewMemStore() *MemStore {
 	return &MemStore{
 		sessions:    make(map[string]*Info),
 		connections: make(map[ulid.ULID]*Connection),
-		watchers:    make(map[string][]chan Event),
 	}
 }
 
@@ -57,19 +55,9 @@ func (m *MemStore) Set(_ context.Context, id string, info *Info) error {
 }
 
 // Delete removes a session and its associated connections.
-// It notifies any active WatchSession watchers with the given reason.
-func (m *MemStore) Delete(_ context.Context, id, reason string) error {
+func (m *MemStore) Delete(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	for _, ch := range m.watchers[id] {
-		select {
-		case ch <- Event{Type: Destroyed, Message: reason}:
-		default:
-		}
-		close(ch)
-	}
-	delete(m.watchers, id)
 
 	delete(m.sessions, id)
 	for connID, conn := range m.connections {
@@ -78,26 +66,6 @@ func (m *MemStore) Delete(_ context.Context, id, reason string) error {
 		}
 	}
 	return nil
-}
-
-// WatchSession returns a channel that receives an Event when
-// the session is destroyed.
-//
-// If the session does not exist at call time (already deleted or never
-// existed), the returned channel is pre-loaded with a Destroyed event and
-// closed. This closes the holomush-umxj Mode B race where a Delete between
-// Get and WatchSession would otherwise register a watcher that never fires.
-func (m *MemStore) WatchSession(_ context.Context, sessionID string) (<-chan Event, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	ch := make(chan Event, 1)
-	if _, ok := m.sessions[sessionID]; !ok {
-		ch <- Event{Type: Destroyed}
-		close(ch)
-		return ch, nil
-	}
-	m.watchers[sessionID] = append(m.watchers[sessionID], ch)
-	return ch, nil
 }
 
 // FindByCharacter returns the active or detached session for a character.
@@ -128,6 +96,32 @@ func (m *MemStore) ListByPlayer(_ context.Context, _ ulid.ULID) ([]*Info, error)
 	var result []*Info
 	for _, info := range m.sessions {
 		if info.Status != StatusExpired {
+			result = append(result, copyInfo(info))
+		}
+	}
+	return result, nil
+}
+
+// ListByPlayerSession returns all active/detached sessions whose PlayerSessionID
+// matches any of the given IDs.
+func (m *MemStore) ListByPlayerSession(_ context.Context, playerSessionIDs []ulid.ULID) ([]*Info, error) {
+	if len(playerSessionIDs) == 0 {
+		return nil, nil
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	want := make(map[ulid.ULID]struct{}, len(playerSessionIDs))
+	for _, id := range playerSessionIDs {
+		want[id] = struct{}{}
+	}
+
+	var result []*Info
+	for _, info := range m.sessions {
+		if info.Status == StatusExpired {
+			continue
+		}
+		if _, ok := want[info.PlayerSessionID]; ok {
 			result = append(result, copyInfo(info))
 		}
 	}
@@ -382,7 +376,7 @@ func (m *MemStore) ListActive(_ context.Context) ([]*Info, error) {
 
 // DeleteByCharacter finds and deletes a character's session.
 // Returns the deleted Info, or nil if no session exists.
-func (m *MemStore) DeleteByCharacter(ctx context.Context, characterID ulid.ULID, reason string) (*Info, error) {
+func (m *MemStore) DeleteByCharacter(ctx context.Context, characterID ulid.ULID) (*Info, error) {
 	// FindByCharacter uses RLock, so call it before taking the write lock.
 	info, err := m.FindByCharacter(ctx, characterID)
 	if err != nil {
@@ -396,7 +390,7 @@ func (m *MemStore) DeleteByCharacter(ctx context.Context, characterID ulid.ULID,
 	}
 
 	// Delete uses its own Lock internally.
-	if err := m.Delete(ctx, info.ID, reason); err != nil {
+	if err := m.Delete(ctx, info.ID); err != nil {
 		return nil, err
 	}
 	return info, nil

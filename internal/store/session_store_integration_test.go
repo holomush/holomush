@@ -100,7 +100,7 @@ var _ = Describe("PostgresSessionStore", func() {
 			err := sessionStore.Set(ctx, info.ID, info)
 			Expect(err).NotTo(HaveOccurred())
 
-			err = sessionStore.Delete(ctx, info.ID, "test")
+			err = sessionStore.Delete(ctx, info.ID)
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = sessionStore.Get(ctx, info.ID)
@@ -325,7 +325,7 @@ var _ = Describe("PostgresSessionStore", func() {
 			err := sessionStore.AddConnection(ctx, conn)
 			Expect(err).NotTo(HaveOccurred())
 
-			err = sessionStore.Delete(ctx, sessID, "test")
+			err = sessionStore.Delete(ctx, sessID)
 			Expect(err).NotTo(HaveOccurred())
 
 			count, err := sessionStore.CountConnections(ctx, sessID)
@@ -762,57 +762,4 @@ var _ = Describe("PostgresSessionStore", func() {
 		})
 	})
 
-	Describe("WatchSession missing-session contract", func() {
-		It("returns a pre-closed Destroyed channel when the session has already been deleted", func() {
-			ctx := context.Background()
-			info := newTestSession("sess-watch-already-deleted")
-
-			Expect(sessionStore.Set(ctx, info.ID, info)).To(Succeed())
-			Expect(sessionStore.Delete(ctx, info.ID, "Goodbye!")).To(Succeed())
-
-			ch, err := sessionStore.WatchSession(ctx, info.ID)
-			Expect(err).NotTo(HaveOccurred())
-
-			ev, ok := <-ch
-			Expect(ok).To(BeTrue(), "expected pre-loaded Destroyed event on watcher channel")
-			Expect(ev.Type).To(Equal(session.Destroyed))
-
-			_, ok = <-ch
-			Expect(ok).To(BeFalse(), "expected channel closed after Destroyed")
-		})
-
-		It("returns a pre-closed Destroyed channel when the session never existed", func() {
-			ctx := context.Background()
-
-			ch, err := sessionStore.WatchSession(ctx, "sess-watch-never-existed")
-			Expect(err).NotTo(HaveOccurred())
-
-			ev, ok := <-ch
-			Expect(ok).To(BeTrue())
-			Expect(ev.Type).To(Equal(session.Destroyed))
-
-			_, ok = <-ch
-			Expect(ok).To(BeFalse())
-		})
-
-		It("delivers Destroyed to a watcher registered while the session exists when Delete fires afterward", func() {
-			ctx := context.Background()
-			info := newTestSession("sess-watch-then-delete")
-
-			Expect(sessionStore.Set(ctx, info.ID, info)).To(Succeed())
-
-			ch, err := sessionStore.WatchSession(ctx, info.ID)
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(sessionStore.Delete(ctx, info.ID, "reason-xyz")).To(Succeed())
-
-			ev, ok := <-ch
-			Expect(ok).To(BeTrue())
-			Expect(ev.Type).To(Equal(session.Destroyed))
-			Expect(ev.Message).To(Equal("reason-xyz"))
-
-			_, ok = <-ch
-			Expect(ok).To(BeFalse())
-		})
-	})
 })

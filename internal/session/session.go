@@ -195,20 +195,6 @@ type Connection struct {
 	ConnectedAt time.Time
 }
 
-// EventType enumerates session lifecycle events.
-type EventType int
-
-const (
-	// Destroyed signals the session was destroyed (quit, kick, reap).
-	Destroyed EventType = iota
-)
-
-// Event signals a lifecycle change for a watched session.
-type Event struct {
-	Type    EventType
-	Message string
-}
-
 // Access provides session operations for command handlers.
 // This is a narrow subset of Store — only what handlers need.
 type Access interface {
@@ -225,7 +211,7 @@ type Access interface {
 	// DeleteByCharacter finds and deletes a character's session.
 	// Returns the deleted Info for caller use (disconnect hooks, leave events).
 	// Returns nil, nil if no session exists.
-	DeleteByCharacter(ctx context.Context, characterID ulid.ULID, reason string) (*Info, error)
+	DeleteByCharacter(ctx context.Context, characterID ulid.ULID) (*Info, error)
 
 	// UpdateActivity bumps the updated_at timestamp for a session.
 	UpdateActivity(ctx context.Context, id string) error
@@ -246,14 +232,8 @@ type Store interface {
 	// Set creates or updates a session.
 	Set(ctx context.Context, id string, info *Info) error
 
-	// Delete removes a session. The reason string propagates to any
-	// active WatchSession watchers before the session is removed.
-	Delete(ctx context.Context, id string, reason string) error
-
-	// WatchSession returns a channel that receives an Event when
-	// the session is destroyed. The channel is closed after the event
-	// is delivered.
-	WatchSession(ctx context.Context, sessionID string) (<-chan Event, error)
+	// Delete removes a session.
+	Delete(ctx context.Context, id string) error
 
 	// FindByCharacter returns the active or detached session for a character.
 	FindByCharacter(ctx context.Context, characterID ulid.ULID) (*Info, error)
@@ -261,6 +241,11 @@ type Store interface {
 	// ListByPlayer returns all non-expired sessions for a player's characters.
 	// TODO: filter by playerID when player-character relationship table exists.
 	ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*Info, error)
+
+	// ListByPlayerSession returns all active/detached sessions whose
+	// PlayerSessionID matches any of the given IDs. Returns empty slice
+	// (not nil error) if playerSessionIDs is empty.
+	ListByPlayerSession(ctx context.Context, playerSessionIDs []ulid.ULID) ([]*Info, error)
 
 	// ListExpired returns all sessions past their expiry time.
 	ListExpired(ctx context.Context) ([]*Info, error)
@@ -307,7 +292,7 @@ type Store interface {
 
 	// DeleteByCharacter finds and deletes a character's session.
 	// Returns the deleted Info, or nil if no session exists.
-	DeleteByCharacter(ctx context.Context, characterID ulid.ULID, reason string) (*Info, error)
+	DeleteByCharacter(ctx context.Context, characterID ulid.ULID) (*Info, error)
 
 	// UpdateActivity bumps the updated_at timestamp for a session.
 	UpdateActivity(ctx context.Context, id string) error

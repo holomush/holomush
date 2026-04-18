@@ -7,8 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -20,16 +18,13 @@ import (
 
 // PostgresSessionStore implements session.Store using PostgreSQL.
 type PostgresSessionStore struct {
-	pool     poolIface
-	mu       sync.Mutex
-	watchers map[string][]chan session.Event
+	pool poolIface
 }
 
 // NewPostgresSessionStore creates a new Postgres-backed session store.
 func NewPostgresSessionStore(pool poolIface) *PostgresSessionStore {
 	return &PostgresSessionStore{
-		pool:     pool,
-		watchers: make(map[string][]chan session.Event),
+		pool: pool,
 	}
 }
 
@@ -314,83 +309,13 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 	return nil
 }
 
-// Delete removes a session and notifies any active WatchSession watchers.
-//
-// Ordering: the DB row is deleted BEFORE watchers are notified. This order
-// is load-bearing for the Mode B fix (holomush-umxj): WatchSession decides
-// "session alive or gone" by querying the DB, then registers (or signals
-// Destroyed) under s.mu. If notify ran before the DB delete, a concurrent
-// WatchSession could observe exists=true (DB still has the row), register
-// a watcher, and then sit dormant forever because Delete had already
-// cleared the watchers map. By committing the DB delete first and gating
-// notify behind s.mu, any WatchSession that queries after DB commit sees
-// exists=false and any WatchSession that queries before DB commit will
-// serialize with notify under s.mu — either way, no watcher is orphaned.
-func (s *PostgresSessionStore) Delete(ctx context.Context, id, reason string) error {
-	if _, err := s.pool.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, id); err != nil {
+// Delete removes a session.
+func (s *PostgresSessionStore) Delete(ctx context.Context, id string) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, id)
+	if err != nil {
 		return oops.With("operation", "delete session").With("session_id", id).Wrap(err)
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, ch := range s.watchers[id] {
-		select {
-		case ch <- session.Event{Type: session.Destroyed, Message: reason}:
-		default:
-		}
-		close(ch)
-	}
-	delete(s.watchers, id)
 	return nil
-}
-
-// WatchSession returns a channel that receives an Event when the session
-// is destroyed.
-//
-// If the session does not exist at call time (already deleted or never
-// existed), the returned channel is pre-loaded with a Destroyed event
-// (empty Message) and closed. This closes holomush-umxj Mode B, where a
-// Delete between Get and WatchSession would otherwise register a watcher
-// that never fires.
-//
-// Atomicity: the existence check runs while holding s.mu so that Delete's
-// notify phase cannot slip in between "DB says exists=true" and "watcher
-// registered in the map." Delete's DB row removal runs outside s.mu, so
-// concurrent WatchSession calls only contend on s.mu with Delete's local
-// notify phase (fast), not Delete's DB round-trip. The DB query itself
-// runs under s.mu — acceptable because in practice it's an index-lookup
-// under a millisecond and the alternative (cross-phase check-and-register)
-// requires significantly more state tracking.
-//
-// Fallback: if the existence query errors (transient DB flap), the
-// watcher is registered unconditionally. A concurrent Delete that does
-// notify will still deliver to it; a Delete that already fired is a
-// visible gap, but no worse than the pre-fix behavior. The caller's
-// lifecycle ctx eventually cleans up dormant watchers. Callers that
-// require the stronger atomicity guarantee in the face of DB errors
-// should prefer explicit Get+WatchSession ordering with transaction
-// semantics — out of scope here.
-func (s *PostgresSessionStore) WatchSession(ctx context.Context, sessionID string) (<-chan session.Event, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ch := make(chan session.Event, 1)
-
-	var exists bool
-	err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM sessions WHERE id = $1)`, sessionID).Scan(&exists)
-	if err != nil {
-		slog.Warn("watch session: existence check failed",
-			"session_id", sessionID, "error", err)
-		s.watchers[sessionID] = append(s.watchers[sessionID], ch)
-		return ch, nil
-	}
-	if !exists {
-		ch <- session.Event{Type: session.Destroyed}
-		close(ch)
-		return ch, nil
-	}
-	s.watchers[sessionID] = append(s.watchers[sessionID], ch)
-	return ch, nil
 }
 
 // FindByCharacter returns the active or detached session for a character.
@@ -416,6 +341,35 @@ func (s *PostgresSessionStore) ListByPlayer(ctx context.Context, playerID ulid.U
 		playerID.String())
 	if err != nil {
 		return nil, oops.With("operation", "list sessions by player").With("player_id", playerID.String()).Wrap(err)
+	}
+	return scanSessions(rows)
+}
+
+// ListByPlayerSession returns all active/detached sessions whose player_session_id
+// matches any of the given IDs.
+func (s *PostgresSessionStore) ListByPlayerSession(
+	ctx context.Context,
+	playerSessionIDs []ulid.ULID,
+) ([]*session.Info, error) {
+	if len(playerSessionIDs) == 0 {
+		return nil, nil
+	}
+
+	ids := make([]string, len(playerSessionIDs))
+	for i, id := range playerSessionIDs {
+		ids[i] = id.String()
+	}
+
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+sessionSelectColumns+`
+		 FROM sessions
+		 WHERE player_session_id = ANY($1)
+		   AND status != 'expired'`,
+		ids)
+	if err != nil {
+		return nil, oops.Code("LIST_BY_PLAYER_SESSION_FAILED").
+			With("operation", "list sessions by player session").
+			Wrap(err)
 	}
 	return scanSessions(rows)
 }
@@ -678,7 +632,7 @@ func (s *PostgresSessionStore) ListActive(ctx context.Context) ([]*session.Info,
 // character using a single DELETE ... RETURNING query, eliminating the TOCTOU
 // race of FindByCharacter + Delete. Returns (nil, nil) when no matching
 // session exists.
-func (s *PostgresSessionStore) DeleteByCharacter(ctx context.Context, characterID ulid.ULID, reason string) (*session.Info, error) {
+func (s *PostgresSessionStore) DeleteByCharacter(ctx context.Context, characterID ulid.ULID) (*session.Info, error) {
 	query := `DELETE FROM sessions WHERE character_id = $1 AND status IN ('active', 'detached')
 		RETURNING ` + sessionSelectColumns
 	row := s.pool.QueryRow(ctx, query, characterID.String())
@@ -689,19 +643,6 @@ func (s *PostgresSessionStore) DeleteByCharacter(ctx context.Context, characterI
 		}
 		return nil, oops.With("operation", "delete_by_character").
 			With("character_id", characterID.String()).Wrap(err)
-	}
-
-	// Notify watchers (same as Delete).
-	s.mu.Lock()
-	watchers := s.watchers[info.ID]
-	delete(s.watchers, info.ID)
-	s.mu.Unlock()
-	for _, ch := range watchers {
-		select {
-		case ch <- session.Event{Type: session.Destroyed, Message: reason}:
-		default:
-		}
-		close(ch)
 	}
 
 	return info, nil

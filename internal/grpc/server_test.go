@@ -26,6 +26,7 @@ import (
 	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/session"
 	tlscerts "github.com/holomush/holomush/internal/tls"
+	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
@@ -65,7 +66,7 @@ func (f *fakePlayerSessionRepo) Create(_ context.Context, _ *auth.PlayerSession)
 	panic("fakePlayerSessionRepo: Create not implemented")
 }
 
-func (f *fakePlayerSessionRepo) CreateWithCap(_ context.Context, _ *auth.PlayerSession, _ int) (int, error) {
+func (f *fakePlayerSessionRepo) CreateWithCap(_ context.Context, _ *auth.PlayerSession, _ int) ([]ulid.ULID, error) {
 	panic("fakePlayerSessionRepo: CreateWithCap not implemented")
 }
 
@@ -2760,7 +2761,12 @@ func (m *mockSubscribeStreamCh) Send(resp *corev1.SubscribeResponse) error {
 	}
 }
 
-func TestCoreServer_Subscribe_EmitsStreamClosedOnSessionDestroy(t *testing.T) {
+// TestSubscribeReturnsAfterMatchingSessionEndedInLiveLoop asserts the
+// event-sourced cutover: Subscribe's live loop observes a session_ended
+// event whose payload SessionID matches the current session, emits
+// STREAM_CLOSED, and returns nil for a clean gRPC close. This replaces
+// the old WatchSession-driven behavior.
+func TestSubscribeReturnsAfterMatchingSessionEndedInLiveLoop(t *testing.T) {
 	charID := core.NewULID()
 	sessionID := core.NewULID()
 	locationID := core.NewULID()
@@ -2789,7 +2795,7 @@ func TestCoreServer_Subscribe_EmitsStreamClosedOnSessionDestroy(t *testing.T) {
 
 	req := &corev1.SubscribeRequest{
 		Meta: &corev1.RequestMeta{
-			RequestId: "stream-closed-test",
+			RequestId: "session-ended-live-loop",
 			Timestamp: timestamppb.Now(),
 		},
 		SessionId:          sessionID.String(),
@@ -2815,25 +2821,139 @@ func TestCoreServer_Subscribe_EmitsStreamClosedOnSessionDestroy(t *testing.T) {
 	}
 replayComplete:
 
-	// Destroy the session — this should trigger STREAM_CLOSED.
-	require.NoError(t, sessStore.Delete(ctx, sessionID.String(), "Goodbye!"))
+	// Append a matching session_ended event on the character stream.
+	// This should propagate through the live loop and close Subscribe.
+	payload, err := json.Marshal(core.SessionEndedPayload{
+		SessionID:   sessionID.String(),
+		CharacterID: charID.String(),
+		Cause:       core.SessionEndedCauseQuit,
+		Reason:      "Goodbye!",
+	})
+	require.NoError(t, err)
 
-	// Next frame must be STREAM_CLOSED.
-	select {
-	case resp := <-sendCh:
-		cf := resp.GetControl()
-		require.NotNil(t, cf, "expected ControlFrame, got: %v", resp)
-		assert.Equal(t, corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED, cf.GetSignal())
-		assert.Equal(t, "Goodbye!", cf.GetMessage())
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for STREAM_CLOSED frame")
+	ev := core.NewEvent(
+		world.CharacterStream(charID),
+		core.EventTypeSessionEnded,
+		core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
+		payload,
+	)
+	require.NoError(t, eventStore.Append(ctx, ev))
+
+	// Drain frames until STREAM_CLOSED — the session_ended event itself
+	// is forwarded verbatim before the control frame.
+	var streamClosed *corev1.ControlFrame
+drainLoop:
+	for {
+		select {
+		case resp := <-sendCh:
+			if cf := resp.GetControl(); cf != nil && cf.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED {
+				streamClosed = cf
+				break drainLoop
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for STREAM_CLOSED frame")
+		}
 	}
+	require.NotNil(t, streamClosed, "expected STREAM_CLOSED frame")
+	assert.Equal(t, "Goodbye!", streamClosed.GetMessage())
 
-	// Subscribe should return nil after sending STREAM_CLOSED.
+	// Subscribe returns nil after emitting STREAM_CLOSED (sentinel
+	// short-circuit in the notification arm).
 	select {
 	case err := <-done:
-		assert.NoError(t, err)
-	case <-time.After(2 * time.Second):
+		assert.NoError(t, err, "Subscribe should return nil on matching session_ended")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Subscribe did not return after STREAM_CLOSED")
+	}
+}
+
+// TestSubscribeReturnsNilWhenSessionEndedMatchesDuringReplay asserts the
+// replay-phase sentinel short-circuit: when a matching session_ended event
+// is present in the event store BEFORE Subscribe starts, it is encountered
+// during initial replay (before REPLAY_COMPLETE), causing Subscribe to emit
+// STREAM_CLOSED and return nil for a clean gRPC close.
+func TestSubscribeReturnsNilWhenSessionEndedMatchesDuringReplay(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+
+	eventStore := core.NewMemoryEventStore()
+	sessStore := session.NewMemStore()
+
+	ctx := context.Background()
+	require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
+		ID:           sessionID.String(),
+		CharacterID:  charID,
+		LocationID:   locationID,
+		Status:       session.StatusActive,
+		EventCursors: map[string]ulid.ULID{},
+	}))
+
+	// Pre-seed the session_ended event so it is encountered during replay,
+	// before REPLAY_COMPLETE is sent.
+	payload, err := json.Marshal(core.SessionEndedPayload{
+		SessionID:   sessionID.String(),
+		CharacterID: charID.String(),
+		Cause:       core.SessionEndedCauseQuit,
+		Reason:      "Disconnected.",
+	})
+	require.NoError(t, err)
+
+	ev := core.NewEvent(
+		world.CharacterStream(charID),
+		core.EventTypeSessionEnded,
+		core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
+		payload,
+	)
+	require.NoError(t, eventStore.Append(ctx, ev))
+
+	server := newSubscribeTestServer(t, eventStore, sessStore, func(s *CoreServer) {
+		s.sessionDefaults = SessionDefaults{MaxReplay: 1000}
+	})
+
+	subCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	sendCh := make(chan *corev1.SubscribeResponse, 20)
+	stream := &mockSubscribeStreamCh{ctx: subCtx, sendCh: sendCh}
+
+	req := &corev1.SubscribeRequest{
+		Meta: &corev1.RequestMeta{
+			RequestId: "session-ended-during-replay",
+			Timestamp: timestamppb.Now(),
+		},
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- server.Subscribe(req, stream)
+	}()
+
+	// Drain frames until STREAM_CLOSED — the sentinel fires during replay,
+	// so REPLAY_COMPLETE is never sent.
+	var streamClosed *corev1.ControlFrame
+drainLoop:
+	for {
+		select {
+		case resp := <-sendCh:
+			if cf := resp.GetControl(); cf != nil && cf.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED {
+				streamClosed = cf
+				break drainLoop
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for STREAM_CLOSED frame")
+		}
+	}
+	require.NotNil(t, streamClosed, "expected STREAM_CLOSED frame")
+	assert.Equal(t, "Disconnected.", streamClosed.GetMessage())
+
+	// Subscribe returns nil after the replay-phase sentinel short-circuits.
+	select {
+	case err := <-done:
+		assert.NoError(t, err, "Subscribe should return nil on matching session_ended during replay")
+	case <-time.After(5 * time.Second):
 		t.Fatal("Subscribe did not return after STREAM_CLOSED")
 	}
 }
@@ -3463,4 +3583,94 @@ func TestSubscribeRegistersConnectionWithClientTypeFromRequest(t *testing.T) {
 		total, err := sessStore.CountConnections(context.Background(), sessionID.String())
 		return err == nil && total == 0
 	}, 2*time.Second, 10*time.Millisecond, "connection should be deregistered on stream close")
+}
+
+// =============================================================================
+// Session-ended emission error path tests (session lifecycle events, 9es6)
+// =============================================================================
+
+// TestCoreServer_HandleCommand_QuitEmitsSessionEndedEvenWhenEndSessionFails verifies
+// that when EndSession returns an error on the quit path, the session is still
+// deleted and the disconnect hook still fires — error is logged but not fatal.
+func TestCoreServer_HandleCommand_QuitEmitsSessionEndedEvenWhenEndSessionFails(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+
+	// Fail Append for session_ended events specifically; allow all others.
+	appendCallCount := 0
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, ev core.Event) error {
+			appendCallCount++
+			if ev.Type == core.EventTypeSessionEnded {
+				return errors.New("event store unavailable")
+			}
+			return nil
+		},
+	}
+
+	sessStore := session.NewMemStore()
+	ctx := context.Background()
+	require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
+		ID:            sessionID.String(),
+		CharacterID:   charID,
+		LocationID:    locationID,
+		CharacterName: "QuitChar",
+		IsGuest:       false,
+		Status:        session.StatusActive,
+		TTLSeconds:    1800,
+	}))
+
+	var hookCalled bool
+	server := newHandleCommandServer(t, store, sessStore,
+		WithDisconnectHook(func(_ session.Info) {
+			hookCalled = true
+		}),
+	)
+
+	req := &corev1.HandleCommandRequest{
+		Meta:               &corev1.RequestMeta{RequestId: "quit-end-session-fail", Timestamp: timestamppb.Now()},
+		SessionId:          sessionID.String(),
+		Command:            "quit",
+		PlayerSessionToken: testPlayerSessionToken,
+	}
+
+	resp, err := server.HandleCommand(ctx, req)
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+
+	// Session must be deleted despite EndSession error.
+	_, getErr := sessStore.Get(ctx, sessionID.String())
+	assert.Error(t, getErr, "session should be deleted after quit even when EndSession fails")
+
+	// Disconnect hook must still fire.
+	assert.True(t, hookCalled, "disconnect hook should fire even when EndSession fails")
+}
+
+// TestSendAndCommitEventLogsWarningOnSessionEndedUnmarshalFailure verifies that when
+// the session_ended payload cannot be unmarshalled, a warning is logged and the
+// stream is left open (no sentinel returned, no STREAM_CLOSED emitted).
+func TestSendAndCommitEventLogsWarningOnSessionEndedUnmarshalFailure(t *testing.T) {
+	srv, info, stream := newSendAndCommitEventHarness(t)
+	charID := info.CharacterID
+
+	// Corrupt payload — not valid JSON for SessionEndedPayload.
+	corruptPayload := []byte(`not-valid-json`)
+
+	streamName := core.StreamPrefixCharacter + charID.String()
+	ev := core.NewEvent(
+		streamName,
+		core.EventTypeSessionEnded,
+		core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
+		corruptPayload,
+	)
+
+	err := srv.sendAndCommitEvent(context.Background(), info, ev.Stream, ev, stream, nil)
+
+	// Unmarshal failure: warn and leave stream open — no sentinel, no STREAM_CLOSED.
+	assert.NoError(t, err, "unmarshal failure must not return sentinel — stream left open")
+	require.Len(t, stream.sent, 1, "only the event frame, no STREAM_CLOSED")
+	ef := stream.sent[0].GetEvent()
+	require.NotNil(t, ef, "the frame should be the session_ended event")
+	assert.Equal(t, string(core.EventTypeSessionEnded), ef.GetType())
 }

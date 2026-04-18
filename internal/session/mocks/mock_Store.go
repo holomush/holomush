@@ -240,17 +240,17 @@ func (_c *MockStore_CountConnectionsByType_Call) RunAndReturn(run func(context.C
 	return _c
 }
 
-// Delete provides a mock function with given fields: ctx, id, reason
-func (_m *MockStore) Delete(ctx context.Context, id string, reason string) error {
-	ret := _m.Called(ctx, id, reason)
+// Delete provides a mock function with given fields: ctx, id
+func (_m *MockStore) Delete(ctx context.Context, id string) error {
+	ret := _m.Called(ctx, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Delete")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
-		r0 = rf(ctx, id, reason)
+	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = rf(ctx, id)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -266,14 +266,13 @@ type MockStore_Delete_Call struct {
 // Delete is a helper method to define mock.On call
 //   - ctx context.Context
 //   - id string
-//   - reason string
-func (_e *MockStore_Expecter) Delete(ctx interface{}, id interface{}, reason interface{}) *MockStore_Delete_Call {
-	return &MockStore_Delete_Call{Call: _e.mock.On("Delete", ctx, id, reason)}
+func (_e *MockStore_Expecter) Delete(ctx interface{}, id interface{}) *MockStore_Delete_Call {
+	return &MockStore_Delete_Call{Call: _e.mock.On("Delete", ctx, id)}
 }
 
-func (_c *MockStore_Delete_Call) Run(run func(ctx context.Context, id string, reason string)) *MockStore_Delete_Call {
+func (_c *MockStore_Delete_Call) Run(run func(ctx context.Context, id string)) *MockStore_Delete_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(string))
+		run(args[0].(context.Context), args[1].(string))
 	})
 	return _c
 }
@@ -283,14 +282,14 @@ func (_c *MockStore_Delete_Call) Return(_a0 error) *MockStore_Delete_Call {
 	return _c
 }
 
-func (_c *MockStore_Delete_Call) RunAndReturn(run func(context.Context, string, string) error) *MockStore_Delete_Call {
+func (_c *MockStore_Delete_Call) RunAndReturn(run func(context.Context, string) error) *MockStore_Delete_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// DeleteByCharacter provides a mock function with given fields: ctx, characterID, reason
-func (_m *MockStore) DeleteByCharacter(ctx context.Context, characterID ulid.ULID, reason string) (*session.Info, error) {
-	ret := _m.Called(ctx, characterID, reason)
+// DeleteByCharacter provides a mock function with given fields: ctx, characterID
+func (_m *MockStore) DeleteByCharacter(ctx context.Context, characterID ulid.ULID) (*session.Info, error) {
+	ret := _m.Called(ctx, characterID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for DeleteByCharacter")
@@ -298,19 +297,19 @@ func (_m *MockStore) DeleteByCharacter(ctx context.Context, characterID ulid.ULI
 
 	var r0 *session.Info
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, string) (*session.Info, error)); ok {
-		return rf(ctx, characterID, reason)
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) (*session.Info, error)); ok {
+		return rf(ctx, characterID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID, string) *session.Info); ok {
-		r0 = rf(ctx, characterID, reason)
+	if rf, ok := ret.Get(0).(func(context.Context, ulid.ULID) *session.Info); ok {
+		r0 = rf(ctx, characterID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*session.Info)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID, string) error); ok {
-		r1 = rf(ctx, characterID, reason)
+	if rf, ok := ret.Get(1).(func(context.Context, ulid.ULID) error); ok {
+		r1 = rf(ctx, characterID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -326,14 +325,13 @@ type MockStore_DeleteByCharacter_Call struct {
 // DeleteByCharacter is a helper method to define mock.On call
 //   - ctx context.Context
 //   - characterID ulid.ULID
-//   - reason string
-func (_e *MockStore_Expecter) DeleteByCharacter(ctx interface{}, characterID interface{}, reason interface{}) *MockStore_DeleteByCharacter_Call {
-	return &MockStore_DeleteByCharacter_Call{Call: _e.mock.On("DeleteByCharacter", ctx, characterID, reason)}
+func (_e *MockStore_Expecter) DeleteByCharacter(ctx interface{}, characterID interface{}) *MockStore_DeleteByCharacter_Call {
+	return &MockStore_DeleteByCharacter_Call{Call: _e.mock.On("DeleteByCharacter", ctx, characterID)}
 }
 
-func (_c *MockStore_DeleteByCharacter_Call) Run(run func(ctx context.Context, characterID ulid.ULID, reason string)) *MockStore_DeleteByCharacter_Call {
+func (_c *MockStore_DeleteByCharacter_Call) Run(run func(ctx context.Context, characterID ulid.ULID)) *MockStore_DeleteByCharacter_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(ulid.ULID), args[2].(string))
+		run(args[0].(context.Context), args[1].(ulid.ULID))
 	})
 	return _c
 }
@@ -343,7 +341,7 @@ func (_c *MockStore_DeleteByCharacter_Call) Return(_a0 *session.Info, _a1 error)
 	return _c
 }
 
-func (_c *MockStore_DeleteByCharacter_Call) RunAndReturn(run func(context.Context, ulid.ULID, string) (*session.Info, error)) *MockStore_DeleteByCharacter_Call {
+func (_c *MockStore_DeleteByCharacter_Call) RunAndReturn(run func(context.Context, ulid.ULID) (*session.Info, error)) *MockStore_DeleteByCharacter_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -815,6 +813,65 @@ func (_c *MockStore_ListByPlayer_Call) Return(_a0 []*session.Info, _a1 error) *M
 }
 
 func (_c *MockStore_ListByPlayer_Call) RunAndReturn(run func(context.Context, ulid.ULID) ([]*session.Info, error)) *MockStore_ListByPlayer_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListByPlayerSession provides a mock function with given fields: ctx, playerSessionIDs
+func (_m *MockStore) ListByPlayerSession(ctx context.Context, playerSessionIDs []ulid.ULID) ([]*session.Info, error) {
+	ret := _m.Called(ctx, playerSessionIDs)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListByPlayerSession")
+	}
+
+	var r0 []*session.Info
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, []ulid.ULID) ([]*session.Info, error)); ok {
+		return rf(ctx, playerSessionIDs)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, []ulid.ULID) []*session.Info); ok {
+		r0 = rf(ctx, playerSessionIDs)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*session.Info)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, []ulid.ULID) error); ok {
+		r1 = rf(ctx, playerSessionIDs)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockStore_ListByPlayerSession_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListByPlayerSession'
+type MockStore_ListByPlayerSession_Call struct {
+	*mock.Call
+}
+
+// ListByPlayerSession is a helper method to define mock.On call
+//   - ctx context.Context
+//   - playerSessionIDs []ulid.ULID
+func (_e *MockStore_Expecter) ListByPlayerSession(ctx interface{}, playerSessionIDs interface{}) *MockStore_ListByPlayerSession_Call {
+	return &MockStore_ListByPlayerSession_Call{Call: _e.mock.On("ListByPlayerSession", ctx, playerSessionIDs)}
+}
+
+func (_c *MockStore_ListByPlayerSession_Call) Run(run func(ctx context.Context, playerSessionIDs []ulid.ULID)) *MockStore_ListByPlayerSession_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].([]ulid.ULID))
+	})
+	return _c
+}
+
+func (_c *MockStore_ListByPlayerSession_Call) Return(_a0 []*session.Info, _a1 error) *MockStore_ListByPlayerSession_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockStore_ListByPlayerSession_Call) RunAndReturn(run func(context.Context, []ulid.ULID) ([]*session.Info, error)) *MockStore_ListByPlayerSession_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1362,65 +1419,6 @@ func (_c *MockStore_UpdateStatus_Call) Return(_a0 error) *MockStore_UpdateStatus
 }
 
 func (_c *MockStore_UpdateStatus_Call) RunAndReturn(run func(context.Context, string, session.Status, *time.Time, *time.Time) error) *MockStore_UpdateStatus_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// WatchSession provides a mock function with given fields: ctx, sessionID
-func (_m *MockStore) WatchSession(ctx context.Context, sessionID string) (<-chan session.Event, error) {
-	ret := _m.Called(ctx, sessionID)
-
-	if len(ret) == 0 {
-		panic("no return value specified for WatchSession")
-	}
-
-	var r0 <-chan session.Event
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) (<-chan session.Event, error)); ok {
-		return rf(ctx, sessionID)
-	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) <-chan session.Event); ok {
-		r0 = rf(ctx, sessionID)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(<-chan session.Event)
-		}
-	}
-
-	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = rf(ctx, sessionID)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// MockStore_WatchSession_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'WatchSession'
-type MockStore_WatchSession_Call struct {
-	*mock.Call
-}
-
-// WatchSession is a helper method to define mock.On call
-//   - ctx context.Context
-//   - sessionID string
-func (_e *MockStore_Expecter) WatchSession(ctx interface{}, sessionID interface{}) *MockStore_WatchSession_Call {
-	return &MockStore_WatchSession_Call{Call: _e.mock.On("WatchSession", ctx, sessionID)}
-}
-
-func (_c *MockStore_WatchSession_Call) Run(run func(ctx context.Context, sessionID string)) *MockStore_WatchSession_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string))
-	})
-	return _c
-}
-
-func (_c *MockStore_WatchSession_Call) Return(_a0 <-chan session.Event, _a1 error) *MockStore_WatchSession_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *MockStore_WatchSession_Call) RunAndReturn(run func(context.Context, string) (<-chan session.Event, error)) *MockStore_WatchSession_Call {
 	_c.Call.Return(run)
 	return _c
 }

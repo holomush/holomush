@@ -90,7 +90,9 @@ type PlayerSessionRepository interface {
 	// CreateWithCap atomically inserts the new session and trims oldest
 	// non-expired sessions for the same player so the total active count is at
 	// most maxActive. A maxActive value <= 0 disables trimming (equivalent to
-	// Create). Returns the number of rows trimmed for observability.
+	// Create). Returns the ULIDs of the PlayerSessions that were trimmed
+	// (empty slice if none) so callers can emit session_ended events for any
+	// child game sessions before they cascade-delete.
 	//
 	// All operations run in a single transaction: any failure rolls back both
 	// the insert and any trimming. This eliminates three correctness gaps in
@@ -102,7 +104,7 @@ type PlayerSessionRepository interface {
 	//     logins to catch up.
 	//   - A Create failure after a successful eviction silently leaves the
 	//     player below cap with no replacement session.
-	CreateWithCap(ctx context.Context, session *PlayerSession, maxActive int) (int, error)
+	CreateWithCap(ctx context.Context, session *PlayerSession, maxActive int) (trimmedIDs []ulid.ULID, err error)
 
 	// GetByTokenHash retrieves a session by its token hash.
 	GetByTokenHash(ctx context.Context, tokenHash string) (*PlayerSession, error)
