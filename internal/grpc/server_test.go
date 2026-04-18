@@ -2838,6 +2838,119 @@ replayComplete:
 	}
 }
 
+// mockSendOnlyStream captures every Send call into a slice. Used by the
+// sendAndCommitEvent terminal-detection unit tests — simpler than the
+// channel-based mockSubscribeStreamCh because these tests call
+// sendAndCommitEvent directly (no goroutine), so synchronous capture is
+// sufficient.
+type mockSendOnlyStream struct {
+	grpc.ServerStream
+	ctx  context.Context
+	sent []*corev1.SubscribeResponse
+}
+
+func (m *mockSendOnlyStream) Context() context.Context {
+	return m.ctx
+}
+
+func (m *mockSendOnlyStream) Send(resp *corev1.SubscribeResponse) error {
+	m.sent = append(m.sent, resp)
+	return nil
+}
+
+func newSendAndCommitEventHarness(t *testing.T) (*CoreServer, *session.Info, *mockSendOnlyStream) {
+	t.Helper()
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+
+	eventStore := core.NewMemoryEventStore()
+	sessStore := session.NewMemStore()
+
+	ctx := context.Background()
+	info := &session.Info{
+		ID:           sessionID.String(),
+		CharacterID:  charID,
+		LocationID:   locationID,
+		Status:       session.StatusActive,
+		EventCursors: map[string]ulid.ULID{},
+	}
+	require.NoError(t, sessStore.Set(ctx, info.ID, info))
+
+	srv := newSubscribeTestServer(t, eventStore, sessStore)
+	stream := &mockSendOnlyStream{ctx: ctx}
+	return srv, info, stream
+}
+
+func TestSendAndCommitEventTerminatesStreamOnMatchingSessionEnded(t *testing.T) {
+	srv, info, stream := newSendAndCommitEventHarness(t)
+	charID := info.CharacterID
+
+	payload, err := json.Marshal(core.SessionEndedPayload{
+		SessionID:   info.ID, // matches current session
+		CharacterID: charID.String(),
+		Cause:       core.SessionEndedCauseQuit,
+		Reason:      "Goodbye!",
+	})
+	require.NoError(t, err)
+
+	streamName := "character:" + charID.String()
+	ev := core.NewEvent(
+		streamName,
+		core.EventTypeSessionEnded,
+		core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
+		payload,
+	)
+
+	err = srv.sendAndCommitEvent(context.Background(), info, ev.Stream, ev, stream, nil)
+
+	assert.ErrorIs(t, err, errStreamTerminated, "matching session_ended must return sentinel")
+	require.Len(t, stream.sent, 2, "expected event + STREAM_CLOSED frame")
+
+	// First frame is the session_ended event itself.
+	ef := stream.sent[0].GetEvent()
+	require.NotNil(t, ef, "first frame should be the session_ended event")
+	assert.Equal(t, string(core.EventTypeSessionEnded), ef.GetType())
+
+	// Second frame is the STREAM_CLOSED control frame with payload.Reason.
+	cf := stream.sent[1].GetControl()
+	require.NotNil(t, cf, "second frame should be ControlFrame")
+	assert.Equal(t, corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED, cf.GetSignal())
+	assert.Equal(t, "Goodbye!", cf.GetMessage())
+}
+
+func TestSendAndCommitEventForwardsNonMatchingSessionEndedVerbatim(t *testing.T) {
+	srv, info, stream := newSendAndCommitEventHarness(t)
+	charID := info.CharacterID
+
+	// SessionID on payload does NOT match info.ID — a prior session's
+	// terminal event replayed on the shared character stream.
+	otherSessionID := core.NewULID().String()
+	payload, err := json.Marshal(core.SessionEndedPayload{
+		SessionID:   otherSessionID,
+		CharacterID: charID.String(),
+		Cause:       core.SessionEndedCauseQuit,
+		Reason:      "Your other session ended",
+	})
+	require.NoError(t, err)
+
+	streamName := "character:" + charID.String()
+	ev := core.NewEvent(
+		streamName,
+		core.EventTypeSessionEnded,
+		core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
+		payload,
+	)
+
+	err = srv.sendAndCommitEvent(context.Background(), info, ev.Stream, ev, stream, nil)
+
+	assert.NoError(t, err, "non-matching session_ended must not return sentinel")
+	require.Len(t, stream.sent, 1, "expected only the event, no STREAM_CLOSED")
+	ef := stream.sent[0].GetEvent()
+	require.NotNil(t, ef, "frame should be the session_ended event")
+	assert.Equal(t, string(core.EventTypeSessionEnded), ef.GetType())
+}
+
 func TestEventToProto(t *testing.T) {
 	ev := core.NewEvent("location:test", core.EventTypeSay, core.Actor{
 		Kind: core.ActorCharacter, ID: "char-1",

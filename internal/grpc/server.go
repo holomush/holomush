@@ -677,6 +677,25 @@ func (s *CoreServer) sendAndCommitEvent(
 			"event_id", ev.ID.String(),
 			"error", updateErr)
 	}
+
+	// Terminal session_ended detection — additive at the tail, AFTER Send +
+	// UpdateCursors. The cursor must already be advanced before we emit
+	// STREAM_CLOSED and return the sentinel, so a reconnect does not
+	// re-replay the session_ended event.
+	//
+	// Design Decision #3: a non-matching session_ended (replay of a prior
+	// session's terminal event on a shared character stream) is forwarded
+	// verbatim — the event is already Sent and the cursor already advanced;
+	// we just return nil. This gives multi-surface clients free "your other
+	// session ended" UX value and guarantees cursors never stall.
+	if ev.Type == core.EventTypeSessionEnded {
+		var payload core.SessionEndedPayload
+		if unmarshalErr := json.Unmarshal(ev.Payload, &payload); unmarshalErr == nil && payload.SessionID == info.ID {
+			//nolint:errcheck // best-effort: client may already be disconnected
+			_ = grpcStream.Send(streamClosedFrame(payload.Reason))
+			return errStreamTerminated
+		}
+	}
 	return nil
 }
 
