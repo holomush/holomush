@@ -6,11 +6,15 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestEndSessionEmitsCorrectEventShapeOnCharacterStream(t *testing.T) {
@@ -60,7 +64,7 @@ func TestEndSessionUsesActorSystemForNonQuitCauses(t *testing.T) {
 	}
 
 	for _, cause := range cases {
-		t.Run("cause="+cause, func(t *testing.T) {
+		t.Run("uses ActorSystem actor when cause is "+cause, func(t *testing.T) {
 			store := NewMemoryEventStore()
 			engine := NewEngine(store)
 
@@ -72,7 +76,37 @@ func TestEndSessionUsesActorSystemForNonQuitCauses(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, events, 1)
 			assert.Equal(t, ActorSystem, events[0].Actor.Kind)
-			assert.Equal(t, "system", events[0].Actor.ID)
+			assert.Equal(t, ActorSystemID, events[0].Actor.ID)
 		})
 	}
+}
+
+// appendFailStore is a minimal EventStore that always fails on Append.
+type appendFailStore struct {
+	err error
+}
+
+func (s *appendFailStore) Append(_ context.Context, _ Event) error { return s.err }
+func (s *appendFailStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]Event, error) {
+	return nil, nil
+}
+func (s *appendFailStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
+	return ulid.ULID{}, nil
+}
+func (s *appendFailStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ ulid.ULID) ([]Event, error) {
+	return nil, nil
+}
+func (s *appendFailStore) SubscribeSession(_ context.Context) (Subscription, error) {
+	return nil, nil
+}
+
+func TestEndSessionReturnsErrorWhenStoreFails(t *testing.T) {
+	store := &appendFailStore{err: errors.New("disk full")}
+	engine := NewEngine(store)
+
+	char := CharacterRef{ID: NewULID(), Name: "Testy", LocationID: NewULID()}
+	err := engine.EndSession(context.Background(), char, NewULID().String(), SessionEndedCauseQuit, "bye")
+
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SESSION_ENDED_APPEND_FAILED")
 }

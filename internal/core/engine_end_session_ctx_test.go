@@ -53,7 +53,7 @@ func TestEndSessionDecouplesAppendCtxFromCallerCtx(t *testing.T) {
 	// The append ctx must have its own deadline (bounded timeout).
 	deadline, ok := store.appendCtx.Deadline()
 	assert.True(t, ok, "append ctx must have a bounded deadline")
-	assert.WithinDuration(t, time.Now().Add(sessionTerminalCommitTimeout), deadline, sessionTerminalCommitTimeout,
+	assert.WithinDuration(t, time.Now().Add(sessionTerminalCommitTimeout), deadline, 500*time.Millisecond,
 		"append ctx deadline must be ~sessionTerminalCommitTimeout from now")
 
 	// Event must be persisted.

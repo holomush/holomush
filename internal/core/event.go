@@ -168,10 +168,13 @@ func (a ActorKind) String() string {
 	}
 }
 
+// ActorSystemID is the well-known ID used for Actor{Kind: ActorSystem} events.
+const ActorSystemID = "system"
+
 // Actor represents who or what caused an event.
 type Actor struct {
 	Kind ActorKind
-	ID   string // Character ID, plugin name, or "system"
+	ID   string // Character ID, plugin name, or ActorSystemID
 }
 
 // Event represents something that happened in the game world.

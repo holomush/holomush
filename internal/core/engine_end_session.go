@@ -38,7 +38,7 @@ func (e *Engine) EndSession(
 	reason string,
 ) error {
 	if err := ctx.Err(); err != nil {
-		return oops.With("operation", "pre_marshal_ctx_check").Wrap(err)
+		return oops.Code("SESSION_ENDED_CTX_CANCELLED").Wrap(err)
 	}
 
 	payload, err := json.Marshal(SessionEndedPayload{
@@ -51,7 +51,7 @@ func (e *Engine) EndSession(
 		return oops.With("operation", "marshal_session_ended_payload").Wrap(err)
 	}
 
-	actor := Actor{Kind: ActorSystem, ID: "system"}
+	actor := Actor{Kind: ActorSystem, ID: ActorSystemID}
 	if cause == SessionEndedCauseQuit {
 		actor = Actor{Kind: ActorCharacter, ID: char.ID.String()}
 	}
