@@ -193,6 +193,52 @@ func (f *Functions) Register(ls *lua.LState, pluginName string, requires ...stri
 	}
 }
 
+// AuditEntry names one Lua-visible global path installed by Register,
+// for the purposes of the context-respect meta-test.
+type AuditEntry struct {
+	// Name is the Lua global path (e.g. "holomush.log"). The meta-test
+	// invokes each by DoString("<name>()") under a cancelled context.
+	Name string
+}
+
+// RegisteredFunctionsForAudit returns the list of holomush.* globals that
+// an unconfigured Functions (hostfunc.New(nil)) installs via Register.
+// Test-only; the audit meta-test in
+// internal/plugin/hostfunc/context_audit_test.go iterates this list.
+//
+// Keep this list in sync with Register. New host functions that could
+// block under adversarial input MUST be added here so the meta-test
+// exercises them.
+func (f *Functions) RegisteredFunctionsForAudit() []AuditEntry {
+	return []AuditEntry{
+		{Name: "holomush.log"},
+		{Name: "holomush.new_request_id"},
+		{Name: "holomush.kv_get"},
+		{Name: "holomush.kv_set"},
+		{Name: "holomush.kv_delete"},
+		{Name: "holomush.query_location"},
+		{Name: "holomush.query_character"},
+		{Name: "holomush.query_location_characters"},
+		{Name: "holomush.query_object"},
+		{Name: "holomush.create_location"},
+		{Name: "holomush.create_exit"},
+		{Name: "holomush.create_object"},
+		{Name: "holomush.find_location"},
+		{Name: "holomush.set_property"},
+		{Name: "holomush.get_property"},
+		{Name: "holomush.list_commands"},
+		{Name: "holomush.get_command_help"},
+		// Unconditionally registered by RegisterStreamFuncs.
+		{Name: "holomush.add_session_stream"},
+		{Name: "holomush.remove_session_stream"},
+		// Unconditionally registered by RegisterFocusFuncs.
+		{Name: "holomush.join_focus"},
+		{Name: "holomush.leave_focus"},
+		{Name: "holomush.present_focus"},
+		{Name: "holomush.query_stream_history"},
+	}
+}
+
 func (f *Functions) logFn(pluginName string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		level := L.CheckString(1)
@@ -290,7 +336,11 @@ func (f *Functions) kvGetFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
+		parentCtx := L.Context()
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
 		defer cancel()
 
 		value, err := f.kvStore.Get(ctx, pluginName, key)
@@ -336,7 +386,11 @@ func (f *Functions) kvSetFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
+		parentCtx := L.Context()
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
 		defer cancel()
 
 		if err := f.kvStore.Set(ctx, pluginName, key, []byte(value)); err != nil {
@@ -374,7 +428,11 @@ func (f *Functions) kvDeleteFn(pluginName string) lua.LGFunction {
 			return 2
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), defaultPluginQueryTimeout)
+		parentCtx := L.Context()
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
 		defer cancel()
 
 		if err := f.kvStore.Delete(ctx, pluginName, key); err != nil {

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/samber/oops"
 	lua "github.com/yuin/gopher-lua"
@@ -37,33 +38,59 @@ type luaPlugin struct {
 
 // Host manages Lua plugins.
 type Host struct {
-	factory   *StateFactory
-	hostFuncs *hostfunc.Functions
-	plugins   map[string]*luaPlugin
-	mu        sync.RWMutex
-	closed    bool
+	factory    *StateFactory
+	hostFuncs  *hostfunc.Functions
+	plugins    map[string]*luaPlugin
+	mu         sync.RWMutex
+	closed     bool
+	cpuTimeout time.Duration // per-invocation deadline applied via context.WithTimeout
+}
+
+// HostOption customizes Host construction.
+type HostOption func(*Host)
+
+// WithCPUTimeout sets the per-invocation deadline applied to every
+// CallByParam dispatched through Host.invoke. Zero disables the cap
+// (unchanged context inheritance). Recommend the caller pass a positive
+// duration in production; zero is allowed only for tests.
+func WithCPUTimeout(d time.Duration) HostOption {
+	return func(h *Host) { h.cpuTimeout = d }
+}
+
+// WithStateFactory replaces the default StateFactory. Used by callers
+// that need a factory with non-default options (e.g. RegistryMaxSize).
+func WithStateFactory(f *StateFactory) HostOption {
+	return func(h *Host) { h.factory = f }
 }
 
 // NewHost creates a new Lua plugin host without host functions.
-func NewHost() *Host {
-	return &Host{
+func NewHost(opts ...HostOption) *Host {
+	h := &Host{
 		factory: NewStateFactory(),
 		plugins: make(map[string]*luaPlugin),
 	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 // NewHostWithFunctions creates a Lua plugin host with host functions.
 // The host functions enable plugins to call holomush.* APIs like log(), new_request_id(), and kv_*.
 // Panics if hf is nil (consistent with hostfunc.New).
-func NewHostWithFunctions(hf *hostfunc.Functions) *Host {
+func NewHostWithFunctions(hf *hostfunc.Functions, opts ...HostOption) *Host {
 	if hf == nil {
 		panic("lua.NewHostWithFunctions: hostFuncs cannot be nil")
 	}
-	return &Host{
+	h := &Host{
 		factory:   NewStateFactory(),
 		hostFuncs: hf,
 		plugins:   make(map[string]*luaPlugin),
 	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 // SetFocusCoordinator injects the focus coordinator into the underlying
@@ -193,7 +220,7 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	if event.Type == "command" {
 		onCommand := L.GetGlobal("on_command")
 		if onCommand.Type() != lua.LTNil {
-			return h.callOnCommand(L, name, event, onCommand)
+			return h.callOnCommand(ctx, L, name, event, onCommand)
 		}
 		// Fall through to on_event if on_command not defined
 	}
@@ -210,8 +237,8 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 	// Build event table
 	eventTable := h.buildEventTable(L, event)
 
-	// Call on_event(event)
-	if err := L.CallByParam(lua.P{
+	// Call on_event(event) via invoke for CPU-deadline + watchdog protection.
+	if err := h.invoke(ctx, L, name, "on_event", lua.P{
 		Fn:      onEvent,
 		NRet:    1,
 		Protect: true,
@@ -277,7 +304,7 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 
 	ctxTable := h.buildCommandRequestTable(L, cmd)
 
-	if err := L.CallByParam(lua.P{
+	if err := h.invoke(ctx, L, name, "on_command", lua.P{
 		Fn:      onCommand,
 		NRet:    1,
 		Protect: true,
@@ -341,7 +368,7 @@ func (h *Host) QuerySessionStreams(ctx context.Context, name string, req plugins
 		return nil, nil
 	}
 
-	if err := L.CallByParam(lua.P{
+	if err := h.invoke(ctx, L, name, "on_session_subscribe", lua.P{
 		Fn:      fn,
 		NRet:    1,
 		Protect: true,
@@ -384,15 +411,15 @@ func (h *Host) Close(_ context.Context) error {
 }
 
 // callOnCommand calls the on_command handler with a typed CommandContext.
-func (h *Host) callOnCommand(state *lua.LState, name string, event pluginsdk.Event, onCommand lua.LValue) ([]pluginsdk.EmitEvent, error) {
+func (h *Host) callOnCommand(ctx context.Context, state *lua.LState, name string, event pluginsdk.Event, onCommand lua.LValue) ([]pluginsdk.EmitEvent, error) {
 	// Parse command payload into CommandContext
 	cmdCtx := holo.ParseCommandPayload(event.Payload)
 
 	// Build Lua context table
 	ctxTable := h.buildContextTable(state, cmdCtx)
 
-	// Call on_command(ctx)
-	if err := state.CallByParam(lua.P{
+	// Call on_command(ctx) via invoke.
+	if err := h.invoke(ctx, state, name, "on_command", lua.P{
 		Fn:      onCommand,
 		NRet:    1,
 		Protect: true,

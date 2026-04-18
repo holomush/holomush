@@ -41,18 +41,20 @@ import (
 
 // coreConfig holds configuration for the core command.
 type coreConfig struct {
-	GRPCAddr              string `koanf:"grpc_addr"`
-	ControlAddr           string `koanf:"control_addr"`
-	MetricsAddr           string `koanf:"metrics_addr"`
-	DataDir               string `koanf:"data_dir"`
-	GameID                string `koanf:"game_id"`
-	LogFormat             string `koanf:"log_format"`
-	SkipSeedMigrations    bool   `koanf:"skip_seed_migrations"`
-	SessionTTL            string `koanf:"session_ttl"`
-	SessionMaxHistory     int    `koanf:"session_max_history"`
-	SessionReaperInterval string `koanf:"session_reaper_interval"`
-	Setting               string `koanf:"setting"`
-	ResetSetting          bool   `koanf:"reset_setting"`
+	GRPCAddr              string        `koanf:"grpc_addr"`
+	ControlAddr           string        `koanf:"control_addr"`
+	MetricsAddr           string        `koanf:"metrics_addr"`
+	DataDir               string        `koanf:"data_dir"`
+	GameID                string        `koanf:"game_id"`
+	LogFormat             string        `koanf:"log_format"`
+	SkipSeedMigrations    bool          `koanf:"skip_seed_migrations"`
+	SessionTTL            string        `koanf:"session_ttl"`
+	SessionMaxHistory     int           `koanf:"session_max_history"`
+	SessionReaperInterval string        `koanf:"session_reaper_interval"`
+	Setting               string        `koanf:"setting"`
+	ResetSetting          bool          `koanf:"reset_setting"`
+	LuaTimeout            time.Duration `koanf:"lua_timeout"`
+	LuaRegistryMaxSize    int           `koanf:"lua_registry_max_size"`
 }
 
 // Validate checks that the configuration is valid.
@@ -66,15 +68,23 @@ func (cfg *coreConfig) Validate() error {
 	if cfg.LogFormat != "json" && cfg.LogFormat != "text" {
 		return oops.Code("CONFIG_INVALID").Errorf("log-format must be 'json' or 'text', got %q", cfg.LogFormat)
 	}
+	if cfg.LuaTimeout <= 0 {
+		return oops.Code("CONFIG_INVALID").Errorf("plugin-lua-timeout must be positive, got %s", cfg.LuaTimeout)
+	}
+	if cfg.LuaRegistryMaxSize <= 0 {
+		return oops.Code("CONFIG_INVALID").Errorf("plugin-lua-registry-max must be positive, got %d", cfg.LuaRegistryMaxSize)
+	}
 	return nil
 }
 
 // Default values for core command flags.
 const (
-	defaultGRPCAddr        = "localhost:9000"
-	defaultCoreControlAddr = "127.0.0.1:9001"
-	defaultCoreMetricsAddr = "127.0.0.1:9100"
-	defaultLogFormat       = "json"
+	defaultGRPCAddr             = "localhost:9000"
+	defaultCoreControlAddr      = "127.0.0.1:9001"
+	defaultCoreMetricsAddr      = "127.0.0.1:9100"
+	defaultLogFormat            = "json"
+	defaultPluginLuaTimeout     = 1 * time.Second
+	defaultPluginLuaRegistryMax = 65536
 )
 
 // NewCoreCmd creates the core subcommand.
@@ -114,6 +124,8 @@ manages plugins, and handles game state.`,
 	cmd.Flags().StringVar(&cfg.SessionReaperInterval, "session-reaper-interval", "30s", "session reaper check interval")
 	cmd.Flags().StringVar(&cfg.Setting, "setting", "crossroads", "setting plugin to bootstrap on first boot")
 	cmd.Flags().BoolVar(&cfg.ResetSetting, "reset-setting", false, "force re-bootstrap from setting plugin")
+	cmd.Flags().DurationVar(&cfg.LuaTimeout, "plugin-lua-timeout", defaultPluginLuaTimeout, "per-invocation CPU deadline for Lua plugins")
+	cmd.Flags().IntVar(&cfg.LuaRegistryMaxSize, "plugin-lua-registry-max", defaultPluginLuaRegistryMax, "max Lua registry size per plugin state")
 
 	return cmd
 }
@@ -259,19 +271,21 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	streamRegistry := holoGRPC.NewSessionStreamRegistry()
 
 	pluginSub := pluginsetup.NewPluginSubsystem(pluginsetup.PluginSubsystemConfig{
-		DataDir:         cfg.DataDir,
-		DatabaseConnStr: databaseURL,
-		CertsDir:        certsDir,
-		GameID:          gameID,
-		TrustAllowlist:  gameConfig.PluginTrustAllowlist,
-		ABAC:            abacSub,
-		PolicyInst:      abacSub,
-		PluginProv:      abacSub,
-		World:           worldSub,
-		Sessions:        &sessionBridge{sub: sessionSub},
-		AdminDeps:       &adminDepsBridge{auth: authSub, db: dbSub},
-		Registry:        registry,
-		StreamRegistry:  streamRegistry,
+		DataDir:            cfg.DataDir,
+		DatabaseConnStr:    databaseURL,
+		CertsDir:           certsDir,
+		GameID:             gameID,
+		TrustAllowlist:     gameConfig.PluginTrustAllowlist,
+		ABAC:               abacSub,
+		PolicyInst:         abacSub,
+		PluginProv:         abacSub,
+		World:              worldSub,
+		Sessions:           &sessionBridge{sub: sessionSub},
+		AdminDeps:          &adminDepsBridge{auth: authSub, db: dbSub},
+		Registry:           registry,
+		StreamRegistry:     streamRegistry,
+		LuaTimeout:         cfg.LuaTimeout,
+		LuaRegistryMaxSize: cfg.LuaRegistryMaxSize,
 	})
 
 	bootstrapSub := bootstrapsetup.NewBootstrapSubsystem(bootstrapsetup.BootstrapSubsystemConfig{

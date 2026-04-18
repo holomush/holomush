@@ -269,9 +269,11 @@ func TestRunCoreWithDeps_ValidationError(t *testing.T) {
 func TestRunCoreWithDeps_DatabaseURLMissing(t *testing.T) {
 	ctx := context.Background()
 	cfg := &coreConfig{
-		GRPCAddr:    "localhost:9000",
-		ControlAddr: "127.0.0.1:9001",
-		LogFormat:   "json",
+		GRPCAddr:           "localhost:9000",
+		ControlAddr:        "127.0.0.1:9001",
+		LogFormat:          "json",
+		LuaTimeout:         1 * time.Second,
+		LuaRegistryMaxSize: 65536,
 	}
 
 	deps := &CoreDeps{

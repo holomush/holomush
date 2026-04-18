@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/config"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestCoreCommand_Flags(t *testing.T) {
@@ -547,6 +548,47 @@ func TestFileExists(t *testing.T) {
 	}
 }
 
+func TestCoreCommand_LuaLimitDefaults(t *testing.T) {
+	cmd := NewCoreCmd()
+
+	timeout, err := cmd.Flags().GetDuration("plugin-lua-timeout")
+	require.NoError(t, err)
+	assert.Equal(t, 1*time.Second, timeout, "default Lua timeout per spec")
+
+	regMax, err := cmd.Flags().GetInt("plugin-lua-registry-max")
+	require.NoError(t, err)
+	assert.Equal(t, 65536, regMax, "default registry max per spec")
+}
+
+func TestCoreConfig_ValidateRejectsNonPositiveLuaLimits(t *testing.T) {
+	base := coreConfig{
+		GRPCAddr:           "localhost:9000",
+		ControlAddr:        "127.0.0.1:9001",
+		LogFormat:          "json",
+		LuaTimeout:         1 * time.Second,
+		LuaRegistryMaxSize: 65536,
+	}
+
+	cases := []struct {
+		name string
+		mut  func(c *coreConfig)
+	}{
+		{"LuaTimeout=0", func(c *coreConfig) { c.LuaTimeout = 0 }},
+		{"LuaTimeout<0", func(c *coreConfig) { c.LuaTimeout = -1 * time.Second }},
+		{"LuaRegistryMaxSize=0", func(c *coreConfig) { c.LuaRegistryMaxSize = 0 }},
+		{"LuaRegistryMaxSize<0", func(c *coreConfig) { c.LuaRegistryMaxSize = -1 }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := base
+			tc.mut(&cfg)
+			err := cfg.Validate()
+			require.Error(t, err)
+			errutil.AssertErrorCode(t, err, "CONFIG_INVALID")
+		})
+	}
+}
+
 // TestCoreConfig_Validate tests validation of coreConfig.
 func TestCoreConfig_Validate(t *testing.T) {
 	tests := []struct {
@@ -558,18 +600,22 @@ func TestCoreConfig_Validate(t *testing.T) {
 		{
 			name: "valid config",
 			cfg: coreConfig{
-				GRPCAddr:    "localhost:9000",
-				ControlAddr: "127.0.0.1:9001",
-				LogFormat:   "json",
+				GRPCAddr:           "localhost:9000",
+				ControlAddr:        "127.0.0.1:9001",
+				LogFormat:          "json",
+				LuaTimeout:         1 * time.Second,
+				LuaRegistryMaxSize: 65536,
 			},
 			wantError: false,
 		},
 		{
 			name: "valid config with text format",
 			cfg: coreConfig{
-				GRPCAddr:    "localhost:9000",
-				ControlAddr: "127.0.0.1:9001",
-				LogFormat:   "text",
+				GRPCAddr:           "localhost:9000",
+				ControlAddr:        "127.0.0.1:9001",
+				LogFormat:          "text",
+				LuaTimeout:         1 * time.Second,
+				LuaRegistryMaxSize: 65536,
 			},
 			wantError: false,
 		},
