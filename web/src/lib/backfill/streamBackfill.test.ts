@@ -2,6 +2,7 @@
 // Copyright 2026 HoloMUSH Contributors
 
 import { describe, it, expect, vi } from 'vitest';
+import { ConnectError, Code } from '@connectrpc/connect';
 import { backfillStreams } from './streamBackfill';
 
 function makeClient() {
@@ -83,5 +84,47 @@ describe('backfillStreams', () => {
 			'location:l1',
 		]);
 		expect(result.events.map((e) => e.eventId)).toEqual(['e-alpha', 'e-beta']);
+	});
+
+	it('retries once on transient error, then succeeds', async () => {
+		const client = makeClient();
+		const transient = new ConnectError('network', Code.Unavailable);
+		client.webQueryStreamHistory.mockRejectedValueOnce(transient).mockResolvedValueOnce({
+			events: [{ eventId: 'e-x', timestamp: 10n, type: 'say' }],
+			hasMore: false,
+		});
+
+		const result = await backfillStreams(client as never, 'sess-1', ['location:l1'], {
+			count: 150,
+		});
+		expect(result.events.map((e) => e.eventId)).toEqual(['e-x']);
+		expect(result.failedStreams).toEqual([]);
+		expect(client.webQueryStreamHistory).toHaveBeenCalledTimes(2);
+	});
+
+	it('records failed stream when transient error persists after retry', async () => {
+		const client = makeClient();
+		const transient = new ConnectError('network', Code.Unavailable);
+		client.webQueryStreamHistory.mockRejectedValueOnce(transient).mockRejectedValueOnce(transient);
+
+		const result = await backfillStreams(client as never, 'sess-1', ['location:l1']);
+		expect(result.events).toEqual([]);
+		expect(result.failedStreams).toEqual(['location:l1']);
+		expect(client.webQueryStreamHistory).toHaveBeenCalledTimes(2);
+	});
+
+	it('does NOT retry on permanent errors (PermissionDenied, NotFound, InvalidArgument)', async () => {
+		const permanents = [
+			new ConnectError('denied', Code.PermissionDenied),
+			new ConnectError('missing', Code.NotFound),
+			new ConnectError('bad', Code.InvalidArgument),
+		];
+		for (const err of permanents) {
+			const client = makeClient();
+			client.webQueryStreamHistory.mockRejectedValueOnce(err);
+			const result = await backfillStreams(client as never, 'sess-1', ['location:l1']);
+			expect(result.failedStreams).toEqual(['location:l1']);
+			expect(client.webQueryStreamHistory).toHaveBeenCalledTimes(1);
+		}
 	});
 });

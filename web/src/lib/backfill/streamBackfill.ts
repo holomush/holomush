@@ -2,6 +2,7 @@
 // Copyright 2026 HoloMUSH Contributors
 
 import type { Client } from '@connectrpc/connect';
+import { ConnectError, Code } from '@connectrpc/connect';
 import type { WebService, GameEvent } from '$lib/connect/holomush/web/v1/web_pb';
 
 export interface BackfillResult {
@@ -59,6 +60,21 @@ export async function backfillStreams(
 
 type FetchResult = { ok: true; events: GameEvent[] } | { ok: false; error: unknown };
 
+const RETRY_DELAY_MS = 500;
+
+function isRetryable(e: unknown): boolean {
+	if (!(e instanceof ConnectError)) return true; // non-Connect errors: treat as transient
+	switch (e.code) {
+		case Code.Unavailable:
+		case Code.DeadlineExceeded:
+		case Code.Internal:
+		case Code.Unknown:
+			return true;
+		default:
+			return false;
+	}
+}
+
 async function fetchOneStream(
 	client: Client<typeof WebService>,
 	sessionId: string,
@@ -66,19 +82,38 @@ async function fetchOneStream(
 	count: number,
 	signal?: AbortSignal,
 ): Promise<FetchResult> {
-	try {
-		const resp = await client.webQueryStreamHistory(
-			{
-				sessionId,
-				stream,
-				count,
-				beforeId: '',
-				notBeforeMs: 0n,
-			},
-			{ signal },
-		);
-		return { ok: true, events: resp.events };
-	} catch (e) {
-		return { ok: false, error: e };
+	for (let attempt = 0; attempt < 2; attempt++) {
+		try {
+			const resp = await client.webQueryStreamHistory(
+				{
+					sessionId,
+					stream,
+					count,
+					beforeId: '',
+					notBeforeMs: 0n,
+				},
+				{ signal },
+			);
+			return { ok: true, events: resp.events };
+		} catch (e) {
+			if (signal?.aborted) {
+				return { ok: false, error: e };
+			}
+			if (attempt === 1 || !isRetryable(e)) {
+				return { ok: false, error: e };
+			}
+			await sleep(RETRY_DELAY_MS, signal);
+		}
 	}
+	return { ok: false, error: new Error('unreachable') };
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const t = setTimeout(resolve, ms);
+		signal?.addEventListener('abort', () => {
+			clearTimeout(t);
+			reject(signal.reason);
+		});
+	});
 }
