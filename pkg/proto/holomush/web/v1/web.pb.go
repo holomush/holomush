@@ -345,6 +345,7 @@ type GameEvent struct {
 	Actor         string                 `protobuf:"bytes,6,opt,name=actor,proto3" json:"actor,omitempty"`
 	Text          string                 `protobuf:"bytes,7,opt,name=text,proto3" json:"text,omitempty"`
 	Metadata      *structpb.Struct       `protobuf:"bytes,8,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	EventId       string                 `protobuf:"bytes,9,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"` // ULID; populated from corev1.EventFrame.id
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -433,6 +434,13 @@ func (x *GameEvent) GetMetadata() *structpb.Struct {
 		return x.Metadata
 	}
 	return nil
+}
+
+func (x *GameEvent) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
 }
 
 type StreamEventsResponse struct {
@@ -2543,7 +2551,7 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"N\n" +
 	"\x13StreamEventsRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionIdJ\x04\b\x02\x10\x03R\x12replay_from_cursor\"\x96\x02\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionIdJ\x04\b\x02\x10\x03R\x12replay_from_cursor\"\xb1\x02\n" +
 	"\tGameEvent\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1a\n" +
 	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x16\n" +
@@ -2552,7 +2560,8 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\x12\x14\n" +
 	"\x05actor\x18\x06 \x01(\tR\x05actor\x12\x12\n" +
 	"\x04text\x18\a \x01(\tR\x04text\x123\n" +
-	"\bmetadata\x18\b \x01(\v2\x17.google.protobuf.StructR\bmetadata\"\x8e\x01\n" +
+	"\bmetadata\x18\b \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12\x19\n" +
+	"\bevent_id\x18\t \x01(\tR\aeventId\"\x8e\x01\n" +
 	"\x14StreamEventsResponse\x122\n" +
 	"\x05event\x18\x01 \x01(\v2\x1a.holomush.web.v1.GameEventH\x00R\x05event\x129\n" +
 	"\acontrol\x18\x02 \x01(\v2\x1d.holomush.web.v1.ControlFrameH\x00R\acontrolB\a\n" +

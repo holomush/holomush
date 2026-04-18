@@ -371,3 +371,31 @@ func TestTranslateEvent_StateCorruptPayload(t *testing.T) {
 	got := h.translateEvent(ev)
 	assert.Nil(t, got)
 }
+
+func TestTranslateEvent_PopulatesEventIdForCommunicationEvents(t *testing.T) {
+	h := newTestHandler(t)
+	ev := &corev1.EventFrame{
+		Id:        "01HYXYZ000000000000000001A",
+		Type:      "say",
+		Timestamp: timestamppb.New(timestamppb.Now().AsTime()),
+		Payload:   mustMarshal(t, map[string]string{"character_name": "Alice", "message": "Hello!"}),
+	}
+
+	got := h.translateEvent(ev)
+	require.NotNil(t, got)
+	assert.Equal(t, "01HYXYZ000000000000000001A", got.GetEventId())
+}
+
+func TestTranslateEvent_PopulatesEventIdForStateEvents(t *testing.T) {
+	h := newTestHandler(t)
+	ev := &corev1.EventFrame{
+		Id:        "01HYXYZ000000000000000002B",
+		Type:      "location_state",
+		Timestamp: timestamppb.New(timestamppb.Now().AsTime()),
+		Payload:   mustMarshal(t, map[string]any{"name": "Cafe", "description": "a place"}),
+	}
+
+	got := h.translateEvent(ev)
+	require.NotNil(t, got)
+	assert.Equal(t, "01HYXYZ000000000000000002B", got.GetEventId())
+}

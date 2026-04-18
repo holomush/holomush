@@ -99,6 +99,7 @@ message GameEvent {
   string actor = 6;
   string text = 7;
   google.protobuf.Struct metadata = 8;
+  string event_id = 9; // ULID; populated from corev1.EventFrame.id
 }
 
 message StreamEventsResponse {

@@ -138,6 +138,7 @@ func (h *Handler) translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 		Actor:         actor,
 		Text:          text,
 		Metadata:      metadata,
+		EventId:       ev.GetId(),
 	}
 }
 
@@ -187,5 +188,6 @@ func (h *Handler) translateStateEvent(
 		DisplayTarget: displayTarget,
 		Timestamp:     ts,
 		Metadata:      s,
+		EventId:       ev.GetId(),
 	}
 }
