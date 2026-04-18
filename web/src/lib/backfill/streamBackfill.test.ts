@@ -127,4 +127,23 @@ describe('backfillStreams', () => {
 			expect(client.webQueryStreamHistory).toHaveBeenCalledTimes(1);
 		}
 	});
+
+	it('rejects with abort reason when AbortSignal is triggered mid-flight', async () => {
+		const client = makeClient();
+		client.webQueryStreamHistory.mockImplementation(
+			(_req: unknown, opts?: { signal?: AbortSignal }) =>
+				new Promise((_resolve, reject) => {
+					opts?.signal?.addEventListener('abort', () => {
+						reject(new DOMException('aborted', 'AbortError'));
+					});
+				}),
+		);
+
+		const controller = new AbortController();
+		const promise = backfillStreams(client as never, 'sess-1', ['location:l1'], {
+			signal: controller.signal,
+		});
+		controller.abort();
+		await expect(promise).rejects.toThrow();
+	});
 });

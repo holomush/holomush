@@ -32,6 +32,10 @@ export async function backfillStreams(
 		streams.map((stream) => fetchOneStream(client, sessionId, stream, count, opts.signal)),
 	);
 
+	if (opts.signal?.aborted) {
+		throw opts.signal.reason;
+	}
+
 	const events: GameEvent[] = [];
 	const failedStreams: string[] = [];
 	for (let i = 0; i < results.length; i++) {
@@ -44,8 +48,8 @@ export async function backfillStreams(
 	}
 
 	events.sort((a, b) => {
-		const at = typeof a.timestamp === 'bigint' ? a.timestamp : BigInt(a.timestamp ?? 0);
-		const bt = typeof b.timestamp === 'bigint' ? b.timestamp : BigInt(b.timestamp ?? 0);
+		const at = a.timestamp;
+		const bt = b.timestamp;
 		if (at < bt) return -1;
 		if (at > bt) return 1;
 		const aid = a.eventId ?? '';
@@ -82,7 +86,7 @@ async function fetchOneStream(
 	count: number,
 	signal?: AbortSignal,
 ): Promise<FetchResult> {
-	for (let attempt = 0; attempt < 2; attempt++) {
+	for (let attempt = 0; ; attempt++) {
 		try {
 			const resp = await client.webQueryStreamHistory(
 				{
@@ -99,21 +103,24 @@ async function fetchOneStream(
 			if (signal?.aborted) {
 				return { ok: false, error: e };
 			}
-			if (attempt === 1 || !isRetryable(e)) {
+			if (attempt >= 1 || !isRetryable(e)) {
 				return { ok: false, error: e };
 			}
 			await sleep(RETRY_DELAY_MS, signal);
 		}
 	}
-	return { ok: false, error: new Error('unreachable') };
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 	return new Promise((resolve, reject) => {
-		const t = setTimeout(resolve, ms);
-		signal?.addEventListener('abort', () => {
+		const onAbort = () => {
 			clearTimeout(t);
-			reject(signal.reason);
-		});
+			reject(signal?.reason);
+		};
+		const t = setTimeout(() => {
+			signal?.removeEventListener('abort', onAbort);
+			resolve();
+		}, ms);
+		signal?.addEventListener('abort', onAbort, { once: true });
 	});
 }
