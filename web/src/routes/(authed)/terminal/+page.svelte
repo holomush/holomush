@@ -20,6 +20,9 @@
   import Sidebar from '$lib/components/sidebar/Sidebar.svelte';
   import { goto } from '$app/navigation';
   import { trace, type Span } from '@opentelemetry/api';
+  import { backfillStreams } from '$lib/backfill/streamBackfill';
+  import { isUnimplementedError } from '$lib/connect/errors';
+  import type { GameEvent } from '$lib/connect/holomush/web/v1/web_pb';
 
   const client = createClient(WebService, transport);
   const tracer = trace.getTracer('holomush-web');
@@ -65,7 +68,7 @@
       sessionId = sid;
       characterName = name ?? '';
       connected = true;
-      startStreaming();
+      hydrateAndStream();
     } else {
       // Auth guard should have prevented this, but redirect as fallback
       goto('/login');
@@ -123,73 +126,146 @@
     ]);
   }
 
-  async function startStreaming() {
+  async function hydrateAndStream() {
     abortController?.abort();
     abortController = new AbortController();
     clearLines();
     replayActive.set(true);
     const generation = ++streamGeneration;
     createStreamReadyGate(generation);
-    let inReplay = true;
 
-    // stream.lifecycle span — tracks the lifetime of the event stream connection
     if (streamSpan) {
       streamSpan.addEvent('reconnect');
       streamSpan.end();
     }
     streamSpan = tracer.startSpan('stream.lifecycle');
 
-    try {
-      for await (const response of client.streamEvents(
-        { sessionId, replayFromCursor: false },
-        { signal: abortController.signal }
-      )) {
-        if (response.frame.case === 'control') {
-          const ctrl = response.frame.value;
-          if (ctrl.signal === ControlSignal.REPLAY_COMPLETE) {
-            inReplay = false;
-            replayActive.set(false);
-            resolveStreamReady(generation);
-          } else if (ctrl.signal === ControlSignal.STREAM_CLOSED) {
-            if (ctrl.message) {
-              appendLine(
-                { type: 'system', characterName: '', text: ctrl.message, channel: 0 },
-                false,
-              );
+    const liveBuffer: GameEvent[] = [];
+    const seenEventIds = new Set<string>();
+    let backfillDone = false;
+
+    // Subscribe runs in parallel with backfill. Subscribe events arriving
+    // before backfill completes are buffered and drained afterward.
+    // Subscribe's replay-phase events are events the user MISSED while detached,
+    // so they render as replayed=false after draining (NOT dimmed).
+    //
+    // streamReadyGate resolves on REPLAY_COMPLETE (not backfill). Commands
+    // sent during backfill get a response via Subscribe which is buffered
+    // and drains as live after the dimmed scrollback.
+    //
+    // Generation gating: resolveStreamReady / rejectStreamReady are already
+    // generation-scoped (they no-op if streamReadyGate.generation !== generation),
+    // so a stale Subscribe from a prior invocation cannot poison a fresh gate.
+    const subscribePromise = (async () => {
+      try {
+        // NOTE: replayFromCursor field was removed from SubscribeRequest
+        // (reserved in proto per focus substrate clean break). Subscribe
+        // is now server-driven replay-from-cursor + live.
+        for await (const response of client.streamEvents(
+          { sessionId },
+          { signal: abortController.signal },
+        )) {
+          if (response.frame.case === 'control') {
+            const ctrl = response.frame.value;
+            if (ctrl.signal === ControlSignal.REPLAY_COMPLETE) {
+              resolveStreamReady(generation);
+            } else if (ctrl.signal === ControlSignal.STREAM_CLOSED) {
+              if (ctrl.message) {
+                appendLine(
+                  { type: 'system', characterName: '', text: ctrl.message, channel: 0 },
+                  false,
+                );
+              }
+              clearCharacterSession();
+              connected = false;
+              sessionId = '';
+              rejectStreamReady(generation, new Error(ctrl.message || 'Stream closed'));
+              streamSpan?.end();
+              streamSpan = null;
+              goto('/characters');
+              return;
             }
-            clearCharacterSession();
-            connected = false;
-            sessionId = '';
-            rejectStreamReady(generation, new Error(ctrl.message || 'Stream closed'));
-            streamSpan?.end();
-            streamSpan = null;
-            goto('/characters');
-            return;
+          } else if (response.frame.case === 'event') {
+            const ev = response.frame.value;
+            if (pendingCommandSpan && ev.type === 'command_response') {
+              pendingCommandSpan.end();
+              pendingCommandSpan = null;
+            }
+            if (!backfillDone) {
+              liveBuffer.push(ev);
+            } else {
+              if (ev.eventId && seenEventIds.has(ev.eventId)) continue;
+              if (ev.eventId) seenEventIds.add(ev.eventId);
+              routeEvent(ev, false);
+            }
           }
-        } else if (response.frame.case === 'event') {
-          // Resolve any pending command.roundtrip span on first response after a command
-          if (pendingCommandSpan && response.frame.value.type === 'command_response') {
-            pendingCommandSpan.end();
-            pendingCommandSpan = null;
-          }
-          routeEvent(response.frame.value, inReplay);
+        }
+      } catch (e) {
+        if (e instanceof Error && e.name !== 'AbortError') {
+          connected = false;
+          error = 'Connection lost. Click "Reconnect" or refresh the page.';
+          rejectStreamReady(generation, e);
+        } else {
+          rejectStreamReady(generation, e);
+        }
+      } finally {
+        if (streamReadyGate?.generation === generation) {
+          rejectStreamReady(generation, new Error('Event stream ended before replay completed'));
+        }
+        streamSpan?.end();
+        streamSpan = null;
+      }
+    })();
+
+    // Backfill: enumerate streams via WebListSessionStreams, fan-out
+    // WebQueryStreamHistory per stream, render as replayed=true. Failures
+    // are logged and swallowed — the terminal still works with Subscribe only.
+    try {
+      let streams: string[] = [];
+      try {
+        const resp = await client.webListSessionStreams({ sessionId });
+        streams = resp.streams;
+      } catch (e) {
+        if (isUnimplementedError(e)) {
+          console.info('[backfill] WebListSessionStreams not available; skipping backfill');
+        } else {
+          console.warn('[backfill] stream enumeration failed', e);
         }
       }
-    } catch (e) {
-      if (e instanceof Error && e.name !== 'AbortError') {
-        connected = false;
-        error = 'Connection lost. Click "Reconnect" or refresh the page.';
-        rejectStreamReady(generation, e);
-      } else {
-        rejectStreamReady(generation, e);
+      try {
+        const { events, failedStreams } = await backfillStreams(client, sessionId, streams, {
+          signal: abortController.signal,
+        });
+        if (failedStreams.length > 0) {
+          console.warn('[backfill] streams failed', { failedStreams });
+        }
+        for (const ev of events) {
+          if (generation !== streamGeneration) break;
+          if (ev.eventId) seenEventIds.add(ev.eventId);
+          routeEvent(ev, true);
+        }
+      } catch (e) {
+        // backfillStreams rejects on abort — component unmount, not an
+        // error worth surfacing to the user.
+        if (!abortController.signal.aborted) {
+          console.warn('[backfill] fetch failed', e);
+        }
       }
     } finally {
-      if (streamReadyGate?.generation === generation) {
-        rejectStreamReady(generation, new Error('Event stream ended before replay completed'));
+      backfillDone = true;
+      if (generation === streamGeneration) {
+        replayActive.set(false);
+        // Drain Subscribe events that arrived during backfill, deduping.
+        for (const ev of liveBuffer) {
+          if (ev.eventId && seenEventIds.has(ev.eventId)) continue;
+          if (ev.eventId) seenEventIds.add(ev.eventId);
+          routeEvent(ev, false);
+        }
       }
-      streamSpan?.end();
-      streamSpan = null;
+      liveBuffer.length = 0;
     }
+
+    await subscribePromise;
   }
 
   async function sendCommand(command: string) {
@@ -237,7 +313,7 @@
   async function reconnect() {
     error = '';
     connected = true;
-    startStreaming();
+    hydrateAndStream();
   }
 </script>
 
