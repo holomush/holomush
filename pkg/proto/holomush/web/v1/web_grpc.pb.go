@@ -39,6 +39,7 @@ const (
 	WebService_WebGetContent_FullMethodName                = "/holomush.web.v1.WebService/WebGetContent"
 	WebService_WebListContent_FullMethodName               = "/holomush.web.v1.WebService/WebListContent"
 	WebService_WebQueryStreamHistory_FullMethodName        = "/holomush.web.v1.WebService/WebQueryStreamHistory"
+	WebService_WebListSessionStreams_FullMethodName        = "/holomush.web.v1.WebService/WebListSessionStreams"
 	WebService_WebListPlayerSessions_FullMethodName        = "/holomush.web.v1.WebService/WebListPlayerSessions"
 	WebService_WebRevokePlayerSession_FullMethodName       = "/holomush.web.v1.WebService/WebRevokePlayerSession"
 	WebService_WebRevokeOtherPlayerSessions_FullMethodName = "/holomush.web.v1.WebService/WebRevokeOtherPlayerSessions"
@@ -76,6 +77,10 @@ type WebServiceClient interface {
 	// WebQueryStreamHistory reads paginated event history for the web client.
 	// Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
 	WebQueryStreamHistory(ctx context.Context, in *WebQueryStreamHistoryRequest, opts ...grpc.CallOption) (*WebQueryStreamHistoryResponse, error)
+	// WebListSessionStreams returns the stream names the session is subscribed to.
+	// Proxies to CoreService.ListSessionStreams — authorization is enforced by core.
+	// Used by the web client to enumerate streams for reload-backfill.
+	WebListSessionStreams(ctx context.Context, in *WebListSessionStreamsRequest, opts ...grpc.CallOption) (*WebListSessionStreamsResponse, error)
 	// Session-management RPCs. The caller is identified via the X-Session-Token
 	// cookie header injected by CookieMiddleware; no token field in the request.
 	WebListPlayerSessions(ctx context.Context, in *WebListPlayerSessionsRequest, opts ...grpc.CallOption) (*WebListPlayerSessionsResponse, error)
@@ -270,6 +275,16 @@ func (c *webServiceClient) WebQueryStreamHistory(ctx context.Context, in *WebQue
 	return out, nil
 }
 
+func (c *webServiceClient) WebListSessionStreams(ctx context.Context, in *WebListSessionStreamsRequest, opts ...grpc.CallOption) (*WebListSessionStreamsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WebListSessionStreamsResponse)
+	err := c.cc.Invoke(ctx, WebService_WebListSessionStreams_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *webServiceClient) WebListPlayerSessions(ctx context.Context, in *WebListPlayerSessionsRequest, opts ...grpc.CallOption) (*WebListPlayerSessionsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(WebListPlayerSessionsResponse)
@@ -332,6 +347,10 @@ type WebServiceServer interface {
 	// WebQueryStreamHistory reads paginated event history for the web client.
 	// Proxies to CoreService.QueryStreamHistory — authorization is enforced by core.
 	WebQueryStreamHistory(context.Context, *WebQueryStreamHistoryRequest) (*WebQueryStreamHistoryResponse, error)
+	// WebListSessionStreams returns the stream names the session is subscribed to.
+	// Proxies to CoreService.ListSessionStreams — authorization is enforced by core.
+	// Used by the web client to enumerate streams for reload-backfill.
+	WebListSessionStreams(context.Context, *WebListSessionStreamsRequest) (*WebListSessionStreamsResponse, error)
 	// Session-management RPCs. The caller is identified via the X-Session-Token
 	// cookie header injected by CookieMiddleware; no token field in the request.
 	WebListPlayerSessions(context.Context, *WebListPlayerSessionsRequest) (*WebListPlayerSessionsResponse, error)
@@ -397,6 +416,9 @@ func (UnimplementedWebServiceServer) WebListContent(context.Context, *WebListCon
 }
 func (UnimplementedWebServiceServer) WebQueryStreamHistory(context.Context, *WebQueryStreamHistoryRequest) (*WebQueryStreamHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebQueryStreamHistory not implemented")
+}
+func (UnimplementedWebServiceServer) WebListSessionStreams(context.Context, *WebListSessionStreamsRequest) (*WebListSessionStreamsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WebListSessionStreams not implemented")
 }
 func (UnimplementedWebServiceServer) WebListPlayerSessions(context.Context, *WebListPlayerSessionsRequest) (*WebListPlayerSessionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WebListPlayerSessions not implemented")
@@ -727,6 +749,24 @@ func _WebService_WebQueryStreamHistory_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WebService_WebListSessionStreams_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WebListSessionStreamsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WebServiceServer).WebListSessionStreams(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WebService_WebListSessionStreams_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WebServiceServer).WebListSessionStreams(ctx, req.(*WebListSessionStreamsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _WebService_WebListPlayerSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(WebListPlayerSessionsRequest)
 	if err := dec(in); err != nil {
@@ -851,6 +891,10 @@ var WebService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WebQueryStreamHistory",
 			Handler:    _WebService_WebQueryStreamHistory_Handler,
+		},
+		{
+			MethodName: "WebListSessionStreams",
+			Handler:    _WebService_WebListSessionStreams_Handler,
 		},
 		{
 			MethodName: "WebListPlayerSessions",
