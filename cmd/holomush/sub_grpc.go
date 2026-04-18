@@ -132,7 +132,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	pluginManager.ConfigureEventEmitter(eventStore)
 
 	// 1. Create core engine from event store.
-	engine := core.NewEngine(eventStore)
+	engine := core.NewEngine(eventStore, core.WithProductionGuardrail())
 
 	// 2. Create gRPC server with TLS credentials.
 	// Install GRPCServiceProxy as UnknownServiceHandler so plugin-provided

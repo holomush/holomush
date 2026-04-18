@@ -231,3 +231,31 @@ func TestEngineHandleDisconnectStoresLeaveEventWithReasonPayload(t *testing.T) {
 	assert.Equal(t, "Alyssa", payload.CharacterName)
 	assert.Equal(t, "quit", payload.Reason)
 }
+
+func TestNewEnginePanicsWhenStoreIsNotEventWriterInProductionMode(t *testing.T) {
+	rawStore := NewMemoryEventStore()
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic from NewEngine in production mode with non-writer store")
+		}
+	}()
+
+	NewEngine(rawStore, WithProductionGuardrail())
+}
+
+func TestNewEngineAcceptsRawStoreInTestMode(t *testing.T) {
+	rawStore := NewMemoryEventStore()
+	// No WithProductionGuardrail — test default is permissive.
+	e := NewEngine(rawStore)
+	assert.NotNil(t, e)
+}
+
+func TestNewEngineAcceptsEventWriterInProductionMode(t *testing.T) {
+	rawStore := NewMemoryEventStore()
+	writer := NewEventWriter(rawStore)
+	t.Cleanup(func() { writer.Close() })
+
+	e := NewEngine(writer, WithProductionGuardrail())
+	assert.NotNil(t, e)
+}

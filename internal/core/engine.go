@@ -6,6 +6,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/samber/oops"
@@ -41,16 +42,39 @@ type LeavePayload struct {
 	Reason        string `json:"reason"`
 }
 
+// EngineOption configures a new Engine.
+type EngineOption func(*engineConfig)
+
+type engineConfig struct {
+	productionGuardrail bool
+}
+
+// WithProductionGuardrail enables the runtime assertion that the engine's
+// store is a *core.EventWriter. Enforces invariant I1 (EventWriter
+// serialization) in production wiring. Test constructors typically omit
+// this to allow lightweight in-memory stores for pure-logic tests.
+func WithProductionGuardrail() EngineOption {
+	return func(c *engineConfig) { c.productionGuardrail = true }
+}
+
 // Engine is the core game engine.
 type Engine struct {
 	store EventStore
 }
 
 // NewEngine creates a new game engine.
-func NewEngine(store EventStore) *Engine {
-	return &Engine{
-		store: store,
+func NewEngine(store EventStore, opts ...EngineOption) *Engine {
+	cfg := engineConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
 	}
+	if cfg.productionGuardrail {
+		if _, ok := store.(*EventWriter); !ok {
+			panic("core.NewEngine: production mode requires *EventWriter store (I1 guardrail). " +
+				"Got " + fmt.Sprintf("%T", store) + ". See design spec Design Decision #8.")
+		}
+	}
+	return &Engine{store: store}
 }
 
 // HandleSay processes a say command.
