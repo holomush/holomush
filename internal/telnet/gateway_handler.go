@@ -36,6 +36,13 @@ const (
 	maxCommandSize = 4096
 	// rpcTimeout is the per-call timeout for unary gRPC RPCs.
 	rpcTimeout = 10 * time.Second
+	// drainTimeout bounds drainUntilClosed's wait for the server's
+	// STREAM_CLOSED frame before falling back to a client-side message.
+	// Matches rpcTimeout so the full quit round-trip (HandleCommand RPC
+	// + Subscribe goroutine scheduling + STREAM_CLOSED delivery) has
+	// headroom on slow CI runners without stalling a misbehaving server
+	// indefinitely.
+	drainTimeout = 10 * time.Second
 )
 
 // CoreClient is the gRPC interface used by GatewayHandler to communicate with
@@ -190,8 +197,11 @@ func (h *GatewayHandler) Handle(ctx context.Context) {
 			}
 			if h.quitting {
 				// Wait for the STREAM_CLOSED control frame with "Goodbye!" before
-				// closing. The server sends it after processing quit.
-				h.drainUntilClosed(eventRecv)
+				// closing. The server sends it after processing quit. If the
+				// server's Subscribe goroutine races the drain timer or exits
+				// without emitting STREAM_CLOSED, fall back to "Goodbye!" so
+				// the client's quit UX is deterministic.
+				h.drainUntilClosed(childCtx, eventRecv, "Goodbye!")
 				if h.loggingOut || h.playerSessionToken == "" {
 					return // LOGOUT or guest: close connection
 				}
@@ -725,17 +735,39 @@ func (h *GatewayHandler) refreshCharacterList(ctx context.Context) {
 
 // drainUntilClosed reads from the event channel until a STREAM_CLOSED
 // control frame arrives or the channel closes or a timeout expires.
-// Any event frames received are forwarded to the client.
-func (h *GatewayHandler) drainUntilClosed(eventRecv <-chan *corev1.SubscribeResponse) {
+// Any event frames received are forwarded to the client. If the timeout
+// fires or the channel closes without a message (e.g., server-side
+// Subscribe goroutine exited on error before emitting STREAM_CLOSED),
+// fallbackMsg is sent to the client so the quit/logout UX remains
+// deterministic. Pass "" to disable the fallback.
+//
+// Why the fallback matters: the server emits STREAM_CLOSED with its
+// "Goodbye!" message from a different goroutine than HandleCommand's
+// Delete call — under CI load the Subscribe goroutine can race the
+// 2s timer (observed with ~5% rate in
+// test/integration/telnet/e2e_test.go "Lifecycle Events / emits leave
+// event on guest disconnect"). Without the fallback, the telnet
+// client sees the character-picker prompt but never receives
+// "Goodbye!", which is the user-facing contract of `quit`.
+func (h *GatewayHandler) drainUntilClosed(ctx context.Context, eventRecv <-chan *corev1.SubscribeResponse, fallbackMsg string) {
 	if eventRecv == nil {
+		// No event subscription to drain (e.g., selectMode logout). The
+		// caller is responsible for emitting any user-facing message in
+		// that path; a fallback here would duplicate it.
 		return
 	}
-	timer := time.NewTimer(2 * time.Second)
+	timer := time.NewTimer(drainTimeout)
 	defer timer.Stop()
 	for {
 		select {
 		case resp, ok := <-eventRecv:
 			if !ok {
+				// Channel closed before STREAM_CLOSED — server goroutine
+				// exited early. Deliver the fallback so the client sees
+				// the quit/logout message it expects.
+				if fallbackMsg != "" {
+					h.send(fallbackMsg)
+				}
 				return
 			}
 			switch frame := resp.GetFrame().(type) {
@@ -743,13 +775,26 @@ func (h *GatewayHandler) drainUntilClosed(eventRecv <-chan *corev1.SubscribeResp
 				h.sendProtoEvent(frame.Event)
 			case *corev1.SubscribeResponse_Control:
 				if frame.Control.GetSignal() == corev1.ControlSignal_CONTROL_SIGNAL_STREAM_CLOSED {
-					if msg := frame.Control.GetMessage(); msg != "" {
+					switch msg := frame.Control.GetMessage(); {
+					case msg != "":
 						h.send(msg)
+					case fallbackMsg != "":
+						h.send(fallbackMsg)
 					}
 					return
 				}
 			}
 		case <-timer.C:
+			// Timed out waiting for STREAM_CLOSED. Log so operators can
+			// see if this becomes common, and fall back to delivering
+			// the expected message to the client.
+			slog.WarnContext(ctx, "gateway: drain timed out waiting for STREAM_CLOSED",
+				"session_id", h.sessionID,
+				"fallback_msg", fallbackMsg,
+			)
+			if fallbackMsg != "" {
+				h.send(fallbackMsg)
+			}
 			return
 		}
 	}
