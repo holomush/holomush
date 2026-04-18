@@ -178,13 +178,9 @@
             } else if (ctrl.signal === ControlSignal.STREAM_CLOSED) {
               // Stale-generation guard: if a later hydrate has started,
               // skip mutating shared state (connected, sessionId) and just
-              // reject our own gate. Span teardown is keyed on localSpan.
+              // reject our own gate. Span teardown is handled in finally.
               if (generation !== streamGeneration) {
                 rejectStreamReady(generation, new Error(ctrl.message || 'Stream closed'));
-                if (streamSpan === localSpan) {
-                  streamSpan = null;
-                }
-                localSpan.end();
                 return;
               }
               if (ctrl.message) {
@@ -197,10 +193,6 @@
               connected = false;
               sessionId = '';
               rejectStreamReady(generation, new Error(ctrl.message || 'Stream closed'));
-              if (streamSpan === localSpan) {
-                streamSpan = null;
-              }
-              localSpan.end();
               goto('/characters');
               return;
             }
