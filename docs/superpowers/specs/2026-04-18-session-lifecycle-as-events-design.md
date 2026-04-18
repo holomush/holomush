@@ -100,6 +100,7 @@ All event appends in production go through `EventWriter` (`internal/core/event_w
 ### I3 — `FindByCharacter` reattach: one character, one session
 
 `sessionStore.FindByCharacter(charID)` returns a single active-or-detached session per character (`internal/session/memstore.go:94-107`). `SelectCharacter` reattaches rather than forking. This invariant is load-bearing for:
+
 - Grid presence (one `arrive`/`leave`/position per character)
 - Peers' view of a character (one set of events, no dedupe needed)
 - The session cap (PR #225: "11th login evicts oldest" — counts one per character)
@@ -137,6 +138,7 @@ type SessionEndedPayload struct {
 ```
 
 **Actor convention** (per Design Decision #1 below):
+
 - `cause="quit"` → `Actor{Kind: ActorCharacter, ID: char.ID}` (character-initiated)
 - All other causes (`logout`, `guest_end`, `kicked`, `reaped`, `evicted`) → `Actor{Kind: ActorSystem, ID: "system"}` (system-initiated). The character reference lives in the payload's `CharacterID`.
 
@@ -364,6 +366,7 @@ Rationale for the split (per architect review round 3): adding `session.Info.Pen
 ### EventWriter coverage guard
 
 Depending on which guardrail the plan picks for I1:
+
 - If type-level (`NewEngine(*EventWriter)`): compilation error if violated — nothing else needed.
 - If startup assertion: a unit test that `NewEngine(rawStore)` panics, and an integration test that the production wiring passes.
 
@@ -380,6 +383,7 @@ Depending on which guardrail the plan picks for I1:
 When `sessionCh` fires, drain pending `sub.Notifications()` non-blockingly before sending STREAM_CLOSED. Under I1 + I2, EventWriter's serialization plus PG LISTEN single-connection delivery means append-order equals notification-order — so a drain *could* close the race, not merely narrow it, by consuming all pending notifications up to a known `LastEventID` before emitting STREAM_CLOSED.
 
 Option D wins on:
+
 - **Code reduction** — deletes a whole control plane rather than adding drain logic.
 - **Audit trail** — `session_ended` persists in the event store; Option A leaves no durable record.
 - **Architectural alignment** — session state becomes event-sourced like everything else.

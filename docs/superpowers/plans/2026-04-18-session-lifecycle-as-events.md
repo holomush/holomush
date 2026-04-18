@@ -67,7 +67,7 @@
 
 ## Dependency Graph
 
-```
+```text
 Phase 1: Foundation (linear)
   Task 1  -->  Task 2  -->  Task 3
 
