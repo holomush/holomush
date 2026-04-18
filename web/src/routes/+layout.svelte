@@ -9,6 +9,12 @@
   import { restoreSession } from '$lib/stores/authStore';
   import { activeTheme, themeToCssVars } from '$lib/stores/themeStore';
   import { uiPrefs, hydrateUiPrefs } from '$lib/stores/uiPrefsStore';
+  import Composer from '$lib/components/terminal/Composer.svelte';
+  import {
+    composerDraft,
+    setComposerDraft,
+    invokeComposerSubmit,
+  } from '$lib/stores/composerBridge';
   import { beforeNavigate, afterNavigate } from '$app/navigation';
   import { onMount } from 'svelte';
 
@@ -36,6 +42,11 @@
 >
   <TopBar />
   <main>{@render children()}</main>
+  <Composer
+    draft={$composerDraft}
+    ondraftChange={setComposerDraft}
+    onsubmit={invokeComposerSubmit}
+  />
 </div>
 
 <style>

@@ -13,6 +13,12 @@
   import { themePreferences, terminalBlackOverrideVars } from '$lib/stores/themeStore';
   import { setConnectionStatus } from '$lib/stores/connectionStore';
   import { toggleSidebar, uiPrefs, setSidebarWidthPx } from '$lib/stores/uiPrefsStore';
+  import {
+    composerDraft,
+    setComposerDraft,
+    registerComposerSubmit,
+  } from '$lib/stores/composerBridge';
+  import { pushCommand } from '$lib/stores/commandHistoryStore';
   import * as Resizable from '$lib/components/ui/resizable';
   import { authState, clearAuth, clearCharacterSession } from '$lib/stores/authStore';
   import TerminalView from '$lib/components/terminal/TerminalView.svelte';
@@ -75,6 +81,23 @@
 
   let sidebarDefaultPct = $derived(pctFromPx($uiPrefs.sidebarWidthPx, containerWidth || 1120));
 
+  // Composer draft bridge: on open, seed composer from the saved CommandInput
+  // draft for this session; on close, inject the (possibly edited) text back
+  // into CommandInput via injectText.
+  let wasComposerOpen = $state(false);
+  $effect(() => {
+    const isOpen = $uiPrefs.composerOpen;
+    if (isOpen && !wasComposerOpen) {
+      if (sessionId) {
+        const saved = localStorage.getItem(`holomush-draft:${sessionId}`) ?? '';
+        setComposerDraft(saved);
+      }
+    } else if (!isOpen && wasComposerOpen) {
+      injectText = $composerDraft;
+    }
+    wasComposerOpen = isOpen;
+  });
+
   function onKeydown(e: KeyboardEvent) {
     if (e.ctrlKey && e.key === 'b') {
       e.preventDefault();
@@ -88,6 +111,11 @@
 
   onMount(() => {
     window.addEventListener('keydown', onKeydown);
+
+    registerComposerSubmit((cmd) => {
+      pushCommand(cmd);
+      sendCommand(cmd);
+    });
 
     const sid = $authState.sessionId;
 
@@ -103,6 +131,7 @@
 
   onDestroy(() => {
     window.removeEventListener('keydown', onKeydown);
+    registerComposerSubmit(null);
     abortController?.abort();
     // Best-effort server disconnect on component unmount (SPA navigation)
     if (sessionId) {
