@@ -17,6 +17,7 @@
   import { authState, clearAuth, clearCharacterSession } from '$lib/stores/authStore';
   import TerminalView from '$lib/components/terminal/TerminalView.svelte';
   import CommandInput from '$lib/components/terminal/CommandInput.svelte';
+  import Rail from '$lib/components/terminal/Rail.svelte';
   import Sidebar from '$lib/components/sidebar/Sidebar.svelte';
   import { goto } from '$app/navigation';
   import { trace, type Span } from '@opentelemetry/api';
@@ -343,6 +344,7 @@
   </div>
 {:else}
   <div class="terminal-layout" style={$themePreferences.terminalBlackBackground ? terminalBlackOverrideVars() : ''}>
+    <Rail />
     <Resizable.PaneGroup direction="horizontal" class="main-area">
       <Resizable.Pane defaultSize={75} class="terminal-column">
         <TerminalView />
@@ -386,11 +388,18 @@
   }
   .terminal-layout {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     height: calc(100vh - var(--topbar-h));
     font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
     font-size: 15px;
     background: var(--color-background);
     color: var(--color-input-text);
+  }
+  :global(.terminal-column) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    height: 100%;
   }
 </style>
