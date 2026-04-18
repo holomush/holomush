@@ -57,6 +57,12 @@ service PluginHostService {
   // LeaveFocus removes a focus membership. Idempotent on non-member.
   rpc LeaveFocus(PluginHostServiceLeaveFocusRequest) returns (PluginHostServiceLeaveFocusResponse);
 
+  // LeaveFocusByTarget removes the given focus membership from every
+  // non-expired session that holds it. Used for cross-session fan-out
+  // (e.g., scene-end reaches all participants). Partial success is normal:
+  // individual session failures are aggregated without halting the sweep.
+  rpc LeaveFocusByTarget(PluginHostServiceLeaveFocusByTargetRequest) returns (PluginHostServiceLeaveFocusByTargetResponse);
+
   // PresentFocus updates the session's PresentingFocus pointer.
   // Target MUST already exist in FocusMemberships.
   rpc PresentFocus(PluginHostServicePresentFocusRequest) returns (PluginHostServicePresentFocusResponse);
@@ -352,6 +358,30 @@ message PluginHostServiceLeaveFocusRequest {
   FocusKey target = 2;
 }
 message PluginHostServiceLeaveFocusResponse {}
+
+message PluginHostServiceLeaveFocusByTargetRequest {
+  FocusKey target = 1;
+}
+message PluginHostServiceLeaveFocusByTargetResponse {
+  // Number of sessions successfully left. Zero is a valid result
+  // (target had no members or every member was already non-a-member
+  // — per-session idempotent no-ops count as successes). Callers
+  // comparing succeeded + len(failed_session_ids) against total_scanned
+  // can distinguish total, partial, and empty-sweep outcomes without
+  // parsing any error string.
+  int32 succeeded = 1;
+  // Number of non-expired sessions the sweep scanned. Always
+  // >= succeeded + len(failed_session_ids).
+  int32 total_scanned = 2;
+  // Session IDs for which the per-session leave failed. Empty means
+  // every scanned session succeeded (idempotent no-ops included).
+  // Per-session error details are not serialized; callers should
+  // treat these IDs as the authoritative partial-failure signal and
+  // re-issue LeaveFocus against them if retry is desired. The RPC
+  // error is reserved for enumeration/list failures (e.g., the
+  // session store could not list members).
+  repeated string failed_session_ids = 3;
+}
 
 message PluginHostServicePresentFocusRequest {
   string session_id = 1 [(buf.validate.field).string.min_len = 1];

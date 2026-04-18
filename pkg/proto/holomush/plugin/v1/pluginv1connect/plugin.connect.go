@@ -75,6 +75,9 @@ const (
 	// PluginHostServiceLeaveFocusProcedure is the fully-qualified name of the PluginHostService's
 	// LeaveFocus RPC.
 	PluginHostServiceLeaveFocusProcedure = "/holomush.plugin.v1.PluginHostService/LeaveFocus"
+	// PluginHostServiceLeaveFocusByTargetProcedure is the fully-qualified name of the
+	// PluginHostService's LeaveFocusByTarget RPC.
+	PluginHostServiceLeaveFocusByTargetProcedure = "/holomush.plugin.v1.PluginHostService/LeaveFocusByTarget"
 	// PluginHostServicePresentFocusProcedure is the fully-qualified name of the PluginHostService's
 	// PresentFocus RPC.
 	PluginHostServicePresentFocusProcedure = "/holomush.plugin.v1.PluginHostService/PresentFocus"
@@ -270,6 +273,11 @@ type PluginHostServiceClient interface {
 	JoinFocus(context.Context, *connect.Request[v1.PluginHostServiceJoinFocusRequest]) (*connect.Response[v1.PluginHostServiceJoinFocusResponse], error)
 	// LeaveFocus removes a focus membership. Idempotent on non-member.
 	LeaveFocus(context.Context, *connect.Request[v1.PluginHostServiceLeaveFocusRequest]) (*connect.Response[v1.PluginHostServiceLeaveFocusResponse], error)
+	// LeaveFocusByTarget removes the given focus membership from every
+	// non-expired session that holds it. Used for cross-session fan-out
+	// (e.g., scene-end reaches all participants). Partial success is normal:
+	// individual session failures are aggregated without halting the sweep.
+	LeaveFocusByTarget(context.Context, *connect.Request[v1.PluginHostServiceLeaveFocusByTargetRequest]) (*connect.Response[v1.PluginHostServiceLeaveFocusByTargetResponse], error)
 	// PresentFocus updates the session's PresentingFocus pointer.
 	// Target MUST already exist in FocusMemberships.
 	PresentFocus(context.Context, *connect.Request[v1.PluginHostServicePresentFocusRequest]) (*connect.Response[v1.PluginHostServicePresentFocusResponse], error)
@@ -344,6 +352,12 @@ func NewPluginHostServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(pluginHostServiceMethods.ByName("LeaveFocus")),
 			connect.WithClientOptions(opts...),
 		),
+		leaveFocusByTarget: connect.NewClient[v1.PluginHostServiceLeaveFocusByTargetRequest, v1.PluginHostServiceLeaveFocusByTargetResponse](
+			httpClient,
+			baseURL+PluginHostServiceLeaveFocusByTargetProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("LeaveFocusByTarget")),
+			connect.WithClientOptions(opts...),
+		),
 		presentFocus: connect.NewClient[v1.PluginHostServicePresentFocusRequest, v1.PluginHostServicePresentFocusResponse](
 			httpClient,
 			baseURL+PluginHostServicePresentFocusProcedure,
@@ -370,6 +384,7 @@ type pluginHostServiceClient struct {
 	removeSessionStream *connect.Client[v1.PluginHostServiceRemoveSessionStreamRequest, v1.PluginHostServiceRemoveSessionStreamResponse]
 	joinFocus           *connect.Client[v1.PluginHostServiceJoinFocusRequest, v1.PluginHostServiceJoinFocusResponse]
 	leaveFocus          *connect.Client[v1.PluginHostServiceLeaveFocusRequest, v1.PluginHostServiceLeaveFocusResponse]
+	leaveFocusByTarget  *connect.Client[v1.PluginHostServiceLeaveFocusByTargetRequest, v1.PluginHostServiceLeaveFocusByTargetResponse]
 	presentFocus        *connect.Client[v1.PluginHostServicePresentFocusRequest, v1.PluginHostServicePresentFocusResponse]
 	queryStreamHistory  *connect.Client[v1.PluginHostServiceQueryStreamHistoryRequest, v1.PluginHostServiceQueryStreamHistoryResponse]
 }
@@ -419,6 +434,11 @@ func (c *pluginHostServiceClient) LeaveFocus(ctx context.Context, req *connect.R
 	return c.leaveFocus.CallUnary(ctx, req)
 }
 
+// LeaveFocusByTarget calls holomush.plugin.v1.PluginHostService.LeaveFocusByTarget.
+func (c *pluginHostServiceClient) LeaveFocusByTarget(ctx context.Context, req *connect.Request[v1.PluginHostServiceLeaveFocusByTargetRequest]) (*connect.Response[v1.PluginHostServiceLeaveFocusByTargetResponse], error) {
+	return c.leaveFocusByTarget.CallUnary(ctx, req)
+}
+
 // PresentFocus calls holomush.plugin.v1.PluginHostService.PresentFocus.
 func (c *pluginHostServiceClient) PresentFocus(ctx context.Context, req *connect.Request[v1.PluginHostServicePresentFocusRequest]) (*connect.Response[v1.PluginHostServicePresentFocusResponse], error) {
 	return c.presentFocus.CallUnary(ctx, req)
@@ -453,6 +473,11 @@ type PluginHostServiceHandler interface {
 	JoinFocus(context.Context, *connect.Request[v1.PluginHostServiceJoinFocusRequest]) (*connect.Response[v1.PluginHostServiceJoinFocusResponse], error)
 	// LeaveFocus removes a focus membership. Idempotent on non-member.
 	LeaveFocus(context.Context, *connect.Request[v1.PluginHostServiceLeaveFocusRequest]) (*connect.Response[v1.PluginHostServiceLeaveFocusResponse], error)
+	// LeaveFocusByTarget removes the given focus membership from every
+	// non-expired session that holds it. Used for cross-session fan-out
+	// (e.g., scene-end reaches all participants). Partial success is normal:
+	// individual session failures are aggregated without halting the sweep.
+	LeaveFocusByTarget(context.Context, *connect.Request[v1.PluginHostServiceLeaveFocusByTargetRequest]) (*connect.Response[v1.PluginHostServiceLeaveFocusByTargetResponse], error)
 	// PresentFocus updates the session's PresentingFocus pointer.
 	// Target MUST already exist in FocusMemberships.
 	PresentFocus(context.Context, *connect.Request[v1.PluginHostServicePresentFocusRequest]) (*connect.Response[v1.PluginHostServicePresentFocusResponse], error)
@@ -523,6 +548,12 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 		connect.WithSchema(pluginHostServiceMethods.ByName("LeaveFocus")),
 		connect.WithHandlerOptions(opts...),
 	)
+	pluginHostServiceLeaveFocusByTargetHandler := connect.NewUnaryHandler(
+		PluginHostServiceLeaveFocusByTargetProcedure,
+		svc.LeaveFocusByTarget,
+		connect.WithSchema(pluginHostServiceMethods.ByName("LeaveFocusByTarget")),
+		connect.WithHandlerOptions(opts...),
+	)
 	pluginHostServicePresentFocusHandler := connect.NewUnaryHandler(
 		PluginHostServicePresentFocusProcedure,
 		svc.PresentFocus,
@@ -555,6 +586,8 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 			pluginHostServiceJoinFocusHandler.ServeHTTP(w, r)
 		case PluginHostServiceLeaveFocusProcedure:
 			pluginHostServiceLeaveFocusHandler.ServeHTTP(w, r)
+		case PluginHostServiceLeaveFocusByTargetProcedure:
+			pluginHostServiceLeaveFocusByTargetHandler.ServeHTTP(w, r)
 		case PluginHostServicePresentFocusProcedure:
 			pluginHostServicePresentFocusHandler.ServeHTTP(w, r)
 		case PluginHostServiceQueryStreamHistoryProcedure:
@@ -602,6 +635,10 @@ func (UnimplementedPluginHostServiceHandler) JoinFocus(context.Context, *connect
 
 func (UnimplementedPluginHostServiceHandler) LeaveFocus(context.Context, *connect.Request[v1.PluginHostServiceLeaveFocusRequest]) (*connect.Response[v1.PluginHostServiceLeaveFocusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.LeaveFocus is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) LeaveFocusByTarget(context.Context, *connect.Request[v1.PluginHostServiceLeaveFocusByTargetRequest]) (*connect.Response[v1.PluginHostServiceLeaveFocusByTargetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.LeaveFocusByTarget is not implemented"))
 }
 
 func (UnimplementedPluginHostServiceHandler) PresentFocus(context.Context, *connect.Request[v1.PluginHostServicePresentFocusRequest]) (*connect.Response[v1.PluginHostServicePresentFocusResponse], error) {

@@ -60,6 +60,24 @@ type FocusKey struct {
 	TargetID ulid.ULID
 }
 
+// LeaveByTargetResult summarizes a cross-session focus-leave sweep. See
+// focus.Coordinator.LeaveFocusByTarget for the full contract. The type
+// lives in session because it must be referenced both by the focus
+// package (which imports session) and by the hostfunc package (which
+// cannot depend on focus). Contract holds when the sweep returns without
+// an enumeration error: Succeeded + len(Failed) == TotalScanned.
+type LeaveByTargetResult struct {
+	Succeeded    int
+	TotalScanned int
+	Failed       []FailedLeave
+}
+
+// FailedLeave records a per-session LeaveFocus failure inside a sweep.
+type FailedLeave struct {
+	SessionID string
+	Err       error
+}
+
 // FocusMembership records that a character is actively participating in a
 // focused context. A session's FocusMemberships is mutated only through
 // FocusCoordinator (invariant I-6). Each membership implies one or more
@@ -315,4 +333,9 @@ type Store interface {
 	//   SESSION_EXPIRED     — session status is "expired".
 	//   FOCUS_MUTATOR_ERROR — mutator returned an error; underlying wrapped.
 	UpdateFocusMemberships(ctx context.Context, sessionID string, m FocusMutator) error
+
+	// ListByFocus returns all non-expired sessions whose FocusMemberships
+	// include the given target. Used by FocusCoordinator.LeaveFocusByTarget
+	// to drive cross-session fan-out (e.g., scene-end).
+	ListByFocus(ctx context.Context, target FocusKey) ([]*Info, error)
 }

@@ -335,6 +335,27 @@ func (m *MemStore) ListActiveByLocation(_ context.Context, locationID ulid.ULID)
 	return result, nil
 }
 
+// ListByFocus returns all non-expired sessions whose FocusMemberships
+// include the given target.
+func (m *MemStore) ListByFocus(_ context.Context, target FocusKey) ([]*Info, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var result []*Info
+	for _, info := range m.sessions {
+		if info.Status == StatusExpired {
+			continue
+		}
+		for _, mem := range info.FocusMemberships {
+			if mem.Kind == target.Kind && mem.TargetID == target.TargetID {
+				result = append(result, copyInfo(info))
+				break
+			}
+		}
+	}
+	return result, nil
+}
+
 // ListActive returns all sessions with status=active.
 func (m *MemStore) ListActive(_ context.Context) ([]*Info, error) {
 	m.mu.RLock()

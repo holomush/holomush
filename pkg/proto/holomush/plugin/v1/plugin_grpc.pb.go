@@ -271,6 +271,7 @@ const (
 	PluginHostService_RemoveSessionStream_FullMethodName = "/holomush.plugin.v1.PluginHostService/RemoveSessionStream"
 	PluginHostService_JoinFocus_FullMethodName           = "/holomush.plugin.v1.PluginHostService/JoinFocus"
 	PluginHostService_LeaveFocus_FullMethodName          = "/holomush.plugin.v1.PluginHostService/LeaveFocus"
+	PluginHostService_LeaveFocusByTarget_FullMethodName  = "/holomush.plugin.v1.PluginHostService/LeaveFocusByTarget"
 	PluginHostService_PresentFocus_FullMethodName        = "/holomush.plugin.v1.PluginHostService/PresentFocus"
 	PluginHostService_QueryStreamHistory_FullMethodName  = "/holomush.plugin.v1.PluginHostService/QueryStreamHistory"
 )
@@ -303,6 +304,11 @@ type PluginHostServiceClient interface {
 	JoinFocus(ctx context.Context, in *PluginHostServiceJoinFocusRequest, opts ...grpc.CallOption) (*PluginHostServiceJoinFocusResponse, error)
 	// LeaveFocus removes a focus membership. Idempotent on non-member.
 	LeaveFocus(ctx context.Context, in *PluginHostServiceLeaveFocusRequest, opts ...grpc.CallOption) (*PluginHostServiceLeaveFocusResponse, error)
+	// LeaveFocusByTarget removes the given focus membership from every
+	// non-expired session that holds it. Used for cross-session fan-out
+	// (e.g., scene-end reaches all participants). Partial success is normal:
+	// individual session failures are aggregated without halting the sweep.
+	LeaveFocusByTarget(ctx context.Context, in *PluginHostServiceLeaveFocusByTargetRequest, opts ...grpc.CallOption) (*PluginHostServiceLeaveFocusByTargetResponse, error)
 	// PresentFocus updates the session's PresentingFocus pointer.
 	// Target MUST already exist in FocusMemberships.
 	PresentFocus(ctx context.Context, in *PluginHostServicePresentFocusRequest, opts ...grpc.CallOption) (*PluginHostServicePresentFocusResponse, error)
@@ -410,6 +416,16 @@ func (c *pluginHostServiceClient) LeaveFocus(ctx context.Context, in *PluginHost
 	return out, nil
 }
 
+func (c *pluginHostServiceClient) LeaveFocusByTarget(ctx context.Context, in *PluginHostServiceLeaveFocusByTargetRequest, opts ...grpc.CallOption) (*PluginHostServiceLeaveFocusByTargetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceLeaveFocusByTargetResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_LeaveFocusByTarget_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *pluginHostServiceClient) PresentFocus(ctx context.Context, in *PluginHostServicePresentFocusRequest, opts ...grpc.CallOption) (*PluginHostServicePresentFocusResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PluginHostServicePresentFocusResponse)
@@ -458,6 +474,11 @@ type PluginHostServiceServer interface {
 	JoinFocus(context.Context, *PluginHostServiceJoinFocusRequest) (*PluginHostServiceJoinFocusResponse, error)
 	// LeaveFocus removes a focus membership. Idempotent on non-member.
 	LeaveFocus(context.Context, *PluginHostServiceLeaveFocusRequest) (*PluginHostServiceLeaveFocusResponse, error)
+	// LeaveFocusByTarget removes the given focus membership from every
+	// non-expired session that holds it. Used for cross-session fan-out
+	// (e.g., scene-end reaches all participants). Partial success is normal:
+	// individual session failures are aggregated without halting the sweep.
+	LeaveFocusByTarget(context.Context, *PluginHostServiceLeaveFocusByTargetRequest) (*PluginHostServiceLeaveFocusByTargetResponse, error)
 	// PresentFocus updates the session's PresentingFocus pointer.
 	// Target MUST already exist in FocusMemberships.
 	PresentFocus(context.Context, *PluginHostServicePresentFocusRequest) (*PluginHostServicePresentFocusResponse, error)
@@ -501,6 +522,9 @@ func (UnimplementedPluginHostServiceServer) JoinFocus(context.Context, *PluginHo
 }
 func (UnimplementedPluginHostServiceServer) LeaveFocus(context.Context, *PluginHostServiceLeaveFocusRequest) (*PluginHostServiceLeaveFocusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method LeaveFocus not implemented")
+}
+func (UnimplementedPluginHostServiceServer) LeaveFocusByTarget(context.Context, *PluginHostServiceLeaveFocusByTargetRequest) (*PluginHostServiceLeaveFocusByTargetResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LeaveFocusByTarget not implemented")
 }
 func (UnimplementedPluginHostServiceServer) PresentFocus(context.Context, *PluginHostServicePresentFocusRequest) (*PluginHostServicePresentFocusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PresentFocus not implemented")
@@ -691,6 +715,24 @@ func _PluginHostService_LeaveFocus_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginHostService_LeaveFocusByTarget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceLeaveFocusByTargetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).LeaveFocusByTarget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_LeaveFocusByTarget_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).LeaveFocusByTarget(ctx, req.(*PluginHostServiceLeaveFocusByTargetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _PluginHostService_PresentFocus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PluginHostServicePresentFocusRequest)
 	if err := dec(in); err != nil {
@@ -769,6 +811,10 @@ var PluginHostService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LeaveFocus",
 			Handler:    _PluginHostService_LeaveFocus_Handler,
+		},
+		{
+			MethodName: "LeaveFocusByTarget",
+			Handler:    _PluginHostService_LeaveFocusByTarget_Handler,
 		},
 		{
 			MethodName: "PresentFocus",

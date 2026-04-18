@@ -51,6 +51,18 @@ type CursorLocker interface {
 type Coordinator interface {
 	JoinFocus(ctx context.Context, sessionID string, target session.FocusKey) error
 	LeaveFocus(ctx context.Context, sessionID string, target session.FocusKey) error
+	// LeaveFocusByTarget removes the given focus membership from every
+	// non-expired session that holds it. Used for cross-session fan-out
+	// (e.g., scene end). Returns a LeaveByTargetResult describing the
+	// sweep; per-session failures are carried in result.Failed.
+	//
+	// Error semantics: the returned error covers only the enumeration
+	// step (session store ListByFocus). On enumeration failure the
+	// result is zero-valued and the error is coded FOCUS_SWEEP_LIST_FAILED.
+	// Per-session errors live on result.Failed[].Err; callers that want
+	// to retry iterate that slice. See LeaveByTargetResult for the full
+	// state-space.
+	LeaveFocusByTarget(ctx context.Context, target session.FocusKey) (session.LeaveByTargetResult, error)
 	PresentFocus(ctx context.Context, sessionID string, target session.FocusKey) error
 	RestoreFocus(ctx context.Context, sessionID string) (RestorePlan, error)
 }

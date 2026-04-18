@@ -5,6 +5,7 @@ package goplugin
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -21,12 +22,15 @@ import (
 
 // stubCoordinator records calls for assertion.
 type stubCoordinator struct {
-	joinCalls    []focusCall
-	leaveCalls   []focusCall
-	presentCalls []focusCall
-	joinErr      error
-	leaveErr     error
-	presentErr   error
+	joinCalls            []focusCall
+	leaveCalls           []focusCall
+	leaveByTargetCalls   []session.FocusKey
+	leaveByTargetResult  session.LeaveByTargetResult
+	leaveByTargetErr     error
+	presentCalls         []focusCall
+	joinErr              error
+	leaveErr             error
+	presentErr           error
 }
 
 type focusCall struct {
@@ -42,6 +46,11 @@ func (s *stubCoordinator) JoinFocus(_ context.Context, sid string, target sessio
 func (s *stubCoordinator) LeaveFocus(_ context.Context, sid string, target session.FocusKey) error {
 	s.leaveCalls = append(s.leaveCalls, focusCall{sid, target})
 	return s.leaveErr
+}
+
+func (s *stubCoordinator) LeaveFocusByTarget(_ context.Context, target session.FocusKey) (session.LeaveByTargetResult, error) {
+	s.leaveByTargetCalls = append(s.leaveByTargetCalls, target)
+	return s.leaveByTargetResult, s.leaveByTargetErr
 }
 
 func (s *stubCoordinator) PresentFocus(_ context.Context, sid string, target session.FocusKey) error {
@@ -167,6 +176,108 @@ func TestLeaveFocusReturnsErrorWhenCoordinatorIsNil(t *testing.T) {
 		},
 	})
 	require.Error(t, err)
+}
+
+func TestLeaveFocusByTargetDelegatesToCoordinatorAndMapsResult(t *testing.T) {
+	fc := &stubCoordinator{
+		leaveByTargetResult: session.LeaveByTargetResult{
+			Succeeded:    3,
+			TotalScanned: 4,
+			Failed:       []session.FailedLeave{{SessionID: "sess-fail"}},
+		},
+	}
+	srv := newTestServer(fc, nil)
+
+	targetID := ulid.Make()
+	resp, err := srv.LeaveFocusByTarget(context.Background(), &pluginv1.PluginHostServiceLeaveFocusByTargetRequest{
+		Target: &pluginv1.FocusKey{
+			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+			TargetId: targetID.String(),
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, int32(3), resp.GetSucceeded())
+	assert.Equal(t, int32(4), resp.GetTotalScanned())
+	assert.Equal(t, []string{"sess-fail"}, resp.GetFailedSessionIds())
+
+	require.Len(t, fc.leaveByTargetCalls, 1)
+	assert.Equal(t, session.FocusKindScene, fc.leaveByTargetCalls[0].Kind)
+	assert.Equal(t, targetID, fc.leaveByTargetCalls[0].TargetID)
+}
+
+func TestLeaveFocusByTargetReturnsErrorWhenCoordinatorIsNil(t *testing.T) {
+	srv := newTestServer(nil, nil)
+
+	_, err := srv.LeaveFocusByTarget(context.Background(), &pluginv1.PluginHostServiceLeaveFocusByTargetRequest{
+		Target: &pluginv1.FocusKey{
+			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+			TargetId: ulid.Make().String(),
+		},
+	})
+	require.Error(t, err)
+}
+
+func TestLeaveFocusByTargetReturnsErrorForInvalidTarget(t *testing.T) {
+	fc := &stubCoordinator{}
+	srv := newTestServer(fc, nil)
+
+	_, err := srv.LeaveFocusByTarget(context.Background(), &pluginv1.PluginHostServiceLeaveFocusByTargetRequest{
+		Target: &pluginv1.FocusKey{
+			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+			TargetId: "not-a-ulid",
+		},
+	})
+	require.Error(t, err, "invalid target_id surfaces as RPC error; coordinator MUST NOT be called")
+	assert.Empty(t, fc.leaveByTargetCalls)
+}
+
+func TestLeaveFocusByTargetReturnsErrorWhenHostIsNil(t *testing.T) {
+	srv := &pluginHostServiceServer{host: nil, pluginName: "test-plugin"}
+
+	_, err := srv.LeaveFocusByTarget(context.Background(), &pluginv1.PluginHostServiceLeaveFocusByTargetRequest{
+		Target: &pluginv1.FocusKey{
+			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+			TargetId: ulid.Make().String(),
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "plugin host service is not configured")
+}
+
+func TestClampCountToInt32HandlesBounds(t *testing.T) {
+	tests := []struct {
+		name string
+		in   int
+		want int32
+	}{
+		{"negative clamps to zero", -5, 0},
+		{"zero passes through", 0, 0},
+		{"small positive passes through", 42, 42},
+		{"max int32 passes through", math.MaxInt32, math.MaxInt32},
+		{"overflow clamps to MaxInt32", math.MaxInt32 + 1, math.MaxInt32},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, clampCountToInt32(tt.in))
+		})
+	}
+}
+
+func TestLeaveFocusByTargetReturnsRpcErrorOnEnumerationFailure(t *testing.T) {
+	fc := &stubCoordinator{
+		leaveByTargetErr: oops.Code("FOCUS_SWEEP_LIST_FAILED").Errorf("store down"),
+	}
+	srv := newTestServer(fc, nil)
+
+	resp, err := srv.LeaveFocusByTarget(context.Background(), &pluginv1.PluginHostServiceLeaveFocusByTargetRequest{
+		Target: &pluginv1.FocusKey{
+			Kind:     pluginv1.FocusKind_FOCUS_KIND_SCENE,
+			TargetId: ulid.Make().String(),
+		},
+	})
+	require.Error(t, err, "enumeration failure surfaces as RPC error")
+	assert.Nil(t, resp, "no response on enumeration failure — per-session errors would ride on the response instead")
 }
 
 func TestPresentFocusDelegatesToCoordinatorWithParsedFocusKey(t *testing.T) {

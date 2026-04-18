@@ -1665,6 +1665,10 @@ func (s *stubLuaTestCoordinator) LeaveFocus(_ context.Context, _ string, _ sessi
 	return nil
 }
 
+func (s *stubLuaTestCoordinator) LeaveFocusByTarget(_ context.Context, _ session.FocusKey) (session.LeaveByTargetResult, error) {
+	return session.LeaveByTargetResult{}, nil
+}
+
 func (s *stubLuaTestCoordinator) PresentFocus(_ context.Context, _ string, _ session.FocusKey) error {
 	return nil
 }

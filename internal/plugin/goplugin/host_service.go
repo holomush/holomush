@@ -5,6 +5,7 @@ package goplugin
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -107,6 +108,65 @@ func (s *pluginHostServiceServer) LeaveFocus(ctx context.Context, req *pluginv1.
 		return nil, oops.With("plugin", s.pluginName).With("session_id", req.GetSessionId()).Wrap(err)
 	}
 	return &pluginv1.PluginHostServiceLeaveFocusResponse{}, nil
+}
+
+func (s *pluginHostServiceServer) LeaveFocusByTarget(ctx context.Context, req *pluginv1.PluginHostServiceLeaveFocusByTargetRequest) (*pluginv1.PluginHostServiceLeaveFocusByTargetResponse, error) {
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+	fc := s.host.FocusCoordinator()
+	if fc == nil {
+		return nil, oops.With("plugin", s.pluginName).New("focus coordinator not configured")
+	}
+
+	key, err := protoToFocusKey(req.GetTarget())
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).Wrap(err)
+	}
+
+	// Enumeration failure is the only path that returns an RPC-level error.
+	// Partial per-session failures are carried on the response via
+	// failed_session_ids; callers inspect the result to distinguish
+	// full / partial / empty outcomes without parsing error strings.
+	result, err := fc.LeaveFocusByTarget(ctx, key)
+	if err != nil {
+		return nil, oops.With("plugin", s.pluginName).
+			With("focus_kind", string(key.Kind)).
+			With("target_id", key.TargetID.String()).Wrap(err)
+	}
+	return leaveByTargetResultToProto(result), nil
+}
+
+// leaveByTargetResultToProto converts the host-side sweep result to the
+// wire format. Callers reconstruct partial-success state from
+// succeeded + len(failed_session_ids) == total_scanned.
+func leaveByTargetResultToProto(r session.LeaveByTargetResult) *pluginv1.PluginHostServiceLeaveFocusByTargetResponse {
+	resp := &pluginv1.PluginHostServiceLeaveFocusByTargetResponse{
+		Succeeded:    clampCountToInt32(r.Succeeded),
+		TotalScanned: clampCountToInt32(r.TotalScanned),
+	}
+	if len(r.Failed) > 0 {
+		resp.FailedSessionIds = make([]string, 0, len(r.Failed))
+		for _, f := range r.Failed {
+			resp.FailedSessionIds = append(resp.FailedSessionIds, f.SessionID)
+		}
+	}
+	return resp
+}
+
+// clampCountToInt32 narrows a Go int to proto int32 safely. The session count
+// is bounded by live-session capacity (far below math.MaxInt32 in any realistic
+// deployment), but explicit bounds keep gosec quiet and guard against future
+// 64-bit-only callers.
+func clampCountToInt32(n int) int32 {
+	switch {
+	case n < 0:
+		return 0
+	case n > math.MaxInt32:
+		return math.MaxInt32
+	default:
+		return int32(n)
+	}
 }
 
 func (s *pluginHostServiceServer) PresentFocus(ctx context.Context, req *pluginv1.PluginHostServicePresentFocusRequest) (*pluginv1.PluginHostServicePresentFocusResponse, error) {

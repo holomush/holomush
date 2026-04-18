@@ -92,6 +92,47 @@ func TestPluginHostFocusClient_LeaveFocusHappyPath(t *testing.T) {
 	assert.Equal(t, "sess-1", srv.leaveReqs[0].GetSessionId())
 }
 
+func TestPluginHostFocusClient_LeaveFocusByTargetMapsResponseToResult(t *testing.T) {
+	srv := &focusTestServer{leaveByTargetResp: &pluginv1.PluginHostServiceLeaveFocusByTargetResponse{
+		Succeeded:        4,
+		TotalScanned:     5,
+		FailedSessionIds: []string{"sess-bad"},
+	}}
+	conn := startPluginHostServiceTestServer(t, srv)
+	client := &pluginHostFocusClient{client: pluginv1.NewPluginHostServiceClient(conn)}
+
+	result, err := client.LeaveFocusByTarget(context.Background(), FocusKey{Kind: FocusKindScene, TargetID: "scene-1"})
+	require.NoError(t, err)
+	assert.Equal(t, 4, result.Succeeded)
+	assert.Equal(t, 5, result.TotalScanned)
+	require.Len(t, result.Failed, 1)
+	assert.Equal(t, "sess-bad", result.Failed[0].SessionID)
+
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	require.Len(t, srv.leaveByTargetReqs, 1)
+	assert.Equal(t, "scene-1", srv.leaveByTargetReqs[0].GetTarget().GetTargetId())
+	assert.Equal(t, pluginv1.FocusKind_FOCUS_KIND_SCENE, srv.leaveByTargetReqs[0].GetTarget().GetKind())
+}
+
+func TestPluginHostFocusClient_LeaveFocusByTargetReturnsZeroResultOnEnumerationError(t *testing.T) {
+	srv := &focusTestServer{leaveByTargetErr: status.Error(codes.Internal, "FOCUS_SWEEP_LIST_FAILED: store down")}
+	conn := startPluginHostServiceTestServer(t, srv)
+	client := &pluginHostFocusClient{client: pluginv1.NewPluginHostServiceClient(conn)}
+
+	result, err := client.LeaveFocusByTarget(context.Background(), FocusKey{Kind: FocusKindScene, TargetID: "scene-1"})
+	require.Error(t, err)
+	assert.Equal(t, LeaveByTargetResult{}, result, "zero result on enumeration error preserves Go err!=nil contract")
+}
+
+func TestPluginHostFocusClient_LeaveFocusByTargetNilClientReturnsError(t *testing.T) {
+	client := &pluginHostFocusClient{}
+	result, err := client.LeaveFocusByTarget(context.Background(), FocusKey{Kind: FocusKindScene, TargetID: "scene-1"})
+	require.Error(t, err)
+	assert.Equal(t, LeaveByTargetResult{}, result)
+	assert.Contains(t, err.Error(), "not configured")
+}
+
 func TestPluginHostFocusClient_PresentFocusHappyPath(t *testing.T) {
 	srv := &focusTestServer{}
 	conn := startPluginHostServiceTestServer(t, srv)
@@ -380,17 +421,20 @@ func TestQueryStreamHistoryRequestNotBeforeIsPassedThrough(t *testing.T) {
 
 type focusTestServer struct {
 	pluginv1.UnimplementedPluginHostServiceServer
-	mu          sync.Mutex
-	joinReqs    []*pluginv1.PluginHostServiceJoinFocusRequest
-	leaveReqs   []*pluginv1.PluginHostServiceLeaveFocusRequest
-	presentReqs []*pluginv1.PluginHostServicePresentFocusRequest
-	historyReqs []*pluginv1.PluginHostServiceQueryStreamHistoryRequest
+	mu                  sync.Mutex
+	joinReqs            []*pluginv1.PluginHostServiceJoinFocusRequest
+	leaveReqs           []*pluginv1.PluginHostServiceLeaveFocusRequest
+	leaveByTargetReqs   []*pluginv1.PluginHostServiceLeaveFocusByTargetRequest
+	presentReqs         []*pluginv1.PluginHostServicePresentFocusRequest
+	historyReqs         []*pluginv1.PluginHostServiceQueryStreamHistoryRequest
 
-	joinErr     error
-	leaveErr    error
-	presentErr  error
-	historyResp *pluginv1.PluginHostServiceQueryStreamHistoryResponse
-	historyErr  error
+	joinErr              error
+	leaveErr             error
+	leaveByTargetErr     error
+	leaveByTargetResp    *pluginv1.PluginHostServiceLeaveFocusByTargetResponse
+	presentErr           error
+	historyResp          *pluginv1.PluginHostServiceQueryStreamHistoryResponse
+	historyErr           error
 }
 
 func (s *focusTestServer) JoinFocus(_ context.Context, req *pluginv1.PluginHostServiceJoinFocusRequest) (*pluginv1.PluginHostServiceJoinFocusResponse, error) {
@@ -411,6 +455,19 @@ func (s *focusTestServer) LeaveFocus(_ context.Context, req *pluginv1.PluginHost
 		return nil, s.leaveErr
 	}
 	return &pluginv1.PluginHostServiceLeaveFocusResponse{}, nil
+}
+
+func (s *focusTestServer) LeaveFocusByTarget(_ context.Context, req *pluginv1.PluginHostServiceLeaveFocusByTargetRequest) (*pluginv1.PluginHostServiceLeaveFocusByTargetResponse, error) {
+	s.mu.Lock()
+	s.leaveByTargetReqs = append(s.leaveByTargetReqs, req)
+	s.mu.Unlock()
+	if s.leaveByTargetErr != nil {
+		return nil, s.leaveByTargetErr
+	}
+	if s.leaveByTargetResp != nil {
+		return s.leaveByTargetResp, nil
+	}
+	return &pluginv1.PluginHostServiceLeaveFocusByTargetResponse{}, nil
 }
 
 func (s *focusTestServer) PresentFocus(_ context.Context, req *pluginv1.PluginHostServicePresentFocusRequest) (*pluginv1.PluginHostServicePresentFocusResponse, error) {

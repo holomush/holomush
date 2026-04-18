@@ -137,9 +137,12 @@ func (p *scenePlugin) handleInfo(ctx context.Context, req pluginsdk.CommandReque
 // handleEnd ends the specified scene. Owner ABAC enforcement is gateway-side
 // (the host's ABAC engine evaluates end-own-scene before this code runs in
 // production); in unit tests, ABAC is bypassed so the test must use the
-// scene owner's character ID. After the DB write, focusClient.LeaveFocus is
-// called for the owner's session only; multi-session fan-out is deferred to a
-// follow-up bead (spec §6.1).
+// scene owner's character ID.
+//
+// After the DB write commits, focusClient.LeaveFocusByTarget fans the leave
+// out to every session that holds the scene's FocusMembership — owner and
+// non-owner participants alike. The sweep is best-effort: DB state is
+// authoritative, and focus-side errors are logged, not surfaced to the user.
 //
 //nolint:unparam // plugin SDK Handler contract requires (*CommandResponse, error); errors are conveyed via pluginsdk.Errorf returning a CommandError status response, not via Go error returns
 func (p *scenePlugin) handleEnd(ctx context.Context, req pluginsdk.CommandRequest, args string) (*pluginsdk.CommandResponse, error) {
@@ -156,15 +159,37 @@ func (p *scenePlugin) handleEnd(ctx context.Context, req pluginsdk.CommandReques
 	}
 
 	if p.focusClient != nil {
-		if err := p.focusClient.LeaveFocus(ctx, req.SessionID, pluginsdk.FocusKey{
+		result, err := p.focusClient.LeaveFocusByTarget(ctx, pluginsdk.FocusKey{
 			Kind:     pluginsdk.FocusKindScene,
 			TargetID: sceneID,
-		}); err != nil {
-			slog.WarnContext(ctx, "scene.command.end focus leave failed for owner session",
+		})
+		switch {
+		case err != nil:
+			// Enumeration failed entirely: host could not list members.
+			// DB transition has committed; focus state across sessions is
+			// inconsistent until a subsequent RestoreFocus reconciles.
+			slog.WarnContext(ctx, "scene.command.end focus sweep enumeration failed",
 				"subject_id", req.CharacterID,
 				"session_id", req.SessionID,
 				"scene_id", sceneID,
 				"error", err,
+			)
+		case len(result.Failed) > 0:
+			// Partial sweep: some sessions still hold stale FocusMemberships.
+			// Non-fatal (the scene has ended; stale memberships stop
+			// receiving events), but worth auditing so an operator can
+			// see which participants need reconciliation.
+			failedIDs := make([]string, 0, len(result.Failed))
+			for _, f := range result.Failed {
+				failedIDs = append(failedIDs, f.SessionID)
+			}
+			slog.WarnContext(ctx, "scene.command.end focus sweep partial",
+				"subject_id", req.CharacterID,
+				"session_id", req.SessionID,
+				"scene_id", sceneID,
+				"succeeded", result.Succeeded,
+				"total_scanned", result.TotalScanned,
+				"failed_session_ids", failedIDs,
 			)
 		}
 	}
