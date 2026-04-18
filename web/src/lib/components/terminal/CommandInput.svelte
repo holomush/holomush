@@ -70,12 +70,15 @@
     client.getCommandHistory({ sessionId }).then((resp) => {
       if (captured !== sessionId) return;
       seedCommands(resp.commands ?? []);
-    }).catch(() => { /* best-effort */ });
+    }).catch((e) => {
+      if (captured !== sessionId) return;  // stale session — skip log
+      console.warn('[history] load failed', e);
+    });
   });
 
   // Inject-from-parent pathway (recent card, composer close)
   $effect(() => {
-    if (injectText !== undefined && injectText !== '') {
+    if (injectText !== undefined) {
       text = injectText;
       onInjectConsumed?.();
       requestAnimationFrame(() => {
@@ -96,10 +99,14 @@
     clearTimeout(draftTimer);
     if (current) {
       draftTimer = setTimeout(() => {
-        localStorage.setItem(DRAFT_KEY_PREFIX + sid, current);
+        try {
+          localStorage.setItem(DRAFT_KEY_PREFIX + sid, current);
+        } catch (e) { console.warn('[draft] persist failed', e); }
       }, DRAFT_DEBOUNCE_MS);
     } else {
-      localStorage.removeItem(DRAFT_KEY_PREFIX + sid);
+      try {
+        localStorage.removeItem(DRAFT_KEY_PREFIX + sid);
+      } catch { /* best effort */ }
     }
   });
 
@@ -135,7 +142,10 @@
     pushCommand(cmd);
     text = '';
     clearTimeout(draftTimer);
-    if (sessionId) localStorage.removeItem(DRAFT_KEY_PREFIX + sessionId);
+    if (sessionId) {
+      try { localStorage.removeItem(DRAFT_KEY_PREFIX + sessionId); }
+      catch { /* best effort */ }
+    }
     onSend(cmd);
     requestAnimationFrame(() => {
       if (textarea) textarea.style.height = 'auto';

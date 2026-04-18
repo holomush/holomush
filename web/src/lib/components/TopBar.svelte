@@ -113,7 +113,7 @@
         </DropdownMenu.RadioGroup>
         <DropdownMenu.Separator />
         <DropdownMenu.CheckboxItem
-          bind:checked={$themePreferences.terminalBlackBackground}
+          checked={$themePreferences.terminalBlackBackground}
           onCheckedChange={(v) => setTerminalBlackBackground(v === true)}
         >
           Black terminal background

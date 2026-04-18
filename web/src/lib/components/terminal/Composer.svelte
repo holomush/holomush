@@ -23,7 +23,7 @@
 
   let localText = $state('');
   $effect(() => {
-    localText = draft;
+    if (draft !== localText) localText = draft;
   });
 
   let pos = $state({ x: 0, y: 0 });

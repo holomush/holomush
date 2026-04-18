@@ -59,7 +59,8 @@
 
   function pctFromPx(px: number, cw: number): number {
     if (cw <= 0) return 25;
-    return Math.min(Math.max((px / cw) * 100, 5), 60);
+    // px is already clamped by uiPrefsStore; just divide
+    return (px / cw) * 100;
   }
 
   let widthCommitTimer: ReturnType<typeof setTimeout> | undefined;
@@ -97,6 +98,27 @@
     }
     wasComposerOpen = isOpen;
   });
+
+  // Persist composer draft to the SAME localStorage key that CommandInput uses,
+  // so composer edits survive reload even before composer closes.
+  let composerPersistTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const draft = $composerDraft;
+    const sid = sessionId;
+    if (!sid || !$uiPrefs.composerOpen) return;
+    clearTimeout(composerPersistTimer);
+    composerPersistTimer = setTimeout(() => {
+      try {
+        if (draft) {
+          localStorage.setItem(`holomush-draft:${sid}`, draft);
+        } else {
+          localStorage.removeItem(`holomush-draft:${sid}`);
+        }
+      } catch { /* quota / privacy mode — best effort */ }
+    }, 500);
+  });
+
+  onDestroy(() => clearTimeout(composerPersistTimer));
 
   onMount(() => {
     registerComposerSubmit((cmd) => {
