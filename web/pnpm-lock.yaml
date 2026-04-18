@@ -23,6 +23,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      cmdk-sv:
+        specifier: ^0.0.19
+        version: 0.0.19(svelte@5.54.0)
       dompurify:
         specifier: ^3.3.3
         version: 3.3.3
@@ -405,6 +408,11 @@ packages:
     resolution: {integrity: sha512-YytBKOUBGox7yWcykZnYxOkn5WpR5G1qYXLYXV/j1B79SOTTEKzB+s5yF5Rq9l9OkweDStNH2b4yTqfvhEhV8g==}
     peerDependencies:
       svelte: ^5
+
+  '@melt-ui/svelte@0.76.2':
+    resolution: {integrity: sha512-7SbOa11tXUS95T3fReL+dwDs5FyJtCEqrqG3inRziDws346SYLsxOQ6HmX+4BkIsQh1R8U3XNa+EMmdMt38lMA==}
+    peerDependencies:
+      svelte: '>=3 <5'
 
   '@opentelemetry/api-logs@0.214.0':
     resolution: {integrity: sha512-40lSJeqYO8Uz2Yj7u94/SJWE/wONa7rmMKjI1ZcIjgf3MHNHv1OZUCrCETGuaRF62d5pQD1wKIW+L4lmSMTzZA==}
@@ -897,6 +905,11 @@ packages:
   bidi-js@1.0.3:
     resolution: {integrity: sha512-RKshQI1R3YQ+n9YJz2QQ147P66ELpa1FQEg20Dk8oW9t2KgLbpDLLp9aGZ7y8WHSshDknG0bknqGw5/tyCs5tw==}
 
+  bits-ui@0.21.16:
+    resolution: {integrity: sha512-XFZ7/bK7j/K+5iktxX/ZpmoFHjYjpPzP5EOO/4bWiaFg5TG1iMcfjDhlBTQnJxD6BoVoHuqeZPHZvaTgF4Iv3Q==}
+    peerDependencies:
+      svelte: ^4.0.0 || ^5.0.0-next.118
+
   bits-ui@2.16.5:
     resolution: {integrity: sha512-Dx+Sc1DGzRaRfzpxrBI40d+O7vykIZ8E2G6tCaOzqYLzg+mN3YYK+8f8ysAFLfkHzey1MACGrYO3IcO6ROKlSA==}
     engines: {node: '>=20'}
@@ -918,6 +931,11 @@ packages:
   clsx@2.1.1:
     resolution: {integrity: sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA==}
     engines: {node: '>=6'}
+
+  cmdk-sv@0.0.19:
+    resolution: {integrity: sha512-Vm6+/up5nQbwGmNw0uYFbXTrbpF460/FhMohTskzzszMtIR/u/78haucSmJWjjp9bW0wxpHXZWa6fk+Lj1tKnA==}
+    peerDependencies:
+      svelte: ^4.0.0 || ^5.0.0-next.1
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
@@ -1007,6 +1025,9 @@ packages:
 
   flatted@3.4.2:
     resolution: {integrity: sha512-PjDse7RzhcPkIJwy5t7KPWQSZ9cAbzQXcafsetQoD7sOJRQlGikNbx7yZp2OotDnJyrDcbyRq3Ttb18iYOqkxA==}
+
+  focus-trap@7.8.0:
+    resolution: {integrity: sha512-/yNdlIkpWbM0ptxno3ONTuf+2g318kh2ez3KSeZN5dZ8YC6AAmgeWz+GasYYiBJPFaYcSAPeu4GfhUaChzIJXA==}
 
   fsevents@2.3.2:
     resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
@@ -1176,6 +1197,11 @@ packages:
   nanoid@3.3.11:
     resolution: {integrity: sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
+    hasBin: true
+
+  nanoid@5.1.9:
+    resolution: {integrity: sha512-ZUvP7KeBLe3OZ1ypw6dI/TzYJuvHP77IM4Ry73waSQTLn8/g8rpdjfyVAh7t1/+FjBtG4lCP42MEbDxOsRpBMw==}
+    engines: {node: ^18 || >=20}
     hasBin: true
 
   obug@2.1.1:
@@ -1765,6 +1791,16 @@ snapshots:
     dependencies:
       svelte: 5.54.0
 
+  '@melt-ui/svelte@0.76.2(svelte@5.54.0)':
+    dependencies:
+      '@floating-ui/core': 1.7.5
+      '@floating-ui/dom': 1.7.6
+      '@internationalized/date': 3.12.0
+      dequal: 2.0.3
+      focus-trap: 7.8.0
+      nanoid: 5.1.9
+      svelte: 5.54.0
+
   '@opentelemetry/api-logs@0.214.0':
     dependencies:
       '@opentelemetry/api': 1.9.1
@@ -2191,6 +2227,13 @@ snapshots:
     dependencies:
       require-from-string: 2.0.2
 
+  bits-ui@0.21.16(svelte@5.54.0):
+    dependencies:
+      '@internationalized/date': 3.12.0
+      '@melt-ui/svelte': 0.76.2(svelte@5.54.0)
+      nanoid: 5.1.9
+      svelte: 5.54.0
+
   bits-ui@2.16.5(@internationalized/date@3.12.0)(@sveltejs/kit@2.55.0(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.54.0)(vite@6.4.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)))(svelte@5.54.0)(typescript@5.9.3)(vite@6.4.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)))(svelte@5.54.0):
     dependencies:
       '@floating-ui/core': 1.7.5
@@ -2213,6 +2256,12 @@ snapshots:
   cjs-module-lexer@2.2.0: {}
 
   clsx@2.1.1: {}
+
+  cmdk-sv@0.0.19(svelte@5.54.0):
+    dependencies:
+      bits-ui: 0.21.16(svelte@5.54.0)
+      nanoid: 5.1.9
+      svelte: 5.54.0
 
   convert-source-map@2.0.0: {}
 
@@ -2306,6 +2355,10 @@ snapshots:
   fflate@0.8.2: {}
 
   flatted@3.4.2: {}
+
+  focus-trap@7.8.0:
+    dependencies:
+      tabbable: 6.4.0
 
   fsevents@2.3.2:
     optional: true
@@ -2444,6 +2497,8 @@ snapshots:
   ms@2.1.3: {}
 
   nanoid@3.3.11: {}
+
+  nanoid@5.1.9: {}
 
   obug@2.1.1: {}
 

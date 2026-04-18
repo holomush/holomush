@@ -52,6 +52,7 @@
     "@connectrpc/connect-web": "^2.1.1",
     "ansi_up": "^6.0.6",
     "clsx": "^2.1.1",
+    "cmdk-sv": "^0.0.19",
     "dompurify": "^3.3.3",
     "lucide-svelte": "^0.577.0",
     "marked": "^17.0.5",

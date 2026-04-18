@@ -10,6 +10,7 @@
   import { activeTheme, themeToCssVars } from '$lib/stores/themeStore';
   import { uiPrefs, hydrateUiPrefs } from '$lib/stores/uiPrefsStore';
   import Composer from '$lib/components/terminal/Composer.svelte';
+  import CommandPalette from '$lib/components/terminal/CommandPalette.svelte';
   import {
     composerDraft,
     setComposerDraft,
@@ -47,6 +48,7 @@
     ondraftChange={setComposerDraft}
     onsubmit={invokeComposerSubmit}
   />
+  <CommandPalette />
 </div>
 
 <style>
