@@ -104,11 +104,11 @@ test.describe('Terminal UI', () => {
 
   test('sidebar toggles with Ctrl+B', async ({ page }) => {
     await connectAsGuest(page);
-    await expect(page.locator('.sidebar.expanded')).toBeVisible();
+    await expect(page.locator('[data-testid="sidebar"][data-expanded="true"]')).toBeVisible();
     await page.keyboard.press('Control+b');
-    await expect(page.locator('.sidebar:not(.expanded)')).toBeVisible();
+    await expect(page.locator('[data-testid="sidebar"][data-expanded="false"]')).toBeAttached();
     await page.keyboard.press('Control+b');
-    await expect(page.locator('.sidebar.expanded')).toBeVisible();
+    await expect(page.locator('[data-testid="sidebar"][data-expanded="true"]')).toBeVisible();
   });
 
   test('responsive layout hides sidebar on mobile', async ({ page }) => {

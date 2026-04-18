@@ -44,6 +44,10 @@
   let error = $state('');
   let abortController: AbortController | null = null;
 
+  let injectText = $state<string | undefined>(undefined);
+  function handleInject(cmd: string) { injectText = cmd; }
+  function handleInjectConsumed() { injectText = undefined; }
+
   function onKeydown(e: KeyboardEvent) {
     if (e.ctrlKey && e.key === 'b') {
       e.preventDefault();
@@ -348,11 +352,16 @@
     <Resizable.PaneGroup direction="horizontal" class="main-area">
       <Resizable.Pane defaultSize={75} class="terminal-column">
         <TerminalView />
-        <CommandInput {sessionId} onSend={sendCommand} />
+        <CommandInput
+          {sessionId}
+          onSend={sendCommand}
+          {injectText}
+          onInjectConsumed={handleInjectConsumed}
+        />
       </Resizable.Pane>
       <Resizable.Handle withHandle />
       <Resizable.Pane defaultSize={25}>
-        <Sidebar onExitClick={handleExitClick} resizable />
+        <Sidebar onExitClick={handleExitClick} onInject={handleInject} resizable />
       </Resizable.Pane>
     </Resizable.PaneGroup>
   </div>
