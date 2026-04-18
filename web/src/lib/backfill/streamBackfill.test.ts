@@ -128,6 +128,28 @@ describe('backfillStreams', () => {
 		}
 	});
 
+	it('deduplicates events appearing in multiple streams by eventId', async () => {
+		const client = makeClient();
+		client.webQueryStreamHistory.mockImplementation((req: { stream: string }) => {
+			if (req.stream === 'character:c1') {
+				return Promise.resolve({
+					events: [{ eventId: 'dup', timestamp: 100n, type: 'say' }],
+					hasMore: false,
+				});
+			}
+			return Promise.resolve({
+				events: [{ eventId: 'dup', timestamp: 100n, type: 'say' }],
+				hasMore: false,
+			});
+		});
+
+		const result = await backfillStreams(client as never, 'sess-1', [
+			'character:c1',
+			'location:l1',
+		]);
+		expect(result.events.map((e) => e.eventId)).toEqual(['dup']);
+	});
+
 	it('rejects with abort reason when AbortSignal is triggered mid-flight', async () => {
 		const client = makeClient();
 		client.webQueryStreamHistory.mockImplementation(

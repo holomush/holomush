@@ -129,6 +129,11 @@
   async function hydrateAndStream() {
     abortController?.abort();
     abortController = new AbortController();
+    // Snapshot the controller to a local so handlers resolving after a
+    // concurrent re-invocation replaced the shared `abortController` do
+    // not read a stale/foreign signal. Side-effect writes below are also
+    // gated on generation + localController.signal.aborted.
+    const localController = abortController;
     clearLines();
     replayActive.set(true);
     const generation = ++streamGeneration;
@@ -138,7 +143,8 @@
       streamSpan.addEvent('reconnect');
       streamSpan.end();
     }
-    streamSpan = tracer.startSpan('stream.lifecycle');
+    const localSpan = tracer.startSpan('stream.lifecycle');
+    streamSpan = localSpan;
 
     const liveBuffer: GameEvent[] = [];
     const seenEventIds = new Set<string>();
@@ -163,13 +169,24 @@
         // is now server-driven replay-from-cursor + live.
         for await (const response of client.streamEvents(
           { sessionId },
-          { signal: abortController.signal },
+          { signal: localController.signal },
         )) {
           if (response.frame.case === 'control') {
             const ctrl = response.frame.value;
             if (ctrl.signal === ControlSignal.REPLAY_COMPLETE) {
               resolveStreamReady(generation);
             } else if (ctrl.signal === ControlSignal.STREAM_CLOSED) {
+              // Stale-generation guard: if a later hydrate has started,
+              // skip mutating shared state (connected, sessionId) and just
+              // reject our own gate. Span teardown is keyed on localSpan.
+              if (generation !== streamGeneration) {
+                rejectStreamReady(generation, new Error(ctrl.message || 'Stream closed'));
+                if (streamSpan === localSpan) {
+                  streamSpan = null;
+                }
+                localSpan.end();
+                return;
+              }
               if (ctrl.message) {
                 appendLine(
                   { type: 'system', characterName: '', text: ctrl.message, channel: 0 },
@@ -180,8 +197,10 @@
               connected = false;
               sessionId = '';
               rejectStreamReady(generation, new Error(ctrl.message || 'Stream closed'));
-              streamSpan?.end();
-              streamSpan = null;
+              if (streamSpan === localSpan) {
+                streamSpan = null;
+              }
+              localSpan.end();
               goto('/characters');
               return;
             }
@@ -201,19 +220,24 @@
           }
         }
       } catch (e) {
-        if (e instanceof Error && e.name !== 'AbortError') {
+        // Gate shared-state writes: if a newer hydrate is running or our
+        // own controller was aborted, only reject our own gate.
+        const isStale = generation !== streamGeneration || localController.signal.aborted;
+        if (!isStale && e instanceof Error && e.name !== 'AbortError') {
           connected = false;
           error = 'Connection lost. Click "Reconnect" or refresh the page.';
-          rejectStreamReady(generation, e);
-        } else {
-          rejectStreamReady(generation, e);
         }
+        rejectStreamReady(generation, e);
       } finally {
         if (streamReadyGate?.generation === generation) {
           rejectStreamReady(generation, new Error('Event stream ended before replay completed'));
         }
-        streamSpan?.end();
-        streamSpan = null;
+        // Only null out the shared streamSpan if it is still OUR span; a
+        // stale invocation must not clobber a newer span the caller owns.
+        if (streamSpan === localSpan) {
+          streamSpan = null;
+        }
+        localSpan.end();
       }
     })();
 
@@ -223,7 +247,10 @@
     try {
       let streams: string[] = [];
       try {
-        const resp = await client.webListSessionStreams({ sessionId });
+        const resp = await client.webListSessionStreams(
+          { sessionId },
+          { signal: localController.signal },
+        );
         streams = resp.streams;
       } catch (e) {
         if (isUnimplementedError(e)) {
@@ -234,26 +261,26 @@
       }
       try {
         const { events, failedStreams } = await backfillStreams(client, sessionId, streams, {
-          signal: abortController.signal,
+          signal: localController.signal,
         });
         if (failedStreams.length > 0) {
           console.warn('[backfill] streams failed', { failedStreams });
         }
         for (const ev of events) {
-          if (generation !== streamGeneration) break;
+          if (generation !== streamGeneration || localController.signal.aborted) break;
           if (ev.eventId) seenEventIds.add(ev.eventId);
           routeEvent(ev, true);
         }
       } catch (e) {
         // backfillStreams rejects on abort — component unmount, not an
         // error worth surfacing to the user.
-        if (!abortController.signal.aborted) {
+        if (!localController.signal.aborted) {
           console.warn('[backfill] fetch failed', e);
         }
       }
     } finally {
       backfillDone = true;
-      if (generation === streamGeneration) {
+      if (generation === streamGeneration && !localController.signal.aborted) {
         replayActive.set(false);
         // Drain Subscribe events that arrived during backfill, deduping.
         for (const ev of liveBuffer) {

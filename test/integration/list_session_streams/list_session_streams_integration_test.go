@@ -7,6 +7,8 @@ package list_session_streams_test
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -14,6 +16,7 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	grpcpkg "github.com/holomush/holomush/internal/grpc"
@@ -24,11 +27,13 @@ import (
 
 // newTestSession returns a session.Info pre-populated with sensible defaults
 // for ListSessionStreams integration tests. The RPC does not consult focus
-// memberships or cursors, so defaults are minimal.
-func newTestSession(id string, charID, locID ulid.ULID) *session.Info {
+// memberships or cursors, so defaults are minimal. PlayerID is supplied so
+// the bd-jv7z ownership gate can compare against a seeded PlayerSession.
+func newTestSession(id string, playerID, charID, locID ulid.ULID) *session.Info {
 	now := time.Now().UTC()
 	return &session.Info{
 		ID:             id,
+		PlayerID:       playerID,
 		CharacterID:    charID,
 		CharacterName:  "Alice",
 		LocationID:     locID,
@@ -41,6 +46,32 @@ func newTestSession(id string, charID, locID ulid.ULID) *session.Info {
 		MaxHistory:     50,
 		CreatedAt:      now,
 	}
+}
+
+// seedPlayerSession inserts a minimal `players` row for playerID (required
+// by the player_sessions FK constraint), creates a real PlayerSession row
+// owned by that player, and returns the plaintext token. Callers pass the
+// token as ListSessionStreamsRequest.PlayerSessionToken so the bd-jv7z
+// ownership gate in CoreServer.ListSessionStreams accepts the request.
+func seedPlayerSession(ctx context.Context, playerID ulid.ULID) string {
+	// Minimal player row — only id + unique username + non-null
+	// password_hash are required by the schema. The password hash is
+	// never validated here; the token is what we exercise.
+	_, err := env.pool.Exec(ctx, `
+		INSERT INTO players (id, username, password_hash)
+		VALUES ($1, $2, 'unused')`,
+		playerID.String(), "lss_"+playerID.String())
+	Expect(err).NotTo(HaveOccurred())
+
+	raw := make([]byte, auth.SessionTokenBytes)
+	_, err = rand.Read(raw)
+	Expect(err).NotTo(HaveOccurred())
+	token := hex.EncodeToString(raw)
+
+	ps, err := auth.NewPlayerSession(playerID, auth.HashSessionToken(token), "", "", auth.PlayerSessionTTL)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(env.playerSessionStore.Create(ctx, ps)).To(Succeed())
+	return token
 }
 
 // newCoreServerForTest constructs a real CoreServer wired to the suite's
@@ -68,6 +99,7 @@ func newCoreServerForTest() *grpcpkg.CoreServer {
 		cmdSvc,
 		grpcpkg.WithEventStore(env.eventStore),
 		grpcpkg.WithAccessEngine(policytest.AllowAllEngine()),
+		grpcpkg.WithPlayerSessionRepo(env.playerSessionStore),
 	)
 }
 
@@ -92,16 +124,19 @@ var _ = Describe("CoreService.ListSessionStreams", func() {
 		// Arrange: real session persisted to Postgres; focusCoordinator is nil
 		// on this server, so the handler runs the Subscribe-parity fallback
 		// that emits character + location streams.
+		playerID := ulid.Make()
 		charID := ulid.Make()
 		locID := ulid.Make()
 		sessionID := core.NewULID().String()
 
 		server := newCoreServerForTest()
-		Expect(env.sessionStore.Set(testCtx, sessionID, newTestSession(sessionID, charID, locID))).To(Succeed())
+		Expect(env.sessionStore.Set(testCtx, sessionID, newTestSession(sessionID, playerID, charID, locID))).To(Succeed())
+		token := seedPlayerSession(testCtx, playerID)
 
 		// Act.
 		resp, err := server.ListSessionStreams(testCtx, &corev1.ListSessionStreamsRequest{
-			SessionId: sessionID,
+			SessionId:          sessionID,
+			PlayerSessionToken: token,
 		})
 
 		// Assert: both ambient streams present, encoded with the canonical prefixes.
@@ -121,5 +156,23 @@ var _ = Describe("CoreService.ListSessionStreams", func() {
 
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("session_id is required"))
+	})
+
+	It("rejects a request with a missing player session token (bd-jv7z ownership gate)", func() {
+		playerID := ulid.Make()
+		charID := ulid.Make()
+		locID := ulid.Make()
+		sessionID := core.NewULID().String()
+
+		server := newCoreServerForTest()
+		Expect(env.sessionStore.Set(testCtx, sessionID, newTestSession(sessionID, playerID, charID, locID))).To(Succeed())
+
+		_, err := server.ListSessionStreams(testCtx, &corev1.ListSessionStreamsRequest{
+			SessionId: sessionID,
+			// PlayerSessionToken intentionally empty.
+		})
+
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("session not found"))
 	})
 })

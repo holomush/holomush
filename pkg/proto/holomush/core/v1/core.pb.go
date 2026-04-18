@@ -2601,11 +2601,12 @@ func (x *QueryStreamHistoryResponse) GetHasMore() bool {
 }
 
 type ListSessionStreamsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Meta               *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId          string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	PlayerSessionToken string                 `protobuf:"bytes,3,opt,name=player_session_token,json=playerSessionToken,proto3" json:"player_session_token,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ListSessionStreamsRequest) Reset() {
@@ -2648,6 +2649,13 @@ func (x *ListSessionStreamsRequest) GetMeta() *RequestMeta {
 func (x *ListSessionStreamsRequest) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
+	}
+	return ""
+}
+
+func (x *ListSessionStreamsRequest) GetPlayerSessionToken() string {
+	if x != nil {
+		return x.PlayerSessionToken
 	}
 	return ""
 }
@@ -2898,11 +2906,12 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x1aQueryStreamHistoryResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x124\n" +
 	"\x06events\x18\x02 \x03(\v2\x1c.holomush.core.v1.EventFrameR\x06events\x12\x19\n" +
-	"\bhas_more\x18\x03 \x01(\bR\ahasMore\"m\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\"\x9f\x01\n" +
 	"\x19ListSessionStreamsRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x02 \x01(\tR\tsessionId\"j\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x120\n" +
+	"\x14player_session_token\x18\x03 \x01(\tR\x12playerSessionToken\"j\n" +
 	"\x1aListSessionStreamsResponse\x12\x18\n" +
 	"\astreams\x18\x01 \x03(\tR\astreams\x122\n" +
 	"\x04meta\x18\x02 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta*u\n" +

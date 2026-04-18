@@ -156,11 +156,11 @@ message GameEvent {
   string actor = 6;
   string text = 7;
   google.protobuf.Struct metadata = 8;
-  string event_id = 9; // ULID; populated from corev1.Event.id
+  string event_id = 9; // ULID; populated from corev1.EventFrame.id
 }
 ```
 
-**Translation**: `internal/web/translate.go` (where `translateEvent` lives) **MUST** copy `corev1.Event.id` into `webv1.GameEvent.event_id`. This single translator is shared between Subscribe and QueryStreamHistory paths, so the field is populated consistently for both sources.
+**Translation**: `internal/web/translate.go` (where `translateEvent` lives) **MUST** copy `corev1.EventFrame.id` into `webv1.GameEvent.event_id`. This single translator is shared between Subscribe and QueryStreamHistory paths, so the field is populated consistently for both sources.
 
 **Tests**: extend `internal/web/translate_test.go` to verify `event_id` propagation. The existing test pattern (`got := h.translateEvent(ev)` x15) makes this trivial.
 
@@ -360,7 +360,7 @@ The existing `'WebQueryStreamHistory returns events through the web gateway'` te
 | Core integration | `ListSessionStreams` returns character + location streams for a fresh session | `test/integration/list_session_streams/` (model on `test/integration/stream_history/`) |
 | Core integration | `ListSessionStreams` returns scene streams for a session with active scene focus | same |
 | Core integration | `ListSessionStreams` returns plugin-contributed streams (stub `StreamContributor`) | same |
-| Web | `translateEvent` populates `event_id` from `corev1.Event.id` | `internal/web/translate_test.go` (extend) |
+| Web | `translateEvent` populates `event_id` from `corev1.EventFrame.id` | `internal/web/translate_test.go` (extend) |
 | Web | `WebListSessionStreams` proxies to core, passes errors through | `internal/web/handler_test.go` |
 | Client unit | `backfillStreams` returns empty result for empty stream list (no RPCs) | `web/src/lib/backfill/streamBackfill.test.ts` (new vitest) |
 | Client unit | `backfillStreams` merges by `(timestamp, event_id)` ascending across streams | same |

@@ -380,6 +380,7 @@ message QueryStreamHistoryResponse {
 message ListSessionStreamsRequest {
   RequestMeta meta = 1;
   string session_id = 2;
+  string player_session_token = 3;
 }
 
 message ListSessionStreamsResponse {

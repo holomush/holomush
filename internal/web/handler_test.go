@@ -747,3 +747,23 @@ func TestWebListSessionStreamsPassesErrorsThrough(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "SESSION_EXPIRED")
 }
+
+func TestWebListSessionStreamsForwardsPlayerSessionToken(t *testing.T) {
+	const token = "tok-list-streams"
+	client := &mockCoreClient{
+		listSessionStreamsResp: &corev1.ListSessionStreamsResponse{
+			Streams: []string{"character:c1"},
+		},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebListSessionStreamsRequest{SessionId: "sess-5"})
+	req.Header().Set(headerInjectSessionToken, token)
+
+	_, err := h.WebListSessionStreams(context.Background(), req)
+	require.NoError(t, err)
+
+	require.NotNil(t, client.listSessionStreamsReq, "ListSessionStreams should have been called")
+	assert.Equal(t, token, client.listSessionStreamsReq.GetPlayerSessionToken())
+	assert.Equal(t, "sess-5", client.listSessionStreamsReq.GetSessionId())
+}

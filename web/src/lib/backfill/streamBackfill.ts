@@ -59,7 +59,20 @@ export async function backfillStreams(
 		return 0;
 	});
 
-	return { events, failedStreams };
+	// Deduplicate events that appeared in multiple streams (e.g. a `say` is
+	// present on both character and location streams). Keep the first
+	// occurrence after the stable sort above so ordering is preserved.
+	const seenIds = new Set<string>();
+	const dedupedEvents: GameEvent[] = [];
+	for (const ev of events) {
+		if (ev.eventId) {
+			if (seenIds.has(ev.eventId)) continue;
+			seenIds.add(ev.eventId);
+		}
+		dedupedEvents.push(ev);
+	}
+
+	return { events: dedupedEvents, failedStreams };
 }
 
 type FetchResult = { ok: true; events: GameEvent[] } | { ok: false; error: unknown };

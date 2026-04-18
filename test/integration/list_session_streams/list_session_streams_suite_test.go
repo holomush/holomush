@@ -34,10 +34,11 @@ func TestListSessionStreams(t *testing.T) {
 // testutil.SharedPostgres); each suite gets its own fresh database from a
 // pre-migrated template (via testutil.FreshDatabase).
 type suiteEnv struct {
-	ctx          context.Context
-	pool         *pgxpool.Pool
-	eventStore   *store.PostgresEventStore
-	sessionStore *store.PostgresSessionStore
+	ctx                context.Context
+	pool               *pgxpool.Pool
+	eventStore         *store.PostgresEventStore
+	sessionStore       *store.PostgresSessionStore
+	playerSessionStore *store.PostgresPlayerSessionStore
 }
 
 var env *suiteEnv
@@ -55,10 +56,11 @@ var _ = BeforeSuite(func() {
 	Expect(pool).NotTo(BeNil())
 
 	env = &suiteEnv{
-		ctx:          ctx,
-		pool:         pool,
-		eventStore:   eventStore,
-		sessionStore: store.NewPostgresSessionStore(pool),
+		ctx:                ctx,
+		pool:               pool,
+		eventStore:         eventStore,
+		sessionStore:       store.NewPostgresSessionStore(pool),
+		playerSessionStore: store.NewPostgresPlayerSessionStore(pool),
 	}
 })
 
@@ -76,6 +78,8 @@ func cleanupTestData(ctx context.Context, pool *pgxpool.Pool) {
 	tables := []string{
 		"session_connections",
 		"sessions",
+		"player_sessions",
+		"players",
 		"events",
 	}
 	for _, table := range tables {

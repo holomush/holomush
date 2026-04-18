@@ -66,12 +66,38 @@ func TestListSessionStreamsRequiresSessionID(t *testing.T) {
 	assert.Equal(t, "INVALID_ARGUMENT", o.Code())
 }
 
-func TestListSessionStreamsReturnsSessionNotFoundOnMiss(t *testing.T) {
+// TestListSessionStreamsRejectsMissingToken verifies the ownership gate
+// collapses a missing player_session_token to SESSION_NOT_FOUND (bd-jv7z).
+func TestListSessionStreamsRejectsMissingToken(t *testing.T) {
+	charID := ulid.MustParse("01HYXYZCHAR0000000000000CH")
+	future := time.Now().Add(time.Hour)
+	info := &session.Info{
+		ID:          "sess-1",
+		CharacterID: charID,
+		ExpiresAt:   &future,
+	}
 	s := &CoreServer{
-		sessionStore: newTestSessionStore(t, nil),
+		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"sess-1": info}),
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 	_, err := s.ListSessionStreams(context.Background(), &corev1.ListSessionStreamsRequest{
-		SessionId: "missing",
+		SessionId: "sess-1",
+		// PlayerSessionToken intentionally omitted.
+	})
+	require.Error(t, err)
+	o, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "SESSION_NOT_FOUND", o.Code())
+}
+
+func TestListSessionStreamsReturnsSessionNotFoundOnMiss(t *testing.T) {
+	s := &CoreServer{
+		sessionStore:      newTestSessionStore(t, nil),
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
+	}
+	_, err := s.ListSessionStreams(context.Background(), &corev1.ListSessionStreamsRequest{
+		SessionId:          "missing",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.Error(t, err)
 	o, ok := oops.AsOops(err)
@@ -86,10 +112,12 @@ func TestListSessionStreamsReturnsSessionExpiredForExpiredSession(t *testing.T) 
 		ExpiresAt: &past,
 	}
 	s := &CoreServer{
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{"sess-expired": expired}),
+		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"sess-expired": expired}),
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 	_, err := s.ListSessionStreams(context.Background(), &corev1.ListSessionStreamsRequest{
-		SessionId: "sess-expired",
+		SessionId:          "sess-expired",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.Error(t, err)
 	o, ok := oops.AsOops(err)
@@ -118,12 +146,14 @@ func TestListSessionStreamsReturnsRestoreFocusStreams(t *testing.T) {
 		},
 	}
 	s := &CoreServer{
-		sessionStore:     newTestSessionStore(t, map[string]*session.Info{"sess-1": info}),
-		focusCoordinator: fakeCoord,
+		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"sess-1": info}),
+		focusCoordinator:  fakeCoord,
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
 	resp, err := s.ListSessionStreams(context.Background(), &corev1.ListSessionStreamsRequest{
-		SessionId: "sess-1",
+		SessionId:          "sess-1",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []string{
@@ -144,12 +174,14 @@ func TestListSessionStreamsFallsBackWhenCoordinatorNil(t *testing.T) {
 		ExpiresAt:   &future,
 	}
 	s := &CoreServer{
-		sessionStore:     newTestSessionStore(t, map[string]*session.Info{"sess-2": info}),
-		focusCoordinator: nil, // explicitly nil
+		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"sess-2": info}),
+		focusCoordinator:  nil, // explicitly nil
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
 	resp, err := s.ListSessionStreams(context.Background(), &corev1.ListSessionStreamsRequest{
-		SessionId: "sess-2",
+		SessionId:          "sess-2",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err)
 	assert.Contains(t, resp.GetStreams(), world.CharacterStream(charID))
@@ -175,10 +207,12 @@ func TestListSessionStreamsIncludesPluginContributedStreamsInFallback(t *testing
 		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"sess-plugin": info}),
 		focusCoordinator:  nil,
 		streamContributor: fakeContrib,
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
 	resp, err := s.ListSessionStreams(context.Background(), &corev1.ListSessionStreamsRequest{
-		SessionId: "sess-plugin",
+		SessionId:          "sess-plugin",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err)
 	assert.Contains(t, resp.GetStreams(), world.CharacterStream(charID))
@@ -198,12 +232,14 @@ func TestListSessionStreamsEchoesRequestIDInResponseMeta(t *testing.T) {
 		ExpiresAt:   &future,
 	}
 	s := &CoreServer{
-		sessionStore: newTestSessionStore(t, map[string]*session.Info{"sess-meta": info}),
+		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"sess-meta": info}),
+		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
 	resp, err := s.ListSessionStreams(context.Background(), &corev1.ListSessionStreamsRequest{
-		Meta:      &corev1.RequestMeta{RequestId: "req-abc"},
-		SessionId: "sess-meta",
+		Meta:               &corev1.RequestMeta{RequestId: "req-abc"},
+		SessionId:          "sess-meta",
+		PlayerSessionToken: testPlayerSessionToken,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp.GetMeta())

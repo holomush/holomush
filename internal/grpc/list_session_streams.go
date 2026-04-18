@@ -9,6 +9,7 @@ import (
 
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/world"
@@ -17,8 +18,15 @@ import (
 
 // ListSessionStreams returns the stream names the session is subscribed to,
 // derived from focusCoordinator.RestoreFocus. Pure read — does not mutate
-// session state. Auth follows the QueryStreamHistory pattern: session
-// existence + expiry only; no player_session_token required.
+// session state.
+//
+// SECURITY (bd-jv7z): Before returning streams, the caller's
+// player_session_token is validated against the target session via
+// auth.ValidateSessionOwnership. Any failure — missing/invalid token,
+// expired token, unknown session, or ownership mismatch — collapses to the
+// enumeration-safe SESSION_NOT_FOUND error. This closes the IDOR surface
+// where one player could enumerate another player's subscribed streams
+// (character/location/scene identifiers) with just the session_id.
 func (s *CoreServer) ListSessionStreams(ctx context.Context, req *corev1.ListSessionStreamsRequest) (*corev1.ListSessionStreamsResponse, error) {
 	requestID := ""
 	if req.Meta != nil {
@@ -31,6 +39,23 @@ func (s *CoreServer) ListSessionStreams(ctx context.Context, req *corev1.ListSes
 
 	if req.SessionId == "" {
 		return nil, oops.Code("INVALID_ARGUMENT").Errorf("session_id is required")
+	}
+
+	// Validate session ownership before any other work. Enumeration-safe:
+	// every failure mode collapses to the same SESSION_NOT_FOUND error.
+	if _, err := auth.ValidateSessionOwnership(
+		ctx,
+		s.playerSessionRepo,
+		s.sessionStore,
+		req.GetPlayerSessionToken(),
+		req.GetSessionId(),
+	); err != nil {
+		slog.DebugContext(ctx, "list session streams ownership validation failed",
+			"request_id", requestID,
+			"session_id", req.SessionId,
+			"error", err,
+		)
+		return nil, oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
 	}
 
 	info, err := s.sessionStore.Get(ctx, req.SessionId)

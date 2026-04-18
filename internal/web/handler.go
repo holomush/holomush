@@ -433,17 +433,24 @@ func (h *Handler) WebQueryStreamHistory(ctx context.Context, req *connect.Reques
 }
 
 // WebListSessionStreams proxies stream enumeration requests to CoreService.
-// Authorization is enforced by the core service.
+// Authorization (bd-jv7z) is enforced server-side in CoreServer via
+// auth.ValidateSessionOwnership; the gateway just forwards the
+// player_session_token header.
 func (h *Handler) WebListSessionStreams(ctx context.Context, req *connect.Request[webv1.WebListSessionStreamsRequest]) (*connect.Response[webv1.WebListSessionStreamsResponse], error) {
 	slog.DebugContext(ctx, "web: WebListSessionStreams",
 		"session_id", req.Msg.GetSessionId(),
 	)
 
+	// Forward the session token header. The core server enforces
+	// ownership; an empty or wrong token collapses to SESSION_NOT_FOUND.
+	token := req.Header().Get(headerInjectSessionToken)
+
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
 	resp, err := h.client.ListSessionStreams(rpcCtx, &corev1.ListSessionStreamsRequest{
-		SessionId: req.Msg.GetSessionId(),
+		SessionId:          req.Msg.GetSessionId(),
+		PlayerSessionToken: token,
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "web: list session streams RPC failed",
