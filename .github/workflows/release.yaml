@@ -8,6 +8,12 @@ on:
     branches: [main]
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to deploy (e.g. v0.2.0)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -295,7 +301,7 @@ jobs:
     name: Deploy Sandbox
     runs-on: namespace-profile-linux-amd64-4x8
     needs: [goreleaser, verify-release]
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     concurrency:
       group: deploy-sandbox
       cancel-in-progress: false
@@ -306,9 +312,11 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
       - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DIGITALOCEAN_SSH_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DIGITALOCEAN_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$(doctl compute droplet get holomush-sandbox-game --format PublicIPv4 --no-header)" >> ~/.ssh/known_hosts
 
@@ -319,20 +327,36 @@ jobs:
           echo "ip=${IP}" >> "$GITHUB_OUTPUT"
 
       - name: Pre-deploy Postgres safety snapshot
+        env:
+          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          VERSION="${GITHUB_REF_NAME}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$DISPATCH_TAG"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+          fi
           # Run the backup service's script with --tag=pre-deploy:<version>.
           # The --tag triggers pin mode in backup.sh so the retention policy
           # never expires this snapshot.
-          ssh -o StrictHostKeyChecking=yes holomush@${{ steps.droplet.outputs.ip }} \
+          ssh -o StrictHostKeyChecking=yes "holomush@${DROPLET_IP}" \
             "cd /opt/holomush \
              && docker compose --profile tunnel --profile backups exec -T backup \
                   /usr/local/bin/backup.sh --tag=pre-deploy:${VERSION}"
 
       - name: Pull + migrate + restart
+        env:
+          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          VERSION="${GITHUB_REF_NAME}"
-          ssh holomush@${{ steps.droplet.outputs.ip }} bash -s -- "${VERSION}" <<'EOF'
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$DISPATCH_TAG"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+          fi
+          ssh "holomush@${DROPLET_IP}" bash -s -- "${VERSION}" <<'EOF'
             set -euo pipefail
             VERSION="$1"
             cd /opt/holomush
@@ -344,7 +368,9 @@ jobs:
           EOF
 
       - name: Health probe
+        env:
+          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
         run: |-
-          ssh holomush@${{ steps.droplet.outputs.ip }} \
+          ssh "holomush@${DROPLET_IP}" \
             "docker compose -f /opt/holomush/compose.yaml exec -T gateway \
-               curl -sf http://localhost:8080/healthz"
+               wget -q --spider http://localhost:9101/healthz/readiness"

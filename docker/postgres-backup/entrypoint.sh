@@ -11,7 +11,7 @@
 set -eu
 
 env \
-  | grep -E '^(POSTGRES_|KOPIA_PASSWORD|BACKUP_|AWS_)' \
+  | grep -E '^(POSTGRES_|PGPASSWORD|KOPIA_PASSWORD|BACKUP_|AWS_)' \
   | sed 's/^/export /' \
   > /etc/backup.env
 
