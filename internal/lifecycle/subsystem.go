@@ -14,15 +14,17 @@ type SubsystemID int
 
 // SubsystemID constants enumerate all registered server subsystems.
 const (
-	SubsystemDatabase  SubsystemID = iota // database
-	SubsystemTLS                          // tls
-	SubsystemABAC                         // abac
-	SubsystemAuth                         // auth
-	SubsystemWorld                        // world
-	SubsystemPlugins                      // plugins
-	SubsystemSessions                     // sessions
-	SubsystemBootstrap                    // bootstrap
-	SubsystemGRPC                         // grpc
+	SubsystemDatabase        SubsystemID = iota // database
+	SubsystemTLS                                // tls
+	SubsystemABAC                               // abac
+	SubsystemAuth                               // auth
+	SubsystemWorld                              // world
+	SubsystemPlugins                            // plugins
+	SubsystemSessions                           // sessions
+	SubsystemBootstrap                          // bootstrap
+	SubsystemGRPC                               // grpc
+	SubsystemEventBus                           // eventbus
+	SubsystemAuditProjection                    // audit_projection
 )
 
 // Subsystem is a top-level server component with lifecycle management

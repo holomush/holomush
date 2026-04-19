@@ -15,6 +15,7 @@ import (
 	"github.com/holomush/holomush/internal/bootstrap"
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/observability"
 	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/stretchr/testify/assert"
@@ -89,7 +90,7 @@ func TestAutoMigrate_RunsByDefault(t *testing.T) {
 	cancel()
 
 	// Run core - it should return quickly since context is cancelled
-	_ = runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), NewCoreCmd(), deps)
+	_ = runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), eventbus.Config{StoreDir: t.TempDir()}, NewCoreCmd(), deps)
 
 	// Verify migration was called
 	assert.True(t, migrator.upCalled, "Migrator.Up() should be called by default")
@@ -142,7 +143,7 @@ func TestAutoMigrate_DisabledWhenEnvVarFalse(t *testing.T) {
 	}
 
 	cancel()
-	_ = runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), NewCoreCmd(), deps)
+	_ = runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), eventbus.Config{StoreDir: t.TempDir()}, NewCoreCmd(), deps)
 
 	// Verify migration was NOT called
 	assert.False(t, migrator.upCalled, "Migrator.Up() should NOT be called when disabled")
@@ -184,7 +185,7 @@ func TestAutoMigrate_ErrorSurfaced(t *testing.T) {
 		LuaRegistryMaxSize: 65536,
 	}
 
-	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), NewCoreCmd(), deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), eventbus.Config{StoreDir: t.TempDir()}, NewCoreCmd(), deps)
 
 	require.Error(t, err, "Migration error should be surfaced")
 	assert.Contains(t, err.Error(), "migration", "Error should mention migration")
@@ -222,7 +223,7 @@ func TestAutoMigrate_MigratorCreationError(t *testing.T) {
 		LuaRegistryMaxSize: 65536,
 	}
 
-	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), NewCoreCmd(), deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), eventbus.Config{StoreDir: t.TempDir()}, NewCoreCmd(), deps)
 
 	require.Error(t, err, "Migrator creation error should be surfaced")
 	assert.Contains(t, err.Error(), "migration", "Error should mention migration")
