@@ -4,7 +4,7 @@
 
 **DRAFT** — design proposal pending implementation plan.
 
-Supersedes: [2026-03-20-event-delivery-redesign.md](2026-03-20-event-delivery-redesign.md)
+Supersedes: [docs/specs/2026-03-20-event-delivery-redesign.md](../../specs/2026-03-20-event-delivery-redesign.md)
 (LISTEN/NOTIFY-based delivery; this design replaces both the event log and the
 delivery transport).
 
@@ -178,12 +178,34 @@ type Event struct {
 sequence (`uint64`) is internal to the bus and **MUST NOT** cross any
 public API boundary. ULIDs survive JetStream rebuilds; sequences do not.
 
-#### 1b. Event Type — plugin-declared, opaque to host
+#### 1b. Event Type and Payload — plugin-declared, opaque to host
 
 The 19 `EventType` constants in `internal/core/event.go:39-70` **MUST** be
 deleted. Each plugin declares its own type strings as constants in its own
 package. The host treats `Type` as `string`, validated only against the
 plugin's manifest declaration (existing `EventSink` mechanism, PR #207).
+
+**The same boundary rule applies to payload schemas.** The plugin-domain
+payload structs at `internal/core/event.go:74-143`
+(`LocationStatePayload`, `ExitUpdatePayload`, `PagePayload`,
+`WhisperPayload`, `WhisperNoticePayload`, `OOCPayload`, `PemitPayload`)
+**MUST** also move out of `internal/core/`. Each lives in its owning
+plugin's package, defined as proto messages in that plugin's proto namespace
+(e.g., `api/proto/holomush/scenes/v1/`, `api/proto/holomush/dm/v1/`,
+`api/proto/holomush/world/v1/` — final layout decided in F5 per plugin).
+
+The host's `Event.Payload []byte` is opaque from end to end:
+
+- Publishers (plugins) marshal their own proto to bytes
+- Host applies codec, persists bytes to JetStream and audit
+- Subscribers receive bytes, apply codec.Decode, then unmarshal to their
+  own proto type
+- The host **MUST NOT** import any plugin's payload type and **MUST NOT**
+  attempt to interpret payload bytes beyond passing them through
+
+This closes the boundary violation completely — neither the type
+identifier nor the payload schema for plugin-owned events lives in
+`internal/core/` after the cutover.
 
 #### 1c. Subject naming — hierarchical, plugin-namespaced
 
@@ -248,9 +270,9 @@ StreamConfig{
     Subjects:    []string{"events.>"},
     Retention:   LimitsPolicy,
     Storage:     FileStorage,
-    Replicas:    1,                     // single-node; bumped at cluster cutover
+    Replicas:    1,                     // single-node; multi-node = planned cutover, not flag flip (§7, §10)
     MaxAge:      720h,                  // 30 days
-    Duplicates:  5 * time.Minute,
+    Duplicates:  30 * time.Minute,      // widened from default 5m to absorb host-restart retry window
     AllowDirect: true,
 }
 ```
@@ -335,20 +357,52 @@ regardless of publish concurrency, so `EventWriter` **MUST** be deleted.
 `core.NewULID`'s in-process mutex still produces monotonic ULIDs — that
 operation is not a serialization bottleneck.
 
-#### Idempotent publish
+#### Idempotent publish — bounded window
 
-`Nats-Msg-Id` = `event.ID.String()`. Within the dedup window (5 min,
-configurable), JS silently drops duplicate publishes with the same ID.
-Crash-safe at-least-once becomes effectively exactly-once for publish.
+`Nats-Msg-Id` = `event.ID.String()`. Within the dedup window (default 5
+minutes, set via stream `Duplicates` config), JS silently drops duplicate
+publishes with the same ID and returns the original ack.
+
+**Honest delivery semantics:** at-least-once, with effective exactly-once
+*within the dedup window*. After the window expires, a publish with the
+same `Nats-Msg-Id` is treated as a fresh message and creates a duplicate
+in the log. There is no "exactly-once" without bound.
+
+**Required publisher contract** (enforced in `EventSink`):
+
+- Plugin retry attempts for the same `EmitIntent` **MUST** complete within
+  the dedup window. The host's publish RPC carries a deadline derived from
+  `dupe_window − safety_margin` (default `5m − 30s = 4m30s`). After
+  deadline, the host returns a `PublishExpired` error and the plugin
+  **MUST NOT** retry the original intent — it must construct a new event
+  (new ULID).
+- Subscribers **MUST** dedup by ULID at the application boundary. Web and
+  telnet adapters maintain a per-connection seen-ULID set with TTL
+  ≥ `MaxAckPending × ack_wait` to absorb at-least-once redelivery from JS
+  consumers.
+- The dedup window is widened (`dupe_window: 30m`) when running embedded
+  NATS so a worst-case host crash + restart + retry cycle stays inside
+  the window.
+
+**Host crash mid-publish scenario.** If the host crashes after JS has
+acked the publish (filestore fsync complete) but before `EmitEvent`
+returns to the plugin, the plugin sees a transport error on restart and
+retries with the same ULID. JS dedup absorbs the duplicate within the
+window. If the host is down longer than the window — i.e., the plugin
+restart happened > `dupe_window` after the crash — the retry creates a
+duplicate. Subscribers' dedup catches it; the log carries two rows for
+the same ULID.
 
 #### Failure modes
 
 | Scenario | Behavior |
 | --- | --- |
-| JS unreachable | `PublishMsg` returns error; `EmitEvent` propagates to plugin; retry safe via dedup |
+| JS unreachable | `PublishMsg` returns error; `EmitEvent` propagates to plugin; retry safe within dedup window |
 | `PublishAck` timeout | Same as above |
 | Manifest validation fails | Reject pre-publish; audit log; plugin error |
 | Payload exceeds 64 KiB | Reject pre-publish; same cap as today |
+| Plugin retry exceeds dedup window | Host returns `PublishExpired`; plugin must mint new ULID |
+| Host crash > dedup window before retry completes | Duplicate in log; subscriber dedup absorbs (cost: one duplicate audit row) |
 
 No silent fallbacks. With embedded NATS, JS down = process down. With
 clustered NATS, quorum loss means publishes fail until quorum returns.
@@ -800,7 +854,7 @@ event_bus:
   mode: embedded                    # "embedded" | "cluster"
   store_dir: ""                     # blank = xdg.DataDir()/jetstream
   stream_max_age: 720h
-  dupe_window: 5m
+  dupe_window: 30m
   monitor_port: 0
   prometheus_exporter: true
 
@@ -814,8 +868,34 @@ event_bus:
     server_name: ""
 ```
 
-`mode` flip is the seam to multi-node. Day-one only `embedded` is
-implemented.
+`mode` is a config seam, **not a cutover plan**. Switching `embedded` →
+`cluster` is a deliberate multi-step migration project (see §10). What the
+config seam buys you: the application-side code (every consumer of
+`EventBus`) stays unchanged across the cutover. What it does **not**
+buy: any of the operational work below. Be honest with planning that the
+cluster cutover, when it lands, is in the same scope class as a database
+migration:
+
+- Cluster sizing decision (3 / 5 nodes, R=3 quorum)
+- External NATS deployment, network policy, DNS / discovery
+- mTLS material lifecycle (issue, rotate, revoke)
+- NKey or JWT-based per-host credentials, including per-plugin in cluster
+  mode (defense-in-depth for subject permissions)
+- Monitoring stack adapted (per-node metrics, leader-election alerts,
+  Raft health)
+- Backup / restore strategy (`nats account backup` is offline; `Mirror`
+  streams are live but require coordination)
+- **Filestore migration** of the existing single-node JetStream data —
+  cannot be a raw `cp -r`. Two options: (a) restore from PG audit
+  projection (clean but multi-hour at scale), (b) `Mirror` stream from
+  embedded to new cluster, wait for lag → 0, flip publishers, deprecate
+  source. Choose at planning time based on downtime tolerance.
+- **Plugin audit consumers must be re-registered** against the new
+  cluster topology (durable consumer state in old filestore is lost
+  unless restored).
+
+Treat the cutover as a multi-week project. The seam is the EventBus
+interface boundary; the migration is the work.
 
 ---
 
@@ -829,6 +909,45 @@ implemented.
 | Bus integration | EventBus contract | Embedded NATS, MemoryStorage | < 100ms |
 | Audit integration | Host + plugin projections | Embedded NATS + PG testcontainer | < 500ms |
 | E2E | Full server, multi-protocol | Embedded NATS + PG + clients | seconds |
+
+#### Controllable test seams (no hidden waits)
+
+Several behaviors of the new design are inherently asynchronous (audit
+projection drain, JS redelivery, ack timing, dedup-window expiry). The
+strategy is **never `time.Sleep`, but `Eventually` is permitted only on
+synchronization metrics, not on data**. Specifically:
+
+- **Test harness MUST inject all timing knobs** as configuration, not
+  hard-coded literals:
+  - JS consumer `AckWait` defaults to 30s in production; tests set
+    100ms so redelivery semantics are observable in bounded time.
+  - JS stream `Duplicates` defaults to 30m in production; tests set 1s
+    so dedup-window expiry tests run fast.
+  - Audit projection `MaxAckPending` and worker batch sizes pinned for
+    reproducibility.
+- **A clock source (`func() time.Time`) is injected into the bus** so
+  time-bound assertions (tier crossover, dedup window, `InactiveThreshold`)
+  use a controllable test clock — not wall clock.
+- **Synchronization points are observable metrics, not timers.** Pattern:
+
+  ```go
+  embedded.AwaitAuditLag(t, 0)            // blocks until audit_projection_lag_seconds == 0
+  embedded.AwaitAckedSeq(t, "session_X", 42)  // blocks until consumer ack-state crosses 42
+  embedded.AwaitConsumerInfo(t, "session_X", func(i jetstream.ConsumerInfo) bool { ... })
+  ```
+
+  These read JS / projection state directly, not wall-clock-bounded
+  polls. They use `Eventually` internally with a hard upper bound (5s)
+  whose only purpose is to fail loudly on a deadlock, not to add
+  observation latency.
+- **`time.Sleep` is banned in `internal/eventbus/`,
+  `test/integration/eventbus_e2e/`, and `internal/grpc/` test files** by
+  custom golangci-lint rule.
+- **`Eventually` on raw subscriber data channels is also banned** — must
+  go through `AwaitAckedSeq` or equivalent metric.
+
+This makes the previously-hidden waits explicit and bounded, and makes
+the test suite genuinely fast (single-digit ms per test).
 
 #### Boundary tests
 
@@ -862,9 +981,20 @@ failure, store-dir lock contention.
 #### Invariant tests (property-based, `pgregory.net/rapid`)
 
 - I-14 cross-subject sequence ordering under concurrent publishers
-- Idempotent publish via `Nats-Msg-Id`
+- Idempotent publish via `Nats-Msg-Id` within window; new event after window
 - Audit row count == JS message count after drain
 - Plugin audit table contains only declared subjects
+- **Filter monotonicity under `SetFilters`** (load-bearing — see §4):
+  emit N events while concurrently calling `SetFilters` with arbitrary
+  subset sequences. After the test:
+  - Every event whose subject was in the filter set *at the time of its
+    publish* MUST be delivered exactly once (modulo ULID dedup)
+  - No event from a removed subject MUST be delivered after the
+    corresponding `SetFilters` returns
+  - Cursor (last acked seq) MUST be preserved across every filter update
+- **Subject-ownership-routing under concurrent loads**: register N
+  manifests with overlapping prefixes, assert resolution is
+  deterministic and matches the documented longest-prefix-wins rule.
 
 Plus fixed invariants checked in CI:
 
@@ -894,6 +1024,33 @@ Plus fixed invariants checked in CI:
 | Plugin process crash mid-deliver | Restart drains; PK ON CONFLICT prevents dups |
 | Embedded JS storage corruption | Rebuild from PG audit; ULIDs stable |
 | Multi-protocol fan-out | Telnet + web in same scene see same pose |
+
+#### JS↔PG hot/cold tier crossover suite (dedicated)
+
+The tier-selection algorithm in §5 (`safetyMargin = 1h`,
+`jsRetentionEdge = now() - JS_MaxAge + safetyMargin`) is the highest-risk
+new code in the design. A dedicated test suite at
+`internal/eventbus/history/tier_test.go` covers it explicitly using the
+injected clock (no wall clock):
+
+| Scenario | Setup | Assertion |
+| --- | --- | --- |
+| Cursor strictly within JS retention | All events recent | Served entirely from JS, zero PG queries |
+| Cursor strictly older than retention | All events aged | Served entirely from PG, zero JS calls |
+| Cursor exactly at the boundary edge | `cursor.timestamp == jsRetentionEdge` | No double-delivery, no skip |
+| Page boundary crosses the edge | Half page in PG, half in JS | Continuous order, no gap, no overlap |
+| Clock skew between PG `inserted_at` and JS publish time | Inject 5s skew | Crossover absorbs skew via safetyMargin |
+| Forward direction crossing boundary | `Direction: Forward` | Older events first, newer continue from JS |
+| Backward direction crossing boundary | `Direction: Backward` | Newer events first, older continue from PG |
+| Empty PG side, full JS side | Audit projection lagging | Only JS events delivered, no error |
+| Empty JS side (aged-out subject), full PG side | Subject aged out of JS | Only PG events delivered, no error |
+| Both sides empty | Subject never had events | Empty result, no error |
+| Cursor for a non-existent subject pattern | | Empty result, no error |
+| Plugin-owned subject crosses the edge | Routes to plugin RPC | Plugin handles tier transparently in its own schema (host doesn't query both) |
+
+This suite **MUST** run with the injected clock fast-forwarded across
+the boundary; never with wall-clock waits. It is the single test suite
+that proves the most subtle new behavior of the design.
 
 #### Chaos and soak (CI nightly)
 
@@ -1058,7 +1215,7 @@ production behavior unchanged.
 | F2 | Audit projection actually projects (exclusion list active) | `internal/eventbus/audit/` |
 | F3 | gRPC Subscribe handler rewritten | `internal/grpc/server.go`; deletes `cursor_lock.go`, `replay.go` |
 | F4 | gRPC `QueryHistory` handler rewritten with hot/cold tier | `internal/grpc/query_history.go` |
-| F5 | Per-plugin updates (subject names, manifest decls, type constants moved) | `plugins/core-scenes/`, others |
+| F5 | Per-plugin updates: subject names, manifest decls, **EventType constants AND payload types moved out of `internal/core/` into plugin packages** (see §1b) | `plugins/core-scenes/`, others; deletes `internal/core/event.go:39-143` |
 | F6 | Schema cutover: DROP `events`, DROP `event_cursors` | `internal/store/migrations/` |
 | F7 | Old code deletion (`EventWriter`, pgnotify, legacy Subscribe) | wide |
 | F8 | Test rewrite (delete obsolete; port "Variant A"; add E2E suite) | `internal/store/postgres_integration_test.go`, `test/integration/eventbus_e2e/` |
@@ -1119,32 +1276,128 @@ Realistic envelope: 5–7 weeks.
 
 ## Open questions
 
+These **MUST** be resolved before implementation plans land. Each item is
+either a decision needed from the project owner, or a design refinement
+surfaced by independent review (architect-review, 2026-04-18) that the
+spec needs to commit to before plan-writing begins.
+
+### Decisions needed (block implementation plans)
+
 1. **NATS server version pinning** — NATS 2.12.5 had a regression on
    stream updates ([nats-server release notes
    2.12.5](https://github.com/nats-io/nats-server/releases/tag/v2.12.5));
-   pick a known-good minor and pin. Need an explicit decision before M4.
+   pick a known-good minor and pin. Define upgrade discipline: who watches
+   release notes, runs the smoke matrix, owns the rollback plan when a
+   NATS upgrade breaks JS. NATS is now a third-party runtime dependency
+   on the critical path; treat it like one.
 
 2. **Codec key provider for the first encryption rollout** — what's the
    preferred KMS / key store for production? Affects which provider
    lands first when encryption work begins. Out of scope for this design;
-   filed as follow-up.
+   filed as follow-up bead.
 
-3. **Event proto schema location** — `api/proto/holomush/eventbus/v1/`
-   alongside other plugin protos? Decide before M1.
+3. **Event proto schema location** — for the host envelope (`Event` proto
+   itself): `api/proto/holomush/eventbus/v1/`? For plugin-owned payload
+   protos: each plugin's own proto namespace. Confirm the layout before M1.
 
-4. **Whether `Event.Type` should be a typed string (Go) for compile-time
-   help even though it's plugin-declared** — tradeoff: typed strings give
-   compile-time per-plugin enforcement but require each plugin to
-   declare its own type. Probably yes (per Section 1b's "constants in
-   plugin's own package").
+4. **Whether `Event.Type` and `Subject` should be typed strings** — change
+   from §1a sketch is `type Type string` and `type Subject string` with
+   constructors that validate against allowed character sets. Yes —
+   add this to §1; the typed-string overhead is zero at runtime and
+   catches accidental field-swap bugs at compile time.
 
-5. **Plugin-side `EventSink` API exact shape** — `Subject` field name vs
-   keeping `Stream` for backward compatibility? Clean break says rename,
-   but check with plugin authors.
+5. **Multi-tenancy game-id prefix** — should subjects be
+   `events.<game-id>.<domain>.<entity>` from day one? Cost today: zero
+   (single game, single literal segment). Cost in 18 months if multi-game
+   ever lands and we didn't: global subject rename across every plugin,
+   every audit row, every consumer. **Recommend: yes, add now.** Decision
+   needed.
 
-6. **Test for "Phase A is truly idle"** — how do we prove the embedded
-   NATS subsystem started in M4 isn't accidentally consuming or affecting
-   anything in production until F1?
+6. **`EventBus` interface split** — reviewer flagged the single interface
+   as too large; idiomatic Go would be three separate interfaces
+   (`Publisher`, `Subscriber`, `HistoryReader`) composed at the call
+   site. Recommend: split. Lets gRPC handlers depend on only what they
+   need; lets each be mocked independently. Decide before M1.
+
+7. **`AckFunc` shape** — return `(Event, AckFunc, error)` (current sketch)
+   vs return `(Delivery, error)` where `Delivery` has `Event()` and
+   `Ack() error` methods. Reviewer recommends the typed handle. Yes —
+   typed handles are easier to mock, log, and extend (`Nack()`,
+   `InProgress()` later). Decide before M1.
+
+8. **Subject ownership prefix matching algorithm** — §6 says "subject
+   prefix → owner map" but doesn't specify matching semantics for
+   overlapping prefixes (e.g., `events.scene.>` vs
+   `events.scene.<id>.lifecycle`). Recommend: longest-prefix-wins,
+   token-aligned. Codify and add to the matching algorithm doc, plus a
+   property test (§8 invariants) for resolution determinism.
+
+9. **`HistoryStream.Cursor()` removed in favor of caller-tracked ULID**
+   — reviewer flagged the stateful side-channel. Yes — caller records the
+   ULID of the last `Event` returned by `Next()`. Drop `Cursor()` from
+   the interface. Decide before M1.
+
+10. **Plugin-owned audit coupling shape (A2)** — current design: host
+    invokes plugin `PluginAuditService.AuditEvent` RPC for every audit
+    event AND `QueryHistory` synchronously RPCs the plugin per page.
+    Reviewer's alternative: host owns audit storage in plugin-namespaced
+    schemas; plugin owns only the projection function (deserialization,
+    derived-table maintenance) plus the read-side authz check. This
+    significantly reduces runtime coupling (no per-event sync RPC on
+    write OR read). Need to choose between current design (clean privacy
+    boundary, runtime coupling) and the reviewer's alternative
+    (different privacy model, less coupling). Decision needed.
+
+11. **Codec interface signature** — current sketch takes `subject` as a
+    parameter. Reviewer recommends keeping crypto primitives narrow:
+    `Encode(ctx, plaintext, key Key) ([]byte, error)`, with subject→key
+    routing in a separate `KeySelector` upstream. Yes — split. Decide
+    before M1.
+
+12. **`HistoryQuery.SessionContext` placement** — current sketch has it
+    on the struct. Reviewer flags duplication with `ctx context.Context`
+    that the methods already take. Yes — pull `SessionContext` out of
+    the struct, carry via a typed context key (`auth.WithSession(ctx,
+    sess)`). Decide before M1.
+
+### Acknowledged (will be addressed during plan-writing or as
+discovered-from beads)
+
+- **Schema evolution under live load** (reviewer F3) — need explicit
+  upgrade path for proto v1 → v2 including who handles old events in
+  audit, subscribers, backfill tool. Plan-writing must define the
+  versioning playbook (filed as discovered-from bead).
+- **Codec key retention is forever** (reviewer F4) — `KeyProvider.ByID`
+  implies any key ever used to encrypt persisted data must remain
+  decryptable. Has compliance implications (key revocation impossible
+  without re-encrypting all old data). Document explicitly in §9 and as
+  follow-up bead.
+- **Per-subject Prometheus cardinality discipline** (reviewer F6) —
+  with `events.scene.<ULID>.ic` subjects, per-subject metrics would
+  explode cardinality. Plan-writing must define the aggregation rule
+  (per-domain, not per-subject). Filed as bead.
+- **Future event-level ABAC** (reviewer F7) — JS doesn't natively
+  support efficient per-event filtering; if ever needed, host pays
+  delivery+ack cost for events users never see. Document the future
+  cost; not a blocker today.
+- **Cluster cutover discipline** — §7 now states honestly that this is a
+  multi-week migration. Spec does not commit to when. When it lands,
+  follows its own spec.
+- **Phase A idleness verification** (Q6 from prior version) — startup
+  test must assert: in M4 with no F-phase code, the embedded NATS server
+  starts, no consumers attach, no events flow, no audit rows produced.
+  Move from open question to plan-writing checklist item.
+
+### Resolved by review (no further action)
+
+- ULID stays as primary identity; JS seq is internal — confirmed sound.
+- `EventWriter` deletion — confirmed sound; ULID monotonicity preserved
+  via `core.NewULID`'s in-process mutex which is not a serialization
+  bottleneck.
+- Cursor race class elimination via per-event ack + ULID dedup — confirmed
+  sound, with the caveat that subscribers need a "client dedup contract"
+  (now documented in §3).
+- Single `EVENTS` stream design — confirmed sound for our scale.
 
 ---
 
@@ -1176,7 +1429,7 @@ Realistic envelope: 5–7 weeks.
 
 ## References
 
-- [2026-03-20-event-delivery-redesign.md](2026-03-20-event-delivery-redesign.md)
+- [docs/specs/2026-03-20-event-delivery-redesign.md](../../specs/2026-03-20-event-delivery-redesign.md)
   — superseded by this design
 - [2026-04-05-plugin-architecture-rework-design.md](2026-04-05-plugin-architecture-rework-design.md)
   — proto-first plugin contracts; this design extends with `PluginAuditService`
