@@ -617,6 +617,34 @@ var _ = Describe("PostgresSessionStore", func() {
 			Expect(got.PresentingFocus).To(BeNil())
 		})
 
+		It("round-trips JSONB serialization for FocusMemberships and is findable via ListByFocus", func() {
+			// Extra assertion in this test covers the ListByFocus JSONB
+			// containment query; keeps serialization + lookup paired so a
+			// future change to FocusMembership's JSON shape trips this
+			// and the ListByFocus-specific tests below together.
+			ctx := context.Background()
+			info := newTestSession("sess-ufm-listable")
+			Expect(sessionStore.Set(ctx, info.ID, info)).To(Succeed())
+
+			target := ulid.Make()
+			mutator := session.NewFocusMutator(func(
+				_ []session.FocusMembership,
+				_ *session.FocusKey,
+			) ([]session.FocusMembership, *session.FocusKey, error) {
+				return []session.FocusMembership{
+					{Kind: session.FocusKindScene, TargetID: target, JoinedAt: time.Now().UTC()},
+				}, nil, nil
+			})
+			Expect(sessionStore.UpdateFocusMemberships(ctx, info.ID, mutator)).To(Succeed())
+
+			results, err := sessionStore.ListByFocus(ctx, session.FocusKey{
+				Kind: session.FocusKindScene, TargetID: target,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(results).To(HaveLen(1))
+			Expect(results[0].ID).To(Equal(info.ID))
+		})
+
 		It("round-trips JSONB serialization for FocusMemberships", func() {
 			ctx := context.Background()
 			info := newTestSession("sess-ufm-jsonb-rt")
@@ -648,6 +676,89 @@ var _ = Describe("PostgresSessionStore", func() {
 			Expect(got.FocusMemberships[0].JoinedAt).To(BeTemporally("~", now, time.Millisecond))
 			Expect(got.PresentingFocus).NotTo(BeNil())
 			Expect(got.PresentingFocus.TargetID).To(Equal(target1))
+		})
+	})
+
+	Describe("ListByFocus", func() {
+		// setMembership is a helper to give a session a specific FocusMembership set.
+		setMembership := func(ctx context.Context, info *session.Info, memberships []session.FocusMembership) {
+			Expect(sessionStore.Set(ctx, info.ID, info)).To(Succeed())
+			mutator := session.NewFocusMutator(func(
+				_ []session.FocusMembership,
+				_ *session.FocusKey,
+			) ([]session.FocusMembership, *session.FocusKey, error) {
+				return memberships, nil, nil
+			})
+			Expect(sessionStore.UpdateFocusMemberships(ctx, info.ID, mutator)).To(Succeed())
+		}
+
+		It("returns non-expired sessions whose focus_memberships include the target", func() {
+			ctx := context.Background()
+			target := ulid.Make()
+			otherTarget := ulid.Make()
+			now := time.Now().UTC()
+
+			active := newTestSession("lbf-active")
+			setMembership(ctx, active, []session.FocusMembership{
+				{Kind: session.FocusKindScene, TargetID: target, JoinedAt: now},
+			})
+
+			detachedMulti := newTestSession("lbf-detached")
+			detachedMulti.Status = session.StatusDetached
+			setMembership(ctx, detachedMulti, []session.FocusMembership{
+				{Kind: session.FocusKindScene, TargetID: otherTarget, JoinedAt: now},
+				{Kind: session.FocusKindScene, TargetID: target, JoinedAt: now},
+			})
+
+			nonMatch := newTestSession("lbf-nomatch")
+			setMembership(ctx, nonMatch, []session.FocusMembership{
+				{Kind: session.FocusKindScene, TargetID: otherTarget, JoinedAt: now},
+			})
+
+			empty := newTestSession("lbf-empty")
+			Expect(sessionStore.Set(ctx, empty.ID, empty)).To(Succeed())
+
+			results, err := sessionStore.ListByFocus(ctx, session.FocusKey{
+				Kind: session.FocusKindScene, TargetID: target,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			ids := []string{}
+			for _, r := range results {
+				ids = append(ids, r.ID)
+			}
+			Expect(ids).To(ConsistOf("lbf-active", "lbf-detached"))
+		})
+
+		It("excludes expired sessions even when membership matches", func() {
+			ctx := context.Background()
+			target := ulid.Make()
+			now := time.Now().UTC()
+
+			expired := newTestSession("lbf-expired")
+			// Must be active during Set (expired sessions reject membership
+			// writes), then flip to expired afterward.
+			setMembership(ctx, expired, []session.FocusMembership{
+				{Kind: session.FocusKindScene, TargetID: target, JoinedAt: now},
+			})
+			expiresAt := now.Add(-time.Hour)
+			Expect(sessionStore.UpdateStatus(ctx, expired.ID, session.StatusExpired, nil, &expiresAt)).To(Succeed())
+
+			results, err := sessionStore.ListByFocus(ctx, session.FocusKey{
+				Kind: session.FocusKindScene, TargetID: target,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(results).To(BeEmpty())
+		})
+
+		It("returns empty slice when no session holds the target", func() {
+			ctx := context.Background()
+			target := ulid.Make()
+
+			results, err := sessionStore.ListByFocus(ctx, session.FocusKey{
+				Kind: session.FocusKindScene, TargetID: target,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(results).To(BeEmpty())
 		})
 	})
 })

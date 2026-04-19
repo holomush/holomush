@@ -1813,6 +1813,10 @@ func (s *stubFocusCoordinator) LeaveFocus(_ context.Context, _ string, _ session
 	return nil
 }
 
+func (s *stubFocusCoordinator) LeaveFocusByTarget(_ context.Context, _ session.FocusKey) (session.LeaveByTargetResult, error) {
+	return session.LeaveByTargetResult{}, nil
+}
+
 func (s *stubFocusCoordinator) PresentFocus(_ context.Context, _ string, _ session.FocusKey) error {
 	return nil
 }

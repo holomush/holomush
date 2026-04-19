@@ -701,6 +701,65 @@ func (_c *MockStore_ListActiveByLocation_Call) RunAndReturn(run func(context.Con
 	return _c
 }
 
+// ListByFocus provides a mock function with given fields: ctx, target
+func (_m *MockStore) ListByFocus(ctx context.Context, target session.FocusKey) ([]*session.Info, error) {
+	ret := _m.Called(ctx, target)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListByFocus")
+	}
+
+	var r0 []*session.Info
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, session.FocusKey) ([]*session.Info, error)); ok {
+		return rf(ctx, target)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, session.FocusKey) []*session.Info); ok {
+		r0 = rf(ctx, target)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*session.Info)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, session.FocusKey) error); ok {
+		r1 = rf(ctx, target)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockStore_ListByFocus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListByFocus'
+type MockStore_ListByFocus_Call struct {
+	*mock.Call
+}
+
+// ListByFocus is a helper method to define mock.On call
+//   - ctx context.Context
+//   - target session.FocusKey
+func (_e *MockStore_Expecter) ListByFocus(ctx interface{}, target interface{}) *MockStore_ListByFocus_Call {
+	return &MockStore_ListByFocus_Call{Call: _e.mock.On("ListByFocus", ctx, target)}
+}
+
+func (_c *MockStore_ListByFocus_Call) Run(run func(ctx context.Context, target session.FocusKey)) *MockStore_ListByFocus_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(session.FocusKey))
+	})
+	return _c
+}
+
+func (_c *MockStore_ListByFocus_Call) Return(_a0 []*session.Info, _a1 error) *MockStore_ListByFocus_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockStore_ListByFocus_Call) RunAndReturn(run func(context.Context, session.FocusKey) ([]*session.Info, error)) *MockStore_ListByFocus_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ListByPlayer provides a mock function with given fields: ctx, playerID
 func (_m *MockStore) ListByPlayer(ctx context.Context, playerID ulid.ULID) ([]*session.Info, error) {
 	ret := _m.Called(ctx, playerID)

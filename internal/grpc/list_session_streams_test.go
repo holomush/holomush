@@ -41,6 +41,10 @@ func (f *fakeFocusCoordinator) LeaveFocus(_ context.Context, _ string, _ session
 	panic("unused in list_session_streams_test")
 }
 
+func (f *fakeFocusCoordinator) LeaveFocusByTarget(_ context.Context, _ session.FocusKey) (session.LeaveByTargetResult, error) {
+	panic("unused in list_session_streams_test")
+}
+
 func (f *fakeFocusCoordinator) PresentFocus(_ context.Context, _ string, _ session.FocusKey) error {
 	panic("unused in list_session_streams_test")
 }

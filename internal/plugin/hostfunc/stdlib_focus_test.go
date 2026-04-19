@@ -20,12 +20,15 @@ import (
 )
 
 type mockFocusOps struct {
-	joinCalls    []focusOpCall
-	leaveCalls   []focusOpCall
-	presentCalls []focusOpCall
-	joinErr      error
-	leaveErr     error
-	presentErr   error
+	joinCalls            []focusOpCall
+	leaveCalls           []focusOpCall
+	leaveByTargetCalls   []session.FocusKey
+	leaveByTargetResult  session.LeaveByTargetResult
+	leaveByTargetErr     error
+	presentCalls         []focusOpCall
+	joinErr              error
+	leaveErr             error
+	presentErr           error
 }
 
 type focusOpCall struct {
@@ -41,6 +44,11 @@ func (m *mockFocusOps) JoinFocus(_ context.Context, sid string, key session.Focu
 func (m *mockFocusOps) LeaveFocus(_ context.Context, sid string, key session.FocusKey) error {
 	m.leaveCalls = append(m.leaveCalls, focusOpCall{sid, key})
 	return m.leaveErr
+}
+
+func (m *mockFocusOps) LeaveFocusByTarget(_ context.Context, key session.FocusKey) (session.LeaveByTargetResult, error) {
+	m.leaveByTargetCalls = append(m.leaveByTargetCalls, key)
+	return m.leaveByTargetResult, m.leaveByTargetErr
 }
 
 func (m *mockFocusOps) PresentFocus(_ context.Context, sid string, key session.FocusKey) error {
@@ -149,6 +157,101 @@ assert(ok == nil, "expected nil on error")
 assert(errmsg == "not a member", "expected error message, got: " .. tostring(errmsg))
 `)
 	require.NoError(t, err)
+}
+
+func TestLeaveFocusByTargetCallsCoordinatorWithParsedFocusKey(t *testing.T) {
+	fo := &mockFocusOps{leaveByTargetResult: session.LeaveByTargetResult{Succeeded: 2, TotalScanned: 2}}
+	L := newFocusTestState(t, fo, nil)
+
+	targetID := ulid.Make()
+	err := L.DoString(`holomush.leave_focus_by_target("scene", "` + targetID.String() + `")`)
+	require.NoError(t, err)
+
+	require.Len(t, fo.leaveByTargetCalls, 1)
+	assert.Equal(t, session.FocusKindScene, fo.leaveByTargetCalls[0].Kind)
+	assert.Equal(t, targetID, fo.leaveByTargetCalls[0].TargetID)
+}
+
+func TestLeaveFocusByTargetReturnsResultTableOnSuccess(t *testing.T) {
+	fo := &mockFocusOps{leaveByTargetResult: session.LeaveByTargetResult{Succeeded: 3, TotalScanned: 3}}
+	L := newFocusTestState(t, fo, nil)
+
+	err := L.DoString(`
+local result = holomush.leave_focus_by_target("scene", "` + ulid.Make().String() + `")
+assert(type(result) == "table", "expected table, got: " .. type(result))
+assert(result.succeeded == 3, "expected succeeded=3, got: " .. tostring(result.succeeded))
+assert(result.total_scanned == 3, "expected total_scanned=3, got: " .. tostring(result.total_scanned))
+assert(#result.failed == 0, "expected empty failed list, got: " .. tostring(#result.failed))
+`)
+	require.NoError(t, err)
+}
+
+func TestLeaveFocusByTargetExposesPartialFailureInLuaTable(t *testing.T) {
+	fo := &mockFocusOps{leaveByTargetResult: session.LeaveByTargetResult{
+		Succeeded:    1,
+		TotalScanned: 2,
+		Failed:       []session.FailedLeave{{SessionID: "sess-bad", Err: errors.New("host blip")}},
+	}}
+	L := newFocusTestState(t, fo, nil)
+
+	err := L.DoString(`
+local result = holomush.leave_focus_by_target("scene", "` + ulid.Make().String() + `")
+assert(result.succeeded == 1, "expected succeeded=1")
+assert(result.total_scanned == 2, "expected total_scanned=2")
+assert(#result.failed == 1, "expected 1 failed entry")
+assert(result.failed[1].session_id == "sess-bad", "wrong session id: " .. tostring(result.failed[1].session_id))
+assert(result.failed[1].error == "host blip", "wrong error: " .. tostring(result.failed[1].error))
+`)
+	require.NoError(t, err)
+}
+
+func TestLeaveFocusByTargetReturnsEmptyTableWhenNoMembers(t *testing.T) {
+	fo := &mockFocusOps{leaveByTargetResult: session.LeaveByTargetResult{}}
+	L := newFocusTestState(t, fo, nil)
+
+	err := L.DoString(`
+local result = holomush.leave_focus_by_target("scene", "` + ulid.Make().String() + `")
+assert(result.succeeded == 0, "expected succeeded=0")
+assert(result.total_scanned == 0, "expected total_scanned=0")
+assert(#result.failed == 0, "expected empty failed list")
+`)
+	require.NoError(t, err)
+}
+
+func TestLeaveFocusByTargetReturnsNilAndErrorOnEnumerationFailure(t *testing.T) {
+	fo := &mockFocusOps{leaveByTargetErr: errors.New("store down")}
+	L := newFocusTestState(t, fo, nil)
+
+	err := L.DoString(`
+local result, errmsg = holomush.leave_focus_by_target("scene", "` + ulid.Make().String() + `")
+assert(result == nil, "expected nil on enumeration failure")
+assert(errmsg == "store down", "expected error message, got: " .. tostring(errmsg))
+`)
+	require.NoError(t, err)
+}
+
+func TestLeaveFocusByTargetReturnsErrorWhenFocusOpsNotInitialized(t *testing.T) {
+	L := newFocusTestState(t, nil, nil)
+
+	err := L.DoString(`
+local result, errmsg = holomush.leave_focus_by_target("scene", "` + ulid.Make().String() + `")
+assert(result == nil, "expected nil when focus ops missing")
+assert(errmsg == "focus ops not initialized", "expected init error, got: " .. tostring(errmsg))
+`)
+	require.NoError(t, err)
+}
+
+func TestLeaveFocusByTargetReturnsErrorForInvalidULID(t *testing.T) {
+	fo := &mockFocusOps{}
+	L := newFocusTestState(t, fo, nil)
+
+	err := L.DoString(`
+local result, errmsg = holomush.leave_focus_by_target("scene", "not-a-ulid")
+assert(result == nil, "expected nil on invalid ulid")
+assert(string.find(errmsg, "invalid target_id"), "expected parse error, got: " .. tostring(errmsg))
+`)
+	require.NoError(t, err)
+	assert.Empty(t, fo.leaveByTargetCalls)
 }
 
 func TestPresentFocusCallsCoordinatorWithCorrectArgs(t *testing.T) {

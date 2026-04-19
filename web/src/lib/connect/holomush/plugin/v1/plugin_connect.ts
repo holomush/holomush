@@ -8,7 +8,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceJoinFocusRequest, PluginHostServiceJoinFocusResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLeaveFocusRequest, PluginHostServiceLeaveFocusResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServicePresentFocusRequest, PluginHostServicePresentFocusResponse, PluginHostServiceQueryStreamHistoryRequest, PluginHostServiceQueryStreamHistoryResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
+import { HandleCommandRequest, HandleCommandResponse, HandleEventRequest, HandleEventResponse, InitRequest, InitResponse, PluginHostServiceAddSessionStreamRequest, PluginHostServiceAddSessionStreamResponse, PluginHostServiceEmitEventRequest, PluginHostServiceEmitEventResponse, PluginHostServiceJoinFocusRequest, PluginHostServiceJoinFocusResponse, PluginHostServiceKVDeleteRequest, PluginHostServiceKVDeleteResponse, PluginHostServiceKVGetRequest, PluginHostServiceKVGetResponse, PluginHostServiceKVSetRequest, PluginHostServiceKVSetResponse, PluginHostServiceLeaveFocusByTargetRequest, PluginHostServiceLeaveFocusByTargetResponse, PluginHostServiceLeaveFocusRequest, PluginHostServiceLeaveFocusResponse, PluginHostServiceLogRequest, PluginHostServiceLogResponse, PluginHostServicePresentFocusRequest, PluginHostServicePresentFocusResponse, PluginHostServiceQueryStreamHistoryRequest, PluginHostServiceQueryStreamHistoryResponse, PluginHostServiceRemoveSessionStreamRequest, PluginHostServiceRemoveSessionStreamResponse, QuerySessionStreamsRequest, QuerySessionStreamsResponse } from "./plugin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -180,6 +180,20 @@ export const PluginHostService = {
       name: "LeaveFocus",
       I: PluginHostServiceLeaveFocusRequest,
       O: PluginHostServiceLeaveFocusResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * LeaveFocusByTarget removes the given focus membership from every
+     * non-expired session that holds it. Used for cross-session fan-out
+     * (e.g., scene-end reaches all participants). Partial success is normal:
+     * individual session failures are aggregated without halting the sweep.
+     *
+     * @generated from rpc holomush.plugin.v1.PluginHostService.LeaveFocusByTarget
+     */
+    leaveFocusByTarget: {
+      name: "LeaveFocusByTarget",
+      I: PluginHostServiceLeaveFocusByTargetRequest,
+      O: PluginHostServiceLeaveFocusByTargetResponse,
       kind: MethodKind.Unary,
     },
     /**

@@ -576,6 +576,44 @@ func (s *PostgresSessionStore) ListActiveByLocation(ctx context.Context, locatio
 	return scanSessions(rows)
 }
 
+// ListByFocus returns all non-expired sessions whose focus_memberships
+// JSONB array contains an entry matching the given target. Uses PostgreSQL's
+// JSONB containment operator (@>), which does partial-object matching: the
+// needle only declares Kind and TargetID; JoinedAt on stored rows is ignored.
+//
+// The needle is built via json.Marshal so field casing and escaping match
+// exactly how session.FocusMembership values are serialized on write.
+//
+// Performance note: focus_memberships has NO GIN index as of migration
+// 000006; this query is a sequential scan on the sessions table. That is
+// acceptable at current session cardinality (hundreds to low thousands
+// of concurrent sessions); if the table grows significantly, add a GIN
+// index on focus_memberships with jsonb_path_ops. Concurrent sweep
+// callers will not block each other since the scan is read-only.
+func (s *PostgresSessionStore) ListByFocus(ctx context.Context, target session.FocusKey) ([]*session.Info, error) {
+	needle, err := json.Marshal([]struct {
+		Kind     session.FocusKind `json:"Kind"`
+		TargetID string            `json:"TargetID"`
+	}{{Kind: target.Kind, TargetID: target.TargetID.String()}})
+	if err != nil {
+		return nil, oops.With("operation", "marshal focus needle").
+			With("focus_kind", string(target.Kind)).
+			With("target_id", target.TargetID.String()).Wrap(err)
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+sessionSelectColumns+`
+		 FROM sessions
+		 WHERE status <> 'expired' AND focus_memberships @> $1::jsonb
+		 ORDER BY created_at`,
+		needle)
+	if err != nil {
+		return nil, oops.With("operation", "list by focus").
+			With("focus_kind", string(target.Kind)).
+			With("target_id", target.TargetID.String()).Wrap(err)
+	}
+	return scanSessions(rows)
+}
+
 // ListActive returns all sessions with status=active.
 func (s *PostgresSessionStore) ListActive(ctx context.Context) ([]*session.Info, error) {
 	rows, err := s.pool.Query(ctx,

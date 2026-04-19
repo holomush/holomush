@@ -16,6 +16,7 @@ import (
 	"github.com/holomush/holomush/internal/session"
 )
 
+
 const (
 	focusOpsKey      = "__holo_focus_ops"
 	historyReaderKey = "__holo_history_reader"
@@ -25,6 +26,7 @@ const (
 type FocusOps interface {
 	JoinFocus(ctx context.Context, sessionID string, target session.FocusKey) error
 	LeaveFocus(ctx context.Context, sessionID string, target session.FocusKey) error
+	LeaveFocusByTarget(ctx context.Context, target session.FocusKey) (session.LeaveByTargetResult, error)
 	PresentFocus(ctx context.Context, sessionID string, target session.FocusKey) error
 }
 
@@ -49,6 +51,7 @@ func RegisterFocusFuncs(ls *lua.LState, mod *lua.LTable, fo FocusOps, hr History
 
 	ls.SetField(mod, "join_focus", ls.NewFunction(joinFocusFn))
 	ls.SetField(mod, "leave_focus", ls.NewFunction(leaveFocusFn))
+	ls.SetField(mod, "leave_focus_by_target", ls.NewFunction(leaveFocusByTargetFn))
 	ls.SetField(mod, "present_focus", ls.NewFunction(presentFocusFn))
 	ls.SetField(mod, "query_stream_history", ls.NewFunction(queryStreamHistoryFn))
 }
@@ -162,6 +165,77 @@ func leaveFocusFn(ls *lua.LState) int {
 	}
 	ls.Push(lua.LTrue)
 	return 1
+}
+
+// leaveFocusByTargetFn implements holomush.leave_focus_by_target(kind, target_id).
+// Sweeps every non-expired session holding the given focus membership.
+//
+// On enumeration success, returns a single Lua table:
+//
+//	{ succeeded = N, total_scanned = M, failed = { {session_id=..., error=...}, ... } }
+//
+// Partial sweep outcomes (some sessions failed) are represented on the
+// table via a non-empty failed array — this removes the ambiguity of a
+// scalar (count, err) shape where Lua callers could confuse "nothing
+// matched" with "everything failed."
+//
+// On enumeration failure (store degraded, e.g.), returns (nil, error_string)
+// as with the other leave_* hostfuncs.
+func leaveFocusByTargetFn(ls *lua.LState) int {
+	kind := ls.CheckString(1)
+	targetID := ls.CheckString(2)
+
+	fo := getFocusOps(ls)
+	if fo == nil {
+		slog.Warn("holomush.leave_focus_by_target: focus ops not initialized")
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString("focus ops not initialized"))
+		return 2
+	}
+
+	key, err := parseFocusKey(kind, targetID)
+	if err != nil {
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString(err.Error()))
+		return 2
+	}
+
+	ctx := ls.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, defaultPluginQueryTimeout)
+	defer cancel()
+
+	result, err := fo.LeaveFocusByTarget(ctx, key)
+	if err != nil {
+		slog.WarnContext(ctx, "holomush.leave_focus_by_target failed",
+			"kind", kind, "target_id", targetID, "error", err)
+		ls.Push(lua.LNil)
+		ls.Push(lua.LString(err.Error()))
+		return 2
+	}
+	ls.Push(leaveByTargetResultToLuaTable(ls, result))
+	return 1
+}
+
+// leaveByTargetResultToLuaTable converts a session.LeaveByTargetResult
+// into a Lua table with succeeded / total_scanned / failed fields.
+func leaveByTargetResultToLuaTable(ls *lua.LState, r session.LeaveByTargetResult) *lua.LTable {
+	tbl := ls.NewTable()
+	ls.SetField(tbl, "succeeded", lua.LNumber(r.Succeeded))
+	ls.SetField(tbl, "total_scanned", lua.LNumber(r.TotalScanned))
+	failed := ls.NewTable()
+	for i, f := range r.Failed {
+		entry := ls.NewTable()
+		ls.SetField(entry, "session_id", lua.LString(f.SessionID))
+		if f.Err != nil {
+			ls.SetField(entry, "error", lua.LString(f.Err.Error()))
+		}
+		failed.RawSetInt(i+1, entry)
+	}
+	ls.SetField(tbl, "failed", failed)
+	return tbl
 }
 
 // presentFocusFn implements holomush.present_focus(session_id, kind, target_id).

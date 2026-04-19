@@ -452,13 +452,16 @@ type focusCall struct {
 }
 
 type fakeFocusClient struct {
-	joinCalls    []focusCall
-	leaveCalls   []focusCall
-	presentCalls []focusCall
+	joinCalls           []focusCall
+	leaveCalls          []focusCall
+	leaveByTargetCalls  []pluginsdk.FocusKey
+	presentCalls        []focusCall
 
-	joinErr    error
-	leaveErr   error
-	presentErr error
+	joinErr             error
+	leaveErr            error
+	leaveByTargetErr    error
+	leaveByTargetResult pluginsdk.LeaveByTargetResult
+	presentErr          error
 }
 
 func (f *fakeFocusClient) JoinFocus(_ context.Context, sid string, t pluginsdk.FocusKey) error {
@@ -469,6 +472,11 @@ func (f *fakeFocusClient) JoinFocus(_ context.Context, sid string, t pluginsdk.F
 func (f *fakeFocusClient) LeaveFocus(_ context.Context, sid string, t pluginsdk.FocusKey) error {
 	f.leaveCalls = append(f.leaveCalls, focusCall{sessionID: sid, target: t})
 	return f.leaveErr
+}
+
+func (f *fakeFocusClient) LeaveFocusByTarget(_ context.Context, t pluginsdk.FocusKey) (pluginsdk.LeaveByTargetResult, error) {
+	f.leaveByTargetCalls = append(f.leaveByTargetCalls, t)
+	return f.leaveByTargetResult, f.leaveByTargetErr
 }
 
 func (f *fakeFocusClient) PresentFocus(_ context.Context, sid string, t pluginsdk.FocusKey) error {
@@ -643,8 +651,9 @@ func TestSceneLeaveToleratesLeaveFocusError(t *testing.T) {
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status, "DB leave succeeded; focus-side failure is logged, not surfaced")
 }
 
-func TestSceneEndCallsLeaveFocusForOwner(t *testing.T) {
+func TestSceneEndCallsLeaveFocusByTargetForFanOut(t *testing.T) {
 	p, fc := newTestPluginWithFocus()
+	fc.leaveByTargetResult = pluginsdk.LeaveByTargetResult{Succeeded: 2, TotalScanned: 2}
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
@@ -657,9 +666,15 @@ func TestSceneEndCallsLeaveFocusForOwner(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
-	require.Len(t, fc.leaveCalls, 1)
-	assert.Equal(t, "sess-owner", fc.leaveCalls[0].sessionID)
-	assert.Equal(t, sceneID, fc.leaveCalls[0].target.TargetID)
+
+	// Single fan-out call targets the scene and carries no session ID — the
+	// host sweeps every session holding the membership.
+	require.Len(t, fc.leaveByTargetCalls, 1)
+	assert.Equal(t, pluginsdk.FocusKindScene, fc.leaveByTargetCalls[0].Kind)
+	assert.Equal(t, sceneID, fc.leaveByTargetCalls[0].TargetID)
+
+	// Per-session LeaveFocus MUST NOT be called; the sweep subsumes owner + participants.
+	assert.Empty(t, fc.leaveCalls, "scene end must fan out via LeaveFocusByTarget, not per-session LeaveFocus")
 }
 
 func TestSceneSwitchCallsPresentFocus(t *testing.T) {
@@ -769,7 +784,7 @@ func TestSceneSwitchReturnsGenericErrorForUnknownFailure(t *testing.T) {
 		"output should start with 'Failed to switch scene:'; got: %q", resp.Output)
 }
 
-func TestSceneEndToleratesLeaveFocusError(t *testing.T) {
+func TestSceneEndToleratesLeaveFocusByTargetEnumerationFailure(t *testing.T) {
 	p, fc := newTestPluginWithFocus()
 
 	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
@@ -778,8 +793,8 @@ func TestSceneEndToleratesLeaveFocusError(t *testing.T) {
 	require.NoError(t, err)
 	sceneID := extractSceneID(t, createResp.Output)
 
-	// Set a transient focus error after the scene exists.
-	fc.leaveErr = errors.New("host blip")
+	// Enumeration failed entirely: host could not list members (e.g., store down).
+	fc.leaveByTargetErr = errors.New("store down")
 
 	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
 		Command:     "scene",
@@ -789,6 +804,34 @@ func TestSceneEndToleratesLeaveFocusError(t *testing.T) {
 	})
 	require.NoError(t, err)
 	// DB write succeeded; focus error is logged, not surfaced.
+	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
+	assert.Contains(t, resp.Output, "ended")
+}
+
+func TestSceneEndToleratesLeaveFocusByTargetPartialFailure(t *testing.T) {
+	p, fc := newTestPluginWithFocus()
+
+	createResp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command: "scene", Args: "create The Gate", CharacterID: "char-owner",
+	})
+	require.NoError(t, err)
+	sceneID := extractSceneID(t, createResp.Output)
+
+	// Partial sweep: 2 succeeded, 1 failed. Result returns nil err.
+	fc.leaveByTargetResult = pluginsdk.LeaveByTargetResult{
+		Succeeded:    2,
+		TotalScanned: 3,
+		Failed:       []pluginsdk.FailedLeave{{SessionID: "sess-bad"}},
+	}
+
+	resp, err := p.HandleCommand(context.Background(), pluginsdk.CommandRequest{
+		Command:     "scene",
+		Args:        "end " + sceneID,
+		CharacterID: "char-owner",
+		SessionID:   "sess-owner",
+	})
+	require.NoError(t, err)
+	// DB write succeeded; partial focus failure is logged, not surfaced.
 	assert.Equal(t, pluginsdk.CommandOK, resp.Status)
 	assert.Contains(t, resp.Output, "ended")
 }

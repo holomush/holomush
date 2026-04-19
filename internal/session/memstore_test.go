@@ -635,6 +635,86 @@ func TestMemStore_UpdateFocusMemberships_MutatorErrorRollsBack(t *testing.T) {
 	assert.Nil(t, got.PresentingFocus)
 }
 
+func TestMemStoreListByFocusReturnsNonExpiredSessionsWithMatchingMembership(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+	sceneID := ulid.Make()
+	otherSceneID := ulid.Make()
+	target := FocusKey{Kind: FocusKindScene, TargetID: sceneID}
+
+	match1 := &Info{
+		ID:          "sess-match-1",
+		CharacterID: ulid.Make(),
+		Status:      StatusActive,
+		FocusMemberships: []FocusMembership{
+			{Kind: FocusKindScene, TargetID: sceneID, JoinedAt: time.Now()},
+		},
+	}
+	match2Detached := &Info{
+		ID:          "sess-match-2",
+		CharacterID: ulid.Make(),
+		Status:      StatusDetached,
+		FocusMemberships: []FocusMembership{
+			{Kind: FocusKindScene, TargetID: otherSceneID, JoinedAt: time.Now()},
+			{Kind: FocusKindScene, TargetID: sceneID, JoinedAt: time.Now()},
+		},
+	}
+	nonMatch := &Info{
+		ID:          "sess-nomatch",
+		CharacterID: ulid.Make(),
+		Status:      StatusActive,
+		FocusMemberships: []FocusMembership{
+			{Kind: FocusKindScene, TargetID: otherSceneID, JoinedAt: time.Now()},
+		},
+	}
+	expiredMatch := &Info{
+		ID:          "sess-expired",
+		CharacterID: ulid.Make(),
+		Status:      StatusExpired,
+		FocusMemberships: []FocusMembership{
+			{Kind: FocusKindScene, TargetID: sceneID, JoinedAt: time.Now()},
+		},
+	}
+	noMemberships := &Info{
+		ID:          "sess-empty",
+		CharacterID: ulid.Make(),
+		Status:      StatusActive,
+	}
+	require.NoError(t, store.Set(ctx, match1.ID, match1))
+	require.NoError(t, store.Set(ctx, match2Detached.ID, match2Detached))
+	require.NoError(t, store.Set(ctx, nonMatch.ID, nonMatch))
+	require.NoError(t, store.Set(ctx, expiredMatch.ID, expiredMatch))
+	require.NoError(t, store.Set(ctx, noMemberships.ID, noMemberships))
+
+	results, err := store.ListByFocus(ctx, target)
+	require.NoError(t, err)
+
+	ids := make([]string, 0, len(results))
+	for _, r := range results {
+		ids = append(ids, r.ID)
+	}
+	assert.ElementsMatch(t, []string{"sess-match-1", "sess-match-2"}, ids)
+}
+
+func TestMemStoreListByFocusReturnsEmptySliceWhenNoMatches(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+
+	info := &Info{
+		ID:          "sess-alone",
+		CharacterID: ulid.Make(),
+		Status:      StatusActive,
+		FocusMemberships: []FocusMembership{
+			{Kind: FocusKindScene, TargetID: ulid.Make(), JoinedAt: time.Now()},
+		},
+	}
+	require.NoError(t, store.Set(ctx, info.ID, info))
+
+	results, err := store.ListByFocus(ctx, FocusKey{Kind: FocusKindScene, TargetID: ulid.Make()})
+	require.NoError(t, err)
+	assert.Empty(t, results)
+}
+
 // mustNewULID mints a ulid.ULID via ulid.Make for tests that need distinct,
 // lex-sortable IDs. The session test package cannot import internal/core
 // without creating a cycle (core imports session indirectly via engine

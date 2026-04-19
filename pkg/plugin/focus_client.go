@@ -34,6 +34,27 @@ type FocusClient interface {
 	// LeaveFocus removes a focus membership. Idempotent on non-member.
 	LeaveFocus(ctx context.Context, sessionID string, target FocusKey) error
 
+	// LeaveFocusByTarget removes the given focus membership from every
+	// non-expired session that holds it. Used for cross-session fan-out,
+	// e.g., scene-end must clear the membership on every participant's
+	// session, not just the caller.
+	//
+	// Returns a LeaveByTargetResult describing the sweep. The error
+	// return covers only enumeration failure (the host's session store
+	// could not list matching sessions); in that case result is zero.
+	// Per-session errors are carried on result.Failed and do NOT
+	// surface as a non-nil error — this preserves the standard Go
+	// `err != nil ⇒ result is zero-valued` contract so plugin authors
+	// can write `if err != nil { return err }` without silently
+	// dropping partial success.
+	//
+	// Distinguishing outcomes: inspect the returned result.
+	//   - result.Succeeded > 0 && len(result.Failed) == 0 → full success
+	//   - result.Succeeded > 0 && len(result.Failed) > 0  → partial
+	//   - result.Succeeded == 0 && result.TotalScanned == 0 → target had no members
+	//   - result.Succeeded == 0 && len(result.Failed) > 0 → total per-session failure
+	LeaveFocusByTarget(ctx context.Context, target FocusKey) (LeaveByTargetResult, error)
+
 	// PresentFocus updates the session's presenting-focus pointer. Target
 	// MUST already exist in the session's FocusMemberships.
 	PresentFocus(ctx context.Context, sessionID string, target FocusKey) error
@@ -48,6 +69,38 @@ type FocusClient interface {
 type FocusKey struct {
 	Kind     FocusKind
 	TargetID string
+}
+
+// LeaveByTargetResult mirrors the host-side sweep result at the SDK
+// boundary. Plugins inspect the fields directly to distinguish full,
+// partial, and empty-sweep outcomes — no error-string parsing required.
+// Contract holds when FocusClient.LeaveFocusByTarget returns err == nil:
+// Succeeded + len(Failed) == TotalScanned.
+type LeaveByTargetResult struct {
+	// Succeeded counts sessions whose membership was cleared plus
+	// idempotent no-ops (sessions that had already lost the membership
+	// between enumeration and leave).
+	Succeeded int
+	// TotalScanned is the number of non-expired sessions the host's
+	// sweep considered.
+	TotalScanned int
+	// Failed lists session IDs for which the per-session leave failed.
+	// Callers that want per-session error detail can re-issue
+	// LeaveFocus against these IDs; the host does not transmit
+	// per-session errors on the wire.
+	Failed []FailedLeave
+}
+
+// FailedLeave identifies one session that failed during a sweep.
+// Err is populated only when the plugin runs in the same process as
+// the coordinator (i.e., never on wire-returned values — the host
+// strips error objects before serialization since errors don't cross
+// process boundaries safely). Plugin authors should treat Err as
+// advisory; the authoritative "which sessions failed" signal is
+// SessionID membership in the Failed slice.
+type FailedLeave struct {
+	SessionID string
+	Err       error
 }
 
 // FocusKind enumerates the kinds of focused contexts. Mirrors
@@ -124,6 +177,31 @@ func (c *pluginHostFocusClient) LeaveFocus(ctx context.Context, sessionID string
 	return wrapFocusError(err, "LeaveFocus", sessionID, target)
 }
 
+func (c *pluginHostFocusClient) LeaveFocusByTarget(ctx context.Context, target FocusKey) (LeaveByTargetResult, error) {
+	if c.client == nil {
+		return LeaveByTargetResult{}, oops.New("plugin host focus client is not configured")
+	}
+	resp, err := c.client.LeaveFocusByTarget(ctx, &pluginv1.PluginHostServiceLeaveFocusByTargetRequest{
+		Target: toProtoFocusKey(target),
+	})
+	if err != nil {
+		return LeaveByTargetResult{}, wrapFanOutFocusError(err, "LeaveFocusByTarget", target)
+	}
+	result := LeaveByTargetResult{
+		Succeeded:    int(resp.GetSucceeded()),
+		TotalScanned: int(resp.GetTotalScanned()),
+	}
+	if ids := resp.GetFailedSessionIds(); len(ids) > 0 {
+		result.Failed = make([]FailedLeave, 0, len(ids))
+		for _, sid := range ids {
+			// Host-side errors are not carried on the wire (see FailedLeave
+			// doc); SessionID is the authoritative failure signal.
+			result.Failed = append(result.Failed, FailedLeave{SessionID: sid})
+		}
+	}
+	return result, nil
+}
+
 func (c *pluginHostFocusClient) PresentFocus(ctx context.Context, sessionID string, target FocusKey) error {
 	if c.client == nil {
 		return oops.New("plugin host focus client is not configured")
@@ -183,6 +261,29 @@ func (c *pluginHostFocusClient) QueryStreamHistory(ctx context.Context, req Quer
 	return events, nil
 }
 
+// wrapFanOutFocusError is the session-less variant of wrapFocusError for
+// RPCs that operate on a target rather than a specific session (e.g.,
+// LeaveFocusByTarget). Keeping a separate wrapper avoids log entries with
+// `session_id=""`, which otherwise misleads log aggregators into treating
+// fan-out failures as attribution errors.
+func wrapFanOutFocusError(err error, op string, target FocusKey) error {
+	if err == nil {
+		return nil
+	}
+	base := oops.With("operation", op).
+		With("focus_kind", string(target.Kind)).
+		With("target_id", target.TargetID)
+	st, ok := status.FromError(err)
+	if !ok {
+		return base.Wrap(err)
+	}
+	code := codeFromStatus(st)
+	if code == "" {
+		return base.Wrap(err)
+	}
+	return base.Code(code).Wrap(err)
+}
+
 // wrapFocusError maps gRPC codes returned by the host's focus RPCs into
 // oops-coded errors that callers can switch on via errors.As + oe.Code().
 // Unknown codes pass through with a generic wrap.
@@ -214,6 +315,7 @@ var focusErrorCodePrefixes = []string{
 	"FOCUS_KIND_UNREGISTERED",
 	"FOCUS_POLICY_FAILED",
 	"FOCUS_NOT_MEMBER",
+	"FOCUS_SWEEP_LIST_FAILED",
 }
 
 // codeFromStatus returns the expected oops code for a gRPC status, or ""
