@@ -197,7 +197,6 @@ docker compose -f /opt/holomush/compose.yaml logs -f core gateway cloudflared
    holomush -c "ALTER USER holomush WITH PASSWORD '...';"`
 3. Update `.env` and `docker compose up -d core gateway backup` to pick
    up the new value.
-4. Update GitHub Secret `HOLOMUSH_SANDBOX_POSTGRES_PASSWORD`.
 
 ### Recreate the tunnel
 
