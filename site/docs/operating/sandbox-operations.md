@@ -119,18 +119,35 @@ export BACKUP_KEEP_MONTHLY=6
   sed -n '10,$p' scripts/cloud-init.sh
 ) > /tmp/holomush-cloud-init.sh
 
+### 4. Create the block volume BEFORE the droplet
+
+Cloud-init's `mounts:` directive only runs during first boot, so the
+volume must exist and be attached BEFORE the droplet boots. Create it
+first, then pass its ID via `--volumes` at droplet-create time:
+
+```bash
+VOLUME_ID=$(doctl compute volume create holomush-sandbox-data \
+  --region sfo3 --size 25GiB --fs-type ext4 --format ID --no-header)
+```
+
+### 5. Create the droplet with the volume attached at boot
+
+```bash
 doctl compute droplet create holomush-sandbox-game \
   --image ubuntu-24-04-x64 \
   --size s-2vcpu-2gb-amd \
   --region sfo3 \
   --ssh-keys "$(doctl compute ssh-key list --format ID --no-header | head -1)" \
   --tag-names holomush-sandbox \
+  --volumes "${VOLUME_ID}" \
   --user-data-file /tmp/holomush-cloud-init.sh
 ```
 
-Wait ~2 minutes for cloud-init to finish.
+Wait ~2 minutes for cloud-init to finish. Postgres's first init will
+land on the attached volume because cloud-init's `mounts:` stanza runs
+before Docker Compose.
 
-### 4. Apply the firewall
+### 6. Apply the firewall
 
 ```bash
 doctl compute firewall create \
@@ -143,24 +160,13 @@ After confirming SSH works, narrow the rule to your static IP + GitHub
 Actions egress range (see <https://api.github.com/meta> for current
 ranges).
 
-### 5. Attach block storage for Postgres data
-
-```bash
-doctl compute volume create holomush-sandbox-data --region sfo3 --size 25GiB
-doctl compute volume-action attach <volume-id> <droplet-id>
-```
-
-SSH in and mount it at `/opt/holomush/data` (document mount point in
-`/etc/fstab`). Re-run the cloud-init after mounting to reinitialize the
-Postgres data dir on the volume.
-
-### 6. Wire DNS
+### 7. Wire DNS
 
 - `game.holomush.dev` — already routed via the tunnel (Step 1).
 - `telnet.game.holomush.dev` — A record → droplet public IP, **DNS only**
   (grey cloud).
 
-### 7. Save the `.env` shape
+### 8. Save the `.env` shape
 
 Commit a redacted `.env` example to `scripts/sandbox.env.example` if the
 real shape has drifted from the committed version.
@@ -172,13 +178,32 @@ real shape has drifted from the committed version.
 Pushing a `v*` tag to `main` triggers the `deploy-sandbox` workflow. No
 manual steps needed.
 
-To deploy manually:
+To deploy manually, mirror what the `deploy-sandbox` job does — sync the
+tag's compose file, `docker/` tree, and `deploy/` tree onto the droplet
+BEFORE pulling images and restarting. Without the sync, compose/profile
+changes or backup-image updates in the release never reach the host:
 
 ```bash
 ssh holomush@game.holomush.dev
+VERSION=v0.2.0
+sudo apt-get install -y git  # if not already present
+
+# Sync release assets onto the host
+rm -rf /tmp/holomush-release
+git clone --depth 1 --branch "${VERSION}" \
+  https://github.com/holomush/holomush.git /tmp/holomush-release
+cp /tmp/holomush-release/compose.prod.yaml /opt/holomush/compose.yaml
+rm -rf /opt/holomush/docker /opt/holomush/deploy
+cp -r /tmp/holomush-release/docker /opt/holomush/docker
+cp -r /tmp/holomush-release/deploy /opt/holomush/deploy
+rm -rf /tmp/holomush-release
+
+# Update version pin + run the deploy sequence
 cd /opt/holomush
-sed -i 's/^HOLOMUSH_VERSION=.*/HOLOMUSH_VERSION=v0.2.0/' .env
-docker compose --profile tunnel --profile backups pull core gateway
+sed -i "s/^HOLOMUSH_VERSION=.*/HOLOMUSH_VERSION=${VERSION}/" .env
+docker compose --profile tunnel --profile backups pull core gateway cloudflared
+docker compose --profile tunnel --profile backups build backup
+docker compose --profile tunnel --profile backups up -d --no-recreate postgres
 docker compose --profile tunnel --profile backups run --rm core migrate
 docker compose --profile tunnel --profile backups up -d
 ```

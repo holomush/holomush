@@ -68,7 +68,8 @@ fi
 if ! command -v docker &>/dev/null; then
   echo "Installing Docker..."
   apt-get update -qq
-  apt-get install -y -qq ca-certificates curl
+  # git is used by the deploy-sandbox workflow to sync release assets on-host.
+  apt-get install -y -qq ca-certificates curl git
   install -m 0755 -d /etc/apt/keyrings
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
   chmod a+r /etc/apt/keyrings/docker.asc

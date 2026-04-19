@@ -417,7 +417,7 @@ Note: if `compose.prod.yaml` already has a top-level `volumes:` block, append
 ```bash
 cat > /tmp/sandbox-env <<'EOF'
 POSTGRES_PASSWORD=dummy
-HOLOMUSH_VERSION=v0.0.0
+HOLOMUSH_VERSION=0.0.0
 DOMAIN=example.com
 BACKUP_S3_BUCKET=holomush-test
 BACKUP_S3_ACCESS_KEY=dummy
@@ -825,7 +825,7 @@ operators derive it from GitHub Secrets at deploy time.
 # This file is committed as reference; the actual .env lives only on the
 # sandbox droplet and is regenerated from secrets on first boot.
 
-HOLOMUSH_VERSION=v0.1.0
+HOLOMUSH_VERSION=0.1.0
 HOLOMUSH_DOMAIN=game.holomush.dev
 HOLOMUSH_INGRESS=tunnel
 

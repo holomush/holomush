@@ -141,6 +141,11 @@ docker compose --profile tunnel --profile backups up -d
 
 ### View logs
 
+On the droplet, cloud-init (and the release deploy workflow) copies the
+repository's `compose.prod.yaml` to `/opt/holomush/compose.yaml`, so the
+`-f /opt/holomush/compose.yaml` path below is correct despite the source
+file being named `compose.prod.yaml`.
+
 ```bash
 ssh holomush@game.holomush.dev
 docker compose -f /opt/holomush/compose.yaml logs -f core gateway cloudflared

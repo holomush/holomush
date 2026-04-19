@@ -52,8 +52,15 @@ if ! kopia repository status >/dev/null 2>&1; then
     --secret-access-key="${BACKUP_S3_SECRET_KEY}"
 fi
 
+# Kopia records the snapshot source identity from the final positional
+# argument to `snapshot create`. `--stdin-file` only sets the virtual
+# filename inside the archive, not the source identity. Passing an
+# explicit stable source path makes the identity deterministic so our
+# subsequent `kopia policy set` and `kopia snapshot expire` calls target
+# the same snapshot chain that was just written. Per CodeRabbit review.
 source_name="holomush-${POSTGRES_DB}"
-echo "[backup] $(date -u +%FT%TZ) streaming pg_dump → kopia snapshot (source=${source_name})"
+source_path="/sandbox/${source_name}"
+echo "[backup] $(date -u +%FT%TZ) streaming pg_dump → kopia snapshot (source=${source_path})"
 
 tag_args=""
 pin_args=""
@@ -73,10 +80,10 @@ pg_dump -h "${POSTGRES_HOST}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
       --stdin-file="${source_name}.sql" \
       ${tag_args} \
       ${pin_args} \
-      -
+      "${source_path}"
 
-echo "[backup] $(date -u +%FT%TZ) applying retention policy"
-kopia policy set "${source_name}" \
+echo "[backup] $(date -u +%FT%TZ) applying retention policy to ${source_path}"
+kopia policy set "${source_path}" \
   --keep-daily="${BACKUP_KEEP_DAILY:-7}" \
   --keep-weekly="${BACKUP_KEEP_WEEKLY:-4}" \
   --keep-monthly="${BACKUP_KEEP_MONTHLY:-6}" \
@@ -85,6 +92,6 @@ kopia policy set "${source_name}" \
   --keep-latest=0 \
   >/dev/null
 
-kopia snapshot expire "${source_name}" --delete
+kopia snapshot expire "${source_path}" --delete
 
 echo "[backup] $(date -u +%FT%TZ) done"

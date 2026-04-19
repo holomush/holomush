@@ -422,6 +422,9 @@ jobs:
             HOLOMUSH_VERSION=$(gh release list -R holomush/holomush --limit 1 --json tagName \
               --jq '.[0].tagName' 2>/dev/null || echo "0.1.0")
           fi
+          # scripts/cloud-init.sh prepends "v" when building RELEASE_URL, so
+          # strip any leading "v" here to avoid "vv0.1.0" double-prefix.
+          HOLOMUSH_VERSION="${HOLOMUSH_VERSION#v}"
 
           python3 - \
             "${HOLOMUSH_VERSION}" \
@@ -523,6 +526,7 @@ jobs:
           DROPLET_SIZE: ${{ inputs.droplet_size }}
           REGION: ${{ inputs.region }}
           SSH_KEY_ID: ${{ secrets.DIGITALOCEAN_SSH_KEY_ID }}
+          VOLUME_ID: ${{ steps.volume.outputs.volume_id }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
@@ -541,25 +545,32 @@ jobs:
             echo "droplet_id=dry-run-droplet-id" >> "$GITHUB_OUTPUT"
             echo "droplet_ip=0.0.0.0" >> "$GITHUB_OUTPUT"
           else
+            # Attach the block volume at droplet-create time via --volumes so
+            # cloud-init's `mounts:` stanza finds the device on first boot.
+            # Attaching AFTER `droplet create --wait` (as an --wait step) lets
+            # cloud-init run against a still-unmounted path, so Postgres
+            # initializes on the droplet's ephemeral disk and the volume never
+            # receives any data. Per CodeRabbit review.
             DROPLET_ID=$(doctl compute droplet create "${DROPLET_NAME}" \
               --image ubuntu-24-04-x64 \
               --size "${DROPLET_SIZE}" \
               --region "${REGION}" \
               --ssh-keys "${SSH_KEY_ID}" \
               --tag-names holomush-sandbox \
+              --volumes "${VOLUME_ID}" \
               --user-data-file /tmp/user-data.mime \
               --wait \
               --format ID \
               --no-header)
             DROPLET_IP=$(doctl compute droplet get "${DROPLET_NAME}" \
               --format PublicIPv4 --no-header)
-            echo "::notice::Created droplet '${DROPLET_NAME}' (${DROPLET_ID}), IP: ${DROPLET_IP}"
+            echo "::notice::Created droplet '${DROPLET_NAME}' (${DROPLET_ID}) with volume ${VOLUME_ID} attached at boot, IP: ${DROPLET_IP}"
             echo "droplet_id=${DROPLET_ID}" >> "$GITHUB_OUTPUT"
             echo "droplet_ip=${DROPLET_IP}" >> "$GITHUB_OUTPUT"
           fi
 
-      # Step 13: Attach volume to droplet
-      - name: Attach volume to droplet
+      # Step 13: Verify volume attachment (idempotent re-runs only)
+      - name: Verify/attach volume to droplet (idempotent)
         env:
           VOLUME_ID: ${{ steps.volume.outputs.volume_id }}
           DROPLET_ID: ${{ steps.droplet.outputs.droplet_id }}
@@ -567,10 +578,13 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${DRY_RUN}" = "true" ]; then
-            echo "DRY RUN: would attach volume ${VOLUME_ID} to droplet ${DROPLET_ID}"
+            echo "DRY RUN: would verify/attach volume ${VOLUME_ID} to droplet ${DROPLET_ID}"
             exit 0
           fi
 
+          # On a fresh create the volume was attached via --volumes in step 12.
+          # On re-runs (droplet already existed), attach now. This step stays
+          # for idempotency; it is a no-op on the fresh-create path.
           ATTACHED=$(doctl compute volume get "${VOLUME_ID}" \
             --format DropletIDs --no-header 2>/dev/null || echo "")
           if echo "${ATTACHED}" | grep -q "${DROPLET_ID}"; then
