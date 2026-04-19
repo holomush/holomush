@@ -42,6 +42,10 @@ task docs:serve   # Start local dev server
 task docs:build   # Build static site
 ```
 
+For sandbox operations at `game.holomush.dev`, see
+[site/docs/operating/sandbox-operations.md](site/docs/operating/sandbox-operations.md)
+and [site/docs/operating/sandbox-restore.md](site/docs/operating/sandbox-restore.md).
+
 ---
 
 ## ⚠️ Protected Branch Policy
