@@ -328,6 +328,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		Plugins:        pluginSub,
 		Sessions:       sessionSub,
 		Bootstrap:      bootstrapSub,
+		EventBus:       eventBusSub,
 		GRPCAddr:       cfg.GRPCAddr,
 		TLSConfig:      tlsConfig,
 		SessionTTL:     sessionTTL,

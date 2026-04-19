@@ -11,20 +11,44 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
-	"github.com/oklog/ulid/v2"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	hashiplug "github.com/hashicorp/go-plugin"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 )
+
+// drainEventbusStream returns every stored message on EVENTS by walking
+// sequences via GetMsg. Stateless RPC — no consumer goroutines to race.
+func drainEventbusStream(t *testing.T, js jetstream.JetStream) []*jetstream.RawStreamMsg {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	stream, err := js.Stream(ctx, eventbus.StreamName)
+	require.NoError(t, err)
+	info, err := stream.Info(ctx)
+	require.NoError(t, err)
+	var out []*jetstream.RawStreamMsg
+	for seq := info.State.FirstSeq; seq <= info.State.LastSeq && seq != 0; seq++ {
+		msg, gerr := stream.GetMsg(ctx, seq)
+		require.NoError(t, gerr)
+		out = append(out, msg)
+	}
+	return out
+}
 
 // createTempExecutable creates a dummy file with execute permissions.
 func createTempExecutable(path string) error {
@@ -1303,9 +1327,9 @@ func TestHostDeliverEventForwardsTrustedActorMetadata(t *testing.T) {
 }
 
 func TestPluginHostServiceEmitEventPreservesIncomingActor(t *testing.T) {
-	store := core.NewMemoryEventStore()
+	bus := eventbustest.New(t)
 	emitter := plugins.NewPluginEventEmitter(
-		store,
+		bus.Bus.Publisher(),
 		func(string) *plugins.Manifest {
 			return &plugins.Manifest{Name: "core-scenes", Emits: []string{"scene"}}
 		},
@@ -1337,18 +1361,20 @@ func TestPluginHostServiceEmitEventPreservesIncomingActor(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events, replayErr := store.Replay(context.Background(), "scene:01SCENE", ulid.ULID{}, 10)
-	require.NoError(t, replayErr)
-	require.Len(t, events, 1)
-	assert.Equal(t, core.ActorCharacter, events[0].Actor.Kind)
-	assert.Equal(t, "char-alice", events[0].Actor.ID)
-	assert.Equal(t, []byte(`{"kind":"created"}`), events[0].Payload)
+	msgs := drainEventbusStream(t, bus.JS)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, "character", msgs[0].Header.Get(eventbus.HeaderActorKind))
+	// "char-alice" is not a ULID → bridge drops id; App-Actor-ID omitted.
+	assert.Empty(t, msgs[0].Header.Get(eventbus.HeaderActorID))
+	var env eventbusv1.Event
+	require.NoError(t, proto.Unmarshal(msgs[0].Data, &env))
+	assert.Equal(t, []byte(`{"kind":"created"}`), env.GetPayload())
 }
 
 func TestPluginHostServiceEmitEventFallsBackToPluginActorWhenIncomingActorMissing(t *testing.T) {
-	store := core.NewMemoryEventStore()
+	bus := eventbustest.New(t)
 	emitter := plugins.NewPluginEventEmitter(
-		store,
+		bus.Bus.Publisher(),
 		func(string) *plugins.Manifest {
 			return &plugins.Manifest{Name: "core-scenes", Emits: []string{"scene"}}
 		},
@@ -1376,11 +1402,9 @@ func TestPluginHostServiceEmitEventFallsBackToPluginActorWhenIncomingActorMissin
 	})
 	require.NoError(t, err)
 
-	events, replayErr := store.Replay(context.Background(), "scene:01SCENE", ulid.ULID{}, 10)
-	require.NoError(t, replayErr)
-	require.Len(t, events, 1)
-	assert.Equal(t, core.ActorPlugin, events[0].Actor.Kind)
-	assert.Equal(t, "core-scenes", events[0].Actor.ID)
+	msgs := drainEventbusStream(t, bus.JS)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, "plugin", msgs[0].Header.Get(eventbus.HeaderActorKind))
 }
 
 func TestPluginHostServiceEmitEventReturnsErrorWhenHostIsMissing(t *testing.T) {
@@ -1428,9 +1452,9 @@ func TestNewPluginHostServiceServerRegistersPluginHostService(t *testing.T) {
 }
 
 func TestPluginHostServiceEmitEventReturnsWrappedEmitterError(t *testing.T) {
-	store := core.NewMemoryEventStore()
+	bus := eventbustest.New(t)
 	emitter := plugins.NewPluginEventEmitter(
-		store,
+		bus.Bus.Publisher(),
 		func(string) *plugins.Manifest {
 			return &plugins.Manifest{Name: "core-scenes", Emits: []string{"scene"}}
 		},

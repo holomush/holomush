@@ -28,16 +28,19 @@ func TestGRPCSubsystemIDReturnsGRPC(t *testing.T) {
 }
 
 // TestGRPCSubsystemDependsOnExpectedSubsystems verifies that DependsOn returns
-// exactly 3 dependencies: Bootstrap, Sessions, and Auth.
+// exactly 4 dependencies: Bootstrap, Sessions, Auth, and EventBus.
+// EventBus was added in the F1 cutover: gRPC Start() reads the eventbus
+// Publisher when wiring the shared plugin event emitter.
 func TestGRPCSubsystemDependsOnExpectedSubsystems(t *testing.T) {
 	s := newGRPCSubsystem(grpcSubsystemConfig{})
 
 	deps := s.DependsOn()
 
-	require.Len(t, deps, 3)
+	require.Len(t, deps, 4)
 	assert.Contains(t, deps, lifecycle.SubsystemBootstrap)
 	assert.Contains(t, deps, lifecycle.SubsystemSessions)
 	assert.Contains(t, deps, lifecycle.SubsystemAuth)
+	assert.Contains(t, deps, lifecycle.SubsystemEventBus)
 }
 
 // TestGRPCSubsystemStopBeforeStartIsSafe verifies that calling Stop on a

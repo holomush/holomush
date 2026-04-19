@@ -39,13 +39,16 @@ func (s *pluginHostEventSink) Emit(ctx context.Context, intent EmitIntent) error
 	if kind, id, ok := actorMetadataFromContext(ctx); ok {
 		callCtx = WithOutgoingActorMetadata(ctx, kind, id)
 	}
+	// TODO(F5): proto field PluginHostServiceEmitEventRequest.Stream will be
+	// renamed to Subject. Keeping the Stream name on the wire for F1 avoids
+	// coupling this task to a proto regeneration step.
 	_, err := s.client.EmitEvent(callCtx, &pluginv1.PluginHostServiceEmitEventRequest{
-		Stream:    intent.Stream,
+		Stream:    intent.Subject,
 		EventType: string(intent.Type),
 		Payload:   []byte(intent.Payload),
 	})
 	if err != nil {
-		return oops.With("stream", intent.Stream).Wrap(err)
+		return oops.With("subject", intent.Subject).Wrap(err)
 	}
 	return nil
 }

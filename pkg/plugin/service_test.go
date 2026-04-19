@@ -240,7 +240,7 @@ func TestEventSinkEmitForwardsTrustedActorMetadata(t *testing.T) {
 		id:   "char-alice",
 	})
 	err = sink.Emit(emitCtx, EmitIntent{
-		Stream:  "scene:01SCENE",
+		Subject: "scene:01SCENE",
 		Type:    EventTypeSystem,
 		Payload: `{"kind":"created"}`,
 	})
@@ -256,7 +256,7 @@ func TestEventSinkEmitReturnsErrorWhenClientIsMissing(t *testing.T) {
 	sink := &pluginHostEventSink{}
 
 	err := sink.Emit(context.Background(), EmitIntent{
-		Stream:  "scene:01SCENE",
+		Subject: "scene:01SCENE",
 		Type:    EventTypeSystem,
 		Payload: `{"kind":"created"}`,
 	})
@@ -360,7 +360,7 @@ func (p *eventSinkInitProvider) Init(ctx context.Context, _ *pluginv1.ServiceCon
 		return errors.New("event sink not injected")
 	}
 	return p.sink.Emit(ctx, EmitIntent{
-		Stream:  "scene:01SCENE",
+		Subject: "scene:01SCENE",
 		Type:    EventTypeSystem,
 		Payload: `{"kind":"init"}`,
 	})

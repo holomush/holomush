@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -230,12 +231,16 @@ func (m *Manager) DeliverCommand(ctx context.Context, pluginName string, cmd plu
 }
 
 // ConfigureEventEmitter wires the shared plugin event emitter to the provided
-// host event store. Production startup MUST call this before plugin response
+// EventBus publisher. Production startup MUST call this before plugin response
 // events are routed through the manager.
-func (m *Manager) ConfigureEventEmitter(store core.EventStore) {
+//
+// Post-F1 the emitter publishes to JetStream (no core.EventStore.Append path
+// remains). Callers SHOULD pass `eventBusSub.Publisher()` here; tests MAY
+// inject a fake Publisher.
+func (m *Manager) ConfigureEventEmitter(publisher eventbus.Publisher, opts ...EmitterOption) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.eventEmitter = NewPluginEventEmitter(store, m.lookupManifest, actorFromContext)
+	m.eventEmitter = NewPluginEventEmitter(publisher, m.lookupManifest, actorFromContext, opts...)
 	for _, host := range m.hosts {
 		if configurer := findOptional[EventEmitterConfigurer](host); configurer != nil {
 			configurer.SetEventEmitter(m.eventEmitter)
@@ -297,7 +302,14 @@ func (m *Manager) EmitPluginEvent(ctx context.Context, pluginName string, event 
 		return oops.With("plugin", pluginName).
 			New("plugin event emitter is not configured")
 	}
-	return emitter.Emit(ctx, pluginName, pluginsdk.EmitIntent(event))
+	return emitter.Emit(ctx, pluginName, pluginsdk.EmitIntent{
+		// EmitEvent is the plugin-return shape (Stream is the legacy field
+		// name); EmitIntent is the host-facing shape (Subject). F5 migrates
+		// plugin code to Subject natively.
+		Subject: event.Stream,
+		Type:    event.Type,
+		Payload: event.Payload,
+	})
 }
 
 // DiscoveredPlugin contains a manifest and its directory.

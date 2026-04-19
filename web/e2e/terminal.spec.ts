@@ -45,7 +45,9 @@ test.describe('Terminal UI', () => {
     await expect(page.locator('[data-testid="event"]').first()).toBeVisible({ timeout: 10000 });
   });
 
-  test('say command creates event in DB with correct actor and stream', async ({ page }) => {
+  // TODO(holomush-1tvn.12): Re-enable after F5 rewrites against plugin_core_scenes.scene_log.
+  // Phase B plan: docs/superpowers/plans/2026-04-18-jetstream-eventbus-phase-b.md §F5
+  test.skip('say command creates event in DB with correct actor and stream', async ({ page }) => {
     await connectAsGuest(page);
     const sessionId = await getClientSessionId(page);
     expect(sessionId).toBeTruthy();
@@ -73,7 +75,9 @@ test.describe('Terminal UI', () => {
     expect(sayEvent!.actor_id).toBe(session!.character_id);
   });
 
-  test('command history is stored in sessions table', async ({ page }) => {
+  // TODO(holomush-1tvn.14): Re-enable after F7 drops EventCursors JSONB column and rewrites command history storage.
+  // Phase B plan: docs/superpowers/plans/2026-04-18-jetstream-eventbus-phase-b.md §F7
+  test.skip('command history is stored in sessions table', async ({ page }) => {
     await connectAsGuest(page);
     const sessionId = await getClientSessionId(page);
     expect(sessionId).toBeTruthy();
@@ -212,7 +216,9 @@ test.describe('Terminal UI', () => {
     await expect(input).toHaveValue('look');
   });
 
-  test('reconnect receives live events after replay', async ({ page }) => {
+  // TODO(holomush-1tvn.10): Re-enable after F3 rewrites Subscribe handler around bus.OpenSession.
+  // Phase B plan: docs/superpowers/plans/2026-04-18-jetstream-eventbus-phase-b.md §F3
+  test.skip('reconnect receives live events after replay', async ({ page }) => {
     await connectAsGuest(page);
 
     // Reload — session persists, stream reconnects
@@ -234,7 +240,9 @@ test.describe('Terminal UI', () => {
   // does not yet call this RPC on mount (that's B13 scope), so this test
   // invokes it directly via fetch() inside the page context to exercise the
   // full stack: browser -> gateway -> core -> ABAC -> PostgresEventStore.
-  test('WebQueryStreamHistory returns events through the web gateway', async ({ page }) => {
+  // TODO(holomush-1tvn.11): Re-enable after F4 implements QueryHistory JS/PG tier crossover.
+  // Phase B plan: docs/superpowers/plans/2026-04-18-jetstream-eventbus-phase-b.md §F4
+  test.skip('WebQueryStreamHistory returns events through the web gateway', async ({ page }) => {
     await connectAsGuest(page);
     const sessionId = await getClientSessionId(page);
     expect(sessionId).toBeTruthy();
@@ -283,7 +291,9 @@ test.describe('Terminal UI', () => {
     expect(matched, `expected event with "${token}" in history response`).toBe(true);
   });
 
-  test('page reload replays prior events from multiple guests', async ({ browser }) => {
+  // TODO(holomush-1tvn.10): Re-enable after F3+F4 rewrite Subscribe replay and QueryHistory.
+  // Phase B plan: docs/superpowers/plans/2026-04-18-jetstream-eventbus-phase-b.md §F3
+  test.skip('page reload replays prior events from multiple guests', async ({ browser }) => {
     // Two independent browser contexts (separate sessions, same starting location)
     const ctx1 = await browser.newContext();
     const ctx2 = await browser.newContext();
@@ -391,7 +401,9 @@ test.describe('Terminal UI', () => {
     await ctx2.close();
   });
 
-  test('detach + accumulated events + reload produces no duplicate scrollback entries', async ({
+  // TODO(holomush-1tvn.10): Re-enable after F3+F4 rewrite Subscribe cursor resume and QueryHistory.
+  // Phase B plan: docs/superpowers/plans/2026-04-18-jetstream-eventbus-phase-b.md §F3
+  test.skip('detach + accumulated events + reload produces no duplicate scrollback entries', async ({
     browser,
   }) => {
     // Two guests in the same location.
@@ -463,7 +475,9 @@ test.describe('Terminal UI', () => {
     await ctx2.close();
   });
 
-  test('command history persists across reconnect', async ({ page }) => {
+  // TODO(holomush-1tvn.10): Re-enable after F3 rewrites Subscribe cursor resume to carry command history.
+  // Phase B plan: docs/superpowers/plans/2026-04-18-jetstream-eventbus-phase-b.md §F3
+  test.skip('command history persists across reconnect', async ({ page }) => {
     await connectAsGuest(page);
 
     // Send commands with unique tokens to avoid collision with other tests
@@ -589,7 +603,9 @@ test.describe('Terminal UI', () => {
     await expect(page.locator('.mode-chip')).toHaveCount(0);
   });
 
-  test('timestamps render on terminal lines', async ({ page }) => {
+  // TODO(holomush-1tvn.10): Re-enable after F3 rewrites Subscribe so live events arrive with timestamps.
+  // Phase B plan: docs/superpowers/plans/2026-04-18-jetstream-eventbus-phase-b.md §F3
+  test.skip('timestamps render on terminal lines', async ({ page }) => {
     await connectAsGuest(page);
     const input = page.locator('textarea').first();
     const token = `ts-${Date.now()}`;

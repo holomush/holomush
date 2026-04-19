@@ -490,25 +490,40 @@ func (h *Host) parseEmitEvents(ret lua.LValue) (emits []pluginsdk.EmitEvent, val
 			return
 		}
 
-		stream := eventTable.RawGetString("stream").String()
-		eventType := eventTable.RawGetString("type").String()
-		payload := eventTable.RawGetString("payload").String()
+		// F1: `subject` is the canonical key; `stream` is accepted for one
+		// release as a deprecation alias so existing Lua plugins keep working
+		// during the cutover. When both are set, subject wins.
+		subject := emitTableString(eventTable, "subject")
+		if subject == "" {
+			if legacy := emitTableString(eventTable, "stream"); legacy != "" {
+				slog.Warn("plugin emit uses deprecated 'stream' key; migrate to 'subject'",
+					"key", "stream",
+					"index", index,
+				)
+				subject = legacy
+			}
+		}
+		eventType := emitTableString(eventTable, "type")
+		payload := emitTableString(eventTable, "payload")
 
 		// Validate required fields
-		if stream == "nil" || stream == "" {
+		if subject == "" {
 			validationErrs = append(validationErrs,
-				fmt.Sprintf("entry[%d]: missing required 'stream' field", index))
+				fmt.Sprintf("entry[%d]: missing required 'subject' field", index))
 			return
 		}
 
-		if eventType == "nil" || eventType == "" {
+		if eventType == "" {
 			validationErrs = append(validationErrs,
-				fmt.Sprintf("entry[%d]: missing required 'type' field (stream=%s)", index, stream))
+				fmt.Sprintf("entry[%d]: missing required 'type' field (subject=%s)", index, subject))
 			return
 		}
 
 		emit := pluginsdk.EmitEvent{
-			Stream:  stream,
+			// EmitEvent keeps the legacy field name Stream; F5 migrates
+			// the plugin-return shape to Subject alongside other plugin
+			// API updates.
+			Stream:  subject,
 			Type:    pluginsdk.EventType(eventType),
 			Payload: payload,
 		}
@@ -516,6 +531,17 @@ func (h *Host) parseEmitEvents(ret lua.LValue) (emits []pluginsdk.EmitEvent, val
 	})
 
 	return emits, validationErrs
+}
+
+// emitTableString fetches a key from a Lua emit table and returns "" if the
+// value is absent or the Lua literal "nil" (gopher-lua's String() on an
+// LNilValue returns the string "nil").
+func emitTableString(t *lua.LTable, key string) string {
+	v := t.RawGetString(key).String()
+	if v == "nil" {
+		return ""
+	}
+	return v
 }
 
 // buildCommandRequestTable creates a Lua table from a CommandRequest.

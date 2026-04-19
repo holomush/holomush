@@ -11,7 +11,6 @@ package eventbustest
 
 import (
 	"context"
-	"testing"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -19,6 +18,17 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus"
 )
+
+// TB is the subset of testing.TB that eventbustest actually uses. Accepting
+// this narrower interface lets Ginkgo's GinkgoT() interface value work as a
+// drop-in without a parallel helper.
+type TB interface {
+	require.TestingT
+	Helper()
+	Cleanup(func())
+	TempDir() string
+	Logf(format string, args ...any)
+}
 
 // Embedded bundles the bus subsystem with its JetStream context and
 // connection so tests can interact directly.
@@ -31,10 +41,13 @@ type Embedded struct {
 // New starts a fresh embedded NATS server with MemoryStorage and registers
 // cleanup on t.Cleanup. Per-test isolation; safe for t.Parallel.
 //
+// Accepts TB (our subset of testing.TB) so Ginkgo's GinkgoT() works here as
+// well as plain *testing.T.
+//
 // StoreDir is set to t.TempDir() even though MemoryStorage is in use: the
 // NATS server still writes its JetStream metadata (streams, consumers)
 // under StoreDir, and leaving it unset would race on the shared xdg path.
-func New(t *testing.T) *Embedded {
+func New(t TB) *Embedded {
 	t.Helper()
 	cfg := eventbus.Config{
 		StoreDir: t.TempDir(),

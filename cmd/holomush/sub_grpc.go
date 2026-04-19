@@ -23,6 +23,7 @@ import (
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/content"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	holoFocus "github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/grpc/focus/scenepolicy"
@@ -50,6 +51,10 @@ type grpcSubsystemConfig struct {
 	Plugins   *pluginsetup.PluginSubsystem
 	Sessions  *sessionsetup.SessionSubsystem
 	Bootstrap *bootstrapsetup.BootstrapSubsystem
+	// EventBus supplies the Publisher used by the shared plugin emitter.
+	// Required post-F1 (cutover commit): plugin emits publish to JetStream,
+	// not to the PostgreSQL events table.
+	EventBus *eventbus.Subsystem
 
 	GRPCAddr       string
 	TLSConfig      *cryptotls.Config
@@ -84,11 +89,14 @@ func (s *grpcSubsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemG
 
 // DependsOn returns the subsystems that must start before gRPC.
 // Bootstrap transitively depends on ABAC, World, Plugins, Database.
+// EventBus is required so the Publisher is ready when ConfigureEventEmitter
+// runs (F1 cutover: plugin emits publish to JetStream).
 func (s *grpcSubsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{
 		lifecycle.SubsystemBootstrap,
 		lifecycle.SubsystemSessions,
 		lifecycle.SubsystemAuth,
+		lifecycle.SubsystemEventBus,
 	}
 }
 
@@ -129,7 +137,22 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	cmdRegistry := s.cfg.Plugins.CommandRegistry()
 	aliasRepo := s.cfg.Plugins.AliasRepo()
 	aliasCache := s.cfg.Plugins.AliasCache()
-	pluginManager.ConfigureEventEmitter(eventStore)
+	// F1 cutover: plugin emits now publish to JetStream via the EventBus
+	// Publisher. EventBus subsystem is a DependsOn above, so the publisher
+	// is guaranteed non-nil by the time Start runs.
+	if s.cfg.EventBus == nil {
+		return oops.Code("GRPC_EVENTBUS_MISSING").
+			Errorf("gRPC subsystem requires EventBus subsystem for plugin emit routing")
+	}
+	publisher := s.cfg.EventBus.Publisher()
+	if publisher == nil {
+		return oops.Code("GRPC_EVENTBUS_NOT_STARTED").
+			Errorf("EventBus publisher is nil; subsystem not started")
+	}
+	pluginManager.ConfigureEventEmitter(
+		publisher,
+		plugins.WithGameID(s.cfg.EventBus.GameID),
+	)
 
 	// 1. Create core engine from event store.
 	engine := core.NewEngine(eventStore, core.WithProductionGuardrail())

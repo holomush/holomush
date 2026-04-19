@@ -10,12 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/mocks"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
@@ -459,7 +460,7 @@ func TestSubscriberCustomEventTypeFilteredBySubscription(t *testing.T) {
 
 func TestSubscriberRoutesResponseEventsThroughSharedEmitterWithIncomingActor(t *testing.T) {
 	pluginsDir := setupRoutingFixture(t)
-	store := core.NewMemoryEventStore()
+	bus := eventbustest.New(t)
 	mockLua := mocks.NewMockHost(t)
 
 	mockLua.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil).Times(2)
@@ -469,7 +470,7 @@ func TestSubscriberRoutesResponseEventsThroughSharedEmitterWithIncomingActor(t *
 	t.Cleanup(func() { _ = manager.Close(context.Background()) })
 
 	require.NoError(t, manager.LoadAll(context.Background()))
-	manager.ConfigureEventEmitter(store)
+	manager.ConfigureEventEmitter(bus.Bus.Publisher())
 
 	host := &subscriberHost{
 		response: []pluginsdk.EmitEvent{
@@ -486,22 +487,26 @@ func TestSubscriberRoutesResponseEventsThroughSharedEmitterWithIncomingActor(t *
 	events := make(chan pluginsdk.Event, 1)
 	sub.Start(ctx, events)
 
+	// Use a real ULID so the bridge preserves it in App-Actor-ID.
+	actorID := core.NewULID()
 	events <- pluginsdk.Event{
 		ID:        "1",
 		Stream:    "location:123",
 		Type:      pluginsdk.EventTypeSay,
 		ActorKind: pluginsdk.ActorCharacter,
-		ActorID:   "01ACTORFROMEVENT",
+		ActorID:   actorID.String(),
 	}
 
-	time.Sleep(50 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		return len(drainStream(t, bus.JS)) > 0
+	}, 2*time.Second, 25*time.Millisecond, "expected emitter to publish event")
 
-	recorded, err := store.Replay(context.Background(), "location:123", ulid.ULID{}, 10)
-	require.NoError(t, err)
-	require.Len(t, recorded, 1)
-	assert.Equal(t, core.ActorCharacter, recorded[0].Actor.Kind)
-	assert.Equal(t, "01ACTORFROMEVENT", recorded[0].Actor.ID)
-	assert.Equal(t, core.EventTypeSay, recorded[0].Type)
+	msgs := drainStream(t, bus.JS)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, "events.main.location.123", msgs[0].Subject)
+	assert.Equal(t, "character", msgs[0].Header.Get(eventbus.HeaderActorKind))
+	assert.Equal(t, actorID.String(), msgs[0].Header.Get(eventbus.HeaderActorID))
+	assert.Equal(t, string(pluginsdk.EventTypeSay), msgs[0].Header.Get(eventbus.HeaderEventType))
 }
 
 // slowSubscriberHost blocks DeliverEvent until blockCh is closed.

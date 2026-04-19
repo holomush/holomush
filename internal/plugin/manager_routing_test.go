@@ -9,17 +9,42 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
-	"github.com/oklog/ulid/v2"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/mocks"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
+
+// drainStream reads every stored message on EVENTS by walking sequences
+// 1..LastSeq via GetMsg — a stateless RPC — so the helper does not spin up
+// consumer goroutines that would race with t.Cleanup of the embedded bus.
+func drainStream(t *testing.T, js jetstream.JetStream) []*jetstream.RawStreamMsg {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	stream, err := js.Stream(ctx, eventbus.StreamName)
+	require.NoError(t, err)
+	info, err := stream.Info(ctx)
+	require.NoError(t, err)
+	var out []*jetstream.RawStreamMsg
+	for seq := info.State.FirstSeq; seq <= info.State.LastSeq && seq != 0; seq++ {
+		msg, gerr := stream.GetMsg(ctx, seq)
+		require.NoError(t, gerr)
+		out = append(out, msg)
+	}
+	return out
+}
 
 // setupRoutingFixture creates a plugins directory with two Lua plugins:
 //   - "say-plugin": a command plugin
@@ -122,9 +147,9 @@ func TestManagerRegisterHostPanicsOnNil(t *testing.T) {
 
 func TestManagerRegisterHostBackfillsConfiguredEventEmitter(t *testing.T) {
 	mgr := plugins.NewManager(t.TempDir())
-	store := core.NewMemoryEventStore()
+	bus := eventbustest.New(t)
 
-	mgr.ConfigureEventEmitter(store)
+	mgr.ConfigureEventEmitter(bus.Bus.Publisher())
 
 	host := &testEventEmitterHost{}
 	mgr.RegisterHost(plugins.TypeBinary, host)
@@ -146,7 +171,7 @@ binary-plugin:
   executable: scene-binary
 `))
 
-	store := core.NewMemoryEventStore()
+	bus := eventbustest.New(t)
 	host := &testEventEmitterHost{}
 	host.loadFn = func(ctx context.Context, manifest *plugins.Manifest, _ string) error {
 		if host.emitter == nil {
@@ -154,7 +179,7 @@ binary-plugin:
 		}
 		emitCtx := core.WithActor(ctx, core.Actor{Kind: core.ActorPlugin, ID: manifest.Name})
 		return host.emitter.Emit(emitCtx, manifest.Name, pluginsdk.EmitIntent{
-			Stream:  "scene:test",
+			Subject: "scene:test",
 			Type:    pluginsdk.EventTypeSystem,
 			Payload: `{"phase":"init"}`,
 		})
@@ -162,16 +187,22 @@ binary-plugin:
 
 	mgr := plugins.NewManager(pluginsDir)
 	mgr.RegisterHost(plugins.TypeBinary, host)
-	mgr.ConfigureEventEmitter(store)
+	mgr.ConfigureEventEmitter(bus.Bus.Publisher())
 
 	require.NoError(t, mgr.LoadAll(context.Background()))
 
-	events, err := store.Replay(context.Background(), "scene:test", ulid.ULID{}, 10)
-	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, "scene:test", events[0].Stream)
-	assert.Equal(t, "scene-binary", events[0].Actor.ID)
-	assert.Equal(t, core.ActorPlugin, events[0].Actor.Kind)
+	msgs := drainStream(t, bus.JS)
+	require.Len(t, msgs, 1)
+	// Legacy "scene:test" → events.main.scene.test (default game_id).
+	assert.Equal(t, "events.main.scene.test", msgs[0].Subject)
+	// Actor kind rides in the header; actor id is empty because the plugin
+	// name is not a ULID (bridge leaves ulid zero, publisher omits the header).
+	assert.Equal(t, "plugin", msgs[0].Header.Get(eventbus.HeaderActorKind))
+	assert.Empty(t, msgs[0].Header.Get(eventbus.HeaderActorID))
+
+	var env eventbusv1.Event
+	require.NoError(t, proto.Unmarshal(msgs[0].Data, &env))
+	assert.Equal(t, `{"phase":"init"}`, string(env.GetPayload()))
 }
 
 func TestManagerDeliverCommandRoutesToCorrectHost(t *testing.T) {
@@ -243,7 +274,9 @@ func TestManagerDeliverEventUnknownPlugin(t *testing.T) {
 
 func TestManagerEmitPluginEventUsesConfiguredSharedEmitter(t *testing.T) {
 	pluginsDir := setupRoutingFixture(t)
-	store := core.NewMemoryEventStore()
+	// Need a location emit-capable manifest; setup fixture already declares
+	// `emits: [location]` on say-plugin.
+	bus := eventbustest.New(t)
 	mockLua := mocks.NewMockHost(t)
 
 	mockLua.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil).Times(2)
@@ -253,11 +286,14 @@ func TestManagerEmitPluginEventUsesConfiguredSharedEmitter(t *testing.T) {
 	t.Cleanup(func() { _ = mgr.Close(context.Background()) })
 
 	require.NoError(t, mgr.LoadAll(context.Background()))
-	mgr.ConfigureEventEmitter(store)
+	mgr.ConfigureEventEmitter(bus.Bus.Publisher())
 
+	// Use a valid ULID so the bridge preserves the id in the App-Actor-ID
+	// header (non-ULID strings are intentionally dropped, matching spec).
+	charID := core.NewULID()
 	ctx := core.WithActor(context.Background(), core.Actor{
 		Kind: core.ActorCharacter,
-		ID:   "01CHARACTERTEST",
+		ID:   charID.String(),
 	})
 
 	err := mgr.EmitPluginEvent(ctx, "say-plugin", pluginsdk.EmitEvent{
@@ -267,12 +303,11 @@ func TestManagerEmitPluginEventUsesConfiguredSharedEmitter(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	events, replayErr := store.Replay(context.Background(), "location:123", ulid.ULID{}, 10)
-	require.NoError(t, replayErr)
-	require.Len(t, events, 1)
-	assert.Equal(t, core.ActorCharacter, events[0].Actor.Kind)
-	assert.Equal(t, "01CHARACTERTEST", events[0].Actor.ID)
-	assert.Equal(t, "location:123", events[0].Stream)
+	msgs := drainStream(t, bus.JS)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, "events.main.location.123", msgs[0].Subject)
+	assert.Equal(t, "character", msgs[0].Header.Get(eventbus.HeaderActorKind))
+	assert.Equal(t, charID.String(), msgs[0].Header.Get(eventbus.HeaderActorID))
 }
 
 func TestManagerDeliverCommandConcurrentSafety(t *testing.T) {

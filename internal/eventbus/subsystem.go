@@ -275,6 +275,10 @@ func (s *Subsystem) JS() jetstream.JetStream { return s.js }
 // Conn returns the in-process NATS connection. Nil before Start / after Stop.
 func (s *Subsystem) Conn() *nats.Conn { return s.conn }
 
+// GameID returns the configured game id. Used by the plugin emitter to
+// compose JetStream subjects (events.<game_id>.<...>).
+func (s *Subsystem) GameID() string { return s.cfg.GameID }
+
 // resolveStoreDir resolves the StoreDir for this subsystem.
 // Blank Config.StoreDir means "use xdg.DataDir() + /jetstream".
 func (s *Subsystem) resolveStoreDir() (string, error) {
