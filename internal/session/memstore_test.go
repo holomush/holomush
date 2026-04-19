@@ -268,6 +268,43 @@ func TestMemStore_WatchSession_ChannelClosedOnDelete(t *testing.T) {
 	assert.False(t, ok, "channel should be closed")
 }
 
+func TestMemStoreWatchSessionReturnsPreClosedDestroyedChannelWhenSessionAlreadyDeleted(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+	require.NoError(t, store.Set(ctx, "sess-1", &Info{ID: "sess-1"}))
+	require.NoError(t, store.Delete(ctx, "sess-1", "Goodbye!"))
+
+	// Caller registers a watcher AFTER Delete has already removed the
+	// session. The pre-fix behavior was to register a dormant watcher
+	// that would never fire; the fix signals Destroyed immediately so
+	// the live loop can close cleanly.
+	ch, err := store.WatchSession(ctx, "sess-1")
+	require.NoError(t, err)
+
+	ev, ok := <-ch
+	require.True(t, ok, "expected pre-loaded Destroyed event")
+	assert.Equal(t, Destroyed, ev.Type, "expected Destroyed type")
+
+	// Channel must be closed to signal no further events are coming.
+	_, ok = <-ch
+	assert.False(t, ok, "expected channel closed after Destroyed")
+}
+
+func TestMemStoreWatchSessionReturnsPreClosedDestroyedChannelWhenSessionNeverExisted(t *testing.T) {
+	store := NewMemStore()
+	ctx := context.Background()
+
+	ch, err := store.WatchSession(ctx, "never-existed")
+	require.NoError(t, err)
+
+	ev, ok := <-ch
+	require.True(t, ok, "expected pre-loaded Destroyed event")
+	assert.Equal(t, Destroyed, ev.Type)
+
+	_, ok = <-ch
+	assert.False(t, ok, "expected channel closed")
+}
+
 func TestMemStore_ConcurrentAccess(_ *testing.T) {
 	store := NewMemStore()
 	ctx := context.Background()
