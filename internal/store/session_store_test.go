@@ -360,7 +360,7 @@ func TestPostgresSessionStore_Delete(t *testing.T) {
 			tt.setupMock(mock)
 
 			store := NewPostgresSessionStore(mock)
-			err = store.Delete(context.Background(), tt.id, "test reason")
+			err = store.Delete(context.Background(), tt.id)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -1610,4 +1610,58 @@ func TestPostgresSessionStore_CountConnectionsByType(t *testing.T) {
 			assert.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
+}
+
+func TestPostgresSessionStore_ListByPlayerSession(t *testing.T) {
+	info := testSessionInfo()
+
+	t.Run("returns sessions matching the given player session IDs", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		psID := info.PlayerSessionID
+		rows := pgxmock.NewRows(sessionColumns()).AddRow(sessionRow(info)...)
+		mock.ExpectQuery(`SELECT .+ FROM sessions WHERE player_session_id = ANY`).
+			WithArgs([]string{psID.String()}).
+			WillReturnRows(rows)
+
+		store := NewPostgresSessionStore(mock)
+		got, err := store.ListByPlayerSession(context.Background(), []ulid.ULID{psID})
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, info.ID, got[0].ID)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("returns nil for empty input without querying the database", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		// No expectations set — the DB must not be called for empty input.
+		store := NewPostgresSessionStore(mock)
+		got, err := store.ListByPlayerSession(context.Background(), []ulid.ULID{})
+		require.NoError(t, err)
+		assert.Nil(t, got)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("returns error on database failure", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		psID := core.NewULID()
+		mock.ExpectQuery(`SELECT .+ FROM sessions WHERE player_session_id = ANY`).
+			WithArgs([]string{psID.String()}).
+			WillReturnError(errors.New("connection lost"))
+
+		store := NewPostgresSessionStore(mock)
+		got, err := store.ListByPlayerSession(context.Background(), []ulid.ULID{psID})
+		require.Error(t, err)
+		assert.Nil(t, got)
+		errutil.AssertErrorCode(t, err, "LIST_BY_PLAYER_SESSION_FAILED")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
 }

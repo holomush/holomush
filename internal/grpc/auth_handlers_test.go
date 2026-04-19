@@ -5,7 +5,9 @@ package grpc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	authmocks "github.com/holomush/holomush/internal/auth/mocks"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
+	sessionmocks "github.com/holomush/holomush/internal/session/mocks"
 	"github.com/holomush/holomush/internal/world"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
@@ -756,6 +759,128 @@ func TestConfirmPasswordReset_InvalidToken(t *testing.T) {
 
 // --- Logout ---
 
+// TestLogoutEmitsSessionEndedForEachChildGameSession verifies that when a
+// player logs out with 2 active game sessions, the Logout handler emits a
+// session_ended event (cause=logout) on each character's stream before
+// delegating to authService.Logout. This closes the "orphaned Subscribe on
+// logout" gap described in the session lifecycle spec.
+func TestLogoutEmitsSessionEndedForEachChildGameSession(t *testing.T) {
+	ctx := context.Background()
+	rawToken := "abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567"
+	tokenHash := auth.HashSessionToken(rawToken)
+
+	playerSessionID := ulid.Make()
+	playerID := ulid.Make()
+
+	ps := &auth.PlayerSession{
+		ID:        playerSessionID,
+		PlayerID:  playerID,
+		TokenHash: tokenHash,
+		ExpiresAt: time.Now().Add(auth.PlayerSessionTTL),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	// Two game sessions belonging to the same PlayerSession.
+	char1ID := core.NewULID()
+	sess1ID := core.NewULID()
+	char2ID := core.NewULID()
+	sess2ID := core.NewULID()
+	locID := ulid.Make()
+
+	store := core.NewMemoryEventStore()
+	sessStore := session.NewMemStore()
+	require.NoError(t, sessStore.Set(ctx, sess1ID.String(), &session.Info{
+		ID:              sess1ID.String(),
+		CharacterID:     char1ID,
+		CharacterName:   "CharOne",
+		LocationID:      locID,
+		PlayerID:        playerID,
+		PlayerSessionID: playerSessionID,
+		Status:          session.StatusActive,
+		EventCursors:    map[string]ulid.ULID{},
+		TTLSeconds:      1800,
+	}))
+	require.NoError(t, sessStore.Set(ctx, sess2ID.String(), &session.Info{
+		ID:              sess2ID.String(),
+		CharacterID:     char2ID,
+		CharacterName:   "CharTwo",
+		LocationID:      locID,
+		PlayerID:        playerID,
+		PlayerSessionID: playerSessionID,
+		Status:          session.StatusActive,
+		EventCursors:    map[string]ulid.ULID{},
+		TTLSeconds:      1800,
+	}))
+
+	// playerSessionRepo: Logout handler looks up the session by token hash
+	// before fanout (one call). authService here is the test mock, so it does
+	// not call GetByTokenHash internally — only the handler-level lookup counts.
+	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).Return(ps, nil).Once()
+
+	// Expected character -> session mapping. Both children MUST have their
+	// session_ended events on the correct character's stream with the correct
+	// session ID before authService.Logout is called. Asserting inside
+	// logoutFunc ensures the fanout completed before the handler delegated.
+	expectedSessionByChar := map[string]string{
+		char1ID.String(): sess1ID.String(),
+		char2ID.String(): sess2ID.String(),
+	}
+
+	authSvc := newMockAuthService(t)
+	authSvc.logoutFunc = func(logoutCtx context.Context, th string) (ulid.ULID, error) {
+		require.Equal(t, tokenHash, th)
+		authSvc.logoutCalled = true
+
+		// Fanout must have completed before authService.Logout is called.
+		// Assert the exact char -> session pairing for every child.
+		for charIDStr, wantSessID := range expectedSessionByChar {
+			stream := "character:" + charIDStr
+			events, replayErr := store.Replay(logoutCtx, stream, ulid.ULID{}, 100)
+			require.NoError(t, replayErr)
+
+			var found *core.Event
+			for i := range events {
+				if events[i].Type == core.EventTypeSessionEnded {
+					found = &events[i]
+					break
+				}
+			}
+			require.NotNilf(t, found,
+				"expected session_ended on stream %s before authService.Logout", stream)
+
+			var payload core.SessionEndedPayload
+			require.NoError(t, json.Unmarshal(found.Payload, &payload))
+			assert.Equal(t, core.SessionEndedCauseLogout, payload.Cause,
+				"session_ended on stream %s should have cause=logout", stream)
+			assert.Equal(t, charIDStr, payload.CharacterID,
+				"session_ended on stream %s must carry its own character id", stream)
+			assert.Equal(t, wantSessID, payload.SessionID,
+				"session_ended on stream %s must reference that character's session, not another's", stream)
+		}
+
+		return playerID, nil
+	}
+
+	server := &CoreServer{
+		engine:            core.NewEngine(store),
+		sessionStore:      sessStore,
+		eventStore:        store,
+		authService:       authSvc,
+		playerSessionRepo: sessionRepo,
+	}
+
+	resp, err := server.Logout(ctx, &corev1.LogoutRequest{
+		PlayerSessionToken: rawToken,
+	})
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+
+	// authService.Logout must have been called exactly once.
+	assert.True(t, authSvc.logoutCalled, "authService.Logout was not called")
+}
+
 func TestLogout_Success(t *testing.T) {
 	ctx := context.Background()
 	playerID := ulid.Make()
@@ -1001,6 +1126,7 @@ type mockAuthServiceForHandlers struct {
 	authenticatePlayerFunc  func(ctx context.Context, username, password, userAgent, ipAddress string) (string, *auth.Player, error)
 	createPlayerFunc        func(ctx context.Context, username, password, email string) (*auth.Player, *auth.PlayerSession, string, error)
 	logoutFunc              func(ctx context.Context, tokenHash string) (ulid.ULID, error)
+	logoutCalled            bool
 }
 
 func newMockAuthService(t *testing.T) *mockAuthServiceForHandlers {
@@ -1672,4 +1798,191 @@ func oopsCoded(code, msg string, kv ...string) error {
 		b = b.With(kv[i], kv[i+1])
 	}
 	return b.Errorf("%s", msg)
+}
+
+// =============================================================================
+// Logout fanout error-branch tests (session lifecycle events, 9es6)
+// =============================================================================
+
+// TestLogoutProceedsWithoutFanoutWhenGetByTokenHashFails verifies that when the
+// player session lookup fails (GetByTokenHash returns an error), Logout logs a
+// warning and proceeds to call authService.Logout without doing any fanout.
+func TestLogoutProceedsWithoutFanoutWhenGetByTokenHashFails(t *testing.T) {
+	ctx := context.Background()
+	rawToken := "abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567"
+	tokenHash := auth.HashSessionToken(rawToken)
+	playerID := ulid.Make()
+
+	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).
+		Return(nil, errors.New("db unavailable")).Once()
+
+	authSvc := newMockAuthService(t)
+	authSvc.logoutFunc = func(_ context.Context, _ string) (ulid.ULID, error) {
+		authSvc.logoutCalled = true
+		return playerID, nil
+	}
+
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      session.NewMemStore(),
+		eventStore:        core.NewMemoryEventStore(),
+		authService:       authSvc,
+		playerSessionRepo: sessionRepo,
+	}
+
+	resp, err := server.Logout(ctx, &corev1.LogoutRequest{PlayerSessionToken: rawToken})
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.True(t, authSvc.logoutCalled, "authService.Logout must still be called after lookup failure")
+}
+
+// TestLogoutProceedsWithoutFanoutWhenListByPlayerSessionFails verifies that when
+// ListByPlayerSession returns an error, Logout logs a warning and still calls
+// authService.Logout (no game sessions are individually closed, but the player
+// session itself is deleted).
+func TestLogoutProceedsWithoutFanoutWhenListByPlayerSessionFails(t *testing.T) {
+	ctx := context.Background()
+	rawToken := "abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567"
+	tokenHash := auth.HashSessionToken(rawToken)
+	playerID := ulid.Make()
+	playerSessionID := ulid.Make()
+
+	ps := &auth.PlayerSession{
+		ID:        playerSessionID,
+		PlayerID:  playerID,
+		TokenHash: tokenHash,
+		ExpiresAt: time.Now().Add(auth.PlayerSessionTTL),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).Return(ps, nil).Once()
+
+	// Inject a mock session store that fails ListByPlayerSession.
+	mockSessStore := sessionmocks.NewMockStore(t)
+	mockSessStore.EXPECT().ListByPlayerSession(mock.Anything, []ulid.ULID{playerSessionID}).
+		Return(nil, errors.New("session store unavailable")).Once()
+
+	authSvc := newMockAuthService(t)
+	authSvc.logoutFunc = func(_ context.Context, _ string) (ulid.ULID, error) {
+		authSvc.logoutCalled = true
+		return playerID, nil
+	}
+
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      mockSessStore,
+		eventStore:        core.NewMemoryEventStore(),
+		authService:       authSvc,
+		playerSessionRepo: sessionRepo,
+	}
+
+	resp, err := server.Logout(ctx, &corev1.LogoutRequest{PlayerSessionToken: rawToken})
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.True(t, authSvc.logoutCalled, "authService.Logout must still be called after list failure")
+}
+
+// TestLogoutFanoutContinuesAfterIndividualSessionErrors verifies that when
+// HandleDisconnect, EndSession, or Delete fail for a child game session, the
+// fanout loop continues (other sessions are still processed) and authService.Logout
+// is still called.
+func TestLogoutFanoutContinuesAfterIndividualSessionErrors(t *testing.T) {
+	ctx := context.Background()
+	rawToken := "abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567"
+	tokenHash := auth.HashSessionToken(rawToken)
+	playerID := ulid.Make()
+	playerSessionID := ulid.Make()
+
+	ps := &auth.PlayerSession{
+		ID:        playerSessionID,
+		PlayerID:  playerID,
+		TokenHash: tokenHash,
+		ExpiresAt: time.Now().Add(auth.PlayerSessionTTL),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	// Two game sessions.
+	char1ID := core.NewULID()
+	sess1ID := core.NewULID().String()
+	char2ID := core.NewULID()
+	sess2ID := core.NewULID().String()
+	locID := ulid.Make()
+
+	// Make EndSession fail for first session by using a failing event store for it.
+	// We'll use MemStore which pre-populates both sessions; EndSession goes via
+	// the engine. Use a mockEventStore that rejects Append for session_ended.
+	// Track per-type append counts so we can assert the fanout attempted
+	// EndSession for BOTH children (not just the first one before giving up).
+	var appendMu sync.Mutex
+	sessionEndedAppends := 0
+	failingStore := &mockEventStore{
+		appendFunc: func(_ context.Context, ev core.Event) error {
+			appendMu.Lock()
+			if ev.Type == core.EventTypeSessionEnded {
+				sessionEndedAppends++
+			}
+			appendMu.Unlock()
+			if ev.Type == core.EventTypeSessionEnded {
+				return errors.New("event store unavailable")
+			}
+			return nil
+		},
+	}
+
+	sessStore := session.NewMemStore()
+	require.NoError(t, sessStore.Set(ctx, sess1ID, &session.Info{
+		ID:              sess1ID,
+		CharacterID:     char1ID,
+		CharacterName:   "CharOne",
+		LocationID:      locID,
+		PlayerID:        playerID,
+		PlayerSessionID: playerSessionID,
+		Status:          session.StatusActive,
+		EventCursors:    map[string]ulid.ULID{},
+		TTLSeconds:      1800,
+	}))
+	require.NoError(t, sessStore.Set(ctx, sess2ID, &session.Info{
+		ID:              sess2ID,
+		CharacterID:     char2ID,
+		CharacterName:   "CharTwo",
+		LocationID:      locID,
+		PlayerID:        playerID,
+		PlayerSessionID: playerSessionID,
+		Status:          session.StatusActive,
+		EventCursors:    map[string]ulid.ULID{},
+		TTLSeconds:      1800,
+	}))
+
+	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).Return(ps, nil).Once()
+
+	authSvc := newMockAuthService(t)
+	authSvc.logoutFunc = func(_ context.Context, _ string) (ulid.ULID, error) {
+		authSvc.logoutCalled = true
+		return playerID, nil
+	}
+
+	server := &CoreServer{
+		engine:            core.NewEngine(failingStore),
+		sessionStore:      sessStore,
+		eventStore:        failingStore,
+		authService:       authSvc,
+		playerSessionRepo: sessionRepo,
+	}
+
+	resp, err := server.Logout(ctx, &corev1.LogoutRequest{PlayerSessionToken: rawToken})
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.True(t, authSvc.logoutCalled, "authService.Logout must still be called when individual session errors occur")
+
+	// Both children must have had EndSession attempted — fanout must not stop
+	// after the first failure.
+	appendMu.Lock()
+	defer appendMu.Unlock()
+	assert.Equal(t, 2, sessionEndedAppends,
+		"logout fanout must attempt EndSession for every child game session, not stop after the first failure")
 }

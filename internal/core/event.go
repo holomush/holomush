@@ -11,6 +11,11 @@ import (
 	"github.com/samber/oops"
 )
 
+// StreamPrefixCharacter is the stream name prefix for character-scoped event
+// streams (e.g., "character:01ABC"). Use this constant instead of the raw
+// string literal to avoid magic values.
+const StreamPrefixCharacter = "character:"
+
 // MaxPayloadSize is the maximum allowed size (in bytes) of an event payload.
 // Events exceeding this size are rejected before they reach the store to
 // prevent DoS, disk-space, and bandwidth-amplification attacks originating
@@ -67,6 +72,9 @@ const (
 	// UI state event types
 	EventTypeLocationState EventType = "location_state"
 	EventTypeExitUpdate    EventType = "exit_update"
+
+	// Session lifecycle
+	EventTypeSessionEnded EventType = "session_ended"
 )
 
 // LocationStatePayload is the JSON payload for location_state events, providing
@@ -165,10 +173,13 @@ func (a ActorKind) String() string {
 	}
 }
 
+// ActorSystemID is the well-known ID used for Actor{Kind: ActorSystem} events.
+const ActorSystemID = "system"
+
 // Actor represents who or what caused an event.
 type Actor struct {
 	Kind ActorKind
-	ID   string // Character ID, plugin name, or "system"
+	ID   string // Character ID, plugin name, or ActorSystemID
 }
 
 // Event represents something that happened in the game world.

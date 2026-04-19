@@ -160,7 +160,7 @@ func (m *mockAccess) FindByCharacter(_ context.Context, _ ulid.ULID) (*session.I
 	return nil, nil
 }
 
-func (m *mockAccess) DeleteByCharacter(_ context.Context, _ ulid.ULID, _ string) (*session.Info, error) {
+func (m *mockAccess) DeleteByCharacter(_ context.Context, _ ulid.ULID) (*session.Info, error) {
 	return nil, nil
 }
 

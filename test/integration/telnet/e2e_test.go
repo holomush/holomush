@@ -545,21 +545,10 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 	})
 
 	Describe("Disconnect", func() {
-		It("Player A disconnects cleanly via quit", func() {
-			client, err := newTestTelnetClient(telnetAddr)
-			Expect(err).NotTo(HaveOccurred())
-			defer client.Close()
-
-			connectAsGuest(client)
-
-			client.SendLine("quit")
-			// The Subscribe stream may replay the arrive event before the
-			// quit response reaches the client.  Use ReadUntil so that any
-			// interleaved replay frames (e.g. "Name has arrived.") are
-			// drained before asserting on "Goodbye!".
-			line := client.ReadUntil("Goodbye!", 5*time.Second)
-			Expect(line).To(Equal("Goodbye!"))
-		})
+		// "Player A disconnects cleanly via quit" was removed — its coverage is
+		// replaced by the flake-proof regression suite in
+		// test/integration/session_lifecycle/quit_regression_integration_test.go
+		// which verifies session_ended persistence end-to-end.
 
 		It("Player B continues receiving events after A disconnects", func() {
 			clientA, err := newTestTelnetClient(telnetAddr)

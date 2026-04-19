@@ -132,7 +132,11 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	pluginManager.ConfigureEventEmitter(eventStore)
 
 	// 1. Create core engine from event store.
-	engine := core.NewEngine(eventStore)
+	engine := core.NewEngine(eventStore, core.WithProductionGuardrail())
+
+	// Wire game-session fanout into the auth service so evictions emit
+	// session_ended events for child game sessions before FK cascade removes them.
+	authService.ConfigureGameSessionFanout(engine, sessionStore)
 
 	// 2. Create gRPC server with TLS credentials.
 	// Install GRPCServiceProxy as UnknownServiceHandler so plugin-provided
@@ -293,6 +297,12 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 					"session_id", info.ID,
 					"error", dcErr,
 				)
+			}
+			if endErr := engine.EndSession(reaperCtx, char, info.ID,
+				core.SessionEndedCauseReaped,
+				"Session expired due to inactivity."); endErr != nil {
+				slog.Warn("reaper: session_ended event failed",
+					"session_id", info.ID, "error", endErr)
 			}
 			if info.IsGuest {
 				guestAuth.ReleaseGuest(info.CharacterName)

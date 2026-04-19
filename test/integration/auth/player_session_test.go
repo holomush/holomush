@@ -223,7 +223,7 @@ var _ = Describe("Player Session Lifecycle", func() {
 			Expect(found.CharacterName).To(Equal("Kael"))
 
 			// Character quits: delete the game session
-			err = env.sessionStore.Delete(ctx, gameSession.ID, "quit")
+			err = env.sessionStore.Delete(ctx, gameSession.ID)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Game session is gone
@@ -264,7 +264,7 @@ var _ = Describe("Player Session Lifecycle", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Quit Char One
-			err = env.sessionStore.Delete(ctx, gameSessionOne.ID, "quit")
+			err = env.sessionStore.Delete(ctx, gameSessionOne.ID)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Char One game session is gone
@@ -614,9 +614,9 @@ var _ = Describe("Player Session Lifecycle", func() {
 			// New session created via CreateWithCap with cap=capN should trim
 			// the oldest one, leaving exactly capN total.
 			newPS := buildSession(now, now.Add(time.Hour))
-			trimmed, err := env.playerSessionStore.CreateWithCap(ctx, newPS, capN)
+			trimmedIDs, err := env.playerSessionStore.CreateWithCap(ctx, newPS, capN)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(trimmed).To(Equal(1))
+			Expect(trimmedIDs).To(HaveLen(1))
 
 			remaining, err := env.playerSessionStore.ListByPlayer(ctx, player.ID)
 			Expect(err).NotTo(HaveOccurred())
@@ -630,6 +630,8 @@ var _ = Describe("Player Session Lifecycle", func() {
 			}
 			Expect(ids).To(HaveKey(newPS.ID))
 			Expect(ids).NotTo(HaveKey(existing[0].ID)) // oldest evicted
+			// The trimmed ID must match the oldest session.
+			Expect(trimmedIDs[0]).To(Equal(existing[0].ID))
 		})
 
 		It("catches up when cap is lowered below current active count", func() {
@@ -645,10 +647,10 @@ var _ = Describe("Player Session Lifecycle", func() {
 			// down to exactly 2 total sessions.
 			const newCap = 2
 			newPS := buildSession(now, now.Add(time.Hour))
-			trimmed, err := env.playerSessionStore.CreateWithCap(ctx, newPS, newCap)
+			trimmedIDs, err := env.playerSessionStore.CreateWithCap(ctx, newPS, newCap)
 			Expect(err).NotTo(HaveOccurred())
 			// priorCount existing + 1 new - newCap = 5 trimmed.
-			Expect(trimmed).To(Equal(priorCount + 1 - newCap))
+			Expect(trimmedIDs).To(HaveLen(priorCount + 1 - newCap))
 
 			remaining, err := env.playerSessionStore.ListByPlayer(ctx, player.ID)
 			Expect(err).NotTo(HaveOccurred())

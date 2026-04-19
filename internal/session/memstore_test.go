@@ -48,7 +48,7 @@ func TestMemStore_Delete(t *testing.T) {
 
 	info := &Info{ID: "session-1", Status: StatusActive}
 	require.NoError(t, store.Set(ctx, "session-1", info))
-	require.NoError(t, store.Delete(ctx, "session-1", "test"))
+	require.NoError(t, store.Delete(ctx, "session-1"))
 
 	_, err := store.Get(ctx, "session-1")
 	assert.Error(t, err)
@@ -231,80 +231,6 @@ func TestMemStore_ListExpired(t *testing.T) {
 	assert.Len(t, expired, 1)
 }
 
-func TestMemStore_WatchSession_NotifiesOnDelete(t *testing.T) {
-	store := NewMemStore()
-	ctx := context.Background()
-	require.NoError(t, store.Set(ctx, "sess-1", &Info{ID: "sess-1"}))
-
-	ch, err := store.WatchSession(ctx, "sess-1")
-	require.NoError(t, err)
-
-	require.NoError(t, store.Delete(ctx, "sess-1", "Goodbye!"))
-
-	ev, ok := <-ch
-	require.True(t, ok, "expected event on channel")
-	assert.Equal(t, Destroyed, ev.Type)
-	assert.Equal(t, "Goodbye!", ev.Message)
-}
-
-func TestMemStore_WatchSession_ChannelClosedOnDelete(t *testing.T) {
-	store := NewMemStore()
-	ctx := context.Background()
-	require.NoError(t, store.Set(ctx, "sess-1", &Info{ID: "sess-1"}))
-
-	ch, err := store.WatchSession(ctx, "sess-1")
-	require.NoError(t, err)
-
-	require.NoError(t, store.Delete(ctx, "sess-1", "test"))
-
-	// First receive should deliver the destroy event
-	e, ok := <-ch
-	require.True(t, ok, "expected destroy event on channel")
-	assert.Equal(t, Destroyed, e.Type)
-	assert.Equal(t, "test", e.Message)
-
-	// Channel should be closed after the event
-	_, ok = <-ch
-	assert.False(t, ok, "channel should be closed")
-}
-
-func TestMemStoreWatchSessionReturnsPreClosedDestroyedChannelWhenSessionAlreadyDeleted(t *testing.T) {
-	store := NewMemStore()
-	ctx := context.Background()
-	require.NoError(t, store.Set(ctx, "sess-1", &Info{ID: "sess-1"}))
-	require.NoError(t, store.Delete(ctx, "sess-1", "Goodbye!"))
-
-	// Caller registers a watcher AFTER Delete has already removed the
-	// session. The pre-fix behavior was to register a dormant watcher
-	// that would never fire; the fix signals Destroyed immediately so
-	// the live loop can close cleanly.
-	ch, err := store.WatchSession(ctx, "sess-1")
-	require.NoError(t, err)
-
-	ev, ok := <-ch
-	require.True(t, ok, "expected pre-loaded Destroyed event")
-	assert.Equal(t, Destroyed, ev.Type, "expected Destroyed type")
-
-	// Channel must be closed to signal no further events are coming.
-	_, ok = <-ch
-	assert.False(t, ok, "expected channel closed after Destroyed")
-}
-
-func TestMemStoreWatchSessionReturnsPreClosedDestroyedChannelWhenSessionNeverExisted(t *testing.T) {
-	store := NewMemStore()
-	ctx := context.Background()
-
-	ch, err := store.WatchSession(ctx, "never-existed")
-	require.NoError(t, err)
-
-	ev, ok := <-ch
-	require.True(t, ok, "expected pre-loaded Destroyed event")
-	assert.Equal(t, Destroyed, ev.Type)
-
-	_, ok = <-ch
-	assert.False(t, ok, "expected channel closed")
-}
-
 func TestMemStore_ConcurrentAccess(_ *testing.T) {
 	store := NewMemStore()
 	ctx := context.Background()
@@ -326,7 +252,7 @@ func TestMemStore_ConcurrentAccess(_ *testing.T) {
 				// (sessions may not exist yet); the goal is to detect data races.
 				_ = store.Set(ctx, id, info)
 				_, _ = store.Get(ctx, id)
-				_ = store.Delete(ctx, id, "test")
+				_ = store.Delete(ctx, id)
 			}
 		}(i)
 	}
@@ -760,4 +686,83 @@ func TestMemStoreListByFocusReturnsEmptySliceWhenNoMatches(t *testing.T) {
 func mustNewULID(t *testing.T) ulid.ULID {
 	t.Helper()
 	return ulid.Make()
+}
+
+func TestMemStoreListByPlayerSessionReturnsOnlyMatchingSessions(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemStore()
+
+	ps1 := ulid.Make()
+	ps2 := ulid.Make()
+	ps3 := ulid.Make()
+
+	require.NoError(t, store.Set(ctx, "s1", &Info{
+		ID: "s1", CharacterID: ulid.Make(), PlayerSessionID: ps1, Status: StatusActive,
+	}))
+	require.NoError(t, store.Set(ctx, "s2", &Info{
+		ID: "s2", CharacterID: ulid.Make(), PlayerSessionID: ps2, Status: StatusActive,
+	}))
+	require.NoError(t, store.Set(ctx, "s3", &Info{
+		ID: "s3", CharacterID: ulid.Make(), PlayerSessionID: ps1, Status: StatusActive,
+	}))
+	require.NoError(t, store.Set(ctx, "s4", &Info{
+		ID: "s4", CharacterID: ulid.Make(), PlayerSessionID: ps3, Status: StatusActive,
+	}))
+
+	got, err := store.ListByPlayerSession(ctx, []ulid.ULID{ps1, ps2})
+	require.NoError(t, err)
+
+	gotIDs := make(map[string]bool)
+	for _, info := range got {
+		gotIDs[info.ID] = true
+	}
+	assert.True(t, gotIDs["s1"])
+	assert.True(t, gotIDs["s2"])
+	assert.True(t, gotIDs["s3"])
+	assert.False(t, gotIDs["s4"])
+	assert.Len(t, got, 3)
+}
+
+func TestMemStoreListByPlayerSessionReturnsEmptyForNoMatches(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemStore()
+	got, err := store.ListByPlayerSession(ctx, []ulid.ULID{ulid.Make()})
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestMemStoreListByPlayerSessionReturnsEmptyForEmptyInput(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemStore()
+	// Seed a session so it would match if input weren't empty
+	require.NoError(t, store.Set(ctx, "s1", &Info{
+		ID: "s1", CharacterID: ulid.Make(), PlayerSessionID: ulid.Make(), Status: StatusActive,
+	}))
+	got, err := store.ListByPlayerSession(ctx, []ulid.ULID{})
+	require.NoError(t, err)
+	assert.Empty(t, got, "empty input must return empty result, not scan all sessions")
+}
+
+// TestMemStoreListByPlayerSessionSkipsExpiredSessions verifies that sessions
+// with StatusExpired are excluded from ListByPlayerSession results even when
+// their PlayerSessionID matches the query.
+func TestMemStoreListByPlayerSessionSkipsExpiredSessions(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemStore()
+
+	psID := ulid.Make()
+
+	// Active session — should appear in results.
+	require.NoError(t, store.Set(ctx, "active", &Info{
+		ID: "active", CharacterID: ulid.Make(), PlayerSessionID: psID, Status: StatusActive,
+	}))
+	// Expired session — must be excluded.
+	require.NoError(t, store.Set(ctx, "expired", &Info{
+		ID: "expired", CharacterID: ulid.Make(), PlayerSessionID: psID, Status: StatusExpired,
+	}))
+
+	got, err := store.ListByPlayerSession(ctx, []ulid.ULID{psID})
+	require.NoError(t, err)
+	require.Len(t, got, 1, "only the active session must be returned")
+	assert.Equal(t, "active", got[0].ID)
 }

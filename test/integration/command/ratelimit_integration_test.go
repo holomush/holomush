@@ -46,7 +46,7 @@ func (s *stubSessionService) FindByCharacter(_ context.Context, _ ulid.ULID) (*s
 	return nil, nil
 }
 
-func (s *stubSessionService) DeleteByCharacter(_ context.Context, _ ulid.ULID, _ string) (*session.Info, error) {
+func (s *stubSessionService) DeleteByCharacter(_ context.Context, _ ulid.ULID) (*session.Info, error) {
 	return nil, nil
 }
 

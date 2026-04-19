@@ -71,7 +71,7 @@ func (m *mockSessionAccess) FindByCharacterName(_ context.Context, name string) 
 	return nil, nil
 }
 
-func (m *mockSessionAccess) DeleteByCharacter(_ context.Context, charID ulid.ULID, _ string) (*session.Info, error) {
+func (m *mockSessionAccess) DeleteByCharacter(_ context.Context, charID ulid.ULID) (*session.Info, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i, s := range m.sessions {
@@ -272,7 +272,7 @@ func (e *errorSessionAccess) FindByCharacterName(_ context.Context, _ string) (*
 	return nil, e.findErr
 }
 
-func (e *errorSessionAccess) DeleteByCharacter(_ context.Context, _ ulid.ULID, _ string) (*session.Info, error) {
+func (e *errorSessionAccess) DeleteByCharacter(_ context.Context, _ ulid.ULID) (*session.Info, error) {
 	return nil, nil
 }
 

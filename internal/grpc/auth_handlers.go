@@ -439,6 +439,16 @@ func (s *CoreServer) ConfirmPasswordReset(ctx context.Context, req *corev1.Confi
 }
 
 // Logout ends a player session.
+//
+// Before invoking authService.Logout (which deletes the PlayerSession row),
+// the handler enumerates child game sessions via sessionStore.ListByPlayerSession
+// and emits HandleDisconnect + EndSession(cause=logout) + Delete + hooks for
+// each. This closes the "orphaned Subscribe on logout" gap documented in the
+// session lifecycle spec (§ Logout & eviction fanout).
+//
+// Ordering invariant: per-session signals complete before PlayerSession deletion
+// so ValidateSessionOwnership (which runs at Subscribe open time) does not flap
+// mid-fanout.
 func (s *CoreServer) Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1.LogoutResponse, error) {
 	// Hash the raw token before logging — never log the live bearer credential.
 	tokenHash := auth.HashSessionToken(req.PlayerSessionToken)
@@ -446,6 +456,43 @@ func (s *CoreServer) Logout(ctx context.Context, req *corev1.LogoutRequest) (*co
 
 	if s.authService == nil {
 		return nil, oops.Code("NOT_CONFIGURED").Errorf("auth service not configured")
+	}
+
+	// Fanout: enumerate child game sessions before deleting the PlayerSession.
+	// If playerSessionRepo is not configured we skip fanout gracefully.
+	if s.playerSessionRepo != nil {
+		ps, lookupErr := s.playerSessionRepo.GetByTokenHash(ctx, tokenHash)
+		if lookupErr != nil {
+			slog.WarnContext(ctx, "logout: player session lookup failed — proceeding without fanout",
+				"token_hash_prefix", tokenHash[:16], "error", lookupErr)
+		} else {
+			childSessions, listErr := s.sessionStore.ListByPlayerSession(ctx, []ulid.ULID{ps.ID})
+			if listErr != nil {
+				slog.WarnContext(ctx, "logout: list child sessions failed — proceeding without fanout",
+					"player_session_id", ps.ID.String(), "error", listErr)
+			}
+			for _, info := range childSessions {
+				char := core.CharacterRef{
+					ID:         info.CharacterID,
+					Name:       info.CharacterName,
+					LocationID: info.LocationID,
+				}
+				if dcErr := s.engine.HandleDisconnect(ctx, char, "logout"); dcErr != nil {
+					slog.WarnContext(ctx, "logout: leave event failed",
+						"session_id", info.ID, "error", dcErr)
+				}
+				if endErr := s.engine.EndSession(ctx, char, info.ID,
+					core.SessionEndedCauseLogout, "Session ended by logout."); endErr != nil {
+					slog.WarnContext(ctx, "logout: session_ended event failed",
+						"session_id", info.ID, "error", endErr)
+				}
+				if delErr := s.sessionStore.Delete(ctx, info.ID); delErr != nil {
+					slog.WarnContext(ctx, "logout: game session delete failed",
+						"session_id", info.ID, "error", delErr)
+				}
+				s.runDisconnectHooks(ctx, *info)
+			}
+		}
 	}
 
 	if _, err := s.authService.Logout(ctx, tokenHash); err != nil {

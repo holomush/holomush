@@ -135,22 +135,24 @@ func (_c *MockPlayerSessionRepository_Create_Call) RunAndReturn(run func(context
 }
 
 // CreateWithCap provides a mock function with given fields: ctx, session, maxActive
-func (_m *MockPlayerSessionRepository) CreateWithCap(ctx context.Context, session *auth.PlayerSession, maxActive int) (int, error) {
+func (_m *MockPlayerSessionRepository) CreateWithCap(ctx context.Context, session *auth.PlayerSession, maxActive int) ([]ulid.ULID, error) {
 	ret := _m.Called(ctx, session, maxActive)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CreateWithCap")
 	}
 
-	var r0 int
+	var r0 []ulid.ULID
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *auth.PlayerSession, int) (int, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, *auth.PlayerSession, int) ([]ulid.ULID, error)); ok {
 		return rf(ctx, session, maxActive)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, *auth.PlayerSession, int) int); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, *auth.PlayerSession, int) []ulid.ULID); ok {
 		r0 = rf(ctx, session, maxActive)
 	} else {
-		r0 = ret.Get(0).(int)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]ulid.ULID)
+		}
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, *auth.PlayerSession, int) error); ok {
@@ -182,12 +184,12 @@ func (_c *MockPlayerSessionRepository_CreateWithCap_Call) Run(run func(ctx conte
 	return _c
 }
 
-func (_c *MockPlayerSessionRepository_CreateWithCap_Call) Return(_a0 int, _a1 error) *MockPlayerSessionRepository_CreateWithCap_Call {
+func (_c *MockPlayerSessionRepository_CreateWithCap_Call) Return(_a0 []ulid.ULID, _a1 error) *MockPlayerSessionRepository_CreateWithCap_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockPlayerSessionRepository_CreateWithCap_Call) RunAndReturn(run func(context.Context, *auth.PlayerSession, int) (int, error)) *MockPlayerSessionRepository_CreateWithCap_Call {
+func (_c *MockPlayerSessionRepository_CreateWithCap_Call) RunAndReturn(run func(context.Context, *auth.PlayerSession, int) ([]ulid.ULID, error)) *MockPlayerSessionRepository_CreateWithCap_Call {
 	_c.Call.Return(run)
 	return _c
 }

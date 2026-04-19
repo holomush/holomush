@@ -6,6 +6,7 @@ package grpc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -339,4 +340,324 @@ func TestDispatcher_HandleCommand_Quit(t *testing.T) {
 
 	// Disconnect hook should fire
 	assert.True(t, hookCalled)
+}
+
+// TestQuitPathAppendsSessionEndedOnCharacterStream verifies that the quit
+// handler emits a session_ended event on the character's own stream between
+// HandleDisconnect and sessionStore.Delete. See Task 8 of the session lifecycle
+// as events plan (docs/superpowers/specs/2026-04-18-session-lifecycle-as-events-design.md).
+func TestQuitPathAppendsSessionEndedOnCharacterStream(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	store := core.NewMemoryEventStore()
+
+	server := newDispatcherTestServer(t, store)
+
+	ctx := context.Background()
+	sessStore := server.sessionStore
+	require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
+		ID:            sessionID.String(),
+		CharacterID:   charID,
+		CharacterName: "QuitChar",
+		LocationID:    locationID,
+		Status:        session.StatusActive,
+		TTLSeconds:    1800,
+	}))
+
+	resp, err := server.HandleCommand(ctx, &corev1.HandleCommandRequest{
+		Meta:               &corev1.RequestMeta{RequestId: "quit-test", Timestamp: timestamppb.Now()},
+		SessionId:          sessionID.String(),
+		Command:            "quit",
+		PlayerSessionToken: testPlayerSessionToken,
+	})
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+
+	// session_ended event should be present on character stream with
+	// cause=quit, the correct SessionID, and Reason="Goodbye!".
+	charEvents, err := store.Replay(ctx, "character:"+charID.String(), ulid.ULID{}, 100)
+	require.NoError(t, err)
+
+	var sessionEnded *core.Event
+	for i := range charEvents {
+		if charEvents[i].Type == core.EventTypeSessionEnded {
+			sessionEnded = &charEvents[i]
+			break
+		}
+	}
+	require.NotNil(t, sessionEnded, "expected a session_ended event on character stream")
+	assert.Equal(t, "character:"+charID.String(), sessionEnded.Stream)
+	assert.Equal(t, core.ActorCharacter, sessionEnded.Actor.Kind,
+		"cause=quit uses ActorCharacter per Design Decision #1")
+
+	var payload core.SessionEndedPayload
+	require.NoError(t, json.Unmarshal(sessionEnded.Payload, &payload))
+	assert.Equal(t, sessionID.String(), payload.SessionID)
+	assert.Equal(t, charID.String(), payload.CharacterID)
+	assert.Equal(t, core.SessionEndedCauseQuit, payload.Cause)
+	assert.Equal(t, "Goodbye!", payload.Reason)
+}
+
+// TestGuestDisconnectEmitsSessionEndedOnCharacterStream verifies that the
+// guest-disconnect path (IsGuest=true with no remaining connections) emits a
+// session_ended event on the character's own stream with cause=guest_end
+// between HandleDisconnect and sessionStore.Delete. See Task 8 of the session
+// lifecycle as events plan
+// (docs/superpowers/specs/2026-04-18-session-lifecycle-as-events-design.md).
+func TestGuestDisconnectEmitsSessionEndedOnCharacterStream(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+	store := core.NewMemoryEventStore()
+
+	server := newDispatcherTestServer(t, store)
+
+	ctx := context.Background()
+	sessStore := server.sessionStore
+	require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
+		ID:            sessionID.String(),
+		CharacterID:   charID,
+		CharacterName: "GuestChar",
+		LocationID:    locationID,
+		IsGuest:       true,
+		Status:        session.StatusActive,
+		TTLSeconds:    1800,
+	}))
+
+	resp, err := server.Disconnect(ctx, &corev1.DisconnectRequest{
+		Meta:               &corev1.RequestMeta{RequestId: "guest-disconnect-test", Timestamp: timestamppb.Now()},
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
+	})
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+
+	// session_ended event should be present on character stream with
+	// cause=guest_end, the correct SessionID, and Reason="Session ended.".
+	charEvents, err := store.Replay(ctx, core.StreamPrefixCharacter+charID.String(), ulid.ULID{}, 100)
+	require.NoError(t, err)
+
+	var sessionEnded *core.Event
+	for i := range charEvents {
+		if charEvents[i].Type == core.EventTypeSessionEnded {
+			sessionEnded = &charEvents[i]
+			break
+		}
+	}
+	require.NotNil(t, sessionEnded, "expected a session_ended event on character stream for guest disconnect")
+	assert.Equal(t, core.StreamPrefixCharacter+charID.String(), sessionEnded.Stream)
+
+	var payload core.SessionEndedPayload
+	require.NoError(t, json.Unmarshal(sessionEnded.Payload, &payload))
+	assert.Equal(t, sessionID.String(), payload.SessionID)
+	assert.Equal(t, charID.String(), payload.CharacterID)
+	assert.Equal(t, core.SessionEndedCauseGuestEnd, payload.Cause)
+	assert.Equal(t, "Session ended.", payload.Reason)
+}
+
+// TestAdminBootEmitsSessionEndedWithKickedCause verifies that the admin-boot
+// teardown path (triggered when a command records a BootedSession via
+// exec.RecordBootedSession) emits a session_ended event on the target
+// character's own stream with cause=kicked and a reason referencing the
+// administrator. See Task 8 of the session lifecycle as events plan
+// (docs/superpowers/specs/2026-04-18-session-lifecycle-as-events-design.md).
+func TestAdminBootEmitsSessionEndedWithKickedCause(t *testing.T) {
+	adminCharID := core.NewULID()
+	adminSessionID := core.NewULID()
+	adminLocationID := core.NewULID()
+
+	targetCharID := core.NewULID()
+	targetSessionID := core.NewULID()
+	targetLocationID := core.NewULID()
+
+	store := core.NewMemoryEventStore()
+
+	// Build a server with a "testboot" command that records the target
+	// session as booted. Server teardown logic then emits the session_ended
+	// event, runs disconnect hooks, and deletes the session.
+	engine := core.NewEngine(store)
+	sessStore := session.NewMemStore()
+	reg := command.NewRegistry()
+	registerTestCommands(t, reg)
+
+	entry, err := command.NewCommandEntry(command.CommandEntryConfig{
+		Name:   "testboot",
+		Source: "test",
+		Handler: func(_ context.Context, exec *command.CommandExecution) error {
+			exec.RecordBootedSession(command.BootedSession{
+				// Leave CharacterRef zero so server.go looks up the
+				// target session and fills in the ref — this exercises
+				// the full plugin-originated boot path.
+				SessionInfo: session.Info{ID: targetSessionID.String()},
+			})
+			return nil
+		},
+	})
+	require.NoError(t, err)
+	require.NoError(t, reg.Register(*entry))
+
+	policyEngine := policytest.AllowAllEngine()
+	svc := command.NewTestServices(command.ServicesConfig{
+		World:   nil,
+		Session: sessStore,
+		Engine:  policyEngine,
+		Events:  store,
+	})
+	dispatcher, err := command.NewDispatcher(reg, policyEngine)
+	require.NoError(t, err)
+
+	server := NewCoreServer(engine, sessStore, dispatcher, svc,
+		WithEventStore(store),
+		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
+	)
+
+	ctx := context.Background()
+	require.NoError(t, sessStore.Set(ctx, adminSessionID.String(), &session.Info{
+		ID:            adminSessionID.String(),
+		CharacterID:   adminCharID,
+		CharacterName: "Admin",
+		LocationID:    adminLocationID,
+		Status:        session.StatusActive,
+		TTLSeconds:    1800,
+	}))
+	require.NoError(t, sessStore.Set(ctx, targetSessionID.String(), &session.Info{
+		ID:            targetSessionID.String(),
+		CharacterID:   targetCharID,
+		CharacterName: "Target",
+		LocationID:    targetLocationID,
+		Status:        session.StatusActive,
+		TTLSeconds:    1800,
+	}))
+
+	resp, err := server.HandleCommand(ctx, &corev1.HandleCommandRequest{
+		Meta:               &corev1.RequestMeta{RequestId: "boot-test", Timestamp: timestamppb.Now()},
+		SessionId:          adminSessionID.String(),
+		Command:            "testboot",
+		PlayerSessionToken: testPlayerSessionToken,
+	})
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+
+	// session_ended event should be present on the TARGET character's
+	// stream with cause=kicked, the correct SessionID, and a reason
+	// mentioning the administrator.
+	charEvents, err := store.Replay(ctx, core.StreamPrefixCharacter+targetCharID.String(), ulid.ULID{}, 100)
+	require.NoError(t, err)
+
+	var sessionEnded *core.Event
+	for i := range charEvents {
+		if charEvents[i].Type == core.EventTypeSessionEnded {
+			sessionEnded = &charEvents[i]
+			break
+		}
+	}
+	require.NotNil(t, sessionEnded, "expected a session_ended event on target character stream for admin boot")
+	assert.Equal(t, core.StreamPrefixCharacter+targetCharID.String(), sessionEnded.Stream)
+
+	var payload core.SessionEndedPayload
+	require.NoError(t, json.Unmarshal(sessionEnded.Payload, &payload))
+	assert.Equal(t, targetSessionID.String(), payload.SessionID)
+	assert.Equal(t, targetCharID.String(), payload.CharacterID)
+	assert.Equal(t, core.SessionEndedCauseKicked, payload.Cause)
+	assert.Contains(t, payload.Reason, "administrator",
+		"reason should reference the administrator performing the boot")
+}
+
+// TestAdminBootRetainsSessionWhenEndSessionFails verifies that when EndSession
+// fails on the admin-boot path, the target session row is RETAINED (not
+// deleted) so the reaper can retry — otherwise subscribers lose STREAM_CLOSED.
+// Also verifies the loop continues past the failed target (other booted
+// sessions are still processed).
+func TestAdminBootRetainsSessionWhenEndSessionFails(t *testing.T) {
+	adminCharID := core.NewULID()
+	adminSessionID := core.NewULID()
+	adminLocationID := core.NewULID()
+
+	targetCharID := core.NewULID()
+	targetSessionID := core.NewULID()
+	targetLocationID := core.NewULID()
+
+	// Fail Append for session_ended events specifically; allow all others.
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, ev core.Event) error {
+			if ev.Type == core.EventTypeSessionEnded {
+				return errors.New("event store unavailable")
+			}
+			return nil
+		},
+	}
+
+	engine := core.NewEngine(store)
+	sessStore := session.NewMemStore()
+	reg := command.NewRegistry()
+	registerTestCommands(t, reg)
+
+	entry, err := command.NewCommandEntry(command.CommandEntryConfig{
+		Name:   "testboot",
+		Source: "test",
+		Handler: func(_ context.Context, exec *command.CommandExecution) error {
+			exec.RecordBootedSession(command.BootedSession{
+				SessionInfo: session.Info{ID: targetSessionID.String()},
+			})
+			return nil
+		},
+	})
+	require.NoError(t, err)
+	require.NoError(t, reg.Register(*entry))
+
+	policyEngine := policytest.AllowAllEngine()
+	svc := command.NewTestServices(command.ServicesConfig{
+		World:   nil,
+		Session: sessStore,
+		Engine:  policyEngine,
+		Events:  store,
+	})
+	dispatcher, err := command.NewDispatcher(reg, policyEngine)
+	require.NoError(t, err)
+
+	var hookCalled bool
+	server := NewCoreServer(engine, sessStore, dispatcher, svc,
+		WithEventStore(store),
+		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
+		WithDisconnectHook(func(_ session.Info) {
+			hookCalled = true
+		}),
+	)
+
+	ctx := context.Background()
+	require.NoError(t, sessStore.Set(ctx, adminSessionID.String(), &session.Info{
+		ID:            adminSessionID.String(),
+		CharacterID:   adminCharID,
+		CharacterName: "Admin",
+		LocationID:    adminLocationID,
+		Status:        session.StatusActive,
+		TTLSeconds:    1800,
+	}))
+	require.NoError(t, sessStore.Set(ctx, targetSessionID.String(), &session.Info{
+		ID:            targetSessionID.String(),
+		CharacterID:   targetCharID,
+		CharacterName: "Target",
+		LocationID:    targetLocationID,
+		Status:        session.StatusActive,
+		TTLSeconds:    1800,
+	}))
+
+	resp, err := server.HandleCommand(ctx, &corev1.HandleCommandRequest{
+		Meta:               &corev1.RequestMeta{RequestId: "boot-fail-test", Timestamp: timestamppb.Now()},
+		SessionId:          adminSessionID.String(),
+		Command:            "testboot",
+		PlayerSessionToken: testPlayerSessionToken,
+	})
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+
+	// Target session must be RETAINED despite EndSession error so the reaper
+	// can retry and emit STREAM_CLOSED to subscribers.
+	info, getErr := sessStore.Get(ctx, targetSessionID.String())
+	require.NoError(t, getErr, "target session must be retained when EndSession fails")
+	assert.Equal(t, targetSessionID.String(), info.ID)
+
+	// Disconnect hook must still fire so in-process cleanup proceeds.
+	assert.True(t, hookCalled, "disconnect hook should fire even when EndSession fails")
 }

@@ -204,7 +204,7 @@ func handleResetPassword(ctx context.Context, exec *command.CommandExecution, de
 		} else {
 			kicksRequested = len(chars)
 			for _, ch := range chars {
-				deletedSession, delErr := exec.Services().Session().DeleteByCharacter(ctx, ch.ID, "password reset kick")
+				deletedSession, delErr := exec.Services().Session().DeleteByCharacter(ctx, ch.ID)
 				if delErr != nil {
 					slog.WarnContext(ctx, "best-effort game session kick failed",
 						"player", args.username, "character", ch.Name, "error", delErr)

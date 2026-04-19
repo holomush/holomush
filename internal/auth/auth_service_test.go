@@ -5,8 +5,11 @@ package auth_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -15,6 +18,9 @@ import (
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/auth/mocks"
+	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/session"
+	sessionmocks "github.com/holomush/holomush/internal/session/mocks"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
@@ -189,10 +195,10 @@ func TestAuthenticatePlayerCallsCreateWithCapWhenCapExceeded(t *testing.T) {
 	svc, playerRepo, sessionRepo, hasher := newTestAuthServiceWithCap(t, capN)
 	player := testPlayerWithCredentials(t, playerRepo, hasher, "alice")
 
-	// Repository receives configured cap and atomically trims. Return trimmed > 0
-	// to simulate the player having been over the cap prior to this call.
+	// Repository receives configured cap and atomically trims. Return a trimmed
+	// ID to simulate the player having been over the cap prior to this call.
 	sessionRepo.On("CreateWithCap", ctx, mock.AnythingOfType("*auth.PlayerSession"), capN).
-		Return(1, nil).Once()
+		Return([]ulid.ULID{ulid.Make()}, nil).Once()
 
 	tok, gotPlayer, err := svc.AuthenticatePlayer(ctx, "alice", "password", "ua", "ip")
 	require.NoError(t, err)
@@ -208,9 +214,9 @@ func TestAuthenticatePlayerDoesNotTrimWhenBelowCap(t *testing.T) {
 	svc, playerRepo, sessionRepo, hasher := newTestAuthServiceWithCap(t, capN)
 	player := testPlayerWithCredentials(t, playerRepo, hasher, "bob")
 
-	// Below the cap: CreateWithCap returns trimmed=0 (nothing to trim).
+	// Below the cap: CreateWithCap returns empty slice (nothing to trim).
 	sessionRepo.On("CreateWithCap", ctx, mock.AnythingOfType("*auth.PlayerSession"), capN).
-		Return(0, nil).Once()
+		Return([]ulid.ULID(nil), nil).Once()
 
 	tok, gotPlayer, err := svc.AuthenticatePlayer(ctx, "bob", "password", "ua", "ip")
 	require.NoError(t, err)
@@ -229,7 +235,7 @@ func TestAuthenticatePlayerPassesDisabledCapToRepository(t *testing.T) {
 	// When cap is disabled, the service still routes through CreateWithCap
 	// (single code path) and the repository's cap <= 0 branch skips trimming.
 	sessionRepo.On("CreateWithCap", ctx, mock.AnythingOfType("*auth.PlayerSession"), capDisabled).
-		Return(0, nil)
+		Return([]ulid.ULID(nil), nil)
 
 	// Authenticate many times; none should trigger trimming.
 	for i := 0; i < 10; i++ {
@@ -249,7 +255,7 @@ func TestAuthenticatePlayerPropagatesCreateWithCapError(t *testing.T) {
 	testPlayerWithCredentials(t, playerRepo, hasher, "alice")
 
 	sessionRepo.On("CreateWithCap", ctx, mock.AnythingOfType("*auth.PlayerSession"), capN).
-		Return(0, errors.New("db down")).Once()
+		Return([]ulid.ULID(nil), errors.New("db down")).Once()
 
 	tok, gotPlayer, err := svc.AuthenticatePlayer(ctx, "alice", "password", "ua", "ip")
 	require.Error(t, err)
@@ -275,3 +281,344 @@ func TestAuthenticatePlayerReturnsErrorOnInvalidCredentials(t *testing.T) {
 	// Session repo never consulted on invalid credentials.
 	_ = sessionRepo // mockery strict mode will fail if it sees unexpected calls
 }
+
+// TestWithGameSessionFanoutIgnoresNilEngine verifies that when WithGameSessionFanout
+// is called with a nil engine, the option is silently ignored and the service
+// behaves as if fanout is not configured.
+func TestWithGameSessionFanoutIgnoresNilEngine(t *testing.T) {
+	playerRepo := mocks.NewMockPlayerRepository(t)
+	playerSessionRepo := mocks.NewMockPlayerSessionRepository(t)
+	hasher := mocks.NewMockPasswordHasher(t)
+	gameStore := sessionmocks.NewMockStore(t)
+
+	// nil engine — fanout must be silently ignored.
+	svc, err := auth.NewAuthService(playerRepo, playerSessionRepo, hasher,
+		auth.WithGameSessionFanout(nil, gameStore),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, svc)
+	// Service is functional; no game session calls should happen on login.
+	_ = gameStore // the mock is strict — unused if not called; that is the assertion
+}
+
+// TestWithGameSessionFanoutIgnoresNilGameStore verifies that when WithGameSessionFanout
+// is called with a nil game sessions store, the option is silently ignored.
+func TestWithGameSessionFanoutIgnoresNilGameStore(t *testing.T) {
+	playerRepo := mocks.NewMockPlayerRepository(t)
+	playerSessionRepo := mocks.NewMockPlayerSessionRepository(t)
+	hasher := mocks.NewMockPasswordHasher(t)
+	engine := core.NewEngine(core.NewMemoryEventStore())
+
+	// nil gameSessions — fanout must be silently ignored.
+	svc, err := auth.NewAuthService(playerRepo, playerSessionRepo, hasher,
+		auth.WithGameSessionFanout(engine, nil),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, svc)
+}
+
+// TestConfigureGameSessionFanoutIgnoresNilArgs verifies that ConfigureGameSessionFanout
+// is a no-op when either argument is nil, leaving fanout unconfigured.
+func TestConfigureGameSessionFanoutIgnoresNilArgs(t *testing.T) {
+	svc, _, _, _ := newTestAuthServiceWithCap(t, 0)
+
+	// Both nil — no-op.
+	svc.ConfigureGameSessionFanout(nil, nil)
+
+	// nil engine — no-op.
+	gameStore := sessionmocks.NewMockStore(t)
+	svc.ConfigureGameSessionFanout(nil, gameStore)
+
+	// nil gameSessions — no-op.
+	engine := core.NewEngine(core.NewMemoryEventStore())
+	svc.ConfigureGameSessionFanout(engine, nil)
+
+	// All three calls must be no-ops: the service should work normally.
+	// No panic and no unexpected calls on the mock.
+	_ = gameStore
+}
+
+// TestAuthenticatePlayerEmitsSessionEndedForEvictedSessionChildren verifies
+// that when CreateWithCap trims a PlayerSession and WithGameSessionFanout is
+// configured, the service emits session_ended (cause=evicted) on the child
+// game session's character stream before the FK cascade deletes it.
+func TestAuthenticatePlayerEmitsSessionEndedForEvictedSessionChildren(t *testing.T) {
+	ctx := context.Background()
+	const capN = 2
+
+	// --- set up in-memory event store + engine ---
+	eventStore := core.NewMemoryEventStore()
+	engine := core.NewEngine(eventStore)
+
+	// --- set up session mock ---
+	gameStore := sessionmocks.NewMockStore(t)
+
+	// --- set up auth service mocks ---
+	playerRepo := mocks.NewMockPlayerRepository(t)
+	sessionRepo := mocks.NewMockPlayerSessionRepository(t)
+	hasher := mocks.NewMockPasswordHasher(t)
+
+	svc, err := auth.NewAuthService(
+		playerRepo,
+		sessionRepo,
+		hasher,
+		auth.WithGameSessionFanout(engine, gameStore),
+	)
+	require.NoError(t, err)
+	svc.SetMaxSessionsPerPlayer(capN)
+
+	// Seed player + credentials.
+	player := &auth.Player{
+		ID:             ulid.Make(),
+		Username:       "dave",
+		PasswordHash:   "$argon2id$v=19$m=65536,t=1,p=4$salt$hash",
+		FailedAttempts: 0,
+		LockedUntil:    nil,
+	}
+	playerRepo.On("GetByUsername", ctx, "dave").Return(player, nil)
+	hasher.On("Verify", "password", player.PasswordHash).Return(true, nil)
+	playerRepo.On("Update", ctx, mock.AnythingOfType("*auth.Player")).Return(nil)
+
+	// Two active PlayerSessions exist at the cap.
+	evictedPSID := ulid.Make()
+	keptPSID := ulid.Make()
+	activePSs := []*auth.PlayerSession{
+		{ID: evictedPSID, PlayerID: player.ID},
+		{ID: keptPSID, PlayerID: player.ID},
+	}
+	sessionRepo.On("ListByPlayer", ctx, player.ID).Return(activePSs, nil).Once()
+
+	// The child game session belonging to the evicted PS.
+	charID := ulid.Make()
+	childSessionID := "child-session-01"
+	gameStore.On("ListByPlayerSession", ctx, mock.MatchedBy(func(ids []ulid.ULID) bool {
+		return len(ids) == 2
+	})).Return([]*session.Info{{
+		ID:              childSessionID,
+		CharacterID:     charID,
+		CharacterName:   "DaveChar",
+		PlayerSessionID: evictedPSID,
+	}}, nil).Once()
+
+	// CreateWithCap returns the evicted PS ID.
+	sessionRepo.On("CreateWithCap", ctx, mock.AnythingOfType("*auth.PlayerSession"), capN).
+		Return([]ulid.ULID{evictedPSID}, nil).Once()
+
+	tok, gotPlayer, authErr := svc.AuthenticatePlayer(ctx, "dave", "password", "ua", "ip")
+	require.NoError(t, authErr)
+	assert.NotEmpty(t, tok)
+	require.NotNil(t, gotPlayer)
+
+	// Verify a session_ended event was emitted on the child's character stream.
+	stream := "character:" + charID.String()
+	events, replayErr := eventStore.Replay(ctx, stream, ulid.ULID{}, 100)
+	require.NoError(t, replayErr)
+	require.Len(t, events, 1, "expected exactly one session_ended event on character stream")
+
+	assert.Equal(t, core.EventTypeSessionEnded, events[0].Type)
+
+	var payload core.SessionEndedPayload
+	require.NoError(t, json.Unmarshal(events[0].Payload, &payload))
+	assert.Equal(t, core.SessionEndedCauseEvicted, payload.Cause)
+	assert.Equal(t, childSessionID, payload.SessionID)
+}
+
+// TestAuthenticatePlayerSkipsChildSessionsNotInTrimmedSet verifies that when the
+// candidate children snapshot includes sessions belonging to a PlayerSession that
+// was NOT trimmed (e.g. concurrent login created it just before the snapshot),
+// those children are skipped — session_ended is only emitted for children whose
+// PlayerSessionID is in the trimmedIDs set.
+func TestAuthenticatePlayerSkipsChildSessionsNotInTrimmedSet(t *testing.T) {
+	ctx := context.Background()
+	const capN = 2
+
+	eventStore := core.NewMemoryEventStore()
+	engine := core.NewEngine(eventStore)
+	gameStore := sessionmocks.NewMockStore(t)
+
+	playerRepo := mocks.NewMockPlayerRepository(t)
+	sessionRepo := mocks.NewMockPlayerSessionRepository(t)
+	hasher := mocks.NewMockPasswordHasher(t)
+
+	svc, err := auth.NewAuthService(
+		playerRepo,
+		sessionRepo,
+		hasher,
+		auth.WithGameSessionFanout(engine, gameStore),
+	)
+	require.NoError(t, err)
+	svc.SetMaxSessionsPerPlayer(capN)
+
+	player := &auth.Player{
+		ID:             ulid.Make(),
+		Username:       "eve",
+		PasswordHash:   "$argon2id$v=19$m=65536,t=1,p=4$salt$hash",
+		FailedAttempts: 0,
+	}
+	playerRepo.On("GetByUsername", ctx, "eve").Return(player, nil)
+	hasher.On("Verify", "password", player.PasswordHash).Return(true, nil)
+	playerRepo.On("Update", ctx, mock.AnythingOfType("*auth.Player")).Return(nil)
+
+	evictedPSID := ulid.Make()
+	keptPSID := ulid.Make()
+	activePSs := []*auth.PlayerSession{
+		{ID: evictedPSID, PlayerID: player.ID},
+		{ID: keptPSID, PlayerID: player.ID},
+	}
+	sessionRepo.On("ListByPlayer", ctx, player.ID).Return(activePSs, nil).Once()
+
+	// candidateChildren contains two sessions — one from the evicted PS and
+	// one from the kept PS (which was NOT trimmed).
+	evictedCharID := ulid.Make()
+	keptCharID := ulid.Make()
+	gameStore.On("ListByPlayerSession", ctx, mock.MatchedBy(func(ids []ulid.ULID) bool {
+		return len(ids) == 2
+	})).Return([]*session.Info{
+		{
+			ID:              "evicted-child",
+			CharacterID:     evictedCharID,
+			CharacterName:   "EveEvicted",
+			PlayerSessionID: evictedPSID,
+		},
+		{
+			ID:              "kept-child",
+			CharacterID:     keptCharID,
+			CharacterName:   "EveKept",
+			PlayerSessionID: keptPSID, // NOT in trimmedIDs — must be skipped
+		},
+	}, nil).Once()
+
+	// Only evictedPSID is trimmed.
+	sessionRepo.On("CreateWithCap", ctx, mock.AnythingOfType("*auth.PlayerSession"), capN).
+		Return([]ulid.ULID{evictedPSID}, nil).Once()
+
+	tok, gotPlayer, authErr := svc.AuthenticatePlayer(ctx, "eve", "password", "ua", "ip")
+	require.NoError(t, authErr)
+	assert.NotEmpty(t, tok)
+	require.NotNil(t, gotPlayer)
+
+	// Evicted child should have session_ended.
+	evictedStream := "character:" + evictedCharID.String()
+	evictedEvents, replayErr := eventStore.Replay(ctx, evictedStream, ulid.ULID{}, 100)
+	require.NoError(t, replayErr)
+	require.Len(t, evictedEvents, 1, "evicted child must have a session_ended event")
+	assert.Equal(t, core.EventTypeSessionEnded, evictedEvents[0].Type)
+
+	// Kept child must NOT have session_ended.
+	keptStream := "character:" + keptCharID.String()
+	keptEvents, keptErr := eventStore.Replay(ctx, keptStream, ulid.ULID{}, 100)
+	require.NoError(t, keptErr)
+	assert.Empty(t, keptEvents, "kept child must not have a session_ended event")
+}
+
+// TestAuthenticatePlayerEvictionFanoutContinuesOnEndSessionError verifies that
+// when EndSession fails for one evicted game session, the fanout loop continues
+// to process subsequent sessions — the error is logged but not fatal.
+func TestAuthenticatePlayerEvictionFanoutContinuesOnEndSessionError(t *testing.T) {
+	ctx := context.Background()
+	const capN = 1
+
+	// Event store that rejects all Append calls — simulates EndSession failure.
+	failingStore := &failingEventStore{}
+	engine := core.NewEngine(failingStore)
+	gameStore := sessionmocks.NewMockStore(t)
+
+	playerRepo := mocks.NewMockPlayerRepository(t)
+	sessionRepo := mocks.NewMockPlayerSessionRepository(t)
+	hasher := mocks.NewMockPasswordHasher(t)
+
+	svc, err := auth.NewAuthService(
+		playerRepo,
+		sessionRepo,
+		hasher,
+		auth.WithGameSessionFanout(engine, gameStore),
+	)
+	require.NoError(t, err)
+	svc.SetMaxSessionsPerPlayer(capN)
+
+	player := &auth.Player{
+		ID:             ulid.Make(),
+		Username:       "frank",
+		PasswordHash:   "$argon2id$v=19$m=65536,t=1,p=4$salt$hash",
+		FailedAttempts: 0,
+	}
+	playerRepo.On("GetByUsername", ctx, "frank").Return(player, nil)
+	hasher.On("Verify", "password", player.PasswordHash).Return(true, nil)
+	playerRepo.On("Update", ctx, mock.AnythingOfType("*auth.Player")).Return(nil)
+
+	evictedPSID := ulid.Make()
+	activePSs := []*auth.PlayerSession{{ID: evictedPSID, PlayerID: player.ID}}
+	sessionRepo.On("ListByPlayer", ctx, player.ID).Return(activePSs, nil).Once()
+
+	child1CharID := ulid.Make()
+	child2CharID := ulid.Make()
+	gameStore.On("ListByPlayerSession", ctx, mock.MatchedBy(func(ids []ulid.ULID) bool {
+		return len(ids) == 1
+	})).Return([]*session.Info{
+		{ID: "child-1", CharacterID: child1CharID, CharacterName: "C1", PlayerSessionID: evictedPSID},
+		{ID: "child-2", CharacterID: child2CharID, CharacterName: "C2", PlayerSessionID: evictedPSID},
+	}, nil).Once()
+
+	sessionRepo.On("CreateWithCap", ctx, mock.AnythingOfType("*auth.PlayerSession"), capN).
+		Return([]ulid.ULID{evictedPSID}, nil).Once()
+
+	// AuthenticatePlayer must succeed even though EndSession fails for both children.
+	tok, gotPlayer, authErr := svc.AuthenticatePlayer(ctx, "frank", "password", "ua", "ip")
+	require.NoError(t, authErr)
+	assert.NotEmpty(t, tok)
+	require.NotNil(t, gotPlayer)
+
+	// Assert that EndSession was attempted for BOTH evicted children — the
+	// fanout loop must not stop after the first failure. One Append per
+	// child's session_ended event means we expect exactly 2 calls.
+	assert.Equal(t, 2, failingStore.SessionEndedAppendCount(),
+		"fanout must attempt EndSession for every evicted child, not stop after the first failure")
+}
+
+// failingEventStore is a test double that rejects all Append calls. It counts
+// Append calls per event type so tests can assert that the eviction fanout
+// attempted EndSession for every child before giving up.
+type failingEventStore struct {
+	mu                  sync.Mutex
+	sessionEndedAppends int
+}
+
+func (f *failingEventStore) Append(_ context.Context, ev core.Event) error {
+	f.mu.Lock()
+	if ev.Type == core.EventTypeSessionEnded {
+		f.sessionEndedAppends++
+	}
+	f.mu.Unlock()
+	return errors.New("event store down")
+}
+
+// SessionEndedAppendCount returns the number of Append attempts for
+// session_ended events.
+func (f *failingEventStore) SessionEndedAppendCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.sessionEndedAppends
+}
+
+func (f *failingEventStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
+	return nil, nil
+}
+
+func (f *failingEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
+	return ulid.ULID{}, core.ErrStreamEmpty
+}
+
+func (f *failingEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
+	ch := make(chan ulid.ULID)
+	errCh := make(chan error)
+	return ch, errCh, nil
+}
+
+func (f *failingEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ ulid.ULID) ([]core.Event, error) {
+	return nil, nil
+}
+
+func (f *failingEventStore) SubscribeSession(_ context.Context) (core.Subscription, error) {
+	return nil, nil
+}
+

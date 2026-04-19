@@ -10,6 +10,9 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/core"
+	gamesession "github.com/holomush/holomush/internal/session"
 )
 
 // Service provides authentication operations.
@@ -19,12 +22,33 @@ type Service struct {
 	hasher               PasswordHasher
 	logger               *slog.Logger
 	maxSessionsPerPlayer int
+
+	// Optional: when both are set, AuthenticatePlayer emits session_ended
+	// (cause=evicted) for child game sessions belonging to trimmed PlayerSessions.
+	engine       *core.Engine
+	gameSessions gamesession.Store
+}
+
+// ServiceOption is a functional option for Service.
+type ServiceOption func(*Service)
+
+// WithGameSessionFanout configures the Service to emit session_ended events
+// (cause=evicted) for child game sessions when CreateWithCap trims PlayerSessions.
+// Both engine and gameSessions must be non-nil; if either is nil, this option
+// is silently ignored.
+func WithGameSessionFanout(engine *core.Engine, gameSessions gamesession.Store) ServiceOption {
+	return func(s *Service) {
+		if engine != nil && gameSessions != nil {
+			s.engine = engine
+			s.gameSessions = gameSessions
+		}
+	}
 }
 
 // NewAuthService creates a new Service with a no-op logger.
 // Returns an error if any required dependency is nil.
 // Session cap enforcement is disabled (use SetMaxSessionsPerPlayer to enable).
-func NewAuthService(players PlayerRepository, playerSessions PlayerSessionRepository, hasher PasswordHasher) (*Service, error) {
+func NewAuthService(players PlayerRepository, playerSessions PlayerSessionRepository, hasher PasswordHasher, opts ...ServiceOption) (*Service, error) {
 	if players == nil {
 		return nil, oops.Errorf("players repository is required")
 	}
@@ -34,18 +58,22 @@ func NewAuthService(players PlayerRepository, playerSessions PlayerSessionReposi
 	if hasher == nil {
 		return nil, oops.Errorf("password hasher is required")
 	}
-	return &Service{
+	svc := &Service{
 		players:        players,
 		playerSessions: playerSessions,
 		hasher:         hasher,
 		logger:         slog.New(slog.DiscardHandler),
-	}, nil
+	}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc, nil
 }
 
 // NewAuthServiceWithLogger creates a new Service with the provided logger.
 // Returns an error if any required dependency is nil.
 // Session cap enforcement is disabled (use SetMaxSessionsPerPlayer to enable).
-func NewAuthServiceWithLogger(players PlayerRepository, playerSessions PlayerSessionRepository, hasher PasswordHasher, logger *slog.Logger) (*Service, error) {
+func NewAuthServiceWithLogger(players PlayerRepository, playerSessions PlayerSessionRepository, hasher PasswordHasher, logger *slog.Logger, opts ...ServiceOption) (*Service, error) {
 	if players == nil {
 		return nil, oops.Errorf("players repository is required")
 	}
@@ -58,12 +86,16 @@ func NewAuthServiceWithLogger(players PlayerRepository, playerSessions PlayerSes
 	if logger == nil {
 		return nil, oops.Errorf("logger is required")
 	}
-	return &Service{
+	svc := &Service{
 		players:        players,
 		playerSessions: playerSessions,
 		hasher:         hasher,
 		logger:         logger,
-	}, nil
+	}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc, nil
 }
 
 // SetMaxSessionsPerPlayer configures the per-player active session cap.
@@ -73,6 +105,18 @@ func NewAuthServiceWithLogger(players PlayerRepository, playerSessions PlayerSes
 // sessions.
 func (s *Service) SetMaxSessionsPerPlayer(n int) {
 	s.maxSessionsPerPlayer = n
+}
+
+// ConfigureGameSessionFanout sets the engine and game session store used to
+// emit session_ended (cause=evicted) events for child game sessions when
+// CreateWithCap trims PlayerSessions. Called after construction when the
+// engine is available (e.g. in sub_grpc.go after the engine is created).
+// If either argument is nil, fanout is left unconfigured.
+func (s *Service) ConfigureGameSessionFanout(engine *core.Engine, gameSessions gamesession.Store) {
+	if engine != nil && gameSessions != nil {
+		s.engine = engine
+		s.gameSessions = gameSessions
+	}
 }
 
 // dummyPasswordHash is used when a user doesn't exist to prevent timing attacks.
@@ -130,19 +174,80 @@ func (s *Service) AuthenticatePlayer(ctx context.Context, username, password, us
 			Wrap(err)
 	}
 
-	trimmed, err := s.playerSessions.CreateWithCap(ctx, session, s.maxSessionsPerPlayer)
+	// Snapshot candidate child game sessions before the atomic TX so we can
+	// emit session_ended for children of actually-trimmed PlayerSessions.
+	// TOCTOU acknowledged (Design Decision #10): the snapshot is best-effort.
+	// Children created or destroyed between here and CreateWithCap are silently
+	// missed; FK CASCADE still cleans up state.
+	var candidateChildren []*gamesession.Info
+	if s.engine != nil && s.gameSessions != nil && s.maxSessionsPerPlayer > 0 {
+		activePSs, listErr := s.playerSessions.ListByPlayer(ctx, player.ID)
+		if listErr == nil && len(activePSs) >= s.maxSessionsPerPlayer {
+			psIDs := make([]ulid.ULID, len(activePSs))
+			for i, ps := range activePSs {
+				psIDs[i] = ps.ID
+			}
+			candidateChildren, _ = s.gameSessions.ListByPlayerSession(ctx, psIDs) //nolint:errcheck // best-effort snapshot
+		}
+	}
+
+	trimmedIDs, err := s.playerSessions.CreateWithCap(ctx, session, s.maxSessionsPerPlayer)
 	if err != nil {
 		return "", nil, oops.Code("AUTH_LOGIN_FAILED").
 			With("operation", "persist player session with cap").
 			Wrap(err)
 	}
-	if trimmed > 0 {
+	if len(trimmedIDs) > 0 {
 		s.logger.InfoContext(ctx, "session cap trimmed oldest sessions",
 			"event", "session_cap_trimmed",
 			"player_id", player.ID.String(),
-			"trimmed_count", trimmed,
+			"trimmed_count", len(trimmedIDs),
 			"cap", s.maxSessionsPerPlayer,
 		)
+	}
+
+	// Emit HandleDisconnect (leave on location) + session_ended (cause=evicted)
+	// for each child game session whose PlayerSessionID was in the trimmed set.
+	// Peers at the evicted character's location need the leave event so the
+	// character does not appear "stuck" to other players.
+	//
+	// NOTE: sessionStore.Delete and runDisconnectHooks are NOT called here.
+	// CreateWithCap's transaction already FK-cascaded the game session rows,
+	// so Delete would be redundant/no-op. DisconnectHooks (guest release etc.)
+	// are a gRPC-layer concern — auth.Service does not own hook registration.
+	// The remaining gap is tracked as a follow-up; the reaper's OnExpired
+	// callback and normal session-lifecycle cleanup cover the common cases.
+	if len(trimmedIDs) > 0 && s.engine != nil && s.gameSessions != nil {
+		trimmedSet := make(map[ulid.ULID]struct{}, len(trimmedIDs))
+		for _, id := range trimmedIDs {
+			trimmedSet[id] = struct{}{}
+		}
+		for _, child := range candidateChildren {
+			if _, ok := trimmedSet[child.PlayerSessionID]; !ok {
+				continue
+			}
+			char := core.CharacterRef{
+				ID:         child.CharacterID,
+				Name:       child.CharacterName,
+				LocationID: child.LocationID,
+			}
+			if dcErr := s.engine.HandleDisconnect(ctx, char, "evicted"); dcErr != nil {
+				s.logger.WarnContext(ctx, "eviction: leave event failed",
+					"session_id", child.ID,
+					"player_session_id", child.PlayerSessionID.String(),
+					"error", dcErr,
+				)
+			}
+			if endErr := s.engine.EndSession(ctx, char, child.ID,
+				core.SessionEndedCauseEvicted,
+				"Session evicted — you logged in elsewhere."); endErr != nil {
+				s.logger.WarnContext(ctx, "eviction: session_ended failed",
+					"session_id", child.ID,
+					"player_session_id", child.PlayerSessionID.String(),
+					"error", endErr,
+				)
+			}
+		}
 	}
 
 	return rawToken, player, nil

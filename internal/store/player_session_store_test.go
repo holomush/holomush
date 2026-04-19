@@ -841,6 +841,8 @@ func TestPostgresPlayerSessionStore_CreateWithCap(t *testing.T) {
 		defer mock.Close()
 
 		const capN = 3
+		trimmedID1 := core.NewULID()
+		trimmedID2 := core.NewULID()
 		mock.ExpectBegin()
 		mock.ExpectExec(`SELECT pg_advisory_xact_lock`).
 			WithArgs(ps.PlayerID.String()).
@@ -848,16 +850,20 @@ func TestPostgresPlayerSessionStore_CreateWithCap(t *testing.T) {
 		mock.ExpectExec(`INSERT INTO player_sessions`).
 			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1))
-		mock.ExpectExec(`DELETE FROM player_sessions`).
+		mock.ExpectQuery(`DELETE FROM player_sessions`).
 			WithArgs(ps.PlayerID.String(), ps.ID.String(), capN-1).
-			WillReturnResult(pgxmock.NewResult("DELETE", 2))
+			WillReturnRows(pgxmock.NewRows([]string{"id"}).
+				AddRow(trimmedID1.String()).
+				AddRow(trimmedID2.String()))
 		mock.ExpectCommit()
 		mock.ExpectRollback()
 
 		store := NewPostgresPlayerSessionStore(mock)
-		trimmed, err := store.CreateWithCap(context.Background(), ps, capN)
+		trimmedIDs, err := store.CreateWithCap(context.Background(), ps, capN)
 		require.NoError(t, err)
-		assert.Equal(t, 2, trimmed)
+		assert.Len(t, trimmedIDs, 2)
+		assert.Contains(t, trimmedIDs, trimmedID1)
+		assert.Contains(t, trimmedIDs, trimmedID2)
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
@@ -878,9 +884,9 @@ func TestPostgresPlayerSessionStore_CreateWithCap(t *testing.T) {
 		mock.ExpectRollback()
 
 		store := NewPostgresPlayerSessionStore(mock)
-		trimmed, err := store.CreateWithCap(context.Background(), ps, 0)
+		trimmedIDs, err := store.CreateWithCap(context.Background(), ps, 0)
 		require.NoError(t, err)
-		assert.Equal(t, 0, trimmed)
+		assert.Empty(t, trimmedIDs)
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
@@ -899,9 +905,9 @@ func TestPostgresPlayerSessionStore_CreateWithCap(t *testing.T) {
 		mock.ExpectRollback()
 
 		store := NewPostgresPlayerSessionStore(mock)
-		trimmed, err := store.CreateWithCap(context.Background(), ps, 3)
+		trimmedIDs, err := store.CreateWithCap(context.Background(), ps, 3)
 		require.Error(t, err)
-		assert.Equal(t, 0, trimmed)
+		assert.Empty(t, trimmedIDs)
 		errutil.AssertErrorCode(t, err, "PLAYER_SESSION_CREATE_FAILED")
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
@@ -918,15 +924,15 @@ func TestPostgresPlayerSessionStore_CreateWithCap(t *testing.T) {
 		mock.ExpectExec(`INSERT INTO player_sessions`).
 			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1))
-		mock.ExpectExec(`DELETE FROM player_sessions`).
+		mock.ExpectQuery(`DELETE FROM player_sessions`).
 			WithArgs(ps.PlayerID.String(), ps.ID.String(), 2).
 			WillReturnError(errors.New("delete failed"))
 		mock.ExpectRollback()
 
 		store := NewPostgresPlayerSessionStore(mock)
-		trimmed, err := store.CreateWithCap(context.Background(), ps, 3)
+		trimmedIDs, err := store.CreateWithCap(context.Background(), ps, 3)
 		require.Error(t, err)
-		assert.Equal(t, 0, trimmed)
+		assert.Empty(t, trimmedIDs)
 		errutil.AssertErrorCode(t, err, "PLAYER_SESSION_TRIM_FAILED")
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
@@ -939,9 +945,9 @@ func TestPostgresPlayerSessionStore_CreateWithCap(t *testing.T) {
 		mock.ExpectBegin().WillReturnError(errors.New("cannot begin tx"))
 
 		store := NewPostgresPlayerSessionStore(mock)
-		trimmed, err := store.CreateWithCap(context.Background(), ps, 3)
+		trimmedIDs, err := store.CreateWithCap(context.Background(), ps, 3)
 		require.Error(t, err)
-		assert.Equal(t, 0, trimmed)
+		assert.Empty(t, trimmedIDs)
 		errutil.AssertErrorCode(t, err, "PLAYER_SESSION_TX_BEGIN_FAILED")
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
@@ -958,17 +964,44 @@ func TestPostgresPlayerSessionStore_CreateWithCap(t *testing.T) {
 		mock.ExpectExec(`INSERT INTO player_sessions`).
 			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1))
-		mock.ExpectExec(`DELETE FROM player_sessions`).
+		mock.ExpectQuery(`DELETE FROM player_sessions`).
 			WithArgs(ps.PlayerID.String(), ps.ID.String(), 2).
-			WillReturnResult(pgxmock.NewResult("DELETE", 0))
+			WillReturnRows(pgxmock.NewRows([]string{"id"}))
 		mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
 		mock.ExpectRollback()
 
 		store := NewPostgresPlayerSessionStore(mock)
-		trimmed, err := store.CreateWithCap(context.Background(), ps, 3)
+		trimmedIDs, err := store.CreateWithCap(context.Background(), ps, 3)
 		require.Error(t, err)
-		assert.Equal(t, 0, trimmed)
+		assert.Empty(t, trimmedIDs)
 		errutil.AssertErrorCode(t, err, "PLAYER_SESSION_TX_COMMIT_FAILED")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("returns parse error when trimmed row contains invalid ULID", func(t *testing.T) {
+		mock, err := pgxmock.NewPool()
+		require.NoError(t, err)
+		defer mock.Close()
+
+		const capN = 3
+		mock.ExpectBegin()
+		mock.ExpectExec(`SELECT pg_advisory_xact_lock`).
+			WithArgs(ps.PlayerID.String()).
+			WillReturnResult(pgxmock.NewResult("SELECT", 1))
+		mock.ExpectExec(`INSERT INTO player_sessions`).
+			WithArgs(ps.ID.String(), ps.PlayerID.String(), ps.TokenHash, ps.UserAgent, ps.IPAddress, ps.ExpiresAt, ps.CreatedAt, ps.UpdatedAt).
+			WillReturnResult(pgxmock.NewResult("INSERT", 1))
+		// Row contains an invalid ULID string.
+		mock.ExpectQuery(`DELETE FROM player_sessions`).
+			WithArgs(ps.PlayerID.String(), ps.ID.String(), capN-1).
+			WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow("not-a-valid-ulid"))
+		mock.ExpectRollback()
+
+		store := NewPostgresPlayerSessionStore(mock)
+		trimmedIDs, err := store.CreateWithCap(context.Background(), ps, capN)
+		require.Error(t, err)
+		assert.Empty(t, trimmedIDs)
+		errutil.AssertErrorCode(t, err, "PLAYER_SESSION_TRIM_PARSE_FAILED")
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 }

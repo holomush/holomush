@@ -78,30 +78,6 @@ const defaultMaxReplay = 1000
 // behavior, never worse.
 const cursorCommitTimeout = 1 * time.Second
 
-// destroyedDrainQuiet is the maximum idle time the live loop waits for
-// additional PG LISTEN/NOTIFY deliveries after Destroyed arrives, before
-// sending STREAM_CLOSED. It must exceed typical NOTIFY propagation (~1ms)
-// by a comfortable margin so events appended just before sessionStore.Delete
-// (e.g. the quit handler's command_response "Goodbye!") are not dropped.
-// 200ms is two orders of magnitude above observed NOTIFY latency and well
-// under both downstream read windows: the telnet gateway's
-// GatewayHandler.drainUntilClosed drainTimeout
-// (internal/telnet/gateway_handler.go) and the test harness's
-// testTelnetClient.ReadUntil 5s default
-// (test/integration/telnet/e2e_test.go).
-const destroyedDrainQuiet = 200 * time.Millisecond
-
-// destroyedDrainHardCap bounds the total time the live loop will spend in
-// the post-Destroyed drain, regardless of ongoing notification arrivals.
-// Without a hard cap, a busy location stream (many chatty characters) can
-// keep resetting destroyedDrainQuiet indefinitely and delay STREAM_CLOSED
-// past both the gateway's drainUntilClosed timer and the test harness's 5s
-// ReadUntil. 1s leaves comfortable headroom under the 5s ReadUntil while
-// staying well below the gateway's drainTimeout, so the client normally
-// receives the server's STREAM_CLOSED before the gateway falls back to
-// its own "Goodbye!" delivery path.
-const destroyedDrainHardCap = 1 * time.Second
-
 // replayCompleteFrame returns a SubscribeResponse containing the
 // REPLAY_COMPLETE control signal.
 func replayCompleteFrame() *corev1.SubscribeResponse {
@@ -432,7 +408,19 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 		if dcErr := s.engine.HandleDisconnect(ctx, char, "quit"); dcErr != nil {
 			slog.WarnContext(ctx, "leave event failed", "error", dcErr)
 		}
-		if delErr := s.sessionStore.Delete(ctx, info.ID, "Goodbye!"); delErr != nil {
+		if endErr := s.engine.EndSession(ctx, char, info.ID,
+			core.SessionEndedCauseQuit, "Goodbye!"); endErr != nil {
+			// If we can't append session_ended, subscribers will not receive
+			// STREAM_CLOSED. Retain the session row so the reaper can retry
+			// (or at least so the row is not orphaned from its audit event).
+			slog.WarnContext(ctx, "session_ended event failed — retaining session row for reap",
+				"session_id", info.ID,
+				"error", endErr,
+			)
+			s.runDisconnectHooks(ctx, *info)
+			return nil
+		}
+		if delErr := s.sessionStore.Delete(ctx, info.ID); delErr != nil {
 			slog.WarnContext(ctx, "session delete failed", "error", delErr)
 		}
 		s.runDisconnectHooks(ctx, *info)
@@ -482,6 +470,25 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 			slog.WarnContext(ctx, "boot leave event failed",
 				"target_id", booted.CharacterRef.ID.String(),
 				"error", dcErr)
+		}
+		if endErr := s.engine.EndSession(ctx, booted.CharacterRef, booted.SessionInfo.ID,
+			core.SessionEndedCauseKicked,
+			"You have been disconnected by an administrator."); endErr != nil {
+			// If we can't append session_ended, subscribers will not receive
+			// STREAM_CLOSED. Retain the session row so the reaper can retry
+			// (or at least so the row is not orphaned from its audit event).
+			slog.WarnContext(ctx, "boot session_ended event failed — retaining session row for reap",
+				"session_id", booted.SessionInfo.ID,
+				"target_id", booted.CharacterRef.ID.String(),
+				"error", endErr)
+			s.runDisconnectHooks(ctx, booted.SessionInfo)
+			continue
+		}
+		if delErr := s.sessionStore.Delete(ctx, booted.SessionInfo.ID); delErr != nil {
+			slog.WarnContext(ctx, "boot session delete failed",
+				"session_id", booted.SessionInfo.ID,
+				"target_id", booted.CharacterRef.ID.String(),
+				"error", delErr)
 		}
 		s.runDisconnectHooks(ctx, booted.SessionInfo)
 	}
@@ -677,76 +684,29 @@ func (s *CoreServer) sendAndCommitEvent(
 			"event_id", ev.ID.String(),
 			"error", updateErr)
 	}
-	return nil
-}
 
-// drainNotificationsUntilQuiet consumes pending sub.Notifications and
-// forwards their events to the client, returning when one of: no new
-// notification arrives within `quiet`, the aggregate drain time reaches
-// `hardCap`, ctx is cancelled, or sub.Errors() fires. Send errors are
-// logged at Warn (not propagated) because the caller is already about to
-// close the stream with STREAM_CLOSED and the stream may already be
-// half-torn-down; we want a visible signal if this ever hides a real bug.
-//
-// The two deadlines address different failure modes:
-//   - `quiet` covers async NOTIFY delivery lag — the quit handler's
-//     command_response event is Appended synchronously before
-//     sessionStore.Delete, but the PG LISTEN/NOTIFY round-trip to the
-//     pgSubscription goroutine runs in the millisecond range. Without a
-//     small wait here, the drain would often see an empty channel at the
-//     exact moment Destroyed arrives.
-//   - `hardCap` prevents busy location streams (many chatty characters)
-//     from resetting the quiet timer indefinitely and delaying
-//     STREAM_CLOSED past downstream windows.
-//
-// Used from the Destroyed branch of the Subscribe live loop to close
-// holomush-umxj Mode B's NOTIFY-delivery-lag sub-problem. The complementary
-// registration-window sub-problem is closed by the atomic check-and-register
-// inside MemStore / PostgresSessionStore.WatchSession.
-func (s *CoreServer) drainNotificationsUntilQuiet(
-	ctx context.Context,
-	info *session.Info,
-	sub core.Subscription,
-	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
-	lf *locationFollower,
-	quiet time.Duration,
-	hardCap time.Duration,
-) {
-	quietTimer := time.NewTimer(quiet)
-	defer quietTimer.Stop()
-	hardTimer := time.NewTimer(hardCap)
-	defer hardTimer.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-hardTimer.C:
-			return
-		case <-sub.Errors():
-			return
-		case notif := <-sub.Notifications():
-			cursor := ulid.ULID{}
-			if c, ok := info.EventCursors[notif.Stream]; ok {
-				cursor = c
-			}
-			last, sendErr := s.replayAndSend(ctx, info, notif.Stream, cursor, stream, lf)
-			if sendErr != nil {
-				slog.WarnContext(ctx, "drain: send failed",
-					"session_id", info.ID, "stream", notif.Stream, "error", sendErr)
-				return
-			}
-			info.EventCursors[notif.Stream] = last
-			if !quietTimer.Stop() {
-				select {
-				case <-quietTimer.C:
-				default:
-				}
-			}
-			quietTimer.Reset(quiet)
-		case <-quietTimer.C:
-			return
+	// Terminal session_ended detection — additive at the tail, AFTER Send +
+	// UpdateCursors. The cursor must already be advanced before we emit
+	// STREAM_CLOSED and return the sentinel, so a reconnect does not
+	// re-replay the session_ended event.
+	//
+	// Design Decision #3: a non-matching session_ended (replay of a prior
+	// session's terminal event on a shared character stream) is forwarded
+	// verbatim — the event is already Sent and the cursor already advanced;
+	// we just return nil. This gives multi-surface clients free "your other
+	// session ended" UX value and guarantees cursors never stall.
+	if ev.Type == core.EventTypeSessionEnded {
+		var payload core.SessionEndedPayload
+		if unmarshalErr := json.Unmarshal(ev.Payload, &payload); unmarshalErr != nil {
+			slog.WarnContext(ctx, "grpc: session_ended payload unmarshal failed — stream left open",
+				"session_id", info.ID, "error", unmarshalErr)
+		} else if payload.SessionID == info.ID {
+			//nolint:errcheck // best-effort: client may already be disconnected
+			_ = grpcStream.Send(streamClosedFrame(payload.Reason))
+			return errStreamTerminated
 		}
 	}
+	return nil
 }
 
 // Subscribe opens a stream of events for the session.
@@ -801,33 +761,6 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	}()
 	if err != nil {
 		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
-	}
-
-	// Register the lifecycle watcher immediately, before replay, so any
-	// Delete fired during the rest of Subscribe setup (AddConnection,
-	// ReattachCAS, RestoreFocus, SubscribeSession, replay) is captured.
-	//
-	// Atomicity note: Get above and WatchSession below do NOT run under a
-	// shared mu — the cursor lock is released before WatchSession is
-	// called. Closure of the Get↔WatchSession window is instead provided
-	// by the store itself: MemStore / PostgresSessionStore.WatchSession
-	// takes its own internal mu, checks session existence, and if the
-	// session has already been deleted by the time mu is acquired it
-	// returns a channel pre-loaded with Destroyed and closed. This makes
-	// the live loop handle the late-delete case as if the notification
-	// had arrived normally. See holomush-umxj Mode B.
-	sessionCh, watchErr := s.sessionStore.WatchSession(ctx, req.SessionId)
-	if watchErr != nil {
-		slog.Warn("failed to watch session lifecycle",
-			"session_id", req.SessionId, "error", watchErr)
-	}
-	// Guard: the Store interface permits (nil, err). A receive on a nil
-	// channel blocks forever, which would leave the live loop observing
-	// no lifecycle events and hanging until ctx cancel. Substitute a
-	// never-firing channel so the select still terminates on ctx.Done()
-	// and sub.Errors() as expected.
-	if sessionCh == nil {
-		sessionCh = make(chan session.Event)
 	}
 
 	// Register the caller's connection in core (bd-j2xj). Connection
@@ -982,8 +915,12 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		s.afterLISTENHook()
 	}
 
-	// 8. Merge-sort replay (I-15).
+	// 8. Merge-sort replay (I-15). errStreamTerminated from a
+	// session_ended event during replay is a graceful close, not an error.
 	if replayErr := s.replayRestorePlan(ctx, info, plan, stream, lf); replayErr != nil {
+		if errors.Is(replayErr, errStreamTerminated) {
+			return nil
+		}
 		return replayErr
 	}
 
@@ -992,9 +929,8 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		return oops.With("session_id", req.SessionId).Wrap(err)
 	}
 
-	// 10. Live loop — single select on Subscription notifications + control + session.
-	// sessionCh was registered earlier (step 1) so any Delete during setup
-	// is captured. See the note there for the rationale.
+	// 10. Live loop — single select on Subscription notifications + control.
+	// Session termination is observed inline via session_ended events.
 	for {
 		select {
 		case <-ctx.Done():
@@ -1013,35 +949,12 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 			}
 			last, sendErr := s.replayAndSend(ctx, info, notif.Stream, cursor, stream, lf)
 			if sendErr != nil {
+				if errors.Is(sendErr, errStreamTerminated) {
+					return nil
+				}
 				return oops.Code("SEND_FAILED").With("session_id", req.SessionId).Wrap(sendErr)
 			}
 			info.EventCursors[notif.Stream] = last
-
-		case ev, ok := <-sessionCh:
-			if !ok {
-				// Defensive fallback: current MemStore and
-				// PostgresSessionStore both always buffer a Destroyed
-				// event into the channel before closing it, so the normal
-				// path takes the ev.Type == Destroyed branch below. A
-				// bare channel close without Destroyed would indicate
-				// either a future Store implementation that skips the
-				// buffered event or a programmer error; in either case,
-				// close the stream with an empty message rather than
-				// hang.
-				//nolint:errcheck // best-effort: client may already be disconnected
-				_ = stream.Send(streamClosedFrame(""))
-				return nil
-			}
-			if ev.Type == session.Destroyed {
-				// Drain pending stream notifications (see
-				// drainNotificationsUntilQuiet) so events emitted just
-				// before Delete reach the client ahead of STREAM_CLOSED.
-				s.drainNotificationsUntilQuiet(ctx, info, sub, stream, lf,
-					destroyedDrainQuiet, destroyedDrainHardCap)
-				//nolint:errcheck // best-effort: client may already be disconnected
-				_ = stream.Send(streamClosedFrame(ev.Message))
-				return nil
-			}
 
 		case ctrl, ok := <-ctrlCh:
 			if !ok {
@@ -1169,7 +1082,24 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 				)
 			}
 
-			if err := s.sessionStore.Delete(ctx, req.SessionId, "Guest session ended"); err != nil {
+			if endErr := s.engine.EndSession(ctx, char, info.ID,
+				core.SessionEndedCauseGuestEnd, "Session ended."); endErr != nil {
+				// If we can't append session_ended, subscribers will not receive
+				// STREAM_CLOSED. Retain the session row so the reaper can retry
+				// (or at least so the row is not orphaned from its audit event).
+				slog.WarnContext(ctx, "guest session_ended event failed — retaining session row for reap",
+					"request_id", requestID,
+					"session_id", info.ID,
+					"error", endErr,
+				)
+				s.runDisconnectHooks(ctx, *info)
+				return &corev1.DisconnectResponse{
+					Meta:    responseMeta(requestID),
+					Success: true,
+				}, nil
+			}
+
+			if err := s.sessionStore.Delete(ctx, req.SessionId); err != nil {
 				slog.WarnContext(ctx, "failed to delete guest session",
 					"request_id", requestID,
 					"error", err,

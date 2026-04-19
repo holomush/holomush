@@ -26,8 +26,8 @@ func (m *mockSessionRepoForReset) Create(_ context.Context, _ *auth.PlayerSessio
 	return nil
 }
 
-func (m *mockSessionRepoForReset) CreateWithCap(_ context.Context, _ *auth.PlayerSession, _ int) (int, error) {
-	return 0, nil
+func (m *mockSessionRepoForReset) CreateWithCap(_ context.Context, _ *auth.PlayerSession, _ int) ([]ulid.ULID, error) {
+	return nil, nil
 }
 
 func (m *mockSessionRepoForReset) GetByTokenHash(_ context.Context, _ string) (*auth.PlayerSession, error) {
