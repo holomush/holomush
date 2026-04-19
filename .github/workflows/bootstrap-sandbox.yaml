@@ -188,38 +188,9 @@ jobs:
             echo "::notice::Tunnel ingress configured: ${DOMAIN} -> gateway:8080"
           fi
 
-      # Step 6: Resolve or create DO Spaces bucket
-      - name: Resolve or create DO Spaces bucket
-        id: bucket
-        env:
-          DO_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-          BUCKET_NAME: ${{ inputs.bucket_name }}
-          REGION: ${{ inputs.region }}
-          DRY_RUN: ${{ inputs.dry_run }}
-        run: |
-          set -euo pipefail
-
-          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
-            -H "Authorization: Bearer ${DO_TOKEN}" \
-            "https://api.digitalocean.com/v2/spaces/${BUCKET_NAME}")
-
-          if [ "${HTTP_STATUS}" = "200" ]; then
-            echo "::notice::Spaces bucket '${BUCKET_NAME}' already exists"
-          elif [ "${DRY_RUN}" = "true" ]; then
-            echo "DRY RUN: would create Spaces bucket '${BUCKET_NAME}' in ${REGION}"
-          else
-            curl -fsSL \
-              -X POST \
-              -H "Authorization: Bearer ${DO_TOKEN}" \
-              -H "Content-Type: application/json" \
-              "https://api.digitalocean.com/v2/spaces" \
-              -d "{\"name\":\"${BUCKET_NAME}\",\"region\":\"${REGION}\"}" \
-              > /dev/null
-            echo "::notice::Created Spaces bucket '${BUCKET_NAME}' in ${REGION}"
-          fi
-          echo "spaces_endpoint=${REGION}.digitaloceanspaces.com" >> "$GITHUB_OUTPUT"
-
-      # Step 7: Resolve or create DO Spaces access key
+      # Step 6: Resolve or create DO Spaces access key
+      # Must run BEFORE bucket creation — access keys are account-scoped and
+      # don't require a pre-existing bucket.
       - name: Resolve or create DO Spaces access key
         id: spaces_key
         env:
@@ -276,9 +247,48 @@ jobs:
             "import sys,json; d=json.load(sys.stdin); print(d['key']['secret_key'])")
 
           echo "::add-mask::${SECRET_KEY}"
+          echo "access_key=${ACCESS_KEY}" >> "$GITHUB_OUTPUT"
           echo "${ACCESS_KEY}" | gh secret set DO_SPACES_ACCESS_KEY
           echo "${SECRET_KEY}" | gh secret set DO_SPACES_SECRET_KEY
           echo "::notice::Created Spaces access key 'holomush-sandbox' and stored in GH Secrets"
+
+      # Step 7: Resolve or create DO Spaces bucket
+      # Uses S3-compatible HEAD check (the DO v2/spaces/<name> endpoint does not exist).
+      - name: Resolve or create DO Spaces bucket
+        id: bucket
+        env:
+          BUCKET_NAME: ${{ inputs.bucket_name }}
+          REGION: ${{ inputs.region }}
+          DO_SPACES_ACCESS_KEY_EXISTING: ${{ steps.spaces_key.outputs.access_key != '' && steps.spaces_key.outputs.access_key
+            || secrets.DO_SPACES_ACCESS_KEY }}
+          DO_SPACES_SECRET_KEY_EXISTING: ${{ secrets.DO_SPACES_SECRET_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "::notice::[dry-run] Would ensure Spaces bucket ${BUCKET_NAME} exists in ${REGION}"
+            echo "spaces_endpoint=${REGION}.digitaloceanspaces.com" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BUCKET_ENDPOINT="https://${BUCKET_NAME}.${REGION}.digitaloceanspaces.com"
+          if curl -fsS --head \
+              -u "${DO_SPACES_ACCESS_KEY_EXISTING:-dummy}:${DO_SPACES_SECRET_KEY_EXISTING:-dummy}" \
+              "${BUCKET_ENDPOINT}" -o /dev/null 2>/dev/null; then
+            echo "::notice::Reusing existing Spaces bucket: ${BUCKET_NAME}"
+          else
+            # Create bucket via S3-compatible API using awscli
+            aws configure set aws_access_key_id "${DO_SPACES_ACCESS_KEY_EXISTING:-dummy}" \
+              --profile dospaces
+            aws configure set aws_secret_access_key "${DO_SPACES_SECRET_KEY_EXISTING:-dummy}" \
+              --profile dospaces
+            aws --profile dospaces \
+              --endpoint-url "https://${REGION}.digitaloceanspaces.com" \
+              s3api create-bucket --bucket "${BUCKET_NAME}"
+            echo "::notice::Created Spaces bucket: ${BUCKET_NAME}"
+          fi
+          echo "spaces_endpoint=${REGION}.digitaloceanspaces.com" >> "$GITHUB_OUTPUT"
 
       # Step 8: Resolve or create DO block volume
       - name: Resolve or create DO block volume
@@ -311,39 +321,52 @@ jobs:
           fi
 
       # Step 9: Resolve or create DO cloud firewall
+      # Uses the DO REST API directly — doctl's --inbound-rules expects a DSL
+      # string (not JSON) and the firewall-sandbox.json shape matches the API
+      # contract after stripping the "comment" fields (not accepted by DO API).
       - name: Resolve or create DO cloud firewall
         id: firewall
         env:
+          DO_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          FW_NAME: holomush-sandbox
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
 
-          FIREWALL_ID=$(doctl compute firewall list --format Name,ID --no-header | \
-            awk '$1=="holomush-sandbox" {print $2}' | head -1)
+          # Check for existing firewall by name
+          EXISTING_FW_ID=$(curl -fsS \
+            -H "Authorization: Bearer ${DO_TOKEN}" \
+            "https://api.digitalocean.com/v2/firewalls?per_page=200" \
+            | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          fws=[f for f in d.get('firewalls',[]) if f.get('name')=='${FW_NAME}']
+          print(fws[0]['id'] if fws else '')
+          " 2>/dev/null || true)
 
-          if [ -n "${FIREWALL_ID}" ]; then
-            echo "::notice::Firewall 'holomush-sandbox' already exists (${FIREWALL_ID})"
-            echo "firewall_id=${FIREWALL_ID}" >> "$GITHUB_OUTPUT"
+          if [ -n "${EXISTING_FW_ID}" ]; then
+            echo "::notice::Reusing existing firewall: ${FW_NAME} (${EXISTING_FW_ID})"
+            FW_ID="${EXISTING_FW_ID}"
           elif [ "${DRY_RUN}" = "true" ]; then
-            echo "DRY RUN: would create firewall 'holomush-sandbox'"
-            echo "firewall_id=dry-run-firewall-id" >> "$GITHUB_OUTPUT"
+            echo "::notice::[dry-run] Would create firewall ${FW_NAME}"
+            FW_ID="dry-run-fw-id"
           else
-            INBOUND_JSON=$(python3 -c "
+            # Strip "comment" fields — not accepted by the DO API
+            FW_JSON=$(python3 -c "
           import json
           fw=json.load(open('deploy/doctl/firewall-sandbox.json'))
-          print(json.dumps(fw.get('inbound_rules',[])))
+          for r in fw.get('inbound_rules',[]): r.pop('comment',None)
+          print(json.dumps(fw))
           ")
-            echo "${INBOUND_JSON}" > /tmp/firewall-inbound.json
-
-            FIREWALL_ID=$(doctl compute firewall create \
-              --name holomush-sandbox \
-              --inbound-rules "$(cat /tmp/firewall-inbound.json)" \
-              --outbound-rules "protocol:tcp,ports:all,address:0.0.0.0/0,address:::/0 protocol:udp,ports:all,address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0" \
-              --format ID \
-              --no-header)
-            echo "::notice::Created firewall 'holomush-sandbox' (${FIREWALL_ID})"
-            echo "firewall_id=${FIREWALL_ID}" >> "$GITHUB_OUTPUT"
+            FW_ID=$(curl -fsS -X POST \
+              -H "Authorization: Bearer ${DO_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "${FW_JSON}" \
+              "https://api.digitalocean.com/v2/firewalls" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin)['firewall']['id'])")
+            echo "::notice::Created firewall: ${FW_NAME} (${FW_ID})"
           fi
+          echo "firewall_id=${FW_ID}" >> "$GITHUB_OUTPUT"
 
       # Step 10: Generate POSTGRES_PASSWORD (ephemeral — lives on droplet only)
       - name: Generate POSTGRES_PASSWORD
@@ -365,11 +388,17 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           TUNNEL_TOKEN: ${{ steps.tunnel.outputs.tunnel_token }}
           PG_PASSWORD: ${{ steps.pg.outputs.password }}
+          KOPIA_PASSWORD: ${{ secrets.KOPIA_SANDBOX_PASSWORD }}
+          BACKUP_S3_ACCESS_KEY_VAL: ${{ steps.spaces_key.outputs.access_key != '' && steps.spaces_key.outputs.access_key ||
+            secrets.DO_SPACES_ACCESS_KEY }}
+          BACKUP_S3_SECRET_KEY_VAL: ${{ secrets.DO_SPACES_SECRET_KEY }}
         run: |
           set -euo pipefail
 
           echo "::add-mask::${TUNNEL_TOKEN}"
           echo "::add-mask::${PG_PASSWORD}"
+          echo "::add-mask::${KOPIA_PASSWORD}"
+          echo "::add-mask::${BACKUP_S3_SECRET_KEY_VAL}"
 
           HOLOMUSH_VERSION=$(gh release list -R holomush/holomush --limit 10 --json tagName,isLatest \
             --jq '.[] | select(.isLatest) | .tagName' 2>/dev/null | head -1 || true)
@@ -385,15 +414,21 @@ jobs:
             "${PG_PASSWORD}" \
             "${BUCKET_NAME}" \
             "${REGION}" \
+            "${KOPIA_PASSWORD}" \
+            "${BACKUP_S3_ACCESS_KEY_VAL}" \
+            "${BACKUP_S3_SECRET_KEY_VAL}" \
             <<'PYEOF'
           import sys
 
-          version    = sys.argv[1]
-          domain     = sys.argv[2]
-          cf_token   = sys.argv[3]
-          pg_pwd     = sys.argv[4]
-          bucket     = sys.argv[5]
-          region     = sys.argv[6]
+          version        = sys.argv[1]
+          domain         = sys.argv[2]
+          cf_token       = sys.argv[3]
+          pg_pwd         = sys.argv[4]
+          bucket         = sys.argv[5]
+          region         = sys.argv[6]
+          kopia_pwd      = sys.argv[7]
+          s3_access_key  = sys.argv[8]
+          s3_secret_key  = sys.argv[9]
 
           cloud_config = """\
           #cloud-config
@@ -422,6 +457,9 @@ jobs:
           export POSTGRES_PASSWORD="{pg_pwd}"
           export BACKUP_S3_BUCKET="{bucket}"
           export BACKUP_S3_ENDPOINT="{region}.digitaloceanspaces.com"
+          export KOPIA_PASSWORD="{kopia_pwd}"
+          export BACKUP_S3_ACCESS_KEY="{s3_access_key}"
+          export BACKUP_S3_SECRET_KEY="{s3_secret_key}"
           export BACKUP_KEEP_DAILY="7"
           export BACKUP_KEEP_WEEKLY="4"
           export BACKUP_KEEP_MONTHLY="6"
@@ -529,18 +567,37 @@ jobs:
       # Step 14: Apply firewall to droplet
       - name: Apply firewall to droplet
         env:
+          DO_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
           FIREWALL_ID: ${{ steps.firewall.outputs.firewall_id }}
           DROPLET_ID: ${{ steps.droplet.outputs.droplet_id }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
-          if [ "${DRY_RUN}" = "true" ]; then
-            echo "DRY RUN: would apply firewall ${FIREWALL_ID} to droplet ${DROPLET_ID}"
-            exit 0
+
+          # Check if firewall is already applied to this droplet
+          ALREADY_APPLIED=$(curl -fsS \
+            -H "Authorization: Bearer ${DO_TOKEN}" \
+            "https://api.digitalocean.com/v2/firewalls/${FIREWALL_ID}" \
+            | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          ids=d.get('firewall',{}).get('droplet_ids',[])
+          droplet_id=int('${DROPLET_ID}') if '${DROPLET_ID}'.isdigit() else None
+          print('yes' if droplet_id in ids else '')
+          " 2>/dev/null || true)
+
+          if [ -n "${ALREADY_APPLIED}" ]; then
+            echo "::notice::Firewall already applied to droplet ${DROPLET_ID}"
+          elif [ "${DRY_RUN}" = "true" ]; then
+            echo "::notice::[dry-run] Would apply firewall ${FIREWALL_ID} to droplet ${DROPLET_ID}"
+          else
+            curl -fsS -X POST \
+              -H "Authorization: Bearer ${DO_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"droplet_ids\":[${DROPLET_ID}]}" \
+              "https://api.digitalocean.com/v2/firewalls/${FIREWALL_ID}/droplets"
+            echo "::notice::Applied firewall ${FIREWALL_ID} to droplet ${DROPLET_ID}"
           fi
-          doctl compute firewall add-droplets "${FIREWALL_ID}" \
-            --droplet-ids "${DROPLET_ID}"
-          echo "::notice::Applied firewall ${FIREWALL_ID} to droplet ${DROPLET_ID}"
 
       # Step 15: Wait for cloud-init to finish
       - name: Wait for cloud-init
