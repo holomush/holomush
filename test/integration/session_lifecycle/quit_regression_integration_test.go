@@ -91,26 +91,43 @@ var _ = Describe("Quit Regression", func() {
 			Expect(err).NotTo(HaveOccurred())
 			charID := sessInfo.CharacterID
 
-			// Issue quit with a context we cancel immediately after.
+			// Issue quit in a goroutine and cancel the context immediately —
+			// the cancel races with the handler, simulating a real mid-quit
+			// client drop. The cancel must arrive BEFORE HandleCommand
+			// returns, not after (otherwise it tests nothing — the server
+			// has already completed).
 			quitCtx, quitCancel := context.WithCancel(testCtx)
-			resp, err := srv.grpcCli.HandleCommand(quitCtx, &corev1.HandleCommandRequest{
-				SessionId:          sessionID,
-				Command:            "quit",
-				PlayerSessionToken: token,
-			})
-			// Cancel after the call returns — simulates a client drop.
+			type quitResult struct {
+				resp *corev1.HandleCommandResponse
+				err  error
+			}
+			done := make(chan quitResult, 1)
+			go func() {
+				resp, err := srv.grpcCli.HandleCommand(quitCtx, &corev1.HandleCommandRequest{
+					SessionId:          sessionID,
+					Command:            "quit",
+					PlayerSessionToken: token,
+				})
+				done <- quitResult{resp: resp, err: err}
+			}()
+			// Cancel immediately — this races the quit handler.
 			quitCancel()
+
+			// Wait for the RPC to return (success or cancellation) before
+			// asserting on persisted events.
+			var qr quitResult
+			Eventually(done, 10*time.Second, 10*time.Millisecond).Should(Receive(&qr))
 
 			// The quit may succeed or the context may have raced: in either case,
 			// the session_ended event MUST be persisted because EndSession uses a
 			// decoupled background context.
-			if err != nil {
+			if qr.err != nil {
 				// If the RPC was cancelled before the server finished, tolerate it.
-				st, ok := status.FromError(err)
+				st, ok := status.FromError(qr.err)
 				Expect(ok).To(BeTrue())
 				Expect(st.Code()).To(BeElementOf(codes.Canceled, codes.OK))
 			} else {
-				Expect(resp.Success).To(BeTrue())
+				Expect(qr.resp.Success).To(BeTrue())
 			}
 
 			charStream := core.StreamPrefixCharacter + charID.String()
@@ -135,24 +152,37 @@ var _ = Describe("Quit Regression", func() {
 	})
 
 	Describe("replay isolation", func() {
-		It("does not self-terminate a new Subscribe when prior session_ended is in replay", func() {
-			// Session 1: player quits — this writes a session_ended event to the
-			// character stream that will be present in replay for a future session.
-			sessionID1, _, token1 := loginAsGuest(testCtx, srv.grpcCli)
-			sessInfo1, err := env.sessionStore.Get(testCtx, sessionID1)
+		It("does not self-terminate a new Subscribe when a prior non-matching session_ended is replayed on the same character stream", func() {
+			// Create a session and get its character stream.
+			sessionID2, _, token2 := loginAsGuest(testCtx, srv.grpcCli)
+			sessInfo2, err := env.sessionStore.Get(testCtx, sessionID2)
 			Expect(err).NotTo(HaveOccurred())
-			charID := sessInfo1.CharacterID
-
-			resp, err := srv.grpcCli.HandleCommand(testCtx, &corev1.HandleCommandRequest{
-				SessionId:          sessionID1,
-				Command:            "quit",
-				PlayerSessionToken: token1,
-			})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(resp.Success).To(BeTrue())
-
-			// Wait for session_ended to be persisted before creating a new session.
+			charID := sessInfo2.CharacterID
 			charStream := core.StreamPrefixCharacter + charID.String()
+
+			// Manufacture a prior session_ended event on THIS character's
+			// stream that references a DIFFERENT session ID. This is the
+			// scenario a naive implementation gets wrong: a stale terminal
+			// event from a previous session replayed into a new Subscribe
+			// would incorrectly close the new stream.
+			staleSessionID := core.NewULID().String()
+			stalePayload, marshalErr := json.Marshal(core.SessionEndedPayload{
+				SessionID:   staleSessionID,
+				CharacterID: charID.String(),
+				Cause:       core.SessionEndedCauseQuit,
+				Reason:      "stale",
+			})
+			Expect(marshalErr).NotTo(HaveOccurred())
+			staleEvent := core.NewEvent(
+				charStream,
+				core.EventTypeSessionEnded,
+				core.Actor{Kind: core.ActorCharacter, ID: charID.String()},
+				stalePayload,
+			)
+			Expect(env.eventStore.Append(testCtx, staleEvent)).To(Succeed())
+
+			// Sanity: the stale event is now in the stream and will be
+			// replayed when a new Subscribe opens.
 			Eventually(func() bool {
 				events, replayErr := env.eventStore.Replay(testCtx, charStream, ulid.ULID{}, 100)
 				if replayErr != nil {
@@ -160,19 +190,23 @@ var _ = Describe("Quit Regression", func() {
 				}
 				for _, e := range events {
 					if e.Type == core.EventTypeSessionEnded {
-						return true
+						var p core.SessionEndedPayload
+						if jsonErr := json.Unmarshal(e.Payload, &p); jsonErr != nil {
+							return false
+						}
+						if p.SessionID == staleSessionID {
+							return true
+						}
 					}
 				}
 				return false
-			}, 5*time.Second, 50*time.Millisecond).Should(BeTrue())
+			}, 5*time.Second, 50*time.Millisecond).Should(BeTrue(),
+				"stale session_ended must be persisted before Subscribe opens")
 
-			// Session 2: a NEW guest session on a different character — we use a
-			// fresh guest login. The prior session_ended is for session1/char1 only.
-			// The new Subscribe must NOT terminate due to that prior event.
-			sessionID2, _, token2 := loginAsGuest(testCtx, srv.grpcCli)
-			Expect(sessionID2).NotTo(Equal(sessionID1))
-
-			// Open Subscribe and drain it for a moment — it should NOT close itself.
+			// Open Subscribe and drain it for a moment — it must forward the
+			// non-matching session_ended frame WITHOUT emitting STREAM_CLOSED
+			// (the control signal must only fire for session_ended events
+			// that reference the currently-subscribed session).
 			subCtx, subCancel := context.WithTimeout(testCtx, 3*time.Second)
 			defer subCancel()
 
@@ -182,12 +216,11 @@ var _ = Describe("Quit Regression", func() {
 			})
 			Expect(subErr).NotTo(HaveOccurred())
 
-			// Drain frames for up to 3 seconds; we must NOT receive STREAM_CLOSED.
 			gotStreamClosed := false
 			for {
 				msg, recvErr := stream.Recv()
 				if recvErr != nil {
-					// context deadline/cancel is expected at 3s — that's fine.
+					// Context deadline/cancel at 3s is expected.
 					break
 				}
 				ctrl := msg.GetControl()
@@ -197,7 +230,7 @@ var _ = Describe("Quit Regression", func() {
 				}
 			}
 			Expect(gotStreamClosed).To(BeFalse(),
-				"a prior session_ended for a different session MUST NOT terminate a new Subscribe")
+				"a prior session_ended that does NOT match the current session MUST NOT terminate a new Subscribe")
 		})
 	})
 })

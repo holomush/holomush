@@ -165,7 +165,7 @@ var _ = Describe("Cross-stream ordering (I2 invariant)", func() {
 		charEvents, err := env.eventStore.Replay(testCtx, charStream, ulid.ULID{}, 100)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(charEvents).To(HaveLen(1),
-			"character stream must have exactly one event (session_ended) when only quit is issued")
+			"character stream must only carry session_ended; say/leave events land on the location stream")
 		Expect(charEvents[0].Type).To(Equal(core.EventTypeSessionEnded),
 			"the sole character-stream event must be session_ended")
 

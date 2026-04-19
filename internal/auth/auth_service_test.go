@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -566,13 +567,37 @@ func TestAuthenticatePlayerEvictionFanoutContinuesOnEndSessionError(t *testing.T
 	require.NoError(t, authErr)
 	assert.NotEmpty(t, tok)
 	require.NotNil(t, gotPlayer)
+
+	// Assert that EndSession was attempted for BOTH evicted children — the
+	// fanout loop must not stop after the first failure. One Append per
+	// child's session_ended event means we expect exactly 2 calls.
+	assert.Equal(t, 2, failingStore.SessionEndedAppendCount(),
+		"fanout must attempt EndSession for every evicted child, not stop after the first failure")
 }
 
-// failingEventStore is a test double that rejects all Append calls.
-type failingEventStore struct{}
+// failingEventStore is a test double that rejects all Append calls. It counts
+// Append calls per event type so tests can assert that the eviction fanout
+// attempted EndSession for every child before giving up.
+type failingEventStore struct {
+	mu                  sync.Mutex
+	sessionEndedAppends int
+}
 
-func (f *failingEventStore) Append(_ context.Context, _ core.Event) error {
+func (f *failingEventStore) Append(_ context.Context, ev core.Event) error {
+	f.mu.Lock()
+	if ev.Type == core.EventTypeSessionEnded {
+		f.sessionEndedAppends++
+	}
+	f.mu.Unlock()
 	return errors.New("event store down")
+}
+
+// SessionEndedAppendCount returns the number of Append attempts for
+// session_ended events.
+func (f *failingEventStore) SessionEndedAppendCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.sessionEndedAppends
 }
 
 func (f *failingEventStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {

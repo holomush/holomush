@@ -2506,6 +2506,12 @@ func TestGatewayHandlerDisconnect(t *testing.T) {
 
 	assert.True(t, h.quitting, "quitting must be set so the handler exits")
 	assert.True(t, h.loggingOut, "loggingOut must be set to skip the character picker")
+
+	// Auth/session state must be cleared so the deferred Disconnect in Handle
+	// does NOT re-fire Disconnect for the connection we just removed.
+	assert.False(t, h.authed, "authed must be cleared after successful Disconnect")
+	assert.Empty(t, h.sessionID, "sessionID must be cleared after successful Disconnect")
+	assert.Empty(t, h.connectionID, "connectionID must be cleared after successful Disconnect")
 }
 
 // TestGatewayHandlerDisconnect_WhenNotAuthed verifies that "disconnect" before
@@ -2625,6 +2631,14 @@ func TestGatewayHandlerDisconnect_RPCError(t *testing.T) {
 	// State flags still set so the handler exits cleanly.
 	assert.True(t, h.quitting, "quitting must be set even when RPC fails")
 	assert.True(t, h.loggingOut, "loggingOut must be set even when RPC fails")
+
+	// Auth/session state cleared even on RPC error so the deferred Disconnect
+	// in Handle does NOT re-fire. The server may or may not have removed the
+	// connection, but the client cannot know; clearing state avoids a
+	// guaranteed-duplicate teardown attempt.
+	assert.False(t, h.authed, "authed must be cleared even when RPC fails")
+	assert.Empty(t, h.sessionID, "sessionID must be cleared even when RPC fails")
+	assert.Empty(t, h.connectionID, "connectionID must be cleared even when RPC fails")
 }
 
 func TestSendSetsWriteDeadline(t *testing.T) {

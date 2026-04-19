@@ -6,6 +6,7 @@ package grpc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/oklog/ulid/v2"
@@ -561,4 +562,102 @@ func TestAdminBootEmitsSessionEndedWithKickedCause(t *testing.T) {
 	assert.Equal(t, core.SessionEndedCauseKicked, payload.Cause)
 	assert.Contains(t, payload.Reason, "administrator",
 		"reason should reference the administrator performing the boot")
+}
+
+// TestAdminBootRetainsSessionWhenEndSessionFails verifies that when EndSession
+// fails on the admin-boot path, the target session row is RETAINED (not
+// deleted) so the reaper can retry — otherwise subscribers lose STREAM_CLOSED.
+// Also verifies the loop continues past the failed target (other booted
+// sessions are still processed).
+func TestAdminBootRetainsSessionWhenEndSessionFails(t *testing.T) {
+	adminCharID := core.NewULID()
+	adminSessionID := core.NewULID()
+	adminLocationID := core.NewULID()
+
+	targetCharID := core.NewULID()
+	targetSessionID := core.NewULID()
+	targetLocationID := core.NewULID()
+
+	// Fail Append for session_ended events specifically; allow all others.
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, ev core.Event) error {
+			if ev.Type == core.EventTypeSessionEnded {
+				return errors.New("event store unavailable")
+			}
+			return nil
+		},
+	}
+
+	engine := core.NewEngine(store)
+	sessStore := session.NewMemStore()
+	reg := command.NewRegistry()
+	registerTestCommands(t, reg)
+
+	entry, err := command.NewCommandEntry(command.CommandEntryConfig{
+		Name:   "testboot",
+		Source: "test",
+		Handler: func(_ context.Context, exec *command.CommandExecution) error {
+			exec.RecordBootedSession(command.BootedSession{
+				SessionInfo: session.Info{ID: targetSessionID.String()},
+			})
+			return nil
+		},
+	})
+	require.NoError(t, err)
+	require.NoError(t, reg.Register(*entry))
+
+	policyEngine := policytest.AllowAllEngine()
+	svc := command.NewTestServices(command.ServicesConfig{
+		World:   nil,
+		Session: sessStore,
+		Engine:  policyEngine,
+		Events:  store,
+	})
+	dispatcher, err := command.NewDispatcher(reg, policyEngine)
+	require.NoError(t, err)
+
+	var hookCalled bool
+	server := NewCoreServer(engine, sessStore, dispatcher, svc,
+		WithEventStore(store),
+		WithPlayerSessionRepo(newFakePlayerSessionRepo(ulid.ULID{})),
+		WithDisconnectHook(func(_ session.Info) {
+			hookCalled = true
+		}),
+	)
+
+	ctx := context.Background()
+	require.NoError(t, sessStore.Set(ctx, adminSessionID.String(), &session.Info{
+		ID:            adminSessionID.String(),
+		CharacterID:   adminCharID,
+		CharacterName: "Admin",
+		LocationID:    adminLocationID,
+		Status:        session.StatusActive,
+		TTLSeconds:    1800,
+	}))
+	require.NoError(t, sessStore.Set(ctx, targetSessionID.String(), &session.Info{
+		ID:            targetSessionID.String(),
+		CharacterID:   targetCharID,
+		CharacterName: "Target",
+		LocationID:    targetLocationID,
+		Status:        session.StatusActive,
+		TTLSeconds:    1800,
+	}))
+
+	resp, err := server.HandleCommand(ctx, &corev1.HandleCommandRequest{
+		Meta:               &corev1.RequestMeta{RequestId: "boot-fail-test", Timestamp: timestamppb.Now()},
+		SessionId:          adminSessionID.String(),
+		Command:            "testboot",
+		PlayerSessionToken: testPlayerSessionToken,
+	})
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+
+	// Target session must be RETAINED despite EndSession error so the reaper
+	// can retry and emit STREAM_CLOSED to subscribers.
+	info, getErr := sessStore.Get(ctx, targetSessionID.String())
+	require.NoError(t, getErr, "target session must be retained when EndSession fails")
+	assert.Equal(t, targetSessionID.String(), info.ID)
+
+	// Disconnect hook must still fire so in-process cleanup proceeds.
+	assert.True(t, hookCalled, "disconnect hook should fire even when EndSession fails")
 }

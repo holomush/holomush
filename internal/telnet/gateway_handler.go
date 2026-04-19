@@ -702,6 +702,14 @@ func (h *GatewayHandler) handleDisconnect(ctx context.Context) {
 	}
 
 	h.send("Disconnected. Other surfaces remain active.")
+	// Clear auth/session state so the deferred teardown in Handle does NOT
+	// re-fire Disconnect for the connection we just removed. Keep quitting
+	// and loggingOut true so the main loop exits (and skips the
+	// character-picker branch) — the eventRecv channel will close naturally
+	// when the server-side subscription for this connection tears down.
+	h.authed = false
+	h.sessionID = ""
+	h.connectionID = ""
 	h.quitting = true
 	h.loggingOut = true // skip the "return to character picker" branch
 }

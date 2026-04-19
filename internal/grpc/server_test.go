@@ -3589,19 +3589,18 @@ func TestSubscribeRegistersConnectionWithClientTypeFromRequest(t *testing.T) {
 // Session-ended emission error path tests (session lifecycle events, 9es6)
 // =============================================================================
 
-// TestCoreServer_HandleCommand_QuitEmitsSessionEndedEvenWhenEndSessionFails verifies
-// that when EndSession returns an error on the quit path, the session is still
-// deleted and the disconnect hook still fires — error is logged but not fatal.
-func TestCoreServer_HandleCommand_QuitEmitsSessionEndedEvenWhenEndSessionFails(t *testing.T) {
+// TestCoreServer_HandleCommand_QuitRetainsSessionWhenEndSessionFails verifies
+// that when EndSession returns an error on the quit path, the session row is
+// RETAINED (not deleted) so the reaper can retry — otherwise subscribers lose
+// STREAM_CLOSED. The disconnect hook still fires either way.
+func TestCoreServer_HandleCommand_QuitRetainsSessionWhenEndSessionFails(t *testing.T) {
 	charID := core.NewULID()
 	sessionID := core.NewULID()
 	locationID := core.NewULID()
 
 	// Fail Append for session_ended events specifically; allow all others.
-	appendCallCount := 0
 	store := &mockEventStore{
 		appendFunc: func(_ context.Context, ev core.Event) error {
-			appendCallCount++
 			if ev.Type == core.EventTypeSessionEnded {
 				return errors.New("event store unavailable")
 			}
@@ -3639,11 +3638,72 @@ func TestCoreServer_HandleCommand_QuitEmitsSessionEndedEvenWhenEndSessionFails(t
 	require.NoError(t, err)
 	assert.True(t, resp.Success)
 
-	// Session must be deleted despite EndSession error.
-	_, getErr := sessStore.Get(ctx, sessionID.String())
-	assert.Error(t, getErr, "session should be deleted after quit even when EndSession fails")
+	// Session must be RETAINED despite EndSession error so the reaper can retry
+	// and emit STREAM_CLOSED to subscribers. Deleting without session_ended
+	// strands subscribers and loses the audit event.
+	info, getErr := sessStore.Get(ctx, sessionID.String())
+	require.NoError(t, getErr, "session must be retained when EndSession fails")
+	assert.Equal(t, sessionID.String(), info.ID)
 
-	// Disconnect hook must still fire.
+	// Disconnect hook must still fire so in-process cleanup proceeds.
+	assert.True(t, hookCalled, "disconnect hook should fire even when EndSession fails")
+}
+
+// TestCoreServer_Disconnect_GuestRetainsSessionWhenEndSessionFails verifies that
+// when EndSession returns an error during guest disconnect, the guest session row
+// is RETAINED (not deleted) so the reaper can retry — otherwise subscribers lose
+// STREAM_CLOSED.
+func TestCoreServer_Disconnect_GuestRetainsSessionWhenEndSessionFails(t *testing.T) {
+	charID := core.NewULID()
+	sessionID := core.NewULID()
+	locationID := core.NewULID()
+
+	// Fail Append for session_ended events specifically; allow all others.
+	store := &mockEventStore{
+		appendFunc: func(_ context.Context, ev core.Event) error {
+			if ev.Type == core.EventTypeSessionEnded {
+				return errors.New("event store unavailable")
+			}
+			return nil
+		},
+	}
+
+	sessStore := session.NewMemStore()
+	ctx := context.Background()
+	require.NoError(t, sessStore.Set(ctx, sessionID.String(), &session.Info{
+		ID:            sessionID.String(),
+		CharacterID:   charID,
+		LocationID:    locationID,
+		CharacterName: "GuestChar",
+		IsGuest:       true,
+		Status:        session.StatusActive,
+		TTLSeconds:    1800,
+	}))
+
+	var hookCalled bool
+	server := newHandleCommandServer(t, store, sessStore,
+		WithDisconnectHook(func(_ session.Info) {
+			hookCalled = true
+		}),
+	)
+
+	req := &corev1.DisconnectRequest{
+		Meta:               &corev1.RequestMeta{RequestId: "guest-end-session-fail", Timestamp: timestamppb.Now()},
+		SessionId:          sessionID.String(),
+		PlayerSessionToken: testPlayerSessionToken,
+	}
+
+	resp, err := server.Disconnect(ctx, req)
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+
+	// Guest session must be RETAINED despite EndSession error so the reaper can
+	// retry and emit STREAM_CLOSED to subscribers.
+	info, getErr := sessStore.Get(ctx, sessionID.String())
+	require.NoError(t, getErr, "guest session must be retained when EndSession fails")
+	assert.Equal(t, sessionID.String(), info.ID)
+
+	// Disconnect hook must still fire so in-process cleanup proceeds.
 	assert.True(t, hookCalled, "disconnect hook should fire even when EndSession fails")
 }
 

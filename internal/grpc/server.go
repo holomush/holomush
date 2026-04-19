@@ -410,10 +410,15 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 		}
 		if endErr := s.engine.EndSession(ctx, char, info.ID,
 			core.SessionEndedCauseQuit, "Goodbye!"); endErr != nil {
-			slog.WarnContext(ctx, "session_ended event failed",
+			// If we can't append session_ended, subscribers will not receive
+			// STREAM_CLOSED. Retain the session row so the reaper can retry
+			// (or at least so the row is not orphaned from its audit event).
+			slog.WarnContext(ctx, "session_ended event failed — retaining session row for reap",
 				"session_id", info.ID,
 				"error", endErr,
 			)
+			s.runDisconnectHooks(ctx, *info)
+			return nil
 		}
 		if delErr := s.sessionStore.Delete(ctx, info.ID); delErr != nil {
 			slog.WarnContext(ctx, "session delete failed", "error", delErr)
@@ -469,10 +474,15 @@ func (s *CoreServer) executeViaDispatcher(ctx context.Context, info *session.Inf
 		if endErr := s.engine.EndSession(ctx, booted.CharacterRef, booted.SessionInfo.ID,
 			core.SessionEndedCauseKicked,
 			"You have been disconnected by an administrator."); endErr != nil {
-			slog.WarnContext(ctx, "boot session_ended event failed",
+			// If we can't append session_ended, subscribers will not receive
+			// STREAM_CLOSED. Retain the session row so the reaper can retry
+			// (or at least so the row is not orphaned from its audit event).
+			slog.WarnContext(ctx, "boot session_ended event failed — retaining session row for reap",
 				"session_id", booted.SessionInfo.ID,
 				"target_id", booted.CharacterRef.ID.String(),
 				"error", endErr)
+			s.runDisconnectHooks(ctx, booted.SessionInfo)
+			continue
 		}
 		if delErr := s.sessionStore.Delete(ctx, booted.SessionInfo.ID); delErr != nil {
 			slog.WarnContext(ctx, "boot session delete failed",
@@ -1074,11 +1084,19 @@ func (s *CoreServer) Disconnect(ctx context.Context, req *corev1.DisconnectReque
 
 			if endErr := s.engine.EndSession(ctx, char, info.ID,
 				core.SessionEndedCauseGuestEnd, "Session ended."); endErr != nil {
-				slog.WarnContext(ctx, "guest session_ended event failed",
+				// If we can't append session_ended, subscribers will not receive
+				// STREAM_CLOSED. Retain the session row so the reaper can retry
+				// (or at least so the row is not orphaned from its audit event).
+				slog.WarnContext(ctx, "guest session_ended event failed — retaining session row for reap",
 					"request_id", requestID,
 					"session_id", info.ID,
 					"error", endErr,
 				)
+				s.runDisconnectHooks(ctx, *info)
+				return &corev1.DisconnectResponse{
+					Meta:    responseMeta(requestID),
+					Success: true,
+				}, nil
 			}
 
 			if err := s.sessionStore.Delete(ctx, req.SessionId); err != nil {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -818,10 +819,47 @@ func TestLogoutEmitsSessionEndedForEachChildGameSession(t *testing.T) {
 	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
 	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).Return(ps, nil).Once()
 
+	// Expected character -> session mapping. Both children MUST have their
+	// session_ended events on the correct character's stream with the correct
+	// session ID before authService.Logout is called. Asserting inside
+	// logoutFunc ensures the fanout completed before the handler delegated.
+	expectedSessionByChar := map[string]string{
+		char1ID.String(): sess1ID.String(),
+		char2ID.String(): sess2ID.String(),
+	}
+
 	authSvc := newMockAuthService(t)
-	authSvc.logoutFunc = func(_ context.Context, th string) (ulid.ULID, error) {
+	authSvc.logoutFunc = func(logoutCtx context.Context, th string) (ulid.ULID, error) {
 		require.Equal(t, tokenHash, th)
 		authSvc.logoutCalled = true
+
+		// Fanout must have completed before authService.Logout is called.
+		// Assert the exact char -> session pairing for every child.
+		for charIDStr, wantSessID := range expectedSessionByChar {
+			stream := "character:" + charIDStr
+			events, replayErr := store.Replay(logoutCtx, stream, ulid.ULID{}, 100)
+			require.NoError(t, replayErr)
+
+			var found *core.Event
+			for i := range events {
+				if events[i].Type == core.EventTypeSessionEnded {
+					found = &events[i]
+					break
+				}
+			}
+			require.NotNilf(t, found,
+				"expected session_ended on stream %s before authService.Logout", stream)
+
+			var payload core.SessionEndedPayload
+			require.NoError(t, json.Unmarshal(found.Payload, &payload))
+			assert.Equal(t, core.SessionEndedCauseLogout, payload.Cause,
+				"session_ended on stream %s should have cause=logout", stream)
+			assert.Equal(t, charIDStr, payload.CharacterID,
+				"session_ended on stream %s must carry its own character id", stream)
+			assert.Equal(t, wantSessID, payload.SessionID,
+				"session_ended on stream %s must reference that character's session, not another's", stream)
+		}
+
 		return playerID, nil
 	}
 
@@ -841,36 +879,6 @@ func TestLogoutEmitsSessionEndedForEachChildGameSession(t *testing.T) {
 
 	// authService.Logout must have been called exactly once.
 	assert.True(t, authSvc.logoutCalled, "authService.Logout was not called")
-
-	// Build the set of known child session IDs for membership checks below.
-	knownSessionIDs := map[string]bool{
-		sess1ID.String(): true,
-		sess2ID.String(): true,
-	}
-
-	// Both character streams must have a session_ended event with cause=logout.
-	for _, charID := range []ulid.ULID{char1ID, char2ID} {
-		stream := "character:" + charID.String()
-		events, replayErr := store.Replay(ctx, stream, ulid.ULID{}, 100)
-		require.NoError(t, replayErr)
-
-		var found *core.Event
-		for i := range events {
-			if events[i].Type == core.EventTypeSessionEnded {
-				found = &events[i]
-				break
-			}
-		}
-		require.NotNil(t, found, "expected session_ended on stream %s", stream)
-
-		var payload core.SessionEndedPayload
-		require.NoError(t, json.Unmarshal(found.Payload, &payload))
-		assert.Equal(t, core.SessionEndedCauseLogout, payload.Cause,
-			"session_ended on stream %s should have cause=logout", stream)
-		assert.Equal(t, charID.String(), payload.CharacterID)
-		assert.True(t, knownSessionIDs[payload.SessionID],
-			"session_ended on stream %s has unexpected SessionID %q", stream, payload.SessionID)
-	}
 }
 
 func TestLogout_Success(t *testing.T) {
@@ -1907,8 +1915,17 @@ func TestLogoutFanoutContinuesAfterIndividualSessionErrors(t *testing.T) {
 	// Make EndSession fail for first session by using a failing event store for it.
 	// We'll use MemStore which pre-populates both sessions; EndSession goes via
 	// the engine. Use a mockEventStore that rejects Append for session_ended.
+	// Track per-type append counts so we can assert the fanout attempted
+	// EndSession for BOTH children (not just the first one before giving up).
+	var appendMu sync.Mutex
+	sessionEndedAppends := 0
 	failingStore := &mockEventStore{
 		appendFunc: func(_ context.Context, ev core.Event) error {
+			appendMu.Lock()
+			if ev.Type == core.EventTypeSessionEnded {
+				sessionEndedAppends++
+			}
+			appendMu.Unlock()
 			if ev.Type == core.EventTypeSessionEnded {
 				return errors.New("event store unavailable")
 			}
@@ -1961,4 +1978,11 @@ func TestLogoutFanoutContinuesAfterIndividualSessionErrors(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.True(t, authSvc.logoutCalled, "authService.Logout must still be called when individual session errors occur")
+
+	// Both children must have had EndSession attempted — fanout must not stop
+	// after the first failure.
+	appendMu.Lock()
+	defer appendMu.Unlock()
+	assert.Equal(t, 2, sessionEndedAppends,
+		"logout fanout must attempt EndSession for every child game session, not stop after the first failure")
 }
