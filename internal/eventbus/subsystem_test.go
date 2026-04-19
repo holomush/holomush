@@ -113,6 +113,39 @@ func TestSubsystemResolvesXDGStoreDirWhenBlank(t *testing.T) {
 	require.NotNil(t, bus.JS())
 }
 
+func TestSubsystemPrometheusExporterStartsWhenMonitorPortSet(t *testing.T) {
+	t.Parallel()
+	cfg := eventbus.Config{
+		StoreDir:           t.TempDir(),
+		MonitorPort:        -1, // random port; subsystem reads back via MonitorAddr.
+		PrometheusExporter: true,
+		ExporterPort:       0, // random exporter port.
+	}.Defaults()
+	bus := eventbus.NewSubsystemWithStorage(cfg, jetstream.MemoryStorage)
+	require.NoError(t, bus.Start(context.Background()))
+	t.Cleanup(func() { _ = bus.Stop(context.Background()) })
+
+	// The subsystem must expose JetStream and the exporter must be stoppable
+	// without error — regression for the "exporter leaked after Stop" bug.
+	require.NotNil(t, bus.JS())
+	require.NoError(t, bus.Stop(context.Background()))
+	require.Nil(t, bus.JS())
+}
+
+func TestSubsystemPrometheusExporterRequiresMonitorPort(t *testing.T) {
+	t.Parallel()
+	cfg := eventbus.Config{
+		StoreDir:           t.TempDir(),
+		MonitorPort:        0, // disabled
+		PrometheusExporter: true,
+	}.Defaults()
+	bus := eventbus.NewSubsystemWithStorage(cfg, jetstream.MemoryStorage)
+	err := bus.Start(context.Background())
+	require.Error(t, err, "PrometheusExporter=true + MonitorPort=0 must fail at Start")
+	// No leaks: a second Stop must be a clean no-op.
+	require.NoError(t, bus.Stop(context.Background()))
+}
+
 func TestConfigDefaultsPreserveExplicitValues(t *testing.T) {
 	t.Parallel()
 	c := eventbus.Config{
@@ -127,4 +160,31 @@ func TestConfigDefaultsPreserveExplicitValues(t *testing.T) {
 	assert.Equal(t, "/tmp/custom", c.StoreDir)
 	assert.Equal(t, 1*time.Hour, c.StreamMaxAge)
 	assert.Equal(t, 5*time.Minute, c.DupeWindow)
+}
+
+// TestSubsystemStartRollsBackWhenPrometheusExporterRequiresUnboundMonitor
+// exercises the rollback branch when the operator has enabled the
+// Prometheus exporter but the embedded NATS server's HTTP monitor port
+// is unbound (MonitorPort == 0 disables monitoring entirely). Start MUST
+// reject with EVENTBUS_EXPORTER_MONITOR_UNBOUND and leave no server /
+// conn / js state behind — otherwise a subsequent retry would collide
+// with the stranded NATS filestore.
+func TestSubsystemStartRollsBackWhenPrometheusExporterRequiresUnboundMonitor(t *testing.T) {
+	t.Parallel()
+	cfg := eventbus.Config{
+		StoreDir:           t.TempDir(),
+		PrometheusExporter: true,
+		MonitorPort:        0, // explicitly disabled → rollback path
+	}.Defaults()
+	sub := eventbus.NewSubsystemWithStorage(cfg, jetstream.MemoryStorage)
+	err := sub.Start(context.Background())
+	require.Error(t, err)
+	// The oops code is metadata; the error message carries the hint.
+	assert.Contains(t, err.Error(), "MonitorPort")
+	// Rollback: after a failed Start the subsystem MUST be safe to retry
+	// (no dangling server, conn, or js reference).
+	assert.Nil(t, sub.JS(), "JS should be nil after failed Start rollback")
+	assert.Nil(t, sub.Conn(), "Conn should be nil after failed Start rollback")
+	// Stop on a failed Start must be a safe no-op (idempotent).
+	require.NoError(t, sub.Stop(context.Background()))
 }

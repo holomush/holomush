@@ -12,8 +12,10 @@ import (
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	natsexporter "github.com/nats-io/prometheus-nats-exporter/exporter"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/eventbus/telemetry"
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/xdg"
 )
@@ -35,6 +37,12 @@ const embeddedClientName = "holomush-host"
 // become ready for in-process connections.
 const readyTimeout = 10 * time.Second
 
+// startExporterFn is the seam Start() uses to launch the NATS exporter.
+// In production it wraps telemetry.StartNATSExporter. Tests can override
+// it to exercise the exporter-start-failure rollback branch without
+// needing a real exporter port conflict.
+var startExporterFn = telemetry.StartNATSExporter
+
 // Subsystem wraps an embedded NATS server and exposes a JetStream context.
 //
 // Phase A invariant: the subsystem runs in production but has no publishers,
@@ -42,11 +50,12 @@ const readyTimeout = 10 * time.Second
 // declaration is idempotent so repeated Start calls (or future cluster-mode
 // bootstrap) do not conflict.
 type Subsystem struct {
-	cfg     Config
-	server  *server.Server
-	conn    *nats.Conn
-	js      jetstream.JetStream
-	storage jetstream.StorageType
+	cfg      Config
+	server   *server.Server
+	conn     *nats.Conn
+	js       jetstream.JetStream
+	storage  jetstream.StorageType
+	exporter *natsexporter.NATSExporter
 }
 
 // NewSubsystem constructs the subsystem from a Config.
@@ -144,6 +153,38 @@ func (s *Subsystem) Start(ctx context.Context) error {
 		s.server = nil
 		return err
 	}
+
+	// Optional Prometheus exporter. Requires the embedded NATS server's HTTP
+	// monitoring listener to be bound (MonitorPort > 0 on config). Read the
+	// actual bound port via server.MonitorAddr() — callers who set -1 for a
+	// random port would otherwise have no way to learn what the exporter
+	// scrapes.
+	if s.cfg.PrometheusExporter {
+		monitorAddr := s.server.MonitorAddr()
+		if monitorAddr == nil || monitorAddr.Port <= 0 {
+			conn.Close()
+			s.conn = nil
+			s.js = nil
+			s.server.Shutdown()
+			s.server.WaitForShutdown()
+			s.server = nil
+			return oops.Code("EVENTBUS_EXPORTER_MONITOR_UNBOUND").
+				Errorf("PrometheusExporter requires MonitorPort > 0 to bind the NATS HTTP monitor")
+		}
+		exp, expErr := startExporterFn(monitorAddr.Port, s.cfg.ExporterPort)
+		if expErr != nil {
+			conn.Close()
+			s.conn = nil
+			s.js = nil
+			s.server.Shutdown()
+			s.server.WaitForShutdown()
+			s.server = nil
+			return oops.Code("EVENTBUS_EXPORTER_START_FAILED").
+				With("monitor_port", monitorAddr.Port).
+				Wrap(expErr)
+		}
+		s.exporter = exp
+	}
 	return nil
 }
 
@@ -187,6 +228,15 @@ func (s *Subsystem) EnsureStream(ctx context.Context) error {
 // Idempotent: safe to call multiple times (e.g., explicit in test + t.Cleanup).
 // codecov:ignore — non-error branches exercised by integration and E2E tests
 func (s *Subsystem) Stop(ctx context.Context) error {
+	// Stop the Prometheus exporter first: it holds an HTTP listener and a
+	// scrape goroutine that queries the embedded NATS monitor endpoint.
+	// Stopping it before Drain/Shutdown prevents scrape-in-flight errors
+	// against a NATS server that's already tearing down its HTTP listener.
+	if s.exporter != nil {
+		s.exporter.Stop()
+		s.exporter = nil
+	}
+
 	var drainErr error
 	if s.conn != nil && !s.conn.IsClosed() {
 		if err := s.conn.Drain(); err != nil && !errors.Is(err, nats.ErrConnectionClosed) {

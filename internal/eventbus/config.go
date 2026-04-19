@@ -36,8 +36,19 @@ type Config struct {
 	StreamMaxAge time.Duration `koanf:"stream_max_age"`
 	DupeWindow   time.Duration `koanf:"dupe_window"`
 
-	MonitorPort        int  `koanf:"monitor_port"`
+	// MonitorPort is the HTTP port the embedded NATS server binds for its
+	// monitoring endpoint (/varz, /jsz, etc). 0 disables. -1 selects a
+	// random port — the subsystem reads the actual bound port back via
+	// server.MonitorAddr() before starting the Prometheus exporter.
+	MonitorPort int `koanf:"monitor_port"`
+
+	// PrometheusExporter toggles the in-process prometheus-nats-exporter.
+	// Requires MonitorPort to be set (> 0 or -1).
 	PrometheusExporter bool `koanf:"prometheus_exporter"`
+
+	// ExporterPort is the TCP port the Prometheus exporter's scrape
+	// endpoint listens on (loopback only). 0 selects an ephemeral port.
+	ExporterPort int `koanf:"exporter_port"`
 
 	// Cluster-mode only (unused in Phase A).
 	ClusterURL      string `koanf:"cluster_url"`
