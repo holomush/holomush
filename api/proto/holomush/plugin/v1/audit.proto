@@ -1,0 +1,46 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.plugin.v1;
+
+import "google/protobuf/timestamp.proto";
+import "holomush/eventbus/v1/eventbus.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1;pluginv1";
+
+// PluginAuditService is implemented by plugins that declare audit
+// subjects in their manifest. The host owns the JetStream durable
+// consumer and forwards each delivered event to the plugin via
+// AuditEvent. The plugin INSERTs into its own schema and acks.
+//
+// QueryHistory is invoked by host's bus.QueryHistory when the queried
+// subject prefix is owned by this plugin.
+service PluginAuditService {
+  rpc AuditEvent(AuditEventRequest) returns (AuditEventResponse);
+  rpc QueryHistory(QueryHistoryRequest) returns (stream QueryHistoryResponse);
+}
+
+message AuditEventRequest {
+  holomush.eventbus.v1.Event event = 1;
+  // Headers carried verbatim from the JS message (App-Codec,
+  // App-Schema-Version, App-Event-Type, etc.) so the plugin can store them.
+  map<string, string> headers = 2;
+}
+
+message AuditEventResponse {}
+
+message QueryHistoryRequest {
+  string subject = 1;
+  bytes after = 2; // ULID; empty = from start
+  bytes before = 3; // ULID; empty = unbounded
+  int32 page_size = 4; // host caps at 200
+  int32 direction = 5; // 1=forward, 2=backward
+  google.protobuf.Timestamp not_before = 6;
+  google.protobuf.Timestamp not_after = 7;
+}
+
+message QueryHistoryResponse {
+  holomush.eventbus.v1.Event event = 1;
+}

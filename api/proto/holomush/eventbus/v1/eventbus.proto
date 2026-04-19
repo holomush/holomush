@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+syntax = "proto3";
+
+package holomush.eventbus.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1;eventbusv1";
+
+// ActorKind identifies what type of entity caused an event.
+enum ActorKind {
+  ACTOR_KIND_UNSPECIFIED = 0;
+  ACTOR_KIND_CHARACTER = 1;
+  ACTOR_KIND_PLAYER = 2;
+  ACTOR_KIND_SYSTEM = 3;
+  ACTOR_KIND_PLUGIN = 4;
+}
+
+// Actor identifies who caused an event.
+message Actor {
+  ActorKind kind = 1;
+  bytes id = 2; // ULID (16 bytes); empty for system/unknown
+}
+
+// Event is the host-side envelope. Wire encoding is proto bytes in the
+// JetStream message data; headers carry routing/codec/version metadata.
+message Event {
+  bytes id = 1; // ULID (16 bytes)
+  string subject = 2;
+  string type = 3;
+  google.protobuf.Timestamp timestamp = 4;
+  Actor actor = 5;
+  bytes payload = 6; // codec.Encode output
+}
