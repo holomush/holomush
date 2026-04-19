@@ -17,10 +17,10 @@
 no-daemon: true
 
 # Disable auto-flush of database to JSONL after mutations
-# no-auto-flush: false
+no-auto-flush: true
 
 # Disable auto-import from JSONL when it's newer than database
-# no-auto-import: false
+no-auto-import: true
 
 # Enable JSON output by default
 # json: false
@@ -40,7 +40,7 @@ no-daemon: true
 # Export events (audit trail) to .beads/events.jsonl on each flush/sync
 # When enabled, new events are appended incrementally using a high-water mark.
 # Use 'bd export --events' to trigger manually regardless of this setting.
-# events-export: false
+events-export: false
 
 # Git branch for beads commits (bd sync will commit to this branch)
 # IMPORTANT: Set this for team projects so all clones use the same sync branch.
