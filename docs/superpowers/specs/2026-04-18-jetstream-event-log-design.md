@@ -155,10 +155,20 @@ relegates PostgreSQL to identity, projection, and forever-archive audit.
 #### 1a. Event identity
 
 ```go
+// Subject is a typed JetStream subject. Constructed via NewSubject which
+// validates against the documented token rules (Section 1c). Prevents
+// accidentally passing an unstructured string (e.g., a player ID) where a
+// subject is expected.
+type Subject string
+
+// Type is a typed plugin-declared event type identifier. Constructed via
+// NewType which validates against the manifest's declared types.
+type Type string
+
 type Event struct {
     ID        ulid.ULID  // identity, dedup key, stable across rebuilds
-    Subject   string     // JS subject (replaces Stream)
-    Type      string     // plugin-declared opaque string
+    Subject   Subject    // typed JS subject
+    Type      Type       // plugin-declared, opaque to host
     Timestamp time.Time  // host-stamped at publish
     Actor     Actor      // host-stamped from session/plugin context
     Payload   []byte     // proto bytes (post-codec encoding)
@@ -177,6 +187,10 @@ type Event struct {
 `Event.ID` (ULID) **MUST** stay as the cross-system identity. JetStream
 sequence (`uint64`) is internal to the bus and **MUST NOT** cross any
 public API boundary. ULIDs survive JetStream rebuilds; sequences do not.
+
+Typed `Subject` and `Type` add zero runtime cost (compile-time only) and
+catch a class of accidental field-swap and free-string bugs that bit the
+old `Event.Stream string` model.
 
 #### 1b. Event Type and Payload — plugin-declared, opaque to host
 
@@ -207,45 +221,71 @@ This closes the boundary violation completely — neither the type
 identifier nor the payload schema for plugin-owned events lives in
 `internal/core/` after the cutover.
 
-#### 1c. Subject naming — hierarchical, plugin-namespaced
+#### 1c. Subject naming — hierarchical, game-namespaced, plugin-namespaced
 
 ```text
-events.<domain>.<entity-id>[.<facet>...]
+events.<game-id>.<domain>.<entity-id>[.<facet>...]
 ```
+
+The leading `events.<game-id>.` prefix is mandatory from day one. Single-game
+deployments use a literal segment (config: `event_bus.game_id`). The cost
+today is one extra subject token and one config knob; the cost of *not*
+having it 18 months from now if multi-tenancy ever lands is a global
+subject rename across every plugin, every audit row, and every consumer.
+
+Concrete subjects (single-game default `<game-id> = main`):
 
 | Subject | Owner | Examples |
 | --- | --- | --- |
-| `events.location.<ULID>` | host | location-scoped events |
-| `events.character.<ULID>` | host | personal stream (DMs, command responses) |
-| `events.session.<ULID>.lifecycle` | host | session lifecycle (PR #233) |
-| `events.notifications.character.<ULID>` | host | cross-scene notifications |
-| `events.scene.<ULID>.ic` | core-scenes plugin | in-character (poses, says) |
-| `events.scene.<ULID>.ooc` | core-scenes plugin | out-of-character chat |
-| `events.scene.<ULID>.lifecycle` | core-scenes plugin | created/paused/ended |
-| `events.channel.<ULID>` | core-channels plugin (future) | channels |
+| `events.<game>.location.<ULID>` | host | location-scoped events |
+| `events.<game>.character.<ULID>` | host | personal stream (DMs, command responses) |
+| `events.<game>.session.<ULID>.lifecycle` | host | session lifecycle (PR #233) |
+| `events.<game>.notifications.character.<ULID>` | host | cross-scene notifications |
+| `events.<game>.scene.<ULID>.ic` | core-scenes plugin | in-character (poses, says) |
+| `events.<game>.scene.<ULID>.ooc` | core-scenes plugin | out-of-character chat |
+| `events.<game>.scene.<ULID>.lifecycle` | core-scenes plugin | created/paused/ended |
+| `events.<game>.channel.<ULID>` | core-channels plugin (future) | channels |
 
 Subjects use dot-delimited tokens; `*` matches one token, `>` matches the
 remainder and **MUST** be the last token. Subject token depth **SHOULD**
 stay below 16 to keep matching cost low.
 
+Stream subject filter remains `events.>` so the JS topology is
+game-agnostic; per-game routing happens via `FilterSubjects` on consumers
+(`events.<game>.scene.>` for game-scoped scenes consumer, etc.).
+
 Manifest declares both publish-allowed and audit-subscribed subjects:
 
 ```yaml
 emits:
-  - "events.scene.*.ic"
-  - "events.scene.*.ooc"
-  - "events.scene.*.lifecycle"
+  - "events.*.scene.*.ic"           # * matches game id
+  - "events.*.scene.*.ooc"
+  - "events.*.scene.*.lifecycle"
 audit:
-  - subjects: ["events.scene.>"]
+  - subjects: ["events.*.scene.>"]
     schema:   plugin_core_scenes
     table:    scene_log
 ```
+
+The wildcard at the game-id position lets a plugin serve multiple
+games on a single server when multi-tenancy lands. For single-game
+deployments today, the wildcard matches the literal `main`.
 
 #### 1d. Wire format — proto + version header
 
 Replace JSON-in-bytea with a proto `Event` message. Forces explicit schema
 discipline; binary; backward-compatible field additions are free. 64 KiB
 payload cap stays.
+
+**Proto schema layout:**
+
+- Host envelope (the `Event` message itself, plus `Actor`, `EventBus`
+  service, `PluginAuditService` if not elsewhere): `api/proto/holomush/eventbus/v1/`
+- Plugin payload schemas: each plugin's existing proto namespace
+  (`api/proto/holomush/scenes/v1/`, `api/proto/holomush/dm/v1/`, etc.)
+
+The host package depends on the envelope proto; **never** on plugin
+payload protos (which are bytes from the host's perspective).
 
 Headers on every published message:
 
@@ -324,7 +364,7 @@ transparently uses PG audit) rather than resume.
 ```go
 // pkg/plugin/event_sink.go
 eventSink.Emit(ctx, EmitIntent{
-    Subject: "events.scene.01JABC...XYZ.ic",
+    Subject: "events.main.scene.01JABC...XYZ.ic",
     Type:    "scene.pose",
     Payload: marshaledProto,
 })
@@ -411,26 +451,67 @@ clustered NATS, quorum loss means publishes fail until quorum returns.
 
 ### 4. Subscribe path
 
-#### Interface
+#### Interface — split into three single-responsibility interfaces
 
 ```go
-type EventBus interface {
+// Publisher writes events. Used by EventSink (which used to call
+// EventStore.Append).
+type Publisher interface {
     Publish(ctx context.Context, event Event) error
-    OpenSession(ctx context.Context, sessionID string, filters []string) (SessionStream, error)
+}
+
+// Subscriber opens long-lived session streams.
+// Used by gRPC Subscribe handler.
+type Subscriber interface {
+    OpenSession(ctx context.Context, sessionID string, filters []Subject) (SessionStream, error)
+}
+
+// HistoryReader serves paginated history reads. Used by QueryHistory
+// gRPC handler and by plugin-side audit projection backfills.
+type HistoryReader interface {
     QueryHistory(ctx context.Context, q HistoryQuery) (HistoryStream, error)
 }
 
-type SessionStream interface {
-    Next(ctx context.Context) (Event, AckFunc, error)
-    SetFilters(ctx context.Context, filters []string) error
-    Close() error
+// EventBus is the concrete implementation that satisfies all three.
+// Tests and consumers depend on the narrow interface they actually need.
+type EventBus interface {
+    Publisher
+    Subscriber
+    HistoryReader
 }
 
-type AckFunc func() error
+// Delivery is a typed handle for a single message in flight from a
+// SessionStream. Replaces the prior (Event, AckFunc, error) tuple shape
+// — typed handles are easier to mock, log, extend (Nack, InProgress).
+type Delivery interface {
+    Event() Event
+    Ack() error
+    // Nack signals the message should be redelivered without affecting
+    // ack-pending state semantics. Used for transient handler errors.
+    Nack() error
+    // InProgress extends the ack-wait timer for handlers expecting to
+    // exceed the default. Use sparingly.
+    InProgress() error
+}
+
+type SessionStream interface {
+    // Next blocks until the next delivery is available or ctx is done.
+    Next(ctx context.Context) (Delivery, error)
+    // SetFilters atomically updates the underlying durable consumer's
+    // FilterSubjects. Cursor is preserved by JS UpdateConsumer.
+    SetFilters(ctx context.Context, filters []Subject) error
+    Close() error
+}
 ```
 
 `AddStream` / `RemoveStream` / `Notifications` / `Errors` (current
-`core.Subscription`) **MUST** be deleted.
+`core.Subscription`) **MUST** be deleted. `AckFunc` closure shape is
+not used; `Delivery` is the canonical handle.
+
+**Composition at call sites:** the gRPC Subscribe handler depends on
+`Subscriber`; the gRPC QueryHistory handler depends on `HistoryReader`;
+the EventSink depends on `Publisher`. Each can be mocked independently.
+The concrete `eventBus` struct satisfies all three.
 
 #### `OpenSession` semantics
 
@@ -474,10 +555,16 @@ respect to delivery. (`FilterSubjects` plural is supported in NATS server
 4. stream, err := bus.OpenSession(ctx, sessionID, filters)
 5. defer stream.Close()
 6. for {
-       event, ack, err := stream.Next(ctx)
+       delivery, err := stream.Next(ctx)
        if err != nil { return err }
-       if err := grpcStream.Send(toProto(event)); err != nil { return err }
-       if err := ack(); err != nil { logger.Warn(...) }
+       if err := grpcStream.Send(toProto(delivery.Event())); err != nil {
+           // Send failure: don't ack. JS will redeliver on next bind.
+           // Caller's existing dedup on ULID prevents duplicate render.
+           return err
+       }
+       if err := delivery.Ack(); err != nil {
+           logger.Warn("ack failed; will redeliver", "error", err)
+       }
    }
 ```
 
@@ -521,25 +608,34 @@ exist.
 
 ```go
 type HistoryQuery struct {
-    Subject        string         // exact subject OR pattern with * / >
-    After          ulid.ULID      // exclusive lower bound; zero = from start
-    Before         ulid.ULID      // exclusive upper bound; zero = unbounded
-    NotBefore      time.Time      // optional time bound
-    NotAfter       time.Time      // optional time bound
-    Direction      Direction      // Forward (older→newer) or Backward
-    PageSize       int            // host caps at 200; default 50
-    SessionContext SessionContext // for auth
+    Subject   Subject     // exact subject OR pattern with * / >
+    After     ulid.ULID   // exclusive lower bound; zero = from start
+    Before    ulid.ULID   // exclusive upper bound; zero = unbounded
+    NotBefore time.Time   // optional time bound
+    NotAfter  time.Time   // optional time bound
+    Direction Direction   // Forward (older→newer) or Backward
+    PageSize  int         // host caps at 200; default 50
+    // Auth flows via context.Context (auth.WithSession), not via the query.
+    // Putting it in two places invites the question "what if they disagree."
 }
 
 type HistoryStream interface {
-    Next(ctx context.Context) (Event, error)  // io.EOF when exhausted
-    Cursor() ulid.ULID                         // last-emitted ULID for resume
+    // Next returns the next event. io.EOF when exhausted.
+    Next(ctx context.Context) (Event, error)
     Close() error
 }
 ```
 
-Server-streaming gRPC. Caller iterates `Next()` until `io.EOF`, calls
-`Cursor()` for next-page resume.
+Server-streaming gRPC. Caller iterates `Next()` until `io.EOF`. For
+next-page resume, the **caller records the ULID of the last `Event`
+returned** and passes it as `After` on the next `QueryHistory` call. The
+stream itself does not carry pagination state — there's no
+`stream.Cursor()` method to invoke at the wrong time and silently get a
+zero-value ULID. ULID is the cursor everywhere.
+
+Auth uses `context.Context`; the gRPC handler injects session via
+`auth.WithSession(ctx, sess)` before calling `QueryHistory`. The plugin
+RPC carries the same context across the boundary.
 
 #### JS / PG fallback
 
@@ -706,10 +802,27 @@ Plugin restart → resumes from last ack. No orphan state.
 ciphertext. Plaintext access for derivations (e.g., pose order) goes
 through `host.codec.Decode` helper — codec stays host-owned.
 
-#### Subject ownership map
+#### Subject ownership map — longest-prefix-wins, token-aligned
 
 At startup, host builds a subject-prefix → owner map from all manifests.
-Conflicts at load = startup error. Validation enforced.
+
+**Matching rule:** longest-prefix-wins, where "prefix" is *token-aligned*
+(matches whole dot-delimited segments, not partial tokens).
+
+| Manifest declarations | Subject `events.main.scene.X.lifecycle` resolves to |
+| --- | --- |
+| only `events.main.scene.>` | scenes plugin |
+| `events.main.scene.>` and `events.main.scene.*.lifecycle` | scenes plugin (specific lifecycle plugin) — longer prefix wins |
+| `events.main.scene.>` and `events.main.>` | scenes plugin (longer prefix) |
+| `events.main.scene.lifecycle` (literal) and `events.main.scene.>` | scenes plugin (specific literal wins over wildcard at same depth) |
+| Two manifests both declaring `events.main.scene.>` | **startup error** — exact-prefix conflict |
+
+Conflicts at startup (two manifests with the same exact-prefix declaration)
+are a fatal error. Manifest validation refuses to load.
+
+A property test in §8 (invariants) asserts resolution determinism: for
+any set of declared prefixes and any concrete subject, the resolved owner
+is unique and deterministic.
 
 #### Audit retention policy
 
@@ -852,6 +965,7 @@ InProcessServer` means zero port-conflict risk in `t.Parallel()`.
 ```yaml
 event_bus:
   mode: embedded                    # "embedded" | "cluster"
+  game_id: "main"                   # mandatory; first segment after "events."
   store_dir: ""                     # blank = xdg.DataDir()/jetstream
   stream_max_age: 720h
   dupe_window: 30m
@@ -867,6 +981,43 @@ event_bus:
     key_file: ""
     server_name: ""
 ```
+
+#### NATS version pinning and upgrade discipline
+
+NATS is now a third-party runtime dependency on the critical path. Pin to
+the **latest GA minor** of `nats-server` (currently 2.12.x — pick the
+latest patch verified clean of the 2.12.5-class regression). Embedded
+import in `go.mod` matches the running server version.
+
+**Renovate config trails GA bumps** to avoid landing the day-one bad
+patch. Custom `renovate.json` rule for `github.com/nats-io/nats-server/v2`
+and `github.com/nats-io/nats.go`:
+
+```jsonc
+{
+  "packageRules": [
+    {
+      "matchPackageNames": [
+        "github.com/nats-io/nats-server/v2",
+        "github.com/nats-io/nats.go"
+      ],
+      "minimumReleaseAge": "14 days",   // wait 2 weeks after GA before opening PR
+      "groupName": "nats",              // group together so we test/upgrade as a unit
+      "schedule": ["after 9am on Monday"]
+    }
+  ]
+}
+```
+
+Upgrade discipline:
+
+- Renovate opens PR for grouped NATS bump 14+ days post-GA
+- PR runs `task pr-prep` (lint, tests, integration, E2E)
+- The chaos+soak nightly (§8) runs against the PR branch before merge
+- Merge only if all gates green
+- Rollback plan: if a bump regresses production behavior, revert the
+  bump commit; the JS filestore format is forward-compatible within a
+  major, so downgrade-restart is safe
 
 `mode` is a config seam, **not a cutover plan**. Switching `embedded` →
 `cluster` is a deliberate multi-step migration project (see §10). What the
@@ -1056,7 +1207,58 @@ that proves the most subtle new behavior of the design.
 
 - Inject latency / errors on PG INSERT, NATS publish, plugin RPC
 - 1k events/sec for 5 minutes; assert no goroutine leak (`goleak`),
-  memory growth < 50 MB, audit lag < 1s, full event count
+  memory growth < 50 MB, audit lag p99 ≤ 5s, full event count
+
+#### Performance budget (humane, justified)
+
+**Context for the budget.** HoloMUSH is a text-based MUSH for human
+players reading prose. It is not twitch gaming, not algorithmic trading,
+not a real-time multiplayer FPS. The product priorities — in order — are
+**Privacy > Stability > Extensibility > Resilience > Performance**.
+Performance only matters insofar as it keeps prose interactions feeling
+responsive to humans.
+
+Human perception baselines for text interaction:
+
+| Latency | Feel |
+| --- | --- |
+| < 100ms | Instant |
+| 100-300ms | Snappy |
+| 300-500ms | Acceptable for chat |
+| 500-1000ms | Noticeable lag, still tolerable |
+| 1-2s | Frustrating |
+| > 2s | Broken |
+
+**Budgets** (CI gates in chaos+soak nightly; breach blocks merge):
+
+| Surface | p50 target | p99 ceiling | Why this number |
+| --- | --- | --- | --- |
+| End-to-end publish → subscriber `Send` (live UX) | ≤ 50ms | ≤ 200ms | The user-facing one. "Snappy" → "acceptable for chat." Anyone seeing 200ms+ on poses notices. |
+| Plugin `AuditEvent` RPC (background) | ≤ 5ms | ≤ 50ms | Background; doesn't affect live UX. The 50ms ceiling catches plugin pathologies (sync I/O in handler) without forcing micro-optimization. |
+| Plugin `QueryHistory` per-page RPC | ≤ 50ms | ≤ 250ms | User-perceived as "loading more scrollback." Half a click-budget; UI applies the rest. |
+| Audit projection lag | ≤ 500ms | ≤ 5s | Doesn't affect live; matters for "did my pose make it into the log yet." 5s ceiling catches projection stalls before users notice. |
+| Embedded NATS publish ack | ≤ 5ms | ≤ 25ms | Local in-process; budget is generous to absorb fsync hiccups under load. |
+
+These are **breaches block merge** — not aspirations. A plugin or change
+that violates the ceiling is a bug, not an architectural concern.
+
+**Explicit non-budgets** — what we deliberately do *not* optimize for:
+
+- Sub-millisecond anything (we will gladly trade 5ms for clearer code
+  or better isolation)
+- Throughput beyond 1k events/sec sustained (our scale envelope; cluster
+  cutover when scale demands)
+- Memory footprint optimization beyond avoiding leaks (50MB headroom is
+  fine; cleverness here is wasted effort)
+- CPU efficiency beyond avoiding pathologies (3% CPU cost of plugin RPC
+  loop is acceptable; "saving" it via tighter coupling would be wrong
+  per priority order)
+
+**When in doubt** between two design choices, the priority order
+decides. Plugin isolation that costs 5ms p99 wins over tighter coupling
+that saves it. Synchronous codec calls that are clearer to audit win
+over async codec calls that shave latency. Stability and clarity are
+features; speed past the budget is not.
 
 #### Coverage gates
 
@@ -1101,39 +1303,67 @@ pgx.Conn lifecycle tests.
 
 #### Codec key management (deferred but designed)
 
-```go
-type KeyProvider interface {
-    Active(ctx context.Context, label KeyLabel) (Key, error)
-    ByID(ctx context.Context, id KeyID) (Key, error)
-}
+Three narrow responsibilities, three interfaces:
 
+```go
+// Codec is a crypto primitive. It does not know about subjects or
+// routing — keep crypto narrow.
 type Codec interface {
     Name() Name
-    Encode(ctx context.Context, subject string, plaintext []byte) ([]byte, error)
-    Decode(ctx context.Context, subject string, ciphertext []byte) ([]byte, error)
+    Encode(ctx context.Context, plaintext []byte, key Key) ([]byte, error)
+    Decode(ctx context.Context, ciphertext []byte, key Key) ([]byte, error)
+}
+
+// KeyProvider supplies keys to codecs. Implementations resolve from
+// local file, env, KMS, etc.
+type KeyProvider interface {
+    Active(ctx context.Context, label KeyLabel) (Key, error)  // for encrypt
+    ByID(ctx context.Context, id KeyID) (Key, error)          // for decrypt
+}
+
+// KeySelector is the policy layer. It maps a subject (or other context)
+// to (codec name, key label) per the deployment's encryption rules.
+// Lives upstream of Codec; calls into KeyProvider after resolution.
+type KeySelector interface {
+    SelectForEncrypt(ctx context.Context, subject Subject) (codec Name, label KeyLabel, err error)
+    SelectForDecrypt(ctx context.Context, codec Name, keyID KeyID) (Key, error)
 }
 ```
+
+The publish path now reads (pseudo-Go):
+
+```go
+codecName, label, _ := selector.SelectForEncrypt(ctx, event.Subject)
+key, _              := keys.Active(ctx, label)
+codec               := registry.Resolve(codecName)
+ciphertext, _       := codec.Encode(ctx, plaintext, key)
+header.App-Codec    = string(codecName)
+```
+
+This keeps the codec implementation stateless and subject-agnostic. The
+subject→key mapping lives in `KeySelector` where it belongs as a policy
+concern.
 
 Codec internal envelope: `[1-byte version][8-byte key_id][12-byte
 nonce][N-byte ciphertext][16-byte auth tag]`. Key ID enables rotation.
 Provider implementations (none ship initially): `LocalFileKeyProvider`,
 `EnvKeyProvider`, `KMSKeyProvider`, `MultiProvider`.
 
-Subject → label routing via config:
+Subject → key routing via config (consumed by `KeySelector`):
 
 ```yaml
 encryption:
   rules:
-    - subject_pattern: "events.scene.>"
+    - subject_pattern: "events.<game>.scene.>"
       codec: aes-gcm-v1
       key_label: scene-content
-    - subject_pattern: "events.character.*"
+    - subject_pattern: "events.<game>.character.*"
       codec: aes-gcm-v1
       key_label: dm-content
 ```
 
-Decryption failure (auth tag invalid OR key not loaded) = hard error,
-security event in audit, never silent.
+Decryption failure (auth tag invalid, codec name unknown, OR key not
+loaded) = hard error, security event in audit, never silent.
 
 #### Plugin audit boundary
 
@@ -1276,89 +1506,70 @@ Realistic envelope: 5–7 weeks.
 
 ## Open questions
 
-These **MUST** be resolved before implementation plans land. Each item is
-either a decision needed from the project owner, or a design refinement
-surfaced by independent review (architect-review, 2026-04-18) that the
-spec needs to commit to before plan-writing begins.
+All decisions surfaced by the independent architect review (2026-04-18)
+have been resolved (below). The spec is unblocked for implementation
+plan-writing.
 
-### Decisions needed (block implementation plans)
+### Decisions resolved (2026-04-18)
 
-1. **NATS server version pinning** — NATS 2.12.5 had a regression on
-   stream updates ([nats-server release notes
-   2.12.5](https://github.com/nats-io/nats-server/releases/tag/v2.12.5));
-   pick a known-good minor and pin. Define upgrade discipline: who watches
-   release notes, runs the smoke matrix, owns the rollback plan when a
-   NATS upgrade breaks JS. NATS is now a third-party runtime dependency
-   on the critical path; treat it like one.
+1. **NATS version pinning + upgrade discipline (Q1)** — pin to latest GA
+   minor of `nats-server`. Renovate trails GA bumps by 14 days
+   (`minimumReleaseAge: "14 days"`) to avoid landing day-one bad patches;
+   bumps grouped between `nats-server` and `nats.go`. Discipline + config
+   in §7. PR-time gates via `task pr-prep` + chaos+soak nightly.
 
-2. **Codec key provider for the first encryption rollout** — what's the
-   preferred KMS / key store for production? Affects which provider
-   lands first when encryption work begins. Out of scope for this design;
-   filed as follow-up bead.
+2. **Codec key provider (Q2)** — deferred to encryption implementation
+   workstream. The `KeyProvider` interface ships now (§9); concrete KMS
+   choice (AWS / GCP / Vault / Local) when threat model + compliance
+   requirements crystallize. Filed as follow-up bead.
 
-3. **Event proto schema location** — for the host envelope (`Event` proto
-   itself): `api/proto/holomush/eventbus/v1/`? For plugin-owned payload
-   protos: each plugin's own proto namespace. Confirm the layout before M1.
+3. **Event proto schema location (Q3)** — host envelope at
+   `api/proto/holomush/eventbus/v1/`. Plugin payload protos in each
+   plugin's existing namespace (`api/proto/holomush/scenes/v1/`, etc.).
+   Codified in §1d.
 
-4. **Whether `Event.Type` and `Subject` should be typed strings** — change
-   from §1a sketch is `type Type string` and `type Subject string` with
-   constructors that validate against allowed character sets. Yes —
-   add this to §1; the typed-string overhead is zero at runtime and
-   catches accidental field-swap bugs at compile time.
+4. **Typed `Subject` and `Type` strings (Q4)** — adopted. `type Subject
+   string` and `type Type string` with validating constructors. Codified
+   in §1a.
 
-5. **Multi-tenancy game-id prefix** — should subjects be
-   `events.<game-id>.<domain>.<entity>` from day one? Cost today: zero
-   (single game, single literal segment). Cost in 18 months if multi-game
-   ever lands and we didn't: global subject rename across every plugin,
-   every audit row, every consumer. **Recommend: yes, add now.** Decision
-   needed.
+5. **Multi-tenancy `events.<game-id>.` prefix (Q5)** — adopted from day
+   one. Single-game default `game_id: "main"` in `event_bus` config.
+   Codified in §1c and §7.
 
-6. **`EventBus` interface split** — reviewer flagged the single interface
-   as too large; idiomatic Go would be three separate interfaces
-   (`Publisher`, `Subscriber`, `HistoryReader`) composed at the call
-   site. Recommend: split. Lets gRPC handlers depend on only what they
-   need; lets each be mocked independently. Decide before M1.
+6. **`EventBus` interface split (Q6)** — adopted. Three single-
+   responsibility interfaces (`Publisher`, `Subscriber`, `HistoryReader`)
+   composed by `EventBus`. Call sites depend only on what they need.
+   Codified in §4.
 
-7. **`AckFunc` shape** — return `(Event, AckFunc, error)` (current sketch)
-   vs return `(Delivery, error)` where `Delivery` has `Event()` and
-   `Ack() error` methods. Reviewer recommends the typed handle. Yes —
-   typed handles are easier to mock, log, and extend (`Nack()`,
-   `InProgress()` later). Decide before M1.
+7. **Typed `Delivery` handle (Q7)** — adopted. `(Delivery, error)` from
+   `Next()`; `Delivery` has `Event()`, `Ack()`, `Nack()`, `InProgress()`.
+   Replaces the `(Event, AckFunc, error)` tuple. Codified in §4.
 
-8. **Subject ownership prefix matching algorithm** — §6 says "subject
-   prefix → owner map" but doesn't specify matching semantics for
-   overlapping prefixes (e.g., `events.scene.>` vs
-   `events.scene.<id>.lifecycle`). Recommend: longest-prefix-wins,
-   token-aligned. Codify and add to the matching algorithm doc, plus a
-   property test (§8 invariants) for resolution determinism.
+8. **Longest-prefix-wins subject ownership routing (Q8)** — adopted,
+   token-aligned. Property test for resolution determinism added to §8.
+   Codified in §6.
 
-9. **`HistoryStream.Cursor()` removed in favor of caller-tracked ULID**
-   — reviewer flagged the stateful side-channel. Yes — caller records the
-   ULID of the last `Event` returned by `Next()`. Drop `Cursor()` from
-   the interface. Decide before M1.
+9. **Drop `HistoryStream.Cursor()` (Q9)** — adopted. Caller records
+   ULID from the last `Event` returned by `Next()`. No stateful side-
+   channel. Codified in §5.
 
-10. **Plugin-owned audit coupling shape (A2)** — current design: host
-    invokes plugin `PluginAuditService.AuditEvent` RPC for every audit
-    event AND `QueryHistory` synchronously RPCs the plugin per page.
-    Reviewer's alternative: host owns audit storage in plugin-namespaced
-    schemas; plugin owns only the projection function (deserialization,
-    derived-table maintenance) plus the read-side authz check. This
-    significantly reduces runtime coupling (no per-event sync RPC on
-    write OR read). Need to choose between current design (clean privacy
-    boundary, runtime coupling) and the reviewer's alternative
-    (different privacy model, less coupling). Decision needed.
+10. **Plugin-owned audit coupling (Q10)** — keep current design with an
+    explicit performance budget (Section 8). Privacy boundary
+    (credential separation, plugin-enforced authz, future plugin-side
+    decryption) wins over coupling reduction. Performance concerns
+    quantified and made into hard CI gates (§8 perf budget): plugin
+    `AuditEvent` RPC p99 ≤ 50ms, plugin `QueryHistory` per-page RPC p99
+    ≤ 250ms. Reasoning baked into §8: HoloMUSH is a text-based MUSH for
+    humans reading prose, priorities are
+    Privacy > Stability > Extensibility > Resilience > Performance.
 
-11. **Codec interface signature** — current sketch takes `subject` as a
-    parameter. Reviewer recommends keeping crypto primitives narrow:
-    `Encode(ctx, plaintext, key Key) ([]byte, error)`, with subject→key
-    routing in a separate `KeySelector` upstream. Yes — split. Decide
-    before M1.
+11. **Codec interface signature (Q11)** — adopted. `Codec.Encode/Decode`
+    takes `(ctx, bytes, key Key)`. Subject→key routing lives in a
+    separate `KeySelector` interface upstream. Codified in §9.
 
-12. **`HistoryQuery.SessionContext` placement** — current sketch has it
-    on the struct. Reviewer flags duplication with `ctx context.Context`
-    that the methods already take. Yes — pull `SessionContext` out of
-    the struct, carry via a typed context key (`auth.WithSession(ctx,
-    sess)`). Decide before M1.
+12. **`HistoryQuery.SessionContext` via `context.Context` (Q12)** —
+    adopted. Removed from the struct; carried via `auth.WithSession(ctx,
+    sess)`. Codified in §5.
 
 ### Acknowledged (will be addressed during plan-writing or as
 discovered-from beads)
