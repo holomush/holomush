@@ -699,6 +699,14 @@ fi
 
 #### Step 6.4: Add profile-aware autorun block
 
+> **Plan-vs-implementation note:** The autorun block below directly
+> interpolates secrets into a `su ... -c "..."` command string. The
+> delivered `scripts/cloud-init.sh` uses a safer pattern that passes
+> secrets via environment variables (`sudo -u USER env KEY=VAL sh -c '...'`)
+> so shell metacharacters in `BACKUP_S3_SECRET_KEY` or `KOPIA_PASSWORD`
+> cannot break or hijack the command. Refer to the committed script for
+> the shipped version; the snippet here records design intent only.
+
 - [ ] Replace the trailing `echo "Next steps:"` block (~lines 101–111) with:
 
 ```bash

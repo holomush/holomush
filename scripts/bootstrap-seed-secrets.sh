@@ -24,6 +24,10 @@ REPO="holomush/holomush"
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo)
+      if [ $# -lt 2 ] || [ -z "${2:-}" ] || [ "${2#-}" != "$2" ]; then
+        echo "ERROR: --repo requires OWNER/NAME" >&2
+        exit 2
+      fi
       REPO="$2"
       shift 2
       ;;
@@ -38,7 +42,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-for tool in gh curl jq; do
+for tool in gh curl jq python3; do
   command -v "${tool}" >/dev/null || {
     echo "ERROR: ${tool} not found in PATH" >&2
     exit 1

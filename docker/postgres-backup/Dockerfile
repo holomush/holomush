@@ -28,7 +28,9 @@ RUN apk add --no-cache bash ca-certificates curl supercronic postgresql18-client
     && curl -fsSL "https://github.com/kopia/kopia/releases/download/v${KOPIA_VERSION}/checksums.txt" \
       -o /tmp/kopia-checksums.txt \
     && cd /tmp \
-    && grep "kopia-${KOPIA_VERSION}-linux-${kopia_arch}.tar.gz$" kopia-checksums.txt | sha256sum -c \
+    && checksum_line="$(grep "kopia-${KOPIA_VERSION}-linux-${kopia_arch}.tar.gz$" kopia-checksums.txt)" \
+    && [ -n "${checksum_line}" ] \
+    && printf '%s\n' "${checksum_line}" | sha256sum -c - \
     && tar -xz -C /tmp -f "/tmp/kopia-${KOPIA_VERSION}-linux-${kopia_arch}.tar.gz" \
     && install -m 0755 "/tmp/kopia-${KOPIA_VERSION}-linux-${kopia_arch}/kopia" /usr/local/bin/kopia \
     && rm -rf "/tmp/kopia-${KOPIA_VERSION}-linux-${kopia_arch}.tar.gz" /tmp/kopia-checksums.txt /tmp/kopia-*

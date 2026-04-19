@@ -59,9 +59,11 @@ tag_args=""
 pin_args=""
 if [ -n "${TAG}" ]; then
   tag_args="--tags=${TAG}"
-  # Pre-deploy snapshots are pinned so the retention policy never expires them.
+  # Pre-deploy and manual-pin snapshots are pinned so the retention policy
+  # never expires them. The runbooks use manual-pin:* for pre-restore and
+  # long-lived operator snapshots.
   case "${TAG}" in
-    pre-deploy:*) pin_args="--pin=${TAG}" ;;
+    pre-deploy:* | manual-pin:*) pin_args="--pin=${TAG}" ;;
   esac
 fi
 

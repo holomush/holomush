@@ -300,8 +300,16 @@ jobs:
   deploy-sandbox:
     name: Deploy Sandbox
     runs-on: namespace-profile-linux-amd64-4x8
-    needs: [goreleaser, verify-release]
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    needs: [verify-release]
+    # On tag push: wait for verify-release to succeed. On workflow_dispatch
+    # (redeploy an existing release): run independently since goreleaser +
+    # verify-release are skipped on dispatch and the image already exists in
+    # GHCR. `always()` lets this job start regardless of upstream skip state.
+    if: |
+      always() && (
+        (startsWith(github.ref, 'refs/tags/') && needs.verify-release.result == 'success') ||
+        github.event_name == 'workflow_dispatch'
+      )
     concurrency:
       group: deploy-sandbox
       cancel-in-progress: false
@@ -359,9 +367,26 @@ jobs:
           ssh "holomush@${DROPLET_IP}" bash -s -- "${VERSION}" <<'EOF'
             set -euo pipefail
             VERSION="$1"
+
+            # Sync release assets from the tag into /opt/holomush so compose
+            # changes (new services, profiles, env wiring) and the
+            # postgres-backup build context are up-to-date with this release.
+            # Without this step, cloud-init-era files persist forever and
+            # release changes to compose / Dockerfiles / scripts never reach
+            # the running sandbox.
+            rm -rf /tmp/holomush-release
+            git clone --depth 1 --branch "${VERSION}" \
+              https://github.com/holomush/holomush.git /tmp/holomush-release
+            cp /tmp/holomush-release/compose.prod.yaml /opt/holomush/compose.yaml
+            rm -rf /opt/holomush/docker /opt/holomush/deploy
+            cp -r /tmp/holomush-release/docker /opt/holomush/docker
+            cp -r /tmp/holomush-release/deploy /opt/holomush/deploy
+            rm -rf /tmp/holomush-release
+
             cd /opt/holomush
             sed -i "s/^HOLOMUSH_VERSION=.*/HOLOMUSH_VERSION=${VERSION}/" .env
             docker compose --profile tunnel --profile backups pull core gateway cloudflared
+            docker compose --profile tunnel --profile backups build backup
             docker compose --profile tunnel --profile backups up -d --no-recreate postgres
             docker compose --profile tunnel --profile backups run --rm core migrate
             docker compose --profile tunnel --profile backups up -d

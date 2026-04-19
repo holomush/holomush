@@ -129,7 +129,10 @@ LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
 EOF
 fi
 
-if [ -n "${BACKUP_S3_BUCKET}" ] && [ -n "${KOPIA_PASSWORD}" ]; then
+if [ -n "${BACKUP_S3_BUCKET}" ] \
+  && [ -n "${KOPIA_PASSWORD}" ] \
+  && [ -n "${BACKUP_S3_ACCESS_KEY}" ] \
+  && [ -n "${BACKUP_S3_SECRET_KEY}" ]; then
   cat >> "${HOLOMUSH_DIR}/.env" <<EOF
 
 # Automated nightly backups via Kopia (encrypted, deduped, compressed).
@@ -142,8 +145,11 @@ BACKUP_KEEP_DAILY=${BACKUP_KEEP_DAILY}
 BACKUP_KEEP_WEEKLY=${BACKUP_KEEP_WEEKLY}
 BACKUP_KEEP_MONTHLY=${BACKUP_KEEP_MONTHLY}
 EOF
-elif [ -n "${BACKUP_S3_BUCKET}" ]; then
-  echo "WARNING: BACKUP_S3_BUCKET is set but KOPIA_PASSWORD is empty — backups disabled" >&2
+elif [ -n "${BACKUP_S3_BUCKET}" ] \
+  || [ -n "${KOPIA_PASSWORD}" ] \
+  || [ -n "${BACKUP_S3_ACCESS_KEY}" ] \
+  || [ -n "${BACKUP_S3_SECRET_KEY}" ]; then
+  echo "WARNING: backups require BACKUP_S3_BUCKET, KOPIA_PASSWORD, BACKUP_S3_ACCESS_KEY, and BACKUP_S3_SECRET_KEY — backups disabled" >&2
 fi
 
 # Data paths (commented defaults for reference)
@@ -193,7 +199,10 @@ case "${HOLOMUSH_DOMAIN}" in
   *)
     echo "Starting compose (ingress=${HOLOMUSH_INGRESS})..."
     profiles="--profile ${HOLOMUSH_INGRESS}"
-    if [ -n "${BACKUP_S3_BUCKET}" ] && [ -n "${KOPIA_PASSWORD}" ]; then
+    if [ -n "${BACKUP_S3_BUCKET}" ] \
+      && [ -n "${KOPIA_PASSWORD}" ] \
+      && [ -n "${BACKUP_S3_ACCESS_KEY}" ] \
+      && [ -n "${BACKUP_S3_SECRET_KEY}" ]; then
       profiles="${profiles} --profile backups"
     fi
 
@@ -202,7 +211,10 @@ case "${HOLOMUSH_DOMAIN}" in
     # repository. This keeps the first-boot path idempotent — re-running
     # cloud-init on an existing droplet connects to the existing repo
     # rather than wiping it.
-    if [ -n "${BACKUP_S3_BUCKET}" ] && [ -n "${KOPIA_PASSWORD}" ]; then
+    if [ -n "${BACKUP_S3_BUCKET}" ] \
+      && [ -n "${KOPIA_PASSWORD}" ] \
+      && [ -n "${BACKUP_S3_ACCESS_KEY}" ] \
+      && [ -n "${BACKUP_S3_SECRET_KEY}" ]; then
       echo "Ensuring Kopia repository exists..."
 
       endpoint_args=""

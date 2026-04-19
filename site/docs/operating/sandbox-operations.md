@@ -97,7 +97,7 @@ From your local machine:
 ```bash
 # Render user-data from scripts/sandbox.env.example + real secrets,
 # then merge with scripts/cloud-init.sh as user-data.
-export HOLOMUSH_VERSION=v0.1.0
+export HOLOMUSH_VERSION=0.1.0  # without leading "v" — cloud-init prepends it
 export HOLOMUSH_DOMAIN=game.holomush.dev
 export HOLOMUSH_INGRESS=tunnel
 export CLOUDFLARE_TUNNEL_TOKEN="..."
@@ -184,6 +184,11 @@ docker compose --profile tunnel --profile backups up -d
 ```
 
 ### View logs
+
+On the droplet, cloud-init (and the release deploy workflow) copies the
+repository's `compose.prod.yaml` to `/opt/holomush/compose.yaml`, so the
+`-f /opt/holomush/compose.yaml` path below is correct despite the source
+file being named `compose.prod.yaml`.
 
 ```bash
 ssh holomush@game.holomush.dev
