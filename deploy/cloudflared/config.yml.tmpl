@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+#
+# Cloudflared config-file template. Rendered by an operator who prefers
+# config-based tunnels over tokens. Substitute {{ TUNNEL_ID }},
+# {{ DOMAIN }}, and {{ CREDENTIALS_PATH }} with real values, then mount
+# this file at /etc/cloudflared/config.yml in the cloudflared container.
+
+tunnel: "{{ TUNNEL_ID }}"
+credentials-file: "{{ CREDENTIALS_PATH }}"
+
+ingress:
+  - hostname: "{{ DOMAIN }}"
+    service: http://gateway:8080
+  - service: http_status:404
