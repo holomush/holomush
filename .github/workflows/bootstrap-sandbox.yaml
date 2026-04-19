@@ -47,11 +47,10 @@ on:
         type: string
         default: "holomush-sandbox-game"
       ssh_allowlist_cidrs:
-        description: "Comma-separated CIDRs allowed to SSH to the droplet. Default 0.0.0.0/0 is convenient for first boot
-          but should be narrowed post-bootstrap."
+        description: "REQUIRED: Comma-separated CIDRs allowed to SSH to the droplet. Explicit operator choice — no default.
+          Example: '203.0.113.5/32,198.51.100.0/24'."
         required: true
         type: string
-        default: "0.0.0.0/0"
       dry_run:
         description: "Print what would be created without creating"
         required: false
@@ -349,6 +348,12 @@ jobs:
           SSH_ALLOWLIST: ${{ inputs.ssh_allowlist_cidrs }}
         run: |
           set -euo pipefail
+
+          # Required input; fail fast if the operator didn't supply one.
+          if [ -z "${SSH_ALLOWLIST// /}" ]; then
+            echo "::error::ssh_allowlist_cidrs is required — supply one or more CIDRs (e.g. 203.0.113.5/32)"
+            exit 1
+          fi
 
           # Check for existing firewall by name
           EXISTING_FW_ID=$(curl -fsS \
@@ -774,11 +779,18 @@ jobs:
           echo "::notice::HTTPS healthz OK: https://${DOMAIN}/healthz"
 
           echo "Checking telnet port reachability..."
-          if timeout 5 nc -z "${DROPLET_IP}" 4201; then
-            echo "::notice::Telnet port 4201 reachable on ${DROPLET_IP}"
-          else
-            echo "WARNING: telnet port 4201 not yet reachable — game may still be starting"
-          fi
+          ATTEMPTS=0
+          MAX_ATTEMPTS=12
+          until timeout 5 nc -z "${DROPLET_IP}" 4201; do
+            ATTEMPTS=$((ATTEMPTS + 1))
+            if [ "${ATTEMPTS}" -ge "${MAX_ATTEMPTS}" ]; then
+              echo "::error::Telnet port 4201 not reachable on ${DROPLET_IP} after ${MAX_ATTEMPTS} attempts"
+              exit 1
+            fi
+            echo "Telnet not ready yet (attempt ${ATTEMPTS}/${MAX_ATTEMPTS}), waiting 15s..."
+            sleep 15
+          done
+          echo "::notice::Telnet port 4201 reachable on ${DROPLET_IP}"
 
       # Step 18: Summary
       - name: Print summary

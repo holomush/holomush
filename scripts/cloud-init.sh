@@ -81,9 +81,20 @@ if ! command -v docker &>/dev/null; then
 fi
 
 # --- Create system user ---
+# Login-capable so the deploy-sandbox GitHub Actions job can SSH in as this
+# user (instead of as root) to run docker compose. DO's --ssh-keys flag
+# populates root's authorized_keys, so we clone those keys to the holomush
+# user so the same DigitalOcean SSH key works for both accounts.
 if ! id "${HOLOMUSH_USER}" &>/dev/null; then
-  useradd --system --create-home --shell /usr/sbin/nologin "${HOLOMUSH_USER}"
+  useradd --system --create-home --shell /bin/bash "${HOLOMUSH_USER}"
   usermod -aG docker "${HOLOMUSH_USER}"
+fi
+
+HOLOMUSH_HOME=$(getent passwd "${HOLOMUSH_USER}" | cut -d: -f6)
+install -d -m 0700 -o "${HOLOMUSH_USER}" -g "${HOLOMUSH_USER}" "${HOLOMUSH_HOME}/.ssh"
+if [ -s /root/.ssh/authorized_keys ] && [ ! -s "${HOLOMUSH_HOME}/.ssh/authorized_keys" ]; then
+  install -m 0600 -o "${HOLOMUSH_USER}" -g "${HOLOMUSH_USER}" \
+    /root/.ssh/authorized_keys "${HOLOMUSH_HOME}/.ssh/authorized_keys"
 fi
 
 # --- Create directory structure ---

@@ -150,16 +150,40 @@ before Docker Compose.
 
 ### 6. Apply the firewall
 
+`doctl compute firewall create --inbound-rules-file` expects a DSL string,
+not JSON. The committed `deploy/doctl/firewall-sandbox.json` is
+REST-API-shaped (matches what the bootstrap workflow posts). Use curl:
+
 ```bash
-doctl compute firewall create \
-  --name holomush-sandbox \
-  --inbound-rules-file deploy/doctl/firewall-sandbox.json
-doctl compute firewall add-droplets <firewall-id> --droplet-ids <droplet-id>
+# Substitute your SSH-allowlist CIDRs before posting.
+SSH_CIDRS='["203.0.113.5/32"]'   # e.g. your static IP; comma-separate if more
+SSH_CIDRS_JSON=$(printf '%s' "${SSH_CIDRS}")
+
+FW_JSON=$(jq \
+  --argjson ssh_sources "${SSH_CIDRS_JSON}" '
+    .inbound_rules[] |= (
+      if .protocol == "tcp" and .ports == "22"
+      then .sources.addresses = $ssh_sources
+      else .
+      end
+    )
+  ' deploy/doctl/firewall-sandbox.json)
+
+FW_ID=$(curl -fsS -X POST \
+  -H "Authorization: Bearer ${DIGITALOCEAN_ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d "${FW_JSON}" \
+  "https://api.digitalocean.com/v2/firewalls" | jq -r '.firewall.id')
+
+curl -fsS -X POST \
+  -H "Authorization: Bearer ${DIGITALOCEAN_ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d "{\"droplet_ids\":[${DROPLET_ID}]}" \
+  "https://api.digitalocean.com/v2/firewalls/${FW_ID}/droplets"
 ```
 
-After confirming SSH works, narrow the rule to your static IP + GitHub
-Actions egress range (see <https://api.github.com/meta> for current
-ranges).
+The committed JSON ships a locked-down `127.0.0.1/32` placeholder for SSH.
+Always substitute your real operator CIDR allowlist before posting.
 
 ### 7. Wire DNS
 
@@ -288,10 +312,34 @@ See [sandbox-restore.md](sandbox-restore.md).
 
 If the droplet is compromised or misconfigured beyond repair:
 
-1. Detach the block volume (`doctl compute volume-action detach`).
-2. Destroy the droplet (`doctl compute droplet delete holomush-sandbox-game`).
-3. Follow the **One-time bootstrap** Step 3 again to create a new droplet.
-4. Attach the block volume back to the new droplet and remount at
-   `/opt/holomush/data`.
-5. Re-apply the firewall (Step 4).
-6. Run `docker compose --profile tunnel --profile backups up -d`.
+1. Detach the block volume from the old droplet:
+
+    ```bash
+    doctl compute volume-action detach "${VOLUME_ID}" "${OLD_DROPLET_ID}"
+    ```
+
+2. Destroy the old droplet:
+
+    ```bash
+    doctl compute droplet delete holomush-sandbox-game
+    ```
+
+3. Create the new droplet **with the existing volume attached at boot** so
+   cloud-init's `mounts:` stanza mounts `/opt/holomush/data` before
+   Postgres initializes — reattaching after create would put Postgres
+   back on ephemeral disk:
+
+    ```bash
+    doctl compute droplet create holomush-sandbox-game \
+      --image ubuntu-24-04-x64 \
+      --size s-2vcpu-2gb-amd \
+      --region sfo3 \
+      --ssh-keys "$(doctl compute ssh-key list --format ID --no-header | head -1)" \
+      --tag-names holomush-sandbox \
+      --volumes "${VOLUME_ID}" \
+      --user-data-file /tmp/holomush-cloud-init.sh
+    ```
+
+4. Re-apply the firewall to the new droplet (see **Manual bootstrap Step 6**
+   for the `doctl compute firewall add-droplets` call).
+5. Verify the stack is up: `ssh holomush@<new-ip> docker compose -f /opt/holomush/compose.yaml ps`.
