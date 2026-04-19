@@ -204,22 +204,43 @@ case "${HOLOMUSH_DOMAIN}" in
     # rather than wiping it.
     if [ -n "${BACKUP_S3_BUCKET}" ] && [ -n "${KOPIA_PASSWORD}" ]; then
       echo "Ensuring Kopia repository exists..."
+
       endpoint_args=""
       if [ -n "${BACKUP_S3_ENDPOINT}" ]; then
         endpoint_args="--endpoint=${BACKUP_S3_ENDPOINT}"
       fi
-      su - "${HOLOMUSH_USER}" -s /bin/sh -c "
-        cd ${HOLOMUSH_DIR} && \
-        docker compose ${profiles} build backup && \
-        (docker compose ${profiles} run --rm backup kopia repository connect s3 \
-           --bucket=${BACKUP_S3_BUCKET} ${endpoint_args} \
-           --access-key=${BACKUP_S3_ACCESS_KEY} \
-           --secret-access-key=${BACKUP_S3_SECRET_KEY} 2>/dev/null || \
-         docker compose ${profiles} run --rm backup kopia repository create s3 \
-           --bucket=${BACKUP_S3_BUCKET} ${endpoint_args} \
-           --access-key=${BACKUP_S3_ACCESS_KEY} \
-           --secret-access-key=${BACKUP_S3_SECRET_KEY})
-      "
+
+      # Pass secrets to the child shell via environment, never interpolated
+      # into the command string. sudo -u with explicit env= args prevents
+      # shell metacharacters in secrets from breaking or hijacking the command.
+      # shellcheck disable=SC2016
+      sudo -u "${HOLOMUSH_USER}" \
+        env \
+          HOLOMUSH_DIR="${HOLOMUSH_DIR}" \
+          PROFILES="${profiles}" \
+          BACKUP_S3_BUCKET="${BACKUP_S3_BUCKET}" \
+          BACKUP_S3_ACCESS_KEY="${BACKUP_S3_ACCESS_KEY}" \
+          BACKUP_S3_SECRET_KEY="${BACKUP_S3_SECRET_KEY}" \
+          ENDPOINT_ARGS="${endpoint_args}" \
+          KOPIA_PASSWORD="${KOPIA_PASSWORD}" \
+        /bin/sh -c '
+          set -eu
+          cd "$HOLOMUSH_DIR"
+          docker compose $PROFILES build backup
+          docker compose $PROFILES run --rm backup \
+            kopia repository connect s3 \
+              --bucket="$BACKUP_S3_BUCKET" \
+              $ENDPOINT_ARGS \
+              --access-key="$BACKUP_S3_ACCESS_KEY" \
+              --secret-access-key="$BACKUP_S3_SECRET_KEY" \
+            >/dev/null 2>&1 \
+          || docker compose $PROFILES run --rm backup \
+            kopia repository create s3 \
+              --bucket="$BACKUP_S3_BUCKET" \
+              $ENDPOINT_ARGS \
+              --access-key="$BACKUP_S3_ACCESS_KEY" \
+              --secret-access-key="$BACKUP_S3_SECRET_KEY"
+        '
     fi
 
     su - "${HOLOMUSH_USER}" -s /bin/sh -c "

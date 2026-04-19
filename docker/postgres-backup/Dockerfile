@@ -36,6 +36,9 @@ RUN apk add --no-cache bash ca-certificates curl supercronic postgresql18-client
 COPY backup.sh /usr/local/bin/backup.sh
 RUN chmod +x /usr/local/bin/backup.sh
 
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 # supercronic reads a plain crontab file and runs as the invoking user.
 # Env vars pass through directly (no stripped environment like dcron/crond).
 # The crontab sources /etc/backup.env for vars written at container start.
@@ -47,10 +50,5 @@ RUN printf '%s\n' '0 3 * * * . /etc/backup.env && /usr/local/bin/backup.sh' \
 
 USER backup
 
-# At container start, dump env to /etc/backup.env so the crontab's shell
-# can source it; then hand off to supercronic.
-ENTRYPOINT ["/bin/sh", "-c", "\
-  env | grep -E '^(POSTGRES_|KOPIA_PASSWORD|BACKUP_|AWS_)' \
-      | sed 's/^/export /' > /etc/backup.env; \
-  exec /usr/bin/supercronic /etc/backup.crontab \
-"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["cron"]
