@@ -5,9 +5,57 @@ Self-hosters should refer to [Deploying HoloMUSH](deployment.md) instead.
 
 ## One-time bootstrap
 
-Run these steps once per fresh droplet. They are not automated in the
-`deploy-sandbox` workflow because they involve creating durable cloud
-resources (DNS, Spaces bucket, tunnel) that survive droplet replacement.
+The bootstrap workflow automates all cloud resource provisioning from zero
+in a single run. It is idempotent — safe to re-run if it fails partway through.
+
+### Seed secrets (set once, before running the workflow)
+
+Add these seven secrets to the repository via **Settings → Secrets and
+variables → Actions → New repository secret**:
+
+| Secret                       | How to obtain                                              |
+| ---------------------------- | ---------------------------------------------------------- |
+| `DIGITALOCEAN_ACCESS_TOKEN`  | DO dashboard → API → Personal Access Tokens               |
+| `DIGITALOCEAN_SSH_KEY_ID`    | Fingerprint or numeric ID of an existing key in DO         |
+| `DIGITALOCEAN_SSH_PRIVATE_KEY` | Matching private key for the above                       |
+| `CLOUDFLARE_API_TOKEN`       | CF dashboard → My Profile → API Tokens (Zone:DNS:Edit + Account:Cloudflare Tunnel:Edit) |
+| `CLOUDFLARE_ACCOUNT_ID`      | CF dashboard → right sidebar → Account ID                  |
+| `CLOUDFLARE_ZONE_ID`         | CF dashboard → domain → right sidebar → Zone ID            |
+| `SECRETS_ADMIN_PAT`          | GitHub → Developer Settings → Fine-grained PAT with Secrets:Write on this repo |
+
+### Run the workflow
+
+1. Go to **Actions → Bootstrap Sandbox → Run workflow**.
+2. Accept the defaults (or adjust region, sizes, bucket name, etc.).
+3. Leave **dry\_run** unchecked for a real provisioning run.
+4. Click **Run workflow** and monitor the run — it takes ~5–10 minutes.
+
+The workflow creates and writes back to GitHub Secrets:
+
+- `KOPIA_SANDBOX_PASSWORD` — Kopia repository encryption key (generated once; back it up)
+- `CLOUDFLARE_TUNNEL_ID` and `CLOUDFLARE_TUNNEL_TOKEN`
+- `DO_SPACES_ACCESS_KEY` and `DO_SPACES_SECRET_KEY`
+
+### After the workflow completes
+
+1. Confirm the healthz check passed in the workflow summary.
+2. Back up `KOPIA_SANDBOX_PASSWORD` to a secure location (1Password, sealed
+   secret, etc.). If it is lost, existing snapshots become unrecoverable —
+   Kopia encrypts client-side with no recovery path.
+3. Narrow the SSH firewall rule (`22/tcp`) from `0.0.0.0/0` to your static IP
+   plus the GitHub Actions egress range (see <https://api.github.com/meta>).
+
+### Save the `.env` shape
+
+Commit a redacted `.env` example to `scripts/sandbox.env.example` if the
+real shape has drifted from the committed version.
+
+---
+
+## Manual bootstrap (air-gapped or debugging)
+
+Use these steps if the workflow is unavailable or you need to troubleshoot
+individual resources.
 
 ### 1. Create the Cloudflare Tunnel
 
