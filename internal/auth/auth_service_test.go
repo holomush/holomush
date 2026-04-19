@@ -621,4 +621,3 @@ func (f *failingEventStore) ReplayTail(_ context.Context, _ string, _ int, _ tim
 func (f *failingEventStore) SubscribeSession(_ context.Context) (core.Subscription, error) {
 	return nil, nil
 }
-

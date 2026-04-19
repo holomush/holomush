@@ -35,14 +35,14 @@ func (s *stubMsg) Reply() string        { return "" }
 func (s *stubMsg) Metadata() (*jetstream.MsgMetadata, error) {
 	return s.meta, s.metaErr
 }
-func (s *stubMsg) Ack() error                          { return nil }
-func (s *stubMsg) AckSync() error                      { return nil }
-func (s *stubMsg) DoubleAck(_ context.Context) error   { return nil }
-func (s *stubMsg) Nak() error                          { return nil }
-func (s *stubMsg) NakWithDelay(_ time.Duration) error  { return nil }
-func (s *stubMsg) InProgress() error                   { return nil }
-func (s *stubMsg) Term() error                         { return nil }
-func (s *stubMsg) TermWithReason(_ string) error       { return nil }
+func (s *stubMsg) Ack() error                         { return nil }
+func (s *stubMsg) AckSync() error                     { return nil }
+func (s *stubMsg) DoubleAck(_ context.Context) error  { return nil }
+func (s *stubMsg) Nak() error                         { return nil }
+func (s *stubMsg) NakWithDelay(_ time.Duration) error { return nil }
+func (s *stubMsg) InProgress() error                  { return nil }
+func (s *stubMsg) Term() error                        { return nil }
+func (s *stubMsg) TermWithReason(_ string) error      { return nil }
 
 // validHeaders returns a minimally-valid header set for persist(); tests
 // mutate one field at a time to exercise each validation branch.
@@ -66,9 +66,9 @@ func newTestProjection() *projection {
 
 func TestPersistRejectsMissingRequiredHeaders(t *testing.T) {
 	cases := []struct {
-		name      string
-		stripKey  string
-		wantCode  string
+		name     string
+		stripKey string
+		wantCode string
 	}{
 		{"missing Nats-Msg-Id", headerMsgID, "AUDIT_MISSING_HEADER"},
 		{"missing App-Codec", headerCodec, "AUDIT_MISSING_HEADER"},

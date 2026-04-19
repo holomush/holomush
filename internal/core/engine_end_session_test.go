@@ -90,12 +90,15 @@ func (s *appendFailStore) Append(_ context.Context, _ Event) error { return s.er
 func (s *appendFailStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]Event, error) {
 	return nil, nil
 }
+
 func (s *appendFailStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
 	return ulid.ULID{}, nil
 }
+
 func (s *appendFailStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ ulid.ULID) ([]Event, error) {
 	return nil, nil
 }
+
 func (s *appendFailStore) SubscribeSession(_ context.Context) (Subscription, error) {
 	return nil, nil
 }
