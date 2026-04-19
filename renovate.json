@@ -1,0 +1,15 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:base"],
+  "packageRules": [
+    {
+      "matchPackageNames": [
+        "github.com/nats-io/nats-server/v2",
+        "github.com/nats-io/nats.go"
+      ],
+      "minimumReleaseAge": "14 days",
+      "groupName": "nats",
+      "schedule": ["after 9am on Monday"]
+    }
+  ]
+}

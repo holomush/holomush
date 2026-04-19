@@ -32,6 +32,9 @@ linters:
     - gocritic
     - nolintlint
 
+    # Custom bans
+    - forbidigo
+
   exclusions:
     # Default exclusion presets
     presets:
@@ -81,6 +84,15 @@ linters:
         linters:
           - gosec
         text: G706
+
+      # forbidigo: only enforce the time.Sleep ban inside the eventbus paths.
+      # Outside of those paths, time.Sleep is legitimate (legacy tests, etc.).
+      # path-except matches files whose path does NOT match the regex; we
+      # invert by disabling forbidigo on everything that is NOT under
+      # internal/eventbus/ or test/integration/eventbus_e2e/.
+      - path-except: '(internal/eventbus/|test/integration/eventbus_e2e/)'
+        linters:
+          - forbidigo
 
   settings:
     errcheck:
@@ -156,6 +168,19 @@ linters:
     nolintlint:
       require-explanation: true
       require-specific: true
+
+    forbidigo:
+      # Scoping is enforced via exclusions.rules below (path-except):
+      # the forbidigo linter is DISABLED outside eventbus paths, so the
+      # forbid pattern below only fires inside internal/eventbus/** and
+      # test/integration/eventbus_e2e/**. The `pkg:` field in forbidigo
+      # matches the package DEFINING the symbol (i.e., `time`), not the
+      # calling file's path — hence path-based scoping is the correct
+      # mechanism.
+      forbid:
+        - pattern: '^time\.Sleep$'
+          msg: "time.Sleep is banned in eventbus code; use eventbustest.Await* helpers (spec §8, invariant: no hidden waits)."
+      analyze-types: true
 
 issues:
   max-issues-per-linter: 0
