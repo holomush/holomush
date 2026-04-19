@@ -20,15 +20,15 @@ import (
 )
 
 type mockFocusOps struct {
-	joinCalls            []focusOpCall
-	leaveCalls           []focusOpCall
-	leaveByTargetCalls   []session.FocusKey
-	leaveByTargetResult  session.LeaveByTargetResult
-	leaveByTargetErr     error
-	presentCalls         []focusOpCall
-	joinErr              error
-	leaveErr             error
-	presentErr           error
+	joinCalls           []focusOpCall
+	leaveCalls          []focusOpCall
+	leaveByTargetCalls  []session.FocusKey
+	leaveByTargetResult session.LeaveByTargetResult
+	leaveByTargetErr    error
+	presentCalls        []focusOpCall
+	joinErr             error
+	leaveErr            error
+	presentErr          error
 }
 
 type focusOpCall struct {

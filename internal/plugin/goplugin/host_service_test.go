@@ -22,15 +22,15 @@ import (
 
 // stubCoordinator records calls for assertion.
 type stubCoordinator struct {
-	joinCalls            []focusCall
-	leaveCalls           []focusCall
-	leaveByTargetCalls   []session.FocusKey
-	leaveByTargetResult  session.LeaveByTargetResult
-	leaveByTargetErr     error
-	presentCalls         []focusCall
-	joinErr              error
-	leaveErr             error
-	presentErr           error
+	joinCalls           []focusCall
+	leaveCalls          []focusCall
+	leaveByTargetCalls  []session.FocusKey
+	leaveByTargetResult session.LeaveByTargetResult
+	leaveByTargetErr    error
+	presentCalls        []focusCall
+	joinErr             error
+	leaveErr            error
+	presentErr          error
 }
 
 type focusCall struct {

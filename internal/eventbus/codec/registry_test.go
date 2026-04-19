@@ -66,6 +66,7 @@ func (stubCodec) Name() codec.Name { return codec.Name("test-only-stub") }
 func (stubCodec) Encode(_ context.Context, p []byte, _ codec.Key) ([]byte, error) {
 	return p, nil
 }
+
 func (stubCodec) Decode(_ context.Context, p []byte, _ codec.Key) ([]byte, error) {
 	return p, nil
 }

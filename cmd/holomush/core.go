@@ -26,6 +26,7 @@ import (
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/audit"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/logging"
@@ -313,6 +314,12 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// handler through the bus. Until then this is pure infrastructure.
 	eventBusSub := eventbus.NewSubsystem(eventBusConfig)
 
+	// AuditProjection drains the EVENTS stream into events_audit so every
+	// published message lands in the forever-archive PostgreSQL table.
+	// Depends on DB (target table) and EventBus (JetStream source); the
+	// orchestrator enforces that ordering via DependsOn.
+	auditSub := audit.NewSubsystem(eventBusSub, dbSub, audit.Config{})
+
 	grpcSub := newGRPCSubsystem(grpcSubsystemConfig{
 		DB:             dbSub,
 		ABAC:           abacSub,
@@ -338,7 +345,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	orch := lifecycle.NewOrchestrator()
 	for _, sub := range []lifecycle.Subsystem{
 		dbSub, abacSub, authSub, worldSub,
-		sessionSub, pluginSub, bootstrapSub, eventBusSub, grpcSub,
+		sessionSub, pluginSub, bootstrapSub, eventBusSub, auditSub, grpcSub,
 	} {
 		orch.Register(sub)
 	}

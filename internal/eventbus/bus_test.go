@@ -18,6 +18,7 @@ func (fakeBus) Publish(_ context.Context, _ eventbus.Event) error { return nil }
 func (fakeBus) OpenSession(_ context.Context, _ string, _ []eventbus.Subject) (eventbus.SessionStream, error) {
 	return nil, nil
 }
+
 func (fakeBus) QueryHistory(_ context.Context, _ eventbus.HistoryQuery) (eventbus.HistoryStream, error) {
 	return nil, nil
 }
