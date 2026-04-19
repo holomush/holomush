@@ -1571,8 +1571,7 @@ plan-writing.
     adopted. Removed from the struct; carried via `auth.WithSession(ctx,
     sess)`. Codified in §5.
 
-### Acknowledged (will be addressed during plan-writing or as
-discovered-from beads)
+### Acknowledged (will be addressed during plan-writing or as discovered-from beads)
 
 - **Schema evolution under live load** (reviewer F3) — need explicit
   upgrade path for proto v1 → v2 including who handles old events in

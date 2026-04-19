@@ -750,6 +750,7 @@ Host code: when loading a plugin with `audit:` in manifest, register a per-plugi
 - [ ] **Step 6: Per-plugin tests**
 
 Test that:
+
 - Plugin's `AuditEvent` RPC stores rows in its schema
 - Plugin's `QueryHistory` RPC enforces membership and returns paginated rows
 - Host audit table has zero rows for the plugin's subjects (subject ownership exclusion)
@@ -977,6 +978,7 @@ Edit `docs/specs/2026-03-20-event-delivery-redesign.md`. At the top, after the t
 - [ ] **Step 3: Public docs for the new bus**
 
 Create or update `site/docs/contributing/event-store.md` with a brief overview of:
+
 - The `EventBus` interface (link to spec §4)
 - Subject naming convention (link to spec §1c)
 - How plugins emit events via `EventSink`
