@@ -60,3 +60,48 @@
     font-family: -apple-system, 'Inter', system-ui, sans-serif;
   }
 }
+
+/* Layout tokens — static constants, not themed. Live on :root outside @theme
+   because Tailwind v4 @theme compiles var() at build time, and these values
+   never change at runtime. */
+:root {
+  --topbar-h: 44px;
+  --rail-w: 48px;
+  --sidebar-w-default: 280px;
+  --sidebar-w-min: 200px;
+  --sidebar-w-max: 520px;
+  --cmd-max-lines: 8;
+  --composer-default-w: 640px;
+  --composer-default-h: 340px;
+}
+
+/* Density tokens — runtime-switchable per user via uiPrefsStore.density.
+   Scoped to .app-root so future alternate shells (embed/iframe) can render
+   without density applied. */
+.app-root[data-density="cozy"] {
+  --row-py: 6px;
+  --row-gap: 8px;
+  --card-pad: 12px;
+}
+.app-root[data-density="compact"] {
+  --row-py: 3px;
+  --row-gap: 4px;
+  --card-pad: 8px;
+}
+
+/* Animations — all gated on prefers-reduced-motion so reduced-motion users
+   see instant state changes. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes dot-pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+  @keyframes just-arrived {
+    from { background: color-mix(in srgb, var(--color-primary) 12%, transparent); }
+    to { background: transparent; }
+  }
+  @keyframes composer-slide-up {
+    from { transform: translateY(16px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+}

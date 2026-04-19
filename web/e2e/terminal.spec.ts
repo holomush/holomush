@@ -20,7 +20,7 @@ test.describe('Terminal UI', () => {
   test('connects and displays events', async ({ page }) => {
     await connectAsGuest(page);
     // Guest characters get random themed names like "Beryl Helium"
-    await expect(page.locator('.status-bar .character')).toContainText(/\w+ \w+/);
+    await expect(page.locator('[data-testid="topbar-char-name"]')).toContainText(/\w+ \w+/);
 
     // DB: session is active with valid location at the starting location
     const sessionId = await getClientSessionId(page);
@@ -102,13 +102,13 @@ test.describe('Terminal UI', () => {
     }).toPass({ timeout: 5000 });
   });
 
-  test('sidebar toggles with Ctrl+B', async ({ page }) => {
+  test('sidebar toggles with Cmd+.', async ({ page }) => {
     await connectAsGuest(page);
-    await expect(page.locator('.sidebar.expanded')).toBeVisible();
-    await page.keyboard.press('Control+b');
-    await expect(page.locator('.sidebar:not(.expanded)')).toBeVisible();
-    await page.keyboard.press('Control+b');
-    await expect(page.locator('.sidebar.expanded')).toBeVisible();
+    await expect(page.locator('[data-testid="sidebar"][data-expanded="true"]')).toBeVisible();
+    await page.keyboard.press('ControlOrMeta+.');
+    await expect(page.locator('[data-testid="sidebar"][data-expanded="false"]')).toBeAttached();
+    await page.keyboard.press('ControlOrMeta+.');
+    await expect(page.locator('[data-testid="sidebar"][data-expanded="true"]')).toBeVisible();
   });
 
   test('responsive layout hides sidebar on mobile', async ({ page }) => {
@@ -372,7 +372,7 @@ test.describe('Terminal UI', () => {
 
     // Separator between replayed and live events.
     await expect(
-      page1.locator('.separator', { hasText: '--- LIVE ---' }),
+      page1.locator('.sep-live').filter({ hasText: 'LIVE' }),
     ).toBeVisible({ timeout: 5000 });
 
     // DB: all 4 events exist on the location stream
@@ -535,5 +535,86 @@ test.describe('Terminal UI', () => {
     // The textarea should be empty — no draft from the old session
     const inputAfter = page.locator('textarea');
     await expect(inputAfter).toHaveValue('');
+  });
+
+  test('Cmd+K opens palette, Escape closes it', async ({ page }) => {
+    await connectAsGuest(page);
+    await page.keyboard.press('ControlOrMeta+k');
+    await expect(page.locator('[data-cmdk-dialog]')).toBeVisible({ timeout: 3000 });
+    // Type to filter
+    await page.keyboard.type('theme');
+    await expect(page.locator('[data-cmdk-item]').first()).toContainText(/theme/i);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-cmdk-dialog]')).toBeHidden();
+  });
+
+  test('Cmd+B toggles rail visibility', async ({ page }) => {
+    await connectAsGuest(page);
+    const rail = page.locator('[data-testid="rail"]');
+    await expect(rail).toBeVisible();
+    // Rail starts visible (not is-hidden)
+    await expect(rail).not.toHaveClass(/is-hidden/);
+    await page.keyboard.press('ControlOrMeta+b');
+    await expect(rail).toHaveClass(/is-hidden/);
+    await page.keyboard.press('ControlOrMeta+b');
+    await expect(rail).not.toHaveClass(/is-hidden/);
+  });
+
+  test('Cmd+Shift+E opens composer; text mirrors inline input', async ({ page }) => {
+    await connectAsGuest(page);
+    const input = page.locator('textarea').first();
+    await input.fill('partial pose from inline');
+    await page.waitForTimeout(700);  // allow draft debounce
+    await page.keyboard.press('ControlOrMeta+Shift+KeyE');
+    const composer = page.locator('[role="region"][aria-label="Command composer"]');
+    await expect(composer).toBeVisible();
+    // Composer textarea should see the draft
+    const composerTA = composer.locator('textarea');
+    await expect(composerTA).toHaveValue('partial pose from inline');
+    // Esc closes composer
+    await page.keyboard.press('Escape');
+    await expect(composer).toBeHidden();
+  });
+
+  test('mode chip appears for say/pose/ooc prefixes', async ({ page }) => {
+    await connectAsGuest(page);
+    const input = page.locator('textarea').first();
+    await input.fill(': smiles');
+    await expect(page.locator('.mode-chip')).toContainText(/pose/i);
+    await input.fill('say hello');
+    await expect(page.locator('.mode-chip')).toContainText(/say/i);
+    await input.fill('ooc brb');
+    await expect(page.locator('.mode-chip')).toContainText(/ooc/i);
+    await input.fill('look');
+    await expect(page.locator('.mode-chip')).toHaveCount(0);
+  });
+
+  test('timestamps render on terminal lines', async ({ page }) => {
+    await connectAsGuest(page);
+    const input = page.locator('textarea').first();
+    const token = `ts-${Date.now()}`;
+    await input.fill(`say ${token}`);
+    await input.press('Enter');
+    await expect(
+      page.locator('[data-testid="event"]').filter({ hasText: token }),
+    ).toBeVisible({ timeout: 10000 });
+    // Each line has a .tstamp in HH:MM form
+    const tstamp = page.locator('.line .tstamp').first();
+    await expect(tstamp).toBeVisible();
+    await expect(tstamp).toHaveText(/^\d{2}:\d{2}$/);
+  });
+
+  test('IME composition does not trigger global shortcuts', async ({ page }) => {
+    await connectAsGuest(page);
+    // Dispatch a synthesized keydown with isComposing=true for the palette shortcut.
+    await page.evaluate(() => {
+      const ev = new KeyboardEvent('keydown', {
+        key: 'k', code: 'KeyK', metaKey: true, ctrlKey: true, isComposing: true,
+        bubbles: true, cancelable: true,
+      });
+      window.dispatchEvent(ev);
+    });
+    // Palette must not open
+    await expect(page.locator('[data-cmdk-dialog]')).toBeHidden();
   });
 });

@@ -10,13 +10,20 @@
   import { ControlSignal } from '$lib/connect/holomush/web/v1/web_pb';
   import { routeEvent } from '$lib/stores/eventRouter';
   import { appendLine, clearLines, replayActive } from '$lib/stores/terminalStore';
-  import { toggleSidebar } from '$lib/stores/sidebarStore';
   import { themePreferences, terminalBlackOverrideVars } from '$lib/stores/themeStore';
+  import { setConnectionStatus } from '$lib/stores/connectionStore';
+  import { uiPrefs, setSidebarWidthPx } from '$lib/stores/uiPrefsStore';
+  import {
+    composerDraft,
+    setComposerDraft,
+    registerComposerSubmit,
+  } from '$lib/stores/composerBridge';
+  import { pushCommand } from '$lib/stores/commandHistoryStore';
   import * as Resizable from '$lib/components/ui/resizable';
   import { authState, clearAuth, clearCharacterSession } from '$lib/stores/authStore';
   import TerminalView from '$lib/components/terminal/TerminalView.svelte';
   import CommandInput from '$lib/components/terminal/CommandInput.svelte';
-  import StatusBar from '$lib/components/terminal/StatusBar.svelte';
+  import Rail from '$lib/components/terminal/Rail.svelte';
   import Sidebar from '$lib/components/sidebar/Sidebar.svelte';
   import { goto } from '$app/navigation';
   import { trace, type Span } from '@opentelemetry/api';
@@ -39,34 +46,90 @@
     | null = null;
 
   let sessionId = $state('');
-  let characterName = $state('');
   let connected = $state(false);
   let error = $state('');
   let abortController: AbortController | null = null;
-  let isMobile = $state(false);
 
-  function onKeydown(e: KeyboardEvent) {
-    if (e.ctrlKey && e.key === 'b') {
-      e.preventDefault();
-      toggleSidebar();
-    }
-    if (e.ctrlKey && e.key === 'l') {
-      e.preventDefault();
-      clearLines();
-    }
+  let injectText = $state<string | undefined>(undefined);
+  function handleInject(cmd: string) { injectText = cmd; }
+  function handleInjectConsumed() { injectText = undefined; }
+
+  let paneGroupEl: HTMLDivElement | undefined = $state(undefined);
+  let containerWidth = $state(0);
+
+  function pctFromPx(px: number, cw: number): number {
+    if (cw <= 0) return 25;
+    // px is already clamped by uiPrefsStore; just divide
+    return (px / cw) * 100;
   }
 
+  let widthCommitTimer: ReturnType<typeof setTimeout> | undefined;
+  function handleSidebarResize(pct: number) {
+    clearTimeout(widthCommitTimer);
+    widthCommitTimer = setTimeout(() => {
+      if (containerWidth > 0) setSidebarWidthPx(Math.round((pct / 100) * containerWidth));
+    }, 200);
+  }
+
+  $effect(() => {
+    if (!paneGroupEl) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) containerWidth = e.contentRect.width;
+    });
+    ro.observe(paneGroupEl);
+    return () => ro.disconnect();
+  });
+
+  let sidebarDefaultPct = $derived(pctFromPx($uiPrefs.sidebarWidthPx, containerWidth || 1120));
+
+  // Composer draft bridge: on open, seed composer from the saved CommandInput
+  // draft for this session; on close, inject the (possibly edited) text back
+  // into CommandInput via injectText.
+  let wasComposerOpen = $state(false);
+  $effect(() => {
+    const isOpen = $uiPrefs.composerOpen;
+    if (isOpen && !wasComposerOpen) {
+      if (sessionId) {
+        const saved = localStorage.getItem(`holomush-draft:${sessionId}`) ?? '';
+        setComposerDraft(saved);
+      }
+    } else if (!isOpen && wasComposerOpen) {
+      injectText = $composerDraft;
+    }
+    wasComposerOpen = isOpen;
+  });
+
+  // Persist composer draft to the SAME localStorage key that CommandInput uses,
+  // so composer edits survive reload even before composer closes.
+  let composerPersistTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const draft = $composerDraft;
+    const sid = sessionId;
+    if (!sid || !$uiPrefs.composerOpen) return;
+    clearTimeout(composerPersistTimer);
+    composerPersistTimer = setTimeout(() => {
+      try {
+        if (draft) {
+          localStorage.setItem(`holomush-draft:${sid}`, draft);
+        } else {
+          localStorage.removeItem(`holomush-draft:${sid}`);
+        }
+      } catch { /* quota / privacy mode — best effort */ }
+    }, 500);
+  });
+
+  onDestroy(() => clearTimeout(composerPersistTimer));
+
   onMount(() => {
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    window.addEventListener('keydown', onKeydown);
+    registerComposerSubmit((cmd) => {
+      pushCommand(cmd);
+      sendCommand(cmd);
+    });
 
     const sid = $authState.sessionId;
-    const name = $authState.characterName;
 
     if (sid) {
       sessionId = sid;
-      characterName = name ?? '';
       connected = true;
       hydrateAndStream();
     } else {
@@ -76,8 +139,7 @@
   });
 
   onDestroy(() => {
-    window.removeEventListener('resize', checkMobile);
-    window.removeEventListener('keydown', onKeydown);
+    registerComposerSubmit(null);
     abortController?.abort();
     // Best-effort server disconnect on component unmount (SPA navigation)
     if (sessionId) {
@@ -88,10 +150,6 @@
     streamSpan?.end();
     streamSpan = null;
   });
-
-  function checkMobile() {
-    isMobile = window.innerWidth < 768;
-  }
 
   function createStreamReadyGate(generation: number) {
     let resolve!: () => void;
@@ -135,6 +193,7 @@
     // gated on generation + localController.signal.aborted.
     const localController = abortController;
     clearLines();
+    setConnectionStatus('syncing');
     replayActive.set(true);
     const generation = ++streamGeneration;
     createStreamReadyGate(generation);
@@ -175,6 +234,7 @@
             const ctrl = response.frame.value;
             if (ctrl.signal === ControlSignal.REPLAY_COMPLETE) {
               resolveStreamReady(generation);
+              setConnectionStatus('connected');
             } else if (ctrl.signal === ControlSignal.STREAM_CLOSED) {
               // Stale-generation guard: if a later hydrate has started,
               // skip mutating shared state (connected, sessionId) and just
@@ -193,6 +253,7 @@
               connected = false;
               sessionId = '';
               rejectStreamReady(generation, new Error(ctrl.message || 'Stream closed'));
+              setConnectionStatus('disconnected');
               goto('/characters');
               return;
             }
@@ -218,6 +279,7 @@
         if (!isStale && e instanceof Error && e.name !== 'AbortError') {
           connected = false;
           error = 'Connection lost. Click "Reconnect" or refresh the page.';
+          setConnectionStatus('disconnected');
         }
         rejectStreamReady(generation, e);
       } finally {
@@ -326,6 +388,7 @@
     clearCharacterSession();
     connected = false;
     sessionId = '';
+    setConnectionStatus('disconnected');
     goto('/characters');
   }
 
@@ -349,33 +412,27 @@
   </div>
 {:else}
   <div class="terminal-layout" style={$themePreferences.terminalBlackBackground ? terminalBlackOverrideVars() : ''}>
-    <StatusBar
-      {characterName}
-      {connected}
-      syncing={$replayActive}
-      onToggleSidebar={toggleSidebar}
-      showHamburger={isMobile}
-    />
-    {#if !isMobile}
-      <Resizable.PaneGroup direction="horizontal" class="main-area">
-        <Resizable.Pane defaultSize={75} class="terminal-column">
+    <Rail />
+    <div class="main-area" bind:this={paneGroupEl}>
+      <Resizable.PaneGroup direction="horizontal">
+        <Resizable.Pane defaultSize={100 - sidebarDefaultPct} class="terminal-column">
           <TerminalView />
-          <CommandInput {sessionId} onSend={sendCommand} />
+          <CommandInput
+            {sessionId}
+            onSend={sendCommand}
+            {injectText}
+            onInjectConsumed={handleInjectConsumed}
+          />
         </Resizable.Pane>
         <Resizable.Handle withHandle />
-        <Resizable.Pane defaultSize={25}>
-          <Sidebar onExitClick={handleExitClick} resizable />
+        <Resizable.Pane
+          defaultSize={sidebarDefaultPct}
+          onResize={handleSidebarResize}
+        >
+          <Sidebar onExitClick={handleExitClick} onInject={handleInject} resizable />
         </Resizable.Pane>
       </Resizable.PaneGroup>
-    {:else}
-      <div class="main-area">
-        <div class="terminal-column">
-          <TerminalView />
-          <CommandInput {sessionId} onSend={sendCommand} />
-        </div>
-        <Sidebar onExitClick={handleExitClick} overlay />
-      </div>
-    {/if}
+    </div>
   </div>
 {/if}
 
@@ -385,7 +442,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: calc(100vh - 32px);
+    height: calc(100vh - var(--topbar-h));
     gap: 16px;
     font-family: 'JetBrains Mono', monospace;
     background: var(--color-background, #0d0d1a);
@@ -409,8 +466,8 @@
   }
   .terminal-layout {
     display: flex;
-    flex-direction: column;
-    height: calc(100vh - 32px);
+    flex-direction: row;
+    height: calc(100vh - var(--topbar-h));
     font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
     font-size: 15px;
     background: var(--color-background);
@@ -419,10 +476,16 @@
   .main-area {
     flex: 1;
     display: flex;
+    min-width: 0;
+    min-height: 0;
     overflow: hidden;
-    position: relative;
   }
-  .terminal-column {
+  .main-area > :global(*) {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+  }
+  :global(.terminal-column) {
     flex: 1;
     display: flex;
     flex-direction: column;

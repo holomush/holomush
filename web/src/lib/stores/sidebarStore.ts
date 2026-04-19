@@ -1,9 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
 import { writable } from 'svelte/store';
 
 export interface RoomLocation {
   id: string;
   name: string;
   description: string;
+  mood?: string;  // optional; populated by server when holomush-uhiz lands
 }
 
 export interface RoomExit {
@@ -15,12 +19,13 @@ export interface RoomExit {
 export interface RoomCharacter {
   name: string;
   idle: boolean;
+  lastMode?: 'say' | 'pose' | 'ooc' | 'sys';  // optional; holomush-uhiz
+  isIdle?: boolean;  // optional; holomush-uhiz — distinct from presence.idle which is per-char timeout
 }
 
 export const location = writable<RoomLocation | null>(null);
 export const exits = writable<RoomExit[]>([]);
 export const presence = writable<RoomCharacter[]>([]);
-export const sidebarExpanded = writable<boolean>(true);
 
 export function applyLocationState(metadata: Record<string, unknown>) {
   const loc = metadata.location as RoomLocation | undefined;
@@ -42,8 +47,4 @@ export function addPresence(name: string) {
 
 export function removePresence(name: string) {
   presence.update((list) => list.filter((c) => c.name !== name));
-}
-
-export function toggleSidebar() {
-  sidebarExpanded.update((v) => !v);
 }

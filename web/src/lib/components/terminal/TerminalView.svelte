@@ -4,23 +4,30 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { lines, replayActive, newMessageCount, isAtBottom, scrolledToBottom, scrolledAway } from '$lib/stores/terminalStore';
+  import { lines, newMessageCount, isAtBottom, scrolledToBottom, scrolledAway } from '$lib/stores/terminalStore';
   import EventRenderer from './EventRenderer.svelte';
 
   let scrollContainer: HTMLDivElement;
   let sentinel: HTMLDivElement;
   let observer: IntersectionObserver;
 
+  const fmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+  function formatHHMM(d: Date): string { return fmt.format(d); }
+
+  // Index of the first live (non-replayed) line in $lines; -1 if none.
+  let liveStartIdx = $derived($lines.findIndex((l) => !l.replayed));
+  let hasReplay = $derived($lines.some((l) => l.replayed));
+  let hasLive = $derived(liveStartIdx !== -1);
+
+  let replayLines = $derived(hasLive ? $lines.slice(0, liveStartIdx) : $lines.filter((l) => l.replayed));
+  let liveLines = $derived(hasLive ? $lines.slice(liveStartIdx) : []);
+
   onMount(() => {
     observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
-          scrolledToBottom();
-        } else {
-          scrolledAway();
-        }
+        if (entry.isIntersecting) scrolledToBottom(); else scrolledAway();
       },
-      { root: scrollContainer, threshold: 0, rootMargin: '50px' }
+      { root: scrollContainer, threshold: 0, rootMargin: '50px' },
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
@@ -28,9 +35,7 @@
 
   $effect(() => {
     if ($isAtBottom && $lines.length > 0) {
-      requestAnimationFrame(() => {
-        sentinel.scrollIntoView({ behavior: 'instant' });
-      });
+      requestAnimationFrame(() => { sentinel.scrollIntoView({ behavior: 'instant' }); });
     }
   });
 
@@ -42,16 +47,35 @@
 
 <div class="terminal-view" bind:this={scrollContainer}>
   <div class="scrollback">
-    {#if $replayActive}
-      <div class="separator">--- REPLAY ---</div>
+    {#if hasReplay}
+      <div class="lines replay-chunk">
+        {#each replayLines as line (line.id)}
+          <div class="line replay" data-event-id={line.id}>
+            <span class="tstamp">{formatHHMM(line.timestamp)}</span>
+            <EventRenderer event={line.event} dimmed={true} />
+          </div>
+        {/each}
+      </div>
     {/if}
 
-    {#each $lines as line, i (line.id)}
-      {#if !line.replayed && i > 0 && $lines[i - 1]?.replayed}
-        <div class="separator">--- LIVE ---</div>
-      {/if}
-      <EventRenderer event={line.event} dimmed={line.replayed} />
-    {/each}
+    {#if hasReplay && hasLive}
+      <div class="sep-live" role="separator" aria-label="Live events begin">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="label">LIVE</span>
+        <span class="gradient-line" aria-hidden="true"></span>
+      </div>
+    {/if}
+
+    {#if hasLive}
+      <div class="lines live-chunk">
+        {#each liveLines as line (line.id)}
+          <div class="line" data-event-id={line.id}>
+            <span class="tstamp">{formatHHMM(line.timestamp)}</span>
+            <EventRenderer event={line.event} dimmed={false} />
+          </div>
+        {/each}
+      </div>
+    {/if}
 
     <div class="sentinel" bind:this={sentinel}></div>
   </div>
@@ -74,22 +98,55 @@
   }
   .scrollback { padding: 8px 12px; }
   .sentinel { height: 1px; }
-  .separator {
-    color: var(--color-status-text);
-    font-size: 11px;
-    letter-spacing: 1px;
-    margin: 4px 0;
+
+  .line {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: var(--row-py, 3px) 0;
+    line-height: 1.7;
   }
+  .line.replay { opacity: 0.45; }
+  .tstamp {
+    flex-shrink: 0;
+    width: 44px;
+    color: var(--mush-timestamp, var(--color-status-text));
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    padding-top: 2px;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .lines.live-chunk > .line:last-child:not(.replay) {
+      animation: just-arrived 600ms ease-out;
+    }
+  }
+
+  .sep-live {
+    display: flex; align-items: center; gap: 8px;
+    margin: 10px 0 6px;
+    color: var(--color-primary);
+    font-size: 10px; letter-spacing: 2px; font-weight: bold;
+  }
+  .sep-live .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--color-primary);
+    animation: dot-pulse 1200ms ease-in-out infinite;
+  }
+  .sep-live .label { flex-shrink: 0; }
+  .sep-live .gradient-line {
+    flex: 1; height: 1px;
+    background: linear-gradient(to right, var(--color-primary), transparent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sep-live .dot { animation: none; opacity: 0.8; }
+  }
+
   .scroll-indicator {
-    position: sticky;
-    bottom: 0;
-    width: 100%;
+    position: sticky; bottom: 0; width: 100%;
     background: var(--color-border);
     color: var(--color-scrollback-indicator);
-    border: none;
-    padding: 4px;
-    font-size: 12px;
-    cursor: pointer;
-    text-align: center;
+    border: none; padding: 4px;
+    font-size: 12px; cursor: pointer; text-align: center;
   }
 </style>

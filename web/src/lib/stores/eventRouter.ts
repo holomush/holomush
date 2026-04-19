@@ -18,7 +18,9 @@ export function routeEvent(event: GameEvent, replayed: boolean) {
 
   // Route to terminal (scrollback)
   if (target === DISPLAY_TERMINAL || target === DISPLAY_BOTH || target === DISPLAY_UNSPECIFIED) {
-    appendLine(event, replayed);
+    // GameEvent.timestamp is bigint Unix millis; convert to number for Date construction.
+    const ms = Number(event.timestamp ?? 0n);
+    appendLine(event, replayed, ms);
   }
 
   // Route to sidebar stores. location_state is always applied (it's the

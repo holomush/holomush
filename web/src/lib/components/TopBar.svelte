@@ -3,7 +3,8 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
-  import { LogOut, ArrowLeftRight, Palette } from 'lucide-svelte';
+  import { LogOut, ArrowLeftRight, Palette, PanelRightOpen, Command as CommandIcon } from 'lucide-svelte';
+  import { page } from '$app/stores';
   import { authState, clearAuth } from '$lib/stores/authStore';
   import {
     activeTheme,
@@ -12,6 +13,9 @@
     setTerminalBlackBackground,
     getAvailableThemes,
   } from '$lib/stores/themeStore';
+  import { location } from '$lib/stores/sidebarStore';
+  import { connectionStatus } from '$lib/stores/connectionStore';
+  import { toggleSidebar } from '$lib/stores/uiPrefsStore';
   import { createClient } from '@connectrpc/connect';
   import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
   import { transport } from '$lib/transport';
@@ -34,21 +38,15 @@
   const availableThemes = getAvailableThemes();
 
   let themeId = $derived($themePreferences.themeId);
+  let onTerminal = $derived($page.route.id?.includes('/terminal') ?? false);
 
   async function handleLogout() {
-    try {
-      await client.webLogout({});
-    } catch {
-      /* best effort */
-    }
+    try { await client.webLogout({}); } catch { /* best effort */ }
     clearAuth();
     goto('/');
   }
 
-  function handleSwitchCharacter() {
-    goto('/characters');
-  }
-
+  function handleSwitchCharacter() { goto('/characters'); }
   function displayName(id: string): string {
     return id.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   }
@@ -56,12 +54,38 @@
 
 <header>
   <div class="left">
-    <a href="/" class="logo">
+    <a href="/" class="logo brand-chip">
       <span class="logo-icon">H</span>
       <span class="logo-text">HoloMUSH</span>
     </a>
+    {#if onTerminal && $authState.characterName}
+      <span class="vdiv" aria-hidden="true"></span>
+      <div class="breadcrumb" data-testid="topbar-breadcrumb">
+        <span class="char">{$authState.characterName}</span>
+        {#if $location?.name}
+          <span class="sep">@</span>
+          <span class="loc">{$location.name}</span>
+          <span class="loc-id">#{$location.id.slice(0, 8)}</span>
+        {/if}
+      </div>
+    {/if}
   </div>
   <nav class="right">
+    {#if onTerminal}
+      <span class="kbd-hint" aria-hidden="true">
+        <CommandIcon size={12} /><kbd>K</kbd> palette
+      </span>
+      <span
+        class="conn-pill"
+        data-testid="conn-pill"
+        data-status={$connectionStatus}
+      >
+        <span class="conn-dot" aria-hidden="true"></span>
+        {#if $connectionStatus === 'connected'}connected{:else if $connectionStatus === 'syncing'}syncing{:else}disconnected{/if}
+      </span>
+      <span class="vdiv" aria-hidden="true"></span>
+    {/if}
+
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
         {#snippet child({ props })}
@@ -78,18 +102,9 @@
             <DropdownMenu.RadioItem value={theme.id}>
               <span class="theme-option">
                 <span class="theme-swatches">
-                  <span
-                    class="swatch"
-                    style="background: {themeData[theme.id]?.colors.background ?? '#000'}"
-                  ></span>
-                  <span
-                    class="swatch"
-                    style="background: {themeData[theme.id]?.colors.primary ?? '#888'}"
-                  ></span>
-                  <span
-                    class="swatch"
-                    style="background: {themeData[theme.id]?.colors.accent ?? '#888'}"
-                  ></span>
+                  <span class="swatch" style="background: {themeData[theme.id]?.colors.background ?? '#000'}"></span>
+                  <span class="swatch" style="background: {themeData[theme.id]?.colors.primary ?? '#888'}"></span>
+                  <span class="swatch" style="background: {themeData[theme.id]?.colors.accent ?? '#888'}"></span>
                 </span>
                 {displayName(theme.id)}
               </span>
@@ -98,7 +113,7 @@
         </DropdownMenu.RadioGroup>
         <DropdownMenu.Separator />
         <DropdownMenu.CheckboxItem
-          bind:checked={$themePreferences.terminalBlackBackground}
+          checked={$themePreferences.terminalBlackBackground}
           onCheckedChange={(v) => setTerminalBlackBackground(v === true)}
         >
           Black terminal background
@@ -106,11 +121,22 @@
       </DropdownMenu.Content>
     </DropdownMenu.Root>
 
+    {#if onTerminal}
+      <button
+        class="icon-btn"
+        onclick={toggleSidebar}
+        title="Toggle sidebar"
+        aria-label="Toggle sidebar"
+      >
+        <PanelRightOpen size={16} />
+      </button>
+    {/if}
+
     {#if !$authState.isPlayerAuthenticated && !$authState.sessionId}
       <a href="/login" class="nav-link">Login</a>
       <a href="/register" class="nav-link accent">Register</a>
     {:else if $authState.sessionId && $authState.characterName}
-      <span class="char-name">{$authState.characterName}</span>
+      <span class="char-name" data-testid="topbar-char-name">{$authState.characterName}</span>
       <button class="icon-btn" onclick={handleSwitchCharacter} title="Switch character" aria-label="Switch character">
         <ArrowLeftRight size={16} />
       </button>
@@ -128,7 +154,7 @@
 
 <style>
   header {
-    height: 36px;
+    height: var(--topbar-h);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -138,103 +164,69 @@
     flex-shrink: 0;
     font-size: 13px;
   }
-
-  .left {
-    display: flex;
-    align-items: center;
-  }
-
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    text-decoration: none;
-    color: var(--color-input-text);
-  }
-
+  .left { display: flex; align-items: center; gap: 10px; }
+  .logo { display: flex; align-items: center; gap: 6px; text-decoration: none; color: var(--color-input-text); }
   .logo-icon {
-    width: 22px;
-    height: 22px;
-    display: flex;
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--color-primary); color: var(--color-primary-foreground);
+    border-radius: 4px; font-weight: bold; font-size: 12px; flex-shrink: 0;
+  }
+  .logo-text { color: var(--color-primary); font-weight: 600; letter-spacing: 0.05em; }
+  .vdiv {
+    width: 1px; height: 20px;
+    background: var(--color-border);
+  }
+  .breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .breadcrumb .char { color: var(--mush-pose-actor); }
+  .breadcrumb .sep { color: var(--color-status-text); }
+  .breadcrumb .loc { color: var(--color-input-text); }
+  .breadcrumb .loc-id { color: var(--color-status-text); font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+  .right { display: flex; align-items: center; gap: 8px; }
+  .kbd-hint {
+    display: none;
     align-items: center;
-    justify-content: center;
-    background: var(--color-primary);
-    color: var(--color-primary-foreground);
-    border-radius: 4px;
-    font-weight: bold;
-    font-size: 12px;
-    flex-shrink: 0;
+    gap: 4px;
+    color: var(--color-status-text);
+    font-size: 11px;
   }
-
-  .logo-text {
-    color: var(--color-primary);
-    font-weight: 600;
-    letter-spacing: 0.05em;
+  @media (min-width: 768px) {
+    .kbd-hint { display: inline-flex; }
   }
-
-  .right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .nav-link {
-    color: var(--color-input-text);
-    text-decoration: none;
-    padding: 2px 8px;
-    border-radius: 4px;
+  .kbd-hint kbd {
+    font-family: inherit; font-size: 11px;
+    padding: 1px 4px;
     border: 1px solid var(--color-border);
+    border-radius: 3px;
+  }
+  .conn-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    background: var(--color-muted);
+    color: var(--color-muted-foreground);
+  }
+  .conn-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-status-text); }
+  .conn-pill[data-status="connected"] .conn-dot { background: var(--mush-arrive, #66bb6a); }
+  .conn-pill[data-status="syncing"] .conn-dot { background: var(--color-accent); animation: dot-pulse 1200ms ease-in-out infinite; }
+  .conn-pill[data-status="disconnected"] .conn-dot { background: var(--mush-system, #e57373); }
+  .nav-link {
+    color: var(--color-input-text); text-decoration: none;
+    padding: 2px 8px; border-radius: 4px; border: 1px solid var(--color-border);
     transition: border-color 0.15s;
   }
-
-  .nav-link:hover {
-    border-color: var(--color-primary);
-  }
-
-  .nav-link.accent {
-    background: var(--color-primary);
-    color: var(--color-primary-foreground);
-    border-color: var(--color-primary);
-  }
-
-  .char-name,
-  .player-name {
-    color: var(--color-primary);
-    font-size: 13px;
-  }
-
+  .nav-link:hover { border-color: var(--color-primary); }
+  .nav-link.accent { background: var(--color-primary); color: var(--color-primary-foreground); border-color: var(--color-primary); }
+  .char-name, .player-name { color: var(--color-primary); font-size: 13px; }
   .icon-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
+    background: none; border: none; cursor: pointer;
     color: var(--color-status-text);
-    display: flex;
-    align-items: center;
-    padding: 2px;
-    border-radius: 4px;
+    display: flex; align-items: center; padding: 2px; border-radius: 4px;
     transition: color 0.15s;
   }
-
-  .icon-btn:hover {
-    color: var(--color-input-text);
-  }
-
-  .theme-option {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .theme-swatches {
-    display: flex;
-    gap: 2px;
-  }
-
-  .swatch {
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border-radius: 2px;
-    border: 1px solid var(--color-border);
-  }
+  .icon-btn:hover { color: var(--color-input-text); }
+  .theme-option { display: flex; align-items: center; gap: 8px; }
+  .theme-swatches { display: flex; gap: 2px; }
+  .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; border: 1px solid var(--color-border); }
 </style>

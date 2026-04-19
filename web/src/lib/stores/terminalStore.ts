@@ -7,6 +7,7 @@ export interface TerminalLine {
   id: string;
   event: { type: string; characterName: string; text: string; channel?: number; metadata?: unknown };
   replayed: boolean;
+  timestamp: Date;
 }
 
 const DEFAULT_BUFFER_SIZE = 2048;
@@ -24,11 +25,17 @@ export const isAtBottom = writable<boolean>(true);
 
 let lineCounter = 0;
 
-export function appendLine(event: TerminalLine['event'], replayed: boolean) {
+export function appendLine(
+  event: TerminalLine['event'],
+  replayed: boolean,
+  timestampMs?: number,
+) {
   const id = `line-${++lineCounter}`;
   const bufferSize = getBufferSize();
+  const ms = timestampMs && timestampMs > 0 ? timestampMs : Date.now();
+  const timestamp = new Date(ms);
   lines.update((current) => {
-    const next = [...current, { id, event, replayed }];
+    const next = [...current, { id, event, replayed, timestamp }];
     return next.length > bufferSize ? next.slice(next.length - bufferSize) : next;
   });
   if (!get(isAtBottom)) {
