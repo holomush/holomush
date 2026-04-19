@@ -452,10 +452,10 @@ type focusCall struct {
 }
 
 type fakeFocusClient struct {
-	joinCalls           []focusCall
-	leaveCalls          []focusCall
-	leaveByTargetCalls  []pluginsdk.FocusKey
-	presentCalls        []focusCall
+	joinCalls          []focusCall
+	leaveCalls         []focusCall
+	leaveByTargetCalls []pluginsdk.FocusKey
+	presentCalls       []focusCall
 
 	joinErr             error
 	leaveErr            error

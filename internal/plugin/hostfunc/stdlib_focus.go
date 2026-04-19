@@ -16,7 +16,6 @@ import (
 	"github.com/holomush/holomush/internal/session"
 )
 
-
 const (
 	focusOpsKey      = "__holo_focus_ops"
 	historyReaderKey = "__holo_history_reader"

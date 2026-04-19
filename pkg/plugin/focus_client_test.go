@@ -421,20 +421,20 @@ func TestQueryStreamHistoryRequestNotBeforeIsPassedThrough(t *testing.T) {
 
 type focusTestServer struct {
 	pluginv1.UnimplementedPluginHostServiceServer
-	mu                  sync.Mutex
-	joinReqs            []*pluginv1.PluginHostServiceJoinFocusRequest
-	leaveReqs           []*pluginv1.PluginHostServiceLeaveFocusRequest
-	leaveByTargetReqs   []*pluginv1.PluginHostServiceLeaveFocusByTargetRequest
-	presentReqs         []*pluginv1.PluginHostServicePresentFocusRequest
-	historyReqs         []*pluginv1.PluginHostServiceQueryStreamHistoryRequest
+	mu                sync.Mutex
+	joinReqs          []*pluginv1.PluginHostServiceJoinFocusRequest
+	leaveReqs         []*pluginv1.PluginHostServiceLeaveFocusRequest
+	leaveByTargetReqs []*pluginv1.PluginHostServiceLeaveFocusByTargetRequest
+	presentReqs       []*pluginv1.PluginHostServicePresentFocusRequest
+	historyReqs       []*pluginv1.PluginHostServiceQueryStreamHistoryRequest
 
-	joinErr              error
-	leaveErr             error
-	leaveByTargetErr     error
-	leaveByTargetResp    *pluginv1.PluginHostServiceLeaveFocusByTargetResponse
-	presentErr           error
-	historyResp          *pluginv1.PluginHostServiceQueryStreamHistoryResponse
-	historyErr           error
+	joinErr           error
+	leaveErr          error
+	leaveByTargetErr  error
+	leaveByTargetResp *pluginv1.PluginHostServiceLeaveFocusByTargetResponse
+	presentErr        error
+	historyResp       *pluginv1.PluginHostServiceQueryStreamHistoryResponse
+	historyErr        error
 }
 
 func (s *focusTestServer) JoinFocus(_ context.Context, req *pluginv1.PluginHostServiceJoinFocusRequest) (*pluginv1.PluginHostServiceJoinFocusResponse, error) {
