@@ -80,6 +80,15 @@ type Config struct {
 	// disables the cap (unlimited redelivery — not recommended for
 	// production). Defaults to DefaultMaxDeliver via Defaults.
 	MaxDeliver int
+
+	// Owners is the subject-ownership map built from plugin manifests.
+	// The projection ack-and-skips messages whose subject resolves to a
+	// plugin owner — per-plugin consumers (registered in F5) project
+	// those into plugin-owned audit schemas independently.
+	//
+	// Nil means "no plugins declared ownership; host owns everything",
+	// preserving Phase A behavior.
+	Owners *OwnerMap
 }
 
 // Defaults fills any zero-valued fields with defaults.

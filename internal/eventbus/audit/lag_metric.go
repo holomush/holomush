@@ -22,11 +22,26 @@ var LagSeconds = prometheus.NewGaugeVec(
 	[]string{"projection"},
 )
 
+// SkippedPluginOwnedTotal counts messages the host projection ack-and-skipped
+// because their subject resolved to a plugin owner. Operators can use this
+// to observe the host/plugin split at projection time and to alert when
+// a plugin-owned consumer falls behind (plugin-skipped on host but not
+// persisted downstream ⇒ investigate per-plugin consumer health).
+var SkippedPluginOwnedTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Namespace: "holomush",
+		Subsystem: "audit",
+		Name:      "projection_plugin_owned_skipped_total",
+		Help:      "Messages the host audit projection acked-and-skipped because the subject is owned by a plugin.",
+	},
+	[]string{"plugin"},
+)
+
 // RegisterMetrics registers audit Prometheus collectors with reg.
 // Duplicate registrations are silently ignored; other registration
 // errors panic. Matches the pattern used by internal/lifecycle/metrics.go.
 func RegisterMetrics(reg prometheus.Registerer) {
-	for _, c := range []prometheus.Collector{LagSeconds} {
+	for _, c := range []prometheus.Collector{LagSeconds, SkippedPluginOwnedTotal} {
 		if err := reg.Register(c); err != nil {
 			var are prometheus.AlreadyRegisteredError
 			if errors.As(err, &are) {
