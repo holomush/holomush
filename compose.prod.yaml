@@ -94,6 +94,7 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    profiles: [caddy]
     ports:
       - "80:80"
       - "443:443"
@@ -107,6 +108,22 @@ services:
       - frontend
     depends_on:
       - gateway
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles: [tunnel]
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+      - --token
+      - ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    networks:
+      - frontend
+    depends_on:
+      gateway:
+        condition: service_started
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
