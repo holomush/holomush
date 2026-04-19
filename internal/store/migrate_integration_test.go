@@ -32,6 +32,7 @@ var expectedTables = []string{
 	"content_items",
 	"entity_properties",
 	"events",
+	"events_audit",
 	"exits",
 	"holomush_system_info",
 	"locations",
@@ -140,7 +141,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(8), version)
+	assert.Equal(t, uint(9), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)
@@ -165,7 +166,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(8), version)
+	assert.Equal(t, uint(9), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)
