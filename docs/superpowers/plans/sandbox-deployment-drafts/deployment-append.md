@@ -33,30 +33,42 @@ Telnet (port 4201) still reaches your droplet directly — Cloudflare does
 not proxy arbitrary TCP. Add a "DNS only" A record for
 `telnet.mush.example.com` pointing at your droplet's IP.
 
-## Automated nightly backups
+## Automated nightly backups (encrypted)
 
 To back up Postgres nightly to S3-compatible storage (DigitalOcean Spaces,
-AWS S3, Cloudflare R2), add these vars to your cloud-init:
+AWS S3, Cloudflare R2) with client-side encryption, add these vars to your
+cloud-init:
 
 ```bash
 BACKUP_S3_BUCKET=my-holomush-backups
-BACKUP_S3_ENDPOINT_URL=https://sfo3.digitaloceanspaces.com   # omit for AWS S3
+BACKUP_S3_ENDPOINT=sfo3.digitaloceanspaces.com   # omit for AWS S3
 BACKUP_S3_ACCESS_KEY=...
 BACKUP_S3_SECRET_KEY=...
-BACKUP_S3_PREFIX=game        # optional, default "game"
-BACKUP_RETENTION_DAYS=14     # optional, default 14
+KOPIA_PASSWORD=...           # long random string — encrypts every snapshot
+BACKUP_KEEP_DAILY=7          # optional
+BACKUP_KEEP_WEEKLY=4         # optional
+BACKUP_KEEP_MONTHLY=6        # optional
 ```
 
 When set, the cloud-init enables the `backups` compose profile, which runs
-a cron container that dumps Postgres at 03:00 UTC and pushes to
-`s3://<bucket>/<prefix>/YYYY/MM/DD/...sql.gz`. Backups older than the
-retention window are pruned automatically.
+a cron container that dumps Postgres at 03:00 UTC and streams it through
+[Kopia](https://kopia.io/). Kopia encrypts the stream client-side (your
+cloud provider cannot read the backups), deduplicates against previous
+snapshots, compresses with zstd, and uploads. Retention is policy-based —
+expired snapshots are pruned automatically.
+
+**Keep `KOPIA_PASSWORD` somewhere recoverable.** If you lose it, every
+snapshot in the repository becomes unrecoverable. Kopia has no recovery
+backdoor.
 
 Run a one-off backup via:
 
 ```bash
 cd /opt/holomush
-docker compose exec backup /usr/local/bin/backup.sh
+docker compose --profile caddy --profile backups exec backup /usr/local/bin/backup.sh
 ```
+
+(Replace `--profile caddy` with `--profile tunnel` if you use tunnel
+ingress.)
 
 Restore from a backup: see [Restoring a backup](sandbox-restore.md).

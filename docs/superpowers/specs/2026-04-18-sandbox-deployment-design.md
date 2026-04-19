@@ -104,10 +104,12 @@ profiles so operators opt in.
 - **New `tunnel` profile** runs a `cloudflared` container that terminates a
   Cloudflare Tunnel to `gateway:8080`. Operators who enable it SHOULD also
   stop the `caddy` service; the cloud-init handles this automatically.
-- **New `backups` profile** runs an alpine + cron + awscli container that
-  executes `pg_dump` nightly and pushes to an S3-compatible bucket (DO
-  Spaces or AWS S3). Off by default; enabled when the operator provides a
-  `BACKUP_S3_BUCKET` env var.
+- **New `backups` profile** runs an alpine + cron + [Kopia](https://kopia.io/)
+  container. Nightly, `pg_dump` is streamed into `kopia snapshot create`,
+  which applies client-side encryption (AES-256 by default), content-addressable
+  deduplication, zstd compression, and integrity verification before uploading
+  to an S3-compatible bucket (DO Spaces or AWS S3). Off by default; enabled
+  when the operator provides a `BACKUP_S3_BUCKET` + `KOPIA_PASSWORD` pair.
 - **`otel-collector` stays under its existing `observability` profile** —
   not in scope here.
 
@@ -189,9 +191,12 @@ droplet user-data env or by pre-editing `.env` before first boot):
 | `CLOUDFLARE_TUNNEL_TOKEN`       | `HOLOMUSH_INGRESS=tunnel` | Tunnel connection token                        |
 | `LETSENCRYPT_EMAIL`             | `HOLOMUSH_INGRESS=caddy`  | ACME account contact (Caddy reads from `.env`) |
 | `BACKUP_S3_BUCKET`              | optional                  | Enables `backups` profile when set             |
-| `BACKUP_S3_ENDPOINT_URL`        | if bucket is non-AWS      | e.g. `https://sfo3.digitaloceanspaces.com`     |
-| `BACKUP_S3_ACCESS_KEY` / `_SECRET_KEY` | if bucket set      | Credentials for backup push                    |
-| `BACKUP_RETENTION_DAYS`         | optional                  | Defaults to 14                                 |
+| `BACKUP_S3_ENDPOINT`            | if bucket is non-AWS      | e.g. `sfo3.digitaloceanspaces.com` (no scheme) |
+| `BACKUP_S3_ACCESS_KEY` / `_SECRET_KEY` | if bucket set      | Credentials Kopia uses to access the bucket    |
+| `KOPIA_PASSWORD`                | if bucket set             | Kopia repository password (encrypts backups)   |
+| `BACKUP_KEEP_DAILY`             | optional                  | Kopia retention — defaults to 7                |
+| `BACKUP_KEEP_WEEKLY`            | optional                  | Kopia retention — defaults to 4                |
+| `BACKUP_KEEP_MONTHLY`           | optional                  | Kopia retention — defaults to 6                |
 
 A `scripts/sandbox.env.example` file shows exactly the values the internal
 `game.holomush.dev` deploy uses (with secrets redacted). The sandbox's
@@ -226,13 +231,24 @@ A new job `deploy-sandbox` in `.github/workflows/release.yaml`, wired after
 
 ## Backups
 
-| Requirement          | Description                                                                                |
-| -------------------- | ------------------------------------------------------------------------------------------ |
-| **MUST** run nightly | `pg_dump` at 03:00 UTC via a `backup` compose service (alpine + cron + awscli)             |
-| **MUST** push to     | `s3://holomush-sandbox-backups/game/YYYY/MM/DD.sql.gz`                                     |
-| **MUST** retain      | 14 days via a DO Spaces lifecycle rule                                                     |
-| **MUST** pre-deploy  | A safety snapshot before each release, keyed by tag, under `pre-deploy/<tag>.sql.gz`       |
-| **SHOULD** document  | Restore procedure in `site/docs/operating/sandbox-restore.md`; restores remain manual      |
+| Requirement          | Description                                                                                                                |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **MUST** encrypt     | Backups are encrypted client-side by Kopia before upload. Operators who can read the Spaces bucket cannot read the backups |
+| **MUST** run nightly | `pg_dump` at 03:00 UTC via a `backup` compose service (alpine + cron + kopia)                                              |
+| **MUST** push to     | A Kopia repository rooted at `s3://holomush-sandbox-backups/` (managed by Kopia; structure is internal)                    |
+| **MUST** retain      | Kopia policy: 7 daily, 4 weekly, 6 monthly. Pre-deploy snapshots are pinned (never auto-expired)                           |
+| **MUST** pre-deploy  | A pinned safety snapshot before each release, tagged with the release tag                                                  |
+| **MUST NOT** bake    | The Kopia repository password (`KOPIA_PASSWORD`) into the image; rendered into `.env` at cloud-init from GitHub Secrets    |
+| **SHOULD** document  | Restore procedure in `site/docs/operating/sandbox-restore.md`; restores remain manual                                      |
+
+Kopia choice rationale: purpose-built for backup workloads, client-side
+encryption with AES-256 or ChaCha20, content-addressable deduplication across
+snapshots (useful because our event-sourced data grows monotonically, so
+older snapshots share blocks with newer ones), zstd compression, and built-in
+integrity verification. The alternative — `pg_dump | openssl enc | aws s3 cp`
+— would give us encryption but lose retention policies, dedup, compression,
+and integrity checks. Kopia is one extra tool; the other approach is three
+extra responsibilities we'd hand-roll.
 
 ## DNS (one-time Cloudflare setup)
 
@@ -262,11 +278,11 @@ is usable:
    already handled inline in `compose.prod.yaml` and does not need a
    separate template.
 6. **`docker/postgres-backup/`** — new alpine-based image (Dockerfile +
-   `backup.sh`) for the `backup` service. Built inline via the compose
-   `build:` directive on the deploy host. Keeps the sandbox scope focused
-   and avoids adding a second publishable image to the release pipeline.
-   Graduate to a goreleaser-published `ghcr.io/holomush/postgres-backup`
-   image if self-host adoption creates demand.
+   `backup.sh` + Kopia policy bootstrap) for the `backup` service. Built
+   inline via the compose `build:` directive on the deploy host. Contains
+   `kopia`, `postgresql-client` (for `pg_dump`), and `dcron`. Graduate to
+   a goreleaser-published `ghcr.io/holomush/postgres-backup` image if
+   self-host adoption creates demand.
 7. **GitHub Secrets to add:**
    - `DIGITALOCEAN_ACCESS_TOKEN`
    - `DIGITALOCEAN_SSH_KEY_ID`
@@ -275,6 +291,9 @@ is usable:
    - `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`
    - `CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_TUNNEL_TOKEN`
    - `DO_SPACES_ACCESS_KEY`, `DO_SPACES_SECRET_KEY`
+   - `KOPIA_SANDBOX_PASSWORD` (encrypts the sandbox's Kopia repository;
+     rotating it requires creating a new repository and discarding older
+     snapshots — document in the runbook)
    - `HOLOMUSH_SANDBOX_POSTGRES_PASSWORD`
 8. **Runbook** `site/docs/operating/sandbox-operations.md` — SSH, logs,
    secret rotation, tunnel recreation.

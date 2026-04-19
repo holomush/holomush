@@ -24,16 +24,27 @@ In the Cloudflare dashboard:
    `game.holomush.dev → http://gateway:8080`.
 5. Save.
 
-### 2. Create the Spaces bucket
+### 2. Create the Spaces bucket and Kopia password
 
 1. DigitalOcean → **Spaces → Create a Space** in `sfo3`, name
    `holomush-sandbox-backups`.
 2. Generate an access key pair: **API → Spaces Keys → Generate New Key**.
 3. Save both values into GitHub Secrets as `DO_SPACES_ACCESS_KEY` and
    `DO_SPACES_SECRET_KEY`.
-4. Add a lifecycle rule: objects under prefix `game/` expire after 14
-   days; objects under prefix `pre-deploy/` never expire (we want every
-   release's safety snapshot to persist until explicitly pruned).
+4. Generate a long Kopia repository password and save it as
+   `KOPIA_SANDBOX_PASSWORD`:
+
+   ```bash
+   openssl rand -base64 48 | tr -d '=/+' | head -c 64
+   ```
+
+   **Store this password somewhere recoverable** (1Password, a sealed
+   secret, etc.). If it is lost, every snapshot in the repository becomes
+   unrecoverable — Kopia encrypts client-side with no recovery.
+
+5. No Spaces lifecycle rule is needed. Kopia manages retention
+   internally: pinned `pre-deploy:*` snapshots live forever, others are
+   pruned by policy.
 
 ### 3. Create the droplet
 
@@ -48,15 +59,18 @@ export HOLOMUSH_INGRESS=tunnel
 export CLOUDFLARE_TUNNEL_TOKEN="..."
 export POSTGRES_PASSWORD="$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)"
 export BACKUP_S3_BUCKET=holomush-sandbox-backups
-export BACKUP_S3_ENDPOINT_URL=https://sfo3.digitaloceanspaces.com
+export BACKUP_S3_ENDPOINT=sfo3.digitaloceanspaces.com
 export BACKUP_S3_ACCESS_KEY="..."
 export BACKUP_S3_SECRET_KEY="..."
-export BACKUP_S3_REGION=us-east-1
+export KOPIA_PASSWORD="..."   # from KOPIA_SANDBOX_PASSWORD secret
+export BACKUP_KEEP_DAILY=7
+export BACKUP_KEEP_WEEKLY=4
+export BACKUP_KEEP_MONTHLY=6
 
 # Prepend env exports to the cloud-init body
 (
   printf '#!/bin/bash\n'
-  env | grep -E '^(HOLOMUSH_|CLOUDFLARE_TUNNEL_TOKEN|POSTGRES_PASSWORD|BACKUP_)' \
+  env | grep -E '^(HOLOMUSH_|CLOUDFLARE_TUNNEL_TOKEN|POSTGRES_PASSWORD|BACKUP_|KOPIA_)' \
       | sed 's/^/export /'
   sed -n '10,$p' scripts/cloud-init.sh
 ) > /tmp/holomush-cloud-init.sh
@@ -154,8 +168,29 @@ If the tunnel token is compromised:
 
 ```bash
 ssh holomush@game.holomush.dev
-docker compose -f /opt/holomush/compose.yaml exec backup /usr/local/bin/backup.sh
+docker compose -f /opt/holomush/compose.yaml --profile tunnel --profile backups \
+  exec backup /usr/local/bin/backup.sh
 ```
+
+To take a pinned snapshot that retention policy will not expire:
+
+```bash
+docker compose -f /opt/holomush/compose.yaml --profile tunnel --profile backups \
+  exec backup /usr/local/bin/backup.sh --tag=manual-pin:$(date -u +%F)
+```
+
+### Rotate the Kopia repository password
+
+**Warning:** rotating the repository password means every snapshot currently
+in the repository becomes unreadable. There is no "re-encrypt" operation.
+
+1. Take a final backup under the old password and download it locally.
+2. Create a new bucket (or prefix) for the new repository.
+3. Update `KOPIA_SANDBOX_PASSWORD` in GitHub Secrets.
+4. SSH to the droplet, update `.env`, and on next `docker compose up -d` the
+   cloud-init-style init path will create a fresh repository at the new
+   bucket. Old snapshots remain encrypted with the old password — keep a
+   copy if they matter.
 
 ### Restore a backup
 

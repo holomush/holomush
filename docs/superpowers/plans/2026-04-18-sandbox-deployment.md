@@ -13,15 +13,17 @@ an alternate ingress, and a `deploy-sandbox` workflow job that deploys on
 release-tag push.
 
 **Architecture:** Extend `compose.prod.yaml` in place with two compose
-profiles — `tunnel` (cloudflared) and `backups` (alpine + awscli + cron +
-pg_dump to S3-compatible storage). Extend `scripts/cloud-init.sh` to read
-`HOLOMUSH_INGRESS` and backup env vars, write them to `.env`, and auto-start
-compose with the right profiles. All wired through a new GitHub Actions
-`deploy-sandbox` job that runs after `verify-release`.
+profiles — `tunnel` (cloudflared) and `backups` (alpine + kopia + cron +
+pg_dump streamed into an encrypted Kopia repository on S3-compatible
+storage). Extend `scripts/cloud-init.sh` to read `HOLOMUSH_INGRESS` and
+backup env vars, write them to `.env`, initialize the Kopia repo on first
+boot, and auto-start compose with the right profiles. All wired through a
+new GitHub Actions `deploy-sandbox` job that runs after `verify-release`.
 
 **Tech Stack:** Docker Compose v2, Cloudflare Tunnel (`cloudflared`), DO
-Spaces (S3-compatible), awscli, cron, bash, GitHub Actions, GoReleaser
-(existing pipeline; no changes).
+Spaces (S3-compatible), [Kopia](https://kopia.io/) for encrypted/deduped
+backups, cron, bash, GitHub Actions, GoReleaser (existing pipeline; no
+changes).
 
 **Spec:** `docs/superpowers/specs/2026-04-18-sandbox-deployment-design.md`
 
@@ -37,8 +39,8 @@ Each task below becomes a child beads issue via `--parent`.
 
 | File                                        | Responsibility                                                                                  |
 | ------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `docker/postgres-backup/Dockerfile`         | Alpine base + awscli + dcron + copy of `backup.sh`                                              |
-| `docker/postgres-backup/backup.sh`          | pg_dump → gzip → `aws s3 cp` → retention prune                                                  |
+| `docker/postgres-backup/Dockerfile`         | Alpine base + kopia (pinned) + postgresql-client + dcron + `backup.sh`                          |
+| `docker/postgres-backup/backup.sh`          | pg_dump → `kopia snapshot create --stdin` (encrypt + dedupe + compress) → retention policy      |
 | `deploy/cloudflared/config.yml.tmpl`        | Tunnel ingress config (reads env-rendered tunnel ID + hostname)                                 |
 | `deploy/doctl/firewall-sandbox.json`        | DO cloud firewall: SSH allowlisted, 4201/tcp public, 80/443 closed (tunnel-only)                |
 | `scripts/sandbox.env.example`               | Reference `.env` for the sandbox droplet (secrets redacted)                                     |
@@ -76,17 +78,25 @@ Each task below becomes a child beads issue via `--parent`.
 
 #### Step 1.1: Write `backup.sh`
 
-- [ ] Create `docker/postgres-backup/backup.sh` with the following content. This
-  script is the cron job body: dumps Postgres, gzips, uploads to S3, prunes
-  older than retention-days.
+- [ ] Create `docker/postgres-backup/backup.sh` with the following content.
+  This script is the cron job body: dumps Postgres and streams it into a
+  Kopia snapshot. Kopia encrypts client-side (AES-256 by default), dedupes,
+  compresses (zstd), and pushes to the configured S3-compatible bucket.
+  Retention is policy-based, applied on every snapshot run.
 
 ```bash
 #!/bin/sh
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 HoloMUSH Contributors
 #
-# Nightly Postgres backup: pg_dump → gzip → S3 upload → retention prune.
-# Invoked by cron; run manually for a one-off backup via docker compose exec.
+# Nightly Postgres backup via Kopia.
+#
+# Flow: pg_dump → kopia snapshot create --stdin → encrypted+deduped+compressed
+#       upload to S3-compatible bucket. Retention policies (keep-daily,
+#       keep-weekly, keep-monthly) applied per snapshot source.
+#
+# Invoked by cron at 03:00 UTC. Run manually via:
+#   docker compose exec backup /usr/local/bin/backup.sh [--tag=pre-deploy:vX]
 
 set -eu
 
@@ -95,38 +105,73 @@ set -eu
 : "${POSTGRES_DB:?must be set}"
 : "${PGPASSWORD:?must be set}"
 : "${BACKUP_S3_BUCKET:?must be set}"
-: "${BACKUP_S3_PREFIX:=game}"
-: "${BACKUP_RETENTION_DAYS:=14}"
+: "${KOPIA_PASSWORD:?must be set}"
+: "${BACKUP_S3_ACCESS_KEY:?must be set}"
+: "${BACKUP_S3_SECRET_KEY:?must be set}"
 
-date_iso=$(date -u +%Y-%m-%dT%H-%M-%SZ)
-s3_key="${BACKUP_S3_PREFIX}/$(date -u +%Y/%m/%d)/${date_iso}.sql.gz"
+# Parse optional --tag=<key:value> argument (used for pre-deploy pins).
+TAG=""
+for arg in "$@"; do
+  case "${arg}" in
+    --tag=*) TAG="${arg#--tag=}" ;;
+    *) echo "unknown arg: ${arg}" >&2; exit 2 ;;
+  esac
+done
 
-endpoint_flag=""
-if [ -n "${BACKUP_S3_ENDPOINT_URL:-}" ]; then
-  endpoint_flag="--endpoint-url ${BACKUP_S3_ENDPOINT_URL}"
+export KOPIA_PASSWORD
+export AWS_ACCESS_KEY_ID="${BACKUP_S3_ACCESS_KEY}"
+export AWS_SECRET_ACCESS_KEY="${BACKUP_S3_SECRET_KEY}"
+
+# Connect to the repo if not already connected. `kopia repository status`
+# returns non-zero if not connected; in that case, connect (the repo is
+# created once during cloud-init; see operations runbook).
+if ! kopia repository status >/dev/null 2>&1; then
+  echo "[backup] connecting to existing Kopia repository"
+  endpoint_args=""
+  if [ -n "${BACKUP_S3_ENDPOINT:-}" ]; then
+    endpoint_args="--endpoint=${BACKUP_S3_ENDPOINT}"
+  fi
+  # shellcheck disable=SC2086
+  kopia repository connect s3 \
+    --bucket="${BACKUP_S3_BUCKET}" \
+    ${endpoint_args} \
+    --access-key="${BACKUP_S3_ACCESS_KEY}" \
+    --secret-access-key="${BACKUP_S3_SECRET_KEY}"
 fi
 
-echo "[backup] $(date -u +%FT%TZ) starting pg_dump → s3://${BACKUP_S3_BUCKET}/${s3_key}"
+source_name="holomush-${POSTGRES_DB}"
+echo "[backup] $(date -u +%FT%TZ) streaming pg_dump → kopia snapshot (source=${source_name})"
+
+tag_args=""
+pin_args=""
+if [ -n "${TAG}" ]; then
+  tag_args="--tags=${TAG}"
+  # Pre-deploy snapshots are pinned so the retention policy never expires them.
+  case "${TAG}" in
+    pre-deploy:*) pin_args="--pin=${TAG}" ;;
+  esac
+fi
+
 # shellcheck disable=SC2086
 pg_dump -h "${POSTGRES_HOST}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
-  | gzip \
-  | aws s3 cp ${endpoint_flag} - "s3://${BACKUP_S3_BUCKET}/${s3_key}" \
-    --content-type application/gzip
+  | kopia snapshot create \
+      --stdin-file="${source_name}.sql" \
+      ${tag_args} \
+      ${pin_args} \
+      -
 
-echo "[backup] $(date -u +%FT%TZ) pruning objects older than ${BACKUP_RETENTION_DAYS} days"
-cutoff_epoch=$(( $(date -u +%s) - BACKUP_RETENTION_DAYS * 86400 ))
-# shellcheck disable=SC2086
-aws s3 ls ${endpoint_flag} "s3://${BACKUP_S3_BUCKET}/${BACKUP_S3_PREFIX}/" --recursive \
-  | while read -r line; do
-      ts=$(echo "${line}" | awk '{print $1" "$2}')
-      key=$(echo "${line}" | awk '{for(i=4;i<=NF;i++) printf "%s%s", $i, (i==NF?"\n":" ")}')
-      obj_epoch=$(date -u -d "${ts}" +%s 2>/dev/null || date -u -j -f '%Y-%m-%d %H:%M:%S' "${ts}" +%s)
-      if [ "${obj_epoch}" -lt "${cutoff_epoch}" ]; then
-        echo "[backup] prune ${key}"
-        # shellcheck disable=SC2086
-        aws s3 rm ${endpoint_flag} "s3://${BACKUP_S3_BUCKET}/${key}"
-      fi
-    done
+echo "[backup] $(date -u +%FT%TZ) applying retention policy"
+kopia policy set "${source_name}" \
+  --keep-daily="${BACKUP_KEEP_DAILY:-7}" \
+  --keep-weekly="${BACKUP_KEEP_WEEKLY:-4}" \
+  --keep-monthly="${BACKUP_KEEP_MONTHLY:-6}" \
+  --keep-annual=0 \
+  --keep-hourly=0 \
+  --keep-latest=0 \
+  >/dev/null
+
+kopia snapshot expire "${source_name}" --delete
+
 echo "[backup] $(date -u +%FT%TZ) done"
 ```
 
@@ -143,23 +188,56 @@ echo "[backup] $(date -u +%FT%TZ) done"
 # Nightly Postgres backup image. Built inline by compose.prod.yaml under
 # the `backups` profile. Runs crond in the foreground; cron invokes
 # /usr/local/bin/backup.sh at 03:00 UTC.
+#
+# Tooling: kopia (encrypt + dedupe + compress + ship to S3), pg_dump
+# (Postgres logical dump), dcron (scheduler).
 
 FROM alpine:3.23
 
-RUN apk add --no-cache aws-cli dcron postgresql18-client coreutils tzdata \
-    && adduser -D -g '' backup
+# kopia is distributed as a single static binary from their GitHub releases;
+# pull it in the build step. Pin the version here and bump deliberately.
+ARG KOPIA_VERSION=0.18.0
+
+RUN apk add --no-cache ca-certificates curl dcron postgresql18-client coreutils tzdata \
+    && adduser -D -g '' backup \
+    && arch="$(uname -m)"; \
+       case "${arch}" in \
+         x86_64)  kopia_arch=x64 ;; \
+         aarch64) kopia_arch=arm64 ;; \
+         *) echo "unsupported arch ${arch}" >&2; exit 1 ;; \
+       esac; \
+    curl -fsSL "https://github.com/kopia/kopia/releases/download/v${KOPIA_VERSION}/kopia-${KOPIA_VERSION}-linux-${kopia_arch}.tar.gz" \
+      | tar -xz -C /tmp \
+    && install -m 0755 "/tmp/kopia-${KOPIA_VERSION}-linux-${kopia_arch}/kopia" /usr/local/bin/kopia \
+    && rm -rf /tmp/kopia-*
 
 COPY backup.sh /usr/local/bin/backup.sh
 RUN chmod +x /usr/local/bin/backup.sh
 
-# 03:00 UTC nightly. Crond passes env through the shell for env-aware scripts.
+# Cron drops most env vars. Wrap invocation in a shell that re-reads /etc/env
+# (we emit env at container start below) so our script sees the compose env.
 RUN mkdir -p /etc/crontabs \
-    && printf '%s\n' '0 3 * * * /usr/local/bin/backup.sh >> /var/log/cron.log 2>&1' \
+    && printf '%s\n' '0 3 * * * . /etc/backup.env && /usr/local/bin/backup.sh >> /var/log/cron.log 2>&1' \
        > /etc/crontabs/root \
     && touch /var/log/cron.log
 
-ENTRYPOINT ["/usr/sbin/crond", "-f", "-l", "2", "-L", "/dev/stdout"]
+# At container start, dump env to /etc/backup.env so cron's restricted shell
+# can source it; then hand off to crond.
+ENTRYPOINT ["/bin/sh", "-c", "\
+  env | grep -E '^(POSTGRES_|KOPIA_PASSWORD|BACKUP_|AWS_)' \
+      | sed 's/^/export /' > /etc/backup.env; \
+  exec /usr/sbin/crond -f -l 2 -L /dev/stdout \
+"]
 ```
+
+Notes:
+
+- Kopia is pinned via `KOPIA_VERSION` build-arg. Bump deliberately, not
+  automatically — encrypted backup compatibility is sensitive to major
+  version changes. Check release notes on upgrade.
+- `env | grep | sed > /etc/backup.env` at container start is required because
+  cron runs with a minimal environment; our env-aware script needs the
+  compose-provided variables.
 
 #### Step 1.3: Validate the image builds
 
@@ -169,15 +247,24 @@ ENTRYPOINT ["/usr/sbin/crond", "-f", "-l", "2", "-L", "/dev/stdout"]
 docker build -t holomush-postgres-backup:test docker/postgres-backup/
 ```
 
-Expected: build succeeds, image tagged.
+Expected: build succeeds, image tagged, kopia binary present.
 
-- [ ] Smoke-run the image with env to confirm the script exits on missing vars:
+- [ ] Verify kopia is functional in the image:
+
+```bash
+docker run --rm holomush-postgres-backup:test kopia --version
+```
+
+Expected: prints `kopia version ...`.
+
+- [ ] Smoke-run `backup.sh` with no env to confirm the precondition checks:
 
 ```bash
 docker run --rm holomush-postgres-backup:test /usr/local/bin/backup.sh
 ```
 
-Expected: exits non-zero with `POSTGRES_HOST: must be set`.
+Expected: exits non-zero with `POSTGRES_HOST: must be set` (or the first
+missing required var).
 
 - [ ] `shellcheck` the script:
 
@@ -190,7 +277,7 @@ file).
 
 #### Step 1.4: Commit
 
-- [ ] `git add docker/postgres-backup/ && git commit -m "feat(backup): alpine+awscli+cron image for nightly Postgres backups"`
+- [ ] `git add docker/postgres-backup/ && git commit -m "feat(backup): encrypted nightly backups via Kopia"`
 
 ---
 
@@ -299,18 +386,29 @@ Notes for the implementer:
       POSTGRES_DB: holomush
       PGPASSWORD: ${POSTGRES_PASSWORD}
       BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:?Set BACKUP_S3_BUCKET in .env}
-      BACKUP_S3_ENDPOINT_URL: ${BACKUP_S3_ENDPOINT_URL:-}
-      BACKUP_S3_PREFIX: ${BACKUP_S3_PREFIX:-game}
-      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
-      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY:?Set BACKUP_S3_ACCESS_KEY in .env}
-      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_KEY:?Set BACKUP_S3_SECRET_KEY in .env}
-      AWS_DEFAULT_REGION: ${BACKUP_S3_REGION:-us-east-1}
+      BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+      BACKUP_S3_ACCESS_KEY: ${BACKUP_S3_ACCESS_KEY:?Set BACKUP_S3_ACCESS_KEY in .env}
+      BACKUP_S3_SECRET_KEY: ${BACKUP_S3_SECRET_KEY:?Set BACKUP_S3_SECRET_KEY in .env}
+      KOPIA_PASSWORD: ${KOPIA_PASSWORD:?Set KOPIA_PASSWORD in .env}
+      BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY:-7}
+      BACKUP_KEEP_WEEKLY: ${BACKUP_KEEP_WEEKLY:-4}
+      BACKUP_KEEP_MONTHLY: ${BACKUP_KEEP_MONTHLY:-6}
+    volumes:
+      # Kopia caches its index locally for performance. Persist across
+      # container restarts so first-snapshot-after-restart is fast.
+      - backup-kopia-cache:/root/.cache/kopia
     networks:
       - backend
     depends_on:
       postgres:
         condition: service_healthy
+
+volumes:
+  backup-kopia-cache:
 ```
+
+Note: if `compose.prod.yaml` already has a top-level `volumes:` block, append
+`backup-kopia-cache:` to it rather than adding a second block.
 
 #### Step 3.2: Validate
 
@@ -483,14 +581,17 @@ rule conditional on ingress mode.
 # "tunnel" (cloudflared, no public HTTP ports).
 HOLOMUSH_INGRESS="${HOLOMUSH_INGRESS:-caddy}"
 
-# Optional: automated nightly backups to S3-compatible storage.
-# When BACKUP_S3_BUCKET is set, the `backups` profile is enabled.
+# Optional: automated nightly backups to S3-compatible storage via Kopia.
+# When BACKUP_S3_BUCKET and KOPIA_PASSWORD are both set, the `backups`
+# profile is enabled.
 BACKUP_S3_BUCKET="${BACKUP_S3_BUCKET:-}"
-BACKUP_S3_ENDPOINT_URL="${BACKUP_S3_ENDPOINT_URL:-}"
+BACKUP_S3_ENDPOINT="${BACKUP_S3_ENDPOINT:-}"
 BACKUP_S3_ACCESS_KEY="${BACKUP_S3_ACCESS_KEY:-}"
 BACKUP_S3_SECRET_KEY="${BACKUP_S3_SECRET_KEY:-}"
-BACKUP_S3_PREFIX="${BACKUP_S3_PREFIX:-game}"
-BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
+KOPIA_PASSWORD="${KOPIA_PASSWORD:-}"
+BACKUP_KEEP_DAILY="${BACKUP_KEEP_DAILY:-7}"
+BACKUP_KEEP_WEEKLY="${BACKUP_KEEP_WEEKLY:-4}"
+BACKUP_KEEP_MONTHLY="${BACKUP_KEEP_MONTHLY:-6}"
 
 # Tunnel-mode only.
 CLOUDFLARE_TUNNEL_TOKEN="${CLOUDFLARE_TUNNEL_TOKEN:-}"
@@ -551,17 +652,21 @@ LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
 EOF
 fi
 
-if [ -n "${BACKUP_S3_BUCKET}" ]; then
+if [ -n "${BACKUP_S3_BUCKET}" ] && [ -n "${KOPIA_PASSWORD}" ]; then
   cat >> "${HOLOMUSH_DIR}/.env" <<EOF
 
-# Automated nightly backups.
+# Automated nightly backups via Kopia (encrypted, deduped, compressed).
 BACKUP_S3_BUCKET=${BACKUP_S3_BUCKET}
-BACKUP_S3_ENDPOINT_URL=${BACKUP_S3_ENDPOINT_URL}
+BACKUP_S3_ENDPOINT=${BACKUP_S3_ENDPOINT}
 BACKUP_S3_ACCESS_KEY=${BACKUP_S3_ACCESS_KEY}
 BACKUP_S3_SECRET_KEY=${BACKUP_S3_SECRET_KEY}
-BACKUP_S3_PREFIX=${BACKUP_S3_PREFIX}
-BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS}
+KOPIA_PASSWORD=${KOPIA_PASSWORD}
+BACKUP_KEEP_DAILY=${BACKUP_KEEP_DAILY}
+BACKUP_KEEP_WEEKLY=${BACKUP_KEEP_WEEKLY}
+BACKUP_KEEP_MONTHLY=${BACKUP_KEEP_MONTHLY}
 EOF
+elif [ -n "${BACKUP_S3_BUCKET}" ]; then
+  echo "WARNING: BACKUP_S3_BUCKET is set but KOPIA_PASSWORD is empty — backups disabled" >&2
 fi
 
 # Data paths (commented defaults for reference)
@@ -618,9 +723,35 @@ case "${HOLOMUSH_DOMAIN}" in
   *)
     echo "Starting compose (ingress=${HOLOMUSH_INGRESS})..."
     profiles="--profile ${HOLOMUSH_INGRESS}"
-    if [ -n "${BACKUP_S3_BUCKET}" ]; then
+    if [ -n "${BACKUP_S3_BUCKET}" ] && [ -n "${KOPIA_PASSWORD}" ]; then
       profiles="${profiles} --profile backups"
     fi
+
+    # If backups are enabled, ensure the Kopia repository exists before
+    # cron ever fires. Try connect first; on failure, initialize a new
+    # repository. This keeps the first-boot path idempotent — re-running
+    # cloud-init on an existing droplet connects to the existing repo
+    # rather than wiping it.
+    if [ -n "${BACKUP_S3_BUCKET}" ] && [ -n "${KOPIA_PASSWORD}" ]; then
+      echo "Ensuring Kopia repository exists..."
+      endpoint_args=""
+      if [ -n "${BACKUP_S3_ENDPOINT}" ]; then
+        endpoint_args="--endpoint=${BACKUP_S3_ENDPOINT}"
+      fi
+      su - "${HOLOMUSH_USER}" -s /bin/sh -c "
+        cd ${HOLOMUSH_DIR} && \
+        docker compose ${profiles} build backup && \
+        (docker compose ${profiles} run --rm backup kopia repository connect s3 \
+           --bucket=${BACKUP_S3_BUCKET} ${endpoint_args} \
+           --access-key=${BACKUP_S3_ACCESS_KEY} \
+           --secret-access-key=${BACKUP_S3_SECRET_KEY} 2>/dev/null || \
+         docker compose ${profiles} run --rm backup kopia repository create s3 \
+           --bucket=${BACKUP_S3_BUCKET} ${endpoint_args} \
+           --access-key=${BACKUP_S3_ACCESS_KEY} \
+           --secret-access-key=${BACKUP_S3_SECRET_KEY})
+      "
+    fi
+
     su - "${HOLOMUSH_USER}" -s /bin/sh -c "
       cd ${HOLOMUSH_DIR} && docker compose ${profiles} up -d
     "
@@ -696,14 +827,19 @@ CLOUDFLARE_TUNNEL_TOKEN=REDACTED
 # Postgres
 POSTGRES_PASSWORD=REDACTED
 
-# Automated backups to DO Spaces
+# Automated encrypted backups to DO Spaces via Kopia.
 BACKUP_S3_BUCKET=holomush-sandbox-backups
-BACKUP_S3_ENDPOINT_URL=https://sfo3.digitaloceanspaces.com
-BACKUP_S3_PREFIX=game
+BACKUP_S3_ENDPOINT=sfo3.digitaloceanspaces.com
 BACKUP_S3_ACCESS_KEY=REDACTED
 BACKUP_S3_SECRET_KEY=REDACTED
-BACKUP_S3_REGION=us-east-1
-BACKUP_RETENTION_DAYS=14
+# Kopia repository password — encrypts every snapshot. ROTATING THIS
+# requires creating a new repository; existing snapshots become
+# unrecoverable. See sandbox-operations runbook.
+KOPIA_PASSWORD=REDACTED
+# Retention policy
+BACKUP_KEEP_DAILY=7
+BACKUP_KEEP_WEEKLY=4
+BACKUP_KEEP_MONTHLY=6
 ```
 
 #### Step 7.2: Commit
@@ -760,15 +896,13 @@ the new image, runs migrations, and brings the stack up.
       - name: Pre-deploy Postgres safety snapshot
         run: |
           VERSION="${GITHUB_REF_NAME}"
+          # Run the backup service's script with --tag=pre-deploy:<version>.
+          # The --tag triggers pin mode in backup.sh so the retention policy
+          # never expires this snapshot.
           ssh -o StrictHostKeyChecking=yes holomush@${{ steps.droplet.outputs.ip }} \
             "cd /opt/holomush \
-             && docker compose exec -T postgres pg_dump -U holomush holomush \
-                | gzip \
-                | aws --endpoint-url https://sfo3.digitaloceanspaces.com \
-                      s3 cp - s3://holomush-sandbox-backups/pre-deploy/${VERSION}.sql.gz"
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.DO_SPACES_ACCESS_KEY }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.DO_SPACES_SECRET_KEY }}
+             && docker compose --profile tunnel --profile backups exec -T backup \
+                  /usr/local/bin/backup.sh --tag=pre-deploy:${VERSION}"
 
       - name: Pull + migrate + restart
         run: |
@@ -971,13 +1105,16 @@ Verification:
 
 #### Step 14.2: Verify pre-deploy backup
 
-- [ ] Confirm `s3://holomush-sandbox-backups/pre-deploy/<tag>.sql.gz` exists
-  with non-zero size:
+- [ ] Confirm a pinned pre-deploy Kopia snapshot exists by listing the
+  sandbox's snapshots via the running `backup` container:
 
 ```bash
-aws --endpoint-url https://sfo3.digitaloceanspaces.com \
-    s3 ls s3://holomush-sandbox-backups/pre-deploy/
+ssh holomush@game.holomush.dev \
+  'docker compose -f /opt/holomush/compose.yaml --profile tunnel --profile backups \
+     exec -T backup kopia snapshot list --tags=pre-deploy:<tag>'
 ```
+
+Expected: one pinned snapshot tagged `pre-deploy:<release-tag>`.
 
 #### Step 14.3: Verify running version
 
@@ -989,10 +1126,20 @@ aws --endpoint-url https://sfo3.digitaloceanspaces.com \
 
 #### Step 14.4: Verify nightly backup runs
 
-- [ ] After 03:05 UTC the next day, confirm a new object under
-  `s3://holomush-sandbox-backups/game/YYYY/MM/DD/` was created.
+- [ ] After 03:05 UTC the next day, confirm a new nightly snapshot exists:
 
-- [ ] After 15 days, confirm retention pruning removed the oldest objects.
+```bash
+ssh holomush@game.holomush.dev \
+  'docker compose -f /opt/holomush/compose.yaml --profile tunnel --profile backups \
+     exec -T backup kopia snapshot list'
+```
+
+Expected: a snapshot dated within the last ~24h for source
+`holomush-holomush`.
+
+- [ ] After 7+ days, confirm retention policy expired the oldest nightly
+  snapshots (run `kopia snapshot list` and verify count does not exceed
+  the configured daily+weekly+monthly totals).
 
 #### Step 14.5: Failure-injection checks (once only)
 
