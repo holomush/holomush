@@ -99,7 +99,7 @@ curl -fsSL "${RELEASE_URL}/docker/otel-collector/config.prod.yaml" \
   -o "${HOLOMUSH_DIR}/config/otel-collector.yaml"
 
 # --- Generate .env ---
-POSTGRES_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)}"
 
 cat > "${HOLOMUSH_DIR}/.env" <<EOF
 # HoloMUSH Production Configuration
