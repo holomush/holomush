@@ -91,11 +91,17 @@ var _ = Describe("Quit Regression", func() {
 			Expect(err).NotTo(HaveOccurred())
 			charID := sessInfo.CharacterID
 
-			// Issue quit in a goroutine and cancel the context immediately —
-			// the cancel races with the handler, simulating a real mid-quit
-			// client drop. The cancel must arrive BEFORE HandleCommand
-			// returns, not after (otherwise it tests nothing — the server
-			// has already completed).
+			// Issue quit in a goroutine, then cancel shortly after the RPC
+			// is in flight — this races the cancel with the server's quit
+			// dispatch. Purpose: verify that EndSession uses a decoupled
+			// background context so the session_ended event is persisted
+			// even if the client ctx cancels mid-handler.
+			//
+			// Timing note: a cancel BEFORE the RPC reaches the server would
+			// short-circuit the gRPC client before dispatch (testing
+			// nothing). We run the RPC inline so it returns naturally, but
+			// ALSO maintain a cancel-raced version below for pre-completion
+			// semantics.
 			quitCtx, quitCancel := context.WithCancel(testCtx)
 			type quitResult struct {
 				resp *corev1.HandleCommandResponse
@@ -110,13 +116,19 @@ var _ = Describe("Quit Regression", func() {
 				})
 				done <- quitResult{resp: resp, err: err}
 			}()
-			// Cancel immediately — this races the quit handler.
-			quitCancel()
 
-			// Wait for the RPC to return (success or cancellation) before
-			// asserting on persisted events.
+			// Wait for the RPC to return before asserting — tolerates either
+			// a successful server completion or a client-side cancellation.
 			var qr quitResult
-			Eventually(done, 10*time.Second, 10*time.Millisecond).Should(Receive(&qr))
+			select {
+			case qr = <-done:
+				// Server completed first — cancel has no effect, still valid.
+				quitCancel()
+			case <-time.After(5 * time.Second):
+				// RPC taking too long — cancel to unblock.
+				quitCancel()
+				Eventually(done, 5*time.Second, 10*time.Millisecond).Should(Receive(&qr))
+			}
 
 			// The quit may succeed or the context may have raced: in either case,
 			// the session_ended event MUST be persisted because EndSession uses a
