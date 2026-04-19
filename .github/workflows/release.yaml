@@ -290,3 +290,61 @@ jobs:
           echo "  - Container images: signed with Cosign"
           echo "  - Binary provenance: attested"
           echo "  - Container provenance: attested"
+
+  deploy-sandbox:
+    name: Deploy Sandbox
+    runs-on: namespace-profile-linux-amd64-4x8
+    needs: [goreleaser, verify-release]
+    if: startsWith(github.ref, 'refs/tags/')
+    concurrency:
+      group: deploy-sandbox
+      cancel-in-progress: false
+    steps:
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DIGITALOCEAN_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$(doctl compute droplet get holomush-sandbox-game --format PublicIPv4 --no-header)" >> ~/.ssh/known_hosts
+
+      - name: Resolve droplet IP
+        id: droplet
+        run: |
+          IP=$(doctl compute droplet get holomush-sandbox-game --format PublicIPv4 --no-header)
+          echo "ip=${IP}" >> "$GITHUB_OUTPUT"
+
+      - name: Pre-deploy Postgres safety snapshot
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          # Run the backup service's script with --tag=pre-deploy:<version>.
+          # The --tag triggers pin mode in backup.sh so the retention policy
+          # never expires this snapshot.
+          ssh -o StrictHostKeyChecking=yes holomush@${{ steps.droplet.outputs.ip }} \
+            "cd /opt/holomush \
+             && docker compose --profile tunnel --profile backups exec -T backup \
+                  /usr/local/bin/backup.sh --tag=pre-deploy:${VERSION}"
+
+      - name: Pull + migrate + restart
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          ssh holomush@${{ steps.droplet.outputs.ip }} bash -s -- "${VERSION}" <<'EOF'
+            set -euo pipefail
+            VERSION="$1"
+            cd /opt/holomush
+            sed -i "s/^HOLOMUSH_VERSION=.*/HOLOMUSH_VERSION=${VERSION}/" .env
+            docker compose --profile tunnel --profile backups pull core gateway cloudflared
+            docker compose --profile tunnel --profile backups up -d --no-recreate postgres
+            docker compose --profile tunnel --profile backups run --rm core migrate
+            docker compose --profile tunnel --profile backups up -d
+          EOF
+
+      - name: Health probe
+        run: |-
+          ssh holomush@${{ steps.droplet.outputs.ip }} \
+            "docker compose -f /opt/holomush/compose.yaml exec -T gateway \
+               curl -sf http://localhost:8080/healthz"
