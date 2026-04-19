@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 HoloMUSH Contributors
 #
@@ -11,7 +11,7 @@
 # Invoked by supercronic at 03:00 UTC. Run manually via:
 #   docker compose exec backup /usr/local/bin/backup.sh [--tag=pre-deploy:vX]
 
-set -eu
+set -euo pipefail
 
 : "${POSTGRES_HOST:?must be set}"
 : "${POSTGRES_USER:?must be set}"
