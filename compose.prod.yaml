@@ -118,7 +118,7 @@ services:
       - --no-autoupdate
       - run
       - --token
-      - ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env}
+      - ${CLOUDFLARE_TUNNEL_TOKEN:-PLEASE_SET_CLOUDFLARE_TUNNEL_TOKEN_IN_DOT_ENV}
     networks:
       - frontend
     depends_on:
@@ -145,7 +145,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_USER: holomush
       POSTGRES_DB: holomush
-      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:?Set BACKUP_S3_BUCKET in .env}
       BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
       BACKUP_S3_ACCESS_KEY: ${BACKUP_S3_ACCESS_KEY:?Set BACKUP_S3_ACCESS_KEY in .env}
