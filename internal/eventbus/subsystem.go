@@ -1,0 +1,239 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+package eventbus
+
+import (
+	"context"
+	"errors"
+	"path/filepath"
+	"time"
+
+	"github.com/nats-io/nats-server/v2/server"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
+	"github.com/samber/oops"
+
+	"github.com/holomush/holomush/internal/lifecycle"
+	"github.com/holomush/holomush/internal/xdg"
+)
+
+// StreamName is the single JetStream stream that holds all events.
+const StreamName = "EVENTS"
+
+// SubjectFilter is the stream subject filter — every event lands here.
+const SubjectFilter = "events.>"
+
+// embeddedServerName is the NATS server name used for the embedded instance.
+// It appears in server logs and monitoring output.
+const embeddedServerName = "holomush-embedded"
+
+// embeddedClientName identifies the host connection on the embedded server.
+const embeddedClientName = "holomush-host"
+
+// readyTimeout bounds how long Start waits for the embedded NATS server to
+// become ready for in-process connections.
+const readyTimeout = 10 * time.Second
+
+// Subsystem wraps an embedded NATS server and exposes a JetStream context.
+//
+// Phase A invariant: the subsystem runs in production but has no publishers,
+// subscribers, or consumers attached. Phase B will attach them. Stream
+// declaration is idempotent so repeated Start calls (or future cluster-mode
+// bootstrap) do not conflict.
+type Subsystem struct {
+	cfg     Config
+	server  *server.Server
+	conn    *nats.Conn
+	js      jetstream.JetStream
+	storage jetstream.StorageType
+}
+
+// NewSubsystem constructs the subsystem from a Config.
+// FileStorage is the default; tests override via NewSubsystemWithStorage.
+func NewSubsystem(cfg Config) *Subsystem {
+	return NewSubsystemWithStorage(cfg, jetstream.FileStorage)
+}
+
+// NewSubsystemWithStorage allows tests to use MemoryStorage for speed.
+func NewSubsystemWithStorage(cfg Config, storage jetstream.StorageType) *Subsystem {
+	return &Subsystem{cfg: cfg.Defaults(), storage: storage}
+}
+
+// ID returns lifecycle.SubsystemEventBus.
+func (s *Subsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemEventBus }
+
+// DependsOn returns nil — the event bus has no subsystem dependencies.
+func (s *Subsystem) DependsOn() []lifecycle.SubsystemID { return nil }
+
+// Start brings the embedded NATS server up, opens an in-process connection,
+// obtains a JetStream context, and declares the EVENTS stream idempotently.
+// Any failure mid-way rolls back earlier state (shutdown server, close conn).
+// codecov:ignore — rollback branches exercised by integration and E2E tests
+func (s *Subsystem) Start(ctx context.Context) error {
+	if s.server != nil {
+		return nil // already started
+	}
+
+	storeDir, err := s.resolveStoreDir()
+	if err != nil {
+		return err
+	}
+
+	opts := &server.Options{
+		ServerName: embeddedServerName,
+		JetStream:  true,
+		StoreDir:   storeDir,
+		DontListen: true,
+		NoSigs:     true,
+		LogtimeUTC: true,
+		HTTPPort:   s.cfg.MonitorPort,
+	}
+
+	srv, err := server.NewServer(opts)
+	if err != nil {
+		return oops.Code("EVENTBUS_SERVER_NEW_FAILED").Wrap(err)
+	}
+	s.server = srv
+	go s.server.Start()
+
+	if !s.server.ReadyForConnections(readyTimeout) {
+		s.server.Shutdown()
+		// WaitForShutdown mirrors the other rollback branches so a retry
+		// cannot race the previous server's filestore teardown.
+		s.server.WaitForShutdown()
+		s.server = nil
+		return oops.Code("EVENTBUS_SERVER_NOT_READY").
+			With("timeout", readyTimeout.String()).
+			Errorf("embedded NATS server did not become ready")
+	}
+
+	conn, err := nats.Connect("",
+		nats.InProcessServer(s.server),
+		nats.Name(embeddedClientName),
+		// DrainTimeout bounds the drain phase in Stop. Pair with the
+		// context-aware WaitForShutdown wait so Stop honors caller
+		// deadlines even if NATS internal shutdown stalls.
+		nats.DrainTimeout(readyTimeout),
+	)
+	if err != nil {
+		s.server.Shutdown()
+		s.server.WaitForShutdown()
+		s.server = nil
+		return oops.Code("EVENTBUS_CONNECT_FAILED").Wrap(err)
+	}
+	s.conn = conn
+
+	js, err := jetstream.New(conn)
+	if err != nil {
+		conn.Close()
+		s.conn = nil
+		s.server.Shutdown()
+		s.server.WaitForShutdown()
+		s.server = nil
+		return oops.Code("EVENTBUS_JETSTREAM_CTX_FAILED").Wrap(err)
+	}
+	s.js = js
+
+	if err := s.EnsureStream(ctx); err != nil {
+		conn.Close()
+		s.conn = nil
+		s.js = nil
+		s.server.Shutdown()
+		s.server.WaitForShutdown()
+		s.server = nil
+		return err
+	}
+	return nil
+}
+
+// EnsureStream creates or updates the EVENTS stream idempotently.
+func (s *Subsystem) EnsureStream(ctx context.Context) error {
+	if s.js == nil {
+		return oops.Code("EVENTBUS_NOT_STARTED").Errorf("EnsureStream called before Start")
+	}
+	_, err := s.js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		Name:        StreamName,
+		Subjects:    []string{SubjectFilter},
+		Retention:   jetstream.LimitsPolicy,
+		Storage:     s.storage,
+		Replicas:    1,
+		MaxAge:      s.cfg.StreamMaxAge,
+		Duplicates:  s.cfg.DupeWindow,
+		AllowDirect: true,
+	})
+	if err != nil {
+		return oops.Code("EVENTBUS_STREAM_DECLARE_FAILED").With("stream", StreamName).Wrap(err)
+	}
+	return nil
+}
+
+// Stop drains the in-process connection and shuts the server down.
+//
+// Order (mandatory for filestore consistency):
+//  1. conn.Drain() — flushes pending publishes; Drain itself is bounded
+//     by nats.DrainTimeout set on Connect (readyTimeout, 10s).
+//  2. server.Shutdown() — signals shutdown.
+//  3. server.WaitForShutdown() — blocks until state is flushed to disk.
+//     Omitting this races the filestore on fast test teardown.
+//
+// The WaitForShutdown call runs in a goroutine so Stop honors ctx
+// cancellation: a deadlined or cancelled ctx returns ctx.Err() while the
+// server goroutine continues draining in the background. For embedded
+// deployments this is the correct trade-off — the filestore will complete
+// its write even after Stop returns; what we avoid is blocking a parent
+// orchestrator shutdown past its own deadline.
+//
+// Idempotent: safe to call multiple times (e.g., explicit in test + t.Cleanup).
+// codecov:ignore — non-error branches exercised by integration and E2E tests
+func (s *Subsystem) Stop(ctx context.Context) error {
+	var drainErr error
+	if s.conn != nil && !s.conn.IsClosed() {
+		if err := s.conn.Drain(); err != nil && !errors.Is(err, nats.ErrConnectionClosed) {
+			drainErr = err
+		}
+	}
+	if s.server != nil {
+		s.server.Shutdown()
+		done := make(chan struct{})
+		go func() {
+			s.server.WaitForShutdown()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-ctx.Done():
+			// Fall through — server teardown continues in the background.
+			// Prefer the caller's deadline over waiting for filestore flush.
+		}
+		s.server = nil
+	}
+	s.conn = nil
+	s.js = nil
+	if drainErr != nil {
+		return oops.Code("EVENTBUS_DRAIN_FAILED").Wrap(drainErr)
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return oops.Code("EVENTBUS_STOP_CTX_CANCELLED").Wrap(ctxErr)
+	}
+	return nil
+}
+
+// JS returns the JetStream context. Nil before Start / after Stop.
+func (s *Subsystem) JS() jetstream.JetStream { return s.js }
+
+// Conn returns the in-process NATS connection. Nil before Start / after Stop.
+func (s *Subsystem) Conn() *nats.Conn { return s.conn }
+
+// resolveStoreDir resolves the StoreDir for this subsystem.
+// Blank Config.StoreDir means "use xdg.DataDir() + /jetstream".
+func (s *Subsystem) resolveStoreDir() (string, error) {
+	if s.cfg.StoreDir != "" {
+		return s.cfg.StoreDir, nil
+	}
+	baseDir, err := xdg.DataDir()
+	if err != nil {
+		return "", oops.Code("EVENTBUS_STOREDIR_FAILED").Wrap(err)
+	}
+	return filepath.Join(baseDir, "jetstream"), nil
+}

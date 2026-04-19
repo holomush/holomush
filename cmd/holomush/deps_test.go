@@ -21,6 +21,7 @@ import (
 
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
+	"github.com/holomush/holomush/internal/eventbus"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/observability"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
@@ -264,7 +265,7 @@ func TestRunCoreWithDeps_ValidationError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), cmd, nil)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), eventbus.Config{StoreDir: t.TempDir()}, cmd, nil)
 	require.Error(t, err, "expected validation error")
 	assert.Contains(t, err.Error(), "grpc-addr")
 }
@@ -287,7 +288,7 @@ func TestRunCoreWithDeps_DatabaseURLMissing(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), eventbus.Config{StoreDir: t.TempDir()}, cmd, deps)
 	require.Error(t, err, "expected DATABASE_URL error")
 	assert.Contains(t, err.Error(), "DATABASE_URL")
 }

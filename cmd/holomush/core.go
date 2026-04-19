@@ -25,6 +25,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/config"
+	"github.com/holomush/holomush/internal/eventbus"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/logging"
@@ -108,7 +109,11 @@ manages plugins, and handles game state.`,
 			if err := config.Load(configFile, cmd, &authConfig, "auth"); err != nil {
 				return err
 			}
-			return runCoreWithDeps(cmd.Context(), cfg, gameConfig, authConfig, cmd, nil)
+			eventBusConfig := eventbus.Config{}
+			if err := config.Load(configFile, cmd, &eventBusConfig, "event_bus"); err != nil {
+				return err
+			}
+			return runCoreWithDeps(cmd.Context(), cfg, gameConfig, authConfig, eventBusConfig, cmd, nil)
 		},
 	}
 
@@ -135,7 +140,7 @@ manages plugins, and handles game state.`,
 // constructs and starts subsystems under an orchestrator, optionally starts observability, launches the control gRPC server,
 // waits for readiness, handles OS signals and context cancellation, and performs a graceful shutdown.
 // codecov:ignore — tested by integration and E2E tests
-func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.GameConfig, authConfig config.AuthConfig, cmd *cobra.Command, deps *CoreDeps) error {
+func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.GameConfig, authConfig config.AuthConfig, eventBusConfig eventbus.Config, cmd *cobra.Command, deps *CoreDeps) error {
 	if deps == nil {
 		deps = &CoreDeps{}
 	}
@@ -302,6 +307,12 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		GuestStartLocation: gameConfig.GuestStartLocation,
 	})
 
+	// EventBus (Phase A): embedded NATS JetStream runs alongside other
+	// subsystems but has no consumers, publishers, or subscribers attached
+	// yet. Phase B (F1+) will wire the plugin emit path and gRPC Subscribe
+	// handler through the bus. Until then this is pure infrastructure.
+	eventBusSub := eventbus.NewSubsystem(eventBusConfig)
+
 	grpcSub := newGRPCSubsystem(grpcSubsystemConfig{
 		DB:             dbSub,
 		ABAC:           abacSub,
@@ -327,7 +338,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	orch := lifecycle.NewOrchestrator()
 	for _, sub := range []lifecycle.Subsystem{
 		dbSub, abacSub, authSub, worldSub,
-		sessionSub, pluginSub, bootstrapSub, grpcSub,
+		sessionSub, pluginSub, bootstrapSub, eventBusSub, grpcSub,
 	} {
 		orch.Register(sub)
 	}
