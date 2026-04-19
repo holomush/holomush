@@ -761,5 +761,4 @@ var _ = Describe("PostgresSessionStore", func() {
 			Expect(results).To(BeEmpty())
 		})
 	})
-
 })

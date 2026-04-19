@@ -2458,9 +2458,9 @@ func TestPreAuthTimerCancelledAfterTwoPhaseSelect(t *testing.T) {
 // loggingOut so the character picker is skipped).
 func TestGatewayHandlerDisconnect(t *testing.T) {
 	const (
-		token    = "tok-telnet-disconnect-cmd"
-		sessID   = "sess-disconnect-cmd"
-		connID   = "conn-disconnect-cmd"
+		token  = "tok-telnet-disconnect-cmd"
+		sessID = "sess-disconnect-cmd"
+		connID = "conn-disconnect-cmd"
 	)
 	client := &mockCoreClient{
 		discResp: &corev1.DisconnectResponse{Success: true},

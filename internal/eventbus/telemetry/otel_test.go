@@ -71,6 +71,7 @@ type keysReadingPropagator struct {
 func (p keysReadingPropagator) Inject(_ context.Context, carrier propagation.TextMapCarrier) {
 	*p.got = carrier.Keys()
 }
+
 func (p keysReadingPropagator) Extract(ctx context.Context, _ propagation.TextMapCarrier) context.Context {
 	return ctx
 }

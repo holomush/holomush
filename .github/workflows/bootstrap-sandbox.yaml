@@ -1,0 +1,819 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: Bootstrap Sandbox
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: "Public hostname for the tunnel (e.g. game.holomush.dev)"
+        required: true
+        type: string
+        default: "game.holomush.dev"
+      telnet_subdomain:
+        description: "Direct A-record for telnet (e.g. telnet.game.holomush.dev)"
+        required: true
+        type: string
+        default: "telnet.game.holomush.dev"
+      region:
+        description: "DigitalOcean region slug"
+        required: true
+        type: string
+        default: "sfo3"
+      droplet_size:
+        description: "Droplet size slug"
+        required: true
+        type: string
+        default: "s-2vcpu-2gb-amd"
+      volume_size_gb:
+        description: "Block volume size in GiB"
+        required: true
+        type: number
+        default: 25
+      bucket_name:
+        description: "DO Spaces bucket name"
+        required: true
+        type: string
+        default: "holomush-sandbox-backups"
+      tunnel_name:
+        description: "Cloudflare tunnel name"
+        required: true
+        type: string
+        default: "holomush-sandbox"
+      droplet_name:
+        description: "Droplet name"
+        required: true
+        type: string
+        default: "holomush-sandbox-game"
+      ssh_allowlist_cidrs:
+        description: "REQUIRED: Comma-separated CIDRs allowed to SSH to the droplet. Explicit operator choice — no default.
+          Example: '203.0.113.5/32,198.51.100.0/24'."
+        required: true
+        type: string
+      dry_run:
+        description: "Print what would be created without creating"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    name: Bootstrap Sandbox Infrastructure
+    runs-on: namespace-profile-linux-amd64-4x8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Step 1: Install doctl
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      # Step 2: Configure gh CLI with SECRETS_ADMIN_PAT
+      - name: Configure gh CLI
+        env:
+          GH_TOKEN: ${{ secrets.SECRETS_ADMIN_PAT }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+
+      # Step 3: Resolve or create KOPIA_SANDBOX_PASSWORD secret
+      # Emits `password` as a step output so step 11 can reference the freshly
+      # generated value on the first-run path — `secrets.KOPIA_SANDBOX_PASSWORD`
+      # is a snapshot taken at workflow-start and does not see secrets created
+      # mid-run.
+      - name: Resolve or create KOPIA_SANDBOX_PASSWORD secret
+        id: kopia_password
+        env:
+          GH_TOKEN: ${{ secrets.SECRETS_ADMIN_PAT }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if gh secret list --app actions | grep -q '^KOPIA_SANDBOX_PASSWORD'; then
+            echo "::notice::KOPIA_SANDBOX_PASSWORD already exists — skipping"
+          else
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "DRY RUN: would generate and set KOPIA_SANDBOX_PASSWORD secret"
+            else
+              KOPIA_PWD="$(openssl rand -base64 48 | tr -d '/+=' | head -c 64)"
+              echo "::add-mask::${KOPIA_PWD}"
+              echo "password=${KOPIA_PWD}" >> "$GITHUB_OUTPUT"
+              echo "${KOPIA_PWD}" | gh secret set KOPIA_SANDBOX_PASSWORD
+              echo "::notice::Created KOPIA_SANDBOX_PASSWORD secret"
+            fi
+          fi
+
+      # Step 4: Resolve or create Cloudflare Tunnel
+      - name: Resolve or create Cloudflare Tunnel
+        id: tunnel
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TUNNEL_NAME: ${{ inputs.tunnel_name }}
+          GH_TOKEN: ${{ secrets.SECRETS_ADMIN_PAT }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          EXISTING=$(curl -fsSL \
+            -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/cfd_tunnel?name=${TUNNEL_NAME}&is_deleted=false")
+
+          COUNT=$(echo "${EXISTING}" | python3 -c \
+            "import sys,json; d=json.load(sys.stdin); print(len(d.get('result',[])) if d.get('success') else 0)")
+
+          if [ "${COUNT}" -gt "0" ]; then
+            TUNNEL_ID=$(echo "${EXISTING}" | python3 -c \
+              "import sys,json; d=json.load(sys.stdin); print(d['result'][0]['id'])")
+            echo "::notice::Reusing existing tunnel ${TUNNEL_NAME} (${TUNNEL_ID})"
+            echo "tunnel_id=${TUNNEL_ID}" >> "$GITHUB_OUTPUT"
+
+            TOKEN_RESP=$(curl -fsSL \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/token")
+            TUNNEL_TOKEN=$(echo "${TOKEN_RESP}" | python3 -c \
+              "import sys,json; d=json.load(sys.stdin); print(d.get('result',''))")
+            echo "::add-mask::${TUNNEL_TOKEN}"
+            echo "tunnel_token=${TUNNEL_TOKEN}" >> "$GITHUB_OUTPUT"
+
+            if [ "${DRY_RUN}" != "true" ]; then
+              echo "${TUNNEL_ID}" | gh secret set CLOUDFLARE_TUNNEL_ID
+              echo "${TUNNEL_TOKEN}" | gh secret set CLOUDFLARE_TUNNEL_TOKEN
+            fi
+          else
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "DRY RUN: would create Cloudflare tunnel '${TUNNEL_NAME}'"
+              echo "tunnel_id=dry-run-tunnel-id" >> "$GITHUB_OUTPUT"
+              echo "tunnel_token=dry-run-tunnel-token" >> "$GITHUB_OUTPUT"
+            else
+              CREATE_RESP=$(curl -fsSL \
+                -X POST \
+                -H "Authorization: Bearer ${CF_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/cfd_tunnel" \
+                -d "{\"name\":\"${TUNNEL_NAME}\",\"config_src\":\"cloudflare\"}")
+
+              TUNNEL_ID=$(echo "${CREATE_RESP}" | python3 -c \
+                "import sys,json; d=json.load(sys.stdin); print(d['result']['id'])")
+              echo "::notice::Created tunnel ${TUNNEL_NAME} (${TUNNEL_ID})"
+              echo "tunnel_id=${TUNNEL_ID}" >> "$GITHUB_OUTPUT"
+
+              TOKEN_RESP=$(curl -fsSL \
+                -H "Authorization: Bearer ${CF_API_TOKEN}" \
+                "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/token")
+              TUNNEL_TOKEN=$(echo "${TOKEN_RESP}" | python3 -c \
+                "import sys,json; d=json.load(sys.stdin); print(d.get('result',''))")
+              echo "::add-mask::${TUNNEL_TOKEN}"
+              echo "tunnel_token=${TUNNEL_TOKEN}" >> "$GITHUB_OUTPUT"
+
+              echo "${TUNNEL_ID}" | gh secret set CLOUDFLARE_TUNNEL_ID
+              echo "${TUNNEL_TOKEN}" | gh secret set CLOUDFLARE_TUNNEL_TOKEN
+            fi
+          fi
+
+      # Step 5: Configure tunnel public-hostname route
+      - name: Configure tunnel public-hostname route
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TUNNEL_ID: ${{ steps.tunnel.outputs.tunnel_id }}
+          DOMAIN: ${{ inputs.domain }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "DRY RUN: would configure tunnel ingress: ${DOMAIN} -> http://gateway:8080"
+          else
+            curl -fsSL \
+              -X PUT \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/configurations" \
+              -d "{\"config\":{\"ingress\":[{\"hostname\":\"${DOMAIN}\",\"service\":\"http://gateway:8080\"},{\"service\":\"http_status:404\"}]}}" \
+              > /dev/null
+            echo "::notice::Tunnel ingress configured: ${DOMAIN} -> gateway:8080"
+          fi
+
+      # Step 6: Resolve or create DO Spaces access key
+      # Must run BEFORE bucket creation — access keys are account-scoped and
+      # don't require a pre-existing bucket.
+      - name: Resolve or create DO Spaces access key
+        id: spaces_key
+        env:
+          DO_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          BUCKET_NAME: ${{ inputs.bucket_name }}
+          GH_TOKEN: ${{ secrets.SECRETS_ADMIN_PAT }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "DRY RUN: would resolve or create Spaces access key 'holomush-sandbox'"
+            exit 0
+          fi
+
+          HAS_ACCESS_KEY=$(gh secret list --app actions | grep -c '^DO_SPACES_ACCESS_KEY' || true)
+          HAS_SECRET_KEY=$(gh secret list --app actions | grep -c '^DO_SPACES_SECRET_KEY' || true)
+
+          if [ "${HAS_ACCESS_KEY}" -gt "0" ] && [ "${HAS_SECRET_KEY}" -gt "0" ]; then
+            echo "::notice::DO_SPACES_ACCESS_KEY and DO_SPACES_SECRET_KEY already set — skipping"
+            exit 0
+          fi
+
+          # Check for existing key by name
+          EXISTING_KEY_ID=$(curl -fsSL \
+            -H "Authorization: Bearer ${DO_TOKEN}" \
+            "https://api.digitalocean.com/v2/spaces/keys" | \
+            python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          keys=[k for k in d.get('keys',[]) if k.get('name')=='holomush-sandbox']
+          print(keys[0]['access_key'] if keys else '')
+          " 2>/dev/null || true)
+
+          if [ -n "${EXISTING_KEY_ID}" ]; then
+            echo "Found existing key but GH Secrets not set — deleting and recreating..."
+            curl -fsSL \
+              -X DELETE \
+              -H "Authorization: Bearer ${DO_TOKEN}" \
+              "https://api.digitalocean.com/v2/spaces/keys/${EXISTING_KEY_ID}" \
+              > /dev/null || true
+          fi
+
+          CREATE_RESP=$(curl -fsSL \
+            -X POST \
+            -H "Authorization: Bearer ${DO_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "https://api.digitalocean.com/v2/spaces/keys" \
+            -d "{\"name\":\"holomush-sandbox\",\"grants\":[{\"bucket\":\"${BUCKET_NAME}\",\"permission\":\"read_write\"}]}")
+
+          ACCESS_KEY=$(echo "${CREATE_RESP}" | python3 -c \
+            "import sys,json; d=json.load(sys.stdin); print(d['key']['access_key'])")
+          SECRET_KEY=$(echo "${CREATE_RESP}" | python3 -c \
+            "import sys,json; d=json.load(sys.stdin); print(d['key']['secret_key'])")
+
+          echo "::add-mask::${SECRET_KEY}"
+          echo "access_key=${ACCESS_KEY}" >> "$GITHUB_OUTPUT"
+          echo "secret_key=${SECRET_KEY}" >> "$GITHUB_OUTPUT"
+          echo "${ACCESS_KEY}" | gh secret set DO_SPACES_ACCESS_KEY
+          echo "${SECRET_KEY}" | gh secret set DO_SPACES_SECRET_KEY
+          echo "::notice::Created Spaces access key 'holomush-sandbox' and stored in GH Secrets"
+
+      # Step 7: Resolve or create DO Spaces bucket
+      # Uses S3-compatible HEAD check (the DO v2/spaces/<name> endpoint does not exist).
+      - name: Resolve or create DO Spaces bucket
+        id: bucket
+        env:
+          BUCKET_NAME: ${{ inputs.bucket_name }}
+          REGION: ${{ inputs.region }}
+          DO_SPACES_ACCESS_KEY_EXISTING: ${{ steps.spaces_key.outputs.access_key != '' && steps.spaces_key.outputs.access_key
+            || secrets.DO_SPACES_ACCESS_KEY }}
+          DO_SPACES_SECRET_KEY_EXISTING: ${{ steps.spaces_key.outputs.secret_key != '' && steps.spaces_key.outputs.secret_key
+            || secrets.DO_SPACES_SECRET_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "::notice::[dry-run] Would ensure Spaces bucket ${BUCKET_NAME} exists in ${REGION}"
+            echo "spaces_endpoint=${REGION}.digitaloceanspaces.com" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Existence check via SigV4 head-bucket (curl + basic auth does NOT
+          # authenticate against S3-compatible APIs — CodeRabbit review catch).
+          aws configure set aws_access_key_id "${DO_SPACES_ACCESS_KEY_EXISTING}" \
+            --profile dospaces
+          aws configure set aws_secret_access_key "${DO_SPACES_SECRET_KEY_EXISTING}" \
+            --profile dospaces
+
+          if aws --profile dospaces \
+              --endpoint-url "https://${REGION}.digitaloceanspaces.com" \
+              s3api head-bucket --bucket "${BUCKET_NAME}" 2>/dev/null; then
+            echo "::notice::Reusing existing Spaces bucket: ${BUCKET_NAME}"
+          else
+            aws --profile dospaces \
+              --endpoint-url "https://${REGION}.digitaloceanspaces.com" \
+              s3api create-bucket --bucket "${BUCKET_NAME}"
+            echo "::notice::Created Spaces bucket: ${BUCKET_NAME}"
+          fi
+          echo "spaces_endpoint=${REGION}.digitaloceanspaces.com" >> "$GITHUB_OUTPUT"
+
+      # Step 8: Resolve or create DO block volume
+      - name: Resolve or create DO block volume
+        id: volume
+        env:
+          REGION: ${{ inputs.region }}
+          VOLUME_SIZE_GB: ${{ inputs.volume_size_gb }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          VOLUME_ID=$(doctl compute volume list --format Name,ID,Region --no-header | \
+            awk -v region="${REGION}" '$1=="holomush-sandbox-data" && $3==region {print $2}' | head -1)
+
+          if [ -n "${VOLUME_ID}" ]; then
+            echo "::notice::Block volume 'holomush-sandbox-data' already exists (${VOLUME_ID})"
+            echo "volume_id=${VOLUME_ID}" >> "$GITHUB_OUTPUT"
+          elif [ "${DRY_RUN}" = "true" ]; then
+            echo "DRY RUN: would create block volume 'holomush-sandbox-data' (${VOLUME_SIZE_GB}GiB) in ${REGION}"
+            echo "volume_id=dry-run-volume-id" >> "$GITHUB_OUTPUT"
+          else
+            VOLUME_ID=$(doctl compute volume create holomush-sandbox-data \
+              --region "${REGION}" \
+              --size "${VOLUME_SIZE_GB}GiB" \
+              --fs-type ext4 \
+              --format ID \
+              --no-header)
+            echo "::notice::Created block volume 'holomush-sandbox-data' (${VOLUME_ID})"
+            echo "volume_id=${VOLUME_ID}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Step 9: Resolve or create DO cloud firewall
+      # Uses the DO REST API directly — doctl's --inbound-rules expects a DSL
+      # string (not JSON) and the firewall-sandbox.json shape matches the API
+      # contract after stripping the "comment" fields (not accepted by DO API).
+      - name: Resolve or create DO cloud firewall
+        id: firewall
+        env:
+          DO_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          FW_NAME: holomush-sandbox
+          DRY_RUN: ${{ inputs.dry_run }}
+          SSH_ALLOWLIST: ${{ inputs.ssh_allowlist_cidrs }}
+        run: |
+          set -euo pipefail
+
+          # Required input; fail fast if the operator didn't supply one.
+          if [ -z "${SSH_ALLOWLIST// /}" ]; then
+            echo "::error::ssh_allowlist_cidrs is required — supply one or more CIDRs (e.g. 203.0.113.5/32)"
+            exit 1
+          fi
+
+          # Check for existing firewall by name
+          EXISTING_FW_ID=$(curl -fsS \
+            -H "Authorization: Bearer ${DO_TOKEN}" \
+            "https://api.digitalocean.com/v2/firewalls?per_page=200" \
+            | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          fws=[f for f in d.get('firewalls',[]) if f.get('name')=='${FW_NAME}']
+          print(fws[0]['id'] if fws else '')
+          " 2>/dev/null || true)
+
+          if [ -n "${EXISTING_FW_ID}" ]; then
+            echo "::notice::Reusing existing firewall: ${FW_NAME} (${EXISTING_FW_ID})"
+            FW_ID="${EXISTING_FW_ID}"
+          elif [ "${DRY_RUN}" = "true" ]; then
+            echo "::notice::[dry-run] Would create firewall ${FW_NAME} (SSH allowlist: ${SSH_ALLOWLIST})"
+            FW_ID="dry-run-fw-id"
+          else
+            # Strip "comment" fields (DO API rejects them) and apply the
+            # operator-supplied SSH CIDR allowlist in place of the file's
+            # default 0.0.0.0/0, per CodeRabbit review.
+            FW_JSON=$(python3 -c "
+          import json, os
+          ssh_cidrs=[c.strip() for c in os.environ['SSH_ALLOWLIST'].split(',') if c.strip()]
+          fw=json.load(open('deploy/doctl/firewall-sandbox.json'))
+          for r in fw.get('inbound_rules',[]):
+              r.pop('comment',None)
+              if r.get('protocol')=='tcp' and r.get('ports')=='22':
+                  r['sources']={'addresses': ssh_cidrs}
+          print(json.dumps(fw))
+          ")
+            FW_ID=$(curl -fsS -X POST \
+              -H "Authorization: Bearer ${DO_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "${FW_JSON}" \
+              "https://api.digitalocean.com/v2/firewalls" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin)['firewall']['id'])")
+            echo "::notice::Created firewall: ${FW_NAME} (${FW_ID}, SSH allowlist: ${SSH_ALLOWLIST})"
+          fi
+          echo "firewall_id=${FW_ID}" >> "$GITHUB_OUTPUT"
+
+      # Step 10: Generate POSTGRES_PASSWORD (ephemeral — lives on droplet only)
+      - name: Generate POSTGRES_PASSWORD
+        id: pg
+        run: |
+          set -euo pipefail
+          PG_PWD="$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)"
+          echo "::add-mask::${PG_PWD}"
+          echo "password=${PG_PWD}" >> "$GITHUB_OUTPUT"
+
+      # Step 11: Render cloud-init user-data (multi-part MIME)
+      - name: Render cloud-init user-data
+        id: userdata
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOMAIN: ${{ inputs.domain }}
+          BUCKET_NAME: ${{ inputs.bucket_name }}
+          REGION: ${{ inputs.region }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          TUNNEL_TOKEN: ${{ steps.tunnel.outputs.tunnel_token }}
+          PG_PASSWORD: ${{ steps.pg.outputs.password }}
+          # KOPIA and Spaces secrets fall back to the secrets context when
+          # no step output is present (pre-existing secrets case), and use
+          # the freshly-generated step output otherwise (first-run case,
+          # where the secrets context is the workflow-start snapshot and
+          # doesn't reflect the just-written secret).
+          KOPIA_PASSWORD: ${{ steps.kopia_password.outputs.password != '' && steps.kopia_password.outputs.password || secrets.KOPIA_SANDBOX_PASSWORD
+            }}
+          BACKUP_S3_ACCESS_KEY_VAL: ${{ steps.spaces_key.outputs.access_key != '' && steps.spaces_key.outputs.access_key ||
+            secrets.DO_SPACES_ACCESS_KEY }}
+          BACKUP_S3_SECRET_KEY_VAL: ${{ steps.spaces_key.outputs.secret_key != '' && steps.spaces_key.outputs.secret_key ||
+            secrets.DO_SPACES_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+
+          echo "::add-mask::${TUNNEL_TOKEN}"
+          echo "::add-mask::${PG_PASSWORD}"
+          echo "::add-mask::${KOPIA_PASSWORD}"
+          echo "::add-mask::${BACKUP_S3_SECRET_KEY_VAL}"
+
+          HOLOMUSH_VERSION=$(gh release list -R holomush/holomush --limit 10 --json tagName,isLatest \
+            --jq '.[] | select(.isLatest) | .tagName' 2>/dev/null | head -1 || true)
+          if [ -z "${HOLOMUSH_VERSION}" ]; then
+            HOLOMUSH_VERSION=$(gh release list -R holomush/holomush --limit 1 --json tagName \
+              --jq '.[0].tagName' 2>/dev/null || echo "0.1.0")
+          fi
+          # scripts/cloud-init.sh prepends "v" when building RELEASE_URL, so
+          # strip any leading "v" here to avoid "vv0.1.0" double-prefix.
+          HOLOMUSH_VERSION="${HOLOMUSH_VERSION#v}"
+
+          python3 - \
+            "${HOLOMUSH_VERSION}" \
+            "${DOMAIN}" \
+            "${TUNNEL_TOKEN}" \
+            "${PG_PASSWORD}" \
+            "${BUCKET_NAME}" \
+            "${REGION}" \
+            "${KOPIA_PASSWORD}" \
+            "${BACKUP_S3_ACCESS_KEY_VAL}" \
+            "${BACKUP_S3_SECRET_KEY_VAL}" \
+            <<'PYEOF'
+          import sys
+
+          version        = sys.argv[1]
+          domain         = sys.argv[2]
+          cf_token       = sys.argv[3]
+          pg_pwd         = sys.argv[4]
+          bucket         = sys.argv[5]
+          region         = sys.argv[6]
+          kopia_pwd      = sys.argv[7]
+          s3_access_key  = sys.argv[8]
+          s3_secret_key  = sys.argv[9]
+
+          cloud_config = """\
+          #cloud-config
+          mounts:
+            - - /dev/disk/by-id/scsi-0DO_Volume_holomush-sandbox-data
+              - /opt/holomush/data
+              - ext4
+              - discard,defaults,nofail
+              - 0
+              - 0
+          """
+
+          cloud_init_src = open("scripts/cloud-init.sh").read()
+          lines = cloud_init_src.splitlines(keepends=True)
+          if lines and lines[0].startswith("#!"):
+              lines = lines[1:]
+          script_body = "".join(lines)
+
+          env_header = f"""\
+          #!/bin/bash
+          # env injected by bootstrap-sandbox workflow
+          export HOLOMUSH_VERSION="{version}"
+          export HOLOMUSH_DOMAIN="{domain}"
+          export HOLOMUSH_INGRESS="tunnel"
+          export CLOUDFLARE_TUNNEL_TOKEN="{cf_token}"
+          export POSTGRES_PASSWORD="{pg_pwd}"
+          export BACKUP_S3_BUCKET="{bucket}"
+          export BACKUP_S3_ENDPOINT="{region}.digitaloceanspaces.com"
+          export KOPIA_PASSWORD="{kopia_pwd}"
+          export BACKUP_S3_ACCESS_KEY="{s3_access_key}"
+          export BACKUP_S3_SECRET_KEY="{s3_secret_key}"
+          export BACKUP_KEEP_DAILY="7"
+          export BACKUP_KEEP_WEEKLY="4"
+          export BACKUP_KEEP_MONTHLY="6"
+
+          """
+
+          bash_part = env_header + script_body
+
+          boundary = "==HOLOMUSH-BOUNDARY=="
+          out = [
+              f"Content-Type: multipart/mixed; boundary=\"{boundary}\"",
+              "MIME-Version: 1.0",
+              "",
+              f"--{boundary}",
+              "Content-Type: text/cloud-config; charset=\"utf-8\"",
+              "MIME-Version: 1.0",
+              "Content-Transfer-Encoding: 7bit",
+              "",
+              cloud_config,
+              f"--{boundary}",
+              "Content-Type: text/x-shellscript; charset=\"utf-8\"",
+              "MIME-Version: 1.0",
+              "Content-Transfer-Encoding: 7bit",
+              "",
+              bash_part,
+              f"--{boundary}--",
+          ]
+
+          with open("/tmp/user-data.mime", "w") as f:
+              f.write("\n".join(out))
+
+          print(f"cloud-init MIME bundle written ({len(''.join(out))} chars)")
+          PYEOF
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "DRY RUN: cloud-init structure (first 20 lines):"
+            head -20 /tmp/user-data.mime
+          fi
+
+      # Step 12: Resolve or create droplet
+      - name: Resolve or create droplet
+        id: droplet
+        env:
+          DROPLET_NAME: ${{ inputs.droplet_name }}
+          DROPLET_SIZE: ${{ inputs.droplet_size }}
+          REGION: ${{ inputs.region }}
+          SSH_KEY_ID: ${{ secrets.DIGITALOCEAN_SSH_KEY_ID }}
+          VOLUME_ID: ${{ steps.volume.outputs.volume_id }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          DROPLET_IP=$(doctl compute droplet get "${DROPLET_NAME}" \
+            --format PublicIPv4 --no-header 2>/dev/null || true)
+
+          if [ -n "${DROPLET_IP}" ]; then
+            DROPLET_ID=$(doctl compute droplet get "${DROPLET_NAME}" \
+              --format ID --no-header)
+            echo "::notice::Droplet '${DROPLET_NAME}' already exists (${DROPLET_ID}), IP: ${DROPLET_IP}"
+            echo "droplet_id=${DROPLET_ID}" >> "$GITHUB_OUTPUT"
+            echo "droplet_ip=${DROPLET_IP}" >> "$GITHUB_OUTPUT"
+          elif [ "${DRY_RUN}" = "true" ]; then
+            echo "DRY RUN: would create droplet '${DROPLET_NAME}' (${DROPLET_SIZE}, ${REGION})"
+            echo "droplet_id=dry-run-droplet-id" >> "$GITHUB_OUTPUT"
+            echo "droplet_ip=0.0.0.0" >> "$GITHUB_OUTPUT"
+          else
+            # Attach the block volume at droplet-create time via --volumes so
+            # cloud-init's `mounts:` stanza finds the device on first boot.
+            # Attaching AFTER `droplet create --wait` (as an --wait step) lets
+            # cloud-init run against a still-unmounted path, so Postgres
+            # initializes on the droplet's ephemeral disk and the volume never
+            # receives any data. Per CodeRabbit review.
+            DROPLET_ID=$(doctl compute droplet create "${DROPLET_NAME}" \
+              --image ubuntu-24-04-x64 \
+              --size "${DROPLET_SIZE}" \
+              --region "${REGION}" \
+              --ssh-keys "${SSH_KEY_ID}" \
+              --tag-names holomush-sandbox \
+              --volumes "${VOLUME_ID}" \
+              --user-data-file /tmp/user-data.mime \
+              --wait \
+              --format ID \
+              --no-header)
+            DROPLET_IP=$(doctl compute droplet get "${DROPLET_NAME}" \
+              --format PublicIPv4 --no-header)
+            echo "::notice::Created droplet '${DROPLET_NAME}' (${DROPLET_ID}) with volume ${VOLUME_ID} attached at boot, IP: ${DROPLET_IP}"
+            echo "droplet_id=${DROPLET_ID}" >> "$GITHUB_OUTPUT"
+            echo "droplet_ip=${DROPLET_IP}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Step 13: Verify volume attachment (idempotent re-runs only)
+      - name: Verify/attach volume to droplet (idempotent)
+        env:
+          VOLUME_ID: ${{ steps.volume.outputs.volume_id }}
+          DROPLET_ID: ${{ steps.droplet.outputs.droplet_id }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "DRY RUN: would verify/attach volume ${VOLUME_ID} to droplet ${DROPLET_ID}"
+            exit 0
+          fi
+
+          # On a fresh create the volume was attached via --volumes in step 12.
+          # On re-runs (droplet already existed), attach now. This step stays
+          # for idempotency; it is a no-op on the fresh-create path.
+          ATTACHED=$(doctl compute volume get "${VOLUME_ID}" \
+            --format DropletIDs --no-header 2>/dev/null || echo "")
+          if echo "${ATTACHED}" | grep -q "${DROPLET_ID}"; then
+            echo "::notice::Volume ${VOLUME_ID} already attached to droplet ${DROPLET_ID}"
+          else
+            doctl compute volume-action attach "${VOLUME_ID}" "${DROPLET_ID}" --wait
+            echo "::notice::Attached volume ${VOLUME_ID} to droplet ${DROPLET_ID}"
+          fi
+
+      # Step 14: Apply firewall to droplet
+      - name: Apply firewall to droplet
+        env:
+          DO_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          FIREWALL_ID: ${{ steps.firewall.outputs.firewall_id }}
+          DROPLET_ID: ${{ steps.droplet.outputs.droplet_id }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          # Check if firewall is already applied to this droplet
+          ALREADY_APPLIED=$(curl -fsS \
+            -H "Authorization: Bearer ${DO_TOKEN}" \
+            "https://api.digitalocean.com/v2/firewalls/${FIREWALL_ID}" \
+            | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          ids=d.get('firewall',{}).get('droplet_ids',[])
+          droplet_id=int('${DROPLET_ID}') if '${DROPLET_ID}'.isdigit() else None
+          print('yes' if droplet_id in ids else '')
+          " 2>/dev/null || true)
+
+          if [ -n "${ALREADY_APPLIED}" ]; then
+            echo "::notice::Firewall already applied to droplet ${DROPLET_ID}"
+          elif [ "${DRY_RUN}" = "true" ]; then
+            echo "::notice::[dry-run] Would apply firewall ${FIREWALL_ID} to droplet ${DROPLET_ID}"
+          else
+            curl -fsS -X POST \
+              -H "Authorization: Bearer ${DO_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{\"droplet_ids\":[${DROPLET_ID}]}" \
+              "https://api.digitalocean.com/v2/firewalls/${FIREWALL_ID}/droplets"
+            echo "::notice::Applied firewall ${FIREWALL_ID} to droplet ${DROPLET_ID}"
+          fi
+
+      # Step 15: Wait for cloud-init to finish
+      - name: Wait for cloud-init
+        env:
+          DROPLET_IP: ${{ steps.droplet.outputs.droplet_ip }}
+          SSH_PRIVATE_KEY: ${{ secrets.DIGITALOCEAN_SSH_PRIVATE_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "DRY RUN: skipping cloud-init wait"
+            exit 0
+          fi
+
+          mkdir -p ~/.ssh
+          echo "${SSH_PRIVATE_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          echo "Waiting for SSH on ${DROPLET_IP}..."
+          ATTEMPTS=0
+          MAX_ATTEMPTS=30
+          until ssh -o StrictHostKeyChecking=no \
+                    -o ConnectTimeout=5 \
+                    -o BatchMode=yes \
+                    "root@${DROPLET_IP}" true 2>/dev/null; do
+            ATTEMPTS=$((ATTEMPTS + 1))
+            if [ "${ATTEMPTS}" -ge "${MAX_ATTEMPTS}" ]; then
+              echo "ERROR: SSH not reachable after ${MAX_ATTEMPTS} attempts"
+              exit 1
+            fi
+            echo "SSH not yet available (attempt ${ATTEMPTS}/${MAX_ATTEMPTS}), waiting 15s..."
+            sleep 15
+          done
+
+          ssh-keyscan -H "${DROPLET_IP}" >> ~/.ssh/known_hosts 2>/dev/null
+
+          echo "Waiting for cloud-init to complete..."
+          ssh -o StrictHostKeyChecking=no "root@${DROPLET_IP}" \
+            "cloud-init status --wait --long" \
+            || { ssh -o StrictHostKeyChecking=no "root@${DROPLET_IP}" \
+                   "cloud-init status; journalctl -u cloud-init-local -u cloud-init --no-pager -n 50" \
+                 && exit 1; }
+          echo "::notice::cloud-init completed successfully"
+
+      # Step 16: Create Cloudflare DNS records
+      - name: Create Cloudflare DNS records
+        env:
+          CF_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TUNNEL_ID: ${{ steps.tunnel.outputs.tunnel_id }}
+          DROPLET_IP: ${{ steps.droplet.outputs.droplet_ip }}
+          DOMAIN: ${{ inputs.domain }}
+          TELNET_SUBDOMAIN: ${{ inputs.telnet_subdomain }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "DRY RUN: would create/update DNS records:"
+            echo "  CNAME ${DOMAIN} -> ${TUNNEL_ID}.cfargotunnel.com (proxied)"
+            echo "  A     ${TELNET_SUBDOMAIN} -> ${DROPLET_IP} (DNS-only)"
+            exit 0
+          fi
+
+          upsert_dns() {
+            local name="$1" type="$2" content="$3" proxied="$4"
+
+            EXISTING=$(curl -fsSL \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?type=${type}&name=${name}")
+            RECORD_ID=$(echo "${EXISTING}" | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          res=d.get('result',[])
+          print(res[0]['id'] if res else '')
+          " 2>/dev/null || echo "")
+
+            local payload
+            payload=$(python3 -c "
+          import json,sys
+          print(json.dumps({'type':'${type}','name':'${name}','content':'${content}','proxied':${proxied},'ttl':1}))
+          ")
+
+            if [ -n "${RECORD_ID}" ]; then
+              curl -fsSL \
+                -X PUT \
+                -H "Authorization: Bearer ${CF_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${RECORD_ID}" \
+                -d "${payload}" > /dev/null
+              echo "::notice::Updated DNS ${type} record: ${name} -> ${content}"
+            else
+              curl -fsSL \
+                -X POST \
+                -H "Authorization: Bearer ${CF_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" \
+                -d "${payload}" > /dev/null
+              echo "::notice::Created DNS ${type} record: ${name} -> ${content}"
+            fi
+          }
+
+          upsert_dns "${DOMAIN}" "CNAME" "${TUNNEL_ID}.cfargotunnel.com" "true"
+          upsert_dns "${TELNET_SUBDOMAIN}" "A" "${DROPLET_IP}" "false"
+
+      # Step 17: Verification
+      - name: Verify sandbox is reachable
+        env:
+          DOMAIN: ${{ inputs.domain }}
+          DROPLET_IP: ${{ steps.droplet.outputs.droplet_ip }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "DRY RUN: skipping verification"
+            exit 0
+          fi
+
+          echo "Checking HTTPS via tunnel..."
+          ATTEMPTS=0
+          MAX_ATTEMPTS=12
+          until curl -fsS "https://${DOMAIN}/healthz" > /dev/null 2>&1; do
+            ATTEMPTS=$((ATTEMPTS + 1))
+            if [ "${ATTEMPTS}" -ge "${MAX_ATTEMPTS}" ]; then
+              echo "ERROR: HTTPS healthz not reachable after ${MAX_ATTEMPTS} attempts"
+              exit 1
+            fi
+            echo "Not ready yet (attempt ${ATTEMPTS}/${MAX_ATTEMPTS}), waiting 15s..."
+            sleep 15
+          done
+          echo "::notice::HTTPS healthz OK: https://${DOMAIN}/healthz"
+
+          echo "Checking telnet port reachability..."
+          ATTEMPTS=0
+          MAX_ATTEMPTS=12
+          until timeout 5 nc -z "${DROPLET_IP}" 4201; do
+            ATTEMPTS=$((ATTEMPTS + 1))
+            if [ "${ATTEMPTS}" -ge "${MAX_ATTEMPTS}" ]; then
+              echo "::error::Telnet port 4201 not reachable on ${DROPLET_IP} after ${MAX_ATTEMPTS} attempts"
+              exit 1
+            fi
+            echo "Telnet not ready yet (attempt ${ATTEMPTS}/${MAX_ATTEMPTS}), waiting 15s..."
+            sleep 15
+          done
+          echo "::notice::Telnet port 4201 reachable on ${DROPLET_IP}"
+
+      # Step 18: Summary
+      - name: Print summary
+        env:
+          DROPLET_IP: ${{ steps.droplet.outputs.droplet_ip }}
+          DROPLET_ID: ${{ steps.droplet.outputs.droplet_id }}
+          VOLUME_ID: ${{ steps.volume.outputs.volume_id }}
+          FIREWALL_ID: ${{ steps.firewall.outputs.firewall_id }}
+          TUNNEL_ID: ${{ steps.tunnel.outputs.tunnel_id }}
+          DOMAIN: ${{ inputs.domain }}
+          TELNET_SUBDOMAIN: ${{ inputs.telnet_subdomain }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |-
+          set -euo pipefail
+          PREFIX=""
+          if [ "${DRY_RUN}" = "true" ]; then
+            PREFIX="DRY RUN — "
+          fi
+          echo "::notice::${PREFIX}Bootstrap complete"
+          echo "::notice::  Droplet:    ${DROPLET_ID} (${DROPLET_IP})"
+          echo "::notice::  Volume:     ${VOLUME_ID}"
+          echo "::notice::  Firewall:   ${FIREWALL_ID}"
+          echo "::notice::  Tunnel:     ${TUNNEL_ID}"
+          echo "::notice::  HTTPS:      https://${DOMAIN}"
+          echo "::notice::  Telnet:     ${TELNET_SUBDOMAIN}:4201"
+          echo "::notice::  DO Console: https://cloud.digitalocean.com/droplets/${DROPLET_ID}"

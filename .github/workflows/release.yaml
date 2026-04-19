@@ -8,6 +8,12 @@ on:
     branches: [main]
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to deploy (e.g. v0.2.0)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -290,3 +296,117 @@ jobs:
           echo "  - Container images: signed with Cosign"
           echo "  - Binary provenance: attested"
           echo "  - Container provenance: attested"
+
+  deploy-sandbox:
+    name: Deploy Sandbox
+    runs-on: namespace-profile-linux-amd64-4x8
+    needs: [verify-release]
+    # On tag push: wait for verify-release to succeed. On workflow_dispatch
+    # (redeploy an existing release): run independently since goreleaser +
+    # verify-release are skipped on dispatch and the image already exists in
+    # GHCR. `always()` lets this job start regardless of upstream skip state.
+    if: |
+      always() && (
+        (startsWith(github.ref, 'refs/tags/') && needs.verify-release.result == 'success') ||
+        github.event_name == 'workflow_dispatch'
+      )
+    concurrency:
+      group: deploy-sandbox
+      cancel-in-progress: false
+    steps:
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DIGITALOCEAN_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$(doctl compute droplet get holomush-sandbox-game --format PublicIPv4 --no-header)" >> ~/.ssh/known_hosts
+
+      - name: Resolve droplet IP
+        id: droplet
+        run: |
+          IP=$(doctl compute droplet get holomush-sandbox-game --format PublicIPv4 --no-header)
+          echo "ip=${IP}" >> "$GITHUB_OUTPUT"
+
+      - name: Pre-deploy Postgres safety snapshot
+        env:
+          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$DISPATCH_TAG"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+          fi
+          # Pass VERSION through an SSH positional arg + single-quoted heredoc
+          # so workflow_dispatch's user-supplied `tag` input cannot inject
+          # shell commands into the remote execution (CodeRabbit review).
+          ssh -o StrictHostKeyChecking=yes "holomush@${DROPLET_IP}" \
+            bash -s -- "${VERSION}" <<'EOF'
+            set -euo pipefail
+            VERSION="$1"
+            cd /opt/holomush
+            # Run the backup service's script with --tag=pre-deploy:<version>.
+            # The --tag triggers pin mode in backup.sh so the retention policy
+            # never expires this snapshot.
+            docker compose --profile tunnel --profile backups exec -T backup \
+              /usr/local/bin/backup.sh --tag="pre-deploy:${VERSION}"
+          EOF
+
+      - name: Pull + migrate + restart
+        env:
+          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$DISPATCH_TAG"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+          fi
+          ssh "holomush@${DROPLET_IP}" bash -s -- "${VERSION}" <<'EOF'
+            set -euo pipefail
+            VERSION="$1"
+
+            # Sync release assets from the tag into /opt/holomush so compose
+            # changes (new services, profiles, env wiring) and the
+            # postgres-backup build context are up-to-date with this release.
+            # Without this step, cloud-init-era files persist forever and
+            # release changes to compose / Dockerfiles / scripts never reach
+            # the running sandbox.
+            if ! command -v git >/dev/null 2>&1; then
+              sudo apt-get update -qq
+              sudo apt-get install -y -qq git
+            fi
+            rm -rf /tmp/holomush-release
+            git clone --depth 1 --branch "${VERSION}" \
+              https://github.com/holomush/holomush.git /tmp/holomush-release
+            cp /tmp/holomush-release/compose.prod.yaml /opt/holomush/compose.yaml
+            rm -rf /opt/holomush/docker /opt/holomush/deploy
+            cp -r /tmp/holomush-release/docker /opt/holomush/docker
+            cp -r /tmp/holomush-release/deploy /opt/holomush/deploy
+            rm -rf /tmp/holomush-release
+
+            cd /opt/holomush
+            sed -i "s/^HOLOMUSH_VERSION=.*/HOLOMUSH_VERSION=${VERSION}/" .env
+            docker compose --profile tunnel --profile backups pull core gateway cloudflared
+            docker compose --profile tunnel --profile backups build backup
+            docker compose --profile tunnel --profile backups up -d --no-recreate postgres
+            docker compose --profile tunnel --profile backups run --rm core migrate
+            docker compose --profile tunnel --profile backups up -d
+          EOF
+
+      - name: Health probe
+        env:
+          DROPLET_IP: ${{ steps.droplet.outputs.ip }}
+        run: |-
+          ssh "holomush@${DROPLET_IP}" \
+            "docker compose -f /opt/holomush/compose.yaml exec -T gateway \
+               wget -q --spider http://localhost:9101/healthz/readiness"

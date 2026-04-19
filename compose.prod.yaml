@@ -94,6 +94,7 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    profiles: [caddy]
     ports:
       - "80:80"
       - "443:443"
@@ -108,6 +109,32 @@ services:
     depends_on:
       - gateway
 
+  cloudflared:
+    # Pinned to a tested version; bump deliberately. `:latest` would let a
+    # silent upstream change break the tunnel. Check cloudflared release
+    # notes before bumping — tunnel protocol (QUIC/HTTP/2) defaults shift
+    # between majors.
+    image: cloudflare/cloudflared:2025.4.2
+    restart: unless-stopped
+    profiles: [tunnel]
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+      - --token
+      # Intentionally `:-` (not `:?`): compose resolves interpolations across
+      # the entire file at config time, even for services not in the active
+      # profile. With `:?` operators using --profile caddy (no tunnel) would
+      # have to set a dummy CLOUDFLARE_TUNNEL_TOKEN in .env to satisfy
+      # parsing. The obvious default value makes misconfiguration
+      # self-diagnosing when --profile tunnel is actually active.
+      - ${CLOUDFLARE_TUNNEL_TOKEN:-PLEASE_SET_CLOUDFLARE_TUNNEL_TOKEN_IN_DOT_ENV}
+    networks:
+      - frontend
+    depends_on:
+      gateway:
+        condition: service_started
+
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
     restart: unless-stopped
@@ -120,6 +147,34 @@ services:
     networks:
       - backend
 
+  backup:
+    build: ./docker/postgres-backup
+    restart: unless-stopped
+    profiles: [backups]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: holomush
+      POSTGRES_DB: holomush
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:?Set BACKUP_S3_BUCKET in .env}
+      BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+      BACKUP_S3_ACCESS_KEY: ${BACKUP_S3_ACCESS_KEY:?Set BACKUP_S3_ACCESS_KEY in .env}
+      BACKUP_S3_SECRET_KEY: ${BACKUP_S3_SECRET_KEY:?Set BACKUP_S3_SECRET_KEY in .env}
+      KOPIA_PASSWORD: ${KOPIA_PASSWORD:?Set KOPIA_PASSWORD in .env}
+      BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY:-7}
+      BACKUP_KEEP_WEEKLY: ${BACKUP_KEEP_WEEKLY:-4}
+      BACKUP_KEEP_MONTHLY: ${BACKUP_KEEP_MONTHLY:-6}
+    volumes:
+      - backup-kopia-cache:/home/backup/.cache/kopia
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 networks:
   frontend:
   backend:
+
+volumes:
+  backup-kopia-cache:

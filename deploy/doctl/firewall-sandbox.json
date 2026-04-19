@@ -1,0 +1,32 @@
+{
+  "name": "holomush-sandbox",
+  "inbound_rules": [
+    {
+      "protocol": "tcp",
+      "ports": "22",
+      "sources": { "addresses": ["127.0.0.1/32"] }
+    },
+    {
+      "protocol": "tcp",
+      "ports": "4201",
+      "sources": { "addresses": ["0.0.0.0/0"] }
+    }
+  ],
+  "outbound_rules": [
+    {
+      "protocol": "tcp",
+      "ports": "0",
+      "destinations": { "addresses": ["0.0.0.0/0", "::/0"] }
+    },
+    {
+      "protocol": "udp",
+      "ports": "0",
+      "destinations": { "addresses": ["0.0.0.0/0", "::/0"] }
+    },
+    {
+      "protocol": "icmp",
+      "destinations": { "addresses": ["0.0.0.0/0", "::/0"] }
+    }
+  ],
+  "tags": ["holomush-sandbox"]
+}

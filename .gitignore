@@ -20,6 +20,9 @@ coverage.html
 .full-review/
 .full-review-*/
 
+# Stray beads export in worktree root (belongs under .beads/ only)
+/issues.jsonl
+
 # Go workspace
 go.work
 go.work.sum
