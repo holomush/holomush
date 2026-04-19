@@ -19,7 +19,8 @@
 
 set -euo pipefail
 
-REPO=""
+# Default to the holomush project repo. Override with --repo for forks or testing.
+REPO="holomush/holomush"
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo)
@@ -48,14 +49,6 @@ gh auth status >/dev/null 2>&1 || {
   echo "ERROR: run 'gh auth login' first" >&2
   exit 1
 }
-
-if [ -z "${REPO}" ]; then
-  REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)
-  if [ -z "${REPO}" ]; then
-    echo "ERROR: not inside a gh-recognized repo; pass --repo OWNER/NAME" >&2
-    exit 1
-  fi
-fi
 
 echo "Target repo: ${REPO}"
 read -r -p "Proceed? [y/N] " confirm
