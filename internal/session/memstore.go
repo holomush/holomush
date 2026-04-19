@@ -82,10 +82,20 @@ func (m *MemStore) Delete(_ context.Context, id, reason string) error {
 
 // WatchSession returns a channel that receives an Event when
 // the session is destroyed.
+//
+// If the session does not exist at call time (already deleted or never
+// existed), the returned channel is pre-loaded with a Destroyed event and
+// closed. This closes the holomush-umxj Mode B race where a Delete between
+// Get and WatchSession would otherwise register a watcher that never fires.
 func (m *MemStore) WatchSession(_ context.Context, sessionID string) (<-chan Event, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	ch := make(chan Event, 1)
+	if _, ok := m.sessions[sessionID]; !ok {
+		ch <- Event{Type: Destroyed}
+		close(ch)
+		return ch, nil
+	}
 	m.watchers[sessionID] = append(m.watchers[sessionID], ch)
 	return ch, nil
 }

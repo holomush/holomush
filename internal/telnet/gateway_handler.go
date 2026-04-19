@@ -532,27 +532,33 @@ func (h *GatewayHandler) subscribeAndEnter(ctx context.Context) <-chan *corev1.S
 		return nil
 	}
 
-	h.eventCh = make(chan *corev1.SubscribeResponse, 16)
+	// Capture session ID and event channel as locals so the receive
+	// goroutine never reads from h.* — the main Handle loop mutates those
+	// fields during teardown (quit→character-picker reset), which would
+	// race with concurrent reads here (holomush-umxj Mode A).
+	eventCh := make(chan *corev1.SubscribeResponse, 16)
+	sessionID := h.sessionID
+	h.eventCh = eventCh
 
 	go func() {
-		defer close(h.eventCh)
+		defer close(eventCh)
 		for {
 			resp, recvErr := stream.Recv()
 			if recvErr != nil {
 				if !errors.Is(recvErr, io.EOF) {
-					slog.DebugContext(ctx, "gateway: event stream recv error", "session_id", h.sessionID, "error", recvErr)
+					slog.DebugContext(ctx, "gateway: event stream recv error", "session_id", sessionID, "error", recvErr)
 				}
 				return
 			}
 			select {
-			case h.eventCh <- resp:
+			case eventCh <- resp:
 			case <-ctx.Done():
 				return
 			}
 		}
 	}()
 
-	return h.eventCh
+	return eventCh
 }
 
 func (h *GatewayHandler) handleSay(ctx context.Context, message string) {
