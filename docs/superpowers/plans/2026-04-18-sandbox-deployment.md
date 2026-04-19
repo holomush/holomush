@@ -1158,6 +1158,81 @@ Expected: a snapshot dated within the last ~24h for source
 
 ---
 
+### Task 15: Bootstrap Automation Workflow
+
+Supersedes the manual Task 13. A new `workflow_dispatch` GitHub Actions
+workflow provisions the sandbox from zero: tunnel, bucket, access keys,
+volume, firewall, droplet, DNS — all idempotent. Operator's one-time
+manual action is pasting four seed secrets into GitHub Secrets.
+
+**Files:**
+
+- Modify: `scripts/cloud-init.sh` — make `POSTGRES_PASSWORD` honor an
+  external value if supplied (currently unconditionally `openssl rand`).
+- Create: `.github/workflows/bootstrap-sandbox.yaml`
+- Modify: `site/docs/operating/sandbox-operations.md` — replace the
+  long "One-time bootstrap" section with a short "Seed GH Secrets and
+  run bootstrap-sandbox workflow" section; keep the manual runbook as
+  an appendix for air-gapped cases.
+
+**Required seed secrets (operator sets once, manually):**
+
+- `DIGITALOCEAN_ACCESS_TOKEN` — write scope on droplets/volumes/firewalls/spaces
+- `DIGITALOCEAN_SSH_KEY_ID` — existing key fingerprint or ID in DO
+- `DIGITALOCEAN_SSH_PRIVATE_KEY` — matching private key
+- `CLOUDFLARE_API_TOKEN` — DNS edit + tunnel create/edit scopes on `holomush.dev`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_ZONE_ID`
+- `SECRETS_ADMIN_PAT` — fine-grained PAT with Secrets: Write on this repo
+
+**Secrets the workflow creates / updates:**
+
+- `KOPIA_SANDBOX_PASSWORD` (generated fresh if not present)
+- `CLOUDFLARE_TUNNEL_ID`
+- `CLOUDFLARE_TUNNEL_TOKEN` (connector token from the tunnel create)
+- `DO_SPACES_ACCESS_KEY`
+- `DO_SPACES_SECRET_KEY`
+
+**Workflow inputs (`workflow_dispatch`):**
+
+| Input | Default | Description |
+|---|---|---|
+| `domain` | `game.holomush.dev` | Public hostname for the tunnel |
+| `telnet_subdomain` | `telnet.game.holomush.dev` | Direct-A-record for telnet |
+| `region` | `sfo3` | DO region |
+| `droplet_size` | `s-2vcpu-2gb-amd` | DO droplet size slug |
+| `volume_size_gb` | `25` | Block volume size |
+| `bucket_name` | `holomush-sandbox-backups` | Spaces bucket name |
+| `tunnel_name` | `holomush-sandbox` | Cloudflare tunnel name |
+| `droplet_name` | `holomush-sandbox-game` | Droplet hostname |
+| `dry_run` | `false` | Print actions without executing (when true) |
+
+**Idempotency requirement:** every creation step MUST first check for
+existence (by name/tag) and reuse if present. Re-running the workflow
+on an already-provisioned environment is a no-op that refreshes nothing.
+
+**Failure isolation:** each step prints `::notice::` markers for what
+was created in that run. On failure, the operator has a trail of partial
+state that they can clean up or re-run against.
+
+**Block-volume ordering:** the workflow creates + attaches the volume
+BEFORE provisioning the droplet, then passes the device path to the
+droplet as cloud-init user-data. The existing `scripts/cloud-init.sh`
+is extended with a cloud-config `mounts:` directive so the volume is
+mounted at `/opt/holomush/data` before Docker Compose runs, so Postgres
+writes land on the volume from first boot.
+
+**Verification:** the workflow ends with:
+
+1. SSH to the droplet and `docker compose ps` — expect all services up.
+2. HTTP GET `https://<domain>/healthz` → 200 via the tunnel.
+3. TCP connect to `<telnet_subdomain>:4201` → ACK.
+
+Failure of any verification step fails the workflow but leaves the
+infrastructure intact for operator inspection.
+
+---
+
 ## Post-Implementation
 
 - [ ] Run `task pr-prep` and confirm green.
