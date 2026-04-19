@@ -84,7 +84,12 @@ jobs:
           gh auth setup-git
 
       # Step 3: Resolve or create KOPIA_SANDBOX_PASSWORD secret
+      # Emits `password` as a step output so step 11 can reference the freshly
+      # generated value on the first-run path — `secrets.KOPIA_SANDBOX_PASSWORD`
+      # is a snapshot taken at workflow-start and does not see secrets created
+      # mid-run.
       - name: Resolve or create KOPIA_SANDBOX_PASSWORD secret
+        id: kopia_password
         env:
           GH_TOKEN: ${{ secrets.SECRETS_ADMIN_PAT }}
           DRY_RUN: ${{ inputs.dry_run }}
@@ -97,6 +102,8 @@ jobs:
               echo "DRY RUN: would generate and set KOPIA_SANDBOX_PASSWORD secret"
             else
               KOPIA_PWD="$(openssl rand -base64 48 | tr -d '/+=' | head -c 64)"
+              echo "::add-mask::${KOPIA_PWD}"
+              echo "password=${KOPIA_PWD}" >> "$GITHUB_OUTPUT"
               echo "${KOPIA_PWD}" | gh secret set KOPIA_SANDBOX_PASSWORD
               echo "::notice::Created KOPIA_SANDBOX_PASSWORD secret"
             fi
@@ -404,10 +411,17 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           TUNNEL_TOKEN: ${{ steps.tunnel.outputs.tunnel_token }}
           PG_PASSWORD: ${{ steps.pg.outputs.password }}
-          KOPIA_PASSWORD: ${{ secrets.KOPIA_SANDBOX_PASSWORD }}
+          # KOPIA and Spaces secrets fall back to the secrets context when
+          # no step output is present (pre-existing secrets case), and use
+          # the freshly-generated step output otherwise (first-run case,
+          # where the secrets context is the workflow-start snapshot and
+          # doesn't reflect the just-written secret).
+          KOPIA_PASSWORD: ${{ steps.kopia_password.outputs.password != '' && steps.kopia_password.outputs.password || secrets.KOPIA_SANDBOX_PASSWORD
+            }}
           BACKUP_S3_ACCESS_KEY_VAL: ${{ steps.spaces_key.outputs.access_key != '' && steps.spaces_key.outputs.access_key ||
             secrets.DO_SPACES_ACCESS_KEY }}
-          BACKUP_S3_SECRET_KEY_VAL: ${{ secrets.DO_SPACES_SECRET_KEY }}
+          BACKUP_S3_SECRET_KEY_VAL: ${{ steps.spaces_key.outputs.secret_key != '' && steps.spaces_key.outputs.secret_key ||
+            secrets.DO_SPACES_SECRET_KEY }}
         run: |
           set -euo pipefail
 

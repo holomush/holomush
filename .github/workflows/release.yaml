@@ -345,13 +345,20 @@ jobs:
           else
             VERSION="${GITHUB_REF_NAME}"
           fi
-          # Run the backup service's script with --tag=pre-deploy:<version>.
-          # The --tag triggers pin mode in backup.sh so the retention policy
-          # never expires this snapshot.
+          # Pass VERSION through an SSH positional arg + single-quoted heredoc
+          # so workflow_dispatch's user-supplied `tag` input cannot inject
+          # shell commands into the remote execution (CodeRabbit review).
           ssh -o StrictHostKeyChecking=yes "holomush@${DROPLET_IP}" \
-            "cd /opt/holomush \
-             && docker compose --profile tunnel --profile backups exec -T backup \
-                  /usr/local/bin/backup.sh --tag=pre-deploy:${VERSION}"
+            bash -s -- "${VERSION}" <<'EOF'
+            set -euo pipefail
+            VERSION="$1"
+            cd /opt/holomush
+            # Run the backup service's script with --tag=pre-deploy:<version>.
+            # The --tag triggers pin mode in backup.sh so the retention policy
+            # never expires this snapshot.
+            docker compose --profile tunnel --profile backups exec -T backup \
+              /usr/local/bin/backup.sh --tag="pre-deploy:${VERSION}"
+          EOF
 
       - name: Pull + migrate + restart
         env:

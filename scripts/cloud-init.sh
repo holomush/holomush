@@ -99,6 +99,19 @@ curl -fsSL "${RELEASE_URL}/compose.prod.yaml" -o "${HOLOMUSH_DIR}/compose.yaml"
 curl -fsSL "${RELEASE_URL}/docker/otel-collector/config.prod.yaml" \
   -o "${HOLOMUSH_DIR}/config/otel-collector.yaml"
 
+# Backup-service build context. The `backup` service in compose.prod.yaml
+# uses `build: ./docker/postgres-backup`, so these files must exist before
+# `docker compose --profile backups build backup` runs at the end of this
+# script. Without them, enabling the `backups` profile breaks bootstrap.
+echo "Downloading postgres-backup build context..."
+mkdir -p "${HOLOMUSH_DIR}/docker/postgres-backup"
+for f in Dockerfile backup.sh entrypoint.sh; do
+  curl -fsSL "${RELEASE_URL}/docker/postgres-backup/${f}" \
+    -o "${HOLOMUSH_DIR}/docker/postgres-backup/${f}"
+done
+chmod +x "${HOLOMUSH_DIR}/docker/postgres-backup/backup.sh" \
+         "${HOLOMUSH_DIR}/docker/postgres-backup/entrypoint.sh"
+
 # --- Generate .env ---
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)}"
 

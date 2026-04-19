@@ -118,6 +118,7 @@ export BACKUP_KEEP_MONTHLY=6
       | sed 's/^/export /'
   sed -n '10,$p' scripts/cloud-init.sh
 ) > /tmp/holomush-cloud-init.sh
+```
 
 ### 4. Create the block volume BEFORE the droplet
 
@@ -260,10 +261,24 @@ in the repository becomes unreadable. There is no "re-encrypt" operation.
 1. Take a final backup under the old password and download it locally.
 2. Create a new bucket (or prefix) for the new repository.
 3. Update `KOPIA_SANDBOX_PASSWORD` in GitHub Secrets.
-4. SSH to the droplet, update `.env`, and on next `docker compose up -d` the
-   cloud-init-style init path will create a fresh repository at the new
-   bucket. Old snapshots remain encrypted with the old password — keep a
-   copy if they matter.
+4. SSH to the droplet, update `.env` with the new password (and bucket /
+   prefix if changed), then **explicitly initialize the new repository**
+   from the `backup` container — `backup.sh` only connects to an existing
+   repo, it does not create one, so without this step cron backups silently
+   fail:
+
+    ```bash
+    cd /opt/holomush
+    docker compose --profile tunnel --profile backups run --rm backup \
+      kopia repository create s3 \
+        --bucket="${BACKUP_S3_BUCKET}" \
+        --endpoint="${BACKUP_S3_ENDPOINT}" \
+        --access-key="${BACKUP_S3_ACCESS_KEY}" \
+        --secret-access-key="${BACKUP_S3_SECRET_KEY}"
+    ```
+
+    Old snapshots remain encrypted with the old password — keep a copy if
+    they matter.
 
 ### Restore a backup
 
