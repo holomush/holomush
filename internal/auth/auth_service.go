@@ -206,8 +206,17 @@ func (s *Service) AuthenticatePlayer(ctx context.Context, username, password, us
 		)
 	}
 
-	// Emit session_ended (cause=evicted) for each child game session whose
-	// PlayerSessionID was in the trimmed set.
+	// Emit HandleDisconnect (leave on location) + session_ended (cause=evicted)
+	// for each child game session whose PlayerSessionID was in the trimmed set.
+	// Peers at the evicted character's location need the leave event so the
+	// character does not appear "stuck" to other players.
+	//
+	// NOTE: sessionStore.Delete and runDisconnectHooks are NOT called here.
+	// CreateWithCap's transaction already FK-cascaded the game session rows,
+	// so Delete would be redundant/no-op. DisconnectHooks (guest release etc.)
+	// are a gRPC-layer concern — auth.Service does not own hook registration.
+	// The remaining gap is tracked as a follow-up; the reaper's OnExpired
+	// callback and normal session-lifecycle cleanup cover the common cases.
 	if len(trimmedIDs) > 0 && s.engine != nil && s.gameSessions != nil {
 		trimmedSet := make(map[ulid.ULID]struct{}, len(trimmedIDs))
 		for _, id := range trimmedIDs {
@@ -221,6 +230,13 @@ func (s *Service) AuthenticatePlayer(ctx context.Context, username, password, us
 				ID:         child.CharacterID,
 				Name:       child.CharacterName,
 				LocationID: child.LocationID,
+			}
+			if dcErr := s.engine.HandleDisconnect(ctx, char, "evicted"); dcErr != nil {
+				s.logger.WarnContext(ctx, "eviction: leave event failed",
+					"session_id", child.ID,
+					"player_session_id", child.PlayerSessionID.String(),
+					"error", dcErr,
+				)
 			}
 			if endErr := s.engine.EndSession(ctx, char, child.ID,
 				core.SessionEndedCauseEvicted,

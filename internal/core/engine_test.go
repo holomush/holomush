@@ -258,3 +258,19 @@ func TestNewEngineAcceptsEventWriterInProductionMode(t *testing.T) {
 	e := NewEngine(writer, WithProductionGuardrail())
 	assert.NotNil(t, e)
 }
+
+// TestNewEnginePanicsOnTypedNilEventWriterInProductionMode verifies the
+// guardrail rejects a typed-nil (*EventWriter)(nil) store. Without the nil
+// check, the type assertion succeeds and construction proceeds, failing
+// later at first Append instead of failing fast at startup.
+func TestNewEnginePanicsOnTypedNilEventWriterInProductionMode(t *testing.T) {
+	var writer *EventWriter // typed nil
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic from NewEngine in production mode with typed-nil *EventWriter")
+		}
+	}()
+
+	NewEngine(writer, WithProductionGuardrail())
+}

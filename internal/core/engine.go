@@ -69,9 +69,14 @@ func NewEngine(store EventStore, opts ...EngineOption) *Engine {
 		opt(&cfg)
 	}
 	if cfg.productionGuardrail {
-		if _, ok := store.(*EventWriter); !ok {
+		// Check BOTH the concrete type AND non-nil. A Go type assertion on an
+		// interface holding (*EventWriter)(nil) succeeds (ok=true), which would
+		// let construction proceed and fail later at first Append. Reject here
+		// so startup fails fast.
+		writer, ok := store.(*EventWriter)
+		if !ok || writer == nil {
 			panic(fmt.Sprintf(
-				"core.NewEngine: production mode requires *EventWriter store (I1 guardrail). "+
+				"core.NewEngine: production mode requires non-nil *EventWriter store (I1 guardrail). "+
 					"Got %T. See docs/superpowers/specs/2026-04-18-session-lifecycle-as-events-design.md Design Decision #8.",
 				store))
 		}

@@ -104,9 +104,12 @@ func TestEndSessionAppendCtxNotCancelledWhenCallerCtxCancelsMidAppend(t *testing
 	assert.Len(t, events, 1, "session_ended event MUST be persisted")
 }
 
-// TestEndSessionFailsFastWhenCallerCtxAlreadyCancelled verifies that
-// EndSession does not do wasted work if the caller has clearly already gone.
-func TestEndSessionFailsFastWhenCallerCtxAlreadyCancelled(t *testing.T) {
+// TestEndSessionPersistsEventEvenWhenCallerCtxAlreadyCancelled verifies that
+// the caller's context does not gate the audit-critical append. A client that
+// hung up just before EndSession was invoked (pre-cancelled ctx) MUST NOT
+// cause the terminal session_ended event to be skipped — the append uses a
+// fresh background context bounded by sessionTerminalCommitTimeout.
+func TestEndSessionPersistsEventEvenWhenCallerCtxAlreadyCancelled(t *testing.T) {
 	store := NewMemoryEventStore()
 	engine := NewEngine(store)
 
@@ -117,10 +120,10 @@ func TestEndSessionFailsFastWhenCallerCtxAlreadyCancelled(t *testing.T) {
 	char := CharacterRef{ID: charID, Name: "Testy", LocationID: NewULID()}
 
 	err := engine.EndSession(ctx, char, NewULID().String(), SessionEndedCauseQuit, "Goodbye!")
-	assert.Error(t, err, "pre-cancelled ctx should fail fast")
+	require.NoError(t, err, "pre-cancelled ctx must not skip the terminal append")
 
 	stream := "character:" + charID.String()
 	events, replayErr := store.Replay(context.Background(), stream, ulid.ULID{}, 10)
 	require.NoError(t, replayErr)
-	assert.Empty(t, events, "no event should be appended")
+	assert.Len(t, events, 1, "session_ended event MUST be persisted even with pre-cancelled caller ctx")
 }
