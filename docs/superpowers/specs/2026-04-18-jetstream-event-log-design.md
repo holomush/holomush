@@ -29,7 +29,7 @@ notification delivery is asynchronous relative to the durable `INSERT`:
 - **Cursor persistence race** (Finding 1, PR #201) — `Send` → `UpdateCursors`
   gap mitigated but not eliminated.
   ([docs/plans/2026-04-07-cursor-lock-finding-1-closure.md](../../plans/2026-04-07-cursor-lock-finding-1-closure.md))
-- **Quit-teardown race** — `holomush-h9fp` telnet E2E flake, intermittent.
+- **Quit-teardown race** — `holomush-h9fp` telnet E2E flake (a separate but related instance, `holomush-umxj`, was fixed independently in PR #237 — F3's Subscribe handler rewrite must not regress it).
 - **Reconnect/replay flakes** — `holomush-0jzs` (four `terminal.spec.ts` tests).
 - **Test ULID ordering crutches** — six+ `time.Sleep(1ms)` calls in
   `postgres_integration_test.go` to dodge ULID collision-in-same-ms.
@@ -1498,7 +1498,7 @@ Realistic envelope: 5–7 weeks.
 
 - Scene Phase 4 implementation
 - Channel plugin resumption
-- holomush-umxj telnet race fix verified under new bus
+- Verify holomush-umxj telnet race fix (already landed in PR #237) holds under new bus — F3 rewrites the Subscribe handler and gateway path that hosted the race; regression test from PR #237 must stay green
 - Real codec implementation (separate workstream)
 - Multi-node cluster cutover (when scale demands)
 

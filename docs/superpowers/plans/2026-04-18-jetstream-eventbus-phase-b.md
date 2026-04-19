@@ -1015,7 +1015,7 @@ Conventional message: `docs: F9 — document new EventBus + supersede prior even
 
 - Scene Phase 4 implementation (`holomush-5rh.13` unblocked)
 - Channel plugin resumption (`holomush-0sc.12` unpaused)
-- holomush-umxj telnet race fix verified under new bus
+- Verify holomush-umxj telnet race fix (already landed in PR #237) holds under new bus — F3 rewrites the Subscribe handler and gateway path that hosted the race; the regression test from PR #237 must stay green after F3
 - Real codec implementation workstream (codec key provider, KMS choice — `holomush-1tvn` follow-up)
 - Multi-node cluster cutover (deferred until scale demands)
 - Schema evolution playbook (proto v1 → v2 migration patterns)
