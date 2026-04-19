@@ -30,6 +30,9 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/eventbustest"
+	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	grpcpkg "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/session"
@@ -174,6 +177,65 @@ func registerTestCommands(reg *command.Registry) {
 	})
 }
 
+// newTelnetBusFanout mirrors the production cmd/holomush fanout. Each
+// EventWriter.Append gets republished to the JetStream bus so the F3
+// Subscribe handler (which reads exclusively from the bus) sees every
+// engine-originated event. Transitional until F6 drops PG Append.
+func newTelnetBusFanout(bus *eventbus.Subsystem) core.BusFanoutFunc {
+	if bus == nil {
+		return nil
+	}
+	publisher := bus.Publisher()
+	if publisher == nil {
+		return nil
+	}
+	return func(ctx context.Context, event core.Event) error {
+		gameID := bus.GameID()
+		if gameID == "" {
+			gameID = "main"
+		}
+		natsSubject, err := subjectxlate.Legacy(event.Stream, gameID)
+		if err != nil {
+			return err
+		}
+		sub, err := eventbus.NewSubject(natsSubject)
+		if err != nil {
+			return err
+		}
+		typ, err := eventbus.NewType(string(event.Type))
+		if err != nil {
+			return err
+		}
+		actor := eventbus.Actor{Kind: telnetCoreActorKindToBus(event.Actor.Kind)}
+		if event.Actor.ID != "" {
+			if parsed, parseErr := ulid.Parse(event.Actor.ID); parseErr == nil {
+				actor.ID = parsed
+			}
+		}
+		return publisher.Publish(ctx, eventbus.Event{
+			ID:        event.ID,
+			Subject:   sub,
+			Type:      typ,
+			Timestamp: event.Timestamp,
+			Actor:     actor,
+			Payload:   event.Payload,
+		})
+	}
+}
+
+func telnetCoreActorKindToBus(k core.ActorKind) eventbus.ActorKind {
+	switch k {
+	case core.ActorCharacter:
+		return eventbus.ActorKindCharacter
+	case core.ActorSystem:
+		return eventbus.ActorKindSystem
+	case core.ActorPlugin:
+		return eventbus.ActorKindPlugin
+	default:
+		return eventbus.ActorKindUnknown
+	}
+}
+
 // testTelnetClient wraps a raw TCP connection for telnet interaction.
 type testTelnetClient struct {
 	conn    net.Conn
@@ -316,8 +378,19 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		clientTLS, err := tlscerts.LoadClientTLS(certsDir, "gateway", gameID)
 		Expect(err).NotTo(HaveOccurred())
 
-		// 7. Create core components
-		engine := core.NewEngine(eventStore)
+		// 7a. Boot an embedded JetStream bus and wrap the event store with a
+		// writer that dual-writes every engine Append to the bus. F3's
+		// Subscribe handler reads exclusively from the bus; without the
+		// dual-write, say/pose/session_ended events published via
+		// EventStore.Append never reach subscribers.
+		busBundle := eventbustest.New(GinkgoT())
+		eventWriter := core.NewEventWriter(eventStore)
+		eventWriter.SetBusFanout(newTelnetBusFanout(busBundle.Bus))
+		DeferCleanup(eventWriter.Close)
+
+		// 7. Create core components. Use the wrapped writer as the engine
+		// store so dispatcher handlers fan out through the bus.
+		engine := core.NewEngine(eventWriter)
 
 		// 8. Create start location in DB and GuestAuthenticator
 		startLocation = ulid.Make()
@@ -345,17 +418,23 @@ var _ = Describe("Telnet Vertical Slice E2E", func() {
 		cmdSvc := command.NewTestServices(command.ServicesConfig{
 			Session: sessStore,
 			Engine:  pe,
-			Events:  eventStore,
+			// Events MUST be the wrapped writer so test command handlers
+			// (say/pose below) fan out through the bus the same way the
+			// engine does. Using the raw eventStore here caused the F3
+			// Subscribe handler to see no events.
+			Events: eventWriter,
 		})
 		dispatcher, dispErr := command.NewDispatcher(reg, pe)
 		Expect(dispErr).NotTo(HaveOccurred())
 
 		coreServer := grpcpkg.NewCoreServer(engine, sessStore, dispatcher, cmdSvc,
-			grpcpkg.WithEventStore(eventStore),
+			grpcpkg.WithEventStore(eventWriter),
 			grpcpkg.WithGuestService(guestService),
 			grpcpkg.WithPlayerRepo(playerRepo),
 			grpcpkg.WithPlayerSessionRepo(playerSessionRepo),
 			grpcpkg.WithCharacterRepo(charRepoAdapter),
+			grpcpkg.WithSubscriber(busBundle.Bus.Subscriber()),
+			grpcpkg.WithGameID(busBundle.Bus.GameID),
 			grpcpkg.WithDisconnectHook(func(info session.Info) {
 				// Release the guest name (stored as underscore form in the namer's
 				// active set, but the session stores it as space-separated display form).

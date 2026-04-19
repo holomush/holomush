@@ -10,6 +10,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -24,6 +25,7 @@ import (
 	"github.com/holomush/holomush/internal/content"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	holoFocus "github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/grpc/focus/scenepolicy"
@@ -111,6 +113,11 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	// Gather dependencies from subsystems.
 	rawEventStore := s.cfg.DB.EventStore()
 	s.eventWriter = core.NewEventWriter(rawEventStore)
+	// F3 transitional dual-write: every host engine Append is also
+	// published to JetStream so the F3 Subscribe handler (which reads
+	// from the bus) still sees say/pose/move/session_ended/etc. F6 drops
+	// the PG events table and the Append leg disappears.
+	s.eventWriter.SetBusFanout(newCoreEventBusFanout(s.cfg.EventBus))
 	// Use the EventWriter as the EventStore for all production code paths.
 	// EventWriter serializes Append calls (I-14 enforcement) and delegates
 	// reads to the underlying store.
@@ -241,6 +248,16 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	}
 
 	// 8. Create CoreServer and register with gRPC.
+	// F3: wire the JetStream event bus subscriber into the Subscribe RPC.
+	// The bus owns per-session durable consumers; the gRPC handler pumps
+	// deliveries through Send → Ack. EventBus subsystem is a DependsOn
+	// above, so Subscriber is guaranteed non-nil by the time Start runs.
+	subscriber := s.cfg.EventBus.Subscriber()
+	if subscriber == nil {
+		return oops.Code("GRPC_EVENTBUS_SUBSCRIBER_NIL").
+			Errorf("EventBus subscriber is nil; subsystem not started")
+	}
+
 	coreServerOpts := []holoGRPC.CoreServerOption{
 		holoGRPC.WithEventStore(eventStore),
 		holoGRPC.WithWorldQuerier(worldService),
@@ -262,6 +279,8 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		holoGRPC.WithGuestService(guestService),
 		holoGRPC.WithStreamContributor(pluginManager),
 		holoGRPC.WithAccessEngine(policyEngine),
+		holoGRPC.WithSubscriber(subscriber),
+		holoGRPC.WithGameID(s.cfg.EventBus.GameID),
 	}
 	if s.cfg.StreamRegistry != nil {
 		coreServerOpts = append(coreServerOpts, holoGRPC.WithStreamRegistry(s.cfg.StreamRegistry))
@@ -391,6 +410,77 @@ func (s *grpcSubsystem) Stop(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// newCoreEventBusFanout returns a core.BusFanoutFunc that publishes each
+// host-engine core.Event to the JetStream EventBus with the matching
+// subject. Legacy colon-delimited streams (e.g. "location:01ABC") are
+// translated to `events.<gameID>.<...>` so subscribers filter on the
+// bus-native subject shape.
+//
+// F3 transitional only — F6 drops PG and the core engine writes to the
+// bus directly.
+func newCoreEventBusFanout(bus *eventbus.Subsystem) core.BusFanoutFunc {
+	if bus == nil {
+		return nil
+	}
+	publisher := bus.Publisher()
+	if publisher == nil {
+		return nil
+	}
+	return func(ctx context.Context, event core.Event) error {
+		gameID := bus.GameID()
+		if gameID == "" {
+			gameID = "main"
+		}
+		natsSubject, err := subjectxlate.Legacy(event.Stream, gameID)
+		if err != nil {
+			return oops.With("stream", event.Stream).Wrap(err)
+		}
+		sub, err := eventbus.NewSubject(natsSubject)
+		if err != nil {
+			return oops.With("stream", event.Stream).Wrap(err)
+		}
+		typ, err := eventbus.NewType(string(event.Type))
+		if err != nil {
+			return oops.With("type", string(event.Type)).Wrap(err)
+		}
+		busEvent := eventbus.Event{
+			ID:        event.ID,
+			Subject:   sub,
+			Type:      typ,
+			Timestamp: event.Timestamp,
+			Actor:     coreToBusActor(event.Actor),
+			Payload:   event.Payload,
+		}
+		return oops.Wrap(publisher.Publish(ctx, busEvent))
+	}
+}
+
+// coreToBusActor bridges the legacy core.Actor (ID is a string, sometimes
+// a ULID and sometimes a plugin name) to the JetStream-side Actor (ID is
+// a ULID; zero for anonymous/system).
+func coreToBusActor(a core.Actor) eventbus.Actor {
+	out := eventbus.Actor{Kind: coreActorKindToBus(a.Kind)}
+	if a.ID != "" {
+		if parsed, parseErr := ulid.Parse(a.ID); parseErr == nil {
+			out.ID = parsed
+		}
+	}
+	return out
+}
+
+func coreActorKindToBus(k core.ActorKind) eventbus.ActorKind {
+	switch k {
+	case core.ActorCharacter:
+		return eventbus.ActorKindCharacter
+	case core.ActorSystem:
+		return eventbus.ActorKindSystem
+	case core.ActorPlugin:
+		return eventbus.ActorKindPlugin
+	default:
+		return eventbus.ActorKindUnknown
+	}
 }
 
 // focusStreamContributorAdapter bridges plugins.Manager.QuerySessionStreams

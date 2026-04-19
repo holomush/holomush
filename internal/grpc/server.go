@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"runtime/debug"
 	"strings"
@@ -27,6 +28,8 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/session"
@@ -67,16 +70,10 @@ type SessionDefaults struct {
 	MaxReplay  int
 }
 
-// defaultMaxReplay is used when MaxReplay is not configured.
-const defaultMaxReplay = 1000
-
-// cursorCommitTimeout bounds the synchronous cursor commit inside
-// replayAndSend. 1 second is ~1000x the healthy-DB latency, well below
-// the "chat feels broken" threshold, and covers typical pool-wait hiccups.
-// On timeout, the write is dropped (logged at error level) and the live
-// loop continues — failure mode degrades to today's "duplicate-on-reconnect"
-// behavior, never worse.
-const cursorCommitTimeout = 1 * time.Second
+// cleanupTimeout bounds best-effort teardown operations (connection removal,
+// session reattach CAS) that must run on a fresh context so client disconnect
+// does not abort cleanup.
+const cleanupTimeout = 1 * time.Second
 
 // replayCompleteFrame returns a SubscribeResponse containing the
 // REPLAY_COMPLETE control signal.
@@ -115,6 +112,11 @@ type SessionStreamContributor interface {
 	QuerySessionStreams(ctx context.Context, req plugins.SessionStreamsRequest) []string
 }
 
+// GameIDProvider returns the current game id for subject translation.
+// F5 removes the need for translation; until then Subscribe must know the
+// game id to route the session's filters at `events.<gameID>.<...>`.
+type GameIDProvider func() string
+
 // CoreServer implements the gRPC Core service.
 type CoreServer struct {
 	corev1.UnimplementedCoreServiceServer
@@ -142,32 +144,26 @@ type CoreServer struct {
 	streamRegistry    *SessionStreamRegistry
 
 	// focusCoordinator manages session focus memberships and replay policy.
-	// Nil until the Subscribe handler refactor (B7) wires it into the live loop.
 	focusCoordinator focus.Coordinator
 
 	// accessEngine evaluates ABAC policies for stream read authorization (Layer 2).
 	// Nil if ABAC is not configured (public stream reads will be denied).
 	accessEngine accessTypes.AccessPolicyEngine
 
-	// afterLISTENHook fires between LISTEN setup and replay — used in tests.
-	afterLISTENHook func()
+	// subscriber opens per-session durable consumers against the JetStream
+	// event bus. Post-F3 Subscribe delegates its live loop to subscribe
+	// streams; nil subscriber causes Subscribe to error early. Wired via
+	// WithSubscriber from the grpc subsystem.
+	subscriber eventbus.Subscriber
+
+	// gameID returns the current game id used to translate legacy colon-
+	// delimited streams (e.g. "character:01ABC") to JetStream subjects
+	// (e.g. "events.main.character.01ABC"). Defaults to "main" when unset.
+	gameID GameIDProvider
 
 	// newSessionID is used for generating session IDs. Can be overridden for testing.
 	newSessionID func() ulid.ULID
 	verbRegistry *core.VerbRegistry
-
-	// cursorLocks serializes the per-session "Send + commit cursor"
-	// critical section in replayAndSend against a concurrent Subscribe's
-	// cursor read on reconnect, deterministically closing the Finding 1
-	// race documented in holomush-9ues. Always non-nil after construction.
-	cursorLocks *cursorLockMap
-
-	// cursorCommitHook is an optional test seam invoked inside
-	// replayAndSend's per-event critical section, AFTER Send returns and
-	// BEFORE UpdateCursors. Production sets this to nil. Tests use it to
-	// pause inside the critical section and drive a concurrent Subscribe
-	// to assert deterministic closure of Finding 1.
-	cursorCommitHook func(ctx context.Context, sessionID string, eventID ulid.ULID)
 }
 
 // CoreServerOption configures a CoreServer.
@@ -187,7 +183,8 @@ func WithSessionDefaults(defaults SessionDefaults) CoreServerOption {
 	}
 }
 
-// WithEventStore sets the event store for replay support.
+// WithEventStore sets the event store (retained for history reads and
+// writes; the Subscribe live loop no longer consumes from it post-F3).
 func WithEventStore(store core.EventStore) CoreServerOption {
 	return func(s *CoreServer) {
 		s.eventStore = store
@@ -216,30 +213,6 @@ func WithDisconnectHook(hook func(session.Info)) CoreServerOption {
 	}
 }
 
-// WithCursorCommitHook installs a test seam invoked inside replayAndSend's
-// per-event critical section, AFTER Send returns and BEFORE UpdateCursors.
-// Production code MUST NOT use this — it exists so integration tests can
-// pause inside the critical section to drive a concurrent Subscribe and
-// assert that Finding 1 is deterministically closed (holomush-9ues).
-func WithCursorCommitHook(hook func(ctx context.Context, sessionID string, eventID ulid.ULID)) CoreServerOption {
-	return func(s *CoreServer) {
-		s.cursorCommitHook = hook
-	}
-}
-
-// CursorLockRefCount returns the number of holders + queued waiters on
-// the per-session cursor lock for sessionID, or 0 if no entry exists.
-//
-// This is an integration-test synchronization helper for the Finding 1
-// closure spec (holomush-9ues): tests need to detect when a concurrent
-// Subscribe handler has queued behind an in-flight commit, and polling
-// on the refcount is the only race-free way to do that without timing
-// heuristics. Production code MUST NOT call this — a refcount snapshot
-// has no semantic meaning outside the lock map's internals.
-func (s *CoreServer) CursorLockRefCount(sessionID string) int {
-	return s.cursorLocks.refCount(sessionID)
-}
-
 // WithStreamContributor sets the plugin stream contributor for the server.
 func WithStreamContributor(c SessionStreamContributor) CoreServerOption {
 	return func(s *CoreServer) { s.streamContributor = c }
@@ -260,12 +233,16 @@ func WithAccessEngine(engine accessTypes.AccessPolicyEngine) CoreServerOption {
 	return func(s *CoreServer) { s.accessEngine = engine }
 }
 
-// WithAfterLISTENHook sets a callback fired between LISTEN setup and replay.
-// For testing only.
-func WithAfterLISTENHook(hook func()) CoreServerOption {
-	return func(s *CoreServer) {
-		s.afterLISTENHook = hook
-	}
+// WithSubscriber wires the JetStream EventBus subscriber into the Subscribe
+// live loop. Required post-F3 — Subscribe returns NOT_CONFIGURED otherwise.
+func WithSubscriber(sub eventbus.Subscriber) CoreServerOption {
+	return func(s *CoreServer) { s.subscriber = sub }
+}
+
+// WithGameID injects the game-id provider used for subject translation.
+// Unset defaults to "main" (eventbus.Config default).
+func WithGameID(p GameIDProvider) CoreServerOption {
+	return func(s *CoreServer) { s.gameID = p }
 }
 
 // NewCoreServer creates a new Core gRPC server.
@@ -276,7 +253,6 @@ func NewCoreServer(engine *core.Engine, sessionStore session.Store, dispatcher *
 		dispatcher:   dispatcher,
 		cmdServices:  cmdServices,
 		newSessionID: core.NewULID,
-		cursorLocks:  newCursorLockMap(),
 	}
 
 	for _, opt := range opts {
@@ -288,6 +264,16 @@ func NewCoreServer(engine *core.Engine, sessionStore session.Store, dispatcher *
 	}
 
 	return s
+}
+
+// currentGameID returns the configured game id, falling back to "main".
+func (s *CoreServer) currentGameID() string {
+	if s.gameID != nil {
+		if g := s.gameID(); g != "" {
+			return g
+		}
+	}
+	return "main"
 }
 
 // HandleCommand processes a game command.
@@ -561,152 +547,69 @@ func (s *CoreServer) runDisconnectHooks(ctx context.Context, info session.Info) 
 	}
 }
 
-// maxReplay returns the configured maximum replay count, or the default.
-func (s *CoreServer) maxReplay() int {
-	if s.sessionDefaults.MaxReplay > 0 {
-		return s.sessionDefaults.MaxReplay
-	}
-	return defaultMaxReplay
-}
-
-// eventToProto converts a core.Event to a proto Event wrapped in an EventFrame.
-func eventToProto(ev core.Event) *corev1.SubscribeResponse {
+// toProtoSubscribeResponse maps an eventbus.Event to a gRPC SubscribeResponse
+// frame. The stream field is reverse-translated from the JetStream subject
+// back to the colon-delimited shape existing web/telnet clients expect
+// (e.g. "events.main.character.01ABC" → "character:01ABC"). F5 migrates
+// clients to subject-native APIs and drops the reverse translation.
+func (s *CoreServer) toProtoSubscribeResponse(ev eventbus.Event) *corev1.SubscribeResponse {
+	gameID := s.currentGameID()
 	return &corev1.SubscribeResponse{
 		Frame: &corev1.SubscribeResponse_Event{
 			Event: &corev1.EventFrame{
 				Id:        ev.ID.String(),
-				Stream:    ev.Stream,
+				Stream:    subjectxlate.ToLegacy(string(ev.Subject), gameID),
 				Type:      string(ev.Type),
 				Timestamp: timestamppb.New(ev.Timestamp),
 				ActorType: ev.Actor.Kind.String(),
-				ActorId:   ev.Actor.ID,
+				ActorId:   actorIDString(ev.Actor),
 				Payload:   ev.Payload,
 			},
 		},
 	}
 }
 
-// replayAndSend fetches events after afterID on the given stream and sends
-// them to the client. Character-stream move events are consumed by the
-// location follower instead of being forwarded. Returns the last sent event
-// ID (or afterID if no events were replayed) and any send error.
-//
-// Each event flows through sendAndCommitEvent, which holds the per-session
-// cursor lock around the Send + UpdateCursors atom. Per-event commit (rather
-// than batch-end commit) keeps the maximum contiguous lock-hold bounded by
-// one event's Send latency plus one DB UPDATE — the smallest critical
-// section that still deterministically closes the Finding 1 race documented
-// in holomush-9ues. Concurrent Subscribes for the same session may slip in
-// between events rather than waiting for the entire batch.
-func (s *CoreServer) replayAndSend(
-	ctx context.Context,
-	info *session.Info,
-	streamName string,
-	afterID ulid.ULID,
-	grpcStream grpc.ServerStreamingServer[corev1.SubscribeResponse],
-	lf *locationFollower,
-) (ulid.ULID, error) {
-	events, err := s.eventStore.Replay(ctx, streamName, afterID, s.maxReplay())
-	if err != nil {
-		slog.WarnContext(ctx, "replay failed", "stream", streamName, "error", err)
-		return afterID, nil // non-fatal: skip this stream
+// actorIDString stringifies the bus-side actor id. Zero ULIDs become "" so
+// existing gateway/web clients don't see a synthetic "00000000..." value.
+func actorIDString(a eventbus.Actor) string {
+	if a.ID.Compare(ulid.ULID{}) == 0 {
+		return ""
 	}
-	last := afterID
-	for _, ev := range events {
-		if sendErr := s.sendAndCommitEvent(ctx, info, streamName, ev, grpcStream, lf); sendErr != nil {
-			return last, sendErr
-		}
-		last = ev.ID
-	}
-	return last, nil
+	return a.ID.String()
 }
 
-// sendAndCommitEvent delivers a single event to the client and commits the
-// per-stream cursor under the per-session lock, in that order.
-//
-// The critical section spans Send → (optional cursorCommitHook test seam)
-// → UpdateCursors. Holding the lock across Send is necessary: any acquisition
-// after Send leaves a TOCTOU window where a concurrent Subscribe can read
-// the stale cursor between "wire bytes left" and "lock acquired", reproducing
-// the very race this method is meant to close.
-//
-// Cursor commit failures are logged but do not surface to the caller —
-// they degrade gracefully to "duplicate-on-reconnect", never worse.
-func (s *CoreServer) sendAndCommitEvent(
-	ctx context.Context,
-	info *session.Info,
-	streamName string,
-	ev core.Event,
-	grpcStream grpc.ServerStreamingServer[corev1.SubscribeResponse],
-	lf *locationFollower,
-) error {
-	unlock := s.cursorLocks.lock(info.ID)
-	defer unlock()
-
-	// Character-stream move events are routed through locationFollower
-	// so the client receives a synthetic location_state for the new
-	// location. handleEvent returns true only when it fully consumed
-	// the event (built and Sent the location_state); for all other
-	// paths — nil worldQuerier, payload unmarshal failure, same
-	// location, buildLocationState failure, or location_state Send
-	// failure — it returns false and the raw event must still be
-	// forwarded so the client is not left in a stale state with a
-	// silently-advanced cursor.
-	handled := false
-	if ev.Type == core.EventTypeMove &&
-		strings.HasPrefix(ev.Stream, world.StreamPrefixCharacter) &&
-		lf != nil {
-		handled = lf.handleEvent(ctx, ev, grpcStream)
-	}
-	if !handled {
-		if sendErr := grpcStream.Send(eventToProto(ev)); sendErr != nil {
-			return oops.With("event_id", ev.ID.String()).Wrap(sendErr)
+// computeInitialFilters translates a focus restore plan's stream list into
+// bus-side subjects. Each colon-delimited legacy name becomes an events.<game>.
+// subject; subjects that already look JetStream-native pass through. Invalid
+// translations are logged and dropped so a single bad stream can't brick the
+// Subscribe handshake.
+func (s *CoreServer) computeInitialFilters(ctx context.Context, plan focus.RestorePlan) []eventbus.Subject {
+	gameID := s.currentGameID()
+	out := make([]eventbus.Subject, 0, len(plan.Streams))
+	for _, sm := range plan.Streams {
+		sub, err := s.toSubject(gameID, sm.Stream)
+		if err != nil {
+			slog.WarnContext(ctx, "skipping stream with invalid subject translation",
+				"stream", sm.Stream, "error", err)
+			continue
 		}
+		out = append(out, sub)
 	}
+	return out
+}
 
-	// Test seam: pause inside the critical section so integration tests can
-	// race a concurrent Subscribe and assert it does not observe the stale
-	// cursor. Production sets this to nil. See WithCursorCommitHook.
-	if hook := s.cursorCommitHook; hook != nil {
-		hook(ctx, info.ID, ev.ID)
+// toSubject resolves a legacy stream name against the game id and validates
+// the result against eventbus.NewSubject.
+func (s *CoreServer) toSubject(gameID, streamName string) (eventbus.Subject, error) {
+	raw, err := subjectxlate.Legacy(streamName, gameID)
+	if err != nil {
+		return "", oops.With("stream", streamName).Wrap(err)
 	}
-
-	// Synchronous, bounded-timeout cursor commit. Uses a fresh context so a
-	// client disconnect (which cancels `ctx`) does not abort the write,
-	// matching the semantics the old persistCursorAsync intended.
-	commitCtx, cancel := context.WithTimeout(context.Background(), cursorCommitTimeout)
-	defer cancel()
-	if updateErr := s.sessionStore.UpdateCursors(commitCtx, info.ID,
-		map[string]ulid.ULID{streamName: ev.ID}); updateErr != nil {
-		slog.ErrorContext(ctx, "cursor commit failed",
-			"session_id", info.ID,
-			"stream", streamName,
-			"event_id", ev.ID.String(),
-			"error", updateErr)
+	sub, err := eventbus.NewSubject(raw)
+	if err != nil {
+		return "", oops.With("stream", streamName).Wrap(err)
 	}
-
-	// Terminal session_ended detection — additive at the tail, AFTER Send +
-	// UpdateCursors. The cursor must already be advanced before we emit
-	// STREAM_CLOSED and return the sentinel, so a reconnect does not
-	// re-replay the session_ended event.
-	//
-	// Design Decision #3: a non-matching session_ended (replay of a prior
-	// session's terminal event on a shared character stream) is forwarded
-	// verbatim — the event is already Sent and the cursor already advanced;
-	// we just return nil. This gives multi-surface clients free "your other
-	// session ended" UX value and guarantees cursors never stall.
-	if ev.Type == core.EventTypeSessionEnded {
-		var payload core.SessionEndedPayload
-		if unmarshalErr := json.Unmarshal(ev.Payload, &payload); unmarshalErr != nil {
-			slog.WarnContext(ctx, "grpc: session_ended payload unmarshal failed — stream left open",
-				"session_id", info.ID, "error", unmarshalErr)
-		} else if payload.SessionID == info.ID {
-			//nolint:errcheck // best-effort: client may already be disconnected
-			_ = grpcStream.Send(streamClosedFrame(payload.Reason))
-			return errStreamTerminated
-		}
-	}
-	return nil
+	return sub, nil
 }
 
 // Subscribe opens a stream of events for the session.
@@ -720,6 +623,13 @@ func (s *CoreServer) sendAndCommitEvent(
 // stream. Ongoing revocation (session deletion, cap eviction)
 // propagates via the existing control-frame mechanism — validation runs
 // once at stream open.
+//
+// Post-F3 live-loop architecture: the handler opens a durable JetStream
+// session consumer via eventbus.Subscriber.OpenSession and pumps every
+// delivery through toProtoSubscribeResponse → grpcStream.Send → Ack.
+// Cursor resume is JS-native (durable consumer acked-seq). Mid-session
+// filter changes use SessionStream.SetFilters which JS applies atomically
+// while preserving the cursor.
 func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerStreamingServer[corev1.SubscribeResponse]) error {
 	ctx := stream.Context()
 	requestID := ""
@@ -732,8 +642,8 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		"session_id", req.SessionId,
 	)
 
-	if s.eventStore == nil {
-		return oops.Code("NOT_CONFIGURED").Errorf("event store not configured")
+	if s.subscriber == nil {
+		return oops.Code("NOT_CONFIGURED").Errorf("event bus subscriber not configured")
 	}
 
 	// Validate session ownership before any other work. Enumeration-safe:
@@ -753,24 +663,14 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
 	}
 
-	// 1. Session lookup under the cursor lock (Finding 1 closure).
-	info, err := func() (*session.Info, error) {
-		unlock := s.cursorLocks.lock(req.SessionId)
-		defer unlock()
-		return s.sessionStore.Get(ctx, req.SessionId)
-	}()
+	info, err := s.sessionStore.Get(ctx, req.SessionId)
 	if err != nil {
 		return oops.Code("SESSION_NOT_FOUND").With("session_id", req.SessionId).Errorf("session not found")
 	}
 
-	// Register the caller's connection in core (bd-j2xj). Connection
-	// lifecycle belongs in the Subscribe RPC, not in the web gateway.
-	//
-	// Transitional gate: only runs when connection_id is non-empty. The
-	// telnet gateway passes connection_id + client_type after Task 8; the
-	// web gateway still calls AddConnection itself and does NOT pass a
-	// connection_id yet. Task 14 makes connection_id required and removes
-	// the web gateway's direct AddConnection call, retiring this gate.
+	// Connection registration (bd-j2xj). Only fires when the caller supplies
+	// a connection_id + client_type. Gate removal uses a fresh context so
+	// stream context cancellation does not abort cleanup.
 	if req.GetConnectionId() != "" {
 		connID, parseErr := ulid.Parse(req.GetConnectionId())
 		if parseErr != nil || req.GetClientType() == "" {
@@ -778,11 +678,6 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 				With("session_id", req.GetSessionId()).
 				Errorf("subscribe: connection_id must be a valid ULID and client_type must be set")
 		}
-		// Streams is initialized to an empty slice (not nil) because the
-		// session_connections.streams column is NOT NULL; pgx serializes a
-		// Go nil []string as SQL NULL, which would fail the insert.
-		// Per-stream subscriptions are tracked in memory by the Subscribe
-		// loop; the column is a placeholder for future queries.
 		conn := &session.Connection{
 			ID:          connID,
 			SessionID:   req.GetSessionId(),
@@ -796,12 +691,8 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 				With("connection_id", req.GetConnectionId()).
 				Wrap(addErr)
 		}
-		// Deferred cleanup fires on any exit path: client disconnect,
-		// context cancel, error return, STREAM_CLOSED. Uses a fresh
-		// context so a cancelled stream context does not abort the
-		// removal (same pattern as cursor commit).
 		defer func() {
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), cursorCommitTimeout)
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 			defer cancel()
 			if rmErr := s.sessionStore.RemoveConnection(cleanupCtx, connID); rmErr != nil {
 				slog.WarnContext(ctx, "subscribe: failed to remove connection on stream close",
@@ -813,7 +704,7 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		}()
 	}
 
-	// 2. Reattach if detached.
+	// Reattach if detached.
 	if info.Status == session.StatusDetached {
 		ok, casErr := s.sessionStore.ReattachCAS(ctx, req.SessionId)
 		if casErr != nil {
@@ -826,15 +717,15 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		}
 	}
 
-	// 3. RestoreFocus — produces the full stream list and replay modes.
+	// RestoreFocus — produces the full stream list and replay modes.
 	var plan focus.RestorePlan
 	if s.focusCoordinator != nil {
-		var planErr error
-		plan, planErr = s.focusCoordinator.RestoreFocus(ctx, req.SessionId)
+		p, planErr := s.focusCoordinator.RestoreFocus(ctx, req.SessionId)
 		if planErr != nil {
 			slog.WarnContext(ctx, "RestoreFocus failed, falling back to empty plan",
 				"session_id", req.SessionId, "error", planErr)
 		}
+		plan = p
 	}
 
 	// Ensure ambient streams are present even without a coordinator.
@@ -847,9 +738,6 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 				focus.StreamWithMode{Stream: world.LocationStream(info.LocationID), Mode: focus.ReplayModeFromCursor},
 			)
 		}
-		// Query plugin-contributed streams when no FocusCoordinator
-		// is wired (the coordinator handles this internally when
-		// present).
 		if s.streamContributor != nil {
 			playerID := ""
 			if !info.PlayerID.IsZero() {
@@ -868,26 +756,32 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		}
 	}
 
-	// 4. SubscribeSession (Variant A — strict cross-stream ordering via single PG connection).
-	sub, subErr := s.eventStore.SubscribeSession(ctx)
+	// Active filter set — mutated by location-following and mid-session
+	// ctrl updates. Both paths funnel into SessionStream.SetFilters.
+	filters := s.computeInitialFilters(ctx, plan)
+
+	// Open the bus session. JS preserves the durable consumer's cursor
+	// across reconnect, so events not acked last time get redelivered
+	// automatically; there is no explicit replay phase.
+	busStream, subErr := s.subscriber.OpenSession(ctx, req.SessionId, filters)
 	if subErr != nil {
 		return oops.Code("SUBSCRIBE_FAILED").With("session_id", req.SessionId).Wrap(subErr)
 	}
 	defer func() {
-		if closeErr := sub.Close(); closeErr != nil {
-			slog.WarnContext(ctx, "subscription close failed", "session_id", req.SessionId, "error", closeErr)
+		if closeErr := busStream.Close(); closeErr != nil {
+			slog.WarnContext(ctx, "bus stream close failed", "session_id", req.SessionId, "error", closeErr)
 		}
 	}()
 
-	// 5. Add all streams from plan.
-	for _, sm := range plan.Streams {
-		if addErr := sub.AddStream(ctx, sm.Stream); addErr != nil {
-			slog.WarnContext(ctx, "failed to add stream from plan",
-				"session_id", req.SessionId, "stream", sm.Stream, "error", addErr)
-		}
+	// filterSet tracks the current subject set so mid-session mutations
+	// can diff additions/removals without the caller having to enumerate.
+	filterSet := make(map[eventbus.Subject]struct{}, len(filters))
+	for _, f := range filters {
+		filterSet[f] = struct{}{}
 	}
 
-	// 6. locationFollower
+	// locationFollower translates character move events into atomic filter
+	// swaps against the bus session.
 	locStreamName := ""
 	if !info.LocationID.IsZero() {
 		locStreamName = world.LocationStream(info.LocationID)
@@ -898,73 +792,248 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 		worldQuerier:  s.worldQuerier,
 		sessionStore:  s.sessionStore,
 		locStreamName: locStreamName,
-		sub:           sub,
+		updateFilters: s.makeFilterUpdater(busStream, filterSet),
 	}
 	if sendErr := lf.sendSynthetic(ctx, stream); sendErr != nil {
 		return oops.Code("SEND_FAILED").With("session_id", req.SessionId).Wrap(sendErr)
 	}
 
-	// 7. Control channel for mid-session stream updates.
+	// Control channel for mid-session stream updates (plugin add/remove).
 	ctrlCh := make(chan sessionStreamUpdate, 16)
 	if s.streamRegistry != nil {
 		s.streamRegistry.Register(info.ID, ctrlCh)
 		defer s.streamRegistry.Deregister(info.ID, ctrlCh)
 	}
 
-	if s.afterLISTENHook != nil {
-		s.afterLISTENHook()
-	}
-
-	// 8. Merge-sort replay (I-15). errStreamTerminated from a
-	// session_ended event during replay is a graceful close, not an error.
-	if replayErr := s.replayRestorePlan(ctx, info, plan, stream, lf); replayErr != nil {
-		if errors.Is(replayErr, errStreamTerminated) {
-			return nil
-		}
-		return replayErr
-	}
-
-	// 9. REPLAY_COMPLETE
+	// REPLAY_COMPLETE is emitted immediately — the bus handles replay
+	// transparently by redelivering from the durable's acked-seq. Clients
+	// that gate UI on this signal still see it at the expected point.
 	if err := stream.Send(replayCompleteFrame()); err != nil {
 		return oops.With("session_id", req.SessionId).Wrap(err)
 	}
 
-	// 10. Live loop — single select on Subscription notifications + control.
-	// Session termination is observed inline via session_ended events.
+	return s.runSubscribeLoop(ctx, info, busStream, filterSet, stream, lf, ctrlCh)
+}
+
+// runSubscribeLoop is the post-REPLAY_COMPLETE live pump. It multiplexes
+// bus deliveries against control-channel updates and ctx cancellation.
+//
+// Returns cleanly (nil) for:
+//   - ctx cancellation (context.Canceled): client disconnected
+//   - errStreamTerminated: matching session_ended observed inline
+//
+// All other errors (Send failures, bus errors) surface wrapped.
+func (s *CoreServer) runSubscribeLoop(
+	ctx context.Context,
+	info *session.Info,
+	busStream eventbus.SessionStream,
+	filterSet map[eventbus.Subject]struct{},
+	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
+	lf *locationFollower,
+	ctrlCh chan sessionStreamUpdate,
+) error {
+	type busResult struct {
+		delivery eventbus.Delivery
+		err      error
+	}
+
+	// Pumper goroutine — Next is blocking. Uses the handler's ctx so
+	// ctx cancellation unblocks the pump cleanly.
+	deliveries := make(chan busResult, 1)
+	pumpCtx, pumpCancel := context.WithCancel(ctx)
+	defer pumpCancel()
+	go func() {
+		defer close(deliveries)
+		for {
+			d, err := busStream.Next(pumpCtx)
+			if err != nil {
+				// ctx cancelled (handler returning) OR iterator closed
+				// (busStream.Close was called on the handler's defer).
+				select {
+				case deliveries <- busResult{err: err}:
+				case <-pumpCtx.Done():
+				}
+				return
+			}
+			select {
+			case deliveries <- busResult{delivery: d}:
+			case <-pumpCtx.Done():
+				// Handler unwinding — nack so JS redelivers on rebind.
+				if nackErr := d.Nack(); nackErr != nil {
+					slog.DebugContext(ctx, "subscribe: nack on teardown failed",
+						"session_id", info.ID, "error", nackErr)
+				}
+				return
+			}
+		}
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
-			if ctx.Err() == context.Canceled {
+			// Must not swallow ctx.Err — the telnet drain relies on the
+			// RPC returning promptly when the gateway cancels the stream
+			// (holomush-umxj).
+			if errors.Is(ctx.Err(), context.Canceled) {
 				return nil
 			}
-			return oops.Code("SUBSCRIPTION_CANCELLED").With("session_id", req.SessionId).Wrap(ctx.Err())
+			return oops.Code("SUBSCRIPTION_CANCELLED").With("session_id", info.ID).Wrap(ctx.Err())
 
-		case subLoopErr := <-sub.Errors():
-			return oops.Code("SUBSCRIPTION_ERROR").With("session_id", req.SessionId).Wrap(subLoopErr)
-
-		case notif := <-sub.Notifications():
-			cursor := ulid.ULID{}
-			if c, ok := info.EventCursors[notif.Stream]; ok {
-				cursor = c
+		case r, ok := <-deliveries:
+			if !ok {
+				return nil
 			}
-			last, sendErr := s.replayAndSend(ctx, info, notif.Stream, cursor, stream, lf)
-			if sendErr != nil {
+			if r.err != nil {
+				if errors.Is(r.err, context.Canceled) || errors.Is(r.err, io.EOF) {
+					return nil
+				}
+				return oops.Code("SUBSCRIPTION_ERROR").With("session_id", info.ID).Wrap(r.err)
+			}
+			if sendErr := s.dispatchDelivery(ctx, info, r.delivery, stream, lf); sendErr != nil {
 				if errors.Is(sendErr, errStreamTerminated) {
 					return nil
 				}
-				return oops.Code("SEND_FAILED").With("session_id", req.SessionId).Wrap(sendErr)
+				return sendErr
 			}
-			info.EventCursors[notif.Stream] = last
 
 		case ctrl, ok := <-ctrlCh:
 			if !ok {
 				return nil
 			}
-			if ctrlErr := s.applyCtrlUpdate(ctx, info, sub, ctrl, stream, lf); ctrlErr != nil {
-				return oops.Code("SEND_FAILED").With("session_id", info.ID).Wrap(ctrlErr)
+			if ctrlErr := s.applyFilterCtrl(ctx, info, busStream, filterSet, ctrl); ctrlErr != nil {
+				slog.WarnContext(ctx, "subscribe: filter ctrl update failed",
+					"session_id", info.ID, "stream", ctrl.stream, "error", ctrlErr)
 			}
 		}
 	}
+}
+
+// dispatchDelivery converts a bus delivery to a proto frame, sends it, and
+// acks the message on success. Move events are routed through the
+// locationFollower — synthetic location_state is sent in lieu of the raw
+// event when a cross-location move is detected. session_ended events that
+// match this handler's session surface errStreamTerminated so the caller
+// closes the stream gracefully.
+func (s *CoreServer) dispatchDelivery(
+	ctx context.Context,
+	info *session.Info,
+	delivery eventbus.Delivery,
+	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
+	lf *locationFollower,
+) error {
+	event := delivery.Event()
+	gameID := s.currentGameID()
+	legacyStream := subjectxlate.ToLegacy(string(event.Subject), gameID)
+
+	// locationFollower consumes move events on character streams and
+	// replies with a synthetic location_state — in that case the raw
+	// event is dropped (ack'd) rather than forwarded.
+	handled := false
+	if string(event.Type) == string(core.EventTypeMove) &&
+		strings.HasPrefix(legacyStream, world.StreamPrefixCharacter) &&
+		lf != nil {
+		handled = lf.handleMovePayload(ctx, core.EventType(event.Type), event.Payload, stream)
+	}
+
+	if !handled {
+		if sendErr := stream.Send(s.toProtoSubscribeResponse(event)); sendErr != nil {
+			// Do not ack — JS redelivers when the consumer rebinds.
+			if nackErr := delivery.Nack(); nackErr != nil {
+				slog.DebugContext(ctx, "subscribe: nack after send failure",
+					"session_id", info.ID, "error", nackErr)
+			}
+			return oops.With("event_id", event.ID.String()).Wrap(sendErr)
+		}
+	}
+
+	if ackErr := delivery.Ack(); ackErr != nil {
+		slog.WarnContext(ctx, "subscribe: ack failed; will redeliver",
+			"session_id", info.ID, "event_id", event.ID.String(), "error", ackErr)
+	}
+
+	// Terminal session_ended for this session → graceful close.
+	if string(event.Type) == string(core.EventTypeSessionEnded) {
+		var payload core.SessionEndedPayload
+		if unmarshalErr := json.Unmarshal(event.Payload, &payload); unmarshalErr != nil {
+			slog.WarnContext(ctx, "grpc: session_ended payload unmarshal failed — stream left open",
+				"session_id", info.ID, "error", unmarshalErr)
+			return nil
+		}
+		if payload.SessionID == info.ID {
+			//nolint:errcheck // best-effort: client may already be disconnected
+			_ = stream.Send(streamClosedFrame(payload.Reason))
+			return errStreamTerminated
+		}
+	}
+	return nil
+}
+
+// applyFilterCtrl applies a mid-session stream add/remove to the bus
+// session's filter set via SetFilters. Location streams are rejected
+// here so locationFollower remains the sole owner of those filters.
+func (s *CoreServer) applyFilterCtrl(
+	ctx context.Context,
+	info *session.Info,
+	busStream eventbus.SessionStream,
+	filterSet map[eventbus.Subject]struct{},
+	ctrl sessionStreamUpdate,
+) error {
+	if strings.HasPrefix(ctrl.stream, world.StreamPrefixLocation) {
+		slog.WarnContext(ctx, "plugin attempted to modify location stream — rejected",
+			"session_id", info.ID, "stream", ctrl.stream)
+		return nil
+	}
+	sub, err := s.toSubject(s.currentGameID(), ctrl.stream)
+	if err != nil {
+		return oops.With("session_id", info.ID).With("stream", ctrl.stream).Wrap(err)
+	}
+	if ctrl.add {
+		if _, exists := filterSet[sub]; exists {
+			return nil
+		}
+		filterSet[sub] = struct{}{}
+	} else {
+		if _, exists := filterSet[sub]; !exists {
+			return nil
+		}
+		delete(filterSet, sub)
+	}
+	return oops.Wrap(busStream.SetFilters(ctx, filterSetToSlice(filterSet)))
+}
+
+// makeFilterUpdater returns the locationFilterUpdater the locationFollower
+// invokes when a character move is detected. It maintains the same
+// filterSet bookkeeping the ctrl path uses so the two stay in sync.
+func (s *CoreServer) makeFilterUpdater(
+	busStream eventbus.SessionStream,
+	filterSet map[eventbus.Subject]struct{},
+) locationFilterUpdater {
+	return func(ctx context.Context, addStream, removeStream string) error {
+		gameID := s.currentGameID()
+		if addStream != "" {
+			sub, err := s.toSubject(gameID, addStream)
+			if err != nil {
+				return oops.With("stream", addStream).Wrap(err)
+			}
+			filterSet[sub] = struct{}{}
+		}
+		if removeStream != "" {
+			sub, err := s.toSubject(gameID, removeStream)
+			if err != nil {
+				return oops.With("stream", removeStream).Wrap(err)
+			}
+			delete(filterSet, sub)
+		}
+		return oops.Wrap(busStream.SetFilters(ctx, filterSetToSlice(filterSet)))
+	}
+}
+
+func filterSetToSlice(set map[eventbus.Subject]struct{}) []eventbus.Subject {
+	out := make([]eventbus.Subject, 0, len(set))
+	for sub := range set {
+		out = append(out, sub)
+	}
+	return out
 }
 
 // Disconnect removes a connection and handles session lifecycle.

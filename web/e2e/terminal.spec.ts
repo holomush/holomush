@@ -216,9 +216,7 @@ test.describe('Terminal UI', () => {
     await expect(input).toHaveValue('look');
   });
 
-  // TODO(holomush-1tvn.10): Re-enable after F3 rewrites Subscribe handler around bus.OpenSession.
-  // Phase B plan: docs/superpowers/plans/2026-04-18-jetstream-eventbus-phase-b.md §F3
-  test.skip('reconnect receives live events after replay', async ({ page }) => {
+  test('reconnect receives live events after replay', async ({ page }) => {
     await connectAsGuest(page);
 
     // Reload — session persists, stream reconnects
@@ -475,9 +473,7 @@ test.describe('Terminal UI', () => {
     await ctx2.close();
   });
 
-  // TODO(holomush-1tvn.10): Re-enable after F3 rewrites Subscribe cursor resume to carry command history.
-  // Phase B plan: docs/superpowers/plans/2026-04-18-jetstream-eventbus-phase-b.md §F3
-  test.skip('command history persists across reconnect', async ({ page }) => {
+  test('command history persists across reconnect', async ({ page }) => {
     await connectAsGuest(page);
 
     // Send commands with unique tokens to avoid collision with other tests
@@ -603,9 +599,7 @@ test.describe('Terminal UI', () => {
     await expect(page.locator('.mode-chip')).toHaveCount(0);
   });
 
-  // TODO(holomush-1tvn.10): Re-enable after F3 rewrites Subscribe so live events arrive with timestamps.
-  // Phase B plan: docs/superpowers/plans/2026-04-18-jetstream-eventbus-phase-b.md §F3
-  test.skip('timestamps render on terminal lines', async ({ page }) => {
+  test('timestamps render on terminal lines', async ({ page }) => {
     await connectAsGuest(page);
     const input = page.locator('textarea').first();
     const token = `ts-${Date.now()}`;

@@ -6,6 +6,7 @@ package core
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,6 +17,18 @@ import (
 
 // ErrWriterClosed is returned when Write is called after Close.
 var ErrWriterClosed = errors.New("event writer is closed")
+
+// BusFanoutFunc is the side-channel the EventWriter invokes after a
+// successful EventStore.Append. Post-F3 the gRPC Subscribe handler reads
+// deliveries from the JetStream EventBus, so host-originated engine events
+// (say/pose/move/session_ended/etc.) MUST also be published to the bus or
+// subscribers never see them. F6 drops the PG events table entirely, at
+// which point Append goes away and the bus is the sole write path; until
+// then we dual-write.
+//
+// Errors from the fanout are logged by the caller (via slog) but do NOT
+// fail the Write — the authoritative store is still PG.
+type BusFanoutFunc func(ctx context.Context, event Event) error
 
 // EventWriter serializes all event appends through a single goroutine,
 // ensuring ULID generation order = Postgres commit order = NOTIFY delivery
@@ -32,16 +45,22 @@ var ErrWriterClosed = errors.New("event writer is closed")
 // and the database INSERT happen in the same serialized goroutine, ULID
 // order is guaranteed to match commit order.
 //
+// Post-F3 the writer also fans each event out to the JetStream bus via the
+// optional BusFanout side-channel. This is transitional — F6 drops PG and
+// the bus becomes the only write path.
+//
 // Throughput: ~1000 events/second (bounded by single-INSERT latency).
 // For a MUSH with ~200 concurrent players, this is ~100x headroom.
 type EventWriter struct {
 	store     EventStore
+	busFanout BusFanoutFunc
 	appendCh  chan appendRequest
 	done      chan struct{}
 	stopped   chan struct{}
 	closed    atomic.Bool
 	once      sync.Once
 	enqueueMu sync.Mutex // serializes closed-check + channel-send in Write vs Close
+	fanoutMu  sync.RWMutex
 }
 
 type appendRequest struct {
@@ -192,20 +211,50 @@ func (w *EventWriter) stamp(req *appendRequest) {
 	req.event.Timestamp = time.Now()
 }
 
+// SetBusFanout installs (or replaces) the bus fanout side-channel. Safe
+// to call concurrently with in-flight Appends. Pass nil to disable.
+func (w *EventWriter) SetBusFanout(f BusFanoutFunc) {
+	w.fanoutMu.Lock()
+	w.busFanout = f
+	w.fanoutMu.Unlock()
+}
+
+// appendAndFanout runs Append and, on success, fires the bus fanout.
+// Fanout failures are logged but never surface to the caller.
+func (w *EventWriter) appendAndFanout(req appendRequest) {
+	err := w.store.Append(req.ctx, req.event)
+	if err == nil {
+		w.fanoutMu.RLock()
+		f := w.busFanout
+		w.fanoutMu.RUnlock()
+		if f != nil {
+			if fErr := f(req.ctx, req.event); fErr != nil {
+				slog.WarnContext(req.ctx, "event writer: bus fanout failed — subscribers may miss this event",
+					"event_id", req.event.ID.String(),
+					"stream", req.event.Stream,
+					"type", string(req.event.Type),
+					"error", fErr,
+				)
+			}
+		}
+	}
+	req.err <- err
+}
+
 func (w *EventWriter) run() {
 	defer close(w.stopped)
 	for {
 		select {
 		case req := <-w.appendCh:
 			w.stamp(&req)
-			req.err <- w.store.Append(req.ctx, req.event)
+			w.appendAndFanout(req)
 		case <-w.done:
 			// Drain remaining requests.
 			for {
 				select {
 				case req := <-w.appendCh:
 					w.stamp(&req)
-					req.err <- w.store.Append(req.ctx, req.event)
+					w.appendAndFanout(req)
 				default:
 					return
 				}

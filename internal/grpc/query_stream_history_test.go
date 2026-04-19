@@ -64,7 +64,6 @@ func newQueryStreamHistoryTestServer(t *testing.T, engine accessTypes.AccessPoli
 		engine:       core.NewEngine(eventStore),
 		eventStore:   eventStore,
 		sessionStore: sessStore,
-		cursorLocks:  newCursorLockMap(),
 		accessEngine: engine,
 	}
 

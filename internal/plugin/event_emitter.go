@@ -15,6 +15,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
@@ -146,7 +147,7 @@ func (e *PluginEventEmitter) Emit(ctx context.Context, pluginName string, intent
 			gameID = g
 		}
 	}
-	natsSubject, err := translateSubject(subjectRaw, gameID)
+	natsSubject, err := subjectxlate.Legacy(subjectRaw, gameID)
 	if err != nil {
 		return oops.With("plugin", pluginName).With("subject", subjectRaw).Wrap(err)
 	}
@@ -216,31 +217,6 @@ func subjectNamespace(subject string) (string, error) {
 			New("subject namespace must match plugin naming pattern")
 	}
 	return head, nil
-}
-
-// translateSubject maps a legacy colon-delimited subject to the JetStream
-// form required by `events.>`. No-op for subjects already in JS form.
-//
-// Mapping: `<ns>[:<a>[:<b>[:...]]]` → `events.<game_id>.<ns>[.<a>[.<b>[...]]]`.
-// Tokens must satisfy eventbus.NewSubject rules (letters, digits, `_`, `-`).
-func translateSubject(subject, gameID string) (string, error) {
-	if strings.HasPrefix(subject, "events.") {
-		return subject, nil
-	}
-	if gameID == "" {
-		return "", oops.New("game id required to translate legacy subject")
-	}
-	parts := strings.Split(subject, ":")
-	for i, p := range parts {
-		if p == "" {
-			return "", oops.With("subject", subject).
-				Errorf("legacy subject has empty token at position %d", i)
-		}
-	}
-	out := make([]string, 0, len(parts)+2)
-	out = append(out, "events", gameID)
-	out = append(out, parts...)
-	return strings.Join(out, "."), nil
 }
 
 func validateResolvedActor(actor core.Actor) error {

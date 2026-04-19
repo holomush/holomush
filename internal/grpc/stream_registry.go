@@ -6,7 +6,6 @@ package grpc
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/samber/oops"
 
@@ -14,13 +13,19 @@ import (
 	"github.com/holomush/holomush/internal/session"
 )
 
-// sessionStreamUpdate is sent on a session's control channel to add or remove a stream.
+// sessionStreamUpdate is sent on a session's control channel to add or
+// remove a stream. Pre-F3 this carried ReplayMode hints (BoundedTail
+// tailCount/notBefore) that the old replay machinery consumed; post-F3
+// all replay lives inside JetStream's durable consumer so only the
+// stream + add/remove bit remain.
+//
+// Note: replayMode is still set by callers for forward compatibility
+// with F5+, but the Subscribe handler ignores it — SessionStream.SetFilters
+// replaces explicit replay logic entirely.
 type sessionStreamUpdate struct {
 	stream     string
 	add        bool             // true = subscribe, false = unsubscribe
-	replayMode focus.ReplayMode // only meaningful when add == true
-	tailCount  int              // for ReplayModeBoundedTail
-	notBefore  time.Time        // for ReplayModeBoundedTail
+	replayMode focus.ReplayMode // advisory post-F3; ignored by Subscribe handler
 }
 
 // SessionStreamRegistry maps active session IDs to their Subscribe control channels.

@@ -25,16 +25,22 @@ import (
 // queries during location-following.
 const systemSubjectID = "system"
 
+// locationFilterUpdater is the narrow callback locationFollower invokes to
+// add/remove location streams from the bus session's filter set. It replaces
+// the pre-F3 core.Subscription.AddStream/RemoveStream wiring.
+type locationFilterUpdater func(ctx context.Context, addStream, removeStream string) error
+
 // locationFollower tracks the character's current location and handles
-// location-following when move events are detected. It uses the session-wide
-// Subscription to dynamically add/remove location streams on move.
+// location-following when move events are detected. On move it invokes
+// the supplied updater so the bus session's subject filters switch
+// atomically (via SessionStream.SetFilters).
 type locationFollower struct {
 	characterID   ulid.ULID
 	currentLocID  ulid.ULID
 	worldQuerier  WorldQuerier
 	sessionStore  session.Store
 	locStreamName string
-	sub           core.Subscription // session-wide subscription
+	updateFilters locationFilterUpdater
 }
 
 // handleEvent checks if the event is a character move for the tracked character.
@@ -45,15 +51,28 @@ func (lf *locationFollower) handleEvent(
 	event core.Event,
 	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
 ) bool {
+	return lf.handleMovePayload(ctx, event.Type, event.Payload, stream)
+}
+
+// handleMovePayload is the bus-friendly entry point: it takes the typed
+// event kind and raw payload bytes instead of a full core.Event literal,
+// sidestepping the I-16 ruleguard (which forbids core.Event{} outside
+// core.NewEvent). Semantically identical to handleEvent.
+func (lf *locationFollower) handleMovePayload(
+	ctx context.Context,
+	eventType core.EventType,
+	payloadBytes []byte,
+	stream grpc.ServerStreamingServer[corev1.SubscribeResponse],
+) bool {
 	if lf.worldQuerier == nil {
 		return false
 	}
-	if event.Type != core.EventTypeMove {
+	if eventType != core.EventTypeMove {
 		return false
 	}
 
 	var payload world.MovePayload
-	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
 		return false
 	}
 
@@ -98,42 +117,34 @@ func (lf *locationFollower) handleEvent(
 	lf.currentLocID = newLocID
 
 	// Switch the live broadcaster subscription to the new location stream
-	// so the client receives events from the destination location.
-	//
-	// Catch-up replay for the new stream is handled automatically: when the
-	// first notification arrives on the new stream, the live loop in
-	// Subscribe calls replayAndSend with lastSentID[newStream] == zero ULID,
-	// which replays all events from the beginning of the stream.
+	// so the client receives events from the destination location. The
+	// updater is backed by the bus session's SetFilters — JS preserves
+	// the consumer cursor across the filter swap, so catch-up delivery
+	// for the new stream happens automatically on the next Next().
 	lf.switchLocationSubscription(ctx, newLocID)
 
 	return true
 }
 
-// switchLocationSubscription uses the session-wide Subscription to add the
-// new location stream and remove the old one. Adding first ensures continuous
-// location feed — if AddStream fails the old stream remains active.
-//
-// Catch-up replay for the new location is handled by the caller: the first
-// LISTEN notification triggers replayAndSend with lastSentID[newStream]=zero,
-// replaying from the beginning of the destination stream.
+// switchLocationSubscription invokes the filter updater to add the new
+// location stream and remove the old one in one atomic filter swap. On
+// failure we log and leave the existing filter set alone — the client
+// keeps receiving the old location's events until the next move attempt.
 func (lf *locationFollower) switchLocationSubscription(ctx context.Context, newLocID ulid.ULID) {
-	if lf.sub == nil {
+	if lf.updateFilters == nil {
 		return
 	}
 
 	newStreamName := world.LocationStream(newLocID)
-
-	// Add new before removing old — ensures continuous location feed.
-	if err := lf.sub.AddStream(ctx, newStreamName); err != nil {
-		slog.WarnContext(ctx, "location-following: add stream failed",
-			"stream", newStreamName, "error", err)
-		return
-	}
+	oldStreamName := ""
 	if lf.locStreamName != "" && lf.locStreamName != newStreamName {
-		if removeErr := lf.sub.RemoveStream(ctx, lf.locStreamName); removeErr != nil {
-			slog.WarnContext(ctx, "location-following: remove old stream failed",
-				"stream", lf.locStreamName, "error", removeErr)
-		}
+		oldStreamName = lf.locStreamName
+	}
+
+	if err := lf.updateFilters(ctx, newStreamName, oldStreamName); err != nil {
+		slog.WarnContext(ctx, "location-following: filter update failed",
+			"new_stream", newStreamName, "old_stream", oldStreamName, "error", err)
+		return
 	}
 	lf.locStreamName = newStreamName
 }

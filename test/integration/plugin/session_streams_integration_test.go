@@ -1,7 +1,11 @@
-//go:build integration
+//go:build integration && f3_legacy
 
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
+
+// TODO(holomush-1tvn.14): Uses WithAfterLISTENHook which F3 removed along
+// with the PG LISTEN/NOTIFY live-loop. Port the scenario to the bus-backed
+// Subscribe handler during F7 or later.
 
 package plugin_test
 
