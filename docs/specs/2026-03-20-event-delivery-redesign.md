@@ -7,7 +7,7 @@
 
 ## Status
 
-**SUPERSEDED** by [docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md](../superpowers/specs/2026-04-18-jetstream-event-log-design.md). LISTEN/NOTIFY-based delivery has been replaced by JetStream as of the F1-F7 cutover (PR #TBD on `feat/eventbus-cutover`).
+**SUPERSEDED** by [docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md](../superpowers/specs/2026-04-18-jetstream-event-log-design.md). LISTEN/NOTIFY-based delivery has been replaced by JetStream as of the F1-F7 cutover (PR #252 on `feat/eventbus-cutover`).
 
 ## Overview
 

@@ -121,18 +121,25 @@ func (p *projection) start(ctx context.Context) error {
 // omits an Ack so JetStream redelivers after AckWait (see persist
 // comment for the rationale — no Nak avoids instant-redeliver storms).
 func (p *projection) handle(msg jetstream.Msg) {
-	if owner := p.owners.Resolve(msg.Subject()); owner.PluginName != "" {
-		// Low-signal per-message event; debug-only to keep log volume
-		// bounded. Plugin-owned audit coverage is observable via the
-		// SkippedPluginOwnedTotal counter instead.
-		slog.Default().Debug(
-			"audit projection skipping plugin-owned subject",
-			"subject", msg.Subject(),
-			"plugin", owner.PluginName,
-		)
-		SkippedPluginOwnedTotal.WithLabelValues(owner.PluginName).Inc()
-		_ = msg.Ack() //nolint:errcheck // ack failures are absorbed by redelivery
-		return
+	// Make the nil-OwnerMap contract explicit: a nil owners map means the
+	// host owns every subject, so skip the plugin-ownership lookup entirely.
+	// OwnerMap.Resolve is nil-safe today, but relying on that invariant
+	// remotely would leave a nil-receiver trap if the implementation
+	// changes.
+	if p.owners != nil {
+		if owner := p.owners.Resolve(msg.Subject()); owner.PluginName != "" {
+			// Low-signal per-message event; debug-only to keep log volume
+			// bounded. Plugin-owned audit coverage is observable via the
+			// SkippedPluginOwnedTotal counter instead.
+			slog.Default().Debug(
+				"audit projection skipping plugin-owned subject",
+				"subject", msg.Subject(),
+				"plugin", owner.PluginName,
+			)
+			SkippedPluginOwnedTotal.WithLabelValues(owner.PluginName).Inc()
+			_ = msg.Ack() //nolint:errcheck // ack failures are absorbed by redelivery
+			return
+		}
 	}
 	if err := p.persist(msg); err != nil {
 		// Deliberate no-ack: JetStream will redeliver after AckWait.

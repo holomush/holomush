@@ -57,11 +57,20 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 	}
 
 	// After: exclusive lower bound by ULID.
+	//
+	// TODO(holomush-suos): cold-tier pagination should key on
+	// events_audit.js_seq, not ULID. Post-F8 cutover removed the global
+	// writer, so id (a ULID) is no longer a safe proxy for JetStream
+	// publish order across concurrent subjects. Using id >/< for cursors
+	// and ORDER BY id can diverge from the hot JetStream tier ordering and
+	// produce unstable crossover pagination. The js_seq column already
+	// exists in migration 000009; the HistoryQuery cursor semantics and the
+	// crossover tier-boundary logic both need to switch together.
 	if !q.After.IsZero() {
 		args = append(args, q.After[:])
 		fmt.Fprintf(&sb, " AND id > $%d", len(args))
 	}
-	// Before: exclusive upper bound by ULID.
+	// Before: exclusive upper bound by ULID. See TODO(holomush-suos) above.
 	if !q.Before.IsZero() {
 		args = append(args, q.Before[:])
 		fmt.Fprintf(&sb, " AND id < $%d", len(args))

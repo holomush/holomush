@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/eventbus/v1/eventbus.proto.
  */
 export const file_holomush_eventbus_v1_eventbus: GenFile = /*@__PURE__*/
-  fileDesc("CiNob2xvbXVzaC9ldmVudGJ1cy92MS9ldmVudGJ1cy5wcm90bxIUaG9sb211c2guZXZlbnRidXMudjEiQgoFQWN0b3ISLQoEa2luZBgBIAEoDjIfLmhvbG9tdXNoLmV2ZW50YnVzLnYxLkFjdG9yS2luZBIKCgJpZBgCIAEoDCKeAQoFRXZlbnQSCgoCaWQYASABKAwSDwoHc3ViamVjdBgCIAEoCRIMCgR0eXBlGAMgASgJEi0KCXRpbWVzdGFtcBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKgoFYWN0b3IYBSABKAsyGy5ob2xvbXVzaC5ldmVudGJ1cy52MS5BY3RvchIPCgdwYXlsb2FkGAYgASgMKoYBCglBY3RvcktpbmQSGgoWQUNUT1JfS0lORF9VTlNQRUNJRklFRBAAEhgKFEFDVE9SX0tJTkRfQ0hBUkFDVEVSEAESFQoRQUNUT1JfS0lORF9QTEFZRVIQAhIVChFBQ1RPUl9LSU5EX1NZU1RFTRADEhUKEUFDVE9SX0tJTkRfUExVR0lOEARCSFpGZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvZXZlbnRidXMvdjE7ZXZlbnRidXN2MWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("CiNob2xvbXVzaC9ldmVudGJ1cy92MS9ldmVudGJ1cy5wcm90bxIUaG9sb211c2guZXZlbnRidXMudjEiVQoFQWN0b3ISLQoEa2luZBgBIAEoDjIfLmhvbG9tdXNoLmV2ZW50YnVzLnYxLkFjdG9yS2luZBIKCgJpZBgCIAEoDBIRCglsZWdhY3lfaWQYAyABKAkingEKBUV2ZW50EgoKAmlkGAEgASgMEg8KB3N1YmplY3QYAiABKAkSDAoEdHlwZRgDIAEoCRItCgl0aW1lc3RhbXAYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEioKBWFjdG9yGAUgASgLMhsuaG9sb211c2guZXZlbnRidXMudjEuQWN0b3ISDwoHcGF5bG9hZBgGIAEoDCqGAQoJQWN0b3JLaW5kEhoKFkFDVE9SX0tJTkRfVU5TUEVDSUZJRUQQABIYChRBQ1RPUl9LSU5EX0NIQVJBQ1RFUhABEhUKEUFDVE9SX0tJTkRfUExBWUVSEAISFQoRQUNUT1JfS0lORF9TWVNURU0QAxIVChFBQ1RPUl9LSU5EX1BMVUdJThAEQkhaRmdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2V2ZW50YnVzL3YxO2V2ZW50YnVzdjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * Actor identifies who caused an event.
@@ -34,6 +34,15 @@ export type Actor = Message<"holomush.eventbus.v1.Actor"> & {
    * @generated from field: bytes id = 2;
    */
   id: Uint8Array;
+
+  /**
+   * legacy_id carries a non-ULID actor identifier (e.g. a plugin name)
+   * bridged from core.Actor. Set only when id is empty; preserves actor
+   * identity for plugin-authored host events across JetStream/audit/history.
+   *
+   * @generated from field: string legacy_id = 3;
+   */
+  legacyId: string;
 };
 
 /**

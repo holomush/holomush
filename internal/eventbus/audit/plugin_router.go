@@ -87,32 +87,65 @@ func (r *PluginHistoryRouter) QueryHistory(
 		req.NotAfter = timestamppb.New(q.NotAfter)
 	}
 
-	stream, err := client.QueryHistory(ctx, req)
+	// Bind the streaming RPC to a child context we control so Close can
+	// cancel it even when the outer caller hasn't cancelled the parent.
+	// Otherwise abandoning a page early leaves the plugin-side RPC running
+	// until the outer query ctx ends.
+	rpcCtx, cancel := context.WithCancel(ctx)
+	stream, err := client.QueryHistory(rpcCtx, req)
 	if err != nil {
+		cancel()
 		return nil, oops.Code("AUDIT_PLUGIN_HISTORY_RPC_FAILED").
 			With("plugin", pluginName).
 			With("subject", string(q.Subject)).
 			Wrap(err)
 	}
-	return &pluginHistoryStream{rpc: stream, pluginName: pluginName, subject: string(q.Subject)}, nil
+	return &pluginHistoryStream{
+		rpc:        stream,
+		cancel:     cancel,
+		pluginName: pluginName,
+		subject:    string(q.Subject),
+	}, nil
 }
 
 // pluginHistoryStream adapts the server-streaming RPC to HistoryStream.Next /
-// Close. The RPC closes itself when the server returns EOF; Close is a
-// best-effort CloseSend for early cancellation.
+// Close. The RPC closes itself when the server returns EOF; Close cancels the
+// underlying context so the plugin-side stream is released immediately on
+// early abandonment.
 type pluginHistoryStream struct {
 	rpc        pluginv1.PluginAuditService_QueryHistoryClient
+	cancel     context.CancelFunc
 	pluginName string
 	subject    string
 	closed     bool
 }
 
 // Next returns the next event or io.EOF when the RPC exhausts the page.
-func (s *pluginHistoryStream) Next(_ context.Context) (eventbus.Event, error) {
+// Honours the passed ctx by cancelling the RPC when ctx is Done, matching
+// the HistoryStream contract.
+func (s *pluginHistoryStream) Next(ctx context.Context) (eventbus.Event, error) {
 	if s.closed {
 		return eventbus.Event{}, io.EOF
 	}
+	if err := ctx.Err(); err != nil {
+		return eventbus.Event{}, oops.Code("AUDIT_PLUGIN_HISTORY_CTX").
+			With("plugin", s.pluginName).
+			With("subject", s.subject).
+			Wrap(err)
+	}
+	// Cancel the underlying RPC if the caller's ctx ends before Recv returns.
+	// Recv blocks on the stream, so we spawn a short-lived watchdog goroutine
+	// that cancels the rpcCtx when the caller's ctx ends.
+	doneCh := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			s.cancel()
+		case <-doneCh:
+		}
+	}()
 	resp, err := s.rpc.Recv()
+	close(doneCh)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return eventbus.Event{}, io.EOF
@@ -187,10 +220,12 @@ func (s *pluginHistoryStream) Close() error {
 		return nil
 	}
 	s.closed = true
-	// The server-streaming client doesn't expose CloseSend on a ServerStreamingClient
-	// alias; context cancellation is the supported termination path. The
-	// host Reader always cancels the request ctx when the crossover stream
-	// is closed, so leaving this method as a flag flip is sufficient.
+	// Cancel the child ctx we bound to the streaming RPC so the plugin-side
+	// handler is released immediately instead of waiting for the outer query
+	// ctx to end.
+	if s.cancel != nil {
+		s.cancel()
+	}
 	return nil
 }
 

@@ -338,34 +338,30 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 			return nil, nil
 		}
 
-		owners := make([]audit.SubjectOwner, 0, len(decls))
-		for _, d := range decls {
-			owners = append(owners, audit.SubjectOwner{
-				PluginName: d.PluginName,
-				Pattern:    d.Subject,
-			})
-		}
-		ownerMap, omErr := audit.NewOwnerMap(owners)
-		if omErr != nil {
-			slog.Error("failed to build audit OwnerMap from plugin manifests; defaulting to host-everything",
-				"error", omErr)
-			return nil, nil
-		}
-
 		js := eventBusSub.JS()
 		if js == nil {
-			slog.Warn("plugin audit consumer manager: JetStream not available; continuing with OwnerMap only")
-			return ownerMap, nil
+			// With no JetStream we cannot register plugin consumers at
+			// all. Returning a nil OwnerMap means the host projection
+			// stays the sole audit sink for every subject, which is
+			// the correct degraded behavior: we must never mark a
+			// subject as plugin-owned when no consumer is running.
+			slog.Warn("plugin audit consumer manager: JetStream not available; host projection will handle all audit subjects")
+			return nil, nil
 		}
 		pcm := audit.NewPluginConsumerManager(js)
 		byPlugin := make(map[string][]string)
 		for _, d := range decls {
 			byPlugin[d.PluginName] = append(byPlugin[d.PluginName], d.Subject)
 		}
+		// Only add a SubjectOwner entry for subjects whose plugin consumer
+		// was successfully registered. Without this, the host projection
+		// would ack-and-skip those subjects while no plugin consumer was
+		// running to archive them, dropping events from every audit sink.
+		owners := make([]audit.SubjectOwner, 0, len(decls))
 		for pluginName, subjects := range byPlugin {
 			client, ok := mgr.PluginAuditClient(pluginName)
 			if !ok {
-				slog.Warn("plugin declared audit subjects but no PluginAuditService client is registered; skipping consumer",
+				slog.Warn("plugin declared audit subjects but no PluginAuditService client is registered; host projection will archive these subjects",
 					"plugin", pluginName,
 					"subjects", subjects)
 				continue
@@ -375,10 +371,30 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 				Subjects:   subjects,
 				Client:     pluginAuditClientAdapter{client: client},
 			}); addErr != nil {
-				slog.Error("plugin audit consumer registration failed",
+				slog.Error("plugin audit consumer registration failed; host projection will archive these subjects",
 					"plugin", pluginName,
+					"subjects", subjects,
 					"error", addErr)
+				continue
 			}
+			for _, subject := range subjects {
+				owners = append(owners, audit.SubjectOwner{
+					PluginName: pluginName,
+					Pattern:    subject,
+				})
+			}
+		}
+		if len(owners) == 0 {
+			// Every plugin consumer registration failed (or no plugins
+			// declared subjects); leave the OwnerMap nil so the host
+			// projection archives everything.
+			return nil, pcm
+		}
+		ownerMap, omErr := audit.NewOwnerMap(owners)
+		if omErr != nil {
+			slog.Error("failed to build audit OwnerMap from successfully registered plugin consumers; defaulting to host-everything",
+				"error", omErr)
+			return nil, pcm
 		}
 		return ownerMap, pcm
 	})

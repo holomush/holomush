@@ -100,6 +100,12 @@ func (r *SessionStreamRegistry) AddStream(_ context.Context, sessionID, stream s
 }
 
 // AddStreamWithMode implements plugins.StreamRegistry. Subscribes with explicit replay mode.
+//
+// TODO(holomush-6uvc): Subscribe post-F3 ignores replayMode and always uses
+// cursor-mode replay via SessionStream.SetFilters, so BoundedTail / LiveOnline
+// requests are silently downgraded here. Either reject unsupported modes
+// with an error (option A) or thread the mode through Subscribe so SetFilters
+// honours the requested replay window (option B).
 func (r *SessionStreamRegistry) AddStreamWithMode(_ context.Context, sessionID, stream string, mode session.ReplayMode) error {
 	return r.Send(sessionID, sessionStreamUpdate{stream: stream, add: true, replayMode: mode})
 }

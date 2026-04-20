@@ -251,11 +251,11 @@ func fetchHistoryFramesFromBus(
 	// Convert bus events → proto frames. Reverse from newest-first
 	// (Backward) to oldest-first to match the legacy ReplayTail wire shape.
 	result := make([]*corev1.EventFrame, len(collected))
-	for i, busEvent := range collected {
+	for i := range collected {
 		// Reverse index: collected[0] is newest; result[0] should be oldest.
 		j := len(collected) - 1 - i
-		legacyStreamName := subjectxlate.ToLegacy(string(busEvent.Subject), gameID)
-		result[j] = eventbusEventToEventFrame(busEvent, legacyStreamName)
+		legacyStreamName := subjectxlate.ToLegacy(string(collected[i].Subject), gameID)
+		result[j] = eventbusEventToEventFrame(collected[i], legacyStreamName)
 	}
 	return result, nil
 }

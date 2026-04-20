@@ -48,7 +48,15 @@ func (h *jetStreamHotTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 	if pageSize <= 0 {
 		return nil, nil
 	}
-	cfg := h.buildConfig(q, edge)
+	// Overfetch when client-side filters will reject some messages.
+	fetch := pageSize * 2
+	if fetch > pageSize+MaxPageSize {
+		fetch = pageSize + MaxPageSize
+	}
+	cfg, err := h.buildConfig(ctx, q, edge, fetch)
+	if err != nil {
+		return nil, err
+	}
 	cons, err := h.js.OrderedConsumer(ctx, eventbus.StreamName, cfg)
 	if err != nil {
 		return nil, oops.Code("EVENTBUS_HOT_CONSUMER_FAILED").
@@ -58,15 +66,6 @@ func (h *jetStreamHotTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 	// OrderedConsumer does not require Delete; ephemeral consumers are
 	// released on the server side when the subscription ends. We do not
 	// keep a Consume loop — one Fetch pulls the page and we move on.
-	//
-	// Fetch over-asks when client-side filters (Before/NotAfter) are in
-	// play because JS can't express those as a native filter. Overfetch
-	// by 2x the page size, capped at pageSize+MaxPageSize, to reduce the
-	// chance of a short page requiring a second OrderedConsumer.
-	fetch := pageSize * 2
-	if fetch > pageSize+MaxPageSize {
-		fetch = pageSize + MaxPageSize
-	}
 	fetchCtx, cancel := context.WithTimeout(ctx, hotFetchTimeout)
 	defer cancel()
 	batch, err := cons.Fetch(fetch, jetstream.FetchMaxWait(hotFetchTimeout))
@@ -107,7 +106,20 @@ func (h *jetStreamHotTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 // buildConfig crafts the OrderedConsumerConfig used for a single page read.
 // JS can express FilterSubject and a start time/sequence; finer bounds are
 // applied client-side in matchesQuery.
-func (h *jetStreamHotTier) buildConfig(q eventbus.HistoryQuery, edge time.Time) jetstream.OrderedConsumerConfig {
+//
+// DirectionBackward needs special care: JetStream has no "start from newest
+// and read backward" policy, so a naive DeliverByStartTimePolicy + forward
+// fetch would return the OLDEST events inside the window, not the tail.
+// For backward reads we therefore consult stream.Info().State.LastSeq and
+// start at max(LastSeq - fetch + 1, 1) via DeliverByStartSequencePolicy so
+// the forward-fetch page is actually the stream's tail. The caller then
+// reverses the page in orderEvents to present newest-first.
+func (h *jetStreamHotTier) buildConfig(
+	ctx context.Context,
+	q eventbus.HistoryQuery,
+	edge time.Time,
+	fetch int,
+) (jetstream.OrderedConsumerConfig, error) {
 	cfg := jetstream.OrderedConsumerConfig{
 		FilterSubjects: []string{string(q.Subject)},
 	}
@@ -121,7 +133,7 @@ func (h *jetStreamHotTier) buildConfig(q eventbus.HistoryQuery, edge time.Time) 
 		start := ulid.Time(q.After.Time())
 		cfg.DeliverPolicy = jetstream.DeliverByStartTimePolicy
 		cfg.OptStartTime = &start
-		return cfg
+		return cfg, nil
 	}
 	dir := q.Direction
 	if dir == 0 {
@@ -136,17 +148,45 @@ func (h *jetStreamHotTier) buildConfig(q eventbus.HistoryQuery, edge time.Time) 
 		cfg.DeliverPolicy = jetstream.DeliverByStartTimePolicy
 		cfg.OptStartTime = &start
 	case eventbus.DirectionBackward:
-		// JS has no "start from newest and read backward" policy; the
-		// best we can do is DeliverAll constrained to times after the
-		// edge, and let the client-side sort present results newest-first.
-		start := edge
-		if !q.NotBefore.IsZero() && q.NotBefore.After(edge) {
-			start = q.NotBefore
+		// Tail-oriented: get stream's last sequence and compute a start
+		// seq that puts `fetch` messages between start and last. If we
+		// can't reach the stream or the stream is empty, fall back to
+		// DeliverByStartTimePolicy so the caller still gets *something*
+		// ordered (the pre-existing behaviour, with the same caveat that
+		// paging is truncated).
+		stream, err := h.js.Stream(ctx, eventbus.StreamName)
+		if err != nil {
+			return cfg, oops.Code("EVENTBUS_HOT_STREAM_LOOKUP_FAILED").
+				With("stream", eventbus.StreamName).
+				Wrap(err)
 		}
-		cfg.DeliverPolicy = jetstream.DeliverByStartTimePolicy
-		cfg.OptStartTime = &start
+		info, err := stream.Info(ctx)
+		if err != nil {
+			return cfg, oops.Code("EVENTBUS_HOT_STREAM_INFO_FAILED").
+				With("stream", eventbus.StreamName).
+				Wrap(err)
+		}
+		last := info.State.LastSeq
+		if last == 0 {
+			// Empty stream: nothing to serve, but the downstream Fetch
+			// will return an empty batch quickly under any policy.
+			cfg.DeliverPolicy = jetstream.DeliverAllPolicy
+			return cfg, nil
+		}
+		// fetch is expected to fit in uint64; Fetch rejects negatives
+		// upstream, so this conversion is safe.
+		window := uint64(0)
+		if fetch > 0 {
+			window = uint64(fetch)
+		}
+		var startSeq uint64 = 1
+		if window > 0 && last > window {
+			startSeq = last - window + 1
+		}
+		cfg.DeliverPolicy = jetstream.DeliverByStartSequencePolicy
+		cfg.OptStartSeq = startSeq
 	}
-	return cfg
+	return cfg, nil
 }
 
 // matchesQuery applies the per-event filters that the JS consumer config
@@ -190,40 +230,23 @@ func matchesQuery(ev eventbus.Event, q eventbus.HistoryQuery, edge time.Time, ti
 	return true
 }
 
-// orderEvents sorts a freshly-read page in q.Direction order by ULID.
-// Stable-sort preserves insertion order for ULID ties (which JetStream's
-// monotonic publisher should prevent in practice, but belt-and-suspenders).
+// orderEvents returns the page in the requested direction while preserving
+// JetStream stream-sequence order within the page.
+//
+// Ordering is owned by JetStream per-stream sequence, not ULID lex order —
+// concurrent publishers produce events whose ULIDs do NOT match stream
+// sequence. For DirectionForward the page is already in stream-seq order
+// (that's the order OrderedConsumer delivered them). For DirectionBackward
+// we reverse the slice so the caller sees newest-first while still
+// preserving JetStream ordering inside the page.
 func orderEvents(events []eventbus.Event, q eventbus.HistoryQuery) {
 	dir := q.Direction
 	if dir == 0 {
 		dir = eventbus.DirectionForward
 	}
-	// Sort by ULID: ULIDs encode time monotonically so ULID order ==
-	// timestamp order (within a single publisher).
-	sortEventsByID(events, dir == eventbus.DirectionBackward)
-}
-
-// sortEventsByID sorts events in place. `descending=true` sorts newest-first.
-func sortEventsByID(events []eventbus.Event, descending bool) {
-	// Simple insertion sort is ample for pageSize <= 200 and avoids
-	// pulling in sort.SliceStable from here (already imported in tier.go
-	// but this avoids an implicit dep cycle when this file is tested in
-	// isolation).
-	for i := 1; i < len(events); i++ {
-		j := i
-		for j > 0 {
-			cmp := events[j-1].ID.Compare(events[j].ID)
-			swap := false
-			if descending {
-				swap = cmp < 0
-			} else {
-				swap = cmp > 0
-			}
-			if !swap {
-				break
-			}
-			events[j-1], events[j] = events[j], events[j-1]
-			j--
+	if dir == eventbus.DirectionBackward {
+		for i, j := 0, len(events)-1; i < j; i, j = i+1, j-1 {
+			events[i], events[j] = events[j], events[i]
 		}
 	}
 }
@@ -301,6 +324,8 @@ func actorFromEnvelope(a *eventbusv1.Actor) eventbus.Actor {
 		var u ulid.ULID
 		copy(u[:], id)
 		out.ID = u
+	} else if legacy := a.GetLegacyId(); legacy != "" {
+		out.LegacyID = legacy
 	}
 	return out
 }

@@ -467,12 +467,16 @@ func (b *busEventAppender) Append(ctx context.Context, event core.Event) error {
 
 // coreToBusActor bridges the legacy core.Actor (ID is a string, sometimes
 // a ULID and sometimes a plugin name) to the JetStream-side Actor (ID is
-// a ULID; zero for anonymous/system).
+// a ULID; zero for anonymous/system). Non-ULID values (e.g. plugin names)
+// are preserved on Actor.LegacyID so plugin-authored host events retain
+// their actor identity across JetStream/audit/history.
 func coreToBusActor(a core.Actor) eventbus.Actor {
 	out := eventbus.Actor{Kind: coreActorKindToBus(a.Kind)}
 	if a.ID != "" {
 		if parsed, parseErr := ulid.Parse(a.ID); parseErr == nil {
 			out.ID = parsed
+		} else {
+			out.LegacyID = a.ID
 		}
 	}
 	return out
@@ -553,20 +557,25 @@ func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string,
 
 	// Reverse to ascending (oldest→newest) and translate to core.Event.
 	result := make([]core.Event, len(collected))
-	for i, be := range collected {
+	for i := range collected {
 		j := len(collected) - 1 - i
-		streamName := subjectxlate.ToLegacy(string(be.Subject), gameID)
-		result[j] = busEventToCoreEvent(be, streamName)
+		streamName := subjectxlate.ToLegacy(string(collected[i].Subject), gameID)
+		result[j] = busEventToCoreEvent(collected[i], streamName)
 	}
 	return result, nil
 }
 
 // busEventToCoreEvent translates an eventbus.Event to a core.Event for plugin
-// consumption. The Actor ID is a ULID string (zero ULID → empty string).
+// consumption. The Actor ID is a ULID string when present; otherwise the
+// LegacyID (e.g. a plugin name) is preserved so plugin-authored events keep
+// their actor identity across the round-trip.
 func busEventToCoreEvent(e eventbus.Event, stream string) core.Event {
 	actorID := ""
-	if e.Actor.ID != (ulid.ULID{}) {
+	switch {
+	case e.Actor.ID != (ulid.ULID{}):
 		actorID = e.Actor.ID.String()
+	case e.Actor.LegacyID != "":
+		actorID = e.Actor.LegacyID
 	}
 	return core.Event{ //nolint:gocritic // translation path: preserves existing ID+Timestamp from JetStream; core.NewEvent() would clobber them
 		ID:        e.ID,

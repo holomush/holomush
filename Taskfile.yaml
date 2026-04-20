@@ -117,6 +117,15 @@ tasks:
       - gotestsum --format pkgname -- -race -tags=integration -count=1 -timeout 8m github.com/holomush/holomush/test/integration/plugin
         {{.CLI_ARGS}}
 
+  soak:eventbus:
+    desc: Run the eventbus chaos + soak matrix (nightly CI; 5min sustained load per spec §8)
+    cmds:
+      # -tags=integration,soak picks up the soak-only tests under
+      # test/integration/eventbus_e2e/ without firing regular integration
+      # tests again. 20m total timeout absorbs the 5m sustained run plus
+      # projection drain + teardown.
+      - gotestsum --format standard-verbose -- -race -tags='integration,soak' -count=1 -timeout=20m -v ./test/integration/eventbus_e2e/...
+
   test:e2e:
     desc: Run Playwright E2E tests in Docker
     deps: ['docker:build']

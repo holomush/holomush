@@ -127,6 +127,15 @@ func (s *JetStreamSubscriber) OpenSession(ctx context.Context, sessionID string,
 	}
 	name := sessionConsumerName(sessionID)
 	subjects := subjectsToStrings(filters)
+	// An empty FilterSubjects set turns the durable into an unfiltered
+	// subscriber on the whole EVENTS stream. Reject here so a bad focus
+	// restore (or removing the last stream) cannot leak unrelated traffic
+	// into a session.
+	if len(subjects) == 0 {
+		return nil, oops.Code("EVENTBUS_SESSION_FILTERS_REQUIRED").
+			With("session_id", sessionID).
+			Errorf("at least one subject filter required")
+	}
 	cfg := jetstream.ConsumerConfig{
 		Durable:           name,
 		Name:              name,
@@ -271,10 +280,18 @@ func (j *jetStreamSessionStream) SetFilters(ctx context.Context, filters []Subje
 	if j.js == nil {
 		return oops.Code("EVENTBUS_SUBSCRIBER_NOT_READY").Errorf("JetStream context is nil")
 	}
+	subjects := subjectsToStrings(filters)
+	// Mirrors the OpenSession guard: an empty filter set is indistinguishable
+	// from an unfiltered consumer once it reaches JetStream, so fail fast.
+	if len(subjects) == 0 {
+		return oops.Code("EVENTBUS_SESSION_FILTERS_REQUIRED").
+			With("session_id", j.sessionID).
+			Errorf("at least one subject filter required")
+	}
 	cfg := jetstream.ConsumerConfig{
 		Durable:           j.consumerName,
 		Name:              j.consumerName,
-		FilterSubjects:    subjectsToStrings(filters),
+		FilterSubjects:    subjects,
 		AckPolicy:         jetstream.AckExplicitPolicy,
 		AckWait:           j.ackWait,
 		MaxAckPending:     j.maxPending,
@@ -423,6 +440,20 @@ func AckSyncForTest(ctx context.Context, d Delivery) error {
 		return d.Ack()
 	}
 	return oops.Wrap(jd.msg.DoubleAck(ctx))
+}
+
+// DeliveryMetadataForTest exposes the underlying jetstream.MsgMetadata of a
+// Delivery produced by this package. Only the invariant-ordering test needs
+// the server-assigned Stream seq to prove cross-subscriber sequence
+// identity. NOT for production use — Delivery intentionally hides this.
+func DeliveryMetadataForTest(d Delivery) (*jetstream.MsgMetadata, error) {
+	jd, ok := d.(*jetStreamDelivery)
+	if !ok {
+		return nil, oops.Code("EVENTBUS_DELIVERY_UNKNOWN_IMPL").
+			Errorf("Delivery is not the jetstream-backed implementation")
+	}
+	//nolint:wrapcheck // forwarding server metadata to test caller
+	return jd.msg.Metadata()
 }
 
 func actorFromProto(a *eventbusv1.Actor) Actor {

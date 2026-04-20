@@ -108,19 +108,40 @@ func validatePattern(pattern string) error {
 	}
 	tokens := strings.Split(pattern, ".")
 	for i, tok := range tokens {
-		if tok == ">" && i != len(tokens)-1 {
-			return oops.
-				Code("AUDIT_INVALID_SUBJECT_PATTERN").
-				With("pattern", pattern).
-				With("token_index", i).
-				Errorf(`">" wildcard MUST be the last token`)
-		}
 		if tok == "" {
 			return oops.
 				Code("AUDIT_INVALID_SUBJECT_PATTERN").
 				With("pattern", pattern).
 				With("token_index", i).
 				Errorf("empty token in pattern")
+		}
+		// NATS subject syntax: * and > must each occupy an ENTIRE token
+		// (no substring use like "foo*" or "ma*in"). > is additionally
+		// valid only as the final token.
+		if strings.Contains(tok, "*") && tok != "*" {
+			return oops.
+				Code("AUDIT_INVALID_SUBJECT_PATTERN").
+				With("pattern", pattern).
+				With("token_index", i).
+				With("token", tok).
+				Errorf(`"*" wildcard MUST occupy an entire token`)
+		}
+		if strings.Contains(tok, ">") {
+			if tok != ">" {
+				return oops.
+					Code("AUDIT_INVALID_SUBJECT_PATTERN").
+					With("pattern", pattern).
+					With("token_index", i).
+					With("token", tok).
+					Errorf(`">" wildcard MUST occupy an entire token`)
+			}
+			if i != len(tokens)-1 {
+				return oops.
+					Code("AUDIT_INVALID_SUBJECT_PATTERN").
+					With("pattern", pattern).
+					With("token_index", i).
+					Errorf(`">" wildcard MUST be the last token`)
+			}
 		}
 	}
 	return nil

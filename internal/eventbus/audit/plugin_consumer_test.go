@@ -18,7 +18,13 @@ func TestPluginConsumerManagerStartWithNoConsumersIsNoop(t *testing.T) {
 	t.Parallel()
 	m := audit.NewPluginConsumerManager(nil) // nil JS tolerated when no Add is called
 	assert.Equal(t, 0, m.Consumers())
-	// Stop before Start is a no-op.
-	err := m.Stop(t.Context())
+	// Start with zero consumers MUST succeed and leave the manager in a
+	// state where Stop is still a no-op. Regression guard: the old code
+	// only exercised Stop and silently regressed when Start started
+	// dereferencing its JetStream context unconditionally.
+	err := m.Start(t.Context())
+	assert.NoError(t, err)
+	assert.Equal(t, 0, m.Consumers())
+	err = m.Stop(t.Context())
 	assert.NoError(t, err)
 }

@@ -239,7 +239,13 @@ func (s *Subsystem) Start(ctx context.Context) error {
 	if s.pluginMgr != nil {
 		if err := s.pluginMgr.Start(workerCtx); err != nil {
 			cancel()
-			_ = p.drain(context.Background()) //nolint:errcheck // best-effort
+			// Bound the rollback drain by DefaultDrainTimeout so a slow
+			// host projection cannot block Start() indefinitely on the
+			// plugin-manager failure path. Matches the normal Stop()
+			// drain contract.
+			rollbackCtx, rollbackCancel := context.WithTimeout(context.Background(), DefaultDrainTimeout)
+			defer rollbackCancel()
+			_ = p.drain(rollbackCtx) //nolint:errcheck // best-effort
 			s.worker = nil
 			s.cancel = nil
 			return err

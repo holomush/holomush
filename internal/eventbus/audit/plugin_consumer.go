@@ -13,11 +13,11 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
-	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/codec"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -238,6 +238,12 @@ func (pc *pluginConsumer) handle(msg jetstream.Msg) {
 // and forwards it. The plugin is expected to INSERT idempotently; a
 // retried delivery on the host side therefore produces zero duplicate
 // plugin rows.
+//
+// The raw msg.Data() is the codec-encoded proto envelope (potentially
+// encrypted). Plugin audit storage MUST receive the original payload, not
+// the envelope/ciphertext, so dispatch decodes the envelope first and
+// populates the AuditEventRequest.Event from the decoded fields (including
+// the publisher-stamped Timestamp, not the JetStream metadata timestamp).
 func (pc *pluginConsumer) dispatch(msg jetstream.Msg) error {
 	h := msg.Headers()
 
@@ -245,14 +251,8 @@ func (pc *pluginConsumer) dispatch(msg jetstream.Msg) error {
 	if msgID == "" {
 		return oops.Code("AUDIT_PLUGIN_MISSING_HEADER").With("header", headerMsgID).Errorf("missing header")
 	}
-	idBytes, err := decodeULIDString(msgID)
-	if err != nil {
+	if _, err := decodeULIDString(msgID); err != nil {
 		return oops.Code("AUDIT_PLUGIN_BAD_MSG_ID").With("msg_id", msgID).Wrap(err)
-	}
-
-	meta, err := msg.Metadata()
-	if err != nil {
-		return oops.Code("AUDIT_PLUGIN_METADATA_FAILED").Wrap(err)
 	}
 
 	headers := make(map[string]string, len(h))
@@ -262,9 +262,12 @@ func (pc *pluginConsumer) dispatch(msg jetstream.Msg) error {
 		}
 	}
 
-	actor, err := actorFromHeaders(h)
+	envelope, err := decodeEnvelope(h, msg.Data())
 	if err != nil {
-		return err
+		return oops.Code("AUDIT_PLUGIN_DECODE_FAILED").
+			With("plugin", pc.cfg.PluginName).
+			With("subject", msg.Subject()).
+			Wrap(err)
 	}
 
 	parent := pc.workerCtx
@@ -274,17 +277,8 @@ func (pc *pluginConsumer) dispatch(msg jetstream.Msg) error {
 	ctx, cancel := context.WithTimeout(parent, persistTimeout)
 	defer cancel()
 
-	event := &eventbusv1.Event{
-		Id:        idBytes,
-		Subject:   msg.Subject(),
-		Type:      h.Get(headerEventType),
-		Timestamp: timestamppb.New(meta.Timestamp),
-		Actor:     actor,
-		Payload:   msg.Data(),
-	}
-
 	_, err = pc.cfg.Client.AuditEvent(ctx, &pluginv1.AuditEventRequest{
-		Event:   event,
+		Event:   envelope,
 		Headers: headers,
 	})
 	if err != nil {
@@ -296,44 +290,41 @@ func (pc *pluginConsumer) dispatch(msg jetstream.Msg) error {
 	return nil
 }
 
-// actorFromHeaders reconstructs an Actor proto from the wire headers. Missing
-// App-Actor-Kind defaults to system (matches projection.persist). A set-but-
-// malformed App-Actor-ID is a contract violation and is rejected here rather
-// than silently attributed to system.
-func actorFromHeaders(h nats.Header) (*eventbusv1.Actor, error) {
-	kind := h.Get(headerActorKind)
-	if kind == "" {
-		kind = defaultActorKind
+// decodeEnvelope decodes the JetStream message data into an eventbusv1.Event.
+// The data is codec-encoded proto envelope bytes; this resolves the codec by
+// the App-Codec header, calls Decode, then proto.Unmarshal. Only the identity
+// codec is supported here because PluginConsumerManager has no KeySelector
+// wired yet — a non-identity codec returns an error so misconfigurations
+// surface at dispatch time rather than forwarding ciphertext to the plugin.
+func decodeEnvelope(h nats.Header, data []byte) (*eventbusv1.Event, error) {
+	codecNameStr := h.Get(headerCodec)
+	if codecNameStr == "" {
+		return nil, oops.Code("AUDIT_PLUGIN_MISSING_HEADER").
+			With("header", headerCodec).
+			Errorf("missing header")
 	}
-	var id []byte
-	if v := h.Get(headerActorID); v != "" {
-		parsed, err := ulid.Parse(v)
-		if err != nil {
-			return nil, oops.Code("AUDIT_PLUGIN_BAD_ACTOR_ID").With("value", v).Wrap(err)
-		}
-		b := parsed.Bytes()
-		id = b
+	if codec.Name(codecNameStr) != codec.NameIdentity {
+		return nil, oops.Code("AUDIT_PLUGIN_CODEC_UNSUPPORTED").
+			With("codec", codecNameStr).
+			Errorf("plugin audit dispatcher does not have a KeySelector; only identity codec is supported")
 	}
-	return &eventbusv1.Actor{
-		Kind: actorKindProto(kind),
-		Id:   id,
-	}, nil
-}
-
-// actorKindProto maps the header string to the ActorKind enum. Unknown
-// values yield ACTOR_KIND_UNSPECIFIED (the zero value), matching the
-// tolerance-at-read policy used throughout the audit path.
-func actorKindProto(s string) eventbusv1.ActorKind {
-	switch s {
-	case "ACTOR_KIND_CHARACTER", "character":
-		return eventbusv1.ActorKind_ACTOR_KIND_CHARACTER
-	case "ACTOR_KIND_SYSTEM", "system":
-		return eventbusv1.ActorKind_ACTOR_KIND_SYSTEM
-	case "ACTOR_KIND_PLUGIN", "plugin":
-		return eventbusv1.ActorKind_ACTOR_KIND_PLUGIN
-	default:
-		return eventbusv1.ActorKind_ACTOR_KIND_UNSPECIFIED
+	c, err := codec.Resolve(codec.Name(codecNameStr))
+	if err != nil {
+		return nil, oops.Code("AUDIT_PLUGIN_CODEC_UNKNOWN").
+			With("codec", codecNameStr).
+			Wrap(err)
 	}
+	plain, err := c.Decode(context.Background(), data, codec.Key{})
+	if err != nil {
+		return nil, oops.Code("AUDIT_PLUGIN_CODEC_DECODE_FAILED").
+			With("codec", codecNameStr).
+			Wrap(err)
+	}
+	var envelope eventbusv1.Event
+	if unmarshalErr := proto.Unmarshal(plain, &envelope); unmarshalErr != nil {
+		return nil, oops.Code("AUDIT_PLUGIN_ENVELOPE_UNMARSHAL_FAILED").Wrap(unmarshalErr)
+	}
+	return &envelope, nil
 }
 
 // pluginDurableName derives the JetStream durable consumer name. Matches

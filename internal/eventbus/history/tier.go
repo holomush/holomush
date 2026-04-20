@@ -383,8 +383,11 @@ func newCrossoverStream(ctx context.Context, hot HotTier, cold ColdTier, q event
 }
 
 // Next implements eventbus.HistoryStream.Next. Returns io.EOF when the query
-// is exhausted in both tiers.
-func (s *crossoverStream) Next(_ context.Context) (eventbus.Event, error) {
+// is exhausted in both tiers. Honours the caller's ctx so per-read
+// deadlines/cancellation reach hot.Read / cold.Read; the stream's own ctx
+// (bound at QueryHistory time) is used only as the parent for lifecycle
+// cancellation, not as the per-read deadline.
+func (s *crossoverStream) Next(ctx context.Context) (eventbus.Event, error) {
 	for {
 		if s.pos < len(s.buf) {
 			e := s.buf[s.pos]
@@ -398,7 +401,7 @@ func (s *crossoverStream) Next(_ context.Context) (eventbus.Event, error) {
 		if s.exhausted {
 			return eventbus.Event{}, io.EOF
 		}
-		if err := s.loadNextPage(); err != nil {
+		if err := s.loadNextPage(ctx); err != nil {
 			return eventbus.Event{}, err
 		}
 	}
@@ -408,7 +411,7 @@ func (s *crossoverStream) Next(_ context.Context) (eventbus.Event, error) {
 // page size AND the crossover has not yet happened, it reads the other tier
 // to continue. The result is concatenated into s.buf in the caller's
 // direction order.
-func (s *crossoverStream) loadNextPage() error {
+func (s *crossoverStream) loadNextPage(ctx context.Context) error {
 	want := s.query.PageSize
 	if want <= 0 {
 		want = DefaultPageSize
@@ -422,7 +425,7 @@ func (s *crossoverStream) loadNextPage() error {
 		second = otherTier(s.startTier)
 	}
 
-	first, err := s.readTier(firstTier, want)
+	first, err := s.readTier(ctx, firstTier, want)
 	if err != nil {
 		return err
 	}
@@ -443,7 +446,7 @@ func (s *crossoverStream) loadNextPage() error {
 		}
 		s.crossoverDone = true
 		if remaining > 0 && s.canReadTier(second) && s.secondTierInWindow(second) {
-			extra, err := s.readTier(second, remaining)
+			extra, err := s.readTier(ctx, second, remaining)
 			if err != nil {
 				return err
 			}
@@ -530,13 +533,21 @@ func (s *crossoverStream) canReadTier(t Tier) bool {
 	}
 }
 
-func (s *crossoverStream) readTier(t Tier, pageSize int) ([]eventbus.Event, error) {
+func (s *crossoverStream) readTier(ctx context.Context, t Tier, pageSize int) ([]eventbus.Event, error) {
+	// Respect caller's Next ctx (per-read deadline/cancellation). Fall back
+	// to the stream's lifecycle ctx if the caller passed a nil/background
+	// ctx — neither should happen in production but defensive handling
+	// keeps the previous single-ctx semantics available.
+	readCtx := ctx
+	if readCtx == nil {
+		readCtx = s.ctx
+	}
 	switch t {
 	case TierJetStream:
 		if s.hot == nil {
 			return nil, nil
 		}
-		events, err := s.hot.Read(s.ctx, s.query, s.edge, pageSize)
+		events, err := s.hot.Read(readCtx, s.query, s.edge, pageSize)
 		if err != nil {
 			return nil, oops.Code("EVENTBUS_HISTORY_HOT_READ_FAILED").
 				With("subject", string(s.query.Subject)).
@@ -547,7 +558,7 @@ func (s *crossoverStream) readTier(t Tier, pageSize int) ([]eventbus.Event, erro
 		if s.cold == nil {
 			return nil, nil
 		}
-		events, err := s.cold.Read(s.ctx, s.query, s.edge, pageSize)
+		events, err := s.cold.Read(readCtx, s.query, s.edge, pageSize)
 		if err != nil {
 			return nil, oops.Code("EVENTBUS_HISTORY_COLD_READ_FAILED").
 				With("subject", string(s.query.Subject)).

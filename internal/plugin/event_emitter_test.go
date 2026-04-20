@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -173,8 +174,17 @@ func TestPluginEventEmitterIdempotentRetryIsNoOpOnStreamState(t *testing.T) {
 		msgs[1].Header.Get(eventbus.HeaderMsgID),
 		"two Emit calls MUST mint different ULIDs",
 	)
-	assert.Equal(t, msgs[0].Header.Get(eventbus.HeaderMsgID),
-		msgs[0].Header.Get(eventbus.HeaderMsgID))
+	// Regression guard for the previously-tautological final assertion:
+	// the Nats-Msg-Id header MUST match the encoded envelope's ULID so
+	// subscriber-side dedup on the header stays aligned with the event
+	// the subscriber actually decodes.
+	for i, m := range msgs {
+		var env eventbusv1.Event
+		require.NoError(t, proto.Unmarshal(m.Data, &env), "msg %d", i)
+		encoded, err := ulid.Parse(m.Header.Get(eventbus.HeaderMsgID))
+		require.NoError(t, err, "msg %d", i)
+		assert.Equal(t, encoded.Bytes(), env.GetId(), "msg %d: Nats-Msg-Id MUST match envelope Id", i)
+	}
 }
 
 // TestPluginPublisherDirectJetStreamRetryAbsorbsDuplicate drops down to the

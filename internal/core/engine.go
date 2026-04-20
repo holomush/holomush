@@ -47,7 +47,14 @@ type Engine struct {
 }
 
 // NewEngine creates a new game engine.
+//
+// Panics when store is nil so the misconfiguration surfaces at construction
+// time rather than deferring to the first Handle* call (which would panic on
+// a nil-receiver dereference of e.store).
 func NewEngine(store EventAppender) *Engine {
+	if store == nil {
+		panic("core.NewEngine: nil EventAppender")
+	}
 	return &Engine{store: store}
 }
 

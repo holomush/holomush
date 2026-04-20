@@ -38,6 +38,12 @@ const (
 	HeaderActorKind = "App-Actor-Kind"
 	// HeaderActorID is the (optional) actor id, set only when non-zero.
 	HeaderActorID = "App-Actor-ID"
+	// HeaderActorLegacyID carries a non-ULID actor identifier (e.g. a plugin
+	// name) that comes from a legacy core.Actor. Stamped only when Actor.ID
+	// is zero but Actor.LegacyID is set, so downstream decoders can restore
+	// the original string identity without corrupting the ULID contract of
+	// HeaderActorID.
+	HeaderActorLegacyID = "App-Actor-Legacy-ID"
 )
 
 // SchemaVersion is the proto envelope major version advertised in the
@@ -125,6 +131,12 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 	if p.js == nil {
 		return oops.Code("EVENTBUS_PUBLISHER_NOT_READY").Errorf("JetStream context is nil")
 	}
+	// Reject the zero ULID before we stamp Nats-Msg-Id below; otherwise every
+	// malformed event coalesces to the same dedupe key inside the dupe window
+	// instead of failing fast.
+	if event.ID == (ulid.ULID{}) {
+		return oops.Code("EVENTBUS_EVENT_ID_REQUIRED").Errorf("event ID required")
+	}
 	if _, err := NewSubject(string(event.Subject)); err != nil {
 		return err
 	}
@@ -197,6 +209,8 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 	msg.Header.Set(HeaderActorKind, event.Actor.Kind.String())
 	if event.Actor.ID != (ulid.ULID{}) {
 		msg.Header.Set(HeaderActorID, event.Actor.ID.String())
+	} else if event.Actor.LegacyID != "" {
+		msg.Header.Set(HeaderActorLegacyID, event.Actor.LegacyID)
 	}
 	// OTEL trace context; no-op when the caller has no active span.
 	telemetry.InjectHeaders(ctx, msg.Header)
@@ -261,6 +275,8 @@ func actorToProto(a Actor) *eventbusv1.Actor {
 	p := &eventbusv1.Actor{Kind: actorKindToProto(a.Kind)}
 	if a.ID != (ulid.ULID{}) {
 		p.Id = a.ID.Bytes()
+	} else if a.LegacyID != "" {
+		p.LegacyId = a.LegacyID
 	}
 	return p
 }
