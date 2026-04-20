@@ -363,6 +363,83 @@ func TestJetStreamSubscriberUsesSessionConsumerName(t *testing.T) {
 	assert.Equal(t, eventbus.DefaultSessionInactiveThreshold, infoC.Config.InactiveThreshold)
 }
 
+func TestOpenSessionRejectsEmptyFilters(t *testing.T) {
+	// F8 autofix: OpenSession rejects an empty filter set so a bad focus
+	// restore cannot leak the entire EVENTS stream into a session.
+	embedded := eventbustest.New(t)
+	sub := embedded.Bus.Subscriber()
+	_, err := sub.OpenSession(context.Background(), freshSessionID(), nil)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVENTBUS_SESSION_FILTERS_REQUIRED")
+}
+
+func TestSetFiltersRejectsEmptyFilters(t *testing.T) {
+	// Mirror of the OpenSession empty-filters guard.
+	embedded := eventbustest.New(t)
+	sub := embedded.Bus.Subscriber()
+	sessionID := freshSessionID()
+	stream, err := sub.OpenSession(context.Background(), sessionID,
+		[]eventbus.Subject{eventbus.Subject("events.main.x.y")})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = stream.Close() })
+
+	err = stream.SetFilters(context.Background(), nil)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVENTBUS_SESSION_FILTERS_REQUIRED")
+}
+
+func TestDeliveryNackAndInProgressForwardToMsg(t *testing.T) {
+	// Nack and InProgress are thin wrappers on jetstream.Msg. Exercising them
+	// via a real publish/subscribe round trip confirms the method bodies run
+	// and the underlying JS call does not panic or return a wrapped error.
+	embedded := eventbustest.New(t)
+	pub := embedded.Bus.Publisher()
+	sub := embedded.Bus.Subscriber()
+	subject := eventbus.Subject("events.main.nack.test")
+	sessionID := freshSessionID()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stream, err := sub.OpenSession(ctx, sessionID, []eventbus.Subject{subject})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = stream.Close() })
+
+	ev := newTestEnvelope(subject, []byte("x"))
+	require.NoError(t, pub.Publish(ctx, ev))
+	d, err := stream.Next(ctx)
+	require.NoError(t, err)
+	require.NoError(t, d.InProgress())
+	require.NoError(t, d.Nack())
+}
+
+func TestSubscriberOptionsOverrideDefaults(t *testing.T) {
+	// Exercise the four WithSession* options so their closures execute.
+	// stubKeySelector is defined in publisher_test.go (same _test package).
+	embedded := eventbustest.New(t)
+	sub := embedded.Bus.Subscriber(
+		eventbus.WithSessionAckWait(10*time.Second),
+		eventbus.WithSessionMaxAckPending(32),
+		eventbus.WithSessionInactiveThreshold(1*time.Hour),
+		eventbus.WithSubscriberCodecSelector(stubKeySelector{}),
+	)
+	sessionID := freshSessionID()
+	stream, err := sub.OpenSession(context.Background(), sessionID,
+		[]eventbus.Subject{eventbus.Subject("events.main.opts.check")})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = stream.Close() })
+
+	info, err := embedded.JS.Stream(context.Background(), eventbus.StreamName)
+	require.NoError(t, err)
+	cons, err := info.Consumer(context.Background(), "session_"+sessionID)
+	require.NoError(t, err)
+	infoC, err := cons.Info(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 10*time.Second, infoC.Config.AckWait)
+	assert.Equal(t, 32, infoC.Config.MaxAckPending)
+	assert.Equal(t, 1*time.Hour, infoC.Config.InactiveThreshold)
+}
+
 func TestJetStreamSubscriberRejectsUnknownCodec(t *testing.T) {
 	// Publish a message directly via the conn with an unknown codec header
 	// so the subscriber's decode path returns EVENTBUS_SUBSCRIBE_UNKNOWN_CODEC.
