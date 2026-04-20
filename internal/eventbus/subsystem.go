@@ -279,6 +279,11 @@ func (s *Subsystem) Conn() *nats.Conn { return s.conn }
 // compose JetStream subjects (events.<game_id>.<...>).
 func (s *Subsystem) GameID() string { return s.cfg.GameID }
 
+// Config returns the subsystem's applied configuration. Used by the gRPC
+// subsystem to construct the history reader (F4) with the same StreamMaxAge
+// that was used to configure the JetStream EVENTS stream.
+func (s *Subsystem) Config() Config { return s.cfg }
+
 // resolveStoreDir resolves the StoreDir for this subsystem.
 // Blank Config.StoreDir means "use xdg.DataDir() + /jetstream".
 func (s *Subsystem) resolveStoreDir() (string, error) {

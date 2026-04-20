@@ -156,6 +156,12 @@ type CoreServer struct {
 	// WithSubscriber from the grpc subsystem.
 	subscriber eventbus.Subscriber
 
+	// historyReader serves QueryStreamHistory from the JetStream/PostgreSQL
+	// tier crossover (F4). When nil, QueryStreamHistory falls back to the
+	// legacy eventStore.ReplayTail path so the server stays functional
+	// without a wired reader (integration tests that don't need the full bus).
+	historyReader eventbus.HistoryReader
+
 	// gameID returns the current game id used to translate legacy colon-
 	// delimited streams (e.g. "character:01ABC") to JetStream subjects
 	// (e.g. "events.main.character.01ABC"). Defaults to "main" when unset.
@@ -237,6 +243,14 @@ func WithAccessEngine(engine accessTypes.AccessPolicyEngine) CoreServerOption {
 // live loop. Required post-F3 — Subscribe returns NOT_CONFIGURED otherwise.
 func WithSubscriber(sub eventbus.Subscriber) CoreServerOption {
 	return func(s *CoreServer) { s.subscriber = sub }
+}
+
+// WithHistoryReader wires the JetStream/PostgreSQL tier crossover reader into
+// QueryStreamHistory. When nil, the handler falls back to the legacy
+// eventStore.ReplayTail path so production gRPC stays functional without a
+// wired reader (F4+ deployment is the recommended path).
+func WithHistoryReader(r eventbus.HistoryReader) CoreServerOption {
+	return func(s *CoreServer) { s.historyReader = r }
 }
 
 // WithGameID injects the game-id provider used for subject translation.

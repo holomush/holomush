@@ -238,9 +238,7 @@ test.describe('Terminal UI', () => {
   // does not yet call this RPC on mount (that's B13 scope), so this test
   // invokes it directly via fetch() inside the page context to exercise the
   // full stack: browser -> gateway -> core -> ABAC -> PostgresEventStore.
-  // TODO(holomush-1tvn.11): Re-enable after F4 implements QueryHistory JS/PG tier crossover.
-  // Phase B plan: docs/superpowers/plans/2026-04-18-jetstream-eventbus-phase-b.md §F4
-  test.skip('WebQueryStreamHistory returns events through the web gateway', async ({ page }) => {
+  test('WebQueryStreamHistory returns events through the web gateway', async ({ page }) => {
     await connectAsGuest(page);
     const sessionId = await getClientSessionId(page);
     expect(sessionId).toBeTruthy();
@@ -289,9 +287,7 @@ test.describe('Terminal UI', () => {
     expect(matched, `expected event with "${token}" in history response`).toBe(true);
   });
 
-  // TODO(holomush-1tvn.10): Re-enable after F3+F4 rewrite Subscribe replay and QueryHistory.
-  // Phase B plan: docs/superpowers/plans/2026-04-18-jetstream-eventbus-phase-b.md §F3
-  test.skip('page reload replays prior events from multiple guests', async ({ browser }) => {
+  test('page reload replays prior events from multiple guests', async ({ browser }) => {
     // Two independent browser contexts (separate sessions, same starting location)
     const ctx1 = await browser.newContext();
     const ctx2 = await browser.newContext();
@@ -383,25 +379,19 @@ test.describe('Terminal UI', () => {
       page1.locator('.sep-live').filter({ hasText: 'LIVE' }),
     ).toBeVisible({ timeout: 5000 });
 
-    // DB: all 4 events exist on the location stream
-    const sessionId = await getClientSessionId(page1);
-    const session = await db.getSessionById(sessionId!);
-    const stream = `location:${session!.location_id}`;
-    const events = await db.getEventsByStream(stream);
-    for (const label of ['alpha', 'bravo', 'charlie', 'delta']) {
-      const found = events.find(
-        (e) => e.type === 'say' && JSON.stringify(e.payload).includes(`${label}-${token}`),
-      );
-      expect(found, `Expected say event "${label}-${token}" in stream ${stream}`).toBeDefined();
-    }
+    // NOTE(F4): Post-F1, say events are emitted via the plugin event emitter
+    // directly to JetStream (not to the PostgreSQL `events` table). The UI
+    // assertions above fully verify the F4 QueryHistory crossover behavior.
+    // A DB-level audit check against events_audit would require the audit
+    // projection to have caught up (async), which is out of scope for F4.
+    // TODO(holomush-1tvn.13): Re-add DB verification against events_audit when
+    // the audit projection lag is bounded / synchronous enough for E2E use.
 
     await ctx1.close();
     await ctx2.close();
   });
 
-  // TODO(holomush-1tvn.10): Re-enable after F3+F4 rewrite Subscribe cursor resume and QueryHistory.
-  // Phase B plan: docs/superpowers/plans/2026-04-18-jetstream-eventbus-phase-b.md §F3
-  test.skip('detach + accumulated events + reload produces no duplicate scrollback entries', async ({
+  test('detach + accumulated events + reload produces no duplicate scrollback entries', async ({
     browser,
   }) => {
     // Two guests in the same location.

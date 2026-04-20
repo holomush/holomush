@@ -16,6 +16,9 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go/jetstream"
+
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	"github.com/holomush/holomush/internal/auth"
 	authsetup "github.com/holomush/holomush/internal/auth/setup"
@@ -25,6 +28,7 @@ import (
 	"github.com/holomush/holomush/internal/content"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/history"
 	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	holoFocus "github.com/holomush/holomush/internal/grpc/focus"
@@ -258,6 +262,14 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 			Errorf("EventBus subscriber is nil; subsystem not started")
 	}
 
+	// F4: wire the JetStream/PostgreSQL tier crossover history reader into
+	// QueryStreamHistory. Both the JetStream context and the PG pool are
+	// in scope here, making Option B the natural construction site. The
+	// reader is built inline so we don't need to add a pool parameter to
+	// eventbus.Subsystem (which doesn't own the DB pool).
+	js := s.cfg.EventBus.JS()
+	historyReader := newHistoryReader(js, pool, s.cfg.EventBus.Config())
+
 	coreServerOpts := []holoGRPC.CoreServerOption{
 		holoGRPC.WithEventStore(eventStore),
 		holoGRPC.WithWorldQuerier(worldService),
@@ -280,6 +292,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		holoGRPC.WithStreamContributor(pluginManager),
 		holoGRPC.WithAccessEngine(policyEngine),
 		holoGRPC.WithSubscriber(subscriber),
+		holoGRPC.WithHistoryReader(historyReader),
 		holoGRPC.WithGameID(s.cfg.EventBus.GameID),
 	}
 	if s.cfg.StreamRegistry != nil {
@@ -496,4 +509,14 @@ func (a *focusStreamContributorAdapter) QuerySessionStreams(ctx context.Context,
 		PlayerID:    req.PlayerID,
 		SessionID:   req.SessionID,
 	})
+}
+
+// newHistoryReader constructs the F4 JetStream/PostgreSQL tier crossover
+// reader. js and pool may be nil if the subsystem has not started yet, but
+// in production both are non-nil by the time Start() reaches this point.
+// The wall clock is passed as time.Now — forbidigo bans time.Now only inside
+// internal/eventbus/** and test/integration/eventbus_e2e/**; cmd/ is not in
+// the banned path.
+func newHistoryReader(js jetstream.JetStream, pool *pgxpool.Pool, cfg eventbus.Config) eventbus.HistoryReader {
+	return history.NewReader(js, pool, cfg.StreamMaxAge, time.Now)
 }

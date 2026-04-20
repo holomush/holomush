@@ -5,6 +5,7 @@ package grpc
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"strings"
 	"time"
@@ -15,6 +16,8 @@ import (
 
 	accessTypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -164,31 +167,114 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	}
 
 	// Step 7: Fetch count+1 to detect has_more.
-	events, fetchErr := s.eventStore.ReplayTail(ctx, req.Stream, count+1, notBefore, beforeID)
-	if fetchErr != nil {
-		return nil, oops.Code("INTERNAL").
-			With("stream", req.Stream).
-			Wrap(fetchErr)
+	// F4: delegate to the JetStream/PostgreSQL tier crossover reader when wired.
+	// Falls back to legacy eventStore.ReplayTail when the reader is not wired
+	// (integration tests, pre-F4 deployments). Both paths produce ascending
+	// (oldest→newest) slices of count+1 events maximum.
+	var protoFrames []*corev1.EventFrame
+	if s.historyReader != nil {
+		frames, fetchErr := fetchHistoryFramesFromBus(ctx, s.historyReader, s.currentGameID(), req.Stream, count, notBefore, beforeID)
+		if fetchErr != nil {
+			return nil, oops.Code("INTERNAL").
+				With("stream", req.Stream).
+				Wrap(fetchErr)
+		}
+		protoFrames = frames
+	} else {
+		legacyEvents, fetchErr := s.eventStore.ReplayTail(ctx, req.Stream, count+1, notBefore, beforeID)
+		if fetchErr != nil {
+			return nil, oops.Code("INTERNAL").
+				With("stream", req.Stream).
+				Wrap(fetchErr)
+		}
+		protoFrames = make([]*corev1.EventFrame, 0, len(legacyEvents))
+		for _, e := range legacyEvents {
+			protoFrames = append(protoFrames, coreEventToEventFrame(e))
+		}
 	}
 
-	// Step 8: Build response. ReplayTail returns up to count+1 newest events
-	// in ascending order. If we got more than count, the OLDEST (index 0) is
-	// the "has_more indicator" — drop it, keep the newest `count` events.
-	hasMore := len(events) > count
+	// Step 8: Build response. Results are ascending (oldest→newest).
+	// If we got more than count, the OLDEST (index 0) is the "has_more
+	// indicator" — drop it, keep the newest `count` events.
+	hasMore := len(protoFrames) > count
 	if hasMore {
-		events = events[len(events)-count:]
-	}
-
-	protoEvents := make([]*corev1.EventFrame, 0, len(events))
-	for _, e := range events {
-		protoEvents = append(protoEvents, coreEventToEventFrame(e))
+		protoFrames = protoFrames[len(protoFrames)-count:]
 	}
 
 	return &corev1.QueryStreamHistoryResponse{
 		Meta:    responseMeta(requestID),
-		Events:  protoEvents,
+		Events:  protoFrames,
 		HasMore: hasMore,
 	}, nil
+}
+
+// fetchHistoryFramesFromBus fetches count+1 events from the HistoryReader and
+// returns them as proto EventFrames in ascending ULID order (oldest→newest),
+// matching the legacy ReplayTail wire shape expected by the response builder.
+//
+// Direction is Backward (newest-first) so the reader returns the tail of the
+// stream relative to beforeID (or the absolute end when beforeID is zero).
+// The slice is reversed on return to restore ascending order.
+func fetchHistoryFramesFromBus(
+	ctx context.Context,
+	reader eventbus.HistoryReader,
+	gameID, legacyStream string,
+	count int,
+	notBefore time.Time,
+	beforeID ulid.ULID,
+) ([]*corev1.EventFrame, error) {
+	natsSubject, err := subjectxlate.Legacy(legacyStream, gameID)
+	if err != nil {
+		return nil, oops.With("stream", legacyStream).Wrap(err)
+	}
+	sub, err := eventbus.NewSubject(natsSubject)
+	if err != nil {
+		return nil, oops.With("stream", legacyStream).Wrap(err)
+	}
+
+	q := eventbus.HistoryQuery{
+		Subject:   sub,
+		Direction: eventbus.DirectionBackward,
+		PageSize:  count + 1,
+		NotBefore: notBefore,
+	}
+	if !beforeID.IsZero() {
+		q.Before = beforeID
+	}
+
+	stream, err := reader.QueryHistory(ctx, q)
+	if err != nil {
+		return nil, oops.With("subject", string(sub)).Wrap(err)
+	}
+	defer stream.Close() //nolint:errcheck // best-effort iterator close
+
+	// Drain up to count+1 events. DirectionBackward gives newest-first;
+	// we collect them and reverse below to restore ascending order.
+	collected := make([]eventbus.Event, 0, count+1)
+	for {
+		e, nextErr := stream.Next(ctx)
+		if nextErr != nil {
+			if nextErr == io.EOF { //nolint:errorlint // io.EOF is a sentinel value
+				break
+			}
+			return nil, oops.With("subject", string(sub)).Wrap(nextErr)
+		}
+		collected = append(collected, e)
+		if len(collected) >= count+1 {
+			break
+		}
+	}
+
+	// Convert bus events → proto frames. Reverse from newest-first
+	// (Backward) to oldest-first to match the legacy ReplayTail wire shape.
+	result := make([]*corev1.EventFrame, len(collected))
+	for i, busEvent := range collected {
+		// Reverse index: collected[0] is newest; result[0] should be oldest.
+		j := len(collected) - 1 - i
+		legacyStreamName := subjectxlate.ToLegacy(string(busEvent.Subject), gameID)
+		result[j] = eventbusEventToEventFrame(busEvent, legacyStreamName)
+	}
+	return result, nil
 }
 
 // coreEventToEventFrame converts a core.Event to a proto EventFrame (bare,
@@ -202,6 +288,25 @@ func coreEventToEventFrame(e core.Event) *corev1.EventFrame {
 		Timestamp: timestamppb.New(e.Timestamp),
 		ActorType: e.Actor.Kind.String(),
 		ActorId:   e.Actor.ID,
+		Payload:   e.Payload,
+	}
+}
+
+// eventbusEventToEventFrame converts an eventbus.Event to a proto EventFrame.
+// legacyStreamName is the pre-translated colon-delimited stream name
+// (e.g. "location:01ABC") that the web client expects in the Stream field.
+func eventbusEventToEventFrame(e eventbus.Event, legacyStreamName string) *corev1.EventFrame {
+	actorID := ""
+	if e.Actor.ID != (ulid.ULID{}) {
+		actorID = e.Actor.ID.String()
+	}
+	return &corev1.EventFrame{
+		Id:        e.ID.String(),
+		Stream:    legacyStreamName,
+		Type:      string(e.Type),
+		Timestamp: timestamppb.New(e.Timestamp),
+		ActorType: e.Actor.Kind.String(),
+		ActorId:   actorID,
 		Payload:   e.Payload,
 	}
 }
