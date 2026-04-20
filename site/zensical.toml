@@ -72,7 +72,10 @@ Contributing = [
   "contributing/coding-standards.md",
   "contributing/authentication.md",
   "contributing/database-migrations.md",
+  "contributing/event-store.md",
   "contributing/event-delivery.md",
+  "contributing/hostfunc-context-audit.md",
+  "contributing/lifecycle-and-health.md",
   "contributing/pr-guide.md",
 ]
 
