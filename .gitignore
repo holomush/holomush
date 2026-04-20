@@ -94,6 +94,12 @@ dist/
 site/build/
 site/.venv/
 *.egg-info/
+
+# Python
+__pycache__/
+*.pyc
+scripts/.venv/
+scripts/uv.lock
 .ansible/
 
 # Superpowers brainstorming artifacts
