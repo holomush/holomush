@@ -267,7 +267,6 @@ func (s *CoreServer) SelectCharacter(ctx context.Context, req *corev1.SelectChar
 		LocationID:      locationID,
 		Status:          session.StatusActive,
 		GridPresent:     true,
-		EventCursors:    map[string]ulid.ULID{},
 		TTLSeconds:      ttlSeconds,
 		MaxHistory:      maxHistory,
 		CreatedAt:       now,

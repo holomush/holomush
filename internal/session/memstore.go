@@ -185,34 +185,6 @@ func (m *MemStore) ReattachCAS(_ context.Context, id string) (bool, error) {
 	return true, nil
 }
 
-// UpdateCursors updates event cursors with a per-key monotonicity guard.
-// Writes with a cursor lex-smaller-or-equal to the stored value are
-// silently ignored — this mirrors the PostgresSessionStore CAS so unit
-// tests exercise the same contract as production.
-func (m *MemStore) UpdateCursors(_ context.Context, id string, cursors map[string]ulid.ULID) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	info, ok := m.sessions[id]
-	if !ok {
-		return oops.Code("SESSION_NOT_FOUND").
-			With("session_id", id).
-			Errorf("session not found")
-	}
-	if info.EventCursors == nil {
-		info.EventCursors = make(map[string]ulid.ULID)
-	}
-	for k, v := range cursors {
-		existing, hasExisting := info.EventCursors[k]
-		if hasExisting && existing.String() >= v.String() {
-			// Regression or no-op; preserve the existing higher cursor.
-			continue
-		}
-		info.EventCursors[k] = v
-	}
-	return nil
-}
-
 // AppendCommand adds a command to the session's history, enforcing the cap.
 func (m *MemStore) AppendCommand(_ context.Context, id, command string, maxHistory int) error {
 	m.mu.Lock()
@@ -504,10 +476,6 @@ func (m *MemStore) UpdateLastWhispered(_ context.Context, id, name string) error
 
 // copyInfo returns a defensive copy of an Info to prevent external modification.
 func copyInfo(info *Info) *Info {
-	cursors := make(map[string]ulid.ULID, len(info.EventCursors))
-	for k, v := range info.EventCursors {
-		cursors[k] = v
-	}
 	history := make([]string, len(info.CommandHistory))
 	copy(history, info.CommandHistory)
 
@@ -515,7 +483,6 @@ func copyInfo(info *Info) *Info {
 	copy(memberships, info.FocusMemberships)
 
 	cp := *info
-	cp.EventCursors = cursors
 	cp.CommandHistory = history
 	cp.FocusMemberships = memberships
 

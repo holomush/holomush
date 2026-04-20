@@ -86,7 +86,6 @@ func TestNewCoordinatorAcceptsAllOptions(t *testing.T) {
 	coord, err := NewCoordinator(
 		WithSessionStore(store),
 		WithStreamSender(sender),
-		WithCursorLocker(nil),
 		WithGameSettings(nil),
 		WithPlayerSettings(nil),
 		WithCharacterSettings(nil),

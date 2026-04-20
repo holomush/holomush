@@ -123,7 +123,7 @@ type CoreServer struct {
 
 	engine          *core.Engine
 	sessionStore    session.Store
-	eventStore      core.EventStore
+	eventStore      core.EventAppender
 	worldQuerier    WorldQuerier
 	sessionDefaults SessionDefaults
 	disconnectHooks []func(session.Info)
@@ -157,9 +157,7 @@ type CoreServer struct {
 	subscriber eventbus.Subscriber
 
 	// historyReader serves QueryStreamHistory from the JetStream/PostgreSQL
-	// tier crossover (F4). When nil, QueryStreamHistory falls back to the
-	// legacy eventStore.ReplayTail path so the server stays functional
-	// without a wired reader (integration tests that don't need the full bus).
+	// tier crossover (F4). Required post-F7; returns INTERNAL when nil.
 	historyReader eventbus.HistoryReader
 
 	// gameID returns the current game id used to translate legacy colon-
@@ -189,9 +187,9 @@ func WithSessionDefaults(defaults SessionDefaults) CoreServerOption {
 	}
 }
 
-// WithEventStore sets the event store (retained for history reads and
-// writes; the Subscribe live loop no longer consumes from it post-F3).
-func WithEventStore(store core.EventStore) CoreServerOption {
+// WithEventStore sets the event appender for host-engine events (e.g.
+// command_response). Post-F7 this is wired to the JetStream bus.
+func WithEventStore(store core.EventAppender) CoreServerOption {
 	return func(s *CoreServer) {
 		s.eventStore = store
 	}
@@ -246,9 +244,8 @@ func WithSubscriber(sub eventbus.Subscriber) CoreServerOption {
 }
 
 // WithHistoryReader wires the JetStream/PostgreSQL tier crossover reader into
-// QueryStreamHistory. When nil, the handler falls back to the legacy
-// eventStore.ReplayTail path so production gRPC stays functional without a
-// wired reader (F4+ deployment is the recommended path).
+// QueryStreamHistory. Required post-F7 — QueryStreamHistory returns
+// INTERNAL otherwise.
 func WithHistoryReader(r eventbus.HistoryReader) CoreServerOption {
 	return func(s *CoreServer) { s.historyReader = r }
 }

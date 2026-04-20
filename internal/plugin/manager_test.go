@@ -1835,12 +1835,12 @@ func TestConfigureFocusDepsInjectsCoordinatorIntoLuaHost(t *testing.T) {
 	mgr := plugins.NewManager(t.TempDir(), plugins.WithLuaHost(luaHost))
 
 	fc := &stubFocusCoordinator{}
-	var es core.EventStore // nil — acceptable for this test
+	var hr plugins.HistoryReader // nil — acceptable for this test
 
-	// Must not panic; calls SetFocusCoordinator and SetEventStore on all
+	// Must not panic; calls SetFocusCoordinator and SetHistoryReader on all
 	// FocusDepsConfigurer hosts registered in the manager.
 	require.NotPanics(t, func() {
-		mgr.ConfigureFocusDeps(fc, es)
+		mgr.ConfigureFocusDeps(fc, hr)
 	})
 }
 

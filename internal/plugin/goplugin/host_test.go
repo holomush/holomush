@@ -1804,9 +1804,9 @@ func TestHostFocusCoordinatorReturnsNilByDefault(t *testing.T) {
 	assert.Nil(t, host.FocusCoordinator())
 }
 
-func TestHostEventStoreReturnsNilByDefault(t *testing.T) {
+func TestHostHistoryReaderReturnsNilByDefault(t *testing.T) {
 	host := NewHost()
-	assert.Nil(t, host.EventStore())
+	assert.Nil(t, host.HistoryReader())
 }
 
 func TestHostSetFocusCoordinatorStoresAndReturnsCoordinator(t *testing.T) {
@@ -1816,11 +1816,11 @@ func TestHostSetFocusCoordinatorStoresAndReturnsCoordinator(t *testing.T) {
 	assert.Equal(t, fc, host.FocusCoordinator())
 }
 
-func TestHostSetEventStoreStoresAndReturnsEventStore(t *testing.T) {
+func TestHostSetHistoryReaderStoresAndReturnsHistoryReader(t *testing.T) {
 	host := NewHost()
-	es := &stubEventStore{}
-	host.SetEventStore(es)
-	assert.Equal(t, es, host.EventStore())
+	hr := &stubHistoryReader{}
+	host.SetHistoryReader(hr)
+	assert.Equal(t, hr, host.HistoryReader())
 }
 
 func TestHostWithFocusCoordinatorOptionSetsCoordinator(t *testing.T) {
@@ -1829,8 +1829,8 @@ func TestHostWithFocusCoordinatorOptionSetsCoordinator(t *testing.T) {
 	assert.Equal(t, fc, host.FocusCoordinator())
 }
 
-func TestHostWithEventStoreOptionSetsEventStore(t *testing.T) {
-	es := &stubEventStore{}
-	host := NewHost(WithEventStore(es))
-	assert.Equal(t, es, host.EventStore())
+func TestHostWithHistoryReaderOptionSetsHistoryReader(t *testing.T) {
+	hr := &stubHistoryReader{}
+	host := NewHost(WithHistoryReader(hr))
+	assert.Equal(t, hr, host.HistoryReader())
 }

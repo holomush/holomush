@@ -16,7 +16,6 @@ import (
 	"github.com/samber/oops"
 	lua "github.com/yuin/gopher-lua"
 
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
@@ -101,11 +100,10 @@ func (h *Host) SetFocusCoordinator(fc focus.Coordinator) {
 	}
 }
 
-// SetEventStore injects the event store into the underlying hostfunc bridge.
-// The event store satisfies hostfunc.HistoryReader.
-func (h *Host) SetEventStore(es core.EventStore) {
+// SetHistoryReader injects the history reader into the underlying hostfunc bridge.
+func (h *Host) SetHistoryReader(hr plugins.HistoryReader) {
 	if h.hostFuncs != nil {
-		h.hostFuncs.SetHistoryReader(es)
+		h.hostFuncs.SetHistoryReader(hr)
 	}
 }
 

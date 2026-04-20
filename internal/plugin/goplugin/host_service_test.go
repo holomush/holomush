@@ -16,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/grpc/focus"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/session"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
@@ -64,9 +65,8 @@ func (s *stubCoordinator) RestoreFocus(_ context.Context, _ string) (focus.Resto
 
 var _ focus.Coordinator = (*stubCoordinator)(nil)
 
-// stubEventStore implements core.EventStore with only ReplayTail wired.
-type stubEventStore struct {
-	core.EventStore  // embed to satisfy interface; panics on unimplemented methods
+// stubHistoryReader implements plugins.HistoryReader for testing.
+type stubHistoryReader struct {
 	replayTailCalls  []replayTailCall
 	replayTailResult []core.Event
 	replayTailErr    error
@@ -79,16 +79,18 @@ type replayTailCall struct {
 	beforeID  ulid.ULID
 }
 
-func (s *stubEventStore) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
+func (s *stubHistoryReader) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
 	s.replayTailCalls = append(s.replayTailCalls, replayTailCall{stream, count, notBefore, beforeID})
 	return s.replayTailResult, s.replayTailErr
 }
 
-func newTestServer(fc focus.Coordinator, es core.EventStore) *pluginHostServiceServer {
+var _ plugins.HistoryReader = (*stubHistoryReader)(nil)
+
+func newTestServer(fc focus.Coordinator, hr plugins.HistoryReader) *pluginHostServiceServer {
 	h := &Host{
 		plugins:          make(map[string]*loadedPlugin),
 		focusCoordinator: fc,
-		eventStore:       es,
+		historyReader:    hr,
 	}
 	return &pluginHostServiceServer{
 		host:       h,
@@ -329,7 +331,7 @@ func TestPresentFocusReturnsErrorWhenCoordinatorFails(t *testing.T) {
 }
 
 func TestQueryStreamHistoryDelegatesToEventStore(t *testing.T) {
-	es := &stubEventStore{
+	es := &stubHistoryReader{
 		replayTailResult: []core.Event{
 			{Stream: "channel:abc", Type: "say", Payload: []byte(`{"text":"hi"}`)},
 		},
@@ -350,7 +352,7 @@ func TestQueryStreamHistoryDelegatesToEventStore(t *testing.T) {
 }
 
 func TestQueryStreamHistoryCapsCountAt500(t *testing.T) {
-	es := &stubEventStore{}
+	es := &stubHistoryReader{}
 	srv := newTestServer(nil, es)
 
 	_, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
@@ -364,7 +366,7 @@ func TestQueryStreamHistoryCapsCountAt500(t *testing.T) {
 }
 
 func TestQueryStreamHistoryConvertsNotBeforeMs(t *testing.T) {
-	es := &stubEventStore{}
+	es := &stubHistoryReader{}
 	srv := newTestServer(nil, es)
 
 	_, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
@@ -438,7 +440,7 @@ func TestQueryStreamHistoryReturnsErrorWhenHostIsNil(t *testing.T) {
 }
 
 func TestQueryStreamHistoryRejectsNegativeCount(t *testing.T) {
-	es := &stubEventStore{}
+	es := &stubHistoryReader{}
 	srv := newTestServer(nil, es)
 
 	_, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{

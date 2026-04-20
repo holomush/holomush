@@ -34,8 +34,6 @@ var (
 	_ session.Access = (*PostgresSessionStore)(nil)
 )
 
-// F6: event_cursors column dropped (migration 000010). The session.Info.EventCursors
-// field still exists in Go (removed by F7) but is no longer persisted to the database.
 const sessionSelectColumns = `id, character_id, player_id,
 	COALESCE(player_session_id, '') AS player_session_id,
 	character_name, location_id,
@@ -48,10 +46,6 @@ const sessionSelectColumns = `id, character_id, player_id,
 // parseSessionRow parses the scalar fields scanned from a session row into a
 // session.Info. Both scanSession and scanSessions call Scan with the same
 // variable set and then delegate here to avoid duplicating the parse logic.
-//
-// F6: cursorsJSON parameter removed — event_cursors column was dropped by
-// migration 000010. session.Info.EventCursors is always empty after this point
-// (F7 removes the field entirely).
 func parseSessionRow(info *session.Info, charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr string, focusMembershipsJSON, presentingFocusJSON []byte) error {
 	charID, err := ulid.Parse(charIDStr)
 	if err != nil {
@@ -396,14 +390,6 @@ func (s *PostgresSessionStore) ReattachCAS(ctx context.Context, id string) (bool
 		return false, oops.With("operation", "reattach session").With("session_id", id).Wrap(err)
 	}
 	return tag.RowsAffected() == 1, nil
-}
-
-// UpdateCursors is a no-op after F6 dropped the event_cursors column
-// (migration 000010). Cursors are no longer persisted to the database.
-// The session.Access interface method remains for backward compatibility;
-// F7 removes it along with the EventCursors field on session.Info.
-func (s *PostgresSessionStore) UpdateCursors(_ context.Context, _ string, _ map[string]ulid.ULID) error {
-	return nil
 }
 
 // AppendCommand adds a command to the session's history, enforcing the cap.

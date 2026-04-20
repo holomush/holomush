@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	cryptotls "crypto/tls"
+	"io"
 	"log/slog"
 	"net"
 	"time"
@@ -83,7 +84,6 @@ type grpcSubsystem struct {
 	reaperCancel  context.CancelFunc
 	guestReaper   *auth.GuestReaper
 	sessionReaper *session.Reaper
-	eventWriter   *core.EventWriter
 }
 
 // newGRPCSubsystem returns a configured grpcSubsystem for the provided configuration.
@@ -117,26 +117,10 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	}
 
 	// Gather dependencies from subsystems.
+	// F7: EventWriter and PG events table are gone. Append goes directly to
+	// JetStream via busEventAppender. rawEventStore is kept only for
+	// system-info / game-ID (GetSystemInfo / InitGameID) used by GameSettings.
 	rawEventStore := s.cfg.DB.EventStore()
-	s.eventWriter = core.NewEventWriter(rawEventStore)
-	// F3 transitional dual-write: every host engine Append is also
-	// published to JetStream so the F3 Subscribe handler (which reads
-	// from the bus) still sees say/pose/move/session_ended/etc. F6 drops
-	// the PG events table and the Append leg disappears.
-	s.eventWriter.SetBusFanout(newCoreEventBusFanout(s.cfg.EventBus))
-	// Use the EventWriter as the EventStore for all production code paths.
-	// EventWriter serializes Append calls (I-14 enforcement) and delegates
-	// reads to the underlying store.
-	eventStore := s.eventWriter
-	// Close the EventWriter on any early-return error path below to prevent
-	// leaking the writer goroutine.
-	writerStarted := true
-	defer func() {
-		if writerStarted {
-			s.eventWriter.Close()
-			s.eventWriter = nil
-		}
-	}()
 	pool := s.cfg.DB.Pool()
 	policyEngine := s.cfg.ABAC.Engine()
 	worldService := s.cfg.World.Service()
@@ -167,8 +151,15 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		plugins.WithGameID(s.cfg.EventBus.GameID),
 	)
 
+	// F7: build the JetStream-backed EventAppender. All host-engine Append
+	// calls publish directly to JetStream; the PG events table is gone.
+	eventStore := &busEventAppender{
+		publisher: publisher,
+		bus:       s.cfg.EventBus,
+	}
+
 	// 1. Create core engine from event store.
-	engine := core.NewEngine(eventStore, core.WithProductionGuardrail())
+	engine := core.NewEngine(eventStore)
 
 	// Wire game-session fanout into the auth service so evictions emit
 	// session_ended events for child game sessions before FK cascade removes them.
@@ -314,7 +305,6 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	})
 	focusCoordOpts := []holoFocus.CoordinatorOption{
 		holoFocus.WithSessionStore(sessionStore),
-		holoFocus.WithEventStore(eventStore),
 		holoFocus.WithKindPolicy(scenepolicy.New()),
 		holoFocus.WithGameSettings(gameSettings),
 		holoFocus.WithPlayerPreferences(holoFocus.NewPlayerPrefsAdapter(authPlayerRepo)),
@@ -331,12 +321,17 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	}
 	coreServerOpts = append(coreServerOpts, holoGRPC.WithFocusCoordinator(focusCoord))
 
-	// 8b. Inject focus coordinator + event store into plugin hosts (late-binding).
+	// 8b. Inject focus coordinator + history reader into plugin hosts (late-binding).
 	// The plugin subsystem started before gRPC, so these deps were not available
 	// at host construction time. Binary plugins use them for JoinFocus/LeaveFocus/
 	// PresentFocus/QueryStreamHistory RPCs; Lua plugins use them for holomush.*
-	// hostfuncs.
-	pluginManager.ConfigureFocusDeps(focusCoord, eventStore)
+	// hostfuncs. F7: pass busHistoryReaderAdapter (JetStream tier) instead of
+	// the legacy EventStore.
+	pluginHistoryReader := &busHistoryReaderAdapter{
+		reader: historyReader,
+		gameID: s.cfg.EventBus.GameID,
+	}
+	pluginManager.ConfigureFocusDeps(focusCoord, pluginHistoryReader)
 
 	coreServer := holoGRPC.NewCoreServer(engine, sessionStore, cmdDispatcher, cmdServices, coreServerOpts...)
 	corev1.RegisterCoreServiceServer(s.grpcServer, coreServer)
@@ -397,7 +392,6 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		}
 	}()
 
-	writerStarted = false // Success — Stop() now owns the writer lifecycle.
 	return nil
 }
 
@@ -422,9 +416,6 @@ func (s *grpcSubsystem) Stop(ctx context.Context) error {
 	if s.reaperCancel != nil {
 		s.reaperCancel()
 	}
-	if s.eventWriter != nil {
-		s.eventWriter.Close()
-	}
 	if s.listener != nil {
 		if err := s.listener.Close(); err != nil {
 			slog.Debug("error closing gRPC listener", "error", err)
@@ -433,49 +424,45 @@ func (s *grpcSubsystem) Stop(ctx context.Context) error {
 	return nil
 }
 
-// newCoreEventBusFanout returns a core.BusFanoutFunc that publishes each
-// host-engine core.Event to the JetStream EventBus with the matching
-// subject. Legacy colon-delimited streams (e.g. "location:01ABC") are
-// translated to `events.<gameID>.<...>` so subscribers filter on the
-// bus-native subject shape.
-//
-// F3 transitional only — F6 drops PG and the core engine writes to the
-// bus directly.
-func newCoreEventBusFanout(bus *eventbus.Subsystem) core.BusFanoutFunc {
-	if bus == nil {
-		return nil
+// busEventAppender implements core.EventAppender by publishing directly to
+// JetStream. F7 removes the PG events table and the EventWriter; all host-
+// engine Append calls go straight to the bus.
+type busEventAppender struct {
+	publisher eventbus.Publisher
+	bus       *eventbus.Subsystem
+}
+
+var _ core.EventAppender = (*busEventAppender)(nil)
+
+// Append translates a core.Event to an eventbus.Event and publishes it to
+// JetStream. Legacy colon-delimited streams (e.g. "location:01ABC") are
+// mapped to `events.<gameID>.<...>` via subjectxlate.Legacy.
+func (b *busEventAppender) Append(ctx context.Context, event core.Event) error {
+	gameID := b.bus.GameID()
+	if gameID == "" {
+		gameID = "main"
 	}
-	publisher := bus.Publisher()
-	if publisher == nil {
-		return nil
+	natsSubject, err := subjectxlate.Legacy(event.Stream, gameID)
+	if err != nil {
+		return oops.With("stream", event.Stream).Wrap(err)
 	}
-	return func(ctx context.Context, event core.Event) error {
-		gameID := bus.GameID()
-		if gameID == "" {
-			gameID = "main"
-		}
-		natsSubject, err := subjectxlate.Legacy(event.Stream, gameID)
-		if err != nil {
-			return oops.With("stream", event.Stream).Wrap(err)
-		}
-		sub, err := eventbus.NewSubject(natsSubject)
-		if err != nil {
-			return oops.With("stream", event.Stream).Wrap(err)
-		}
-		typ, err := eventbus.NewType(string(event.Type))
-		if err != nil {
-			return oops.With("type", string(event.Type)).Wrap(err)
-		}
-		busEvent := eventbus.Event{
-			ID:        event.ID,
-			Subject:   sub,
-			Type:      typ,
-			Timestamp: event.Timestamp,
-			Actor:     coreToBusActor(event.Actor),
-			Payload:   event.Payload,
-		}
-		return oops.Wrap(publisher.Publish(ctx, busEvent))
+	sub, err := eventbus.NewSubject(natsSubject)
+	if err != nil {
+		return oops.With("stream", event.Stream).Wrap(err)
 	}
+	typ, err := eventbus.NewType(string(event.Type))
+	if err != nil {
+		return oops.With("type", string(event.Type)).Wrap(err)
+	}
+	busEvent := eventbus.Event{
+		ID:        event.ID,
+		Subject:   sub,
+		Type:      typ,
+		Timestamp: event.Timestamp,
+		Actor:     coreToBusActor(event.Actor),
+		Payload:   event.Payload,
+	}
+	return oops.Wrap(b.publisher.Publish(ctx, busEvent))
 }
 
 // coreToBusActor bridges the legacy core.Actor (ID is a string, sometimes
@@ -501,6 +488,109 @@ func coreActorKindToBus(k core.ActorKind) eventbus.ActorKind {
 		return eventbus.ActorKindPlugin
 	default:
 		return eventbus.ActorKindUnknown
+	}
+}
+
+// busHistoryReaderAdapter bridges eventbus.HistoryReader (QueryHistory) to
+// plugins.HistoryReader (ReplayTail). Used by the plugin subsystem for
+// QueryStreamHistory RPCs and Lua holomush.query_stream_history hostfuncs.
+type busHistoryReaderAdapter struct {
+	reader  eventbus.HistoryReader
+	gameID  func() string
+}
+
+var _ plugins.HistoryReader = (*busHistoryReaderAdapter)(nil)
+
+// ReplayTail satisfies plugins.HistoryReader. It fetches count most-recent
+// events on stream (optionally filtered by notBefore and exclusive beforeID),
+// returning them in ascending ULID order (oldest→newest).
+func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
+	if count <= 0 {
+		return nil, nil
+	}
+	gameID := a.gameID()
+	if gameID == "" {
+		gameID = "main"
+	}
+	natsSubject, err := subjectxlate.Legacy(stream, gameID)
+	if err != nil {
+		return nil, oops.With("stream", stream).Wrap(err)
+	}
+	sub, err := eventbus.NewSubject(natsSubject)
+	if err != nil {
+		return nil, oops.With("stream", stream).Wrap(err)
+	}
+	q := eventbus.HistoryQuery{
+		Subject:   sub,
+		Direction: eventbus.DirectionBackward,
+		PageSize:  count,
+		NotBefore: notBefore,
+	}
+	if !beforeID.IsZero() {
+		q.Before = beforeID
+	}
+	hs, err := a.reader.QueryHistory(ctx, q)
+	if err != nil {
+		return nil, oops.With("stream", stream).Wrap(err)
+	}
+	defer hs.Close() //nolint:errcheck // best-effort iterator close
+
+	// Backward direction yields newest-first; collect then reverse.
+	collected := make([]eventbus.Event, 0, count)
+	for {
+		e, nextErr := hs.Next(ctx)
+		if nextErr != nil {
+			if nextErr == io.EOF { //nolint:errorlint // io.EOF is sentinel
+				break
+			}
+			return nil, oops.With("stream", stream).Wrap(nextErr)
+		}
+		collected = append(collected, e)
+		if len(collected) >= count {
+			break
+		}
+	}
+
+	// Reverse to ascending (oldest→newest) and translate to core.Event.
+	result := make([]core.Event, len(collected))
+	for i, be := range collected {
+		j := len(collected) - 1 - i
+		streamName := subjectxlate.ToLegacy(string(be.Subject), gameID)
+		result[j] = busEventToCoreEvent(be, streamName)
+	}
+	return result, nil
+}
+
+// busEventToCoreEvent translates an eventbus.Event to a core.Event for plugin
+// consumption. The Actor ID is a ULID string (zero ULID → empty string).
+func busEventToCoreEvent(e eventbus.Event, stream string) core.Event {
+	actorID := ""
+	if e.Actor.ID != (ulid.ULID{}) {
+		actorID = e.Actor.ID.String()
+	}
+	return core.Event{ //nolint:gocritic // translation path: preserves existing ID+Timestamp from JetStream; core.NewEvent() would clobber them
+		ID:        e.ID,
+		Stream:    stream,
+		Type:      core.EventType(e.Type),
+		Timestamp: e.Timestamp,
+		Actor: core.Actor{
+			Kind: busActorKindToCore(e.Actor.Kind),
+			ID:   actorID,
+		},
+		Payload: e.Payload,
+	}
+}
+
+func busActorKindToCore(k eventbus.ActorKind) core.ActorKind {
+	switch k {
+	case eventbus.ActorKindCharacter:
+		return core.ActorCharacter
+	case eventbus.ActorKindSystem:
+		return core.ActorSystem
+	case eventbus.ActorKindPlugin:
+		return core.ActorPlugin
+	default:
+		return core.ActorSystem
 	}
 }
 

@@ -15,7 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"google.golang.org/grpc"
@@ -34,25 +33,12 @@ import (
 	"github.com/holomush/holomush/test/testutil"
 )
 
-// noopEventStore is a stub EventStore for tests that don't exercise event functionality.
+// noopEventStore is a stub EventAppender for tests that don't exercise event functionality.
 type noopEventStore struct{}
 
 func (n *noopEventStore) Append(_ context.Context, _ core.Event) error { return nil }
-func (n *noopEventStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
-	return nil, nil
-}
 
-func (n *noopEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
-	return ulid.ULID{}, nil
-}
-
-func (n *noopEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ ulid.ULID) ([]core.Event, error) {
-	return nil, nil
-}
-
-func (n *noopEventStore) SubscribeSession(_ context.Context) (core.Subscription, error) {
-	return nil, nil
-}
+var _ core.EventAppender = (*noopEventStore)(nil)
 
 // newMinimalDispatcher creates a dispatcher with no registered commands for tests
 // that don't exercise command functionality.

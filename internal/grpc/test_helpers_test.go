@@ -37,6 +37,8 @@ type fakePlayerSessionRepo struct {
 
 // newFakePlayerSessionRepo constructs a fakePlayerSessionRepo seeded to
 // accept testPlayerSessionToken and return the given PlayerID.
+//
+//nolint:unparam // playerID is always ulid.ULID{} in current tests; kept parameterised for future callers
 func newFakePlayerSessionRepo(playerID ulid.ULID) *fakePlayerSessionRepo {
 	return &fakePlayerSessionRepo{
 		tokenHash: auth.HashSessionToken(testPlayerSessionToken),
@@ -118,7 +120,7 @@ func newTestSessionStore(t *testing.T, sessions map[string]*session.Info) sessio
 //
 // The store is used for both Engine and dispatcher Services.Events.
 // Pass a custom sessStore to pre-populate sessions; nil uses a fresh MemStore.
-func newHandleCommandServer(t *testing.T, store core.EventStore, sessStore session.Store, opts ...CoreServerOption) *CoreServer {
+func newHandleCommandServer(t *testing.T, store core.EventAppender, sessStore session.Store, opts ...CoreServerOption) *CoreServer {
 	t.Helper()
 	engine := core.NewEngine(store)
 	if sessStore == nil {
@@ -149,12 +151,9 @@ func newHandleCommandServer(t *testing.T, store core.EventStore, sessStore sessi
 	return NewCoreServer(engine, sessStore, dispatcher, svc, allOpts...)
 }
 
-// mockEventStore implements core.EventStore for testing.
+// mockEventStore implements core.EventAppender for testing.
 type mockEventStore struct {
-	appendFunc      func(ctx context.Context, event core.Event) error
-	replayFunc      func(ctx context.Context, stream string, afterID ulid.ULID, limit int) ([]core.Event, error)
-	lastEventIDFunc func(ctx context.Context, stream string) (ulid.ULID, error)
-	subscribeFunc   func(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error)
+	appendFunc func(ctx context.Context, event core.Event) error
 }
 
 func (m *mockEventStore) Append(ctx context.Context, event core.Event) error {
@@ -164,38 +163,4 @@ func (m *mockEventStore) Append(ctx context.Context, event core.Event) error {
 	return nil
 }
 
-func (m *mockEventStore) Replay(ctx context.Context, stream string, afterID ulid.ULID, limit int) ([]core.Event, error) {
-	if m.replayFunc != nil {
-		return m.replayFunc(ctx, stream, afterID, limit)
-	}
-	return nil, nil
-}
-
-func (m *mockEventStore) LastEventID(ctx context.Context, stream string) (ulid.ULID, error) {
-	if m.lastEventIDFunc != nil {
-		return m.lastEventIDFunc(ctx, stream)
-	}
-	return ulid.ULID{}, core.ErrStreamEmpty
-}
-
-func (m *mockEventStore) Subscribe(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error) {
-	if m.subscribeFunc != nil {
-		return m.subscribeFunc(ctx, stream)
-	}
-	eventCh := make(chan ulid.ULID)
-	errCh := make(chan error)
-	go func() {
-		<-ctx.Done()
-		close(eventCh)
-		close(errCh)
-	}()
-	return eventCh, errCh, nil
-}
-
-func (m *mockEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ ulid.ULID) ([]core.Event, error) {
-	return nil, nil
-}
-
-func (m *mockEventStore) SubscribeSession(_ context.Context) (core.Subscription, error) {
-	return nil, nil
-}
+var _ core.EventAppender = (*mockEventStore)(nil)

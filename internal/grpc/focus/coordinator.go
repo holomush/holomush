@@ -9,7 +9,6 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/internal/settings"
 )
@@ -38,12 +37,6 @@ type StreamContributorRequest struct {
 	CharacterID string
 	PlayerID    string
 	SessionID   string
-}
-
-// CursorLocker provides per-session mutex access for serializing focus
-// transitions against live-loop cursor commits.
-type CursorLocker interface {
-	Lock(sessionID string) (unlock func())
 }
 
 // Coordinator is the sole authoritative mutator of a session's
@@ -77,9 +70,7 @@ type RestorePlan struct {
 // defaultCoordinator is the production Coordinator implementation.
 type defaultCoordinator struct {
 	sessionStore      session.Store
-	eventStore        core.EventStore
 	streamSender      StreamSender
-	cursorLocker      CursorLocker
 	streamContributor StreamContributor
 	policies          map[session.FocusKind]KindPolicy
 
@@ -100,19 +91,9 @@ func WithSessionStore(store session.Store) CoordinatorOption {
 	return func(c *defaultCoordinator) { c.sessionStore = store }
 }
 
-// WithEventStore sets the event store.
-func WithEventStore(store core.EventStore) CoordinatorOption {
-	return func(c *defaultCoordinator) { c.eventStore = store }
-}
-
 // WithStreamSender sets the stream sender.
 func WithStreamSender(sender StreamSender) CoordinatorOption {
 	return func(c *defaultCoordinator) { c.streamSender = sender }
-}
-
-// WithCursorLocker sets the cursor locker.
-func WithCursorLocker(locker CursorLocker) CoordinatorOption {
-	return func(c *defaultCoordinator) { c.cursorLocker = locker }
 }
 
 // WithKindPolicy registers a KindPolicy for its kind.

@@ -253,23 +253,23 @@ func (m *Manager) ConfigureEventEmitter(publisher eventbus.Publisher, opts ...Em
 	}
 }
 
-// ConfigureFocusDeps injects the focus coordinator and event store into all
+// ConfigureFocusDeps injects the focus coordinator and history reader into all
 // registered hosts. Production startup MUST call this before plugins handle
 // focus-related RPCs or host functions. Called from the gRPC subsystem's
-// Start after creating the FocusCoordinator and EventWriter.
-func (m *Manager) ConfigureFocusDeps(fc focus.Coordinator, es core.EventStore) {
+// Start after creating the FocusCoordinator.
+func (m *Manager) ConfigureFocusDeps(fc focus.Coordinator, hr HistoryReader) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, host := range m.hosts {
 		if configurer := findOptional[FocusDepsConfigurer](host); configurer != nil {
 			configurer.SetFocusCoordinator(fc)
-			configurer.SetEventStore(es)
+			configurer.SetHistoryReader(hr)
 		}
 	}
 	if m.luaHost != nil {
 		if configurer := findOptional[FocusDepsConfigurer](m.luaHost); configurer != nil {
 			configurer.SetFocusCoordinator(fc)
-			configurer.SetEventStore(es)
+			configurer.SetHistoryReader(hr)
 		}
 	}
 }

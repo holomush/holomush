@@ -15,7 +15,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	accessTypes "github.com/holomush/holomush/internal/access/policy/types"
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -50,9 +49,9 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		"stream", req.Stream,
 	)
 
-	// Step 0: Guard — eventStore must be configured.
-	if s.eventStore == nil {
-		return nil, oops.Code("INTERNAL").Errorf("event store not configured")
+	// Step 0: Guard — historyReader must be configured.
+	if s.historyReader == nil {
+		return nil, oops.Code("INTERNAL").Errorf("history reader not configured")
 	}
 
 	// Step 1: Validate session_id and load session.
@@ -167,31 +166,15 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	}
 
 	// Step 7: Fetch count+1 to detect has_more.
-	// F4: delegate to the JetStream/PostgreSQL tier crossover reader when wired.
-	// Falls back to legacy eventStore.ReplayTail when the reader is not wired
-	// (integration tests, pre-F4 deployments). Both paths produce ascending
-	// (oldest→newest) slices of count+1 events maximum.
-	var protoFrames []*corev1.EventFrame
-	if s.historyReader != nil {
-		frames, fetchErr := fetchHistoryFramesFromBus(ctx, s.historyReader, s.currentGameID(), req.Stream, count, notBefore, beforeID)
-		if fetchErr != nil {
-			return nil, oops.Code("INTERNAL").
-				With("stream", req.Stream).
-				Wrap(fetchErr)
-		}
-		protoFrames = frames
-	} else {
-		legacyEvents, fetchErr := s.eventStore.ReplayTail(ctx, req.Stream, count+1, notBefore, beforeID)
-		if fetchErr != nil {
-			return nil, oops.Code("INTERNAL").
-				With("stream", req.Stream).
-				Wrap(fetchErr)
-		}
-		protoFrames = make([]*corev1.EventFrame, 0, len(legacyEvents))
-		for _, e := range legacyEvents {
-			protoFrames = append(protoFrames, coreEventToEventFrame(e))
-		}
+	// Delegate to the JetStream/PostgreSQL tier crossover reader (F4+).
+	// Both paths produce ascending (oldest→newest) slices of count+1 events maximum.
+	frames, fetchErr := fetchHistoryFramesFromBus(ctx, s.historyReader, s.currentGameID(), req.Stream, count, notBefore, beforeID)
+	if fetchErr != nil {
+		return nil, oops.Code("INTERNAL").
+			With("stream", req.Stream).
+			Wrap(fetchErr)
 	}
+	protoFrames := frames
 
 	// Step 8: Build response. Results are ascending (oldest→newest).
 	// If we got more than count, the OLDEST (index 0) is the "has_more
@@ -275,21 +258,6 @@ func fetchHistoryFramesFromBus(
 		result[j] = eventbusEventToEventFrame(busEvent, legacyStreamName)
 	}
 	return result, nil
-}
-
-// coreEventToEventFrame converts a core.Event to a proto EventFrame (bare,
-// not wrapped in SubscribeResponse). Actor.Kind.String() matches the
-// representation used by eventToProto for Subscribe responses.
-func coreEventToEventFrame(e core.Event) *corev1.EventFrame {
-	return &corev1.EventFrame{
-		Id:        e.ID.String(),
-		Stream:    e.Stream,
-		Type:      string(e.Type),
-		Timestamp: timestamppb.New(e.Timestamp),
-		ActorType: e.Actor.Kind.String(),
-		ActorId:   e.Actor.ID,
-		Payload:   e.Payload,
-	}
 }
 
 // eventbusEventToEventFrame converts an eventbus.Event to a proto EventFrame.

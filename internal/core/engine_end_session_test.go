@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -81,27 +80,14 @@ func TestEndSessionUsesActorSystemForNonQuitCauses(t *testing.T) {
 	}
 }
 
-// appendFailStore is a minimal EventStore that always fails on Append.
+// appendFailStore is a minimal EventAppender that always fails on Append.
 type appendFailStore struct {
 	err error
 }
 
 func (s *appendFailStore) Append(_ context.Context, _ Event) error { return s.err }
-func (s *appendFailStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]Event, error) {
-	return nil, nil
-}
 
-func (s *appendFailStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
-	return ulid.ULID{}, nil
-}
-
-func (s *appendFailStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ ulid.ULID) ([]Event, error) {
-	return nil, nil
-}
-
-func (s *appendFailStore) SubscribeSession(_ context.Context) (Subscription, error) {
-	return nil, nil
-}
+var _ EventAppender = (*appendFailStore)(nil)
 
 func TestEndSessionReturnsErrorWhenStoreFails(t *testing.T) {
 	store := &appendFailStore{err: errors.New("disk full")}

@@ -1691,13 +1691,13 @@ func TestLuaHostSetFocusCoordinatorWithNilHostFuncsIsNoOp(t *testing.T) {
 	})
 }
 
-func TestLuaHostSetEventStoreWithNilHostFuncsIsNoOp(t *testing.T) {
-	// NewHost() creates a host without hostFuncs — SetEventStore must not panic.
+func TestLuaHostSetHistoryReaderWithNilHostFuncsIsNoOp(t *testing.T) {
+	// NewHost() creates a host without hostFuncs — SetHistoryReader must not panic.
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
 	require.NotPanics(t, func() {
-		host.SetEventStore(nil)
+		host.SetHistoryReader(nil)
 	})
 }
 
@@ -1712,14 +1712,14 @@ func TestLuaHostSetFocusCoordinatorWithHostFuncsInjectsOps(t *testing.T) {
 	})
 }
 
-func TestLuaHostSetEventStoreWithHostFuncsInjectsReader(t *testing.T) {
+func TestLuaHostSetHistoryReaderWithHostFuncsInjectsReader(t *testing.T) {
 	hf := hostfunc.New(nil)
 	host := pluginlua.NewHostWithFunctions(hf)
 	defer closeHost(t, host)
 
-	// nil event store is valid (late-binding to clear or defer injection).
+	// nil history reader is valid (late-binding to clear or defer injection).
 	require.NotPanics(t, func() {
-		host.SetEventStore(nil)
+		host.SetHistoryReader(nil)
 	})
 }
 

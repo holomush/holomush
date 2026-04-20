@@ -69,21 +69,8 @@ func (s *stubSessionService) UpdateLastWhispered(_ context.Context, _ string, _ 
 type stubEventStore struct{}
 
 func (s *stubEventStore) Append(_ context.Context, _ core.Event) error { return nil }
-func (s *stubEventStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
-	return nil, nil
-}
 
-func (s *stubEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
-	return ulid.ULID{}, nil
-}
-
-func (s *stubEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ ulid.ULID) ([]core.Event, error) {
-	return nil, nil
-}
-
-func (s *stubEventStore) SubscribeSession(_ context.Context) (core.Subscription, error) {
-	return nil, nil
-}
+var _ core.EventAppender = (*stubEventStore)(nil)
 
 var _ = Describe("Rate Limiting Integration", func() {
 	var (
