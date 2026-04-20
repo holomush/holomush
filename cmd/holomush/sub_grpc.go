@@ -28,6 +28,7 @@ import (
 	"github.com/holomush/holomush/internal/content"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/history"
 	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -36,6 +37,7 @@ import (
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/naming"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
 	"github.com/holomush/holomush/internal/session"
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
@@ -267,8 +269,14 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	// in scope here, making Option B the natural construction site. The
 	// reader is built inline so we don't need to add a pool parameter to
 	// eventbus.Subsystem (which doesn't own the DB pool).
+	//
+	// F5: also wire the subject-ownership map + plugin history router so
+	// QueryHistory calls for plugin-owned subjects route to the plugin's
+	// PluginAuditService.QueryHistory RPC instead of the host tiers.
 	js := s.cfg.EventBus.JS()
-	historyReader := newHistoryReader(js, pool, s.cfg.EventBus.Config())
+	owners := historyOwnersFromPlugins(pluginManager)
+	router := audit.NewPluginHistoryRouter(pluginAuditClientProvider{mgr: pluginManager})
+	historyReader := newHistoryReader(js, pool, s.cfg.EventBus.Config(), owners, router)
 
 	coreServerOpts := []holoGRPC.CoreServerOption{
 		holoGRPC.WithEventStore(eventStore),
@@ -512,11 +520,78 @@ func (a *focusStreamContributorAdapter) QuerySessionStreams(ctx context.Context,
 }
 
 // newHistoryReader constructs the F4 JetStream/PostgreSQL tier crossover
-// reader. js and pool may be nil if the subsystem has not started yet, but
-// in production both are non-nil by the time Start() reaches this point.
-// The wall clock is passed as time.Now — forbidigo bans time.Now only inside
-// internal/eventbus/** and test/integration/eventbus_e2e/**; cmd/ is not in
-// the banned path.
-func newHistoryReader(js jetstream.JetStream, pool *pgxpool.Pool, cfg eventbus.Config) eventbus.HistoryReader {
-	return history.NewReader(js, pool, cfg.StreamMaxAge, time.Now)
+// reader with F5 plugin-owned subject routing. js and pool may be nil if
+// the subsystem has not started yet, but in production both are non-nil
+// by the time Start() reaches this point. The wall clock is passed as
+// time.Now — forbidigo bans time.Now only inside internal/eventbus/**
+// and test/integration/eventbus_e2e/**; cmd/ is not in the banned path.
+//
+// owners MAY be nil; when non-nil, plugin-owned subjects are routed to
+// the given PluginHistoryRouter rather than queried locally. router MAY
+// be nil only when owners is also nil — the Reader surfaces
+// EVENTBUS_PLUGIN_HISTORY_NOT_WIRED when a plugin-owned subject is
+// queried without a router.
+func newHistoryReader(
+	js jetstream.JetStream,
+	pool *pgxpool.Pool,
+	cfg eventbus.Config,
+	owners *audit.OwnerMap,
+	router history.PluginHistoryRouter,
+) eventbus.HistoryReader {
+	opts := []history.Option{}
+	if owners != nil {
+		opts = append(opts, history.WithOwners(owners))
+	}
+	if router != nil {
+		opts = append(opts, history.WithPluginRouter(router))
+	}
+	return history.NewReader(js, pool, cfg.StreamMaxAge, time.Now, opts...)
+}
+
+// historyOwnersFromPlugins aggregates plugin-declared audit subjects into an
+// audit.OwnerMap. A nil return means no plugins declared ownership, which
+// the reader treats as "host owns everything" — the Phase A default.
+// Returns nil on construction failure and logs the reason; a broken
+// manifest MUST NOT block gRPC start because plugin-owned subjects will
+// still fall through to host storage (which is the safe degradation).
+func historyOwnersFromPlugins(mgr *plugins.Manager) *audit.OwnerMap {
+	if mgr == nil {
+		return nil
+	}
+	decls := mgr.AuditSubjects()
+	if len(decls) == 0 {
+		return nil
+	}
+	owners := make([]audit.SubjectOwner, 0, len(decls))
+	for _, d := range decls {
+		owners = append(owners, audit.SubjectOwner{
+			PluginName: d.PluginName,
+			Pattern:    d.Subject,
+		})
+	}
+	m, err := audit.NewOwnerMap(owners)
+	if err != nil {
+		slog.Error("history OwnerMap construction failed; plugin-owned subjects will route via host fallback",
+			"error", err)
+		return nil
+	}
+	return m
+}
+
+// pluginAuditClientProvider adapts the plugin manager to the
+// audit.PluginHistoryClientProvider interface. Kept as an unexported type
+// in the cmd package so the plugin package does not need to depend on
+// the audit package to satisfy the contract.
+type pluginAuditClientProvider struct {
+	mgr *plugins.Manager
+}
+
+// PluginAuditClient resolves the PluginAuditService client by name via the
+// plugin manager. Returns (nil, false) when the plugin is not loaded or
+// its host does not expose a PluginAuditService.
+func (p pluginAuditClientProvider) PluginAuditClient(name string) (pluginv1.PluginAuditServiceClient, bool) {
+	if p.mgr == nil {
+		return nil, false
+	}
+	return p.mgr.PluginAuditClient(name)
 }

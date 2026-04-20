@@ -255,6 +255,30 @@
     "storage": {
       "type": "string"
     },
+    "audit": {
+      "items": {
+        "properties": {
+          "subjects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "schema": {
+            "type": "string"
+          },
+          "table": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "subjects"
+        ]
+      },
+      "type": "array"
+    },
     "resource_types": {
       "items": {
         "type": "string"

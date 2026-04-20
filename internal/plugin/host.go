@@ -81,6 +81,14 @@ type AttributeResolverProvider interface {
 	AttributeResolverClient(pluginName string) pluginv1.AttributeResolverServiceClient
 }
 
+// PluginAuditClientProvider is an optional interface that binary-plugin
+// hosts implement so the eventbus/audit per-plugin consumer and history
+// router can reach the plugin's PluginAuditService. Returns nil when the
+// plugin is not loaded or did not register the service.
+type PluginAuditClientProvider interface {
+	PluginAuditClient(pluginName string) pluginv1.PluginAuditServiceClient
+}
+
 // PluginIntentEmitter routes plugin-owned emit intents through the shared host
 // event emission path.
 type PluginIntentEmitter interface {

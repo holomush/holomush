@@ -177,6 +177,42 @@ export async function getEventsByStream(stream: string): Promise<DbEvent[]> {
   return rows;
 }
 
+// DbAuditEvent mirrors the events_audit schema (internal/store/migrations/
+// 000009_create_events_audit.up.sql). Post-F1 all published events land
+// here via the host JetStream audit projection; the payload column is the
+// codec-encoded bytes from the wire, not decoded JSON.
+export interface DbAuditEvent {
+  id: Buffer;
+  subject: string;
+  type: string;
+  actor_kind: string;
+  actor_id: Buffer | null;
+  payload: Buffer;
+  timestamp: Date;
+  codec: string;
+}
+
+// getAuditEventsBySubjectSuffix returns audit rows whose subject ends with
+// the given suffix. F5 pre-cutover, say events are published to subjects
+// like `events.<game>.location.<id>`; callers pass the legacy stream name
+// (e.g. `location:<id>`) and this helper translates it to the JetStream
+// dot-subject suffix. Equivalent to the old getEventsByStream but reads
+// the audit tier rather than the now-empty events table.
+export async function getAuditEventsBySubjectSuffix(
+  legacyStream: string,
+): Promise<DbAuditEvent[]> {
+  // legacy "location:<id>" → dot-subject suffix ".location.<id>"
+  const suffix = '.' + legacyStream.replace(/:/g, '.');
+  const { rows } = await getPool().query<DbAuditEvent>(
+    `SELECT id, subject, type, actor_kind, actor_id, payload, timestamp, codec
+       FROM events_audit
+      WHERE subject LIKE $1
+      ORDER BY id`,
+    [`%${suffix}`],
+  );
+  return rows;
+}
+
 // ── Command history queries ────────────────────────────────────
 
 export async function getCommandHistory(sessionId: string): Promise<string[]> {

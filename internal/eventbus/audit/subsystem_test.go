@@ -39,9 +39,13 @@ func TestSubsystemDependsOnDatabaseAndEventBus(t *testing.T) {
 	t.Parallel()
 	s := audit.NewSubsystem(stubJS{}, stubPool{}, audit.Config{})
 	deps := s.DependsOn()
-	require.Len(t, deps, 2)
+	// F5 added a Plugins dependency so the per-plugin audit consumers
+	// can resolve their PluginAuditService clients via the plugin
+	// manager. Existing (Database, EventBus) deps are preserved.
+	require.Len(t, deps, 3)
 	assert.Contains(t, deps, lifecycle.SubsystemDatabase)
 	assert.Contains(t, deps, lifecycle.SubsystemEventBus)
+	assert.Contains(t, deps, lifecycle.SubsystemPlugins)
 }
 
 func TestConfigDefaultsFillZeroFields(t *testing.T) {

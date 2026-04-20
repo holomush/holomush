@@ -32,6 +32,7 @@ type scenePlugin struct {
 	store       *SceneStore
 	service     *SceneServiceImpl
 	resolver    *SceneResolver
+	auditSrv    *SceneAuditServer
 	focusClient pluginsdk.FocusClient
 }
 
@@ -52,9 +53,12 @@ func (p *scenePlugin) HandleCommand(ctx context.Context, req pluginsdk.CommandRe
 }
 
 // RegisterServices registers the SceneServiceServer on the go-plugin gRPC
-// transport so the host can proxy scene RPCs to this plugin.
+// transport so the host can proxy scene RPCs to this plugin. Also
+// registers the PluginAuditService that serves the plugin-owned audit
+// subject prefix (events.*.scene.>) per the manifest's audit block.
 func (p *scenePlugin) RegisterServices(registrar grpc.ServiceRegistrar) {
 	scenev1.RegisterSceneServiceServer(registrar, p.service)
+	pluginv1.RegisterPluginAuditServiceServer(registrar, p.auditSrv)
 }
 
 // RegisterAttributeResolver registers the SceneResolver on the go-plugin
@@ -101,6 +105,7 @@ func (p *scenePlugin) Init(ctx context.Context, config *pluginv1.ServiceConfig) 
 	p.store = store
 	p.service.store = store
 	p.resolver.store = store
+	p.auditSrv.store = NewSceneAuditStore(store.Pool())
 
 	slog.InfoContext(ctx, "core-scenes plugin initialised",
 		"storage", "postgres",
@@ -112,6 +117,7 @@ func main() {
 	plugin := &scenePlugin{
 		service:  &SceneServiceImpl{},
 		resolver: &SceneResolver{},
+		auditSrv: &SceneAuditServer{},
 	}
 
 	pluginsdk.ServeWithServices(

@@ -694,6 +694,21 @@ func (h *Host) AttributeResolverClient(pluginName string) pluginv1.AttributeReso
 	return pluginv1.NewAttributeResolverServiceClient(lp.conn)
 }
 
+// PluginAuditClient returns the PluginAuditService gRPC client for a
+// loaded plugin. Returns nil when the plugin is not loaded, the
+// connection is not yet established, or the plugin did not register the
+// service. The host uses this to route JetStream audit deliveries into
+// plugin-owned audit schemas (F5).
+func (h *Host) PluginAuditClient(pluginName string) pluginv1.PluginAuditServiceClient {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	lp, ok := h.plugins[pluginName]
+	if !ok || lp.conn == nil {
+		return nil
+	}
+	return pluginv1.NewPluginAuditServiceClient(lp.conn)
+}
+
 // PluginConn returns the gRPC client connection for the named plugin.
 // This enables the manager to register plugin-provided services in the
 // ServiceRegistry after loading.

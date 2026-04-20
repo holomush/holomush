@@ -41,6 +41,15 @@ func ValidatePayload(payload []byte) error {
 type EventType string
 
 // Event types for game events.
+//
+// TODO(holomush-k18g): Migrate plugin-owned EventType constants out of
+// internal/core/. The majority of the constants below are plugin-domain
+// (communication, world movement, object interactions) but currently
+// live here because the target Go plugin packages (core-world, core-comm)
+// do not yet exist. Host-only types that stay: EventTypeSystem,
+// EventTypeCommandResponse, EventTypeCommandError, EventTypeSessionEnded.
+// F5 (holomush-1tvn.12) landed the audit-routing infrastructure that
+// unblocks this migration.
 const (
 	EventTypeSay    EventType = "say"
 	EventTypePose   EventType = "pose"
