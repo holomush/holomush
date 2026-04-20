@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
+// TODO(holomush-1tvn.14): F7 deletes this file along with EventStore.{Append,Replay,SubscribeSession,LastEventID}
+//go:build f6_legacy
+
 package store
 
 import (

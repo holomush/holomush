@@ -21,7 +21,9 @@ import (
 	"github.com/holomush/holomush/internal/store"
 )
 
-// expectedTables lists every table created by the baseline migration.
+// expectedTables lists every table present after all migrations have been applied.
+// NOTE: The `events` table was dropped by migration 000010 (F6 schema cutover);
+// it does NOT appear here.
 var expectedTables = []string{
 	"access_audit_log",
 	"access_policies",
@@ -31,7 +33,6 @@ var expectedTables = []string{
 	"characters",
 	"content_items",
 	"entity_properties",
-	"events",
 	"events_audit",
 	"exits",
 	"holomush_system_info",
@@ -141,7 +142,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(9), version)
+	assert.Equal(t, uint(10), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)
@@ -166,7 +167,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(9), version)
+	assert.Equal(t, uint(10), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)

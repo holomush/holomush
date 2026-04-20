@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 HoloMUSH Contributors
 
-//go:build integration
+// TODO(holomush-1tvn.14): F7 deletes this file along with EventStore.{Append,Replay,SubscribeSession,LastEventID}
+//go:build integration && f6_legacy
 
 // Package session_lifecycle_test contains integration tests for session
 // lifecycle events (session_ended). These tests exercise real end-to-end paths

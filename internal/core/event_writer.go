@@ -219,26 +219,39 @@ func (w *EventWriter) SetBusFanout(f BusFanoutFunc) {
 	w.fanoutMu.Unlock()
 }
 
-// appendAndFanout runs Append and, on success, fires the bus fanout.
-// Fanout failures are logged but never surface to the caller.
+// appendAndFanout writes the event, then fires the bus fanout side-channel.
+//
+// Pre-F6: PG is authoritative. Append to PG first; on success, fan out to the
+// bus. Bus failures are logged but do not fail the Write.
+//
+// Post-F6 (bus fanout is wired, PG events table is dropped): the bus fanout is
+// the authoritative write path. PG Append is attempted for backward compat but
+// its failure is ignored — only the bus result is returned to the caller.
+// F7 removes the PG leg entirely.
 func (w *EventWriter) appendAndFanout(req appendRequest) {
-	err := w.store.Append(req.ctx, req.event)
-	if err == nil {
-		w.fanoutMu.RLock()
-		f := w.busFanout
-		w.fanoutMu.RUnlock()
-		if f != nil {
-			if fErr := f(req.ctx, req.event); fErr != nil {
-				slog.WarnContext(req.ctx, "event writer: bus fanout failed — subscribers may miss this event",
-					"event_id", req.event.ID.String(),
-					"stream", req.event.Stream,
-					"type", string(req.event.Type),
-					"error", fErr,
-				)
-			}
+	w.fanoutMu.RLock()
+	f := w.busFanout
+	w.fanoutMu.RUnlock()
+
+	if f != nil {
+		// F6 mode: bus is authoritative. Attempt PG write first (best-effort),
+		// then publish to bus. Bus result is returned to caller.
+		pgErr := w.store.Append(req.ctx, req.event)
+		if pgErr != nil {
+			slog.WarnContext(req.ctx, "event writer: PG append failed (events table dropped?) — proceeding with bus-only write",
+				"event_id", req.event.ID.String(),
+				"stream", req.event.Stream,
+				"type", string(req.event.Type),
+				"error", pgErr,
+			)
 		}
+		busErr := f(req.ctx, req.event)
+		req.err <- busErr
+		return
 	}
-	req.err <- err
+
+	// Pre-F6 mode: PG is authoritative, no bus fanout.
+	req.err <- w.store.Append(req.ctx, req.event)
 }
 
 func (w *EventWriter) run() {

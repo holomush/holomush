@@ -34,10 +34,12 @@ var (
 	_ session.Access = (*PostgresSessionStore)(nil)
 )
 
+// F6: event_cursors column dropped (migration 000010). The session.Info.EventCursors
+// field still exists in Go (removed by F7) but is no longer persisted to the database.
 const sessionSelectColumns = `id, character_id, player_id,
 	COALESCE(player_session_id, '') AS player_session_id,
 	character_name, location_id,
-	is_guest, status, grid_present, event_cursors,
+	is_guest, status, grid_present,
 	command_history, ttl_seconds, max_history,
 	detached_at, expires_at, created_at, updated_at,
 	last_paged, last_whispered,
@@ -46,7 +48,11 @@ const sessionSelectColumns = `id, character_id, player_id,
 // parseSessionRow parses the scalar fields scanned from a session row into a
 // session.Info. Both scanSession and scanSessions call Scan with the same
 // variable set and then delegate here to avoid duplicating the parse logic.
-func parseSessionRow(info *session.Info, charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr string, cursorsJSON, focusMembershipsJSON, presentingFocusJSON []byte) error {
+//
+// F6: cursorsJSON parameter removed — event_cursors column was dropped by
+// migration 000010. session.Info.EventCursors is always empty after this point
+// (F7 removes the field entirely).
+func parseSessionRow(info *session.Info, charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr string, focusMembershipsJSON, presentingFocusJSON []byte) error {
 	charID, err := ulid.Parse(charIDStr)
 	if err != nil {
 		return oops.With("operation", "parse character_id").With("raw_id", charIDStr).Wrap(err)
@@ -86,14 +92,6 @@ func parseSessionRow(info *session.Info, charIDStr, playerIDStr, playerSessionID
 	}
 	info.Status = status
 
-	if len(cursorsJSON) > 0 {
-		cursors := make(map[string]ulid.ULID)
-		if err := json.Unmarshal(cursorsJSON, &cursors); err != nil {
-			return oops.With("operation", "unmarshal event_cursors").Wrap(err)
-		}
-		info.EventCursors = cursors
-	}
-
 	if len(focusMembershipsJSON) > 0 {
 		var memberships []session.FocusMembership
 		if err := json.Unmarshal(focusMembershipsJSON, &memberships); err != nil {
@@ -117,7 +115,6 @@ func parseSessionRow(info *session.Info, charIDStr, playerIDStr, playerSessionID
 func scanSession(row pgx.Row) (*session.Info, error) {
 	var info session.Info
 	var charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr string
-	var cursorsJSON []byte
 	var focusMembershipsJSON, presentingFocusJSON []byte
 
 	err := row.Scan(
@@ -130,7 +127,6 @@ func scanSession(row pgx.Row) (*session.Info, error) {
 		&info.IsGuest,
 		&statusStr,
 		&info.GridPresent,
-		&cursorsJSON,
 		&info.CommandHistory,
 		&info.TTLSeconds,
 		&info.MaxHistory,
@@ -147,7 +143,7 @@ func scanSession(row pgx.Row) (*session.Info, error) {
 		return nil, oops.With("operation", "scan session row").Wrap(err)
 	}
 
-	if err := parseSessionRow(&info, charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr, cursorsJSON, focusMembershipsJSON, presentingFocusJSON); err != nil {
+	if err := parseSessionRow(&info, charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr, focusMembershipsJSON, presentingFocusJSON); err != nil {
 		return nil, err
 	}
 
@@ -161,7 +157,6 @@ func scanSessions(rows pgx.Rows) ([]*session.Info, error) {
 	for rows.Next() {
 		var info session.Info
 		var charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr string
-		var cursorsJSON []byte
 		var focusMembershipsJSON, presentingFocusJSON []byte
 
 		err := rows.Scan(
@@ -174,7 +169,6 @@ func scanSessions(rows pgx.Rows) ([]*session.Info, error) {
 			&info.IsGuest,
 			&statusStr,
 			&info.GridPresent,
-			&cursorsJSON,
 			&info.CommandHistory,
 			&info.TTLSeconds,
 			&info.MaxHistory,
@@ -191,7 +185,7 @@ func scanSessions(rows pgx.Rows) ([]*session.Info, error) {
 			return nil, oops.With("operation", "scan session row").Wrap(err)
 		}
 
-		if err := parseSessionRow(&info, charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr, cursorsJSON, focusMembershipsJSON, presentingFocusJSON); err != nil {
+		if err := parseSessionRow(&info, charIDStr, playerIDStr, playerSessionIDStr, locIDStr, statusStr, focusMembershipsJSON, presentingFocusJSON); err != nil {
 			return nil, err
 		}
 
@@ -220,10 +214,7 @@ func (s *PostgresSessionStore) Get(ctx context.Context, id string) (*session.Inf
 
 // Set creates or updates a session.
 func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session.Info) error {
-	cursorsJSON, err := json.Marshal(info.EventCursors)
-	if err != nil {
-		return oops.With("operation", "marshal event_cursors").With("session_id", id).Wrap(err)
-	}
+	// F6: event_cursors column dropped (migration 000010); no longer persisted.
 
 	// Coerce nil slice to empty — pgx sends nil Go slices as SQL NULL,
 	// which violates the NOT NULL constraint on command_history.
@@ -256,12 +247,12 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 	_, err = s.pool.Exec(ctx,
 		`INSERT INTO sessions (id, character_id, player_id, player_session_id,
 			character_name, location_id,
-			is_guest, status, grid_present, event_cursors,
+			is_guest, status, grid_present,
 			command_history, ttl_seconds, max_history,
 			detached_at, expires_at, created_at,
 			last_paged, last_whispered,
 			focus_memberships, presenting_focus)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20::jsonb)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET
 			character_id = EXCLUDED.character_id,
 			player_id = EXCLUDED.player_id,
@@ -271,7 +262,6 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 			is_guest = EXCLUDED.is_guest,
 			status = EXCLUDED.status,
 			grid_present = EXCLUDED.grid_present,
-			event_cursors = EXCLUDED.event_cursors,
 			command_history = EXCLUDED.command_history,
 			ttl_seconds = EXCLUDED.ttl_seconds,
 			max_history = EXCLUDED.max_history,
@@ -291,7 +281,6 @@ func (s *PostgresSessionStore) Set(ctx context.Context, id string, info *session
 		info.IsGuest,
 		string(info.Status),
 		info.GridPresent,
-		cursorsJSON,
 		cmdHistory,
 		info.TTLSeconds,
 		info.MaxHistory,
@@ -409,60 +398,11 @@ func (s *PostgresSessionStore) ReattachCAS(ctx context.Context, id string) (bool
 	return tag.RowsAffected() == 1, nil
 }
 
-// UpdateCursors updates event cursors via JSONB merge with a per-key
-// monotonicity guard. A write is applied only if the new cursor is
-// strictly greater (lexicographic, COLLATE "C") than the stored value
-// for the key being written. Writes that lose the CAS race — i.e.,
-// another writer committed a higher cursor first — are silently
-// dropped (RowsAffected==0 is not an error, it is the correct outcome).
-//
-// The CAS depends on cursor values being monotonic ULIDs (core.NewULID),
-// not random ULIDs (idgen.New). A non-monotonic cursor can produce a
-// lex-inverted value within the same millisecond, causing legitimate
-// cursor advances to be silently rejected. The ruleguard rule
-// EventIDMustBeMonotonic in gorules/rules.go enforces monotonic event
-// IDs for core.Event{} struct literals.
-//
-// Multi-key writes are rejected with UNSUPPORTED. The only current
-// caller (CoreServer.replayAndSend) always passes one key, and a
-// single-statement per-key CAS cannot be expressed cleanly for multiple
-// keys. A future multi-key caller should refactor this function to
-// apply per-key CAS across multiple UPDATE statements in a transaction.
-func (s *PostgresSessionStore) UpdateCursors(ctx context.Context, id string, cursors map[string]ulid.ULID) error {
-	if len(cursors) == 0 {
-		return nil
-	}
-	if len(cursors) != 1 {
-		return oops.Code("UNSUPPORTED").
-			With("operation", "update cursors").
-			With("session_id", id).
-			With("key_count", len(cursors)).
-			Errorf("multi-key cursor updates are not supported")
-	}
-	var streamKey string
-	var newCursor ulid.ULID
-	for k, v := range cursors {
-		streamKey, newCursor = k, v
-	}
-	cursorsJSON, err := json.Marshal(cursors)
-	if err != nil {
-		return oops.With("operation", "marshal cursors").With("session_id", id).Wrap(err)
-	}
-	_, err = s.pool.Exec(ctx,
-		`UPDATE sessions
-            SET event_cursors = event_cursors || $1::jsonb,
-                updated_at = now()
-          WHERE id = $2
-            AND (
-                event_cursors->>$3 IS NULL
-                OR (event_cursors->>$3) COLLATE "C" < ($4::text) COLLATE "C"
-            )`,
-		cursorsJSON, id, streamKey, newCursor.String())
-	if err != nil {
-		return oops.With("operation", "update cursors").With("session_id", id).Wrap(err)
-	}
-	// RowsAffected==0 is intentional: another writer beat us with a higher
-	// cursor. Do not surface it as an error.
+// UpdateCursors is a no-op after F6 dropped the event_cursors column
+// (migration 000010). Cursors are no longer persisted to the database.
+// The session.Access interface method remains for backward compatibility;
+// F7 removes it along with the EventCursors field on session.Info.
+func (s *PostgresSessionStore) UpdateCursors(_ context.Context, _ string, _ map[string]ulid.ULID) error {
 	return nil
 }
 
