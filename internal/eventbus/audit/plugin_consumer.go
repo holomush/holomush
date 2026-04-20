@@ -356,6 +356,6 @@ type PluginHistoryStream interface {
 
 // itoaAckWait converts a duration to a short string for logs without
 // pulling in strconv.FormatFloat. Used only by debug-level helpers.
-func itoaAckWait(d time.Duration) string { //nolint:unused // reserved for future debug logging
+func itoaAckWait(d time.Duration) string {
 	return strconv.FormatInt(int64(d/time.Millisecond), 10) + "ms"
 }
