@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"strconv"
 	"sync"
 	"time"
 
@@ -107,6 +106,20 @@ func (m *PluginConsumerManager) Add(ctx context.Context, cfg PluginConsumerConfi
 			With("plugin", cfg.PluginName).
 			Errorf("PluginAuditClient required")
 	}
+
+	// Check started before calling CreateOrUpdateConsumer so that late
+	// Add() calls don't create orphaned durable consumers on the JetStream
+	// server. TOCTOU window between this check and the append below is
+	// acceptable: Start is called once after all Adds complete.
+	m.mu.Lock()
+	if m.started {
+		m.mu.Unlock()
+		return oops.Code("AUDIT_PLUGIN_CONSUMER_INVALID_STATE").
+			With("plugin", cfg.PluginName).
+			Errorf("cannot add plugin consumer after Start")
+	}
+	m.mu.Unlock()
+
 	ackWait := cfg.AckWait
 	if ackWait == 0 {
 		ackWait = DefaultAckWait
@@ -141,10 +154,10 @@ func (m *PluginConsumerManager) Add(ctx context.Context, cfg PluginConsumerConfi
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.started {
-		// Once Start has run, Add is a no-op: subsequent Start() calls
-		// short-circuit on m.started so a late-added consumer would never
-		// be attached to a Consume loop. Surface the misuse instead of
-		// stranding the registration.
+		// Second-layer check closes the TOCTOU window: Start may have run
+		// concurrently while CreateOrUpdateConsumer was in flight. Surface
+		// the misuse instead of stranding a registration that would never
+		// be attached to a Consume loop.
 		return oops.Code("AUDIT_PLUGIN_CONSUMER_INVALID_STATE").
 			With("plugin", cfg.PluginName).
 			Errorf("cannot add plugin consumer after Start")
@@ -378,8 +391,3 @@ type PluginHistoryStream interface {
 	Close() error
 }
 
-// itoaAckWait converts a duration to a short string for logs without
-// pulling in strconv.FormatFloat. Used only by debug-level helpers.
-func itoaAckWait(d time.Duration) string {
-	return strconv.FormatInt(int64(d/time.Millisecond), 10) + "ms"
-}

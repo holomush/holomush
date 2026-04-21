@@ -181,9 +181,13 @@ func TestSubscribeReattachesDetachedSession(t *testing.T) {
 	}, 2*time.Second, 10*time.Millisecond)
 	cancel()
 	// Bound the wait so the test fails fast if Subscribe stops returning
-	// on cancellation instead of hanging until the package timeout.
+	// on cancellation instead of hanging until the package timeout. Assert
+	// the returned value explicitly — a NoError check pins the happy-path
+	// cancellation contract (Subscribe wraps ctx.Canceled into nil per the
+	// gRPC conventions used by the other Subscribe tests in this file).
 	select {
-	case <-errCh:
+	case err := <-errCh:
+		assert.NoError(t, err)
 	case <-time.After(2 * time.Second):
 		t.Fatal("Subscribe did not return after ctx cancel")
 	}

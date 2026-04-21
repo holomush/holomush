@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
@@ -126,15 +125,6 @@ func TestDispatchUsesBackgroundWhenWorkerCtxNil(t *testing.T) {
 	}
 	require.NoError(t, pc.dispatch(msg))
 	assert.True(t, cli.called)
-}
-
-// TestItoaAckWaitFormatsMilliseconds covers the otherwise-unused itoaAckWait
-// debug helper. Low priority but eliminates a 0% coverage line.
-func TestItoaAckWaitFormatsMilliseconds(t *testing.T) {
-	t.Parallel()
-	// 1500ms → "1500ms"; 250ms → "250ms".
-	assert.Equal(t, "1500ms", itoaAckWait(1500*time.Millisecond))
-	assert.Equal(t, "250ms", itoaAckWait(250*time.Millisecond))
 }
 
 // TestDecodeEnvelopeRejectsUnknownCodec covers the codec.Resolve failure

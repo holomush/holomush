@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
@@ -63,17 +64,22 @@ func TestDeliveryMetadataForTestRejectsUnknownImpl(t *testing.T) {
 
 func TestDeliveryMetadataForTestReturnsMetadataForJetstreamImpl(t *testing.T) {
 	// Exercise the happy path — metadata call against a real delivery.
+	// Every blocking call is bounded so a JetStream delivery stall fails
+	// fast instead of hanging the CI job.
 	embedded := eventbustest.New(t)
 	pub := embedded.Bus.Publisher()
 	sub := embedded.Bus.Subscriber()
 	subject := eventbus.Subject("events.main.metadata.test")
 	sessionID := freshSessionID()
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
 	stream, err := sub.OpenSession(ctx, sessionID, []eventbus.Subject{subject})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 	require.NoError(t, pub.Publish(ctx, newTestEnvelope(subject, []byte("m"))))
-	d, err := stream.Next(ctx)
+	nextCtx, nextCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer nextCancel()
+	d, err := stream.Next(nextCtx)
 	require.NoError(t, err)
 	md, err := eventbus.DeliveryMetadataForTest(d)
 	require.NoError(t, err)

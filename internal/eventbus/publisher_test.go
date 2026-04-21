@@ -12,6 +12,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
@@ -66,7 +67,11 @@ func (errCodec) Decode(_ context.Context, _ []byte, _ codec.Key) ([]byte, error)
 
 func goodEvent(subject eventbus.Subject) eventbus.Event {
 	return eventbus.Event{
-		ID:        ulid.MustNew(ulid.Timestamp(time.Now()), testEntropy),
+		// Use the project-standard helper for Event IDs (core.NewULID is
+		// monotonic within a millisecond); ulid.MustNew would mint a
+		// non-monotonic fresh-entropy ULID which is the wrong tool for
+		// event IDs per CLAUDE.md.
+		ID:        core.NewULID(),
 		Subject:   subject,
 		Type:      eventbus.Type("scene.pose"),
 		Timestamp: time.Now().UTC(),

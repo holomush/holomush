@@ -86,7 +86,9 @@ func TestHotTierForwardReadReturnsPublishedEvents(t *testing.T) {
 
 	var got []ulid.ULID
 	for {
-		ev, nextErr := stream.Next(context.Background())
+		nextCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ev, nextErr := stream.Next(nextCtx)
+		cancel()
 		if errors.Is(nextErr, io.EOF) {
 			break
 		}
@@ -125,7 +127,9 @@ func TestHotTierBackwardReadUsesStartSeq(t *testing.T) {
 	const pageSize = 3
 	var got []ulid.ULID
 	for {
-		ev, nextErr := stream.Next(context.Background())
+		nextCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ev, nextErr := stream.Next(nextCtx)
+		cancel()
 		if errors.Is(nextErr, io.EOF) {
 			break
 		}
@@ -162,7 +166,9 @@ func TestHotTierUnknownSubjectReturnsEmpty(t *testing.T) {
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
-	_, err = stream.Next(context.Background())
+	nextCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = stream.Next(nextCtx)
 	require.ErrorIs(t, err, io.EOF, "unknown subject must drain as io.EOF")
 }
 
@@ -181,7 +187,9 @@ func TestHotTierBackwardReadOnEmptyStream(t *testing.T) {
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
-	_, err = stream.Next(context.Background())
+	nextCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = stream.Next(nextCtx)
 	require.ErrorIs(t, err, io.EOF, "empty stream must drain as io.EOF")
 }
 
