@@ -6,6 +6,9 @@ package plugins
 
 import (
 	"context"
+	"time"
+
+	"github.com/oklog/ulid/v2"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/grpc/focus"
@@ -81,6 +84,14 @@ type AttributeResolverProvider interface {
 	AttributeResolverClient(pluginName string) pluginv1.AttributeResolverServiceClient
 }
 
+// PluginAuditClientProvider is an optional interface that binary-plugin
+// hosts implement so the eventbus/audit per-plugin consumer and history
+// router can reach the plugin's PluginAuditService. Returns nil when the
+// plugin is not loaded or did not register the service.
+type PluginAuditClientProvider interface {
+	PluginAuditClient(pluginName string) pluginv1.PluginAuditServiceClient
+}
+
 // PluginIntentEmitter routes plugin-owned emit intents through the shared host
 // event emission path.
 type PluginIntentEmitter interface {
@@ -93,10 +104,17 @@ type EventEmitterConfigurer interface {
 	SetEventEmitter(emitter PluginIntentEmitter)
 }
 
+// HistoryReader provides read-only replay access for host functions (e.g.
+// query_stream_history in Lua plugins). Satisfied by MemoryEventStore in
+// unit tests and by a JetStream-backed reader in production.
+type HistoryReader interface {
+	ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error)
+}
+
 // FocusDepsConfigurer is an optional interface for hosts that need the focus
-// coordinator and event store injected after construction. These dependencies
+// coordinator and history reader injected after construction. These dependencies
 // are created during gRPC subsystem Start, which runs after plugin loading.
 type FocusDepsConfigurer interface {
 	SetFocusCoordinator(fc focus.Coordinator)
-	SetEventStore(es core.EventStore)
+	SetHistoryReader(hr HistoryReader)
 }

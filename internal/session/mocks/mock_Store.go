@@ -1133,54 +1133,6 @@ func (_c *MockStore_UpdateActivity_Call) RunAndReturn(run func(context.Context, 
 	return _c
 }
 
-// UpdateCursors provides a mock function with given fields: ctx, id, cursors
-func (_m *MockStore) UpdateCursors(ctx context.Context, id string, cursors map[string]ulid.ULID) error {
-	ret := _m.Called(ctx, id, cursors)
-
-	if len(ret) == 0 {
-		panic("no return value specified for UpdateCursors")
-	}
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, map[string]ulid.ULID) error); ok {
-		r0 = rf(ctx, id, cursors)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// MockStore_UpdateCursors_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateCursors'
-type MockStore_UpdateCursors_Call struct {
-	*mock.Call
-}
-
-// UpdateCursors is a helper method to define mock.On call
-//   - ctx context.Context
-//   - id string
-//   - cursors map[string]ulid.ULID
-func (_e *MockStore_Expecter) UpdateCursors(ctx interface{}, id interface{}, cursors interface{}) *MockStore_UpdateCursors_Call {
-	return &MockStore_UpdateCursors_Call{Call: _e.mock.On("UpdateCursors", ctx, id, cursors)}
-}
-
-func (_c *MockStore_UpdateCursors_Call) Run(run func(ctx context.Context, id string, cursors map[string]ulid.ULID)) *MockStore_UpdateCursors_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(map[string]ulid.ULID))
-	})
-	return _c
-}
-
-func (_c *MockStore_UpdateCursors_Call) Return(_a0 error) *MockStore_UpdateCursors_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *MockStore_UpdateCursors_Call) RunAndReturn(run func(context.Context, string, map[string]ulid.ULID) error) *MockStore_UpdateCursors_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // UpdateFocusMemberships provides a mock function with given fields: ctx, sessionID, m
 func (_m *MockStore) UpdateFocusMemberships(ctx context.Context, sessionID string, m session.FocusMutator) error {
 	ret := _m.Called(ctx, sessionID, m)

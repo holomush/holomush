@@ -93,6 +93,13 @@ type Manifest struct {
 	Provides []string    `yaml:"provides,omitempty" json:"provides,omitempty"`
 	Storage  StorageType `yaml:"storage,omitempty" json:"storage,omitempty"`
 
+	// Audit declares NATS subject patterns the plugin owns for JetStream
+	// audit purposes. When set, the host routes AuditEvent deliveries
+	// matching these patterns to the plugin's PluginAuditService RPC
+	// instead of the host events_audit projection, and QueryHistory calls
+	// on those subjects are forwarded to the plugin's QueryHistory RPC.
+	Audit []AuditBlock `yaml:"audit,omitempty" json:"audit,omitempty"`
+
 	// ABAC trust boundary fields
 	ResourceTypes []string     `yaml:"resource_types,omitempty" json:"resource_types,omitempty"`
 	Actions       []string     `yaml:"actions,omitempty" json:"actions,omitempty"`
@@ -150,6 +157,46 @@ var validVerbFormats = map[string]bool{
 
 var validDisplayTargets = map[string]bool{
 	"terminal": true, "state": true, "both": true,
+}
+
+// AuditBlock declares a set of NATS subject patterns the plugin owns for
+// JetStream audit routing. Subjects matching any Subjects pattern are
+// excluded from the host events_audit projection and routed to the
+// plugin's PluginAuditService.AuditEvent RPC. QueryHistory for a matching
+// subject is forwarded to the plugin's PluginAuditService.QueryHistory.
+//
+// Schema and Table are advisory (used by operators to introspect where
+// the plugin stores its audit rows); the host does not validate or touch
+// the plugin's storage directly.
+type AuditBlock struct {
+	// Subjects is the list of NATS subject patterns owned by this
+	// plugin. Each pattern follows NATS wildcard rules: `*` matches
+	// exactly one token, `>` matches one-or-more terminal tokens.
+	// Example: "events.*.scene.>".
+	Subjects []string `yaml:"subjects" json:"subjects" jsonschema:"required"`
+
+	// Schema is the PostgreSQL schema name where the plugin stores its
+	// audit rows. Advisory — used by operators to introspect audit
+	// storage. Example: "plugin_core_scenes".
+	Schema string `yaml:"schema,omitempty" json:"schema,omitempty"`
+
+	// Table is the table name in Schema that holds audit rows. Advisory.
+	// Example: "scene_log".
+	Table string `yaml:"table,omitempty" json:"table,omitempty"`
+}
+
+// Validate checks audit-block constraints.
+func (a *AuditBlock) Validate() error {
+	if len(a.Subjects) == 0 {
+		return oops.In("manifest").New("audit block must declare at least one subject pattern")
+	}
+	for i, s := range a.Subjects {
+		if strings.TrimSpace(s) == "" {
+			return oops.In("manifest").With("subject_index", i).
+				New("audit subject pattern must not be empty")
+		}
+	}
+	return nil
 }
 
 // CommandSpec declares a command provided by a plugin.
@@ -426,6 +473,19 @@ func (m *Manifest) Validate() error {
 				New("duplicate verb type")
 		}
 		seenVerbs[v.Type] = true
+	}
+
+	// Validate audit blocks — binary plugins only (gRPC service requirement).
+	if len(m.Audit) > 0 {
+		if m.Type != TypeBinary {
+			return oops.In("manifest").With("name", m.Name).With("type", m.Type).
+				New("audit can only be declared by binary plugins (requires PluginAuditService gRPC server)")
+		}
+		for i := range m.Audit {
+			if err := m.Audit[i].Validate(); err != nil {
+				return oops.In("manifest").With("plugin", m.Name).With("audit_index", i).Wrap(err)
+			}
+		}
 	}
 
 	// Validate provides — only binary plugins can provide services.

@@ -91,14 +91,14 @@ func registerTestCommands(t *testing.T, reg *command.Registry) {
 
 // newDispatcherTestServer creates a CoreServer wired with the unified
 // command dispatcher, using in-memory stores for testing.
-func newDispatcherTestServer(t *testing.T, store core.EventStore, opts ...CoreServerOption) *CoreServer {
+func newDispatcherTestServer(t *testing.T, store core.EventAppender, opts ...CoreServerOption) *CoreServer {
 	t.Helper()
 	return newHandleCommandServer(t, store, nil, opts...)
 }
 
 // newDispatcherTestServerWithAliases creates a CoreServer with MUSH aliases
 // (`:`, `;`, `"`) loaded into the alias cache, matching production bootstrap.
-func newDispatcherTestServerWithAliases(t *testing.T, store core.EventStore, opts ...CoreServerOption) *CoreServer {
+func newDispatcherTestServerWithAliases(t *testing.T, store core.EventAppender, opts ...CoreServerOption) *CoreServer {
 	t.Helper()
 	engine := core.NewEngine(store)
 	sessStore := session.NewMemStore()

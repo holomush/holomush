@@ -1,4 +1,10 @@
-# Event Delivery Architecture
+# Event Delivery Architecture (Superseded)
+
+:::warning Superseded
+This page describes the former LISTEN/NOTIFY-based delivery architecture. It has
+been replaced by JetStream as of the F1-F7 EventBus cutover. See
+[Event Store & EventBus](./event-store.md) for current information.
+:::
 
 This document describes how events flow from command execution to client delivery
 in HoloMUSH. It covers the notification-driven replay pattern, the Subscribe
@@ -169,8 +175,6 @@ selects on the merged notification channel, a merged error channel, and
 
 ## Related
 
-- Spec: `docs/specs/2026-03-20-event-delivery-redesign.md`
-- Implementation: `internal/grpc/server.go`, `internal/grpc/location_follow.go`
-- EventStore interface: `internal/core/store.go`
-- PostgreSQL implementation: `internal/core/store_postgres.go`
-- In-memory implementation (unit tests only): `internal/core/store_memory.go`
+- **Current architecture**: [Event Store & EventBus](./event-store.md)
+- Superseded spec: `docs/specs/2026-03-20-event-delivery-redesign.md` (LISTEN/NOTIFY era)
+- JetStream design spec: `docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md`

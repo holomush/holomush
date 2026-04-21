@@ -202,15 +202,22 @@ WHERE datname = 'holomush'
 GROUP BY state;
 ```
 
-### LISTEN/NOTIFY Listeners
+### JetStream Consumer Health
 
-HoloMUSH uses PostgreSQL LISTEN/NOTIFY for real-time events:
+HoloMUSH uses an embedded NATS JetStream server for real-time event delivery.
+Check consumer state via the NATS monitoring port (default: disabled; set
+`event_bus.monitor_port` in config to enable):
 
-```sql
-SELECT pid, datname, usename, application_name, state, query
-FROM pg_stat_activity
-WHERE query LIKE 'LISTEN%' OR wait_event_type = 'Client';
+```bash
+# List stream info (requires nats CLI and monitoring port enabled)
+nats stream info EVENTS --server nats://localhost:<monitor_port>
+
+# Check audit projection consumer lag
+nats consumer info EVENTS host_audit_projection
 ```
+
+Prometheus metric `audit_projection_lag_seconds` alerts at > 5s lag. The
+embedded server does not open a network port by default (`DontListen: true`).
 
 ## Index Health
 

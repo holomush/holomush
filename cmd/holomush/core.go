@@ -31,6 +31,7 @@ import (
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/logging"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"github.com/holomush/holomush/internal/session"
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
 	"github.com/holomush/holomush/internal/store"
@@ -316,9 +317,87 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 
 	// AuditProjection drains the EVENTS stream into events_audit so every
 	// published message lands in the forever-archive PostgreSQL table.
-	// Depends on DB (target table) and EventBus (JetStream source); the
-	// orchestrator enforces that ordering via DependsOn.
+	// Depends on DB (target table), EventBus (JetStream source), and
+	// Plugins (F5: per-plugin consumers need plugin manifests + gRPC
+	// clients); the orchestrator enforces that ordering via DependsOn.
 	auditSub := audit.NewSubsystem(eventBusSub, dbSub, audit.Config{})
+
+	// F5: wire per-plugin audit plumbing. Both the OwnerMap (drives host-
+	// projection ack-and-skip) and the per-plugin consumer manager (drives
+	// dispatch to the plugin's PluginAuditService.AuditEvent RPC) are
+	// built from the same plugin-manifest snapshot inside a single lazy
+	// provider. Evaluated once at audit.Subsystem.Start, after the plugin
+	// subsystem has loaded manifests per DependsOn.
+	auditSub.SetLateInitProvider(func() (*audit.OwnerMap, *audit.PluginConsumerManager) {
+		mgr := pluginSub.Manager()
+		if mgr == nil {
+			return nil, nil
+		}
+		decls := mgr.AuditSubjects()
+		if len(decls) == 0 {
+			return nil, nil
+		}
+
+		js := eventBusSub.JS()
+		if js == nil {
+			// With no JetStream we cannot register plugin consumers at
+			// all. Returning a nil OwnerMap means the host projection
+			// stays the sole audit sink for every subject, which is
+			// the correct degraded behavior: we must never mark a
+			// subject as plugin-owned when no consumer is running.
+			slog.Warn("plugin audit consumer manager: JetStream not available; host projection will handle all audit subjects")
+			return nil, nil
+		}
+		pcm := audit.NewPluginConsumerManager(js)
+		byPlugin := make(map[string][]string)
+		for _, d := range decls {
+			byPlugin[d.PluginName] = append(byPlugin[d.PluginName], d.Subject)
+		}
+		// Only add a SubjectOwner entry for subjects whose plugin consumer
+		// was successfully registered. Without this, the host projection
+		// would ack-and-skip those subjects while no plugin consumer was
+		// running to archive them, dropping events from every audit sink.
+		owners := make([]audit.SubjectOwner, 0, len(decls))
+		for pluginName, subjects := range byPlugin {
+			client, ok := mgr.PluginAuditClient(pluginName)
+			if !ok {
+				slog.Warn("plugin declared audit subjects but no PluginAuditService client is registered; host projection will archive these subjects",
+					"plugin", pluginName,
+					"subjects", subjects)
+				continue
+			}
+			if addErr := pcm.Add(context.Background(), audit.PluginConsumerConfig{
+				PluginName: pluginName,
+				Subjects:   subjects,
+				Client:     pluginAuditClientAdapter{client: client},
+			}); addErr != nil {
+				slog.Error("plugin audit consumer registration failed; host projection will archive these subjects",
+					"plugin", pluginName,
+					"subjects", subjects,
+					"error", addErr)
+				continue
+			}
+			for _, subject := range subjects {
+				owners = append(owners, audit.SubjectOwner{
+					PluginName: pluginName,
+					Pattern:    subject,
+				})
+			}
+		}
+		if len(owners) == 0 {
+			// Every plugin consumer registration failed (or no plugins
+			// declared subjects); leave the OwnerMap nil so the host
+			// projection archives everything.
+			return nil, pcm
+		}
+		ownerMap, omErr := audit.NewOwnerMap(owners)
+		if omErr != nil {
+			slog.Error("failed to build audit OwnerMap from successfully registered plugin consumers; defaulting to host-everything",
+				"error", omErr)
+			return nil, pcm
+		}
+		return ownerMap, pcm
+	})
 
 	grpcSub := newGRPCSubsystem(grpcSubsystemConfig{
 		DB:             dbSub,
@@ -328,6 +407,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		Plugins:        pluginSub,
 		Sessions:       sessionSub,
 		Bootstrap:      bootstrapSub,
+		EventBus:       eventBusSub,
 		GRPCAddr:       cfg.GRPCAddr,
 		TLSConfig:      tlsConfig,
 		SessionTTL:     sessionTTL,
@@ -471,6 +551,28 @@ func parseSessionConfig(cfg *coreConfig) (sessionTTL, reaperInterval time.Durati
 // sessionBridge adapts SessionSubsystem to pluginsetup.SessionProvider.
 type sessionBridge struct {
 	sub *sessionsetup.SessionSubsystem
+}
+
+// pluginAuditClientAdapter bridges the proto-generated
+// pluginv1.PluginAuditServiceClient to the narrow audit.PluginAuditClient
+// interface. Keeps the audit package free of generated-proto dependency
+// for the dispatch path (AuditEvent only), while the manager-side
+// resolver still returns the full proto client.
+type pluginAuditClientAdapter struct {
+	client pluginv1.PluginAuditServiceClient
+}
+
+// AuditEvent forwards the RPC. gRPC CallOption is empty — the host owns
+// dispatch context (timeout, metadata) at the consumer layer. Errors are
+// wrapped downstream by the plugin consumer's dispatch path
+// (AUDIT_PLUGIN_DISPATCH_FAILED), so returning the raw RPC error here is
+// correct.
+func (a pluginAuditClientAdapter) AuditEvent(ctx context.Context, req *pluginv1.AuditEventRequest) (*pluginv1.AuditEventResponse, error) {
+	resp, err := a.client.AuditEvent(ctx, req)
+	if err != nil {
+		return nil, oops.Code("AUDIT_PLUGIN_RPC_FAILED").Wrap(err)
+	}
+	return resp, nil
 }
 
 func (b *sessionBridge) SessionStore() session.Access {

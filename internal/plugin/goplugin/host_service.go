@@ -60,7 +60,9 @@ func (s *pluginHostServiceServer) EmitEvent(ctx context.Context, req *pluginv1.P
 		})
 	}
 	if err := emitter.Emit(emitCtx, s.pluginName, pluginsdk.EmitIntent{
-		Stream:  req.GetStream(),
+		// TODO(F5): proto request field renames to Subject; keep Stream on
+		// the wire until the proto regeneration task runs.
+		Subject: req.GetStream(),
 		Type:    pluginsdk.EventType(req.GetEventType()),
 		Payload: string(req.GetPayload()),
 	}); err != nil {
@@ -229,9 +231,9 @@ func (s *pluginHostServiceServer) QueryStreamHistory(ctx context.Context, req *p
 	if s.host == nil {
 		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
 	}
-	es := s.host.EventStore()
-	if es == nil {
-		return nil, oops.With("plugin", s.pluginName).New("event store not configured")
+	hr := s.host.HistoryReader()
+	if hr == nil {
+		return nil, oops.With("plugin", s.pluginName).New("history reader not configured")
 	}
 
 	count := int(req.GetCount())
@@ -249,7 +251,7 @@ func (s *pluginHostServiceServer) QueryStreamHistory(ctx context.Context, req *p
 		notBefore = time.UnixMilli(req.GetNotBeforeMs()).UTC()
 	}
 
-	events, err := es.ReplayTail(ctx, req.GetStream(), count, notBefore, ulid.ULID{})
+	events, err := hr.ReplayTail(ctx, req.GetStream(), count, notBefore, ulid.ULID{})
 	if err != nil {
 		return nil, oops.With("plugin", s.pluginName).With("stream", req.GetStream()).Wrap(err)
 	}

@@ -15,8 +15,9 @@ import "fmt"
 type ReplayMode int
 
 const (
-	// ReplayModeFromCursor replays from the stored per-stream cursor in
-	// session.Info.EventCursors, or from ULID zero if no cursor is set.
+	// ReplayModeFromCursor replays from ULID zero (stream beginning).
+	// EventCursors were removed in F7; cursor tracking is now fully
+	// delegated to the JetStream consumer layer.
 	ReplayModeFromCursor ReplayMode = iota
 
 	// ReplayModeBoundedTail replays the most recent TailCount events on

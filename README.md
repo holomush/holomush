@@ -75,8 +75,8 @@ telnet localhost 4201
 - **Go core** with event-oriented architecture
 - **Dual protocol**: telnet + web (planned)
 - **Lua plugins** (gopher-lua) with go-plugin for complex extensions (planned)
-- **PostgreSQL** for production data (in-memory store available for development)
-- **ABAC engine** with Cedar-inspired DSL, in-memory policy cache, pg_notify invalidation
+- **NATS JetStream** (embedded) for real-time event delivery; **PostgreSQL** for identity, ABAC, and audit projection
+- **ABAC engine** with Cedar-inspired DSL, in-memory policy cache with push-based invalidation
 - **SvelteKit web client** with terminal UI, ANSI rendering, and session persistence
 
 See [Architecture](site/docs/contributors/architecture.md) for details.

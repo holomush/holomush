@@ -80,6 +80,15 @@ type Config struct {
 	// disables the cap (unlimited redelivery — not recommended for
 	// production). Defaults to DefaultMaxDeliver via Defaults.
 	MaxDeliver int
+
+	// Owners is the subject-ownership map built from plugin manifests.
+	// The projection ack-and-skips messages whose subject resolves to a
+	// plugin owner — per-plugin consumers (registered in F5) project
+	// those into plugin-owned audit schemas independently.
+	//
+	// Nil means "no plugins declared ownership; host owns everything",
+	// preserving Phase A behavior.
+	Owners *OwnerMap
 }
 
 // Defaults fills any zero-valued fields with defaults.
@@ -125,12 +134,19 @@ type PoolProvider interface {
 // shutdown racing with a signal handler) cannot observe worker = nil
 // while the first Stop is still inside drain().
 type Subsystem struct {
-	mu       sync.Mutex
-	jsProv   JSProvider
-	poolProv PoolProvider
-	cfg      Config
-	cancel   context.CancelFunc
-	worker   *projection
+	mu        sync.Mutex
+	jsProv    JSProvider
+	poolProv  PoolProvider
+	cfg       Config
+	cancel    context.CancelFunc
+	worker    *projection
+	pluginMgr *PluginConsumerManager
+	// lateInit is called once from Start (before newProjection) so the
+	// owner map and per-plugin consumer manager can be built from plugin
+	// manifests that are only available after SubsystemPlugins has
+	// started. The provider MUST NOT call back into Subsystem setters
+	// (would deadlock s.mu). A nil lateInit keeps Phase A behavior.
+	lateInit func() (*OwnerMap, *PluginConsumerManager)
 }
 
 // NewSubsystem constructs an audit projection subsystem. jsProv and
@@ -145,12 +161,31 @@ func NewSubsystem(jsProv JSProvider, poolProv PoolProvider, cfg Config) *Subsyst
 // ID returns lifecycle.SubsystemAuditProjection.
 func (s *Subsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemAuditProjection }
 
+// SetLateInitProvider registers a single late-bound provider that
+// returns both the OwnerMap (for host projection subject-exclusion) and
+// the PluginConsumerManager (for dispatching plugin-owned messages to
+// the plugin's PluginAuditService). The provider is evaluated once at
+// Start, after the plugin subsystem has started per DependsOn.
+//
+// Either return value may be nil: a nil OwnerMap preserves the Phase A
+// "host owns everything" behavior, and a nil manager disables per-
+// plugin dispatch. The provider MUST NOT call back into Subsystem
+// setters — Start evaluates it under s.mu.
+func (s *Subsystem) SetLateInitProvider(p func() (*OwnerMap, *PluginConsumerManager)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lateInit = p
+}
+
 // DependsOn returns the subsystems that must be started first:
-// database (events_audit target table) and eventbus (JetStream source).
+// database (events_audit target table), eventbus (JetStream source),
+// and plugins (needed so per-plugin audit consumers can resolve their
+// PluginAuditService clients via the plugin manager's registered hosts).
 func (s *Subsystem) DependsOn() []lifecycle.SubsystemID {
 	return []lifecycle.SubsystemID{
 		lifecycle.SubsystemDatabase,
 		lifecycle.SubsystemEventBus,
+		lifecycle.SubsystemPlugins,
 	}
 }
 
@@ -172,6 +207,19 @@ func (s *Subsystem) Start(ctx context.Context) error {
 	if pool == nil {
 		return oops.Code("AUDIT_DEP_NOT_STARTED").Errorf("database pool not available at audit.Start")
 	}
+	// Late-bind the owner map + per-plugin consumer manager if a
+	// provider was installed (F5): plugin manifests are only available
+	// after the plugin subsystem has started, which is guaranteed by the
+	// DependsOn on SubsystemPlugins.
+	if s.lateInit != nil {
+		owners, pcm := s.lateInit()
+		if owners != nil {
+			s.cfg.Owners = owners
+		}
+		if pcm != nil {
+			s.pluginMgr = pcm
+		}
+	}
 	p, err := newProjection(ctx, js, pool, s.cfg)
 	if err != nil {
 		return oops.Code("AUDIT_PROJECTION_START_FAILED").Wrap(err)
@@ -183,6 +231,26 @@ func (s *Subsystem) Start(ctx context.Context) error {
 	}
 	s.worker = p
 	s.cancel = cancel
+	// F5: start per-plugin audit consumers. Failure here is treated as a
+	// hard Start failure because a misconfigured plugin consumer would
+	// leave plugin-owned subjects without any audit sink (the host
+	// projection skips them). The error path rolls back the host
+	// projection we just started so lifecycle is all-or-nothing.
+	if s.pluginMgr != nil {
+		if err := s.pluginMgr.Start(workerCtx); err != nil {
+			cancel()
+			// Bound the rollback drain by DefaultDrainTimeout so a slow
+			// host projection cannot block Start() indefinitely on the
+			// plugin-manager failure path. Matches the normal Stop()
+			// drain contract.
+			rollbackCtx, rollbackCancel := context.WithTimeout(context.Background(), DefaultDrainTimeout)
+			defer rollbackCancel()
+			_ = p.drain(rollbackCtx) //nolint:errcheck // best-effort
+			s.worker = nil
+			s.cancel = nil
+			return err
+		}
+	}
 	return nil
 }
 
@@ -203,10 +271,19 @@ func (s *Subsystem) Stop(ctx context.Context) error {
 		s.cancel()
 		s.cancel = nil
 	}
+	// Drain per-plugin consumers before the host projection so a plugin
+	// cannot keep dispatching while the host projection is tearing down.
+	var pluginErr error
+	if s.pluginMgr != nil {
+		pluginErr = s.pluginMgr.Stop(ctx)
+	}
 	w := s.worker
 	err := w.drain(ctx)
 	s.worker = nil
-	return err
+	if err != nil {
+		return err
+	}
+	return pluginErr
 }
 
 // AwaitDrained is a test-only helper that blocks until the consumer has

@@ -6,7 +6,7 @@ package core
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/samber/oops"
@@ -42,46 +42,36 @@ type LeavePayload struct {
 	Reason        string `json:"reason"`
 }
 
-// EngineOption configures a new Engine.
-type EngineOption func(*engineConfig)
-
-type engineConfig struct {
-	productionGuardrail bool
-}
-
-// WithProductionGuardrail enables the runtime assertion that the engine's
-// store is a *core.EventWriter. Enforces invariant I1 (EventWriter
-// serialization) in production wiring. Test constructors typically omit
-// this to allow lightweight in-memory stores for pure-logic tests.
-func WithProductionGuardrail() EngineOption {
-	return func(c *engineConfig) { c.productionGuardrail = true }
-}
-
 // Engine is the core game engine.
 type Engine struct {
-	store EventStore
+	store EventAppender
 }
 
 // NewEngine creates a new game engine.
-func NewEngine(store EventStore, opts ...EngineOption) *Engine {
-	cfg := engineConfig{}
-	for _, opt := range opts {
-		opt(&cfg)
-	}
-	if cfg.productionGuardrail {
-		// Check BOTH the concrete type AND non-nil. A Go type assertion on an
-		// interface holding (*EventWriter)(nil) succeeds (ok=true), which would
-		// let construction proceed and fail later at first Append. Reject here
-		// so startup fails fast.
-		writer, ok := store.(*EventWriter)
-		if !ok || writer == nil {
-			panic(fmt.Sprintf(
-				"core.NewEngine: production mode requires non-nil *EventWriter store (I1 guardrail). "+
-					"Got %T. See docs/superpowers/specs/2026-04-18-session-lifecycle-as-events-design.md Design Decision #8.",
-				store))
-		}
+//
+// Panics when store is nil so the misconfiguration surfaces at construction
+// time rather than deferring to the first Handle* call (which would panic on
+// a nil-receiver dereference of e.store). Detects both untyped nil and
+// typed-nil interface values (e.g. (*MemoryEventStore)(nil)) so callers
+// truly fail fast at construction.
+func NewEngine(store EventAppender) *Engine {
+	if store == nil || isNilEventAppender(store) {
+		panic("core.NewEngine: nil EventAppender")
 	}
 	return &Engine{store: store}
+}
+
+// isNilEventAppender detects typed-nil interface values whose underlying
+// concrete kind is nilable (pointer, slice, map, chan, func, interface).
+// Returns false for non-nilable kinds (struct, value-receiver fakes).
+func isNilEventAppender(store EventAppender) bool {
+	v := reflect.ValueOf(store)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
 
 // HandleSay processes a say command.

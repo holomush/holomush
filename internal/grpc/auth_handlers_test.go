@@ -296,7 +296,7 @@ func TestSelectCharacter_Reattach(t *testing.T) {
 		CharacterName: "Alice",
 		LocationID:    locID,
 		Status:        session.StatusDetached,
-		EventCursors:  map[string]ulid.ULID{},
+
 		CreatedAt:     time.Now(),
 		UpdatedAt:     time.Now(),
 	}))
@@ -798,7 +798,7 @@ func TestLogoutEmitsSessionEndedForEachChildGameSession(t *testing.T) {
 		PlayerID:        playerID,
 		PlayerSessionID: playerSessionID,
 		Status:          session.StatusActive,
-		EventCursors:    map[string]ulid.ULID{},
+
 		TTLSeconds:      1800,
 	}))
 	require.NoError(t, sessStore.Set(ctx, sess2ID.String(), &session.Info{
@@ -809,7 +809,7 @@ func TestLogoutEmitsSessionEndedForEachChildGameSession(t *testing.T) {
 		PlayerID:        playerID,
 		PlayerSessionID: playerSessionID,
 		Status:          session.StatusActive,
-		EventCursors:    map[string]ulid.ULID{},
+
 		TTLSeconds:      1800,
 	}))
 
@@ -1942,7 +1942,7 @@ func TestLogoutFanoutContinuesAfterIndividualSessionErrors(t *testing.T) {
 		PlayerID:        playerID,
 		PlayerSessionID: playerSessionID,
 		Status:          session.StatusActive,
-		EventCursors:    map[string]ulid.ULID{},
+
 		TTLSeconds:      1800,
 	}))
 	require.NoError(t, sessStore.Set(ctx, sess2ID, &session.Info{
@@ -1953,7 +1953,7 @@ func TestLogoutFanoutContinuesAfterIndividualSessionErrors(t *testing.T) {
 		PlayerID:        playerID,
 		PlayerSessionID: playerSessionID,
 		Status:          session.StatusActive,
-		EventCursors:    map[string]ulid.ULID{},
+
 		TTLSeconds:      1800,
 	}))
 

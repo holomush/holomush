@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+name: Nightly Soak
+
+# Runs long-running chaos + soak tests for the JetStream event bus
+# (spec §8 "Chaos and soak"). Scheduled at 06:00 UTC daily; also
+# triggerable by hand via workflow_dispatch.
+#
+# The soak-tagged tests live alongside the integration tests under
+# test/integration/eventbus_e2e/ but carry the `soak` build tag so they
+# only fire from this workflow — `task pr-prep` stays fast for
+# per-PR runs.
+on:
+  schedule:
+    - cron: "0 6 * * *" # 06:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  soak:
+    name: Event Bus Soak
+    runs-on: namespace-profile-linux-amd64-4x8
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: go
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@v1.13.0
+
+      - name: Run eventbus soak suite
+        run: task soak:eventbus

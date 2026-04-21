@@ -114,6 +114,13 @@ func (s *SceneStore) Close() {
 	}
 }
 
+// Pool exposes the underlying pgxpool so sibling subsystems inside the
+// plugin (e.g. SceneAuditStore) can share a single connection pool.
+// MUST NOT be called before NewSceneStore returns successfully.
+func (s *SceneStore) Pool() *pgxpool.Pool {
+	return s.pool
+}
+
 // Create inserts a new scene row. The caller MUST populate ID, Title,
 // OwnerID, State, PoseOrder, and Visibility; defaults from the schema apply
 // for unset nullable fields.

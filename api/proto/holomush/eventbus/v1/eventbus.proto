@@ -22,6 +22,10 @@ enum ActorKind {
 message Actor {
   ActorKind kind = 1;
   bytes id = 2; // ULID (16 bytes); empty for system/unknown
+  // legacy_id carries a non-ULID actor identifier (e.g. a plugin name)
+  // bridged from core.Actor. Set only when id is empty; preserves actor
+  // identity for plugin-authored host events across JetStream/audit/history.
+  string legacy_id = 3;
 }
 
 // Event is the host-side envelope. Wire encoding is proto bytes in the

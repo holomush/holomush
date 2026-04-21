@@ -942,19 +942,21 @@ end
 	assert.Contains(t, logOutput, "string", "expected type name in warning")
 }
 
-func TestLuaHostDeliverEventMalformedEmitEventsWarnsOnMissingStream(t *testing.T) {
+func TestLuaHostDeliverEventMalformedEmitEventsWarnsOnMissingSubject(t *testing.T) {
 	dir := t.TempDir()
 
-	// Plugin returns event without stream field
+	// Plugin returns event without subject field. The second entry uses the
+	// new canonical `subject` key; the first is rejected because neither
+	// `subject` nor the legacy `stream` alias is set.
 	mainLua := `
 function on_event(event)
     return {
         {
             type = "test",
-            payload = "missing stream"
+            payload = "missing subject"
         },
         {
-            stream = "valid:1",
+            subject = "valid:1",
             type = "test",
             payload = "valid"
         }
@@ -974,7 +976,7 @@ end
 	defer closeHost(t, host)
 
 	manifest := &plugins.Manifest{
-		Name:      "warn-missing-stream",
+		Name:      "warn-missing-subject",
 		Version:   "1.0.0",
 		Type:      plugins.TypeLua,
 		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
@@ -984,17 +986,17 @@ end
 	require.NoError(t, err)
 
 	event := pluginsdk.Event{ID: "01ABC", Type: "say"}
-	emits, err := host.DeliverEvent(context.Background(), "warn-missing-stream", event)
+	emits, err := host.DeliverEvent(context.Background(), "warn-missing-subject", event)
 	require.NoError(t, err)
 
 	// Only the valid entry should be returned
 	require.Len(t, emits, 1)
 	assert.Equal(t, "valid:1", emits[0].Stream)
 
-	// Verify warning was logged for missing stream
+	// Verify warning was logged for missing subject
 	logOutput := logBuf.String()
-	assert.Contains(t, logOutput, "stream", "expected warning about missing stream field")
-	assert.Contains(t, logOutput, "warn-missing-stream", "expected plugin name in warning")
+	assert.Contains(t, logOutput, "subject", "expected warning about missing subject field")
+	assert.Contains(t, logOutput, "warn-missing-subject", "expected plugin name in warning")
 }
 
 func TestLuaHostDeliverEventMalformedEmitEventsWarnsOnMissingType(t *testing.T) {
@@ -1689,13 +1691,13 @@ func TestLuaHostSetFocusCoordinatorWithNilHostFuncsIsNoOp(t *testing.T) {
 	})
 }
 
-func TestLuaHostSetEventStoreWithNilHostFuncsIsNoOp(t *testing.T) {
-	// NewHost() creates a host without hostFuncs — SetEventStore must not panic.
+func TestLuaHostSetHistoryReaderWithNilHostFuncsIsNoOp(t *testing.T) {
+	// NewHost() creates a host without hostFuncs — SetHistoryReader must not panic.
 	host := pluginlua.NewHost()
 	defer closeHost(t, host)
 
 	require.NotPanics(t, func() {
-		host.SetEventStore(nil)
+		host.SetHistoryReader(nil)
 	})
 }
 
@@ -1710,14 +1712,14 @@ func TestLuaHostSetFocusCoordinatorWithHostFuncsInjectsOps(t *testing.T) {
 	})
 }
 
-func TestLuaHostSetEventStoreWithHostFuncsInjectsReader(t *testing.T) {
+func TestLuaHostSetHistoryReaderWithHostFuncsInjectsReader(t *testing.T) {
 	hf := hostfunc.New(nil)
 	host := pluginlua.NewHostWithFunctions(hf)
 	defer closeHost(t, host)
 
-	// nil event store is valid (late-binding to clear or defer injection).
+	// nil history reader is valid (late-binding to clear or defer injection).
 	require.NotPanics(t, func() {
-		host.SetEventStore(nil)
+		host.SetHistoryReader(nil)
 	})
 }
 

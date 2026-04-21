@@ -85,7 +85,24 @@ func TestSessionStreamRegistryRemoveStreamDelegatesToSend(t *testing.T) {
 	assert.False(t, update.add)
 }
 
-func TestStreamSenderAdapterSendPassesModeToRegistry(t *testing.T) {
+func TestStreamSenderAdapterSendPassesFromCursorToRegistry(t *testing.T) {
+	reg := NewSessionStreamRegistry()
+	ch := make(chan sessionStreamUpdate, 1)
+	reg.Register("sess-1", ch)
+	defer reg.Deregister("sess-1", ch)
+
+	adapter := NewStreamSenderAdapter(reg)
+	err := adapter.Send("sess-1", "scene:abc:ic", true, focus.ReplayModeFromCursor)
+	require.NoError(t, err)
+
+	update := <-ch
+	assert.Equal(t, "scene:abc:ic", update.stream)
+	assert.True(t, update.add)
+	assert.Equal(t, focus.ReplayModeFromCursor, update.replayMode)
+}
+
+func TestStreamSenderAdapterSendRejectsUnsupportedModeOnAdd(t *testing.T) {
+	// Adapter must enforce the same replay-mode contract as the registry.
 	reg := NewSessionStreamRegistry()
 	ch := make(chan sessionStreamUpdate, 1)
 	reg.Register("sess-1", ch)
@@ -93,12 +110,7 @@ func TestStreamSenderAdapterSendPassesModeToRegistry(t *testing.T) {
 
 	adapter := NewStreamSenderAdapter(reg)
 	err := adapter.Send("sess-1", "scene:abc:ic", true, focus.ReplayModeBoundedTail)
-	require.NoError(t, err)
-
-	update := <-ch
-	assert.Equal(t, "scene:abc:ic", update.stream)
-	assert.True(t, update.add)
-	assert.Equal(t, focus.ReplayModeBoundedTail, update.replayMode)
+	errutil.AssertErrorCode(t, err, "REPLAY_MODE_NOT_SUPPORTED")
 }
 
 func TestStreamSenderAdapterSendReturnsErrorForMissingSession(t *testing.T) {
@@ -122,19 +134,34 @@ func TestAddStreamDefaultsToFromCursor(t *testing.T) {
 	assert.Equal(t, focus.ReplayModeFromCursor, update.replayMode)
 }
 
-func TestAddStreamWithModeSendsReplayModeToControlChannel(t *testing.T) {
+func TestAddStreamWithModeAcceptsFromCursor(t *testing.T) {
+	reg := NewSessionStreamRegistry()
+	ch := make(chan sessionStreamUpdate, 4)
+	reg.Register("sess-1", ch)
+	defer reg.Deregister("sess-1", ch)
+
+	err := reg.AddStreamWithMode(context.Background(), "sess-1", "channel:x", session.ReplayModeFromCursor)
+	require.NoError(t, err)
+
+	update := <-ch
+	assert.Equal(t, "channel:x", update.stream)
+	assert.True(t, update.add)
+	assert.Equal(t, focus.ReplayModeFromCursor, update.replayMode)
+}
+
+func TestAddStreamWithModeRejectsUnsupportedModes(t *testing.T) {
+	// Post-F3 only ReplayModeFromCursor is honoured — BoundedTail /
+	// LiveOnly must fail explicitly rather than silently downgrade.
 	reg := NewSessionStreamRegistry()
 	ch := make(chan sessionStreamUpdate, 4)
 	reg.Register("sess-1", ch)
 	defer reg.Deregister("sess-1", ch)
 
 	err := reg.AddStreamWithMode(context.Background(), "sess-1", "channel:x", session.ReplayModeLiveOnly)
-	require.NoError(t, err)
+	errutil.AssertErrorCode(t, err, "REPLAY_MODE_NOT_SUPPORTED")
 
-	update := <-ch
-	assert.Equal(t, "channel:x", update.stream)
-	assert.True(t, update.add)
-	assert.Equal(t, session.ReplayModeLiveOnly, update.replayMode)
+	err = reg.AddStreamWithMode(context.Background(), "sess-1", "channel:x", session.ReplayModeBoundedTail)
+	errutil.AssertErrorCode(t, err, "REPLAY_MODE_NOT_SUPPORTED")
 }
 
 func TestSendCarriesReplayMode(t *testing.T) {

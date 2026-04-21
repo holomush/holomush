@@ -11,7 +11,18 @@ requires:
 
 provides:
   - holomush.scene.v1.SceneService
+  - holomush.plugin.v1.PluginAuditService
 emits: [scene]
+
+# Audit ownership (F5): core-scenes owns all events.*.scene.> subjects.
+# The host audit projection ack-and-skips these; deliveries are forwarded
+# to this plugin's PluginAuditService.AuditEvent RPC, which persists into
+# plugin_core_scenes.scene_log. QueryHistory for scene subjects routes to
+# this plugin's PluginAuditService.QueryHistory.
+audit:
+  - subjects: ["events.*.scene.>"]
+    schema: plugin_core_scenes
+    table: scene_log
 # Note: holomush.plugin.v1.AttributeResolverService is intentionally NOT
 # declared in provides. The host auto-registers it via the plugin's
 # RegisterAttributeResolver method (AttributeResolverProvider interface),

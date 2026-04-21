@@ -12,7 +12,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/prometheus/client_golang/prometheus"
@@ -81,25 +80,8 @@ func (s *stubAccess) UpdateLastWhispered(_ context.Context, _ string, _ string) 
 type stubEventStore struct{}
 
 func (s *stubEventStore) Append(_ context.Context, _ core.Event) error { return nil }
-func (s *stubEventStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
-	return nil, nil
-}
 
-func (s *stubEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
-	return ulid.ULID{}, nil
-}
-
-func (s *stubEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
-	return nil, nil, nil
-}
-
-func (s *stubEventStore) ReplayTail(context.Context, string, int, time.Time, ulid.ULID) ([]core.Event, error) {
-	return nil, nil
-}
-
-func (s *stubEventStore) SubscribeSession(context.Context) (core.Subscription, error) {
-	return nil, nil
-}
+var _ core.EventAppender = (*stubEventStore)(nil)
 
 func TestDispatcherDispatch(t *testing.T) {
 	reg := NewRegistry()
@@ -2148,25 +2130,7 @@ func (s *appendCountingEventStore) Append(_ context.Context, _ core.Event) error
 	return nil
 }
 
-func (s *appendCountingEventStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
-	return nil, nil
-}
-
-func (s *appendCountingEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
-	return ulid.ULID{}, nil
-}
-
-func (s *appendCountingEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
-	return nil, nil, nil
-}
-
-func (s *appendCountingEventStore) ReplayTail(context.Context, string, int, time.Time, ulid.ULID) ([]core.Event, error) {
-	return nil, nil
-}
-
-func (s *appendCountingEventStore) SubscribeSession(context.Context) (core.Subscription, error) {
-	return nil, nil
-}
+var _ core.EventAppender = (*appendCountingEventStore)(nil)
 
 func TestDispatcherAttachesAuditContextToDispatchContext(t *testing.T) {
 	// Verify that after Dispatch is called, the context seen by the

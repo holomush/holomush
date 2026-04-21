@@ -6,7 +6,6 @@ package grpc
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/samber/oops"
 
@@ -14,13 +13,19 @@ import (
 	"github.com/holomush/holomush/internal/session"
 )
 
-// sessionStreamUpdate is sent on a session's control channel to add or remove a stream.
+// sessionStreamUpdate is sent on a session's control channel to add or
+// remove a stream. Pre-F3 this carried ReplayMode hints (BoundedTail
+// tailCount/notBefore) that the old replay machinery consumed; post-F3
+// all replay lives inside JetStream's durable consumer so only the
+// stream + add/remove bit remain.
+//
+// Note: replayMode is still set by callers for forward compatibility
+// with F5+, but the Subscribe handler ignores it — SessionStream.SetFilters
+// replaces explicit replay logic entirely.
 type sessionStreamUpdate struct {
 	stream     string
 	add        bool             // true = subscribe, false = unsubscribe
-	replayMode focus.ReplayMode // only meaningful when add == true
-	tailCount  int              // for ReplayModeBoundedTail
-	notBefore  time.Time        // for ReplayModeBoundedTail
+	replayMode focus.ReplayMode // advisory post-F3; ignored by Subscribe handler
 }
 
 // SessionStreamRegistry maps active session IDs to their Subscribe control channels.
@@ -95,7 +100,20 @@ func (r *SessionStreamRegistry) AddStream(_ context.Context, sessionID, stream s
 }
 
 // AddStreamWithMode implements plugins.StreamRegistry. Subscribes with explicit replay mode.
+//
+// Post-F3 the Subscribe handler uses cursor-mode replay via
+// SessionStream.SetFilters exclusively; BoundedTail and LiveOnline are not
+// honoured. We reject those modes eagerly (option A of TODO(holomush-6uvc))
+// instead of silently downgrading, so plugins requesting a specific replay
+// window see an explicit error rather than the wrong behaviour.
 func (r *SessionStreamRegistry) AddStreamWithMode(_ context.Context, sessionID, stream string, mode session.ReplayMode) error {
+	if mode != focus.ReplayModeFromCursor {
+		return oops.Code("REPLAY_MODE_NOT_SUPPORTED").
+			With("session_id", sessionID).
+			With("stream", stream).
+			With("mode", mode).
+			Errorf("replay mode %v is not supported post-F3; only ReplayModeFromCursor is honored", mode)
+	}
 	return r.Send(sessionID, sessionStreamUpdate{stream: stream, add: true, replayMode: mode})
 }
 
@@ -116,7 +134,18 @@ func NewStreamSenderAdapter(r *SessionStreamRegistry) *StreamSenderAdapter {
 }
 
 // Send implements focus.StreamSender.
+//
+// Post-F3 only ReplayModeFromCursor is honoured; see AddStreamWithMode for
+// the rationale. Add-requests with other modes are rejected here too so
+// callers see the mismatch instead of getting silent cursor replay.
 func (a *StreamSenderAdapter) Send(sessionID, stream string, add bool, mode focus.ReplayMode) error {
+	if add && mode != focus.ReplayModeFromCursor {
+		return oops.Code("REPLAY_MODE_NOT_SUPPORTED").
+			With("session_id", sessionID).
+			With("stream", stream).
+			With("mode", mode).
+			Errorf("replay mode %v is not supported post-F3; only ReplayModeFromCursor is honored", mode)
+	}
 	return a.registry.Send(sessionID, sessionStreamUpdate{
 		stream:     stream,
 		add:        add,

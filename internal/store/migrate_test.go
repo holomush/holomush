@@ -278,18 +278,19 @@ func TestMigratorCloseIsIdempotent(t *testing.T) {
 }
 
 func TestMigratorPendingMigrationsReturnsMigrationsAboveCurrentVersion(t *testing.T) {
-	// At version 0, migrations 1-9 should be pending (baseline + is_guest +
+	// At version 0, migrations 1-10 should be pending (baseline + is_guest +
 	// alias_source + session_player_id + audit_source_component + session_focus +
-	// seed_scene_defaults + session_player_fk + create_events_audit)
+	// seed_scene_defaults + session_player_fk + create_events_audit +
+	// drop_events_and_cursors)
 	m := &Migrator{m: &mockMigrate{versionVal: 0, versionErr: migrate.ErrNilVersion}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8, 9}, pending)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, pending)
 }
 
 func TestMigratorPendingMigrationsReturnsEmptyAtLatestVersion(t *testing.T) {
-	// At version 9 (latest), no migrations should be pending
-	m := &Migrator{m: &mockMigrate{versionVal: 9}}
+	// At version 10 (latest), no migrations should be pending
+	m := &Migrator{m: &mockMigrate{versionVal: 10}}
 	pending, err := m.PendingMigrations()
 	require.NoError(t, err)
 	assert.Empty(t, pending)

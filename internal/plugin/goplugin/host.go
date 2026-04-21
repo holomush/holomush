@@ -114,10 +114,10 @@ func WithFocusCoordinator(fc focus.Coordinator) HostOption {
 	return func(h *Host) { h.focusCoordinator = fc }
 }
 
-// WithEventStore configures the host to inject an event store for
+// WithHistoryReader configures the host with a history reader for
 // QueryStreamHistory RPCs.
-func WithEventStore(es core.EventStore) HostOption {
-	return func(h *Host) { h.eventStore = es }
+func WithHistoryReader(hr plugins.HistoryReader) HostOption {
+	return func(h *Host) { h.historyReader = hr }
 }
 
 // Host manages binary plugins via HashiCorp go-plugins.
@@ -131,7 +131,7 @@ type Host struct {
 	hostClientCert    *tlscerts.ClientCert
 	eventEmitter      plugins.PluginIntentEmitter
 	focusCoordinator  focus.Coordinator
-	eventStore        core.EventStore
+	historyReader     plugins.HistoryReader
 	plugins           map[string]*loadedPlugin
 	mu                sync.RWMutex
 	closed            bool
@@ -218,19 +218,19 @@ func (h *Host) FocusCoordinator() focus.Coordinator {
 	return h.focusCoordinator
 }
 
-// SetEventStore injects the event store after construction.
+// SetHistoryReader injects the history reader after construction.
 // Same late-binding rationale as SetFocusCoordinator.
-func (h *Host) SetEventStore(es core.EventStore) {
+func (h *Host) SetHistoryReader(hr plugins.HistoryReader) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.eventStore = es
+	h.historyReader = hr
 }
 
-// EventStore returns the current event store, or nil if not set.
-func (h *Host) EventStore() core.EventStore {
+// HistoryReader returns the current history reader, or nil if not set.
+func (h *Host) HistoryReader() plugins.HistoryReader {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	return h.eventStore
+	return h.historyReader
 }
 
 // Load initializes a plugin from its manifest.
@@ -692,6 +692,21 @@ func (h *Host) AttributeResolverClient(pluginName string) pluginv1.AttributeReso
 		return nil
 	}
 	return pluginv1.NewAttributeResolverServiceClient(lp.conn)
+}
+
+// PluginAuditClient returns the PluginAuditService gRPC client for a
+// loaded plugin. Returns nil when the plugin is not loaded, the
+// connection is not yet established, or the plugin did not register the
+// service. The host uses this to route JetStream audit deliveries into
+// plugin-owned audit schemas (F5).
+func (h *Host) PluginAuditClient(pluginName string) pluginv1.PluginAuditServiceClient {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	lp, ok := h.plugins[pluginName]
+	if !ok || lp.conn == nil {
+		return nil
+	}
+	return pluginv1.NewPluginAuditServiceClient(lp.conn)
 }
 
 // PluginConn returns the gRPC client connection for the named plugin.

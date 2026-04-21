@@ -6,7 +6,6 @@ package command
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
@@ -203,25 +202,8 @@ func TestDecisionZeroValueIsDeny(t *testing.T) {
 type mockEventStore struct{}
 
 func (m *mockEventStore) Append(_ context.Context, _ core.Event) error { return nil }
-func (m *mockEventStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
-	return nil, nil
-}
 
-func (m *mockEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
-	return ulid.ULID{}, nil
-}
-
-func (m *mockEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
-	return nil, nil, nil
-}
-
-func (m *mockEventStore) ReplayTail(context.Context, string, int, time.Time, ulid.ULID) ([]core.Event, error) {
-	return nil, nil
-}
-
-func (m *mockEventStore) SubscribeSession(context.Context) (core.Subscription, error) {
-	return nil, nil
-}
+var _ core.EventAppender = (*mockEventStore)(nil)
 
 func TestCommandHandlerSignature(t *testing.T) {
 	// Verify CommandHandler can be assigned a function with the correct signature
@@ -848,9 +830,8 @@ func TestServicesBroadcastSystemMessageProducesMonotonicEventIDs(t *testing.T) {
 	}
 }
 
-// captureEventStore is a minimal core.EventStore fake that records every
-// Append call for assertion. Subscribe/Replay/LastEventID return errors
-// because BroadcastSystemMessage does not call them.
+// captureEventStore is a minimal core.EventAppender fake that records every
+// Append call for assertion.
 type captureEventStore struct {
 	events []core.Event
 }
@@ -860,22 +841,4 @@ func (c *captureEventStore) Append(_ context.Context, ev core.Event) error {
 	return nil
 }
 
-func (c *captureEventStore) Subscribe(context.Context, string) (<-chan ulid.ULID, <-chan error, error) {
-	return nil, nil, errors.New("captureEventStore.Subscribe not implemented")
-}
-
-func (c *captureEventStore) Replay(context.Context, string, ulid.ULID, int) ([]core.Event, error) {
-	return nil, errors.New("captureEventStore.Replay not implemented")
-}
-
-func (c *captureEventStore) LastEventID(context.Context, string) (ulid.ULID, error) {
-	return ulid.ULID{}, errors.New("captureEventStore.LastEventID not implemented")
-}
-
-func (c *captureEventStore) ReplayTail(context.Context, string, int, time.Time, ulid.ULID) ([]core.Event, error) {
-	return nil, nil
-}
-
-func (c *captureEventStore) SubscribeSession(context.Context) (core.Subscription, error) {
-	return nil, nil
-}
+var _ core.EventAppender = (*captureEventStore)(nil)

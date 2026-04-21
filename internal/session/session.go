@@ -148,7 +148,6 @@ type Info struct {
 	IsGuest         bool
 	Status          Status
 	GridPresent     bool
-	EventCursors    map[string]ulid.ULID
 	CommandHistory  []string
 	TTLSeconds      int
 	MaxHistory      int
@@ -257,9 +256,6 @@ type Store interface {
 	// ReattachCAS atomically transitions a detached session to active.
 	// Returns true if the row was updated, false if another client won the race.
 	ReattachCAS(ctx context.Context, id string) (bool, error)
-
-	// UpdateCursors updates the event cursors for a session.
-	UpdateCursors(ctx context.Context, id string, cursors map[string]ulid.ULID) error
 
 	// AppendCommand adds a command to the session's history, enforcing the cap.
 	AppendCommand(ctx context.Context, id string, command string, maxHistory int) error

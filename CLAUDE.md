@@ -14,6 +14,8 @@ HoloMUSH is a modern MUSH platform with:
 
 **Architecture Reference**: [docs/plans/2026-01-18-holomush-roadmap-design.md](docs/plans/2026-01-18-holomush-roadmap-design.md)
 
+**EventBus Design**: [docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md](docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md)
+
 ---
 
 ## Documentation Structure
@@ -170,17 +172,17 @@ as an example.
 
 ### ULID Generation
 
-Two ULID generators exist; the choice matters because the event store relies
-on lex order matching arrival order.
+Two ULID generators exist; the choice matters for correctness.
 
 | Use case | Generator | Why |
 | --- | --- | --- |
-| **Event IDs** (`core.Event.ID`), session IDs | `core.NewULID()` | Monotonic within a millisecond. `PostgresEventStore.Replay` uses `WHERE id > afterID ORDER BY id`; cursor advances use a SQL monotonicity CAS. Non-monotonic event IDs silently break both. |
+| **Event IDs** (`core.Event.ID`), session IDs | `core.NewULID()` | Identity and dedup key. Set as `Nats-Msg-Id` header for JetStream dedup within the dedup window; stable across JetStream rebuilds (sequences are not). Ordering is owned by JetStream's per-stream `uint64` seq — **not** ULID lex order. |
 | **Entity primary keys** (players, locations, characters, exits, objects, policies) | `idgen.New()` | Identity, not ordering. Fresh `crypto/rand` entropy per call. |
 
-Enforced by the `EventIDMustBeMonotonic` ruleguard rule in `gorules/rules.go`
-(loaded via `gocritic`). New `core.Event{}` literals using `idgen.New()` will
-fail `task lint`.
+The `EventIDMustBeMonotonic` ruleguard rule in `gorules/rules.go` (loaded via
+`gocritic`) still enforces that `core.Event{}` struct literals use
+`core.NewEvent()` rather than a raw struct literal. New `core.Event{}` literals
+using `idgen.New()` will fail `task lint`.
 
 ### Error Handling
 
@@ -423,8 +425,8 @@ mockery # Uses .mockery.yaml config
 Use generated mocks:
 
 ```go
-store := mocks.NewMockEventStore(t)
-store.EXPECT().Append(mock.Anything, mock.Anything).Return(nil)
+pub := mocks.NewMockPublisher(t)
+pub.EXPECT().Publish(mock.Anything, mock.Anything).Return(nil)
 ```
 
 ### Test Engine Helpers
@@ -439,12 +441,13 @@ mockAccess.Grant(subject, "emit", "stream")              // Layer 2 / capability
 
 Other test engines: `AllowAllEngine()`, `DenyAllEngine()`, `NewErrorEngine(err)`, `NewInfraFailureEngine(t, reason, policyID)`.
 
-### MemoryEventStore
+### EventBus test harness
 
-MemoryEventStore is for **unit tests only**. It MUST NOT be used in integration
-tests, E2E tests, or production code. Integration and E2E tests MUST use
-PostgresEventStore via testcontainers. The `//go:build !integration` tag on
-`store_memory.go` enforces this at compile time.
+`internal/eventbus/eventbustest.New(t)` provides an in-process embedded NATS
+server with `MemoryStorage` for unit and bus-integration tests. It MUST NOT be
+used in E2E tests. E2E tests use the full server stack with a real PG
+testcontainer. The `//go:build !integration` tag on the harness file enforces
+this at compile time.
 
 ### Integration Tests with Ginkgo/Gomega (BDD)
 
@@ -595,16 +598,57 @@ test/                # Integration tests
 
 ## Key Interfaces
 
-### EventStore
+### EventBus (`internal/eventbus`)
+
+The EventBus replaced the former `EventStore.Append` / `LISTEN`/`NOTIFY` stack
+as of the F1-F7 JetStream cutover. The old `EventStore` interface is deleted.
+
+Three narrow interfaces cover the three consumer roles:
 
 ```go
-type EventStore interface {
-    Append(ctx context.Context, event Event) error
-    Subscribe(ctx context.Context, stream string) (<-chan ulid.ULID, <-chan error, error)
-    Replay(ctx context.Context, stream string, afterID ulid.ULID, limit int) ([]Event, error)
-    LastEventID(ctx context.Context, stream string) (ulid.ULID, error)
+// Publisher — used by EventSink (emit path from plugins and host).
+type Publisher interface {
+    Publish(ctx context.Context, event Event) error
+}
+
+// Subscriber — used by the gRPC Subscribe handler.
+type Subscriber interface {
+    OpenSession(ctx context.Context, sessionID string, filters []Subject) (SessionStream, error)
+}
+
+// HistoryReader — used by the gRPC QueryHistory handler.
+type HistoryReader interface {
+    QueryHistory(ctx context.Context, q HistoryQuery) (HistoryStream, error)
+}
+
+// EventBus is the concrete implementation satisfying all three.
+type EventBus interface {
+    Publisher
+    Subscriber
+    HistoryReader
 }
 ```
+
+Ordering is owned by JetStream's per-stream `uint64` sequence. Event ULIDs
+(`core.Event.ID`) are identity and dedup keys, not ordering keys.
+
+Durable audit lives in the `events_audit` PostgreSQL table (host-owned subjects)
+and in plugin-owned audit tables (plugin-declared subjects; e.g.,
+`plugin_core_scenes.scene_log`). `HistoryReader.QueryHistory` transparently
+falls back from JetStream (recent) to PostgreSQL audit (older than JS retention)
+so callers never see the boundary.
+
+Subject naming follows NATS dot-delimited conventions:
+`events.<game_id>.<domain>.<entity-id>[.<facet>...]`. The legacy colon-style
+subjects (e.g., `scene:01ABC`) are translated at the EventSink boundary by
+`internal/eventbus/subjectxlate/`.
+
+See [docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md](docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md)
+for the full design (§3 publish, §4 subscribe, §5 history, §6 PostgreSQL role).
+
+See [site/docs/contributing/event-store.md](site/docs/contributing/event-store.md)
+for contributor-oriented examples (plugin emit, manifest audit declarations,
+embedded vs cluster NATS).
 
 ### ServiceRegistry (`internal/plugin`)
 

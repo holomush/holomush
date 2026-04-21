@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -112,28 +111,14 @@ func TestEngineHandlePoseAppendsEventToLocationStream(t *testing.T) {
 	assert.Equal(t, stream, events[0].Stream)
 }
 
-// failingEventStore is a mock that returns errors for testing error paths.
+// failingEventStore is a mock EventAppender that returns errors for testing error paths.
 type failingEventStore struct{}
 
 func (f *failingEventStore) Append(_ context.Context, _ Event) error {
 	return errStoreFailure
 }
 
-func (f *failingEventStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]Event, error) {
-	return nil, errStoreFailure
-}
-
-func (f *failingEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
-	return ulid.ULID{}, errStoreFailure
-}
-
-func (f *failingEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ ulid.ULID) ([]Event, error) {
-	return nil, errStoreFailure
-}
-
-func (f *failingEventStore) SubscribeSession(_ context.Context) (Subscription, error) {
-	return nil, errStoreFailure
-}
+var _ EventAppender = (*failingEventStore)(nil)
 
 var errStoreFailure = &storeError{msg: "store failure"}
 
@@ -232,45 +217,26 @@ func TestEngineHandleDisconnectStoresLeaveEventWithReasonPayload(t *testing.T) {
 	assert.Equal(t, "quit", payload.Reason)
 }
 
-func TestNewEnginePanicsWhenStoreIsNotEventWriterInProductionMode(t *testing.T) {
-	rawStore := NewMemoryEventStore()
-
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("expected panic from NewEngine in production mode with non-writer store")
-		}
-	}()
-
-	NewEngine(rawStore, WithProductionGuardrail())
-}
-
-func TestNewEngineAcceptsAnyStoreWhenProductionGuardrailOmitted(t *testing.T) {
-	rawStore := NewMemoryEventStore()
-	e := NewEngine(rawStore)
+func TestNewEngineAcceptsMemoryStore(t *testing.T) {
+	store := NewMemoryEventStore()
+	e := NewEngine(store)
 	assert.NotNil(t, e)
 }
 
-func TestNewEngineAcceptsEventWriterInProductionMode(t *testing.T) {
-	rawStore := NewMemoryEventStore()
-	writer := NewEventWriter(rawStore)
-	t.Cleanup(func() { writer.Close() })
-
-	e := NewEngine(writer, WithProductionGuardrail())
-	assert.NotNil(t, e)
+func TestNewEnginePanicsOnNilAppender(t *testing.T) {
+	assert.Panics(t, func() {
+		NewEngine(nil)
+	}, "NewEngine must reject a nil EventAppender so callers fail fast at construction")
 }
 
-// TestNewEnginePanicsOnTypedNilEventWriterInProductionMode verifies the
-// guardrail rejects a typed-nil (*EventWriter)(nil) store. Without the nil
-// check, the type assertion succeeds and construction proceeds, failing
-// later at first Append instead of failing fast at startup.
-func TestNewEnginePanicsOnTypedNilEventWriterInProductionMode(t *testing.T) {
-	var writer *EventWriter // typed nil
-
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("expected panic from NewEngine in production mode with typed-nil *EventWriter")
-		}
-	}()
-
-	NewEngine(writer, WithProductionGuardrail())
+func TestNewEnginePanicsOnTypedNilAppender(t *testing.T) {
+	// A typed-nil (*MemoryEventStore)(nil) is NOT caught by a naive
+	// `== nil` guard because the interface wraps a non-nil type
+	// descriptor. The constructor uses reflection (isNilEventAppender)
+	// to detect this so misconfiguration surfaces at construction time
+	// rather than on first Handle* call.
+	var nilStore *MemoryEventStore
+	assert.Panics(t, func() {
+		_ = NewEngine(nilStore)
+	}, "typed-nil store must panic at construction, not on first use")
 }

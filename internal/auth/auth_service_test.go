@@ -9,7 +9,6 @@ import (
 	"errors"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -600,24 +599,4 @@ func (f *failingEventStore) SessionEndedAppendCount() int {
 	return f.sessionEndedAppends
 }
 
-func (f *failingEventStore) Replay(_ context.Context, _ string, _ ulid.ULID, _ int) ([]core.Event, error) {
-	return nil, nil
-}
-
-func (f *failingEventStore) LastEventID(_ context.Context, _ string) (ulid.ULID, error) {
-	return ulid.ULID{}, core.ErrStreamEmpty
-}
-
-func (f *failingEventStore) Subscribe(_ context.Context, _ string) (<-chan ulid.ULID, <-chan error, error) {
-	ch := make(chan ulid.ULID)
-	errCh := make(chan error)
-	return ch, errCh, nil
-}
-
-func (f *failingEventStore) ReplayTail(_ context.Context, _ string, _ int, _ time.Time, _ ulid.ULID) ([]core.Event, error) {
-	return nil, nil
-}
-
-func (f *failingEventStore) SubscribeSession(_ context.Context) (core.Subscription, error) {
-	return nil, nil
-}
+var _ core.EventAppender = (*failingEventStore)(nil)

@@ -6,677 +6,437 @@ package grpc
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
-	accessTypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
-// ---------- Test helpers ----------
+// TODO(holomush-l60y): refactor the repetitive TestQueryStreamHistory*
+// functions into a single table-driven test. Deferred as it would churn
+// every test body simultaneously; tracked as follow-up.
 
-// queryHistoryFixture holds the common state threaded through tests.
-type queryHistoryFixture struct {
-	server     *CoreServer
-	eventStore *core.MemoryEventStore
-	sessStore  *session.MemStore
-	sessionID  string
-	charID     ulid.ULID
-	locID      ulid.ULID
-	sceneID    ulid.ULID
+// fakeHistoryReader returns a canned slice (newest-first to match the
+// production bus contract) or a pre-seeded error. fetchHistoryFramesFromBus
+// reverses the slice internally.
+type fakeHistoryReader struct {
+	events []eventbus.Event
+	err    error
+	gotQ   eventbus.HistoryQuery
 }
 
-// newQueryStreamHistoryTestServer builds a CoreServer with a MemoryEventStore,
-// session.MemStore and a configurable ABAC engine. The session is
-// pre-populated active, with a single scene focus membership on sceneID.
-func newQueryStreamHistoryTestServer(t *testing.T, engine accessTypes.AccessPolicyEngine) *queryHistoryFixture {
+func (f *fakeHistoryReader) QueryHistory(_ context.Context, q eventbus.HistoryQuery) (eventbus.HistoryStream, error) {
+	f.gotQ = q
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &fakeHistoryStream{events: f.events}, nil
+}
+
+type fakeHistoryStream struct {
+	events []eventbus.Event
+	idx    int
+}
+
+func (f *fakeHistoryStream) Next(_ context.Context) (eventbus.Event, error) {
+	if f.idx >= len(f.events) {
+		return eventbus.Event{}, io.EOF
+	}
+	e := f.events[f.idx]
+	f.idx++
+	return e, nil
+}
+
+func (f *fakeHistoryStream) Close() error { return nil }
+
+// sceneFocusKey returns a FocusMembership-aligned scene stream name and the
+// matching FocusMembership the session needs to pass the I-17 gate.
+func sceneFocusMembership(t *testing.T) (string, session.FocusMembership) {
 	t.Helper()
-	eventStore := core.NewMemoryEventStore()
-	sessStore := session.NewMemStore()
-
-	charID := core.NewULID()
-	sessionID := core.NewULID().String()
-	locID := core.NewULID()
-	sceneID := core.NewULID()
-
-	require.NoError(t, sessStore.Set(context.Background(), sessionID, &session.Info{
-		ID:            sessionID,
-		CharacterID:   charID,
-		CharacterName: "Alice",
-		LocationID:    locID,
-		Status:        session.StatusActive,
-		EventCursors:  map[string]ulid.ULID{},
-		FocusMemberships: []session.FocusMembership{
-			{Kind: session.FocusKindScene, TargetID: sceneID, JoinedAt: time.Now()},
-		},
-	}))
-
-	s := &CoreServer{
-		engine:       core.NewEngine(eventStore),
-		eventStore:   eventStore,
-		sessionStore: sessStore,
-		cursorLocks:  newCursorLockMap(),
-		accessEngine: engine,
-	}
-
-	return &queryHistoryFixture{
-		server:     s,
-		eventStore: eventStore,
-		sessStore:  sessStore,
-		sessionID:  sessionID,
-		charID:     charID,
-		locID:      locID,
-		sceneID:    sceneID,
+	sceneID := ulid.MustParse("01HYXSCENE00000000000000CC")
+	return "scene:" + sceneID.String() + ":ic", session.FocusMembership{
+		Kind:     session.FocusKindScene,
+		TargetID: sceneID,
 	}
 }
 
-// appendTestEvent appends a test event with the given stream, returning the event.
-func appendTestEvent(t *testing.T, store *core.MemoryEventStore, stream string) core.Event {
+// newQueryStreamHistoryServer builds a CoreServer with the given history
+// reader + session store for unit-testing QueryStreamHistory.
+func newQueryStreamHistoryServer(t *testing.T, reader eventbus.HistoryReader, sess session.Store) *CoreServer {
 	t.Helper()
-	e := core.NewEvent(stream, core.EventTypeSay, core.Actor{
-		Kind: core.ActorCharacter, ID: "test-actor",
-	}, []byte(`{"message":"test"}`))
-	require.NoError(t, store.Append(context.Background(), e))
-	return e
-}
-
-// locationStream returns "location:<id>".
-func locationStream(id ulid.ULID) string { return "location:" + id.String() }
-
-// sceneICStream returns "scene:<id>:ic".
-func sceneICStream(id ulid.ULID) string { return "scene:" + id.String() + ":ic" }
-
-// characterStream returns "character:<id>".
-func characterStream(id ulid.ULID) string { return "character:" + id.String() }
-
-// buildHistoryRequest is a small helper to reduce boilerplate.
-func buildHistoryRequest(sessionID, stream string, count int32) *corev1.QueryStreamHistoryRequest {
-	return &corev1.QueryStreamHistoryRequest{
-		Meta:      &corev1.RequestMeta{RequestId: "req-" + sessionID, Timestamp: timestamppb.Now()},
-		SessionId: sessionID,
-		Stream:    stream,
-		Count:     count,
+	return &CoreServer{
+		sessionStore:  sess,
+		historyReader: reader,
+		accessEngine:  policytest.AllowAllEngine(),
 	}
 }
 
-// ---------- §8.1 Unit tests ----------
-
-func TestQueryStreamHistoryReturnsEventsForAuthorizedLocationStream(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f := newQueryStreamHistoryTestServer(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	e1 := appendTestEvent(t, f.eventStore, stream)
-	e2 := appendTestEvent(t, f.eventStore, stream)
-
-	resp, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 10))
-	require.NoError(t, err)
-	require.Len(t, resp.Events, 2)
-	assert.Equal(t, e1.ID.String(), resp.Events[0].Id)
-	assert.Equal(t, e2.ID.String(), resp.Events[1].Id)
-	assert.False(t, resp.HasMore)
+func TestQueryStreamHistoryRejectsMissingHistoryReader(t *testing.T) {
+	t.Parallel()
+	s := &CoreServer{sessionStore: newTestSessionStore(t, nil)}
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "sess-1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "INTERNAL")
 }
 
-func TestQueryStreamHistoryReturnsEventsForFocusDerivedSceneStream(t *testing.T) {
-	// Use an engine that would ERROR if called — proves ABAC is NOT
-	// consulted for private scene streams.
-	errEngine := policytest.NewErrorEngine(errors.New("engine must not be called for private streams"))
-	f := newQueryStreamHistoryTestServer(t, errEngine)
-	stream := sceneICStream(f.sceneID)
-	appendTestEvent(t, f.eventStore, stream)
-
-	resp, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 10))
-	require.NoError(t, err)
-	require.Len(t, resp.Events, 1)
-}
-
-func TestQueryStreamHistoryReturnsEventsForOwnCharacterStream(t *testing.T) {
-	errEngine := policytest.NewErrorEngine(errors.New("engine must not be called for private streams"))
-	f := newQueryStreamHistoryTestServer(t, errEngine)
-	stream := characterStream(f.charID)
-	appendTestEvent(t, f.eventStore, stream)
-
-	resp, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 10))
-	require.NoError(t, err)
-	require.Len(t, resp.Events, 1)
-}
-
-func TestQueryStreamHistoryRejectsEmptySessionID(t *testing.T) {
-	f := newQueryStreamHistoryTestServer(t, policytest.AllowAllEngine())
-	req := buildHistoryRequest("", locationStream(f.locID), 10)
-
-	_, err := f.server.QueryStreamHistory(context.Background(), req)
+func TestQueryStreamHistoryRejectsMissingSessionID(t *testing.T) {
+	t.Parallel()
+	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, newTestSessionStore(t, nil))
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		Stream: "location:x",
+	})
+	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "INVALID_ARGUMENT")
 }
 
-func TestQueryStreamHistoryRejectsEmptyStream(t *testing.T) {
-	f := newQueryStreamHistoryTestServer(t, policytest.AllowAllEngine())
-	req := buildHistoryRequest(f.sessionID, "", 10)
+func TestQueryStreamHistoryReturnsSessionNotFound(t *testing.T) {
+	t.Parallel()
+	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, newTestSessionStore(t, nil))
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "unknown",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SESSION_NOT_FOUND")
+}
 
-	_, err := f.server.QueryStreamHistory(context.Background(), req)
+func TestQueryStreamHistoryReturnsSessionExpired(t *testing.T) {
+	t.Parallel()
+	past := time.Now().Add(-time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"e1": {ID: "e1", ExpiresAt: &past},
+	})
+	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "e1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "SESSION_EXPIRED")
+}
+
+func TestQueryStreamHistoryRejectsEmptyStream(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "",
+	})
+	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "INVALID_ARGUMENT")
 }
 
 func TestQueryStreamHistoryRejectsNegativeCount(t *testing.T) {
-	f := newQueryStreamHistoryTestServer(t, policytest.AllowAllEngine())
-	req := buildHistoryRequest(f.sessionID, locationStream(f.locID), -1)
-
-	_, err := f.server.QueryStreamHistory(context.Background(), req)
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Count:     -1,
+	})
+	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "INVALID_ARGUMENT")
 }
 
 func TestQueryStreamHistoryRejectsMalformedBeforeID(t *testing.T) {
-	f := newQueryStreamHistoryTestServer(t, policytest.AllowAllEngine())
-	req := buildHistoryRequest(f.sessionID, locationStream(f.locID), 10)
-	req.BeforeId = "not-a-ulid"
-
-	_, err := f.server.QueryStreamHistory(context.Background(), req)
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		BeforeId:  "not-a-ulid",
+	})
+	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "INVALID_ARGUMENT")
 }
 
-// countingReplayTailStore wraps a MemoryEventStore so tests can observe the
-// count parameter forwarded to ReplayTail.
-type countingReplayTailStore struct {
-	*core.MemoryEventStore
-	lastCount     int
-	lastBeforeID  ulid.ULID
-	lastNotBefore time.Time
-	lastStream    string
-	calls         int
+func TestQueryStreamHistoryRejectsMalformedSceneStream(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "scene:not-a-ulid:ic",
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "INVALID_ARGUMENT")
 }
 
-func (c *countingReplayTailStore) ReplayTail(ctx context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
-	c.calls++
-	c.lastStream = stream
-	c.lastCount = count
-	c.lastBeforeID = beforeID
-	c.lastNotBefore = notBefore
-	return c.MemoryEventStore.ReplayTail(ctx, stream, count, notBefore, beforeID)
+func TestQueryStreamHistoryEnforcesMembershipGateForPrivateStream(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	charID := ulid.MustParse("01HYXYZCHAR0000000000000CH")
+	otherID := ulid.MustParse("01HYXYZOTHER000000000000CH")
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {
+			ID: "s1", CharacterID: charID, ExpiresAt: &future,
+		},
+	})
+	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
+	// character stream for a DIFFERENT character → membership denied.
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "character:" + otherID.String(),
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
 }
 
-// newCountingFixture builds a fixture whose eventStore is a counting wrapper.
-func newCountingFixture(t *testing.T, engine accessTypes.AccessPolicyEngine) (*queryHistoryFixture, *countingReplayTailStore) {
-	t.Helper()
-	f := newQueryStreamHistoryTestServer(t, engine)
-	cs := &countingReplayTailStore{MemoryEventStore: f.eventStore}
-	f.server.eventStore = cs
-	return f, cs
-}
-
-func TestQueryStreamHistoryDefaultsCountTo150WhenZero(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f, cs := newCountingFixture(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	_, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 0))
+func TestQueryStreamHistoryAllowsOwnerOfPrivateCharacterStream(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	charID := ulid.MustParse("01HYXYZCHAR0000000000000CH")
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", CharacterID: charID, ExpiresAt: &future},
+	})
+	reader := &fakeHistoryReader{events: []eventbus.Event{{
+		ID:        core.NewULID(),
+		Subject:   eventbus.Subject("events.main.character." + charID.String()),
+		Type:      "scene.pose",
+		Timestamp: time.Now(),
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
+		Payload:   []byte("p"),
+	}}}
+	s := newQueryStreamHistoryServer(t, reader, sess)
+	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "character:" + charID.String(),
+		Count:     10,
+	})
 	require.NoError(t, err)
-	assert.Equal(t, defaultHistoryPageSize+1, cs.lastCount, "count=0 should default to 150, fetched as 151 for has_more detection")
+	assert.Len(t, resp.GetEvents(), 1)
+	assert.False(t, resp.GetHasMore())
 }
 
-func TestQueryStreamHistoryClampsCountAbove500(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f, cs := newCountingFixture(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	_, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 1000))
+func TestQueryStreamHistoryAllowsSceneMemberForScenePrivateStream(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	charID := ulid.MustParse("01HYXYZCHAR0000000000000CH")
+	sceneStream, fm := sceneFocusMembership(t)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {
+			ID:               "s1",
+			CharacterID:      charID,
+			ExpiresAt:        &future,
+			FocusMemberships: []session.FocusMembership{fm},
+		},
+	})
+	reader := &fakeHistoryReader{}
+	s := newQueryStreamHistoryServer(t, reader, sess)
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    sceneStream,
+		Count:     10,
+	})
 	require.NoError(t, err)
-	assert.Equal(t, maxHistoryPageSize+1, cs.lastCount, "count=1000 should clamp to 500, fetched as 501 for has_more detection")
 }
 
-func TestQueryStreamHistoryRejectsExpiredSession(t *testing.T) {
-	f := newQueryStreamHistoryTestServer(t, policytest.AllowAllEngine())
-	// Mutate the session to be expired.
-	past := time.Now().Add(-1 * time.Hour)
-	require.NoError(t, f.sessStore.Set(context.Background(), f.sessionID, &session.Info{
-		ID:          f.sessionID,
-		CharacterID: f.charID,
-		LocationID:  f.locID,
-		Status:      session.StatusDetached,
-		ExpiresAt:   &past,
-	}))
-
-	_, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, locationStream(f.locID), 10))
-	errutil.AssertErrorCode(t, err, "SESSION_EXPIRED")
+func TestQueryStreamHistoryDenysSceneNonMember(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	charID := ulid.MustParse("01HYXYZCHAR0000000000000CH")
+	sceneStream, _ := sceneFocusMembership(t)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {
+			ID:          "s1",
+			CharacterID: charID,
+			ExpiresAt:   &future,
+			// No FocusMemberships.
+		},
+	})
+	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    sceneStream,
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
 }
 
-func TestQueryStreamHistoryRejectsNonexistentSession(t *testing.T) {
-	f := newQueryStreamHistoryTestServer(t, policytest.AllowAllEngine())
-
-	_, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest("nonexistent-session", locationStream(f.locID), 10))
-	errutil.AssertErrorCode(t, err, "SESSION_NOT_FOUND")
+func TestQueryStreamHistoryRejectsPublicStreamWithoutAccessEngine(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+	// No access engine wired.
+	s := &CoreServer{
+		sessionStore:  sess,
+		historyReader: &fakeHistoryReader{},
+	}
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
 }
 
-func TestQueryStreamHistoryRejectsWhenEventStoreIsNil(t *testing.T) {
-	f := newQueryStreamHistoryTestServer(t, policytest.AllowAllEngine())
-	f.server.eventStore = nil
+func TestQueryStreamHistoryDeniedByABAC(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+	s := &CoreServer{
+		sessionStore:  sess,
+		historyReader: &fakeHistoryReader{},
+		accessEngine:  policytest.DenyAllEngine(),
+	}
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
+}
 
-	_, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, locationStream(f.locID), 10))
+func TestQueryStreamHistoryBusErrorSurfacesAsInternal(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+	reader := &fakeHistoryReader{err: errors.New("bus down")}
+	s := newQueryStreamHistoryServer(t, reader, sess)
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+	})
+	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "INTERNAL")
 }
 
-func TestQueryStreamHistoryDeniesUnauthorizedPublicStream(t *testing.T) {
-	f := newQueryStreamHistoryTestServer(t, policytest.DenyAllEngine())
-	stream := locationStream(f.locID)
-	appendTestEvent(t, f.eventStore, stream)
-
-	_, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 10))
-	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
-}
-
-func TestQueryStreamHistoryAdminCanReadAnyPublicStream(t *testing.T) {
-	// AllowAllEngine simulates the admin policy granting read on any
-	// stream. We use a non-co-located location stream to demonstrate
-	// admin can read any public stream.
-	f := newQueryStreamHistoryTestServer(t, policytest.AllowAllEngine())
-	otherLoc := core.NewULID()
-	stream := locationStream(otherLoc)
-	e1 := appendTestEvent(t, f.eventStore, stream)
-
-	resp, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 10))
-	require.NoError(t, err)
-	require.Len(t, resp.Events, 1)
-	assert.Equal(t, e1.ID.String(), resp.Events[0].Id)
-}
-
-func TestQueryStreamHistoryPassesBeforeIDToReplayTail(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f, cs := newCountingFixture(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	beforeID := core.NewULID()
-	req := buildHistoryRequest(f.sessionID, stream, 10)
-	req.BeforeId = beforeID.String()
-
-	_, err := f.server.QueryStreamHistory(context.Background(), req)
-	require.NoError(t, err)
-	assert.Equal(t, beforeID, cs.lastBeforeID)
-}
-
-func TestQueryStreamHistoryPassesNotBeforeToReplayTail(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f, cs := newCountingFixture(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	floor := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
-	req := buildHistoryRequest(f.sessionID, stream, 10)
-	req.NotBeforeMs = floor.UnixMilli()
-
-	_, err := f.server.QueryStreamHistory(context.Background(), req)
-	require.NoError(t, err)
-	assert.True(t, cs.lastNotBefore.Equal(floor), "expected notBefore=%s, got %s", floor, cs.lastNotBefore)
-}
-
-func TestQueryStreamHistorySetsHasMoreWhenMoreEventsExist(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f := newQueryStreamHistoryTestServer(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	// 5 events, count=3 → fetch 4, return 3, has_more=true.
-	for i := 0; i < 5; i++ {
-		appendTestEvent(t, f.eventStore, stream)
-	}
-
-	resp, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 3))
-	require.NoError(t, err)
-	assert.Len(t, resp.Events, 3)
-	assert.True(t, resp.HasMore)
-}
-
-func TestQueryStreamHistorySetsHasMoreAtMaxPageSize(t *testing.T) {
-	// Regression test for the count+1 interaction at the ceiling. When
-	// count=500 (user-facing max) and 501+ events exist, has_more MUST be
-	// true. This requires the store-level cap to be >= 501 so the
-	// handler's count+1 probe actually retrieves the 501st event — if the
-	// store silently capped at 500, has_more would be incorrectly false.
-	grant := policytest.NewGrantEngine()
-	f := newQueryStreamHistoryTestServer(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	// 501 events on the stream.
-	for i := 0; i < 501; i++ {
-		appendTestEvent(t, f.eventStore, stream)
-	}
-
-	resp, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, maxHistoryPageSize))
-	require.NoError(t, err)
-	assert.Len(t, resp.Events, maxHistoryPageSize, "must return exactly count events")
-	assert.True(t, resp.HasMore, "has_more must be true when count=500 and 501 events exist")
-}
-
-func TestQueryStreamHistorySetsHasMoreFalseWhenNoMore(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f := newQueryStreamHistoryTestServer(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	for i := 0; i < 3; i++ {
-		appendTestEvent(t, f.eventStore, stream)
-	}
-
-	resp, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 10))
-	require.NoError(t, err)
-	assert.Len(t, resp.Events, 3)
-	assert.False(t, resp.HasMore)
-}
-
-func TestQueryStreamHistoryReturnsEventsInAscendingOrder(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f := newQueryStreamHistoryTestServer(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	events := make([]core.Event, 0, 4)
+func TestQueryStreamHistoryHasMoreReflectsCountPlusOne(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+	// 4 events, count=3 → has_more=true; response trims to 3 (newest).
+	evts := make([]eventbus.Event, 0, 4)
 	for i := 0; i < 4; i++ {
-		events = append(events, appendTestEvent(t, f.eventStore, stream))
+		evts = append(evts, eventbus.Event{
+			ID:        core.NewULID(),
+			Subject:   eventbus.Subject("events.main.location.01HYXYZ0C0000000000000000C"),
+			Type:      "scene.pose",
+			Timestamp: time.Now(),
+			Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
+			Payload:   []byte("p"),
+		})
 	}
-
-	resp, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 10))
+	reader := &fakeHistoryReader{events: evts}
+	s := newQueryStreamHistoryServer(t, reader, sess)
+	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Count:     3,
+	})
 	require.NoError(t, err)
-	require.Len(t, resp.Events, 4)
-	for i, e := range events {
-		assert.Equal(t, e.ID.String(), resp.Events[i].Id, "event %d out of order", i)
-	}
+	assert.True(t, resp.GetHasMore())
+	assert.Len(t, resp.GetEvents(), 3)
+	// PageSize forwarded with +1.
+	assert.Equal(t, 4, reader.gotQ.PageSize)
 }
 
-func TestQueryStreamHistoryIncludesResponseMeta(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f := newQueryStreamHistoryTestServer(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	req := buildHistoryRequest(f.sessionID, stream, 10)
-	req.Meta.RequestId = "echo-me-123"
-
-	resp, err := f.server.QueryStreamHistory(context.Background(), req)
+func TestQueryStreamHistoryCountDefaultsWhenZero(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+	reader := &fakeHistoryReader{}
+	s := newQueryStreamHistoryServer(t, reader, sess)
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Count:     0,
+	})
 	require.NoError(t, err)
-	require.NotNil(t, resp.Meta)
-	assert.Equal(t, "echo-me-123", resp.Meta.RequestId)
+	assert.Equal(t, defaultHistoryPageSize+1, reader.gotQ.PageSize)
 }
 
-// ---------- §8.2 Invariant tests (I-17) ----------
-
-func TestQueryStreamHistoryI17DeniesNonMemberSceneStreamRead(t *testing.T) {
-	// Engine returns an error if called — proves the membership gate
-	// short-circuits BEFORE ABAC evaluation for private streams (I-17).
-	engine := policytest.NewErrorEngine(errors.New("ABAC must not be consulted for private streams"))
-	f := newQueryStreamHistoryTestServer(t, engine)
-
-	foreignScene := core.NewULID() // not in session's FocusMemberships
-	stream := sceneICStream(foreignScene)
-
-	_, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 10))
-	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
-}
-
-func TestQueryStreamHistoryI17DeniesAdminNonMemberSceneStreamRead(t *testing.T) {
-	// AllowAllEngine would grant admin, but I-17 is a hard gate that
-	// ignores ABAC for private streams — admin does NOT override.
-	f := newQueryStreamHistoryTestServer(t, policytest.AllowAllEngine())
-	foreignScene := core.NewULID()
-	stream := sceneICStream(foreignScene)
-
-	_, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 10))
-	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
-}
-
-func TestQueryStreamHistoryI17DeniesOtherCharacterPersonalStreamRead(t *testing.T) {
-	// Use an engine that would error if called — confirms character
-	// streams also bypass ABAC for non-owners.
-	engine := policytest.NewErrorEngine(errors.New("ABAC must not be consulted for private streams"))
-	f := newQueryStreamHistoryTestServer(t, engine)
-
-	otherChar := core.NewULID()
-	stream := characterStream(otherChar)
-
-	_, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 10))
-	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
-}
-
-func TestQueryStreamHistoryI17PermitsMemberSceneStreamRead(t *testing.T) {
-	engine := policytest.NewErrorEngine(errors.New("ABAC must not be consulted for private streams"))
-	f := newQueryStreamHistoryTestServer(t, engine)
-	// Session already has FocusMembership{Kind:Scene, TargetID: sceneID}.
-	stream := sceneICStream(f.sceneID)
-	appendTestEvent(t, f.eventStore, stream)
-
-	resp, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 10))
+func TestQueryStreamHistoryCountCappedAtMax(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+	reader := &fakeHistoryReader{}
+	s := newQueryStreamHistoryServer(t, reader, sess)
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Count:     99_999,
+	})
 	require.NoError(t, err)
-	require.Len(t, resp.Events, 1)
+	assert.Equal(t, maxHistoryPageSize+1, reader.gotQ.PageSize)
 }
 
-func TestQueryStreamHistoryI17PermitsOwnCharacterStreamRead(t *testing.T) {
-	engine := policytest.NewErrorEngine(errors.New("ABAC must not be consulted for private streams"))
-	f := newQueryStreamHistoryTestServer(t, engine)
-	stream := characterStream(f.charID)
-	appendTestEvent(t, f.eventStore, stream)
-
-	resp, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 10))
+func TestQueryStreamHistoryBeforeIDForwardsToBus(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+	before := core.NewULID()
+	reader := &fakeHistoryReader{}
+	s := newQueryStreamHistoryServer(t, reader, sess)
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		BeforeId:  before.String(),
+		Count:     5,
+	})
 	require.NoError(t, err)
-	require.Len(t, resp.Events, 1)
+	assert.Equal(t, before, reader.gotQ.Before)
 }
 
-func TestQueryStreamHistoryI17DeniesAfterFocusMembershipRemoved(t *testing.T) {
-	// Regression test: if a character's FocusMembership is removed, reads
-	// of that scene stream MUST immediately deny, proving I-17 is
-	// membership-based (evaluated on every request) rather than a
-	// one-time check. Simulates a character leaving a scene.
-	engine := policytest.NewErrorEngine(errors.New("ABAC must not be consulted for private streams"))
-	f := newQueryStreamHistoryTestServer(t, engine)
-	// Fixture already seeded FocusMemberships with sceneID.
-	stream := sceneICStream(f.sceneID)
-	appendTestEvent(t, f.eventStore, stream)
-
-	// First request: permitted (membership present).
-	req := buildHistoryRequest(f.sessionID, stream, 10)
-	_, err := f.server.QueryStreamHistory(context.Background(), req)
-	require.NoError(t, err, "first request must be permitted with membership present")
-
-	// Simulate leave: persist a session with no memberships.
-	require.NoError(t, f.sessStore.Set(context.Background(), f.sessionID, &session.Info{
-		ID:               f.sessionID,
-		CharacterID:      f.charID,
-		CharacterName:    "Alice",
-		LocationID:       f.locID,
-		Status:           session.StatusActive,
-		EventCursors:     map[string]ulid.ULID{},
-		FocusMemberships: nil,
-	}))
-
-	// Second request: denied (membership removed).
-	_, err = f.server.QueryStreamHistory(context.Background(), req)
-	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
-}
-
-func TestQueryStreamHistoryI17DeniesSceneStreamWithMalformedTargetID(t *testing.T) {
-	f := newQueryStreamHistoryTestServer(t, policytest.AllowAllEngine())
-	stream := "scene:not-a-ulid:ic"
-
-	_, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 10))
-	errutil.AssertErrorCode(t, err, "INVALID_ARGUMENT")
-}
-
-// ---------- §8.3 Boundary tests ----------
-
-func TestQueryStreamHistoryReturnsEmptyEventsForEmptyStream(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f := newQueryStreamHistoryTestServer(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	resp, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 10))
+func TestQueryStreamHistoryNotBeforeMsForwardsToBus(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+	notBefore := time.Now().Add(-2 * time.Hour).UnixMilli()
+	reader := &fakeHistoryReader{}
+	s := newQueryStreamHistoryServer(t, reader, sess)
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId:   "s1",
+		Stream:      "location:01HYXYZ0C0000000000000000C",
+		NotBeforeMs: notBefore,
+		Count:       5,
+	})
 	require.NoError(t, err)
-	assert.Empty(t, resp.Events)
-	assert.False(t, resp.HasMore)
-}
-
-func TestQueryStreamHistoryPaginationWalksBackwardCorrectly(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f := newQueryStreamHistoryTestServer(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	// 7 events, page size 3 → 3 pages (3, 3, 1).
-	events := make([]core.Event, 0, 7)
-	for i := 0; i < 7; i++ {
-		events = append(events, appendTestEvent(t, f.eventStore, stream))
-	}
-
-	// Page 1: latest 3 → events[4..6], has_more=true.
-	r1, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 3))
-	require.NoError(t, err)
-	require.Len(t, r1.Events, 3)
-	assert.True(t, r1.HasMore)
-	assert.Equal(t, events[4].ID.String(), r1.Events[0].Id)
-	assert.Equal(t, events[6].ID.String(), r1.Events[2].Id)
-
-	// Page 2: use before_id = oldest of page 1 → events[1..3], has_more=true.
-	req2 := buildHistoryRequest(f.sessionID, stream, 3)
-	req2.BeforeId = r1.Events[0].Id
-	r2, err := f.server.QueryStreamHistory(context.Background(), req2)
-	require.NoError(t, err)
-	require.Len(t, r2.Events, 3)
-	assert.True(t, r2.HasMore)
-	assert.Equal(t, events[1].ID.String(), r2.Events[0].Id)
-	assert.Equal(t, events[3].ID.String(), r2.Events[2].Id)
-
-	// Page 3: before_id = oldest of page 2 → events[0], has_more=false.
-	req3 := buildHistoryRequest(f.sessionID, stream, 3)
-	req3.BeforeId = r2.Events[0].Id
-	r3, err := f.server.QueryStreamHistory(context.Background(), req3)
-	require.NoError(t, err)
-	require.Len(t, r3.Events, 1)
-	assert.False(t, r3.HasMore)
-	assert.Equal(t, events[0].ID.String(), r3.Events[0].Id)
-}
-
-func TestQueryStreamHistoryBeforeIDAtOldestEventReturnsEmpty(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f := newQueryStreamHistoryTestServer(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	oldest := appendTestEvent(t, f.eventStore, stream)
-	appendTestEvent(t, f.eventStore, stream)
-	appendTestEvent(t, f.eventStore, stream)
-
-	req := buildHistoryRequest(f.sessionID, stream, 10)
-	req.BeforeId = oldest.ID.String()
-
-	resp, err := f.server.QueryStreamHistory(context.Background(), req)
-	require.NoError(t, err)
-	assert.Empty(t, resp.Events)
-	assert.False(t, resp.HasMore)
-}
-
-func TestQueryStreamHistoryCountExactlyMatchesAvailableEvents(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f := newQueryStreamHistoryTestServer(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	for i := 0; i < 5; i++ {
-		appendTestEvent(t, f.eventStore, stream)
-	}
-
-	resp, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 5))
-	require.NoError(t, err)
-	assert.Len(t, resp.Events, 5)
-	assert.False(t, resp.HasMore)
-}
-
-func TestQueryStreamHistoryCountOneLessThanAvailable(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f := newQueryStreamHistoryTestServer(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	for i := 0; i < 5; i++ {
-		appendTestEvent(t, f.eventStore, stream)
-	}
-
-	resp, err := f.server.QueryStreamHistory(context.Background(), buildHistoryRequest(f.sessionID, stream, 4))
-	require.NoError(t, err)
-	assert.Len(t, resp.Events, 4)
-	assert.True(t, resp.HasMore)
-}
-
-func TestQueryStreamHistoryNotBeforeFiltersOldEvents(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f := newQueryStreamHistoryTestServer(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	// Hand-craft 3 events: first two in the past, last now. MemoryEventStore
-	// filters by Timestamp.Before(notBefore).
-	now := time.Now()
-	past := now.Add(-24 * time.Hour)
-	oldEvent := core.Event{
-		ID:        core.NewULID(),
-		Stream:    stream,
-		Type:      core.EventTypeSay,
-		Timestamp: past,
-		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "old"},
-		Payload:   []byte(`{}`),
-	}
-	require.NoError(t, f.eventStore.Append(context.Background(), oldEvent))
-	// Ensure second append is newer via NewEvent's fresh timestamp.
-	newEvent := appendTestEvent(t, f.eventStore, stream)
-
-	floor := now.Add(-1 * time.Minute)
-	req := buildHistoryRequest(f.sessionID, stream, 10)
-	req.NotBeforeMs = floor.UnixMilli()
-
-	resp, err := f.server.QueryStreamHistory(context.Background(), req)
-	require.NoError(t, err)
-	require.Len(t, resp.Events, 1)
-	assert.Equal(t, newEvent.ID.String(), resp.Events[0].Id)
-}
-
-func TestQueryStreamHistoryNotBeforeAndBeforeIDCombined(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f, cs := newCountingFixture(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	// Just verify both filters are forwarded.
-	floor := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	beforeID := core.NewULID()
-	req := buildHistoryRequest(f.sessionID, stream, 10)
-	req.NotBeforeMs = floor.UnixMilli()
-	req.BeforeId = beforeID.String()
-
-	_, err := f.server.QueryStreamHistory(context.Background(), req)
-	require.NoError(t, err)
-	assert.True(t, cs.lastNotBefore.Equal(floor))
-	assert.Equal(t, beforeID, cs.lastBeforeID)
-}
-
-func TestQueryStreamHistoryBeforeIDWithZeroULIDIgnored(t *testing.T) {
-	grant := policytest.NewGrantEngine()
-	f, cs := newCountingFixture(t, grant)
-	stream := locationStream(f.locID)
-	grant.Grant("character:"+f.charID.String(), accessTypes.ActionRead, "stream:"+stream)
-
-	req := buildHistoryRequest(f.sessionID, stream, 10)
-	req.BeforeId = "" // empty, not "00000000000000000000000000"
-
-	_, err := f.server.QueryStreamHistory(context.Background(), req)
-	require.NoError(t, err)
-	assert.True(t, cs.lastBeforeID.IsZero(), "empty before_id should translate to zero ULID (no cursor filter)")
+	// NotBefore is threaded into the bus query as UTC time.
+	assert.Equal(t, notBefore, reader.gotQ.NotBefore.UnixMilli())
+	assert.Equal(t, eventbus.DirectionBackward, reader.gotQ.Direction)
 }

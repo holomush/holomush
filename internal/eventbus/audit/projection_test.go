@@ -68,6 +68,30 @@ func publishTestMessage(t *testing.T, js jetstream.JetStream) ulid.ULID {
 	return publishTestMessageWithID(t, js, ulid.Make())
 }
 
+// publishTestMessageOnSubject publishes to a caller-chosen subject with
+// a fresh msgID. Returns the ULID used as Nats-Msg-Id so callers can
+// assert persisted rows. Used by the F2 plugin-ownership skip test to
+// place messages on plugin-owned subjects without touching the default
+// testSubject.
+func publishTestMessageOnSubject(t *testing.T, js jetstream.JetStream, subject string) ulid.ULID {
+	t.Helper()
+	id := ulid.Make()
+	msg := &nats.Msg{
+		Subject: subject,
+		Header: nats.Header{
+			"Nats-Msg-Id":        []string{id.String()},
+			"App-Codec":          []string{testCodec},
+			"App-Event-Type":     []string{testEventType},
+			"App-Schema-Version": []string{testSchemaVer},
+			"App-Actor-Kind":     []string{testActorKind},
+		},
+		Data: []byte(`{"hello":"world"}`),
+	}
+	_, err := js.PublishMsg(t.Context(), msg)
+	require.NoError(t, err)
+	return id
+}
+
 // publishTestMessageWithID publishes a message with a caller-chosen
 // msgID. Used by the idempotency test to publish duplicates.
 func publishTestMessageWithID(t *testing.T, js jetstream.JetStream, id ulid.ULID) ulid.ULID {
@@ -203,4 +227,67 @@ func TestProjectionResumesAfterRestart(t *testing.T) {
 
 	assert.Equal(t, 1, countAuditRows(t, pool),
 		"restarted projection must not re-insert already-acked messages")
+}
+
+// TestProjectionAckSkipsPluginOwnedSubjects exercises the F2 contract:
+// the host audit projection MUST ack-and-skip messages whose subject
+// resolves to a plugin owner, and MUST still persist messages on
+// host-owned subjects. Ack-and-skip (not just skip) is load-bearing —
+// a plugin-owned message left unacked on the host consumer would
+// redeliver forever until it hits MaxDeliver. Acking advances the host
+// cursor; the per-plugin consumer (F5) has its own independent cursor.
+func TestProjectionAckSkipsPluginOwnedSubjects(t *testing.T) {
+	shared := testutil.SharedPostgres(t)
+	connStr := testutil.FreshDatabase(t, shared)
+	pool := openPool(t, connStr)
+
+	bus := eventbustest.New(t)
+
+	// core-scenes owns `events.*.scene.>`; everything else falls back
+	// to the host. testSubject ("events.test.unit") is host-owned.
+	owners, err := audit.NewOwnerMap([]audit.SubjectOwner{
+		{PluginName: "core-scenes", Pattern: "events.*.scene.>"},
+	})
+	require.NoError(t, err)
+
+	sub := audit.NewSubsystem(
+		fixedJS{js: bus.JS},
+		fixedPool{pool: pool},
+		audit.Config{Owners: owners},
+	)
+	require.NoError(t, sub.Start(t.Context()))
+	t.Cleanup(func() { _ = sub.Stop(context.Background()) })
+
+	// Publish one plugin-owned message (scene) and one host-owned message.
+	pluginID := publishTestMessageOnSubject(t, bus.JS, "events.main.scene.01ABC.ic")
+	hostID := publishTestMessageOnSubject(t, bus.JS, testSubject)
+
+	sub.AwaitDrained(t, awaitTimeout)
+
+	// The plugin-owned message MUST NOT appear in events_audit.
+	var pluginCount int
+	err = pool.QueryRow(
+		t.Context(),
+		`SELECT count(*) FROM events_audit WHERE id = $1`,
+		pluginID.Bytes(),
+	).Scan(&pluginCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, pluginCount,
+		"plugin-owned message must NOT be persisted by host projection")
+
+	// The host-owned message MUST appear.
+	var hostCount int
+	err = pool.QueryRow(
+		t.Context(),
+		`SELECT count(*) FROM events_audit WHERE id = $1`,
+		hostID.Bytes(),
+	).Scan(&hostCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, hostCount,
+		"host-owned message must be persisted by host projection")
+
+	// AwaitDrained waits until NumPending and NumAckPending are both
+	// zero, so a successful return already implies the host acked the
+	// plugin-owned message — if it hadn't, NumAckPending would stay
+	// >0 until AckWait expired.
 }

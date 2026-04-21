@@ -22,7 +22,7 @@ import (
 // Note: Capability checks are performed by the dispatcher, not the handler.
 // See TestDispatcher_PermissionDenied in dispatcher_test.go for capability tests.
 
-func newShutdownExec(t *testing.T, args string, store core.EventStore) (*command.CommandExecution, *bytes.Buffer) {
+func newShutdownExec(t *testing.T, args string, store core.EventAppender) (*command.CommandExecution, *bytes.Buffer) {
 	t.Helper()
 
 	var buf bytes.Buffer

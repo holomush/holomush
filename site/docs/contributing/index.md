@@ -45,7 +45,8 @@ For detailed guidance on each step, see the pages below.
 | [Architecture](architecture.md)           | System design, event model, plugin system         |
 | [Coding Standards](coding-standards.md)   | Go conventions, testing, error handling            |
 | [Authentication](authentication.md)       | Auth internals, security design, timing defenses  |
-| [Event Delivery](event-delivery.md)       | How events flow from commands to clients           |
+| [Event Store & EventBus](event-store.md)  | JetStream EventBus, subjects, plugin emit, audit   |
+| [Event Delivery (superseded)](event-delivery.md) | Former LISTEN/NOTIFY architecture (historical) |
 | [Pull Request Guide](pr-guide.md)         | Branch naming, PR format, review process           |
 
 ## Development Workflow

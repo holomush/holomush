@@ -50,6 +50,11 @@ const (
 type Actor struct {
 	Kind ActorKind
 	ID   ulid.ULID // zero ULID for ActorKindSystem / Unknown
+	// LegacyID carries a non-ULID identifier (e.g. a plugin name) bridged
+	// from core.Actor.ID. Set only when ID is zero; propagated through
+	// publisher/subscriber headers so plugin-authored host events keep
+	// their actor identity across the JetStream boundary.
+	LegacyID string
 }
 
 // Event is the host-side representation of a published event.

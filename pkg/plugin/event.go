@@ -74,10 +74,16 @@ type EmitEvent struct {
 }
 
 // EmitIntent is a host-side request to emit an event on behalf of a plugin.
-// Hosts use this to validate stream ownership and stamp system-owned fields
-// before persisting the event.
+// Hosts use this to validate subject ownership and stamp system-owned fields
+// before publishing the event.
+//
+// Subject names the JetStream subject the event will be published to (e.g.,
+// "events.main.scene.01ABC.ic"). For the Phase B cutover (F1) the host
+// accepts both legacy colon-delimited namespaces (e.g. "scene:01ABC") and
+// JetStream-native dot-delimited subjects; legacy names are translated
+// internally. F5 migrates plugins to emit JetStream-native subjects directly.
 type EmitIntent struct {
-	Stream  string
+	Subject string
 	Type    EventType
 	Payload string // JSON string
 }

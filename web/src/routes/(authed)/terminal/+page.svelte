@@ -10,6 +10,7 @@
   import { ControlSignal } from '$lib/connect/holomush/web/v1/web_pb';
   import { routeEvent } from '$lib/stores/eventRouter';
   import { appendLine, clearLines, replayActive } from '$lib/stores/terminalStore';
+  import { addPresence, removePresence } from '$lib/stores/sidebarStore';
   import { themePreferences, terminalBlackOverrideVars } from '$lib/stores/themeStore';
   import { setConnectionStatus } from '$lib/stores/connectionStore';
   import { uiPrefs, setSidebarWidthPx } from '$lib/stores/uiPrefsStore';
@@ -338,7 +339,26 @@
         replayActive.set(false);
         // Drain Subscribe events that arrived during backfill, deduping.
         for (const ev of liveBuffer) {
-          if (ev.eventId && seenEventIds.has(ev.eventId)) continue;
+          if (ev.eventId && seenEventIds.has(ev.eventId)) {
+            // Terminal dedup: suppress duplicate output. But movement events
+            // (arrive/leave) may have been fetched by backfill as historical
+            // (replayed=true, sidebar suppressed) and now need to update the
+            // presence list as a live event. Apply the sidebar delta here so
+            // the presence list stays accurate when two clients connect in
+            // rapid succession.
+            //
+            // TODO(holomush-1tvn.15): Fix backfill to exclude events published
+            // after subscribe started; then this guard can be removed.
+            const evRec = ev as Record<string, unknown>;
+            if (evRec.category === 'movement') {
+              const actor = evRec.actor as string | undefined;
+              if (actor) {
+                if (evRec.type === 'arrive') addPresence(actor);
+                else if (evRec.type === 'leave') removePresence(actor);
+              }
+            }
+            continue;
+          }
           if (ev.eventId) seenEventIds.add(ev.eventId);
           routeEvent(ev, false);
         }

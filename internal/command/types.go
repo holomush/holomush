@@ -506,7 +506,7 @@ type ServicesConfig struct {
 	World              WorldService             // world model queries and mutations
 	Session            session.Access           // session management
 	Engine             types.AccessPolicyEngine // ABAC policy engine for authorization
-	Events             core.EventStore          // event persistence
+	Events             core.EventAppender       // event persistence
 	AliasCache         *AliasCache              // alias management (optional)
 	AliasRepo          AliasWriter              // alias persistence (optional, for alias handlers)
 	Registry           *Registry                // command registry (optional)
@@ -526,7 +526,7 @@ type Services struct {
 	world              WorldService             // world model queries and mutations
 	session            session.Access           // session management
 	engine             types.AccessPolicyEngine // ABAC policy engine for authorization
-	events             core.EventStore          // event persistence
+	events             core.EventAppender       // event persistence
 	aliasCache         *AliasCache              // alias management (optional, for alias commands)
 	aliasRepo          AliasWriter              // alias persistence (optional, for alias handlers)
 	registry           *Registry                // command registry (optional, for alias shadow detection)
@@ -543,8 +543,8 @@ func (s *Services) Session() session.Access { return s.session }
 // Engine returns the ABAC policy engine for authorization checks.
 func (s *Services) Engine() types.AccessPolicyEngine { return s.engine }
 
-// Events returns the event store for event persistence.
-func (s *Services) Events() core.EventStore { return s.events }
+// Events returns the event appender for event persistence.
+func (s *Services) Events() core.EventAppender { return s.events }
 
 // AliasCache returns the alias cache for alias management (may be nil).
 func (s *Services) AliasCache() *AliasCache { return s.aliasCache }

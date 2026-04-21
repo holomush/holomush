@@ -18,6 +18,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -230,12 +231,16 @@ func (m *Manager) DeliverCommand(ctx context.Context, pluginName string, cmd plu
 }
 
 // ConfigureEventEmitter wires the shared plugin event emitter to the provided
-// host event store. Production startup MUST call this before plugin response
+// EventBus publisher. Production startup MUST call this before plugin response
 // events are routed through the manager.
-func (m *Manager) ConfigureEventEmitter(store core.EventStore) {
+//
+// Post-F1 the emitter publishes to JetStream (no core.EventStore.Append path
+// remains). Callers SHOULD pass `eventBusSub.Publisher()` here; tests MAY
+// inject a fake Publisher.
+func (m *Manager) ConfigureEventEmitter(publisher eventbus.Publisher, opts ...EmitterOption) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.eventEmitter = NewPluginEventEmitter(store, m.lookupManifest, actorFromContext)
+	m.eventEmitter = NewPluginEventEmitter(publisher, m.lookupManifest, actorFromContext, opts...)
 	for _, host := range m.hosts {
 		if configurer := findOptional[EventEmitterConfigurer](host); configurer != nil {
 			configurer.SetEventEmitter(m.eventEmitter)
@@ -248,23 +253,23 @@ func (m *Manager) ConfigureEventEmitter(store core.EventStore) {
 	}
 }
 
-// ConfigureFocusDeps injects the focus coordinator and event store into all
+// ConfigureFocusDeps injects the focus coordinator and history reader into all
 // registered hosts. Production startup MUST call this before plugins handle
 // focus-related RPCs or host functions. Called from the gRPC subsystem's
-// Start after creating the FocusCoordinator and EventWriter.
-func (m *Manager) ConfigureFocusDeps(fc focus.Coordinator, es core.EventStore) {
+// Start after creating the FocusCoordinator.
+func (m *Manager) ConfigureFocusDeps(fc focus.Coordinator, hr HistoryReader) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, host := range m.hosts {
 		if configurer := findOptional[FocusDepsConfigurer](host); configurer != nil {
 			configurer.SetFocusCoordinator(fc)
-			configurer.SetEventStore(es)
+			configurer.SetHistoryReader(hr)
 		}
 	}
 	if m.luaHost != nil {
 		if configurer := findOptional[FocusDepsConfigurer](m.luaHost); configurer != nil {
 			configurer.SetFocusCoordinator(fc)
-			configurer.SetEventStore(es)
+			configurer.SetHistoryReader(hr)
 		}
 	}
 }
@@ -297,7 +302,14 @@ func (m *Manager) EmitPluginEvent(ctx context.Context, pluginName string, event 
 		return oops.With("plugin", pluginName).
 			New("plugin event emitter is not configured")
 	}
-	return emitter.Emit(ctx, pluginName, pluginsdk.EmitIntent(event))
+	return emitter.Emit(ctx, pluginName, pluginsdk.EmitIntent{
+		// EmitEvent is the plugin-return shape (Stream is the legacy field
+		// name); EmitIntent is the host-facing shape (Subject). F5 migrates
+		// plugin code to Subject natively.
+		Subject: event.Stream,
+		Type:    event.Type,
+		Payload: event.Payload,
+	})
 }
 
 // DiscoveredPlugin contains a manifest and its directory.
@@ -1056,6 +1068,66 @@ func (m *Manager) Close(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// AuditSubjectDeclaration pairs a plugin name with one NATS subject pattern
+// drawn from the plugin's manifest audit blocks. Consumers of this shape
+// feed it directly into audit.NewOwnerMap to build the host OwnerMap.
+type AuditSubjectDeclaration struct {
+	PluginName string
+	Subject    string
+}
+
+// PluginAuditClient returns the PluginAuditService client for the named
+// plugin by walking every registered host and asking each to produce one.
+// Returns nil, false when no host can supply a client for the plugin —
+// typically because the plugin is not a binary plugin, is not loaded, or
+// did not register the service. The host audit subsystem calls this to
+// resolve the client for each manifest-declared audit block.
+func (m *Manager) PluginAuditClient(pluginName string) (pluginv1.PluginAuditServiceClient, bool) {
+	m.mu.RLock()
+	host, ok := m.pluginHosts[pluginName]
+	m.mu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+	// Use the Unwrap-aware optional lookup so middleware-wrapped hosts
+	// (e.g. HostMiddleware for OTel instrumentation) still surface the
+	// underlying provider. Mirrors how ServiceConnProvider is discovered
+	// during plugin load.
+	provider := findOptional[PluginAuditClientProvider](host)
+	if provider == nil {
+		return nil, false
+	}
+	client := provider.PluginAuditClient(pluginName)
+	if client == nil {
+		return nil, false
+	}
+	return client, true
+}
+
+// AuditSubjects returns every (plugin, subject) pair declared via
+// manifest.Audit[*].Subjects across all loaded plugins. Plugins without
+// audit blocks contribute nothing; duplicate subjects from the same
+// plugin are de-duplicated at OwnerMap construction time, not here.
+func (m *Manager) AuditSubjects() []AuditSubjectDeclaration {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var out []AuditSubjectDeclaration
+	for name, dp := range m.loaded {
+		if dp.Manifest == nil {
+			continue
+		}
+		for _, block := range dp.Manifest.Audit {
+			for _, subj := range block.Subjects {
+				out = append(out, AuditSubjectDeclaration{
+					PluginName: name,
+					Subject:    subj,
+				})
+			}
+		}
+	}
+	return out
 }
 
 // IsPluginLoaded returns true if the named plugin is currently loaded.

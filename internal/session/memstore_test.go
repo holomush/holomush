@@ -24,7 +24,7 @@ func TestMemStore_GetSet(t *testing.T) {
 		CharacterID:   ulid.Make(),
 		CharacterName: "TestChar",
 		Status:        StatusActive,
-		EventCursors:  map[string]ulid.ULID{},
+
 	}
 
 	require.NoError(t, store.Set(ctx, "session-1", info))
@@ -370,52 +370,6 @@ func TestMemStore_UpdateLastWhispered(t *testing.T) {
 	assert.Equal(t, "Artanis", got.LastWhispered)
 }
 
-func TestMemStoreUpdateCursorsRejectsRegression(t *testing.T) {
-	// MemStore.UpdateCursors must preserve the higher cursor on regression
-	// attempts, mirroring the SQL-level CAS on PostgresSessionStore. Without
-	// this parity, unit tests that exercise cursor code paths would silently
-	// pass with inputs that would be rejected by the production store.
-	ctx := context.Background()
-	store := NewMemStore()
-
-	sess := &Info{
-		ID:            "sess-mem-cas",
-		CharacterID:   ulid.Make(),
-		CharacterName: "TestChar",
-		LocationID:    ulid.Make(),
-		Status:        StatusActive,
-		EventCursors:  map[string]ulid.ULID{},
-	}
-	require.NoError(t, store.Set(ctx, sess.ID, sess))
-
-	// Mint two cursors and force the "higher" one to be written first.
-	// ulid.Make() is not guaranteed monotonic across calls (fresh random
-	// per call), so swap if the mint ordering doesn't produce the shape
-	// we need for the test. The test exercises the guard, not ULID
-	// monotonicity, so deterministic arrangement is sufficient.
-	later := mustNewULID(t)
-	time.Sleep(1 * time.Millisecond)
-	earlier := mustNewULID(t)
-	if earlier.String() > later.String() {
-		later, earlier = earlier, later
-	}
-
-	// Write the higher cursor first.
-	require.NoError(t, store.UpdateCursors(ctx, sess.ID, map[string]ulid.ULID{
-		"stream:x": later,
-	}))
-
-	// Attempt a regression — must be silently ignored (no error, no overwrite).
-	require.NoError(t, store.UpdateCursors(ctx, sess.ID, map[string]ulid.ULID{
-		"stream:x": earlier,
-	}))
-
-	got, err := store.Get(ctx, sess.ID)
-	require.NoError(t, err)
-	assert.Equal(t, later, got.EventCursors["stream:x"],
-		"MemStore must preserve the higher cursor on regression attempts")
-}
-
 func TestFocusMembershipTypesExist(t *testing.T) {
 	// Verify the type system is wired correctly. This test serves as
 	// a compile-time canary — if the types are removed or renamed,
@@ -462,7 +416,7 @@ func TestMemStore_FocusMembershipsRoundTrip(t *testing.T) {
 		CharacterID:   ulid.Make(),
 		CharacterName: "FocusChar",
 		Status:        StatusActive,
-		EventCursors:  map[string]ulid.ULID{},
+
 		FocusMemberships: []FocusMembership{
 			{Kind: FocusKindScene, TargetID: targetID, JoinedAt: now},
 		},
@@ -498,7 +452,7 @@ func TestMemStore_UpdateFocusMemberships_AddsAndPresents(t *testing.T) {
 		ID:           "session-ufm-add",
 		CharacterID:  ulid.Make(),
 		Status:       StatusActive,
-		EventCursors: map[string]ulid.ULID{},
+
 	}
 	require.NoError(t, store.Set(ctx, info.ID, info))
 
@@ -552,7 +506,7 @@ func TestMemStore_UpdateFocusMemberships_RejectsExpiredSession(t *testing.T) {
 		ID:           "session-ufm-expired",
 		CharacterID:  ulid.Make(),
 		Status:       StatusExpired,
-		EventCursors: map[string]ulid.ULID{},
+
 	}
 	require.NoError(t, store.Set(ctx, info.ID, info))
 
@@ -576,7 +530,7 @@ func TestMemStore_UpdateFocusMemberships_MutatorErrorRollsBack(t *testing.T) {
 		ID:           "session-ufm-err",
 		CharacterID:  ulid.Make(),
 		Status:       StatusActive,
-		EventCursors: map[string]ulid.ULID{},
+
 	}
 	require.NoError(t, store.Set(ctx, info.ID, info))
 
@@ -676,16 +630,6 @@ func TestMemStoreListByFocusReturnsEmptySliceWhenNoMatches(t *testing.T) {
 	results, err := store.ListByFocus(ctx, FocusKey{Kind: FocusKindScene, TargetID: ulid.Make()})
 	require.NoError(t, err)
 	assert.Empty(t, results)
-}
-
-// mustNewULID mints a ulid.ULID via ulid.Make for tests that need distinct,
-// lex-sortable IDs. The session test package cannot import internal/core
-// without creating a cycle (core imports session indirectly via engine
-// types), so ulid.Make is used despite being non-monotonic. Test code is
-// exempt from the ruleguard rule that forbids ulid.Make in production code.
-func mustNewULID(t *testing.T) ulid.ULID {
-	t.Helper()
-	return ulid.Make()
 }
 
 func TestMemStoreListByPlayerSessionReturnsOnlyMatchingSessions(t *testing.T) {
