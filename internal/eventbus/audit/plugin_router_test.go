@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -84,7 +84,7 @@ func (s stubProvider) PluginAuditClient(name string) (pluginv1.PluginAuditServic
 func TestPluginHistoryRouterForwardsQueryAndAdaptsStream(t *testing.T) {
 	t.Parallel()
 
-	id := ulid.MustNew(ulid.Timestamp(time.Now()), nil)
+	id := core.NewULID()
 	idBytes := id.Bytes()
 
 	fs := &fakeStream{
@@ -189,7 +189,7 @@ func TestPluginHistoryRouterRejectsEmptyEvent(t *testing.T) {
 
 func TestPluginHistoryRouterAcceptsRawULIDBytes(t *testing.T) {
 	t.Parallel()
-	id := ulid.MustNew(ulid.Timestamp(time.Now()), nil)
+	id := core.NewULID()
 	raw := id.Bytes()
 	fs := &fakeStream{resps: []*pluginv1.QueryHistoryResponse{
 		{Event: &eventbusv1.Event{
@@ -254,8 +254,8 @@ func TestPluginHistoryRouterForwardsCursors(t *testing.T) {
 	fc := &fakeHistoryClient{stream: &fakeStream{}}
 	router := audit.NewPluginHistoryRouter(stubProvider{name: "core-scenes", client: fc})
 
-	after := ulid.MustNew(ulid.Timestamp(time.Now()), nil)
-	before := ulid.MustNew(ulid.Timestamp(time.Now().Add(time.Hour)), nil)
+	after := core.NewULID()
+	before := core.NewULID()
 	notBefore := time.Unix(100, 0)
 	notAfter := time.Unix(200, 0)
 

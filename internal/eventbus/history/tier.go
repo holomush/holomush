@@ -368,6 +368,13 @@ type crossoverStream struct {
 	// so a page drawn straddling both tiers can legitimately observe the
 	// same ULID twice.
 	seenIDs map[ulid.ULID]struct{}
+
+	// stuckPageReads counts consecutive loadNextPage calls that made no
+	// forward progress (either returned zero new events, or returned events
+	// we'd already seen). A non-zero count that exceeds maxBufferMultiple
+	// means the tier is ignoring our cursor — trip EVENTBUS_HISTORY_BUFFER_OVERFLOW
+	// to avoid unbounded memory growth and infinite loops.
+	stuckPageReads int
 }
 
 func newCrossoverStream(ctx context.Context, hot HotTier, cold ColdTier, q eventbus.HistoryQuery, edge time.Time, startTier Tier) *crossoverStream {
@@ -412,6 +419,15 @@ func (s *crossoverStream) Next(ctx context.Context) (eventbus.Event, error) {
 // to continue. The result is concatenated into s.buf in the caller's
 // direction order.
 func (s *crossoverStream) loadNextPage(ctx context.Context) error {
+	// Compact the buffer before loading more: Next() only advances s.pos,
+	// so without compaction len(s.buf) grows unbounded across pages and a
+	// buffer-length-based guard would fire spuriously on long scans while
+	// pinning all consumed events in memory.
+	if s.pos >= len(s.buf) {
+		s.buf = s.buf[:0]
+		s.pos = 0
+	}
+
 	want := s.query.PageSize
 	if want <= 0 {
 		want = DefaultPageSize
@@ -425,18 +441,40 @@ func (s *crossoverStream) loadNextPage(ctx context.Context) error {
 		second = otherTier(s.startTier)
 	}
 
+	// Snapshot the cursor before the tier read; if the read returns events
+	// but advanceCursor doesn't change the cursor, we know the tier is
+	// ignoring it (pathological — would loop forever) and we must abort.
+	cursorBefore := s.currentCursor()
+	preSeen := len(s.seenIDs)
+
 	first, err := s.readTier(ctx, firstTier, want)
 	if err != nil {
 		return err
 	}
 	s.appendOrdered(first)
 	s.advanceCursor(first)
-	if bufCap := want * maxBufferMultiple; bufCap > 0 && len(s.buf) > bufCap {
+
+	// Detect the cursor-ignored regression: a non-empty tier read that
+	// didn't move the cursor (either the tier returned the same events
+	// again, or advanceCursor is broken). Allow one such read (bounded
+	// dedup churn at the tier boundary) but trip the guard after
+	// maxBufferMultiple consecutive stuck reads.
+	switch {
+	case len(first) > 0 && s.currentCursor() == cursorBefore:
+		s.stuckPageReads++
+	case len(first) > 0 && len(s.seenIDs) == preSeen:
+		// Cursor moved but every returned ID was already seen — still no
+		// forward progress for the consumer.
+		s.stuckPageReads++
+	default:
+		s.stuckPageReads = 0
+	}
+	if s.stuckPageReads > maxBufferMultiple {
 		return oops.Code("EVENTBUS_HISTORY_BUFFER_OVERFLOW").
 			With("page_size", want).
-			With("buffer_len", len(s.buf)).
+			With("stuck_reads", s.stuckPageReads).
 			With("subject", string(s.query.Subject)).
-			Errorf("crossover buffer exceeded %d× page size; cursor advancement likely broken", maxBufferMultiple)
+			Errorf("crossover buffer exceeded progress budget: %d consecutive tier reads made no forward progress; cursor advancement likely broken", s.stuckPageReads)
 	}
 
 	if len(first) < want && !s.crossoverDone {
@@ -479,6 +517,20 @@ func (s *crossoverStream) loadNextPage(ctx context.Context) error {
 // backward advances Before. Without this, loadNextPage would re-read the
 // same page indefinitely (dedup at Next hides the events but s.buf and
 // the read-loop still grow without bound — an O(n) memory leak per call).
+// currentCursor returns the query's active cursor bound (After for
+// forward, Before for backward). Used to detect pathological tiers that
+// ignore the cursor and return the same events on every read.
+func (s *crossoverStream) currentCursor() ulid.ULID {
+	dir := s.query.Direction
+	if dir == 0 {
+		dir = eventbus.DirectionForward
+	}
+	if dir == eventbus.DirectionForward {
+		return s.query.After
+	}
+	return s.query.Before
+}
+
 func (s *crossoverStream) advanceCursor(events []eventbus.Event) {
 	if len(events) == 0 {
 		return

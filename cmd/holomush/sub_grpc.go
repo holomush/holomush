@@ -661,12 +661,25 @@ func historyOwnersFromPlugins(mgr *plugins.Manager) *audit.OwnerMap {
 	if len(decls) == 0 {
 		return nil
 	}
+	// Only claim ownership for plugins that actually have a registered
+	// PluginAuditService client. If a plugin declares subjects in its
+	// manifest but never brought up a service (e.g. crashed at startup),
+	// the audit subsystem leaves those subjects to the host projection;
+	// routing them to the plugin here anyway would make QueryHistory fail
+	// instead of reading from the host archive. Mirrors the filter in
+	// buildAuditSubsystem (core.go).
 	owners := make([]audit.SubjectOwner, 0, len(decls))
 	for _, d := range decls {
+		if _, ok := mgr.PluginAuditClient(d.PluginName); !ok {
+			continue
+		}
 		owners = append(owners, audit.SubjectOwner{
 			PluginName: d.PluginName,
 			Pattern:    d.Subject,
 		})
+	}
+	if len(owners) == 0 {
+		return nil
 	}
 	m, err := audit.NewOwnerMap(owners)
 	if err != nil {

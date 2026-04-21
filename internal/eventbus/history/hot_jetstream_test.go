@@ -6,6 +6,8 @@ package history_test
 import (
 	"context"
 	crand "crypto/rand"
+	"errors"
+	"io"
 	"sort"
 	"testing"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/internal/eventbus/history"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // These tests exercise the JetStream-backed HotTier directly via a Reader
@@ -84,12 +87,13 @@ func TestHotTierForwardReadReturnsPublishedEvents(t *testing.T) {
 	var got []ulid.ULID
 	for {
 		ev, nextErr := stream.Next(context.Background())
-		if nextErr != nil {
+		if errors.Is(nextErr, io.EOF) {
 			break
 		}
+		require.NoError(t, nextErr)
 		got = append(got, ev.ID)
 	}
-	assert.GreaterOrEqual(t, len(got), 1, "at least one event served from hot tier")
+	assert.Equal(t, ids, got, "forward read must return exactly the published events in order")
 }
 
 func TestHotTierBackwardReadUsesStartSeq(t *testing.T) {
@@ -97,7 +101,8 @@ func TestHotTierBackwardReadUsesStartSeq(t *testing.T) {
 	// the F8 autofix introduced.
 	embedded := eventbustest.New(t)
 	subject := eventbus.Subject("events.main.hot.backward")
-	_ = publishN(t, embedded, subject, 5)
+	ids := publishN(t, embedded, subject, 5)
+	sort.Slice(ids, func(i, j int) bool { return ids[i].Compare(ids[j]) < 0 })
 
 	reader := history.NewReader(
 		embedded.JS, nil,
@@ -111,18 +116,37 @@ func TestHotTierBackwardReadUsesStartSeq(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 
-	var got []eventbus.Event
+	// Backward read starts from the latest-seen seq and walks backwards
+	// through the stream. The test asserts two invariants:
+	//   (a) the reader MUST yield strictly ULID-descending ids (no dupes,
+	//       no out-of-order), and
+	//   (b) every returned id MUST be one of the published ids (no
+	//       phantom rows, no cross-contamination from prior tests).
+	const pageSize = 3
+	var got []ulid.ULID
 	for {
 		ev, nextErr := stream.Next(context.Background())
-		if nextErr != nil {
+		if errors.Is(nextErr, io.EOF) {
 			break
 		}
-		got = append(got, ev)
-		if len(got) >= 3 {
+		require.NoError(t, nextErr)
+		got = append(got, ev.ID)
+		if len(got) >= pageSize {
 			break
 		}
 	}
-	assert.GreaterOrEqual(t, len(got), 1, "at least one event served backward")
+	assert.Len(t, got, pageSize, "backward read must fill the page")
+	publishedSet := make(map[ulid.ULID]struct{}, len(ids))
+	for _, id := range ids {
+		publishedSet[id] = struct{}{}
+	}
+	for i, id := range got {
+		_, ok := publishedSet[id]
+		assert.True(t, ok, "returned id %v was not published", id)
+		if i > 0 {
+			assert.Less(t, id.Compare(got[i-1]), 0, "backward read must be strictly ULID-descending at index %d", i)
+		}
+	}
 }
 
 func TestHotTierUnknownSubjectReturnsEmpty(t *testing.T) {
@@ -139,7 +163,7 @@ func TestHotTierUnknownSubjectReturnsEmpty(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 	_, err = stream.Next(context.Background())
-	require.Error(t, err)
+	require.ErrorIs(t, err, io.EOF, "unknown subject must drain as io.EOF")
 }
 
 func TestHotTierBackwardReadOnEmptyStream(t *testing.T) {
@@ -158,7 +182,7 @@ func TestHotTierBackwardReadOnEmptyStream(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 	_, err = stream.Next(context.Background())
-	require.Error(t, err)
+	require.ErrorIs(t, err, io.EOF, "empty stream must drain as io.EOF")
 }
 
 func TestNewReaderOptionsAreApplied(t *testing.T) {
@@ -182,5 +206,5 @@ func TestReaderRejectsInvalidDirection(t *testing.T) {
 		Subject:   "events.main.any",
 		Direction: eventbus.Direction(99),
 	})
-	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_INVALID_DIRECTION")
 }

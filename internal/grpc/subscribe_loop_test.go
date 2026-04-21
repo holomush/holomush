@@ -130,7 +130,7 @@ var _ eventbus.Delivery = (*fakeDelivery)(nil)
 // the given character stream.
 func makeDelivery(t *testing.T, evType, characterID string) *fakeDelivery {
 	t.Helper()
-	id := ulid.MustNew(ulid.Timestamp(time.Now()), nil)
+	id := core.NewULID()
 	return &fakeDelivery{
 		ev: eventbus.Event{
 			ID:        id,
@@ -149,7 +149,7 @@ func TestDispatchDeliveryForwardsAndAcks(t *testing.T) {
 	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
-	charID := ulid.MustNew(ulid.Timestamp(time.Now()), nil).String()
+	charID := core.NewULID().String()
 	d := makeDelivery(t, "say", charID)
 
 	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
@@ -165,7 +165,7 @@ func TestDispatchDeliveryNacksOnSendError(t *testing.T) {
 	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
 	stream := &fakeSubscribeStream{ctx: context.Background(), err: errors.New("send boom")}
-	charID := ulid.MustNew(ulid.Timestamp(time.Now()), nil).String()
+	charID := core.NewULID().String()
 	d := makeDelivery(t, "say", charID)
 
 	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
@@ -179,7 +179,7 @@ func TestDispatchDeliveryAckFailureLogsButReturnsNil(t *testing.T) {
 	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
-	charID := ulid.MustNew(ulid.Timestamp(time.Now()), nil).String()
+	charID := core.NewULID().String()
 	d := makeDelivery(t, "say", charID)
 	d.ackErr = errors.New("ack boom")
 
@@ -193,7 +193,7 @@ func TestDispatchDeliveryTerminatesOnMatchingSessionEnded(t *testing.T) {
 	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
-	charID := ulid.MustNew(ulid.Timestamp(time.Now()), nil).String()
+	charID := core.NewULID().String()
 
 	d := makeDelivery(t, string(core.EventTypeSessionEnded), charID)
 	payload, _ := json.Marshal(core.SessionEndedPayload{
@@ -216,7 +216,7 @@ func TestDispatchDeliveryIgnoresNonMatchingSessionEnded(t *testing.T) {
 	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
-	charID := ulid.MustNew(ulid.Timestamp(time.Now()), nil).String()
+	charID := core.NewULID().String()
 
 	d := makeDelivery(t, string(core.EventTypeSessionEnded), charID)
 	payload, _ := json.Marshal(core.SessionEndedPayload{
@@ -237,7 +237,7 @@ func TestDispatchDeliverySessionEndedBadPayloadLogsAndSurvives(t *testing.T) {
 	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
 	stream := &fakeSubscribeStream{ctx: context.Background()}
-	charID := ulid.MustNew(ulid.Timestamp(time.Now()), nil).String()
+	charID := core.NewULID().String()
 
 	d := makeDelivery(t, string(core.EventTypeSessionEnded), charID)
 	d.ev.Payload = []byte("not-json")
@@ -270,7 +270,7 @@ func TestApplyFilterCtrlAddsAndCallsSetFilters(t *testing.T) {
 	bs := newFakeSessionStream()
 	filterSet := map[eventbus.Subject]struct{}{}
 
-	charID := ulid.MustNew(ulid.Timestamp(time.Now()), nil).String()
+	charID := core.NewULID().String()
 	ctrl := sessionStreamUpdate{stream: "character:" + charID, add: true}
 	err := s.applyFilterCtrl(context.Background(), info, bs, filterSet, ctrl)
 	require.NoError(t, err)
@@ -283,7 +283,7 @@ func TestApplyFilterCtrlAddIdempotentWhenExists(t *testing.T) {
 	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
 	bs := newFakeSessionStream()
-	charID := ulid.MustNew(ulid.Timestamp(time.Now()), nil).String()
+	charID := core.NewULID().String()
 	sub := eventbus.Subject("events.main.character." + charID)
 	filterSet := map[eventbus.Subject]struct{}{sub: {}}
 
@@ -298,7 +298,7 @@ func TestApplyFilterCtrlRemovesAndCallsSetFilters(t *testing.T) {
 	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
 	bs := newFakeSessionStream()
-	charID := ulid.MustNew(ulid.Timestamp(time.Now()), nil).String()
+	charID := core.NewULID().String()
 	sub := eventbus.Subject("events.main.character." + charID)
 	filterSet := map[eventbus.Subject]struct{}{sub: {}}
 
@@ -316,7 +316,7 @@ func TestApplyFilterCtrlRemoveIdempotentWhenMissing(t *testing.T) {
 	bs := newFakeSessionStream()
 	filterSet := map[eventbus.Subject]struct{}{}
 
-	charID := ulid.MustNew(ulid.Timestamp(time.Now()), nil).String()
+	charID := core.NewULID().String()
 	ctrl := sessionStreamUpdate{stream: "character:" + charID, add: false}
 	err := s.applyFilterCtrl(context.Background(), info, bs, filterSet, ctrl)
 	require.NoError(t, err)
@@ -343,7 +343,7 @@ func TestApplyFilterCtrlPropagatesSetFiltersError(t *testing.T) {
 	bs.setFiltersErr = errors.New("js bust")
 	filterSet := map[eventbus.Subject]struct{}{}
 
-	charID := ulid.MustNew(ulid.Timestamp(time.Now()), nil).String()
+	charID := core.NewULID().String()
 	ctrl := sessionStreamUpdate{stream: "character:" + charID, add: true}
 	err := s.applyFilterCtrl(context.Background(), info, bs, filterSet, ctrl)
 	require.Error(t, err)
@@ -418,7 +418,7 @@ func TestRunSubscribeLoopDeliversEventsThenReturnsOnCtxCancel(t *testing.T) {
 	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
 	bs := newFakeSessionStream()
-	charID := ulid.MustNew(ulid.Timestamp(time.Now()), nil).String()
+	charID := core.NewULID().String()
 
 	d1 := makeDelivery(t, "say", charID)
 	d2 := makeDelivery(t, "pose", charID)
@@ -459,7 +459,7 @@ func TestRunSubscribeLoopReturnsOnSendError(t *testing.T) {
 	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
 	bs := newFakeSessionStream()
-	charID := ulid.MustNew(ulid.Timestamp(time.Now()), nil).String()
+	charID := core.NewULID().String()
 
 	d1 := makeDelivery(t, "say", charID)
 	bs.push(d1)
@@ -480,7 +480,7 @@ func TestRunSubscribeLoopReturnsNilOnSessionEnded(t *testing.T) {
 	s := &CoreServer{}
 	info := &session.Info{ID: "s1"}
 	bs := newFakeSessionStream()
-	charID := ulid.MustNew(ulid.Timestamp(time.Now()), nil).String()
+	charID := core.NewULID().String()
 
 	d := makeDelivery(t, string(core.EventTypeSessionEnded), charID)
 	payload, _ := json.Marshal(core.SessionEndedPayload{SessionID: "s1", Reason: "goodbye"})
@@ -507,7 +507,7 @@ func TestRunSubscribeLoopAppliesFilterCtrl(t *testing.T) {
 	ctrlCh := make(chan sessionStreamUpdate, 2)
 	filterSet := map[eventbus.Subject]struct{}{}
 
-	charID := ulid.MustNew(ulid.Timestamp(time.Now()), nil).String()
+	charID := core.NewULID().String()
 	ctrlCh <- sessionStreamUpdate{stream: "character:" + charID, add: true}
 	// Location stream: rejected path (logged warning).
 	ctrlCh <- sessionStreamUpdate{stream: world.StreamPrefixLocation + "01HYXYZ0C0000000000000000C", add: true}

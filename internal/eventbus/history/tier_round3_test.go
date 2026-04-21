@@ -9,6 +9,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/eventbus"
 )
@@ -23,14 +24,10 @@ func TestSelectStartTierEveryBranch(t *testing.T) {
 	now := time.Date(2026, 4, 20, 0, 0, 0, 0, time.UTC)
 	// afterOnHot: ULID whose Timestamp is after edge (>= edge) → hot.
 	afterOnHot, err := ulid.New(ulid.Timestamp(edge.Add(24*time.Hour)), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	// afterOnCold: ULID whose Timestamp is before edge → cold.
 	afterOnCold, err := ulid.New(ulid.Timestamp(edge.Add(-24*time.Hour)), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	tests := []struct {
 		name string
@@ -139,12 +136,25 @@ func TestSelectStartTierEveryBranch(t *testing.T) {
 	}
 }
 
-// TestOtherTierRoundTrip exercises the helper that flips hot↔cold. Tiny
-// function but the 100% line reading is visible in coverage deltas.
-func TestOtherTierRoundTrip(t *testing.T) {
+// TestOtherTier exercises the helper that flips hot↔cold. Tiny function
+// but the 100% line reading is visible in coverage deltas.
+func TestOtherTier(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, TierPostgres, otherTier(TierJetStream))
-	assert.Equal(t, TierJetStream, otherTier(TierPostgres))
-	// Unknown tier defaults to JS (fallback branch).
-	assert.Equal(t, TierJetStream, otherTier(Tier(255)))
+
+	tests := []struct {
+		name string
+		in   Tier
+		want Tier
+	}{
+		{name: "jetstream maps to postgres", in: TierJetStream, want: TierPostgres},
+		{name: "postgres maps to jetstream", in: TierPostgres, want: TierJetStream},
+		{name: "unknown tier falls back to jetstream", in: Tier(255), want: TierJetStream},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, otherTier(tc.in))
+		})
+	}
 }

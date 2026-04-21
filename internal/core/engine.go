@@ -6,6 +6,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"time"
 
 	"github.com/samber/oops"
@@ -50,12 +51,27 @@ type Engine struct {
 //
 // Panics when store is nil so the misconfiguration surfaces at construction
 // time rather than deferring to the first Handle* call (which would panic on
-// a nil-receiver dereference of e.store).
+// a nil-receiver dereference of e.store). Detects both untyped nil and
+// typed-nil interface values (e.g. (*MemoryEventStore)(nil)) so callers
+// truly fail fast at construction.
 func NewEngine(store EventAppender) *Engine {
-	if store == nil {
+	if store == nil || isNilEventAppender(store) {
 		panic("core.NewEngine: nil EventAppender")
 	}
 	return &Engine{store: store}
+}
+
+// isNilEventAppender detects typed-nil interface values whose underlying
+// concrete kind is nilable (pointer, slice, map, chan, func, interface).
+// Returns false for non-nilable kinds (struct, value-receiver fakes).
+func isNilEventAppender(store EventAppender) bool {
+	v := reflect.ValueOf(store)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
 
 // HandleSay processes a say command.

@@ -139,8 +139,25 @@ func (m *PluginConsumerManager) Add(ctx context.Context, cfg PluginConsumerConfi
 
 	pc := &pluginConsumer{cfg: cfg, consumer: cons}
 	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.started {
+		// Once Start has run, Add is a no-op: subsequent Start() calls
+		// short-circuit on m.started so a late-added consumer would never
+		// be attached to a Consume loop. Surface the misuse instead of
+		// stranding the registration.
+		return oops.Code("AUDIT_PLUGIN_CONSUMER_INVALID_STATE").
+			With("plugin", cfg.PluginName).
+			Errorf("cannot add plugin consumer after Start")
+	}
+	// Idempotent by plugin name: re-adding the same plugin replaces the
+	// existing entry rather than creating a duplicate durable binding.
+	for i, existing := range m.consumers {
+		if existing.cfg.PluginName == cfg.PluginName {
+			m.consumers[i] = pc
+			return nil
+		}
+	}
 	m.consumers = append(m.consumers, pc)
-	m.mu.Unlock()
 	return nil
 }
 
@@ -156,10 +173,17 @@ func (m *PluginConsumerManager) Start(ctx context.Context) error {
 		pc.workerCtx = ctx
 		cc, err := pc.consumer.Consume(pc.handle)
 		if err != nil {
-			// Best-effort rollback of already-started consumers.
+			// Rollback: stop previously-started consumers AND wait for
+			// each to drain so in-flight callbacks don't outlive the
+			// failed Start. Mirrors the drain pattern used in Stop.
 			for _, started := range m.consumers {
 				if started.cc != nil {
 					started.cc.Stop()
+					select {
+					case <-started.cc.Closed():
+					case <-time.After(DefaultDrainTimeout):
+					case <-ctx.Done():
+					}
 					started.cc = nil
 				}
 			}

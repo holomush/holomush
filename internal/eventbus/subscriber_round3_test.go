@@ -8,6 +8,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -94,7 +95,9 @@ func TestSessionStreamNextReturnsIteratorClosedErrorAfterClose(t *testing.T) {
 	// Close first; next call observes the closed channel.
 	require.NoError(t, stream.Close())
 
-	// Next() MUST return an error referencing the closed iterator.
+	// Next() MUST return the concrete closed-iterator sentinel, not any
+	// error. Using errors.Is pins the branch that Close() deliberately
+	// engineers (inbox closed → ok=false → wrap jetstream.ErrMsgIteratorClosed).
 	_, err = stream.Next(context.Background())
-	require.Error(t, err)
+	require.ErrorIs(t, err, jetstream.ErrMsgIteratorClosed)
 }

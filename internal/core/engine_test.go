@@ -230,15 +230,13 @@ func TestNewEnginePanicsOnNilAppender(t *testing.T) {
 }
 
 func TestNewEnginePanicsOnTypedNilAppender(t *testing.T) {
-	// A typed-nil (*MemoryEventStore)(nil) is NOT caught by the == nil guard
-	// because the interface wraps a non-nil type descriptor. This test pins
-	// the current behavior: only the untyped-nil path is rejected at
-	// construction. A typed nil still panics on first Handle* due to the
-	// nil-pointer dereference of store.Append.
+	// A typed-nil (*MemoryEventStore)(nil) is NOT caught by a naive
+	// `== nil` guard because the interface wraps a non-nil type
+	// descriptor. The constructor uses reflection (isNilEventAppender)
+	// to detect this so misconfiguration surfaces at construction time
+	// rather than on first Handle* call.
 	var nilStore *MemoryEventStore
-	e := NewEngine(nilStore)
-	require.NotNil(t, e)
 	assert.Panics(t, func() {
-		_ = e.HandleSay(context.Background(), CharacterRef{Name: "x"}, "hello")
-	}, "typed-nil store must surface as a panic on first use")
+		_ = NewEngine(nilStore)
+	}, "typed-nil store must panic at construction, not on first use")
 }

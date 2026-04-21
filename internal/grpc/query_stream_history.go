@@ -267,6 +267,12 @@ func eventbusEventToEventFrame(e eventbus.Event, legacyStreamName string) *corev
 	actorID := ""
 	if e.Actor.ID != (ulid.ULID{}) {
 		actorID = e.Actor.ID.String()
+	} else if e.Actor.LegacyID != "" {
+		// Plugin-authored events carry a string LegacyID instead of a
+		// ULID. Preserve it here so non-ULID actors keep attribution
+		// across the EventFrame boundary, matching the publisher
+		// (internal/eventbus/publisher.go) and sub_grpc.go.
+		actorID = e.Actor.LegacyID
 	}
 	return &corev1.EventFrame{
 		Id:        e.ID.String(),

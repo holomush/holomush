@@ -247,12 +247,19 @@ func TestPublisherStampsAllRequiredHeaders(t *testing.T) {
 	}
 	require.NoError(t, pub.Publish(ctx, ev))
 
-	// Subscriber decoded headers; we verify via the Event returned.
+	// Subscriber decoded headers; we verify via the Event returned. A
+	// regression in any header-stamping path (actor kind, LegacyID,
+	// subject, timestamp) must fail this test, not just ID/Type.
 	d, err := stream.Next(ctx)
 	require.NoError(t, err)
 	got := d.Event()
 	require.Equal(t, ev.ID, got.ID)
 	require.Equal(t, ev.Type, got.Type)
+	require.Equal(t, ev.Subject, got.Subject, "Subject header must round-trip")
+	require.Equal(t, ev.Actor.Kind, got.Actor.Kind, "Actor-Kind header must round-trip")
+	require.Equal(t, ev.Actor.LegacyID, got.Actor.LegacyID, "Actor-LegacyID header must round-trip")
+	// Timestamp fidelity is to millisecond precision on the JS path.
+	require.WithinDuration(t, ev.Timestamp, got.Timestamp, 1*time.Millisecond, "Timestamp header must round-trip")
 	require.NoError(t, d.Ack())
 }
 
@@ -287,9 +294,18 @@ func TestIdentityKeySelectorReturnsIdentityAndNoKey(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 
-	require.NoError(t, pub.Publish(ctx, goodEvent(subject)))
+	want := goodEvent(subject)
+	require.NoError(t, pub.Publish(ctx, want))
 
 	d, err := stream.Next(ctx)
 	require.NoError(t, err)
+	// Prove the default identityKeySelector path: the round-tripped
+	// event's identity (ID + Subject + Type) must match exactly and the
+	// delivery MUST ack cleanly. A broken selector would either drop the
+	// event, mis-key it across subjects, or produce a different ID.
+	got := d.Event()
+	require.Equal(t, want.ID, got.ID, "identityKeySelector must preserve the event ID")
+	require.Equal(t, subject, got.Subject, "identityKeySelector must preserve the subject")
+	require.Equal(t, want.Type, got.Type, "identityKeySelector must preserve the type")
 	require.NoError(t, d.Ack())
 }

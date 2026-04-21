@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	"github.com/holomush/holomush/internal/session"
@@ -43,7 +44,7 @@ func TestStreamClosedFrameIncludesReason(t *testing.T) {
 func TestActorIDStringZeroIsEmpty(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "", actorIDString(eventbus.Actor{}))
-	id := ulid.MustNew(ulid.Timestamp(time.Now()), nil)
+	id := core.NewULID()
 	assert.Equal(t, id.String(), actorIDString(eventbus.Actor{ID: id}))
 }
 
@@ -104,8 +105,8 @@ func TestComputeInitialFiltersSkipsInvalidStreams(t *testing.T) {
 func TestToProtoSubscribeResponseMapsFields(t *testing.T) {
 	t.Parallel()
 	s := &CoreServer{}
-	id := ulid.MustNew(ulid.Timestamp(time.Now()), nil)
-	charID := ulid.MustNew(ulid.Timestamp(time.Now()), nil)
+	id := core.NewULID()
+	charID := core.NewULID()
 	resp := s.toProtoSubscribeResponse(eventbus.Event{
 		ID:        id,
 		Subject:   eventbus.Subject("events.main.character." + charID.String()),

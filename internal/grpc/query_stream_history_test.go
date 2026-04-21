@@ -11,15 +11,20 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
-	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
+
+// TODO(holomush-l60y): refactor the repetitive TestQueryStreamHistory*
+// functions into a single table-driven test. Deferred as it would churn
+// every test body simultaneously; tracked as follow-up.
 
 // fakeHistoryReader returns a canned slice (newest-first to match the
 // production bus contract) or a pre-seeded error. fetchHistoryFramesFromBus
@@ -84,9 +89,7 @@ func TestQueryStreamHistoryRejectsMissingHistoryReader(t *testing.T) {
 		Stream:    "location:01HYXYZ0C0000000000000000C",
 	})
 	require.Error(t, err)
-	o, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, "INTERNAL", o.Code())
+	errutil.AssertErrorCode(t, err, "INTERNAL")
 }
 
 func TestQueryStreamHistoryRejectsMissingSessionID(t *testing.T) {
@@ -96,9 +99,7 @@ func TestQueryStreamHistoryRejectsMissingSessionID(t *testing.T) {
 		Stream: "location:x",
 	})
 	require.Error(t, err)
-	o, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, "INVALID_ARGUMENT", o.Code())
+	errutil.AssertErrorCode(t, err, "INVALID_ARGUMENT")
 }
 
 func TestQueryStreamHistoryReturnsSessionNotFound(t *testing.T) {
@@ -109,9 +110,7 @@ func TestQueryStreamHistoryReturnsSessionNotFound(t *testing.T) {
 		Stream:    "location:01HYXYZ0C0000000000000000C",
 	})
 	require.Error(t, err)
-	o, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, "SESSION_NOT_FOUND", o.Code())
+	errutil.AssertErrorCode(t, err, "SESSION_NOT_FOUND")
 }
 
 func TestQueryStreamHistoryReturnsSessionExpired(t *testing.T) {
@@ -126,9 +125,7 @@ func TestQueryStreamHistoryReturnsSessionExpired(t *testing.T) {
 		Stream:    "location:01HYXYZ0C0000000000000000C",
 	})
 	require.Error(t, err)
-	o, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, "SESSION_EXPIRED", o.Code())
+	errutil.AssertErrorCode(t, err, "SESSION_EXPIRED")
 }
 
 func TestQueryStreamHistoryRejectsEmptyStream(t *testing.T) {
@@ -143,9 +140,7 @@ func TestQueryStreamHistoryRejectsEmptyStream(t *testing.T) {
 		Stream:    "",
 	})
 	require.Error(t, err)
-	o, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, "INVALID_ARGUMENT", o.Code())
+	errutil.AssertErrorCode(t, err, "INVALID_ARGUMENT")
 }
 
 func TestQueryStreamHistoryRejectsNegativeCount(t *testing.T) {
@@ -161,9 +156,7 @@ func TestQueryStreamHistoryRejectsNegativeCount(t *testing.T) {
 		Count:     -1,
 	})
 	require.Error(t, err)
-	o, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, "INVALID_ARGUMENT", o.Code())
+	errutil.AssertErrorCode(t, err, "INVALID_ARGUMENT")
 }
 
 func TestQueryStreamHistoryRejectsMalformedBeforeID(t *testing.T) {
@@ -179,9 +172,7 @@ func TestQueryStreamHistoryRejectsMalformedBeforeID(t *testing.T) {
 		BeforeId:  "not-a-ulid",
 	})
 	require.Error(t, err)
-	o, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, "INVALID_ARGUMENT", o.Code())
+	errutil.AssertErrorCode(t, err, "INVALID_ARGUMENT")
 }
 
 func TestQueryStreamHistoryRejectsMalformedSceneStream(t *testing.T) {
@@ -196,9 +187,7 @@ func TestQueryStreamHistoryRejectsMalformedSceneStream(t *testing.T) {
 		Stream:    "scene:not-a-ulid:ic",
 	})
 	require.Error(t, err)
-	o, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, "INVALID_ARGUMENT", o.Code())
+	errutil.AssertErrorCode(t, err, "INVALID_ARGUMENT")
 }
 
 func TestQueryStreamHistoryEnforcesMembershipGateForPrivateStream(t *testing.T) {
@@ -218,9 +207,7 @@ func TestQueryStreamHistoryEnforcesMembershipGateForPrivateStream(t *testing.T) 
 		Stream:    "character:" + otherID.String(),
 	})
 	require.Error(t, err)
-	o, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, "STREAM_ACCESS_DENIED", o.Code())
+	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
 }
 
 func TestQueryStreamHistoryAllowsOwnerOfPrivateCharacterStream(t *testing.T) {
@@ -231,7 +218,7 @@ func TestQueryStreamHistoryAllowsOwnerOfPrivateCharacterStream(t *testing.T) {
 		"s1": {ID: "s1", CharacterID: charID, ExpiresAt: &future},
 	})
 	reader := &fakeHistoryReader{events: []eventbus.Event{{
-		ID:        ulid.MustNew(ulid.Timestamp(time.Now()), nil),
+		ID:        core.NewULID(),
 		Subject:   eventbus.Subject("events.main.character." + charID.String()),
 		Type:      "scene.pose",
 		Timestamp: time.Now(),
@@ -291,9 +278,7 @@ func TestQueryStreamHistoryDenysSceneNonMember(t *testing.T) {
 		Stream:    sceneStream,
 	})
 	require.Error(t, err)
-	o, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, "STREAM_ACCESS_DENIED", o.Code())
+	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
 }
 
 func TestQueryStreamHistoryRejectsPublicStreamWithoutAccessEngine(t *testing.T) {
@@ -312,9 +297,7 @@ func TestQueryStreamHistoryRejectsPublicStreamWithoutAccessEngine(t *testing.T) 
 		Stream:    "location:01HYXYZ0C0000000000000000C",
 	})
 	require.Error(t, err)
-	o, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, "STREAM_ACCESS_DENIED", o.Code())
+	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
 }
 
 func TestQueryStreamHistoryDeniedByABAC(t *testing.T) {
@@ -333,9 +316,7 @@ func TestQueryStreamHistoryDeniedByABAC(t *testing.T) {
 		Stream:    "location:01HYXYZ0C0000000000000000C",
 	})
 	require.Error(t, err)
-	o, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, "STREAM_ACCESS_DENIED", o.Code())
+	errutil.AssertErrorCode(t, err, "STREAM_ACCESS_DENIED")
 }
 
 func TestQueryStreamHistoryBusErrorSurfacesAsInternal(t *testing.T) {
@@ -351,9 +332,7 @@ func TestQueryStreamHistoryBusErrorSurfacesAsInternal(t *testing.T) {
 		Stream:    "location:01HYXYZ0C0000000000000000C",
 	})
 	require.Error(t, err)
-	o, ok := oops.AsOops(err)
-	require.True(t, ok)
-	assert.Equal(t, "INTERNAL", o.Code())
+	errutil.AssertErrorCode(t, err, "INTERNAL")
 }
 
 func TestQueryStreamHistoryHasMoreReflectsCountPlusOne(t *testing.T) {
@@ -366,7 +345,7 @@ func TestQueryStreamHistoryHasMoreReflectsCountPlusOne(t *testing.T) {
 	evts := make([]eventbus.Event, 0, 4)
 	for i := 0; i < 4; i++ {
 		evts = append(evts, eventbus.Event{
-			ID:        ulid.MustNew(ulid.Timestamp(time.Now()), nil),
+			ID:        core.NewULID(),
 			Subject:   eventbus.Subject("events.main.location.01HYXYZ0C0000000000000000C"),
 			Type:      "scene.pose",
 			Timestamp: time.Now(),
@@ -428,7 +407,7 @@ func TestQueryStreamHistoryBeforeIDForwardsToBus(t *testing.T) {
 	sess := newTestSessionStore(t, map[string]*session.Info{
 		"s1": {ID: "s1", ExpiresAt: &future},
 	})
-	before := ulid.MustNew(ulid.Timestamp(time.Now()), nil)
+	before := core.NewULID()
 	reader := &fakeHistoryReader{}
 	s := newQueryStreamHistoryServer(t, reader, sess)
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{

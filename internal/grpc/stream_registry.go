@@ -101,12 +101,19 @@ func (r *SessionStreamRegistry) AddStream(_ context.Context, sessionID, stream s
 
 // AddStreamWithMode implements plugins.StreamRegistry. Subscribes with explicit replay mode.
 //
-// TODO(holomush-6uvc): Subscribe post-F3 ignores replayMode and always uses
-// cursor-mode replay via SessionStream.SetFilters, so BoundedTail / LiveOnline
-// requests are silently downgraded here. Either reject unsupported modes
-// with an error (option A) or thread the mode through Subscribe so SetFilters
-// honours the requested replay window (option B).
+// Post-F3 the Subscribe handler uses cursor-mode replay via
+// SessionStream.SetFilters exclusively; BoundedTail and LiveOnline are not
+// honoured. We reject those modes eagerly (option A of TODO(holomush-6uvc))
+// instead of silently downgrading, so plugins requesting a specific replay
+// window see an explicit error rather than the wrong behaviour.
 func (r *SessionStreamRegistry) AddStreamWithMode(_ context.Context, sessionID, stream string, mode session.ReplayMode) error {
+	if mode != focus.ReplayModeFromCursor {
+		return oops.Code("REPLAY_MODE_NOT_SUPPORTED").
+			With("session_id", sessionID).
+			With("stream", stream).
+			With("mode", mode).
+			Errorf("replay mode %v is not supported post-F3; only ReplayModeFromCursor is honored", mode)
+	}
 	return r.Send(sessionID, sessionStreamUpdate{stream: stream, add: true, replayMode: mode})
 }
 
@@ -127,7 +134,18 @@ func NewStreamSenderAdapter(r *SessionStreamRegistry) *StreamSenderAdapter {
 }
 
 // Send implements focus.StreamSender.
+//
+// Post-F3 only ReplayModeFromCursor is honoured; see AddStreamWithMode for
+// the rationale. Add-requests with other modes are rejected here too so
+// callers see the mismatch instead of getting silent cursor replay.
 func (a *StreamSenderAdapter) Send(sessionID, stream string, add bool, mode focus.ReplayMode) error {
+	if add && mode != focus.ReplayModeFromCursor {
+		return oops.Code("REPLAY_MODE_NOT_SUPPORTED").
+			With("session_id", sessionID).
+			With("stream", stream).
+			With("mode", mode).
+			Errorf("replay mode %v is not supported post-F3; only ReplayModeFromCursor is honored", mode)
+	}
 	return a.registry.Send(sessionID, sessionStreamUpdate{
 		stream:     stream,
 		add:        add,

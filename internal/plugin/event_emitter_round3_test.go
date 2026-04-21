@@ -136,13 +136,10 @@ func TestEmitRejectsJetStreamSubjectWithInvalidNamespaceChars(t *testing.T) {
 	require.Error(t, err)
 }
 
-// erroringActorResolverForPlayerBridge covers the Player branch of
-// bridgeActorKind via the coreActorToEventbusActor path Emit invokes.
-func erroringActorResolverForPlayerBridge(_ context.Context, _ string) (core.Actor, error) {
-	// core.ActorKind has no "Player" — but bridgeActorKind maps unknown
-	// kinds to Unknown. The default branch is already covered by existing
-	// tests with ActorKind(99). We instead cover that the explicit Player
-	// eventbus kind is produced elsewhere — via actorKindFromProto.
+// systemActorResolver returns a core.Actor of kind System. Used to
+// verify bridgeActorKind maps core.ActorSystem to the eventbus "system"
+// actor-kind header stamp on the Emit path.
+func systemActorResolver(_ context.Context, _ string) (core.Actor, error) {
 	return core.Actor{Kind: core.ActorSystem, ID: "system-actor-id"}, nil
 }
 
@@ -151,7 +148,7 @@ func TestEmitSystemActorBridgesToEventbusSystemKind(t *testing.T) {
 	emitter := plugins.NewPluginEventEmitter(
 		bus.Bus.Publisher(),
 		func(string) *plugins.Manifest { return sceneManifest() },
-		erroringActorResolverForPlayerBridge,
+		systemActorResolver,
 	)
 	err := emitter.Emit(context.Background(), "core-scenes", pluginsdk.EmitIntent{
 		Subject: "scene:01TEST",

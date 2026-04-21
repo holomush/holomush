@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -84,7 +85,7 @@ func TestSubscribeOpenSessionErrorSurfacesWrapped(t *testing.T) {
 		ID:          "s1",
 		ExpiresAt:   &future,
 		Status:      session.StatusActive,
-		CharacterID: ulid.MustNew(1, nil),
+		CharacterID: core.NewULID(),
 	}
 	sub := &fakeSubscriber{openErr: errors.New("js down")}
 	s := &CoreServer{
@@ -110,7 +111,7 @@ func TestSubscribeHappyPathSendsReplayCompleteAndReturnsOnCtxCancel(t *testing.T
 		ID:          "s1",
 		ExpiresAt:   &future,
 		Status:      session.StatusActive,
-		CharacterID: ulid.MustNew(1, nil),
+		CharacterID: core.NewULID(),
 		// LocationID zero — avoids locationFollower.sendSynthetic path.
 	}
 	bs := newFakeSessionStream()
@@ -154,7 +155,7 @@ func TestSubscribeReattachesDetachedSession(t *testing.T) {
 		ID:          "s1",
 		ExpiresAt:   &future,
 		Status:      session.StatusDetached,
-		CharacterID: ulid.MustNew(1, nil),
+		CharacterID: core.NewULID(),
 	}
 	bs := newFakeSessionStream()
 	sub := &fakeSubscriber{stream: bs}
@@ -179,7 +180,13 @@ func TestSubscribeReattachesDetachedSession(t *testing.T) {
 		return stream.sentLen() >= 1
 	}, 2*time.Second, 10*time.Millisecond)
 	cancel()
-	<-errCh
+	// Bound the wait so the test fails fast if Subscribe stops returning
+	// on cancellation instead of hanging until the package timeout.
+	select {
+	case <-errCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Subscribe did not return after ctx cancel")
+	}
 }
 
 func TestSubscribeRejectsBadConnectionID(t *testing.T) {
@@ -189,7 +196,7 @@ func TestSubscribeRejectsBadConnectionID(t *testing.T) {
 		ID:          "s1",
 		ExpiresAt:   &future,
 		Status:      session.StatusActive,
-		CharacterID: ulid.MustNew(1, nil),
+		CharacterID: core.NewULID(),
 	}
 	bs := newFakeSessionStream()
 	sub := &fakeSubscriber{stream: bs}
@@ -218,7 +225,7 @@ func TestSubscribeRejectsConnectionIDWithoutClientType(t *testing.T) {
 		ID:          "s1",
 		ExpiresAt:   &future,
 		Status:      session.StatusActive,
-		CharacterID: ulid.MustNew(1, nil),
+		CharacterID: core.NewULID(),
 	}
 	bs := newFakeSessionStream()
 	sub := &fakeSubscriber{stream: bs}
@@ -228,7 +235,7 @@ func TestSubscribeRejectsConnectionIDWithoutClientType(t *testing.T) {
 		playerSessionRepo: newFakePlayerSessionRepo(ulid.ULID{}),
 	}
 
-	connID := ulid.MustNew(ulid.Timestamp(time.Now()), nil).String()
+	connID := core.NewULID().String()
 	err := s.Subscribe(&corev1.SubscribeRequest{
 		SessionId:          "s1",
 		PlayerSessionToken: testPlayerSessionToken,
