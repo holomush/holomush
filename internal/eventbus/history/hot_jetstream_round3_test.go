@@ -24,7 +24,7 @@ import (
 // are covered without an embedded server.
 
 // TestBuildConfigForwardWithAfterCursorUsesStartTimePolicy covers the
-// "q.After is set" early-return branch.
+// "q.AfterID is set" early-return branch.
 func TestBuildConfigForwardWithAfterCursorUsesStartTimePolicy(t *testing.T) {
 	t.Parallel()
 	h := &jetStreamHotTier{now: time.Now}
@@ -33,14 +33,14 @@ func TestBuildConfigForwardWithAfterCursorUsesStartTimePolicy(t *testing.T) {
 	require.NoError(t, err)
 	q := eventbus.HistoryQuery{
 		Subject:   eventbus.Subject("events.main.scene.abc"),
-		After:     after,
+		AfterID:   after,
 		Direction: eventbus.DirectionForward,
 	}
 	cfg, err := h.buildConfig(context.Background(), q, time.Time{}, 10)
 	require.NoError(t, err)
 	assert.Equal(t, jetstream.DeliverByStartTimePolicy, cfg.DeliverPolicy)
 	require.NotNil(t, cfg.OptStartTime)
-	// NotBefore is absent, so OptStartTime should reflect q.After's time.
+	// NotBefore is absent, so OptStartTime should reflect q.AfterID's time.
 	assert.WithinDuration(t, ulid.Time(after.Time()), *cfg.OptStartTime, time.Second)
 	assert.Equal(t, []string{string(q.Subject)}, cfg.FilterSubjects)
 }
@@ -138,7 +138,7 @@ func TestMatchesQueryBoundaryBranchesEachFilter(t *testing.T) {
 				ID:        mk(now),
 				Timestamp: now,
 			},
-			q:    eventbus.HistoryQuery{After: mk(now)},
+			q:    eventbus.HistoryQuery{AfterID: mk(now)},
 			tier: TierJetStream,
 			want: false,
 		},
@@ -148,7 +148,7 @@ func TestMatchesQueryBoundaryBranchesEachFilter(t *testing.T) {
 				ID:        mk(now),
 				Timestamp: now,
 			},
-			q:    eventbus.HistoryQuery{Before: mk(now)},
+			q:    eventbus.HistoryQuery{BeforeID: mk(now)},
 			tier: TierJetStream,
 			want: false,
 		},

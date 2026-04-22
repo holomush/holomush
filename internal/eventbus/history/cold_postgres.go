@@ -66,13 +66,13 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 	// produce unstable crossover pagination. The js_seq column already
 	// exists in migration 000009; the HistoryQuery cursor semantics and the
 	// crossover tier-boundary logic both need to switch together.
-	if !q.After.IsZero() {
-		args = append(args, q.After[:])
+	if !q.AfterID.IsZero() {
+		args = append(args, q.AfterID[:])
 		fmt.Fprintf(&sb, " AND id > $%d", len(args))
 	}
 	// Before: exclusive upper bound by ULID. See TODO(holomush-suos) above.
-	if !q.Before.IsZero() {
-		args = append(args, q.Before[:])
+	if !q.BeforeID.IsZero() {
+		args = append(args, q.BeforeID[:])
 		fmt.Fprintf(&sb, " AND id < $%d", len(args))
 	}
 	// Inclusive time bounds.

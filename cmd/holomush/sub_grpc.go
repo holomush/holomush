@@ -531,7 +531,7 @@ func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string,
 		NotBefore: notBefore,
 	}
 	if !beforeID.IsZero() {
-		q.Before = beforeID
+		q.BeforeID = beforeID
 	}
 	hs, err := a.reader.QueryHistory(ctx, q)
 	if err != nil {

@@ -63,14 +63,30 @@ type SessionStream interface {
 
 // HistoryQuery describes a paginated history read. Auth flows via
 // context.Context (auth.WithSession), not via this struct.
+//
+// Pagination ordering is by JetStream stream sequence (js_seq), not by
+// ULID. Cursors are (seq, id) pairs: AfterSeq/AfterID for forward reads,
+// BeforeSeq/BeforeID for backward reads. The id field is a tripwire that
+// validates the cursor's seq still names the same event in storage; on
+// mismatch the reader returns ErrCursorStale or ErrCursorLag (see
+// internal/eventbus/errors.go).
+//
+// Zero seq means "from the start" (forward) or "from the end" (backward).
+// AfterID / BeforeID are required when their corresponding seq is non-zero
+// for client-supplied cursors; internal callers MAY leave id zero (then no
+// validation is performed).
 type HistoryQuery struct {
-	Subject   Subject   // exact subject OR pattern with * / >
-	After     ulid.ULID // exclusive lower bound; zero ULID = from start
-	Before    ulid.ULID // exclusive upper bound; zero ULID = unbounded
-	NotBefore time.Time // optional time bound
-	NotAfter  time.Time // optional time bound
+	Subject Subject
+
+	AfterSeq  uint64    // exclusive lower bound by JS stream seq
+	AfterID   ulid.ULID // tripwire for AfterSeq; zero = skip validation
+	BeforeSeq uint64    // exclusive upper bound by JS stream seq
+	BeforeID  ulid.ULID // tripwire for BeforeSeq; zero = skip validation
+
+	NotBefore time.Time
+	NotAfter  time.Time
 	Direction Direction
-	PageSize  int // host caps at 200; default 50
+	PageSize  int
 }
 
 // HistoryStream is a server-streaming handle. Caller iterates Next()

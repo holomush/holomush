@@ -288,8 +288,8 @@ func validateQuery(q eventbus.HistoryQuery) error {
 //     the edge is exactly observed, JS still has the data and PG may not yet
 //     because the audit projection lags by up to ~safetyMargin.
 func selectStartTier(q eventbus.HistoryQuery, edge, now time.Time) Tier {
-	if !q.After.IsZero() {
-		ts := ulid.Time(q.After.Time())
+	if !q.AfterID.IsZero() {
+		ts := ulid.Time(q.AfterID.Time())
 		if ts.Before(edge) {
 			return TierPostgres
 		}
@@ -526,9 +526,9 @@ func (s *crossoverStream) currentCursor() ulid.ULID {
 		dir = eventbus.DirectionForward
 	}
 	if dir == eventbus.DirectionForward {
-		return s.query.After
+		return s.query.AfterID
 	}
-	return s.query.Before
+	return s.query.BeforeID
 }
 
 func (s *crossoverStream) advanceCursor(events []eventbus.Event) {
@@ -541,9 +541,9 @@ func (s *crossoverStream) advanceCursor(events []eventbus.Event) {
 	}
 	last := events[len(events)-1].ID
 	if dir == eventbus.DirectionForward {
-		s.query.After = last
+		s.query.AfterID = last
 	} else {
-		s.query.Before = last
+		s.query.BeforeID = last
 	}
 }
 

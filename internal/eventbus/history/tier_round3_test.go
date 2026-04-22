@@ -37,13 +37,13 @@ func TestSelectStartTierEveryBranch(t *testing.T) {
 	}{
 		{
 			name: "after ulid after edge routes hot",
-			q:    eventbus.HistoryQuery{After: afterOnHot, Direction: eventbus.DirectionForward},
+			q:    eventbus.HistoryQuery{AfterID: afterOnHot, Direction: eventbus.DirectionForward},
 			now:  now,
 			want: TierJetStream,
 		},
 		{
 			name: "after ulid before edge routes cold",
-			q:    eventbus.HistoryQuery{After: afterOnCold, Direction: eventbus.DirectionForward},
+			q:    eventbus.HistoryQuery{AfterID: afterOnCold, Direction: eventbus.DirectionForward},
 			now:  now,
 			want: TierPostgres,
 		},

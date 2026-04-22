@@ -129,8 +129,8 @@ func (h *jetStreamHotTier) buildConfig(
 	//     filters out ULIDs <= After.Time.
 	//   - Else use the lower bound that applies — NotBefore forward,
 	//     edge for unbounded queries.
-	if !q.After.IsZero() {
-		start := ulid.Time(q.After.Time())
+	if !q.AfterID.IsZero() {
+		start := ulid.Time(q.AfterID.Time())
 		cfg.DeliverPolicy = jetstream.DeliverByStartTimePolicy
 		cfg.OptStartTime = &start
 		return cfg, nil
@@ -199,10 +199,10 @@ func (h *jetStreamHotTier) buildConfig(
 //     from here (they may still appear for up to safetyMargin; the cold
 //     tier serves the canonical pre-edge slice).
 func matchesQuery(ev eventbus.Event, q eventbus.HistoryQuery, edge time.Time, tier Tier) bool {
-	if !q.After.IsZero() && ev.ID.Compare(q.After) <= 0 {
+	if !q.AfterID.IsZero() && ev.ID.Compare(q.AfterID) <= 0 {
 		return false
 	}
-	if !q.Before.IsZero() && ev.ID.Compare(q.Before) >= 0 {
+	if !q.BeforeID.IsZero() && ev.ID.Compare(q.BeforeID) >= 0 {
 		return false
 	}
 	if !q.NotBefore.IsZero() && ev.Timestamp.Before(q.NotBefore) {

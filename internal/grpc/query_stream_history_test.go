@@ -417,7 +417,7 @@ func TestQueryStreamHistoryBeforeIDForwardsToBus(t *testing.T) {
 		Count:     5,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, before, reader.gotQ.Before)
+	assert.Equal(t, before, reader.gotQ.BeforeID)
 }
 
 func TestQueryStreamHistoryNotBeforeMsForwardsToBus(t *testing.T) {

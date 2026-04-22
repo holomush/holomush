@@ -7,6 +7,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/oklog/ulid/v2"
+	"github.com/stretchr/testify/assert"
+
 	"github.com/holomush/holomush/internal/eventbus"
 )
 
@@ -30,4 +33,19 @@ func TestEventBusInterfaceComposesAllThree(_ *testing.T) {
 		_ eventbus.HistoryReader = fakeBus{}
 		_ eventbus.EventBus      = fakeBus{}
 	)
+}
+
+func TestHistoryQueryNewCursorFields(t *testing.T) {
+	t.Parallel()
+	id := ulid.MustParse("01HYXYZEVT0000000000000001")
+	q := eventbus.HistoryQuery{
+		AfterSeq:  10,
+		AfterID:   id,
+		BeforeSeq: 100,
+		BeforeID:  id,
+	}
+	assert.Equal(t, uint64(10), q.AfterSeq)
+	assert.Equal(t, id, q.AfterID)
+	assert.Equal(t, uint64(100), q.BeforeSeq)
+	assert.Equal(t, id, q.BeforeID)
 }

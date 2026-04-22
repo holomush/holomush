@@ -222,7 +222,7 @@ func fetchHistoryFramesFromBus(
 		NotBefore: notBefore,
 	}
 	if !beforeID.IsZero() {
-		q.Before = beforeID
+		q.BeforeID = beforeID
 	}
 
 	stream, err := reader.QueryHistory(ctx, q)

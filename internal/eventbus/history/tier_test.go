@@ -50,10 +50,10 @@ func (f *fakeTier) Read(_ context.Context, q eventbus.HistoryQuery, edge time.Ti
 		if e.Subject != q.Subject {
 			continue
 		}
-		if !q.After.IsZero() && e.ID.Compare(q.After) <= 0 {
+		if !q.AfterID.IsZero() && e.ID.Compare(q.AfterID) <= 0 {
 			continue
 		}
-		if !q.Before.IsZero() && e.ID.Compare(q.Before) >= 0 {
+		if !q.BeforeID.IsZero() && e.ID.Compare(q.BeforeID) >= 0 {
 			continue
 		}
 		if !q.NotBefore.IsZero() && e.Timestamp.Before(q.NotBefore) {
@@ -654,7 +654,7 @@ func TestReaderRejectsInvalidTimeRange(t *testing.T) {
 	assert.ErrorIs(t, err, eventbus.ErrInvalidTimeRange)
 }
 
-// pathologicalTier ignores q.After and always returns the same full page.
+// pathologicalTier ignores q.AfterID and always returns the same full page.
 // Simulates the "cursor not advanced" regression: if advanceCursor is
 // removed (or returned events' IDs aren't wired into the query), a naive
 // loadNextPage loop would read this tier forever while dedup hid the
@@ -669,7 +669,7 @@ type pathologicalTier struct {
 
 func (p *pathologicalTier) Read(_ context.Context, q eventbus.HistoryQuery, _ time.Time, pageSize int) ([]eventbus.Event, error) {
 	p.calls++
-	// Deliberately return the same events regardless of q.After. Copy so
+	// Deliberately return the same events regardless of q.AfterID. Copy so
 	// the returned slice can't be mutated by the Reader.
 	out := make([]eventbus.Event, 0, pageSize)
 	for _, e := range p.events {
