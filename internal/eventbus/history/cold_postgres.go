@@ -26,28 +26,46 @@ func newPostgresColdTier(pool *pgxpool.Pool) *postgresColdTier {
 	return &postgresColdTier{pool: pool}
 }
 
-// Read satisfies ColdTier. Builds a parameterized SELECT against
-// events_audit, honoring the subject filter, ULID cursor(s), time bounds,
-// direction, and page size. An optional `edge` constraint is applied when
-// the caller wants to restrict the cold tier to Timestamp < edge (the
-// crossover case); pass the zero time to skip the constraint.
+// Read satisfies ColdTier per §6.1 of the suos spec. Builds a parameterized
+// SELECT against events_audit, ordering by js_seq (NOT ULID — see spec §1
+// problem statement for why). Honors the subject filter, seq cursor(s),
+// time bounds, direction, and page size. An optional `edge` time
+// constraint is applied when crossing tiers (the cursor row is OR'd into
+// the WHERE so it always passes regardless of edge — see §6.2).
 //
-// The query uses positional placeholders with a dynamic parameter list so
-// callers are never at risk of a SQL-injection surface — all user data
-// flows through args, never into the SQL text.
+// PIGGYBACK VALIDATION (§6.2 — load-bearing): When a cursor is supplied
+// (AfterSeq > 0 forward, BeforeSeq > 0 backward), the SQL uses `>=` (forward)
+// or `<=` (backward), NOT a strict inequality. The first row returned is
+// the cursor echo: it MUST have js_seq == cursor.Seq AND id == cursor.ID.
+// We validate, discard, and return the rest. A future maintainer who
+// changes >= back to > silently disables the tripwire and reintroduces
+// the bug class this design exists to prevent. DO NOT.
 func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, edge time.Time, pageSize int) ([]eventbus.Event, error) {
 	if pageSize <= 0 {
 		return nil, nil
 	}
 	subjectExact, subjectPattern := classifySubject(string(q.Subject))
+
+	dir := q.Direction
+	if dir == 0 {
+		dir = eventbus.DirectionForward
+	}
+	var cursorSeq uint64
+	var cursorID ulid.ULID
+	if dir == eventbus.DirectionForward {
+		cursorSeq = q.AfterSeq
+		cursorID = q.AfterID
+	} else {
+		cursorSeq = q.BeforeSeq
+		cursorID = q.BeforeID
+	}
+	hasCursor := cursorSeq > 0
+
 	var (
 		sb   strings.Builder
 		args []any
 	)
-	sb.WriteString(`
-		SELECT id, subject, type, timestamp, actor_kind, actor_id, payload
-		FROM events_audit
-		WHERE `)
+	sb.WriteString(`SELECT id, subject, type, timestamp, actor_kind, actor_id, payload, js_seq FROM events_audit WHERE `)
 	if subjectPattern != "" {
 		args = append(args, subjectPattern)
 		fmt.Fprintf(&sb, "subject LIKE $%d", len(args))
@@ -56,26 +74,16 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 		fmt.Fprintf(&sb, "subject = $%d", len(args))
 	}
 
-	// After: exclusive lower bound by ULID.
-	//
-	// TODO(holomush-suos): cold-tier pagination should key on
-	// events_audit.js_seq, not ULID. Post-F8 cutover removed the global
-	// writer, so id (a ULID) is no longer a safe proxy for JetStream
-	// publish order across concurrent subjects. Using id >/< for cursors
-	// and ORDER BY id can diverge from the hot JetStream tier ordering and
-	// produce unstable crossover pagination. The js_seq column already
-	// exists in migration 000009; the HistoryQuery cursor semantics and the
-	// crossover tier-boundary logic both need to switch together.
-	if !q.AfterID.IsZero() {
-		args = append(args, q.AfterID[:])
-		fmt.Fprintf(&sb, " AND id > $%d", len(args))
+	// Cursor bound — INCLUSIVE so the cursor echo is the first row.
+	if hasCursor {
+		args = append(args, int64(cursorSeq)) //nolint:gosec // G115: js_seq is always a positive JetStream sequence number; fits safely in int64
+		if dir == eventbus.DirectionForward {
+			fmt.Fprintf(&sb, " AND js_seq >= $%d", len(args))
+		} else {
+			fmt.Fprintf(&sb, " AND js_seq <= $%d", len(args))
+		}
 	}
-	// Before: exclusive upper bound by ULID. See TODO(holomush-suos) above.
-	if !q.BeforeID.IsZero() {
-		args = append(args, q.BeforeID[:])
-		fmt.Fprintf(&sb, " AND id < $%d", len(args))
-	}
-	// Inclusive time bounds.
+
 	if !q.NotBefore.IsZero() {
 		args = append(args, q.NotBefore)
 		fmt.Fprintf(&sb, " AND timestamp >= $%d", len(args))
@@ -84,24 +92,37 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 		args = append(args, q.NotAfter)
 		fmt.Fprintf(&sb, " AND timestamp <= $%d", len(args))
 	}
-	// Tier-boundary constraint: when the Reader is crossing from hot to
-	// cold, this caps cold to events that are actually archived-only.
-	// Passing the zero time disables the constraint (whole-archive query).
+
+	// Crossover edge: cursor row passes regardless of edge (guarded by
+	// BOTH js_seq and id — preventing a drift twin from bypassing the
+	// edge filter). Non-cursor rows subject to edge filter.
 	if !edge.IsZero() {
 		args = append(args, edge)
-		fmt.Fprintf(&sb, " AND timestamp < $%d", len(args))
+		edgeIdx := len(args)
+		if hasCursor {
+			args = append(args, int64(cursorSeq)) //nolint:gosec // G115: js_seq is always a positive JetStream sequence number; fits safely in int64
+			seqIdx := len(args)
+			args = append(args, cursorID[:])
+			idIdx := len(args)
+			fmt.Fprintf(&sb, " AND (timestamp < $%d OR (js_seq = $%d AND id = $%d))",
+				edgeIdx, seqIdx, idIdx)
+		} else {
+			fmt.Fprintf(&sb, " AND timestamp < $%d", edgeIdx)
+		}
 	}
 
-	dir := q.Direction
-	if dir == 0 {
-		dir = eventbus.DirectionForward
-	}
-	if dir == eventbus.DirectionBackward {
-		sb.WriteString(" ORDER BY id DESC")
+	if dir == eventbus.DirectionForward {
+		sb.WriteString(" ORDER BY js_seq ASC")
 	} else {
-		sb.WriteString(" ORDER BY id ASC")
+		sb.WriteString(" ORDER BY js_seq DESC")
 	}
-	args = append(args, pageSize)
+
+	limit := pageSize
+	if hasCursor {
+		// One extra row for the cursor echo we'll discard.
+		limit = pageSize + 1
+	}
+	args = append(args, limit)
 	fmt.Fprintf(&sb, " LIMIT $%d", len(args))
 
 	rows, err := c.pool.Query(ctx, sb.String(), args...)
@@ -113,17 +134,19 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 	defer rows.Close()
 
 	out := make([]eventbus.Event, 0, pageSize)
+	first := true
 	for rows.Next() {
 		var (
 			idBytes      []byte
-			subject      string
+			subjectStr   string
 			eventType    string
 			ts           time.Time
 			actorKindStr string
 			actorIDBytes []byte
 			payload      []byte
+			seq          int64
 		)
-		if scanErr := rows.Scan(&idBytes, &subject, &eventType, &ts, &actorKindStr, &actorIDBytes, &payload); scanErr != nil {
+		if scanErr := rows.Scan(&idBytes, &subjectStr, &eventType, &ts, &actorKindStr, &actorIDBytes, &payload, &seq); scanErr != nil {
 			return nil, oops.Code("EVENTBUS_COLD_SCAN_FAILED").Wrap(scanErr)
 		}
 		if len(idBytes) != 16 {
@@ -133,9 +156,27 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 		}
 		var id ulid.ULID
 		copy(id[:], idBytes)
+		seqU := uint64(seq) //nolint:gosec // G115: js_seq is always a positive JetStream sequence number; PG bigint stores only non-negative values here
+
+		if hasCursor && first {
+			first = false
+			if seqU != cursorSeq || id != cursorID {
+				return nil, oops.Code("EVENTBUS_CURSOR_STALE").
+					With("subject", string(q.Subject)).
+					With("cursor_seq", cursorSeq).
+					With("cursor_id", cursorID.String()).
+					With("got_seq", seqU).
+					With("got_id", id.String()).
+					Wrap(eventbus.ErrCursorStale)
+			}
+			continue // discard cursor echo
+		}
+		first = false
+
 		out = append(out, eventbus.Event{
 			ID:        id,
-			Subject:   eventbus.Subject(subject),
+			Seq:       seqU,
+			Subject:   eventbus.Subject(subjectStr),
 			Type:      eventbus.Type(eventType),
 			Timestamp: ts.UTC(),
 			Actor:     actorFromAuditRow(actorKindStr, actorIDBytes),
@@ -145,6 +186,18 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 	if err := rows.Err(); err != nil {
 		return nil, oops.Code("EVENTBUS_COLD_ROWS_ERR").Wrap(err)
 	}
+
+	// Cursor supplied but zero rows returned — cursor seq is absent.
+	// LAG vs STALE distinction comes in Task 8; for now all missing cursors
+	// are STALE.
+	if hasCursor && first {
+		return nil, oops.Code("EVENTBUS_CURSOR_STALE").
+			With("subject", string(q.Subject)).
+			With("cursor_seq", cursorSeq).
+			With("cursor_id", cursorID.String()).
+			Wrap(eventbus.ErrCursorStale)
+	}
+
 	return out, nil
 }
 
