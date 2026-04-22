@@ -5,6 +5,7 @@ package hostfunc_test
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus/cursor"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/internal/session"
 )
@@ -66,10 +68,11 @@ type historyCall struct {
 	stream    string
 	count     int
 	notBefore time.Time
+	beforeID  ulid.ULID
 }
 
-func (m *mockHistoryReader) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, _ ulid.ULID) ([]core.Event, error) {
-	m.calls = append(m.calls, historyCall{stream, count, notBefore})
+func (m *mockHistoryReader) ReplayTail(_ context.Context, stream string, count int, notBefore time.Time, beforeID ulid.ULID) ([]core.Event, error) {
+	m.calls = append(m.calls, historyCall{stream, count, notBefore, beforeID})
 	return m.result, m.err
 }
 
@@ -291,11 +294,24 @@ assert(errmsg == "focus not found", "expected error message, got: " .. tostring(
 	require.NoError(t, err)
 }
 
+// encodeTestCursor builds a base64 cursor string for use in test assertions.
+func encodeTestCursor(t *testing.T, id ulid.ULID) string {
+	t.Helper()
+	b, err := cursor.Encode(cursor.Cursor{
+		Version: cursor.CurrentVersion,
+		Epoch:   cursor.CurrentEpoch(),
+		Owner:   cursor.Owner{Kind: cursor.OwnerHost},
+		Host:    &cursor.HostCursor{Seq: 0, ID: id},
+	})
+	require.NoError(t, err)
+	return base64.StdEncoding.EncodeToString(b)
+}
+
 func TestQueryStreamHistoryCallsReaderWithCorrectArgs(t *testing.T) {
 	hr := &mockHistoryReader{result: []core.Event{}}
 	L := newFocusTestState(t, nil, hr)
 
-	err := L.DoString(`holomush.query_stream_history("scene:01ABC:ic", 10, 1700000000000)`)
+	err := L.DoString(`holomush.query_stream_history({stream="scene:01ABC:ic", count=10, not_before_ms=1700000000000})`)
 	require.NoError(t, err)
 
 	require.Len(t, hr.calls, 1)
@@ -304,7 +320,7 @@ func TestQueryStreamHistoryCallsReaderWithCorrectArgs(t *testing.T) {
 	assert.Equal(t, time.UnixMilli(1700000000000).UTC(), hr.calls[0].notBefore)
 }
 
-func TestQueryStreamHistoryReturnsEventTableOnSuccess(t *testing.T) {
+func TestQueryStreamHistoryReturnsResultTableWithEventsAndMeta(t *testing.T) {
 	targetID := ulid.Make()
 	ev := core.Event{
 		ID:        targetID,
@@ -318,15 +334,19 @@ func TestQueryStreamHistoryReturnsEventTableOnSuccess(t *testing.T) {
 	L := newFocusTestState(t, nil, hr)
 
 	err := L.DoString(`
-local events = holomush.query_stream_history("scene:abc:ic", 5)
-assert(type(events) == "table", "expected table, got: " .. type(events))
-assert(#events == 1, "expected 1 event, got: " .. #events)
-local e = events[1]
+local result = holomush.query_stream_history({stream="scene:abc:ic", count=5})
+assert(type(result) == "table", "expected table, got: " .. type(result))
+assert(type(result.events) == "table", "expected events table, got: " .. type(result.events))
+assert(#result.events == 1, "expected 1 event, got: " .. #result.events)
+local e = result.events[1]
 assert(e.stream == "scene:abc:ic", "wrong stream: " .. tostring(e.stream))
 assert(e.type == "say", "wrong type: " .. tostring(e.type))
 assert(e.actor_kind == "character", "wrong actor_kind: " .. tostring(e.actor_kind))
 assert(e.actor_id == "char-1", "wrong actor_id: " .. tostring(e.actor_id))
 assert(e.payload == '{"msg":"hello"}', "wrong payload: " .. tostring(e.payload))
+assert(type(e.cursor) == "string", "expected cursor string, got: " .. type(e.cursor))
+assert(result.has_more == false, "expected has_more=false for partial page")
+assert(result.next_cursor == nil, "expected next_cursor=nil for partial page")
 `)
 	require.NoError(t, err)
 }
@@ -336,8 +356,8 @@ func TestQueryStreamHistoryReturnsNilAndErrorOnFailure(t *testing.T) {
 	L := newFocusTestState(t, nil, hr)
 
 	err := L.DoString(`
-local events, errmsg = holomush.query_stream_history("scene:abc:ic", 5)
-assert(events == nil, "expected nil on error")
+local result, errmsg = holomush.query_stream_history({stream="scene:abc:ic", count=5})
+assert(result == nil, "expected nil on error")
 assert(errmsg == "store unavailable", "expected error message, got: " .. tostring(errmsg))
 `)
 	require.NoError(t, err)
@@ -347,7 +367,7 @@ func TestQueryStreamHistoryWithZeroNotBeforePassesZeroTime(t *testing.T) {
 	hr := &mockHistoryReader{result: []core.Event{}}
 	L := newFocusTestState(t, nil, hr)
 
-	err := L.DoString(`holomush.query_stream_history("scene:abc:ic", 5)`)
+	err := L.DoString(`holomush.query_stream_history({stream="scene:abc:ic", count=5})`)
 	require.NoError(t, err)
 
 	require.Len(t, hr.calls, 1)
@@ -360,7 +380,7 @@ func TestQueryStreamHistoryWithNilReaderIsNoOp(t *testing.T) {
 	hf := hostfunc.New(nil)
 	hf.Register(L, "test-plugin")
 
-	err := L.DoString(`holomush.query_stream_history("scene:abc:ic", 10)`)
+	err := L.DoString(`holomush.query_stream_history({stream="scene:abc:ic", count=10})`)
 	require.NoError(t, err)
 }
 
@@ -379,7 +399,7 @@ func TestQueryStreamHistoryClampsCountAbove500ToMax(t *testing.T) {
 	hr := &mockHistoryReader{result: []core.Event{}}
 	L := newFocusTestState(t, nil, hr)
 
-	err := L.DoString(`holomush.query_stream_history("scene:abc:ic", 1000)`)
+	err := L.DoString(`holomush.query_stream_history({stream="scene:abc:ic", count=1000})`)
 	require.NoError(t, err)
 
 	require.Len(t, hr.calls, 1)
@@ -390,11 +410,111 @@ func TestQueryStreamHistoryClampsNegativeCountToZero(t *testing.T) {
 	hr := &mockHistoryReader{result: []core.Event{}}
 	L := newFocusTestState(t, nil, hr)
 
-	err := L.DoString(`holomush.query_stream_history("scene:abc:ic", -5)`)
+	err := L.DoString(`holomush.query_stream_history({stream="scene:abc:ic", count=-5})`)
 	require.NoError(t, err)
 
 	require.Len(t, hr.calls, 1)
 	assert.Equal(t, 0, hr.calls[0].count)
+}
+
+func TestQueryStreamHistoryHasMoreTrueWhenFullPageReturned(t *testing.T) {
+	// 2 events returned for count=2 → has_more=true, next_cursor is set.
+	e1 := core.Event{ID: ulid.Make(), Stream: "scene:abc:ic", Type: core.EventTypeSay}
+	e2 := core.Event{ID: ulid.Make(), Stream: "scene:abc:ic", Type: core.EventTypeSay}
+	hr := &mockHistoryReader{result: []core.Event{e1, e2}}
+	L := newFocusTestState(t, nil, hr)
+
+	err := L.DoString(`
+local result = holomush.query_stream_history({stream="scene:abc:ic", count=2})
+assert(result.has_more == true, "expected has_more=true for full page")
+assert(type(result.next_cursor) == "string", "expected next_cursor string, got: " .. type(result.next_cursor))
+assert(#result.next_cursor > 0, "expected non-empty next_cursor")
+`)
+	require.NoError(t, err)
+}
+
+func TestQueryStreamHistoryCursorRoundTripsAsBase64(t *testing.T) {
+	// Encode a cursor, pass it back in the next call, verify beforeID is extracted.
+	eventID := ulid.Make()
+	ev := core.Event{
+		ID:     eventID,
+		Stream: "scene:abc:ic",
+		Type:   core.EventTypeSay,
+	}
+	hr := &mockHistoryReader{result: []core.Event{ev}}
+	L := newFocusTestState(t, nil, hr)
+
+	// First page — get cursor from first event.
+	err := L.DoString(`
+local result = holomush.query_stream_history({stream="scene:abc:ic", count=5})
+assert(type(result.events[1].cursor) == "string", "expected cursor string on event")
+_G.captured_cursor = result.events[1].cursor
+`)
+	require.NoError(t, err)
+
+	// Second call using the cursor — verify the call was made with the decoded beforeID.
+	hr.result = []core.Event{}
+	err = L.DoString(`
+local result2 = holomush.query_stream_history({stream="scene:abc:ic", count=5, cursor=_G.captured_cursor})
+assert(type(result2) == "table", "expected table on second call")
+`)
+	require.NoError(t, err)
+
+	// The second call should have passed the decoded beforeID (eventID) to ReplayTail.
+	require.Len(t, hr.calls, 2)
+	assert.Equal(t, eventID, hr.calls[1].beforeID, "cursor should decode to the event's ULID as beforeID")
+}
+
+func TestQueryStreamHistoryPassesCursorToReaderAsBeforeID(t *testing.T) {
+	// Build a cursor externally and verify it decodes correctly when passed to the hostfunc.
+	anchorID := ulid.Make()
+	cursorStr := encodeTestCursor(t, anchorID)
+
+	hr := &mockHistoryReader{result: []core.Event{}}
+	L := newFocusTestState(t, nil, hr)
+
+	err := L.DoString(`holomush.query_stream_history({stream="scene:abc:ic", count=5, cursor="` + cursorStr + `"})`)
+	require.NoError(t, err)
+
+	require.Len(t, hr.calls, 1)
+	assert.Equal(t, anchorID, hr.calls[0].beforeID, "decoded cursor should match anchor ULID")
+}
+
+func TestQueryStreamHistoryReturnsErrorForInvalidBase64Cursor(t *testing.T) {
+	hr := &mockHistoryReader{result: []core.Event{}}
+	L := newFocusTestState(t, nil, hr)
+
+	err := L.DoString(`
+local result, errmsg = holomush.query_stream_history({stream="scene:abc:ic", count=5, cursor="!!!not-base64!!!"})
+assert(result == nil, "expected nil on invalid cursor")
+assert(errmsg ~= nil, "expected error message")
+assert(string.find(errmsg, "base64"), "expected base64 error, got: " .. tostring(errmsg))
+`)
+	require.NoError(t, err)
+}
+
+func TestQueryStreamHistoryReturnsErrorWhenStreamMissing(t *testing.T) {
+	hr := &mockHistoryReader{result: []core.Event{}}
+	L := newFocusTestState(t, nil, hr)
+
+	err := L.DoString(`
+local result, errmsg = holomush.query_stream_history({count=5})
+assert(result == nil, "expected nil when stream missing")
+assert(errmsg ~= nil, "expected error message")
+`)
+	require.NoError(t, err)
+}
+
+func TestQueryStreamHistoryReturnsErrorWhenCountMissing(t *testing.T) {
+	hr := &mockHistoryReader{result: []core.Event{}}
+	L := newFocusTestState(t, nil, hr)
+
+	err := L.DoString(`
+local result, errmsg = holomush.query_stream_history({stream="scene:abc:ic"})
+assert(result == nil, "expected nil when count missing")
+assert(errmsg ~= nil, "expected error message")
+`)
+	require.NoError(t, err)
 }
 
 func TestJoinFocusReturnsErrorForInvalidULID(t *testing.T) {

@@ -577,7 +577,7 @@ func busEventToCoreEvent(e eventbus.Event, stream string) core.Event {
 	case e.Actor.LegacyID != "":
 		actorID = e.Actor.LegacyID
 	}
-	return core.Event{ //nolint:gocritic // translation path: preserves existing ID+Timestamp from JetStream; core.NewEvent() would clobber them
+	return core.Event{
 		ID:        e.ID,
 		Stream:    stream,
 		Type:      core.EventType(e.Type),
