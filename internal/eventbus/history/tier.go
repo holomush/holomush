@@ -33,7 +33,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go/jetstream"
-	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/eventbus"
@@ -145,7 +144,9 @@ func WithColdTier(c ColdTier) Option {
 type HotTier interface {
 	// Read returns up to pageSize events matching q, constrained to events
 	// with Timestamp >= edge. Events are returned in q.Direction order.
-	Read(ctx context.Context, q eventbus.HistoryQuery, edge time.Time, pageSize int) ([]eventbus.Event, error)
+	// snap is a per-QueryHistory-call cache of Stream.Info().State; it MAY
+	// be nil (e.g. in unit tests that bypass the hot tier).
+	Read(ctx context.Context, q eventbus.HistoryQuery, edge time.Time, pageSize int, snap *StreamStateSnapshot) ([]eventbus.Event, error)
 }
 
 // ColdTier reads the events_audit-hosted archive slice of history. Exported
@@ -155,7 +156,10 @@ type ColdTier interface {
 	// with Timestamp < edge when crossover applies. When edge is the zero
 	// value, no tier-boundary constraint is applied and the full archive is
 	// queried.
-	Read(ctx context.Context, q eventbus.HistoryQuery, edge time.Time, pageSize int) ([]eventbus.Event, error)
+	// snap is a per-QueryHistory-call cache of Stream.Info().State; it MAY
+	// be nil (e.g. in unit tests that bypass the cold tier). When non-nil
+	// it is consulted to distinguish LAG from STALE for missing cursors.
+	Read(ctx context.Context, q eventbus.HistoryQuery, edge time.Time, pageSize int, snap *StreamStateSnapshot) ([]eventbus.Event, error)
 }
 
 // Reader implements eventbus.HistoryReader by routing queries between
@@ -247,9 +251,10 @@ func (r *Reader) QueryHistory(ctx context.Context, q eventbus.HistoryQuery) (eve
 
 	now := r.now()
 	edge := now.Add(-r.streamMaxAge).Add(r.safetyMargin)
-	startTier := selectStartTier(q, edge, now)
+	snap := newStreamStateSnapshot(r.js)
+	startTier := selectStartTier(ctx, q, edge, now, snap)
 
-	return newCrossoverStream(ctx, r.hot, r.cold, q, edge, startTier), nil
+	return newCrossoverStream(ctx, r.hot, r.cold, q, edge, startTier, snap), nil
 }
 
 // validateQuery enforces the invariants that are free to check before
@@ -279,22 +284,32 @@ func validateQuery(q eventbus.HistoryQuery) error {
 
 // selectStartTier decides which tier services the first page.
 //
-// Rules (spec §5, with the cursor-ULID refinement):
-//   - If After is set, decode its timestamp and pick the tier that holds it.
-//   - Else (zero ULID cursor): use the time bound that points away from "now"
-//     to decide. Forward ⇒ NotBefore picks the oldest endpoint to start
-//     from; Backward ⇒ NotAfter picks the newest endpoint.
+// Rules (spec §8, with the seq-cursor refinement):
+//   - If a cursor seq is set, compare it against the snapshot's FirstSeq:
+//     if cursor.Seq >= FirstSeq the cursor is still within the live JS stream
+//     (hot); otherwise it predates JS retention (cold).
+//   - Else (no cursor): use the time bound that points away from "now" to
+//     decide. Forward ⇒ NotBefore picks the oldest endpoint; Backward ⇒
+//     NotAfter picks the newest endpoint.
 //   - Ties at the exact edge resolve to JS (hot). This is intentional: when
 //     the edge is exactly observed, JS still has the data and PG may not yet
 //     because the audit projection lags by up to ~safetyMargin.
-func selectStartTier(q eventbus.HistoryQuery, edge, now time.Time) Tier {
-	if !q.AfterID.IsZero() {
-		ts := ulid.Time(q.AfterID.Time())
-		if ts.Before(edge) {
+func selectStartTier(ctx context.Context, q eventbus.HistoryQuery, edge, now time.Time, snap *StreamStateSnapshot) Tier {
+	cursorSeq := q.AfterSeq
+	if q.Direction == eventbus.DirectionBackward {
+		cursorSeq = q.BeforeSeq
+	}
+	if cursorSeq > 0 && snap != nil {
+		firstSeq, _, err := snap.Get(ctx)
+		if err == nil && firstSeq > 0 {
+			if cursorSeq >= firstSeq {
+				return TierJetStream
+			}
 			return TierPostgres
 		}
-		return TierJetStream
 	}
+
+	// No cursor or snapshot unavailable — fall back to time-bound routing.
 	dir := q.Direction
 	if dir == 0 {
 		dir = eventbus.DirectionForward
@@ -363,11 +378,11 @@ type crossoverStream struct {
 	// Set once the stream has no more events to emit.
 	exhausted bool
 
-	// seenIDs deduplicates by ULID across the boundary. At the edge, events
-	// that were recently projected into PG are still within JS retention,
-	// so a page drawn straddling both tiers can legitimately observe the
-	// same ULID twice.
-	seenIDs map[ulid.ULID]struct{}
+	// seenSeqs deduplicates by JetStream stream sequence across the boundary.
+	// At the edge, events that were recently projected into PG are still within
+	// JS retention, so a page drawn straddling both tiers can legitimately
+	// observe the same sequence number twice.
+	seenSeqs map[uint64]struct{}
 
 	// stuckPageReads counts consecutive loadNextPage calls that made no
 	// forward progress (either returned zero new events, or returned events
@@ -375,9 +390,12 @@ type crossoverStream struct {
 	// means the tier is ignoring our cursor — trip EVENTBUS_HISTORY_BUFFER_OVERFLOW
 	// to avoid unbounded memory growth and infinite loops.
 	stuckPageReads int
+
+	// snap is the per-call Stream.Info cache threaded from Reader.QueryHistory.
+	snap *StreamStateSnapshot
 }
 
-func newCrossoverStream(ctx context.Context, hot HotTier, cold ColdTier, q eventbus.HistoryQuery, edge time.Time, startTier Tier) *crossoverStream {
+func newCrossoverStream(ctx context.Context, hot HotTier, cold ColdTier, q eventbus.HistoryQuery, edge time.Time, startTier Tier, snap *StreamStateSnapshot) *crossoverStream {
 	return &crossoverStream{
 		ctx:       ctx,
 		hot:       hot,
@@ -385,7 +403,8 @@ func newCrossoverStream(ctx context.Context, hot HotTier, cold ColdTier, q event
 		query:     q,
 		edge:      edge,
 		startTier: startTier,
-		seenIDs:   make(map[ulid.ULID]struct{}),
+		seenSeqs:  make(map[uint64]struct{}),
+		snap:      snap,
 	}
 }
 
@@ -399,10 +418,10 @@ func (s *crossoverStream) Next(ctx context.Context) (eventbus.Event, error) {
 		if s.pos < len(s.buf) {
 			e := s.buf[s.pos]
 			s.pos++
-			if _, dup := s.seenIDs[e.ID]; dup {
+			if _, dup := s.seenSeqs[e.Seq]; dup {
 				continue
 			}
-			s.seenIDs[e.ID] = struct{}{}
+			s.seenSeqs[e.Seq] = struct{}{}
 			return e, nil
 		}
 		if s.exhausted {
@@ -445,7 +464,7 @@ func (s *crossoverStream) loadNextPage(ctx context.Context) error {
 	// but advanceCursor doesn't change the cursor, we know the tier is
 	// ignoring it (pathological — would loop forever) and we must abort.
 	cursorBefore := s.currentCursor()
-	preSeen := len(s.seenIDs)
+	preSeen := len(s.seenSeqs)
 
 	first, err := s.readTier(ctx, firstTier, want)
 	if err != nil {
@@ -462,7 +481,7 @@ func (s *crossoverStream) loadNextPage(ctx context.Context) error {
 	switch {
 	case len(first) > 0 && s.currentCursor() == cursorBefore:
 		s.stuckPageReads++
-	case len(first) > 0 && len(s.seenIDs) == preSeen:
+	case len(first) > 0 && len(s.seenSeqs) == preSeen:
 		// Cursor moved but every returned ID was already seen — still no
 		// forward progress for the consumer.
 		s.stuckPageReads++
@@ -483,6 +502,16 @@ func (s *crossoverStream) loadNextPage(ctx context.Context) error {
 			remaining = 0
 		}
 		s.crossoverDone = true
+		// Reset seq cursor at the tier boundary. The seq from the first
+		// tier is only meaningful within that tier's sequence space (e.g.
+		// a cold event's js_seq is an aged-out JS seq, no longer in JS
+		// retention). The second tier derives its own seq cursor from the
+		// first events it returns; clearing here forces it to use time-based
+		// routing rather than attempting to start at a seq it can't echo.
+		// The ID cursor (AfterID / BeforeID) is preserved so matchesQuery
+		// can still filter at the boundary.
+		s.query.AfterSeq = 0
+		s.query.BeforeSeq = 0
 		if remaining > 0 && s.canReadTier(second) && s.secondTierInWindow(second) {
 			extra, err := s.readTier(ctx, second, remaining)
 			if err != nil {
@@ -512,38 +541,41 @@ func (s *crossoverStream) loadNextPage(ctx context.Context) error {
 	return nil
 }
 
-// advanceCursor updates the query's cursor bound so the next tier read
-// picks up where this one left off. Forward direction advances After;
-// backward advances Before. Without this, loadNextPage would re-read the
-// same page indefinitely (dedup at Next hides the events but s.buf and
-// the read-loop still grow without bound — an O(n) memory leak per call).
-// currentCursor returns the query's active cursor bound (After for
-// forward, Before for backward). Used to detect pathological tiers that
-// ignore the cursor and return the same events on every read.
-func (s *crossoverStream) currentCursor() ulid.ULID {
+// currentCursor returns the query's active cursor seq (AfterSeq for
+// forward, BeforeSeq for backward). Used to detect pathological tiers
+// that ignore the cursor and return the same events on every read.
+func (s *crossoverStream) currentCursor() uint64 {
 	dir := s.query.Direction
 	if dir == 0 {
 		dir = eventbus.DirectionForward
 	}
 	if dir == eventbus.DirectionForward {
-		return s.query.AfterID
+		return s.query.AfterSeq
 	}
-	return s.query.BeforeID
+	return s.query.BeforeSeq
 }
 
+// advanceCursor updates the query's cursor bound so the next tier read
+// picks up where this one left off. Forward direction advances AfterSeq +
+// AfterID; backward advances BeforeSeq + BeforeID. Without this,
+// loadNextPage would re-read the same page indefinitely (dedup at Next
+// hides the events but s.buf and the read-loop still grow without bound —
+// an O(n) memory leak per call).
 func (s *crossoverStream) advanceCursor(events []eventbus.Event) {
 	if len(events) == 0 {
 		return
 	}
+	last := events[len(events)-1]
 	dir := s.query.Direction
 	if dir == 0 {
 		dir = eventbus.DirectionForward
 	}
-	last := events[len(events)-1].ID
 	if dir == eventbus.DirectionForward {
-		s.query.AfterID = last
+		s.query.AfterSeq = last.Seq
+		s.query.AfterID = last.ID
 	} else {
-		s.query.BeforeID = last
+		s.query.BeforeSeq = last.Seq
+		s.query.BeforeID = last.ID
 	}
 }
 
@@ -599,7 +631,7 @@ func (s *crossoverStream) readTier(ctx context.Context, t Tier, pageSize int) ([
 		if s.hot == nil {
 			return nil, nil
 		}
-		events, err := s.hot.Read(readCtx, s.query, s.edge, pageSize)
+		events, err := s.hot.Read(readCtx, s.query, s.edge, pageSize, s.snap)
 		if err != nil {
 			return nil, oops.Code("EVENTBUS_HISTORY_HOT_READ_FAILED").
 				With("subject", string(s.query.Subject)).
@@ -610,7 +642,7 @@ func (s *crossoverStream) readTier(ctx context.Context, t Tier, pageSize int) ([
 		if s.cold == nil {
 			return nil, nil
 		}
-		events, err := s.cold.Read(readCtx, s.query, s.edge, pageSize)
+		events, err := s.cold.Read(readCtx, s.query, s.edge, pageSize, s.snap)
 		if err != nil {
 			return nil, oops.Code("EVENTBUS_HISTORY_COLD_READ_FAILED").
 				With("subject", string(s.query.Subject)).
@@ -623,9 +655,10 @@ func (s *crossoverStream) readTier(ctx context.Context, t Tier, pageSize int) ([
 }
 
 // appendOrdered appends events to the buffer in the direction the query
-// asked for. Each tier is expected to return events already in the requested
-// order; appendOrdered re-sorts the tail (unread region) to keep a stable
-// merge when the two tiers overlap across the edge.
+// asked for, sorted by JetStream stream sequence. Each tier is expected to
+// return events already in the requested order; appendOrdered re-sorts the
+// tail (unread region) to keep a stable merge when the two tiers overlap
+// across the edge.
 func (s *crossoverStream) appendOrdered(events []eventbus.Event) {
 	if len(events) == 0 {
 		return
@@ -638,9 +671,9 @@ func (s *crossoverStream) appendOrdered(events []eventbus.Event) {
 	tail := s.buf[s.pos:]
 	sort.SliceStable(tail, func(i, j int) bool {
 		if dir == eventbus.DirectionBackward {
-			return tail[i].ID.Compare(tail[j].ID) > 0
+			return tail[i].Seq > tail[j].Seq
 		}
-		return tail[i].ID.Compare(tail[j].ID) < 0
+		return tail[i].Seq < tail[j].Seq
 	})
 }
 

@@ -44,7 +44,7 @@ func newJetStreamHotTier(js jetstream.JetStream, selector codec.KeySelector, now
 // start position implied by q, fetches up to pageSize messages, decodes
 // each, and filters in-process for the Before/After/NotAfter bounds the JS
 // consumer cannot express directly.
-func (h *jetStreamHotTier) Read(ctx context.Context, q eventbus.HistoryQuery, edge time.Time, pageSize int) ([]eventbus.Event, error) {
+func (h *jetStreamHotTier) Read(ctx context.Context, q eventbus.HistoryQuery, edge time.Time, pageSize int, _ *StreamStateSnapshot) ([]eventbus.Event, error) {
 	if pageSize <= 0 {
 		return nil, nil
 	}

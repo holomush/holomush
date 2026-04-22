@@ -40,7 +40,7 @@ func newPostgresColdTier(pool *pgxpool.Pool) *postgresColdTier {
 // We validate, discard, and return the rest. A future maintainer who
 // changes >= back to > silently disables the tripwire and reintroduces
 // the bug class this design exists to prevent. DO NOT.
-func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, edge time.Time, pageSize int) ([]eventbus.Event, error) {
+func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, edge time.Time, pageSize int, snap *StreamStateSnapshot) ([]eventbus.Event, error) {
 	if pageSize <= 0 {
 		return nil, nil
 	}
@@ -187,10 +187,23 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 		return nil, oops.Code("EVENTBUS_COLD_ROWS_ERR").Wrap(err)
 	}
 
-	// Cursor supplied but zero rows returned — cursor seq is absent.
-	// LAG vs STALE distinction comes in Task 8; for now all missing cursors
-	// are STALE.
+	// Cursor supplied but zero rows returned — cursor seq is absent from cold.
+	// Consult snapshot: if cursor.Seq is still within the live JS stream
+	// (i.e. cursor.Seq <= snap.LastSeq), the audit projection simply hasn't
+	// caught up yet — that's LAG, not STALE. Otherwise the seq doesn't exist
+	// anywhere = STALE.
 	if hasCursor && first {
+		if snap != nil {
+			_, lastSeq, snapErr := snap.Get(ctx)
+			if snapErr == nil && cursorSeq <= lastSeq {
+				return nil, oops.Code("EVENTBUS_CURSOR_LAG").
+					With("subject", string(q.Subject)).
+					With("cursor_seq", cursorSeq).
+					With("cursor_id", cursorID.String()).
+					With("js_last_seq", lastSeq).
+					Wrap(eventbus.ErrCursorLag)
+			}
+		}
 		return nil, oops.Code("EVENTBUS_CURSOR_STALE").
 			With("subject", string(q.Subject)).
 			With("cursor_seq", cursorSeq).

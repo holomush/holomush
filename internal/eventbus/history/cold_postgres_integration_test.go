@@ -87,7 +87,7 @@ func TestColdReadValidatesAndDiscardsCursorEcho(t *testing.T) {
 		AfterID:   id1,
 		Direction: eventbus.DirectionForward,
 	}
-	out, err := tier.Read(ctx, q, time.Time{}, 10)
+	out, err := tier.Read(ctx, q, time.Time{}, 10, nil)
 	require.NoError(t, err)
 	require.Len(t, out, 2, "should return events after cursor; cursor row is discarded")
 	assert.Equal(t, uint64(2), out[0].Seq)
@@ -115,7 +115,7 @@ func TestColdReadReturnsStaleOnIDMismatch(t *testing.T) {
 		AfterID:   idCursor, // mismatched id for seq 1
 		Direction: eventbus.DirectionForward,
 	}
-	_, err := tier.Read(ctx, q, time.Time{}, 10)
+	_, err := tier.Read(ctx, q, time.Time{}, 10, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, eventbus.ErrCursorStale)
 }
@@ -136,7 +136,7 @@ func TestColdReadReturnsStaleOnMissingCursorSeq(t *testing.T) {
 		AfterID:   testULID(t, 3000099),
 		Direction: eventbus.DirectionForward,
 	}
-	_, err := tier.Read(ctx, q, time.Time{}, 10)
+	_, err := tier.Read(ctx, q, time.Time{}, 10, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, eventbus.ErrCursorStale)
 }
@@ -165,8 +165,87 @@ func TestColdReadCursorAtEdgePassesEdgeFilter(t *testing.T) {
 		Direction: eventbus.DirectionForward,
 	}
 	edge := now.Add(-30 * time.Minute)
-	out, err := tier.Read(ctx, q, edge, 10)
+	out, err := tier.Read(ctx, q, edge, 10, nil)
 	require.NoError(t, err)
 	// Cursor echo is validated and discarded; idAfterEdge is filtered by edge.
 	assert.Empty(t, out)
+}
+
+// TestColdReadReturnsLagWhenCursorSeqMissingFromColdButPresentInJS uses a
+// stubbed snapshot to simulate cursor.Seq=50 being in JS (LastSeq=100) but
+// not yet projected into cold. Expect ErrCursorLag.
+func TestColdReadReturnsLagWhenCursorSeqMissingFromColdButPresentInJS(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+
+	subject := eventbus.Subject("events.main.location.01HXTESTLOCEEE0000000000E")
+	// Insert seq=1 only; cursor will point to seq=50 which is absent.
+	insertAuditRow(t, pool, testULID(t, 5000001), subject, 1)
+
+	tier := newPostgresColdTier(pool)
+	q := eventbus.HistoryQuery{
+		Subject:   subject,
+		AfterSeq:  50,
+		AfterID:   testULID(t, 5000050),
+		Direction: eventbus.DirectionForward,
+		PageSize:  10,
+	}
+	// Snapshot: JS contains seqs 1..100; cursor.Seq=50 is within [1,100] → LAG.
+	snap := newSnapshotForTest(1, 100)
+	_, err := tier.Read(ctx, q, time.Time{}, q.PageSize, snap)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, eventbus.ErrCursorLag,
+		"cursor seq within JS range must be LAG, not STALE")
+}
+
+// TestColdReadReturnsStaleWhenCursorSeqBeyondJS uses a stubbed snapshot where
+// cursor.Seq exceeds the snapshot's LastSeq — the seq doesn't exist anywhere,
+// so it's truly STALE.
+func TestColdReadReturnsStaleWhenCursorSeqBeyondJS(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+
+	subject := eventbus.Subject("events.main.location.01HXTESTLOCFFF0000000000F")
+	// Insert seq=1 only; cursor will point to seq=200 which exceeds JS.
+	insertAuditRow(t, pool, testULID(t, 6000001), subject, 1)
+
+	tier := newPostgresColdTier(pool)
+	q := eventbus.HistoryQuery{
+		Subject:   subject,
+		AfterSeq:  200,
+		AfterID:   testULID(t, 6000200),
+		Direction: eventbus.DirectionForward,
+		PageSize:  10,
+	}
+	// Snapshot: JS only has seqs 1..100; cursor.Seq=200 > lastSeq=100 → STALE.
+	snap := newSnapshotForTest(1, 100)
+	_, err := tier.Read(ctx, q, time.Time{}, q.PageSize, snap)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, eventbus.ErrCursorStale,
+		"cursor seq beyond JS range must be STALE")
+}
+
+// TestColdReadReturnsStaleWhenNoSnapshotAndCursorMissing verifies that without
+// a snapshot (nil), a missing cursor seq always returns ErrCursorStale
+// (can't distinguish LAG from STALE).
+func TestColdReadReturnsStaleWhenNoSnapshotAndCursorMissing(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+
+	subject := eventbus.Subject("events.main.location.01HXTESTLOCGGG0000000000G")
+	insertAuditRow(t, pool, testULID(t, 7000001), subject, 1)
+
+	tier := newPostgresColdTier(pool)
+	q := eventbus.HistoryQuery{
+		Subject:   subject,
+		AfterSeq:  50,
+		AfterID:   testULID(t, 7000050),
+		Direction: eventbus.DirectionForward,
+		PageSize:  10,
+	}
+	// No snapshot — falls back to STALE.
+	_, err := tier.Read(ctx, q, time.Time{}, q.PageSize, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, eventbus.ErrCursorStale,
+		"without snapshot, missing cursor must be STALE")
 }
