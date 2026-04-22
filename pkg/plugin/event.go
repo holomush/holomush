@@ -57,6 +57,11 @@ type Event struct {
 	ActorKind ActorKind
 	ActorID   string
 	Payload   string // JSON string
+	// Cursor is the opaque pagination token representing this event's
+	// position in the stream. Pass this as QueryStreamHistoryRequest.Cursor
+	// on the next call to page backward from this event. Treat as an
+	// opaque blob — internal encoding may change between host versions.
+	Cursor []byte
 }
 
 // Response is what plugins return after handling an event.

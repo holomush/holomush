@@ -403,7 +403,12 @@ type Event struct {
 	// Actor identifier.
 	ActorId string `protobuf:"bytes,6,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
 	// JSON-encoded payload.
-	Payload       string `protobuf:"bytes,7,opt,name=payload,proto3" json:"payload,omitempty"`
+	Payload string `protobuf:"bytes,7,opt,name=payload,proto3" json:"payload,omitempty"`
+	// cursor is the opaque pagination token for this event. Pass as
+	// PluginHostServiceQueryStreamHistoryRequest.cursor on the next call
+	// to page backward from this position. Empty on events received via
+	// delivery (not history). Treat as an opaque blob.
+	Cursor        []byte `protobuf:"bytes,8,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -485,6 +490,13 @@ func (x *Event) GetPayload() string {
 		return x.Payload
 	}
 	return ""
+}
+
+func (x *Event) GetCursor() []byte {
+	if x != nil {
+		return x.Cursor
+	}
+	return nil
 }
 
 // EmitEvent represents an event that a plugin wants to emit.
@@ -2389,7 +2401,7 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\vInitRequest\x129\n" +
 	"\x06config\x18\x01 \x01(\v2!.holomush.plugin.v1.ServiceConfigR\x06config\";\n" +
 	"\fInitResponse\x12+\n" +
-	"\x11provided_services\x18\x01 \x03(\tR\x10providedServices\"\xed\x01\n" +
+	"\x11provided_services\x18\x01 \x03(\tR\x10providedServices\"\x85\x02\n" +
 	"\x05Event\x12\x17\n" +
 	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\x12\x1f\n" +
 	"\x06stream\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06stream\x12\x1b\n" +
@@ -2398,7 +2410,8 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
 	"actor_kind\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tactorKind\x12\"\n" +
 	"\bactor_id\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\aactorId\x12#\n" +
-	"\apayload\x18\a \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x04R\apayload\"n\n" +
+	"\apayload\x18\a \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x04R\apayload\x12\x16\n" +
+	"\x06cursor\x18\b \x01(\fR\x06cursor\"n\n" +
 	"\tEmitEvent\x12\x1f\n" +
 	"\x06stream\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06stream\x12\x1b\n" +
 	"\x04type\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04type\x12#\n" +

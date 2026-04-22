@@ -97,6 +97,9 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	// Step 4: Decode opaque cursor (if any). Empty = first page.
 	var beforeSeq uint64
 	var beforeID ulid.ULID
+	// pluginCursorOwner is non-zero when the decoded cursor is OwnerPlugin.
+	// It carries the plugin name for re-wrapping the returned event cursors.
+	var pluginCursorOwner cursor.Owner
 	if len(req.Cursor) > 0 {
 		c, decodeErr := cursor.Decode(req.Cursor)
 		if decodeErr != nil {
@@ -113,7 +116,35 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 			beforeSeq = c.Host.Seq
 			beforeID = c.Host.ID
 		case cursor.OwnerPlugin:
-			return nil, status.Errorf(codes.Unimplemented, "plugin-owned cursor routing pending (see holomush-suos Task 13)")
+			// Plugin-owned cursor: route to the plugin's QueryHistory. The
+			// inner bytes (c.Plugin) are the raw ULID that the plugin stored
+			// as its event cursor. Parse as ULID and forward as BeforeID.
+			// Authorization (Step 5) still applies; the plugin performs its
+			// own domain authz on top.
+			if c.Owner.PluginName == "" {
+				return nil, status.Errorf(codes.InvalidArgument, "plugin cursor missing plugin_name")
+			}
+			var innerID ulid.ULID
+			if len(c.Plugin) == 16 {
+				copy(innerID[:], c.Plugin)
+			} else if len(c.Plugin) > 0 {
+				// Non-16-byte inner: the plugin may have used a string ULID;
+				// attempt string parse as a fallback.
+				parsed, parseErr := ulid.Parse(string(c.Plugin))
+				if parseErr != nil {
+					return nil, status.Errorf(codes.InvalidArgument, "plugin cursor: invalid inner ULID bytes")
+				}
+				innerID = parsed
+			}
+			// Fall through to step 5 (authorization) then step 7 where we
+			// route via fetchHistoryFramesFromBus. The Reader.QueryHistory
+			// will delegate to PluginHistoryRouter for plugin-owned subjects.
+			// beforeSeq stays 0 (plugins don't expose seq).
+			beforeID = innerID
+			// Stash plugin name for cursor re-wrap in the response builder.
+			// We carry it via the decoded cursor owner so no extra field is
+			// needed on the handler's local state.
+			pluginCursorOwner = c.Owner
 		default:
 			return nil, status.Errorf(codes.InvalidArgument, "unknown cursor owner kind")
 		}
@@ -192,6 +223,14 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 			Wrap(fetchErr))
 	}
 	protoFrames := frames
+
+	// If a plugin-owned cursor was decoded in Step 4, re-wrap each frame's
+	// cursor as an OwnerPlugin token so the client's next page request can
+	// be recognised as plugin-owned. fetchHistoryFramesFromBus stamps
+	// OwnerHost cursors regardless of the subject owner; we fix that here.
+	if pluginCursorOwner.Kind == cursor.OwnerPlugin {
+		protoFrames = rewrapFrameCursorsForPlugin(protoFrames, pluginCursorOwner.PluginName)
+	}
 
 	// Step 8: Build response. Results are ascending (oldest→newest).
 	// If we got more than count, the OLDEST (index 0) is the "has_more
@@ -320,6 +359,60 @@ func encodeEventCursor(ev eventbus.Event) []byte {
 		return nil
 	}
 	return b
+}
+
+// encodePluginEventCursor wraps a plugin's opaque inner cursor bytes inside a
+// host OwnerPlugin token. The inner bytes are the ULID bytes the plugin stored
+// as its event ID (or its own opaque cursor). The host treats them as opaque;
+// on the next page request the handler decodes the token and forwards the
+// inner bytes back to the plugin's QueryHistory as the Before cursor.
+func encodePluginEventCursor(pluginName string, inner []byte) []byte {
+	b, err := cursor.Encode(cursor.Cursor{
+		Version: cursor.CurrentVersion,
+		Epoch:   cursor.CurrentEpoch(),
+		Owner:   cursor.Owner{Kind: cursor.OwnerPlugin, PluginName: pluginName},
+		Plugin:  inner,
+	})
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// rewrapFrameCursorsForPlugin replaces each EventFrame.Cursor in frames with
+// a OwnerPlugin-wrapped token for the given plugin. The host-inner ULID bytes
+// are extracted from the existing OwnerHost cursor set by fetchHistoryFramesFromBus.
+// Frames whose existing cursor cannot be decoded are left with nil cursor
+// (non-fatal — the client cannot paginate from that event).
+func rewrapFrameCursorsForPlugin(frames []*corev1.EventFrame, pluginName string) []*corev1.EventFrame {
+	if len(frames) == 0 || pluginName == "" {
+		return frames
+	}
+	out := make([]*corev1.EventFrame, len(frames))
+	for i, f := range frames {
+		// Construct a new EventFrame rather than shallow-copying the proto
+		// struct, which contains a sync.Mutex inside protoimpl.MessageState.
+		var pluginCursor []byte
+		if len(f.GetCursor()) > 0 {
+			existing, decErr := cursor.Decode(f.GetCursor())
+			if decErr == nil && existing.Host != nil {
+				// Use the ULID bytes as the plugin inner cursor.
+				id := existing.Host.ID
+				pluginCursor = encodePluginEventCursor(pluginName, id[:])
+			}
+		}
+		out[i] = &corev1.EventFrame{
+			Id:        f.GetId(),
+			Stream:    f.GetStream(),
+			Type:      f.GetType(),
+			Timestamp: f.GetTimestamp(),
+			ActorType: f.GetActorType(),
+			ActorId:   f.GetActorId(),
+			Payload:   f.GetPayload(),
+			Cursor:    pluginCursor,
+		}
+	}
+	return out
 }
 
 // eventbusEventToEventFrame converts an eventbus.Event to a proto EventFrame.

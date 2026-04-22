@@ -484,8 +484,8 @@ func (f *fakeFocusClient) PresentFocus(_ context.Context, sid string, t pluginsd
 	return f.presentErr
 }
 
-func (f *fakeFocusClient) QueryStreamHistory(_ context.Context, _ pluginsdk.QueryStreamHistoryRequest) ([]pluginsdk.Event, error) {
-	return nil, nil
+func (f *fakeFocusClient) QueryStreamHistory(_ context.Context, _ pluginsdk.QueryStreamHistoryRequest) (pluginsdk.QueryStreamHistoryResponse, error) {
+	return pluginsdk.QueryStreamHistoryResponse{}, nil
 }
 
 // newTestPluginWithFocus returns a scenePlugin wired with a fakeFocusClient

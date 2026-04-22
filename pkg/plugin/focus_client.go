@@ -62,7 +62,11 @@ type FocusClient interface {
 	// QueryStreamHistory reads the tail of a stream for plugin-side display.
 	// Read-only (I-13): does not mutate cursors, subscriptions, or session
 	// state. The host clamps Count server-side at 500.
-	QueryStreamHistory(ctx context.Context, req QueryStreamHistoryRequest) ([]Event, error)
+	//
+	// The returned QueryStreamHistoryResponse.NextCursor is an opaque token
+	// suitable for the next call's Cursor field to page backward through the
+	// stream. Empty NextCursor means no older pages are available.
+	QueryStreamHistory(ctx context.Context, req QueryStreamHistoryRequest) (QueryStreamHistoryResponse, error)
 }
 
 // FocusKey identifies a focus membership within a session.
@@ -119,6 +123,21 @@ type QueryStreamHistoryRequest struct {
 	Stream    string
 	Count     int       // server clamps to 500
 	NotBefore time.Time // zero means no time floor
+	// Cursor is the opaque pagination cursor from a previous
+	// QueryStreamHistoryResponse.NextCursor. Empty means "start from the
+	// latest event" (no pagination state). Treat as an opaque blob — the
+	// host may change its internal encoding at any time.
+	Cursor []byte
+}
+
+// QueryStreamHistoryResponse is the result of a QueryStreamHistory call.
+type QueryStreamHistoryResponse struct {
+	// Events is the ordered slice of events on the page (oldest→newest).
+	Events []Event
+	// NextCursor is the opaque cursor to pass on the next call to page
+	// backward. Empty when no more pages are available (the query reached
+	// the beginning of the stream).
+	NextCursor []byte
 }
 
 // FocusClientAware is the optional interface service providers implement to
@@ -221,9 +240,9 @@ func (c *pluginHostFocusClient) PresentFocus(ctx context.Context, sessionID stri
 // of truth for the cap.
 const queryStreamHistoryCountConversionMax int32 = 1 << 30
 
-func (c *pluginHostFocusClient) QueryStreamHistory(ctx context.Context, req QueryStreamHistoryRequest) ([]Event, error) {
+func (c *pluginHostFocusClient) QueryStreamHistory(ctx context.Context, req QueryStreamHistoryRequest) (QueryStreamHistoryResponse, error) {
 	if c.client == nil {
-		return nil, oops.New("plugin host focus client is not configured")
+		return QueryStreamHistoryResponse{}, oops.New("plugin host focus client is not configured")
 	}
 	var notBeforeMs int64
 	if !req.NotBefore.IsZero() {
@@ -242,9 +261,10 @@ func (c *pluginHostFocusClient) QueryStreamHistory(ctx context.Context, req Quer
 		Stream:      req.Stream,
 		Count:       count,
 		NotBeforeMs: notBeforeMs,
+		Cursor:      req.Cursor,
 	})
 	if err != nil {
-		return nil, oops.With("stream", req.Stream).Wrap(err)
+		return QueryStreamHistoryResponse{}, oops.With("stream", req.Stream).Wrap(err)
 	}
 	events := make([]Event, 0, len(resp.GetEvents()))
 	for _, e := range resp.GetEvents() {
@@ -256,9 +276,13 @@ func (c *pluginHostFocusClient) QueryStreamHistory(ctx context.Context, req Quer
 			ActorKind: protoActorKindToActorKind(e.GetActorKind()),
 			ActorID:   e.GetActorId(),
 			Payload:   e.GetPayload(),
+			Cursor:    e.GetCursor(),
 		})
 	}
-	return events, nil
+	return QueryStreamHistoryResponse{
+		Events:     events,
+		NextCursor: resp.GetNextCursor(),
+	}, nil
 }
 
 // wrapFanOutFocusError is the session-less variant of wrapFocusError for

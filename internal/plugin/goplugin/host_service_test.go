@@ -471,6 +471,95 @@ func TestProtoToFocusKindReturnsErrorForUnspecified(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported focus kind")
 }
 
+func TestQueryStreamHistoryPopulatesPerEventCursors(t *testing.T) {
+	evID := ulid.Make()
+	es := &stubHistoryReader{
+		replayTailResult: []core.Event{
+			{ID: evID, Stream: "channel:abc", Type: "say", Payload: []byte(`{}`)},
+		},
+	}
+	srv := newTestServer(nil, es)
+
+	resp, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+		Stream: "channel:abc",
+		Count:  10,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetEvents(), 1)
+	// Each returned event must have a non-empty cursor blob.
+	assert.NotEmpty(t, resp.GetEvents()[0].GetCursor(), "per-event cursor must be set")
+}
+
+func TestQueryStreamHistoryDecodesOpaqueBeforeIDCursor(t *testing.T) {
+	// Build a valid host cursor wrapping a ULID as the beforeID.
+	anchorID := ulid.Make()
+	es := &stubHistoryReader{}
+	srv := newTestServer(nil, es)
+
+	// Encode the cursor the same way encodeHostEventCursor does.
+	cursorBytes := encodeHostEventCursor(anchorID)
+	require.NotEmpty(t, cursorBytes)
+
+	_, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+		Stream: "channel:abc",
+		Count:  5,
+		Cursor: cursorBytes,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, es.replayTailCalls, 1)
+	assert.Equal(t, anchorID, es.replayTailCalls[0].beforeID, "decoded cursor ULID must be forwarded as beforeID")
+}
+
+func TestQueryStreamHistoryRejectsInvalidCursorBytes(t *testing.T) {
+	es := &stubHistoryReader{}
+	srv := newTestServer(nil, es)
+
+	_, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+		Stream: "channel:abc",
+		Count:  5,
+		Cursor: []byte("not-a-valid-cursor"),
+	})
+	require.Error(t, err)
+	var oe oops.OopsError
+	require.ErrorAs(t, err, &oe)
+	// cursor.Decode stamps EVENTBUS_CURSOR_INVALID; the host wraps with
+	// INVALID_ARGUMENT context but the inner code is preserved by oops.Wrap.
+	assert.Equal(t, "EVENTBUS_CURSOR_INVALID", oe.Code())
+}
+
+func TestQueryStreamHistorySetsNextCursorWhenPageFull(t *testing.T) {
+	// When len(events) == count, next_cursor should be populated.
+	evts := make([]core.Event, 0, 3)
+	for range 3 {
+		evts = append(evts, core.Event{ID: ulid.Make(), Stream: "channel:abc", Type: "say", Payload: []byte(`{}`)})
+	}
+	es := &stubHistoryReader{replayTailResult: evts}
+	srv := newTestServer(nil, es)
+
+	resp, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+		Stream: "channel:abc",
+		Count:  3, // exactly count events returned → next_cursor populated
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, resp.GetNextCursor(), "next_cursor must be set when page is full")
+}
+
+func TestQueryStreamHistoryNextCursorEmptyWhenFewerEventsThanCount(t *testing.T) {
+	evts := []core.Event{
+		{ID: ulid.Make(), Stream: "channel:abc", Type: "say", Payload: []byte(`{}`)},
+	}
+	es := &stubHistoryReader{replayTailResult: evts}
+	srv := newTestServer(nil, es)
+
+	resp, err := srv.QueryStreamHistory(context.Background(), &pluginv1.PluginHostServiceQueryStreamHistoryRequest{
+		Stream: "channel:abc",
+		Count:  10, // more than returned → no more pages
+	})
+	require.NoError(t, err)
+	assert.Empty(t, resp.GetNextCursor(), "next_cursor must be empty when page is not full")
+}
+
 func TestCoreEventToProtoConvertsAllFields(t *testing.T) {
 	eventID := ulid.Make()
 	ts := time.Date(2026, 4, 13, 12, 0, 0, 0, time.UTC)
