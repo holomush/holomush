@@ -394,8 +394,13 @@ message PluginHostServiceQueryStreamHistoryRequest {
   int32 count = 2;
   // Epoch milliseconds. Events before this time are excluded. 0 means no lower bound.
   int64 not_before_ms = 3;
+  // cursor is the opaque pagination cursor from a previous response.
+  // Events older than the cursor position are returned. Empty = start from latest.
+  bytes cursor = 4;
 }
 
 message PluginHostServiceQueryStreamHistoryResponse {
   repeated Event events = 1;
+  // next_cursor is the opaque cursor for the next page. Empty if no more pages.
+  bytes next_cursor = 2;
 }

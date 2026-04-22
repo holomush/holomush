@@ -140,6 +140,10 @@ message EventFrame {
   string actor_type = 5;
   string actor_id = 6;
   bytes payload = 7;
+  // cursor is the opaque pagination cursor for this event. Populated by the
+  // server on QueryStreamHistory responses and Subscribe deliveries so clients
+  // can resume without re-delivering events they already processed.
+  bytes cursor = 8;
 }
 
 enum ControlSignal {
@@ -368,13 +372,17 @@ message QueryStreamHistoryRequest {
   string stream = 3;
   int32 count = 4; // page size; 0 = default (150), max 500, negative rejected
   int64 not_before_ms = 5; // epoch ms time floor; 0 = no lower bound
-  string before_id = 6; // ULID pagination cursor; events older than this; empty = latest
+  // cursor is the opaque pagination cursor from a previous QueryStreamHistoryResponse.
+  // Events older than the cursor position are returned. Empty = start from latest.
+  bytes cursor = 6;
 }
 
 message QueryStreamHistoryResponse {
   ResponseMeta meta = 1;
   repeated EventFrame events = 2;
   bool has_more = 3;
+  // next_cursor is the opaque cursor for the next page. Empty if has_more is false.
+  bytes next_cursor = 4;
 }
 
 message ListSessionStreamsRequest {

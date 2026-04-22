@@ -346,6 +346,9 @@ type GameEvent struct {
 	Text          string                 `protobuf:"bytes,7,opt,name=text,proto3" json:"text,omitempty"`
 	Metadata      *structpb.Struct       `protobuf:"bytes,8,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	EventId       string                 `protobuf:"bytes,9,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"` // ULID; populated from corev1.EventFrame.id
+	// cursor is the opaque pagination cursor for this event. Mirrors
+	// corev1.EventFrame.cursor for reconnect-with-backfill support.
+	Cursor        []byte `protobuf:"bytes,10,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -441,6 +444,13 @@ func (x *GameEvent) GetEventId() string {
 		return x.EventId
 	}
 	return ""
+}
+
+func (x *GameEvent) GetCursor() []byte {
+	if x != nil {
+		return x.Cursor
+	}
+	return nil
 }
 
 type StreamEventsResponse struct {
@@ -2054,12 +2064,14 @@ func (x *WebContentItem) GetMetadata() map[string]string {
 }
 
 type WebQueryStreamHistoryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Stream        string                 `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
-	Count         int32                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`                                  // page size; 0 = default (150), max 500, negative rejected
-	NotBeforeMs   int64                  `protobuf:"varint,4,opt,name=not_before_ms,json=notBeforeMs,proto3" json:"not_before_ms,omitempty"` // epoch ms time floor; 0 = no lower bound
-	BeforeId      string                 `protobuf:"bytes,5,opt,name=before_id,json=beforeId,proto3" json:"before_id,omitempty"`             // ULID pagination cursor; events older than this; empty = latest
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	SessionId   string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Stream      string                 `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
+	Count       int32                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`                                  // page size; 0 = default (150), max 500, negative rejected
+	NotBeforeMs int64                  `protobuf:"varint,4,opt,name=not_before_ms,json=notBeforeMs,proto3" json:"not_before_ms,omitempty"` // epoch ms time floor; 0 = no lower bound
+	// cursor is the opaque pagination cursor from a previous WebQueryStreamHistoryResponse.
+	// Events older than the cursor position are returned. Empty = start from latest.
+	Cursor        []byte `protobuf:"bytes,5,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2122,17 +2134,19 @@ func (x *WebQueryStreamHistoryRequest) GetNotBeforeMs() int64 {
 	return 0
 }
 
-func (x *WebQueryStreamHistoryRequest) GetBeforeId() string {
+func (x *WebQueryStreamHistoryRequest) GetCursor() []byte {
 	if x != nil {
-		return x.BeforeId
+		return x.Cursor
 	}
-	return ""
+	return nil
 }
 
 type WebQueryStreamHistoryResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Events        []*GameEvent           `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
-	HasMore       bool                   `protobuf:"varint,2,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Events  []*GameEvent           `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	HasMore bool                   `protobuf:"varint,2,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	// next_cursor is the opaque cursor for the next page. Empty if has_more is false.
+	NextCursor    []byte `protobuf:"bytes,3,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2179,6 +2193,13 @@ func (x *WebQueryStreamHistoryResponse) GetHasMore() bool {
 		return x.HasMore
 	}
 	return false
+}
+
+func (x *WebQueryStreamHistoryResponse) GetNextCursor() []byte {
+	if x != nil {
+		return x.NextCursor
+	}
+	return nil
 }
 
 type WebListSessionStreamsRequest struct {
@@ -2639,7 +2660,7 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"N\n" +
 	"\x13StreamEventsRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionIdJ\x04\b\x02\x10\x03R\x12replay_from_cursor\"\xb1\x02\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionIdJ\x04\b\x02\x10\x03R\x12replay_from_cursor\"\xc9\x02\n" +
 	"\tGameEvent\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1a\n" +
 	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x16\n" +
@@ -2649,7 +2670,9 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x05actor\x18\x06 \x01(\tR\x05actor\x12\x12\n" +
 	"\x04text\x18\a \x01(\tR\x04text\x123\n" +
 	"\bmetadata\x18\b \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12\x19\n" +
-	"\bevent_id\x18\t \x01(\tR\aeventId\"\x8e\x01\n" +
+	"\bevent_id\x18\t \x01(\tR\aeventId\x12\x16\n" +
+	"\x06cursor\x18\n" +
+	" \x01(\fR\x06cursor\"\x8e\x01\n" +
 	"\x14StreamEventsResponse\x122\n" +
 	"\x05event\x18\x01 \x01(\v2\x1a.holomush.web.v1.GameEventH\x00R\x05event\x129\n" +
 	"\acontrol\x18\x02 \x01(\v2\x1d.holomush.web.v1.ControlFrameH\x00R\acontrolB\a\n" +
@@ -2758,17 +2781,19 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\bmetadata\x18\x04 \x03(\v2-.holomush.web.v1.WebContentItem.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xac\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa7\x01\n" +
 	"\x1cWebQueryStreamHistoryRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x16\n" +
 	"\x06stream\x18\x02 \x01(\tR\x06stream\x12\x14\n" +
 	"\x05count\x18\x03 \x01(\x05R\x05count\x12\"\n" +
-	"\rnot_before_ms\x18\x04 \x01(\x03R\vnotBeforeMs\x12\x1b\n" +
-	"\tbefore_id\x18\x05 \x01(\tR\bbeforeId\"n\n" +
+	"\rnot_before_ms\x18\x04 \x01(\x03R\vnotBeforeMs\x12\x16\n" +
+	"\x06cursor\x18\x05 \x01(\fR\x06cursor\"\x8f\x01\n" +
 	"\x1dWebQueryStreamHistoryResponse\x122\n" +
 	"\x06events\x18\x01 \x03(\v2\x1a.holomush.web.v1.GameEventR\x06events\x12\x19\n" +
-	"\bhas_more\x18\x02 \x01(\bR\ahasMore\"=\n" +
+	"\bhas_more\x18\x02 \x01(\bR\ahasMore\x12\x1f\n" +
+	"\vnext_cursor\x18\x03 \x01(\fR\n" +
+	"nextCursor\"=\n" +
 	"\x1cWebListSessionStreamsRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"9\n" +

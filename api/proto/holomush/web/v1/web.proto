@@ -105,6 +105,9 @@ message GameEvent {
   string text = 7;
   google.protobuf.Struct metadata = 8;
   string event_id = 9; // ULID; populated from corev1.EventFrame.id
+  // cursor is the opaque pagination cursor for this event. Mirrors
+  // corev1.EventFrame.cursor for reconnect-with-backfill support.
+  bytes cursor = 10;
 }
 
 message StreamEventsResponse {
@@ -263,12 +266,16 @@ message WebQueryStreamHistoryRequest {
   string stream = 2;
   int32 count = 3; // page size; 0 = default (150), max 500, negative rejected
   int64 not_before_ms = 4; // epoch ms time floor; 0 = no lower bound
-  string before_id = 5; // ULID pagination cursor; events older than this; empty = latest
+  // cursor is the opaque pagination cursor from a previous WebQueryStreamHistoryResponse.
+  // Events older than the cursor position are returned. Empty = start from latest.
+  bytes cursor = 5;
 }
 
 message WebQueryStreamHistoryResponse {
   repeated GameEvent events = 1;
   bool has_more = 2;
+  // next_cursor is the opaque cursor for the next page. Empty if has_more is false.
+  bytes next_cursor = 3;
 }
 
 message WebListSessionStreamsRequest {

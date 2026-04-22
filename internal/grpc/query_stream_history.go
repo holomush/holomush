@@ -5,6 +5,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"strings"
@@ -12,10 +13,13 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	accessTypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/cursor"
 	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
@@ -90,16 +94,29 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		count = maxHistoryPageSize
 	}
 
-	// Step 4: Parse before_id (empty = no cursor).
+	// Step 4: Decode opaque cursor (if any). Empty = first page.
+	var beforeSeq uint64
 	var beforeID ulid.ULID
-	if req.BeforeId != "" {
-		parsed, parseErr := ulid.Parse(req.BeforeId)
-		if parseErr != nil {
-			return nil, oops.Code("INVALID_ARGUMENT").
-				With("before_id", req.BeforeId).
-				Errorf("before_id must be a valid ULID")
+	if len(req.Cursor) > 0 {
+		c, decodeErr := cursor.Decode(req.Cursor)
+		if decodeErr != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid cursor: %v", decodeErr)
 		}
-		beforeID = parsed
+		if c.Epoch != cursor.CurrentEpoch() {
+			return nil, status.Errorf(codes.FailedPrecondition, "cursor stale: epoch %d vs current %d", c.Epoch, cursor.CurrentEpoch())
+		}
+		switch c.Owner.Kind {
+		case cursor.OwnerHost:
+			if c.Host == nil {
+				return nil, status.Errorf(codes.InvalidArgument, "host cursor missing body")
+			}
+			beforeSeq = c.Host.Seq
+			beforeID = c.Host.ID
+		case cursor.OwnerPlugin:
+			return nil, status.Errorf(codes.Unimplemented, "plugin-owned cursor routing pending (see holomush-suos Task 13)")
+		default:
+			return nil, status.Errorf(codes.InvalidArgument, "unknown cursor owner kind")
+		}
 	}
 
 	// Step 5: Authorization — two-layer model.
@@ -168,11 +185,11 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	// Step 7: Fetch count+1 to detect has_more.
 	// Delegate to the JetStream/PostgreSQL tier crossover reader (F4+).
 	// Both paths produce ascending (oldest→newest) slices of count+1 events maximum.
-	frames, fetchErr := fetchHistoryFramesFromBus(ctx, s.historyReader, s.currentGameID(), req.Stream, count, notBefore, beforeID)
+	frames, fetchErr := fetchHistoryFramesFromBus(ctx, s.historyReader, s.currentGameID(), req.Stream, count, notBefore, beforeSeq, beforeID)
 	if fetchErr != nil {
-		return nil, oops.Code("INTERNAL").
+		return nil, mapHistoryError(oops.Code("INTERNAL").
 			With("stream", req.Stream).
-			Wrap(fetchErr)
+			Wrap(fetchErr))
 	}
 	protoFrames := frames
 
@@ -184,11 +201,33 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		protoFrames = protoFrames[len(protoFrames)-count:]
 	}
 
+	// Populate next_cursor from the last frame's cursor (oldest frame in
+	// the page is the pagination anchor for the next backward read).
+	var nextCursor []byte
+	if hasMore && len(protoFrames) > 0 {
+		nextCursor = protoFrames[0].GetCursor()
+	}
+
 	return &corev1.QueryStreamHistoryResponse{
-		Meta:    responseMeta(requestID),
-		Events:  protoFrames,
-		HasMore: hasMore,
+		Meta:       responseMeta(requestID),
+		Events:     protoFrames,
+		HasMore:    hasMore,
+		NextCursor: nextCursor,
 	}, nil
+}
+
+// mapHistoryError translates eventbus cursor errors to gRPC status codes.
+func mapHistoryError(err error) error {
+	switch {
+	case errors.Is(err, eventbus.ErrCursorInvalid):
+		return status.Errorf(codes.InvalidArgument, "%v", err)
+	case errors.Is(err, eventbus.ErrCursorStale):
+		return status.Errorf(codes.FailedPrecondition, "%v", err)
+	case errors.Is(err, eventbus.ErrCursorLag):
+		return status.Errorf(codes.Unavailable, "%v", err)
+	default:
+		return err // let oops wrap through
+	}
 }
 
 // fetchHistoryFramesFromBus fetches count+1 events from the HistoryReader and
@@ -196,7 +235,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 // matching the legacy ReplayTail wire shape expected by the response builder.
 //
 // Direction is Backward (newest-first) so the reader returns the tail of the
-// stream relative to beforeID (or the absolute end when beforeID is zero).
+// stream relative to beforeSeq/beforeID (or the absolute end when zero).
 // The slice is reversed on return to restore ascending order.
 func fetchHistoryFramesFromBus(
 	ctx context.Context,
@@ -204,6 +243,7 @@ func fetchHistoryFramesFromBus(
 	gameID, legacyStream string,
 	count int,
 	notBefore time.Time,
+	beforeSeq uint64,
 	beforeID ulid.ULID,
 ) ([]*corev1.EventFrame, error) {
 	natsSubject, err := subjectxlate.Legacy(legacyStream, gameID)
@@ -221,13 +261,16 @@ func fetchHistoryFramesFromBus(
 		PageSize:  count + 1,
 		NotBefore: notBefore,
 	}
-	if !beforeID.IsZero() {
+	if beforeSeq != 0 {
+		q.BeforeSeq = beforeSeq
+		q.BeforeID = beforeID
+	} else if !beforeID.IsZero() {
 		q.BeforeID = beforeID
 	}
 
 	stream, err := reader.QueryHistory(ctx, q)
 	if err != nil {
-		return nil, oops.With("subject", string(sub)).Wrap(err)
+		return nil, mapHistoryError(oops.With("subject", string(sub)).Wrap(err))
 	}
 	defer stream.Close() //nolint:errcheck // best-effort iterator close
 
@@ -255,9 +298,28 @@ func fetchHistoryFramesFromBus(
 		// Reverse index: collected[0] is newest; result[0] should be oldest.
 		j := len(collected) - 1 - i
 		legacyStreamName := subjectxlate.ToLegacy(string(collected[i].Subject), gameID)
-		result[j] = eventbusEventToEventFrame(collected[i], legacyStreamName)
+		frame := eventbusEventToEventFrame(collected[i], legacyStreamName)
+		frame.Cursor = encodeEventCursor(collected[i])
+		result[j] = frame
 	}
 	return result, nil
+}
+
+// encodeEventCursor encodes an eventbus.Event into an opaque cursor bytes
+// value suitable for setting on EventFrame.Cursor and response NextCursor.
+// Returns nil on encoding failure (non-fatal; client simply cannot paginate
+// from this event).
+func encodeEventCursor(ev eventbus.Event) []byte {
+	b, err := cursor.Encode(cursor.Cursor{
+		Version: cursor.CurrentVersion,
+		Epoch:   cursor.CurrentEpoch(),
+		Owner:   cursor.Owner{Kind: cursor.OwnerHost},
+		Host:    &cursor.HostCursor{Seq: ev.Seq, ID: ev.ID},
+	})
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 // eventbusEventToEventFrame converts an eventbus.Event to a proto EventFrame.

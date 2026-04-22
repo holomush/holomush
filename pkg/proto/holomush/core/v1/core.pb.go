@@ -394,14 +394,18 @@ func (x *SubscribeRequest) GetClientType() string {
 }
 
 type EventFrame struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Stream        string                 `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
-	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	Timestamp     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	ActorType     string                 `protobuf:"bytes,5,opt,name=actor_type,json=actorType,proto3" json:"actor_type,omitempty"`
-	ActorId       string                 `protobuf:"bytes,6,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
-	Payload       []byte                 `protobuf:"bytes,7,opt,name=payload,proto3" json:"payload,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Id        string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Stream    string                 `protobuf:"bytes,2,opt,name=stream,proto3" json:"stream,omitempty"`
+	Type      string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	Timestamp *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	ActorType string                 `protobuf:"bytes,5,opt,name=actor_type,json=actorType,proto3" json:"actor_type,omitempty"`
+	ActorId   string                 `protobuf:"bytes,6,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	Payload   []byte                 `protobuf:"bytes,7,opt,name=payload,proto3" json:"payload,omitempty"`
+	// cursor is the opaque pagination cursor for this event. Populated by the
+	// server on QueryStreamHistory responses and Subscribe deliveries so clients
+	// can resume without re-delivering events they already processed.
+	Cursor        []byte `protobuf:"bytes,8,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -481,6 +485,13 @@ func (x *EventFrame) GetActorId() string {
 func (x *EventFrame) GetPayload() []byte {
 	if x != nil {
 		return x.Payload
+	}
+	return nil
+}
+
+func (x *EventFrame) GetCursor() []byte {
+	if x != nil {
+		return x.Cursor
 	}
 	return nil
 }
@@ -2457,13 +2468,15 @@ func (x *RevokeOtherPlayerSessionsResponse) GetRevokedCount() int32 {
 }
 
 type QueryStreamHistoryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Stream        string                 `protobuf:"bytes,3,opt,name=stream,proto3" json:"stream,omitempty"`
-	Count         int32                  `protobuf:"varint,4,opt,name=count,proto3" json:"count,omitempty"`                                  // page size; 0 = default (150), max 500, negative rejected
-	NotBeforeMs   int64                  `protobuf:"varint,5,opt,name=not_before_ms,json=notBeforeMs,proto3" json:"not_before_ms,omitempty"` // epoch ms time floor; 0 = no lower bound
-	BeforeId      string                 `protobuf:"bytes,6,opt,name=before_id,json=beforeId,proto3" json:"before_id,omitempty"`             // ULID pagination cursor; events older than this; empty = latest
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Meta        *RequestMeta           `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	SessionId   string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Stream      string                 `protobuf:"bytes,3,opt,name=stream,proto3" json:"stream,omitempty"`
+	Count       int32                  `protobuf:"varint,4,opt,name=count,proto3" json:"count,omitempty"`                                  // page size; 0 = default (150), max 500, negative rejected
+	NotBeforeMs int64                  `protobuf:"varint,5,opt,name=not_before_ms,json=notBeforeMs,proto3" json:"not_before_ms,omitempty"` // epoch ms time floor; 0 = no lower bound
+	// cursor is the opaque pagination cursor from a previous QueryStreamHistoryResponse.
+	// Events older than the cursor position are returned. Empty = start from latest.
+	Cursor        []byte `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2533,18 +2546,20 @@ func (x *QueryStreamHistoryRequest) GetNotBeforeMs() int64 {
 	return 0
 }
 
-func (x *QueryStreamHistoryRequest) GetBeforeId() string {
+func (x *QueryStreamHistoryRequest) GetCursor() []byte {
 	if x != nil {
-		return x.BeforeId
+		return x.Cursor
 	}
-	return ""
+	return nil
 }
 
 type QueryStreamHistoryResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Meta          *ResponseMeta          `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
-	Events        []*EventFrame          `protobuf:"bytes,2,rep,name=events,proto3" json:"events,omitempty"`
-	HasMore       bool                   `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Meta    *ResponseMeta          `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Events  []*EventFrame          `protobuf:"bytes,2,rep,name=events,proto3" json:"events,omitempty"`
+	HasMore bool                   `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	// next_cursor is the opaque cursor for the next page. Empty if has_more is false.
+	NextCursor    []byte `protobuf:"bytes,4,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2598,6 +2613,13 @@ func (x *QueryStreamHistoryResponse) GetHasMore() bool {
 		return x.HasMore
 	}
 	return false
+}
+
+func (x *QueryStreamHistoryResponse) GetNextCursor() []byte {
+	if x != nil {
+		return x.NextCursor
+	}
+	return nil
 }
 
 type ListSessionStreamsRequest struct {
@@ -2742,7 +2764,7 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x14player_session_token\x18\x05 \x01(\tR\x12playerSessionToken\x12#\n" +
 	"\rconnection_id\x18\x06 \x01(\tR\fconnectionId\x12\x1f\n" +
 	"\vclient_type\x18\a \x01(\tR\n" +
-	"clientTypeJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\astreamsR\x12replay_from_cursor\"\xd6\x01\n" +
+	"clientTypeJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\astreamsR\x12replay_from_cursor\"\xee\x01\n" +
 	"\n" +
 	"EventFrame\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
@@ -2752,7 +2774,8 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\n" +
 	"actor_type\x18\x05 \x01(\tR\tactorType\x12\x19\n" +
 	"\bactor_id\x18\x06 \x01(\tR\aactorId\x12\x18\n" +
-	"\apayload\x18\a \x01(\fR\apayload\"a\n" +
+	"\apayload\x18\a \x01(\fR\apayload\x12\x16\n" +
+	"\x06cursor\x18\b \x01(\fR\x06cursor\"a\n" +
 	"\fControlFrame\x127\n" +
 	"\x06signal\x18\x01 \x01(\x0e2\x1f.holomush.core.v1.ControlSignalR\x06signal\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"\x8e\x01\n" +
@@ -2894,19 +2917,21 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x14player_session_token\x18\x01 \x01(\tR\x12playerSessionToken\"b\n" +
 	"!RevokeOtherPlayerSessionsResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
-	"\rrevoked_count\x18\x02 \x01(\x05R\frevokedCount\"\xdc\x01\n" +
+	"\rrevoked_count\x18\x02 \x01(\x05R\frevokedCount\"\xd7\x01\n" +
 	"\x19QueryStreamHistoryRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x16\n" +
 	"\x06stream\x18\x03 \x01(\tR\x06stream\x12\x14\n" +
 	"\x05count\x18\x04 \x01(\x05R\x05count\x12\"\n" +
-	"\rnot_before_ms\x18\x05 \x01(\x03R\vnotBeforeMs\x12\x1b\n" +
-	"\tbefore_id\x18\x06 \x01(\tR\bbeforeId\"\xa1\x01\n" +
+	"\rnot_before_ms\x18\x05 \x01(\x03R\vnotBeforeMs\x12\x16\n" +
+	"\x06cursor\x18\x06 \x01(\fR\x06cursor\"\xc2\x01\n" +
 	"\x1aQueryStreamHistoryResponse\x122\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1e.holomush.core.v1.ResponseMetaR\x04meta\x124\n" +
 	"\x06events\x18\x02 \x03(\v2\x1c.holomush.core.v1.EventFrameR\x06events\x12\x19\n" +
-	"\bhas_more\x18\x03 \x01(\bR\ahasMore\"\x9f\x01\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\x12\x1f\n" +
+	"\vnext_cursor\x18\x04 \x01(\fR\n" +
+	"nextCursor\"\x9f\x01\n" +
 	"\x19ListSessionStreamsRequest\x121\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1d.holomush.core.v1.RequestMetaR\x04meta\x12\x1d\n" +
 	"\n" +

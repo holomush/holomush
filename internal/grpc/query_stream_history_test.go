@@ -13,10 +13,13 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/cursor"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -159,7 +162,7 @@ func TestQueryStreamHistoryRejectsNegativeCount(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "INVALID_ARGUMENT")
 }
 
-func TestQueryStreamHistoryRejectsMalformedBeforeID(t *testing.T) {
+func TestQueryStreamHistoryRejectsMalformedCursor(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
 	sess := newTestSessionStore(t, map[string]*session.Info{
@@ -169,10 +172,13 @@ func TestQueryStreamHistoryRejectsMalformedBeforeID(t *testing.T) {
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
 		Stream:    "location:01HYXYZ0C0000000000000000C",
-		BeforeId:  "not-a-ulid",
+		Cursor:    []byte("not-valid-cursor-bytes"),
 	})
 	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "INVALID_ARGUMENT")
+	// gRPC status error with code InvalidArgument
+	s2, ok := status.FromError(err)
+	require.True(t, ok, "expected gRPC status error")
+	assert.Equal(t, codes.InvalidArgument, s2.Code())
 }
 
 func TestQueryStreamHistoryRejectsMalformedSceneStream(t *testing.T) {
@@ -401,23 +407,33 @@ func TestQueryStreamHistoryCountCappedAtMax(t *testing.T) {
 	assert.Equal(t, maxHistoryPageSize+1, reader.gotQ.PageSize)
 }
 
-func TestQueryStreamHistoryBeforeIDForwardsToBus(t *testing.T) {
+func TestQueryStreamHistoryCursorForwardsToBus(t *testing.T) {
 	t.Parallel()
 	future := time.Now().Add(time.Hour)
 	sess := newTestSessionStore(t, map[string]*session.Info{
 		"s1": {ID: "s1", ExpiresAt: &future},
 	})
-	before := core.NewULID()
+	beforeID := core.NewULID()
+	const beforeSeq uint64 = 42
+	cursorBytes, encErr := cursor.Encode(cursor.Cursor{
+		Version: cursor.CurrentVersion,
+		Epoch:   cursor.CurrentEpoch(),
+		Owner:   cursor.Owner{Kind: cursor.OwnerHost},
+		Host:    &cursor.HostCursor{Seq: beforeSeq, ID: beforeID},
+	})
+	require.NoError(t, encErr)
+
 	reader := &fakeHistoryReader{}
 	s := newQueryStreamHistoryServer(t, reader, sess)
 	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
 		SessionId: "s1",
 		Stream:    "location:01HYXYZ0C0000000000000000C",
-		BeforeId:  before.String(),
+		Cursor:    cursorBytes,
 		Count:     5,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, before, reader.gotQ.BeforeID)
+	assert.Equal(t, beforeID, reader.gotQ.BeforeID)
+	assert.Equal(t, beforeSeq, reader.gotQ.BeforeSeq)
 }
 
 func TestQueryStreamHistoryNotBeforeMsForwardsToBus(t *testing.T) {

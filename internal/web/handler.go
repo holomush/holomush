@@ -410,7 +410,7 @@ func (h *Handler) WebQueryStreamHistory(ctx context.Context, req *connect.Reques
 		Stream:      req.Msg.GetStream(),
 		Count:       req.Msg.GetCount(),
 		NotBeforeMs: req.Msg.GetNotBeforeMs(),
-		BeforeId:    req.Msg.GetBeforeId(),
+		Cursor:      req.Msg.GetCursor(),
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "web: query stream history RPC failed",
@@ -422,13 +422,15 @@ func (h *Handler) WebQueryStreamHistory(ctx context.Context, req *connect.Reques
 	for _, ef := range resp.GetEvents() {
 		ge := h.translateEvent(ef)
 		if ge != nil {
+			ge.Cursor = ef.GetCursor()
 			gameEvents = append(gameEvents, ge)
 		}
 	}
 
 	return connect.NewResponse(&webv1.WebQueryStreamHistoryResponse{
-		Events:  gameEvents,
-		HasMore: resp.GetHasMore(),
+		Events:     gameEvents,
+		HasMore:    resp.GetHasMore(),
+		NextCursor: resp.GetNextCursor(),
 	}), nil
 }
 
