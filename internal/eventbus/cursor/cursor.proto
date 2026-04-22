@@ -35,17 +35,17 @@ message Owner {
 // HostCursor is the body for host-owned subject cursors.
 message HostCursor {
   uint64 seq = 1; // JetStream stream sequence
-  bytes  id  = 2; // ULID, 16 bytes — tripwire for drift/rebuild detection
+  bytes id = 2; // ULID, 16 bytes — tripwire for drift/rebuild detection
 }
 
 // Cursor is the on-the-wire token (proto-marshaled). Clients treat
 // these bytes as opaque.
 message Cursor {
   uint32 version = 1; // bump on incompatible format change; today=1
-  uint64 epoch   = 2; // bumps on JS rebuild; 0 today
-  Owner  owner   = 3;
+  uint64 epoch = 2; // bumps on JS rebuild; 0 today
+  Owner owner = 3;
   oneof body {
-    HostCursor host         = 4;
-    bytes      plugin_inner = 5; // opaque bytes from plugin's own QueryHistory
+    HostCursor host = 4;
+    bytes plugin_inner = 5; // opaque bytes from plugin's own QueryHistory
   }
 }

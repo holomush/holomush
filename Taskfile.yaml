@@ -230,27 +230,24 @@ tasks:
   # ──────────────────────────────────────────
 
   proto:
-    desc: Generate Go code from protobuf definitions
+    desc: Generate Go code from protobuf definitions (public and internal modules).
     cmds:
+      # Public module (api/proto): Go + gRPC + ConnectRPC bindings → pkg/proto/.
       - buf generate
-      - task: proto:internal
+      # Internal module (internal/eventbus/cursor): Go only → internal/eventbus/cursor/cursorv1/.
+      # Separate template because the internal module has different
+      # go_package_prefix and output paths; both are real buf modules
+      # listed in buf.yaml so `buf lint` and `buf breaking` cover both.
+      - buf generate --template buf.gen.internal.yaml
     sources:
       - api/proto/**/*.proto
+      - internal/eventbus/cursor/**/*.proto
       - buf.yaml
       - buf.gen.yaml
+      - buf.gen.internal.yaml
     generates:
-      - internal/proto/**/*.go
-
-  proto:internal:
-    desc: Generate Go bindings for internal protos (not covered by buf.yaml)
-    cmds:
-      - >
-        protoc --proto_path=internal/eventbus/cursor --go_out=internal/eventbus/cursor/cursorv1 --go_opt=paths=source_relative
-        internal/eventbus/cursor/cursor.proto
-    sources:
-      - internal/eventbus/cursor/cursor.proto
-    generates:
-      - internal/eventbus/cursor/cursorv1/cursor.pb.go
+      - pkg/proto/**/*.pb.go
+      - internal/eventbus/cursor/cursorv1/*.pb.go
 
   generate:schema:
     desc: Generate plugin JSON Schema from Go types
