@@ -23,25 +23,20 @@ import (
 // hard-to-reach error arms (stream-lookup failure, empty stream fallback)
 // are covered without an embedded server.
 
-// TestBuildConfigForwardWithAfterCursorUsesStartTimePolicy covers the
-// "q.AfterID is set" early-return branch.
-func TestBuildConfigForwardWithAfterCursorUsesStartTimePolicy(t *testing.T) {
+// TestBuildConfigForwardWithAfterSeqUsesStartSequencePolicy covers the
+// "q.AfterSeq > 0" early-return branch (cursor present, forward direction).
+func TestBuildConfigForwardWithAfterSeqUsesStartSequencePolicy(t *testing.T) {
 	t.Parallel()
 	h := &jetStreamHotTier{now: time.Now}
-	ts := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	after, err := ulid.New(ulid.Timestamp(ts), nil)
-	require.NoError(t, err)
 	q := eventbus.HistoryQuery{
 		Subject:   eventbus.Subject("events.main.scene.abc"),
-		AfterID:   after,
+		AfterSeq:  42,
 		Direction: eventbus.DirectionForward,
 	}
 	cfg, err := h.buildConfig(context.Background(), q, time.Time{}, 10)
 	require.NoError(t, err)
-	assert.Equal(t, jetstream.DeliverByStartTimePolicy, cfg.DeliverPolicy)
-	require.NotNil(t, cfg.OptStartTime)
-	// NotBefore is absent, so OptStartTime should reflect q.AfterID's time.
-	assert.WithinDuration(t, ulid.Time(after.Time()), *cfg.OptStartTime, time.Second)
+	assert.Equal(t, jetstream.DeliverByStartSequencePolicy, cfg.DeliverPolicy)
+	assert.Equal(t, uint64(42), cfg.OptStartSeq)
 	assert.Equal(t, []string{string(q.Subject)}, cfg.FilterSubjects)
 }
 
@@ -97,6 +92,40 @@ func TestBuildConfigForwardDirectionZeroDefaultsToForward(t *testing.T) {
 	assert.Equal(t, jetstream.DeliverByStartTimePolicy, cfg.DeliverPolicy)
 }
 
+// TestBuildConfigBackwardWithBeforeSeqUsesStartSequencePolicy covers the
+// backward cursor branch: BeforeSeq > 0 → start at max(1, BeforeSeq - fetch + 1).
+func TestBuildConfigBackwardWithBeforeSeqUsesStartSequencePolicy(t *testing.T) {
+	t.Parallel()
+	h := &jetStreamHotTier{now: time.Now}
+	q := eventbus.HistoryQuery{
+		Subject:   eventbus.Subject("events.main.scene.abc"),
+		BeforeSeq: 50,
+		Direction: eventbus.DirectionBackward,
+	}
+	// fetch=10: startSeq = 50 - 10 + 1 = 41
+	cfg, err := h.buildConfig(context.Background(), q, time.Time{}, 10)
+	require.NoError(t, err)
+	assert.Equal(t, jetstream.DeliverByStartSequencePolicy, cfg.DeliverPolicy)
+	assert.Equal(t, uint64(41), cfg.OptStartSeq)
+}
+
+// TestBuildConfigBackwardWithBeforeSeqClampsToOne covers the case where
+// BeforeSeq is smaller than fetch, so startSeq clamps to 1.
+func TestBuildConfigBackwardWithBeforeSeqClampsToOne(t *testing.T) {
+	t.Parallel()
+	h := &jetStreamHotTier{now: time.Now}
+	q := eventbus.HistoryQuery{
+		Subject:   eventbus.Subject("events.main.scene.abc"),
+		BeforeSeq: 5,
+		Direction: eventbus.DirectionBackward,
+	}
+	// fetch=20, BeforeSeq=5: 5 <= 20 → startSeq=1
+	cfg, err := h.buildConfig(context.Background(), q, time.Time{}, 20)
+	require.NoError(t, err)
+	assert.Equal(t, jetstream.DeliverByStartSequencePolicy, cfg.DeliverPolicy)
+	assert.Equal(t, uint64(1), cfg.OptStartSeq)
+}
+
 // TestMatchesQueryBoundaryBranchesEachFilter covers each filter branch of
 // matchesQuery. Table-driven so every path shows independent coverage.
 func TestMatchesQueryBoundaryBranchesEachFilter(t *testing.T) {
@@ -107,8 +136,8 @@ func TestMatchesQueryBoundaryBranchesEachFilter(t *testing.T) {
 		id, _ := ulid.New(ulid.Timestamp(ts), nil)
 		return id
 	}
-	ev := func(ts time.Time) eventbus.Event {
-		return eventbus.Event{ID: mk(ts), Timestamp: ts}
+	evSeq := func(ts time.Time, seq uint64) eventbus.Event {
+		return eventbus.Event{ID: mk(ts), Seq: seq, Timestamp: ts}
 	}
 
 	tests := []struct {
@@ -120,62 +149,70 @@ func TestMatchesQueryBoundaryBranchesEachFilter(t *testing.T) {
 	}{
 		{
 			name: "empty query in JS tier accepts post-edge event",
-			ev:   ev(now),
+			ev:   evSeq(now, 10),
 			q:    eventbus.HistoryQuery{},
 			tier: TierJetStream,
 			want: true,
 		},
 		{
 			name: "JS tier rejects pre-edge event",
-			ev:   ev(edge.Add(-time.Hour)),
+			ev:   evSeq(edge.Add(-time.Hour), 5),
 			q:    eventbus.HistoryQuery{},
 			tier: TierJetStream,
 			want: false,
 		},
 		{
-			name: "After excludes ULID at cursor (exclusive)",
-			ev: eventbus.Event{
-				ID:        mk(now),
-				Timestamp: now,
-			},
-			q:    eventbus.HistoryQuery{AfterID: mk(now)},
+			name: "AfterSeq excludes event at cursor seq (exclusive)",
+			ev:   evSeq(now, 10),
+			q:    eventbus.HistoryQuery{AfterSeq: 10},
 			tier: TierJetStream,
 			want: false,
 		},
 		{
-			name: "Before excludes ULID at cursor (exclusive)",
-			ev: eventbus.Event{
-				ID:        mk(now),
-				Timestamp: now,
-			},
-			q:    eventbus.HistoryQuery{BeforeID: mk(now)},
+			name: "AfterSeq allows event strictly after cursor seq",
+			ev:   evSeq(now, 11),
+			q:    eventbus.HistoryQuery{AfterSeq: 10},
+			tier: TierJetStream,
+			want: true,
+		},
+		{
+			name: "BeforeSeq excludes event at cursor seq (exclusive)",
+			ev:   evSeq(now, 10),
+			q:    eventbus.HistoryQuery{BeforeSeq: 10},
 			tier: TierJetStream,
 			want: false,
+		},
+		{
+			name: "BeforeSeq allows event strictly before cursor seq",
+			ev:   evSeq(now, 9),
+			q:    eventbus.HistoryQuery{BeforeSeq: 10},
+			tier: TierJetStream,
+			want: true,
 		},
 		{
 			name: "NotBefore rejects event before window",
-			ev:   ev(now.Add(-10 * time.Hour)),
+			ev:   evSeq(now.Add(-10*time.Hour), 3),
 			q:    eventbus.HistoryQuery{NotBefore: now.Add(-5 * time.Hour)},
 			tier: TierJetStream,
 			want: false,
 		},
 		{
 			name: "NotAfter rejects event after window",
-			ev:   ev(now.Add(time.Hour)),
+			ev:   evSeq(now.Add(time.Hour), 20),
 			q:    eventbus.HistoryQuery{NotAfter: now},
 			tier: TierJetStream,
 			want: false,
 		},
 		{
 			name: "cold tier accepts pre-edge without tier-boundary reject",
-			ev:   ev(edge.Add(-10 * time.Hour)),
+			ev:   evSeq(edge.Add(-10*time.Hour), 1),
 			q:    eventbus.HistoryQuery{},
 			tier: TierPostgres,
 			want: true,
 		},
 		{
 			name: "cold tier accepts overlapping post-edge event (seen-set dedups)",
-			ev:   ev(now),
+			ev:   evSeq(now, 15),
 			q:    eventbus.HistoryQuery{},
 			tier: TierPostgres,
 			want: true,
@@ -229,6 +266,27 @@ func TestOrderEventsKeepsOrderForForwardAndZeroDirection(t *testing.T) {
 
 	orderEvents(events, eventbus.HistoryQuery{}) // Direction 0 → forward
 	assert.Equal(t, original[0].ID, events[0].ID)
+}
+
+// TestHotTierForwardCursorUsesStartSequencePolicy is the canonical unit test
+// specified in Task 7: pure config check, no NATS needed.
+func TestHotTierForwardCursorUsesStartSequencePolicy(t *testing.T) {
+	t.Parallel()
+	tier := newJetStreamHotTier(nil, nil, func() time.Time { return time.Now() })
+	// Use a valid ULID as the AfterID tripwire; any ULID is fine here since
+	// buildConfig only looks at AfterSeq for policy selection.
+	afterID := ulid.MustNew(ulid.Timestamp(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)), nil)
+	q := eventbus.HistoryQuery{
+		Subject:   eventbus.Subject("events.main.location.01ABC"),
+		AfterSeq:  100,
+		AfterID:   afterID,
+		Direction: eventbus.DirectionForward,
+		PageSize:  10,
+	}
+	cfg, err := tier.buildConfig(context.Background(), q, time.Time{}, q.PageSize+1)
+	require.NoError(t, err)
+	assert.Equal(t, jetstream.DeliverByStartSequencePolicy, cfg.DeliverPolicy)
+	assert.Equal(t, uint64(100), cfg.OptStartSeq)
 }
 
 // Hold a reference to nats.Header so imports are not flagged when the file

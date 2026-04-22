@@ -193,6 +193,84 @@ func TestHotTierBackwardReadOnEmptyStream(t *testing.T) {
 	require.ErrorIs(t, err, io.EOF, "empty stream must drain as io.EOF")
 }
 
+// TestHotTierPopulatesEventSeq verifies that Event.Seq is populated from the
+// JetStream stream sequence (msg.Metadata().Sequence.Stream) on a Read call.
+func TestHotTierPopulatesEventSeq(t *testing.T) {
+	embedded := eventbustest.New(t)
+	subject := eventbus.Subject("events.main.hot.seq.populate")
+	publishN(t, embedded, subject, 1)
+
+	reader := history.NewReader(
+		embedded.JS, nil,
+		24*time.Hour, func() time.Time { return time.Now() },
+	)
+	stream, err := reader.QueryHistory(context.Background(), eventbus.HistoryQuery{
+		Subject:   subject,
+		Direction: eventbus.DirectionForward,
+		PageSize:  5,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = stream.Close() })
+
+	nextCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ev, err := stream.Next(nextCtx)
+	require.NoError(t, err)
+	assert.Greater(t, ev.Seq, uint64(0), "Event.Seq must be populated from JetStream stream sequence")
+}
+
+// TestHotTierStaleOnIDMismatchAtCursorSeq verifies that Read returns
+// ErrCursorStale when the first delivered message's ID does not match the
+// cursor ID for the given AfterSeq.
+func TestHotTierStaleOnIDMismatchAtCursorSeq(t *testing.T) {
+	embedded := eventbustest.New(t)
+	subject := eventbus.Subject("events.main.hot.cursor.stale")
+	publishN(t, embedded, subject, 3)
+
+	// First, do an uncursored forward read to discover the actual seq of event 1.
+	reader := history.NewReader(
+		embedded.JS, nil,
+		24*time.Hour, func() time.Time { return time.Now() },
+	)
+	stream, err := reader.QueryHistory(context.Background(), eventbus.HistoryQuery{
+		Subject:   subject,
+		Direction: eventbus.DirectionForward,
+		PageSize:  10,
+	})
+	require.NoError(t, err)
+
+	var firstSeq uint64
+	for i := 0; i < 3; i++ {
+		nextCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ev, nextErr := stream.Next(nextCtx)
+		cancel()
+		require.NoError(t, nextErr)
+		if i == 0 {
+			firstSeq = ev.Seq
+		}
+	}
+	_ = stream.Close()
+	require.Greater(t, firstSeq, uint64(0), "need a real seq for cursor test")
+
+	// Now query with a cursor pointing to firstSeq but a WRONG id — expect ErrCursorStale.
+	// Use a ULID with a recent timestamp (so selectStartTier routes to hot) but wrong entropy.
+	wrongID := ulid.MustNew(ulid.Timestamp(time.Now()), hotEntropy)
+	stream2, err := reader.QueryHistory(context.Background(), eventbus.HistoryQuery{
+		Subject:   subject,
+		AfterSeq:  firstSeq,
+		AfterID:   wrongID,
+		Direction: eventbus.DirectionForward,
+		PageSize:  5,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = stream2.Close() })
+
+	nextCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = stream2.Next(nextCtx)
+	assert.ErrorIs(t, err, eventbus.ErrCursorStale, "wrong cursor ID must return ErrCursorStale")
+}
+
 func TestNewReaderOptionsAreApplied(t *testing.T) {
 	// Constructing a Reader with all tunable options exercises each option
 	// closure and keeps them from silently drifting to 0% coverage.
