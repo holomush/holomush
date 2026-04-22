@@ -61,6 +61,7 @@ func (e errCodec) Name() codec.Name { return e.name }
 func (errCodec) Encode(_ context.Context, _ []byte, _ codec.Key) ([]byte, error) {
 	return nil, errors.New("encode boom")
 }
+
 func (errCodec) Decode(_ context.Context, _ []byte, _ codec.Key) ([]byte, error) {
 	return nil, errors.New("decode boom")
 }

@@ -1,0 +1,51 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+// Package cursor — INTERNAL eventbus cursor format. Not exported via
+// api/proto/. Clients see only the marshaled bytes; this proto is the
+// host's private encoding.
+//
+// Forward compatibility: leading `version` field discriminates the wire
+// format. Today only version=1 is defined.
+//
+// See docs/superpowers/specs/2026-04-21-cold-tier-js-seq-pagination-design.md §4.5.
+syntax = "proto3";
+
+package holomush.eventbus.cursor.v1;
+
+option go_package = "github.com/holomush/holomush/internal/eventbus/cursor/cursorv1;cursorv1";
+
+// OwnerKind discriminates between host-owned and plugin-owned subjects.
+// Typed enum (not free-form string) to prevent plugin-name collisions
+// with the discriminator scheme.
+enum OwnerKind {
+  OWNER_KIND_UNSPECIFIED = 0;
+  OWNER_KIND_HOST = 1;
+  OWNER_KIND_PLUGIN = 2;
+}
+
+// Owner identifies who owns the subject the cursor names.
+message Owner {
+  OwnerKind kind = 1;
+  // plugin_name is set iff kind == OWNER_KIND_PLUGIN. The canonical name
+  // from the plugin manifest (internal/plugin/manifest).
+  string plugin_name = 2;
+}
+
+// HostCursor is the body for host-owned subject cursors.
+message HostCursor {
+  uint64 seq = 1; // JetStream stream sequence
+  bytes  id  = 2; // ULID, 16 bytes — tripwire for drift/rebuild detection
+}
+
+// Cursor is the on-the-wire token (proto-marshaled). Clients treat
+// these bytes as opaque.
+message Cursor {
+  uint32 version = 1; // bump on incompatible format change; today=1
+  uint64 epoch   = 2; // bumps on JS rebuild; 0 today
+  Owner  owner   = 3;
+  oneof body {
+    HostCursor host         = 4;
+    bytes      plugin_inner = 5; // opaque bytes from plugin's own QueryHistory
+  }
+}

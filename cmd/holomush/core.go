@@ -31,7 +31,6 @@ import (
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/logging"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
-	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"github.com/holomush/holomush/internal/session"
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
 	"github.com/holomush/holomush/internal/store"
@@ -40,6 +39,7 @@ import (
 	worldpostgres "github.com/holomush/holomush/internal/world/postgres"
 	worldsetup "github.com/holomush/holomush/internal/world/setup"
 	"github.com/holomush/holomush/internal/xdg"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
 // coreConfig holds configuration for the core command.

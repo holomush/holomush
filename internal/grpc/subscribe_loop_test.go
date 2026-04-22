@@ -80,13 +80,13 @@ var _ eventbus.SessionStream = (*fakeSessionStream)(nil)
 
 // fakeDelivery implements eventbus.Delivery with counters for Ack/Nack.
 type fakeDelivery struct {
-	ev       eventbus.Event
-	ackErr   error
-	nackErr  error
-	ackCnt   int
-	nackCnt  int
+	ev        eventbus.Event
+	ackErr    error
+	nackErr   error
+	ackCnt    int
+	nackCnt   int
 	inProgCnt int
-	mu       sync.Mutex
+	mu        sync.Mutex
 }
 
 func (d *fakeDelivery) Event() eventbus.Event { return d.ev }

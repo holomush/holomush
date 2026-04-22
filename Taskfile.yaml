@@ -239,6 +239,17 @@ tasks:
     generates:
       - internal/proto/**/*.go
 
+  proto:internal:
+    desc: Generate Go bindings for internal protos (not covered by buf.yaml)
+    cmds:
+      - >
+        protoc --proto_path=internal/eventbus/cursor --go_out=internal/eventbus/cursor/cursorv1 --go_opt=paths=source_relative
+        internal/eventbus/cursor/cursor.proto
+    sources:
+      - internal/eventbus/cursor/cursor.proto
+    generates:
+      - internal/eventbus/cursor/cursorv1/cursor.pb.go
+
   generate:schema:
     desc: Generate plugin JSON Schema from Go types
     cmds:

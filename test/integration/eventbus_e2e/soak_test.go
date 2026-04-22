@@ -138,4 +138,3 @@ func TestSoakPublish1kPerSecondFor5Minutes(t *testing.T) {
 	assert.Less(t, growth, int64(50*1024*1024),
 		"heap growth %d bytes exceeds 50MB soak ceiling", growth)
 }
-

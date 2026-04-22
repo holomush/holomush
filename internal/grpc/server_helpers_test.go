@@ -202,7 +202,7 @@ type fakeSubscribeStream struct {
 	err  error
 }
 
-func (f *fakeSubscribeStream) Context() context.Context     { return f.ctx }
+func (f *fakeSubscribeStream) Context() context.Context       { return f.ctx }
 func (f *fakeSubscribeStream) SendHeader(_ metadata.MD) error { return nil }
 func (f *fakeSubscribeStream) SetHeader(_ metadata.MD) error  { return nil }
 func (f *fakeSubscribeStream) SetTrailer(_ metadata.MD)       {}
