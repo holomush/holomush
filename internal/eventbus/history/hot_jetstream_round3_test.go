@@ -93,7 +93,9 @@ func TestBuildConfigForwardDirectionZeroDefaultsToForward(t *testing.T) {
 }
 
 // TestBuildConfigBackwardWithBeforeSeqUsesStartSequencePolicy covers the
-// backward cursor branch: BeforeSeq > 0 → start at max(1, BeforeSeq - fetch + 1).
+// backward cursor branch: BeforeSeq > 0 → start at max(1, BeforeSeq - fetch).
+// fetch is set to pageSize by the caller so the window [BeforeSeq-pageSize,
+// BeforeSeq) holds exactly pageSize in-scope events.
 func TestBuildConfigBackwardWithBeforeSeqUsesStartSequencePolicy(t *testing.T) {
 	t.Parallel()
 	h := &jetStreamHotTier{now: time.Now}
@@ -102,11 +104,12 @@ func TestBuildConfigBackwardWithBeforeSeqUsesStartSequencePolicy(t *testing.T) {
 		BeforeSeq: 50,
 		Direction: eventbus.DirectionBackward,
 	}
-	// fetch=10: startSeq = 50 - 10 + 1 = 41
+	// fetch=10 (= pageSize for backward): startSeq = 50 - 10 = 40
+	// window [40, 50): 10 in-scope events (seq 40..49), reversed = seq 49..40
 	cfg, err := h.buildConfig(context.Background(), q, time.Time{}, 10)
 	require.NoError(t, err)
 	assert.Equal(t, jetstream.DeliverByStartSequencePolicy, cfg.DeliverPolicy)
-	assert.Equal(t, uint64(41), cfg.OptStartSeq)
+	assert.Equal(t, uint64(40), cfg.OptStartSeq)
 }
 
 // TestBuildConfigBackwardWithBeforeSeqClampsToOne covers the case where
