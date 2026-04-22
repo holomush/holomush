@@ -5,6 +5,41 @@ import type { Client } from '@connectrpc/connect';
 import { ConnectError, Code } from '@connectrpc/connect';
 import type { WebService, GameEvent } from '$lib/connect/holomush/web/v1/web_pb';
 
+// ---------------------------------------------------------------------------
+// Error types for cursor lifecycle
+// ---------------------------------------------------------------------------
+
+/** Server returned FAILED_PRECONDITION: cursor is stale. Drop it and re-query. */
+export class CursorStaleError extends Error {
+	override readonly name = 'CursorStaleError' as const;
+	constructor(message: string) {
+		super(message);
+	}
+}
+
+/**
+ * Server returned UNAVAILABLE after all retries: cold tier is lagging.
+ * The cursor is still valid; surface this to the user but do NOT drop it.
+ */
+export class CursorLagError extends Error {
+	override readonly name = 'CursorLagError' as const;
+	constructor(message: string) {
+		super(message);
+	}
+}
+
+/** Server returned INVALID_ARGUMENT: programming error in cursor construction. */
+export class CursorInvalidError extends Error {
+	override readonly name = 'CursorInvalidError' as const;
+	constructor(message: string) {
+		super(message);
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Backfill result (multi-stream, used by backfillStreams)
+// ---------------------------------------------------------------------------
+
 export interface BackfillResult {
 	events: GameEvent[];
 	failedStreams: string[];
@@ -15,8 +50,99 @@ export interface BackfillOpts {
 	signal?: AbortSignal;
 }
 
+// ---------------------------------------------------------------------------
+// Single-page request/response (used by backfillPage and callers that need
+// opaque cursors + pagination)
+// ---------------------------------------------------------------------------
+
+export interface BackfillRequest {
+	sessionId: string;
+	stream: string;
+	count: number;
+	/** Opaque cursor from a previous response. Omit or pass undefined to start from latest. */
+	cursor?: Uint8Array;
+	notBeforeMs?: bigint;
+}
+
+export interface BackfillResponse {
+	events: GameEvent[];
+	hasMore: boolean;
+	/** Empty when has_more is false. Persist this to resume pagination. */
+	nextCursor: Uint8Array;
+}
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
 const DEFAULT_COUNT = 150;
 
+/** Backoff schedule for UNAVAILABLE (LAG) retries, per spec §4.4. */
+const LAG_BACKOFF_MS = [250, 500, 1000, 2000, 4000] as const;
+
+// ---------------------------------------------------------------------------
+// backfillPage — single stream, single page, opaque cursor, with LAG/STALE
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch one page of history for a single stream.
+ *
+ * - On UNAVAILABLE (LAG): retries with the spec §4.4 schedule (250/500/1000/2000/4000ms).
+ *   After all retries exhausted, throws CursorLagError. The cursor is still valid.
+ * - On FAILED_PRECONDITION (STALE): throws CursorStaleError. Caller must drop cursor.
+ * - On INVALID_ARGUMENT: throws CursorInvalidError. Programming error.
+ */
+export async function backfillPage(
+	client: Client<typeof WebService>,
+	req: BackfillRequest,
+): Promise<BackfillResponse> {
+	for (let attempt = 0; attempt <= LAG_BACKOFF_MS.length; attempt++) {
+		try {
+			const resp = await client.webQueryStreamHistory({
+				sessionId: req.sessionId,
+				stream: req.stream,
+				count: req.count,
+				cursor: req.cursor ?? new Uint8Array(),
+				notBeforeMs: req.notBeforeMs ?? 0n,
+			});
+			return {
+				events: resp.events,
+				hasMore: resp.hasMore,
+				nextCursor: resp.nextCursor,
+			};
+		} catch (err) {
+			if (err instanceof ConnectError) {
+				switch (err.code) {
+					case Code.Unavailable:
+						if (attempt < LAG_BACKOFF_MS.length) {
+							await sleep(LAG_BACKOFF_MS[attempt]);
+							continue;
+						}
+						throw new CursorLagError(err.message);
+					case Code.FailedPrecondition:
+						throw new CursorStaleError(err.message);
+					case Code.InvalidArgument:
+						throw new CursorInvalidError(err.message);
+				}
+			}
+			throw err;
+		}
+	}
+	// Unreachable: loop exits via return or throw.
+	throw new CursorLagError('unreachable');
+}
+
+// ---------------------------------------------------------------------------
+// backfillStreams — multi-stream fan-out, merges + deduplicates results.
+// This is the higher-level API used by the terminal page.
+// ---------------------------------------------------------------------------
+
+/**
+ * Backfill the most recent events for a set of streams in parallel, merging
+ * results in ascending (timestamp, eventId) order with cross-stream dedup.
+ *
+ * Uses opaque cursor bytes. The legacy `beforeId` field is no longer sent.
+ */
 export async function backfillStreams(
 	client: Client<typeof WebService>,
 	sessionId: string,
@@ -75,6 +201,10 @@ export async function backfillStreams(
 	return { events: dedupedEvents, failedStreams };
 }
 
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
 type FetchResult = { ok: true; events: GameEvent[] } | { ok: false; error: unknown };
 
 const RETRY_DELAY_MS = 500;
@@ -106,7 +236,7 @@ async function fetchOneStream(
 					sessionId,
 					stream,
 					count,
-					beforeId: '',
+					cursor: new Uint8Array(),
 					notBeforeMs: 0n,
 				},
 				{ signal },
