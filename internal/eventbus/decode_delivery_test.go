@@ -142,3 +142,28 @@ func TestDecodeDeliveryRejectsMalformedProto(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_SUBSCRIBE_UNMARSHAL_FAILED")
 }
+
+// stubMsgWithSeq is stubMsg with a Metadata() implementation that returns a
+// non-nil MsgMetadata so the Seq-plumbing path in decodeDelivery is exercised.
+type stubMsgWithSeq struct {
+	stubMsg
+	seq uint64
+}
+
+func (s *stubMsgWithSeq) Metadata() (*jetstream.MsgMetadata, error) {
+	return &jetstream.MsgMetadata{
+		Sequence: jetstream.SequencePair{Stream: s.seq},
+	}, nil
+}
+
+func TestDecodeDeliveryPopulatesSeqFromMetadata(t *testing.T) {
+	t.Parallel()
+	h, _ := validSubscriberHeaders(t)
+	msg := &stubMsgWithSeq{
+		stubMsg: stubMsg{headers: h, data: validPayload(t)},
+		seq:     42,
+	}
+	ev, err := decodeDelivery(context.Background(), msg, nil)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(42), ev.Seq)
+}

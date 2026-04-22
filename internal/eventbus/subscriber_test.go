@@ -469,3 +469,31 @@ func TestJetStreamSubscriberRejectsUnknownCodec(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_SUBSCRIBE_UNKNOWN_CODEC")
 }
+
+func TestOpenSessionDeliveryCarriesNonZeroSeq(t *testing.T) {
+	// Verifies that the JetStream stream sequence is populated on delivered
+	// events so callers can use it for backfill cursor construction.
+	embedded := eventbustest.New(t)
+	pub := embedded.Bus.Publisher()
+	require.NotNil(t, pub)
+	sub := embedded.Bus.Subscriber()
+	require.NotNil(t, sub)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	subject := eventbus.Subject("events.main.scene.seqtest.ic")
+	sessionID := freshSessionID()
+
+	stream, err := sub.OpenSession(ctx, sessionID, []eventbus.Subject{subject})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = stream.Close() })
+
+	evt := newTestEnvelope(subject, []byte("seq-test"))
+	require.NoError(t, pub.Publish(ctx, evt))
+
+	delivery, err := stream.Next(ctx)
+	require.NoError(t, err)
+	assert.Greater(t, delivery.Event().Seq, uint64(0), "delivered event must carry a non-zero JetStream stream sequence")
+	require.NoError(t, delivery.Ack())
+}
