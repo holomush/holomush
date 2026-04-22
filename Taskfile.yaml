@@ -233,6 +233,7 @@ tasks:
     desc: Generate Go code from protobuf definitions
     cmds:
       - buf generate
+      - task: proto:internal
     sources:
       - api/proto/**/*.proto
       - buf.yaml

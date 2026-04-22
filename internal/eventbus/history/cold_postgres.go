@@ -188,18 +188,29 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 	}
 
 	// Cursor supplied but zero rows returned — cursor seq is absent from cold.
-	// Consult snapshot: if cursor.Seq is still within the live JS stream
-	// (i.e. cursor.Seq <= snap.LastSeq), the audit projection simply hasn't
-	// caught up yet — that's LAG, not STALE. Otherwise the seq doesn't exist
-	// anywhere = STALE.
+	// Classify LAG vs STALE by consulting the snapshot's full live-window
+	// range [firstSeq, lastSeq]:
+	//   - cursor.Seq inside [firstSeq, lastSeq] → LAG (audit projection has
+	//     not caught up yet to a seq that JS still holds).
+	//   - cursor.Seq below firstSeq → STALE (retention aged it out of JS;
+	//     it should be in cold but isn't — drift or deletion).
+	//   - cursor.Seq above lastSeq  → STALE (cursor refers to a seq that
+	//     never existed; rebuild reassigned seqs or client fabricated one).
+	//   - snap.Get error            → propagate; don't mask infra failures
+	//     as STALE because that would tell clients to drop a still-valid
+	//     cursor on a transient JS lookup blip.
 	if hasCursor && first {
 		if snap != nil {
-			_, lastSeq, snapErr := snap.Get(ctx)
-			if snapErr == nil && cursorSeq <= lastSeq {
+			firstSeq, lastSeq, snapErr := snap.Get(ctx)
+			if snapErr != nil {
+				return nil, snapErr
+			}
+			if firstSeq > 0 && cursorSeq >= firstSeq && cursorSeq <= lastSeq {
 				return nil, oops.Code("EVENTBUS_CURSOR_LAG").
 					With("subject", string(q.Subject)).
 					With("cursor_seq", cursorSeq).
 					With("cursor_id", cursorID.String()).
+					With("js_first_seq", firstSeq).
 					With("js_last_seq", lastSeq).
 					Wrap(eventbus.ErrCursorLag)
 			}

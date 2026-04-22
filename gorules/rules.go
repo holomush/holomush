@@ -67,6 +67,24 @@ func CursorPackageInternal(m dsl.Matcher) {
 	m.Match(`cursor.HostCursor{$*_}`).
 		Where(!m.File().PkgPath.Matches(allowed)).
 		Report(msg)
+
+	// OwnerKind discriminator — guard the type and its constants so a
+	// non-allowlisted importer can't introspect cursor ownership.
+	m.Match(`cursor.OwnerKind`).
+		Where(!m.File().PkgPath.Matches(allowed)).
+		Report(msg)
+
+	m.Match(`cursor.OwnerHost`).
+		Where(!m.File().PkgPath.Matches(allowed)).
+		Report(msg)
+
+	m.Match(`cursor.OwnerPlugin`).
+		Where(!m.File().PkgPath.Matches(allowed)).
+		Report(msg)
+
+	m.Match(`cursor.OwnerUnspecified`).
+		Where(!m.File().PkgPath.Matches(allowed)).
+		Report(msg)
 }
 
 // SceneOpsEventsAppendOnly forbids UPDATE/DELETE/TRUNCATE statements
