@@ -15,11 +15,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+
+	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
+	cursorv1 "github.com/holomush/holomush/internal/eventbus/cursor/cursorv1"
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -455,4 +459,319 @@ func TestQueryStreamHistoryNotBeforeMsForwardsToBus(t *testing.T) {
 	// NotBefore is threaded into the bus query as UTC time.
 	assert.Equal(t, notBefore, reader.gotQ.NotBefore.UnixMilli())
 	assert.Equal(t, eventbus.DirectionBackward, reader.gotQ.Direction)
+}
+
+// TestQueryStreamHistoryRejectsCursorWithStaleEpoch covers the epoch-mismatch
+// branch: a cursor whose Epoch != CurrentEpoch() gets FailedPrecondition.
+func TestQueryStreamHistoryRejectsCursorWithStaleEpoch(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+	// Encode a cursor with Epoch=1 (current epoch is 0).
+	staleEpochCursor, encErr := cursor.Encode(cursor.Cursor{
+		Version: cursor.CurrentVersion,
+		Epoch:   1, // not CurrentEpoch()
+		Owner:   cursor.Owner{Kind: cursor.OwnerHost},
+		Host:    &cursor.HostCursor{Seq: 10, ID: core.NewULID()},
+	})
+	require.NoError(t, encErr)
+
+	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Cursor:    staleEpochCursor,
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok, "expected gRPC status error")
+	assert.Equal(t, codes.FailedPrecondition, st.Code())
+}
+
+// TestQueryStreamHistoryRejectsUnknownCursorOwnerKind covers the default:
+// branch in cursor.Decode (OwnerKind out of range). We construct a proto
+// Cursor with OwnerKind(99) directly via cursorv1, marshal it, and send the
+// bytes to the handler. Decode hits the default: branch and returns
+// EVENTBUS_CURSOR_INVALID, which the handler surfaces as InvalidArgument.
+func TestQueryStreamHistoryRejectsUnknownCursorOwnerKind(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+
+	// Craft a proto Cursor with an out-of-range OwnerKind (99) and version=1
+	// so it passes the version check but hits the default: branch in Decode.
+	pb := &cursorv1.Cursor{
+		Version: cursor.CurrentVersion,
+		Epoch:   cursor.CurrentEpoch(),
+		Owner:   &cursorv1.Owner{Kind: cursorv1.OwnerKind(99)},
+	}
+	cursorBytes, err := proto.Marshal(pb)
+	require.NoError(t, err)
+
+	s := newQueryStreamHistoryServer(t, &fakeHistoryReader{}, sess)
+	_, err = s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Cursor:    cursorBytes,
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok, "expected gRPC status error")
+	assert.Equal(t, codes.InvalidArgument, st.Code())
+}
+
+// TestQueryStreamHistoryWithPluginCursorRewrapsFrames covers the OwnerPlugin
+// cursor path: the handler decodes the plugin cursor, routes to the bus, and
+// re-wraps each EventFrame's cursor as OwnerPlugin.
+func TestQueryStreamHistoryWithPluginCursorRewrapsFrames(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	charID := ulid.MustParse("01HYXYZCHAR0000000000000CH")
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", CharacterID: charID, ExpiresAt: &future},
+	})
+
+	// Build a plugin cursor with a 16-byte inner ULID.
+	innerID := core.NewULID()
+	pluginCursorBytes, encErr := cursor.Encode(cursor.Cursor{
+		Version: cursor.CurrentVersion,
+		Epoch:   cursor.CurrentEpoch(),
+		Owner:   cursor.Owner{Kind: cursor.OwnerPlugin, PluginName: "core-scenes"},
+		Plugin:  innerID[:],
+	})
+	require.NoError(t, encErr)
+
+	// Fake reader returns one event.
+	evt := eventbus.Event{
+		ID:        core.NewULID(),
+		Subject:   eventbus.Subject("events.main.location.01HYXYZ0C0000000000000000C"),
+		Type:      "scene.pose",
+		Timestamp: time.Now(),
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
+		Payload:   []byte("payload"),
+		Seq:       5,
+	}
+	reader := &fakeHistoryReader{events: []eventbus.Event{evt}}
+
+	s := newQueryStreamHistoryServer(t, reader, sess)
+	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Cursor:    pluginCursorBytes,
+		Count:     10,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetEvents(), 1)
+
+	// The BeforeID forwarded to the bus must equal the inner ULID.
+	assert.Equal(t, innerID, reader.gotQ.BeforeID)
+
+	// Each frame's cursor must be re-wrapped as OwnerPlugin.
+	frameCursor := resp.GetEvents()[0].GetCursor()
+	require.NotEmpty(t, frameCursor, "EventFrame must carry a cursor")
+	decoded, decErr := cursor.Decode(frameCursor)
+	require.NoError(t, decErr)
+	assert.Equal(t, cursor.OwnerPlugin, decoded.Owner.Kind)
+	assert.Equal(t, "core-scenes", decoded.Owner.PluginName)
+}
+
+// TestQueryStreamHistoryWithPluginCursorStringInner covers the plugin cursor
+// path where the inner bytes are a string-encoded ULID (not raw 16 bytes).
+func TestQueryStreamHistoryWithPluginCursorStringInner(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	charID := ulid.MustParse("01HYXYZCHAR0000000000000CH")
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", CharacterID: charID, ExpiresAt: &future},
+	})
+
+	// Build a plugin cursor whose inner bytes are the string form of a ULID
+	// (26 bytes, not 16).
+	innerID := core.NewULID()
+	innerStr := innerID.String() // 26-char string ULID
+	pluginCursorBytes, encErr := cursor.Encode(cursor.Cursor{
+		Version: cursor.CurrentVersion,
+		Epoch:   cursor.CurrentEpoch(),
+		Owner:   cursor.Owner{Kind: cursor.OwnerPlugin, PluginName: "core-scenes"},
+		Plugin:  []byte(innerStr),
+	})
+	require.NoError(t, encErr)
+
+	reader := &fakeHistoryReader{}
+	s := newQueryStreamHistoryServer(t, reader, sess)
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Cursor:    pluginCursorBytes,
+		Count:     5,
+	})
+	require.NoError(t, err)
+	// The handler must parse the string ULID and forward the correct BeforeID.
+	assert.Equal(t, innerID, reader.gotQ.BeforeID)
+}
+
+// TestQueryStreamHistoryEventFrameCarriesCursor verifies that each returned
+// EventFrame has a non-empty Cursor field (set by encodeEventCursor).
+func TestQueryStreamHistoryEventFrameCarriesCursor(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+	evt := eventbus.Event{
+		ID:        core.NewULID(),
+		Subject:   eventbus.Subject("events.main.location.01HYXYZ0C0000000000000000C"),
+		Type:      "scene.pose",
+		Timestamp: time.Now(),
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
+		Payload:   []byte("p"),
+		Seq:       7,
+	}
+	reader := &fakeHistoryReader{events: []eventbus.Event{evt}}
+	s := newQueryStreamHistoryServer(t, reader, sess)
+	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Count:     5,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetEvents(), 1)
+
+	frameCursor := resp.GetEvents()[0].GetCursor()
+	require.NotEmpty(t, frameCursor, "EventFrame.Cursor must be non-empty")
+
+	// Cursor must decode as a valid OwnerHost cursor.
+	decoded, decErr := cursor.Decode(frameCursor)
+	require.NoError(t, decErr)
+	assert.Equal(t, cursor.OwnerHost, decoded.Owner.Kind)
+	require.NotNil(t, decoded.Host)
+	assert.Equal(t, uint64(7), decoded.Host.Seq)
+	assert.Equal(t, evt.ID, decoded.Host.ID)
+}
+
+// TestQueryStreamHistoryNextCursorSetWhenHasMore verifies that NextCursor is
+// populated on the response when has_more is true, and empty when false.
+func TestQueryStreamHistoryNextCursorSetWhenHasMore(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+	// 4 events with count=3 → has_more=true, NextCursor from oldest frame.
+	evts := make([]eventbus.Event, 4)
+	for i := range evts {
+		evts[i] = eventbus.Event{
+			ID:        core.NewULID(),
+			Subject:   eventbus.Subject("events.main.location.01HYXYZ0C0000000000000000C"),
+			Type:      "scene.pose",
+			Timestamp: time.Now(),
+			Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
+			Payload:   []byte("p"),
+			Seq:       uint64(i + 1),
+		}
+	}
+	reader := &fakeHistoryReader{events: evts}
+	s := newQueryStreamHistoryServer(t, reader, sess)
+	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Count:     3,
+	})
+	require.NoError(t, err)
+	assert.True(t, resp.GetHasMore())
+	assert.NotEmpty(t, resp.GetNextCursor(), "NextCursor must be set when has_more is true")
+
+	// No-more case: 2 events with count=3 → has_more=false, NextCursor empty.
+	s2 := newQueryStreamHistoryServer(t, &fakeHistoryReader{events: evts[:2]}, sess)
+	resp2, err2 := s2.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Count:     3,
+	})
+	require.NoError(t, err2)
+	assert.False(t, resp2.GetHasMore())
+	assert.Empty(t, resp2.GetNextCursor(), "NextCursor must be empty when has_more is false")
+}
+
+// TestMapHistoryErrorTranslatesErrCursorInvalidToInvalidArgument verifies
+// that mapHistoryError maps ErrCursorInvalid → gRPC InvalidArgument.
+func TestMapHistoryErrorTranslatesErrCursorInvalidToInvalidArgument(t *testing.T) {
+	t.Parallel()
+	wrapped := oops.Code("WRAPPER").Wrap(eventbus.ErrCursorInvalid)
+	got := mapHistoryError(wrapped)
+	st, ok := status.FromError(got)
+	require.True(t, ok, "expected gRPC status error")
+	assert.Equal(t, codes.InvalidArgument, st.Code())
+}
+
+// TestMapHistoryErrorTranslatesErrCursorStaleToFailedPrecondition verifies
+// that mapHistoryError maps ErrCursorStale → gRPC FailedPrecondition.
+func TestMapHistoryErrorTranslatesErrCursorStaleToFailedPrecondition(t *testing.T) {
+	t.Parallel()
+	wrapped := oops.Code("WRAPPER").Wrap(eventbus.ErrCursorStale)
+	got := mapHistoryError(wrapped)
+	st, ok := status.FromError(got)
+	require.True(t, ok, "expected gRPC status error")
+	assert.Equal(t, codes.FailedPrecondition, st.Code())
+}
+
+// TestMapHistoryErrorTranslatesErrCursorLagToUnavailable verifies that
+// mapHistoryError maps ErrCursorLag → gRPC Unavailable.
+func TestMapHistoryErrorTranslatesErrCursorLagToUnavailable(t *testing.T) {
+	t.Parallel()
+	wrapped := oops.Code("WRAPPER").Wrap(eventbus.ErrCursorLag)
+	got := mapHistoryError(wrapped)
+	st, ok := status.FromError(got)
+	require.True(t, ok, "expected gRPC status error")
+	assert.Equal(t, codes.Unavailable, st.Code())
+}
+
+// TestMapHistoryErrorPassesThroughUnknownError verifies that mapHistoryError
+// does not transform errors it does not recognise.
+func TestMapHistoryErrorPassesThroughUnknownError(t *testing.T) {
+	t.Parallel()
+	orig := oops.Errorf("some other error")
+	got := mapHistoryError(orig)
+	// mapHistoryError must pass through errors it does not recognise unchanged.
+	assert.Equal(t, orig, got)
+}
+
+// TestQueryStreamHistoryEncodeEventCursorWithZeroSeq verifies that
+// encodeEventCursor still produces a decodable OwnerHost cursor when Seq==0
+// (no JetStream metadata populated).
+func TestQueryStreamHistoryEncodeEventCursorWithZeroSeq(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {ID: "s1", ExpiresAt: &future},
+	})
+	// Event without Seq (Seq==0) — encodeEventCursor must not fail.
+	evt := eventbus.Event{
+		ID:        core.NewULID(),
+		Subject:   eventbus.Subject("events.main.location.01HYXYZ0C0000000000000000C"),
+		Type:      "scene.pose",
+		Timestamp: time.Now(),
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
+		Payload:   []byte("p"),
+		Seq:       0,
+	}
+	reader := &fakeHistoryReader{events: []eventbus.Event{evt}}
+	s := newQueryStreamHistoryServer(t, reader, sess)
+	resp, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Count:     5,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetEvents(), 1)
+	// Cursor must be decodable even with Seq==0.
+	frameCursor := resp.GetEvents()[0].GetCursor()
+	require.NotEmpty(t, frameCursor)
+	decoded, decErr := cursor.Decode(frameCursor)
+	require.NoError(t, decErr)
+	assert.Equal(t, uint64(0), decoded.Host.Seq)
 }
