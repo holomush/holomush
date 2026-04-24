@@ -39,7 +39,7 @@ export AWS_ACCESS_KEY_ID="<your-DO_SPACES_ACCESS_KEY>"
 export AWS_SECRET_ACCESS_KEY="<your-DO_SPACES_SECRET_KEY>"
 kopia repository connect s3 \
   --bucket=holomush-sandbox-backups \
-  --endpoint=sfo3.digitaloceanspaces.com
+  --endpoint=nyc3.digitaloceanspaces.com
 
 # Pull the chosen snapshot contents to a file
 kopia snapshot restore <snapshot-id> ./backup.sql
