@@ -553,12 +553,13 @@ func TestWebQueryStreamHistoryPropagatesRequestFields(t *testing.T) {
 	}
 	h := NewHandler(client)
 
+	cursorBytes := []byte{0x01, 0x02, 0x03} // opaque cursor bytes
 	_, err := h.WebQueryStreamHistory(context.Background(), connect.NewRequest(&webv1.WebQueryStreamHistoryRequest{
 		SessionId:   "sess-xyz",
 		Stream:      "location:abc",
 		Count:       50,
 		NotBeforeMs: 1700000000000,
-		BeforeId:    "01CURSOR",
+		Cursor:      cursorBytes,
 	}))
 	require.NoError(t, err)
 
@@ -568,7 +569,7 @@ func TestWebQueryStreamHistoryPropagatesRequestFields(t *testing.T) {
 	assert.Equal(t, "location:abc", req.GetStream())
 	assert.Equal(t, int32(50), req.GetCount())
 	assert.Equal(t, int64(1700000000000), req.GetNotBeforeMs())
-	assert.Equal(t, "01CURSOR", req.GetBeforeId())
+	assert.Equal(t, cursorBytes, req.GetCursor())
 }
 
 // Post-auth RPC token forwarding (bd-jv7z, Task 7).

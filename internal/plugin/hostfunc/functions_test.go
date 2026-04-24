@@ -786,7 +786,7 @@ func TestSetHistoryReaderLateBindingMakesCallsAvailable(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	hf.Register(L, "test-plugin")
-	require.NoError(t, L.DoString(`holomush.query_stream_history("scene:abc:ic", 10)`))
+	require.NoError(t, L.DoString(`holomush.query_stream_history({stream="scene:abc:ic", count=10})`))
 
 	// After SetHistoryReader, calls route to the new reader.
 	hr := &mockHistoryReader{}
@@ -795,7 +795,7 @@ func TestSetHistoryReaderLateBindingMakesCallsAvailable(t *testing.T) {
 	L2 := lua.NewState()
 	defer L2.Close()
 	hf.Register(L2, "test-plugin")
-	require.NoError(t, L2.DoString(`holomush.query_stream_history("scene:abc:ic", 10)`))
+	require.NoError(t, L2.DoString(`holomush.query_stream_history({stream="scene:abc:ic", count=10})`))
 	require.Len(t, hr.calls, 1)
 	assert.Equal(t, "scene:abc:ic", hr.calls[0].stream)
 }

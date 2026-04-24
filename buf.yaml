@@ -1,14 +1,39 @@
-# buf.yaml
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+# buf.yaml — multi-module workspace.
+#
+# Two modules:
+#   - api/proto                 Public schema. Generates Go (→ pkg/proto/)
+#                               AND TypeScript (→ web/src/lib/connect/).
+#                               Consumed by plugin SDK and web client.
+#   - internal/eventbus/cursor  Host-internal opaque cursor format.
+#                               Generates Go ONLY (→ internal/eventbus/cursor/cursorv1/).
+#                               MUST NOT leak to plugins or the web client —
+#                               enforced by the CursorPackageInternal ruleguard
+#                               and by NOT being inputted to web/buf.gen.yaml.
+#
+# Both modules are subject to `buf lint` and `buf breaking` per the configs
+# below. Generation is per-module via separate buf.gen.<name>.yaml files —
+# `task proto` runs both.
 version: v2
 modules:
   - path: api/proto
     name: buf.build/holomush/holomush
+  - path: internal/eventbus/cursor
 deps:
   - buf.build/googleapis/googleapis
   - buf.build/bufbuild/protovalidate
 lint:
   use:
     - STANDARD
+  # The internal cursor proto deliberately lives at the root of its
+  # module path (internal/eventbus/cursor/cursor.proto) for file-tree
+  # opacity — not in a deep holomush/eventbus/cursor/v1/ subdirectory
+  # like the public schema. Exempt it from PACKAGE_DIRECTORY_MATCH.
+  ignore_only:
+    PACKAGE_DIRECTORY_MATCH:
+      - internal/eventbus/cursor/cursor.proto
 breaking:
   use:
     - FILE

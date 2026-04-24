@@ -24,7 +24,6 @@ func TestMemStore_GetSet(t *testing.T) {
 		CharacterID:   ulid.Make(),
 		CharacterName: "TestChar",
 		Status:        StatusActive,
-
 	}
 
 	require.NoError(t, store.Set(ctx, "session-1", info))
@@ -449,10 +448,9 @@ func TestMemStore_UpdateFocusMemberships_AddsAndPresents(t *testing.T) {
 	targetID := ulid.Make()
 
 	info := &Info{
-		ID:           "session-ufm-add",
-		CharacterID:  ulid.Make(),
-		Status:       StatusActive,
-
+		ID:          "session-ufm-add",
+		CharacterID: ulid.Make(),
+		Status:      StatusActive,
 	}
 	require.NoError(t, store.Set(ctx, info.ID, info))
 
@@ -503,10 +501,9 @@ func TestMemStore_UpdateFocusMemberships_RejectsExpiredSession(t *testing.T) {
 	ctx := context.Background()
 
 	info := &Info{
-		ID:           "session-ufm-expired",
-		CharacterID:  ulid.Make(),
-		Status:       StatusExpired,
-
+		ID:          "session-ufm-expired",
+		CharacterID: ulid.Make(),
+		Status:      StatusExpired,
 	}
 	require.NoError(t, store.Set(ctx, info.ID, info))
 
@@ -527,10 +524,9 @@ func TestMemStore_UpdateFocusMemberships_MutatorErrorRollsBack(t *testing.T) {
 	ctx := context.Background()
 
 	info := &Info{
-		ID:           "session-ufm-err",
-		CharacterID:  ulid.Make(),
-		Status:       StatusActive,
-
+		ID:          "session-ufm-err",
+		CharacterID: ulid.Make(),
+		Status:      StatusActive,
 	}
 	require.NoError(t, store.Set(ctx, info.ID, info))
 

@@ -29,6 +29,24 @@ var (
 	ErrStoreDirLocked           = errors.New("eventbus: NATS StoreDir is already locked by another process")
 	ErrDecryptionFailed         = errors.New("eventbus: decryption failed")
 	ErrKeyUnavailable           = errors.New("eventbus: codec key unavailable")
+
+	// ErrCursorStale is returned when a cursor's (seq, id) pair has no
+	// corresponding event in either tier — e.g., the audit row was deleted,
+	// the JS stream was rebuilt with reassigned seqs, or audit drift has
+	// changed the id at this seq. Maps to gRPC FAILED_PRECONDITION.
+	//
+	// Recovery: drop cursor; re-query without it.
+	ErrCursorStale = errors.New("eventbus: cursor stale")
+
+	// ErrCursorLag is returned when a cursor's seq is in the live JS stream
+	// but not yet projected into events_audit. Cursor remains valid; client
+	// should retry with backoff. Maps to gRPC UNAVAILABLE.
+	ErrCursorLag = errors.New("eventbus: cursor lag")
+
+	// ErrCursorInvalid is returned when cursor bytes failed to decode
+	// (corruption, unknown version, malformed body). Maps to gRPC
+	// INVALID_ARGUMENT.
+	ErrCursorInvalid = errors.New("eventbus: cursor invalid")
 )
 
 // MaxPayloadSize matches the prior cap in internal/core/event.go to keep

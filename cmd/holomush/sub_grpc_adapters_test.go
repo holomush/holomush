@@ -323,7 +323,7 @@ func TestBusHistoryReaderReplayTailPassesBeforeIDOnQuery(t *testing.T) {
 	notBefore := time.Unix(100, 0).UTC()
 	_, err := adapter.ReplayTail(context.Background(), "scene:01ABC", 5, notBefore, before)
 	require.NoError(t, err)
-	assert.Equal(t, before, reader.gotQuery.Before)
+	assert.Equal(t, before, reader.gotQuery.BeforeID)
 	assert.Equal(t, notBefore, reader.gotQuery.NotBefore)
 	assert.Equal(t, eventbus.DirectionBackward, reader.gotQuery.Direction)
 	assert.Equal(t, 5, reader.gotQuery.PageSize)

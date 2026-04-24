@@ -72,12 +72,12 @@ func (r *PluginHistoryRouter) QueryHistory(
 		PageSize:  int32(pageSize),
 		Direction: directionProto(q.Direction),
 	}
-	if !q.After.IsZero() {
-		b := q.After.Bytes()
+	if !q.AfterID.IsZero() {
+		b := q.AfterID.Bytes()
 		req.After = b
 	}
-	if !q.Before.IsZero() {
-		b := q.Before.Bytes()
+	if !q.BeforeID.IsZero() {
+		b := q.BeforeID.Bytes()
 		req.Before = b
 	}
 	if !q.NotBefore.IsZero() {

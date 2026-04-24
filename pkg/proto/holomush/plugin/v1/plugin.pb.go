@@ -403,7 +403,12 @@ type Event struct {
 	// Actor identifier.
 	ActorId string `protobuf:"bytes,6,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
 	// JSON-encoded payload.
-	Payload       string `protobuf:"bytes,7,opt,name=payload,proto3" json:"payload,omitempty"`
+	Payload string `protobuf:"bytes,7,opt,name=payload,proto3" json:"payload,omitempty"`
+	// cursor is the opaque pagination token for this event. Pass as
+	// PluginHostServiceQueryStreamHistoryRequest.cursor on the next call
+	// to page backward from this position. Empty on events received via
+	// delivery (not history). Treat as an opaque blob.
+	Cursor        []byte `protobuf:"bytes,8,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -485,6 +490,13 @@ func (x *Event) GetPayload() string {
 		return x.Payload
 	}
 	return ""
+}
+
+func (x *Event) GetCursor() []byte {
+	if x != nil {
+		return x.Cursor
+	}
+	return nil
 }
 
 // EmitEvent represents an event that a plugin wants to emit.
@@ -2256,7 +2268,10 @@ type PluginHostServiceQueryStreamHistoryRequest struct {
 	Stream string                 `protobuf:"bytes,1,opt,name=stream,proto3" json:"stream,omitempty"`
 	Count  int32                  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
 	// Epoch milliseconds. Events before this time are excluded. 0 means no lower bound.
-	NotBeforeMs   int64 `protobuf:"varint,3,opt,name=not_before_ms,json=notBeforeMs,proto3" json:"not_before_ms,omitempty"`
+	NotBeforeMs int64 `protobuf:"varint,3,opt,name=not_before_ms,json=notBeforeMs,proto3" json:"not_before_ms,omitempty"`
+	// cursor is the opaque pagination cursor from a previous response.
+	// Events older than the cursor position are returned. Empty = start from latest.
+	Cursor        []byte `protobuf:"bytes,4,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2312,9 +2327,18 @@ func (x *PluginHostServiceQueryStreamHistoryRequest) GetNotBeforeMs() int64 {
 	return 0
 }
 
+func (x *PluginHostServiceQueryStreamHistoryRequest) GetCursor() []byte {
+	if x != nil {
+		return x.Cursor
+	}
+	return nil
+}
+
 type PluginHostServiceQueryStreamHistoryResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Events        []*Event               `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Events []*Event               `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	// next_cursor is the opaque cursor for the next page. Empty if no more pages.
+	NextCursor    []byte `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2356,6 +2380,13 @@ func (x *PluginHostServiceQueryStreamHistoryResponse) GetEvents() []*Event {
 	return nil
 }
 
+func (x *PluginHostServiceQueryStreamHistoryResponse) GetNextCursor() []byte {
+	if x != nil {
+		return x.NextCursor
+	}
+	return nil
+}
+
 var File_holomush_plugin_v1_plugin_proto protoreflect.FileDescriptor
 
 const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
@@ -2370,7 +2401,7 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\vInitRequest\x129\n" +
 	"\x06config\x18\x01 \x01(\v2!.holomush.plugin.v1.ServiceConfigR\x06config\";\n" +
 	"\fInitResponse\x12+\n" +
-	"\x11provided_services\x18\x01 \x03(\tR\x10providedServices\"\xed\x01\n" +
+	"\x11provided_services\x18\x01 \x03(\tR\x10providedServices\"\x85\x02\n" +
 	"\x05Event\x12\x17\n" +
 	"\x02id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x02id\x12\x1f\n" +
 	"\x06stream\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06stream\x12\x1b\n" +
@@ -2379,7 +2410,8 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
 	"actor_kind\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tactorKind\x12\"\n" +
 	"\bactor_id\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\aactorId\x12#\n" +
-	"\apayload\x18\a \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x04R\apayload\"n\n" +
+	"\apayload\x18\a \x01(\tB\t\xbaH\x06r\x04\x18\x80\x80\x04R\apayload\x12\x16\n" +
+	"\x06cursor\x18\b \x01(\fR\x06cursor\"n\n" +
 	"\tEmitEvent\x12\x1f\n" +
 	"\x06stream\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06stream\x12\x1b\n" +
 	"\x04type\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04type\x12#\n" +
@@ -2495,13 +2527,16 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tsessionId\x124\n" +
 	"\x06target\x18\x02 \x01(\v2\x1c.holomush.plugin.v1.FocusKeyR\x06target\"'\n" +
-	"%PluginHostServicePresentFocusResponse\"\x87\x01\n" +
+	"%PluginHostServicePresentFocusResponse\"\x9f\x01\n" +
 	"*PluginHostServiceQueryStreamHistoryRequest\x12\x1f\n" +
 	"\x06stream\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06stream\x12\x14\n" +
 	"\x05count\x18\x02 \x01(\x05R\x05count\x12\"\n" +
-	"\rnot_before_ms\x18\x03 \x01(\x03R\vnotBeforeMs\"`\n" +
+	"\rnot_before_ms\x18\x03 \x01(\x03R\vnotBeforeMs\x12\x16\n" +
+	"\x06cursor\x18\x04 \x01(\fR\x06cursor\"\x81\x01\n" +
 	"+PluginHostServiceQueryStreamHistoryResponse\x121\n" +
-	"\x06events\x18\x01 \x03(\v2\x19.holomush.plugin.v1.EventR\x06events*\x96\x01\n" +
+	"\x06events\x18\x01 \x03(\v2\x19.holomush.plugin.v1.EventR\x06events\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\fR\n" +
+	"nextCursor*\x96\x01\n" +
 	"\rCommandStatus\x12\x1e\n" +
 	"\x1aCOMMAND_STATUS_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11COMMAND_STATUS_OK\x10\x01\x12\x18\n" +

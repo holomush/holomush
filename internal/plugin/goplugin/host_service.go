@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus/cursor"
 	"github.com/holomush/holomush/internal/session"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -251,16 +252,66 @@ func (s *pluginHostServiceServer) QueryStreamHistory(ctx context.Context, req *p
 		notBefore = time.UnixMilli(req.GetNotBeforeMs()).UTC()
 	}
 
-	events, err := hr.ReplayTail(ctx, req.GetStream(), count, notBefore, ulid.ULID{})
+	// Decode the opaque cursor (if any) to extract the beforeID for
+	// ReplayTail. The cursor bytes are a host-format OwnerHost token
+	// (Seq + ULID) produced by encodeHostEventCursor below. On first
+	// page the cursor is empty and we pass the zero ULID.
+	var beforeID ulid.ULID
+	if len(req.GetCursor()) > 0 {
+		c, decodeErr := cursor.Decode(req.GetCursor())
+		if decodeErr != nil {
+			return nil, oops.Code("INVALID_ARGUMENT").
+				With("plugin", s.pluginName).
+				Wrap(decodeErr)
+		}
+		if c.Host != nil {
+			beforeID = c.Host.ID
+		}
+	}
+
+	events, err := hr.ReplayTail(ctx, req.GetStream(), count, notBefore, beforeID)
 	if err != nil {
 		return nil, oops.With("plugin", s.pluginName).With("stream", req.GetStream()).Wrap(err)
 	}
 
 	protoEvents := make([]*pluginv1.Event, 0, len(events))
 	for _, e := range events {
-		protoEvents = append(protoEvents, coreEventToProto(e))
+		pe := coreEventToProto(e)
+		pe.Cursor = encodeHostEventCursor(e.ID)
+		protoEvents = append(protoEvents, pe)
 	}
-	return &pluginv1.PluginHostServiceQueryStreamHistoryResponse{Events: protoEvents}, nil
+
+	// Populate next_cursor from the oldest (first) event in the page, which
+	// is the pagination anchor for the next backward read. ReplayTail returns
+	// events in ascending order (oldest→newest), so index 0 is the boundary.
+	var nextCursor []byte
+	if len(protoEvents) == count && len(protoEvents) > 0 {
+		nextCursor = protoEvents[0].GetCursor()
+	}
+
+	return &pluginv1.PluginHostServiceQueryStreamHistoryResponse{
+		Events:     protoEvents,
+		NextCursor: nextCursor,
+	}, nil
+}
+
+// encodeHostEventCursor encodes an event ULID into an opaque host cursor
+// token for the plugin → host boundary. Seq is not available here (the
+// plugins.HistoryReader.ReplayTail interface returns core.Event without Seq),
+// so Seq=0 is used. The cold tier handles Seq=0 as "ID-only" fallback.
+// Returns nil on encoding failure (non-fatal; client cannot paginate from
+// this event but the page result is still valid).
+func encodeHostEventCursor(id ulid.ULID) []byte {
+	b, err := cursor.Encode(cursor.Cursor{
+		Version: cursor.CurrentVersion,
+		Epoch:   cursor.CurrentEpoch(),
+		Owner:   cursor.Owner{Kind: cursor.OwnerHost},
+		Host:    &cursor.HostCursor{Seq: 0, ID: id},
+	})
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 // coreEventToProto converts a core.Event to the plugin proto Event.

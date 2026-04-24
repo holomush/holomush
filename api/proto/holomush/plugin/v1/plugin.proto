@@ -111,6 +111,11 @@ message Event {
   string actor_id = 6 [(buf.validate.field).string.min_len = 1];
   // JSON-encoded payload.
   string payload = 7 [(buf.validate.field).string.max_len = 65536];
+  // cursor is the opaque pagination token for this event. Pass as
+  // PluginHostServiceQueryStreamHistoryRequest.cursor on the next call
+  // to page backward from this position. Empty on events received via
+  // delivery (not history). Treat as an opaque blob.
+  bytes cursor = 8;
 }
 
 // EmitEvent represents an event that a plugin wants to emit.
@@ -394,8 +399,13 @@ message PluginHostServiceQueryStreamHistoryRequest {
   int32 count = 2;
   // Epoch milliseconds. Events before this time are excluded. 0 means no lower bound.
   int64 not_before_ms = 3;
+  // cursor is the opaque pagination cursor from a previous response.
+  // Events older than the cursor position are returned. Empty = start from latest.
+  bytes cursor = 4;
 }
 
 message PluginHostServiceQueryStreamHistoryResponse {
   repeated Event events = 1;
+  // next_cursor is the opaque cursor for the next page. Empty if no more pages.
+  bytes next_cursor = 2;
 }

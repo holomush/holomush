@@ -40,7 +40,7 @@ type fakeTier struct {
 	calls int
 }
 
-func (f *fakeTier) Read(_ context.Context, q eventbus.HistoryQuery, edge time.Time, pageSize int) ([]eventbus.Event, error) {
+func (f *fakeTier) Read(_ context.Context, q eventbus.HistoryQuery, edge time.Time, pageSize int, _ *history.StreamStateSnapshot) ([]eventbus.Event, error) {
 	f.calls++
 	if f.err != nil {
 		return nil, f.err
@@ -50,10 +50,11 @@ func (f *fakeTier) Read(_ context.Context, q eventbus.HistoryQuery, edge time.Ti
 		if e.Subject != q.Subject {
 			continue
 		}
-		if !q.After.IsZero() && e.ID.Compare(q.After) <= 0 {
+		// Filter by seq cursors (set by advanceCursor after each tier read).
+		if q.AfterSeq > 0 && e.Seq <= q.AfterSeq {
 			continue
 		}
-		if !q.Before.IsZero() && e.ID.Compare(q.Before) >= 0 {
+		if q.BeforeSeq > 0 && e.Seq >= q.BeforeSeq {
 			continue
 		}
 		if !q.NotBefore.IsZero() && e.Timestamp.Before(q.NotBefore) {
@@ -84,9 +85,9 @@ func (f *fakeTier) Read(_ context.Context, q eventbus.HistoryQuery, edge time.Ti
 	}
 	sort.SliceStable(matches, func(i, j int) bool {
 		if dir == eventbus.DirectionBackward {
-			return matches[i].ID.Compare(matches[j].ID) > 0
+			return matches[i].Seq > matches[j].Seq
 		}
-		return matches[i].ID.Compare(matches[j].ID) < 0
+		return matches[i].Seq < matches[j].Seq
 	})
 	if len(matches) > pageSize {
 		matches = matches[:pageSize]
@@ -95,12 +96,15 @@ func (f *fakeTier) Read(_ context.Context, q eventbus.HistoryQuery, edge time.Ti
 }
 
 // mintEvent builds a test event whose ULID encodes the given timestamp.
+// Seq is set to ulid.Timestamp(ts) (milliseconds since epoch) so that
+// ordering by Seq matches ordering by Timestamp in tests.
 func mintEvent(t *testing.T, ts time.Time, subject eventbus.Subject) eventbus.Event {
 	t.Helper()
 	id, err := ulid.New(ulid.Timestamp(ts), crand.Reader)
 	require.NoError(t, err)
 	return eventbus.Event{
 		ID:        id,
+		Seq:       ulid.Timestamp(ts),
 		Subject:   subject,
 		Type:      eventbus.Type("scene.pose"),
 		Timestamp: ts.UTC(),
@@ -654,7 +658,7 @@ func TestReaderRejectsInvalidTimeRange(t *testing.T) {
 	assert.ErrorIs(t, err, eventbus.ErrInvalidTimeRange)
 }
 
-// pathologicalTier ignores q.After and always returns the same full page.
+// pathologicalTier ignores q.AfterID and always returns the same full page.
 // Simulates the "cursor not advanced" regression: if advanceCursor is
 // removed (or returned events' IDs aren't wired into the query), a naive
 // loadNextPage loop would read this tier forever while dedup hid the
@@ -667,9 +671,9 @@ type pathologicalTier struct {
 	calls  int
 }
 
-func (p *pathologicalTier) Read(_ context.Context, q eventbus.HistoryQuery, _ time.Time, pageSize int) ([]eventbus.Event, error) {
+func (p *pathologicalTier) Read(_ context.Context, q eventbus.HistoryQuery, _ time.Time, pageSize int, _ *history.StreamStateSnapshot) ([]eventbus.Event, error) {
 	p.calls++
-	// Deliberately return the same events regardless of q.After. Copy so
+	// Deliberately return the same events regardless of q.AfterID. Copy so
 	// the returned slice can't be mutated by the Reader.
 	out := make([]eventbus.Event, 0, pageSize)
 	for _, e := range p.events {

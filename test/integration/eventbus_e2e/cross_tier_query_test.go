@@ -24,6 +24,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/history"
 )
 
+
 // TestCrossTierQueryEndToEnd mirrors the 12-scenario tier suite from
 // internal/eventbus/history/tier_test.go but runs against the real
 // JetStream hot tier + real PostgreSQL cold tier. The in-memory suite
@@ -103,7 +104,7 @@ func TestCrossTierQueryEndToEnd(t *testing.T) {
 					mintAt(subject, edge.Add(-10*24*time.Hour), "a"),
 					mintAt(subject, edge.Add(-5*24*time.Hour), "b"),
 				}
-				insertAuditRows(ctx, t, pool, cold)
+				insertAuditRows(ctx, t, bus, pub, pool, cold)
 
 				r := buildReader(bus, pool, streamMaxAge, baseNow)
 				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
@@ -154,7 +155,7 @@ func TestCrossTierQueryEndToEnd(t *testing.T) {
 					mintAt(subject, edge.Add(time.Hour), "h1"),
 					mintAt(subject, edge.Add(2*time.Hour), "h2"),
 				}
-				insertAuditRows(ctx, t, pool, cold)
+				insertAuditRows(ctx, t, bus, pub, pool, cold)
 				publishAll(ctx, t, pub, hot)
 
 				r := buildReader(bus, pool, streamMaxAge, baseNow)
@@ -182,8 +183,13 @@ func TestCrossTierQueryEndToEnd(t *testing.T) {
 				// lives in JS; we also INSERT it in PG to represent the
 				// "lagging projection" overlap. Dedup must suppress the dup.
 				dup := mintAt(subject, edge.Add(-5*time.Second), "overlap")
+				seqBefore := currentStreamLastSeq(t, bus)
 				publishAll(ctx, t, pub, []eventbus.Event{dup})
-				insertAuditRows(ctx, t, pool, []eventbus.Event{dup})
+				bus.AwaitStreamLastSeq(t, seqBefore+1, 5*time.Second)
+				dupSeq := currentStreamLastSeq(t, bus)
+				// Insert into cold with the SAME JS seq so seenSeqs dedup
+				// recognises the overlap event as already delivered.
+				insertAuditRowWithSeq(ctx, t, pool, dup, dupSeq)
 
 				r := buildReader(bus, pool, streamMaxAge, baseNow)
 				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
@@ -211,7 +217,7 @@ func TestCrossTierQueryEndToEnd(t *testing.T) {
 					mintAt(subject, edge.Add(time.Hour), "h1"),
 					mintAt(subject, edge.Add(10*time.Hour), "h2"),
 				}
-				insertAuditRows(ctx, t, pool, cold)
+				insertAuditRows(ctx, t, bus, pub, pool, cold)
 				publishAll(ctx, t, pub, hot)
 
 				r := buildReader(bus, pool, streamMaxAge, baseNow)
@@ -242,7 +248,7 @@ func TestCrossTierQueryEndToEnd(t *testing.T) {
 					mintAt(subject, edge.Add(time.Hour), "h1"),
 					mintAt(subject, edge.Add(10*time.Hour), "h2"),
 				}
-				insertAuditRows(ctx, t, pool, cold)
+				insertAuditRows(ctx, t, bus, pub, pool, cold)
 				publishAll(ctx, t, pub, hot)
 
 				r := buildReader(bus, pool, streamMaxAge, baseNow)
@@ -292,7 +298,7 @@ func TestCrossTierQueryEndToEnd(t *testing.T) {
 					mintAt(subject, edge.Add(-10*24*time.Hour), "c1"),
 					mintAt(subject, edge.Add(-5*24*time.Hour), "c2"),
 				}
-				insertAuditRows(ctx, t, pool, cold)
+				insertAuditRows(ctx, t, bus, pub, pool, cold)
 
 				r := buildReader(bus, pool, streamMaxAge, baseNow)
 				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
@@ -330,7 +336,7 @@ func TestCrossTierQueryEndToEnd(t *testing.T) {
 				// Seed events on a DIFFERENT subject; query for ours.
 				other := eventbus.Subject("events.main.elsewhere.zzz")
 				publishAll(ctx, t, pub, []eventbus.Event{mintAt(other, edge.Add(time.Hour), "x")})
-				insertAuditRows(ctx, t, pool, []eventbus.Event{mintAt(other, edge.Add(-time.Hour), "y")})
+				insertAuditRows(ctx, t, bus, pub, pool, []eventbus.Event{mintAt(other, edge.Add(-time.Hour), "y")})
 
 				r := buildReader(bus, pool, streamMaxAge, baseNow)
 				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
@@ -430,40 +436,58 @@ func publishAll(ctx context.Context, t *testing.T, pub eventbus.Publisher, event
 	}
 }
 
-// insertAuditRows INSERTs directly into events_audit, bypassing the JS
-// projection. Used to seed "cold" events without having to age them out of
-// JS retention.
-func insertAuditRows(ctx context.Context, t *testing.T, pool *pgxpool.Pool, events []eventbus.Event) {
+// insertAuditRows simulates the audit projection for "cold" events by:
+//  1. Publishing each event to the EVENTS JetStream stream (getting a real,
+//     monotonic stream sequence).
+//  2. Inserting the event into events_audit with that real js_seq.
+//
+// This is necessary because seq-based crossover dedup (seenSeqs) requires
+// that the js_seq in events_audit matches what the hot tier returns for the
+// same physical event. Publishing first also gives cold events lower JS seqs
+// than subsequently published hot events, which preserves the ordering
+// invariant that appendOrdered sorts by seq.
+//
+// The hot tier's matchesQuery filter (Timestamp < edge → reject) ensures
+// these events are served from cold (events_audit) rather than from JS,
+// even though they are technically still in the JS stream.
+func insertAuditRows(ctx context.Context, t *testing.T, bus *eventbustest.Embedded, pub eventbus.Publisher, pool *pgxpool.Pool, events []eventbus.Event) {
 	t.Helper()
 	for _, e := range events {
-		id := e.ID.Bytes()
-		var actorID []byte
-		if e.Actor.ID != (ulid.ULID{}) {
-			b := e.Actor.ID.Bytes()
-			actorID = b
-		}
-		_, err := pool.Exec(ctx, `
-			INSERT INTO events_audit (
-				id, subject, type, timestamp, actor_kind, actor_id,
-				payload, schema_ver, codec, js_seq
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-			ON CONFLICT (id) DO NOTHING`,
-			id,
-			string(e.Subject),
-			string(e.Type),
-			e.Timestamp,
-			e.Actor.Kind.String(),
-			actorID,
-			e.Payload,
-			int16(1),
-			"identity",
-			// Cold-tier rows synthesize a js_seq of 0 — the real
-			// projection writes the JS stream seq, but cold-only rows
-			// never hit JS so any non-null placeholder is fine.
-			int64(0),
-		)
-		require.NoError(t, err)
+		seqBefore := currentStreamLastSeq(t, bus)
+		require.NoError(t, pub.Publish(ctx, e))
+		bus.AwaitStreamLastSeq(t, seqBefore+1, 5*time.Second)
+		seq := currentStreamLastSeq(t, bus)
+		insertAuditRowWithSeq(ctx, t, pool, e, seq)
 	}
+}
+
+// insertAuditRowWithSeq INSERTs one events_audit row with an explicit js_seq.
+func insertAuditRowWithSeq(ctx context.Context, t *testing.T, pool *pgxpool.Pool, e eventbus.Event, seq uint64) {
+	t.Helper()
+	id := e.ID.Bytes()
+	var actorID []byte
+	if e.Actor.ID != (ulid.ULID{}) {
+		b := e.Actor.ID.Bytes()
+		actorID = b
+	}
+	_, err := pool.Exec(ctx, `
+		INSERT INTO events_audit (
+			id, subject, type, timestamp, actor_kind, actor_id,
+			payload, schema_ver, codec, js_seq
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		ON CONFLICT (id) DO NOTHING`,
+		id,
+		string(e.Subject),
+		string(e.Type),
+		e.Timestamp,
+		e.Actor.Kind.String(),
+		actorID,
+		e.Payload,
+		int16(1),
+		"identity",
+		int64(seq), //nolint:gosec // G115: seq is always a positive JetStream sequence; fits safely in int64
+	)
+	require.NoError(t, err)
 }
 
 // drainStream pulls every event from stream until io.EOF, failing on any

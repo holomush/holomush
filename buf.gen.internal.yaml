@@ -1,0 +1,25 @@
+# buf.gen.internal.yaml — generation for the host-INTERNAL eventbus
+# cursor module (internal/eventbus/cursor).
+#
+# Go bindings only — no gRPC services, no ConnectRPC handlers, no
+# TypeScript clients. The cursor proto defines an opaque on-the-wire
+# token format used by host code; clients and plugins MUST NOT inspect
+# or construct it. The CursorPackageInternal ruleguard enforces the
+# same boundary at import time for Go consumers.
+#
+# Managed mode disabled here so the proto's own `option go_package`
+# declaration drives the output path:
+#   option go_package = "github.com/holomush/holomush/internal/eventbus/cursor/cursorv1;cursorv1";
+#
+# Combined with `out: internal/eventbus/cursor/cursorv1` and
+# `paths=source_relative`, this places the generated file at:
+#   internal/eventbus/cursor/cursorv1/cursor.pb.go
+version: v2
+managed:
+  enabled: false
+plugins:
+  - remote: buf.build/protocolbuffers/go
+    out: internal/eventbus/cursor/cursorv1
+    opt: paths=source_relative
+inputs:
+  - directory: internal/eventbus/cursor

@@ -241,4 +241,3 @@ func (a *atomicErr) get() error {
 	defer a.mu.Unlock()
 	return a.err
 }
-

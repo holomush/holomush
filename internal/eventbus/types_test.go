@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/eventbus"
@@ -87,4 +88,16 @@ func TestMustSubjectPanicsOnInvalid(t *testing.T) {
 
 func TestMustSubjectAcceptsValid(t *testing.T) {
 	require.NotPanics(t, func() { eventbus.MustSubject("events.main.scene.>") })
+}
+
+func TestEventSeqIsZeroWhenUninitialized(t *testing.T) {
+	t.Parallel()
+	e := eventbus.Event{}
+	assert.Equal(t, uint64(0), e.Seq)
+}
+
+func TestEventSeqPreservesLiteralValueWhenSet(t *testing.T) {
+	t.Parallel()
+	e := eventbus.Event{Seq: 42}
+	assert.Equal(t, uint64(42), e.Seq)
 }

@@ -297,8 +297,8 @@ func TestSelectCharacter_Reattach(t *testing.T) {
 		LocationID:    locID,
 		Status:        session.StatusDetached,
 
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}))
 
 	server := &CoreServer{
@@ -799,7 +799,7 @@ func TestLogoutEmitsSessionEndedForEachChildGameSession(t *testing.T) {
 		PlayerSessionID: playerSessionID,
 		Status:          session.StatusActive,
 
-		TTLSeconds:      1800,
+		TTLSeconds: 1800,
 	}))
 	require.NoError(t, sessStore.Set(ctx, sess2ID.String(), &session.Info{
 		ID:              sess2ID.String(),
@@ -810,7 +810,7 @@ func TestLogoutEmitsSessionEndedForEachChildGameSession(t *testing.T) {
 		PlayerSessionID: playerSessionID,
 		Status:          session.StatusActive,
 
-		TTLSeconds:      1800,
+		TTLSeconds: 1800,
 	}))
 
 	// playerSessionRepo: Logout handler looks up the session by token hash
@@ -1943,7 +1943,7 @@ func TestLogoutFanoutContinuesAfterIndividualSessionErrors(t *testing.T) {
 		PlayerSessionID: playerSessionID,
 		Status:          session.StatusActive,
 
-		TTLSeconds:      1800,
+		TTLSeconds: 1800,
 	}))
 	require.NoError(t, sessStore.Set(ctx, sess2ID, &session.Info{
 		ID:              sess2ID,
@@ -1954,7 +1954,7 @@ func TestLogoutFanoutContinuesAfterIndividualSessionErrors(t *testing.T) {
 		PlayerSessionID: playerSessionID,
 		Status:          session.StatusActive,
 
-		TTLSeconds:      1800,
+		TTLSeconds: 1800,
 	}))
 
 	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)

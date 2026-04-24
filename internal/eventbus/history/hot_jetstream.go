@@ -44,12 +44,45 @@ func newJetStreamHotTier(js jetstream.JetStream, selector codec.KeySelector, now
 // start position implied by q, fetches up to pageSize messages, decodes
 // each, and filters in-process for the Before/After/NotAfter bounds the JS
 // consumer cannot express directly.
-func (h *jetStreamHotTier) Read(ctx context.Context, q eventbus.HistoryQuery, edge time.Time, pageSize int) ([]eventbus.Event, error) {
+// Read fetches a page of events from JetStream. The *StreamStateSnapshot
+// parameter is intentionally ignored: the hot tier always derives its own
+// stream state from the query parameters and (for tail reads) a fresh
+// stream.Info() call — see the backward uncursored branch below.
+func (h *jetStreamHotTier) Read(ctx context.Context, q eventbus.HistoryQuery, edge time.Time, pageSize int, _ *StreamStateSnapshot) ([]eventbus.Event, error) {
 	if pageSize <= 0 {
 		return nil, nil
 	}
-	// Overfetch when client-side filters will reject some messages.
-	fetch := pageSize * 2
+	// Determine the fetch size (how many messages to request from the JS
+	// consumer) based on direction and cursor state.
+	//
+	// Forward reads:
+	//   - With cursor (AfterSeq > 0): start AT AfterSeq (cursor echo), then
+	//     take pageSize events. fetch = pageSize + 1 (echo slot + page).
+	//   - Without cursor: start at the edge timestamp and walk forward;
+	//     double-fetch to absorb per-event filter rejections from matchesQuery.
+	//
+	// Backward reads:
+	//   - With cursor (BeforeSeq > 0): we start at BeforeSeq − pageSize and
+	//     deliver ascending; matchesQuery excludes >= BeforeSeq. We need
+	//     exactly pageSize events in the window, so fetch = pageSize.
+	//   - Without cursor: we start at LastSeq − pageSize + 1 so the window
+	//     holds exactly pageSize events. fetch = pageSize.
+	//
+	// The key invariant for backward reads: the in-loop cap (len(out) >=
+	// pageSize) must never drop events that belong to the page. This is
+	// guaranteed when the window contains at most pageSize in-scope events,
+	// which the fetch sizing above enforces.
+	isForwardCursor := q.AfterSeq > 0 && q.Direction != eventbus.DirectionBackward
+	isBackward := q.Direction == eventbus.DirectionBackward
+	var fetch int
+	switch {
+	case isForwardCursor:
+		fetch = pageSize + 1 // cursor echo + pageSize events
+	case isBackward:
+		fetch = pageSize // window is sized to hold exactly pageSize events
+	default:
+		fetch = pageSize * 2 // forward uncursored: absorb filter rejections
+	}
 	if fetch > pageSize+MaxPageSize {
 		fetch = pageSize + MaxPageSize
 	}
@@ -76,6 +109,19 @@ func (h *jetStreamHotTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 	}
 
 	out := make([]eventbus.Event, 0, pageSize)
+
+	// For forward reads with AfterSeq > 0, the consumer starts AT AfterSeq
+	// (inclusive) and delivers the cursor row first as an echo. The cursor
+	// echo must match the tripwire (AfterSeq, AfterID); if it doesn't, the
+	// seq was reused by a JetStream rebuild and the cursor is stale.
+	//
+	// For backward reads with BeforeSeq > 0, the consumer starts at
+	// max(1, BeforeSeq-fetch+1) and delivers messages in ascending order up
+	// to BeforeSeq. The cursor exclusion is already handled by matchesQuery
+	// (ev.Seq >= q.BeforeSeq → reject). There is no cursor echo to validate
+	// because the cursor row is not the first message delivered.
+	forwardCursorPending := q.AfterSeq > 0 && q.Direction != eventbus.DirectionBackward
+
 	for msg := range batch.Messages() {
 		if fetchCtx.Err() != nil {
 			break
@@ -88,6 +134,42 @@ func (h *jetStreamHotTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 			// separately.
 			continue
 		}
+		// Populate Event.Seq from JetStream message metadata. When forward
+		// cursor validation is pending the metadata MUST be available — a
+		// missing/failed Metadata() lookup leaves ev.Seq=0, which would
+		// then spuriously trigger ErrCursorStale on the cursor-echo
+		// validation below. Surface the metadata error so the caller can
+		// distinguish a genuine cursor-stale from a JS infra blip.
+		meta, mErr := msg.Metadata()
+		if mErr != nil {
+			if forwardCursorPending {
+				return nil, oops.Code("EVENTBUS_HOT_METADATA_FAILED").
+					With("subject", string(q.Subject)).
+					With("cursor_seq", q.AfterSeq).
+					With("cursor_id", q.AfterID.String()).
+					Wrap(mErr)
+			}
+			// No cursor in flight — Seq is best-effort; events without
+			// metadata still match by time/subject filters.
+		} else {
+			ev.Seq = meta.Sequence.Stream
+		}
+
+		if forwardCursorPending {
+			forwardCursorPending = false
+			if ev.Seq != q.AfterSeq || ev.ID != q.AfterID {
+				return nil, oops.Code("EVENTBUS_CURSOR_STALE").
+					With("subject", string(q.Subject)).
+					With("cursor_seq", q.AfterSeq).
+					With("cursor_id", q.AfterID.String()).
+					With("got_seq", ev.Seq).
+					With("got_id", ev.ID.String()).
+					Wrap(eventbus.ErrCursorStale)
+			}
+			// Discard the forward cursor echo; the real page starts after it.
+			continue
+		}
+
 		if !matchesQuery(ev, q, edge, TierJetStream) {
 			continue
 		}
@@ -107,13 +189,19 @@ func (h *jetStreamHotTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 // JS can express FilterSubject and a start time/sequence; finer bounds are
 // applied client-side in matchesQuery.
 //
-// DirectionBackward needs special care: JetStream has no "start from newest
-// and read backward" policy, so a naive DeliverByStartTimePolicy + forward
-// fetch would return the OLDEST events inside the window, not the tail.
-// For backward reads we therefore consult stream.Info().State.LastSeq and
-// start at max(LastSeq - fetch + 1, 1) via DeliverByStartSequencePolicy so
-// the forward-fetch page is actually the stream's tail. The caller then
-// reverses the page in orderEvents to present newest-first.
+// Start-policy table:
+//   - Forward, cursor seq set (AfterSeq > 0): DeliverByStartSequencePolicy at
+//     AfterSeq so the cursor row is delivered first as an echo for tripwire
+//     validation. After validation the cursor row is discarded.
+//   - Forward, no cursor: DeliverByStartTimePolicy at max(edge, NotBefore).
+//   - Backward, cursor seq set (BeforeSeq > 0): DeliverByStartSequencePolicy
+//     at max(1, BeforeSeq - pageSize) so the window holds exactly pageSize
+//     in-scope events (those with seq < BeforeSeq). No cursor echo: matchesQuery
+//     already excludes ev.Seq >= BeforeSeq.
+//   - Backward, no cursor: tail-oriented — consult stream.Info().State.LastSeq
+//     and start at max(LastSeq - pageSize + 1, 1) so the window holds exactly
+//     pageSize events. The caller reverses the page in orderEvents to
+//     present newest-first.
 func (h *jetStreamHotTier) buildConfig(
 	ctx context.Context,
 	q eventbus.HistoryQuery,
@@ -123,69 +211,73 @@ func (h *jetStreamHotTier) buildConfig(
 	cfg := jetstream.OrderedConsumerConfig{
 		FilterSubjects: []string{string(q.Subject)},
 	}
-	// Start position:
-	//   - If the caller gave us After, start from its timestamp (the
-	//     closest JS can get to a ULID cursor). matchesQuery then
-	//     filters out ULIDs <= After.Time.
-	//   - Else use the lower bound that applies — NotBefore forward,
-	//     edge for unbounded queries.
-	if !q.After.IsZero() {
-		start := ulid.Time(q.After.Time())
-		cfg.DeliverPolicy = jetstream.DeliverByStartTimePolicy
-		cfg.OptStartTime = &start
-		return cfg, nil
-	}
 	dir := q.Direction
 	if dir == 0 {
 		dir = eventbus.DirectionForward
 	}
-	switch dir {
-	case eventbus.DirectionForward:
+
+	// FORWARD: cursor seq present → start AT seq inclusive.
+	if dir == eventbus.DirectionForward {
+		if q.AfterSeq > 0 {
+			cfg.DeliverPolicy = jetstream.DeliverByStartSequencePolicy
+			cfg.OptStartSeq = q.AfterSeq
+			return cfg, nil
+		}
 		start := edge
 		if !q.NotBefore.IsZero() && q.NotBefore.After(edge) {
 			start = q.NotBefore
 		}
 		cfg.DeliverPolicy = jetstream.DeliverByStartTimePolicy
 		cfg.OptStartTime = &start
-	case eventbus.DirectionBackward:
-		// Tail-oriented: get stream's last sequence and compute a start
-		// seq that puts `fetch` messages between start and last. If we
-		// can't reach the stream or the stream is empty, fall back to
-		// DeliverByStartTimePolicy so the caller still gets *something*
-		// ordered (the pre-existing behaviour, with the same caveat that
-		// paging is truncated).
-		stream, err := h.js.Stream(ctx, eventbus.StreamName)
-		if err != nil {
-			return cfg, oops.Code("EVENTBUS_HOT_STREAM_LOOKUP_FAILED").
-				With("stream", eventbus.StreamName).
-				Wrap(err)
-		}
-		info, err := stream.Info(ctx)
-		if err != nil {
-			return cfg, oops.Code("EVENTBUS_HOT_STREAM_INFO_FAILED").
-				With("stream", eventbus.StreamName).
-				Wrap(err)
-		}
-		last := info.State.LastSeq
-		if last == 0 {
-			// Empty stream: nothing to serve, but the downstream Fetch
-			// will return an empty batch quickly under any policy.
-			cfg.DeliverPolicy = jetstream.DeliverAllPolicy
-			return cfg, nil
-		}
-		// fetch is expected to fit in uint64; Fetch rejects negatives
-		// upstream, so this conversion is safe.
-		window := uint64(0)
-		if fetch > 0 {
-			window = uint64(fetch)
-		}
+		return cfg, nil
+	}
+
+	// BACKWARD with cursor: walk forward from max(1, BeforeSeq - fetch) up to
+	// BeforeSeq (exclusive per matchesQuery), then reverse in-memory.
+	// Caller sets fetch = pageSize for backward reads, giving a window of
+	// exactly pageSize in-scope events so the in-loop cap never drops events.
+	if q.BeforeSeq > 0 {
 		var startSeq uint64 = 1
-		if window > 0 && last > window {
-			startSeq = last - window + 1
+		if q.BeforeSeq > uint64(fetch) { //nolint:gosec // fetch is a bounded positive int from ClampPageSize
+			startSeq = q.BeforeSeq - uint64(fetch) //nolint:gosec // same bound; no +1 because we want [BeforeSeq-fetch, BeforeSeq)
 		}
 		cfg.DeliverPolicy = jetstream.DeliverByStartSequencePolicy
 		cfg.OptStartSeq = startSeq
+		return cfg, nil
 	}
+
+	// BACKWARD without cursor: tail-oriented read. Start at LastSeq - fetch + 1
+	// where fetch = pageSize, giving a window of exactly pageSize events.
+	// The in-loop cap and subsequent orderEvents reversal then yield the newest
+	// pageSize events in descending seq order.
+	//
+	// Intentionally uses a fresh stream.Info() (not the ignored snapshot param) so the returned page
+	// reflects the current stream tail. The snapshot taken at query start is
+	// appropriate when consistency-with-other-tier-reads matters; here we want
+	// the latest events, so a fresh lookup is correct.
+	stream, err := h.js.Stream(ctx, eventbus.StreamName)
+	if err != nil {
+		return cfg, oops.Code("EVENTBUS_HOT_STREAM_LOOKUP_FAILED").
+			With("stream", eventbus.StreamName).
+			Wrap(err)
+	}
+	info, err := stream.Info(ctx)
+	if err != nil {
+		return cfg, oops.Code("EVENTBUS_HOT_STREAM_INFO_FAILED").
+			With("stream", eventbus.StreamName).
+			Wrap(err)
+	}
+	last := info.State.LastSeq
+	if last == 0 {
+		cfg.DeliverPolicy = jetstream.DeliverAllPolicy
+		return cfg, nil
+	}
+	var startSeq uint64 = 1
+	if last >= uint64(fetch) { //nolint:gosec // fetch is a bounded positive int
+		startSeq = last - uint64(fetch) + 1 //nolint:gosec // same bound
+	}
+	cfg.DeliverPolicy = jetstream.DeliverByStartSequencePolicy
+	cfg.OptStartSeq = startSeq
 	return cfg, nil
 }
 
@@ -193,16 +285,16 @@ func (h *jetStreamHotTier) buildConfig(
 // could not express natively.
 //
 // Boundary semantics:
-//   - After / Before are EXCLUSIVE.
-//   - NotBefore / NotAfter are INCLUSIVE.
+//   - AfterSeq / BeforeSeq are EXCLUSIVE (by Seq).
+//   - NotBefore / NotAfter are INCLUSIVE (by Timestamp).
 //   - In the JetStream tier, events with Timestamp < edge are NOT served
 //     from here (they may still appear for up to safetyMargin; the cold
 //     tier serves the canonical pre-edge slice).
 func matchesQuery(ev eventbus.Event, q eventbus.HistoryQuery, edge time.Time, tier Tier) bool {
-	if !q.After.IsZero() && ev.ID.Compare(q.After) <= 0 {
+	if q.AfterSeq > 0 && ev.Seq <= q.AfterSeq {
 		return false
 	}
-	if !q.Before.IsZero() && ev.ID.Compare(q.Before) >= 0 {
+	if q.BeforeSeq > 0 && ev.Seq >= q.BeforeSeq {
 		return false
 	}
 	if !q.NotBefore.IsZero() && ev.Timestamp.Before(q.NotBefore) {
@@ -216,7 +308,7 @@ func matchesQuery(ev eventbus.Event, q eventbus.HistoryQuery, edge time.Time, ti
 	// Timestamp < edge. Events within the overlap window (recently
 	// projected into PG while still within JS retention) are still
 	// served from the tier that provided them; the crossoverStream's
-	// ULID-seen map is responsible for dedup, not this filter.
+	// seen-map is responsible for dedup, not this filter.
 	switch tier {
 	case TierJetStream:
 		if !edge.IsZero() && ev.Timestamp.Before(edge) {

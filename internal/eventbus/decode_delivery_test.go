@@ -27,19 +27,19 @@ type stubMsg struct {
 	subject string
 }
 
-func (s *stubMsg) Headers() nats.Header                     { return s.headers }
-func (s *stubMsg) Data() []byte                             { return s.data }
-func (s *stubMsg) Subject() string                          { return s.subject }
-func (s *stubMsg) Reply() string                            { return "" }
+func (s *stubMsg) Headers() nats.Header                      { return s.headers }
+func (s *stubMsg) Data() []byte                              { return s.data }
+func (s *stubMsg) Subject() string                           { return s.subject }
+func (s *stubMsg) Reply() string                             { return "" }
 func (s *stubMsg) Metadata() (*jetstream.MsgMetadata, error) { return nil, nil }
-func (s *stubMsg) Ack() error                               { return nil }
-func (s *stubMsg) AckSync() error                           { return nil }
-func (s *stubMsg) DoubleAck(_ context.Context) error        { return nil }
-func (s *stubMsg) Nak() error                               { return nil }
-func (s *stubMsg) NakWithDelay(_ time.Duration) error       { return nil }
-func (s *stubMsg) InProgress() error                        { return nil }
-func (s *stubMsg) Term() error                              { return nil }
-func (s *stubMsg) TermWithReason(_ string) error            { return nil }
+func (s *stubMsg) Ack() error                                { return nil }
+func (s *stubMsg) AckSync() error                            { return nil }
+func (s *stubMsg) DoubleAck(_ context.Context) error         { return nil }
+func (s *stubMsg) Nak() error                                { return nil }
+func (s *stubMsg) NakWithDelay(_ time.Duration) error        { return nil }
+func (s *stubMsg) InProgress() error                         { return nil }
+func (s *stubMsg) Term() error                               { return nil }
+func (s *stubMsg) TermWithReason(_ string) error             { return nil }
 
 // validSubscriberHeaders builds a minimally-valid header set matching what
 // Publisher stamps on wire. Tests mutate/strip one at a time to cover branches.
@@ -141,4 +141,29 @@ func TestDecodeDeliveryRejectsMalformedProto(t *testing.T) {
 	_, err := decodeDelivery(context.Background(), msg, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_SUBSCRIBE_UNMARSHAL_FAILED")
+}
+
+// stubMsgWithSeq is stubMsg with a Metadata() implementation that returns a
+// non-nil MsgMetadata so the Seq-plumbing path in decodeDelivery is exercised.
+type stubMsgWithSeq struct {
+	stubMsg
+	seq uint64
+}
+
+func (s *stubMsgWithSeq) Metadata() (*jetstream.MsgMetadata, error) {
+	return &jetstream.MsgMetadata{
+		Sequence: jetstream.SequencePair{Stream: s.seq},
+	}, nil
+}
+
+func TestDecodeDeliveryPopulatesSeqFromMetadata(t *testing.T) {
+	t.Parallel()
+	h, _ := validSubscriberHeaders(t)
+	msg := &stubMsgWithSeq{
+		stubMsg: stubMsg{headers: h, data: validPayload(t)},
+		seq:     42,
+	}
+	ev, err := decodeDelivery(context.Background(), msg, nil)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(42), ev.Seq)
 }

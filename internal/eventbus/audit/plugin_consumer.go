@@ -390,4 +390,3 @@ type PluginHistoryStream interface {
 	Recv() (*pluginv1.QueryHistoryResponse, error)
 	Close() error
 }
-

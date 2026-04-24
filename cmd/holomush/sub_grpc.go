@@ -38,7 +38,6 @@ import (
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/naming"
 	plugins "github.com/holomush/holomush/internal/plugin"
-	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
 	"github.com/holomush/holomush/internal/session"
 	sessionsetup "github.com/holomush/holomush/internal/session/setup"
@@ -49,6 +48,7 @@ import (
 	worldsetup "github.com/holomush/holomush/internal/world/setup"
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
 // grpcSubsystemConfig configures the gRPC subsystem.
@@ -499,8 +499,8 @@ func coreActorKindToBus(k core.ActorKind) eventbus.ActorKind {
 // plugins.HistoryReader (ReplayTail). Used by the plugin subsystem for
 // QueryStreamHistory RPCs and Lua holomush.query_stream_history hostfuncs.
 type busHistoryReaderAdapter struct {
-	reader  eventbus.HistoryReader
-	gameID  func() string
+	reader eventbus.HistoryReader
+	gameID func() string
 }
 
 var _ plugins.HistoryReader = (*busHistoryReaderAdapter)(nil)
@@ -531,7 +531,7 @@ func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string,
 		NotBefore: notBefore,
 	}
 	if !beforeID.IsZero() {
-		q.Before = beforeID
+		q.BeforeID = beforeID
 	}
 	hs, err := a.reader.QueryHistory(ctx, q)
 	if err != nil {
@@ -577,7 +577,7 @@ func busEventToCoreEvent(e eventbus.Event, stream string) core.Event {
 	case e.Actor.LegacyID != "":
 		actorID = e.Actor.LegacyID
 	}
-	return core.Event{ //nolint:gocritic // translation path: preserves existing ID+Timestamp from JetStream; core.NewEvent() would clobber them
+	return core.Event{
 		ID:        e.ID,
 		Stream:    stream,
 		Type:      core.EventType(e.Type),

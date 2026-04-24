@@ -14,24 +14,6 @@ package gorules
 
 import "github.com/quasilyte/go-ruleguard/dsl"
 
-// EventIDMustBeMonotonic ensures events are constructed via core.NewEvent(),
-// not via raw core.Event{} struct literals. core.NewEvent() assigns the ID
-// from core.NewULID() (monotonic-within-millisecond), enforcing invariant
-// I-16 from the focus-substrate design spec. Raw struct literals risk using
-// idgen.New() or ulid.Make() which produce non-monotonic IDs that silently
-// break PostgresEventStore.Replay and cursor CAS advances.
-//
-// The rule catches ANY core.Event{} literal. The only legitimate construction
-// site is core.NewEvent() itself (in internal/core/event.go), which is
-// excluded via the Where clause filtering on the file path.
-//
-// See docs/superpowers/specs/2026-04-11-focus-substrate-design.md section 3.1 I-16.
-func EventIDMustBeMonotonic(m dsl.Matcher) {
-	m.Match(`core.Event{$*_}`).
-		Where(!m.File().Name.Matches(`event\.go$`)).
-		Report(`use core.NewEvent() instead of raw core.Event{} literal -- see I-16 in focus-substrate spec`)
-}
-
 // ULIDMakeForbidden forbids ulid.Make() in production code. ulid.Make()
 // uses math/rand internally, violating the project-wide crypto/rand rule.
 // Use idgen.New() for entity IDs or core.NewULID() for event IDs. This
@@ -39,6 +21,70 @@ func EventIDMustBeMonotonic(m dsl.Matcher) {
 func ULIDMakeForbidden(m dsl.Matcher) {
 	m.Match(`ulid.Make()`).
 		Report(`use idgen.New() for entity IDs or core.NewULID() for event IDs; ulid.Make() uses math/rand`)
+}
+
+// CursorPackageInternal forbids importing internal/eventbus/cursor from
+// outside the eventbus/grpc/web/plugin-host package trees. The cursor
+// codec is host-internal: plugin authors and external clients MUST NOT
+// inspect or construct opaque tokens. Allowed importers:
+//
+//   - internal/eventbus/...      (the codec's natural home)
+//   - internal/grpc/...          (decodes/encodes at the RPC boundary)
+//   - internal/web/...           (thin proxy over gRPC)
+//   - internal/plugin/goplugin/  (plugin host service wraps plugin cursors)
+//   - internal/plugin/hostfunc/  (Lua hostfunc encodes/decodes for Lua plugins)
+//
+// See docs/superpowers/specs/2026-04-21-cold-tier-js-seq-pagination-design.md §4.5.
+func CursorPackageInternal(m dsl.Matcher) {
+	m.Import("github.com/holomush/holomush/internal/eventbus/cursor")
+	const allowed = `^github\.com/holomush/holomush/internal/(eventbus|grpc|web|plugin/goplugin|plugin/hostfunc)(/|$)`
+	const msg = `internal/eventbus/cursor is host-internal — clients and plugins must not import it`
+
+	m.Match(`cursor.Encode($*_)`).
+		Where(!m.File().PkgPath.Matches(allowed)).
+		Report(msg)
+
+	m.Match(`cursor.Decode($*_)`).
+		Where(!m.File().PkgPath.Matches(allowed)).
+		Report(msg)
+
+	m.Match(`cursor.Cursor{$*_}`).
+		Where(!m.File().PkgPath.Matches(allowed)).
+		Report(msg)
+
+	m.Match(`cursor.CurrentVersion`).
+		Where(!m.File().PkgPath.Matches(allowed)).
+		Report(msg)
+
+	m.Match(`cursor.CurrentEpoch()`).
+		Where(!m.File().PkgPath.Matches(allowed)).
+		Report(msg)
+
+	m.Match(`cursor.Owner{$*_}`).
+		Where(!m.File().PkgPath.Matches(allowed)).
+		Report(msg)
+
+	m.Match(`cursor.HostCursor{$*_}`).
+		Where(!m.File().PkgPath.Matches(allowed)).
+		Report(msg)
+
+	// OwnerKind discriminator — guard the type and its constants so a
+	// non-allowlisted importer can't introspect cursor ownership.
+	m.Match(`cursor.OwnerKind`).
+		Where(!m.File().PkgPath.Matches(allowed)).
+		Report(msg)
+
+	m.Match(`cursor.OwnerHost`).
+		Where(!m.File().PkgPath.Matches(allowed)).
+		Report(msg)
+
+	m.Match(`cursor.OwnerPlugin`).
+		Where(!m.File().PkgPath.Matches(allowed)).
+		Report(msg)
+
+	m.Match(`cursor.OwnerUnspecified`).
+		Where(!m.File().PkgPath.Matches(allowed)).
+		Report(msg)
 }
 
 // SceneOpsEventsAppendOnly forbids UPDATE/DELETE/TRUNCATE statements

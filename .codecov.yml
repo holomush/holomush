@@ -32,7 +32,10 @@ coverage:
         threshold: 5%
 
 ignore:
-  # Generated protobuf Go code (buf generate)
+  # Generated protobuf Go code (buf generate). Use the global glob so
+  # internal-module .pb.go files (e.g. internal/eventbus/cursor/cursorv1/)
+  # are also excluded — not just pkg/proto/.
+  - "**/*.pb.go"
   - "pkg/proto/**"
   # Generated ConnectRPC TypeScript clients (buf generate)
   - "web/src/lib/connect/**"

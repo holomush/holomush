@@ -419,14 +419,18 @@ func decodeDelivery(ctx context.Context, msg jetstream.Msg, selector codec.KeySe
 	if unmarshalErr := proto.Unmarshal(plain, &envelope); unmarshalErr != nil {
 		return Event{}, oops.Code("EVENTBUS_SUBSCRIBE_UNMARSHAL_FAILED").Wrap(unmarshalErr)
 	}
-	return Event{
+	ev := Event{
 		ID:        id,
 		Subject:   Subject(envelope.GetSubject()),
 		Type:      Type(envelope.GetType()),
 		Timestamp: envelope.GetTimestamp().AsTime(),
 		Actor:     actorFromProto(envelope.GetActor()),
 		Payload:   envelope.GetPayload(),
-	}, nil
+	}
+	if meta, mErr := msg.Metadata(); mErr == nil && meta != nil {
+		ev.Seq = meta.Sequence.Stream
+	}
+	return ev, nil
 }
 
 // AckSyncForTest performs a server-confirmed ack on a Delivery that was

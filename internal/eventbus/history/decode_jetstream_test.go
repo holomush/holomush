@@ -27,19 +27,19 @@ type stubMsg struct {
 	data    []byte
 }
 
-func (s *stubMsg) Headers() nats.Header                     { return s.headers }
-func (s *stubMsg) Data() []byte                             { return s.data }
-func (s *stubMsg) Subject() string                          { return "" }
-func (s *stubMsg) Reply() string                            { return "" }
+func (s *stubMsg) Headers() nats.Header                      { return s.headers }
+func (s *stubMsg) Data() []byte                              { return s.data }
+func (s *stubMsg) Subject() string                           { return "" }
+func (s *stubMsg) Reply() string                             { return "" }
 func (s *stubMsg) Metadata() (*jetstream.MsgMetadata, error) { return nil, nil }
-func (s *stubMsg) Ack() error                               { return nil }
-func (s *stubMsg) AckSync() error                           { return nil }
-func (s *stubMsg) DoubleAck(_ context.Context) error        { return nil }
-func (s *stubMsg) Nak() error                               { return nil }
-func (s *stubMsg) NakWithDelay(_ time.Duration) error       { return nil }
-func (s *stubMsg) InProgress() error                        { return nil }
-func (s *stubMsg) Term() error                              { return nil }
-func (s *stubMsg) TermWithReason(_ string) error            { return nil }
+func (s *stubMsg) Ack() error                                { return nil }
+func (s *stubMsg) AckSync() error                            { return nil }
+func (s *stubMsg) DoubleAck(_ context.Context) error         { return nil }
+func (s *stubMsg) Nak() error                                { return nil }
+func (s *stubMsg) NakWithDelay(_ time.Duration) error        { return nil }
+func (s *stubMsg) InProgress() error                         { return nil }
+func (s *stubMsg) Term() error                               { return nil }
+func (s *stubMsg) TermWithReason(_ string) error             { return nil }
 
 func validHeaders(t *testing.T) (nats.Header, ulid.ULID) {
 	t.Helper()

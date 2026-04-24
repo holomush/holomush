@@ -1,4 +1,9 @@
-# buf.gen.yaml
+# buf.gen.yaml — generation for the PUBLIC schema module (api/proto).
+#
+# The internal eventbus cursor module is generated separately by
+# buf.gen.internal.yaml. This split lets each module have its own
+# go_package_prefix and output path without the public Go SDK leaking
+# the internal cursor types.
 version: v2
 managed:
   enabled: true
@@ -21,3 +26,7 @@ plugins:
   - remote: buf.build/connectrpc/go
     out: pkg/proto
     opt: paths=source_relative
+inputs:
+  # Restrict to the PUBLIC module. Without this, `buf generate` would
+  # apply pkg/proto output paths to the internal cursor module too.
+  - directory: api/proto

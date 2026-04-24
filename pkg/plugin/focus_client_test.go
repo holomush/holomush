@@ -146,21 +146,28 @@ func TestPluginHostFocusClient_PresentFocusHappyPath(t *testing.T) {
 }
 
 func TestPluginHostFocusClient_QueryStreamHistoryHappyPath(t *testing.T) {
-	wantEvt := &pluginv1.Event{Id: "01EVT", Stream: "scene:1:ic", Type: "say", Payload: `{"m":"hi"}`}
-	srv := &focusTestServer{historyResp: &pluginv1.PluginHostServiceQueryStreamHistoryResponse{Events: []*pluginv1.Event{wantEvt}}}
+	wantCursor := []byte("plugin-evt-cursor")
+	wantNextCursor := []byte("plugin-next-cursor")
+	wantEvt := &pluginv1.Event{Id: "01EVT", Stream: "scene:1:ic", Type: "say", Payload: `{"m":"hi"}`, Cursor: wantCursor}
+	srv := &focusTestServer{historyResp: &pluginv1.PluginHostServiceQueryStreamHistoryResponse{
+		Events:     []*pluginv1.Event{wantEvt},
+		NextCursor: wantNextCursor,
+	}}
 	conn := startPluginHostServiceTestServer(t, srv)
 	client := &pluginHostFocusClient{client: pluginv1.NewPluginHostServiceClient(conn)}
 
-	events, err := client.QueryStreamHistory(context.Background(), QueryStreamHistoryRequest{
+	resp, err := client.QueryStreamHistory(context.Background(), QueryStreamHistoryRequest{
 		Stream: "scene:1:ic",
 		Count:  10,
 	})
 	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, "01EVT", events[0].ID)
-	assert.Equal(t, "scene:1:ic", events[0].Stream)
-	assert.Equal(t, EventType("say"), events[0].Type)
-	assert.Equal(t, `{"m":"hi"}`, events[0].Payload)
+	require.Len(t, resp.Events, 1)
+	assert.Equal(t, "01EVT", resp.Events[0].ID)
+	assert.Equal(t, "scene:1:ic", resp.Events[0].Stream)
+	assert.Equal(t, EventType("say"), resp.Events[0].Type)
+	assert.Equal(t, `{"m":"hi"}`, resp.Events[0].Payload)
+	assert.Equal(t, wantCursor, resp.Events[0].Cursor, "per-event cursor must be propagated from proto response")
+	assert.Equal(t, wantNextCursor, resp.NextCursor, "next_cursor must be propagated from proto response")
 }
 
 func TestPluginHostFocusClient_NilClientReturnsError(t *testing.T) {
@@ -202,9 +209,9 @@ func TestPluginHostFocusClient_PresentFocusNilClientReturnsError(t *testing.T) {
 
 func TestPluginHostFocusClient_QueryStreamHistoryNilClientReturnsError(t *testing.T) {
 	client := &pluginHostFocusClient{}
-	events, err := client.QueryStreamHistory(context.Background(), QueryStreamHistoryRequest{Stream: "scene:1:ic", Count: 5})
+	resp, err := client.QueryStreamHistory(context.Background(), QueryStreamHistoryRequest{Stream: "scene:1:ic", Count: 5})
 	require.Error(t, err)
-	assert.Nil(t, events)
+	assert.Empty(t, resp.Events)
 	assert.Contains(t, err.Error(), "not configured")
 }
 
@@ -247,12 +254,12 @@ func TestPluginHostFocusClient_QueryStreamHistoryPropagatesHostError(t *testing.
 	conn := startPluginHostServiceTestServer(t, srv)
 	client := &pluginHostFocusClient{client: pluginv1.NewPluginHostServiceClient(conn)}
 
-	events, err := client.QueryStreamHistory(context.Background(), QueryStreamHistoryRequest{
+	resp, err := client.QueryStreamHistory(context.Background(), QueryStreamHistoryRequest{
 		Stream: "scene:1:ic",
 		Count:  5,
 	})
 	require.Error(t, err)
-	assert.Nil(t, events)
+	assert.Empty(t, resp.Events)
 	// The stream name is attached as oops context, not embedded in the message string.
 	var oe oops.OopsError
 	require.ErrorAs(t, err, &oe)

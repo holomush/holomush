@@ -261,8 +261,8 @@ func TestPluginHistoryRouterForwardsCursors(t *testing.T) {
 
 	_, err := router.QueryHistory(context.Background(), "core-scenes", eventbus.HistoryQuery{
 		Subject:   "events.main.scene.01ABC",
-		After:     after,
-		Before:    before,
+		AfterID:   after,
+		BeforeID:  before,
 		NotBefore: notBefore,
 		NotAfter:  notAfter,
 		Direction: eventbus.DirectionBackward,

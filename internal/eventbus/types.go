@@ -64,6 +64,7 @@ type Actor struct {
 // See spec §1d.
 type Event struct {
 	ID        ulid.ULID
+	Seq       uint64 // JetStream stream sequence; populated by both tier readers and by the subscriber. Host-internal — never serialized in any public proto envelope.
 	Subject   Subject
 	Type      Type
 	Timestamp time.Time
