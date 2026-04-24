@@ -154,6 +154,29 @@ All tasks MUST be reviewed before completion. See
 4. Address all findings
 5. Create PR or mark task complete
 
+## Pre-Push Review Gates
+
+Three adversarial read-only sub-agents gate hand-offs BEFORE the PR surface.
+These complement `pr-review-toolkit:review-pr` (which runs on the PR itself)
+by providing an earlier, in-session review pass.
+
+| Agent             | Fires before                                                                           | Invocation                              |
+| ----------------- | -------------------------------------------------------------------------------------- | --------------------------------------- |
+| `design-reviewer` | `superpowers:writing-plans` is invoked on a spec                                       | `/review-design [<spec-path>]` or auto  |
+| `plan-reviewer`   | `superpowers:executing-plans` or `superpowers:subagent-driven-development` runs a plan | `/review-plan [<plan-path>]` or auto    |
+| `code-reviewer`   | `bd close`, `jj git push`, or PR creation                                              | `/review-code [<target>]` or auto       |
+
+| Requirement                         | Description                                                                             |
+| ----------------------------------- | --------------------------------------------------------------------------------------- |
+| **MUST** produce grounded findings  | Every finding cites `path:line` for code, `section` for docs, or a verified external source |
+| **MUST** produce a binary verdict   | READY or NOT READY — no "mostly ready with minor concerns"                              |
+| **MUST NOT** apply fixes            | Read-only by construction (`permissionMode: plan` + explicit tool allowlist)            |
+| **MAY** be skipped                  | Only with explicit justification in the commit message or PR description                |
+
+Agent definitions live in `.claude/agents/`; slash commands in
+`.claude/commands/`; persistent memory in `.claude/agent-memory/`
+(checked into VCS).
+
 ## Code Conventions
 
 ### Go Idioms
