@@ -12,7 +12,11 @@ services:
       POSTGRES_DB: holomush
     volumes:
       - ./docker/postgres/init-role.sh:/docker-entrypoint-initdb.d/01-init-role.sh
-      - pgdata:/var/lib/postgresql/data
+      # postgres:18+ stores data in a major-version-specific subdir
+      # (/var/lib/postgresql/18/docker) rather than /var/lib/postgresql/data.
+      # Mount the parent so the subdir is persisted. Pre-18 volumes are not
+      # upgraded in place — drop them with `docker compose down -v`.
+      - pgdata:/var/lib/postgresql
     networks:
       - backend
     healthcheck:
