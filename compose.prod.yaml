@@ -15,18 +15,22 @@ services:
       POSTGRES_DB: holomush
     # Enable TLS so DATABASE_URL can use sslmode=require. A self-signed
     # certificate is generated on first boot and stored on the data
-    # volume. Connections from core use sslmode=require (encrypt, but
-    # do not verify CA), which is appropriate for an intra-stack
-    # backend network. Operators who need verify-full SHOULD mount
-    # their own CA-signed cert at /var/lib/postgresql/data/server.crt|key
-    # and set sslmode=verify-full in DATABASE_URL.
+    # volume (under /var/lib/postgresql/ssl, outside PGDATA so it
+    # survives postgres major-version upgrades). Connections from core
+    # use sslmode=require (encrypt, but do not verify CA), which is
+    # appropriate for an intra-stack backend network. Operators who
+    # need verify-full SHOULD mount their own CA-signed cert at
+    # /var/lib/postgresql/ssl/server.crt|key and set sslmode=verify-full
+    # in DATABASE_URL.
     command:
       - sh
       - -c
       - |
         set -e
-        CRT=/var/lib/postgresql/data/server.crt
-        KEY=/var/lib/postgresql/data/server.key
+        SSL_DIR=/var/lib/postgresql/ssl
+        CRT=$$SSL_DIR/server.crt
+        KEY=$$SSL_DIR/server.key
+        mkdir -p "$$SSL_DIR"
         if [ ! -s "$$CRT" ] || [ ! -s "$$KEY" ]; then
           apk add --no-cache openssl >/dev/null
           openssl req -new -x509 -days 3650 -nodes -subj "/CN=holomush-postgres" -out "$$CRT" -keyout "$$KEY"
@@ -36,7 +40,9 @@ services:
         fi
         exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=$$CRT -c ssl_key_file=$$KEY
     volumes:
-      - ${DATA_DIR:-/opt/holomush/data}/postgres:/var/lib/postgresql/data
+      # postgres:18+ stores data under /var/lib/postgresql/<major>/docker;
+      # mount the parent so both PGDATA and the ssl/ dir are persisted.
+      - ${DATA_DIR:-/opt/holomush/data}/postgres:/var/lib/postgresql
     networks:
       - backend
     healthcheck:
