@@ -157,7 +157,7 @@ grounding. Back it with popularity/maintenance/feature evidence.
 
 ## Output format
 
-```
+```text
 ## Summary
 [One paragraph: what the diff does, what spec/issue it claims to close, and
 your overall read — grounded only in what you actually inspected.]

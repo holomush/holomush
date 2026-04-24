@@ -143,7 +143,7 @@ touching a dependency, the code-reviewer MUST verify:
 
 Every agent emits a Markdown report in chat with this structure:
 
-```
+```text
 ## Summary
 [One paragraph: what the artifact does, what it claims to satisfy, the agent's
 overall read — grounded only in what was actually inspected.]
@@ -175,7 +175,7 @@ blocking findings list is empty (READY) or it is not (NOT READY).
 
 ## File Layout
 
-```
+```text
 .claude/
 ├── agents/
 │   ├── abac-reviewer.md              # existing, unchanged

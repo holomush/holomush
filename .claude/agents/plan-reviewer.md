@@ -150,7 +150,7 @@ answer — your training data may not reflect recent changes." Follow that.
 
 ## Output format
 
-```
+```text
 ## Summary
 [One paragraph: what the plan intends to build, what spec it claims to
 implement, your overall read — grounded only in what you actually inspected.]

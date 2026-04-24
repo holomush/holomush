@@ -18,7 +18,7 @@
 
 This plan creates only Markdown and configuration files — no Go code. No tests in the traditional sense; validation is by actual agent invocation.
 
-```
+```text
 .claude/
 ├── agents/
 │   ├── code-reviewer.md              # CREATE — full adversarial persona + code-specific workflow
@@ -82,7 +82,7 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 
   If there is an existing `.claude` block, append to it. Otherwise, append this block at the end of `.gitignore`:
 
-  ```
+  ```text
   # Claude Code local-scope agent memory (never committed; project-scope memory
   # lives in .claude/agent-memory/ and IS committed).
   .claude/agent-memory-local/
@@ -97,7 +97,8 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 - [ ] **Step 4: Commit**
 
   Run:
-  ```
+
+  ```text
   jj describe -m "chore(claude): gitignore local-scope agent memory
 
   Project-scope agent memory at .claude/agent-memory/ is intentionally
@@ -191,7 +192,8 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 - [ ] **Step 3: Commit**
 
   Run:
-  ```
+
+  ```text
   jj describe -m "chore(claude): scaffold project-scope agent memory
 
   Creates .claude/agent-memory/{code,plan,design}-reviewer/MEMORY.md stubs
@@ -374,7 +376,7 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 
   ## Output format
 
-  ```
+  ```text
   ## Summary
   [One paragraph: what the diff does, what spec/issue it claims to close, and
   your overall read — grounded only in what you actually inspected.]
@@ -439,7 +441,8 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 - [ ] **Step 4: Commit**
 
   Run:
-  ```
+
+  ```text
   jj describe -m "feat(claude): add code-reviewer adversarial sub-agent
 
   Read-only sub-agent that fires before bd close / jj git push / PR create,
@@ -615,7 +618,7 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 
   ## Output format
 
-  ```
+  ```text
   ## Summary
   [One paragraph: what the plan intends to build, what spec it claims to
   implement, your overall read — grounded only in what you actually inspected.]
@@ -672,7 +675,8 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 - [ ] **Step 4: Commit**
 
   Run:
-  ```
+
+  ```text
   jj describe -m "feat(claude): add plan-reviewer adversarial sub-agent
 
   Read-only sub-agent that fires after writing-plans produces a plan,
@@ -854,7 +858,7 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 
   ## Output format
 
-  ```
+  ```text
   ## Summary
   [One paragraph: what the spec proposes, what problem it claims to solve,
   your overall read — grounded only in what you actually inspected.]
@@ -911,7 +915,8 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 - [ ] **Step 4: Commit**
 
   Run:
-  ```
+
+  ```text
   jj describe -m "feat(claude): add design-reviewer adversarial sub-agent
 
   Read-only sub-agent that fires after brainstorming writes a spec,
@@ -973,7 +978,8 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 - [ ] **Step 3: Commit**
 
   Run:
-  ```
+
+  ```text
   jj describe -m "feat(claude): add /review-code slash command
 
   Explicit ad-hoc invocation of the code-reviewer sub-agent for moments
@@ -1028,7 +1034,8 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 - [ ] **Step 3: Commit**
 
   Run:
-  ```
+
+  ```text
   jj describe -m "feat(claude): add /review-plan slash command
 
   Explicit ad-hoc invocation of the plan-reviewer sub-agent.
@@ -1082,7 +1089,8 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 - [ ] **Step 3: Commit**
 
   Run:
-  ```
+
+  ```text
   jj describe -m "feat(claude): add /review-design slash command
 
   Explicit ad-hoc invocation of the design-reviewer sub-agent.
@@ -1157,7 +1165,8 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 - [ ] **Step 5: Commit**
 
   Run:
-  ```
+
+  ```text
   jj describe -m "docs(claude): document pre-push review gates in CLAUDE.md
 
   Adds a Pre-Push Review Gates section above Code Conventions,
@@ -1362,7 +1371,8 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 - [ ] **Step 4: Commit any fixups**
 
   If fixups were needed:
-  ```
+
+  ```text
   jj describe -m "chore: pass pr-prep after review-subagent scaffolding
 
   Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
@@ -1390,7 +1400,8 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
   Scope to your change(s) only:
 
   Run:
-  ```
+
+  ```text
   jj git fetch
   jj rebase -r 'review-subagents-spec..@' -d main@origin
   ```
@@ -1401,7 +1412,8 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 - [ ] **Step 3: Set the bookmark to the tip of the chain**
 
   Run:
-  ```
+
+  ```text
   jj bookmark set review-subagents-spec -r @-
   jj st
   ```
@@ -1412,7 +1424,8 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 - [ ] **Step 4: Push the branch**
 
   Run:
-  ```
+
+  ```text
   jj git push --branch review-subagents-spec
   ```
 
@@ -1421,7 +1434,8 @@ Each agent file is self-contained (Claude Code sub-agent files do not support in
 - [ ] **Step 5: Open the PR**
 
   Run:
-  ```
+
+  ```text
   gh pr create \
     --title "feat(claude): adversarial review sub-agents (code/plan/design)" \
     --body "$(cat <<'EOF'

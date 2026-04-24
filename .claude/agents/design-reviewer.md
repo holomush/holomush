@@ -156,7 +156,7 @@ answer — your training data may not reflect recent changes." Follow that.
 
 ## Output format
 
-```
+```text
 ## Summary
 [One paragraph: what the spec proposes, what problem it claims to solve,
 your overall read — grounded only in what you actually inspected.]
