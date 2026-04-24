@@ -8,17 +8,28 @@ package history
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/test/testutil"
 )
+
+// newErrorSnapshotForTest builds a snapshot whose Get() returns the given
+// error. Used to verify that infra failures propagate rather than being
+// silently classified as ErrCursorStale or ErrCursorLag. Integration test only.
+func newErrorSnapshotForTest(err error) *StreamStateSnapshot {
+	s := &StreamStateSnapshot{err: err}
+	s.once.Do(func() {}) // mark as populated (err is the result)
+	return s
+}
 
 // newTestPool opens a pgxpool against a fresh migrated test database and
 // registers cleanup. Each test gets its own isolated database so rows from
@@ -223,6 +234,65 @@ func TestColdReadReturnsStaleWhenCursorSeqBeyondJS(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, eventbus.ErrCursorStale,
 		"cursor seq beyond JS range must be STALE")
+}
+
+// TestColdReadReturnsStaleWhenCursorBelowJSFirstSeq verifies that a cursor
+// whose seq is below the snapshot's firstSeq (i.e., retention has aged it
+// out of JS but it was never projected into cold) returns ErrCursorStale.
+func TestColdReadReturnsStaleWhenCursorBelowJSFirstSeq(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+
+	// Snapshot: JS has seq=10..100; cursor points to seq=5 which is below firstSeq.
+	subject := eventbus.Subject("events.main.location.01HXTESTLOCHHH0000000000H")
+	// No cold row for the cursor seq (absent from cold).
+	insertAuditRow(t, pool, testULID(t, 8000001), subject, 99)
+
+	tier := newPostgresColdTier(pool)
+	q := eventbus.HistoryQuery{
+		Subject:   subject,
+		AfterSeq:  5,
+		AfterID:   testULID(t, 8000005),
+		Direction: eventbus.DirectionForward,
+		PageSize:  10,
+	}
+	// Snapshot: firstSeq=10 > cursorSeq=5 → not in LAG range → STALE.
+	snap := newSnapshotForTest(10, 100)
+	_, err := tier.Read(ctx, q, time.Time{}, q.PageSize, snap)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, eventbus.ErrCursorStale,
+		"cursor seq below JS firstSeq must be STALE (retention aged it out)")
+}
+
+// TestColdReadPropagatesSnapshotError verifies that an error returned by
+// the snapshot's Get() propagates to the caller unchanged and is NOT
+// classified as ErrCursorStale or ErrCursorLag.
+func TestColdReadPropagatesSnapshotError(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+
+	// Insert one row so the query reaches the cursor-validation branch.
+	subject := eventbus.Subject("events.main.location.01HXTESTLOCIII0000000000I")
+	insertAuditRow(t, pool, testULID(t, 9000001), subject, 1)
+
+	tier := newPostgresColdTier(pool)
+	q := eventbus.HistoryQuery{
+		Subject:   subject,
+		AfterSeq:  50,
+		AfterID:   testULID(t, 9000050),
+		Direction: eventbus.DirectionForward,
+		PageSize:  10,
+	}
+	snapErr := oops.Code("EVENTBUS_HISTORY_STREAM_LOOKUP_FAILED").Errorf("js unreachable")
+	snap := newErrorSnapshotForTest(snapErr)
+	_, err := tier.Read(ctx, q, time.Time{}, q.PageSize, snap)
+	require.Error(t, err)
+	assert.False(t, errors.Is(err, eventbus.ErrCursorStale),
+		"snapshot error must not be classified as ErrCursorStale")
+	assert.False(t, errors.Is(err, eventbus.ErrCursorLag),
+		"snapshot error must not be classified as ErrCursorLag")
+	// The infra error propagates as-is.
+	assert.ErrorIs(t, err, snapErr)
 }
 
 // TestColdReadReturnsStaleWhenNoSnapshotAndCursorMissing verifies that without

@@ -5,8 +5,9 @@
 // api/proto/. Clients see only the marshaled bytes; this proto is the
 // host's private encoding.
 //
-// Forward compatibility: leading `version` field discriminates the wire
-// format. Today only version=1 is defined.
+// Version compatibility: Decode() accepts ONLY CurrentVersion (today=1).
+// Any other version value causes EVENTBUS_CURSOR_INVALID; there is no
+// forward- or backward-compatibility between versions.
 //
 // See docs/superpowers/specs/2026-04-21-cold-tier-js-seq-pagination-design.md §4.5.
 syntax = "proto3";

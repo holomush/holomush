@@ -44,6 +44,10 @@ func newJetStreamHotTier(js jetstream.JetStream, selector codec.KeySelector, now
 // start position implied by q, fetches up to pageSize messages, decodes
 // each, and filters in-process for the Before/After/NotAfter bounds the JS
 // consumer cannot express directly.
+// Read fetches a page of events from JetStream. The *StreamStateSnapshot
+// parameter is intentionally ignored: the hot tier always derives its own
+// stream state from the query parameters and (for tail reads) a fresh
+// stream.Info() call — see the backward uncursored branch below.
 func (h *jetStreamHotTier) Read(ctx context.Context, q eventbus.HistoryQuery, edge time.Time, pageSize int, _ *StreamStateSnapshot) ([]eventbus.Event, error) {
 	if pageSize <= 0 {
 		return nil, nil
@@ -246,6 +250,11 @@ func (h *jetStreamHotTier) buildConfig(
 	// where fetch = pageSize, giving a window of exactly pageSize events.
 	// The in-loop cap and subsequent orderEvents reversal then yield the newest
 	// pageSize events in descending seq order.
+	//
+	// Intentionally uses a fresh stream.Info() (not the ignored snapshot param) so the returned page
+	// reflects the current stream tail. The snapshot taken at query start is
+	// appropriate when consistency-with-other-tier-reads matters; here we want
+	// the latest events, so a fresh lookup is correct.
 	stream, err := h.js.Stream(ctx, eventbus.StreamName)
 	if err != nil {
 		return cfg, oops.Code("EVENTBUS_HOT_STREAM_LOOKUP_FAILED").

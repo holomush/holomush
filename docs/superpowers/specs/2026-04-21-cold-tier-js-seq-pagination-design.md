@@ -9,7 +9,9 @@
 - `docs/superpowers/specs/2026-04-18-jetstream-event-log-design.md` §1a (the "JetStream sequence MUST NOT cross any public API boundary" rule) and §5 (the "ULID is the cursor everywhere" rule). See §3 for the rationale (the opaque cursor's `epoch` field replaces the ULID's role as the rebuild-survival anchor).
 - `docs/superpowers/specs/2026-04-17-b13-web-client-backfill-design.md` cursor handling (replaces ULID `before_id` with opaque `cursor`).
 - `docs/superpowers/specs/2026-04-15-query-stream-history-rpc-design.md` cursor field semantics.
+
 **Related (not superseded, downstream):**
+
 - Follow-up beads: `holomush-6nds` (JS rebuild tool — will use the cursor's `epoch` field), `holomush-ecbg` (audit drift detector — will key on `js_seq` natively), `holomush-l4kx` (audit-backfill CLI), `holomush-u5bb` (Actor.LegacyID persistence), `holomush-l60y` (test consolidation — the new tests in §12 fold into this).
 
 ## 1. Problem statement

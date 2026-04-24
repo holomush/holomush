@@ -17,7 +17,7 @@ import (
 )
 
 // CurrentVersion is the only cursor format version this build emits.
-// Decoders accept this AND any earlier versions (none today).
+// Decode accepts ONLY this version; any other value returns EVENTBUS_CURSOR_INVALID.
 const CurrentVersion uint32 = 1
 
 // OwnerKind identifies who owns the subject a cursor names.

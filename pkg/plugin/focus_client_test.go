@@ -146,8 +146,13 @@ func TestPluginHostFocusClient_PresentFocusHappyPath(t *testing.T) {
 }
 
 func TestPluginHostFocusClient_QueryStreamHistoryHappyPath(t *testing.T) {
-	wantEvt := &pluginv1.Event{Id: "01EVT", Stream: "scene:1:ic", Type: "say", Payload: `{"m":"hi"}`}
-	srv := &focusTestServer{historyResp: &pluginv1.PluginHostServiceQueryStreamHistoryResponse{Events: []*pluginv1.Event{wantEvt}}}
+	wantCursor := []byte("plugin-evt-cursor")
+	wantNextCursor := []byte("plugin-next-cursor")
+	wantEvt := &pluginv1.Event{Id: "01EVT", Stream: "scene:1:ic", Type: "say", Payload: `{"m":"hi"}`, Cursor: wantCursor}
+	srv := &focusTestServer{historyResp: &pluginv1.PluginHostServiceQueryStreamHistoryResponse{
+		Events:     []*pluginv1.Event{wantEvt},
+		NextCursor: wantNextCursor,
+	}}
 	conn := startPluginHostServiceTestServer(t, srv)
 	client := &pluginHostFocusClient{client: pluginv1.NewPluginHostServiceClient(conn)}
 
@@ -161,6 +166,8 @@ func TestPluginHostFocusClient_QueryStreamHistoryHappyPath(t *testing.T) {
 	assert.Equal(t, "scene:1:ic", resp.Events[0].Stream)
 	assert.Equal(t, EventType("say"), resp.Events[0].Type)
 	assert.Equal(t, `{"m":"hi"}`, resp.Events[0].Payload)
+	assert.Equal(t, wantCursor, resp.Events[0].Cursor, "per-event cursor must be propagated from proto response")
+	assert.Equal(t, wantNextCursor, resp.NextCursor, "next_cursor must be propagated from proto response")
 }
 
 func TestPluginHostFocusClient_NilClientReturnsError(t *testing.T) {

@@ -90,13 +90,13 @@ func TestMustSubjectAcceptsValid(t *testing.T) {
 	require.NotPanics(t, func() { eventbus.MustSubject("events.main.scene.>") })
 }
 
-func TestEventSeqDefaultsToZero(t *testing.T) {
+func TestEventSeqIsZeroWhenUninitialized(t *testing.T) {
 	t.Parallel()
 	e := eventbus.Event{}
 	assert.Equal(t, uint64(0), e.Seq)
 }
 
-func TestEventSeqRoundTripsThroughLiteral(t *testing.T) {
+func TestEventSeqPreservesLiteralValueWhenSet(t *testing.T) {
 	t.Parallel()
 	e := eventbus.Event{Seq: 42}
 	assert.Equal(t, uint64(42), e.Seq)

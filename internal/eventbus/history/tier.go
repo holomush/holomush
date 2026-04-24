@@ -464,7 +464,6 @@ func (s *crossoverStream) loadNextPage(ctx context.Context) error {
 	// but advanceCursor doesn't change the cursor, we know the tier is
 	// ignoring it (pathological — would loop forever) and we must abort.
 	cursorBefore := s.currentCursor()
-	preSeen := len(s.seenSeqs)
 
 	first, err := s.readTier(ctx, firstTier, want)
 	if err != nil {
@@ -478,14 +477,14 @@ func (s *crossoverStream) loadNextPage(ctx context.Context) error {
 	// again, or advanceCursor is broken). Allow one such read (bounded
 	// dedup churn at the tier boundary) but trip the guard after
 	// maxBufferMultiple consecutive stuck reads.
-	switch {
-	case len(first) > 0 && s.currentCursor() == cursorBefore:
+	//
+	// NOTE: seenSeqs is updated only in Next(), NOT in loadNextPage(), so
+	// comparing len(seenSeqs) before and after a tier read would always
+	// register as "no growth" even on productive pages. The cursor-moved
+	// check below is the authoritative stuck-loop detector.
+	if len(first) > 0 && s.currentCursor() == cursorBefore {
 		s.stuckPageReads++
-	case len(first) > 0 && len(s.seenSeqs) == preSeen:
-		// Cursor moved but every returned ID was already seen — still no
-		// forward progress for the consumer.
-		s.stuckPageReads++
-	default:
+	} else {
 		s.stuckPageReads = 0
 	}
 	if s.stuckPageReads > maxBufferMultiple {

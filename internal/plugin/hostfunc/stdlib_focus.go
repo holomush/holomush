@@ -402,6 +402,9 @@ func queryStreamHistoryFn(ls *lua.LState) int {
 		})
 		if encErr == nil {
 			ls.SetField(et, "cursor", lua.LString(base64.StdEncoding.EncodeToString(evtCursorBytes)))
+		} else {
+			slog.DebugContext(ctx, "holomush.query_stream_history: failed to encode per-event cursor",
+				"event_id", e.ID, "cursor_kind", "event", "error", encErr)
 		}
 		eventsTable.RawSetInt(i+1, et)
 	}
@@ -421,6 +424,9 @@ func queryStreamHistoryFn(ls *lua.LState) int {
 		})
 		if encErr == nil {
 			ls.SetField(result, "next_cursor", lua.LString(base64.StdEncoding.EncodeToString(nextCursorBytes)))
+		} else {
+			slog.DebugContext(ctx, "holomush.query_stream_history: failed to encode next_cursor",
+				"event_id", events[0].ID, "cursor_kind", "next", "error", encErr)
 		}
 	}
 	ls.Push(result)

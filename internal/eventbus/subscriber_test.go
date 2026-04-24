@@ -470,7 +470,7 @@ func TestJetStreamSubscriberRejectsUnknownCodec(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "EVENTBUS_SUBSCRIBE_UNKNOWN_CODEC")
 }
 
-func TestOpenSessionDeliveryCarriesNonZeroSeq(t *testing.T) {
+func TestOpenSessionDeliveriesCarryNonZeroJetStreamSequence(t *testing.T) {
 	// Verifies that the JetStream stream sequence is populated on delivered
 	// events so callers can use it for backfill cursor construction.
 	embedded := eventbustest.New(t)

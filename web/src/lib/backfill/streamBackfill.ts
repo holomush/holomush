@@ -96,6 +96,10 @@ export async function backfillPage(
 	client: Client<typeof WebService>,
 	req: BackfillRequest,
 ): Promise<BackfillResponse> {
+	// attempt=0 is the initial try; LAG_BACKOFF_MS.length retries follow.
+	// Total attempts = 1 + LAG_BACKOFF_MS.length (≈6) for ≈7.75s total backoff.
+	// The final iteration throws CursorLagError rather than sleeping — the
+	// cursor remains valid; the caller decides what to surface to the user.
 	for (let attempt = 0; attempt <= LAG_BACKOFF_MS.length; attempt++) {
 		try {
 			const resp = await client.webQueryStreamHistory({
