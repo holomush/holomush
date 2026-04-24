@@ -16,6 +16,7 @@ exclude:
   - .serena/
   - dist/
   - .worktrees/
+  - .claude/worktrees/
   - node_modules/
   - web/node_modules/
   - vendor/

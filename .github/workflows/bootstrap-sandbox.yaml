@@ -206,7 +206,6 @@ jobs:
       - name: Resolve or create DO Spaces access key
         id: spaces_key
         env:
-          DO_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
           BUCKET_NAME: ${{ inputs.bucket_name }}
           GH_TOKEN: ${{ secrets.SECRETS_ADMIN_PAT }}
           DRY_RUN: ${{ inputs.dry_run }}
@@ -226,37 +225,26 @@ jobs:
             exit 0
           fi
 
-          # Check for existing key by name
-          EXISTING_KEY_ID=$(curl -fsSL \
-            -H "Authorization: Bearer ${DO_TOKEN}" \
-            "https://api.digitalocean.com/v2/spaces/keys" | \
-            python3 -c "
-          import sys,json
-          d=json.load(sys.stdin)
-          keys=[k for k in d.get('keys',[]) if k.get('name')=='holomush-sandbox']
-          print(keys[0]['access_key'] if keys else '')
-          " 2>/dev/null || true)
-
-          if [ -n "${EXISTING_KEY_ID}" ]; then
-            echo "Found existing key but GH Secrets not set — deleting and recreating..."
-            curl -fsSL \
-              -X DELETE \
-              -H "Authorization: Bearer ${DO_TOKEN}" \
-              "https://api.digitalocean.com/v2/spaces/keys/${EXISTING_KEY_ID}" \
-              > /dev/null || true
+          # Rotate any stale key of the same name so create never collides.
+          # doctl validates the permission enum (read|readwrite|fullaccess), so
+          # this path can't silently send a bad value like the prior curl did.
+          EXISTING_ACCESS_KEY=$(doctl spaces keys list --format Name,AccessKey --no-header \
+            | awk '$1=="holomush-sandbox" {print $2}')
+          if [ -n "${EXISTING_ACCESS_KEY}" ]; then
+            echo "Found existing key 'holomush-sandbox' — deleting before recreate"
+            doctl spaces keys delete "${EXISTING_ACCESS_KEY}" --force
           fi
 
-          CREATE_RESP=$(curl -fsSL \
-            -X POST \
-            -H "Authorization: Bearer ${DO_TOKEN}" \
-            -H "Content-Type: application/json" \
-            "https://api.digitalocean.com/v2/spaces/keys" \
-            -d "{\"name\":\"holomush-sandbox\",\"grants\":[{\"bucket\":\"${BUCKET_NAME}\",\"permission\":\"read_write\"}]}")
+          CREATED=$(doctl spaces keys create holomush-sandbox \
+            --grants "bucket=${BUCKET_NAME};permission=readwrite" \
+            --format AccessKey,SecretKey --no-header)
+          ACCESS_KEY=$(echo "${CREATED}" | awk '{print $1}')
+          SECRET_KEY=$(echo "${CREATED}" | awk '{print $2}')
 
-          ACCESS_KEY=$(echo "${CREATE_RESP}" | python3 -c \
-            "import sys,json; d=json.load(sys.stdin); print(d['key']['access_key'])")
-          SECRET_KEY=$(echo "${CREATE_RESP}" | python3 -c \
-            "import sys,json; d=json.load(sys.stdin); print(d['key']['secret_key'])")
+          if [ -z "${ACCESS_KEY}" ] || [ -z "${SECRET_KEY}" ]; then
+            echo "::error::doctl spaces keys create returned empty access/secret key"
+            exit 1
+          fi
 
           echo "::add-mask::${SECRET_KEY}"
           echo "access_key=${ACCESS_KEY}" >> "$GITHUB_OUTPUT"
