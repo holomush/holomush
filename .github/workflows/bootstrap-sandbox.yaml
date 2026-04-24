@@ -210,7 +210,9 @@ jobs:
           GH_TOKEN: ${{ secrets.SECRETS_ADMIN_PAT }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          set -euo pipefail
+          # -x traces every command so the step log shows which line exits when.
+          # Remove once the step is stable (tracked in bead holomush-7ugz notes).
+          set -euxo pipefail
 
           if [ "${DRY_RUN}" = "true" ]; then
             echo "DRY RUN: would resolve or create Spaces access key 'holomush-sandbox'"
@@ -232,17 +234,18 @@ jobs:
           # doctl shipped by digitalocean/action-doctl@v2 lacks --format on
           # `spaces keys create`. JSON parsing uses python3 for consistency
           # with the Cloudflare and firewall steps in this workflow.
-          EXISTING_JSON=$(doctl spaces keys list --output json)
+          # --verbose surfaces doctl's HTTP layer diagnostics (does NOT log tokens).
+          EXISTING_JSON=$(doctl spaces keys list --verbose --output json)
           EXISTING_ACCESS_KEY=$(echo "${EXISTING_JSON}" | python3 -c \
             "import sys,json; d=json.load(sys.stdin); keys=[k for k in d if k.get('name')=='holomush-sandbox']; print(keys[0].get('access_key','') if keys else '')")
           if [ -n "${EXISTING_ACCESS_KEY}" ]; then
             echo "Found existing key 'holomush-sandbox' — deleting before recreate"
-            doctl spaces keys delete "${EXISTING_ACCESS_KEY}" --force
+            doctl spaces keys delete "${EXISTING_ACCESS_KEY}" --verbose --force
           fi
 
           CREATED=$(doctl spaces keys create holomush-sandbox \
             --grants "bucket=${BUCKET_NAME};permission=readwrite" \
-            --output json)
+            --verbose --output json)
           # doctl wraps single-item create results in a one-element array;
           # `.[0] if list else .` accepts either shape defensively.
           ACCESS_KEY=$(echo "${CREATED}" | python3 -c \
