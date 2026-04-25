@@ -63,11 +63,11 @@ The failure mode is not rare. Recent work has shown:
 
 ### Three sub-agents, each guarding one hand-off
 
-| Agent | File | Fires before | Reviews |
-|---|---|---|---|
-| `code-reviewer` | `.claude/agents/code-reviewer.md` | `bd close`, `jj git push`, PR creation | `jj diff --from <merge-base>` output + full touched files + linked beads issue + spec the issue references |
-| `plan-reviewer` | `.claude/agents/plan-reviewer.md` | `superpowers:executing-plans` invocation | The plan file + the spec it claims to implement |
-| `design-reviewer` | `.claude/agents/design-reviewer.md` | `superpowers:writing-plans` invocation | The spec file in `docs/superpowers/specs/` or `docs/specs/` |
+| Agent             | File                                | Fires before                             | Reviews                                                                                                    |
+| ----------------- | ----------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `code-reviewer`   | `.claude/agents/code-reviewer.md`   | `bd close`, `jj git push`, PR creation   | `jj diff --from <merge-base>` output + full touched files + linked beads issue + spec the issue references |
+| `plan-reviewer`   | `.claude/agents/plan-reviewer.md`   | `superpowers:executing-plans` invocation | The plan file + the spec it claims to implement                                                            |
+| `design-reviewer` | `.claude/agents/design-reviewer.md` | `superpowers:writing-plans` invocation   | The spec file in `docs/superpowers/specs/` or `docs/specs/`                                                |
 
 Each agent is defined by a single Markdown file with YAML frontmatter, per
 [Claude Code sub-agent conventions](https://code.claude.com/docs/en/sub-agents).
@@ -235,16 +235,16 @@ maxTurns: 50
 ---
 ```
 
-| Field | Rationale |
-|---|---|
-| `model: opus` | Per project CLAUDE.md model-selection rule (highest available). Review quality is precision-bound. |
-| `effort: high` | Reviews MUST NOT take shortcuts. |
-| `permissionMode: plan` | Belt-and-suspenders with the tool allowlist. Even if the prompt is subverted, the permission layer blocks writes. |
-| `tools` (allowlist) | Explicit allowlist MUST exclude `Write`, `Edit`, `NotebookEdit`. The MCP set covers external grounding. |
-| `skills` (preloaded) | Skills inject craft (verification discipline, clear writing) that complements the persona. Subagents do not inherit skills from the parent, so they MUST be listed. |
-| `memory: project` | Accumulates project-specific anti-patterns in `.claude/agent-memory/<agent>/MEMORY.md`, shared via VCS. |
-| `maxTurns: 50` | Bounded runaway investigation. |
-| `color` | UI distinction: red (code), yellow (plan), purple (design). |
+| Field                  | Rationale                                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `model: opus`          | Per project CLAUDE.md model-selection rule (highest available). Review quality is precision-bound.                                                                 |
+| `effort: high`         | Reviews MUST NOT take shortcuts.                                                                                                                                   |
+| `permissionMode: plan` | Belt-and-suspenders with the tool allowlist. Even if the prompt is subverted, the permission layer blocks writes.                                                  |
+| `tools` (allowlist)    | Explicit allowlist MUST exclude `Write`, `Edit`, `NotebookEdit`. The MCP set covers external grounding.                                                            |
+| `skills` (preloaded)   | Skills inject craft (verification discipline, clear writing) that complements the persona. Subagents do not inherit skills from the parent, so they MUST be listed. |
+| `memory: project`      | Accumulates project-specific anti-patterns in `.claude/agent-memory/<agent>/MEMORY.md`, shared via VCS.                                                            |
+| `maxTurns: 50`         | Bounded runaway investigation.                                                                                                                                     |
+| `color`                | UI distinction: red (code), yellow (plan), purple (design).                                                                                                        |
 
 Per-agent diffs (note: `jj:jujutsu` is preloaded on ALL three agents because
 this repo is jj-colocated and the `jj:jujutsu` skill mandates activation on
@@ -256,13 +256,13 @@ for artifact context):
 
 Fields intentionally NOT used in v1:
 
-| Field | Why omitted |
-|---|---|
-| `hooks` | Auto-appending findings to beads violates the "intentional, not automatic" principle. The agent MAY suggest a note in its text output; the human decides. |
-| `isolation: worktree` | Overkill for read-only review. |
-| `mcpServers` (inline) | External-grounding MCPs are already session-scoped; no need to redefine. |
-| `disallowedTools` | `tools` allowlist is more explicit and auditable. |
-| `background: true` | Reviews MUST block. The verdict is required before hand-off. |
+| Field                 | Why omitted                                                                                                                                                |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hooks`               | Auto-appending findings to beads violates the "intentional, not automatic" principle. The agent MAY suggest a note in its text output; the human decides. |
+| `isolation: worktree` | Overkill for read-only review.                                                                                                                             |
+| `mcpServers` (inline) | External-grounding MCPs are already session-scoped; no need to redefine.                                                                                   |
+| `disallowedTools`     | `tools` allowlist is more explicit and auditable.                                                                                                          |
+| `background: true`    | Reviews MUST block. The verdict is required before hand-off.                                                                                               |
 
 ## Per-Agent Body Skeletons
 
