@@ -6,6 +6,7 @@
   import { Command } from 'cmdk-sv';
   import {
     uiPrefs,
+    openPalette,
     closePalette,
     toggleRail,
     toggleSidebar,
@@ -59,12 +60,29 @@
   }
 </script>
 
+<!--
+  Controlled-mode: pass `open` one-way and route close through onOpenChange.
+  Two-way `bind:open={$store.field}` through cmdk-sv (Svelte 4 compat) into
+  bits-ui v2 ($bindable) is unreliable on rapid open/close — the writeback
+  to the runes-mode store-field expression doesn't always settle before the
+  next event cycle. Controlled mode keeps the store as the single source
+  of truth (holomush-ceon).
+-->
 <Command.Dialog
-  bind:open={$uiPrefs.paletteOpen}
+  open={$uiPrefs.paletteOpen}
   label="Command palette"
-  onOpenChange={(open: boolean) => { if (!open) closePalette(); }}
+  onOpenChange={(open: boolean) => {
+    if (open) openPalette(); else closePalette();
+  }}
 >
-  <Command.Input placeholder="Type a command…" />
+  <!-- autofocus={true} kicks cmdk-sv's 10ms focus action; combined with
+       FocusScope's rAF auto-focus this gives two paths to focus the input
+       before user keystrokes can race past dialog open. -->
+  <Command.Input
+    name="command-palette-query"
+    placeholder="Type a command…"
+    autofocus={true}
+  />
   <Command.List>
     <Command.Empty>No matches</Command.Empty>
     {#each items as item (item.id)}
