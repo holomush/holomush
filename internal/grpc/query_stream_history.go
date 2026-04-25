@@ -276,7 +276,6 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 // QueryStreamHistoryRequest. They are attached to the oops chain on the
 // PermissionDenied translation so server logs match the outer I-17 gate
 // (see internal/grpc/query_stream_history.go:170-173).
-//
 func mapHistoryError(err error, sessionID, stream string) error {
 	// gRPC status pass-through with opacity translation. The plugin emits
 	// status.Error directly; the router preserves the code; we run this
@@ -292,11 +291,16 @@ func mapHistoryError(err error, sessionID, stream string) error {
 				With("stream", stream).
 				Errorf("not authorized to read stream")
 		case codes.InvalidArgument:
-			// Use the extracted status message — using "%v" on err would
-			// include the host-side oops wrapper text in the client-visible
-			// message (e.g., "stream=...: subject required" instead of just
-			// "subject required"). st.Message() is the plugin's original.
-			return status.Errorf(codes.InvalidArgument, "%s", st.Message())
+			// Preserves the plugin's gRPC code AND any status.WithDetails
+			// proto messages it attached. NOTE: when err is a wrapped status
+			// (the production shape per the call site at line 233), grpc's
+			// status.FromError rewrites Status.Message to err.Error(),
+			// which includes the outer oops chain text. That message-rewrite
+			// is unchanged from PR #267's status.Errorf("%s", st.Message())
+			// behavior (see spec §5 risk #3). This branch's contribution
+			// is strictly Details preservation; message purity is a
+			// separate concern.
+			return st.Err() //nolint:wrapcheck // gRPC status errors pass through as-is to preserve WithDetails payloads.
 		}
 		// Other status codes (Internal, Unavailable, …) pass through to the
 		// existing dispatch below, which falls through to default.

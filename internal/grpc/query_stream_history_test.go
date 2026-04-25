@@ -13,6 +13,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -792,6 +793,39 @@ func TestMapHistoryErrorRetainsCursorInvalidDispatchForNonStatusErrors(t *testin
 	require.True(t, ok)
 	assert.Equal(t, codes.InvalidArgument, st.Code(),
 		"existing cursor-error dispatch MUST still apply when no gRPC status is present")
+}
+
+// TestMapHistoryErrorPassesThroughInvalidArgumentWithDetails verifies that
+// status.WithDetails proto messages attached by the plugin survive
+// translation through mapHistoryError. Goal G2: pass-through MUST preserve
+// the gRPC code AND any structured details. Bare-status pass-through is
+// covered separately by TestMapHistoryErrorPassesThroughInvalidArgument.
+func TestMapHistoryErrorPassesThroughInvalidArgumentWithDetails(t *testing.T) {
+	t.Parallel()
+
+	detail := &errdetails.BadRequest{
+		FieldViolations: []*errdetails.BadRequest_FieldViolation{
+			{Field: "subject", Description: "malformed"},
+		},
+	}
+	pluginStatus, withErr := status.New(codes.InvalidArgument, "subject malformed").WithDetails(detail)
+	require.NoError(t, withErr, "WithDetails MUST succeed for canonical errdetails proto")
+
+	got := mapHistoryError(pluginStatus.Err(), "test-session", "location:test")
+	require.Error(t, got)
+
+	gotStatus, ok := status.FromError(got)
+	require.True(t, ok, "translated error MUST carry a gRPC status")
+	assert.Equal(t, codes.InvalidArgument, gotStatus.Code(),
+		"InvalidArgument MUST pass through")
+
+	details := gotStatus.Details()
+	require.Len(t, details, 1, "exactly one detail proto MUST round-trip")
+
+	gotDetail, ok := details[0].(*errdetails.BadRequest)
+	require.True(t, ok, "detail proto MUST round-trip as *errdetails.BadRequest")
+	assert.True(t, proto.Equal(detail, gotDetail),
+		"detail proto MUST be byte-equal to the input via proto.Equal")
 }
 
 // TestQueryStreamHistoryEncodeEventCursorWithZeroSeq verifies that
