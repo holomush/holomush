@@ -231,6 +231,12 @@ message WebCheckSessionRequest {}
 
 message WebCheckSessionResponse {
   string player_name = 1;
+  // NEW (additive on the success path; failure path still returns
+  // connect.CodeUnauthenticated so web/src/routes/(authed)/+layout.ts:18-25
+  // continues to redirect on throw — no contract break).
+  string player_id = 2;
+  bool is_guest = 3;
+  repeated CharacterSummary characters = 4;
 }
 
 // --- Web content messages ---
