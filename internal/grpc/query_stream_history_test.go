@@ -702,7 +702,7 @@ func TestQueryStreamHistoryNextCursorSetWhenHasMore(t *testing.T) {
 func TestMapHistoryErrorTranslatesErrCursorInvalidToInvalidArgument(t *testing.T) {
 	t.Parallel()
 	wrapped := oops.Code("WRAPPER").Wrap(eventbus.ErrCursorInvalid)
-	got := mapHistoryError(wrapped)
+	got := mapHistoryError(wrapped, "test-session", "location:test")
 	st, ok := status.FromError(got)
 	require.True(t, ok, "expected gRPC status error")
 	assert.Equal(t, codes.InvalidArgument, st.Code())
@@ -713,7 +713,7 @@ func TestMapHistoryErrorTranslatesErrCursorInvalidToInvalidArgument(t *testing.T
 func TestMapHistoryErrorTranslatesErrCursorStaleToFailedPrecondition(t *testing.T) {
 	t.Parallel()
 	wrapped := oops.Code("WRAPPER").Wrap(eventbus.ErrCursorStale)
-	got := mapHistoryError(wrapped)
+	got := mapHistoryError(wrapped, "test-session", "location:test")
 	st, ok := status.FromError(got)
 	require.True(t, ok, "expected gRPC status error")
 	assert.Equal(t, codes.FailedPrecondition, st.Code())
@@ -724,7 +724,7 @@ func TestMapHistoryErrorTranslatesErrCursorStaleToFailedPrecondition(t *testing.
 func TestMapHistoryErrorTranslatesErrCursorLagToUnavailable(t *testing.T) {
 	t.Parallel()
 	wrapped := oops.Code("WRAPPER").Wrap(eventbus.ErrCursorLag)
-	got := mapHistoryError(wrapped)
+	got := mapHistoryError(wrapped, "test-session", "location:test")
 	st, ok := status.FromError(got)
 	require.True(t, ok, "expected gRPC status error")
 	assert.Equal(t, codes.Unavailable, st.Code())
@@ -735,7 +735,7 @@ func TestMapHistoryErrorTranslatesErrCursorLagToUnavailable(t *testing.T) {
 func TestMapHistoryErrorPassesThroughUnknownError(t *testing.T) {
 	t.Parallel()
 	orig := oops.Errorf("some other error")
-	got := mapHistoryError(orig)
+	got := mapHistoryError(orig, "test-session", "location:test")
 	// mapHistoryError must pass through errors it does not recognise unchanged.
 	assert.Equal(t, orig, got)
 }
@@ -748,7 +748,7 @@ func TestMapHistoryErrorTranslatesPermissionDeniedToOpaqueOopsCode(t *testing.T)
 	t.Parallel()
 
 	pluginErr := status.Error(codes.PermissionDenied, "scene audit access denied")
-	got := mapHistoryError(pluginErr)
+	got := mapHistoryError(pluginErr, "test-session", "location:test")
 	require.Error(t, got)
 
 	oopsErr, ok := oops.AsOops(got)
@@ -763,7 +763,7 @@ func TestMapHistoryErrorPassesThroughInvalidArgument(t *testing.T) {
 	t.Parallel()
 
 	pluginErr := status.Error(codes.InvalidArgument, "subject malformed")
-	got := mapHistoryError(pluginErr)
+	got := mapHistoryError(pluginErr, "test-session", "location:test")
 	require.Error(t, got)
 
 	st, ok := status.FromError(got)
@@ -777,7 +777,7 @@ func TestMapHistoryErrorPassesThroughInvalidArgument(t *testing.T) {
 func TestMapHistoryErrorRetainsCursorInvalidDispatchForNonStatusErrors(t *testing.T) {
 	t.Parallel()
 
-	got := mapHistoryError(eventbus.ErrCursorInvalid)
+	got := mapHistoryError(eventbus.ErrCursorInvalid, "test-session", "location:test")
 	require.Error(t, got)
 	st, ok := status.FromError(got)
 	require.True(t, ok)

@@ -230,9 +230,11 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		notBefore, beforeSeq, beforeID, caller,
 	)
 	if fetchErr != nil {
-		return nil, mapHistoryError(oops.Code("INTERNAL").
-			With("stream", req.Stream).
-			Wrap(fetchErr))
+		return nil, mapHistoryError(
+			oops.Code("INTERNAL").With("stream", req.Stream).Wrap(fetchErr),
+			req.SessionId,
+			req.Stream,
+		)
 	}
 	protoFrames := frames
 
@@ -267,8 +269,16 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	}, nil
 }
 
-// mapHistoryError translates eventbus cursor errors to gRPC status codes.
-func mapHistoryError(err error) error {
+// mapHistoryError translates eventbus cursor errors and plugin-emitted
+// gRPC status errors into the host's wire-level error vocabulary.
+//
+// sessionID and stream MUST be the request-scoped values from the
+// QueryStreamHistoryRequest. They are attached to the oops chain on the
+// PermissionDenied translation so server logs match the outer I-17 gate
+// (see internal/grpc/query_stream_history.go:170-173).
+//
+//nolint:unparam,revive // TODO(holomush-095g.6): sessionID/stream wired in Task 2.
+func mapHistoryError(err error, sessionID, stream string) error {
 	// gRPC status pass-through with opacity translation. The plugin emits
 	// status.Error directly; the router preserves the code; we run this
 	// dispatch FIRST so the existing cursor-error chain doesn't shadow it.
