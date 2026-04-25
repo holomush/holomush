@@ -83,11 +83,15 @@ for r in fw.get("outbound_rules", []):
 print(" ".join(parts))
 ')
 
+  # NB: do NOT pass --tag-names. DO requires the tag to pre-exist (returns
+  # 422 "tag X does not exist" on a fresh account). Our flow attaches the
+  # firewall to the droplet explicitly via firewall-attach.sh, so a tag on
+  # the firewall is redundant. The droplet uses --tag-names separately —
+  # `doctl compute droplet create --tag-names X` auto-creates X.
   FW_ID=$(doctl compute firewall create \
     --name "${FW_NAME}" \
     --inbound-rules "${IN_RULES}" \
     --outbound-rules "${OUT_RULES}" \
-    --tag-names "${FW_NAME}" \
     --format ID --no-header)
 
   if [ -z "${FW_ID}" ]; then
