@@ -2,3 +2,4 @@ settings.local.json
 *.local.json
 ralph-loop*
 worktrees/
+agent-memory/*/reports/

@@ -25,3 +25,10 @@ Apply the adversarial stance and grounding discipline from your system
 prompt. Run the external-grounding MCPs (`context7`, `deepwiki`, `exa`) for
 any library/API/version claims. Produce the standard findings report with a
 binary READY / NOT READY verdict.
+
+**On receipt:** the agent's response IS the full report — read it. The agent
+also persists the full report to `.claude/agent-memory/code-reviewer/reports/`.
+Do NOT spawn a second agent to "retrieve full findings"; subagents are
+stateless across invocations and a fresh one has nothing to retrieve. If the
+response looks truncated, read the persisted file from disk directly with
+`Read`.

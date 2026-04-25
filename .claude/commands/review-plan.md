@@ -19,3 +19,10 @@ prompt. Run the traceability passes (spec → plan, plan → spec), the
 definition-of-done pass, the decomposition pass, and the repo-reality pass.
 Produce the standard findings report with a binary READY / NOT READY
 verdict.
+
+**On receipt:** the agent's response IS the full report — read it. The agent
+also persists the full report to `.claude/agent-memory/plan-reviewer/reports/`.
+Do NOT spawn a second agent to "retrieve full findings"; subagents are
+stateless across invocations and a fresh one has nothing to retrieve. If the
+response looks truncated, read the persisted file from disk directly with
+`Read`.
