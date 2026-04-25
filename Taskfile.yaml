@@ -512,6 +512,37 @@ tasks:
       - go mod download
       - go mod tidy
 
+  workspace:new:
+    desc: |
+      Create a fresh jj workspace at <repo-parent>/.worktrees/<name>, fetching
+      main@origin first so it's current. Idempotent: if the workspace already
+      exists, prints its absolute path and exits 0. Works from any cwd inside
+      the repo or any worktree.
+
+      Usage: task workspace:new -- <name>
+    cmds:
+      - |
+        set -euo pipefail
+        WS_ROOT="$(jj workspace root)"   # fail-fast if not in a jj repo
+        # shellcheck source=scripts/jj-main-repo.sh
+        . "$WS_ROOT/scripts/jj-main-repo.sh"
+
+        NAME="{{.CLI_ARGS}}"
+        [ -n "$NAME" ] || { echo "ERROR: usage: task workspace:new -- <name>" >&2; exit 1; }
+
+        TARGET="$WORKTREES/$NAME"
+
+        # Idempotent pre-check
+        if [ -d "$TARGET" ]; then
+          echo "$TARGET"
+          exit 0
+        fi
+
+        # Fresh workspace path
+        jj git fetch >&2
+        jj workspace add "$TARGET" --name "$NAME" -r main@origin >&2
+        echo "$TARGET"
+
   # ──────────────────────────────────────────
   # Database migrations
   # ──────────────────────────────────────────
