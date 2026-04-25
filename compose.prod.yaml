@@ -7,7 +7,7 @@
 
 services:
   postgres:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:54451ecb8ab38c24c3ec123f2fd501303a3a1856a5c66e98cecf2460d5e1e9d7
     restart: unless-stopped
     environment:
       POSTGRES_USER: holomush
@@ -98,7 +98,7 @@ services:
         condition: service_healthy
 
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2-alpine@sha256:834468128c7696cec0ceea6172f7d692daf645ae51983ca76e39da54a97c570d
     restart: unless-stopped
     profiles: [caddy]
     ports:
@@ -120,7 +120,7 @@ services:
     # silent upstream change break the tunnel. Check cloudflared release
     # notes before bumping — tunnel protocol (QUIC/HTTP/2) defaults shift
     # between majors.
-    image: cloudflare/cloudflared:2025.4.2
+    image: cloudflare/cloudflared:2025.4.2@sha256:698f5c59bf0b9ece62f8c60061004bdfcf7718fbac5d72b87e214af7b9d1d7ac
     restart: unless-stopped
     profiles: [tunnel]
     command:
@@ -142,7 +142,7 @@ services:
         condition: service_started
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
+    image: otel/opentelemetry-collector-contrib:latest@sha256:a516c26968aa1feb5e5fc0562e3338ea13755cb4f373603226bcc4e276374ad0
     restart: unless-stopped
     profiles: [observability]
     environment:
