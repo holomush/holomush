@@ -883,3 +883,65 @@ func TestWebCheckSessionFailureContractUnchanged(t *testing.T) {
 	require.True(t, errors.As(err, &connectErr))
 	assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
 }
+
+func TestCheckCookieCollisionGatedOnValidCookie(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionResp: &corev1.CheckPlayerSessionResponse{
+			PlayerName: "Jasper Iodine",
+			PlayerId:   "01KQ2Y5ETK5957724MGZ2H2TDB",
+			IsGuest:    true,
+		},
+	}
+	h := NewHandler(client)
+
+	headers := http.Header{}
+	headers.Set(headerInjectSessionToken, "valid-token")
+
+	name, gated, err := h.checkCookieCollision(context.Background(), headers)
+	require.NoError(t, err)
+	assert.True(t, gated, "valid cookie MUST trip the gate")
+	assert.Equal(t, "Jasper Iodine", name)
+	assert.Equal(t, int32(1), client.checkSessionCalls.Load())
+}
+
+func TestCheckCookieCollisionPassesThroughOnAbsentCookie(t *testing.T) {
+	client := &mockCoreClient{}
+	h := NewHandler(client)
+
+	headers := http.Header{}
+	// No token header.
+
+	name, gated, err := h.checkCookieCollision(context.Background(), headers)
+	require.NoError(t, err)
+	assert.False(t, gated, "absent cookie MUST NOT trip the gate")
+	assert.Empty(t, name)
+	assert.Equal(t, int32(0), client.checkSessionCalls.Load(), "absent cookie MUST NOT touch the core RPC")
+}
+
+func TestCheckCookieCollisionPassesThroughOnAuthFailure(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionErr: oops.Code("PLAYER_SESSION_NOT_FOUND").Errorf("expired or unknown"),
+	}
+	h := NewHandler(client)
+
+	headers := http.Header{}
+	headers.Set(headerInjectSessionToken, "expired-token")
+
+	name, gated, err := h.checkCookieCollision(context.Background(), headers)
+	require.NoError(t, err, "auth-failure errors MUST NOT propagate; they're normal-case fall-through")
+	assert.False(t, gated)
+	assert.Empty(t, name)
+}
+
+func TestCheckCookieCollisionSurfacesUnexpectedErrors(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionErr: oops.Code("PLAYER_LOOKUP_FAILED").Errorf("transport flake"),
+	}
+	h := NewHandler(client)
+
+	headers := http.Header{}
+	headers.Set(headerInjectSessionToken, "some-token")
+
+	_, _, err := h.checkCookieCollision(context.Background(), headers)
+	require.Error(t, err, "non-auth errors MUST surface, not silently fall through to the create path")
+}

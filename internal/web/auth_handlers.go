@@ -11,6 +11,7 @@ import (
 	"strconv"
 
 	"connectrpc.com/connect"
+	"github.com/samber/oops"
 
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
@@ -44,6 +45,54 @@ func playerTokenFromHeader(h http.Header) (string, error) {
 		return "", connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("no player session"))
 	}
 	return token, nil
+}
+
+// checkCookieCollision implements the cookie-collision gate documented in
+// docs/superpowers/specs/2026-04-25-multi-tab-session-isolation-design.md §4.2.0.
+//
+// Returns:
+//   - name: the existing player's display name (only meaningful when gated=true).
+//   - gated: true if the request carries a valid PlayerSession cookie and the
+//     caller MUST short-circuit with ALREADY_AUTHENTICATED.
+//   - err: non-nil iff the cookie validation hit an unexpected error
+//     (transport / lookup-failed). Auth-failure (PLAYER_SESSION_NOT_FOUND /
+//     PLAYER_SESSION_EXPIRED) is a normal case and returns gated=false, err=nil.
+func (h *Handler) checkCookieCollision(ctx context.Context, headers http.Header) (name string, gated bool, err error) {
+	token := headers.Get(headerInjectSessionToken)
+	if token == "" {
+		return "", false, nil
+	}
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.client.CheckPlayerSession(rpcCtx, &corev1.CheckPlayerSessionRequest{
+		PlayerSessionToken: token,
+	})
+	if err != nil {
+		if isPlayerSessionAuthFailure(err) {
+			return "", false, nil
+		}
+		return "", false, oops.Code("COOKIE_GATE_LOOKUP_FAILED").Wrap(err)
+	}
+	return resp.GetPlayerName(), true, nil
+}
+
+// isPlayerSessionAuthFailure reports whether err is one of the documented
+// auth-failure codes that mean "cookie is invalid; treat as no-cookie".
+// Unknown error types and non-string codes return false (caller surfaces).
+func isPlayerSessionAuthFailure(err error) bool {
+	oopsErr, ok := oops.AsOops(err)
+	if !ok {
+		return false
+	}
+	code, ok := oopsErr.Code().(string)
+	if !ok {
+		return false
+	}
+	return code == "PLAYER_SESSION_NOT_FOUND" ||
+		code == "PLAYER_SESSION_EXPIRED" ||
+		code == "SESSION_NOT_FOUND"
 }
 
 // WebAuthenticatePlayer validates player credentials and returns a player token with character list.
