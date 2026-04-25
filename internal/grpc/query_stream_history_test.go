@@ -910,4 +910,13 @@ func TestQueryStreamHistoryTranslatesPluginPermissionDeniedToOpaqueCode(t *testi
 	require.True(t, ok, "translated error MUST be an oops error at the top level")
 	assert.Equal(t, "STREAM_ACCESS_DENIED", oopsErr.Code(),
 		"top-level oops code MUST equal the outer I-17 gate's code (no double-wrap with INTERNAL)")
+
+	// G1 regression guard: the plugin-path translation MUST attach the
+	// same context the outer I-17 gate does. Without these the server
+	// log loses session_id/stream when the plugin wall catches.
+	ctx := oopsErr.Context()
+	assert.Equal(t, "s1", ctx["session_id"],
+		"plugin-path translation MUST attach session_id from the request")
+	assert.Equal(t, stream, ctx["stream"],
+		"plugin-path translation MUST attach stream from the request")
 }
