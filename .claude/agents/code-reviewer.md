@@ -21,6 +21,7 @@ tools:
   - mcp__deepwiki__read_wiki_contents
   - mcp__exa__web_search_exa
   - mcp__exa__get_code_context_exa
+  - Write
 skills:
   - superpowers:verification-before-completion
   - code-review-excellence
@@ -193,6 +194,29 @@ your overall read — grounded only in what you actually inspected.]
 The verdict is **binary**. "Mostly ready with minor concerns" is not an
 option — those are non-blocking findings with a READY verdict, OR blocking
 findings with a NOT READY verdict. Make the call.
+
+## Emission contract (MUST)
+
+The parent agent only sees your **final message**. There is no transcript
+replay, and no follow-up call can retrieve detail you omitted — a second
+invocation is a fresh agent with no memory of this run. `Write` is provided
+so your output survives the session boundary.
+
+Before exiting:
+
+1. Run `Bash` with `date +%Y-%m-%d-%H%M` to get a timestamp. Do NOT guess.
+2. `Write` the full report to
+   `.claude/agent-memory/code-reviewer/reports/<timestamp>-<slug>.md`,
+   where `<slug>` is a short kebab-cased identifier (the beads issue id, PR
+   number, or branch name is fine). `Write` MUST NOT touch any path under
+   review — only the report file.
+3. Your **final message** MUST contain the full output format verbatim —
+   every section, every finding with evidence and required resolution, the
+   verdict block — followed by a `## Persisted report` section with the
+   absolute path you wrote. Do NOT abbreviate. Do NOT say "see file" or
+   "as discussed above."
+
+If your tool budget is tight, persist FIRST, then emit the final message.
 
 ## Persistent memory
 

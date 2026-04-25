@@ -19,3 +19,10 @@ prompt. Run the required-section pass, the testability pass, the consistency
 pass, the repo-reality pass (including overlap-with-existing-specs), and the
 scope pass. Produce the standard findings report with a binary READY /
 NOT READY verdict.
+
+**On receipt:** the agent's response IS the full report — read it. The agent
+also persists the full report to `.claude/agent-memory/design-reviewer/reports/`.
+Do NOT spawn a second agent to "retrieve full findings"; subagents are
+stateless across invocations and a fresh one has nothing to retrieve. If the
+response looks truncated, read the persisted file from disk directly with
+`Read`.
