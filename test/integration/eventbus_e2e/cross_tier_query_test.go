@@ -24,7 +24,6 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/history"
 )
 
-
 // TestCrossTierQueryEndToEnd mirrors the 12-scenario tier suite from
 // internal/eventbus/history/tier_test.go but runs against the real
 // JetStream hot tier + real PostgreSQL cold tier. The in-memory suite

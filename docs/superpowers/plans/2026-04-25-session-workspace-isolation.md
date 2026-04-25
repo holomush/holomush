@@ -63,19 +63,26 @@ Note the `holomush-XXXX` ID emitted in step 1. Subsequent commits and the PR bod
 
 - [ ] **Step 3: Add dependency on `holomush-rmo2`**
 
-Run:
+Per `bd dep --help`: `bd dep add <blocked-id> <blocker-id>` makes the first depend on the second. `holomush-rmo2` doesn't strictly block this work (the spec is finished and the implementation is queued), but the relationship is "this PR resolves holomush-rmo2" — best modelled as: this work is the blocker, and holomush-rmo2 is the blocked-by-implementation:
 
 ```bash
-bd dep add <new-bead-id> holomush-rmo2
+bd dep add holomush-rmo2 <new-bead-id>
 ```
 
-Expected: dependency recorded; `bd show <new-bead-id>` shows `holomush-rmo2` in the "blocks" or "depends-on" relationship (Phase 1 closes `holomush-rmo2`, so this is a "fixes" relationship — exact wording depends on `bd dep` semantics; if `bd dep add` rejects, skip and just reference both beads in the commit message).
+Expected: dependency recorded with no error. Verify:
+
+```bash
+bd dep list holomush-rmo2
+```
+
+Expected output includes `<new-bead-id>` as something `holomush-rmo2` depends on. If `bd dep` returns an error (e.g., circular detection), skip silently and just reference both beads in the commit message instead — the dep relationship is bookkeeping, not load-bearing.
 
 ---
 
 ## Task 1: Create `scripts/jj-main-repo.sh` shared helper
 
 **Files:**
+
 - Create: `scripts/jj-main-repo.sh`
 - Test: smoke-test inline (no formal test file; this is a 12-line shell script)
 
@@ -135,7 +142,7 @@ Run from the main repo root (`/Volumes/Code/github.com/holomush/holomush` on the
 
 Expected output (paths machine-specific):
 
-```
+```text
 IS_DEFAULT=yes MAIN_REPO=/Volumes/Code/github.com/holomush/holomush WORKTREES=/Volumes/Code/github.com/holomush/.worktrees
 ```
 
@@ -149,7 +156,7 @@ Run from any existing worktree (e.g., `/Volumes/Code/github.com/holomush/.worktr
 
 Expected output:
 
-```
+```text
 IS_DEFAULT=no MAIN_REPO=/Volumes/Code/github.com/holomush/holomush WORKTREES=/Volumes/Code/github.com/holomush/.worktrees
 ```
 
@@ -174,6 +181,7 @@ This helper is consumed by Phase 2 and Phase 3 — commit it as part of the Phas
 ## Task 2: Phase 1.1 — Delete `go.work` and update `.gitignore`
 
 **Files:**
+
 - Delete: `go.work`
 - Modify: `.gitignore` (add `/go.work` and `/go.work.sum`)
 
@@ -201,7 +209,7 @@ Note the order of existing entries. The new entries should go near other generat
 
 Edit `.gitignore`. Add (preserve any existing trailing newline):
 
-```
+```text
 # Go workspace mode is not used by this repo (single-module). If a
 # contributor regenerates go.work locally for IDE coverage, keep it local.
 /go.work
@@ -229,7 +237,7 @@ grep -n 'go\.work' .gitignore
 
 Expected:
 
-```
+```text
 ls: go.work: No such file or directory
 <line>:/go.work
 <line>:/go.work.sum
@@ -244,6 +252,7 @@ Defer to Task 6 (combined Phase 1 commit).
 ## Task 3: Phase 1.2 — Delete `gowork` task from `Taskfile.yaml`
 
 **Files:**
+
 - Modify: `Taskfile.yaml` (delete lines 515-551, the entire `gowork:` target)
 
 - [ ] **Step 1: Verify the exact range of the `gowork` task**
@@ -255,7 +264,7 @@ sed -n '515,551p' Taskfile.yaml | head -5
 sed -n '551,555p' Taskfile.yaml
 ```
 
-Expected: line 515 starts `  gowork:`, line 551 ends with the `echo` summary, line 552 is blank, line 553 is the next task's section comment (`# ──────────────────────────────────────────`).
+Expected: line 515 starts `gowork:`, line 551 ends with the `echo` summary, line 552 is blank, line 553 is the next task's section comment (`# ──────────────────────────────────────────`).
 
 If your local `Taskfile.yaml` has shifted line numbers (a parallel session may have edited it), find the actual range using:
 
@@ -264,7 +273,7 @@ grep -n '^  gowork:' Taskfile.yaml
 grep -n '^  # Database migrations' Taskfile.yaml
 ```
 
-The `gowork` block is everything from `  gowork:` through the line BEFORE the next top-level `  # ──────────` comment block. Adjust the sed range accordingly.
+The `gowork` block is everything from `gowork:` through the line BEFORE the next top-level `# ──────────` comment block. Adjust the sed range accordingly.
 
 - [ ] **Step 2: Delete the `gowork` task**
 
@@ -301,6 +310,7 @@ Defer to Task 6.
 ## Task 4: Phase 1.3 — Update CLAUDE.md "jj Workspace Commands"
 
 **Files:**
+
 - Modify: `CLAUDE.md` (lines 552-568 — drop `task gowork` references)
 
 - [ ] **Step 1: Read the current section**
@@ -309,9 +319,9 @@ Already mapped above. The exact lines to replace are 557-568 (the code block + t
 
 - [ ] **Step 2: Edit the section**
 
-Replace the existing "jj Workspace Commands" section body (everything from line 554 after the heading through line 568) with this new content:
+Replace the existing "jj Workspace Commands" section body (everything from line 554 after the heading through line 568) with this new content (note the outer 4-backtick fence to keep the nested 3-backtick `bash` block intact):
 
-```markdown
+````markdown
 Workspaces live in a `.worktrees/` directory that is a sibling of the main repo root
 (e.g., `<parent>/.worktrees/<name>`). The exact path is machine-specific.
 
@@ -324,7 +334,9 @@ For the typical case of "start a new isolated Claude session," prefer the
 `task workspace:new -- <name>` wrapper (see "Session isolation" below) which
 handles `.jj/repo`-based path resolution from any cwd, runs `jj git fetch`
 first so `main@origin` is fresh, and is idempotent on re-invocation.
-```
+````
+
+```text
 
 (Note: the original `task gowork` line, the MUST-run-task-gowork requirement table, and the gopls-coverage paragraph are all removed. The `--name <name>` arg is preserved from the original since it's a useful jj convention.)
 
@@ -359,31 +371,29 @@ grep -c 'gowork' Taskfile.yaml CLAUDE.md
 
 Expected:
 
-```
+```text
 ls: go.work: No such file or directory
 Taskfile.yaml:0
 CLAUDE.md:0
 ```
 
-- [ ] **Step 2: Run `task pr-prep` WITHOUT `GOWORK=off`**
+- [ ] **Step 2: Run `task pr-prep` WITHOUT `GOWORK=off` (LONG-RUNNING — ~5-15 min)**
 
-Run from the repo root:
+This is the critical Phase 1 acceptance check. The whole point of Phase 1 is that `task pr-prep` should now pass without the `GOWORK=off` env hack.
+
+**Run in background** (orchestrators executing this plan: use `run_in_background=true` and poll via TaskOutput; do NOT block synchronously for 15 min):
 
 ```bash
-task pr-prep 2>&1 | tail -5
+task pr-prep 2>&1
 ```
 
-This is the critical Phase 1 acceptance check. The whole point of Phase 1 is that `task pr-prep` should now pass without the `GOWORK=off` env hack. Expected last lines:
+When complete, read the output file's last 5 lines. Expected last line:
 
-```
+```text
 ✓ All PR checks passed.
 ```
 
-(Or equivalent success indicator — current Taskfile prints `✓ All PR checks passed.`)
-
-If the run fails with `module appears multiple times in workspace` or any other go-workspace error, Phase 1 is incomplete — `go.work` is still being generated by something. Investigate (likely a leftover `task gowork` invocation by a hook or CI step).
-
-This run will take 5-15 minutes (full schema + lint + unit + integration + E2E). Run in background via the task runner if available.
+**Important caveat**: piping the run through `tail -5` masks the real exit code (tail always exits 0). Read the full output file or check the actual task exit by examining the last line for "✓ All PR checks passed." vs "task: Failed". If the run fails with `module appears multiple times in workspace` or any other go-workspace error, Phase 1 is incomplete — `go.work` is still being generated by something. Investigate (likely a leftover `task gowork` invocation by a hook or CI step).
 
 - [ ] **Step 3: Commit**
 
@@ -405,7 +415,7 @@ jj --no-pager st
 
 Expected:
 
-```
+```text
 Working copy changes:
 M .gitignore
 M CLAUDE.md
@@ -450,11 +460,30 @@ jj --no-pager diff --stat
 
 Expected: commit description matches; diff stat shows the 5 files (modify/add/delete).
 
+- [ ] **Step 4: Start the Phase 2 commit (CRITICAL — boundary required)**
+
+Run:
+
+```bash
+jj --no-pager new -m "phase 2 (in progress)"
+```
+
+This creates a new empty commit on top of Phase 1. Without this, Task 7's edits would land in the Phase 1 commit, and Task 9's `jj describe` would clobber Phase 1's description. Mirror this pattern at the end of Tasks 9 and 13. **Task 16 is the final phase and intentionally OMITS the trailing `jj new`** so Task 18 can set the bookmark on `@` (which IS Phase 4, not an empty trailing commit).
+
+Verify:
+
+```bash
+jj --no-pager log -r 'main@origin..@' --no-graph -T 'change_id.short() ++ " " ++ description.first_line() ++ "\n"'
+```
+
+Expected: two entries — the new "phase 2 (in progress)" at @, and "phase 1: tear down go.work and task gowork" at @-.
+
 ---
 
 ## Task 7: Phase 2.1 — Add `task workspace:new` to `Taskfile.yaml`
 
 **Files:**
+
 - Modify: `Taskfile.yaml` (add new `workspace:new` task after the `mod` task / where `gowork` used to live)
 
 - [ ] **Step 1: Locate the insertion point**
@@ -484,9 +513,9 @@ Edit `Taskfile.yaml`. Insert this block at the location identified in Step 1:
     cmds:
       - |
         set -euo pipefail
+        WS_ROOT="$(jj workspace root)"   # fail-fast if not in a jj repo
         # shellcheck source=scripts/jj-main-repo.sh
-        . "$(jj workspace root 2>/dev/null || pwd)/scripts/jj-main-repo.sh" 2>/dev/null \
-          || . "$(jj workspace root)/scripts/jj-main-repo.sh"
+        . "$WS_ROOT/scripts/jj-main-repo.sh"
 
         NAME="${CLI_ARGS:-}"
         [ -n "$NAME" ] || { echo "ERROR: usage: task workspace:new -- <name>" >&2; exit 1; }
@@ -506,8 +535,9 @@ Edit `Taskfile.yaml`. Insert this block at the location identified in Step 1:
 ```
 
 (Notes on the structure:
+
 - `set -euo pipefail` — fail loudly on errors, undefined vars, pipe failures.
-- The `. ...jj-main-repo.sh` line uses two fallbacks because the script's path is determined by the workspace root, not cwd. The first attempt uses `jj workspace root`; if that fails (somehow), fall back to a direct invocation that lets shell error-out cleanly.
+- `WS_ROOT="$(jj workspace root)"` + the single `.` source line uses `set -euo pipefail` to fail-fast if cwd is not in a jj repo. The helper is sourced from the workspace root path (not cwd-relative), so it works regardless of where `task workspace:new` was invoked.
 - `CLI_ARGS` is the Taskfile convention for `--`-separated args (per CLAUDE.md "Test commands accept arguments after `--`").
 - All progress output (`jj git fetch`, `jj workspace add`) goes to stderr so `tail -n 1` of stdout reliably gets the path.
 - The final `echo "$TARGET"` is the contracted "absolute path on last line of stdout" (Phase 2 DoD).)
@@ -546,7 +576,7 @@ ls -la /Volumes/Code/github.com/holomush/.worktrees/ws-test-root/.jj/repo
 
 Expected:
 
-```
+```text
 Got: /Volumes/Code/github.com/holomush/.worktrees/ws-test-root
 PASS
 <path to file pointer> (regular file, ~26 bytes)
@@ -619,12 +649,14 @@ jj --no-pager diff --stat
 
 Expected: only `Taskfile.yaml` should show as modified (the `scripts/jj-main-repo.sh` was already added in Phase 1).
 
-- [ ] **Step 2: Describe the commit (creates a new change on top of Phase 1)**
+- [ ] **Step 2: Describe the Phase 2 commit**
+
+The Phase 2 changes are already in `@` (Tasks 7-8 edited Taskfile.yaml; Task 6 step 4 created the boundary `jj new`). Use `jj describe` to set the message — do NOT use `jj new` here, which would create yet another empty commit and strand Phase 2's changes in the "phase 2 (in progress)" placeholder.
 
 Run:
 
 ```bash
-jj --no-pager new -m "phase 2: add task workspace:new
+JJ_EDITOR=true jj --no-pager describe -m "phase 2: add task workspace:new
 
 Adds the agent-friendly wrapper for creating an isolated jj workspace
 in one command. Resolves MAIN_REPO via the .jj/repo dir-vs-file
@@ -642,40 +674,36 @@ Refs: <bead-id-from-task-0>
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ```
 
-Wait — `jj new` creates a NEW EMPTY commit. The Phase 2 changes are already in @ (from Tasks 7-8). The right command is:
+- [ ] **Step 3: Start the Phase 3 commit boundary**
 
-```bash
-JJ_EDITOR=true jj --no-pager describe -m "phase 2: add task workspace:new
-
-[same body as above]"
-```
-
-Then create a new empty commit to start Phase 3 work:
+Run:
 
 ```bash
 jj --no-pager new -m "phase 3 (in progress)"
 ```
 
-Verify:
+- [ ] **Step 4: Verify**
+
+Run:
 
 ```bash
 jj --no-pager log -r 'main@origin..@' --no-graph -T 'change_id.short() ++ " " ++ description.first_line() ++ "\n"'
 ```
 
-Expected: two commits ahead of `main@origin`:
+Expected: three entries (the new "phase 3 (in progress)" at @, then phase 2, then phase 1):
 
-```
+```text
+<id>  phase 3 (in progress)
 <id>  phase 2: add task workspace:new
 <id>  phase 1: tear down go.work and task gowork
 ```
-
-(Plus the new `phase 3 (in progress)` commit at @, which is currently empty.)
 
 ---
 
 ## Task 10: Phase 3.1 — Create `warn-default-workspace.sh` SessionStart hook
 
 **Files:**
+
 - Create: `.claude/hooks/warn-default-workspace.sh`
 
 - [ ] **Step 1: Create the hook script**
@@ -735,6 +763,7 @@ EOF
 ```
 
 (Notes:
+
 - `cat >/dev/null` consumes stdin — Claude Code may send JSON; we don't need any field.
 - The two-stage source is defensive: first a subshell validation (so a broken helper doesn't kill the hook), then the real source in the current shell to set `IS_DEFAULT`.
 - `cd "$ws_root"` matters: `jj-main-repo.sh` uses `[ -f ".jj/repo" ]` etc. with cwd-relative paths.
@@ -789,7 +818,7 @@ echo "---exit was $?---"
 
 Expected:
 
-```
+```text
 ---exit was 0---
 ```
 
@@ -825,6 +854,7 @@ shellcheck .claude/hooks/warn-default-workspace.sh
 ```
 
 Expected: no output (clean). If there are warnings:
+
 - For `SC1091` (sourced file not found): add `# shellcheck source=path` directive (already in the script)
 - For other warnings: fix or add a justified `# shellcheck disable=SCxxxx` comment
 
@@ -837,6 +867,7 @@ Defer to Task 13.
 ## Task 12: Phase 3.3 — Wire the hook into `.claude/settings.json`
 
 **Files:**
+
 - Modify: `.claude/settings.json` (add the new hook to `hooks.SessionStart`)
 
 - [ ] **Step 1: Read the current SessionStart entry**
@@ -918,7 +949,7 @@ jj --no-pager diff --stat
 
 Expected:
 
-```
+```text
 .claude/hooks/warn-default-workspace.sh | <N> +++++++
 .claude/settings.json                   | 11 +++++++
 ```
@@ -960,6 +991,7 @@ jj --no-pager new -m "phase 4 (in progress)"
 ## Task 14: Phase 4.1 — Add CLAUDE.md "Session isolation" subsection
 
 **Files:**
+
 - Modify: `CLAUDE.md` (insert new `### Session isolation` between `### jj Workspace Commands` (line 552) and `### Beads Commands` (line 570))
 
 - [ ] **Step 1: Re-locate the insertion point (line numbers may have shifted from Phase 1.3 edits)**
@@ -1066,6 +1098,7 @@ Defer to Task 16.
 ## Task 15: Phase 4.2 — Expand "Landing the Plane" step 5 in place
 
 **Files:**
+
 - Modify: `CLAUDE.md` (line 849 — the existing `5. Clean up - ...` line)
 
 - [ ] **Step 1: Locate the line**
@@ -1124,7 +1157,7 @@ jj --no-pager diff --stat
 
 Expected: only `CLAUDE.md` modified.
 
-- [ ] **Step 2: Describe the commit**
+- [ ] **Step 2: Describe the Phase 4 commit**
 
 Run:
 
@@ -1147,6 +1180,16 @@ Refs: <bead-id-from-task-0>
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ```
 
+- [ ] **Step 3: Verify the four-commit chain**
+
+Phase 4 is the last implementation phase — do NOT create a trailing empty `jj new` (Task 18 sets the bookmark on `@`, which is Phase 4 itself). Verify:
+
+```bash
+jj --no-pager log -r 'main@origin..@' --no-graph -T 'change_id.short() ++ " " ++ description.first_line() ++ "\n"'
+```
+
+Expected: four entries, in order from @ down — Phase 4 at @, then Phase 3, Phase 2, Phase 1.
+
 ---
 
 ## Task 17: Pre-PR verification — full acceptance pass
@@ -1166,7 +1209,7 @@ grep -E '^/go\.work' .gitignore
 
 Expected:
 
-```
+```text
 ls: go.work: No such file or directory
 /go.work
 /go.work.sum
@@ -1230,37 +1273,60 @@ bd show holomush-rmo2 | grep -i status
 
 Expected: `Status: open`.
 
-- [ ] **Step 7: Acceptance #7 — concurrent workspace edits don't collide**
+- [ ] **Step 7: Acceptance #7 — concurrent workspace edits don't collide (automated, single-shell)**
 
-This is a manual-ish check. Steps:
-
-1. From the main checkout, run `task workspace:new -- collide-test-a` and note the path.
-2. From the same shell, run `task workspace:new -- collide-test-b` and note the path.
-3. In a separate terminal, `cd` into `collide-test-a` and edit a unique file (e.g., `echo "test-a" > collide-test-a-marker.txt`). Do NOT commit.
-4. In yet another terminal, `cd` into `collide-test-b` and edit a different file (`echo "test-b" > collide-test-b-marker.txt`). Do NOT commit.
-5. From any workspace, run:
-
-   ```bash
-   jj --no-pager log -r 'mutable() & ~empty()' --no-graph -T 'change_id.short() ++ " " ++ working_copies ++ " " ++ description.first_line() ++ "\n"'
-   ```
-
-   Expected: each marker file appears in the diff of a DIFFERENT change ID, identified by `collide-test-a@` or `collide-test-b@` in the `working_copies` column. No cross-pollution.
-
-6. Clean up: `jj workspace forget collide-test-a && jj workspace forget collide-test-b && rm -rf <repo-parent>/.worktrees/collide-test-{a,b}`.
-
-(This is reproducible with a shell script if desired; see references/vcs-preamble.md for jj scripting.)
-
-- [ ] **Step 8: Run `task pr-prep` (without `GOWORK=off`)**
-
-Run from the workspace:
+Run this as one shell pipeline from the repo root. File writes inside each workspace dir don't trigger snapshots — only `jj` invocations do — so we explicitly run `jj st` in each workspace to force snapshots, then inspect the result:
 
 ```bash
-task pr-prep 2>&1 | tail -3
+set -euo pipefail
+WS_A=$(task workspace:new -- collide-test-a | tail -n 1)
+WS_B=$(task workspace:new -- collide-test-b | tail -n 1)
+
+# Distinct edits in each workspace
+( cd "$WS_A" && echo "test-a" > collide-test-a-marker.txt )
+( cd "$WS_B" && echo "test-b" > collide-test-b-marker.txt )
+
+# Force jj to snapshot each workspace's working copy
+( cd "$WS_A" && jj --no-pager st >/dev/null )
+( cd "$WS_B" && jj --no-pager st >/dev/null )
+
+# Inspect — should show two distinct change IDs, one per workspace
+echo "--- mutable, non-empty changes (one per workspace) ---"
+jj --no-pager log -r 'mutable() & ~empty()' --no-graph \
+  -T 'change_id.short() ++ " " ++ working_copies ++ " " ++ description.first_line() ++ "\n"'
+
+# Verify the change IDs are actually different
+A_CHANGE=$( cd "$WS_A" && jj --no-pager log -r @ --no-graph -T 'change_id.short()' )
+B_CHANGE=$( cd "$WS_B" && jj --no-pager log -r @ --no-graph -T 'change_id.short()' )
+if [ "$A_CHANGE" != "$B_CHANGE" ]; then
+  echo "PASS: distinct change IDs ($A_CHANGE vs $B_CHANGE)"
+else
+  echo "FAIL: same change ID ($A_CHANGE) — workspaces collided"
+  exit 1
+fi
+
+# Cleanup
+jj --no-pager workspace forget collide-test-a
+jj --no-pager workspace forget collide-test-b
+rm -rf "$WS_A" "$WS_B"
+echo "--- cleaned up ---"
+```
+
+Expected output: the `jj log` shows two entries with `collide-test-a@` and `collide-test-b@` in the `working_copies` column with distinct change IDs, the script prints `PASS: distinct change IDs (...)`, and cleanup runs without error.
+
+If `FAIL: same change ID` appears (script exits 1), the workspace isolation is broken — STOP and investigate before approving the PR.
+
+- [ ] **Step 8: Run `task pr-prep` without `GOWORK=off` (LONG-RUNNING — ~5-15 min)**
+
+This is the final pre-push gate per CLAUDE.md "MUST run task pr-prep". Run in background and read the output file's last line on completion (avoid the `tail -3` exit-code-masking trap noted in Task 5):
+
+```bash
+task pr-prep 2>&1
 ```
 
 Expected last line: `✓ All PR checks passed.`
 
-This is the final pre-push gate per CLAUDE.md "MUST run task pr-prep". May take 5-15 minutes.
+If anything else (e.g., `task: Failed to run task "pr-prep"`), STOP and address.
 
 ---
 
@@ -1272,7 +1338,7 @@ This is the final pre-push gate per CLAUDE.md "MUST run task pr-prep". May take 
 
 Per CLAUDE.md "Pre-Push Review Gates" and the just-merged PR #266 trigger hooks, the `code-reviewer` MUST run before `jj git push` / `gh pr create`. Invoke:
 
-```
+```text
 /review-code
 ```
 
@@ -1280,15 +1346,13 @@ Per CLAUDE.md "Pre-Push Review Gates" and the just-merged PR #266 trigger hooks,
 
 Expected: review runs against the branch diff, returns a verdict. If NOT READY, address blocking findings inline; re-run review until READY.
 
-- [ ] **Step 2: Set the bookmark**
+- [ ] **Step 2: Set the bookmark on the Phase 4 commit**
 
-Run:
+After Task 16, `@` IS the Phase 4 commit (Task 16 step 3 explicitly does NOT create a trailing `jj new`). The bookmark targets `@`:
 
 ```bash
-jj --no-pager bookmark create chore/session-workspace-isolation -r @-
+jj --no-pager bookmark create chore/session-workspace-isolation -r @
 ```
-
-(`@-` is the Phase 4 commit, since `@` is currently empty after the commit-then-new pattern from Task 16.)
 
 Verify:
 
@@ -1296,7 +1360,7 @@ Verify:
 jj --no-pager log -r 'main@origin..chore/session-workspace-isolation' --no-graph -T 'change_id.short() ++ " " ++ description.first_line() ++ "\n"'
 ```
 
-Expected: four commits — phase 1, phase 2, phase 3, phase 4.
+Expected: four commits — phase 1, phase 2, phase 3, phase 4. If only THREE appear, the bookmark is on the wrong commit (Phase 4 was omitted) — STOP and investigate before pushing.
 
 - [ ] **Step 3: Push**
 
@@ -1411,7 +1475,7 @@ ls /Volumes/Code/github.com/holomush/.worktrees/pr-b-isolation-spec 2>&1 | head 
 
 Expected:
 
-```
+```text
 PASS (cleaned up)
 ls: /Volumes/Code/github.com/holomush/.worktrees/pr-b-isolation-spec: No such file or directory
 ```
@@ -1433,6 +1497,7 @@ Expected: beads DB synced to remote with the closed beads.
 After this plan was written, the author ran the following checks:
 
 **Spec coverage (all 7 acceptance criteria):**
+
 - #1 (go.work gone, gitignored) → Tasks 2 + Task 17 step 1
 - #2 (task gowork gone) → Task 3 + Task 17 step 2
 - #3 (task workspace:new works from anywhere, idempotent) → Tasks 7-8 + Task 17 step 3
@@ -1444,6 +1509,7 @@ After this plan was written, the author ran the following checks:
 **Placeholder scan:** none of "TBD", "TODO", "implement later", "fill in details", "add appropriate error handling", "Write tests for the above", "Similar to Task N" appear in this plan. All steps have either complete code or complete commands.
 
 **Type/name consistency:**
+
 - Helper script: `scripts/jj-main-repo.sh` (consistent across Tasks 1, 7, 10)
 - Helper exports: `IS_DEFAULT`, `MAIN_REPO`, `WORKTREES` (consistent)
 - Hook script: `.claude/hooks/warn-default-workspace.sh` (consistent across Tasks 10-12, 17)

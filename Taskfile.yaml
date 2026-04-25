@@ -512,44 +512,6 @@ tasks:
       - go mod download
       - go mod tidy
 
-  gowork:
-    desc: Regenerate go.work to cover the main repo and all active jj workspaces (run after jj workspace add/forget)
-    cmds:
-      - |
-        set -euo pipefail
-
-        # In a jj workspace, .jj/repo is a FILE pointing (relatively) to the
-        # shared repo directory inside the main checkout. In the main checkout
-        # itself, .jj/repo is a DIRECTORY. Use that to find the main repo root
-        # regardless of which workspace this task is invoked from.
-        if [ -f ".jj/repo" ]; then
-          POINTER=$(cat ".jj/repo")
-          MAIN_REPO=$(cd ".jj/${POINTER}/../.." && pwd -P)
-        else
-          MAIN_REPO=$(pwd -P)
-        fi
-
-        # Read Go version from go.mod so go.work stays aligned with CI regardless
-        # of which patch version a developer has installed locally.
-        GO_VER=$(awk '/^go[[:space:]]+/ {print $2; exit}' "$MAIN_REPO/go.mod")
-        [ -n "$GO_VER" ] || { echo "ERROR: failed to parse go version from $MAIN_REPO/go.mod"; exit 1; }
-
-        WORKTREES="$(dirname "$MAIN_REPO")/.worktrees"
-
-        {
-          echo "go $GO_VER"
-          echo ""
-          echo "use ."
-          if [ -d "$WORKTREES" ]; then
-            for dir in "$WORKTREES"/*/; do
-              [ -f "${dir}go.mod" ] && echo "use ${dir%/}"
-            done
-          fi
-        } > "$MAIN_REPO/go.work"
-
-        COUNT=$(grep -c '^use' "$MAIN_REPO/go.work")
-        echo "✓ go.work written to $MAIN_REPO with $COUNT module(s)"
-
   # ──────────────────────────────────────────
   # Database migrations
   # ──────────────────────────────────────────

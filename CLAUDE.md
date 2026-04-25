@@ -555,17 +555,14 @@ Workspaces live in a `.worktrees/` directory that is a sibling of the main repo 
 (e.g., `<parent>/.worktrees/<name>`). The exact path is machine-specific.
 
 ```bash
-jj workspace add <parent>/.worktrees/<name> --name <name> -r main
+jj workspace add <parent>/.worktrees/<name> --name <name> -r main@origin
 jj workspace forget <name>  # then: rm -rf <parent>/.worktrees/<name>
-task gowork                 # MUST run after add or forget — regenerates go.work
 ```
 
-| Requirement | Description |
-| ----------- | ----------- |
-| **MUST** run `task gowork` | After every `jj workspace add` or `jj workspace forget` |
-
-`task gowork` regenerates `go.work` in the main repo root so gopls covers all active
-workspaces without "not in workspace" LSP diagnostics. Works from any workspace.
+For the typical case of "start a new isolated Claude session," prefer the
+`task workspace:new -- <name>` wrapper (see "Session isolation" below) which
+handles `.jj/repo`-based path resolution from any cwd, runs `jj git fetch`
+first so `main@origin` is fresh, and is idempotent on re-invocation.
 
 ### Beads Commands
 
