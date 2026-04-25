@@ -1681,3 +1681,100 @@ func TestOpsEventsCannotBeUpdatedOrDeletedByApplicationCode(t *testing.T) {
 			"%s contains DELETE on scene_ops_events — events must be immutable", fname)
 	}
 }
+
+func TestSceneStoreIsMemberReturnsExpectedByRoleAndSceneState(t *testing.T) {
+	const (
+		alice    = "char-alice"
+		bob      = "char-bob"
+		stranger = "char-stranger"
+	)
+
+	tests := []struct {
+		name     string
+		sceneID  string
+		visible  SceneVisibility
+		setup    func(t *testing.T, store *SceneStore, sceneID string)
+		probe    string
+		want     bool
+		wantMsg  string
+	}{
+		{
+			name:    "returns true for owner",
+			sceneID: "scene-isM-1",
+			visible: SceneVisibilityOpen,
+			setup:   nil,
+			probe:   alice,
+			want:    true,
+			wantMsg: "owner MUST be reported as member",
+		},
+		{
+			name:    "returns true for joined member",
+			sceneID: "scene-isM-2",
+			visible: SceneVisibilityOpen,
+			setup: func(t *testing.T, store *SceneStore, sceneID string) {
+				_, _, err := store.AddParticipant(context.Background(), sceneID, bob)
+				require.NoError(t, err)
+			},
+			probe: bob,
+			want:  true,
+		},
+		{
+			name:    "returns false for invited-only",
+			sceneID: "scene-isM-3",
+			visible: SceneVisibilityPrivate,
+			setup: func(t *testing.T, store *SceneStore, sceneID string) {
+				_, err := store.InviteParticipant(context.Background(), sceneID, alice, bob)
+				require.NoError(t, err)
+			},
+			probe:   bob,
+			want:    false,
+			wantMsg: "invited-only rows MUST return false — invitation grants join, not read",
+		},
+		{
+			name:    "returns false for non-participant",
+			sceneID: "scene-isM-4",
+			visible: SceneVisibilityOpen,
+			setup:   nil,
+			probe:   stranger,
+			want:    false,
+		},
+		{
+			name:    "returns false for missing scene",
+			sceneID: "scene-isM-missing",
+			visible: "", // sentinel: skip scene creation
+			setup:   nil,
+			probe:   alice,
+			want:    false,
+			wantMsg: "missing scene MUST be nil error per spec §5.4 (info-hiding)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newTestStore(t)
+			ctx := context.Background()
+
+			if tt.visible != "" {
+				row := &SceneRow{
+					ID: tt.sceneID, OwnerID: alice, Title: "T",
+					State:           string(SceneStateActive),
+					PoseOrder:       string(PoseOrderModeFree),
+					Visibility:      string(tt.visible),
+					ContentWarnings: []string{}, Tags: []string{},
+				}
+				require.NoError(t, store.CreateWithOwner(ctx, row))
+			}
+			if tt.setup != nil {
+				tt.setup(t, store, tt.sceneID)
+			}
+
+			got, err := store.IsMember(ctx, tt.sceneID, tt.probe)
+			require.NoError(t, err, tt.wantMsg)
+			if tt.wantMsg != "" {
+				assert.Equal(t, tt.want, got, tt.wantMsg)
+			} else {
+				assert.Equal(t, tt.want, got)
+			}
+		})
+	}
+}

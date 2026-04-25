@@ -39,6 +39,14 @@ message QueryHistoryRequest {
   int32 direction = 5; // 1=forward, 2=backward
   google.protobuf.Timestamp not_before = 6;
   google.protobuf.Timestamp not_after = 7;
+
+  // caller identifies the principal on whose behalf the host is reading.
+  // Plugins implementing PluginAuditService MUST enforce domain-specific
+  // authz (e.g., membership) against this identity before returning rows.
+  // An absent caller, a zero identity, or an unsupported Actor.Kind MUST
+  // be rejected with gRPC PERMISSION_DENIED. The host populates this
+  // field from the authenticated session record; clients never supply it.
+  holomush.eventbus.v1.Actor caller = 8;
 }
 
 message QueryHistoryResponse {

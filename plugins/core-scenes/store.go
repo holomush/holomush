@@ -302,6 +302,46 @@ func (s *SceneStore) GetWithMembership(ctx context.Context, id string) (scene *S
 	return row, participants, invitees, nil
 }
 
+// IsMember reports whether characterID has an owner or member row in
+// sceneID. Invited-only rows return false — invitation grants join
+// rights, not read rights (see spec §5.4 for the deliberate role-policy
+// tightening).
+//
+// Missing scene and missing row both return (false, nil) by design: the
+// audit-read boundary MUST NOT distinguish "scene doesn't exist" from
+// "you're not a member" because that would leak scene existence to
+// non-members. Internal logs MAY tag the cases distinctly via slog
+// attributes; the function's return type does not.
+func (s *SceneStore) IsMember(ctx context.Context, sceneID, characterID string) (bool, error) {
+	ctx, span := startSpan(ctx, "scene.store.is_member",
+		attribute.String("scene_id", sceneID),
+		attribute.String("character_id", characterID),
+	)
+	defer span.End()
+
+	const q = `
+		SELECT 1
+		FROM scene_participants
+		WHERE scene_id = $1
+		  AND character_id = $2
+		  AND role IN ('owner', 'member')
+		LIMIT 1
+	`
+	var one int
+	err := s.pool.QueryRow(ctx, q, sceneID, characterID).Scan(&one)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		recordError(span, err)
+		return false, oops.Code("SCENE_STORE_IS_MEMBER_FAILED").
+			With("scene_id", sceneID).
+			With("character_id", characterID).
+			Wrap(err)
+	}
+	return true, nil
+}
+
 // End transitions a scene to the `ended` state and returns the post-update
 // row. Only scenes currently in `active` or `paused` states can be ended;
 // the WHERE clause enforces this at the database level so concurrent

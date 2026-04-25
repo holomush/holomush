@@ -117,14 +117,21 @@ func (*AuditEventResponse) Descriptor() ([]byte, []int) {
 }
 
 type QueryHistoryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Subject       string                 `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
-	After         []byte                 `protobuf:"bytes,2,opt,name=after,proto3" json:"after,omitempty"`                        // ULID; empty = from start
-	Before        []byte                 `protobuf:"bytes,3,opt,name=before,proto3" json:"before,omitempty"`                      // ULID; empty = unbounded
-	PageSize      int32                  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"` // host caps at 200
-	Direction     int32                  `protobuf:"varint,5,opt,name=direction,proto3" json:"direction,omitempty"`               // 1=forward, 2=backward
-	NotBefore     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
-	NotAfter      *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=not_after,json=notAfter,proto3" json:"not_after,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Subject   string                 `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
+	After     []byte                 `protobuf:"bytes,2,opt,name=after,proto3" json:"after,omitempty"`                        // ULID; empty = from start
+	Before    []byte                 `protobuf:"bytes,3,opt,name=before,proto3" json:"before,omitempty"`                      // ULID; empty = unbounded
+	PageSize  int32                  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"` // host caps at 200
+	Direction int32                  `protobuf:"varint,5,opt,name=direction,proto3" json:"direction,omitempty"`               // 1=forward, 2=backward
+	NotBefore *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
+	NotAfter  *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=not_after,json=notAfter,proto3" json:"not_after,omitempty"`
+	// caller identifies the principal on whose behalf the host is reading.
+	// Plugins implementing PluginAuditService MUST enforce domain-specific
+	// authz (e.g., membership) against this identity before returning rows.
+	// An absent caller, a zero identity, or an unsupported Actor.Kind MUST
+	// be rejected with gRPC PERMISSION_DENIED. The host populates this
+	// field from the authenticated session record; clients never supply it.
+	Caller        *v1.Actor `protobuf:"bytes,8,opt,name=caller,proto3" json:"caller,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -208,6 +215,13 @@ func (x *QueryHistoryRequest) GetNotAfter() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *QueryHistoryRequest) GetCaller() *v1.Actor {
+	if x != nil {
+		return x.Caller
+	}
+	return nil
+}
+
 type QueryHistoryResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Event         *v1.Event              `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
@@ -263,7 +277,7 @@ const file_holomush_plugin_v1_audit_proto_rawDesc = "" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x14\n" +
-	"\x12AuditEventResponse\"\x8c\x02\n" +
+	"\x12AuditEventResponse\"\xc1\x02\n" +
 	"\x13QueryHistoryRequest\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\x12\x14\n" +
 	"\x05after\x18\x02 \x01(\fR\x05after\x12\x16\n" +
@@ -272,7 +286,8 @@ const file_holomush_plugin_v1_audit_proto_rawDesc = "" +
 	"\tdirection\x18\x05 \x01(\x05R\tdirection\x129\n" +
 	"\n" +
 	"not_before\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tnotBefore\x127\n" +
-	"\tnot_after\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\bnotAfter\"I\n" +
+	"\tnot_after\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\bnotAfter\x123\n" +
+	"\x06caller\x18\b \x01(\v2\x1b.holomush.eventbus.v1.ActorR\x06caller\"I\n" +
 	"\x14QueryHistoryResponse\x121\n" +
 	"\x05event\x18\x01 \x01(\v2\x1b.holomush.eventbus.v1.EventR\x05event2\xd6\x01\n" +
 	"\x12PluginAuditService\x12[\n" +
@@ -303,22 +318,24 @@ var file_holomush_plugin_v1_audit_proto_goTypes = []any{
 	nil,                           // 4: holomush.plugin.v1.AuditEventRequest.HeadersEntry
 	(*v1.Event)(nil),              // 5: holomush.eventbus.v1.Event
 	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
+	(*v1.Actor)(nil),              // 7: holomush.eventbus.v1.Actor
 }
 var file_holomush_plugin_v1_audit_proto_depIdxs = []int32{
 	5, // 0: holomush.plugin.v1.AuditEventRequest.event:type_name -> holomush.eventbus.v1.Event
 	4, // 1: holomush.plugin.v1.AuditEventRequest.headers:type_name -> holomush.plugin.v1.AuditEventRequest.HeadersEntry
 	6, // 2: holomush.plugin.v1.QueryHistoryRequest.not_before:type_name -> google.protobuf.Timestamp
 	6, // 3: holomush.plugin.v1.QueryHistoryRequest.not_after:type_name -> google.protobuf.Timestamp
-	5, // 4: holomush.plugin.v1.QueryHistoryResponse.event:type_name -> holomush.eventbus.v1.Event
-	0, // 5: holomush.plugin.v1.PluginAuditService.AuditEvent:input_type -> holomush.plugin.v1.AuditEventRequest
-	2, // 6: holomush.plugin.v1.PluginAuditService.QueryHistory:input_type -> holomush.plugin.v1.QueryHistoryRequest
-	1, // 7: holomush.plugin.v1.PluginAuditService.AuditEvent:output_type -> holomush.plugin.v1.AuditEventResponse
-	3, // 8: holomush.plugin.v1.PluginAuditService.QueryHistory:output_type -> holomush.plugin.v1.QueryHistoryResponse
-	7, // [7:9] is the sub-list for method output_type
-	5, // [5:7] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	7, // 4: holomush.plugin.v1.QueryHistoryRequest.caller:type_name -> holomush.eventbus.v1.Actor
+	5, // 5: holomush.plugin.v1.QueryHistoryResponse.event:type_name -> holomush.eventbus.v1.Event
+	0, // 6: holomush.plugin.v1.PluginAuditService.AuditEvent:input_type -> holomush.plugin.v1.AuditEventRequest
+	2, // 7: holomush.plugin.v1.PluginAuditService.QueryHistory:input_type -> holomush.plugin.v1.QueryHistoryRequest
+	1, // 8: holomush.plugin.v1.PluginAuditService.AuditEvent:output_type -> holomush.plugin.v1.AuditEventResponse
+	3, // 9: holomush.plugin.v1.PluginAuditService.QueryHistory:output_type -> holomush.plugin.v1.QueryHistoryResponse
+	8, // [8:10] is the sub-list for method output_type
+	6, // [6:8] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_holomush_plugin_v1_audit_proto_init() }

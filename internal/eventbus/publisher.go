@@ -158,7 +158,7 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 		Subject:   string(event.Subject),
 		Type:      string(event.Type),
 		Timestamp: timestamppb.New(event.Timestamp),
-		Actor:     actorToProto(event.Actor),
+		Actor:     ActorToProto(event.Actor),
 		Payload:   event.Payload,
 	}
 	plainBytes, err := proto.Marshal(envelope)
@@ -271,8 +271,11 @@ func (k ActorKind) String() string {
 	}
 }
 
-func actorToProto(a Actor) *eventbusv1.Actor {
-	p := &eventbusv1.Actor{Kind: actorKindToProto(a.Kind)}
+// ActorToProto converts an in-process Actor to the proto representation.
+// Exported so audit-router and other cross-package callers can reuse the
+// single source of truth for Actor mapping.
+func ActorToProto(a Actor) *eventbusv1.Actor {
+	p := &eventbusv1.Actor{Kind: ActorKindToProto(a.Kind)}
 	if a.ID != (ulid.ULID{}) {
 		p.Id = a.ID.Bytes()
 	} else if a.LegacyID != "" {
@@ -281,7 +284,10 @@ func actorToProto(a Actor) *eventbusv1.Actor {
 	return p
 }
 
-func actorKindToProto(k ActorKind) eventbusv1.ActorKind {
+// ActorKindToProto maps the in-process ActorKind enum to the proto enum.
+// ActorKindUnknown (zero) maps to ACTOR_KIND_UNSPECIFIED — there is no
+// proto ACTOR_KIND_UNKNOWN.
+func ActorKindToProto(k ActorKind) eventbusv1.ActorKind {
 	switch k {
 	case ActorKindCharacter:
 		return eventbusv1.ActorKind_ACTOR_KIND_CHARACTER

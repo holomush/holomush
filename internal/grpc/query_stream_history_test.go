@@ -740,6 +740,51 @@ func TestMapHistoryErrorPassesThroughUnknownError(t *testing.T) {
 	assert.Equal(t, orig, got)
 }
 
+// TestMapHistoryErrorTranslatesPermissionDeniedToOpaqueOopsCode verifies that
+// a gRPC PermissionDenied returned by the plugin collapses into the same
+// opaque oops code the outer I-17 gate uses, preventing information leak
+// about which authorization wall caught the caller.
+func TestMapHistoryErrorTranslatesPermissionDeniedToOpaqueOopsCode(t *testing.T) {
+	t.Parallel()
+
+	pluginErr := status.Error(codes.PermissionDenied, "scene audit access denied")
+	got := mapHistoryError(pluginErr)
+	require.Error(t, got)
+
+	oopsErr, ok := oops.AsOops(got)
+	require.True(t, ok, "translated error MUST be oops-wrapped")
+	assert.Equal(t, "STREAM_ACCESS_DENIED", oopsErr.Code(),
+		"PermissionDenied from the plugin MUST collapse into the same opaque oops code the outer I-17 gate uses")
+}
+
+// TestMapHistoryErrorPassesThroughInvalidArgument verifies that an
+// InvalidArgument status from the plugin propagates as-is to the client.
+func TestMapHistoryErrorPassesThroughInvalidArgument(t *testing.T) {
+	t.Parallel()
+
+	pluginErr := status.Error(codes.InvalidArgument, "subject malformed")
+	got := mapHistoryError(pluginErr)
+	require.Error(t, got)
+
+	st, ok := status.FromError(got)
+	require.True(t, ok)
+	assert.Equal(t, codes.InvalidArgument, st.Code())
+}
+
+// TestMapHistoryErrorRetainsCursorInvalidDispatchForNonStatusErrors verifies
+// that the existing eventbus.ErrCursorInvalid → InvalidArgument dispatch
+// still applies when no gRPC status is present on the error.
+func TestMapHistoryErrorRetainsCursorInvalidDispatchForNonStatusErrors(t *testing.T) {
+	t.Parallel()
+
+	got := mapHistoryError(eventbus.ErrCursorInvalid)
+	require.Error(t, got)
+	st, ok := status.FromError(got)
+	require.True(t, ok)
+	assert.Equal(t, codes.InvalidArgument, st.Code(),
+		"existing cursor-error dispatch MUST still apply when no gRPC status is present")
+}
+
 // TestQueryStreamHistoryEncodeEventCursorWithZeroSeq verifies that
 // encodeEventCursor still produces a decodable OwnerHost cursor when Seq==0
 // (no JetStream metadata populated).
@@ -774,4 +819,86 @@ func TestQueryStreamHistoryEncodeEventCursorWithZeroSeq(t *testing.T) {
 	decoded, decErr := cursor.Decode(frameCursor)
 	require.NoError(t, decErr)
 	assert.Equal(t, uint64(0), decoded.Host.Seq)
+}
+
+// TestQueryStreamHistoryThreadsCallerFromSession asserts that the handler
+// derives Caller (Actor) from the authenticated session record and threads
+// it through to the HistoryReader's HistoryQuery. This is the producer side
+// of the I-23 caller invariant: plugin-owned subjects gate on q.Caller.
+func TestQueryStreamHistoryThreadsCallerFromSession(t *testing.T) {
+	t.Parallel()
+
+	charID := ulid.MustParse("01HYXCHAR0000000000000000C")
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"sess-1": {
+			ID:          "sess-1",
+			CharacterID: charID,
+			ExpiresAt:   &future,
+		},
+	})
+
+	reader := &fakeHistoryReader{}
+	server := newQueryStreamHistoryServer(t, reader, sess)
+
+	// Public stream so the I-17 gate doesn't fire — focuses the test on
+	// caller threading. The harness wires policytest.AllowAllEngine() by
+	// default per newQueryStreamHistoryServer.
+	_, err := server.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "sess-1",
+		Stream:    "location:01HYXLOC00000000000000000",
+		Count:     10,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, eventbus.ActorKindCharacter, reader.gotQ.Caller.Kind,
+		"handler MUST set Caller.Kind = ActorKindCharacter")
+	assert.Equal(t, charID, reader.gotQ.Caller.ID,
+		"handler MUST set Caller.ID from info.CharacterID")
+}
+
+// TestQueryStreamHistoryTranslatesPluginPermissionDeniedToOpaqueCode covers
+// spec §6.5 case 2: the outer I-17 membership gate passes (the session is a
+// scene member), so the request reaches the HistoryReader. The plugin then
+// returns a gRPC PermissionDenied (e.g., due to a mid-read membership
+// revocation, or a plugin-internal authz wall). The handler MUST collapse
+// this into the SAME opaque STREAM_ACCESS_DENIED oops code the outer gate
+// uses — clients cannot distinguish "outer wall caught" from "plugin wall
+// caught", preventing information leak about authz topology.
+func TestQueryStreamHistoryTranslatesPluginPermissionDeniedToOpaqueCode(t *testing.T) {
+	t.Parallel()
+
+	stream, focus := sceneFocusMembership(t)
+	future := time.Now().Add(time.Hour)
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {
+			ID:               "s1",
+			CharacterID:      ulid.MustParse("01HYXCHAR0000000000000000C"),
+			ExpiresAt:        &future,
+			FocusMemberships: []session.FocusMembership{focus},
+		},
+	})
+
+	reader := &fakeHistoryReader{
+		err: status.Error(codes.PermissionDenied, "scene audit access denied"),
+	}
+	s := newQueryStreamHistoryServer(t, reader, sess)
+
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    stream,
+		Count:     10,
+	})
+	require.Error(t, err)
+
+	// Assert the TOP-LEVEL oops code, not any code somewhere in the chain.
+	// errutil.AssertErrorCode walks the chain via errors.Is, which would
+	// pass even if the handler double-wrapped STREAM_ACCESS_DENIED inside
+	// an outer INTERNAL — defeating the opacity contract. oops.AsOops
+	// returns the OUTERMOST oops node, so .Code() asserts the actual
+	// client-visible top-level code.
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "translated error MUST be an oops error at the top level")
+	assert.Equal(t, "STREAM_ACCESS_DENIED", oopsErr.Code(),
+		"top-level oops code MUST equal the outer I-17 gate's code (no double-wrap with INTERNAL)")
 }
