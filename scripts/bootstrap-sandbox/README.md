@@ -11,10 +11,12 @@ The workflow YAML and scripts stay in sync as each step is extracted.
 
 ## Currently extracted
 
-| Order | Script              | Responsibility                                           |
-| ----- | ------------------- | -------------------------------------------------------- |
-| 1     | `spaces-bucket.sh`  | Ensure the DO Spaces bucket exists (temp-key dance)      |
-| 2     | `spaces-key.sh`     | Mint a permanent readwrite key scoped to the bucket      |
+| Order | Script                | Responsibility                                                       |
+| ----- | --------------------- | -------------------------------------------------------------------- |
+| 1     | `spaces-bucket.sh`    | Ensure the DO Spaces bucket exists (temp-key dance)                  |
+| 2     | `spaces-key.sh`       | Mint a permanent readwrite key scoped to the bucket                  |
+| 3     | `firewall.sh`         | Resolve or create the cloud firewall (translates JSON → doctl DSL)   |
+| 4     | `firewall-attach.sh`  | Idempotently attach the firewall to the droplet                      |
 
 The bucket must be created before the key because DO's `/v2/spaces/keys`
 rejects grants whose bucket does not exist (`403 invalid grant`). Since
