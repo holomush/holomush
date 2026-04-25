@@ -250,6 +250,9 @@ func (h *Handler) WebCheckSession(ctx context.Context, req *connect.Request[webv
 
 	return connect.NewResponse(&webv1.WebCheckSessionResponse{
 		PlayerName: coreResp.GetPlayerName(),
+		PlayerId:   coreResp.GetPlayerId(),
+		IsGuest:    coreResp.GetIsGuest(),
+		Characters: translateCharacterSummaries(coreResp.GetCharacters()),
 	}), nil
 }
 

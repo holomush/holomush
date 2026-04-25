@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -840,4 +841,45 @@ func TestCookieMiddleware_WriteWithoutExplicitWriteHeader(t *testing.T) {
 	cookies := rr.Result().Cookies()
 	require.Len(t, cookies, 1)
 	assert.Equal(t, "implicit-token", cookies[0].Value)
+}
+
+func TestWebCheckSessionForwardsPlayerIDIsGuestAndCharacters(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionResp: &corev1.CheckPlayerSessionResponse{
+			PlayerName: "Jasper Iodine",
+			PlayerId:   "01KQ2Y5ETK5957724MGZ2H2TDB",
+			IsGuest:    true,
+			Characters: []*corev1.CharacterSummary{
+				{CharacterId: "01KQ2Y5ETW03KJ0HKCQ07ASYF2", CharacterName: "Jasper Iodine"},
+			},
+		},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebCheckSessionRequest{})
+	req.Header().Set(headerInjectSessionToken, "valid-token")
+
+	resp, err := h.WebCheckSession(context.Background(), req)
+	require.NoError(t, err)
+	assert.Equal(t, "Jasper Iodine", resp.Msg.GetPlayerName())
+	assert.Equal(t, "01KQ2Y5ETK5957724MGZ2H2TDB", resp.Msg.GetPlayerId())
+	assert.True(t, resp.Msg.GetIsGuest())
+	require.Len(t, resp.Msg.GetCharacters(), 1)
+	assert.Equal(t, "01KQ2Y5ETW03KJ0HKCQ07ASYF2", resp.Msg.GetCharacters()[0].GetCharacterId())
+}
+
+func TestWebCheckSessionFailureContractUnchanged(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionErr: oops.Code("PLAYER_SESSION_NOT_FOUND").Errorf("expired"),
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebCheckSessionRequest{})
+	req.Header().Set(headerInjectSessionToken, "expired-token")
+
+	_, err := h.WebCheckSession(context.Background(), req)
+	require.Error(t, err)
+	var connectErr *connect.Error
+	require.True(t, errors.As(err, &connectErr))
+	assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
 }
