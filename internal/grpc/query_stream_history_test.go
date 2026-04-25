@@ -13,6 +13,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -702,7 +703,7 @@ func TestQueryStreamHistoryNextCursorSetWhenHasMore(t *testing.T) {
 func TestMapHistoryErrorTranslatesErrCursorInvalidToInvalidArgument(t *testing.T) {
 	t.Parallel()
 	wrapped := oops.Code("WRAPPER").Wrap(eventbus.ErrCursorInvalid)
-	got := mapHistoryError(wrapped)
+	got := mapHistoryError(wrapped, "test-session", "location:test")
 	st, ok := status.FromError(got)
 	require.True(t, ok, "expected gRPC status error")
 	assert.Equal(t, codes.InvalidArgument, st.Code())
@@ -713,7 +714,7 @@ func TestMapHistoryErrorTranslatesErrCursorInvalidToInvalidArgument(t *testing.T
 func TestMapHistoryErrorTranslatesErrCursorStaleToFailedPrecondition(t *testing.T) {
 	t.Parallel()
 	wrapped := oops.Code("WRAPPER").Wrap(eventbus.ErrCursorStale)
-	got := mapHistoryError(wrapped)
+	got := mapHistoryError(wrapped, "test-session", "location:test")
 	st, ok := status.FromError(got)
 	require.True(t, ok, "expected gRPC status error")
 	assert.Equal(t, codes.FailedPrecondition, st.Code())
@@ -724,7 +725,7 @@ func TestMapHistoryErrorTranslatesErrCursorStaleToFailedPrecondition(t *testing.
 func TestMapHistoryErrorTranslatesErrCursorLagToUnavailable(t *testing.T) {
 	t.Parallel()
 	wrapped := oops.Code("WRAPPER").Wrap(eventbus.ErrCursorLag)
-	got := mapHistoryError(wrapped)
+	got := mapHistoryError(wrapped, "test-session", "location:test")
 	st, ok := status.FromError(got)
 	require.True(t, ok, "expected gRPC status error")
 	assert.Equal(t, codes.Unavailable, st.Code())
@@ -735,7 +736,7 @@ func TestMapHistoryErrorTranslatesErrCursorLagToUnavailable(t *testing.T) {
 func TestMapHistoryErrorPassesThroughUnknownError(t *testing.T) {
 	t.Parallel()
 	orig := oops.Errorf("some other error")
-	got := mapHistoryError(orig)
+	got := mapHistoryError(orig, "test-session", "location:test")
 	// mapHistoryError must pass through errors it does not recognise unchanged.
 	assert.Equal(t, orig, got)
 }
@@ -748,13 +749,22 @@ func TestMapHistoryErrorTranslatesPermissionDeniedToOpaqueOopsCode(t *testing.T)
 	t.Parallel()
 
 	pluginErr := status.Error(codes.PermissionDenied, "scene audit access denied")
-	got := mapHistoryError(pluginErr)
+	got := mapHistoryError(pluginErr, "test-session", "location:test")
 	require.Error(t, got)
 
 	oopsErr, ok := oops.AsOops(got)
 	require.True(t, ok, "translated error MUST be oops-wrapped")
 	assert.Equal(t, "STREAM_ACCESS_DENIED", oopsErr.Code(),
 		"PermissionDenied from the plugin MUST collapse into the same opaque oops code the outer I-17 gate uses")
+
+	// Log-parity assertion (G1): server-side observability requires the
+	// same context fields the outer I-17 gate attaches at
+	// internal/grpc/query_stream_history.go:170-173.
+	ctx := oopsErr.Context()
+	assert.Equal(t, "test-session", ctx["session_id"],
+		"PermissionDenied translation MUST attach session_id to the oops chain for log parity")
+	assert.Equal(t, "location:test", ctx["stream"],
+		"PermissionDenied translation MUST attach stream to the oops chain for log parity")
 }
 
 // TestMapHistoryErrorPassesThroughInvalidArgument verifies that an
@@ -763,7 +773,7 @@ func TestMapHistoryErrorPassesThroughInvalidArgument(t *testing.T) {
 	t.Parallel()
 
 	pluginErr := status.Error(codes.InvalidArgument, "subject malformed")
-	got := mapHistoryError(pluginErr)
+	got := mapHistoryError(pluginErr, "test-session", "location:test")
 	require.Error(t, got)
 
 	st, ok := status.FromError(got)
@@ -777,12 +787,45 @@ func TestMapHistoryErrorPassesThroughInvalidArgument(t *testing.T) {
 func TestMapHistoryErrorRetainsCursorInvalidDispatchForNonStatusErrors(t *testing.T) {
 	t.Parallel()
 
-	got := mapHistoryError(eventbus.ErrCursorInvalid)
+	got := mapHistoryError(eventbus.ErrCursorInvalid, "test-session", "location:test")
 	require.Error(t, got)
 	st, ok := status.FromError(got)
 	require.True(t, ok)
 	assert.Equal(t, codes.InvalidArgument, st.Code(),
 		"existing cursor-error dispatch MUST still apply when no gRPC status is present")
+}
+
+// TestMapHistoryErrorPassesThroughInvalidArgumentWithDetails verifies that
+// status.WithDetails proto messages attached by the plugin survive
+// translation through mapHistoryError. Goal G2: pass-through MUST preserve
+// the gRPC code AND any structured details. Bare-status pass-through is
+// covered separately by TestMapHistoryErrorPassesThroughInvalidArgument.
+func TestMapHistoryErrorPassesThroughInvalidArgumentWithDetails(t *testing.T) {
+	t.Parallel()
+
+	detail := &errdetails.BadRequest{
+		FieldViolations: []*errdetails.BadRequest_FieldViolation{
+			{Field: "subject", Description: "malformed"},
+		},
+	}
+	pluginStatus, withErr := status.New(codes.InvalidArgument, "subject malformed").WithDetails(detail)
+	require.NoError(t, withErr, "WithDetails MUST succeed for canonical errdetails proto")
+
+	got := mapHistoryError(pluginStatus.Err(), "test-session", "location:test")
+	require.Error(t, got)
+
+	gotStatus, ok := status.FromError(got)
+	require.True(t, ok, "translated error MUST carry a gRPC status")
+	assert.Equal(t, codes.InvalidArgument, gotStatus.Code(),
+		"InvalidArgument MUST pass through")
+
+	details := gotStatus.Details()
+	require.Len(t, details, 1, "exactly one detail proto MUST round-trip")
+
+	gotDetail, ok := details[0].(*errdetails.BadRequest)
+	require.True(t, ok, "detail proto MUST round-trip as *errdetails.BadRequest")
+	assert.True(t, proto.Equal(detail, gotDetail),
+		"detail proto MUST be byte-equal to the input via proto.Equal")
 }
 
 // TestQueryStreamHistoryEncodeEventCursorWithZeroSeq verifies that
@@ -901,4 +944,13 @@ func TestQueryStreamHistoryTranslatesPluginPermissionDeniedToOpaqueCode(t *testi
 	require.True(t, ok, "translated error MUST be an oops error at the top level")
 	assert.Equal(t, "STREAM_ACCESS_DENIED", oopsErr.Code(),
 		"top-level oops code MUST equal the outer I-17 gate's code (no double-wrap with INTERNAL)")
+
+	// G1 regression guard: the plugin-path translation MUST attach the
+	// same context the outer I-17 gate does. Without these the server
+	// log loses session_id/stream when the plugin wall catches.
+	ctx := oopsErr.Context()
+	assert.Equal(t, "s1", ctx["session_id"],
+		"plugin-path translation MUST attach session_id from the request")
+	assert.Equal(t, stream, ctx["stream"],
+		"plugin-path translation MUST attach stream from the request")
 }
