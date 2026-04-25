@@ -6,7 +6,7 @@
 
 services:
   postgres:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:54451ecb8ab38c24c3ec123f2fd501303a3a1856a5c66e98cecf2460d5e1e9d7
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: holomush
@@ -65,7 +65,7 @@ services:
         condition: service_healthy
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
+    image: otel/opentelemetry-collector-contrib:latest@sha256:a516c26968aa1feb5e5fc0562e3338ea13755cb4f373603226bcc4e276374ad0
     profiles: [observability]
     volumes:
       - ./docker/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml
@@ -78,7 +78,7 @@ services:
       - jaeger
 
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/all-in-one:latest@sha256:ab6f1a1f0fb49ea08bcd19f6b84f6081d0d44b364b6de148e1798eb5816bacac
     profiles: [observability]
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
@@ -88,7 +88,7 @@ services:
       - "16686:16686"
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:latest@sha256:5550dc63da361dc30f6fe02ac0e4dfc736ededfef3c8d12a634db04a67824d78
     profiles: [observability]
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -102,7 +102,7 @@ services:
         condition: service_healthy
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:latest@sha256:0f86bada30d65ef9d0183b90c1e2682ac92d53d95da8bed322b984ea78a4a73a
     profiles: [observability]
     ports:
       - "3001:3000"
@@ -118,7 +118,7 @@ services:
       - jaeger
 
   dozzle:
-    image: amir20/dozzle:latest
+    image: amir20/dozzle:latest@sha256:03ac4280eec733d004de0a46a3944e8ef0d3fbd9c317027b19492d4ed360aa89
     profiles: [observability]
     ports:
       - "8888:8080"

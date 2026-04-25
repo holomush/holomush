@@ -66,7 +66,7 @@ jobs:
     runs-on: namespace-profile-linux-amd64-4x8
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       # Step 1: Install doctl. Pin both the action and binary versions:
       # - action @v2 was a moving tag; pin to a specific release for determinism.
@@ -74,7 +74,7 @@ jobs:
       #   Namespace runners was stuck at v1.98.1 (no `doctl spaces` subcommand).
       #   1.155.0 has every subcommand the bootstrap scripts need.
       - name: Install doctl
-        uses: digitalocean/action-doctl@v2.5.2
+        uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
           version: "1.155.0"
