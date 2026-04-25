@@ -277,7 +277,6 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 // PermissionDenied translation so server logs match the outer I-17 gate
 // (see internal/grpc/query_stream_history.go:170-173).
 //
-//nolint:unparam,revive // TODO(holomush-095g.6): sessionID/stream wired in Task 2.
 func mapHistoryError(err error, sessionID, stream string) error {
 	// gRPC status pass-through with opacity translation. The plugin emits
 	// status.Error directly; the router preserves the code; we run this
@@ -289,6 +288,8 @@ func mapHistoryError(err error, sessionID, stream string) error {
 			// code the outer I-17 gate uses. Client cannot distinguish
 			// "outer wall caught" from "plugin wall caught."
 			return oops.Code("STREAM_ACCESS_DENIED").
+				With("session_id", sessionID).
+				With("stream", stream).
 				Errorf("not authorized to read stream")
 		case codes.InvalidArgument:
 			// Use the extracted status message — using "%v" on err would

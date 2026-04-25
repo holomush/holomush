@@ -755,6 +755,15 @@ func TestMapHistoryErrorTranslatesPermissionDeniedToOpaqueOopsCode(t *testing.T)
 	require.True(t, ok, "translated error MUST be oops-wrapped")
 	assert.Equal(t, "STREAM_ACCESS_DENIED", oopsErr.Code(),
 		"PermissionDenied from the plugin MUST collapse into the same opaque oops code the outer I-17 gate uses")
+
+	// Log-parity assertion (G1): server-side observability requires the
+	// same context fields the outer I-17 gate attaches at
+	// internal/grpc/query_stream_history.go:170-173.
+	ctx := oopsErr.Context()
+	assert.Equal(t, "test-session", ctx["session_id"],
+		"PermissionDenied translation MUST attach session_id to the oops chain for log parity")
+	assert.Equal(t, "location:test", ctx["stream"],
+		"PermissionDenied translation MUST attach stream to the oops chain for log parity")
 }
 
 // TestMapHistoryErrorPassesThroughInvalidArgument verifies that an
