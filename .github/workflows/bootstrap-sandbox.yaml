@@ -20,7 +20,7 @@ on:
         description: "DigitalOcean region slug"
         required: true
         type: string
-        default: "sfo3"
+        default: "nyc3"
       droplet_size:
         description: "Droplet size slug"
         required: true
@@ -200,107 +200,25 @@ jobs:
             echo "::notice::Tunnel ingress configured: ${DOMAIN} -> gateway:8080"
           fi
 
-      # Step 6: Resolve or create DO Spaces access key
-      # Must run BEFORE bucket creation — access keys are account-scoped and
-      # don't require a pre-existing bucket.
+      # Spaces provisioning — bucket MUST be created before the scoped key.
+      # DO's /v2/spaces/keys rejects grants whose bucket doesn't yet exist
+      # (403 invalid grant). Step bodies live in scripts/bootstrap-sandbox/
+      # so they can be exercised locally during debugging.
+      - name: Resolve or create DO Spaces bucket
+        id: bucket
+        env:
+          BUCKET_NAME: ${{ inputs.bucket_name }}
+          REGION: ${{ inputs.region }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: ./scripts/bootstrap-sandbox/spaces-bucket.sh
+
       - name: Resolve or create DO Spaces access key
         id: spaces_key
         env:
           BUCKET_NAME: ${{ inputs.bucket_name }}
           GH_TOKEN: ${{ secrets.SECRETS_ADMIN_PAT }}
           DRY_RUN: ${{ inputs.dry_run }}
-        run: |
-          set -euo pipefail
-
-          if [ "${DRY_RUN}" = "true" ]; then
-            echo "DRY RUN: would resolve or create Spaces access key 'holomush-sandbox'"
-            exit 0
-          fi
-
-          HAS_ACCESS_KEY=$(gh secret list --app actions | grep -c '^DO_SPACES_ACCESS_KEY' || true)
-          HAS_SECRET_KEY=$(gh secret list --app actions | grep -c '^DO_SPACES_SECRET_KEY' || true)
-
-          if [ "${HAS_ACCESS_KEY}" -gt "0" ] && [ "${HAS_SECRET_KEY}" -gt "0" ]; then
-            echo "::notice::DO_SPACES_ACCESS_KEY and DO_SPACES_SECRET_KEY already set — skipping"
-            exit 0
-          fi
-
-          # Rotate any stale key of the same name so create never collides.
-          # doctl validates the permission enum (read|readwrite|fullaccess), so
-          # this path can't silently send a bad value like the prior curl did.
-          # NOTE: use --output json (a global flag) rather than --format; the
-          # doctl shipped by digitalocean/action-doctl@v2 lacks --format on
-          # `spaces keys create`. JSON parsing uses python3 for consistency
-          # with the Cloudflare and firewall steps in this workflow.
-          EXISTING_JSON=$(doctl spaces keys list --output json)
-          EXISTING_ACCESS_KEY=$(echo "${EXISTING_JSON}" | python3 -c \
-            "import sys,json; d=json.load(sys.stdin); keys=[k for k in d if k.get('name')=='holomush-sandbox']; print(keys[0].get('access_key','') if keys else '')")
-          if [ -n "${EXISTING_ACCESS_KEY}" ]; then
-            echo "Found existing key 'holomush-sandbox' — deleting before recreate"
-            doctl spaces keys delete "${EXISTING_ACCESS_KEY}" --force
-          fi
-
-          CREATED=$(doctl spaces keys create holomush-sandbox \
-            --grants "bucket=${BUCKET_NAME};permission=readwrite" \
-            --output json)
-          # doctl wraps single-item create results in a one-element array;
-          # `.[0] if list else .` accepts either shape defensively.
-          ACCESS_KEY=$(echo "${CREATED}" | python3 -c \
-            "import sys,json; d=json.load(sys.stdin); o=d[0] if isinstance(d,list) else d; print(o.get('access_key',''))")
-          SECRET_KEY=$(echo "${CREATED}" | python3 -c \
-            "import sys,json; d=json.load(sys.stdin); o=d[0] if isinstance(d,list) else d; print(o.get('secret_key',''))")
-
-          if [ -z "${ACCESS_KEY}" ] || [ -z "${SECRET_KEY}" ]; then
-            echo "::error::doctl spaces keys create returned empty access/secret key"
-            exit 1
-          fi
-
-          echo "::add-mask::${SECRET_KEY}"
-          echo "access_key=${ACCESS_KEY}" >> "$GITHUB_OUTPUT"
-          echo "secret_key=${SECRET_KEY}" >> "$GITHUB_OUTPUT"
-          echo "${ACCESS_KEY}" | gh secret set DO_SPACES_ACCESS_KEY
-          echo "${SECRET_KEY}" | gh secret set DO_SPACES_SECRET_KEY
-          echo "::notice::Created Spaces access key 'holomush-sandbox' and stored in GH Secrets"
-
-      # Step 7: Resolve or create DO Spaces bucket
-      # Uses S3-compatible HEAD check (the DO v2/spaces/<name> endpoint does not exist).
-      - name: Resolve or create DO Spaces bucket
-        id: bucket
-        env:
-          BUCKET_NAME: ${{ inputs.bucket_name }}
-          REGION: ${{ inputs.region }}
-          DO_SPACES_ACCESS_KEY_EXISTING: ${{ steps.spaces_key.outputs.access_key != '' && steps.spaces_key.outputs.access_key
-            || secrets.DO_SPACES_ACCESS_KEY }}
-          DO_SPACES_SECRET_KEY_EXISTING: ${{ steps.spaces_key.outputs.secret_key != '' && steps.spaces_key.outputs.secret_key
-            || secrets.DO_SPACES_SECRET_KEY }}
-          DRY_RUN: ${{ inputs.dry_run }}
-        run: |
-          set -euo pipefail
-
-          if [ "${DRY_RUN}" = "true" ]; then
-            echo "::notice::[dry-run] Would ensure Spaces bucket ${BUCKET_NAME} exists in ${REGION}"
-            echo "spaces_endpoint=${REGION}.digitaloceanspaces.com" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Existence check via SigV4 head-bucket (curl + basic auth does NOT
-          # authenticate against S3-compatible APIs — CodeRabbit review catch).
-          aws configure set aws_access_key_id "${DO_SPACES_ACCESS_KEY_EXISTING}" \
-            --profile dospaces
-          aws configure set aws_secret_access_key "${DO_SPACES_SECRET_KEY_EXISTING}" \
-            --profile dospaces
-
-          if aws --profile dospaces \
-              --endpoint-url "https://${REGION}.digitaloceanspaces.com" \
-              s3api head-bucket --bucket "${BUCKET_NAME}" 2>/dev/null; then
-            echo "::notice::Reusing existing Spaces bucket: ${BUCKET_NAME}"
-          else
-            aws --profile dospaces \
-              --endpoint-url "https://${REGION}.digitaloceanspaces.com" \
-              s3api create-bucket --bucket "${BUCKET_NAME}"
-            echo "::notice::Created Spaces bucket: ${BUCKET_NAME}"
-          fi
-          echo "spaces_endpoint=${REGION}.digitaloceanspaces.com" >> "$GITHUB_OUTPUT"
+        run: ./scripts/bootstrap-sandbox/spaces-key.sh
 
       # Step 8: Resolve or create DO block volume
       - name: Resolve or create DO block volume

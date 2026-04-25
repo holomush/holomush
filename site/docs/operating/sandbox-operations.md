@@ -71,7 +71,7 @@ In the Cloudflare dashboard:
 
 ### 2. Create the Spaces bucket and Kopia password
 
-1. DigitalOcean → **Spaces → Create a Space** in `sfo3`, name
+1. DigitalOcean → **Spaces → Create a Space** in `nyc3`, name
    `holomush-sandbox-backups`.
 2. Generate an access key pair: **API → Spaces Keys → Generate New Key**.
 3. Save both values into GitHub Secrets as `DO_SPACES_ACCESS_KEY` and
@@ -103,7 +103,7 @@ export HOLOMUSH_INGRESS=tunnel
 export CLOUDFLARE_TUNNEL_TOKEN="..."
 export POSTGRES_PASSWORD="$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)"
 export BACKUP_S3_BUCKET=holomush-sandbox-backups
-export BACKUP_S3_ENDPOINT=sfo3.digitaloceanspaces.com
+export BACKUP_S3_ENDPOINT=nyc3.digitaloceanspaces.com
 export BACKUP_S3_ACCESS_KEY="..."
 export BACKUP_S3_SECRET_KEY="..."
 export KOPIA_PASSWORD="..."   # from KOPIA_SANDBOX_PASSWORD secret
@@ -128,7 +128,7 @@ first, then pass its ID via `--volumes` at droplet-create time:
 
 ```bash
 VOLUME_ID=$(doctl compute volume create holomush-sandbox-data \
-  --region sfo3 --size 25GiB --fs-type ext4 --format ID --no-header)
+  --region nyc3 --size 25GiB --fs-type ext4 --format ID --no-header)
 ```
 
 ### 5. Create the droplet with the volume attached at boot
@@ -137,7 +137,7 @@ VOLUME_ID=$(doctl compute volume create holomush-sandbox-data \
 doctl compute droplet create holomush-sandbox-game \
   --image ubuntu-24-04-x64 \
   --size s-2vcpu-2gb-amd \
-  --region sfo3 \
+  --region nyc3 \
   --ssh-keys "$(doctl compute ssh-key list --format ID --no-header | head -1)" \
   --tag-names holomush-sandbox \
   --volumes "${VOLUME_ID}" \
@@ -333,7 +333,7 @@ If the droplet is compromised or misconfigured beyond repair:
     doctl compute droplet create holomush-sandbox-game \
       --image ubuntu-24-04-x64 \
       --size s-2vcpu-2gb-amd \
-      --region sfo3 \
+      --region nyc3 \
       --ssh-keys "$(doctl compute ssh-key list --format ID --no-header | head -1)" \
       --tag-names holomush-sandbox \
       --volumes "${VOLUME_ID}" \
