@@ -574,7 +574,7 @@ jj workspace will collide on uncommitted edits. To prevent this:
 |---|---|
 | **MUST** isolate per session | Start each Claude session in its own jj workspace. Humans: `claude-iso <name>` (shell function below). Agents: `task workspace:new -- <name>`, then `cd <printed-path> && claude` |
 | **SHOULD NOT** edit files in `default` | The `default` workspace is reserved for read-only inspection and one-off throwaway work. A `SessionStart` hook warns when a session begins there |
-| **MUST** clean up post-merge | After your branch lands, `jj workspace forget <name> && rm -rf ../.worktrees/<name>` from any workspace. (See "Landing the Plane.") |
+| **MUST** clean up post-merge | After your branch lands: `cd <repo-root> && jj workspace forget <name> && rm -rf <repo-parent>/.worktrees/<name>`. The leading `cd` matters — `../.worktrees/<name>` is unsafe from any nested cwd. See "Landing the Plane" for the full sequence. |
 
 **`claude-iso` shell function** — copy into your shell's rc file:
 

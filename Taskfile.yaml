@@ -524,11 +524,20 @@ tasks:
       - |
         set -euo pipefail
         WS_ROOT="$(jj workspace root)"   # fail-fast if not in a jj repo
+        # The helper resolves .jj/repo from cwd, so we must cd to WS_ROOT first
+        # before sourcing — otherwise the task fails when invoked from any
+        # subdirectory of the workspace (e.g., from internal/, scripts/, etc).
+        cd "$WS_ROOT"
         # shellcheck source=scripts/jj-main-repo.sh
         . "$WS_ROOT/scripts/jj-main-repo.sh"
 
         NAME="{{.CLI_ARGS}}"
         [ -n "$NAME" ] || { echo "ERROR: usage: task workspace:new -- <name>" >&2; exit 1; }
+        # Validate name: single token, no path separators or relative parts,
+        # so $NAME can't escape $WORKTREES via "../foo" or "/abs/foo".
+        case "$NAME" in
+          *[!A-Za-z0-9._-]*|.|..|*..*|*/*) echo "ERROR: name must match [A-Za-z0-9._-]+ (no slashes, no '..')" >&2; exit 1 ;;
+        esac
 
         TARGET="$WORKTREES/$NAME"
 

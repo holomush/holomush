@@ -1,7 +1,7 @@
 # Session Workspace Isolation + go.work Removal
 
 **Date:** 2026-04-25
-**Status:** Design — pending review
+**Status:** Design — READY (3 rounds of design-review passed 2026-04-25)
 **Tracking bead:** _to be filed_
 **Resolves:** `holomush-rmo2` (as a side effect of removing `go.work`)
 **Related:** `holomush-krsq` (#264 — reviewer report persistence), `holomush-rsu` (#266 — reviewer trigger hooks)
