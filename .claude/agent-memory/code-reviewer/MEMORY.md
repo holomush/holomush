@@ -27,6 +27,22 @@ Keep under 200 lines. Curate — don't hoard.
   explicitly (e.g., via `oops.Unwrap` chain walk) before re-emitting.
   Documented as out-of-scope at `internal/grpc/query_stream_history.go:295`.
 
+- **Comment-only proto reservations.** `// field N is reserved (was X)` without
+  an actual `reserved N;` declaration does NOT prevent reuse — proto3 permits
+  re-use of any field number that isn't in a real `reserved` block. Search
+  pattern: `rg "field [0-9]+ is reserved|reserved [0-9]+;" api/proto/`.
+  Project convention uses real `reserved N;` (see
+  `api/proto/holomush/core/v1/core.proto:109`,
+  `api/proto/holomush/web/v1/web.proto:94`). Pre-existing wart introduced by
+  PR #179 (cookie cutover, commit f5473248e) in
+  `WebAuthenticatePlayerResponse` and `WebCreatePlayerResponse`.
+
+- **Stale TS regen across stacked proto commits.** When a stack of commits
+  edits proto files, `task proto` may not be run by every commit's author,
+  leaving the per-language generated bindings out of sync with each other.
+  When reviewing a stacked-PR proto change, check whether earlier commits in
+  the stack regenerated all generated artifacts (Go, TS, etc.) or only some.
+
 ## Invariants worth remembering
 
 - **Top-level oops Code() is the wire-visible code**: client-side error
@@ -47,3 +63,16 @@ Keep under 200 lines. Curate — don't hoard.
   with `//nolint:wrapcheck` justifying the deliberate non-wrap. Adding an
   `oops.Wrap` anywhere in this chain would shadow the code from
   `mapHistoryError`'s `status.FromError` lookup.
+
+- **Proto field-number lifecycle**: deletion → MUST add `reserved N;` AND
+  `reserved "field_name";` in the same commit. Comment-only reservation is
+  not enforced by `protoc` and not enforced by the project's lint chain.
+
+- **Generated artifacts inventory** for proto changes:
+  - `pkg/proto/holomush/<svc>/v1/<svc>.pb.go` (Go)
+  - `web/src/lib/connect/holomush/<svc>/v1/<svc>_pb.ts` (TS bindings)
+  - Run `task proto` (or `task web:generate`) to regenerate.
+
+- **Diff-scope verification**: for proto-only tasks, `jj diff -r @ --name-only`
+  should show only `.proto`, `.pb.go`, and `_pb.ts` files. Anything else is
+  scope creep.

@@ -848,13 +848,21 @@ func (x *WebAuthenticatePlayerRequest) GetRememberMe() bool {
 }
 
 type WebAuthenticatePlayerResponse struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Success            bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMessage       string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	Characters         []*CharacterSummary    `protobuf:"bytes,4,rep,name=characters,proto3" json:"characters,omitempty"`
-	DefaultCharacterId string                 `protobuf:"bytes,5,opt,name=default_character_id,json=defaultCharacterId,proto3" json:"default_character_id,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Success bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	// field 2 is reserved (was player_session_token before the cookie cutover)
+	ErrorMessage       string              `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	Characters         []*CharacterSummary `protobuf:"bytes,4,rep,name=characters,proto3" json:"characters,omitempty"`
+	DefaultCharacterId string              `protobuf:"bytes,5,opt,name=default_character_id,json=defaultCharacterId,proto3" json:"default_character_id,omitempty"`
+	// NEW: machine-readable error code. Values: "" on success, "ALREADY_AUTHENTICATED"
+	// when the cookie-collision gate fires, others reserved for future use.
+	ErrorCode string `protobuf:"bytes,6,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	// NEW: populated only when error_code = "ALREADY_AUTHENTICATED". Holds the
+	// existing player's display name so the client renders the right
+	// "you are already signed in as X" UI without a second round trip.
+	CurrentPlayerName string `protobuf:"bytes,7,opt,name=current_player_name,json=currentPlayerName,proto3" json:"current_player_name,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *WebAuthenticatePlayerResponse) Reset() {
@@ -911,6 +919,20 @@ func (x *WebAuthenticatePlayerResponse) GetCharacters() []*CharacterSummary {
 func (x *WebAuthenticatePlayerResponse) GetDefaultCharacterId() string {
 	if x != nil {
 		return x.DefaultCharacterId
+	}
+	return ""
+}
+
+func (x *WebAuthenticatePlayerResponse) GetErrorCode() string {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ""
+}
+
+func (x *WebAuthenticatePlayerResponse) GetCurrentPlayerName() string {
+	if x != nil {
+		return x.CurrentPlayerName
 	}
 	return ""
 }
@@ -1096,12 +1118,16 @@ func (x *WebCreatePlayerRequest) GetEmail() string {
 }
 
 type WebCreatePlayerResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Characters    []*CharacterSummary    `protobuf:"bytes,3,rep,name=characters,proto3" json:"characters,omitempty"`
-	ErrorMessage  string                 `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Success bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	// field 2 is reserved (was player_session_token)
+	Characters   []*CharacterSummary `protobuf:"bytes,3,rep,name=characters,proto3" json:"characters,omitempty"`
+	ErrorMessage string              `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	// NEW: see WebAuthenticatePlayerResponse for semantics.
+	ErrorCode         string `protobuf:"bytes,5,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	CurrentPlayerName string `protobuf:"bytes,6,opt,name=current_player_name,json=currentPlayerName,proto3" json:"current_player_name,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *WebCreatePlayerResponse) Reset() {
@@ -1155,6 +1181,20 @@ func (x *WebCreatePlayerResponse) GetErrorMessage() string {
 	return ""
 }
 
+func (x *WebCreatePlayerResponse) GetErrorCode() string {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ""
+}
+
+func (x *WebCreatePlayerResponse) GetCurrentPlayerName() string {
+	if x != nil {
+		return x.CurrentPlayerName
+	}
+	return ""
+}
+
 type WebCreateGuestRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1197,8 +1237,11 @@ type WebCreateGuestResponse struct {
 	ErrorMessage       string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	Characters         []*CharacterSummary    `protobuf:"bytes,3,rep,name=characters,proto3" json:"characters,omitempty"`
 	DefaultCharacterId string                 `protobuf:"bytes,4,opt,name=default_character_id,json=defaultCharacterId,proto3" json:"default_character_id,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// NEW: see WebAuthenticatePlayerResponse for semantics.
+	ErrorCode         string `protobuf:"bytes,5,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	CurrentPlayerName string `protobuf:"bytes,6,opt,name=current_player_name,json=currentPlayerName,proto3" json:"current_player_name,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *WebCreateGuestResponse) Reset() {
@@ -1255,6 +1298,20 @@ func (x *WebCreateGuestResponse) GetCharacters() []*CharacterSummary {
 func (x *WebCreateGuestResponse) GetDefaultCharacterId() string {
 	if x != nil {
 		return x.DefaultCharacterId
+	}
+	return ""
+}
+
+func (x *WebCreateGuestResponse) GetErrorCode() string {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ""
+}
+
+func (x *WebCreateGuestResponse) GetCurrentPlayerName() string {
+	if x != nil {
+		return x.CurrentPlayerName
 	}
 	return ""
 }
@@ -2724,14 +2781,17 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x12\x1f\n" +
 	"\vremember_me\x18\x03 \x01(\bR\n" +
-	"rememberMe\"\xd3\x01\n" +
+	"rememberMe\"\xa2\x02\n" +
 	"\x1dWebAuthenticatePlayerResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
 	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\x12A\n" +
 	"\n" +
 	"characters\x18\x04 \x03(\v2!.holomush.web.v1.CharacterSummaryR\n" +
 	"characters\x120\n" +
-	"\x14default_character_id\x18\x05 \x01(\tR\x12defaultCharacterId\">\n" +
+	"\x14default_character_id\x18\x05 \x01(\tR\x12defaultCharacterId\x12\x1d\n" +
+	"\n" +
+	"error_code\x18\x06 \x01(\tR\terrorCode\x12.\n" +
+	"\x13current_player_name\x18\a \x01(\tR\x11currentPlayerName\">\n" +
 	"\x19WebSelectCharacterRequest\x12!\n" +
 	"\fcharacter_id\x18\x02 \x01(\tR\vcharacterId\"\xc1\x01\n" +
 	"\x1aWebSelectCharacterResponse\x12\x18\n" +
@@ -2746,21 +2806,27 @@ const file_holomush_web_v1_web_proto_rawDesc = "" +
 	"\x16WebCreatePlayerRequest\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x12\x14\n" +
-	"\x05email\x18\x03 \x01(\tR\x05email\"\x9b\x01\n" +
+	"\x05email\x18\x03 \x01(\tR\x05email\"\xea\x01\n" +
 	"\x17WebCreatePlayerResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12A\n" +
 	"\n" +
 	"characters\x18\x03 \x03(\v2!.holomush.web.v1.CharacterSummaryR\n" +
 	"characters\x12#\n" +
-	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"\x17\n" +
-	"\x15WebCreateGuestRequest\"\xcc\x01\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\x12\x1d\n" +
+	"\n" +
+	"error_code\x18\x05 \x01(\tR\terrorCode\x12.\n" +
+	"\x13current_player_name\x18\x06 \x01(\tR\x11currentPlayerName\"\x17\n" +
+	"\x15WebCreateGuestRequest\"\x9b\x02\n" +
 	"\x16WebCreateGuestResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12A\n" +
 	"\n" +
 	"characters\x18\x03 \x03(\v2!.holomush.web.v1.CharacterSummaryR\n" +
 	"characters\x120\n" +
-	"\x14default_character_id\x18\x04 \x01(\tR\x12defaultCharacterId\"B\n" +
+	"\x14default_character_id\x18\x04 \x01(\tR\x12defaultCharacterId\x12\x1d\n" +
+	"\n" +
+	"error_code\x18\x05 \x01(\tR\terrorCode\x12.\n" +
+	"\x13current_player_name\x18\x06 \x01(\tR\x11currentPlayerName\"B\n" +
 	"\x19WebCreateCharacterRequest\x12%\n" +
 	"\x0echaracter_name\x18\x02 \x01(\tR\rcharacterName\"\xa5\x01\n" +
 	"\x1aWebCreateCharacterResponse\x12\x18\n" +
