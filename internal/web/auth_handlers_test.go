@@ -8,6 +8,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -944,4 +946,90 @@ func TestCheckCookieCollisionSurfacesUnexpectedErrors(t *testing.T) {
 
 	_, _, err := h.checkCookieCollision(context.Background(), headers)
 	require.Error(t, err, "non-auth errors MUST surface, not silently fall through to the create path")
+}
+
+// --- WebCreateGuest cookie-collision gate ---
+
+func TestWebCreateGuestReturnsAlreadyAuthenticatedWhenCookieValid(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionResp: &corev1.CheckPlayerSessionResponse{PlayerName: "Jasper Iodine"},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebCreateGuestRequest{})
+	req.Header().Set(headerInjectSessionToken, "valid-token")
+
+	resp, err := h.WebCreateGuest(context.Background(), req)
+	require.NoError(t, err, "gate hit returns success=false in body, not an RPC error")
+	assert.False(t, resp.Msg.GetSuccess())
+	assert.Equal(t, "ALREADY_AUTHENTICATED", resp.Msg.GetErrorCode())
+	assert.Equal(t, "Jasper Iodine", resp.Msg.GetCurrentPlayerName())
+	assert.Contains(t, resp.Msg.GetErrorMessage(), "Jasper Iodine")
+	assert.Equal(t, int32(0), client.createGuestCalls.Load(), "CreateGuest MUST NOT be called")
+}
+
+func TestWebCreateGuestProceedsWhenCookieAbsent(t *testing.T) {
+	client := &mockCoreClient{
+		createGuestResp: &corev1.CreateGuestResponse{
+			Success:            true,
+			PlayerSessionToken: "fresh-token",
+			Characters:         []*corev1.CharacterSummary{{CharacterId: "c1", CharacterName: "Alice"}},
+			DefaultCharacterId: "c1",
+		},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebCreateGuestRequest{})
+	// No token header.
+
+	resp, err := h.WebCreateGuest(context.Background(), req)
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.GetSuccess())
+	assert.Empty(t, resp.Msg.GetCurrentPlayerName())
+	assert.Empty(t, resp.Msg.GetErrorCode())
+	assert.Equal(t, int32(1), client.createGuestCalls.Load())
+	assert.Equal(t, int32(0), client.checkSessionCalls.Load(), "absent cookie short-circuits before CheckPlayerSession")
+}
+
+func TestWebCreateGuestProceedsWhenCookieExpired(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionErr: oops.Code("PLAYER_SESSION_EXPIRED").Errorf("expired"),
+		createGuestResp: &corev1.CreateGuestResponse{Success: true, PlayerSessionToken: "fresh"},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebCreateGuestRequest{})
+	req.Header().Set(headerInjectSessionToken, "expired-token")
+
+	resp, err := h.WebCreateGuest(context.Background(), req)
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.GetSuccess())
+	assert.Equal(t, int32(1), client.checkSessionCalls.Load())
+	assert.Equal(t, int32(1), client.createGuestCalls.Load())
+}
+
+func TestWebCreateGuestConcurrentValidCookieAllGate(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionResp: &corev1.CheckPlayerSessionResponse{PlayerName: "Jasper Iodine"},
+	}
+	h := NewHandler(client)
+
+	var wg sync.WaitGroup
+	var gatedCount atomic.Int32
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			req := connect.NewRequest(&webv1.WebCreateGuestRequest{})
+			req.Header().Set(headerInjectSessionToken, "valid-token")
+			resp, err := h.WebCreateGuest(context.Background(), req)
+			require.NoError(t, err)
+			if resp.Msg.GetErrorCode() == "ALREADY_AUTHENTICATED" {
+				gatedCount.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	assert.Equal(t, int32(10), gatedCount.Load(), "all 10 concurrent calls MUST hit the gate")
+	assert.Equal(t, int32(0), client.createGuestCalls.Load(), "zero CreateGuest calls MUST occur")
 }

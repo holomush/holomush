@@ -74,8 +74,7 @@ type mockCoreClient struct {
 	confirmPwResetErr  error
 	checkSessionResp   *corev1.CheckPlayerSessionResponse
 	checkSessionErr    error
-	checkSessionReq    *corev1.CheckPlayerSessionRequest // captured for assertion
-	checkSessionCalls  atomic.Int32                      // call counter; atomic for use under -race
+	checkSessionCalls  atomic.Int32 // call counter; atomic for use under -race
 	createGuestResp    *corev1.CreateGuestResponse
 	createGuestErr     error
 	createGuestCalls   atomic.Int32
@@ -171,8 +170,7 @@ func (m *mockCoreClient) Logout(_ context.Context, _ *corev1.LogoutRequest) (*co
 	return m.logoutResp, m.logoutErr
 }
 
-func (m *mockCoreClient) CheckPlayerSession(_ context.Context, req *corev1.CheckPlayerSessionRequest) (*corev1.CheckPlayerSessionResponse, error) {
-	m.checkSessionReq = req
+func (m *mockCoreClient) CheckPlayerSession(_ context.Context, _ *corev1.CheckPlayerSessionRequest) (*corev1.CheckPlayerSessionResponse, error) {
 	m.checkSessionCalls.Add(1)
 	return m.checkSessionResp, m.checkSessionErr
 }
