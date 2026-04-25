@@ -97,7 +97,8 @@ From your local machine:
 ```bash
 # Render user-data from scripts/sandbox.env.example + real secrets,
 # then merge with scripts/cloud-init.sh as user-data.
-export HOLOMUSH_VERSION=0.1.0  # without leading "v" — cloud-init prepends it
+export HOLOMUSH_REF=v0.1.0     # source ref for cloud-init (tag/branch/sha; defaults to "main")
+export HOLOMUSH_VERSION=0.1.0  # docker image tag pulled from ghcr.io (without "v")
 export HOLOMUSH_DOMAIN=game.holomush.dev
 export HOLOMUSH_INGRESS=tunnel
 export CLOUDFLARE_TUNNEL_TOKEN="..."
