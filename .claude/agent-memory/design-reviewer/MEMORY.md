@@ -8,7 +8,7 @@ Keep under 200 lines. Curate — don't hoard.
 
 ## Common spec weaknesses in this codebase
 
-<!-- Populated by the agent over time. -->
+- [oops vs gRPC code conflation](feedback_oops_vs_grpc_code_conflation.md) — HoloMUSH specs often call oops codes "gRPC codes"; flag wording, do not block if pattern matches existing codebase convention
 
 ## Interfaces and boundaries that recur
 

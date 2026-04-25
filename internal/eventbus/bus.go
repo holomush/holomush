@@ -61,8 +61,13 @@ type SessionStream interface {
 	Close() error
 }
 
-// HistoryQuery describes a paginated history read. Auth flows via
-// context.Context (auth.WithSession), not via this struct.
+// HistoryQuery describes a paginated history read. Caller identity is
+// carried on the `Caller` field below — populated by the host's gRPC
+// handler from the authenticated session record. Public-tier readers
+// (hot JetStream, cold Postgres) ignore Caller; plugin-owned subject
+// routes (PluginHistoryRouter) MUST forward it to the plugin's
+// PluginAuditService.QueryHistory for membership enforcement. See
+// spec §4.2.
 //
 // Pagination ordering is by JetStream stream sequence (js_seq), not by
 // ULID. Cursors are (seq, id) pairs: AfterSeq/AfterID for forward reads,
@@ -87,6 +92,14 @@ type HistoryQuery struct {
 	NotAfter  time.Time
 	Direction Direction
 	PageSize  int
+
+	// Caller identifies the principal on whose behalf the read is happening.
+	// Populated by the host's gRPC handler from the authenticated session
+	// record. Public-tier readers (hot JetStream, cold Postgres) ignore this
+	// field; plugin-owned subject routes (PluginHistoryRouter) MUST forward
+	// it to the plugin's PluginAuditService.QueryHistory for membership
+	// enforcement. See spec §4.2.
+	Caller Actor
 }
 
 // HistoryStream is a server-streaming handle. Caller iterates Next()

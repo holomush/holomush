@@ -10,6 +10,8 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/eventbus"
@@ -71,6 +73,7 @@ func (r *PluginHistoryRouter) QueryHistory(
 		Subject:   string(q.Subject),
 		PageSize:  int32(pageSize),
 		Direction: directionProto(q.Direction),
+		Caller:    eventbus.ActorToProto(q.Caller),
 	}
 	if !q.AfterID.IsZero() {
 		b := q.AfterID.Bytes()
@@ -95,6 +98,14 @@ func (r *PluginHistoryRouter) QueryHistory(
 	stream, err := client.QueryHistory(rpcCtx, req)
 	if err != nil {
 		cancel()
+		// Preserve gRPC status codes from the plugin verbatim. The host's error-
+		// translation chain (mapHistoryError + the gRPC server-streaming layer)
+		// uses status.FromError to extract the code; wrapping with oops here
+		// would shadow it. Only wrap non-status errors with the diagnostic
+		// AUDIT_PLUGIN_HISTORY_RPC_FAILED oops code.
+		if st, ok := status.FromError(err); ok && st.Code() != codes.Unknown {
+			return nil, err //nolint:wrapcheck // intentional: preserve plugin's gRPC status code for downstream status.FromError-based translation
+		}
 		return nil, oops.Code("AUDIT_PLUGIN_HISTORY_RPC_FAILED").
 			With("plugin", pluginName).
 			With("subject", string(q.Subject)).
@@ -149,6 +160,14 @@ func (s *pluginHistoryStream) Next(ctx context.Context) (eventbus.Event, error) 
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return eventbus.Event{}, io.EOF
+		}
+		// Preserve gRPC status codes from the plugin verbatim. The host's
+		// error-translation chain (mapHistoryError + the gRPC server-streaming
+		// layer) uses status.FromError to extract the code; wrapping with oops
+		// here would shadow it. Only wrap non-status errors with the diagnostic
+		// AUDIT_PLUGIN_HISTORY_RECV_FAILED oops code.
+		if st, ok := status.FromError(err); ok && st.Code() != codes.Unknown {
+			return eventbus.Event{}, err //nolint:wrapcheck // preserve plugin's gRPC status code for downstream status.FromError-based translation
 		}
 		return eventbus.Event{}, oops.Code("AUDIT_PLUGIN_HISTORY_RECV_FAILED").
 			With("plugin", s.pluginName).

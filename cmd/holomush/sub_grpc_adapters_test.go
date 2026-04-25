@@ -13,6 +13,8 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
@@ -372,4 +374,33 @@ func TestBusHistoryReaderReplayTailRejectsInvalidStream(t *testing.T) {
 	// Empty stream → subjectxlate fails.
 	_, err := adapter.ReplayTail(context.Background(), "", 5, time.Time{}, ulid.ULID{})
 	require.Error(t, err)
+}
+
+// TestBusHistoryReaderAdapterFailsClosedOnPluginOwnedSubjects covers spec
+// §6.5 case 6: when the plugin's PluginAuditService.QueryHistory returns
+// PermissionDenied (e.g., because the plugin-as-caller invariant cannot yet
+// be satisfied — this adapter passes a zero Caller — or because the plugin
+// fails its own membership check), the adapter MUST surface the
+// PermissionDenied to the plugin caller. It MUST NOT swallow or downgrade
+// that into an opaque or generic error: the plugin needs to see the precise
+// gRPC code so it can react (e.g., return an empty page rather than spin).
+//
+// This test pins the §4.4 fail-closed contract for the deferred
+// plugin-as-caller follow-up. If the adapter is later changed to pass a
+// real plugin Caller, this test should still pass — the adapter MUST
+// propagate PermissionDenied unchanged for plugin-owned subjects.
+func TestBusHistoryReaderAdapterFailsClosedOnPluginOwnedSubjects(t *testing.T) {
+	reader := &stubHistoryReader{
+		err: status.Error(codes.PermissionDenied, "caller required"),
+	}
+	adapter := &busHistoryReaderAdapter{
+		reader: reader,
+		gameID: func() string { return "main" },
+	}
+
+	_, err := adapter.ReplayTail(context.Background(),
+		"scene:01HYXSCENE00000000000000CC:ic", 10, time.Time{}, ulid.ULID{})
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err),
+		"adapter MUST surface the plugin's PermissionDenied for plugin-owned subjects until the plugin-as-caller follow-up lands")
 }

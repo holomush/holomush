@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -13,6 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
@@ -48,6 +51,37 @@ const (
 	directionBackward = int32(2)
 )
 
+// sceneAuditLogStore is the log-storage surface SceneAuditServer needs.
+// Insert / queryLog signatures match *SceneAuditStore verbatim so the
+// concrete store satisfies the interface without adapter shims.
+type sceneAuditLogStore interface {
+	Insert(
+		ctx context.Context,
+		id []byte,
+		subject, eventType string,
+		timestamp *timestamppb.Timestamp,
+		actorKind string,
+		actorID []byte,
+		payload []byte,
+		schemaVer int,
+		codec string,
+	) error
+	queryLog(
+		ctx context.Context,
+		subject string,
+		after, before []byte,
+		notBefore, notAfter *timestamppb.Timestamp,
+		reverse bool,
+		pageSize int,
+	) ([]logRow, error)
+}
+
+// sceneMembershipLookup is the membership-check surface SceneAuditServer
+// needs. *SceneStore (Task 8) satisfies this.
+type sceneMembershipLookup interface {
+	IsMember(ctx context.Context, sceneID, characterID string) (bool, error)
+}
+
 // SceneAuditServer implements PluginAuditService for core-scenes.
 //
 // AuditEvent is invoked by the host per-plugin audit consumer for every
@@ -61,7 +95,8 @@ const (
 // format used by the host events_audit table.
 type SceneAuditServer struct {
 	pluginv1.UnimplementedPluginAuditServiceServer
-	store *SceneAuditStore
+	store        sceneAuditLogStore    // queryLog only
+	memberLookup sceneMembershipLookup // IsMember only
 }
 
 // SceneAuditStore wraps the pgx pool with audit-specific SQL helpers. Kept
@@ -193,30 +228,100 @@ func (s *SceneAuditServer) AuditEvent(ctx context.Context, req *pluginv1.AuditEv
 		ver,
 		codec,
 	); err != nil {
-		return nil, err
+		// SceneAuditStore.Insert already wraps with SCENE_AUDIT_INSERT_FAILED
+		// and the same subject/type context — propagate as-is.
+		return nil, err //nolint:wrapcheck // already wrapped by Insert with SCENE_AUDIT_INSERT_FAILED
 	}
 
 	return &pluginv1.AuditEventResponse{}, nil
 }
 
-// QueryHistory streams scene_log rows matching the request. The plugin
-// enforces authorisation via a membership check: the caller MUST be a
-// participant of the queried scene (owner, member, or invited). Absent
-// auth context, the plugin rejects the call — the host is expected to
-// propagate the character's identity via gRPC metadata, but in the
-// current wiring the host is a trusted caller; until auth context is
-// plumbed through the plugin transport, the plugin permits any query
-// and relies on the host gatekeeping at the outer gRPC boundary.
+// QueryHistory streams scene_log rows matching the request after enforcing
+// scene membership at the plugin boundary. Authorisation is step 1 and runs
+// BEFORE cursor decoding or any DB query — the early-rejection ordering
+// avoids timing oracles and is pinned by audit_test.go's
+// TestQueryHistoryDeniesNonMemberWithoutHittingLogStore.
 //
-// TODO(holomush-1tvn.12 follow-up): plumb caller identity from the host
-// through the plugin gRPC connection so the membership check can hard-
-// gate non-participant queries at the plugin boundary.
+// The caller (req.Caller) is forwarded verbatim from the host's
+// CoreServer.QueryStreamHistory handler (which derives it from the
+// authenticated session). Plugins MUST NOT trust client-supplied identity;
+// see spec §3.2 for the trust model.
+//
+// Membership policy: only owner and member roles see rows. Invited rows
+// return PERMISSION_DENIED — invitation grants join rights, not passive
+// read rights (spec §5.4). Non-CHARACTER caller kinds are rejected;
+// admin / system / cross-plugin reads are deferred to a future RPC.
+//
+// Errors:
+//   - codes.PermissionDenied — caller missing, kind unsupported, or non-member
+//   - codes.InvalidArgument  — subject empty or malformed
+//   - codes.Internal         — store / DB error
 func (s *SceneAuditServer) QueryHistory(req *pluginv1.QueryHistoryRequest, stream pluginv1.PluginAuditService_QueryHistoryServer) error {
 	if req == nil || req.GetSubject() == "" {
-		return oops.Code("SCENE_AUDIT_SUBJECT_REQUIRED").Errorf("subject required")
+		return status.Error(codes.InvalidArgument, "subject required") //nolint:wrapcheck // intentional: gRPC status is the documented contract for this handler; wrapping would shadow the code visible to mapHistoryError
 	}
-	ctx := stream.Context()
 
+	// Auth — step 1, before any other work.
+	caller := req.GetCaller()
+	if caller == nil {
+		slog.InfoContext(stream.Context(), "scene audit denied — caller missing",
+			"subject", req.GetSubject(), "code", "SCENE_AUDIT_AUTH_REQUIRED")
+		return status.Error(codes.PermissionDenied, "caller required") //nolint:wrapcheck // preserve gRPC status code for mapHistoryError
+	}
+	if caller.GetKind() != eventbusv1.ActorKind_ACTOR_KIND_CHARACTER {
+		slog.InfoContext(stream.Context(), "scene audit denied — non-character caller",
+			"subject", req.GetSubject(), "kind", caller.GetKind().String(),
+			"code", "SCENE_AUDIT_AUTH_REQUIRED")
+		return status.Error(codes.PermissionDenied, "unsupported caller kind") //nolint:wrapcheck // preserve gRPC status code for mapHistoryError
+	}
+	callerIDBytes := caller.GetId()
+	if len(callerIDBytes) != 16 {
+		slog.InfoContext(stream.Context(), "scene audit denied — caller id wrong length",
+			"subject", req.GetSubject(), "code", "SCENE_AUDIT_AUTH_REQUIRED")
+		return status.Error(codes.PermissionDenied, "caller id required") //nolint:wrapcheck // preserve gRPC status code for mapHistoryError
+	}
+	var callerULID ulid.ULID
+	copy(callerULID[:], callerIDBytes)
+	if callerULID == (ulid.ULID{}) {
+		slog.InfoContext(stream.Context(), "scene audit denied — caller id zero",
+			"subject", req.GetSubject(), "code", "SCENE_AUDIT_AUTH_REQUIRED")
+		return status.Error(codes.PermissionDenied, "caller id required") //nolint:wrapcheck // preserve gRPC status code for mapHistoryError
+	}
+	callerCharID := callerULID.String()
+
+	// Subject parse.
+	sceneID, err := parseSceneSubject(req.GetSubject())
+	if err != nil {
+		slog.InfoContext(stream.Context(), "scene audit denied — subject malformed",
+			"subject", req.GetSubject(), "code", "SCENE_AUDIT_SUBJECT_INVALID")
+		return status.Error(codes.InvalidArgument, err.Error()) //nolint:wrapcheck // preserve gRPC status code for mapHistoryError
+	}
+
+	// Membership check. Fail closed if memberLookup wasn't wired — the
+	// server uses field injection (main.go:108-109), so a missed setup
+	// would otherwise panic on the first audit read.
+	if s.memberLookup == nil {
+		return status.Error(codes.Internal, "membership lookup not configured") //nolint:wrapcheck // gRPC status is the contract; oops would shadow the code
+	}
+	ok, err := s.memberLookup.IsMember(stream.Context(), sceneID, callerCharID)
+	if err != nil {
+		// Log the underlying error server-side; return a generic message
+		// so internal store/transport details don't leak past the plugin
+		// boundary. This path is not rewritten by host's mapHistoryError.
+		slog.ErrorContext(stream.Context(), "scene audit membership lookup failed",
+			"subject", req.GetSubject(), "scene_id", sceneID,
+			"character_id", callerCharID, "err", err.Error())
+		return status.Error(codes.Internal, "membership lookup failed") //nolint:wrapcheck // gRPC status is the contract; oops would shadow the code
+	}
+	if !ok {
+		slog.InfoContext(stream.Context(), "scene audit denied — non-member",
+			"subject", req.GetSubject(), "scene_id", sceneID,
+			"character_id", callerCharID, "code", "SCENE_AUDIT_ACCESS_DENIED")
+		return status.Error(codes.PermissionDenied, "not a participant") //nolint:wrapcheck // preserve gRPC status code for mapHistoryError
+	}
+
+	// From here, the existing pagination + streaming logic runs unchanged.
+	ctx := stream.Context()
 	pageSize := int(req.GetPageSize())
 	if pageSize <= 0 {
 		pageSize = auditDefaultPageSize
@@ -260,12 +365,42 @@ func (s *SceneAuditServer) QueryHistory(req *pluginv1.QueryHistoryRequest, strea
 			},
 		}
 		if err := stream.Send(resp); err != nil {
-			return oops.Code("SCENE_AUDIT_STREAM_SEND_FAILED").
-				With("subject", req.GetSubject()).
-				Wrap(err)
+			// Log server-side; return a generic message so transport details
+			// don't leak past the plugin boundary (path not rewritten by host).
+			slog.ErrorContext(ctx, "scene audit stream send failed",
+				"subject", req.GetSubject(), "err", err.Error())
+			return status.Error(codes.Internal, "stream send failed") //nolint:wrapcheck // gRPC status is the contract; oops would shadow the code
 		}
 	}
 	return nil
+}
+
+// parseSceneSubject extracts sceneID from a JetStream-native scene subject.
+// Expected: events.<gameID>.scene.<sceneID>.<channel>[.<...>]. Rejects
+// wildcard tokens and malformed shapes. See spec §5.3.
+func parseSceneSubject(subject string) (string, error) {
+	parts := strings.Split(subject, ".")
+	if len(parts) < 5 {
+		return "", oops.Code("SCENE_AUDIT_SUBJECT_INVALID").
+			With("subject", subject).
+			Errorf("subject does not match events.<game>.scene.<id>.<channel>")
+	}
+	if parts[0] != "events" || parts[2] != "scene" {
+		return "", oops.Code("SCENE_AUDIT_SUBJECT_INVALID").
+			With("subject", subject).
+			Errorf("subject not owned by core-scenes")
+	}
+	for _, p := range parts {
+		// Empty token (e.g., "events.main.scene..ic") MUST also be rejected;
+		// otherwise parts[3] returns "" and falls through to membership
+		// denial instead of the InvalidArgument the contract specifies.
+		if p == "" || strings.ContainsAny(p, "*>") {
+			return "", oops.Code("SCENE_AUDIT_SUBJECT_INVALID").
+				With("subject", subject).
+				Errorf("empty or wildcard subject tokens not permitted for QueryHistory")
+		}
+	}
+	return parts[3], nil
 }
 
 // logRow is the scanned representation of one scene_log row.

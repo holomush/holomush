@@ -216,7 +216,19 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	// Step 7: Fetch count+1 to detect has_more.
 	// Delegate to the JetStream/PostgreSQL tier crossover reader (F4+).
 	// Both paths produce ascending (oldest→newest) slices of count+1 events maximum.
-	frames, fetchErr := fetchHistoryFramesFromBus(ctx, s.historyReader, s.currentGameID(), req.Stream, count, notBefore, beforeSeq, beforeID)
+	//
+	// Caller MUST be derived from the authenticated session record only.
+	// We never trust a client-supplied character_id from the request body.
+	// The plugin-owned subject path forwards this through PluginAuditService
+	// to enforce per-plugin membership (spec §4.2 + §4.3).
+	caller := eventbus.Actor{
+		Kind: eventbus.ActorKindCharacter,
+		ID:   info.CharacterID,
+	}
+	frames, fetchErr := fetchHistoryFramesFromBus(
+		ctx, s.historyReader, s.currentGameID(), req.Stream, count,
+		notBefore, beforeSeq, beforeID, caller,
+	)
 	if fetchErr != nil {
 		return nil, mapHistoryError(oops.Code("INTERNAL").
 			With("stream", req.Stream).
@@ -257,6 +269,27 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 
 // mapHistoryError translates eventbus cursor errors to gRPC status codes.
 func mapHistoryError(err error) error {
+	// gRPC status pass-through with opacity translation. The plugin emits
+	// status.Error directly; the router preserves the code; we run this
+	// dispatch FIRST so the existing cursor-error chain doesn't shadow it.
+	if st, ok := status.FromError(err); ok {
+		switch st.Code() {
+		case codes.PermissionDenied:
+			// Opaque: collapse plugin-boundary denial into the same oops
+			// code the outer I-17 gate uses. Client cannot distinguish
+			// "outer wall caught" from "plugin wall caught."
+			return oops.Code("STREAM_ACCESS_DENIED").
+				Errorf("not authorized to read stream")
+		case codes.InvalidArgument:
+			// Use the extracted status message — using "%v" on err would
+			// include the host-side oops wrapper text in the client-visible
+			// message (e.g., "stream=...: subject required" instead of just
+			// "subject required"). st.Message() is the plugin's original.
+			return status.Errorf(codes.InvalidArgument, "%s", st.Message())
+		}
+		// Other status codes (Internal, Unavailable, …) pass through to the
+		// existing dispatch below, which falls through to default.
+	}
 	switch {
 	case errors.Is(err, eventbus.ErrCursorInvalid):
 		return status.Errorf(codes.InvalidArgument, "%v", err)
@@ -284,6 +317,7 @@ func fetchHistoryFramesFromBus(
 	notBefore time.Time,
 	beforeSeq uint64,
 	beforeID ulid.ULID,
+	caller eventbus.Actor,
 ) ([]*corev1.EventFrame, error) {
 	natsSubject, err := subjectxlate.Legacy(legacyStream, gameID)
 	if err != nil {
@@ -299,6 +333,7 @@ func fetchHistoryFramesFromBus(
 		Direction: eventbus.DirectionBackward,
 		PageSize:  count + 1,
 		NotBefore: notBefore,
+		Caller:    caller,
 	}
 	if beforeSeq != 0 {
 		q.BeforeSeq = beforeSeq
@@ -309,7 +344,11 @@ func fetchHistoryFramesFromBus(
 
 	stream, err := reader.QueryHistory(ctx, q)
 	if err != nil {
-		return nil, mapHistoryError(oops.With("subject", string(sub)).Wrap(err))
+		// Do NOT call mapHistoryError here — translation runs once, at the
+		// outer QueryStreamHistory call site (see :233). Translating twice
+		// produces an oops("INTERNAL").Wrap(oops("STREAM_ACCESS_DENIED")...)
+		// chain whose top code is INTERNAL, breaking the §5.5 opacity contract.
+		return nil, oops.With("subject", string(sub)).Wrap(err)
 	}
 	defer stream.Close() //nolint:errcheck // best-effort iterator close
 

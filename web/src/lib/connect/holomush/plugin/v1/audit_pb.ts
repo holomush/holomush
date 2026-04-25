@@ -9,7 +9,7 @@ import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegen
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { Event } from "../../eventbus/v1/eventbus_pb";
+import type { Actor, Event } from "../../eventbus/v1/eventbus_pb";
 import { file_holomush_eventbus_v1_eventbus } from "../../eventbus/v1/eventbus_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file holomush/plugin/v1/audit.proto.
  */
 export const file_holomush_plugin_v1_audit: GenFile = /*@__PURE__*/
-  fileDesc("Ch5ob2xvbXVzaC9wbHVnaW4vdjEvYXVkaXQucHJvdG8SEmhvbG9tdXNoLnBsdWdpbi52MSK0AQoRQXVkaXRFdmVudFJlcXVlc3QSKgoFZXZlbnQYASABKAsyGy5ob2xvbXVzaC5ldmVudGJ1cy52MS5FdmVudBJDCgdoZWFkZXJzGAIgAygLMjIuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RXZlbnRSZXF1ZXN0LkhlYWRlcnNFbnRyeRouCgxIZWFkZXJzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASIUChJBdWRpdEV2ZW50UmVzcG9uc2UiygEKE1F1ZXJ5SGlzdG9yeVJlcXVlc3QSDwoHc3ViamVjdBgBIAEoCRINCgVhZnRlchgCIAEoDBIOCgZiZWZvcmUYAyABKAwSEQoJcGFnZV9zaXplGAQgASgFEhEKCWRpcmVjdGlvbhgFIAEoBRIuCgpub3RfYmVmb3JlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBItCglub3RfYWZ0ZXIYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkIKFFF1ZXJ5SGlzdG9yeVJlc3BvbnNlEioKBWV2ZW50GAEgASgLMhsuaG9sb211c2guZXZlbnRidXMudjEuRXZlbnQy1gEKElBsdWdpbkF1ZGl0U2VydmljZRJbCgpBdWRpdEV2ZW50EiUuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RXZlbnRSZXF1ZXN0GiYuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RXZlbnRSZXNwb25zZRJjCgxRdWVyeUhpc3RvcnkSJy5ob2xvbXVzaC5wbHVnaW4udjEuUXVlcnlIaXN0b3J5UmVxdWVzdBooLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeUhpc3RvcnlSZXNwb25zZTABQkRaQmdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3BsdWdpbi92MTtwbHVnaW52MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_holomush_eventbus_v1_eventbus]);
+  fileDesc("Ch5ob2xvbXVzaC9wbHVnaW4vdjEvYXVkaXQucHJvdG8SEmhvbG9tdXNoLnBsdWdpbi52MSK0AQoRQXVkaXRFdmVudFJlcXVlc3QSKgoFZXZlbnQYASABKAsyGy5ob2xvbXVzaC5ldmVudGJ1cy52MS5FdmVudBJDCgdoZWFkZXJzGAIgAygLMjIuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RXZlbnRSZXF1ZXN0LkhlYWRlcnNFbnRyeRouCgxIZWFkZXJzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASIUChJBdWRpdEV2ZW50UmVzcG9uc2Ui9wEKE1F1ZXJ5SGlzdG9yeVJlcXVlc3QSDwoHc3ViamVjdBgBIAEoCRINCgVhZnRlchgCIAEoDBIOCgZiZWZvcmUYAyABKAwSEQoJcGFnZV9zaXplGAQgASgFEhEKCWRpcmVjdGlvbhgFIAEoBRIuCgpub3RfYmVmb3JlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBItCglub3RfYWZ0ZXIYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKBmNhbGxlchgIIAEoCzIbLmhvbG9tdXNoLmV2ZW50YnVzLnYxLkFjdG9yIkIKFFF1ZXJ5SGlzdG9yeVJlc3BvbnNlEioKBWV2ZW50GAEgASgLMhsuaG9sb211c2guZXZlbnRidXMudjEuRXZlbnQy1gEKElBsdWdpbkF1ZGl0U2VydmljZRJbCgpBdWRpdEV2ZW50EiUuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RXZlbnRSZXF1ZXN0GiYuaG9sb211c2gucGx1Z2luLnYxLkF1ZGl0RXZlbnRSZXNwb25zZRJjCgxRdWVyeUhpc3RvcnkSJy5ob2xvbXVzaC5wbHVnaW4udjEuUXVlcnlIaXN0b3J5UmVxdWVzdBooLmhvbG9tdXNoLnBsdWdpbi52MS5RdWVyeUhpc3RvcnlSZXNwb25zZTABQkRaQmdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL3BsdWdpbi92MTtwbHVnaW52MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_holomush_eventbus_v1_eventbus]);
 
 /**
  * @generated from message holomush.plugin.v1.AuditEventRequest
@@ -103,6 +103,18 @@ export type QueryHistoryRequest = Message<"holomush.plugin.v1.QueryHistoryReques
    * @generated from field: google.protobuf.Timestamp not_after = 7;
    */
   notAfter?: Timestamp | undefined;
+
+  /**
+   * caller identifies the principal on whose behalf the host is reading.
+   * Plugins implementing PluginAuditService MUST enforce domain-specific
+   * authz (e.g., membership) against this identity before returning rows.
+   * An absent caller, a zero identity, or an unsupported Actor.Kind MUST
+   * be rejected with gRPC PERMISSION_DENIED. The host populates this
+   * field from the authenticated session record; clients never supply it.
+   *
+   * @generated from field: holomush.eventbus.v1.Actor caller = 8;
+   */
+  caller?: Actor | undefined;
 };
 
 /**
