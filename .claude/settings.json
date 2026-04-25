@@ -55,6 +55,15 @@
           }
         ],
         "matcher": ""
+      },
+      {
+        "hooks": [
+          {
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/warn-default-workspace.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
       }
     ],
     "UserPromptSubmit": [

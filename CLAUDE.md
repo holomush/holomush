@@ -555,17 +555,71 @@ Workspaces live in a `.worktrees/` directory that is a sibling of the main repo 
 (e.g., `<parent>/.worktrees/<name>`). The exact path is machine-specific.
 
 ```bash
-jj workspace add <parent>/.worktrees/<name> --name <name> -r main
+jj workspace add <parent>/.worktrees/<name> --name <name> -r main@origin
 jj workspace forget <name>  # then: rm -rf <parent>/.worktrees/<name>
-task gowork                 # MUST run after add or forget — regenerates go.work
 ```
 
-| Requirement | Description |
-| ----------- | ----------- |
-| **MUST** run `task gowork` | After every `jj workspace add` or `jj workspace forget` |
+For the typical case of "start a new isolated Claude session," prefer the
+`task workspace:new -- <name>` wrapper (see "Session isolation" below) which
+handles `.jj/repo`-based path resolution from any cwd, runs `jj git fetch`
+first so `main@origin` is fresh, and is idempotent on re-invocation.
 
-`task gowork` regenerates `go.work` in the main repo root so gopls covers all active
-workspaces without "not in workspace" LSP diagnostics. Works from any workspace.
+### Session isolation
+
+This repo is developed primarily by concurrent AI agent sessions. Because jj
+snapshots the working copy on every command, two sessions sharing the same
+jj workspace will collide on uncommitted edits. To prevent this:
+
+| Requirement | Description |
+|---|---|
+| **MUST** isolate per session | Start each Claude session in its own jj workspace. Humans: `claude-iso <name>` (shell function below). Agents: `task workspace:new -- <name>`, then `cd <printed-path> && claude` |
+| **SHOULD NOT** edit files in `default` | The `default` workspace is reserved for read-only inspection and one-off throwaway work. A `SessionStart` hook warns when a session begins there |
+| **MUST** clean up post-merge | After your branch lands: `cd <repo-root> && jj workspace forget <name> && rm -rf <repo-parent>/.worktrees/<name>`. The leading `cd` matters — `../.worktrees/<name>` is unsafe from any nested cwd. See "Landing the Plane" for the full sequence. |
+
+**`claude-iso` shell function** — copy into your shell's rc file:
+
+```fish
+# fish: ~/.config/fish/config.fish
+#
+# IMPORTANT: `set var (cmd | tail -n 1); or ...` does NOT propagate the
+# failure of `cmd` because the pipeline's exit status is `tail`'s, not
+# `cmd`'s. We therefore call `task workspace:new` twice — first to check
+# the exit status, then again inside command substitution to capture the
+# path. The second call is idempotent (Phase 2 DoD requirement) and just
+# prints the path for an existing workspace.
+function claude-iso
+    set name $argv[1]
+    task workspace:new -- $name >/dev/null
+    or return $status
+    set ws (task workspace:new -- $name | tail -n 1)
+    cd $ws
+    or return $status
+    exec claude
+end
+```
+
+```bash
+# bash/zsh: ~/.bashrc or ~/.zshrc
+#
+# Same caveat as fish: $(cmd | tail -n 1) carries tail's exit status, not
+# cmd's. Two-call pattern; second call is idempotent.
+claude-iso() {
+  local name="$1"
+  task workspace:new -- "$name" >/dev/null || return $?
+  local ws
+  ws="$(task workspace:new -- "$name" | tail -n 1)"
+  cd "$ws" || return $?
+  exec claude
+}
+```
+
+New worktrees inherit `.claude/` (tracked in git), so `SessionStart`,
+`UserPromptSubmit`, and other Claude Code hooks fire identically in any
+worktree — no hook re-wiring is needed when creating a workspace.
+
+Sub-agents launched via the `Task` tool inherit the parent's workspace. The
+parent is responsible for not dispatching parallel `Task` calls that would
+edit the same files. (Future work MAY add per-`Task` workspace creation.)
 
 ### Beads Commands
 
@@ -846,7 +900,14 @@ runes patterns.
    git status  # MUST show "up to date with origin"
    ```
 
-5. **Clean up** - Clear stashes, prune remote branches, `jj workspace forget` unused workspaces
+5. **Clean up** — clear stashes, prune remote branches, and (if this work was done in a dedicated workspace per the "Session isolation" discipline) forget and remove the workspace:
+
+   ```bash
+   cd <repo-root>                           # exit the workspace before forgetting it
+   jj workspace forget <name>
+   rm -rf <repo-parent>/.worktrees/<name>
+   ```
+
 6. **Verify** - All changes committed AND pushed
 7. **Hand off** - Provide context for next session
 
