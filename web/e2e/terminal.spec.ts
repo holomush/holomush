@@ -553,6 +553,10 @@ test.describe('Terminal UI', () => {
     await connectAsGuest(page);
     await page.keyboard.press('ControlOrMeta+k');
     await expect(page.locator('[data-cmdk-dialog]')).toBeVisible({ timeout: 3000 });
+    // Wait for focus to settle on the cmdk input before typing — without
+    // this guard the test races FocusScope's rAF auto-focus and `theme`
+    // can land in the inline command-input textarea (holomush-ceon).
+    await expect(page.locator('[data-cmdk-input]')).toBeFocused();
     // Type to filter
     await page.keyboard.type('theme');
     await expect(page.locator('[data-cmdk-item]').first()).toContainText(/theme/i);
