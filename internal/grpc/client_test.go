@@ -5,16 +5,20 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"testing"
 	"time"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	tlscerts "github.com/holomush/holomush/internal/tls"
@@ -536,4 +540,43 @@ type mockCoreServerWithSubscribeError struct {
 
 func (m *mockCoreServerWithSubscribeError) Subscribe(_ *corev1.SubscribeRequest, _ grpc.ServerStreamingServer[corev1.SubscribeResponse]) error {
 	return io.EOF // Simulate error - stream ends immediately
+}
+
+// TestTranslateCheckPlayerSessionErrPreservesAuthFailureAcrossWire asserts the
+// client-side error translator (Task 6.5) re-injects the
+// PLAYER_SESSION_NOT_FOUND oops code on codes.Unauthenticated, so the
+// gateway's cookie-collision gate predicate can see auth failures across the
+// gRPC boundary instead of the generic RPC_FAILED wrap.
+func TestTranslateCheckPlayerSessionErrPreservesAuthFailureAcrossWire(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        error
+		expectedCode string
+	}{
+		{
+			name:         "codes.Unauthenticated translates to PLAYER_SESSION_NOT_FOUND oops code",
+			input:        status.Error(codes.Unauthenticated, "PLAYER_SESSION_NOT_FOUND: unknown token"),
+			expectedCode: "PLAYER_SESSION_NOT_FOUND",
+		},
+		{
+			name:         "codes.NotFound falls through to RPC_FAILED",
+			input:        status.Error(codes.NotFound, "not found"),
+			expectedCode: "RPC_FAILED",
+		},
+		{
+			name:         "non-status error falls through to RPC_FAILED",
+			input:        errors.New("transport flake"),
+			expectedCode: "RPC_FAILED",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := translateCheckPlayerSessionErr(tt.input)
+			require.Error(t, err)
+			oopsErr, ok := oops.AsOops(err)
+			require.True(t, ok, "translator must always return an oops error")
+			assert.Equal(t, tt.expectedCode, oopsErr.Code())
+		})
+	}
 }
