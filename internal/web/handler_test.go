@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -55,10 +56,12 @@ type mockCoreClient struct {
 	// Auth RPC fields
 	authPlayerResp     *corev1.AuthenticatePlayerResponse
 	authPlayerErr      error
+	authPlayerCalls    atomic.Int32 // call counter; atomic for use under -race in concurrent tests
 	selectCharResp     *corev1.SelectCharacterResponse
 	selectCharErr      error
 	createPlayerResp   *corev1.CreatePlayerResponse
 	createPlayerErr    error
+	createPlayerCalls  atomic.Int32
 	createCharResp     *corev1.CreateCharacterResponse
 	createCharErr      error
 	listCharsResp      *corev1.ListCharactersResponse
@@ -71,8 +74,11 @@ type mockCoreClient struct {
 	confirmPwResetErr  error
 	checkSessionResp   *corev1.CheckPlayerSessionResponse
 	checkSessionErr    error
+	checkSessionReq    *corev1.CheckPlayerSessionRequest // captured for assertion
+	checkSessionCalls  atomic.Int32                      // call counter; atomic for use under -race
 	createGuestResp    *corev1.CreateGuestResponse
 	createGuestErr     error
+	createGuestCalls   atomic.Int32
 
 	queryStreamHistoryResp *corev1.QueryStreamHistoryResponse
 	queryStreamHistoryErr  error
@@ -132,6 +138,7 @@ func (m *mockCoreClient) GetCommandHistory(_ context.Context, req *corev1.GetCom
 }
 
 func (m *mockCoreClient) AuthenticatePlayer(_ context.Context, _ *corev1.AuthenticatePlayerRequest) (*corev1.AuthenticatePlayerResponse, error) {
+	m.authPlayerCalls.Add(1)
 	return m.authPlayerResp, m.authPlayerErr
 }
 
@@ -140,6 +147,7 @@ func (m *mockCoreClient) SelectCharacter(_ context.Context, _ *corev1.SelectChar
 }
 
 func (m *mockCoreClient) CreatePlayer(_ context.Context, _ *corev1.CreatePlayerRequest) (*corev1.CreatePlayerResponse, error) {
+	m.createPlayerCalls.Add(1)
 	return m.createPlayerResp, m.createPlayerErr
 }
 
@@ -163,11 +171,14 @@ func (m *mockCoreClient) Logout(_ context.Context, _ *corev1.LogoutRequest) (*co
 	return m.logoutResp, m.logoutErr
 }
 
-func (m *mockCoreClient) CheckPlayerSession(_ context.Context, _ *corev1.CheckPlayerSessionRequest) (*corev1.CheckPlayerSessionResponse, error) {
+func (m *mockCoreClient) CheckPlayerSession(_ context.Context, req *corev1.CheckPlayerSessionRequest) (*corev1.CheckPlayerSessionResponse, error) {
+	m.checkSessionReq = req
+	m.checkSessionCalls.Add(1)
 	return m.checkSessionResp, m.checkSessionErr
 }
 
 func (m *mockCoreClient) CreateGuest(_ context.Context, _ *corev1.CreateGuestRequest) (*corev1.CreateGuestResponse, error) {
+	m.createGuestCalls.Add(1)
 	return m.createGuestResp, m.createGuestErr
 }
 
