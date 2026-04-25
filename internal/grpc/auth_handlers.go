@@ -503,10 +503,14 @@ func (s *CoreServer) Logout(ctx context.Context, req *corev1.LogoutRequest) (*co
 	return &corev1.LogoutResponse{}, nil
 }
 
-// CheckPlayerSession validates a player session token and returns the player name.
+// CheckPlayerSession validates a player session token and returns the player +
+// characters. Failure-path contract (nil, err with PLAYER_SESSION_NOT_FOUND /
+// PLAYER_SESSION_EXPIRED) is preserved exactly. See spec §4.3 / §4.3.1.
 func (s *CoreServer) CheckPlayerSession(ctx context.Context, req *corev1.CheckPlayerSessionRequest) (*corev1.CheckPlayerSessionResponse, error) {
 	slog.DebugContext(ctx, "grpc: CheckPlayerSession")
 
+	// resolvePlayerSession does the token-hash lookup and the best-effort
+	// RefreshTTL — TTL refresh on the success path is inherited.
 	ps, err := s.resolvePlayerSession(ctx, req.GetPlayerSessionToken())
 	if err != nil {
 		return nil, err
@@ -521,8 +525,16 @@ func (s *CoreServer) CheckPlayerSession(ctx context.Context, req *corev1.CheckPl
 		return nil, oops.Code("PLAYER_LOOKUP_FAILED").Wrap(err)
 	}
 
+	characters, err := s.buildCharacterSummaries(ctx, player.ID)
+	if err != nil {
+		return nil, oops.Code("CHARACTER_LOOKUP_FAILED").Wrap(err)
+	}
+
 	return &corev1.CheckPlayerSessionResponse{
 		PlayerName: player.Username,
+		PlayerId:   player.ID.String(),
+		IsGuest:    player.IsGuest,
+		Characters: characters,
 	}, nil
 }
 

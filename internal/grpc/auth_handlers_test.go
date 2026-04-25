@@ -1090,6 +1090,68 @@ func TestCheckPlayerSession(t *testing.T) {
 	}
 }
 
+func TestCheckPlayerSessionPopulatesPlayerIDIsGuestAndCharactersOnSuccess(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	charID := ulid.Make()
+
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	playerRepo := authmocks.NewMockPlayerRepository(t)
+	playerRepo.EXPECT().GetByID(mock.Anything, playerID).
+		Return(&auth.Player{ID: playerID, Username: "Jasper Iodine", IsGuest: true}, nil)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{{ID: charID, PlayerID: playerID, Name: "Jasper Iodine"}}, nil)
+
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      session.NewMemStore(),
+		playerSessionRepo: sessionRepo,
+		playerRepo:        playerRepo,
+		charRepo:          charRepo,
+	}
+
+	resp, err := server.CheckPlayerSession(ctx, &corev1.CheckPlayerSessionRequest{
+		PlayerSessionToken: validToken,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "Jasper Iodine", resp.GetPlayerName())
+	assert.Equal(t, playerID.String(), resp.GetPlayerId())
+	assert.True(t, resp.GetIsGuest())
+	require.Len(t, resp.GetCharacters(), 1)
+	assert.Equal(t, "Jasper Iodine", resp.GetCharacters()[0].GetCharacterName())
+	assert.Equal(t, charID.String(), resp.GetCharacters()[0].GetCharacterId())
+}
+
+func TestCheckPlayerSessionFailureContractUnchanged(t *testing.T) {
+	ctx := context.Background()
+
+	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+	tokenHash := auth.HashSessionToken("bad-token")
+	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).
+		Return(nil, samberOops.Code("PLAYER_SESSION_NOT_FOUND").Errorf("unknown token"))
+
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      session.NewMemStore(),
+		playerSessionRepo: sessionRepo,
+	}
+
+	resp, err := server.CheckPlayerSession(ctx, &corev1.CheckPlayerSessionRequest{
+		PlayerSessionToken: "bad-token",
+	})
+
+	assert.Nil(t, resp, "failure path returns nil response")
+	require.Error(t, err)
+	var oopsErr samberOops.OopsError
+	require.ErrorAs(t, err, &oopsErr)
+	assert.Equal(t, "PLAYER_SESSION_NOT_FOUND", oopsErr.Code())
+}
+
 // --- AuthenticatePlayer additional paths ---
 
 func TestAuthenticatePlayer_SessionRepoCreateFails(t *testing.T) {
