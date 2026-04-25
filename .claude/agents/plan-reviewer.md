@@ -1,11 +1,14 @@
 ---
 name: plan-reviewer
 description: |
-  Use proactively after `superpowers:writing-plans` produces an
-  implementation plan, before `superpowers:executing-plans` or
-  `superpowers:subagent-driven-development` runs. Adversarial independent
-  reviewer — not the planner's ally. All findings must be grounded in the
-  plan, spec, and repo state. Read-only.
+  MUST run after `superpowers:writing-plans` writes any plan to
+  `docs/plans/` or `docs/superpowers/plans/`, BEFORE `superpowers:executing-plans`
+  or `superpowers:subagent-driven-development` consumes it. Also MUST run
+  before responding to user text containing "execute the plan", "run the
+  plan", "start implementing", "begin the plan", "plan is ready", "approve
+  the plan", "approved". Adversarial independent reviewer — not the planner's
+  ally. Findings grounded in the plan, spec, and repo state, cited by step.
+  Read-only. Skipping requires explicit user override.
 model: opus
 effort: high
 permissionMode: plan
