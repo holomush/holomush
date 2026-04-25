@@ -87,7 +87,71 @@ jobs:
           set -euo pipefail
           gh auth setup-git
 
-      # Step 3: Resolve or create KOPIA_SANDBOX_PASSWORD secret
+      # Step 3: Resolve sandbox source ref + image tag, and verify the GHCR
+      # image actually exists. Runs BEFORE any paid resource (volume, droplet)
+      # is created so a missing :latest / :version image fails fast with a
+      # clear error instead of leaving an unused volume + droplet behind.
+      - name: Resolve image ref and verify GHCR tag exists
+        id: image
+        env:
+          GH_TOKEN: ${{ secrets.SECRETS_ADMIN_PAT }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          # Identical resolution logic to scripts/cloud-init.sh:
+          #   HOLOMUSH_REF      → source ref for raw.githubusercontent.com
+          #   HOLOMUSH_VERSION  → docker image tag pulled from ghcr.io
+          # Latest GitHub release tag if one exists; else REF=main + VERSION=latest.
+          HOLOMUSH_REF=$(gh release list -R holomush/holomush --limit 10 --json tagName,isLatest \
+            --jq '.[] | select(.isLatest) | .tagName' 2>/dev/null | head -1 || true)
+          if [ -z "${HOLOMUSH_REF}" ]; then
+            HOLOMUSH_REF=$(gh release list -R holomush/holomush --limit 1 --json tagName \
+              --jq '.[0].tagName' 2>/dev/null || true)
+          fi
+          if [ -z "${HOLOMUSH_REF}" ]; then
+            HOLOMUSH_REF="main"
+            HOLOMUSH_VERSION="latest"
+          else
+            HOLOMUSH_VERSION="${HOLOMUSH_REF#v}"
+          fi
+
+          echo "::notice::Will deploy ref=${HOLOMUSH_REF} image=ghcr.io/holomush/holomush:${HOLOMUSH_VERSION}"
+          echo "holomush_ref=${HOLOMUSH_REF}" >> "$GITHUB_OUTPUT"
+          echo "holomush_version=${HOLOMUSH_VERSION}" >> "$GITHUB_OUTPUT"
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "[dry-run] skipping GHCR manifest probe"
+            exit 0
+          fi
+
+          # Probe GHCR for the manifest. Public-image pull flow: fetch a
+          # short-lived anonymous token, then HEAD the manifest endpoint.
+          # 200 = exists; 404 = missing tag; anything else = unexpected error.
+          TOKEN=$(curl -fsS \
+            "https://ghcr.io/token?service=ghcr.io&scope=repository:holomush/holomush:pull" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
+          if [ -z "${TOKEN}" ]; then
+            echo "::error::Could not fetch GHCR pull token"
+            exit 1
+          fi
+
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+            -H "Accept: application/vnd.oci.image.manifest.v1+json" \
+            -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+            -H "Accept: application/vnd.oci.image.index.v1+json" \
+            "https://ghcr.io/v2/holomush/holomush/manifests/${HOLOMUSH_VERSION}")
+
+          if [ "${HTTP_CODE}" != "200" ]; then
+            echo "::error::Image ghcr.io/holomush/holomush:${HOLOMUSH_VERSION} not found in GHCR (HTTP ${HTTP_CODE})."
+            echo "::error::Either cut a release first (merge the release-please PR so goreleaser publishes the image), or pass HOLOMUSH_REF/HOLOMUSH_VERSION pointing to an existing tag."
+            exit 1
+          fi
+          echo "::notice::GHCR manifest verified (HTTP 200)"
+
+      # Step 4: Resolve or create KOPIA_SANDBOX_PASSWORD secret
       # Emits `password` as a step output so step 11 can reference the freshly
       # generated value on the first-run path — `secrets.KOPIA_SANDBOX_PASSWORD`
       # is a snapshot taken at workflow-start and does not see secrets created
@@ -284,6 +348,9 @@ jobs:
           BUCKET_NAME: ${{ inputs.bucket_name }}
           REGION: ${{ inputs.region }}
           DRY_RUN: ${{ inputs.dry_run }}
+          # REF + VERSION are computed and verified by the early `image` step.
+          HOLOMUSH_REF: ${{ steps.image.outputs.holomush_ref }}
+          HOLOMUSH_VERSION: ${{ steps.image.outputs.holomush_version }}
           TUNNEL_TOKEN: ${{ steps.tunnel.outputs.tunnel_token }}
           PG_PASSWORD: ${{ steps.pg.outputs.password }}
           # KOPIA and Spaces secrets fall back to the secrets context when
@@ -305,17 +372,12 @@ jobs:
           echo "::add-mask::${KOPIA_PASSWORD}"
           echo "::add-mask::${BACKUP_S3_SECRET_KEY_VAL}"
 
-          HOLOMUSH_VERSION=$(gh release list -R holomush/holomush --limit 10 --json tagName,isLatest \
-            --jq '.[] | select(.isLatest) | .tagName' 2>/dev/null | head -1 || true)
-          if [ -z "${HOLOMUSH_VERSION}" ]; then
-            HOLOMUSH_VERSION=$(gh release list -R holomush/holomush --limit 1 --json tagName \
-              --jq '.[0].tagName' 2>/dev/null || echo "0.1.0")
-          fi
-          # scripts/cloud-init.sh prepends "v" when building RELEASE_URL, so
-          # strip any leading "v" here to avoid "vv0.1.0" double-prefix.
-          HOLOMUSH_VERSION="${HOLOMUSH_VERSION#v}"
+          # HOLOMUSH_REF and HOLOMUSH_VERSION arrive from the `image` step's
+          # outputs, where they were also probed against GHCR before any paid
+          # resource was created. Trust them here; do not recompute.
 
           python3 - \
+            "${HOLOMUSH_REF}" \
             "${HOLOMUSH_VERSION}" \
             "${DOMAIN}" \
             "${TUNNEL_TOKEN}" \
@@ -328,15 +390,16 @@ jobs:
             <<'PYEOF'
           import sys
 
-          version        = sys.argv[1]
-          domain         = sys.argv[2]
-          cf_token       = sys.argv[3]
-          pg_pwd         = sys.argv[4]
-          bucket         = sys.argv[5]
-          region         = sys.argv[6]
-          kopia_pwd      = sys.argv[7]
-          s3_access_key  = sys.argv[8]
-          s3_secret_key  = sys.argv[9]
+          ref            = sys.argv[1]
+          version        = sys.argv[2]
+          domain         = sys.argv[3]
+          cf_token       = sys.argv[4]
+          pg_pwd         = sys.argv[5]
+          bucket         = sys.argv[6]
+          region         = sys.argv[7]
+          kopia_pwd      = sys.argv[8]
+          s3_access_key  = sys.argv[9]
+          s3_secret_key  = sys.argv[10]
 
           cloud_config = """\
           #cloud-config
@@ -358,6 +421,7 @@ jobs:
           env_header = f"""\
           #!/bin/bash
           # env injected by bootstrap-sandbox workflow
+          export HOLOMUSH_REF="{ref}"
           export HOLOMUSH_VERSION="{version}"
           export HOLOMUSH_DOMAIN="{domain}"
           export HOLOMUSH_INGRESS="tunnel"
@@ -527,11 +591,28 @@ jobs:
           ssh-keyscan -H "${DROPLET_IP}" >> ~/.ssh/known_hosts 2>/dev/null
 
           echo "Waiting for cloud-init to complete..."
-          ssh -o StrictHostKeyChecking=no "root@${DROPLET_IP}" \
-            "cloud-init status --wait --long" \
-            || { ssh -o StrictHostKeyChecking=no "root@${DROPLET_IP}" \
-                   "cloud-init status; journalctl -u cloud-init-local -u cloud-init --no-pager -n 50" \
-                 && exit 1; }
+          if ! ssh -o StrictHostKeyChecking=no "root@${DROPLET_IP}" \
+                 "cloud-init status --wait --long"; then
+            # On failure, surface the *user-data script* output (where part-002
+            # errors actually live) plus modern systemd unit logs. The legacy
+            # unit names cloud-init-local/cloud-init don't exist on Ubuntu 24.04;
+            # use the ".target" form so journalctl picks up cloud-config,
+            # cloud-final, etc., regardless of which one logged the error.
+            echo "::group::cloud-init-output.log (last 200 lines)"
+            ssh -o StrictHostKeyChecking=no "root@${DROPLET_IP}" \
+              "tail -n 200 /var/log/cloud-init-output.log || true"
+            echo "::endgroup::"
+            echo "::group::cloud-init.log (last 100 lines)"
+            ssh -o StrictHostKeyChecking=no "root@${DROPLET_IP}" \
+              "tail -n 100 /var/log/cloud-init.log || true"
+            echo "::endgroup::"
+            echo "::group::journalctl cloud-init.target (last 100 lines)"
+            ssh -o StrictHostKeyChecking=no "root@${DROPLET_IP}" \
+              "journalctl --no-pager -n 100 -u 'cloud-init*' || true"
+            echo "::endgroup::"
+            ssh -o StrictHostKeyChecking=no "root@${DROPLET_IP}" "cloud-init status --long || true"
+            exit 1
+          fi
           echo "::notice::cloud-init completed successfully"
 
       # Step 16: Create Cloudflare DNS records

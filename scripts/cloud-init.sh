@@ -13,9 +13,34 @@ set -euo pipefail
 
 HOLOMUSH_DIR="/opt/holomush"
 HOLOMUSH_USER="holomush"
-# Set this to the release you want to deploy (e.g., "0.1.0").
-HOLOMUSH_VERSION="${HOLOMUSH_VERSION:-0.1.0}"
-RELEASE_URL="https://raw.githubusercontent.com/holomush/holomush/v${HOLOMUSH_VERSION}"
+# Source ref to fetch compose files and config from. Any git ref works:
+#   - branch  (e.g. "main", "develop") — sandbox tracking-mode
+#   - tag     (e.g. "v0.1.0") — pinned production deployment
+#   - commit  (e.g. "abc1234") — exact reproduce
+# Default is "main" so a fresh sandbox boots from the latest committed code
+# rather than depending on a released tag that may not exist yet.
+# Backward-compat: legacy callers that only set HOLOMUSH_VERSION map to a
+# matching v-prefixed ref. `latest` is special-cased — it's a docker image
+# tag, not a git ref — so it resolves to `main`. Idempotent on a leading "v"
+# (so HOLOMUSH_VERSION=v0.1.0 doesn't double-prefix).
+if [ -z "${HOLOMUSH_REF:-}" ]; then
+  case "${HOLOMUSH_VERSION:-}" in
+    ""|latest) HOLOMUSH_REF="main" ;;
+    *)         HOLOMUSH_REF="v${HOLOMUSH_VERSION#v}" ;;
+  esac
+fi
+# HOLOMUSH_VERSION is the docker image tag (separate concept from the source
+# ref above). If unset (e.g. standalone runs that only specify HOLOMUSH_REF),
+# derive it from the ref: a vX.Y.Z tag drops the leading "v" to match the
+# image tag goreleaser publishes; anything else (branch/sha) falls back to
+# the floating `latest` tag.
+if [ -z "${HOLOMUSH_VERSION:-}" ]; then
+  case "${HOLOMUSH_REF}" in
+    v[0-9]*) HOLOMUSH_VERSION="${HOLOMUSH_REF#v}" ;;
+    *)       HOLOMUSH_VERSION="latest" ;;
+  esac
+fi
+RELEASE_URL="https://raw.githubusercontent.com/holomush/holomush/${HOLOMUSH_REF}"
 
 # Ingress mode: "caddy" (default, public 80/443 with Let's Encrypt) or
 # "tunnel" (cloudflared, no public HTTP ports).
