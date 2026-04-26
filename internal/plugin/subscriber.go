@@ -109,7 +109,14 @@ func (s *Subscriber) deliverAsync(ctx context.Context, pluginName string, event 
 		tctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 
-		emits, err := s.host.DeliverEvent(tctx, pluginName, event)
+		// Stamp the host-vouched actor on the dispatch ctx BEFORE calling
+		// Host.DeliverEvent. This activates the actor-metadata channel for
+		// the host's outgoing metadata injection (host.go) and binary-plugin
+		// token issuance (per spec G7). The same ctx flows through to the
+		// post-deliver emit loop.
+		dispatchCtx := core.WithActor(tctx, actorFromIncomingEvent(event))
+
+		emits, err := s.host.DeliverEvent(dispatchCtx, pluginName, event)
 		if err != nil {
 			switch {
 			case errors.Is(err, context.DeadlineExceeded):
@@ -134,13 +141,11 @@ func (s *Subscriber) deliverAsync(ctx context.Context, pluginName string, event 
 			return
 		}
 
-		emitCtx := core.WithActor(tctx, actorFromIncomingEvent(event))
-
 		// Emit response events. Event type validation is the responsibility
 		// of the VerbRegistry, not the subscriber. The subscriber passes
 		// through any event type the plugin emits.
 		for _, emit := range emits {
-			if err := s.emitter.EmitPluginEvent(emitCtx, pluginName, emit); err != nil {
+			if err := s.emitter.EmitPluginEvent(dispatchCtx, pluginName, emit); err != nil {
 				slog.ErrorContext(tctx, "failed to emit plugin event",
 					"plugin", pluginName,
 					"stream", emit.Stream,
