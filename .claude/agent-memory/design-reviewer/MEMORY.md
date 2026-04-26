@@ -14,6 +14,8 @@ Keep under 200 lines. Curate — don't hoard.
 - **Shell-snippet error handling in spec docs is rarely verified.** Patterns like `var=$(cmd | tail -n 1) || return` (bash) and `set var (cmd | tail -n 1); or return $status` (fish) do NOT detect failure of `cmd` — the pipeline status is the LAST command's status. Run the snippet before believing it. Seen 2026-04-25.
 - **Spec "verifiable by …" criteria with overly-broad jj revsets.** `jj log -r 'all()'` returns full history; for experiment-level verification prefer `mutable()` or scoped revsets. Not blocking but degrades the diagnostic value.
 - **Stated rationale for shell idioms can be wrong even when the idiom works.** A spec may correctly include a `cd` or `cd && cmd` block but provide an incorrect *reason* (e.g., "needed because X requires Y" where Y is false). This is documentation rot risk, not a correctness blocker. Verify rationale claims by running the inner command without the `cd` to see if it really fails. Seen 2026-04-25 in session-workspace-isolation r3: spec claimed `cd "$MAIN_REPO"` was needed for `jj git fetch`, but `jj git fetch` works from any workspace because it resolves repo storage via `.jj/repo`.
+- [Check existing RPCs before "new RPC" proposals](feedback_check_existing_rpcs.md) — auth/session/check specs often duplicate existing RPCs (e.g., `WhoAmI` vs `WebCheckSession`); always grep proto + handlers
+- [Extending an existing RPC: audit callers for contract-shape dependencies](feedback_extending_rpc_check_callers.md) — when a spec extends an RPC's failure-path contract (error → `authenticated=false`), grep all current callers; web client try/catch patterns often depend on the throw
 
 ## Interfaces and boundaries that recur
 

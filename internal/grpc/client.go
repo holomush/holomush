@@ -12,9 +12,11 @@ import (
 	"github.com/samber/oops"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 
 	contentv1 "github.com/holomush/holomush/pkg/proto/holomush/content/v1"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -205,11 +207,30 @@ func (c *Client) Logout(ctx context.Context, req *corev1.LogoutRequest) (*corev1
 	return resp, nil
 }
 
+// translateCheckPlayerSessionErr re-injects an oops auth-failure code on
+// codes.Unauthenticated so callers (e.g. the gateway's cookie-collision
+// gate predicate) can distinguish "cookie invalid" from genuine
+// transport/lookup failures. All other errors collapse to RPC_FAILED so
+// transport problems are not mistaken for legitimate auth failures.
+//
+// The server collapses three distinct codes (PLAYER_SESSION_NOT_FOUND,
+// PLAYER_SESSION_EXPIRED, SESSION_NOT_FOUND) into a single codes.Unauthenticated
+// status. The original message body still carries the granular code text
+// for log diagnostics.
+func translateCheckPlayerSessionErr(err error) error {
+	if statusErr, ok := status.FromError(err); ok && statusErr.Code() == codes.Unauthenticated {
+		return oops.Code("PLAYER_SESSION_NOT_FOUND").
+			With("method", "CheckPlayerSession").
+			Errorf("%s", statusErr.Message())
+	}
+	return oops.Code("RPC_FAILED").With("method", "CheckPlayerSession").Wrap(err)
+}
+
 // CheckPlayerSession validates a player session token.
 func (c *Client) CheckPlayerSession(ctx context.Context, req *corev1.CheckPlayerSessionRequest) (*corev1.CheckPlayerSessionResponse, error) {
 	resp, err := c.client.CheckPlayerSession(ctx, req)
 	if err != nil {
-		return nil, oops.Code("RPC_FAILED").With("method", "CheckPlayerSession").Wrap(err)
+		return nil, translateCheckPlayerSessionErr(err)
 	}
 	return resp, nil
 }

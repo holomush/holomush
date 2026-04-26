@@ -150,9 +150,18 @@ message WebAuthenticatePlayerRequest {
 
 message WebAuthenticatePlayerResponse {
   bool success = 1;
+  reserved 2;
+  reserved "player_session_token"; // removed by the cookie cutover (PR #179)
   string error_message = 3;
   repeated CharacterSummary characters = 4;
   string default_character_id = 5;
+  // NEW: machine-readable error code. Values: "" on success, "ALREADY_AUTHENTICATED"
+  // when the cookie-collision gate fires, others reserved for future use.
+  string error_code = 6;
+  // NEW: populated only when error_code = "ALREADY_AUTHENTICATED". Holds the
+  // existing player's display name so the client renders the right
+  // "you are already signed in as X" UI without a second round trip.
+  string current_player_name = 7;
 }
 
 message WebSelectCharacterRequest {
@@ -175,8 +184,13 @@ message WebCreatePlayerRequest {
 
 message WebCreatePlayerResponse {
   bool success = 1;
+  reserved 2;
+  reserved "player_session_token"; // removed by the cookie cutover (PR #179)
   repeated CharacterSummary characters = 3;
   string error_message = 4;
+  // NEW: see WebAuthenticatePlayerResponse for semantics.
+  string error_code = 5;
+  string current_player_name = 6;
 }
 
 message WebCreateGuestRequest {}
@@ -186,6 +200,9 @@ message WebCreateGuestResponse {
   string error_message = 2;
   repeated CharacterSummary characters = 3;
   string default_character_id = 4;
+  // NEW: see WebAuthenticatePlayerResponse for semantics.
+  string error_code = 5;
+  string current_player_name = 6;
 }
 
 message WebCreateCharacterRequest {
@@ -231,6 +248,12 @@ message WebCheckSessionRequest {}
 
 message WebCheckSessionResponse {
   string player_name = 1;
+  // NEW (additive on the success path; failure path still returns
+  // connect.CodeUnauthenticated so web/src/routes/(authed)/+layout.ts:18-25
+  // continues to redirect on throw — no contract break).
+  string player_id = 2;
+  bool is_guest = 3;
+  repeated CharacterSummary characters = 4;
 }
 
 // --- Web content messages ---

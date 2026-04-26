@@ -11,6 +11,7 @@ import (
 	"strconv"
 
 	"connectrpc.com/connect"
+	"github.com/samber/oops"
 
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
@@ -35,6 +36,16 @@ const (
 	headerInjectSessionToken = "X-Session-Token"
 )
 
+// Exported aliases of the wire-level header names so integration tests can
+// thread the same header values without duplicating string literals. These
+// MUST stay in sync with the unexported constants above.
+const (
+	HeaderInjectSessionToken = headerInjectSessionToken
+	HeaderSetSessionToken    = headerSetSessionToken
+	HeaderSetSessionMaxAge   = headerSetSessionMaxAge
+	HeaderClearSession       = headerClearSession
+)
+
 // playerTokenFromHeader extracts the player session token from the
 // X-Session-Token header injected by CookieMiddleware. Returns
 // CodeUnauthenticated if the header is missing or empty.
@@ -46,9 +57,68 @@ func playerTokenFromHeader(h http.Header) (string, error) {
 	return token, nil
 }
 
+// checkCookieCollision implements the cookie-collision gate documented in
+// docs/superpowers/specs/2026-04-25-multi-tab-session-isolation-design.md §4.2.0.
+//
+// Returns:
+//   - name: the existing player's display name (only meaningful when gated=true).
+//   - gated: true if the request carries a valid PlayerSession cookie and the
+//     caller MUST short-circuit with ALREADY_AUTHENTICATED.
+//   - err: non-nil iff the cookie validation hit an unexpected error
+//     (transport / lookup-failed). Auth-failure (PLAYER_SESSION_NOT_FOUND /
+//     PLAYER_SESSION_EXPIRED) is a normal case and returns gated=false, err=nil.
+func (h *Handler) checkCookieCollision(ctx context.Context, headers http.Header) (name string, gated bool, err error) {
+	token := headers.Get(headerInjectSessionToken)
+	if token == "" {
+		return "", false, nil
+	}
+
+	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := h.client.CheckPlayerSession(rpcCtx, &corev1.CheckPlayerSessionRequest{
+		PlayerSessionToken: token,
+	})
+	if err != nil {
+		if isPlayerSessionAuthFailure(err) {
+			return "", false, nil
+		}
+		return "", false, oops.Code("COOKIE_GATE_LOOKUP_FAILED").Wrap(err)
+	}
+	return resp.GetPlayerName(), true, nil
+}
+
+// isPlayerSessionAuthFailure reports whether err is one of the documented
+// auth-failure codes that mean "cookie is invalid; treat as no-cookie".
+// Unknown error types and non-string codes return false (caller surfaces).
+func isPlayerSessionAuthFailure(err error) bool {
+	oopsErr, ok := oops.AsOops(err)
+	if !ok {
+		return false
+	}
+	code, ok := oopsErr.Code().(string)
+	if !ok {
+		return false
+	}
+	return code == "PLAYER_SESSION_NOT_FOUND" ||
+		code == "PLAYER_SESSION_EXPIRED" ||
+		code == "SESSION_NOT_FOUND"
+}
+
 // WebAuthenticatePlayer validates player credentials and returns a player token with character list.
 func (h *Handler) WebAuthenticatePlayer(ctx context.Context, req *connect.Request[webv1.WebAuthenticatePlayerRequest]) (*connect.Response[webv1.WebAuthenticatePlayerResponse], error) {
 	slog.DebugContext(ctx, "web: WebAuthenticatePlayer", "username", req.Msg.GetUsername())
+
+	if name, gated, err := h.checkCookieCollision(ctx, req.Header()); err != nil {
+		return nil, oops.Wrap(err)
+	} else if gated {
+		return connect.NewResponse(&webv1.WebAuthenticatePlayerResponse{
+			Success:           false,
+			ErrorCode:         "ALREADY_AUTHENTICATED",
+			ErrorMessage:      fmt.Sprintf("Already signed in as %s.", name),
+			CurrentPlayerName: name,
+		}), nil
+	}
 
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
@@ -118,6 +188,17 @@ func (h *Handler) WebSelectCharacter(ctx context.Context, req *connect.Request[w
 // WebCreatePlayer creates a new player account.
 func (h *Handler) WebCreatePlayer(ctx context.Context, req *connect.Request[webv1.WebCreatePlayerRequest]) (*connect.Response[webv1.WebCreatePlayerResponse], error) {
 	slog.DebugContext(ctx, "web: WebCreatePlayer", "username", req.Msg.GetUsername())
+
+	if name, gated, err := h.checkCookieCollision(ctx, req.Header()); err != nil {
+		return nil, oops.Wrap(err)
+	} else if gated {
+		return connect.NewResponse(&webv1.WebCreatePlayerResponse{
+			Success:           false,
+			ErrorCode:         "ALREADY_AUTHENTICATED",
+			ErrorMessage:      fmt.Sprintf("Already signed in as %s.", name),
+			CurrentPlayerName: name,
+		}), nil
+	}
 
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
@@ -250,6 +331,9 @@ func (h *Handler) WebCheckSession(ctx context.Context, req *connect.Request[webv
 
 	return connect.NewResponse(&webv1.WebCheckSessionResponse{
 		PlayerName: coreResp.GetPlayerName(),
+		PlayerId:   coreResp.GetPlayerId(),
+		IsGuest:    coreResp.GetIsGuest(),
+		Characters: translateCharacterSummaries(coreResp.GetCharacters()),
 	}), nil
 }
 
@@ -305,8 +389,19 @@ func (h *Handler) WebConfirmPasswordReset(ctx context.Context, req *connect.Requ
 }
 
 // WebCreateGuest creates an ephemeral guest player and returns a session cookie.
-func (h *Handler) WebCreateGuest(ctx context.Context, _ *connect.Request[webv1.WebCreateGuestRequest]) (*connect.Response[webv1.WebCreateGuestResponse], error) {
+func (h *Handler) WebCreateGuest(ctx context.Context, req *connect.Request[webv1.WebCreateGuestRequest]) (*connect.Response[webv1.WebCreateGuestResponse], error) {
 	slog.DebugContext(ctx, "web: WebCreateGuest")
+
+	if name, gated, err := h.checkCookieCollision(ctx, req.Header()); err != nil {
+		return nil, oops.Wrap(err)
+	} else if gated {
+		return connect.NewResponse(&webv1.WebCreateGuestResponse{
+			Success:           false,
+			ErrorCode:         "ALREADY_AUTHENTICATED",
+			ErrorMessage:      fmt.Sprintf("Already signed in as %s.", name),
+			CurrentPlayerName: name,
+		}), nil
+	}
 
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()

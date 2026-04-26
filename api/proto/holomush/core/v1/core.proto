@@ -319,6 +319,13 @@ message CheckPlayerSessionRequest {
 
 message CheckPlayerSessionResponse {
   string player_name = 1;
+  // NEW (additive on the success path; failure path still returns nil, err
+  // so these fields are absent on PLAYER_SESSION_NOT_FOUND / PLAYER_SESSION_EXPIRED
+  // — preserves the enumeration-safety contract documented at
+  // internal/auth/session_ownership.go:18-20).
+  string player_id = 2;
+  bool is_guest = 3;
+  repeated CharacterSummary characters = 4;
 }
 
 message ListPlayerSessionsRequest {

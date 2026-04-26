@@ -8,14 +8,18 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
@@ -840,4 +844,346 @@ func TestCookieMiddleware_WriteWithoutExplicitWriteHeader(t *testing.T) {
 	cookies := rr.Result().Cookies()
 	require.Len(t, cookies, 1)
 	assert.Equal(t, "implicit-token", cookies[0].Value)
+}
+
+func TestWebCheckSessionForwardsPlayerIDIsGuestAndCharacters(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionResp: &corev1.CheckPlayerSessionResponse{
+			PlayerName: "Jasper Iodine",
+			PlayerId:   "01KQ2Y5ETK5957724MGZ2H2TDB",
+			IsGuest:    true,
+			Characters: []*corev1.CharacterSummary{
+				{CharacterId: "01KQ2Y5ETW03KJ0HKCQ07ASYF2", CharacterName: "Jasper Iodine"},
+			},
+		},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebCheckSessionRequest{})
+	req.Header().Set(headerInjectSessionToken, "valid-token")
+
+	resp, err := h.WebCheckSession(context.Background(), req)
+	require.NoError(t, err)
+	assert.Equal(t, "Jasper Iodine", resp.Msg.GetPlayerName())
+	assert.Equal(t, "01KQ2Y5ETK5957724MGZ2H2TDB", resp.Msg.GetPlayerId())
+	assert.True(t, resp.Msg.GetIsGuest())
+	require.Len(t, resp.Msg.GetCharacters(), 1)
+	assert.Equal(t, "01KQ2Y5ETW03KJ0HKCQ07ASYF2", resp.Msg.GetCharacters()[0].GetCharacterId())
+}
+
+func TestWebCheckSessionFailureContractUnchanged(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionErr: oops.Code("PLAYER_SESSION_NOT_FOUND").Errorf("expired"),
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebCheckSessionRequest{})
+	req.Header().Set(headerInjectSessionToken, "expired-token")
+
+	_, err := h.WebCheckSession(context.Background(), req)
+	require.Error(t, err)
+	var connectErr *connect.Error
+	require.True(t, errors.As(err, &connectErr))
+	assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
+}
+
+func TestCheckCookieCollisionGatedOnValidCookie(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionResp: &corev1.CheckPlayerSessionResponse{
+			PlayerName: "Jasper Iodine",
+			PlayerId:   "01KQ2Y5ETK5957724MGZ2H2TDB",
+			IsGuest:    true,
+		},
+	}
+	h := NewHandler(client)
+
+	headers := http.Header{}
+	headers.Set(headerInjectSessionToken, "valid-token")
+
+	name, gated, err := h.checkCookieCollision(context.Background(), headers)
+	require.NoError(t, err)
+	assert.True(t, gated, "valid cookie MUST trip the gate")
+	assert.Equal(t, "Jasper Iodine", name)
+	assert.Equal(t, int32(1), client.checkSessionCalls.Load())
+}
+
+func TestCheckCookieCollisionPassesThroughOnAbsentCookie(t *testing.T) {
+	client := &mockCoreClient{}
+	h := NewHandler(client)
+
+	headers := http.Header{}
+	// No token header.
+
+	name, gated, err := h.checkCookieCollision(context.Background(), headers)
+	require.NoError(t, err)
+	assert.False(t, gated, "absent cookie MUST NOT trip the gate")
+	assert.Empty(t, name)
+	assert.Equal(t, int32(0), client.checkSessionCalls.Load(), "absent cookie MUST NOT touch the core RPC")
+}
+
+func TestCheckCookieCollisionPassesThroughOnAuthFailure(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionErr: oops.Code("PLAYER_SESSION_NOT_FOUND").Errorf("expired or unknown"),
+	}
+	h := NewHandler(client)
+
+	headers := http.Header{}
+	headers.Set(headerInjectSessionToken, "expired-token")
+
+	name, gated, err := h.checkCookieCollision(context.Background(), headers)
+	require.NoError(t, err, "auth-failure errors MUST NOT propagate; they're normal-case fall-through")
+	assert.False(t, gated)
+	assert.Empty(t, name)
+}
+
+func TestCheckCookieCollisionSurfacesUnexpectedErrors(t *testing.T) {
+	// Plain (non-oops, non-coded) inner error so the gate's outer
+	// oops.Code("COOKIE_GATE_LOOKUP_FAILED").Wrap(err) becomes the deepest
+	// code in the chain. oops.OopsError.Code() returns the DEEPEST code in
+	// the chain (see github.com/samber/oops/error.go:118 getDeepestErrorCode);
+	// if the inner err already had a code it would shadow the gate's code.
+	client := &mockCoreClient{
+		checkSessionErr: errors.New("transport flake"),
+	}
+	h := NewHandler(client)
+
+	headers := http.Header{}
+	headers.Set(headerInjectSessionToken, "some-token")
+
+	_, _, err := h.checkCookieCollision(context.Background(), headers)
+	// Non-auth errors MUST surface wrapped with the gate's COOKIE_GATE_LOOKUP_FAILED
+	// code so callers can distinguish "cookie gate had a transport hiccup" from
+	// "cookie was invalid / no cookie" (both of which return err == nil).
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "COOKIE_GATE_LOOKUP_FAILED")
+}
+
+// --- WebCreateGuest cookie-collision gate ---
+
+func TestWebCreateGuestReturnsAlreadyAuthenticatedWhenCookieValid(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionResp: &corev1.CheckPlayerSessionResponse{PlayerName: "Jasper Iodine"},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebCreateGuestRequest{})
+	req.Header().Set(headerInjectSessionToken, "valid-token")
+
+	resp, err := h.WebCreateGuest(context.Background(), req)
+	require.NoError(t, err, "gate hit returns success=false in body, not an RPC error")
+	assert.False(t, resp.Msg.GetSuccess())
+	assert.Equal(t, "ALREADY_AUTHENTICATED", resp.Msg.GetErrorCode())
+	assert.Equal(t, "Jasper Iodine", resp.Msg.GetCurrentPlayerName())
+	assert.Contains(t, resp.Msg.GetErrorMessage(), "Jasper Iodine")
+	assert.Equal(t, int32(0), client.createGuestCalls.Load(), "CreateGuest MUST NOT be called")
+}
+
+func TestWebCreateGuestProceedsWhenCookieAbsent(t *testing.T) {
+	client := &mockCoreClient{
+		createGuestResp: &corev1.CreateGuestResponse{
+			Success:            true,
+			PlayerSessionToken: "fresh-token",
+			Characters:         []*corev1.CharacterSummary{{CharacterId: "c1", CharacterName: "Alice"}},
+			DefaultCharacterId: "c1",
+		},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebCreateGuestRequest{})
+	// No token header.
+
+	resp, err := h.WebCreateGuest(context.Background(), req)
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.GetSuccess())
+	assert.Empty(t, resp.Msg.GetCurrentPlayerName())
+	assert.Empty(t, resp.Msg.GetErrorCode())
+	assert.Equal(t, int32(1), client.createGuestCalls.Load())
+	assert.Equal(t, int32(0), client.checkSessionCalls.Load(), "absent cookie short-circuits before CheckPlayerSession")
+}
+
+func TestWebCreateGuestProceedsWhenCookieExpired(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionErr: oops.Code("PLAYER_SESSION_EXPIRED").Errorf("expired"),
+		createGuestResp: &corev1.CreateGuestResponse{Success: true, PlayerSessionToken: "fresh"},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebCreateGuestRequest{})
+	req.Header().Set(headerInjectSessionToken, "expired-token")
+
+	resp, err := h.WebCreateGuest(context.Background(), req)
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.GetSuccess())
+	assert.Equal(t, int32(1), client.checkSessionCalls.Load())
+	assert.Equal(t, int32(1), client.createGuestCalls.Load())
+}
+
+func TestWebCreateGuestConcurrentValidCookieAllGate(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionResp: &corev1.CheckPlayerSessionResponse{PlayerName: "Jasper Iodine"},
+	}
+	h := NewHandler(client)
+
+	var wg sync.WaitGroup
+	var gatedCount atomic.Int32
+	errCh := make(chan error, 10)
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			req := connect.NewRequest(&webv1.WebCreateGuestRequest{})
+			req.Header().Set(headerInjectSessionToken, "valid-token")
+			resp, err := h.WebCreateGuest(context.Background(), req)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			if resp.Msg.GetErrorCode() == "ALREADY_AUTHENTICATED" {
+				gatedCount.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
+	assert.Equal(t, int32(10), gatedCount.Load(), "all 10 concurrent calls MUST hit the gate")
+	assert.Equal(t, int32(0), client.createGuestCalls.Load(), "zero CreateGuest calls MUST occur")
+}
+
+func TestWebAuthenticatePlayerReturnsAlreadyAuthenticatedWhenCookieValid(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionResp: &corev1.CheckPlayerSessionResponse{PlayerName: "Real Player"},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebAuthenticatePlayerRequest{
+		Username: "real_player",
+		Password: "correct horse battery staple",
+	})
+	req.Header().Set(headerInjectSessionToken, "valid-token")
+
+	resp, err := h.WebAuthenticatePlayer(context.Background(), req)
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.GetSuccess())
+	assert.Equal(t, "ALREADY_AUTHENTICATED", resp.Msg.GetErrorCode())
+	assert.Equal(t, "Real Player", resp.Msg.GetCurrentPlayerName())
+	assert.Contains(t, resp.Msg.GetErrorMessage(), "Real Player")
+	assert.Equal(t, int32(0), client.authPlayerCalls.Load(), "AuthenticatePlayer MUST NOT run; cap eviction stays untouched")
+	assert.Empty(t, resp.Header().Get(headerSetSessionToken), "no Set-Cookie on gate hit")
+}
+
+func TestWebAuthenticatePlayerProceedsWhenCookieAbsent(t *testing.T) {
+	client := &mockCoreClient{
+		authPlayerResp: &corev1.AuthenticatePlayerResponse{
+			Success: true, PlayerSessionToken: "fresh-token",
+		},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebAuthenticatePlayerRequest{Username: "u", Password: "p"})
+
+	resp, err := h.WebAuthenticatePlayer(context.Background(), req)
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.GetSuccess())
+	assert.Equal(t, int32(1), client.authPlayerCalls.Load())
+}
+
+func TestWebCreatePlayerReturnsAlreadyAuthenticatedWhenCookieValid(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionResp: &corev1.CheckPlayerSessionResponse{PlayerName: "Existing Player"},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebCreatePlayerRequest{
+		Username: "new_player", Password: "x", Email: "new@example.com",
+	})
+	req.Header().Set(headerInjectSessionToken, "valid-token")
+
+	resp, err := h.WebCreatePlayer(context.Background(), req)
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.GetSuccess())
+	assert.Equal(t, "ALREADY_AUTHENTICATED", resp.Msg.GetErrorCode())
+	assert.Equal(t, "Existing Player", resp.Msg.GetCurrentPlayerName())
+	assert.Equal(t, int32(0), client.createPlayerCalls.Load())
+}
+
+// --- signalSessionCookie TTL branch ---
+
+func TestSignalSessionCookieOmitsMaxAgeWhenTTLIsZero(t *testing.T) {
+	h := http.Header{}
+	signalSessionCookie(h, "tok-zero", 0)
+	assert.Equal(t, "tok-zero", h.Get(headerSetSessionToken))
+	assert.Empty(t, h.Get(headerSetSessionMaxAge),
+		"ttl=0 MUST NOT signal MaxAge so the cookie default applies")
+}
+
+func TestSignalSessionCookieOmitsMaxAgeWhenTTLIsNegative(t *testing.T) {
+	h := http.Header{}
+	signalSessionCookie(h, "tok-neg", -1)
+	assert.Equal(t, "tok-neg", h.Get(headerSetSessionToken))
+	assert.Empty(t, h.Get(headerSetSessionMaxAge))
+}
+
+func TestSignalSessionCookieSetsMaxAgeWhenTTLIsPositive(t *testing.T) {
+	h := http.Header{}
+	signalSessionCookie(h, "tok-pos", 7200)
+	assert.Equal(t, "tok-pos", h.Get(headerSetSessionToken))
+	assert.Equal(t, "7200", h.Get(headerSetSessionMaxAge))
+}
+
+// --- isPlayerSessionAuthFailure ---
+
+func TestIsPlayerSessionAuthFailure(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"returns true for player session not found oops code", oops.Code("PLAYER_SESSION_NOT_FOUND").Errorf("x"), true},
+		{"returns true for player session expired oops code", oops.Code("PLAYER_SESSION_EXPIRED").Errorf("x"), true},
+		{"returns true for session not found oops code", oops.Code("SESSION_NOT_FOUND").Errorf("x"), true},
+		{"returns false for unrelated oops code", oops.Code("UNRELATED_CODE").Errorf("x"), false},
+		{"returns false for oops error without code", oops.Errorf("plain oops"), false},
+		{"returns false for plain stdlib error", errors.New("plain error"), false},
+		{"returns false for nil error", nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isPlayerSessionAuthFailure(tt.err))
+		})
+	}
+}
+
+// --- WebCreateGuest RPC-error fallback ---
+
+func TestWebCreateGuestReturnsCoreFailureMessageOnNonSuccess(t *testing.T) {
+	client := &mockCoreClient{
+		createGuestResp: &corev1.CreateGuestResponse{
+			Success:      false,
+			ErrorMessage: "guest service disabled",
+		},
+	}
+	h := NewHandler(client)
+
+	resp, err := h.WebCreateGuest(context.Background(), connect.NewRequest(&webv1.WebCreateGuestRequest{}))
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.GetSuccess())
+	assert.Equal(t, "guest service disabled", resp.Msg.GetErrorMessage())
+	assert.Empty(t, resp.Header().Get(headerSetSessionToken),
+		"core failure MUST NOT signal Set-Cookie")
+}
+
+func TestWebCreateGuestReturnsErrorMessageOnRPCFailure(t *testing.T) {
+	client := &mockCoreClient{
+		createGuestErr: errors.New("connection refused"),
+	}
+	h := NewHandler(client)
+
+	resp, err := h.WebCreateGuest(context.Background(), connect.NewRequest(&webv1.WebCreateGuestRequest{}))
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.GetSuccess())
+	assert.Equal(t, "guest creation error", resp.Msg.GetErrorMessage())
+	assert.Empty(t, resp.Header().Get(headerSetSessionToken))
 }

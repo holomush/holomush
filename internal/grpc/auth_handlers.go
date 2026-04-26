@@ -11,6 +11,8 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/auth"
@@ -19,6 +21,32 @@ import (
 	"github.com/holomush/holomush/internal/world"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
+
+// authFailureToStatus translates known auth-failure oops codes into a
+// codes.Unauthenticated gRPC status, so the client side can distinguish
+// auth-failure (legit expired/unknown cookie) from transport/lookup
+// failures across the wire.
+//
+// Returns:
+//   - non-nil status.Error iff err is a known auth-failure oops code
+//   - nil otherwise (caller should fall through with original err)
+func authFailureToStatus(err error) error {
+	oopsErr, ok := oops.AsOops(err)
+	if !ok {
+		return nil
+	}
+	code, ok := oopsErr.Code().(string)
+	if !ok {
+		return nil
+	}
+	switch code {
+	case "PLAYER_SESSION_NOT_FOUND",
+		"PLAYER_SESSION_EXPIRED",
+		"SESSION_NOT_FOUND":
+		return status.Errorf(codes.Unauthenticated, "%s", oopsErr.Error())
+	}
+	return nil
+}
 
 // AuthServiceProvider defines the auth.Service methods used by auth handlers.
 type AuthServiceProvider interface {
@@ -503,12 +531,24 @@ func (s *CoreServer) Logout(ctx context.Context, req *corev1.LogoutRequest) (*co
 	return &corev1.LogoutResponse{}, nil
 }
 
-// CheckPlayerSession validates a player session token and returns the player name.
+// CheckPlayerSession validates a player session token and returns the player +
+// characters. Failure-path contract (nil, err with PLAYER_SESSION_NOT_FOUND /
+// PLAYER_SESSION_EXPIRED) is preserved exactly. See spec §4.3 / §4.3.1.
 func (s *CoreServer) CheckPlayerSession(ctx context.Context, req *corev1.CheckPlayerSessionRequest) (*corev1.CheckPlayerSessionResponse, error) {
 	slog.DebugContext(ctx, "grpc: CheckPlayerSession")
 
+	// resolvePlayerSession does the token-hash lookup and the best-effort
+	// RefreshTTL — TTL refresh on the success path is inherited.
 	ps, err := s.resolvePlayerSession(ctx, req.GetPlayerSessionToken())
 	if err != nil {
+		// Translate known auth-failure oops codes to codes.Unauthenticated
+		// so the client wrapper can re-inject an oops auth-failure code
+		// without the gRPC client's generic RPC_FAILED wrap hiding it.
+		// Infrastructure failures (NOT_CONFIGURED, etc.) fall through
+		// unchanged — gRPC will surface them as codes.Unknown.
+		if authErr := authFailureToStatus(err); authErr != nil {
+			return nil, authErr
+		}
 		return nil, err
 	}
 
@@ -521,8 +561,16 @@ func (s *CoreServer) CheckPlayerSession(ctx context.Context, req *corev1.CheckPl
 		return nil, oops.Code("PLAYER_LOOKUP_FAILED").Wrap(err)
 	}
 
+	characters, err := s.buildCharacterSummaries(ctx, player.ID)
+	if err != nil {
+		return nil, oops.Code("CHARACTER_LOOKUP_FAILED").Wrap(err)
+	}
+
 	return &corev1.CheckPlayerSessionResponse{
 		PlayerName: player.Username,
+		PlayerId:   player.ID.String(),
+		IsGuest:    player.IsGuest,
+		Characters: characters,
 	}, nil
 }
 

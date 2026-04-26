@@ -541,6 +541,13 @@ test.describe('Terminal UI', () => {
     await input.press('Enter');
     await expect(page).toHaveURL(/\/characters/, { timeout: 10000 });
 
+    // Clear cookies so the new landing-page §4.4.4 pre-gate (added by
+    // multi-tab-session-isolation) doesn't render the authenticated branch
+    // and hide the "Try as Guest" button. This simulates a fresh browser
+    // context — the test's intent is "drafts don't leak across DIFFERENT
+    // guest sessions," not "drafts don't leak after `quit` keeps the cookie."
+    await page.context().clearCookies();
+
     // Reconnect as guest from landing page
     await connectAsGuest(page);
 

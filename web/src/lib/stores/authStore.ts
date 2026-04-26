@@ -6,11 +6,19 @@ import { trace } from '@opentelemetry/api';
 
 const tracer = trace.getTracer('holomush-web');
 
+export interface CharacterSummary {
+  characterId: string;
+  name?: string;
+}
+
 interface AuthState {
   isPlayerAuthenticated: boolean;
   sessionId: string | null;
   characterName: string | null;
   playerName: string | null;
+  playerId: string | null;
+  isGuest: boolean;
+  characters: CharacterSummary[];
 }
 
 const initial: AuthState = {
@@ -18,6 +26,9 @@ const initial: AuthState = {
   sessionId: null,
   characterName: null,
   playerName: null,
+  playerId: null,
+  isGuest: false,
+  characters: [],
 };
 
 export const authState = writable<AuthState>(initial);
@@ -27,6 +38,23 @@ export const hasCharacter = derived(authState, ($s) => !!$s.sessionId && !!$s.ch
 export function setPlayerAuth(playerName: string) {
   sessionStorage.removeItem('holomush-player'); // clean up legacy raw-token key
   authState.update((s) => ({ ...s, isPlayerAuthenticated: true, playerName }));
+}
+
+export function setPlayerProfile(profile: {
+  playerId: string;
+  playerName: string;
+  isGuest: boolean;
+  characters: CharacterSummary[];
+}) {
+  sessionStorage.removeItem('holomush-player'); // clean up legacy raw-token key
+  authState.update((s) => ({
+    ...s,
+    isPlayerAuthenticated: true,
+    playerId: profile.playerId,
+    playerName: profile.playerName,
+    isGuest: profile.isGuest,
+    characters: profile.characters,
+  }));
 }
 
 export function setCharacterSession(sessionId: string, characterName: string) {

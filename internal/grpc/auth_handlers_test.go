@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/holomush/holomush/internal/auth"
 	authmocks "github.com/holomush/holomush/internal/auth/mocks"
@@ -1088,6 +1090,106 @@ func TestCheckPlayerSession(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCheckPlayerSessionPopulatesPlayerIDIsGuestAndCharactersOnSuccess(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	charID := ulid.Make()
+
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	playerRepo := authmocks.NewMockPlayerRepository(t)
+	playerRepo.EXPECT().GetByID(mock.Anything, playerID).
+		Return(&auth.Player{ID: playerID, Username: "Jasper Iodine", IsGuest: true}, nil)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return([]*world.Character{{ID: charID, PlayerID: playerID, Name: "Jasper Iodine"}}, nil)
+
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      session.NewMemStore(),
+		playerSessionRepo: sessionRepo,
+		playerRepo:        playerRepo,
+		charRepo:          charRepo,
+	}
+
+	resp, err := server.CheckPlayerSession(ctx, &corev1.CheckPlayerSessionRequest{
+		PlayerSessionToken: validToken,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "Jasper Iodine", resp.GetPlayerName())
+	assert.Equal(t, playerID.String(), resp.GetPlayerId())
+	assert.True(t, resp.GetIsGuest())
+	require.Len(t, resp.GetCharacters(), 1)
+	assert.Equal(t, "Jasper Iodine", resp.GetCharacters()[0].GetCharacterName())
+	assert.Equal(t, charID.String(), resp.GetCharacters()[0].GetCharacterId())
+}
+
+// TestCheckPlayerSessionAuthFailureTranslatesToCodesUnauthenticated asserts
+// the server-side contract evolved by Task 6.5: known auth-failure oops codes
+// from the player session repo (PLAYER_SESSION_NOT_FOUND, PLAYER_SESSION_EXPIRED,
+// SESSION_NOT_FOUND) are translated to codes.Unauthenticated so the gRPC client
+// wrapper can re-inject an oops auth-failure code on the far side. Without
+// this translation the client wraps every error as RPC_FAILED and the
+// gateway's cookie-collision gate predicate cannot distinguish auth failure
+// from transport failure.
+func TestCheckPlayerSessionAuthFailureTranslatesToCodesUnauthenticated(t *testing.T) {
+	ctx := context.Background()
+
+	sessionRepo := authmocks.NewMockPlayerSessionRepository(t)
+	tokenHash := auth.HashSessionToken("bad-token")
+	sessionRepo.EXPECT().GetByTokenHash(mock.Anything, tokenHash).
+		Return(nil, samberOops.Code("PLAYER_SESSION_NOT_FOUND").Errorf("unknown token"))
+
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      session.NewMemStore(),
+		playerSessionRepo: sessionRepo,
+	}
+
+	resp, err := server.CheckPlayerSession(ctx, &corev1.CheckPlayerSessionRequest{
+		PlayerSessionToken: "bad-token",
+	})
+
+	assert.Nil(t, resp, "failure path returns nil response")
+	require.Error(t, err)
+	statusErr, ok := status.FromError(err)
+	require.True(t, ok, "auth failure must be a gRPC status error")
+	assert.Equal(t, codes.Unauthenticated, statusErr.Code())
+}
+
+// TestCheckPlayerSessionInfraFailureNotTranslated asserts that infrastructure
+// failure paths (NOT_CONFIGURED, PLAYER_LOOKUP_FAILED, CHARACTER_LOOKUP_FAILED)
+// are NOT translated to codes.Unauthenticated — they remain as raw oops errors
+// (gRPC will surface them as codes.Unknown) so they're not mistaken for
+// legitimate auth failures by the client wrapper.
+func TestCheckPlayerSessionInfraFailureNotTranslated(t *testing.T) {
+	ctx := context.Background()
+
+	// playerSessionRepo unset → resolvePlayerSession returns NOT_CONFIGURED.
+	server := &CoreServer{
+		engine:       core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore: session.NewMemStore(),
+	}
+
+	resp, err := server.CheckPlayerSession(ctx, &corev1.CheckPlayerSessionRequest{
+		PlayerSessionToken: validToken,
+	})
+
+	assert.Nil(t, resp)
+	require.Error(t, err)
+	statusErr, ok := status.FromError(err)
+	if ok {
+		assert.NotEqual(t, codes.Unauthenticated, statusErr.Code(),
+			"infra failures must not be translated to Unauthenticated")
+	}
+	var oopsErr samberOops.OopsError
+	require.ErrorAs(t, err, &oopsErr)
+	assert.Equal(t, "NOT_CONFIGURED", oopsErr.Code())
 }
 
 // --- AuthenticatePlayer additional paths ---
