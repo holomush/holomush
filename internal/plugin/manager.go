@@ -354,13 +354,44 @@ func (m *Manager) Discover(_ context.Context) ([]*DiscoveredPlugin, error) {
 			continue
 		}
 
+		// Static crypto-section validation. Failure means the manifest is
+		// internally malformed (unknown sensitivity, duplicate emit, etc.)
+		// and we skip the plugin entirely, mirroring the ParseManifest path.
+		if err := ValidateCrypto(manifest); err != nil {
+			slog.Warn("skipping plugin with invalid crypto section",
+				"dir", entry.Name(),
+				"plugin", manifest.Name,
+				"error", err)
+			continue
+		}
+
 		plugins = append(plugins, &DiscoveredPlugin{
 			Manifest: manifest,
 			Dir:      pluginDir,
 		})
 	}
 
-	return plugins, nil
+	// Build the per-plugin emit registry from successfully-discovered manifests.
+	emitRegistry := make(map[string][]CryptoEmit, len(plugins))
+	for _, dp := range plugins {
+		if dp.Manifest.Crypto != nil {
+			emitRegistry[dp.Manifest.Name] = dp.Manifest.Crypto.Emits
+		}
+	}
+
+	// Filter out plugins whose cross-plugin refs don't resolve.
+	resolved := plugins[:0]
+	for _, dp := range plugins {
+		if err := ResolveCryptoRefs(dp.Manifest, emitRegistry); err != nil {
+			slog.Warn("skipping plugin with unresolvable crypto refs",
+				"plugin", dp.Manifest.Name,
+				"dir", dp.Dir,
+				"error", err)
+			continue
+		}
+		resolved = append(resolved, dp)
+	}
+	return resolved, nil
 }
 
 // warnUnknownTrustAllowlistEntries logs a slog.Warn for each entry in the

@@ -61,7 +61,7 @@ func ValidateCrypto(m *Manifest) error {
 					Errorf("requests_decryption MUST NOT contain wildcards; enumerate event types")
 			}
 			// Rule 3b: must be qualified <plugin>:<event_type>.
-			pluginName, eventType, ok := splitQualifiedRef(ref)
+			pluginName, _, ok := splitQualifiedRef(ref)
 			if !ok {
 				return oops.Code("PLUGIN_CRYPTO_UNQUALIFIED_REF").
 					With("plugin", m.Name).
@@ -78,7 +78,6 @@ func ValidateCrypto(m *Manifest) error {
 						Errorf("requests_decryption references plugin %q not listed in dependencies", pluginName)
 				}
 			}
-			_ = eventType // resolution against the referenced plugin's emits happens at loader-level (Task 4)
 		}
 	}
 
@@ -91,6 +90,67 @@ func validSensitivity(s Sensitivity) bool {
 		return true
 	}
 	return false
+}
+
+// ResolveCryptoRefs verifies every requests_decryption reference points
+// at a plugin in the registry whose manifest declares the named event
+// type with sensitivity in {always, may}. Caller is the loader, after
+// all manifests in this load batch have been parsed.
+//
+// Caller MUST have validated m with ValidateCrypto first; ResolveCryptoRefs
+// assumes every requests_decryption ref is well-formed (qualified
+// <plugin>:<event_type>). With an unvalidated manifest, malformed refs
+// will surface as PLUGIN_CRYPTO_REF_PLUGIN_NOT_LOADED rather than a
+// dedicated error code.
+//
+// registry maps plugin name → that plugin's emit declarations. The
+// loader populates this from the manifests it has already accepted.
+// Self-references (m.Name → its own emits) are resolved against m
+// directly, so a plugin's manifest can request decryption for its
+// own emitted event types without listing itself in the registry.
+func ResolveCryptoRefs(m *Manifest, registry map[string][]CryptoEmit) error {
+	if m.Crypto == nil {
+		return nil
+	}
+	for ci, c := range m.Crypto.Consumes {
+		for ri, ref := range c.RequestsDecryption {
+			pluginName, eventType, _ := splitQualifiedRef(ref)
+			emits := m.Crypto.Emits
+			if pluginName != m.Name {
+				e, ok := registry[pluginName]
+				if !ok {
+					return oops.Code("PLUGIN_CRYPTO_REF_PLUGIN_NOT_LOADED").
+						With("plugin", m.Name).
+						With("ref_plugin", pluginName).
+						With("ref", ref).
+						With("consumes_index", ci).
+						With("decryption_index", ri).
+						Errorf("requests_decryption references plugin not yet loaded")
+				}
+				emits = e
+			}
+			var found *CryptoEmit
+			for i := range emits {
+				if emits[i].EventType == eventType {
+					found = &emits[i]
+					break
+				}
+			}
+			if found == nil {
+				return oops.Code("PLUGIN_CRYPTO_UNKNOWN_EVENT_REF").
+					With("plugin", m.Name).
+					With("ref", ref).
+					Errorf("requests_decryption references event type not declared by referenced plugin")
+			}
+			if found.Sensitivity == SensitivityNever {
+				return oops.Code("PLUGIN_CRYPTO_REF_NEVER_SENSITIVE").
+					With("plugin", m.Name).
+					With("ref", ref).
+					Errorf("requests_decryption MUST NOT reference SensitivityNever event types")
+			}
+		}
+	}
+	return nil
 }
 
 // splitQualifiedRef parses "<plugin>:<event_type>" into its components.
