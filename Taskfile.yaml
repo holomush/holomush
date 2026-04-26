@@ -217,6 +217,12 @@ tasks:
     cmds:
       - ./scripts/build-plugins.sh {{.CLI_ARGS}}
 
+  plugin:validate:
+    desc: "Validate a plugin's manifest (manifest grammar + crypto.emits/consumes rules)"
+    cmds:
+      - ./scripts/validate-plugin.sh {{.CLI_ARGS}}
+    silent: false
+
   docker:build:
     desc: Build Docker image from locally-compiled Linux binary
     deps: ['web:embed', 'plugin:build-all']

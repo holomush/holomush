@@ -9,9 +9,11 @@ import "github.com/spf13/cobra"
 // (validate, events) attach via NewPluginValidateCmd / NewPluginEventsCmd
 // added in subsequent tasks.
 func NewPluginCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "plugin",
 		Short: "Plugin authoring and inspection commands",
 		Long:  "Inspect and validate plugin manifests, list declared event types, and run author-time checks.",
 	}
+	cmd.AddCommand(NewPluginValidateCmd())
+	return cmd
 }
