@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+version: "3"
+
+# Fixture Taskfile for scripts/tests/pr-prep-lock.bats.
+#
+# Mirrors the production `pr-prep` / `pr-prep:run` shape from `Taskfile.yaml`,
+# but invokes `pr-prep:stub` (a configurable stub) instead of the real 9-step
+# body. Shares the lockfile path with production by default; tests override
+# via $LOCK_DIR_OVERRIDE so they do not contend with a real `task pr-prep`
+# running concurrently on the same machine.
+
+vars:
+  LOCK_DIR:
+    sh: echo "${LOCK_DIR_OVERRIDE:-${TMPDIR:-/tmp}/holomush-pr-prep-bats}"
+
+tasks:
+  pr-prep:
+    desc: Locked entry point under test
+    preconditions:
+      - sh: command -v flock >/dev/null 2>&1
+        msg: "flock(1) is required. Install with 'brew install flock' (macOS) or 'apt install util-linux' (Linux)."
+    cmds:
+      - cmd: |
+          set -euo pipefail
+          LOCK_DIR="{{.LOCK_DIR}}"
+          mkdir -p "$LOCK_DIR"
+          LOCK="$LOCK_DIR/lock"
+          INFO="$LOCK_DIR/info"
+          rc=0
+          # {{.TASKFILE}} is a go-task BUILT-IN that resolves to the absolute
+          # path of the loaded Taskfile (i.e., this fixture). We pass it
+          # explicitly to `exec task -t "$3"` so the inner `pr-prep:run`
+          # invocation looks up THIS fixture's task, not the project root's
+          # Taskfile.yaml (which has its own `pr-prep:run` after Task 13).
+          # NOTE: per-`cmd:` `vars:` blocks are silently ignored by go-task
+          # (verified empirically against go-task 3.x); do not add one here.
+          flock -n -E 75 "$LOCK" sh -c '
+            export HOLOMUSH_PR_PREP_BYPASS_LOCK=1
+            printf "pid=%s\nworkspace=%s\nstarted_at=%s\n" \
+              "$$" "$2" "$(date -u +%FT%TZ)" > "$1"
+            exec task -t "$3" pr-prep:run
+          ' _ "$INFO" "$PWD" "{{.TASKFILE}}" || rc=$?
+          if [ "$rc" -eq 75 ]; then
+            {
+              echo "ERROR: another pr-prep is running on this machine."
+              if [ -s "$INFO" ]; then
+                echo
+                sed 's/^/  /' "$INFO"
+              fi
+              echo
+              echo "  Lock file: $LOCK"
+              echo "  Wait for it to finish, or kill the holder PID if wedged."
+            } >&2
+            exit 1
+          fi
+          if [ "$rc" -ne 0 ]; then
+            echo "ERROR: lock acquire failed unexpectedly (rc=$rc); see flock(1) output above." >&2
+            exit "$rc"
+          fi
+
+  pr-prep:run:
+    cmds:
+      - cmd: |
+          if [ "${HOLOMUSH_PR_PREP_BYPASS_LOCK:-}" != "1" ]; then
+            echo "ERROR: pr-prep:run is the unlocked inner body of pr-prep." >&2
+            echo "       Do NOT invoke it directly — it skips the concurrency lock and" >&2
+            echo "       will race with any other pr-prep on this machine." >&2
+            echo "       Use 'task pr-prep' instead." >&2
+            echo "       To intentionally bypass (e.g. CI, debugging), set" >&2
+            echo "       HOLOMUSH_PR_PREP_BYPASS_LOCK=1." >&2
+            exit 1
+          fi
+      - task: pr-prep:stub
+
+  pr-prep:stub:
+    cmds:
+      - cmd: |-
+          MARKER="${STUB_MARKER:-/tmp/pr-prep-stub-marker.$$}"
+          : > "$MARKER"
+          if [ -n "${STUB_SLEEP:-}" ]; then
+            sleep "$STUB_SLEEP"
+          fi
+          if [ -n "${STUB_EXIT:-}" ]; then
+            exit "$STUB_EXIT"
+          fi
