@@ -20,6 +20,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	corecomm "github.com/holomush/holomush/plugins/core-communication"
 )
 
 // registerTestCommands registers quit/shutdown (compiled-in) plus stub handlers
@@ -45,7 +46,7 @@ func registerTestCommands(t *testing.T, reg *command.Registry) {
 			})
 			event := core.NewEvent(
 				"location:"+exec.LocationID().String(),
-				core.EventTypeSay,
+				core.EventType(corecomm.EventTypeSay),
 				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
 				payload,
 			)
@@ -62,7 +63,7 @@ func registerTestCommands(t *testing.T, reg *command.Registry) {
 			})
 			event := core.NewEvent(
 				"location:"+exec.LocationID().String(),
-				core.EventTypePose,
+				core.EventType(corecomm.EventTypePose),
 				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
 				payload,
 			)
@@ -80,7 +81,7 @@ func registerTestCommands(t *testing.T, reg *command.Registry) {
 			})
 			event := core.NewEvent(
 				"location:"+exec.LocationID().String(),
-				core.EventTypeOOC,
+				core.EventType(corecomm.EventTypeOOC),
 				core.Actor{Kind: core.ActorCharacter, ID: exec.CharacterID().String()},
 				payload,
 			)
@@ -171,7 +172,7 @@ func TestDispatcher_HandleCommand_Say(t *testing.T) {
 
 	// Should emit a say event on the location stream
 	require.NotEmpty(t, appended)
-	assert.Equal(t, core.EventTypeSay, appended[0].Type)
+	assert.Equal(t, core.EventType(corecomm.EventTypeSay), appended[0].Type)
 	assert.Equal(t, "location:"+locationID.String(), appended[0].Stream)
 }
 
@@ -209,7 +210,7 @@ func TestDispatcher_HandleCommand_Pose(t *testing.T) {
 	assert.True(t, resp.Success, "pose should succeed: %s", resp.Error)
 
 	require.NotEmpty(t, appended)
-	assert.Equal(t, core.EventTypePose, appended[0].Type)
+	assert.Equal(t, core.EventType(corecomm.EventTypePose), appended[0].Type)
 }
 
 func TestDispatcher_HandleCommand_ColonPrefix(t *testing.T) {
@@ -246,7 +247,7 @@ func TestDispatcher_HandleCommand_ColonPrefix(t *testing.T) {
 	assert.True(t, resp.Success, ": should expand to pose via alias: %s", resp.Error)
 
 	require.NotEmpty(t, appended)
-	assert.Equal(t, core.EventTypePose, appended[0].Type)
+	assert.Equal(t, core.EventType(corecomm.EventTypePose), appended[0].Type)
 }
 
 func TestDispatcher_HandleCommand_UnknownCommand(t *testing.T) {

@@ -15,8 +15,7 @@ func TestEventType_String(t *testing.T) {
 		input    EventType
 		expected string
 	}{
-		{"say event", EventTypeSay, "say"},
-		{"pose event", EventTypePose, "pose"},
+		// Host-owned event types (stay in internal/core)
 		{"arrive event", EventTypeArrive, "arrive"},
 		{"leave event", EventTypeLeave, "leave"},
 		{"system event", EventTypeSystem, "system"},
@@ -28,8 +27,6 @@ func TestEventType_String(t *testing.T) {
 		{"object_give event", EventTypeObjectGive, "object_give"},
 		{"location_state event", EventTypeLocationState, "location_state"},
 		{"exit_update event", EventTypeExitUpdate, "exit_update"},
-		{"ooc event", EventTypeOOC, "ooc"},
-		{"pemit event", EventTypePemit, "pemit"},
 	}
 
 	for _, tt := range tests {
@@ -42,40 +39,6 @@ func TestEventType_String(t *testing.T) {
 func TestEventTypeLocationStateConstantsMatchExpectedValues(t *testing.T) {
 	assert.Equal(t, EventType("location_state"), EventTypeLocationState)
 	assert.Equal(t, EventType("exit_update"), EventTypeExitUpdate)
-}
-
-// TestDocumentedEventTypes validates that event types mentioned in plugin-authoring.md
-// are valid EventType constants. This test will fail if docs/reference/plugin-authoring.md
-// references invalid event types like "emit".
-//
-// The documentation states: Event type (e.g., "say", "pose", "arrive")
-// These must all be valid EventType values.
-func TestDocumentedEventTypesAreValidEventTypeConstants(t *testing.T) {
-	// Event types documented in plugin-authoring.md line 104
-	// These are the examples given: "say", "pose", "arrive"
-	documentedTypes := []string{"say", "pose", "arrive"}
-
-	validTypes := map[string]bool{
-		string(EventTypeSay):           true,
-		string(EventTypePose):          true,
-		string(EventTypeArrive):        true,
-		string(EventTypeLeave):         true,
-		string(EventTypeSystem):        true,
-		string(EventTypeMove):          true,
-		string(EventTypeObjectCreate):  true,
-		string(EventTypeObjectDestroy): true,
-		string(EventTypeObjectUse):     true,
-		string(EventTypeObjectExamine): true,
-		string(EventTypeObjectGive):    true,
-		string(EventTypeLocationState): true,
-		string(EventTypeExitUpdate):    true,
-		string(EventTypePage):          true,
-		string(EventTypeWhisper):       true,
-	}
-
-	for _, docType := range documentedTypes {
-		assert.True(t, validTypes[docType], "documented event type %q is not a valid EventType constant", docType)
-	}
 }
 
 func TestActorKind_String(t *testing.T) {

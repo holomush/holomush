@@ -31,7 +31,7 @@ func TestEngineHandleSayStoresEventWithCharacterNameAndMessage(t *testing.T) {
 	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
 	require.NoError(t, err)
 	assert.Len(t, events, 1)
-	assert.Equal(t, EventTypeSay, events[0].Type)
+	assert.Equal(t, EventType("core-communication:say"), events[0].Type)
 
 	// Verify payload includes character_name
 	var payload SayPayload
@@ -58,7 +58,7 @@ func TestEngineHandlePoseStoresEventWithCharacterNameAndAction(t *testing.T) {
 	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
 	require.NoError(t, err)
 	assert.Len(t, events, 1)
-	assert.Equal(t, EventTypePose, events[0].Type)
+	assert.Equal(t, EventType("core-communication:pose"), events[0].Type)
 
 	// Verify payload includes character_name
 	var payload PosePayload
@@ -85,7 +85,7 @@ func TestEngineHandleSayAppendsEventToLocationStream(t *testing.T) {
 	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, EventTypeSay, events[0].Type)
+	assert.Equal(t, EventType("core-communication:say"), events[0].Type)
 	assert.Equal(t, stream, events[0].Stream)
 }
 
@@ -107,7 +107,7 @@ func TestEngineHandlePoseAppendsEventToLocationStream(t *testing.T) {
 	events, err := store.Replay(ctx, stream, ulid.ULID{}, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, EventTypePose, events[0].Type)
+	assert.Equal(t, EventType("core-communication:pose"), events[0].Type)
 	assert.Equal(t, stream, events[0].Stream)
 }
 

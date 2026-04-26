@@ -16,6 +16,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/session"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	corecomm "github.com/holomush/holomush/plugins/core-communication"
 )
 
 // TestPipelineRendering verifies the full command -> event -> replay pipeline
@@ -58,7 +59,7 @@ func TestPipelineRendering(t *testing.T) {
 		// Find the say event.
 		var sayEvent *core.Event
 		for i := range events {
-			if events[i].Type == core.EventTypeSay {
+			if events[i].Type == core.EventType(corecomm.EventTypeSay) {
 				sayEvent = &events[i]
 				break
 			}
@@ -105,7 +106,7 @@ func TestPipelineRendering(t *testing.T) {
 
 		var poseEvent *core.Event
 		for i := range events {
-			if events[i].Type == core.EventTypePose {
+			if events[i].Type == core.EventType(corecomm.EventTypePose) {
 				poseEvent = &events[i]
 				break
 			}
@@ -201,7 +202,7 @@ func TestPipelineRendering(t *testing.T) {
 
 		// Verify the event carries the fields needed for EventFrame construction.
 		ev := events[0]
-		assert.Equal(t, core.EventTypeSay, ev.Type)
+		assert.Equal(t, core.EventType(corecomm.EventTypeSay), ev.Type)
 		assert.Equal(t, "location:"+locationID.String(), ev.Stream)
 		assert.False(t, ev.ID.IsZero(), "event ID must be set")
 		assert.False(t, ev.Timestamp.IsZero(), "timestamp must be set")
@@ -246,7 +247,7 @@ func TestPipelineRendering(t *testing.T) {
 
 		var oocEvent *core.Event
 		for i := range events {
-			if events[i].Type == core.EventTypeOOC {
+			if events[i].Type == core.EventType(corecomm.EventTypeOOC) {
 				oocEvent = &events[i]
 				break
 			}

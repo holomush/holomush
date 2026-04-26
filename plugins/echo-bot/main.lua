@@ -10,7 +10,7 @@
 
 function on_event(event)
     -- Only respond to say events
-    if event.type ~= "say" then
+    if event.type ~= "core-communication:say" then
         return nil
     end
 
@@ -37,7 +37,7 @@ function on_event(event)
     return {
         {
             stream = event.stream,
-            type = "say",
+            type = "core-communication:say",
             payload = '{"message":"Echo: ' .. msg .. '"}'
         }
     }

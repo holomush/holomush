@@ -19,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/cursor"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	"github.com/holomush/holomush/internal/session"
+	corecomm "github.com/holomush/holomush/plugins/core-communication"
 )
 
 type mockFocusOps struct {
@@ -325,7 +326,7 @@ func TestQueryStreamHistoryReturnsResultTableWithEventsAndMeta(t *testing.T) {
 	ev := core.Event{
 		ID:        targetID,
 		Stream:    "scene:abc:ic",
-		Type:      core.EventTypeSay,
+		Type:      core.EventType(corecomm.EventTypeSay),
 		Timestamp: time.UnixMilli(1700000000000).UTC(),
 		Actor:     core.Actor{Kind: core.ActorCharacter, ID: "char-1"},
 		Payload:   []byte(`{"msg":"hello"}`),
@@ -340,7 +341,7 @@ assert(type(result.events) == "table", "expected events table, got: " .. type(re
 assert(#result.events == 1, "expected 1 event, got: " .. #result.events)
 local e = result.events[1]
 assert(e.stream == "scene:abc:ic", "wrong stream: " .. tostring(e.stream))
-assert(e.type == "say", "wrong type: " .. tostring(e.type))
+assert(e.type == "core-communication:say", "wrong type: " .. tostring(e.type))
 assert(e.actor_kind == "character", "wrong actor_kind: " .. tostring(e.actor_kind))
 assert(e.actor_id == "char-1", "wrong actor_id: " .. tostring(e.actor_id))
 assert(e.payload == '{"msg":"hello"}', "wrong payload: " .. tostring(e.payload))
@@ -419,8 +420,8 @@ func TestQueryStreamHistoryClampsNegativeCountToZero(t *testing.T) {
 
 func TestQueryStreamHistoryHasMoreTrueWhenFullPageReturned(t *testing.T) {
 	// 2 events returned for count=2 → has_more=true, next_cursor is set.
-	e1 := core.Event{ID: ulid.Make(), Stream: "scene:abc:ic", Type: core.EventTypeSay}
-	e2 := core.Event{ID: ulid.Make(), Stream: "scene:abc:ic", Type: core.EventTypeSay}
+	e1 := core.Event{ID: ulid.Make(), Stream: "scene:abc:ic", Type: core.EventType(corecomm.EventTypeSay)}
+	e2 := core.Event{ID: ulid.Make(), Stream: "scene:abc:ic", Type: core.EventType(corecomm.EventTypeSay)}
 	hr := &mockHistoryReader{result: []core.Event{e1, e2}}
 	L := newFocusTestState(t, nil, hr)
 
@@ -439,7 +440,7 @@ func TestQueryStreamHistoryCursorRoundTripsAsBase64(t *testing.T) {
 	ev := core.Event{
 		ID:     eventID,
 		Stream: "scene:abc:ic",
-		Type:   core.EventTypeSay,
+		Type:   core.EventType(corecomm.EventTypeSay),
 	}
 	hr := &mockHistoryReader{result: []core.Event{ev}}
 	L := newFocusTestState(t, nil, hr)

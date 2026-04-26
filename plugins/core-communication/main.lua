@@ -62,7 +62,7 @@ local function handle_say(ctx)
                     ',"message":' .. json_string(msg) .. '}'
 
     return ok_events({
-        {stream = "location:" .. ctx.location_id, type = "say", payload = payload}
+        {stream = "location:" .. ctx.location_id, type = "core-communication:say", payload = payload}
     })
 end
 
@@ -107,7 +107,7 @@ local function handle_pose(ctx)
     payload = payload .. '}'
 
     return ok_events({
-        {stream = "location:" .. ctx.location_id, type = "pose", payload = payload}
+        {stream = "location:" .. ctx.location_id, type = "core-communication:pose", payload = payload}
     })
 end
 
@@ -142,7 +142,7 @@ local function handle_ooc(ctx)
                     ',"style":' .. json_string(style) .. '}'
 
     return ok_events({
-        {stream = "location:" .. ctx.location_id, type = "ooc", payload = payload}
+        {stream = "location:" .. ctx.location_id, type = "core-communication:ooc", payload = payload}
     })
 end
 
@@ -262,7 +262,7 @@ local function handle_page(ctx)
     end
 
     return ok_events(
-        {{stream = "character:" .. target_session.character_id, type = "page", payload = payload}},
+        {{stream = "character:" .. target_session.character_id, type = "core-communication:page", payload = payload}},
         formatted_for_sender
     )
 end
@@ -383,8 +383,8 @@ local function handle_whisper(ctx)
 
     return ok_events(
         {
-            {stream = "location:" .. loc, type = "whisper_notice", payload = notice_payload},
-            {stream = "character:" .. target.character_id, type = "whisper", payload = whisper_payload},
+            {stream = "location:" .. loc, type = "core-communication:whisper_notice", payload = notice_payload},
+            {stream = "character:" .. target.character_id, type = "core-communication:whisper", payload = whisper_payload},
         },
         sender_msg
     )
@@ -429,7 +429,7 @@ local function handle_pemit(ctx)
                     ',"message":' .. json_string(message) .. '}'
 
     return ok_events(
-        {{stream = "character:" .. target_session.character_id, type = "pemit", payload = payload}},
+        {{stream = "character:" .. target_session.character_id, type = "core-communication:pemit", payload = payload}},
         "Pemit sent to " .. target_session.character_name .. "."
     )
 end
