@@ -95,3 +95,23 @@ setup() {
     }
   done
 }
+
+# I-9: direct CLI invocation of pr-prep:run without HOLOMUSH_PR_PREP_BYPASS_LOCK=1
+# refuses to run, exits non-zero, and prints a message naming the bypass env var.
+@test "bypass_guard_blocks: direct pr-prep:run without env var fails with bypass-message" {
+  run env -u HOLOMUSH_PR_PREP_BYPASS_LOCK \
+    task -t "$(fixture_taskfile)" pr-prep:run
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"HOLOMUSH_PR_PREP_BYPASS_LOCK"* ]]
+  [[ "$output" == *"Use 'task pr-prep' instead"* ]]
+}
+
+# Also verify the bypass DOES allow direct invocation (so CI can use it).
+@test "bypass_guard_blocks (positive): with env var set, pr-prep:run runs to success" {
+  STUB_MARKER="${BATS_TEST_TMPDIR}/bypass-marker"
+  HOLOMUSH_PR_PREP_BYPASS_LOCK=1 \
+    STUB_MARKER="$STUB_MARKER" \
+    run task -t "$(fixture_taskfile)" pr-prep:run
+  [ "$status" -eq 0 ]
+  [ -f "$STUB_MARKER" ]
+}
