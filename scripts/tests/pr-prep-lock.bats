@@ -43,3 +43,18 @@ setup() {
   [[ "$output" == *"brew install flock"* ]]
   [[ "$output" == *"apt install util-linux"* ]]
 }
+
+# I-1: a first invocation on an idle machine acquires the lock and runs the
+# inner body to completion.
+@test "acquires_when_idle: harness acquires lock and runs inner stub to success" {
+  STUB_MARKER="${BATS_TEST_TMPDIR}/marker"
+  STUB_SLEEP=0 \
+    STUB_MARKER="$STUB_MARKER" \
+    run task -t "$(fixture_taskfile)" pr-prep
+  [ "$status" -eq 0 ]
+  [ -f "$STUB_MARKER" ]
+  [ -s "$INFO_FILE" ]
+  grep -q '^pid=' "$INFO_FILE"
+  grep -q '^workspace=' "$INFO_FILE"
+  grep -q '^started_at=' "$INFO_FILE"
+}
