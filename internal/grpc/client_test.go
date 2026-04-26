@@ -580,3 +580,63 @@ func TestTranslateCheckPlayerSessionErrPreservesAuthFailureAcrossWire(t *testing
 		})
 	}
 }
+
+// TestNewClientWrapsURLParseFailureAsConnectionFailed pins the defensive
+// branch where grpc.NewClient itself rejects the address (URL-parse error).
+// In production this branch should never fire — addresses come from validated
+// config — but the wrap matters when it does so callers see a CONNECTION_FAILED
+// oops code rather than the raw grpc parse error. \x00 is rejected by net/url's
+// invalid-control-character check; this is the only consistent way to provoke
+// grpc.NewClient into returning an error rather than deferring to first-RPC.
+func TestNewClientWrapsURLParseFailureAsConnectionFailed(t *testing.T) {
+	ctx := context.Background()
+
+	_, err := NewClient(ctx, ClientConfig{Address: "\x00"})
+
+	require.Error(t, err)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "constructor failure must surface as an oops error")
+	assert.Equal(t, "CONNECTION_FAILED", oopsErr.Code())
+}
+
+// TestClientSubscribeWrapsImmediateRPCErrorAsRPCFailed pins the synchronous
+// error path on Client.Subscribe — when the server-side handler returns an
+// error before any frame is sent, c.client.Subscribe returns the error from
+// the initial RPC dispatch and the wrapper MUST surface RPC_FAILED. The
+// existing TestClient_Subscribe_StreamError covers the streaming-error case
+// (error surfaces from stream.Recv after Subscribe returns nil); this test
+// covers the case where Subscribe itself returns the error.
+//
+// In practice grpc-go's server-streaming dispatch typically returns
+// (nonNilStream, nil) and surfaces handler errors on the next Recv. To force
+// the synchronous-error shape that this branch handles, drive the wrapper
+// with a fake gRPC client whose Subscribe returns (nil, err) directly.
+func TestClientSubscribeWrapsImmediateRPCErrorAsRPCFailed(t *testing.T) {
+	ctx := context.Background()
+
+	wrapper := &Client{
+		client: &fakeCoreClient{
+			subscribeErr: status.Error(codes.Internal, "synthetic dispatch failure"),
+		},
+	}
+
+	_, err := wrapper.Subscribe(ctx, &corev1.SubscribeRequest{SessionId: "s"})
+
+	require.Error(t, err)
+	oopsErr, ok := oops.AsOops(err)
+	require.True(t, ok, "Subscribe error must surface as oops")
+	assert.Equal(t, "RPC_FAILED", oopsErr.Code())
+}
+
+// fakeCoreClient is a minimal corev1.CoreServiceClient that lets a single
+// test exercise the wrapper-level error branch on Client.Subscribe without
+// spinning up a real grpc.Server. Only Subscribe is implemented; other
+// methods panic if invoked, which would surface a test boundary violation.
+type fakeCoreClient struct {
+	corev1.CoreServiceClient
+	subscribeErr error
+}
+
+func (f *fakeCoreClient) Subscribe(_ context.Context, _ *corev1.SubscribeRequest, _ ...grpc.CallOption) (corev1.CoreService_SubscribeClient, error) {
+	return nil, f.subscribeErr
+}
