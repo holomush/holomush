@@ -318,6 +318,59 @@ func (s *pluginHostServiceServer) QueryStreamHistory(ctx context.Context, req *p
 	}, nil
 }
 
+// RequestEmitToken issues a self-token bound to {ActorPlugin, pluginName}.
+//
+// Self-tokens cover the gap left by dispatch-token authentication when a
+// plugin emits from a path that DID NOT originate at DeliverEvent or
+// DeliverCommand — typically a plugin-served gRPC handler such as
+// SceneService.CreateScene. Without a self-token, every such emit would
+// fail with EMIT_TOKEN_MISSING after Task 9 landed.
+//
+// G1 (forgery resistance) preservation:
+//   - The request carries no identity fields.
+//   - The actor is hardcoded to {ActorPlugin, s.pluginName}; s.pluginName
+//     is set at server construction (mTLS-bound) and the plugin cannot
+//     forge it.
+//   - The plugin's outgoing actor-claim metadata is still discarded at
+//     EmitEvent — the host uses the tokenStore-bound actor.
+//   - Manifest gate (actor_kinds_claimable must include "plugin") still
+//     fires inside EmitEvent's emit path.
+//   - Cross-plugin defense unchanged: tokenStore keys on (pluginName, token).
+//   - Character-actor cascading still requires a real DeliverEvent /
+//     DeliverCommand dispatch, where the host issues a character-bound
+//     dispatch token; this self-token cannot grant that elevation.
+//
+// (Spec §3.3.5 / §5.4 — two-token pattern.)
+func (s *pluginHostServiceServer) RequestEmitToken(_ context.Context, _ *pluginv1.PluginHostServiceRequestEmitTokenRequest) (*pluginv1.PluginHostServiceRequestEmitTokenResponse, error) {
+	if s.host == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin host service is not configured")
+	}
+
+	s.host.mu.RLock()
+	tokenStore := s.host.tokenStore
+	s.host.mu.RUnlock()
+	if tokenStore == nil {
+		return nil, oops.With("plugin", s.pluginName).New("plugin token store is not configured")
+	}
+
+	// HARDCODED actor: ActorPlugin + the mTLS-bound plugin name. We
+	// deliberately ignore any caller-supplied identity (the request has
+	// none) so this RPC cannot be used as an actor-escalation vector.
+	actor := core.Actor{
+		Kind: core.ActorPlugin,
+		ID:   s.pluginName,
+	}
+
+	token, err := tokenStore.Issue(s.pluginName, actor)
+	if err != nil {
+		return nil, oops.Code("EMIT_TOKEN_ISSUE_FAILED").
+			With("plugin", s.pluginName).
+			Wrap(err)
+	}
+
+	return &pluginv1.PluginHostServiceRequestEmitTokenResponse{Token: token}, nil
+}
+
 // encodeHostEventCursor encodes an event ULID into an opaque host cursor
 // token for the plugin → host boundary. Seq is not available here (the
 // plugins.HistoryReader.ReplayTail interface returns core.Event without Seq),

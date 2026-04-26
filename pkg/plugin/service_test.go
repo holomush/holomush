@@ -264,6 +264,111 @@ func TestEventSinkEmitReturnsErrorWhenClientIsMissing(t *testing.T) {
 	assert.Contains(t, err.Error(), "not configured")
 }
 
+// TestEventSinkEmitFallsBackToRequestEmitTokenWhenNoIncomingToken covers
+// the self-token path (spec §3.3.5). When Emit is called from a
+// plugin-served gRPC handler the incoming ctx has no dispatch token, so
+// the SDK MUST request a self-token via RequestEmitToken and ferry that
+// token onto the outgoing EmitEvent call. This is what makes
+// SceneService.CreateScene-style emits work after Task 9.
+func TestEventSinkEmitFallsBackToRequestEmitTokenWhenNoIncomingToken(t *testing.T) {
+	hostService := &testPluginHostServiceServer{requestEmitTokenResp: "self-tok-123"}
+	hostConn := startPluginHostServiceTestServer(t, hostService)
+
+	sink, err := newEventSinkFromBroker(&testBrokerDialer{
+		conns: map[uint32]*grpc.ClientConn{7: hostConn},
+	}, map[string]string{
+		PluginHostServiceName: "broker:7",
+	})
+	require.NoError(t, err)
+
+	// Call Emit with a plain ctx (no dispatch token in incoming metadata —
+	// this is the plugin-served-RPC path).
+	err = sink.Emit(context.Background(), EmitIntent{
+		Subject: "scene:01SCENE",
+		Type:    EventTypeSystem,
+		Payload: `{"kind":"created"}`,
+	})
+	require.NoError(t, err)
+
+	hostService.mu.Lock()
+	defer hostService.mu.Unlock()
+	assert.Equal(t, 1, hostService.requestEmitTokenHits,
+		"SDK MUST request a self-token exactly once when no incoming token is present")
+	require.Len(t, hostService.requests, 1)
+	require.Len(t, hostService.emitTokens, 1)
+	assert.Equal(t, "self-tok-123", hostService.emitTokens[0],
+		"SDK MUST ferry the host-issued self-token onto the outgoing EmitEvent call")
+}
+
+// TestEventSinkEmitFerriesIncomingTokenAndDoesNotCallRequestEmitToken
+// covers the dispatch-token path (the existing Task 10 auto-ferry).
+// When the incoming ctx already carries a host-issued dispatch token,
+// the SDK MUST ferry it through and MUST NOT call RequestEmitToken
+// (which would replace the character/system-bound dispatch token with
+// a plugin-bound self-token, silently downgrading the actor).
+func TestEventSinkEmitFerriesIncomingTokenAndDoesNotCallRequestEmitToken(t *testing.T) {
+	hostService := &testPluginHostServiceServer{}
+	hostConn := startPluginHostServiceTestServer(t, hostService)
+
+	sink, err := newEventSinkFromBroker(&testBrokerDialer{
+		conns: map[uint32]*grpc.ClientConn{7: hostConn},
+	}, map[string]string{
+		PluginHostServiceName: "broker:7",
+	})
+	require.NoError(t, err)
+
+	// Simulate a HandleEvent / HandleCommand call: the host stamped the
+	// dispatch token onto the incoming metadata.
+	incomingMD := metadata.New(map[string]string{
+		"x-holomush-emit-token": "dispatch-tok-abc",
+	})
+	emitCtx := metadata.NewIncomingContext(context.Background(), incomingMD)
+
+	err = sink.Emit(emitCtx, EmitIntent{
+		Subject: "scene:01SCENE",
+		Type:    EventTypeSystem,
+		Payload: `{"kind":"created"}`,
+	})
+	require.NoError(t, err)
+
+	hostService.mu.Lock()
+	defer hostService.mu.Unlock()
+	assert.Equal(t, 0, hostService.requestEmitTokenHits,
+		"SDK MUST NOT request a self-token when a dispatch token is already present")
+	require.Len(t, hostService.emitTokens, 1)
+	assert.Equal(t, "dispatch-tok-abc", hostService.emitTokens[0],
+		"SDK MUST ferry the incoming dispatch token, not replace it with a self-token")
+}
+
+// TestEventSinkEmitWrapsRequestEmitTokenFailure verifies the SDK
+// surfaces a structured error when the host's self-token issuance
+// fails (e.g., crypto/rand exhaustion). The plugin author sees
+// EMIT_TOKEN_REQUEST_FAILED at the SDK boundary.
+func TestEventSinkEmitWrapsRequestEmitTokenFailure(t *testing.T) {
+	hostService := &testPluginHostServiceServer{
+		requestEmitTokenErr: errors.New("simulated rand exhaustion"),
+	}
+	hostConn := startPluginHostServiceTestServer(t, hostService)
+
+	sink, err := newEventSinkFromBroker(&testBrokerDialer{
+		conns: map[uint32]*grpc.ClientConn{7: hostConn},
+	}, map[string]string{
+		PluginHostServiceName: "broker:7",
+	})
+	require.NoError(t, err)
+
+	err = sink.Emit(context.Background(), EmitIntent{
+		Subject: "scene:01SCENE",
+		Type:    EventTypeSystem,
+		Payload: `{"kind":"created"}`,
+	})
+	require.Error(t, err)
+	// Don't pin an exact code-string match — just assert the SDK does not
+	// silently swallow self-token issuance failures and propagates
+	// something sensible to the plugin author.
+	assert.Contains(t, err.Error(), "simulated rand exhaustion")
+}
+
 func TestNewEventSinkFromBrokerReturnsErrorWhenBrokerIsMissing(t *testing.T) {
 	sink, err := newEventSinkFromBroker(nil, map[string]string{
 		PluginHostServiceName: "broker:7",
@@ -399,23 +504,49 @@ func (d *testBrokerDialer) DialWithOptions(id uint32, _ ...grpc.DialOption) (*gr
 
 type testPluginHostServiceServer struct {
 	pluginv1.UnimplementedPluginHostServiceServer
-	mu        sync.Mutex
-	requests  []*pluginv1.PluginHostServiceEmitEventRequest
-	sawActor  bool
-	actorKind ActorKind
-	actorID   string
+	mu                   sync.Mutex
+	requests             []*pluginv1.PluginHostServiceEmitEventRequest
+	emitTokens           []string // x-holomush-emit-token observed on each EmitEvent
+	sawActor             bool
+	actorKind            ActorKind
+	actorID              string
+	requestEmitTokenHits int
+	requestEmitTokenResp string // token to return; empty = "self-tok"
+	requestEmitTokenErr  error
 }
 
 func (s *testPluginHostServiceServer) EmitEvent(ctx context.Context, req *pluginv1.PluginHostServiceEmitEventRequest) (*pluginv1.PluginHostServiceEmitEventResponse, error) {
+	var tok string
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if vs := md.Get("x-holomush-emit-token"); len(vs) > 0 {
+			tok = vs[0]
+		}
+	}
 	s.mu.Lock()
 	s.requests = append(s.requests, &pluginv1.PluginHostServiceEmitEventRequest{
 		Stream:    req.GetStream(),
 		EventType: req.GetEventType(),
 		Payload:   append([]byte(nil), req.GetPayload()...),
 	})
+	s.emitTokens = append(s.emitTokens, tok)
 	s.actorKind, s.actorID, s.sawActor = ActorMetadataFromIncomingContext(ctx)
 	s.mu.Unlock()
 	return &pluginv1.PluginHostServiceEmitEventResponse{}, nil
+}
+
+func (s *testPluginHostServiceServer) RequestEmitToken(_ context.Context, _ *pluginv1.PluginHostServiceRequestEmitTokenRequest) (*pluginv1.PluginHostServiceRequestEmitTokenResponse, error) {
+	s.mu.Lock()
+	s.requestEmitTokenHits++
+	tok := s.requestEmitTokenResp
+	err := s.requestEmitTokenErr
+	s.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	if tok == "" {
+		tok = "self-tok"
+	}
+	return &pluginv1.PluginHostServiceRequestEmitTokenResponse{Token: tok}, nil
 }
 
 type emittingPluginHostServiceServer struct {
@@ -425,6 +556,14 @@ type emittingPluginHostServiceServer struct {
 	requests   []*pluginv1.PluginHostServiceEmitEventRequest
 	actorKind  ActorKind
 	actorID    string
+}
+
+// RequestEmitToken on the emitting test server returns a deterministic
+// token so SDK fallback callers can complete the EmitEvent round-trip in
+// tests. The host hardcodes the actor on the real implementation; this
+// mock just satisfies the wire contract.
+func (s *emittingPluginHostServiceServer) RequestEmitToken(_ context.Context, _ *pluginv1.PluginHostServiceRequestEmitTokenRequest) (*pluginv1.PluginHostServiceRequestEmitTokenResponse, error) {
+	return &pluginv1.PluginHostServiceRequestEmitTokenResponse{Token: "mock-self-tok"}, nil
 }
 
 func (s *emittingPluginHostServiceServer) EmitEvent(ctx context.Context, req *pluginv1.PluginHostServiceEmitEventRequest) (*pluginv1.PluginHostServiceEmitEventResponse, error) {

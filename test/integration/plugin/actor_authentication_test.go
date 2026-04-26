@@ -158,18 +158,20 @@ func drainPublishedEvents(ctx context.Context, fx *hostFixture) []eventHeaders {
 		msg, gerr := stream.GetMsg(ctx, seq)
 		Expect(gerr).NotTo(HaveOccurred())
 		out = append(out, eventHeaders{
-			Subject:   msg.Subject,
-			ActorKind: msg.Header.Get(eventbus.HeaderActorKind),
-			ActorID:   msg.Header.Get(eventbus.HeaderActorID),
+			Subject:       msg.Subject,
+			ActorKind:     msg.Header.Get(eventbus.HeaderActorKind),
+			ActorID:       msg.Header.Get(eventbus.HeaderActorID),
+			ActorLegacyID: msg.Header.Get(eventbus.HeaderActorLegacyID),
 		})
 	}
 	return out
 }
 
 type eventHeaders struct {
-	Subject   string
-	ActorKind string
-	ActorID   string
+	Subject       string
+	ActorKind     string
+	ActorID       string
+	ActorLegacyID string
 }
 
 // pollResultFile polls path until it exists or deadline elapses, returns
@@ -297,7 +299,20 @@ var _ = Describe("Plugin actor-claim authentication (ec22.1)", func() {
 	})
 
 	Describe("Out-of-dispatch background emit", func() {
-		It("rejects background-goroutine emits with no token in ctx", func() {
+		// Background emits (a goroutine emitting AFTER HandleEvent
+		// returned, with a fresh background ctx and NO dispatch token)
+		// are the SAME architectural path as plugin-served gRPC handlers
+		// like SceneService.CreateScene: the call did not originate at
+		// DeliverEvent / DeliverCommand, so there is no dispatch token
+		// to ferry.
+		//
+		// The SDK falls back to RequestEmitToken to obtain a self-token
+		// bound to {ActorPlugin, pluginName}. The emit succeeds, and the
+		// published event carries the plugin actor — NOT the original
+		// dispatch character. That's the load-bearing G1 invariant: a
+		// background goroutine cannot keep emitting under a dispatching
+		// character's identity after the dispatch has returned.
+		It("publishes a plugin-actor event via the self-token fallback", func() {
 			fx := newHostFixture(ctx)
 			defer fx.cleanup()
 
@@ -312,21 +327,40 @@ var _ = Describe("Plugin actor-claim authentication (ec22.1)", func() {
 				ActorID:   dispatchCharID,
 				// Mode tells the plugin to spawn a goroutine and emit
 				// AFTER HandleEvent returns. The goroutine emits with a
-				// fresh background ctx — NO token in metadata.
+				// fresh background ctx — NO token in metadata. The SDK's
+				// self-token fallback picks this up.
 				Payload: modePayload(forgeryEmitSubject, withBackgroundEmit(resultFile)),
 			})
 			Expect(err).NotTo(HaveOccurred(),
-				"HandleEvent itself returns nil — only the background emit fails")
+				"HandleEvent returns nil; the background emit succeeds via self-token")
 
 			contents, readErr := pollResultFile(resultFile, 10*time.Second)
 			Expect(readErr).NotTo(HaveOccurred())
-			// gRPC drops oops Codes over the wire — assert on the
-			// EMIT_TOKEN_MISSING message text instead.
-			Expect(contents).To(ContainSubstring("plugin emitted without a host-issued dispatch token"),
-				"background emit (no token in ctx) MUST surface EMIT_TOKEN_MISSING")
+			Expect(contents).To(Equal("ok"),
+				"background emit via self-token fallback MUST succeed")
 
-			Expect(drainPublishedEvents(ctx, fx)).To(BeEmpty(),
-				"no event may be published when emit lacks a token")
+			// G1 invariant: published event carries the PLUGIN actor
+			// (the self-token's hardcoded binding), NOT the original
+			// dispatching character — a background goroutine cannot
+			// continue acting under the dispatch character's identity.
+			//
+			// Note: the plugin name is a non-ULID string, and the
+			// transitional core.Actor → eventbus.Actor bridge in
+			// internal/plugin/event_emitter.go::coreActorToEventbusActor
+			// drops non-ULID IDs. So HeaderActorID is empty for plugin
+			// actors today. We assert on ActorKind alone (the load-
+			// bearing G1 signal) and explicitly assert HeaderActorID
+			// does NOT carry the dispatching character ID (the bug we
+			// would introduce if we accidentally let the dispatch
+			// token's stored character actor leak into self-token
+			// emits).
+			events := drainPublishedEvents(ctx, fx)
+			Expect(events).To(HaveLen(1),
+				"self-token fallback produces exactly one published event")
+			Expect(events[0].ActorKind).To(Equal("plugin"),
+				"G1: background self-token emit MUST carry plugin actor kind, NOT character")
+			Expect(events[0].ActorID).NotTo(Equal(dispatchCharID),
+				"G1: background emit MUST NOT inherit the dispatching character's ULID")
 		})
 	})
 

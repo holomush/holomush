@@ -275,6 +275,26 @@ func (s *pluginHostServiceServer) EmitEvent(ctx context.Context, req *pluginv1.P
 
 Key invariant: `storedActor` comes from the token store (host-authoritative), NEVER from `pluginsdk.ActorMetadataFromIncomingContext(ctx)`. The plugin's metadata claim values are discarded.
 
+#### 3.3.6 Two-token pattern (dispatch tokens vs self tokens)
+
+The §3.3.4 issuance flow only fires at `DeliverEvent` / `DeliverCommand`. Plugins that **serve their own gRPC handlers** (e.g., `SceneService.CreateScene`) emit events from a path that did NOT originate at a Deliver call site, so no dispatch token is in the incoming ctx. Without a second issuance path, every such emit would fail with `EMIT_TOKEN_MISSING` after this design lands — breaking the entire plugin-served-RPC surface.
+
+Resolution: the host exposes a second RPC, `PluginHostService.RequestEmitToken`, that issues a **self-token** bound to `{ActorPlugin, pluginName}`. The SDK's `pluginHostEventSink.Emit` calls it as a fallback whenever the incoming ctx has no dispatch token.
+
+| Token | Issued by | Bound actor | Use case |
+| ---   | ---       | ---         | --- |
+| **Dispatch token** | `Host.DeliverEvent` / `Host.DeliverCommand` (§3.3.4) | Stored character / system / plugin actor from upstream ctx | HandleEvent / HandleCommand round-trip emits |
+| **Self token** | `pluginHostServiceServer.RequestEmitToken` | HARDCODED `{ActorPlugin, pluginName}` | Plugin-served gRPC handler emits, background goroutine emits |
+
+G1 preservation under self-tokens:
+
+- The `RequestEmitToken` request carries no identity fields. Adding any caller-supplied actor fields here would re-open the forgery surface; the proto comment forbids it.
+- The handler binds the actor to `{ActorPlugin, s.pluginName}`. `s.pluginName` is set at server construction (mTLS-bound on real deployments). The plugin cannot forge its own name through this RPC.
+- `EmitEvent`'s actor-headers-discarded contract is unchanged — the host still uses the tokenStore-bound actor regardless of what the plugin claims in metadata.
+- The manifest gate in `event_emitter.go::Emit` still fires for the resulting actor kind. A plugin that doesn't list `"plugin"` in `actor_kinds_claimable` cannot self-token-emit at all.
+- Cross-plugin defense unchanged: `tokenStore` keys on `(pluginName, token)`, so plugin A's self-token cannot be reused by plugin B's server.
+- **Character-actor cascading still requires a real Deliver dispatch.** Self-tokens cannot promote a background goroutine into the original character's identity — a goroutine emitting after `HandleEvent` returned will publish events stamped with the plugin actor, NOT the dispatching character.
+
 ### 3.4 Manifest gate (universal — Lua + binary)
 
 In `internal/plugin/event_emitter.go::Emit`, after the namespace check at lines 99-111 and before publish:

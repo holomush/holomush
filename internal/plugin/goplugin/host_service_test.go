@@ -774,3 +774,94 @@ func TestEmitEventCrossPluginTokenLeakFails(t *testing.T) {
 
 	assert.Empty(t, drainEventbusStream(t, bus.JS))
 }
+
+// TestRequestEmitTokenIssuesSelfTokenBoundToPluginActor covers the
+// happy path: a plugin-served gRPC handler requests a self-token and
+// receives one bound to {ActorPlugin, pluginName}. (Spec §3.3.5
+// self-token pattern.)
+func TestRequestEmitTokenIssuesSelfTokenBoundToPluginActor(t *testing.T) {
+	t.Parallel()
+	h := NewHost()
+	defer func() { _ = h.Close(context.Background()) }()
+	s := &pluginHostServiceServer{host: h, pluginName: "plug-A"}
+
+	resp, err := s.RequestEmitToken(context.Background(), &pluginv1.PluginHostServiceRequestEmitTokenRequest{})
+	require.NoError(t, err)
+	require.NotEmpty(t, resp.GetToken(), "self-token must be non-empty")
+
+	// The returned token MUST resolve via the host's tokenStore to an
+	// actor pinned to {ActorPlugin, pluginName}. This is the load-bearing
+	// G1 invariant for the self-token path: the plugin cannot escalate
+	// to a character or system actor through this RPC.
+	storedActor, ok := h.tokenStore.Lookup("plug-A", resp.GetToken())
+	require.True(t, ok, "issued token must resolve in the host's tokenStore")
+	assert.Equal(t, core.ActorPlugin, storedActor.Kind)
+	assert.Equal(t, "plug-A", storedActor.ID)
+}
+
+// TestRequestEmitTokenAlwaysHardcodesActorPluginAndPluginName guards
+// against future spec drift: regardless of any caller-supplied input the
+// RPC MUST bind the token to {ActorPlugin, s.pluginName}. The request
+// message is intentionally empty today; this test makes the hardcoded
+// binding contract explicit so a future "extend the request" patch can't
+// silently re-open the G1 forgery surface.
+func TestRequestEmitTokenAlwaysHardcodesActorPluginAndPluginName(t *testing.T) {
+	t.Parallel()
+	h := NewHost()
+	defer func() { _ = h.Close(context.Background()) }()
+	s := &pluginHostServiceServer{host: h, pluginName: "plug-B"}
+
+	resp, err := s.RequestEmitToken(context.Background(), &pluginv1.PluginHostServiceRequestEmitTokenRequest{})
+	require.NoError(t, err)
+
+	storedActor, ok := h.tokenStore.Lookup("plug-B", resp.GetToken())
+	require.True(t, ok)
+	assert.Equal(t, core.ActorPlugin, storedActor.Kind,
+		"actor kind MUST be ActorPlugin regardless of any future request fields")
+	assert.Equal(t, "plug-B", storedActor.ID,
+		"actor ID MUST be the mTLS-bound plugin name, not a caller-supplied value")
+
+	// Cross-plugin defense intact: a sibling server with a different
+	// pluginName MUST NOT be able to use this token.
+	_, leaked := h.tokenStore.Lookup("plug-A", resp.GetToken())
+	assert.False(t, leaked, "plug-B's self-token MUST NOT resolve under plug-A")
+}
+
+// TestRequestEmitTokenReturnsErrorWhenHostIsNil covers the defensive
+// nil-host check on the handler.
+func TestRequestEmitTokenReturnsErrorWhenHostIsNil(t *testing.T) {
+	t.Parallel()
+	s := &pluginHostServiceServer{host: nil, pluginName: "plug-A"}
+
+	_, err := s.RequestEmitToken(context.Background(), &pluginv1.PluginHostServiceRequestEmitTokenRequest{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "plugin host service is not configured")
+}
+
+// TestRequestEmitTokenWrapsIssueFailure verifies that a token-store Issue
+// failure (e.g., crypto/rand exhaustion) surfaces as a structured error
+// with the EMIT_TOKEN_ISSUE_FAILED code so callers can distinguish it
+// from EMIT_TOKEN_REJECTED at the EmitEvent boundary.
+func TestRequestEmitTokenWrapsIssueFailure(t *testing.T) {
+	t.Parallel()
+	h := NewHost()
+	defer func() { _ = h.Close(context.Background()) }()
+	// Inject a failing rand source on the tokenStore so Issue returns
+	// an error from the crypto path.
+	h.tokenStore.rand = failingReader{}
+	s := &pluginHostServiceServer{host: h, pluginName: "plug-A"}
+
+	_, err := s.RequestEmitToken(context.Background(), &pluginv1.PluginHostServiceRequestEmitTokenRequest{})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_ISSUE_FAILED")
+}
+
+// failingReader implements io.Reader returning a deterministic error,
+// used to simulate crypto/rand exhaustion on token issuance.
+type failingReader struct{}
+
+func (failingReader) Read(_ []byte) (int, error) {
+	return 0, errFailingReader
+}
+
+var errFailingReader = oops.Errorf("simulated rand exhaustion")

@@ -274,6 +274,7 @@ const (
 	PluginHostService_LeaveFocusByTarget_FullMethodName  = "/holomush.plugin.v1.PluginHostService/LeaveFocusByTarget"
 	PluginHostService_PresentFocus_FullMethodName        = "/holomush.plugin.v1.PluginHostService/PresentFocus"
 	PluginHostService_QueryStreamHistory_FullMethodName  = "/holomush.plugin.v1.PluginHostService/QueryStreamHistory"
+	PluginHostService_RequestEmitToken_FullMethodName    = "/holomush.plugin.v1.PluginHostService/RequestEmitToken"
 )
 
 // PluginHostServiceClient is the client API for PluginHostService service.
@@ -316,6 +317,14 @@ type PluginHostServiceClient interface {
 	// Read-only: does not advance cursors or affect session state.
 	// Count capped at 500 server-side.
 	QueryStreamHistory(ctx context.Context, in *PluginHostServiceQueryStreamHistoryRequest, opts ...grpc.CallOption) (*PluginHostServiceQueryStreamHistoryResponse, error)
+	// RequestEmitToken issues a self-token bound to the calling plugin's
+	// identity (ActorPlugin + pluginName), so plugin-served gRPC handlers
+	// (which are not invoked via DeliverEvent / DeliverCommand) can still
+	// call EmitEvent. The plugin's identity is taken from the mTLS-bound
+	// gRPC server struct — the request carries no identity fields and the
+	// plugin cannot impersonate another actor through this RPC.
+	// (Spec §3.3.5 / §5.4 self-token pattern.)
+	RequestEmitToken(ctx context.Context, in *PluginHostServiceRequestEmitTokenRequest, opts ...grpc.CallOption) (*PluginHostServiceRequestEmitTokenResponse, error)
 }
 
 type pluginHostServiceClient struct {
@@ -446,6 +455,16 @@ func (c *pluginHostServiceClient) QueryStreamHistory(ctx context.Context, in *Pl
 	return out, nil
 }
 
+func (c *pluginHostServiceClient) RequestEmitToken(ctx context.Context, in *PluginHostServiceRequestEmitTokenRequest, opts ...grpc.CallOption) (*PluginHostServiceRequestEmitTokenResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginHostServiceRequestEmitTokenResponse)
+	err := c.cc.Invoke(ctx, PluginHostService_RequestEmitToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginHostServiceServer is the server API for PluginHostService service.
 // All implementations must embed UnimplementedPluginHostServiceServer
 // for forward compatibility.
@@ -486,6 +505,14 @@ type PluginHostServiceServer interface {
 	// Read-only: does not advance cursors or affect session state.
 	// Count capped at 500 server-side.
 	QueryStreamHistory(context.Context, *PluginHostServiceQueryStreamHistoryRequest) (*PluginHostServiceQueryStreamHistoryResponse, error)
+	// RequestEmitToken issues a self-token bound to the calling plugin's
+	// identity (ActorPlugin + pluginName), so plugin-served gRPC handlers
+	// (which are not invoked via DeliverEvent / DeliverCommand) can still
+	// call EmitEvent. The plugin's identity is taken from the mTLS-bound
+	// gRPC server struct — the request carries no identity fields and the
+	// plugin cannot impersonate another actor through this RPC.
+	// (Spec §3.3.5 / §5.4 self-token pattern.)
+	RequestEmitToken(context.Context, *PluginHostServiceRequestEmitTokenRequest) (*PluginHostServiceRequestEmitTokenResponse, error)
 	mustEmbedUnimplementedPluginHostServiceServer()
 }
 
@@ -531,6 +558,9 @@ func (UnimplementedPluginHostServiceServer) PresentFocus(context.Context, *Plugi
 }
 func (UnimplementedPluginHostServiceServer) QueryStreamHistory(context.Context, *PluginHostServiceQueryStreamHistoryRequest) (*PluginHostServiceQueryStreamHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method QueryStreamHistory not implemented")
+}
+func (UnimplementedPluginHostServiceServer) RequestEmitToken(context.Context, *PluginHostServiceRequestEmitTokenRequest) (*PluginHostServiceRequestEmitTokenResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RequestEmitToken not implemented")
 }
 func (UnimplementedPluginHostServiceServer) mustEmbedUnimplementedPluginHostServiceServer() {}
 func (UnimplementedPluginHostServiceServer) testEmbeddedByValue()                           {}
@@ -769,6 +799,24 @@ func _PluginHostService_QueryStreamHistory_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginHostService_RequestEmitToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginHostServiceRequestEmitTokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginHostServiceServer).RequestEmitToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginHostService_RequestEmitToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginHostServiceServer).RequestEmitToken(ctx, req.(*PluginHostServiceRequestEmitTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginHostService_ServiceDesc is the grpc.ServiceDesc for PluginHostService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -823,6 +871,10 @@ var PluginHostService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "QueryStreamHistory",
 			Handler:    _PluginHostService_QueryStreamHistory_Handler,
+		},
+		{
+			MethodName: "RequestEmitToken",
+			Handler:    _PluginHostService_RequestEmitToken_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
