@@ -691,8 +691,19 @@ tasks:
     cmds:
       - uv sync
 
+  docs:gen-events:
+    desc: "Regenerate site/docs/reference/events/<plugin>.md from plugin manifests"
+    cmds:
+      - ./scripts/gen-event-docs.sh
+    sources:
+      - plugins/*/plugin.yaml
+    generates:
+      - site/docs/reference/events/*.md
+      - site/docs/reference/events.md
+
   docs:build:
     desc: Build documentation site
+    deps: ['docs:gen-events']
     dir: site
     cmds:
       - uv run zensical build

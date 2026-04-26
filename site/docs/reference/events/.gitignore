@@ -1,0 +1,3 @@
+# Auto-generated plugin event reference pages — see scripts/gen-event-docs.sh
+*.md
+!.gitkeep

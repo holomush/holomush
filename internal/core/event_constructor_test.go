@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/holomush/holomush/internal/core"
+	corecomm "github.com/holomush/holomush/plugins/core-communication"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	corecomm "github.com/holomush/holomush/plugins/core-communication"
 )
 
 func TestNewEventAssignsMonotonicID(t *testing.T) {
