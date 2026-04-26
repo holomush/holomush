@@ -367,3 +367,125 @@ var _ = Describe("Multi-tab session isolation — two characters of one player",
 			"two characters under one player MUST NOT trigger ownership-mismatch logs")
 	})
 })
+
+var _ = Describe("Multi-tab session isolation — logout in tab 1, action in tab 2", func() {
+	var ctx context.Context
+	var gw *web.Handler
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		// FK-safe wipe of any state from prior specs (deletes locations among
+		// other tables — see auth_suite_test.go cleanupTestData).
+		cleanupTestData(ctx, env.pool)
+
+		// Re-create the guest start-location row that the GuestService's namer
+		// references. Other specs in this file rely on it; keep it consistent
+		// across the suite even though this spec uses a registered player.
+		loc := &world.Location{
+			ID:           env.guestStartLocationID,
+			Name:         "Guest Lobby",
+			Description:  "Guest start location for multi-tab integration tests",
+			Type:         world.LocationTypePersistent,
+			ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
+		}
+		Expect(env.locRepo.Create(ctx, loc)).To(Succeed())
+
+		gw = env.webHandler
+	})
+
+	It("each call site from spec §4.4.5 returns SESSION_NOT_FOUND after logout", func() {
+		// Seed: a registered player with one character. CreatePlayer returns
+		// (*Player, *PlayerSession, rawToken string, error). auth.Service
+		// constructs the PlayerSession but does NOT persist it — replicate
+		// the gRPC handler's persistence so resolvePlayerSession can find
+		// the token.
+		username := "logout_player"
+		password := "correct horse battery staple"
+		_, playerSession, rawToken, err := env.authService.CreatePlayer(ctx, username, password, username+"@test.local")
+		Expect(err).NotTo(HaveOccurred(), "seed: create player")
+		Expect(rawToken).NotTo(BeEmpty())
+		Expect(env.playerSessionStore.Create(ctx, playerSession)).To(Succeed(),
+			"seed: persist player session so the rawToken resolves")
+
+		player, err := env.playerRepo.GetByUsername(ctx, username)
+		Expect(err).NotTo(HaveOccurred())
+		// world.Character.Name is "letters and spaces only"; avoid hyphens.
+		loc := createTestLocation(ctx, "Logout Lobby")
+		char := createTestCharacter(ctx, player.ID, "Logout Hero", loc.ID)
+		charID := char.ID.String()
+
+		// Tab 1 + Tab 2 both select the character. WebSelectCharacter is
+		// idempotent for the same (player, character) — both calls land on
+		// the same session_id (verified by the "same character in two tabs"
+		// spec above). We only need one sessionID for the post-logout retries.
+		selReq := connect.NewRequest(&webv1.WebSelectCharacterRequest{CharacterId: charID})
+		selReq.Header().Set(web.HeaderInjectSessionToken, rawToken)
+		selResp, err := gw.WebSelectCharacter(ctx, selReq)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(selResp.Msg.GetSuccess()).To(BeTrue(), "select: %s", selResp.Msg.GetErrorMessage())
+		sessionID := selResp.Msg.GetSessionId()
+		Expect(sessionID).NotTo(BeEmpty())
+
+		// Tab 1: WebLogout. PlayerSession is deleted; child game sessions are
+		// also deleted via the fanout in CoreServer.Logout.
+		_, err = env.coreServer.Logout(ctx, &corev1.LogoutRequest{
+			PlayerSessionToken: rawToken,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Tab 2 retries each of the four call sites with the (now-stale)
+		// token. The post-logout error surface differs by call site:
+		//
+		//   - WebQueryStreamHistory  → errors out (gRPC status passes through)
+		//   - WebListSessionStreams  → errors out (gRPC status passes through)
+		//   - HandleCommand          → returns Success=false (enumeration-safe;
+		//                              see server.go:317-328)
+		//   - GetCommandHistory      → returns Success=false (enumeration-safe;
+		//                              see server.go:1261-1278)
+		//
+		// Both shapes are valid "session not found" surfaces; what matters
+		// is that none of them return Success=true with real data.
+
+		// 1. WebQueryStreamHistory.
+		qReq := connect.NewRequest(&webv1.WebQueryStreamHistoryRequest{
+			SessionId: sessionID,
+			Stream:    "character:" + charID,
+			Count:     10,
+		})
+		qReq.Header().Set(web.HeaderInjectSessionToken, rawToken)
+		_, err = gw.WebQueryStreamHistory(ctx, qReq)
+		Expect(err).To(HaveOccurred(), "WebQueryStreamHistory MUST surface stale-session error")
+
+		// 2. WebListSessionStreams.
+		lReq := connect.NewRequest(&webv1.WebListSessionStreamsRequest{SessionId: sessionID})
+		lReq.Header().Set(web.HeaderInjectSessionToken, rawToken)
+		_, err = gw.WebListSessionStreams(ctx, lReq)
+		Expect(err).To(HaveOccurred(), "WebListSessionStreams MUST surface stale-session error")
+
+		// 3. HandleCommand on the core server. Enumeration-safe path returns
+		// Success=false with no transport-level error.
+		cmdResp, err := env.coreServer.HandleCommand(ctx, &corev1.HandleCommandRequest{
+			SessionId:          sessionID,
+			PlayerSessionToken: rawToken,
+			Command:            "look",
+		})
+		Expect(err).NotTo(HaveOccurred(), "HandleCommand uses enumeration-safe Success=false rejection")
+		Expect(cmdResp.GetSuccess()).To(BeFalse(),
+			"HandleCommand MUST reject stale token with Success=false")
+		Expect(cmdResp.GetError()).To(ContainSubstring("session not found"))
+
+		// 4. GetCommandHistory — same enumeration-safe path. This stands in
+		// for the Subscribe call site: both run through ValidateSessionOwnership,
+		// and Subscribe's stream-opening machinery is awkward to drive directly
+		// from this test. GetCommandHistory exercises the identical validation
+		// path (see server.go:1261-1278).
+		histResp, err := env.coreServer.GetCommandHistory(ctx, &corev1.GetCommandHistoryRequest{
+			SessionId:          sessionID,
+			PlayerSessionToken: rawToken,
+		})
+		Expect(err).NotTo(HaveOccurred(), "GetCommandHistory uses enumeration-safe Success=false rejection")
+		Expect(histResp.GetSuccess()).To(BeFalse(),
+			"GetCommandHistory MUST reject revoked token with Success=false")
+		Expect(histResp.GetError()).To(ContainSubstring("session not found"))
+	})
+})
