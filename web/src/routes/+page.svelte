@@ -3,39 +3,67 @@
   Copyright 2026 HoloMUSH Contributors
 -->
 <script lang="ts">
-  import { createClient } from '@connectrpc/connect';
-  import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
-  import { transport } from '$lib/transport';
-  import { setPlayerAuth, setCharacterSession } from '$lib/stores/authStore';
   import { goto } from '$app/navigation';
   import MarkdownContent from '$lib/components/MarkdownContent.svelte';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
+  import { createClient } from '@connectrpc/connect';
+  import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
+  import { transport } from '$lib/transport';
+  import { clearAuth, setCharacterSession } from '$lib/stores/authStore';
   import type { ContentItem } from '$lib/stores/contentStore';
 
-  let { data }: { data: { hero?: ContentItem; pitch?: ContentItem; features?: ContentItem[]; connectInfo?: ContentItem } } = $props();
+  let {
+    data
+  }: {
+    data: {
+      hero?: ContentItem;
+      pitch?: ContentItem;
+      features?: ContentItem[];
+      connectInfo?: ContentItem;
+      authenticated: boolean;
+      playerName?: string;
+      characters?: { characterId: string; characterName?: string }[];
+    };
+  } = $props();
 
   const hero = $derived(data.hero);
   const pitch = $derived(data.pitch);
   const features = $derived(data.features ?? []);
   const connectInfo = $derived(data.connectInfo);
-
-  const client = createClient(WebService, transport);
-
-  let loading = $state(false);
-  let error = $state('');
-
-  const hasContent = $derived(!!hero || !!pitch || features.length > 0 || !!connectInfo);
   const heroTitle = $derived(hero?.metadata?.title ?? 'HoloMUSH');
   const heroTagline = $derived(hero?.metadata?.tagline ?? 'A modern MUSH platform');
+  const hasContent = $derived(!!hero || !!pitch || features.length > 0 || !!connectInfo);
+
+  const client = createClient(WebService, transport);
+  let busy = $state(false);
+  let error = $state('');
+
+  // Spec §4.4.4 client-side pre-gate: probe webCheckSession before any
+  // create/auth call. If the throw doesn't fire, the user is already signed
+  // in and we route to the authenticated landing branch instead of clobbering
+  // the cookie.
+  async function isAlreadySignedIn(): Promise<boolean> {
+    try {
+      await client.webCheckSession({});
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   async function handleGuest() {
     error = '';
-    loading = true;
+    busy = true;
     try {
+      if (await isAlreadySignedIn()) {
+        // Defense in depth — load() should already have rendered the
+        // authenticated branch. Reload to pick it up.
+        location.reload();
+        return;
+      }
       const resp = await client.webCreateGuest({});
       if (resp.success) {
-        setPlayerAuth('Guest');
         const charId = resp.defaultCharacterId || resp.characters[0]?.characterId;
         if (charId) {
           const selectResp = await client.webSelectCharacter({ characterId: charId });
@@ -46,14 +74,53 @@
           }
         }
         goto('/characters');
+      } else if (resp.errorCode === 'ALREADY_AUTHENTICATED') {
+        // Server-side backstop fired — same handling as the pre-gate.
+        location.reload();
       } else {
         error = resp.errorMessage || 'Guest login failed.';
       }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Guest login failed.';
     } finally {
-      loading = false;
+      busy = false;
     }
+  }
+
+  async function handleContinue() {
+    busy = true;
+    try {
+      const chars = data.characters ?? [];
+      if (chars.length === 0) {
+        goto('/characters');
+        return;
+      }
+      if (chars.length === 1) {
+        const selectResp = await client.webSelectCharacter({ characterId: chars[0].characterId });
+        if (selectResp.success) {
+          setCharacterSession(selectResp.sessionId, selectResp.characterName);
+          goto('/terminal');
+          return;
+        }
+        error = selectResp.errorMessage || 'Could not resume session.';
+        return;
+      }
+      goto('/characters');
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function handleLogout() {
+    busy = true;
+    try {
+      await client.webLogout({});
+    } catch {
+      /* swallow */
+    }
+    clearAuth();
+    busy = false;
+    location.reload();
   }
 </script>
 
@@ -67,13 +134,23 @@
       <p class="text-sm text-destructive" data-testid="hero-error">{error}</p>
     {/if}
 
-    <div class="flex gap-3 mt-2 flex-wrap justify-center" data-testid="hero-actions">
-      <Button href="/login" data-testid="login-link">Login</Button>
-      <Button variant="outline" href="/register" data-testid="register-link">Register</Button>
-      <Button variant="ghost" onclick={handleGuest} disabled={loading} data-testid="guest-button">
-        {loading ? 'Connecting…' : 'Try as Guest'}
-      </Button>
-    </div>
+    {#if data.authenticated}
+      <div class="flex flex-col items-center gap-2 mt-2" data-testid="hero-actions-authenticated">
+        <p class="text-sm">Signed in as <strong>{data.playerName}</strong></p>
+        <div class="flex gap-3 flex-wrap justify-center">
+          <Button onclick={handleContinue} disabled={busy} data-testid="continue-button">Continue</Button>
+          <Button variant="ghost" onclick={handleLogout} disabled={busy} data-testid="logout-button">Log out</Button>
+        </div>
+      </div>
+    {:else}
+      <div class="flex gap-3 mt-2 flex-wrap justify-center" data-testid="hero-actions">
+        <Button href="/login" data-testid="login-link">Login</Button>
+        <Button variant="outline" href="/register" data-testid="register-link">Register</Button>
+        <Button variant="ghost" onclick={handleGuest} disabled={busy} data-testid="guest-button">
+          {busy ? 'Connecting…' : 'Try as Guest'}
+        </Button>
+      </div>
+    {/if}
   </section>
 
   {#if hasContent}
