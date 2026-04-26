@@ -1192,6 +1192,129 @@ func TestCheckPlayerSessionInfraFailureNotTranslated(t *testing.T) {
 	assert.Equal(t, "NOT_CONFIGURED", oopsErr.Code())
 }
 
+// TestIsPlayerSessionAuthError covers the predicate's branches that the
+// multi-tab session isolation work (PR #271) added as part of the gateway's
+// cookie-collision gate. It runs through each of the four branches:
+//   - errors.Is matches auth.ErrNotFound (sentinel error → true)
+//   - non-oops error → false
+//   - oops error with a known auth-failure code → true
+//   - oops error with an unrelated code → false
+func TestIsPlayerSessionAuthError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "returns true for auth.ErrNotFound sentinel",
+			err:  auth.ErrNotFound,
+			want: true,
+		},
+		{
+			name: "returns false for plain stdlib error that is not an oops",
+			err:  errors.New("transport flake"),
+			want: false,
+		},
+		{
+			name: "returns true for oops error coded PLAYER_SESSION_NOT_FOUND",
+			err:  samberOops.Code("PLAYER_SESSION_NOT_FOUND").Errorf("unknown token"),
+			want: true,
+		},
+		{
+			name: "returns true for oops error coded PLAYER_SESSION_EXPIRED",
+			err:  samberOops.Code("PLAYER_SESSION_EXPIRED").Errorf("expired token"),
+			want: true,
+		},
+		{
+			name: "returns true for oops error coded NOT_CONFIGURED",
+			err:  samberOops.Code("NOT_CONFIGURED").Errorf("session service not configured"),
+			want: true,
+		},
+		{
+			name: "returns false for oops error with unrelated code",
+			err:  samberOops.Code("DATABASE_UNAVAILABLE").Errorf("pg down"),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isPlayerSessionAuthError(tt.err))
+		})
+	}
+}
+
+// TestCheckPlayerSessionWrapsPlayerLookupFailureAsPlayerLookupFailed pins the
+// failure-shape contract for the multi-tab session isolation work: when the
+// player session resolves but the underlying player record lookup fails (e.g.,
+// pg connection error), the handler MUST surface a PLAYER_LOOKUP_FAILED oops
+// code rather than leaking the raw repository error.
+func TestCheckPlayerSessionWrapsPlayerLookupFailureAsPlayerLookupFailed(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	playerRepo := authmocks.NewMockPlayerRepository(t)
+	playerRepo.EXPECT().GetByID(mock.Anything, playerID).
+		Return(nil, errors.New("connection refused"))
+
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      session.NewMemStore(),
+		playerSessionRepo: sessionRepo,
+		playerRepo:        playerRepo,
+	}
+
+	resp, err := server.CheckPlayerSession(ctx, &corev1.CheckPlayerSessionRequest{
+		PlayerSessionToken: validToken,
+	})
+
+	assert.Nil(t, resp)
+	require.Error(t, err)
+	var oopsErr samberOops.OopsError
+	require.ErrorAs(t, err, &oopsErr)
+	assert.Equal(t, "PLAYER_LOOKUP_FAILED", oopsErr.Code())
+}
+
+// TestCheckPlayerSessionWrapsCharacterLookupFailureAsCharacterLookupFailed pins
+// the failure-shape contract when player resolution succeeds but the character
+// summary build (charRepo.ListByPlayer) fails. The handler MUST surface a
+// CHARACTER_LOOKUP_FAILED oops code so the client can distinguish auth
+// failures from infrastructure failures in this code path.
+func TestCheckPlayerSessionWrapsCharacterLookupFailureAsCharacterLookupFailed(t *testing.T) {
+	ctx := context.Background()
+	playerID := ulid.Make()
+	ps := makePlayerSession(playerID)
+	sessionRepo := setupSessionRepo(t, ps)
+
+	playerRepo := authmocks.NewMockPlayerRepository(t)
+	playerRepo.EXPECT().GetByID(mock.Anything, playerID).
+		Return(&auth.Player{ID: playerID, Username: "alice"}, nil)
+
+	charRepo := authmocks.NewMockCharacterRepository(t)
+	charRepo.EXPECT().ListByPlayer(mock.Anything, playerID).
+		Return(nil, errors.New("char repo down"))
+
+	server := &CoreServer{
+		engine:            core.NewEngine(core.NewMemoryEventStore()),
+		sessionStore:      session.NewMemStore(),
+		playerSessionRepo: sessionRepo,
+		playerRepo:        playerRepo,
+		charRepo:          charRepo,
+	}
+
+	resp, err := server.CheckPlayerSession(ctx, &corev1.CheckPlayerSessionRequest{
+		PlayerSessionToken: validToken,
+	})
+
+	assert.Nil(t, resp)
+	require.Error(t, err)
+	var oopsErr samberOops.OopsError
+	require.ErrorAs(t, err, &oopsErr)
+	assert.Equal(t, "CHARACTER_LOOKUP_FAILED", oopsErr.Code())
+}
+
 // --- AuthenticatePlayer additional paths ---
 
 func TestAuthenticatePlayer_SessionRepoCreateFails(t *testing.T) {
