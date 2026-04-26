@@ -62,3 +62,24 @@ fixture_pr_prep() {
 fixture_pr_prep_run() {
   task -t "$(fixture_taskfile)" pr-prep:run
 }
+
+# Spawn a 30s background holder for collision tests. Sets globals
+# HOLDER_BASH_PID and HOLDER_PID. Returns 0 on successful acquire,
+# fails the test (via bats `fail`) if the holder never acquires.
+start_collision() {
+  STUB_SLEEP=30 STUB_MARKER="${BATS_TEST_TMPDIR}/holder-marker" \
+    spawn_holder &
+  HOLDER_BASH_PID=$!
+  if ! wait_for_acquire; then
+    kill -9 "$HOLDER_BASH_PID" 2>/dev/null || :
+    fail "holder never acquired the lock within 5s"
+  fi
+  HOLDER_PID="$(holder_pid_from_info)"
+  [ -n "$HOLDER_PID" ] || fail "info file did not contain a pid line"
+}
+
+# Reap the collision holder. Idempotent.
+end_collision() {
+  kill "$HOLDER_PID" 2>/dev/null || :
+  wait "$HOLDER_BASH_PID" 2>/dev/null || :
+}

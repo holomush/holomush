@@ -115,3 +115,35 @@ setup() {
   [ "$status" -eq 0 ]
   [ -f "$STUB_MARKER" ]
 }
+
+# I-2: a second invocation while the first is in flight exits non-zero
+# without running any inner step.
+@test "rejects_while_held: second invocation exits non-zero while holder runs" {
+  start_collision
+  run fixture_pr_prep
+  [ "$status" -ne 0 ]
+  end_collision
+}
+
+# I-3: the collision error contains pid, workspace, started_at, and lockfile path.
+@test "error_includes_metadata: collision stderr names the holder PID, workspace, start time, and lockfile" {
+  start_collision
+  run fixture_pr_prep
+  [[ "$output" == *"another pr-prep is running"* ]]
+  [[ "$output" == *"pid=$HOLDER_PID"* ]]
+  [[ "$output" == *"workspace="* ]]
+  [[ "$output" == *"started_at="* ]]
+  [[ "$output" == *"Lock file: $LOCK_FILE"* ]]
+  end_collision
+}
+
+# I-8: collision exits within 2s regardless of holder remaining time (non-blocking).
+@test "non_blocking_acquire: collision exits within 2s while holder still has 28s+ to run" {
+  start_collision
+  start_ms=$(perl -MTime::HiRes=time -e 'printf "%d", time*1000')
+  run fixture_pr_prep
+  end_ms=$(perl -MTime::HiRes=time -e 'printf "%d", time*1000')
+  elapsed=$((end_ms - start_ms))
+  [ "$elapsed" -lt 2000 ]
+  end_collision
+}
