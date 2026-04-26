@@ -1071,3 +1071,22 @@ func TestWebAuthenticatePlayerProceedsWhenCookieAbsent(t *testing.T) {
 	assert.True(t, resp.Msg.GetSuccess())
 	assert.Equal(t, int32(1), client.authPlayerCalls.Load())
 }
+
+func TestWebCreatePlayerReturnsAlreadyAuthenticatedWhenCookieValid(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionResp: &corev1.CheckPlayerSessionResponse{PlayerName: "Existing Player"},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebCreatePlayerRequest{
+		Username: "new_player", Password: "x", Email: "new@example.com",
+	})
+	req.Header().Set(headerInjectSessionToken, "valid-token")
+
+	resp, err := h.WebCreatePlayer(context.Background(), req)
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.GetSuccess())
+	assert.Equal(t, "ALREADY_AUTHENTICATED", resp.Msg.GetErrorCode())
+	assert.Equal(t, "Existing Player", resp.Msg.GetCurrentPlayerName())
+	assert.Equal(t, int32(0), client.createPlayerCalls.Load())
+}

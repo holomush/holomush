@@ -179,6 +179,17 @@ func (h *Handler) WebSelectCharacter(ctx context.Context, req *connect.Request[w
 func (h *Handler) WebCreatePlayer(ctx context.Context, req *connect.Request[webv1.WebCreatePlayerRequest]) (*connect.Response[webv1.WebCreatePlayerResponse], error) {
 	slog.DebugContext(ctx, "web: WebCreatePlayer", "username", req.Msg.GetUsername())
 
+	if name, gated, err := h.checkCookieCollision(ctx, req.Header()); err != nil {
+		return nil, oops.Wrap(err)
+	} else if gated {
+		return connect.NewResponse(&webv1.WebCreatePlayerResponse{
+			Success:           false,
+			ErrorCode:         "ALREADY_AUTHENTICATED",
+			ErrorMessage:      fmt.Sprintf("Already signed in as %s.", name),
+			CurrentPlayerName: name,
+		}), nil
+	}
+
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
