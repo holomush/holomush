@@ -5,12 +5,14 @@ package goplugin
 
 import (
 	"context"
+	"log/slog"
 	"math"
 	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
@@ -48,18 +50,39 @@ func (s *pluginHostServiceServer) EmitEvent(ctx context.Context, req *pluginv1.P
 		return nil, oops.With("plugin", s.pluginName).New("plugin event emitter is not configured")
 	}
 
-	emitCtx := ctx
-	if kind, id, ok := pluginsdk.ActorMetadataFromIncomingContext(ctx); ok {
-		emitCtx = core.WithActor(ctx, core.Actor{
-			Kind: sdkActorKindToCore(kind),
-			ID:   id,
-		})
-	} else {
-		emitCtx = core.WithActor(emitCtx, core.Actor{
-			Kind: core.ActorPlugin,
-			ID:   s.pluginName,
-		})
+	// Token-based authentication (spec §3.3.5, §5.4): the host issues a
+	// per-dispatch token in DeliverEvent / DeliverCommand and stores the
+	// vouched-for actor (Kind + ID) keyed by (pluginName, token). The
+	// plugin presents the token in the x-holomush-emit-token header on
+	// EmitEvent. The plugin's x-holomush-actor-kind / -actor-id metadata
+	// values are NOT trusted as identity claims at this boundary — the
+	// host uses the actor it stored at issue time. This closes the
+	// forgery surface (G1): a malicious plugin that substitutes the
+	// actor headers cannot escape the token's stored actor.
+	md, _ := metadata.FromIncomingContext(ctx)
+	tokens := md.Get("x-holomush-emit-token")
+	if len(tokens) == 0 || tokens[0] == "" {
+		return nil, oops.Code("EMIT_TOKEN_MISSING").
+			With("plugin", s.pluginName).
+			Errorf("plugin emitted without a host-issued dispatch token")
 	}
+
+	s.host.mu.RLock()
+	tokenStore := s.host.tokenStore
+	s.host.mu.RUnlock()
+
+	storedActor, ok := tokenStore.Lookup(s.pluginName, tokens[0])
+	if !ok {
+		slog.WarnContext(ctx, "EmitEvent rejected: token not valid for this plugin",
+			"plugin", s.pluginName,
+			"code", "EMIT_TOKEN_REJECTED",
+		)
+		return nil, oops.Code("EMIT_TOKEN_REJECTED").
+			With("plugin", s.pluginName).
+			Errorf("dispatch token is not valid for this plugin")
+	}
+
+	emitCtx := core.WithActor(ctx, storedActor)
 	if err := emitter.Emit(emitCtx, s.pluginName, pluginsdk.EmitIntent{
 		// TODO(F5): proto request field renames to Subject; keep Stream on
 		// the wire until the proto regeneration task runs.

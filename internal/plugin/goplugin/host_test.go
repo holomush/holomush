@@ -28,11 +28,9 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
-	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/proto"
 )
 
 // drainEventbusStream returns every stored message on EVENTS by walking
@@ -1330,94 +1328,16 @@ func TestHostDeliverEventForwardsTrustedActorMetadata(t *testing.T) {
 	assert.Equal(t, "char-alice", id)
 }
 
-func TestPluginHostServiceEmitEventPreservesIncomingActor(t *testing.T) {
-	bus := eventbustest.New(t)
-	emitter := plugins.NewPluginEventEmitter(
-		bus.Bus.Publisher(),
-		func(string) *plugins.Manifest {
-			return &plugins.Manifest{
-				Name:                "core-scenes",
-				Emits:               []string{"scene"},
-				ActorKindsClaimable: []string{"plugin", "character"},
-			}
-		},
-		func(ctx context.Context, _ string) (core.Actor, error) {
-			actor, ok := core.ActorFromContext(ctx)
-			if !ok {
-				return core.Actor{}, errors.New("missing actor")
-			}
-			return actor, nil
-		},
-	)
-
-	host := NewHost()
-	host.SetEventEmitter(emitter)
-
-	server := &pluginHostServiceServer{
-		host:       host,
-		pluginName: "core-scenes",
-	}
-
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
-		"x-holomush-actor-kind", "0",
-		"x-holomush-actor-id", "char-alice",
-	))
-	_, err := server.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
-		Stream:    "scene:01SCENE",
-		EventType: "system",
-		Payload:   []byte(`{"kind":"created"}`),
-	})
-	require.NoError(t, err)
-
-	msgs := drainEventbusStream(t, bus.JS)
-	require.Len(t, msgs, 1)
-	assert.Equal(t, "character", msgs[0].Header.Get(eventbus.HeaderActorKind))
-	// "char-alice" is not a ULID → bridge drops id; App-Actor-ID omitted.
-	assert.Empty(t, msgs[0].Header.Get(eventbus.HeaderActorID))
-	var env eventbusv1.Event
-	require.NoError(t, proto.Unmarshal(msgs[0].Data, &env))
-	assert.Equal(t, []byte(`{"kind":"created"}`), env.GetPayload())
-}
-
-func TestPluginHostServiceEmitEventFallsBackToPluginActorWhenIncomingActorMissing(t *testing.T) {
-	bus := eventbustest.New(t)
-	emitter := plugins.NewPluginEventEmitter(
-		bus.Bus.Publisher(),
-		func(string) *plugins.Manifest {
-			return &plugins.Manifest{
-				Name:                "core-scenes",
-				Emits:               []string{"scene"},
-				ActorKindsClaimable: []string{"plugin", "character"},
-			}
-		},
-		func(ctx context.Context, _ string) (core.Actor, error) {
-			actor, ok := core.ActorFromContext(ctx)
-			if !ok {
-				return core.Actor{}, errors.New("missing actor")
-			}
-			return actor, nil
-		},
-	)
-
-	host := NewHost()
-	host.SetEventEmitter(emitter)
-
-	server := &pluginHostServiceServer{
-		host:       host,
-		pluginName: "core-scenes",
-	}
-
-	_, err := server.EmitEvent(context.Background(), &pluginv1.PluginHostServiceEmitEventRequest{
-		Stream:    "scene:01SCENE",
-		EventType: "system",
-		Payload:   []byte(`{"kind":"created"}`),
-	})
-	require.NoError(t, err)
-
-	msgs := drainEventbusStream(t, bus.JS)
-	require.Len(t, msgs, 1)
-	assert.Equal(t, "plugin", msgs[0].Header.Get(eventbus.HeaderActorKind))
-}
+// Note: the legacy "preserves incoming actor metadata" and "falls back to
+// plugin actor when metadata missing" tests were removed in Task 9 of the
+// plugin actor-claim authentication rollout. Those behaviors trusted
+// plugin-supplied x-holomush-actor-kind / -actor-id headers, which the
+// new token-based EmitEvent (host_service.go) explicitly DISCARDS per
+// spec §3.3.5. Their replacements live in host_service_test.go:
+//   - TestEmitEventUsesStoredActorIgnoringPluginClaim (G1 forgery override)
+//   - TestEmitEventMissingTokenFails (EMIT_TOKEN_MISSING)
+//   - TestEmitEventUnknownTokenFails (EMIT_TOKEN_REJECTED)
+//   - TestEmitEventCrossPluginTokenLeakFails (cross-plugin token defense)
 
 func TestPluginHostServiceEmitEventReturnsErrorWhenHostIsMissing(t *testing.T) {
 	server := &pluginHostServiceServer{pluginName: "core-scenes"}
@@ -1485,13 +1405,24 @@ func TestPluginHostServiceEmitEventReturnsWrappedEmitterError(t *testing.T) {
 
 	host := NewHost()
 	host.SetEventEmitter(emitter)
+	defer func() { _ = host.Close(context.Background()) }()
 
 	server := &pluginHostServiceServer{
 		host:       host,
 		pluginName: "core-scenes",
 	}
 
-	_, err := server.EmitEvent(context.Background(), &pluginv1.PluginHostServiceEmitEventRequest{
+	// Token-based EmitEvent (Task 9): the emitter is only reached after
+	// the host validates a per-dispatch token, so the test issues one and
+	// presents it on the incoming context. The malformed JSON payload
+	// then exercises the emitter's error-wrap path.
+	tok, err := host.tokenStore.Issue("core-scenes", core.Actor{Kind: core.ActorPlugin, ID: "core-scenes"})
+	require.NoError(t, err)
+	defer host.tokenStore.Revoke(tok)
+	ctx := metadata.NewIncomingContext(context.Background(),
+		metadata.Pairs("x-holomush-emit-token", tok))
+
+	_, err = server.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
 		Stream:    "scene:01SCENE",
 		EventType: "system",
 		Payload:   []byte(`{"kind":`),

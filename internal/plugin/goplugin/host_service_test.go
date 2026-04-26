@@ -6,6 +6,7 @@ package goplugin
 import (
 	"context"
 	"math"
+	"strconv"
 	"testing"
 	"time"
 
@@ -13,11 +14,16 @@ import (
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/session"
+	"github.com/holomush/holomush/pkg/errutil"
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
@@ -580,4 +586,191 @@ func TestCoreEventToProtoConvertsAllFields(t *testing.T) {
 	assert.Equal(t, "character", pe.GetActorKind())
 	assert.Equal(t, "char-1", pe.GetActorId())
 	assert.Equal(t, `{"text":"hello"}`, pe.GetPayload())
+}
+
+// newTestHostWithEmitter constructs a Host with a real PluginEventEmitter
+// wired to the given embedded JetStream bus. Manifest lookup returns the
+// caller-supplied manifest when called for pluginName; nil otherwise. The
+// actor resolver pulls the actor from the context (which the host's token
+// flow stamps via core.WithActor) so the emit ends up with the host-vouched
+// actor on the published message.
+//
+// pluginName is parameterized intentionally — current callers all use
+// "plug-A" as the loaded plugin, but the cross-plugin leak test still
+// invokes EmitEvent through a *different* server pluginName ("plug-B").
+// Future tests covering manifest-mismatch and multi-plugin scenarios
+// will exercise non-"plug-A" values.
+//
+//nolint:unparam // see comment above; helper is intentionally parametric.
+func newTestHostWithEmitter(t *testing.T, bus *eventbustest.Embedded, pluginName string, manifest *plugins.Manifest) *Host {
+	t.Helper()
+	publisher := bus.Bus.Publisher()
+	require.NotNil(t, publisher)
+	emitter := plugins.NewPluginEventEmitter(publisher,
+		func(name string) *plugins.Manifest {
+			if name == pluginName {
+				return manifest
+			}
+			return nil
+		},
+		func(ctx context.Context, _ string) (core.Actor, error) {
+			actor, ok := core.ActorFromContext(ctx)
+			if !ok {
+				return core.Actor{}, oops.New("plugin event actor missing from context")
+			}
+			return actor, nil
+		},
+	)
+	h := NewHost()
+	h.SetEventEmitter(emitter)
+	return h
+}
+
+// TestEmitEventUsesStoredActorIgnoringPluginClaim covers the load-bearing
+// G1 invariant (spec §3.3.5): a plugin substituting the actor-kind/id
+// headers but ferrying a valid token MUST get an event stamped with the
+// host's stored actor, NOT the plugin's claim.
+func TestEmitEventUsesStoredActorIgnoringPluginClaim(t *testing.T) {
+	t.Parallel()
+	bus := eventbustest.New(t)
+	manifest := &plugins.Manifest{
+		Name:                "plug-A",
+		Type:                plugins.TypeBinary,
+		Emits:               []string{"location"},
+		ActorKindsClaimable: []string{"plugin", "character"},
+	}
+	h := newTestHostWithEmitter(t, bus, "plug-A", manifest)
+	defer func() { _ = h.Close(context.Background()) }()
+
+	// Construct the server struct directly (we're in package goplugin).
+	s := &pluginHostServiceServer{host: h, pluginName: "plug-A"}
+
+	// Host issues a token storing the legitimate dispatching character.
+	storedID := "01HCHAR0000000000000000000"
+	storedActor := core.Actor{Kind: core.ActorCharacter, ID: storedID}
+	token, err := h.tokenStore.Issue("plug-A", storedActor)
+	require.NoError(t, err)
+	defer h.tokenStore.Revoke(token)
+
+	// Plugin (in test simulation) substitutes a forged actor-kind/id claim
+	// but ferries the valid token.
+	forgedID := "01HFAKE0000000000000000000"
+	md := metadata.New(map[string]string{
+		"x-holomush-emit-token": token,
+		"x-holomush-actor-kind": strconv.Itoa(int(pluginsdk.ActorCharacter)),
+		"x-holomush-actor-id":   forgedID,
+	})
+	ctx := metadata.NewIncomingContext(context.Background(), md)
+
+	_, err = s.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
+		Stream:    "location:01HLOC0000000000000000000",
+		EventType: "say",
+		Payload:   []byte(`{"message":"hi"}`),
+	})
+	require.NoError(t, err)
+
+	// Inspect the published event via the embedded bus.
+	msgs := drainEventbusStream(t, bus.JS)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, "character", msgs[0].Header.Get(eventbus.HeaderActorKind))
+	assert.Equal(t, storedID, msgs[0].Header.Get(eventbus.HeaderActorID),
+		"event MUST carry the host-stored actor, not the plugin's claim")
+	assert.NotEqual(t, forgedID, msgs[0].Header.Get(eventbus.HeaderActorID))
+}
+
+// TestEmitEventMissingTokenFails covers spec §3.3.5 EMIT_TOKEN_MISSING.
+func TestEmitEventMissingTokenFails(t *testing.T) {
+	t.Parallel()
+	bus := eventbustest.New(t)
+	manifest := &plugins.Manifest{
+		Name:                "plug-A",
+		Type:                plugins.TypeBinary,
+		Emits:               []string{"location"},
+		ActorKindsClaimable: []string{"plugin", "character"},
+	}
+	h := newTestHostWithEmitter(t, bus, "plug-A", manifest)
+	defer func() { _ = h.Close(context.Background()) }()
+	s := &pluginHostServiceServer{host: h, pluginName: "plug-A"}
+
+	md := metadata.New(map[string]string{}) // no token
+	ctx := metadata.NewIncomingContext(context.Background(), md)
+	_, err := s.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
+		Stream:    "location:01HLOC0000000000000000000",
+		EventType: "say",
+		Payload:   []byte(`{}`),
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_MISSING")
+
+	// And no event was published.
+	assert.Empty(t, drainEventbusStream(t, bus.JS))
+}
+
+// TestEmitEventUnknownTokenFails covers EMIT_TOKEN_REJECTED for an
+// unrecognized token (e.g., expired & swept, or fabricated by a plugin).
+func TestEmitEventUnknownTokenFails(t *testing.T) {
+	t.Parallel()
+	bus := eventbustest.New(t)
+	manifest := &plugins.Manifest{
+		Name:                "plug-A",
+		Type:                plugins.TypeBinary,
+		Emits:               []string{"location"},
+		ActorKindsClaimable: []string{"plugin", "character"},
+	}
+	h := newTestHostWithEmitter(t, bus, "plug-A", manifest)
+	defer func() { _ = h.Close(context.Background()) }()
+	s := &pluginHostServiceServer{host: h, pluginName: "plug-A"}
+
+	md := metadata.New(map[string]string{
+		"x-holomush-emit-token": "not-a-real-token",
+	})
+	ctx := metadata.NewIncomingContext(context.Background(), md)
+	_, err := s.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
+		Stream:    "location:01HLOC0000000000000000000",
+		EventType: "test",
+		Payload:   []byte(`{}`),
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_REJECTED")
+
+	assert.Empty(t, drainEventbusStream(t, bus.JS))
+}
+
+// TestEmitEventCrossPluginTokenLeakFails covers cross-plugin defense:
+// plug-A's token used by plug-B's server → reject. This is the headline
+// G1 security guarantee — pluginName tagging in the token store catches
+// any future host bug that lets plugin A's gRPC client invoke plugin B's
+// server.
+func TestEmitEventCrossPluginTokenLeakFails(t *testing.T) {
+	t.Parallel()
+	bus := eventbustest.New(t)
+	manifestA := &plugins.Manifest{
+		Name:                "plug-A",
+		Type:                plugins.TypeBinary,
+		Emits:               []string{"location"},
+		ActorKindsClaimable: []string{"plugin", "character"},
+	}
+	h := newTestHostWithEmitter(t, bus, "plug-A", manifestA)
+	defer func() { _ = h.Close(context.Background()) }()
+
+	// Issue a token for plug-A.
+	tok, err := h.tokenStore.Issue("plug-A", core.Actor{Kind: core.ActorCharacter, ID: "01HCHAR0000000000000000000"})
+	require.NoError(t, err)
+
+	// Invoke EmitEvent on plug-B's server (different pluginName). Note
+	// that plug-B is NOT loaded in the host — its manifest lookup would
+	// return nil — but the token check fires FIRST, so the manifest gate
+	// never runs.
+	sB := &pluginHostServiceServer{host: h, pluginName: "plug-B"}
+	md := metadata.New(map[string]string{"x-holomush-emit-token": tok})
+	ctx := metadata.NewIncomingContext(context.Background(), md)
+	_, err = sB.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
+		Stream:    "location:01HLOC0000000000000000000",
+		EventType: "test",
+		Payload:   []byte(`{}`),
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_REJECTED")
+
+	assert.Empty(t, drainEventbusStream(t, bus.JS))
 }
