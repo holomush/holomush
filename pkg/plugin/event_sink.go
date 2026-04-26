@@ -9,7 +9,18 @@ import (
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
+
+// emitTokenHeader is the gRPC metadata header that carries the
+// host-issued per-dispatch emit token. The host attaches it to outgoing
+// HandleEvent / HandleCommand metadata; the SDK ferries it back to
+// EmitEvent so the host can authenticate the actor input. Plugin
+// authors do not interact with this header directly — auto-ferry is the
+// transparent path. (Spec §3.3.5 / §5.4.)
+//
+//nolint:gosec // G101 false positive: this is a metadata header NAME, not credential material.
+const emitTokenHeader = "x-holomush-emit-token"
 
 // EventSink is the SDK-facing facade binary plugin service code uses to ask
 // the host to emit an event on the plugin's behalf.
@@ -38,6 +49,19 @@ func (s *pluginHostEventSink) Emit(ctx context.Context, intent EmitIntent) error
 	callCtx := ctx
 	if kind, id, ok := actorMetadataFromContext(ctx); ok {
 		callCtx = WithOutgoingActorMetadata(ctx, kind, id)
+	}
+	// Auto-ferry the host-issued emit token from incoming HandleEvent /
+	// HandleCommand metadata onto the outgoing EmitEvent call. The host
+	// authenticates the actor input via this token (spec §3.3.5 / §5.4 /
+	// G1); plugin authors don't touch the header directly. If the caller
+	// has already set the token on the outgoing metadata (test plugins
+	// exercising fabrication / forgery paths), we leave it untouched.
+	if existing, _ := metadata.FromOutgoingContext(callCtx); len(existing.Get(emitTokenHeader)) == 0 {
+		if incoming, ok := metadata.FromIncomingContext(ctx); ok {
+			if tokens := incoming.Get(emitTokenHeader); len(tokens) > 0 && tokens[0] != "" {
+				callCtx = metadata.AppendToOutgoingContext(callCtx, emitTokenHeader, tokens[0])
+			}
+		}
 	}
 	// TODO(F5): proto field PluginHostServiceEmitEventRequest.Stream will be
 	// renamed to Subject. Keeping the Stream name on the wire for F1 avoids

@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+
+# forgery_plugin is a test-only binary plugin used by the
+# actor_authentication_test.go integration suite to exercise the spec
+# §5.6 plugin actor-claim authentication boundary (G1).
+#
+# Behavior is driven by a Mode JSON document the test sends as the
+# event payload (see main.go for the schema). This avoids any reliance
+# on process env vars — go-plugin spawns the binary with a stripped env.
+#
+# actor_kinds_claimable lists [plugin, character] so character-driven
+# dispatch tests can exercise the cascade-preserved success path. The
+# Lua manifest-gate scenarios use a separate Lua plugin under
+# testdata/lua/.
+name: forgery-plugin
+version: 0.0.0
+type: binary
+emits:
+  - location
+actor_kinds_claimable: [plugin, character]
+requires: []
+# Declares a fictional provided service so the host's Init gate fires
+# (host.go:452 only calls Init when Requires|Provides|Postgres-storage
+# is non-empty, which is what wires up the EventSink). The service
+# itself is never registered or consumed — the test never resolves it.
+provides:
+  - holomush.test.v1.ForgeryEmitTriggerService
+storage: kv
+
+binary-plugin:
+  executable: forgery-plugin
