@@ -20,7 +20,9 @@ import (
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/command"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/internal/telnet"
 	"github.com/holomush/holomush/internal/web"
 	"github.com/holomush/holomush/internal/world"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
@@ -55,6 +57,13 @@ type testEnv struct {
 	// In-process gateway+core stack (for multi-tab integration tests).
 	coreServer *holoGRPC.CoreServer
 	webHandler *web.Handler
+
+	// guestStartLocationID is the location ULID wired into the GuestService's
+	// namer at suite setup. The locations row with this ID MUST exist before
+	// any spec calls WebCreateGuest (the cleanupTestData helper deletes
+	// locations between specs, so specs are responsible for re-creating it
+	// in their BeforeEach). See multi_tab_test.go for the canonical pattern.
+	guestStartLocationID ulid.ULID
 }
 
 var env *testEnv
@@ -110,6 +119,19 @@ func setupTestEnv() (*testEnv, error) {
 	}
 	cmdServices := command.NewTestServices(command.ServicesConfig{Engine: pe})
 
+	// Wire a real *auth.GuestService so WebCreateGuest can succeed in
+	// multi-tab specs. Without this, CoreServer.CreateGuest short-circuits
+	// with Success=false, ErrorMessage="guest login not configured" (see
+	// internal/grpc/auth_handlers.go:578-586). The start-location ULID is
+	// recorded on testEnv so specs can create the FK target row in BeforeEach.
+	guestStartLocationID := ulid.Make()
+	guestAuth := telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), guestStartLocationID)
+	guestService, err := auth.NewGuestService(guestAuth, playerRepo, charRepo, playerSessionStore)
+	if err != nil {
+		eventStore.Close()
+		return nil, oops.Wrap(err)
+	}
+
 	coreServer := holoGRPC.NewCoreServer(
 		nil, // engine: not exercised by auth-only flows
 		sessionStore,
@@ -120,23 +142,25 @@ func setupTestEnv() (*testEnv, error) {
 		holoGRPC.WithPlayerRepo(playerRepo),
 		holoGRPC.WithCharacterRepo(charRepo),
 		holoGRPC.WithSessionStore(sessionStore),
+		holoGRPC.WithGuestService(guestService),
 	)
 
 	webHandler := web.NewHandler(&coreClientShim{s: coreServer})
 
 	return &testEnv{
-		ctx:                ctx,
-		pool:               pool,
-		playerSessionStore: playerSessionStore,
-		playerRepo:         playerRepo,
-		charRepo:           charRepo,
-		locRepo:            worldpg.NewLocationRepository(pool),
-		sessionStore:       sessionStore,
-		eventStore:         eventStore,
-		authService:        authService,
-		hasher:             hasher,
-		coreServer:         coreServer,
-		webHandler:         webHandler,
+		ctx:                  ctx,
+		pool:                 pool,
+		playerSessionStore:   playerSessionStore,
+		playerRepo:           playerRepo,
+		charRepo:             charRepo,
+		locRepo:              worldpg.NewLocationRepository(pool),
+		sessionStore:         sessionStore,
+		eventStore:           eventStore,
+		authService:          authService,
+		hasher:               hasher,
+		coreServer:           coreServer,
+		webHandler:           webHandler,
+		guestStartLocationID: guestStartLocationID,
 	}, nil
 }
 
