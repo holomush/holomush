@@ -133,6 +133,28 @@ policies:
       permit(principal is character, action in ["execute"], resource is command) when { "builder" in principal.character.roles
       && resource.command.name in ["create", "describe"] };
 
+verbs:
+  - type: core-objects:object_create
+    category: state
+    format: delta
+    display_target: state
+  - type: core-objects:object_destroy
+    category: state
+    format: delta
+    display_target: state
+  - type: core-objects:object_use
+    category: command
+    format: narrative
+    display_target: terminal
+  - type: core-objects:object_examine
+    category: command
+    format: narrative
+    display_target: terminal
+  - type: core-objects:object_give
+    category: command
+    format: narrative
+    display_target: terminal
+
 crypto:
   emits:
     - event_type: object_create

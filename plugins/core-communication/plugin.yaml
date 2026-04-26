@@ -232,6 +232,43 @@ policies:
       permit(principal is character, action in ["execute"], resource is command) when { principal.character.roles.containsAny(["storyteller",
       "admin"]) && resource.command.name == "pemit" };
 
+verbs:
+  - type: core-communication:say
+    category: communication
+    format: speech
+    label: says
+    display_target: terminal
+  - type: core-communication:pose
+    category: communication
+    format: action
+    display_target: terminal
+  - type: core-communication:page
+    category: communication
+    format: speech
+    label: pages
+    display_target: terminal
+  - type: core-communication:whisper
+    category: communication
+    format: speech
+    label: whispers
+    display_target: terminal
+  - type: core-communication:whisper_notice
+    category: communication
+    format: action
+    display_target: terminal
+  - type: core-communication:ooc
+    category: communication
+    format: action
+    display_target: terminal
+  - type: core-communication:emit
+    category: communication
+    format: action
+    display_target: terminal
+  - type: core-communication:pemit
+    category: command
+    format: narrative
+    display_target: terminal
+
 crypto:
   emits:
     - event_type: say

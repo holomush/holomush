@@ -80,15 +80,17 @@ lua-plugin:
 	})
 
 	It("rejects a plugin whose verb type conflicts with a builtin", func() {
+		// "system" is a host-owned event type registered by RegisterBuiltinTypes.
+		// (Plugin-owned types like say/pose are no longer registered as builtins
+		// per the plugin-boundary discipline; they're owned by their plugin.)
 		writePlugin("conflict-plugin", `
 name: conflict-plugin
 version: 1.0.0
 type: lua
 verbs:
-  - type: say
-    category: communication
-    format: speech
-    label: "says"
+  - type: system
+    category: system
+    format: notification
     display_target: terminal
 lua-plugin:
   entry: main.lua

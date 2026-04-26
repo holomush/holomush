@@ -175,24 +175,26 @@ func TestRegisterBuiltinTypesRegistersAllKnownEventTypes(t *testing.T) {
 	err := RegisterBuiltinTypes(r)
 	require.NoError(t, err)
 
-	// Verify a few known types.
-	reg, ok := r.Lookup("say")
-	require.True(t, ok)
-	assert.Equal(t, "communication", reg.Category)
-	assert.Equal(t, "speech", reg.Format)
-	assert.Equal(t, "says", reg.Label)
+	// RegisterBuiltinTypes registers ONLY host-owned event types per the
+	// plugin-boundary discipline. Plugin-owned types (say/pose/whisper
+	// from core-communication, object_* from core-objects) are registered
+	// by the plugin loader from each plugin's manifest `verbs:` block —
+	// see internal/plugin/manager.go.
 
-	reg, ok = r.Lookup("pose")
-	require.True(t, ok)
-	assert.Equal(t, "action", reg.Format)
-
-	reg, ok = r.Lookup("command_error")
+	// Host-owned types are present:
+	reg, ok := r.Lookup("command_error")
 	require.True(t, ok)
 	assert.Equal(t, "command", reg.Category)
 	assert.Equal(t, "error", reg.Format)
 
 	_, ok = r.Lookup("location_state")
 	assert.True(t, ok)
+
+	// Plugin-owned types are NOT registered by RegisterBuiltinTypes:
+	_, ok = r.Lookup("core-communication:say")
+	assert.False(t, ok, "say is plugin-owned and registered by the loader, not RegisterBuiltinTypes")
+	_, ok = r.Lookup("core-objects:object_create")
+	assert.False(t, ok, "object_create is plugin-owned and registered by the loader, not RegisterBuiltinTypes")
 }
 
 func TestRegisterBuiltinTypesDoesNotIncludeChannelTypes(t *testing.T) {

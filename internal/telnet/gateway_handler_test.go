@@ -22,13 +22,33 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
 
-// testRegistry returns a VerbRegistry populated with built-in types for testing.
+// testRegistry returns a VerbRegistry populated with host-owned built-in
+// types plus the plugin-owned comm/object verbs these tests exercise. In
+// production, the plugin loader registers plugin verbs from each
+// plugin.yaml's `verbs:` block; tests short-circuit that.
 func testRegistry() *core.VerbRegistry {
 	r := core.NewVerbRegistry()
 	_ = core.RegisterBuiltinTypes(r)
+	registerTestPluginVerbs(r)
 	return r
+}
+
+func registerTestPluginVerbs(r *core.VerbRegistry) {
+	verbs := []core.VerbRegistration{
+		{Type: "core-communication:say", Category: "communication", Format: "speech", Label: "says", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:pose", Category: "communication", Format: "action", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:page", Category: "communication", Format: "speech", Label: "pages", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:whisper", Category: "communication", Format: "speech", Label: "whispers", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:whisper_notice", Category: "communication", Format: "action", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:ooc", Category: "communication", Format: "action", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:pemit", Category: "command", Format: "narrative", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+	}
+	for _, v := range verbs {
+		_ = r.Register(v)
+	}
 }
 
 // newTestHandler wraps NewGatewayHandler with DefaultLimits so existing
@@ -1068,20 +1088,20 @@ func TestFormatEvent_Communication_Speech(t *testing.T) {
 		expected string
 	}{
 		{
-			"say",
-			"say",
+			"core-communication:say",
+			"core-communication:say",
 			`{"character_name":"Alice","message":"Hello"}`,
 			`Alice says, "Hello"`,
 		},
 		{
-			"page",
-			"page",
+			"core-communication:page",
+			"core-communication:page",
 			`{"sender_name":"Bob","message":"Hey there"}`,
 			`Bob pages, "Hey there"`,
 		},
 		{
-			"whisper",
-			"whisper",
+			"core-communication:whisper",
+			"core-communication:whisper",
 			`{"sender_name":"Carol","message":"psst"}`,
 			`Carol whispers, "psst"`,
 		},
@@ -1111,19 +1131,19 @@ func TestFormatEvent_Communication_Action(t *testing.T) {
 	}{
 		{
 			"pose with space",
-			"pose",
+			"core-communication:pose",
 			`{"character_name":"Alice","action":"waves happily."}`,
 			"Alice waves happily.",
 		},
 		{
 			"pose no_space",
-			"pose",
+			"core-communication:pose",
 			`{"character_name":"Alice","action":"'s eyes widen.","no_space":true}`,
 			"Alice's eyes widen.",
 		},
 		{
-			"whisper_notice",
-			"whisper_notice",
+			"core-communication:whisper_notice",
+			"core-communication:whisper_notice",
 			`{"sender_name":"Bob","target_name":"Carol","notice":"whispers something to Carol."}`,
 			"Bob whispers something to Carol.",
 		},

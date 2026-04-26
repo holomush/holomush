@@ -78,7 +78,7 @@ test.describe('Terminal UI', () => {
       // Payload is the codec-encoded bytes (not JSON), so token-match via
       // UTF-8 decode. The identity codec is the default test deployment.
       const sayRow = rows.find(
-        (r) => r.type === 'say' && r.payload.toString('utf8').includes(token),
+        (r) => r.type === 'core-communication:say' && r.payload.toString('utf8').includes(token),
       );
       expect(
         sayRow,

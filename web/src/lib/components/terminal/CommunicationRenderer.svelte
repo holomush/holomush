@@ -23,7 +23,7 @@
   let noSpace = $derived(event.metadata?.no_space as boolean | undefined);
   let oocPrefix = $derived(event.metadata?.ooc_prefix as string | undefined);
   let style = $derived(event.metadata?.style as string | undefined);
-  let isOoc = $derived(event.type === 'ooc' || !!oocPrefix);
+  let isOoc = $derived(event.type === 'core-communication:ooc' || !!oocPrefix);
 </script>
 
 <div class="event event-{event.type}" data-testid="event">

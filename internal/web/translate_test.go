@@ -23,25 +23,52 @@ func mustMarshal(t *testing.T, v any) []byte {
 	return b
 }
 
-// newTestHandler creates a Handler with a fully populated VerbRegistry.
+// newTestHandler creates a Handler with a VerbRegistry populated with
+// host-owned builtins plus the plugin-owned comm/object verbs that
+// these tests exercise. In production the plugin loader registers
+// plugin verbs from each plugin.yaml manifest's `verbs:` block; tests
+// short-circuit that by registering the same set inline.
 func newTestHandler(t *testing.T) *Handler {
 	t.Helper()
 	reg := core.NewVerbRegistry()
 	require.NoError(t, core.RegisterBuiltinTypes(reg))
+	registerTestPluginVerbs(t, reg)
 	return &Handler{verbRegistry: reg}
+}
+
+func registerTestPluginVerbs(t *testing.T, reg *core.VerbRegistry) {
+	t.Helper()
+	verbs := []core.VerbRegistration{
+		{Type: "core-communication:say", Category: "communication", Format: "speech", Label: "says", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:pose", Category: "communication", Format: "action", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:page", Category: "communication", Format: "speech", Label: "pages", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:whisper", Category: "communication", Format: "speech", Label: "whispers", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:whisper_notice", Category: "communication", Format: "action", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:ooc", Category: "communication", Format: "action", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:emit", Category: "communication", Format: "action", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:pemit", Category: "command", Format: "narrative", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-objects:object_create", Category: "state", Format: "delta", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_STATE, Source: "core-objects"},
+		{Type: "core-objects:object_destroy", Category: "state", Format: "delta", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_STATE, Source: "core-objects"},
+		{Type: "core-objects:object_use", Category: "command", Format: "narrative", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-objects"},
+		{Type: "core-objects:object_examine", Category: "command", Format: "narrative", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-objects"},
+		{Type: "core-objects:object_give", Category: "command", Format: "narrative", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-objects"},
+	}
+	for _, v := range verbs {
+		require.NoError(t, reg.Register(v))
+	}
 }
 
 func TestTranslateEvent_Say(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
-		Type:      "say",
+		Type:      "core-communication:say",
 		Timestamp: timestamppb.New(timestamppb.Now().AsTime()),
 		Payload:   mustMarshal(t, map[string]string{"character_name": "Alice", "message": "Hello!"}),
 	}
 
 	got := h.translateEvent(ev)
 	require.NotNil(t, got)
-	assert.Equal(t, "say", got.GetType())
+	assert.Equal(t, "core-communication:say", got.GetType())
 	assert.Equal(t, "communication", got.GetCategory())
 	assert.Equal(t, "speech", got.GetFormat())
 	assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetDisplayTarget())
@@ -54,13 +81,13 @@ func TestTranslateEvent_Say(t *testing.T) {
 func TestTranslateEvent_Pose(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
-		Type:    "pose",
+		Type:    "core-communication:pose",
 		Payload: mustMarshal(t, map[string]any{"character_name": "Bob", "action": "waves hello."}),
 	}
 
 	got := h.translateEvent(ev)
 	require.NotNil(t, got)
-	assert.Equal(t, "pose", got.GetType())
+	assert.Equal(t, "core-communication:pose", got.GetType())
 	assert.Equal(t, "communication", got.GetCategory())
 	assert.Equal(t, "action", got.GetFormat())
 	assert.Equal(t, "Bob", got.GetActor())
@@ -70,7 +97,7 @@ func TestTranslateEvent_Pose(t *testing.T) {
 func TestTranslateEvent_PoseNoSpace(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
-		Type:    "pose",
+		Type:    "core-communication:pose",
 		Payload: mustMarshal(t, map[string]any{"character_name": "Bob", "action": "'s face turns red.", "no_space": true}),
 	}
 
@@ -252,13 +279,13 @@ func TestTranslateEvent_ExitUpdate(t *testing.T) {
 func TestTranslateEvent_OOC(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
-		Type:    "ooc",
+		Type:    "core-communication:ooc",
 		Payload: mustMarshal(t, core.OOCPayload{CharacterName: "Alice", Message: "brb", Style: "say"}),
 	}
 
 	got := h.translateEvent(ev)
 	require.NotNil(t, got)
-	assert.Equal(t, "ooc", got.GetType())
+	assert.Equal(t, "core-communication:ooc", got.GetType())
 	assert.Equal(t, "communication", got.GetCategory())
 	assert.Equal(t, "action", got.GetFormat())
 	assert.Equal(t, "Alice", got.GetActor())
@@ -270,13 +297,13 @@ func TestTranslateEvent_OOC(t *testing.T) {
 func TestTranslateEvent_OOC_PoseStyle(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
-		Type:    "ooc",
+		Type:    "core-communication:ooc",
 		Payload: mustMarshal(t, core.OOCPayload{CharacterName: "Bob", Message: "waves.", Style: "pose"}),
 	}
 
 	got := h.translateEvent(ev)
 	require.NotNil(t, got)
-	assert.Equal(t, "ooc", got.GetType())
+	assert.Equal(t, "core-communication:ooc", got.GetType())
 	require.NotNil(t, got.GetMetadata())
 	assert.Equal(t, "pose", got.GetMetadata().AsMap()["style"])
 }
@@ -284,7 +311,7 @@ func TestTranslateEvent_OOC_PoseStyle(t *testing.T) {
 func TestTranslateEvent_Pemit(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
-		Type: "pemit",
+		Type: "core-communication:pemit",
 		Payload: mustMarshal(t, core.PemitPayload{
 			SenderName: "Alice",
 			Message:    "Secret message.",
@@ -293,7 +320,7 @@ func TestTranslateEvent_Pemit(t *testing.T) {
 
 	got := h.translateEvent(ev)
 	require.NotNil(t, got)
-	assert.Equal(t, "pemit", got.GetType())
+	assert.Equal(t, "core-communication:pemit", got.GetType())
 	assert.Equal(t, "command", got.GetCategory())
 	assert.Equal(t, "narrative", got.GetFormat())
 	assert.Equal(t, "Secret message.", got.GetText())
@@ -303,7 +330,7 @@ func TestTranslateEvent_Pemit(t *testing.T) {
 func TestTranslateEvent_Page(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
-		Type: "page",
+		Type: "core-communication:page",
 		Payload: mustMarshal(t, core.PagePayload{
 			SenderName: "Alice",
 			Message:    "Hey there!",
@@ -312,7 +339,7 @@ func TestTranslateEvent_Page(t *testing.T) {
 
 	got := h.translateEvent(ev)
 	require.NotNil(t, got, "page events should now be translated (previously dropped)")
-	assert.Equal(t, "page", got.GetType())
+	assert.Equal(t, "core-communication:page", got.GetType())
 	assert.Equal(t, "communication", got.GetCategory())
 	assert.Equal(t, "speech", got.GetFormat())
 	assert.Equal(t, "Alice", got.GetActor())
@@ -340,7 +367,7 @@ func TestTranslateEvent_Unknown(t *testing.T) {
 func TestTranslateEvent_CorruptPayload(t *testing.T) {
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
-		Type:    "say",
+		Type:    "core-communication:say",
 		Payload: []byte(`not-valid-json`),
 	}
 
@@ -351,7 +378,7 @@ func TestTranslateEvent_CorruptPayload(t *testing.T) {
 func TestTranslateEvent_NilRegistry(t *testing.T) {
 	h := &Handler{}
 	ev := &corev1.EventFrame{
-		Type:    "say",
+		Type:    "core-communication:say",
 		Payload: mustMarshal(t, map[string]string{"character_name": "Alice", "message": "Hello!"}),
 	}
 
@@ -377,7 +404,7 @@ func TestTranslateEvent_PopulatesEventIdForCommunicationEvents(t *testing.T) {
 	expectedID := core.NewULID().String()
 	ev := &corev1.EventFrame{
 		Id:        expectedID,
-		Type:      "say",
+		Type:      "core-communication:say",
 		Timestamp: timestamppb.New(timestamppb.Now().AsTime()),
 		Payload:   mustMarshal(t, map[string]string{"character_name": "Alice", "message": "Hello!"}),
 	}

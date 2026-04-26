@@ -44,14 +44,14 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 
 	t.Run("CommunicationRenderer/say", func(t *testing.T) {
 		ev := &corev1.EventFrame{
-			Type:      "say",
+			Type:      "core-communication:say",
 			Timestamp: timestamppb.Now(),
 			Payload:   mustMarshal(t, map[string]string{"character_name": "Alice", "message": "Hello world"}),
 		}
 
 		got := h.translateEvent(ev)
 		require.NotNil(t, got, "say event must not be dropped")
-		assert.Equal(t, "say", got.GetType())
+		assert.Equal(t, "core-communication:say", got.GetType())
 		assert.Equal(t, "communication", got.GetCategory())
 		assert.Equal(t, "speech", got.GetFormat())
 		assert.Equal(t, "Alice", got.GetActor())
@@ -61,14 +61,14 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 
 	t.Run("CommunicationRenderer/pose", func(t *testing.T) {
 		ev := &corev1.EventFrame{
-			Type:      "pose",
+			Type:      "core-communication:pose",
 			Timestamp: timestamppb.Now(),
 			Payload:   mustMarshal(t, map[string]any{"character_name": "Bob", "action": "waves cheerfully."}),
 		}
 
 		got := h.translateEvent(ev)
 		require.NotNil(t, got, "pose event must not be dropped")
-		assert.Equal(t, "pose", got.GetType())
+		assert.Equal(t, "core-communication:pose", got.GetType())
 		assert.Equal(t, "communication", got.GetCategory())
 		assert.Equal(t, "action", got.GetFormat())
 		assert.Equal(t, "Bob", got.GetActor())
@@ -78,28 +78,28 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 
 	t.Run("CommunicationRenderer/pose_no_space", func(t *testing.T) {
 		ev := &corev1.EventFrame{
-			Type:      "pose",
+			Type:      "core-communication:pose",
 			Timestamp: timestamppb.Now(),
 			Payload:   mustMarshal(t, map[string]any{"character_name": "Bob", "action": "'s eyes widen.", "no_space": true}),
 		}
 
 		got := h.translateEvent(ev)
 		require.NotNil(t, got)
-		assert.Equal(t, "pose", got.GetType())
+		assert.Equal(t, "core-communication:pose", got.GetType())
 		require.NotNil(t, got.GetMetadata(), "semipose must carry no_space metadata")
 		assert.Equal(t, true, got.GetMetadata().AsMap()["no_space"])
 	})
 
 	t.Run("CommunicationRenderer/ooc_say", func(t *testing.T) {
 		ev := &corev1.EventFrame{
-			Type:      "ooc",
+			Type:      "core-communication:ooc",
 			Timestamp: timestamppb.Now(),
 			Payload:   mustMarshal(t, map[string]any{"character_name": "Carol", "message": "heading out soon", "style": "say"}),
 		}
 
 		got := h.translateEvent(ev)
 		require.NotNil(t, got)
-		assert.Equal(t, "ooc", got.GetType())
+		assert.Equal(t, "core-communication:ooc", got.GetType())
 		assert.Equal(t, "communication", got.GetCategory())
 		assert.Equal(t, "Carol", got.GetActor())
 		assert.Equal(t, "heading out soon", got.GetText())
@@ -111,28 +111,28 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 
 	t.Run("CommunicationRenderer/ooc_pose", func(t *testing.T) {
 		ev := &corev1.EventFrame{
-			Type:      "ooc",
+			Type:      "core-communication:ooc",
 			Timestamp: timestamppb.Now(),
 			Payload:   mustMarshal(t, map[string]any{"character_name": "Dave", "message": "waves.", "style": "pose"}),
 		}
 
 		got := h.translateEvent(ev)
 		require.NotNil(t, got)
-		assert.Equal(t, "ooc", got.GetType())
+		assert.Equal(t, "core-communication:ooc", got.GetType())
 		require.NotNil(t, got.GetMetadata(), "pose-style OOC must carry style metadata")
 		assert.Equal(t, "pose", got.GetMetadata().AsMap()["style"])
 	})
 
 	t.Run("CommunicationRenderer/pemit", func(t *testing.T) {
 		ev := &corev1.EventFrame{
-			Type:      "pemit",
+			Type:      "core-communication:pemit",
 			Timestamp: timestamppb.Now(),
 			Payload:   mustMarshal(t, map[string]any{"sender_name": "Eve", "message": "A whispered secret reaches you."}),
 		}
 
 		got := h.translateEvent(ev)
 		require.NotNil(t, got)
-		assert.Equal(t, "pemit", got.GetType())
+		assert.Equal(t, "core-communication:pemit", got.GetType())
 		assert.Equal(t, "A whispered secret reaches you.", got.GetText())
 		assert.Equal(t, webv1.EventChannel_EVENT_CHANNEL_TERMINAL, got.GetDisplayTarget())
 	})
