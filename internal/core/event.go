@@ -40,13 +40,11 @@ func ValidatePayload(payload []byte) error {
 // EventType identifies the kind of event.
 type EventType string
 
-// Event types for game events.
-//
-// NOTE(holomush-k18g): core-communication plugin event types (Say, Pose, Page,
-// Whisper, Pemit, OOC, WhisperNotice) have been migrated to
-// plugins/core-communication/events.go with qualified names. The types below
-// are host-owned and stay here permanently. Object-plugin types (ObjectCreate
-// etc.) are the remaining migration target for a future task.
+// Event types for game events. All constants here are host-owned and stay
+// permanently. Plugin-owned event types have been migrated to their respective
+// plugin packages with qualified <plugin>:<type> identifiers:
+//   - core-communication: plugins/core-communication/events.go
+//   - core-objects: plugins/core-objects/events.go
 const (
 	EventTypeArrive EventType = "arrive"
 	EventTypeLeave  EventType = "leave"
@@ -54,13 +52,6 @@ const (
 
 	// World movement (host-owned)
 	EventTypeMove EventType = "move"
-
-	// Object interaction event types (plugin-owned, migration pending)
-	EventTypeObjectCreate  EventType = "object_create"
-	EventTypeObjectDestroy EventType = "object_destroy"
-	EventTypeObjectUse     EventType = "object_use"
-	EventTypeObjectExamine EventType = "object_examine"
-	EventTypeObjectGive    EventType = "object_give"
 
 	// Command response event types (host-owned)
 	EventTypeCommandResponse EventType = "command_response"

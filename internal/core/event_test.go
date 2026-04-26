@@ -22,11 +22,6 @@ func TestEventType_String(t *testing.T) {
 		{"leave event", EventTypeLeave, "leave"},
 		{"system event", EventTypeSystem, "system"},
 		{"move event", EventTypeMove, "move"},
-		{"object_create event", EventTypeObjectCreate, "object_create"},
-		{"object_destroy event", EventTypeObjectDestroy, "object_destroy"},
-		{"object_use event", EventTypeObjectUse, "object_use"},
-		{"object_examine event", EventTypeObjectExamine, "object_examine"},
-		{"object_give event", EventTypeObjectGive, "object_give"},
 		{"location_state event", EventTypeLocationState, "location_state"},
 		{"exit_update event", EventTypeExitUpdate, "exit_update"},
 	}
