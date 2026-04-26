@@ -161,3 +161,45 @@ setup() {
   [ "$status" -eq 0 ]
   [ -f "${BATS_TEST_TMPDIR}/marker2" ]
 }
+
+# I-5: when the holder process is SIGKILLed, the next invocation acquires
+# the lock within 2s (kernel-managed flock release on fd close).
+@test "releases_on_sigkill: lock released within 2s of SIGKILL on holder PID" {
+  STUB_SLEEP=30 STUB_MARKER="${BATS_TEST_TMPDIR}/holder-marker" \
+    spawn_holder &
+  HOLDER_BASH_PID=$!
+
+  if ! wait_for_acquire; then
+    kill -9 "$HOLDER_BASH_PID" 2>/dev/null || :
+    fail "holder never acquired the lock within 5s"
+  fi
+
+  HOLDER_PID="$(holder_pid_from_info)"
+  [ -n "$HOLDER_PID" ]
+
+  # SIGKILL every process that has the lock fd open. The inner `task` PID
+  # in the info file is one such process, but its child (the stub's
+  # `sleep`) inherited the fd and would keep the lock alive if we only
+  # killed the parent. Process-group kill is unsafe under bats because
+  # bats runs without job control — every process here shares the bats
+  # PGID, so `kill -- -$PGID` would euthanize the test runner. lsof gives
+  # us exactly the set we want: processes with the fd open.
+  LOCK_HOLDERS="$(lsof -t "$LOCK_FILE" 2>/dev/null | tr '\n' ' ')"
+  [ -n "$LOCK_HOLDERS" ]
+  # shellcheck disable=SC2086 # word-splitting intentional
+  kill -9 $LOCK_HOLDERS 2>/dev/null || :
+
+  # Poll for the lock to become available (2s budget, 100ms granularity)
+  acquired=0
+  for _ in $(seq 1 20); do
+    if flock -n "$LOCK_FILE" -c true 2>/dev/null; then
+      acquired=1
+      break
+    fi
+    sleep 0.1
+  done
+  [ "$acquired" -eq 1 ]
+
+  # Reap the bash subprocess; ignore exit code (holder was killed)
+  wait "$HOLDER_BASH_PID" 2>/dev/null || :
+}
