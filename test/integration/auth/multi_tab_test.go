@@ -15,6 +15,9 @@ import (
 	"connectrpc.com/connect"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
+	"github.com/samber/oops"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/holomush/holomush/internal/web"
 	"github.com/holomush/holomush/internal/world"
@@ -498,6 +501,112 @@ var _ = Describe("Multi-tab session isolation — logout in tab 1, action in tab
 		Expect(histResp.GetError()).To(ContainSubstring("session not found"))
 	})
 })
+
+var _ = Describe("Multi-tab session isolation — Subscribe-path post-logout (spec §4.4.5 Subscribe call site)", func() {
+	var ctx context.Context
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		// FK-safe wipe of any state from prior specs (deletes locations among
+		// other tables — see auth_suite_test.go cleanupTestData).
+		cleanupTestData(ctx, env.pool)
+
+		// Re-create the guest start-location row so other specs in this file
+		// remain consistent. This spec uses a registered player and does not
+		// hit the guest start-location FK, but we keep the seed parity with
+		// every other Describe in this file.
+		loc := &world.Location{
+			ID:           env.guestStartLocationID,
+			Name:         "Guest Lobby",
+			Description:  "Guest start location for multi-tab integration tests",
+			Type:         world.LocationTypePersistent,
+			ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
+		}
+		Expect(env.locRepo.Create(ctx, loc)).To(Succeed())
+	})
+
+	It("Subscribe rejects a stale token with SESSION_NOT_FOUND before sending any frame", func() {
+		// Companion to the "logout in tab 1, action in tab 2" spec above. That
+		// spec substituted GetCommandHistory for the Subscribe call site
+		// (spec §4.4.5) because Subscribe is server-streaming and awkward to
+		// drive directly from a Ginkgo spec. Both call sites run through
+		// auth.ValidateSessionOwnership at internal/grpc/server.go (Subscribe
+		// at :645, GetCommandHistory at :1261-1278), so the validation path
+		// is identical — but Subscribe's stream-opening machinery (early-return
+		// vs. error-frame, transport-level vs. response-level signal) could
+		// regress independently. This spec pins the wire-level error shape
+		// that the Subscribe handler returns when ownership validation fails.
+
+		// Seed: registered player + character + persisted PlayerSession (gRPC
+		// handler normally persists; auth.Service constructs but does not).
+		username := "subscribe_logout_player"
+		password := "correct horse battery staple"
+		_, playerSession, rawToken, err := env.authService.CreatePlayer(ctx, username, password, username+"@test.local")
+		Expect(err).NotTo(HaveOccurred(), "seed: create player")
+		Expect(rawToken).NotTo(BeEmpty())
+		Expect(env.playerSessionStore.Create(ctx, playerSession)).To(Succeed(),
+			"seed: persist player session so the rawToken resolves")
+
+		player, err := env.playerRepo.GetByUsername(ctx, username)
+		Expect(err).NotTo(HaveOccurred())
+		// world.Character.Name is "letters and spaces only"; avoid hyphens.
+		loc := createTestLocation(ctx, "Subscribe Lobby")
+		char := createTestCharacter(ctx, player.ID, "Subscribe Hero", loc.ID)
+		charID := char.ID.String()
+
+		// Tab 1: select the character → game session exists.
+		selReq := connect.NewRequest(&webv1.WebSelectCharacterRequest{CharacterId: charID})
+		selReq.Header().Set(web.HeaderInjectSessionToken, rawToken)
+		selResp, err := env.webHandler.WebSelectCharacter(ctx, selReq)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(selResp.Msg.GetSuccess()).To(BeTrue(), "select: %s", selResp.Msg.GetErrorMessage())
+		sessionID := selResp.Msg.GetSessionId()
+		Expect(sessionID).NotTo(BeEmpty())
+
+		// Tab 1: WebLogout deletes the PlayerSession + child game sessions.
+		_, err = env.coreServer.Logout(ctx, &corev1.LogoutRequest{PlayerSessionToken: rawToken})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Tab 2: open Subscribe with the now-stale token. MUST return an
+		// error tagged SESSION_NOT_FOUND, and MUST NOT have sent any frame
+		// on the stream before validation fired.
+		stream := &captureSubscribeStream{ctx: ctx}
+		err = env.coreServer.Subscribe(&corev1.SubscribeRequest{
+			SessionId:          sessionID,
+			PlayerSessionToken: rawToken,
+		}, stream)
+		Expect(err).To(HaveOccurred(), "Subscribe MUST surface stale-session error at the transport level")
+
+		var oerr oops.OopsError
+		Expect(errors.As(err, &oerr)).To(BeTrue(), "Subscribe error MUST be an oops error")
+		Expect(oerr.Code()).To(Equal("SESSION_NOT_FOUND"),
+			"Subscribe MUST collapse stale-token failure to enumeration-safe SESSION_NOT_FOUND")
+		Expect(stream.sent).To(BeEmpty(),
+			"Subscribe MUST NOT send any frame before ownership validation fires")
+	})
+})
+
+// captureSubscribeStream is a test double for grpc.ServerStreamingServer that
+// captures sent frames so specs can assert that no data was streamed before an
+// early validation failure. Mirrors the capturingStream pattern in
+// internal/grpc/location_follow_test.go.
+type captureSubscribeStream struct {
+	grpc.ServerStream
+	ctx  context.Context
+	sent []*corev1.SubscribeResponse
+}
+
+func (s *captureSubscribeStream) Send(resp *corev1.SubscribeResponse) error {
+	s.sent = append(s.sent, resp)
+	return nil
+}
+
+func (s *captureSubscribeStream) Context() context.Context     { return s.ctx }
+func (s *captureSubscribeStream) SetHeader(_ metadata.MD) error  { return nil }
+func (s *captureSubscribeStream) SendHeader(_ metadata.MD) error { return nil }
+func (s *captureSubscribeStream) SetTrailer(_ metadata.MD)       {}
+func (s *captureSubscribeStream) SendMsg(_ any) error            { return nil }
+func (s *captureSubscribeStream) RecvMsg(_ any) error            { return nil }
 
 var _ = Describe("Pre-deploy WebCheckSession contract", func() {
 	var gw *web.Handler
