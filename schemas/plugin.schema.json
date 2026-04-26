@@ -261,6 +261,58 @@
     "storage": {
       "type": "string"
     },
+    "crypto": {
+      "properties": {
+        "emits": {
+          "items": {
+            "properties": {
+              "event_type": {
+                "type": "string"
+              },
+              "sensitivity": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "event_type",
+              "sensitivity"
+            ]
+          },
+          "type": "array"
+        },
+        "consumes": {
+          "items": {
+            "properties": {
+              "subjects": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "requests_decryption": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "subjects"
+            ]
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
     "audit": {
       "items": {
         "properties": {
