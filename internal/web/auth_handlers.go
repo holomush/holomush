@@ -99,6 +99,17 @@ func isPlayerSessionAuthFailure(err error) bool {
 func (h *Handler) WebAuthenticatePlayer(ctx context.Context, req *connect.Request[webv1.WebAuthenticatePlayerRequest]) (*connect.Response[webv1.WebAuthenticatePlayerResponse], error) {
 	slog.DebugContext(ctx, "web: WebAuthenticatePlayer", "username", req.Msg.GetUsername())
 
+	if name, gated, err := h.checkCookieCollision(ctx, req.Header()); err != nil {
+		return nil, oops.Wrap(err)
+	} else if gated {
+		return connect.NewResponse(&webv1.WebAuthenticatePlayerResponse{
+			Success:           false,
+			ErrorCode:         "ALREADY_AUTHENTICATED",
+			ErrorMessage:      fmt.Sprintf("Already signed in as %s.", name),
+			CurrentPlayerName: name,
+		}), nil
+	}
+
 	rpcCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 

@@ -1033,3 +1033,41 @@ func TestWebCreateGuestConcurrentValidCookieAllGate(t *testing.T) {
 	assert.Equal(t, int32(10), gatedCount.Load(), "all 10 concurrent calls MUST hit the gate")
 	assert.Equal(t, int32(0), client.createGuestCalls.Load(), "zero CreateGuest calls MUST occur")
 }
+
+func TestWebAuthenticatePlayerReturnsAlreadyAuthenticatedWhenCookieValid(t *testing.T) {
+	client := &mockCoreClient{
+		checkSessionResp: &corev1.CheckPlayerSessionResponse{PlayerName: "Real Player"},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebAuthenticatePlayerRequest{
+		Username: "real_player",
+		Password: "correct horse battery staple",
+	})
+	req.Header().Set(headerInjectSessionToken, "valid-token")
+
+	resp, err := h.WebAuthenticatePlayer(context.Background(), req)
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.GetSuccess())
+	assert.Equal(t, "ALREADY_AUTHENTICATED", resp.Msg.GetErrorCode())
+	assert.Equal(t, "Real Player", resp.Msg.GetCurrentPlayerName())
+	assert.Contains(t, resp.Msg.GetErrorMessage(), "Real Player")
+	assert.Equal(t, int32(0), client.authPlayerCalls.Load(), "AuthenticatePlayer MUST NOT run; cap eviction stays untouched")
+	assert.Empty(t, resp.Header().Get(headerSetSessionToken), "no Set-Cookie on gate hit")
+}
+
+func TestWebAuthenticatePlayerProceedsWhenCookieAbsent(t *testing.T) {
+	client := &mockCoreClient{
+		authPlayerResp: &corev1.AuthenticatePlayerResponse{
+			Success: true, PlayerSessionToken: "fresh-token",
+		},
+	}
+	h := NewHandler(client)
+
+	req := connect.NewRequest(&webv1.WebAuthenticatePlayerRequest{Username: "u", Password: "p"})
+
+	resp, err := h.WebAuthenticatePlayer(context.Background(), req)
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.GetSuccess())
+	assert.Equal(t, int32(1), client.authPlayerCalls.Load())
+}
