@@ -58,3 +58,40 @@ setup() {
   grep -q '^workspace=' "$INFO_FILE"
   grep -q '^started_at=' "$INFO_FILE"
 }
+
+# I-10: pr-prep:run MUST NOT appear in `task --list`. YAML-level: the task
+# entry exists, has no `desc:`, and has no `internal: true`. Asserted against
+# BOTH the fixture (where the lock idiom lives during testing) AND the
+# production Taskfile.yaml (so a regression that adds `desc:` to production
+# is caught — the fixture and production share the contract).
+@test "pr_prep_run_hidden_from_list: not in task --list; YAML asserts no desc and no internal (fixture + production)" {
+  local target
+  for target in "$(fixture_taskfile)" "Taskfile.yaml"; do
+    # CLI-output check (supplementary).
+    run task -t "$target" --list
+    [ "$status" -eq 0 ]
+    if [[ "$output" == *"pr-prep:run"* ]]; then
+      printf 'pr-prep:run unexpectedly appeared in `task --list` for %s\n%s\n' \
+        "$target" "$output" >&2
+      return 1
+    fi
+
+    # YAML-level (primary contract). Robust against go-task version drift.
+    run yq '.tasks["pr-prep:run"]' "$target"
+    [ "$status" -eq 0 ]
+    [ -n "$output" ]
+    [ "$output" != "null" ]
+
+    run yq '.tasks["pr-prep:run"].desc' "$target"
+    [ "$output" = "null" ] || {
+      printf 'pr-prep:run.desc must be null in %s, was: %s\n' "$target" "$output" >&2
+      return 1
+    }
+
+    run yq '.tasks["pr-prep:run"].internal' "$target"
+    [ "$output" = "null" ] || {
+      printf 'pr-prep:run.internal must be null in %s, was: %s\n' "$target" "$output" >&2
+      return 1
+    }
+  done
+}
