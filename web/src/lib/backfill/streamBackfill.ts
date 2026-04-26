@@ -4,6 +4,7 @@
 import type { Client } from '@connectrpc/connect';
 import { ConnectError, Code } from '@connectrpc/connect';
 import type { WebService, GameEvent } from '$lib/connect/holomush/web/v1/web_pb';
+import { isStaleSession } from '$lib/util/stale';
 
 // ---------------------------------------------------------------------------
 // Error types for cursor lifecycle
@@ -247,6 +248,7 @@ async function fetchOneStream(
 			);
 			return { ok: true, events: resp.events };
 		} catch (e) {
+			if (isStaleSession(e)) throw e; // let the caller route to /
 			if (signal?.aborted) {
 				return { ok: false, error: e };
 			}

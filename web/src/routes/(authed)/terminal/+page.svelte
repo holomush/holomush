@@ -30,9 +30,17 @@
   import { trace, type Span } from '@opentelemetry/api';
   import { backfillStreams } from '$lib/backfill/streamBackfill';
   import { isUnimplementedError } from '$lib/connect/errors';
+  import { isStaleSession } from '$lib/util/stale';
   import type { GameEvent } from '$lib/connect/holomush/web/v1/web_pb';
 
   const client = createClient(WebService, transport);
+
+  async function handleStaleSession() {
+    clearCharacterSession();
+    clearAuth();
+    await goto('/');
+  }
+
   const tracer = trace.getTracer('holomush-web');
   let pendingCommandSpan: Span | null = null;
   let streamSpan: Span | null = null;
@@ -274,6 +282,10 @@
           }
         }
       } catch (e) {
+        if (isStaleSession(e)) {
+          await handleStaleSession();
+          return;
+        }
         // Gate shared-state writes: if a newer hydrate is running or our
         // own controller was aborted, only reject our own gate.
         const isStale = generation !== streamGeneration || localController.signal.aborted;
@@ -308,6 +320,10 @@
         );
         streams = resp.streams;
       } catch (e) {
+        if (isStaleSession(e)) {
+          await handleStaleSession();
+          return;
+        }
         if (isUnimplementedError(e)) {
           console.info('[backfill] WebListSessionStreams not available; skipping backfill');
         } else {
@@ -327,6 +343,10 @@
           routeEvent(ev, true);
         }
       } catch (e) {
+        if (isStaleSession(e)) {
+          await handleStaleSession();
+          return;
+        }
         // backfillStreams rejects on abort — component unmount, not an
         // error worth surfacing to the user.
         if (!localController.signal.aborted) {
@@ -389,6 +409,10 @@
         pendingCommandSpan = null;
       }
     } catch (e) {
+      if (isStaleSession(e)) {
+        await handleStaleSession();
+        return;
+      }
       error = e instanceof Error ? e.message : 'Command failed';
       pendingCommandSpan?.setStatus({ code: 2, message: error });
       pendingCommandSpan?.end();
