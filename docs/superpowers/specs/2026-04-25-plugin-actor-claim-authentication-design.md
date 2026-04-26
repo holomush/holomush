@@ -112,6 +112,7 @@ Allowed shapes after validation:
 A migration audit identified these three as the only in-tree plugins that emit during character-driven dispatches. Other in-tree plugins (`core-aliases`, `core-building`, `core-help`, `core-objects`, `setting-crossroads`, `setting-skeleton`, `test-abac-widget`) either don't emit, only emit during plugin-actor cascades (default `[plugin]` covers them), or are setting-only.
 
 **CI assertion** (added in this PR): `task lint:plugin-manifests` (or analogous task target) loads every in-tree `plugin.yaml`, parses it, and flags any plugin where `type` is not `setting` AND `actor_kinds_claimable` does not contain `character` AND ANY of:
+
 - `emits:` is non-empty AND (`commands:` is non-empty OR `events:` is non-empty), OR
 - `events:` is non-empty (regardless of `emits:` — handler-emitted events bypass the top-level `emits:` declaration).
 
@@ -295,6 +296,7 @@ if !manifest.declaresActorKindClaimable(actor.Kind) {
 ```
 
 `Manifest.declaresActorKindClaimable(kind)` is a new helper that:
+
 - Returns `true` if `kind` is `ActorPlugin` and `manifest.ActorKindsClaimable` contains `"plugin"` (always true after validation).
 - Returns `true` if `kind` is `ActorCharacter` and `manifest.ActorKindsClaimable` contains `"character"`.
 - Returns `false` for any other kind (notably `ActorSystem`, which can never be claimed because validation rejects `system` from the list).
@@ -524,21 +526,21 @@ A reviewer can verify the work is complete by running:
 7. `pluginHostServiceServer.EmitEvent` no longer reads `pluginsdk.ActorMetadataFromIncomingContext` for identity claims (verifiable via `rg` AND the §5.6 case 2 integration test passing — the grep is necessary but not sufficient).
 8. `plugins/core-scenes/plugin.yaml`, `plugins/core-communication/plugin.yaml`, AND `plugins/echo-bot/plugin.yaml` declare `actor_kinds_claimable: [plugin, character]`. The new `task lint:plugin-manifests` CI check passes against the in-tree manifest set. The check MUST flag any in-tree plugin that has at least one character-reachable entry point AND lacks `character` in `actor_kinds_claimable`. Concretely: flag plugins where `type` is not `setting` AND ANY of the following is true AND `actor_kinds_claimable` does not contain `character`:
 
-  - (a) `emits:` is non-empty AND (`commands:` is non-empty OR `events:` is non-empty) — plugin declares emit capability AND has a character-reachable invocation path. Catches `core-scenes` and `core-communication`.
-  - (b) `events:` is non-empty (regardless of `emits:`) — plugin subscribes to events, which may carry character or system actors, AND can emit from its event handler regardless of whether the manifest declares top-level `emits:`. Catches `echo-bot` (whose `plugin.yaml` declares `events: [say]` but does not declare top-level `emits:`; the emit happens in its Lua `on_event` handler).
+   - (a) `emits:` is non-empty AND (`commands:` is non-empty OR `events:` is non-empty) — plugin declares emit capability AND has a character-reachable invocation path. Catches `core-scenes` and `core-communication`.
+   - (b) `events:` is non-empty (regardless of `emits:`) — plugin subscribes to events, which may carry character or system actors, AND can emit from its event handler regardless of whether the manifest declares top-level `emits:`. Catches `echo-bot` (whose `plugin.yaml` declares `events: [say]` but does not declare top-level `emits:`; the emit happens in its Lua `on_event` handler).
 
-  This two-clause formulation correctly handles the in-tree manifest set:
+   This two-clause formulation correctly handles the in-tree manifest set:
 
-  | Plugin | type | emits: | commands: | events: | Heuristic flags if claim absent? |
-  | --- | --- | --- | --- | --- | --- |
-  | `core-scenes` | binary | `[scene]` | yes | absent | yes — clause (a) |
-  | `core-communication` | lua | `[location, character]` | yes | absent | yes — clause (a) |
-  | `echo-bot` | lua | absent | absent | `[say]` | yes — clause (b) |
-  | `core-aliases` / `core-building` / `core-help` / `core-objects` | lua | absent | yes | absent or `[]` | no |
-  | `test-abac-widget` | binary | absent | yes | absent | no |
-  | `setting-*` | setting | — | — | — | no (type-exempted) |
+   | Plugin | type | emits: | commands: | events: | Heuristic flags if claim absent? |
+   | --- | --- | --- | --- | --- | --- |
+   | `core-scenes` | binary | `[scene]` | yes | absent | yes — clause (a) |
+   | `core-communication` | lua | `[location, character]` | yes | absent | yes — clause (a) |
+   | `echo-bot` | lua | absent | absent | `[say]` | yes — clause (b) |
+   | `core-aliases` / `core-building` / `core-help` / `core-objects` | lua | absent | yes | absent or `[]` | no |
+   | `test-abac-widget` | binary | absent | yes | absent | no |
+   | `setting-*` | setting | — | — | — | no (type-exempted) |
 
-  Clause (b) accepts a small false-positive surface (a plugin that subscribes but never emits in its handler would still need to declare the claim, OR set `actor_kinds_claimable: [plugin]` explicitly to opt out). This is an operationally-acceptable trade-off because the alternative — parsing Lua/Go handlers to determine emit-or-not — is brittle and out of scope for a manifest lint.
+   Clause (b) accepts a small false-positive surface (a plugin that subscribes but never emits in its handler would still need to declare the claim, OR set `actor_kinds_claimable: [plugin]` explicitly to opt out). This is an operationally-acceptable trade-off because the alternative — parsing Lua/Go handlers to determine emit-or-not — is brittle and out of scope for a manifest lint.
 9. `AGENTS.md` and `CLAUDE.md` contain a new "Plugin Runtime Symmetry" subsection explicitly documenting the binary/Lua trust-equality invariant. A CI check (added as `task lint:docs-symmetry` following the existing `lint:access-migration` / `lint:test-helpers` pattern in `Taskfile.yaml`) verifies the subsection delimited by stable HTML-comment anchors `<!-- BEGIN: plugin-runtime-symmetry -->` and `<!-- END: plugin-runtime-symmetry -->` is byte-identical between the two files. Sketch: `diff <(awk '/<!-- BEGIN: plugin-runtime-symmetry -->/,/<!-- END: plugin-runtime-symmetry -->/' AGENTS.md) <(awk '/<!-- BEGIN: plugin-runtime-symmetry -->/,/<!-- END: plugin-runtime-symmetry -->/' CLAUDE.md)`. Anchored byte-equivalence avoids the drift fragility of free-form file comparison.
 10. `core.ActorFromContext(ctx)` returns `(actor, true)` at the entrance to `Host.DeliverEvent` and `Host.DeliverCommand` for character-driven dispatches and EventBus cascades. Verifiable via the §5.8 unit tests.
 11. `site/docs/extending/` has a section documenting `actor_kinds_claimable` for plugin authors.

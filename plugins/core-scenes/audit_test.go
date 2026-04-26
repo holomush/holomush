@@ -173,7 +173,8 @@ func TestQueryHistoryAllowsMemberAndReturnsRows(t *testing.T) {
 
 	logStore := &fakeAuditStore{
 		rows: []logRow{
-			{id: ulidStringBytes(t, "01EVENT0000000000000000000"),
+			{
+				id:        ulidStringBytes(t, "01EVENT0000000000000000000"),
 				subject:   "events.main.scene." + sceneID + ".ic",
 				eventType: "scene.pose.posted",
 				timestamp: time.Unix(100, 0),

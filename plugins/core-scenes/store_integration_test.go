@@ -1690,13 +1690,13 @@ func TestSceneStoreIsMemberReturnsExpectedByRoleAndSceneState(t *testing.T) {
 	)
 
 	tests := []struct {
-		name     string
-		sceneID  string
-		visible  SceneVisibility
-		setup    func(t *testing.T, store *SceneStore, sceneID string)
-		probe    string
-		want     bool
-		wantMsg  string
+		name    string
+		sceneID string
+		visible SceneVisibility
+		setup   func(t *testing.T, store *SceneStore, sceneID string)
+		probe   string
+		want    bool
+		wantMsg string
 	}{
 		{
 			name:    "returns true for owner",

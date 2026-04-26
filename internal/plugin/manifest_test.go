@@ -12,7 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestParseManifestLuaPlugin(t *testing.T) {
@@ -2236,4 +2238,196 @@ lua-plugin:
 	m, err := plugins.ParseManifest(data)
 	require.NoError(t, err)
 	assert.Empty(t, m.Verbs)
+}
+
+// TestManifestActorKindsClaimableValidation covers spec §3.2 validation
+// rules for the actor_kinds_claimable manifest field.
+func TestManifestActorKindsClaimableValidation(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name           string
+		yaml           string
+		wantErr        bool
+		wantErrCode    string
+		wantErrSubstr  string
+		wantNormalized []string
+	}{
+		{
+			name: "absent field defaults to [plugin]",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`,
+			wantNormalized: []string{"plugin"},
+		},
+		{
+			name: "explicit [plugin] loads as canonical",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+actor_kinds_claimable: [plugin]
+`,
+			wantNormalized: []string{"plugin"},
+		},
+		{
+			name: "[plugin, character] loads preserving order",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+actor_kinds_claimable: [plugin, character]
+`,
+			wantNormalized: []string{"plugin", "character"},
+		},
+		{
+			name: "empty list rejected for missing plugin",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+actor_kinds_claimable: []
+`,
+			// Spec §5.2 + §2 G5: declared-empty MUST loudly error, not
+			// silently default to [plugin]. Distinguishes operator's typed
+			// `[]` (loud) from the field being absent (silent default).
+			wantErr:     true,
+			wantErrCode: "MANIFEST_ACTOR_KINDS_MISSING_PLUGIN",
+		},
+		{
+			name: "[character] alone rejected for missing plugin",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+actor_kinds_claimable: [character]
+`,
+			wantErr:     true,
+			wantErrCode: "MANIFEST_ACTOR_KINDS_MISSING_PLUGIN",
+		},
+		{
+			name: "[plugin, system] rejected because system is forbidden",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+actor_kinds_claimable: [plugin, system]
+`,
+			wantErr:     true,
+			wantErrCode: "MANIFEST_ACTOR_KIND_SYSTEM_FORBIDDEN",
+		},
+		{
+			name: "[plugin, frobnicate] rejected as unknown kind",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+actor_kinds_claimable: [plugin, frobnicate]
+`,
+			wantErr:     true,
+			wantErrCode: "MANIFEST_ACTOR_KIND_UNKNOWN",
+		},
+		{
+			name: "duplicates silently dedup preserving first occurrence",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+actor_kinds_claimable: [plugin, plugin, character]
+`,
+			wantNormalized: []string{"plugin", "character"},
+		},
+		{
+			name: "non-sequence yaml value is rejected as malformed",
+			yaml: `
+name: test
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+actor_kinds_claimable: plugin
+`,
+			wantErr: true,
+			// Pre-Decode kind check produces a manifest-namespaced error
+			// pointing at the offending key, rather than yaml.v3's generic
+			// "cannot unmarshal !!str into []string" type error.
+			wantErrSubstr: "actor_kinds_claimable must be declared as a YAML sequence",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			m, err := plugins.ParseManifest([]byte(tt.yaml))
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.wantErrCode != "" {
+					errutil.AssertErrorCode(t, err, tt.wantErrCode)
+				}
+				if tt.wantErrSubstr != "" {
+					assert.Contains(t, err.Error(), tt.wantErrSubstr)
+				}
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantNormalized, m.ActorKindsClaimable)
+		})
+	}
+}
+
+// TestManifestDeclaresActorKindClaimable verifies the helper used by the
+// manifest gate (Task 5) returns the correct boolean for each ActorKind.
+func TestManifestDeclaresActorKindClaimable(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns true for declared plugin and character kinds", func(t *testing.T) {
+		t.Parallel()
+		m := &plugins.Manifest{ActorKindsClaimable: []string{"plugin", "character"}}
+		assert.True(t, m.DeclaresActorKindClaimable(core.ActorPlugin))
+		assert.True(t, m.DeclaresActorKindClaimable(core.ActorCharacter))
+		assert.False(t, m.DeclaresActorKindClaimable(core.ActorSystem))
+	})
+
+	t.Run("returns false for character when only plugin declared", func(t *testing.T) {
+		t.Parallel()
+		m := &plugins.Manifest{ActorKindsClaimable: []string{"plugin"}}
+		assert.True(t, m.DeclaresActorKindClaimable(core.ActorPlugin))
+		assert.False(t, m.DeclaresActorKindClaimable(core.ActorCharacter))
+		assert.False(t, m.DeclaresActorKindClaimable(core.ActorSystem))
+	})
+
+	t.Run("returns false for system kind on validated manifests", func(t *testing.T) {
+		t.Parallel()
+		// Manifest validation rejects "system" in ActorKindsClaimable
+		// (MANIFEST_ACTOR_KIND_SYSTEM_FORBIDDEN), so any manifest reaching
+		// the gate cannot have "system" in its slice. The helper trusts the
+		// validation contract and uses kind.String() for lookup; the
+		// "system" case falls through the loop naturally.
+		m := &plugins.Manifest{ActorKindsClaimable: []string{"plugin", "character"}}
+		assert.False(t, m.DeclaresActorKindClaimable(core.ActorSystem))
+	})
+
+	t.Run("returns false when ActorKindsClaimable is empty", func(t *testing.T) {
+		t.Parallel()
+		m := &plugins.Manifest{}
+		assert.False(t, m.DeclaresActorKindClaimable(core.ActorPlugin))
+		assert.False(t, m.DeclaresActorKindClaimable(core.ActorCharacter))
+		assert.False(t, m.DeclaresActorKindClaimable(core.ActorSystem))
+	})
 }

@@ -15,6 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/core"
 )
 
 // Type identifies the plugin runtime.
@@ -68,21 +69,27 @@ type ManifestPolicy struct {
 
 // Manifest represents a plugin.yaml file.
 type Manifest struct {
-	Name           string            `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=64,pattern=^[a-z](-?[a-z0-9])*$"`
-	Version        string            `yaml:"version" json:"version" jsonschema:"required,minLength=1"`
-	Type           Type              `yaml:"type" json:"type" jsonschema:"required,enum=lua,enum=binary,enum=setting"`
-	Engine         string            `yaml:"engine,omitempty" json:"engine,omitempty" jsonschema:"description=HoloMUSH version constraint (e.g. >= 2.0.0)"`
-	Dependencies   map[string]string `yaml:"dependencies,omitempty" json:"dependencies,omitempty" jsonschema:"description=Plugin dependencies with version constraints"`
-	Events         []string          `yaml:"events,omitempty" json:"events,omitempty"`
-	Emits          []string          `yaml:"emits,omitempty" json:"emits,omitempty"`
-	Policies       []ManifestPolicy  `yaml:"policies,omitempty" json:"policies,omitempty"`
-	Commands       []CommandSpec     `yaml:"commands,omitempty" json:"commands,omitempty" jsonschema:"description=Commands provided by this plugin"`
-	Verbs          []VerbSpec        `yaml:"verbs,omitempty" json:"verbs,omitempty" jsonschema:"description=Verb registrations contributed by this plugin"`
-	Priority       *LoadPriority     `yaml:"priority,omitempty" json:"priority,omitempty" jsonschema:"description=Load priority (lower loads first)"`
-	SessionStreams bool              `yaml:"session_streams,omitempty" json:"session_streams,omitempty" jsonschema:"description=Plugin contributes streams to session subscriptions via QuerySessionStreams"`
-	LuaPlugin      *LuaConfig        `yaml:"lua-plugin,omitempty" json:"lua-plugin,omitempty"`
-	BinaryPlugin   *BinaryConfig     `yaml:"binary-plugin,omitempty" json:"binary-plugin,omitempty"`
-	Setting        *SettingConfig    `yaml:"setting,omitempty" json:"setting,omitempty"`
+	Name         string            `yaml:"name" json:"name" jsonschema:"required,minLength=1,maxLength=64,pattern=^[a-z](-?[a-z0-9])*$"`
+	Version      string            `yaml:"version" json:"version" jsonschema:"required,minLength=1"`
+	Type         Type              `yaml:"type" json:"type" jsonschema:"required,enum=lua,enum=binary,enum=setting"`
+	Engine       string            `yaml:"engine,omitempty" json:"engine,omitempty" jsonschema:"description=HoloMUSH version constraint (e.g. >= 2.0.0)"`
+	Dependencies map[string]string `yaml:"dependencies,omitempty" json:"dependencies,omitempty" jsonschema:"description=Plugin dependencies with version constraints"`
+	Events       []string          `yaml:"events,omitempty" json:"events,omitempty"`
+	Emits        []string          `yaml:"emits,omitempty" json:"emits,omitempty"`
+	// ActorKindsClaimable declares which Actor.Kind values the plugin may
+	// vouch for on emitted events. Default if absent: ["plugin"]. Allowed
+	// values: "plugin" (always required), "character". The "system" kind
+	// is rejected at load — plugins may never claim the host's system
+	// identity. See spec docs/superpowers/specs/2026-04-25-plugin-actor-claim-authentication-design.md §3.2.
+	ActorKindsClaimable []string         `yaml:"actor_kinds_claimable,omitempty" json:"actor_kinds_claimable,omitempty"`
+	Policies            []ManifestPolicy `yaml:"policies,omitempty" json:"policies,omitempty"`
+	Commands            []CommandSpec    `yaml:"commands,omitempty" json:"commands,omitempty" jsonschema:"description=Commands provided by this plugin"`
+	Verbs               []VerbSpec       `yaml:"verbs,omitempty" json:"verbs,omitempty" jsonschema:"description=Verb registrations contributed by this plugin"`
+	Priority            *LoadPriority    `yaml:"priority,omitempty" json:"priority,omitempty" jsonschema:"description=Load priority (lower loads first)"`
+	SessionStreams      bool             `yaml:"session_streams,omitempty" json:"session_streams,omitempty" jsonschema:"description=Plugin contributes streams to session subscriptions via QuerySessionStreams"`
+	LuaPlugin           *LuaConfig       `yaml:"lua-plugin,omitempty" json:"lua-plugin,omitempty"`
+	BinaryPlugin        *BinaryConfig    `yaml:"binary-plugin,omitempty" json:"binary-plugin,omitempty"`
+	Setting             *SettingConfig   `yaml:"setting,omitempty" json:"setting,omitempty"`
 
 	// Deprecated: capabilities field is no longer supported. Use policies instead.
 	// This field exists only to detect old-format manifests and produce a clear error.
@@ -105,7 +112,8 @@ type Manifest struct {
 	Actions       []string     `yaml:"actions,omitempty" json:"actions,omitempty"`
 	Trust         *TrustConfig `yaml:"trust,omitempty" json:"trust,omitempty"`
 
-	emitsDeclared bool `yaml:"-" json:"-" jsonschema:"-"`
+	emitsDeclared               bool `yaml:"-" json:"-" jsonschema:"-"`
+	actorKindsClaimableDeclared bool `yaml:"-" json:"-" jsonschema:"-"`
 }
 
 // EffectivePriority returns the manifest's load priority, applying
@@ -299,6 +307,21 @@ func ParseManifest(data []byte) (*Manifest, error) {
 		return nil, oops.In("manifest").Hint("invalid YAML").Wrap(err)
 	}
 
+	// Pre-Decode kind checks for sequence-typed fields. yaml.v3's `root.Decode`
+	// fails with a generic "cannot unmarshal !!str into []string" error when a
+	// scalar is supplied for a slice field, masking the manifest namespace. We
+	// check sequence-typed fields BEFORE Decode so operators get a manifest-
+	// namespaced error pointing at the offending key.
+	if node := manifestKeyNode(&root, "actor_kinds_claimable"); node != nil {
+		if node.Kind != yaml.SequenceNode {
+			// Name may not be available yet (Decode hasn't run); read it
+			// directly from the YAML for the error context.
+			name := manifestScalarValue(&root, "name")
+			return nil, oops.In("manifest").With("name", name).
+				New("actor_kinds_claimable must be declared as a YAML sequence")
+		}
+	}
+
 	var m Manifest
 	if err := root.Decode(&m); err != nil {
 		return nil, oops.In("manifest").Hint("invalid YAML").Wrap(err)
@@ -310,6 +333,7 @@ func ParseManifest(data []byte) (*Manifest, error) {
 				New("emits must be declared as a YAML sequence")
 		}
 	}
+	m.actorKindsClaimableDeclared = manifestKeyNode(&root, "actor_kinds_claimable") != nil
 
 	if err := m.Validate(); err != nil {
 		return nil, err
@@ -531,6 +555,13 @@ func (m *Manifest) Validate() error {
 		}
 	}
 
+	// Validate and normalize actor_kinds_claimable per spec §3.2.
+	normalizedKinds, err := m.validateActorKindsClaimable()
+	if err != nil {
+		return err
+	}
+	m.ActorKindsClaimable = normalizedKinds
+
 	// Validate actions: no empty strings, no duplicates.
 	// All plugin types may declare actions (unlike resource_types, actions
 	// have no structural coupling to AttributeResolverService).
@@ -553,6 +584,80 @@ func (m *Manifest) Validate() error {
 	}
 
 	return nil
+}
+
+// validateActorKindsClaimable applies spec §3.2 validation rules and
+// normalizes the field. The `actorKindsClaimableDeclared` flag distinguishes
+// "field absent" (defaults silently to [plugin] per spec §3.2 row 2) from
+// "field present but empty" (loud error per spec §5.2 test table; preserves
+// the §2 G5 no-silent-fallback invariant — operators who type
+// `actor_kinds_claimable: []` MUST get a loud failure rather than a silent
+// rewrite to [plugin]). Returns the canonical form on success; oops error on
+// violation. Errors are stamped with `plugin = m.Name` so multi-plugin load
+// failures identify the offending manifest.
+func (m *Manifest) validateActorKindsClaimable() ([]string, error) {
+	if !m.actorKindsClaimableDeclared {
+		return []string{"plugin"}, nil
+	}
+	if len(m.ActorKindsClaimable) == 0 {
+		return nil, oops.Code("MANIFEST_ACTOR_KINDS_MISSING_PLUGIN").
+			With("plugin", m.Name).
+			Errorf("actor_kinds_claimable MUST contain %q (plugins always need to vouch for their own identity)", "plugin")
+	}
+	seen := make(map[string]bool, len(m.ActorKindsClaimable))
+	out := make([]string, 0, len(m.ActorKindsClaimable))
+	for _, k := range m.ActorKindsClaimable {
+		switch k {
+		case "plugin", "character":
+			if !seen[k] {
+				seen[k] = true
+				out = append(out, k)
+			}
+		case "system":
+			return nil, oops.Code("MANIFEST_ACTOR_KIND_SYSTEM_FORBIDDEN").
+				With("plugin", m.Name).
+				Errorf("actor_kinds_claimable MUST NOT contain %q (host's system identity is not a claimable plugin capability)", k)
+		default:
+			return nil, oops.Code("MANIFEST_ACTOR_KIND_UNKNOWN").
+				With("plugin", m.Name).
+				With("kind", k).
+				Errorf("actor_kinds_claimable contains unknown kind %q (allowed: plugin, character)", k)
+		}
+	}
+	if !seen["plugin"] {
+		return nil, oops.Code("MANIFEST_ACTOR_KINDS_MISSING_PLUGIN").
+			With("plugin", m.Name).
+			Errorf("actor_kinds_claimable MUST contain %q (plugins always need to vouch for their own identity)", "plugin")
+	}
+	return out, nil
+}
+
+// DeclaresActorKindClaimable returns true if the plugin manifest opts into
+// vouching for the given actor kind on emitted events. Used by the manifest
+// gate at internal/plugin/event_emitter.go::Emit.
+//
+// Defers to core.ActorKind.String() for the wire name; manifest validation
+// guarantees "system" never appears in ActorKindsClaimable, so that case
+// returns false naturally via the loop without a special branch.
+func (m *Manifest) DeclaresActorKindClaimable(kind core.ActorKind) bool {
+	name := kind.String()
+	for _, k := range m.ActorKindsClaimable {
+		if k == name {
+			return true
+		}
+	}
+	return false
+}
+
+// manifestScalarValue returns the scalar value of a top-level mapping key, or
+// "" if the key is absent or non-scalar. Used to extract context (e.g., name)
+// for pre-Decode error messages.
+func manifestScalarValue(root *yaml.Node, key string) string {
+	node := manifestKeyNode(root, key)
+	if node == nil || node.Kind != yaml.ScalarNode {
+		return ""
+	}
+	return node.Value
 }
 
 func manifestKeyNode(root *yaml.Node, key string) *yaml.Node {

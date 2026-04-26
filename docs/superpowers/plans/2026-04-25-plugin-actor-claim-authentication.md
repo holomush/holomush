@@ -54,6 +54,7 @@
 **Why first:** This is a refactor that activates the actor-metadata channel at the subscriber boundary. Without it, the manifest gate (Task 5) and token mechanism (Task 8) operate on a channel that's empty in production. TDD: write a unit test asserting `core.ActorFromContext(ctx)` is populated at the `DeliverEvent` boundary; verify it fails (red); apply the refactor; verify it passes (green).
 
 **Files:**
+
 - Modify: `internal/plugin/subscriber.go:104-150` (`deliverAsync` function)
 - Create: `internal/plugin/subscriber_test.go`
 
@@ -296,6 +297,7 @@ Bead: holomush-ec22.1 (G7)"
 **Why second:** Same prerequisite as Task 1, applied at the second dispatch entry point (command dispatch path). TDD red-green at the dispatcher boundary.
 
 **Files:**
+
 - Modify: `internal/command/dispatcher.go::dispatchToPlugin` (~lines 285-381)
 - Modify: `internal/command/dispatcher_test.go` (extend with §5.8.2 tests)
 
@@ -464,6 +466,7 @@ Bead: holomush-ec22.1 (G7)"
 **Why third:** All downstream tasks (manifest gate at Task 5, plugin migrations at Task 4) depend on the field existing on the parsed `Manifest` struct. Tasks 4 and 5 must come AFTER this. TDD: validation rules first (table-driven test), then add the field + validation logic.
 
 **Files:**
+
 - Modify: `internal/plugin/manifest.go::Manifest` struct (~line 70)
 - Modify: `internal/plugin/manifest.go` (validation logic in `ParseManifest` or `(*Manifest).Validate()`)
 - Modify: `internal/plugin/manifest_test.go`
@@ -786,6 +789,7 @@ Bead: holomush-ec22.1 (G2)"
 **Why fourth:** Once the manifest gate (Task 5) is in place, any plugin without proper claim breaks. Manifests must be updated FIRST so Task 5 can land green. TDD: not strictly applicable (YAML edits); regression assertion is "Task 5's tests pass."
 
 **Files:**
+
 - Modify: `plugins/core-scenes/plugin.yaml`
 - Modify: `plugins/core-communication/plugin.yaml`
 - Modify: `plugins/echo-bot/plugin.yaml`
@@ -870,6 +874,7 @@ Bead: holomush-ec22.1 (§3.2 migration scope)"
 **Why fifth:** The manifest schema (Task 3) and migrations (Task 4) are in place; the gate can now safely enforce. TDD: write tests asserting the gate fires for a non-claimed kind and passes for a claimed kind, then add the gate.
 
 **Files:**
+
 - Modify: `internal/plugin/event_emitter.go::Emit` (around lines 99-111)
 - Modify: `internal/plugin/event_emitter_test.go`
 
@@ -1075,6 +1080,7 @@ Bead: holomush-ec22.1 (G2)"
 **Why sixth:** Foundation for the binary-plugin token mechanism. Pure isolated unit (no integration with `Host` yet). TDD: write all unit tests for `Issue` / `Lookup` / `Revoke` / sweeper / Close, then implement.
 
 **Files:**
+
 - Create: `internal/plugin/goplugin/emit_token_store.go`
 - Create: `internal/plugin/goplugin/emit_token_store_test.go`
 
@@ -1503,6 +1509,7 @@ Bead: holomush-ec22.1 (G1)"
 **Why seventh:** Plumb the store into `Host` construction and `Close`. Pure structural; no behavior change yet (issuance comes in Task 8). TDD: assert `NewHost()` returns a Host with a non-nil `tokenStore`; assert `Close()` invokes `tokenStore.Close()`.
 
 **Files:**
+
 - Modify: `internal/plugin/goplugin/host.go::Host` struct + `NewHost`/`NewHostWithFactory` + `Close`
 - Modify: `internal/plugin/goplugin/host_test.go`
 
@@ -1706,6 +1713,7 @@ Bead: holomush-ec22.1 (G1 wiring)"
 **Why eighth:** Now that the store is wired in (Task 7), the host can issue tokens at the outgoing-call boundary with the actor re-anchor logic per spec §3.3.4. TDD: assert outgoing metadata contains `x-holomush-emit-token`; assert store has matching entry; assert defer-revoke clears it; assert ActorSystem re-anchored.
 
 **Files:**
+
 - Modify: `internal/plugin/goplugin/host.go::DeliverEvent` (~line 540) + `DeliverCommand` (~line 592)
 - Modify: `internal/plugin/goplugin/host_test.go`
 
@@ -1878,6 +1886,7 @@ func TestDeliverEventNoRecoverWrapper(t *testing.T) {
 ```
 
 **Imports needed in `host_test.go`**:
+
 - `"google.golang.org/grpc/metadata"` (verify against existing imports — the file already imports gRPC metadata at line 1353; confirm)
 - `"go/ast"`, `"go/parser"`, `"go/token"` for the recover() static-analysis test (new — Task 8 introduces these)
 
@@ -2010,6 +2019,7 @@ Bead: holomush-ec22.1 (G1 issuance)"
 **Why ninth:** The store has tokens (Task 8); now `EmitEvent` looks them up instead of trusting the plugin's metadata. This is the load-bearing security change — closes the forgery surface. TDD: forgery override test (plugin substitutes kind/id headers but token is honest → host uses token's stored actor); missing token; unknown token; cross-plugin token leak.
 
 **Files:**
+
 - Modify: `internal/plugin/goplugin/host_service.go::EmitEvent` (lines 39-74)
 - Modify: `internal/plugin/goplugin/host_service_test.go`
 
@@ -2302,6 +2312,7 @@ Bead: holomush-ec22.1 (G1)"
 **Why tenth:** Full-stack test exercising the gRPC metadata path with a real binary plugin and a real Lua plugin. This is the load-bearing G1 + G2 verification.
 
 **Files:**
+
 - Create: `test/integration/plugin/actor_authentication_test.go` (NEW file in the EXISTING `test/integration/plugin/` Ginkgo suite — `binary_plugin_test.go`, `extensible_actions_test.go`, etc. live here)
 - Optional create (only if a forgery-capable test plugin doesn't already exist): `test/integration/plugin/testdata/forgery_plugin/main.go` — a binary plugin built specifically for this test that allows test-controlled header substitution before EmitEvent. Reuse the existing `testdata/` patterns.
 
@@ -2461,6 +2472,7 @@ Bead: holomush-ec22.1 (G1 + G2 e2e)"
 **Why eleventh:** Codifies the "binary and Lua plugins MUST be treated identically" invariant in the two human-facing AI guidance files. Anchored byte-equivalence enforced by a CI check (Task 12).
 
 **Files:**
+
 - Modify: `AGENTS.md`
 - Modify: `CLAUDE.md`
 
@@ -2545,6 +2557,7 @@ Bead: holomush-ec22.1 (G6)"
 **Why twelfth:** Codifies the regression guards from spec criterion 8 (manifest claim coverage) and criterion 9 (docs byte-equivalence) as `task` targets that run in `task pr-prep`.
 
 **Files:**
+
 - Modify: `Taskfile.yaml`
 - Create: `scripts/lint-plugin-manifests.sh`
 
@@ -2728,6 +2741,7 @@ Bead: holomush-ec22.1 (acceptance criteria 8 + 9)"
 **Why thirteenth:** Spec acceptance criterion 11 — operator-facing docs for plugin authors describing the new manifest field and migration guidance.
 
 **Files:**
+
 - Create: `site/docs/extending/actor-kinds-claimable.md`
 
 - [ ] **Step 0: Start a fresh jj change**
@@ -2756,6 +2770,7 @@ operator-controlled trust boundary for plugin-emitted event identity.
 actor_kinds_claimable:
   - plugin
   - character
+```
 ```
 
 Allowed values:
@@ -2827,7 +2842,8 @@ version: add `actor_kinds_claimable: [plugin, character]` to your manifest if
 your plugin emits during character-driven dispatches. The first emit after
 upgrade will loud-fail with `EMIT_ACTOR_KIND_NOT_CLAIMABLE` if the field is
 missing.
-```
+
+```text
 
 - [ ] **Step 2: Verify the doc builds**
 
@@ -2875,6 +2891,7 @@ task pr-prep
 Expected: green. Mirrors all CI: lint, format, schema, license, unit, integration, e2e + the two new lint tasks.
 
 If any gate fails, fix inline and re-run. Common likely failures:
+
 - Markdown lint: heading levels, line lengths.
 - License headers: any new `.go`/`.sh` file missing `SPDX-License-Identifier` (run `task license:add`).
 - `goleak` not in go.mod: re-run `go mod tidy`.
