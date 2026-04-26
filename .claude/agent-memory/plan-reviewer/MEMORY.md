@@ -44,6 +44,14 @@ Keep under 200 lines. Curate — don't hoard.
   9, 13, and 16" but Task 16 step 3 explicitly forbids the mirror. Subagent execution
   per-task hides this contradiction; an inline-execution agent might propagate the
   wrong pattern to Task 16.
+- **Running test-count drift after a per-task split.** When a revision splits one
+  bats/test task into N tests, the author often updates the FINAL tally and the
+  per-task breakdown but forgets to propagate through the intermediate
+  "Expected: N tests" lines in subsequent tasks. Always grep
+  `rg -n "Expected: [0-9]+ tests"` against the plan and recompute the cumulative sum
+  from the per-task contributions; flag any line that doesn't match. Pr-prep-lock
+  round-2 example: Task 8 split 1→3; Task 12 step 2 correctly updated to "12 tests"
+  but Tasks 9/10/11 step 2 still said 7/8/9 instead of 9/10/11.
 
 ## Decomposition patterns that work here
 
@@ -89,3 +97,7 @@ Keep under 200 lines. Curate — don't hoard.
   verify enum constants by grepping `pkg/plugin/*.go` (or the relevant
   package) before approving any plan that names them — TDD red phase that
   fails at compile-time is a defect, not a TDD red.
+- **go-task per-`cmd:` `vars:` is silently ignored.** `vars:` is supported at task-level (sibling of `cmds:`) and under `task: <subtask>` invocations, but NOT as a sibling of `cmd:` inside a list item. Plans that put `vars:` directly on a `cmd:` will see the block silently dropped and the variable will resolve to either empty or a built-in shadow (`{{.TASKFILE}}` in particular is a go-task built-in = abs path of loaded Taskfile). Verify by reading: any `cmd: |...` followed by `vars:` at the same list-item indent. Run a 5-line minimal Taskfile to confirm before flagging — go-task version drift is real.
+- **Skip-stub `@test` declarations defeat invariant enforcement.** When a plan consolidates multiple invariants into one test body and adds skip-only `@test "<name>"` aliases just to satisfy a meta-test that greps for names, the meta-test loses its drift-detection power. The skip-aliases ARE detectable: `bats` body contains only `skip "..."` and nothing else. If spec assigns invariant I-N to test name X and plan implements X as a skip-stub, that's a blocking gap. Either rename in spec (I-N enforced jointly with I-M, test = `<combined-name>`) or split tests in plan to give each invariant its own real assertions.
+- **`task fmt -- <file>` does NOT scope to the file** in HoloMUSH's Taskfile (sub-tasks `fmt:go`/`fmt:yaml`/`fmt:markdown`/`fmt:dprint` don't consume `CLI_ARGS`). Plans citing this invocation as targeted formatting are wrong; it's a no-op arg and `fmt` formats everything. Non-blocking but flag — common copy-paste error from other go-task projects that DO route CLI_ARGS.
+- **CI does not run `task pr-prep` in HoloMUSH.** `.github/workflows/ci.yaml` invokes the underlying tasks directly (`task lint`, `task test:cover`, `task test:int`, `task test:e2e:cover`). Only one comment in `.github/workflows/nightly-soak.yml` mentions pr-prep. Plans claiming "CI runs task pr-prep" are wrong about CI's actual invocation pattern; the conclusions about CI behavior may still be correct but for the wrong reasons.
