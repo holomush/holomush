@@ -15,9 +15,13 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/auth"
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
+	"github.com/holomush/holomush/internal/command"
+	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/internal/web"
 	"github.com/holomush/holomush/internal/world"
 	worldpg "github.com/holomush/holomush/internal/world/postgres"
 	"github.com/holomush/holomush/test/testutil"
@@ -47,6 +51,10 @@ type testEnv struct {
 	// Services
 	authService *auth.Service
 	hasher      auth.PasswordHasher
+
+	// In-process gateway+core stack (for multi-tab integration tests).
+	coreServer *holoGRPC.CoreServer
+	webHandler *web.Handler
 }
 
 var env *testEnv
@@ -86,17 +94,49 @@ func setupTestEnv() (*testEnv, error) {
 		return nil, err
 	}
 
+	charRepo := &authCharRepoAdapter{pool: pool, charRepo: worldpg.NewCharacterRepository(pool)}
+	sessionStore := store.NewPostgresSessionStore(pool)
+
+	// Build the in-process gateway+core stack. Auth/multi-tab specs exercise
+	// the unary RPC surface only; the dispatcher and command services are
+	// non-nil to satisfy NewCoreServer's invariant but use the AllowAll
+	// policy engine so command paths are not blocked by ABAC. Mirrors
+	// test/integration/phase1_5_test.go newMinimalDispatcher() (lines 45-53).
+	pe := policytest.AllowAllEngine()
+	dispatcher, err := command.NewDispatcher(command.NewRegistry(), pe)
+	if err != nil {
+		eventStore.Close()
+		return nil, oops.Wrap(err)
+	}
+	cmdServices := command.NewTestServices(command.ServicesConfig{Engine: pe})
+
+	coreServer := holoGRPC.NewCoreServer(
+		nil, // engine: not exercised by auth-only flows
+		sessionStore,
+		dispatcher,
+		cmdServices,
+		holoGRPC.WithAuthService(authService),
+		holoGRPC.WithPlayerSessionRepo(playerSessionStore),
+		holoGRPC.WithPlayerRepo(playerRepo),
+		holoGRPC.WithCharacterRepo(charRepo),
+		holoGRPC.WithSessionStore(sessionStore),
+	)
+
+	webHandler := web.NewHandler(&coreClientShim{s: coreServer})
+
 	return &testEnv{
 		ctx:                ctx,
 		pool:               pool,
 		playerSessionStore: playerSessionStore,
 		playerRepo:         playerRepo,
-		charRepo:           &authCharRepoAdapter{pool: pool, charRepo: worldpg.NewCharacterRepository(pool)},
+		charRepo:           charRepo,
 		locRepo:            worldpg.NewLocationRepository(pool),
-		sessionStore:       store.NewPostgresSessionStore(pool),
+		sessionStore:       sessionStore,
 		eventStore:         eventStore,
 		authService:        authService,
 		hasher:             hasher,
+		coreServer:         coreServer,
+		webHandler:         webHandler,
 	}, nil
 }
 
