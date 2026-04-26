@@ -49,10 +49,9 @@ func main() {
 }
 
 // requiresCharacterClaim implements the spec §3.2 / criterion 8 heuristic:
-// flag plugins where type != setting AND any of:
-//
-//	(a) emits: non-empty AND (commands: non-empty OR events: non-empty)
-//	(b) events: non-empty (regardless of emits:)
+// flag plugins where type != setting AND emits non-empty AND (commands OR
+// events non-empty). A subscriber-only plugin with no emits doesn't traverse
+// the manifest gate, so we don't force it to declare a broader actor claim.
 func requiresCharacterClaim(m *plugins.Manifest) bool {
 	if m.Type == plugins.TypeSetting {
 		return false
@@ -60,13 +59,7 @@ func requiresCharacterClaim(m *plugins.Manifest) bool {
 	hasEmits := len(m.Emits) > 0
 	hasCommands := len(m.Commands) > 0
 	hasEvents := len(m.Events) > 0
-	if hasEvents {
-		return true // clause (b)
-	}
-	if hasEmits && (hasCommands || hasEvents) {
-		return true // clause (a)
-	}
-	return false
+	return hasEmits && (hasCommands || hasEvents)
 }
 
 func containsCharacter(kinds []string) bool {

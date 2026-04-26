@@ -147,6 +147,15 @@ func TestEmitTokenStoreIssueFailsOnRandFailure(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_ISSUE_FAILED")
 }
 
+func TestEmitTokenStoreIssueFailsAfterClose(t *testing.T) {
+	t.Parallel()
+	s := newStoreForTest(t)
+	require.NoError(t, s.Close())
+	_, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_STORE_CLOSED")
+}
+
 func TestEmitTokenStoreSweeperRemovesExpired(t *testing.T) {
 	// NOTE: NOT t.Parallel — goleak.VerifyNone observes ALL live goroutines
 	// at the moment it runs, including sibling t.Parallel test runners.

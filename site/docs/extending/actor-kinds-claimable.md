@@ -70,14 +70,14 @@ chain, not just who emitted at each link.
 
 ## Two-token pattern (binary plugins)
 
-Binary plugins additionally undergo per-dispatch token authentication on
-the gRPC `EmitEvent` boundary. The host issues two tokens for every
-outbound dispatch:
+Binary plugins undergo token authentication on the gRPC `EmitEvent`
+boundary. There are two token types, each with a distinct issuance
+trigger:
 
-| Token            | Purpose                                                                     |
-| ---------------- | --------------------------------------------------------------------------- |
-| Dispatch token   | Authorizes emits that preserve the dispatch's actor (e.g., the character).  |
-| Self-token       | Authorizes emits with the plugin's own identity (`ActorPlugin:<your-name>`).|
+| Token            | Issuance                                                                                              |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
+| Dispatch token   | Issued automatically by the host on `DeliverEvent` / `DeliverCommand`; preserves the dispatch actor.  |
+| Self-token       | Issued on demand via `RequestEmitToken` for out-of-dispatch emits as `ActorPlugin:<your-name>`.       |
 
 The plugin's claimed actor metadata (`x-holomush-actor-kind` /
 `-actor-id` headers) is no longer trusted as identity on its own — every

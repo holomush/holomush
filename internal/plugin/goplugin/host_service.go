@@ -70,6 +70,11 @@ func (s *pluginHostServiceServer) EmitEvent(ctx context.Context, req *pluginv1.P
 	s.host.mu.RLock()
 	tokenStore := s.host.tokenStore
 	s.host.mu.RUnlock()
+	if tokenStore == nil {
+		return nil, oops.Code("EMIT_TOKEN_STORE_UNCONFIGURED").
+			With("plugin", s.pluginName).
+			Errorf("plugin token store is not configured")
+	}
 
 	storedActor, ok := tokenStore.Lookup(s.pluginName, tokens[0])
 	if !ok {

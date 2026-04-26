@@ -59,6 +59,10 @@ func newEmitTokenStore() *emitTokenStore {
 
 // Issue creates a new token for an outgoing dispatch. Caller MUST defer
 // Revoke or the entry will rely on TTL expiry for cleanup.
+//
+// Returns EMIT_TOKEN_STORE_CLOSED if Close() has fired — the store is
+// terminal-on-close so a host shutting down cannot keep minting tokens
+// that survive into a successor's lifetime.
 func (s *emitTokenStore) Issue(pluginName string, actor core.Actor) (string, error) {
 	var buf [16]byte
 	if _, err := io.ReadFull(s.rand, buf[:]); err != nil {
@@ -68,6 +72,12 @@ func (s *emitTokenStore) Issue(pluginName string, actor core.Actor) (string, err
 	}
 	token := base64.RawURLEncoding.EncodeToString(buf[:])
 	s.mu.Lock()
+	if s.stopped {
+		s.mu.Unlock()
+		return "", oops.Code("EMIT_TOKEN_STORE_CLOSED").
+			With("plugin", pluginName).
+			Errorf("emit token store is closed")
+	}
 	s.items[token] = emitTokenEntry{
 		pluginName: pluginName,
 		actor:      actor,
