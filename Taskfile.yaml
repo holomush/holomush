@@ -523,6 +523,7 @@ tasks:
     desc: Install all dev tools and git hooks
     cmds:
       - brew install golangci-lint gofumpt lefthook actionlint goreleaser dprint cocogitto rumdl yamlfmt binaryen gotestsum
+        flock bats-core yq
       - brew install steveyegge/beads/bd
       - go install github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc@latest
       - lefthook install
