@@ -791,7 +791,7 @@ end
 	event := pluginsdk.Event{
 		ID:     "01ABC",
 		Stream: "location:123",
-		Type:   pluginsdk.EventTypeSay,
+		Type:   pluginsdk.EventType("say"),
 	}
 
 	emits, err := host.DeliverEvent(context.Background(), "both-handlers", event)

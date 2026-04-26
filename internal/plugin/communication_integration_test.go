@@ -20,6 +20,7 @@ import (
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	corecomm "github.com/holomush/holomush/plugins/core-communication"
 )
 
 // communicationFixture contains all components needed for communication plugin integration tests.
@@ -169,7 +170,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				Expect(emits[0].Stream).To(Equal("location:loc456"))
-				Expect(emits[0].Type).To(Equal(pluginsdk.EventTypeSay))
+				Expect(emits[0].Type).To(Equal(pluginsdk.EventType(corecomm.EventTypeSay)))
 				Expect(emits[0].Payload).To(ContainSubstring(`Alice says, \"Hello everyone!\"`))
 				Expect(emits[0].Payload).To(ContainSubstring(`"speaker":"Alice"`))
 			})
@@ -216,7 +217,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				Expect(emits[0].Stream).To(Equal("location:loc456"))
-				Expect(emits[0].Type).To(Equal(pluginsdk.EventTypePose))
+				Expect(emits[0].Type).To(Equal(pluginsdk.EventType(corecomm.EventTypePose)))
 				Expect(emits[0].Payload).To(ContainSubstring(`Bob waves hello.`))
 				Expect(emits[0].Payload).To(ContainSubstring(`"actor":"Bob"`))
 			})
@@ -423,7 +424,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				event := pluginsdk.Event{
 					ID:        "01MNO",
 					Stream:    "location:123",
-					Type:      pluginsdk.EventTypeSay,
+					Type:      pluginsdk.EventType(corecomm.EventTypeSay),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char_1",

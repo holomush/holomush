@@ -11,15 +11,36 @@ package pluginsdk
 // EventType identifies the kind of event.
 type EventType string
 
-// These constants are provided for convenience. Plugins may emit any event
-// type registered in the VerbRegistry.
+// Plugin-owned event-type constants live in the owning plugin's Go package
+// (e.g., plugins/core-communication/events.go). The SDK exposes the
+// EventType string type only. Cross-package event-type references use the
+// qualified form "<plugin>:<event_type>" per spec §7.1.
+//
+// Host-owned event-type strings (e.g., "system" for system events) are
+// constants in internal/core/event.go and are re-exported below as typed
+// SDK constants so plugin code (which cannot import internal/core per the
+// plugin-boundary discipline) can reference them without resorting to magic strings.
+
+// Host-owned event-type constants. These name event types emitted by
+// the host runtime — and by plugins emitting on behalf of the host
+// (e.g., system messages from a service plugin). The string values are
+// owned by internal/core/event.go; they are re-exported here as typed
+// SDK constants so plugin code (which cannot import internal/core per
+// the plugin-boundary discipline) can reference them without resorting
+// to magic strings.
+//
+// Plugin-owned event-type constants (e.g., "core-communication:say")
+// stay in their owning plugin's package, NOT here.
 const (
-	EventTypeSay    EventType = "say"
-	EventTypePose   EventType = "pose"
-	EventTypeEmit   EventType = "emit"
-	EventTypeArrive EventType = "arrive"
-	EventTypeLeave  EventType = "leave"
-	EventTypeSystem EventType = "system"
+	HostEventTypeSystem          EventType = "system"
+	HostEventTypeSessionEnded    EventType = "session_ended"
+	HostEventTypeCommandResponse EventType = "command_response"
+	HostEventTypeCommandError    EventType = "command_error"
+	HostEventTypeArrive          EventType = "arrive"
+	HostEventTypeLeave           EventType = "leave"
+	HostEventTypeMove            EventType = "move"
+	HostEventTypeLocationState   EventType = "location_state"
+	HostEventTypeExitUpdate      EventType = "exit_update"
 )
 
 // ActorKind identifies what type of entity caused an event.

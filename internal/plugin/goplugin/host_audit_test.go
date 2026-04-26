@@ -45,7 +45,7 @@ func TestProtoCommandResponseToSDKCopiesStatusAndEvents(t *testing.T) {
 	assert.Equal(t, "denied", got.Output)
 	require.Len(t, got.Events, 1)
 	assert.Equal(t, "character:01ABC", got.Events[0].Stream)
-	assert.Equal(t, pluginsdk.EventType("command_response"), got.Events[0].Type)
+	assert.Equal(t, pluginsdk.HostEventTypeCommandResponse, got.Events[0].Type)
 	assert.Equal(t, `{"text":"hi"}`, got.Events[0].Payload)
 }
 

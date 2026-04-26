@@ -24,6 +24,7 @@ import (
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/plugin/mocks"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	corecomm "github.com/holomush/holomush/plugins/core-communication"
 )
 
 // echoBotFixture contains all components needed for echo-bot integration tests.
@@ -151,7 +152,7 @@ var _ = Describe("Echo Bot Integration", func() {
 				event := pluginsdk.Event{
 					ID:        "01ABC",
 					Stream:    "location:123",
-					Type:      pluginsdk.EventTypeSay,
+					Type:      pluginsdk.EventType(corecomm.EventTypeSay),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char_1",
@@ -163,7 +164,7 @@ var _ = Describe("Echo Bot Integration", func() {
 				Expect(emits).To(HaveLen(1))
 
 				Expect(emits[0].Stream).To(Equal("location:123"))
-				Expect(emits[0].Type).To(Equal(pluginsdk.EventTypeSay))
+				Expect(emits[0].Type).To(Equal(pluginsdk.EventType(corecomm.EventTypeSay)))
 
 				var payload map[string]string
 				err = json.Unmarshal([]byte(emits[0].Payload), &payload)
@@ -180,7 +181,7 @@ var _ = Describe("Echo Bot Integration", func() {
 				event := pluginsdk.Event{
 					ID:        "01DEF",
 					Stream:    "location:123",
-					Type:      pluginsdk.EventTypeSay,
+					Type:      pluginsdk.EventType(corecomm.EventTypeSay),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorPlugin,
 					ActorID:   "some-plugin",
@@ -199,7 +200,7 @@ var _ = Describe("Echo Bot Integration", func() {
 				event := pluginsdk.Event{
 					ID:        "01GHI",
 					Stream:    "location:123",
-					Type:      pluginsdk.EventTypePose,
+					Type:      pluginsdk.EventType(corecomm.EventTypePose),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char_1",
@@ -218,7 +219,7 @@ var _ = Describe("Echo Bot Integration", func() {
 				event := pluginsdk.Event{
 					ID:        "01JKL",
 					Stream:    "location:123",
-					Type:      pluginsdk.EventTypeSay,
+					Type:      pluginsdk.EventType(corecomm.EventTypeSay),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char_1",
@@ -237,7 +238,7 @@ var _ = Describe("Echo Bot Integration", func() {
 				event := pluginsdk.Event{
 					ID:        "01MNO",
 					Stream:    "location:123",
-					Type:      pluginsdk.EventTypeSay,
+					Type:      pluginsdk.EventType(corecomm.EventTypeSay),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char_1",
@@ -256,7 +257,7 @@ var _ = Describe("Echo Bot Integration", func() {
 				event := pluginsdk.Event{
 					ID:        "01PQR",
 					Stream:    "location:123",
-					Type:      pluginsdk.EventTypeSay,
+					Type:      pluginsdk.EventType(corecomm.EventTypeSay),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char_1",
@@ -301,7 +302,7 @@ var _ = Describe("Echo Bot Integration", func() {
 			events <- pluginsdk.Event{
 				ID:        "01STU",
 				Stream:    "location:123",
-				Type:      pluginsdk.EventTypeSay,
+				Type:      pluginsdk.EventType(corecomm.EventTypeSay),
 				Timestamp: time.Now().UnixMilli(),
 				ActorKind: pluginsdk.ActorCharacter,
 				ActorID:   "char_1",

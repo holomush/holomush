@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 func TestEventType_String(t *testing.T) {
@@ -56,6 +58,34 @@ func TestActorKind_String(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.input.String())
+		})
+	}
+}
+
+func TestHostEventTypesMatchPluginSDKReExports(t *testing.T) {
+	// The host's authoritative event-type strings are in this file.
+	// pkg/plugin re-exports them as pluginsdk.HostEventType* so plugin
+	// code (which cannot import internal/core) has typed references.
+	// Verify the two sides agree string-for-string.
+	cases := []struct {
+		name string
+		core EventType
+		sdk  pluginsdk.EventType
+	}{
+		{"system", EventTypeSystem, pluginsdk.HostEventTypeSystem},
+		{"session_ended", EventTypeSessionEnded, pluginsdk.HostEventTypeSessionEnded},
+		{"command_response", EventTypeCommandResponse, pluginsdk.HostEventTypeCommandResponse},
+		{"command_error", EventTypeCommandError, pluginsdk.HostEventTypeCommandError},
+		{"arrive", EventTypeArrive, pluginsdk.HostEventTypeArrive},
+		{"leave", EventTypeLeave, pluginsdk.HostEventTypeLeave},
+		{"move", EventTypeMove, pluginsdk.HostEventTypeMove},
+		{"location_state", EventTypeLocationState, pluginsdk.HostEventTypeLocationState},
+		{"exit_update", EventTypeExitUpdate, pluginsdk.HostEventTypeExitUpdate},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, string(c.core), string(c.sdk),
+				"host event-type drift between internal/core and pkg/plugin")
 		})
 	}
 }

@@ -424,7 +424,7 @@ func TestSceneServiceCreateSceneEmitsLifecycleEventWhenEventSinkConfigured(t *te
 
 	require.Len(t, sink.intents, 1)
 	assert.Equal(t, "scene:"+resp.GetScene().GetId(), sink.intents[0].Subject)
-	assert.Equal(t, pluginsdk.EventTypeSystem, sink.intents[0].Type)
+	assert.Equal(t, pluginsdk.HostEventTypeSystem, sink.intents[0].Type)
 	assert.Contains(t, sink.intents[0].Payload, `"kind":"scene.lifecycle.created"`)
 	assert.Contains(t, sink.intents[0].Payload, `"scene_id":"`+resp.GetScene().GetId()+`"`)
 }
@@ -479,7 +479,7 @@ func TestSceneServiceSceneCreatedIntentBuildsLifecyclePayload(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "scene:scene-123", intent.Subject)
-	assert.Equal(t, pluginsdk.EventTypeSystem, intent.Type)
+	assert.Equal(t, pluginsdk.HostEventTypeSystem, intent.Type)
 	assert.Contains(t, intent.Payload, `"kind":"scene.lifecycle.created"`)
 	assert.Contains(t, intent.Payload, `"scene_id":"scene-123"`)
 	assert.Contains(t, intent.Payload, `"owner_id":"char-alice"`)

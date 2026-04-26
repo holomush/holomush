@@ -186,7 +186,7 @@ binary-plugin:
 		emitCtx := core.WithActor(ctx, core.Actor{Kind: core.ActorPlugin, ID: manifest.Name})
 		return host.emitter.Emit(emitCtx, manifest.Name, pluginsdk.EmitIntent{
 			Subject: "scene:test",
-			Type:    pluginsdk.EventTypeSystem,
+			Type:    pluginsdk.EventType(core.EventTypeSystem),
 			Payload: `{"phase":"init"}`,
 		})
 	}
@@ -263,7 +263,7 @@ func TestManagerDeliverEventRoutesToCorrectHost(t *testing.T) {
 
 	emits, err := mgr.DeliverEvent(context.Background(), "echo-bot", pluginsdk.Event{
 		Stream: "loc:1",
-		Type:   pluginsdk.EventTypeSay,
+		Type:   pluginsdk.EventType("say"),
 	})
 	require.NoError(t, err)
 	require.Len(t, emits, 1)
@@ -304,7 +304,7 @@ func TestManagerEmitPluginEventUsesConfiguredSharedEmitter(t *testing.T) {
 
 	err := mgr.EmitPluginEvent(ctx, "say-plugin", pluginsdk.EmitEvent{
 		Stream:  "location:123",
-		Type:    pluginsdk.EventTypeSay,
+		Type:    pluginsdk.EventType("say"),
 		Payload: `{"text":"hello"}`,
 	})
 	require.NoError(t, err)

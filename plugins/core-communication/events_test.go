@@ -14,12 +14,13 @@ import (
 
 func TestEventTypesAreQualifiedWithPluginName(t *testing.T) {
 	for _, et := range []corecomm.EventType{
-		corecomm.EventTypeSay,
-		corecomm.EventTypePose,
-		corecomm.EventTypePage,
-		corecomm.EventTypeWhisper,
-		corecomm.EventTypePemit,
+		corecomm.EventTypeEmit,
 		corecomm.EventTypeOOC,
+		corecomm.EventTypePage,
+		corecomm.EventTypePemit,
+		corecomm.EventTypePose,
+		corecomm.EventTypeSay,
+		corecomm.EventTypeWhisper,
 		corecomm.EventTypeWhisperNotice,
 	} {
 		assert.True(t,

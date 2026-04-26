@@ -201,7 +201,7 @@ func TestPluginServerAdapterInitInjectsBrokerBackedEventSinkIntoServiceProvider(
 	require.True(t, provider.initCalled, "expected provider.Init to run")
 	require.Len(t, hostService.requests, 1)
 	assert.Equal(t, "scene:01SCENE", hostService.requests[0].GetStream())
-	assert.Equal(t, string(EventTypeSystem), hostService.requests[0].GetEventType())
+	assert.Equal(t, string(EventType("system")), hostService.requests[0].GetEventType())
 	assert.Equal(t, []byte(`{"kind":"init"}`), hostService.requests[0].GetPayload())
 }
 
@@ -242,7 +242,7 @@ func TestEventSinkEmitForwardsTrustedActorMetadata(t *testing.T) {
 	})
 	err = sink.Emit(emitCtx, EmitIntent{
 		Subject: "scene:01SCENE",
-		Type:    EventTypeSystem,
+		Type:    EventType("system"),
 		Payload: `{"kind":"created"}`,
 	})
 	require.NoError(t, err)
@@ -258,7 +258,7 @@ func TestEventSinkEmitReturnsErrorWhenClientIsMissing(t *testing.T) {
 
 	err := sink.Emit(context.Background(), EmitIntent{
 		Subject: "scene:01SCENE",
-		Type:    EventTypeSystem,
+		Type:    EventType("system"),
 		Payload: `{"kind":"created"}`,
 	})
 	require.Error(t, err)
@@ -465,7 +465,7 @@ func (p *eventSinkInitProvider) Init(ctx context.Context, _ *pluginv1.ServiceCon
 	}
 	return p.sink.Emit(ctx, EmitIntent{
 		Subject: "scene:01SCENE",
-		Type:    EventTypeSystem,
+		Type:    EventType("system"),
 		Payload: `{"kind":"init"}`,
 	})
 }

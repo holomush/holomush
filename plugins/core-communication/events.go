@@ -16,11 +16,12 @@ type EventType string
 
 // Event-type constants. All are qualified with the plugin name.
 const (
-	EventTypeSay           EventType = "core-communication:say"
-	EventTypePose          EventType = "core-communication:pose"
-	EventTypePage          EventType = "core-communication:page"
-	EventTypeWhisper       EventType = "core-communication:whisper"
-	EventTypePemit         EventType = "core-communication:pemit"
+	EventTypeEmit          EventType = "core-communication:emit"
 	EventTypeOOC           EventType = "core-communication:ooc"
+	EventTypePage          EventType = "core-communication:page"
+	EventTypePemit         EventType = "core-communication:pemit"
+	EventTypePose          EventType = "core-communication:pose"
+	EventTypeSay           EventType = "core-communication:say"
+	EventTypeWhisper       EventType = "core-communication:whisper"
 	EventTypeWhisperNotice EventType = "core-communication:whisper_notice"
 )

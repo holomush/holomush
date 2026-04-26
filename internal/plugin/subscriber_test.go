@@ -92,7 +92,7 @@ func TestSubscriberDeliversEvents(t *testing.T) {
 	events <- pluginsdk.Event{
 		ID:     "01ABC",
 		Stream: "location:123",
-		Type:   pluginsdk.EventTypeSay,
+		Type:   pluginsdk.EventType("say"),
 	}
 
 	// Wait for delivery
@@ -114,8 +114,8 @@ func TestSubscriberFiltersEventTypes(t *testing.T) {
 	events := make(chan pluginsdk.Event, 2)
 	sub.Start(ctx, events)
 
-	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
-	events <- pluginsdk.Event{ID: "2", Stream: "location:123", Type: pluginsdk.EventTypePose} // Should be filtered
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventType("say")}
+	events <- pluginsdk.Event{ID: "2", Stream: "location:123", Type: pluginsdk.EventType("pose")} // Should be filtered
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -135,8 +135,8 @@ func TestSubscriberFiltersStreams(t *testing.T) {
 	events := make(chan pluginsdk.Event, 2)
 	sub.Start(ctx, events)
 
-	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
-	events <- pluginsdk.Event{ID: "2", Stream: "location:456", Type: pluginsdk.EventTypeSay} // Different stream
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventType("say")}
+	events <- pluginsdk.Event{ID: "2", Stream: "location:456", Type: pluginsdk.EventType("say")} // Different stream
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -156,9 +156,9 @@ func TestSubscriberSubscribeAllEventTypes(t *testing.T) {
 	events := make(chan pluginsdk.Event, 3)
 	sub.Start(ctx, events)
 
-	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
-	events <- pluginsdk.Event{ID: "2", Stream: "location:123", Type: pluginsdk.EventTypePose}
-	events <- pluginsdk.Event{ID: "3", Stream: "location:123", Type: pluginsdk.EventTypeArrive}
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventType("say")}
+	events <- pluginsdk.Event{ID: "2", Stream: "location:123", Type: pluginsdk.EventType("pose")}
+	events <- pluginsdk.Event{ID: "3", Stream: "location:123", Type: pluginsdk.EventType(core.EventTypeArrive)}
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -168,7 +168,7 @@ func TestSubscriberSubscribeAllEventTypes(t *testing.T) {
 func TestSubscriberEmitsResponseEvents(t *testing.T) {
 	host := &subscriberHost{
 		response: []pluginsdk.EmitEvent{
-			{Stream: "location:123", Type: pluginsdk.EventTypeSay, Payload: `{"text":"hello"}`},
+			{Stream: "location:123", Type: pluginsdk.EventType("say"), Payload: `{"text":"hello"}`},
 		},
 	}
 	emitter := &subscriberEmitter{}
@@ -182,7 +182,7 @@ func TestSubscriberEmitsResponseEvents(t *testing.T) {
 	events := make(chan pluginsdk.Event, 1)
 	sub.Start(ctx, events)
 
-	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventType("say")}
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -205,7 +205,7 @@ func TestSubscriberHandlesHostError(t *testing.T) {
 	sub.Start(ctx, events)
 
 	// Should not panic on error
-	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventType("say")}
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -229,7 +229,7 @@ func TestSubscriberMultiplePlugins(t *testing.T) {
 	events := make(chan pluginsdk.Event, 1)
 	sub.Start(ctx, events)
 
-	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventType("say")}
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -249,7 +249,7 @@ func TestSubscriberStopWaitsForCompletion(t *testing.T) {
 	events := make(chan pluginsdk.Event, 1)
 	sub.Start(ctx, events)
 
-	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventType("say")}
 
 	// Cancel context and stop
 	cancel()
@@ -300,7 +300,7 @@ func TestSubscriberChannelClose(t *testing.T) {
 func TestSubscriberHandlesEmitterError(t *testing.T) {
 	host := &subscriberHost{
 		response: []pluginsdk.EmitEvent{
-			{Stream: "location:123", Type: pluginsdk.EventTypeSay, Payload: `{"text":"hello"}`},
+			{Stream: "location:123", Type: pluginsdk.EventType("say"), Payload: `{"text":"hello"}`},
 		},
 	}
 	emitter := &subscriberEmitter{err: errors.New("emit failed")}
@@ -315,7 +315,7 @@ func TestSubscriberHandlesEmitterError(t *testing.T) {
 	sub.Start(ctx, events)
 
 	// Should not panic on emitter error
-	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventType("say")}
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -338,9 +338,9 @@ func TestSubscriberEmptyEventTypesSliceReceivesAll(t *testing.T) {
 	events := make(chan pluginsdk.Event, 3)
 	sub.Start(ctx, events)
 
-	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
-	events <- pluginsdk.Event{ID: "2", Stream: "location:123", Type: pluginsdk.EventTypePose}
-	events <- pluginsdk.Event{ID: "3", Stream: "location:123", Type: pluginsdk.EventTypeArrive}
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventType("say")}
+	events <- pluginsdk.Event{ID: "2", Stream: "location:123", Type: pluginsdk.EventType("pose")}
+	events <- pluginsdk.Event{ID: "3", Stream: "location:123", Type: pluginsdk.EventType(core.EventTypeArrive)}
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -364,7 +364,7 @@ func TestSubscriberStopWaitsForInFlightDeliveries(t *testing.T) {
 	sub.Start(ctx, events)
 
 	// Send event that will block in delivery
-	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventTypeSay}
+	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: pluginsdk.EventType("say")}
 
 	// Give time for the async delivery to start
 	time.Sleep(20 * time.Millisecond)
@@ -451,7 +451,7 @@ func TestSubscriberCustomEventTypeFilteredBySubscription(t *testing.T) {
 	sub.Start(ctx, events)
 
 	events <- pluginsdk.Event{ID: "1", Stream: "location:123", Type: "telepathy"}
-	events <- pluginsdk.Event{ID: "2", Stream: "location:123", Type: pluginsdk.EventTypeSay} // should be filtered
+	events <- pluginsdk.Event{ID: "2", Stream: "location:123", Type: pluginsdk.EventType("say")} // should be filtered
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -474,7 +474,7 @@ func TestSubscriberRoutesResponseEventsThroughSharedEmitterWithIncomingActor(t *
 
 	host := &subscriberHost{
 		response: []pluginsdk.EmitEvent{
-			{Stream: "location:123", Type: pluginsdk.EventTypeSay, Payload: `{"text":"echo"}`},
+			{Stream: "location:123", Type: pluginsdk.EventType("say"), Payload: `{"text":"echo"}`},
 		},
 	}
 
@@ -492,7 +492,7 @@ func TestSubscriberRoutesResponseEventsThroughSharedEmitterWithIncomingActor(t *
 	events <- pluginsdk.Event{
 		ID:        "1",
 		Stream:    "location:123",
-		Type:      pluginsdk.EventTypeSay,
+		Type:      pluginsdk.EventType("say"),
 		ActorKind: pluginsdk.ActorCharacter,
 		ActorID:   actorID.String(),
 	}
@@ -506,7 +506,7 @@ func TestSubscriberRoutesResponseEventsThroughSharedEmitterWithIncomingActor(t *
 	assert.Equal(t, "events.main.location.123", msgs[0].Subject)
 	assert.Equal(t, "character", msgs[0].Header.Get(eventbus.HeaderActorKind))
 	assert.Equal(t, actorID.String(), msgs[0].Header.Get(eventbus.HeaderActorID))
-	assert.Equal(t, string(pluginsdk.EventTypeSay), msgs[0].Header.Get(eventbus.HeaderEventType))
+	assert.Equal(t, string(pluginsdk.EventType("say")), msgs[0].Header.Get(eventbus.HeaderEventType))
 }
 
 // slowSubscriberHost blocks DeliverEvent until blockCh is closed.
