@@ -5,7 +5,7 @@ import { isRedirect, redirect } from '@sveltejs/kit';
 import { createClient } from '@connectrpc/connect';
 import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
 import { transport } from '$lib/transport';
-import { clearAuth, setPlayerAuth, restoreSession } from '$lib/stores/authStore';
+import { clearAuth, setPlayerProfile, restoreSession } from '$lib/stores/authStore';
 
 export const ssr = false;
 
@@ -17,7 +17,12 @@ export async function load() {
   const client = createClient(WebService, transport);
   try {
     const resp = await client.webCheckSession({});
-    setPlayerAuth(resp.playerName);
+    setPlayerProfile({
+      playerId: resp.playerId,
+      playerName: resp.playerName,
+      isGuest: resp.isGuest,
+      characters: resp.characters.map((c) => ({ characterId: c.characterId, name: c.characterName })),
+    });
   } catch (e) {
     if (isRedirect(e)) throw e;
     clearAuth();
