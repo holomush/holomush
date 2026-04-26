@@ -63,7 +63,6 @@ Keep under 200 lines. Curate — don't hoard.
   with `//nolint:wrapcheck` justifying the deliberate non-wrap. Adding an
   `oops.Wrap` anywhere in this chain would shadow the code from
   `mapHistoryError`'s `status.FromError` lookup.
-
 - **Proto field-number lifecycle**: deletion → MUST add `reserved N;` AND
   `reserved "field_name";` in the same commit. Comment-only reservation is
   not enforced by `protoc` and not enforced by the project's lint chain.
@@ -76,3 +75,25 @@ Keep under 200 lines. Curate — don't hoard.
 - **Diff-scope verification**: for proto-only tasks, `jj diff -r @ --name-only`
   should show only `.proto`, `.pb.go`, and `_pb.ts` files. Anything else is
   scope creep.
+
+- **Plugin emit-gate symmetry checkpoint**: any host-side trust check on
+  the plugin emit path MUST land in `internal/plugin/event_emitter.go::Emit`
+  (the single gate site reached by both Lua and binary runtimes). Lua
+  flows through `Manager.EmitPluginEvent` → `emitter.Emit`; binary flows
+  through `pluginHostServiceServer.EmitEvent` → `emitter.Emit`. A check
+  added only on the binary path (e.g., in `host_service.go::EmitEvent`)
+  silently bypasses Lua plugins, violating the project's runtime-symmetry
+  invariant (CLAUDE.md "Plugin Runtime Symmetry"). Runtime-specific
+  authentication (e.g., the gRPC token mechanism) IS OK in
+  runtime-specific code, but the policy/manifest gate MUST be at the
+  shared site.
+
+- **Plugin emit token store: pluginName binding is the cross-plugin
+  defense**: `emitTokenStore.Lookup(pluginName, token)` rejects when the
+  stored entry's pluginName != caller pluginName. The caller pluginName
+  is `pluginHostServiceServer.pluginName`, set at server construction and
+  mTLS-bound. Adding any code path that lets a plugin influence the
+  pluginName argument (e.g., reading it from request metadata) re-opens
+  the cross-plugin actor-escalation surface. The unit test guarding this
+  is `TestEmitEventCrossPluginTokenLeakFails`
+  (`internal/plugin/goplugin/host_service_test.go:744-776`).
