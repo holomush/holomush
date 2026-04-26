@@ -815,6 +815,24 @@ plugin list            # List loaded plugins with name, type, version
 plugin info <name>     # Detailed plugin info (requires, provides, storage, commands)
 ```
 
+### Plugin Runtime Symmetry
+
+<!-- BEGIN: plugin-runtime-symmetry -->
+
+**Project invariant: Binary and Lua plugins MUST be treated identically by the host.**
+
+Any host-side trust check, validation, or feature MUST apply to both binary and Lua plugins. Asymmetric behavior between plugin runtimes is forbidden — it creates a privilege gradient that violates the core plugin-system design.
+
+When designing security or authorization features that touch plugins:
+
+1. Find the **common code path** that handles both runtimes (e.g., `internal/plugin/event_emitter.go::Emit` is the shared emit boundary for both Lua return-value emits and binary gRPC emits).
+2. Place the gate at the common path so both runtimes are enforced uniformly.
+3. Runtime-specific code (e.g., the gRPC token mechanism for binary plugins, Lua state lifecycle) is acceptable for runtime-specific concerns (e.g., the binary forgery surface that doesn't exist on the Lua path), but MUST NOT differ in policy / trust / manifest-gate dimensions.
+
+Example (this PR — `holomush-ec22.1`): the `actor_kinds_claimable` manifest gate fires at `event_emitter.go::Emit` for both runtimes; the supplemental token-authentication mechanism applies only to the binary gRPC `EmitEvent` boundary because that's where the forgery surface exists. Both runtimes reach the same policy enforcement.
+
+<!-- END: plugin-runtime-symmetry -->
+
 ### Access Control (`internal/access`)
 
 Attribute-Based Access Control (ABAC) with phased implementation:
