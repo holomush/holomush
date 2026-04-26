@@ -91,6 +91,7 @@
 
   async function handleContinue() {
     busy = true;
+    error = '';
     try {
       const chars = data.characters ?? [];
       if (chars.length === 0) {
@@ -108,6 +109,8 @@
         return;
       }
       goto('/characters');
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Could not resume session.';
     } finally {
       busy = false;
     }

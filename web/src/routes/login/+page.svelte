@@ -54,7 +54,7 @@
         location.reload();
         return;
       }
-      const resp = await client.webAuthenticatePlayer({ username, password });
+      const resp = await client.webAuthenticatePlayer({ username, password, rememberMe });
       if (resp.success) {
         const autoCharId = resp.defaultCharacterId || (resp.characters.length === 1 ? resp.characters[0].characterId : '');
         if (autoCharId) {
@@ -118,6 +118,7 @@
 
   async function handleContinue() {
     busy = true;
+    error = '';
     try {
       const chars = data.characters ?? [];
       if (chars.length === 0) {
@@ -135,6 +136,8 @@
         return;
       }
       goto('/characters');
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Could not resume session.';
     } finally {
       busy = false;
     }

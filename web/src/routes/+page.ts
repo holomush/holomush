@@ -7,6 +7,7 @@ import { transport } from '$lib/transport';
 import { clearAuth, setPlayerProfile } from '$lib/stores/authStore';
 import { listContent } from '$lib/stores/contentStore';
 import type { ContentItem } from '$lib/stores/contentStore';
+import { isStaleSession } from '$lib/util/stale';
 import type { PageLoad } from './$types';
 
 export const ssr = false;
@@ -52,8 +53,12 @@ export const load: PageLoad = async () => {
       playerName: resp.playerName,
       characters: resp.characters,
     };
-  } catch {
-    clearAuth();
+  } catch (e) {
+    // See login/+page.ts: only clear on real stale-session signals so a
+    // transient webCheckSession outage doesn't log a returning user out.
+    if (isStaleSession(e)) {
+      clearAuth();
+    }
     return { ...baseData, authenticated: false };
   }
 };

@@ -181,12 +181,13 @@ existing response):
 message WebCreateGuestResponse {
   // Existing fields:
   bool   success                     = 1;
-  string error_code                  = 2;
-  string error_message               = 3;
-  // ... existing success-path fields ...
+  string error_message               = 2;
+  repeated CharacterSummary characters = 3;
+  string default_character_id        = 4;
 
   // NEW:
-  string current_player_name         = N;  // populated only when error_code = ALREADY_AUTHENTICATED
+  string error_code                  = 5;
+  string current_player_name         = 6;  // populated only when error_code = ALREADY_AUTHENTICATED
 }
 ```
 

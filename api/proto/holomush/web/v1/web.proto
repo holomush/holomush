@@ -150,7 +150,8 @@ message WebAuthenticatePlayerRequest {
 
 message WebAuthenticatePlayerResponse {
   bool success = 1;
-  // field 2 is reserved (was player_session_token before the cookie cutover)
+  reserved 2;
+  reserved "player_session_token"; // removed by the cookie cutover (PR #179)
   string error_message = 3;
   repeated CharacterSummary characters = 4;
   string default_character_id = 5;
@@ -183,7 +184,8 @@ message WebCreatePlayerRequest {
 
 message WebCreatePlayerResponse {
   bool success = 1;
-  // field 2 is reserved (was player_session_token)
+  reserved 2;
+  reserved "player_session_token"; // removed by the cookie cutover (PR #179)
   repeated CharacterSummary characters = 3;
   string error_message = 4;
   // NEW: see WebAuthenticatePlayerResponse for semantics.

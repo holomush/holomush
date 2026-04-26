@@ -36,6 +36,12 @@
   const client = createClient(WebService, transport);
 
   async function handleStaleSession() {
+    // Abort any in-flight stream/backfill before redirecting so post-logout
+    // async work does not mutate connected/sessionId/error after navigation.
+    abortController?.abort();
+    setConnectionStatus('disconnected');
+    connected = false;
+    sessionId = '';
     clearCharacterSession();
     clearAuth();
     await goto('/');

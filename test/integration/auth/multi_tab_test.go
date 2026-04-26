@@ -172,13 +172,21 @@ var _ = Describe("Multi-tab session isolation — same character in two tabs", f
 // specific warning was NOT emitted).
 type captureHandler struct {
 	buf *bytes.Buffer
-	mu  sync.Mutex
+	// Mutex is a pointer so derived handlers (WithAttrs/WithGroup) share
+	// the same lock and serialize writes to the shared buf. A value-typed
+	// mutex would give each clone a fresh zero mutex while keeping buf
+	// shared, racing concurrent writes through different derived handlers.
+	mu  *sync.Mutex
 	sub slog.Handler
 }
 
 func newCaptureHandler() (*captureHandler, *bytes.Buffer) {
 	buf := &bytes.Buffer{}
-	h := &captureHandler{buf: buf, sub: slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})}
+	h := &captureHandler{
+		buf: buf,
+		mu:  &sync.Mutex{},
+		sub: slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}),
+	}
 	return h, buf
 }
 
@@ -193,11 +201,11 @@ func (c *captureHandler) Handle(ctx context.Context, r slog.Record) error {
 }
 
 func (c *captureHandler) WithAttrs(a []slog.Attr) slog.Handler {
-	return &captureHandler{buf: c.buf, sub: c.sub.WithAttrs(a)}
+	return &captureHandler{buf: c.buf, mu: c.mu, sub: c.sub.WithAttrs(a)}
 }
 
 func (c *captureHandler) WithGroup(g string) slog.Handler {
-	return &captureHandler{buf: c.buf, sub: c.sub.WithGroup(g)}
+	return &captureHandler{buf: c.buf, mu: c.mu, sub: c.sub.WithGroup(g)}
 }
 
 var _ = Describe("Multi-tab session isolation — browser cookie + concurrent telnet auth", func() {

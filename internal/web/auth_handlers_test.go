@@ -1016,6 +1016,7 @@ func TestWebCreateGuestConcurrentValidCookieAllGate(t *testing.T) {
 
 	var wg sync.WaitGroup
 	var gatedCount atomic.Int32
+	errCh := make(chan error, 10)
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
@@ -1023,13 +1024,20 @@ func TestWebCreateGuestConcurrentValidCookieAllGate(t *testing.T) {
 			req := connect.NewRequest(&webv1.WebCreateGuestRequest{})
 			req.Header().Set(headerInjectSessionToken, "valid-token")
 			resp, err := h.WebCreateGuest(context.Background(), req)
-			require.NoError(t, err)
+			if err != nil {
+				errCh <- err
+				return
+			}
 			if resp.Msg.GetErrorCode() == "ALREADY_AUTHENTICATED" {
 				gatedCount.Add(1)
 			}
 		}()
 	}
 	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
 	assert.Equal(t, int32(10), gatedCount.Load(), "all 10 concurrent calls MUST hit the gate")
 	assert.Equal(t, int32(0), client.createGuestCalls.Load(), "zero CreateGuest calls MUST occur")
 }
