@@ -197,3 +197,25 @@ crypto:
 	require.Len(t, discovered, 1)
 	assert.Equal(t, "plugin-a", discovered[0].Manifest.Name)
 }
+
+func TestDiscoverAcceptsRealPluginsDirectory(t *testing.T) {
+	// Load every real plugin from the repo's plugins/ directory.
+	// Confirms the crypto.emits declarations all pass validation.
+	pluginsDir := filepath.Join("..", "..", "plugins")
+	mgr := plugins.NewManager(pluginsDir)
+	discovered, err := mgr.Discover(t.Context())
+	require.NoError(t, err)
+	require.NotEmpty(t, discovered, "expected at least one real plugin to be discovered")
+
+	expectedNames := []string{
+		"core-communication",
+		"core-objects",
+	}
+	gotNames := make(map[string]bool)
+	for _, dp := range discovered {
+		gotNames[dp.Manifest.Name] = true
+	}
+	for _, name := range expectedNames {
+		assert.True(t, gotNames[name], "plugin %q was not discovered (validator rejected it?)", name)
+	}
+}

@@ -132,3 +132,21 @@ policies:
     dsl: >-
       permit(principal is character, action in ["execute"], resource is command) when { "builder" in principal.character.roles
       && resource.command.name in ["create", "describe"] };
+
+crypto:
+  emits:
+    - event_type: object_create
+      sensitivity: never
+      description: "An object came into existence."
+    - event_type: object_destroy
+      sensitivity: never
+      description: "An object was destroyed."
+    - event_type: object_use
+      sensitivity: never
+      description: "An object was used or activated."
+    - event_type: object_examine
+      sensitivity: never
+      description: "An object was examined."
+    - event_type: object_give
+      sensitivity: never
+      description: "An object changed possession."
