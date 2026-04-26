@@ -9,6 +9,7 @@ lua-plugin:
 requires:
   - holomush.session.v1.SessionService
 emits: [location, character]
+actor_kinds_claimable: [plugin, character]
 commands:
   - name: say
     aliases:

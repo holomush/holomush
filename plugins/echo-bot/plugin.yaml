@@ -6,6 +6,7 @@ version: 1.0.0
 type: lua
 events:
   - say
+actor_kinds_claimable: [plugin, character]
 policies:
   - name: "emit-events"
     dsl: |

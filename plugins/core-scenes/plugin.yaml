@@ -13,6 +13,7 @@ provides:
   - holomush.scene.v1.SceneService
   - holomush.plugin.v1.PluginAuditService
 emits: [scene]
+actor_kinds_claimable: [plugin, character]
 
 # Audit ownership (F5): core-scenes owns all events.*.scene.> subjects.
 # The host audit projection ack-and-skips these; deliveries are forwarded
