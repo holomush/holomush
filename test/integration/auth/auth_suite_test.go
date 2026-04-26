@@ -19,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/auth"
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/store"
@@ -132,8 +133,15 @@ func setupTestEnv() (*testEnv, error) {
 		return nil, oops.Wrap(err)
 	}
 
+	// Wire a real *core.Engine. WebSelectCharacter → SelectCharacter calls
+	// engine.HandleConnect (internal/grpc/auth_handlers.go:310), which would
+	// nil-deref a nil engine. Mirrors test/integration/phase1_5_test.go:257
+	// (eventStore := &noopEventStore{}; engine := core.NewEngine(eventStore)).
+	eventStoreNoop := &noopEventStore{}
+	engine := core.NewEngine(eventStoreNoop)
+
 	coreServer := holoGRPC.NewCoreServer(
-		nil, // engine: not exercised by auth-only flows
+		engine,
 		sessionStore,
 		dispatcher,
 		cmdServices,
@@ -319,3 +327,11 @@ func (a *authCharRepoAdapter) ListByPlayer(ctx context.Context, playerID ulid.UL
 
 // Compile-time interface check.
 var _ auth.CharacterRepository = (*authCharRepoAdapter)(nil)
+
+// noopEventStore is a stub EventAppender for tests that don't exercise event
+// functionality. Mirrors test/integration/phase1_5_test.go:36-41.
+type noopEventStore struct{}
+
+func (n *noopEventStore) Append(_ context.Context, _ core.Event) error { return nil }
+
+var _ core.EventAppender = (*noopEventStore)(nil)
