@@ -147,3 +147,17 @@ setup() {
   [ "$elapsed" -lt 2000 ]
   end_collision
 }
+
+# I-4: after a holder exits normally, the next invocation acquires the lock.
+@test "releases_on_normal_exit: sequential second invocation succeeds after holder finishes" {
+  # First holder runs and exits 0
+  STUB_SLEEP=0 STUB_MARKER="${BATS_TEST_TMPDIR}/marker1" \
+    run task -t "$(fixture_taskfile)" pr-prep
+  [ "$status" -eq 0 ]
+
+  # Second invocation should succeed
+  STUB_SLEEP=0 STUB_MARKER="${BATS_TEST_TMPDIR}/marker2" \
+    run task -t "$(fixture_taskfile)" pr-prep
+  [ "$status" -eq 0 ]
+  [ -f "${BATS_TEST_TMPDIR}/marker2" ]
+}
