@@ -6,7 +6,7 @@
   import { createClient } from '@connectrpc/connect';
   import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
   import { transport } from '$lib/transport';
-  import { setCharacterSession, setPlayerAuth, clearAuth } from '$lib/stores/authStore';
+  import { setCharacterSession, setPlayerProfile, clearAuth } from '$lib/stores/authStore';
   import { isStaleSession } from '$lib/util/stale';
   import { goto } from '$app/navigation';
   import { Button } from '$lib/components/ui/button';
@@ -93,7 +93,38 @@
       }
       const resp = await client.webCreateGuest({});
       if (resp.success) {
-        setPlayerAuth('Guest');
+        // Match +page.ts/(authed)/+layout.ts: round-trip webCheckSession so
+        // setPlayerProfile gets playerId/isGuest/characters (WebCreateGuest
+        // doesn't return playerId or isGuest). If the round-trip throws on a
+        // connection that just succeeded webCreateGuest (transient blip),
+        // fall back to a minimal profile built from resp so the user proceeds
+        // — leaving them on /login with an error while the server has already
+        // minted the guest cookie is the worse failure mode. (authed)/+layout.ts
+        // re-runs webCheckSession and overwrites with the full profile on the
+        // next load.
+        try {
+          const session = await client.webCheckSession({});
+          setPlayerProfile({
+            playerId: session.playerId,
+            playerName: session.playerName,
+            isGuest: session.isGuest,
+            characters: session.characters.map((c) => ({
+              characterId: c.characterId,
+              name: c.characterName,
+            })),
+          });
+        } catch (checkErr) {
+          console.warn('webCheckSession after webCreateGuest failed; using fallback profile', checkErr);
+          setPlayerProfile({
+            playerId: '',
+            playerName: resp.currentPlayerName || 'Guest',
+            isGuest: true,
+            characters: resp.characters.map((c) => ({
+              characterId: c.characterId,
+              name: c.characterName,
+            })),
+          });
+        }
         const charId = resp.defaultCharacterId || resp.characters[0]?.characterId;
         if (charId) {
           const selectResp = await client.webSelectCharacter({ characterId: charId });

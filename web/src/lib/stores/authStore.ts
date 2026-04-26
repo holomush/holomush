@@ -35,11 +35,6 @@ export const authState = writable<AuthState>(initial);
 export const isAuthenticated = derived(authState, ($s) => $s.isPlayerAuthenticated || !!$s.sessionId);
 export const hasCharacter = derived(authState, ($s) => !!$s.sessionId && !!$s.characterName);
 
-export function setPlayerAuth(playerName: string) {
-  sessionStorage.removeItem('holomush-player'); // clean up legacy raw-token key
-  authState.update((s) => ({ ...s, isPlayerAuthenticated: true, playerName }));
-}
-
 export function setPlayerProfile(profile: {
   playerId: string;
   playerName: string;
