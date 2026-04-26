@@ -16,6 +16,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	hashiplug "github.com/hashicorp/go-plugin"
 	"github.com/holomush/holomush/internal/core"
@@ -1845,4 +1846,44 @@ func TestHostWithHistoryReaderOptionSetsHistoryReader(t *testing.T) {
 	hr := &stubHistoryReader{}
 	host := NewHost(WithHistoryReader(hr))
 	assert.Equal(t, hr, host.HistoryReader())
+}
+
+// TestNewHostInitializesTokenStore verifies Host construction wires the
+// emitTokenStore and starts its sweeper goroutine. The closed-host
+// snapshot taken via goleak.IgnoreCurrent() filters out sweeper
+// goroutines leaked by sibling tests in this file that construct a
+// Host but never call Close — the assertion only catches NEW goroutines
+// our Host fails to clean up.
+//
+// NOTE: NOT t.Parallel — goleak.VerifyNone observes ALL live goroutines.
+func TestNewHostInitializesTokenStore(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	h := NewHost()
+	require.NotNil(t, h.tokenStore, "Host must construct emitTokenStore")
+	require.NoError(t, h.Close(context.Background()))
+}
+
+// TestHostCloseClosesTokenStore verifies Host.Close shuts the token
+// store down (sweeper goroutine exits, entries cleared).
+func TestHostCloseClosesTokenStore(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	h := NewHost()
+	_, err := h.tokenStore.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"})
+	require.NoError(t, err)
+	require.NoError(t, h.Close(context.Background()))
+	// After Close, the token store is reset.
+	h.tokenStore.mu.RLock()
+	n := len(h.tokenStore.items)
+	h.tokenStore.mu.RUnlock()
+	assert.Equal(t, 0, n)
+}
+
+// TestHostCloseIdempotentWithTokenStore verifies the second Close call
+// hits the closed-guard early-return and does not double-cancel the
+// sweeper context or panic on already-closed channel.
+func TestHostCloseIdempotentWithTokenStore(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	h := NewHost()
+	require.NoError(t, h.Close(context.Background()))
+	require.NoError(t, h.Close(context.Background()))
 }

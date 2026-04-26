@@ -135,6 +135,14 @@ type Host struct {
 	plugins           map[string]*loadedPlugin
 	mu                sync.RWMutex
 	closed            bool
+
+	// tokenStore authenticates per-dispatch actor claims on the binary-plugin
+	// EmitEvent boundary. The sweeper goroutine is host-owned: tokenStoreCtx
+	// is canceled in Close() to deterministically stop it before
+	// tokenStore.Close() does the belt-and-braces shutdown.
+	tokenStore       *emitTokenStore
+	tokenStoreCtx    context.Context
+	tokenStoreCancel context.CancelFunc
 }
 
 // loadedPlugin holds state for a single loaded binary plugin.
@@ -158,13 +166,21 @@ func NewHostWithFactory(factory ClientFactory, opts ...HostOption) *Host {
 	if factory == nil {
 		panic("goplugin: factory cannot be nil")
 	}
+	tokenStoreCtx, tokenStoreCancel := context.WithCancel(context.Background())
 	h := &Host{
-		clientFactory: factory,
-		plugins:       make(map[string]*loadedPlugin),
+		clientFactory:    factory,
+		plugins:          make(map[string]*loadedPlugin),
+		tokenStore:       newEmitTokenStore(),
+		tokenStoreCtx:    tokenStoreCtx,
+		tokenStoreCancel: tokenStoreCancel,
 	}
 	for _, opt := range opts {
 		opt(h)
 	}
+	// Start the token-store sweeper. tokenStoreCancel (called from Close)
+	// signals the sweeper to exit; tokenStore.Close() is idempotent and
+	// also closes the s.stop channel as a belt-and-braces safety.
+	go h.tokenStore.Run(h.tokenStoreCtx)
 	if h.ca != nil {
 		brokerCert, brokerCertErr := tlscerts.GenerateServerCert(h.ca, h.gameID, "plugin-host")
 		if brokerCertErr != nil {
@@ -800,7 +816,13 @@ func (h *Host) Close(_ context.Context) error {
 
 	h.closed = true
 	clear(h.plugins)
-	return nil
+
+	// Token-store teardown (Task 7): cancel sweeper context first so the
+	// sweeper goroutine exits on ctx.Done, then close the store. Surfaces
+	// tokenStore.Close error since the existing function previously
+	// returned nil unconditionally.
+	h.tokenStoreCancel()
+	return h.tokenStore.Close()
 }
 
 // buildHostTLSConfig creates a TLS config for the host to connect to a plugin
