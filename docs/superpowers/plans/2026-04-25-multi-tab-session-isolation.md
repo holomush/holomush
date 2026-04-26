@@ -3030,7 +3030,8 @@ Describe("Pre-deploy WebCheckSession contract", func() {
 ```
 
 Add `"errors"` to the test file's import block if it isn't already present.
-```
+
+```text
 
 - [ ] **Step 2: Run the full integration suite**
 

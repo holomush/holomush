@@ -24,7 +24,7 @@ Reproduction (verified 2026-04-25 in cmux automation against `local-dev` from
 
 Server logs (`docker logs local-dev-core-1`):
 
-```
+```text
 level=WARN msg="session ownership mismatch"
   player_id=01KQ2Y7AQGTEDH6TGNPFSSDB19      (player B, from cookie)
   session_id=01KQ2Y5ETW03KJ0HKCQ07ASYF2     (Tab 1's stored session)
@@ -88,7 +88,7 @@ UX gap.
 ## 3. Non-goals
 
 - **Concurrent identities in one browser** (player A + player B, or guest
-  + registered player, both alive at once). Out of scope; a user who
+  - registered player, both alive at once). Out of scope; a user who
   needs this uses a private window, a different browser profile, or a
   different browser.
 - **Cross-tab logout broadcast.** Other tabs detecting a peer's logout in
