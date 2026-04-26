@@ -20,6 +20,7 @@ import (
 	authpg "github.com/holomush/holomush/internal/auth/postgres"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/naming"
 	"github.com/holomush/holomush/internal/store"
@@ -151,6 +152,14 @@ func setupTestEnv() (*testEnv, error) {
 		holoGRPC.WithCharacterRepo(charRepo),
 		holoGRPC.WithSessionStore(sessionStore),
 		holoGRPC.WithGuestService(guestService),
+		// Wire a stub Subscriber so Subscribe gets past the early
+		// nil-subscriber guard at internal/grpc/server.go:657 and reaches
+		// the ownership-validation path that the multi-tab Subscribe-path
+		// post-logout spec asserts on. The stub is never actually invoked
+		// in any spec — every Subscribe call in this suite uses a
+		// stale/invalid token, so ValidateSessionOwnership rejects before
+		// OpenSession would be called.
+		holoGRPC.WithSubscriber(&unusedSubscriber{}),
 	)
 
 	webHandler := web.NewHandler(&coreClientShim{s: coreServer})
@@ -335,3 +344,19 @@ type noopEventStore struct{}
 func (n *noopEventStore) Append(_ context.Context, _ core.Event) error { return nil }
 
 var _ core.EventAppender = (*noopEventStore)(nil)
+
+// unusedSubscriber satisfies eventbus.Subscriber so the Subscribe handler
+// reaches the ownership-validation path. Returns an error if OpenSession
+// is ever called — that would mean a spec advanced past validation, which
+// no spec in this suite is meant to do (every Subscribe call uses a
+// stale/invalid token). The returned error is distinctively coded so a
+// reorder regression in CoreServer.Subscribe (validation moved after
+// OpenSession) would surface as TEST_SUITE_BUG, not as the SESSION_NOT_FOUND
+// the spec asserts on.
+type unusedSubscriber struct{}
+
+func (unusedSubscriber) OpenSession(_ context.Context, _ string, _ []eventbus.Subject) (eventbus.SessionStream, error) {
+	return nil, oops.Code("TEST_SUITE_BUG").Errorf("unusedSubscriber.OpenSession invoked: a spec reached the subscriber call without expecting to")
+}
+
+var _ eventbus.Subscriber = unusedSubscriber{}
