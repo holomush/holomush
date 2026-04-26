@@ -171,6 +171,11 @@ tasks:
           ./scripts/e2e-summary.sh
           exit $E2E_EXIT
 
+  test:bats:
+    desc: Run bats shell tests under scripts/tests/
+    cmds:
+      - bats scripts/tests/
+
   test:bench:
     desc: Run benchmarks
     cmds:
