@@ -6,7 +6,10 @@
 package auth_test
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"sync"
 
 	"connectrpc.com/connect"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
@@ -160,5 +163,141 @@ var _ = Describe("Multi-tab session isolation — same character in two tabs", f
 		cmdResp2, err := env.coreServer.HandleCommand(ctx, cmdReq2)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cmdResp2.GetSuccess()).To(BeTrue(), "tab 2 command MUST succeed against the shared session")
+	})
+})
+
+// captureHandler is a thread-safe slog.Handler that records emitted log lines
+// into an in-memory buffer so tests can assert on log contents (e.g., that a
+// specific warning was NOT emitted).
+type captureHandler struct {
+	buf *bytes.Buffer
+	mu  sync.Mutex
+	sub slog.Handler
+}
+
+func newCaptureHandler() (*captureHandler, *bytes.Buffer) {
+	buf := &bytes.Buffer{}
+	h := &captureHandler{buf: buf, sub: slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})}
+	return h, buf
+}
+
+func (c *captureHandler) Enabled(ctx context.Context, l slog.Level) bool {
+	return c.sub.Enabled(ctx, l)
+}
+func (c *captureHandler) Handle(ctx context.Context, r slog.Record) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.sub.Handle(ctx, r)
+}
+
+func (c *captureHandler) WithAttrs(a []slog.Attr) slog.Handler {
+	return &captureHandler{buf: c.buf, sub: c.sub.WithAttrs(a)}
+}
+
+func (c *captureHandler) WithGroup(g string) slog.Handler {
+	return &captureHandler{buf: c.buf, sub: c.sub.WithGroup(g)}
+}
+
+var _ = Describe("Multi-tab session isolation — two characters of one player", func() {
+	var ctx context.Context
+	var gw *web.Handler
+	var prevDefault *slog.Logger
+	var logBuf *bytes.Buffer
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		// FK-safe wipe of any state from prior specs (deletes locations among
+		// other tables — see auth_suite_test.go cleanupTestData).
+		cleanupTestData(ctx, env.pool)
+
+		// Re-create the guest start-location row that the GuestService's namer
+		// references. Other specs in this file rely on it; keep it consistent
+		// across the suite.
+		loc := &world.Location{
+			ID:           env.guestStartLocationID,
+			Name:         "Guest Lobby",
+			Description:  "Guest start location for multi-tab integration tests",
+			Type:         world.LocationTypePersistent,
+			ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
+		}
+		Expect(env.locRepo.Create(ctx, loc)).To(Succeed())
+
+		gw = env.webHandler
+
+		// Capture slog output so we can assert on the absence of an
+		// ownership-mismatch warning at the end of the spec.
+		prevDefault = slog.Default()
+		h, buf := newCaptureHandler()
+		slog.SetDefault(slog.New(h))
+		logBuf = buf
+	})
+
+	AfterEach(func() {
+		slog.SetDefault(prevDefault)
+	})
+
+	It("creates two distinct sessions and produces no ownership-mismatch warnings", func() {
+		// Seed: a registered player with two characters X and Y. CreatePlayer
+		// returns (*Player, *PlayerSession, rawToken string, error). Note that
+		// auth.Service.CreatePlayer constructs the PlayerSession but does NOT
+		// persist it — the gRPC handler does (internal/grpc/auth_handlers.go:354).
+		// We replicate that here so resolvePlayerSession can find the token.
+		username := "two_char_player"
+		password := "correct horse battery staple"
+		_, playerSession, rawToken, err := env.authService.CreatePlayer(ctx, username, password, username+"@test.local")
+		Expect(err).NotTo(HaveOccurred(), "seed: create player")
+		Expect(rawToken).NotTo(BeEmpty())
+		Expect(env.playerSessionStore.Create(ctx, playerSession)).To(Succeed(),
+			"seed: persist player session so the rawToken resolves")
+
+		player, err := env.playerRepo.GetByUsername(ctx, username)
+		Expect(err).NotTo(HaveOccurred())
+		// world.Character.Name is validated as "letters and spaces only", so
+		// avoid underscores/hyphens in the seeded character names.
+		loc := createTestLocation(ctx, "Two Char Lobby")
+		charX := createTestCharacter(ctx, player.ID, "Hero X", loc.ID)
+		charY := createTestCharacter(ctx, player.ID, "Hero Y", loc.ID)
+		charXID := charX.ID.String()
+		charYID := charY.ID.String()
+		Expect(charXID).NotTo(Equal(charYID))
+
+		// Tab 1: select X.
+		selReq1 := connect.NewRequest(&webv1.WebSelectCharacterRequest{CharacterId: charXID})
+		selReq1.Header().Set(web.HeaderInjectSessionToken, rawToken)
+		selResp1, err := gw.WebSelectCharacter(ctx, selReq1)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(selResp1.Msg.GetSuccess()).To(BeTrue(), "tab 1: %s", selResp1.Msg.GetErrorMessage())
+		Expect(selResp1.Msg.GetSessionId()).NotTo(BeEmpty())
+
+		// Tab 2: same cookie token, DIFFERENT character → distinct session.
+		selReq2 := connect.NewRequest(&webv1.WebSelectCharacterRequest{CharacterId: charYID})
+		selReq2.Header().Set(web.HeaderInjectSessionToken, rawToken)
+		selResp2, err := gw.WebSelectCharacter(ctx, selReq2)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(selResp2.Msg.GetSuccess()).To(BeTrue(), "tab 2: %s", selResp2.Msg.GetErrorMessage())
+		Expect(selResp2.Msg.GetSessionId()).NotTo(BeEmpty())
+
+		Expect(selResp2.Msg.GetSessionId()).NotTo(Equal(selResp1.Msg.GetSessionId()),
+			"different characters MUST have distinct sessions")
+
+		// Both sessions accept commands. The dispatcher in this suite has no
+		// commands registered, so "look" surfaces as an unknown-command user-
+		// facing error; HandleCommand returns Success=true at the RPC level
+		// (see internal/grpc/server.go:427-441 isUserFacingError handling).
+		// The assertion that matters here is RPC-level acceptance, which
+		// proves the ownership gate let both sessions through.
+		for _, sessionID := range []string{selResp1.Msg.GetSessionId(), selResp2.Msg.GetSessionId()} {
+			cmdReq := &corev1.HandleCommandRequest{
+				SessionId:          sessionID,
+				PlayerSessionToken: rawToken,
+				Command:            "look",
+			}
+			cmdResp, err := env.coreServer.HandleCommand(ctx, cmdReq)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cmdResp.GetSuccess()).To(BeTrue(), "command MUST succeed for session %s", sessionID)
+		}
+
+		Expect(logBuf.String()).NotTo(ContainSubstring("session ownership mismatch"),
+			"two characters under one player MUST NOT trigger ownership-mismatch logs")
 	})
 })
