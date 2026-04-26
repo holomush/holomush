@@ -23,6 +23,7 @@ import (
 	hashiplug "github.com/hashicorp/go-plugin"
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/grpc/focus"
@@ -552,9 +553,30 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 
 	callCtx, cancel := context.WithTimeout(ctx, DefaultEventTimeout)
 	defer cancel()
-	if actor, ok := core.ActorFromContext(ctx); ok {
-		callCtx = pluginsdk.WithOutgoingActorMetadata(callCtx, coreActorKindToSDK(actor.Kind), actor.ID)
+
+	// Per spec §3.3.4: compute the stored actor with re-anchor for ActorSystem.
+	// Plugins never speak as the host's system identity — when the upstream
+	// ctx carries ActorSystem the host re-anchors to ActorPlugin:<name>.
+	storedActor := core.Actor{Kind: core.ActorPlugin, ID: name}
+	if upstream, ok := core.ActorFromContext(ctx); ok {
+		switch upstream.Kind {
+		case core.ActorCharacter, core.ActorPlugin:
+			storedActor = upstream // verbatim — cascade preserved
+		case core.ActorSystem:
+			storedActor = core.Actor{Kind: core.ActorPlugin, ID: name} // re-anchor
+		}
 	}
+
+	emitToken, err := h.tokenStore.Issue(name, storedActor)
+	if err != nil {
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "issue_emit_token").Wrap(err)
+	}
+	defer h.tokenStore.Revoke(emitToken)
+
+	callCtx = metadata.AppendToOutgoingContext(callCtx, "x-holomush-emit-token", emitToken)
+	// Existing actor-kind / -id metadata still attached for plugin-side advisory
+	// consumption (pkg/plugin/sdk.go ActorMetadataFromIncomingContext).
+	callCtx = pluginsdk.WithOutgoingActorMetadata(callCtx, coreActorKindToSDK(storedActor.Kind), storedActor.ID)
 
 	resp, err := p.plugin.HandleEvent(callCtx, &pluginv1.HandleEventRequest{Event: protoEvent})
 	if err != nil {
@@ -604,9 +626,26 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 
 	callCtx, cancel := context.WithTimeout(ctx, DefaultEventTimeout)
 	defer cancel()
-	if actor, ok := core.ActorFromContext(ctx); ok {
-		callCtx = pluginsdk.WithOutgoingActorMetadata(callCtx, coreActorKindToSDK(actor.Kind), actor.ID)
+
+	// Per spec §3.3.4: same actor re-anchor + token issuance as DeliverEvent.
+	storedActor := core.Actor{Kind: core.ActorPlugin, ID: name}
+	if upstream, ok := core.ActorFromContext(ctx); ok {
+		switch upstream.Kind {
+		case core.ActorCharacter, core.ActorPlugin:
+			storedActor = upstream
+		case core.ActorSystem:
+			storedActor = core.Actor{Kind: core.ActorPlugin, ID: name}
+		}
 	}
+
+	emitToken, err := h.tokenStore.Issue(name, storedActor)
+	if err != nil {
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "issue_emit_token").Wrap(err)
+	}
+	defer h.tokenStore.Revoke(emitToken)
+
+	callCtx = metadata.AppendToOutgoingContext(callCtx, "x-holomush-emit-token", emitToken)
+	callCtx = pluginsdk.WithOutgoingActorMetadata(callCtx, coreActorKindToSDK(storedActor.Kind), storedActor.ID)
 
 	resp, err := p.plugin.HandleCommand(callCtx, protoReq)
 	if err != nil {

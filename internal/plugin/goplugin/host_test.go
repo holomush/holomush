@@ -7,6 +7,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -1886,4 +1889,208 @@ func TestHostCloseIdempotentWithTokenStore(t *testing.T) {
 	h := NewHost()
 	require.NoError(t, h.Close(context.Background()))
 	require.NoError(t, h.Close(context.Background()))
+}
+
+// TestDeliverEventIssuesTokenWithCharacterActor verifies the host issues
+// a per-dispatch token, attaches it to outgoing metadata, and revokes
+// the entry on call return (defer Revoke).
+func TestDeliverEventIssuesTokenWithCharacterActor(t *testing.T) {
+	t.Parallel()
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	defer func() { _ = h.Close(context.Background()) }()
+	h.plugins["plug-A"] = &loadedPlugin{
+		manifest: &plugins.Manifest{Name: "plug-A"},
+		plugin:   grpcClient,
+	}
+
+	charID := "01HCHAR0000000000000000000"
+	ctx := core.WithActor(context.Background(), core.Actor{Kind: core.ActorCharacter, ID: charID})
+	_, err := h.DeliverEvent(ctx, "plug-A", pluginsdk.Event{Type: "say"})
+	require.NoError(t, err)
+
+	// Inspect the outgoing metadata that the host attached to the gRPC call.
+	md, ok := metadata.FromOutgoingContext(grpcClient.eventCtx)
+	require.True(t, ok, "outgoing metadata MUST be present on the call to plugin")
+	tokens := md.Get("x-holomush-emit-token")
+	require.Len(t, tokens, 1, "x-holomush-emit-token MUST be set exactly once")
+	capturedToken := tokens[0]
+	require.NotEmpty(t, capturedToken)
+
+	// The entry will already be Revoke'd by defer when DeliverEvent returns.
+	_, ok = h.tokenStore.Lookup("plug-A", capturedToken)
+	assert.False(t, ok, "deferred Revoke MUST clear the token after DeliverEvent returns")
+}
+
+// TestDeliverEventStoresUpstreamCharacterActorVerbatim asserts the host
+// attaches ActorCharacter:<charID> verbatim as outgoing actor metadata
+// (cascade preserved per spec §3.3.4).
+func TestDeliverEventStoresUpstreamCharacterActorVerbatim(t *testing.T) {
+	t.Parallel()
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	defer func() { _ = h.Close(context.Background()) }()
+	h.plugins["plug-A"] = &loadedPlugin{
+		manifest: &plugins.Manifest{Name: "plug-A"},
+		plugin:   grpcClient,
+	}
+
+	charID := "01HCHAR0000000000000000000"
+	ctx := core.WithActor(context.Background(), core.Actor{Kind: core.ActorCharacter, ID: charID})
+	_, err := h.DeliverEvent(ctx, "plug-A", pluginsdk.Event{Type: "say"})
+	require.NoError(t, err)
+
+	kind, id, ok := pluginsdk.ActorMetadataFromOutgoingContext(grpcClient.eventCtx)
+	require.True(t, ok)
+	assert.Equal(t, pluginsdk.ActorCharacter, kind)
+	assert.Equal(t, charID, id)
+}
+
+// TestDeliverEventReanchorsActorSystem verifies spec §3.3.4: when ctx has
+// ActorSystem, the host attaches ActorPlugin:<self> as outgoing metadata
+// (re-anchored). Plugins can never speak as the host's system identity.
+func TestDeliverEventReanchorsActorSystem(t *testing.T) {
+	t.Parallel()
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	defer func() { _ = h.Close(context.Background()) }()
+	h.plugins["plug-A"] = &loadedPlugin{
+		manifest: &plugins.Manifest{Name: "plug-A"},
+		plugin:   grpcClient,
+	}
+
+	ctx := core.WithActor(context.Background(), core.Actor{Kind: core.ActorSystem, ID: core.ActorSystemID})
+	_, err := h.DeliverEvent(ctx, "plug-A", pluginsdk.Event{Type: "tick"})
+	require.NoError(t, err)
+
+	kind, id, ok := pluginsdk.ActorMetadataFromOutgoingContext(grpcClient.eventCtx)
+	require.True(t, ok)
+	assert.Equal(t, pluginsdk.ActorPlugin, kind, "ActorSystem MUST be re-anchored to ActorPlugin at issuance")
+	assert.Equal(t, "plug-A", id)
+}
+
+// TestDeliverEventNoActorFallsBackToPluginIdentity covers the bootstrap
+// edge case: no actor in ctx → outgoing metadata carries ActorPlugin:<self>.
+func TestDeliverEventNoActorFallsBackToPluginIdentity(t *testing.T) {
+	t.Parallel()
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	defer func() { _ = h.Close(context.Background()) }()
+	h.plugins["plug-A"] = &loadedPlugin{
+		manifest: &plugins.Manifest{Name: "plug-A"},
+		plugin:   grpcClient,
+	}
+
+	_, err := h.DeliverEvent(context.Background(), "plug-A", pluginsdk.Event{Type: "test"})
+	require.NoError(t, err)
+
+	kind, id, ok := pluginsdk.ActorMetadataFromOutgoingContext(grpcClient.eventCtx)
+	require.True(t, ok)
+	assert.Equal(t, pluginsdk.ActorPlugin, kind)
+	assert.Equal(t, "plug-A", id)
+}
+
+// TestDeliverCommandIssuesTokenWithCharacterActor mirrors the DeliverEvent
+// case for the command boundary.
+func TestDeliverCommandIssuesTokenWithCharacterActor(t *testing.T) {
+	t.Parallel()
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	defer func() { _ = h.Close(context.Background()) }()
+	h.plugins["plug-A"] = &loadedPlugin{
+		manifest: &plugins.Manifest{Name: "plug-A"},
+		plugin:   grpcClient,
+	}
+
+	charID := "01HCHAR0000000000000000000"
+	ctx := core.WithActor(context.Background(), core.Actor{Kind: core.ActorCharacter, ID: charID})
+	_, err := h.DeliverCommand(ctx, "plug-A", pluginsdk.CommandRequest{Command: "say"})
+	require.NoError(t, err)
+
+	md, ok := metadata.FromOutgoingContext(grpcClient.commandCtx)
+	require.True(t, ok, "outgoing metadata MUST be present on the call to plugin")
+	tokens := md.Get("x-holomush-emit-token")
+	require.Len(t, tokens, 1)
+	assert.NotEmpty(t, tokens[0])
+
+	_, ok = h.tokenStore.Lookup("plug-A", tokens[0])
+	assert.False(t, ok, "deferred Revoke MUST clear the token after DeliverCommand returns")
+}
+
+// TestDeliverCommandReanchorsActorSystem mirrors the ActorSystem
+// re-anchor invariant (spec §3.3.4) for the command path.
+func TestDeliverCommandReanchorsActorSystem(t *testing.T) {
+	t.Parallel()
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	defer func() { _ = h.Close(context.Background()) }()
+	h.plugins["plug-A"] = &loadedPlugin{
+		manifest: &plugins.Manifest{Name: "plug-A"},
+		plugin:   grpcClient,
+	}
+
+	ctx := core.WithActor(context.Background(), core.Actor{Kind: core.ActorSystem, ID: core.ActorSystemID})
+	_, err := h.DeliverCommand(ctx, "plug-A", pluginsdk.CommandRequest{Command: "tick"})
+	require.NoError(t, err)
+
+	kind, id, ok := pluginsdk.ActorMetadataFromOutgoingContext(grpcClient.commandCtx)
+	require.True(t, ok)
+	assert.Equal(t, pluginsdk.ActorPlugin, kind)
+	assert.Equal(t, "plug-A", id)
+}
+
+// TestDeliverEventNoRecoverWrapper (round-1 plan-reviewer N2) — asserts
+// Host.DeliverEvent does NOT contain a recover() call. A recover() in this
+// path would swallow host-side panics and skip the deferred token Revoke,
+// masking forgery attempts and other security failures. The runtime's
+// default panic semantics are correct: surface, defer-Revoke, propagate.
+//
+// Static-analysis approach via go/ast — parsed from CWD = the goplugin/
+// package directory, which is where `go test` runs.
+func TestDeliverEventNoRecoverWrapper(t *testing.T) {
+	t.Parallel()
+	assertNoRecoverInFunction(t, "DeliverEvent")
+}
+
+// TestDeliverCommandNoRecoverWrapper applies the same recover()-guard
+// invariant to the command boundary.
+func TestDeliverCommandNoRecoverWrapper(t *testing.T) {
+	t.Parallel()
+	assertNoRecoverInFunction(t, "DeliverCommand")
+}
+
+// assertNoRecoverInFunction parses host.go and asserts that the named
+// top-level function does not contain a recover() call.
+func assertNoRecoverInFunction(t *testing.T, funcName string) {
+	t.Helper()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "host.go", nil, parser.ParseComments)
+	require.NoError(t, err)
+	var decl *ast.FuncDecl
+	for _, d := range file.Decls {
+		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name.Name == funcName {
+			decl = fn
+			break
+		}
+	}
+	require.NotNilf(t, decl, "%s function must be in host.go", funcName)
+	ast.Inspect(decl, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		ident, ok := call.Fun.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		assert.NotEqualf(t, "recover", ident.Name,
+			"Host.%s MUST NOT contain recover() — would swallow panics and skip deferred token Revoke", funcName)
+		return true
+	})
 }
