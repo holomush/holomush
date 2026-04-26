@@ -126,10 +126,20 @@
 
   async function handleLogout() {
     busy = true;
+    error = '';
     try {
       await client.webLogout({});
-    } catch {
-      /* swallow */
+    } catch (e) {
+      // Stale-session errors mean the cookie was already invalid server-side
+      // — treat as success and continue to clear local state. Other errors
+      // (network, etc.) leave the server cookie intact, so clearing local
+      // state and reloading would let the cookie immediately re-authenticate
+      // the user; surface the error and bail instead.
+      if (!isStaleSession(e)) {
+        error = e instanceof Error ? e.message : 'Logout failed.';
+        busy = false;
+        return;
+      }
     }
     clearAuth();
     busy = false;

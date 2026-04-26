@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
@@ -936,8 +937,13 @@ func TestCheckCookieCollisionPassesThroughOnAuthFailure(t *testing.T) {
 }
 
 func TestCheckCookieCollisionSurfacesUnexpectedErrors(t *testing.T) {
+	// Plain (non-oops, non-coded) inner error so the gate's outer
+	// oops.Code("COOKIE_GATE_LOOKUP_FAILED").Wrap(err) becomes the deepest
+	// code in the chain. oops.OopsError.Code() returns the DEEPEST code in
+	// the chain (see github.com/samber/oops/error.go:118 getDeepestErrorCode);
+	// if the inner err already had a code it would shadow the gate's code.
 	client := &mockCoreClient{
-		checkSessionErr: oops.Code("PLAYER_LOOKUP_FAILED").Errorf("transport flake"),
+		checkSessionErr: errors.New("transport flake"),
 	}
 	h := NewHandler(client)
 
@@ -945,7 +951,11 @@ func TestCheckCookieCollisionSurfacesUnexpectedErrors(t *testing.T) {
 	headers.Set(headerInjectSessionToken, "some-token")
 
 	_, _, err := h.checkCookieCollision(context.Background(), headers)
-	require.Error(t, err, "non-auth errors MUST surface, not silently fall through to the create path")
+	// Non-auth errors MUST surface wrapped with the gate's COOKIE_GATE_LOOKUP_FAILED
+	// code so callers can distinguish "cookie gate had a transport hiccup" from
+	// "cookie was invalid / no cookie" (both of which return err == nil).
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "COOKIE_GATE_LOOKUP_FAILED")
 }
 
 // --- WebCreateGuest cookie-collision gate ---
