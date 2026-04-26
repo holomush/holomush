@@ -5,6 +5,9 @@ movement, object interactions -- produces an event. Plugins subscribe to events
 and can emit new events in response. This page covers the event types, their
 payloads, and the stream system that organizes them.
 
+For event sensitivity (whisper, DM, private-scene content), see
+[Declaring event sensitivity](event-sensitivity.md).
+
 ## Communication Events
 
 These events represent character communication within a location.
