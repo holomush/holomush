@@ -84,6 +84,12 @@
     error = '';
     busy = true;
     try {
+      if (await isAlreadySignedIn()) {
+        // Spec §4.4.4 pre-gate — load() should already have rendered the
+        // authenticated branch. Reload to pick it up.
+        location.reload();
+        return;
+      }
       const resp = await client.webCreateGuest({});
       if (resp.success) {
         setPlayerAuth('Guest');
@@ -97,6 +103,9 @@
           }
         }
         goto('/characters');
+      } else if (resp.errorCode === 'ALREADY_AUTHENTICATED') {
+        // Server-side backstop fired — same handling as the pre-gate.
+        location.reload();
       } else {
         error = resp.errorMessage || 'Guest login failed.';
       }
