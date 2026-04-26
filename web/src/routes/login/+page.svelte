@@ -7,6 +7,7 @@
   import { WebService } from '$lib/connect/holomush/web/v1/web_pb';
   import { transport } from '$lib/transport';
   import { setCharacterSession, setPlayerAuth, clearAuth } from '$lib/stores/authStore';
+  import { isStaleSession } from '$lib/util/stale';
   import { goto } from '$app/navigation';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
@@ -137,6 +138,13 @@
       }
       goto('/characters');
     } catch (e) {
+      // Cookie expired or revoked between page load and Continue click —
+      // self-recover instead of stranding the user on the authenticated UI.
+      if (isStaleSession(e)) {
+        clearAuth();
+        await goto('/');
+        return;
+      }
       error = e instanceof Error ? e.message : 'Could not resume session.';
     } finally {
       busy = false;

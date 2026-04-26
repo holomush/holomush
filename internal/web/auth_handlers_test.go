@@ -1098,3 +1098,82 @@ func TestWebCreatePlayerReturnsAlreadyAuthenticatedWhenCookieValid(t *testing.T)
 	assert.Equal(t, "Existing Player", resp.Msg.GetCurrentPlayerName())
 	assert.Equal(t, int32(0), client.createPlayerCalls.Load())
 }
+
+// --- signalSessionCookie TTL branch ---
+
+func TestSignalSessionCookieOmitsMaxAgeWhenTTLIsZero(t *testing.T) {
+	h := http.Header{}
+	signalSessionCookie(h, "tok-zero", 0)
+	assert.Equal(t, "tok-zero", h.Get(headerSetSessionToken))
+	assert.Empty(t, h.Get(headerSetSessionMaxAge),
+		"ttl=0 MUST NOT signal MaxAge so the cookie default applies")
+}
+
+func TestSignalSessionCookieOmitsMaxAgeWhenTTLIsNegative(t *testing.T) {
+	h := http.Header{}
+	signalSessionCookie(h, "tok-neg", -1)
+	assert.Equal(t, "tok-neg", h.Get(headerSetSessionToken))
+	assert.Empty(t, h.Get(headerSetSessionMaxAge))
+}
+
+func TestSignalSessionCookieSetsMaxAgeWhenTTLIsPositive(t *testing.T) {
+	h := http.Header{}
+	signalSessionCookie(h, "tok-pos", 7200)
+	assert.Equal(t, "tok-pos", h.Get(headerSetSessionToken))
+	assert.Equal(t, "7200", h.Get(headerSetSessionMaxAge))
+}
+
+// --- isPlayerSessionAuthFailure ---
+
+func TestIsPlayerSessionAuthFailure(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"returns true for player session not found oops code", oops.Code("PLAYER_SESSION_NOT_FOUND").Errorf("x"), true},
+		{"returns true for player session expired oops code", oops.Code("PLAYER_SESSION_EXPIRED").Errorf("x"), true},
+		{"returns true for session not found oops code", oops.Code("SESSION_NOT_FOUND").Errorf("x"), true},
+		{"returns false for unrelated oops code", oops.Code("UNRELATED_CODE").Errorf("x"), false},
+		{"returns false for oops error without code", oops.Errorf("plain oops"), false},
+		{"returns false for plain stdlib error", errors.New("plain error"), false},
+		{"returns false for nil error", nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isPlayerSessionAuthFailure(tt.err))
+		})
+	}
+}
+
+// --- WebCreateGuest RPC-error fallback ---
+
+func TestWebCreateGuestReturnsCoreFailureMessageOnNonSuccess(t *testing.T) {
+	client := &mockCoreClient{
+		createGuestResp: &corev1.CreateGuestResponse{
+			Success:      false,
+			ErrorMessage: "guest service disabled",
+		},
+	}
+	h := NewHandler(client)
+
+	resp, err := h.WebCreateGuest(context.Background(), connect.NewRequest(&webv1.WebCreateGuestRequest{}))
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.GetSuccess())
+	assert.Equal(t, "guest service disabled", resp.Msg.GetErrorMessage())
+	assert.Empty(t, resp.Header().Get(headerSetSessionToken),
+		"core failure MUST NOT signal Set-Cookie")
+}
+
+func TestWebCreateGuestReturnsErrorMessageOnRPCFailure(t *testing.T) {
+	client := &mockCoreClient{
+		createGuestErr: errors.New("connection refused"),
+	}
+	h := NewHandler(client)
+
+	resp, err := h.WebCreateGuest(context.Background(), connect.NewRequest(&webv1.WebCreateGuestRequest{}))
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.GetSuccess())
+	assert.Equal(t, "guest creation error", resp.Msg.GetErrorMessage())
+	assert.Empty(t, resp.Header().Get(headerSetSessionToken))
+}
