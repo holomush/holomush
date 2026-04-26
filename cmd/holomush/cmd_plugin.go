@@ -15,5 +15,6 @@ func NewPluginCmd() *cobra.Command {
 		Long:  "Inspect and validate plugin manifests, list declared event types, and run author-time checks.",
 	}
 	cmd.AddCommand(NewPluginValidateCmd())
+	cmd.AddCommand(NewPluginEventsCmd())
 	return cmd
 }
