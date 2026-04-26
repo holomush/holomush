@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/pkg/errutil"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -363,9 +364,7 @@ func TestEventSinkEmitWrapsRequestEmitTokenFailure(t *testing.T) {
 		Payload: `{"kind":"created"}`,
 	})
 	require.Error(t, err)
-	// Don't pin an exact code-string match — just assert the SDK does not
-	// silently swallow self-token issuance failures and propagates
-	// something sensible to the plugin author.
+	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_REQUEST_FAILED")
 	assert.Contains(t, err.Error(), "simulated rand exhaustion")
 }
 

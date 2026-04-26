@@ -492,7 +492,7 @@ Real binary plugin loaded into the host. Five scenarios:
 
 4. **Cross-plugin token leak:** plugin A captures its token `T_A` and tries to use it from plugin B's process (test simulates by injecting `T_A` into plugin B's outgoing metadata). Assert: emit fails with `EMIT_TOKEN_REJECTED` because lookup compares against the calling plugin's server identity (`pluginName`).
 
-5. **Out-of-dispatch emit:** plugin attempts to emit from a background goroutine that has no token in ctx (no host dispatch is in flight). Assert: emit fails with `EMIT_TOKEN_MISSING`.
+5. **Out-of-dispatch emit (self-token path, see §3.3.6):** plugin attempts to emit from a background goroutine with no dispatch token in ctx. The SDK's `pluginHostEventSink.Emit` falls back to `RequestEmitToken`, the host issues a self-token bound to `{ActorPlugin, pluginName}`, and the emit is accepted. Assert: emit succeeds with `Actor.Kind == ActorPlugin` and `Actor.ID == <pluginName>` — explicitly NOT the dispatching character's ID. (The earlier draft of this scenario asserted `EMIT_TOKEN_MISSING`; that behavior was superseded by the §3.3.6 self-token fallback added when plugin-served gRPC handlers — like `SceneService.CreateScene` — needed to emit outside dispatch paths.)
 
 ### 5.7 Integration — Lua-plugin manifest gate (`test/integration/plugin_e2e/`, extended)
 

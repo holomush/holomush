@@ -317,8 +317,9 @@ func ParseManifest(data []byte) (*Manifest, error) {
 			// Name may not be available yet (Decode hasn't run); read it
 			// directly from the YAML for the error context.
 			name := manifestScalarValue(&root, "name")
-			return nil, oops.In("manifest").With("name", name).
-				New("actor_kinds_claimable must be declared as a YAML sequence")
+			return nil, oops.Code("MANIFEST_ACTOR_KINDS_MALFORMED").
+				In("manifest").With("name", name).
+				Errorf("actor_kinds_claimable must be declared as a YAML sequence")
 		}
 	}
 

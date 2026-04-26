@@ -2364,7 +2364,8 @@ lua-plugin:
   entry: main.lua
 actor_kinds_claimable: plugin
 `,
-			wantErr: true,
+			wantErr:     true,
+			wantErrCode: "MANIFEST_ACTOR_KINDS_MALFORMED",
 			// Pre-Decode kind check produces a manifest-namespaced error
 			// pointing at the offending key, rather than yaml.v3's generic
 			// "cannot unmarshal !!str into []string" type error.

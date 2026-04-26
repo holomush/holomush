@@ -8,7 +8,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -124,18 +126,32 @@ func TestEmitTokenStoreConcurrentIssueLookupSafety(t *testing.T) {
 	s := newStoreForTest(t)
 	const N = 100
 	var wg sync.WaitGroup
+	// Collect errors via channel — calling require.* inside a worker only
+	// terminates the worker goroutine (testing.T.FailNow does runtime.Goexit
+	// on the calling goroutine). Failures must be asserted on the main test
+	// goroutine after wg.Wait.
+	errCh := make(chan error, N)
 	for i := 0; i < N; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			tok, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"})
-			require.NoError(t, err)
-			_, ok := s.Lookup("plug-A", tok)
-			require.True(t, ok)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			if _, ok := s.Lookup("plug-A", tok); !ok {
+				errCh <- errors.New("lookup returned ok=false for freshly-issued token")
+				return
+			}
 			s.Revoke(tok)
 		}()
 	}
 	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
 }
 
 func TestEmitTokenStoreIssueFailsOnRandFailure(t *testing.T) {
@@ -161,9 +177,16 @@ func TestEmitTokenStoreSweeperRemovesExpired(t *testing.T) {
 	// at the moment it runs, including sibling t.Parallel test runners.
 	defer goleak.VerifyNone(t)
 
+	// Use an atomic int64 unix-nano holder rather than reassigning s.now —
+	// the sweeper goroutine reads s.now() concurrently with the test's clock
+	// advance, and overwriting the function pointer would race. Reading
+	// atomic.Int64 is race-free; the function value itself never changes.
 	now := time.Now()
+	var nowUnix atomic.Int64
+	nowUnix.Store(now.UnixNano())
+
 	s := newStoreForTest(t)
-	s.now = func() time.Time { return now }
+	s.now = func() time.Time { return time.Unix(0, nowUnix.Load()) }
 	s.sweep = 10 * time.Millisecond
 	tok, err := s.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"})
 	require.NoError(t, err)
@@ -172,8 +195,8 @@ func TestEmitTokenStoreSweeperRemovesExpired(t *testing.T) {
 	defer cancel()
 	go s.Run(ctx)
 
-	// Advance clock past TTL.
-	s.now = func() time.Time { return now.Add(s.ttl + time.Second) }
+	// Advance clock past TTL via atomic store — race-free with sweepExpired.
+	nowUnix.Store(now.Add(s.ttl + time.Second).UnixNano())
 	// Wait for sweeper to fire.
 	require.Eventually(t, func() bool {
 		_, ok := s.Lookup("plug-A", tok)
