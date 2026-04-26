@@ -184,6 +184,7 @@ func newCaptureHandler() (*captureHandler, *bytes.Buffer) {
 func (c *captureHandler) Enabled(ctx context.Context, l slog.Level) bool {
 	return c.sub.Enabled(ctx, l)
 }
+
 func (c *captureHandler) Handle(ctx context.Context, r slog.Record) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -197,6 +198,71 @@ func (c *captureHandler) WithAttrs(a []slog.Attr) slog.Handler {
 func (c *captureHandler) WithGroup(g string) slog.Handler {
 	return &captureHandler{buf: c.buf, sub: c.sub.WithGroup(g)}
 }
+
+var _ = Describe("Multi-tab session isolation — browser cookie + concurrent telnet auth", func() {
+	var ctx context.Context
+	var gw *web.Handler
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		// FK-safe wipe of any state from prior specs (deletes locations among
+		// other tables — see auth_suite_test.go cleanupTestData).
+		cleanupTestData(ctx, env.pool)
+
+		// Re-create the guest start-location row that the GuestService's namer
+		// references. Other specs in this file rely on it; keep it consistent
+		// across the suite even though this spec uses a registered player.
+		loc := &world.Location{
+			ID:           env.guestStartLocationID,
+			Name:         "Guest Lobby",
+			Description:  "Guest start location for multi-tab integration tests",
+			Type:         world.LocationTypePersistent,
+			ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
+		}
+		Expect(env.locRepo.Create(ctx, loc)).To(Succeed())
+
+		gw = env.webHandler
+	})
+
+	It("telnet auth bypasses the gateway gate; both PlayerSessions exist; reattach holds", func() {
+		// Seed a registered player. CreatePlayer returns
+		// (*Player, *PlayerSession, rawToken string, error). We discard all
+		// returns because this test mints fresh sessions via WebAuthenticatePlayer
+		// (web) and authService.AuthenticatePlayer (telnet) — each persists its
+		// own PlayerSession.
+		username := "parity_player"
+		password := "correct horse battery staple"
+		_, _, _, err := env.authService.CreatePlayer(ctx, username, password, username+"@test.local")
+		Expect(err).NotTo(HaveOccurred(), "seed: create player")
+
+		// Web: WebAuthenticatePlayer — cookie set, PlayerSession_W exists.
+		webResp, err := gw.WebAuthenticatePlayer(ctx, connect.NewRequest(&webv1.WebAuthenticatePlayerRequest{
+			Username: username,
+			Password: password,
+		}))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(webResp.Msg.GetSuccess()).To(BeTrue())
+		webToken := webResp.Header().Get(web.HeaderSetSessionToken)
+		Expect(webToken).NotTo(BeEmpty())
+
+		// Telnet: authenticate with the same username+password. This calls
+		// env.authService.AuthenticatePlayer directly (telnet does not go
+		// through the web gateway). The gate doesn't apply.
+		telnetToken, _, err := env.authService.AuthenticatePlayer(ctx, username, password, "telnet-ua", "127.0.0.1")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(telnetToken).NotTo(BeEmpty())
+		Expect(telnetToken).NotTo(Equal(webToken), "telnet's PlayerSession is distinct from web's")
+
+		// ListPlayerSessions reports >= 2 active sessions for this player —
+		// browser + telnet MUST coexist as two PlayerSessions.
+		player, err := env.playerRepo.GetByUsername(ctx, username)
+		Expect(err).NotTo(HaveOccurred())
+		sessions, err := env.playerSessionStore.ListByPlayer(ctx, player.ID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(sessions)).To(BeNumerically(">=", 2),
+			"browser + telnet MUST coexist as two PlayerSessions")
+	})
+})
 
 var _ = Describe("Multi-tab session isolation — two characters of one player", func() {
 	var ctx context.Context
