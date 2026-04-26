@@ -8,6 +8,7 @@ package auth_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 
@@ -487,5 +488,59 @@ var _ = Describe("Multi-tab session isolation — logout in tab 1, action in tab
 		Expect(histResp.GetSuccess()).To(BeFalse(),
 			"GetCommandHistory MUST reject revoked token with Success=false")
 		Expect(histResp.GetError()).To(ContainSubstring("session not found"))
+	})
+})
+
+var _ = Describe("Pre-deploy WebCheckSession contract", func() {
+	var gw *web.Handler
+
+	BeforeEach(func() {
+		ctx := context.Background()
+		// FK-safe wipe of any state from prior specs (deletes locations among
+		// other tables — see auth_suite_test.go cleanupTestData).
+		cleanupTestData(ctx, env.pool)
+
+		// Re-create the guest start-location row that the GuestService's namer
+		// references. characters.location_id has a FK to locations(id), so this
+		// must exist before WebCreateGuest is invoked.
+		loc := &world.Location{
+			ID:           env.guestStartLocationID,
+			Name:         "Guest Lobby",
+			Description:  "Guest start location for multi-tab integration tests",
+			Type:         world.LocationTypePersistent,
+			ReplayPolicy: world.DefaultReplayPolicy(world.LocationTypePersistent),
+		}
+		Expect(env.locRepo.Create(ctx, loc)).To(Succeed())
+
+		gw = env.webHandler
+	})
+
+	It("still throws / returns Unauthenticated on auth failure", func() {
+		ctx := context.Background()
+		req := connect.NewRequest(&webv1.WebCheckSessionRequest{})
+		// No token set.
+		_, err := gw.WebCheckSession(ctx, req)
+		Expect(err).To(HaveOccurred(), "auth-failure path MUST still return an error response")
+		var connectErr *connect.Error
+		Expect(errors.As(err, &connectErr)).To(BeTrue())
+		Expect(connectErr.Code()).To(Equal(connect.CodeUnauthenticated))
+	})
+
+	It("still populates player_name on success and now also player_id, is_guest, characters", func() {
+		ctx := context.Background()
+
+		// Mint a guest, capture the token, call WebCheckSession.
+		guestResp, err := gw.WebCreateGuest(ctx, connect.NewRequest(&webv1.WebCreateGuestRequest{}))
+		Expect(err).NotTo(HaveOccurred())
+		token := guestResp.Header().Get(web.HeaderSetSessionToken)
+
+		req := connect.NewRequest(&webv1.WebCheckSessionRequest{})
+		req.Header().Set(web.HeaderInjectSessionToken, token)
+		resp, err := gw.WebCheckSession(ctx, req)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(resp.Msg.GetPlayerName()).NotTo(BeEmpty())
+		Expect(resp.Msg.GetPlayerId()).NotTo(BeEmpty())
+		Expect(resp.Msg.GetIsGuest()).To(BeTrue())
+		Expect(resp.Msg.GetCharacters()).To(HaveLen(1))
 	})
 })
