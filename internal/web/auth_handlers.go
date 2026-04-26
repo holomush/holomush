@@ -36,6 +36,16 @@ const (
 	headerInjectSessionToken = "X-Session-Token"
 )
 
+// Exported aliases of the wire-level header names so integration tests can
+// thread the same header values without duplicating string literals. These
+// MUST stay in sync with the unexported constants above.
+const (
+	HeaderInjectSessionToken = headerInjectSessionToken
+	HeaderSetSessionToken    = headerSetSessionToken
+	HeaderSetSessionMaxAge   = headerSetSessionMaxAge
+	HeaderClearSession       = headerClearSession
+)
+
 // playerTokenFromHeader extracts the player session token from the
 // X-Session-Token header injected by CookieMiddleware. Returns
 // CodeUnauthenticated if the header is missing or empty.
