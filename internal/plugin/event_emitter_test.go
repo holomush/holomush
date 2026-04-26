@@ -12,6 +12,7 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -28,8 +29,18 @@ import (
 // sceneManifest returns a manifest declaring `scene` as an allowed emit
 // namespace — matches the historical colon-namespace shape that every
 // in-tree plugin still uses during the F1 transition.
+//
+// ActorKindsClaimable mirrors the in-tree core-scenes manifest (Task 4 of
+// the plugin actor-claim authentication rollout): plugin + character so
+// the manifest gate at event_emitter.Emit allows both self-cascade and
+// character-driven emits. Tests that need to exercise the gate's reject
+// path build their own manifest inline.
 func sceneManifest() *plugins.Manifest {
-	return &plugins.Manifest{Name: "core-scenes", Emits: []string{"scene"}}
+	return &plugins.Manifest{
+		Name:                "core-scenes",
+		Emits:               []string{"scene"},
+		ActorKindsClaimable: []string{"plugin", "character"},
+	}
 }
 
 func pluginActorResolver(_ context.Context, _ string) (core.Actor, error) {
@@ -112,19 +123,27 @@ func TestPluginEventEmitterStampsHostOwnedFields(t *testing.T) {
 	assert.Equal(t, eventbusv1.ActorKind_ACTOR_KIND_PLUGIN, env.GetActor().GetKind())
 }
 
-// TestPluginEventEmitterOmitsActorIDWhenZero complements the happy path by
-// exercising the documented invariant that App-Actor-ID is absent (not
-// present-but-empty) when the resolved actor has no id — spec §1:
-// "zero ULID for ActorKindSystem / Unknown".
-func TestPluginEventEmitterOmitsActorIDHeaderForSystemActor(t *testing.T) {
+// TestPluginEventEmitterOmitsActorIDHeaderForNonULIDActorID complements the
+// happy path by exercising the documented invariant that App-Actor-ID is
+// absent (not present-but-empty) when the resolved actor's ID is not a
+// ULID — the legacy core-scenes plugin uses its plugin name ("core-scenes")
+// as the ID, which the bridge MUST drop while preserving Kind on the wire.
+//
+// (Pre-claim-gate this test exercised ActorSystem; per Task 5 of the
+// plugin actor-claim authentication rollout, ActorSystem can never reach
+// the manifest gate via plugin emit because manifest validation rejects
+// "system" from actor_kinds_claimable. The header-omission invariant
+// itself is unchanged and still worth a regression guard, so the test
+// now uses ActorPlugin with a non-ULID id.)
+func TestPluginEventEmitterOmitsActorIDHeaderForNonULIDActorID(t *testing.T) {
 	bus := eventbustest.New(t)
 	emitter := plugins.NewPluginEventEmitter(
 		bus.Bus.Publisher(),
 		func(string) *plugins.Manifest { return sceneManifest() },
-		// System actor with non-empty ID string that is NOT a ULID — the
-		// bridge keeps the Kind but drops the id, matching spec intent.
+		// Plugin actor with a non-ULID ID (the plugin name) — the bridge
+		// keeps the Kind but drops the id, matching spec intent.
 		func(context.Context, string) (core.Actor, error) {
-			return core.Actor{Kind: core.ActorSystem, ID: "system"}, nil
+			return core.Actor{Kind: core.ActorPlugin, ID: "core-scenes"}, nil
 		},
 	)
 
@@ -137,8 +156,8 @@ func TestPluginEventEmitterOmitsActorIDHeaderForSystemActor(t *testing.T) {
 
 	msgs := fetchAllMessages(t, bus.JS)
 	require.Len(t, msgs, 1)
-	// system kind → header present; non-ULID id → App-Actor-ID omitted.
-	assert.Equal(t, "system", msgs[0].Header.Get(eventbus.HeaderActorKind))
+	// plugin kind → header present; non-ULID id → App-Actor-ID omitted.
+	assert.Equal(t, "plugin", msgs[0].Header.Get(eventbus.HeaderActorKind))
 	assert.Empty(t, msgs[0].Header.Get(eventbus.HeaderActorID),
 		"App-Actor-ID MUST be absent when actor id is not a ULID")
 }
@@ -476,6 +495,101 @@ func TestPluginPublisherReturnsErrPublishExpiredWhenDeadlineElapses(t *testing.T
 	err := pub.Publish(ctx, event)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, eventbus.ErrPublishExpired), "expected ErrPublishExpired, got %v", err)
+}
+
+// actorFromCtxResolver is a test-only ActorResolver that reads from ctx
+// (mirrors the production resolver at internal/plugin/manager.go:1164).
+func actorFromCtxResolver(ctx context.Context, _ string) (core.Actor, error) {
+	actor, ok := core.ActorFromContext(ctx)
+	if !ok {
+		return core.Actor{}, oops.New("plugin event actor missing from context")
+	}
+	return actor, nil
+}
+
+// TestEmitManifestGateRejectsCharacterClaimWithoutOptIn covers spec §3.4 + §5.3:
+// a plugin manifest that doesn't list "character" MUST loud-error when emit
+// ctx carries an ActorCharacter.
+func TestEmitManifestGateRejectsCharacterClaimWithoutOptIn(t *testing.T) {
+	t.Parallel()
+	bus := eventbustest.New(t)
+	manifest := &plugins.Manifest{
+		Name: "plug-A", Type: plugins.TypeLua, Emits: []string{"location"},
+		ActorKindsClaimable: []string{"plugin"}, // no character
+	}
+	e := newEmitter(t, bus,
+		func(string) *plugins.Manifest { return manifest },
+		actorFromCtxResolver,
+	)
+	ctx := core.WithActor(context.Background(), core.Actor{
+		Kind: core.ActorCharacter,
+		ID:   "01HCHAR0000000000000000000",
+	})
+	err := e.Emit(ctx, "plug-A", pluginsdk.EmitIntent{
+		Subject: "location:01HLOC0000000000000000000",
+		Type:    "say",
+		Payload: `{"message":"hi"}`,
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EMIT_ACTOR_KIND_NOT_CLAIMABLE")
+
+	// No message should have been published.
+	msgs := fetchAllMessages(t, bus.JS)
+	assert.Empty(t, msgs)
+}
+
+// TestEmitManifestGateAllowsClaimedKind verifies the gate passes when the
+// manifest declares the actor's kind.
+func TestEmitManifestGateAllowsClaimedKind(t *testing.T) {
+	t.Parallel()
+	bus := eventbustest.New(t)
+	manifest := &plugins.Manifest{
+		Name: "plug-A", Type: plugins.TypeLua, Emits: []string{"location"},
+		ActorKindsClaimable: []string{"plugin", "character"},
+	}
+	e := newEmitter(t, bus,
+		func(string) *plugins.Manifest { return manifest },
+		actorFromCtxResolver,
+	)
+	ctx := core.WithActor(context.Background(), core.Actor{
+		Kind: core.ActorCharacter,
+		ID:   "01HCHAR0000000000000000000",
+	})
+	err := e.Emit(ctx, "plug-A", pluginsdk.EmitIntent{
+		Subject: "location:01HLOC0000000000000000000",
+		Type:    "say",
+		Payload: `{"message":"hi"}`,
+	})
+	require.NoError(t, err)
+	msgs := fetchAllMessages(t, bus.JS)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, "character", msgs[0].Header.Get(eventbus.HeaderActorKind))
+}
+
+// TestEmitManifestGateAllowsPluginCascade covers cascade preservation:
+// plug-A emits during a cascade with ActorPlugin:plug-B in ctx; default
+// [plugin] manifest allows plug-A to vouch for the cascade.
+func TestEmitManifestGateAllowsPluginCascade(t *testing.T) {
+	t.Parallel()
+	bus := eventbustest.New(t)
+	manifest := &plugins.Manifest{
+		Name: "plug-A", Type: plugins.TypeLua, Emits: []string{"location"},
+		ActorKindsClaimable: []string{"plugin"},
+	}
+	e := newEmitter(t, bus,
+		func(string) *plugins.Manifest { return manifest },
+		actorFromCtxResolver,
+	)
+	ctx := core.WithActor(context.Background(), core.Actor{
+		Kind: core.ActorPlugin,
+		ID:   "plug-B", // upstream cascade
+	})
+	err := e.Emit(ctx, "plug-A", pluginsdk.EmitIntent{
+		Subject: "location:01HLOC0000000000000000000",
+		Type:    "test",
+		Payload: `{}`,
+	})
+	require.NoError(t, err)
 }
 
 // erroringPublisher lets negative-path tests exercise wrap/unwrap without

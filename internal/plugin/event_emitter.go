@@ -122,6 +122,20 @@ func (e *PluginEventEmitter) Emit(ctx context.Context, pluginName string, intent
 		return oops.With("plugin", pluginName).With("subject", subjectRaw).Wrap(vErr)
 	}
 
+	// Manifest gate (universal — applies to Lua and binary plugins). Asserts
+	// the actor's Kind is in the plugin's actor_kinds_claimable list.
+	// Per spec §3.4 + project invariant on plugin runtime symmetry: this
+	// gate fires for both Lua and binary plugins because both runtimes
+	// flow through this Emit codepath.
+	if !manifest.DeclaresActorKindClaimable(actor.Kind) {
+		return oops.Code("EMIT_ACTOR_KIND_NOT_CLAIMABLE").
+			With("plugin", pluginName).
+			With("subject", subjectRaw).
+			With("actor_kind", actor.Kind.String()).
+			With("declared_kinds", manifest.ActorKindsClaimable).
+			Errorf("plugin manifest does not declare %q as a claimable actor kind", actor.Kind.String())
+	}
+
 	if e.publisher == nil {
 		return oops.With("plugin", pluginName).With("subject", subjectRaw).
 			New("plugin event publisher is not configured")

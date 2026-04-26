@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/core"
-	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
@@ -136,14 +136,22 @@ func TestEmitRejectsJetStreamSubjectWithInvalidNamespaceChars(t *testing.T) {
 	require.Error(t, err)
 }
 
-// systemActorResolver returns a core.Actor of kind System. Used to
-// verify bridgeActorKind maps core.ActorSystem to the eventbus "system"
-// actor-kind header stamp on the Emit path.
+// systemActorResolver returns a core.Actor of kind System. Used to assert
+// the manifest gate (Task 5 of the plugin actor-claim authentication
+// rollout) refuses to let a plugin claim ActorSystem on emit. Manifest
+// validation rejects "system" from actor_kinds_claimable, so no real
+// manifest can ever pass; the resolver-driven path here is the lone
+// regression guard for "what if a future code path forgets that".
 func systemActorResolver(_ context.Context, _ string) (core.Actor, error) {
 	return core.Actor{Kind: core.ActorSystem, ID: "system-actor-id"}, nil
 }
 
-func TestEmitSystemActorBridgesToEventbusSystemKind(t *testing.T) {
+// TestEmitRejectsSystemActorAtManifestGate asserts the gate refuses to
+// vouch for ActorSystem because no manifest can declare "system" as
+// claimable (validated at manifest load time per spec §3.2). Per spec
+// §3.3.4 the binary-plugin path additionally re-anchors ActorSystem to
+// ActorPlugin:<self> at token issuance (Task 8) before the gate sees it.
+func TestEmitRejectsSystemActorAtManifestGate(t *testing.T) {
 	bus := eventbustest.New(t)
 	emitter := plugins.NewPluginEventEmitter(
 		bus.Bus.Publisher(),
@@ -155,8 +163,7 @@ func TestEmitSystemActorBridgesToEventbusSystemKind(t *testing.T) {
 		Type:    pluginsdk.EventTypeSystem,
 		Payload: `{}`,
 	})
-	require.NoError(t, err)
-	msgs := fetchAllMessages(t, bus.JS)
-	require.Len(t, msgs, 1)
-	assert.Equal(t, "system", msgs[0].Header.Get(eventbus.HeaderActorKind))
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EMIT_ACTOR_KIND_NOT_CLAIMABLE")
+	assert.Empty(t, fetchAllMessages(t, bus.JS))
 }

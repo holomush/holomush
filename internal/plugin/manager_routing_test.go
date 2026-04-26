@@ -62,6 +62,9 @@ version: 1.0.0
 type: lua
 emits:
   - location
+actor_kinds_claimable:
+  - plugin
+  - character
 commands:
   - name: say
     help: Say something
@@ -78,6 +81,9 @@ version: 1.0.0
 type: lua
 emits:
   - location
+actor_kinds_claimable:
+  - plugin
+  - character
 events:
   - say
 lua-plugin:

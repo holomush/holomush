@@ -1331,7 +1331,11 @@ func TestPluginHostServiceEmitEventPreservesIncomingActor(t *testing.T) {
 	emitter := plugins.NewPluginEventEmitter(
 		bus.Bus.Publisher(),
 		func(string) *plugins.Manifest {
-			return &plugins.Manifest{Name: "core-scenes", Emits: []string{"scene"}}
+			return &plugins.Manifest{
+				Name:                "core-scenes",
+				Emits:               []string{"scene"},
+				ActorKindsClaimable: []string{"plugin", "character"},
+			}
 		},
 		func(ctx context.Context, _ string) (core.Actor, error) {
 			actor, ok := core.ActorFromContext(ctx)
@@ -1376,7 +1380,11 @@ func TestPluginHostServiceEmitEventFallsBackToPluginActorWhenIncomingActorMissin
 	emitter := plugins.NewPluginEventEmitter(
 		bus.Bus.Publisher(),
 		func(string) *plugins.Manifest {
-			return &plugins.Manifest{Name: "core-scenes", Emits: []string{"scene"}}
+			return &plugins.Manifest{
+				Name:                "core-scenes",
+				Emits:               []string{"scene"},
+				ActorKindsClaimable: []string{"plugin", "character"},
+			}
 		},
 		func(ctx context.Context, _ string) (core.Actor, error) {
 			actor, ok := core.ActorFromContext(ctx)
@@ -1456,7 +1464,11 @@ func TestPluginHostServiceEmitEventReturnsWrappedEmitterError(t *testing.T) {
 	emitter := plugins.NewPluginEventEmitter(
 		bus.Bus.Publisher(),
 		func(string) *plugins.Manifest {
-			return &plugins.Manifest{Name: "core-scenes", Emits: []string{"scene"}}
+			return &plugins.Manifest{
+				Name:                "core-scenes",
+				Emits:               []string{"scene"},
+				ActorKindsClaimable: []string{"plugin", "character"},
+			}
 		},
 		func(ctx context.Context, _ string) (core.Actor, error) {
 			actor, ok := core.ActorFromContext(ctx)
