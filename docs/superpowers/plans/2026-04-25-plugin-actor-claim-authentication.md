@@ -2756,7 +2756,7 @@ jj log -r '@-' --no-pager   # MUST show Task 12's commit
 
 Create `site/docs/extending/actor-kinds-claimable.md`:
 
-```markdown
+````markdown
 # `actor_kinds_claimable`
 
 The `actor_kinds_claimable` field in your plugin's `plugin.yaml` declares which
@@ -2771,7 +2771,8 @@ actor_kinds_claimable:
   - plugin
   - character
 ```
-```
+
+````
 
 Allowed values:
 

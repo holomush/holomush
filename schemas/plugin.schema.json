@@ -67,6 +67,12 @@
       "type": "array",
       "uniqueItems": true
     },
+    "actor_kinds_claimable": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
     "policies": {
       "items": {
         "properties": {
