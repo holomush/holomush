@@ -24,37 +24,46 @@ import (
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
-// testRegistry returns a VerbRegistry populated with host-owned built-in
-// types plus the plugin-owned comm/object verbs these tests exercise. In
-// production, the plugin loader registers plugin verbs from each
-// plugin.yaml's `verbs:` block; tests short-circuit that.
-func testRegistry() *core.VerbRegistry {
-	r := core.NewVerbRegistry()
-	_ = core.RegisterBuiltinTypes(r)
-	registerTestPluginVerbs(r)
-	return r
+// testRenderings maps the event types these tests exercise to the
+// rendering metadata that the core process's RenderingPublisher would
+// otherwise stamp on outbound events at emit time. The gateway no
+// longer holds a local VerbRegistry — rendering arrives on the wire
+// via EventFrame.Rendering. Tests use withRendering to populate it.
+var testRenderings = map[string]*corev1.RenderingMetadata{
+	"core-communication:say":            {Category: "communication", Format: "speech", Label: "says", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
+	"core-communication:pose":           {Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
+	"core-communication:page":           {Category: "communication", Format: "speech", Label: "pages", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
+	"core-communication:whisper":        {Category: "communication", Format: "speech", Label: "whispers", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
+	"core-communication:whisper_notice": {Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
+	"core-communication:ooc":            {Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
+	"core-communication:pemit":          {Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
+
+	// Host-owned builtins (registered by core.RegisterBuiltinTypes in production).
+	"arrive":           {Category: "movement", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_BOTH, SourcePlugin: "core"},
+	"leave":            {Category: "movement", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_BOTH, SourcePlugin: "core"},
+	"system":           {Category: "system", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core"},
+	"command_response": {Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core"},
+	"command_error":    {Category: "command", Format: "error", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core"},
+	"location_state":   {Category: "state", Format: "snapshot", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE, SourcePlugin: "core"},
 }
 
-func registerTestPluginVerbs(r *core.VerbRegistry) {
-	verbs := []core.VerbRegistration{
-		{Type: "core-communication:say", Category: "communication", Format: "speech", Label: "says", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:pose", Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:page", Category: "communication", Format: "speech", Label: "pages", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:whisper", Category: "communication", Format: "speech", Label: "whispers", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:whisper_notice", Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:ooc", Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:pemit", Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+// withRendering populates ev.Rendering from testRenderings (if present).
+// Tests use this to simulate the core process's RenderingPublisher.
+func withRendering(ev *corev1.EventFrame) *corev1.EventFrame {
+	if ev.Rendering != nil {
+		return ev
 	}
-	for _, v := range verbs {
-		_ = r.Register(v)
+	if r, ok := testRenderings[ev.GetType()]; ok {
+		ev.Rendering = r
 	}
+	return ev
 }
 
 // newTestHandler wraps NewGatewayHandler with DefaultLimits so existing
-// tests remain a single line and don't grow noise from the new parameter.
-// Tests that need custom limits call NewGatewayHandler directly.
+// tests remain a single line. Tests that need custom limits call
+// NewGatewayHandler directly.
 func newTestHandler(conn net.Conn, client CoreClient) *GatewayHandler {
-	return NewGatewayHandler(conn, client, testRegistry(), DefaultLimits)
+	return NewGatewayHandler(conn, client, DefaultLimits)
 }
 
 // TestCoreClient_SatisfiedByGRPCClient verifies at compile time that
@@ -1077,8 +1086,7 @@ func TestGatewayHandler_TwoPhase_AuthFailure(t *testing.T) {
 }
 
 func TestFormatEvent_Communication_Speech(t *testing.T) {
-	registry := testRegistry()
-	h := &GatewayHandler{verbRegistry: registry}
+	h := &GatewayHandler{}
 
 	tests := []struct {
 		name     string
@@ -1112,15 +1120,14 @@ func TestFormatEvent_Communication_Speech(t *testing.T) {
 				Type:    tt.evType,
 				Payload: []byte(tt.payload),
 			}
-			got := h.formatEvent(ev)
+			got := h.formatEvent(withRendering(ev))
 			assert.Equal(t, tt.expected, got)
 		})
 	}
 }
 
 func TestFormatEvent_Communication_Action(t *testing.T) {
-	registry := testRegistry()
-	h := &GatewayHandler{verbRegistry: registry}
+	h := &GatewayHandler{}
 
 	tests := []struct {
 		name     string
@@ -1154,15 +1161,14 @@ func TestFormatEvent_Communication_Action(t *testing.T) {
 				Type:    tt.evType,
 				Payload: []byte(tt.payload),
 			}
-			got := h.formatEvent(ev)
+			got := h.formatEvent(withRendering(ev))
 			assert.Equal(t, tt.expected, got)
 		})
 	}
 }
 
 func TestFormatEvent_Movement(t *testing.T) {
-	registry := testRegistry()
-	h := &GatewayHandler{verbRegistry: registry}
+	h := &GatewayHandler{}
 
 	tests := []struct {
 		name     string
@@ -1196,15 +1202,14 @@ func TestFormatEvent_Movement(t *testing.T) {
 				Type:    tt.evType,
 				Payload: []byte(tt.payload),
 			}
-			got := h.formatEvent(ev)
+			got := h.formatEvent(withRendering(ev))
 			assert.Equal(t, tt.expected, got)
 		})
 	}
 }
 
 func TestFormatEvent_Command(t *testing.T) {
-	registry := testRegistry()
-	h := &GatewayHandler{verbRegistry: registry}
+	h := &GatewayHandler{}
 
 	tests := []struct {
 		name     string
@@ -1232,55 +1237,53 @@ func TestFormatEvent_Command(t *testing.T) {
 				Type:    tt.evType,
 				Payload: []byte(tt.payload),
 			}
-			got := h.formatEvent(ev)
+			got := h.formatEvent(withRendering(ev))
 			assert.Equal(t, tt.expected, got)
 		})
 	}
 }
 
 func TestFormatEvent_State_Suppressed(t *testing.T) {
-	registry := testRegistry()
-	h := &GatewayHandler{verbRegistry: registry}
+	h := &GatewayHandler{}
 
 	ev := &corev1.EventFrame{
 		Type:    "location_state",
 		Payload: []byte(`{"location":{"id":"loc-1","name":"Town Square"}}`),
 	}
-	got := h.formatEvent(ev)
+	got := h.formatEvent(withRendering(ev))
 	assert.Equal(t, "", got, "state events should produce empty string for telnet")
 }
 
 func TestFormatEvent_System(t *testing.T) {
-	registry := testRegistry()
-	h := &GatewayHandler{verbRegistry: registry}
+	h := &GatewayHandler{}
 
 	ev := &corev1.EventFrame{
 		Type:    "system",
 		Payload: []byte(`{"message":"Server restarting in 5 minutes."}`),
 	}
-	got := h.formatEvent(ev)
+	got := h.formatEvent(withRendering(ev))
 	assert.Equal(t, "Server restarting in 5 minutes.", got)
 }
 
 func TestFormatEvent_Unknown_WithText(t *testing.T) {
-	h := &GatewayHandler{verbRegistry: core.NewVerbRegistry()} // empty registry
+	h := &GatewayHandler{} // no rendering on event triggers fallback
 
 	ev := &corev1.EventFrame{
 		Type:    "custom_plugin_event",
 		Payload: []byte(`{"text":"Something happened."}`),
 	}
-	got := h.formatEvent(ev)
+	got := h.formatEvent(withRendering(ev))
 	assert.Equal(t, "Something happened.", got)
 }
 
 func TestFormatEvent_Unknown_NoText(t *testing.T) {
-	h := &GatewayHandler{verbRegistry: core.NewVerbRegistry()} // empty registry
+	h := &GatewayHandler{} // no rendering on event triggers fallback
 
 	ev := &corev1.EventFrame{
 		Type:    "mystery",
 		Payload: []byte(`{"data":123}`),
 	}
-	got := h.formatEvent(ev)
+	got := h.formatEvent(withRendering(ev))
 	assert.Equal(t, "<event: mystery>", got)
 }
 
@@ -2170,7 +2173,7 @@ func TestReadDeadlineFiresOnIdleClient(t *testing.T) {
 
 	client := &mockCoreClient{}
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry(), Limits{
+	handler := NewGatewayHandler(serverConn, client, Limits{
 		IdleReadTimeout: 100 * time.Millisecond,
 		WriteTimeout:    DefaultLimits.WriteTimeout,
 		PreAuthTimeout:  DefaultLimits.PreAuthTimeout,
@@ -2209,7 +2212,7 @@ func TestReadDeadlineResetsOnByte(t *testing.T) {
 
 	client := &mockCoreClient{}
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry(), Limits{
+	handler := NewGatewayHandler(serverConn, client, Limits{
 		IdleReadTimeout: 150 * time.Millisecond,
 		WriteTimeout:    DefaultLimits.WriteTimeout,
 		PreAuthTimeout:  DefaultLimits.PreAuthTimeout,
@@ -2301,7 +2304,7 @@ func TestPreAuthTimerFiresForUnauthedClient(t *testing.T) {
 	defer func() { _ = clientConn.Close() }()
 
 	client := &mockCoreClient{}
-	handler := NewGatewayHandler(serverConn, client, testRegistry(), Limits{
+	handler := NewGatewayHandler(serverConn, client, Limits{
 		IdleReadTimeout: DefaultLimits.IdleReadTimeout,
 		WriteTimeout:    DefaultLimits.WriteTimeout,
 		PreAuthTimeout:  100 * time.Millisecond,
@@ -2368,7 +2371,7 @@ func TestPreAuthTimerCancelledAfterGuestConnect(t *testing.T) {
 	}
 	client.subStream = newEOFStream()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry(), Limits{
+	handler := NewGatewayHandler(serverConn, client, Limits{
 		IdleReadTimeout: DefaultLimits.IdleReadTimeout,
 		WriteTimeout:    DefaultLimits.WriteTimeout,
 		PreAuthTimeout:  200 * time.Millisecond,
@@ -2433,7 +2436,7 @@ func TestPreAuthTimerCancelledAfterTwoPhaseSelect(t *testing.T) {
 	}
 	client.subStream = newEOFStream()
 
-	handler := NewGatewayHandler(serverConn, client, testRegistry(), Limits{
+	handler := NewGatewayHandler(serverConn, client, Limits{
 		IdleReadTimeout: DefaultLimits.IdleReadTimeout,
 		WriteTimeout:    DefaultLimits.WriteTimeout,
 		PreAuthTimeout:  200 * time.Millisecond,

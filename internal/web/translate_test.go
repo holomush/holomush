@@ -23,39 +23,56 @@ func mustMarshal(t *testing.T, v any) []byte {
 	return b
 }
 
-// newTestHandler creates a Handler with a VerbRegistry populated with
-// host-owned builtins plus the plugin-owned comm/object verbs that
-// these tests exercise. In production the plugin loader registers
-// plugin verbs from each plugin.yaml manifest's `verbs:` block; tests
-// short-circuit that by registering the same set inline.
+// newTestHandler creates a Handler. The gateway no longer holds a
+// VerbRegistry — rendering metadata travels on the wire via
+// EventFrame.Rendering. Tests build EventFrames with the appropriate
+// Rendering sub-message via testRendering.
 func newTestHandler(t *testing.T) *Handler {
 	t.Helper()
-	reg := core.NewVerbRegistry()
-	require.NoError(t, core.RegisterBuiltinTypes(reg))
-	registerTestPluginVerbs(t, reg)
-	return &Handler{verbRegistry: reg}
+	return &Handler{}
 }
 
-func registerTestPluginVerbs(t *testing.T, reg *core.VerbRegistry) {
-	t.Helper()
-	verbs := []core.VerbRegistration{
-		{Type: "core-communication:say", Category: "communication", Format: "speech", Label: "says", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:pose", Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:page", Category: "communication", Format: "speech", Label: "pages", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:whisper", Category: "communication", Format: "speech", Label: "whispers", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:whisper_notice", Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:ooc", Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:emit", Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:pemit", Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-objects:object_create", Category: "state", Format: "delta", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE, Source: "core-objects"},
-		{Type: "core-objects:object_destroy", Category: "state", Format: "delta", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE, Source: "core-objects"},
-		{Type: "core-objects:object_use", Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-objects"},
-		{Type: "core-objects:object_examine", Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-objects"},
-		{Type: "core-objects:object_give", Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-objects"},
+// testRenderings maps the event types these tests exercise to the
+// rendering metadata that the core process's RenderingPublisher would
+// otherwise stamp on outbound events at emit time. Production rendering
+// is sourced from plugin manifests + host builtins; tests short-circuit.
+var testRenderings = map[string]*corev1.RenderingMetadata{
+	"core-communication:say":            {Category: "communication", Format: "speech", Label: "says", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
+	"core-communication:pose":           {Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
+	"core-communication:page":           {Category: "communication", Format: "speech", Label: "pages", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
+	"core-communication:whisper":        {Category: "communication", Format: "speech", Label: "whispers", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
+	"core-communication:whisper_notice": {Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
+	"core-communication:ooc":            {Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
+	"core-communication:emit":           {Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
+	"core-communication:pemit":          {Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
+	"core-objects:object_create":        {Category: "state", Format: "delta", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE, SourcePlugin: "core-objects"},
+	"core-objects:object_destroy":       {Category: "state", Format: "delta", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE, SourcePlugin: "core-objects"},
+	"core-objects:object_use":           {Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-objects"},
+	"core-objects:object_examine":       {Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-objects"},
+	"core-objects:object_give":          {Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-objects"},
+
+	// Host-owned builtins (registered by core.RegisterBuiltinTypes in production).
+	"arrive":           {Category: "movement", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_BOTH, SourcePlugin: "core"},
+	"leave":            {Category: "movement", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_BOTH, SourcePlugin: "core"},
+	"move":             {Category: "movement", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_BOTH, SourcePlugin: "core"},
+	"system":           {Category: "system", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core"},
+	"command_response": {Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core"},
+	"command_error":    {Category: "command", Format: "error", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core"},
+	"location_state":   {Category: "state", Format: "snapshot", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE, SourcePlugin: "core"},
+	"exit_update":      {Category: "state", Format: "delta", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE, SourcePlugin: "core"},
+}
+
+// withRendering returns a copy of ev with Rendering populated from
+// testRenderings (if present for ev.Type). Tests use this helper to
+// simulate the core process's RenderingPublisher.
+func withRendering(ev *corev1.EventFrame) *corev1.EventFrame {
+	if ev.Rendering != nil {
+		return ev
 	}
-	for _, v := range verbs {
-		require.NoError(t, reg.Register(v))
+	if r, ok := testRenderings[ev.GetType()]; ok {
+		ev.Rendering = r
 	}
+	return ev
 }
 
 func TestTranslateEvent_Say(t *testing.T) {
@@ -66,7 +83,7 @@ func TestTranslateEvent_Say(t *testing.T) {
 		Payload:   mustMarshal(t, map[string]string{"character_name": "Alice", "message": "Hello!"}),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got)
 	assert.Equal(t, "core-communication:say", got.GetType())
 	assert.Equal(t, "communication", got.GetCategory())
@@ -85,7 +102,7 @@ func TestTranslateEvent_Pose(t *testing.T) {
 		Payload: mustMarshal(t, map[string]any{"character_name": "Bob", "action": "waves hello."}),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got)
 	assert.Equal(t, "core-communication:pose", got.GetType())
 	assert.Equal(t, "communication", got.GetCategory())
@@ -101,7 +118,7 @@ func TestTranslateEvent_PoseNoSpace(t *testing.T) {
 		Payload: mustMarshal(t, map[string]any{"character_name": "Bob", "action": "'s face turns red.", "no_space": true}),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got)
 	assert.Equal(t, "communication", got.GetCategory())
 	assert.Equal(t, "action", got.GetFormat())
@@ -116,7 +133,7 @@ func TestTranslateEvent_Arrive(t *testing.T) {
 		Payload: mustMarshal(t, map[string]string{"character_name": "Carol"}),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got)
 	assert.Equal(t, "arrive", got.GetType())
 	assert.Equal(t, "movement", got.GetCategory())
@@ -132,7 +149,7 @@ func TestTranslateEvent_Leave(t *testing.T) {
 		Payload: mustMarshal(t, map[string]string{"character_name": "Dave"}),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got)
 	assert.Equal(t, "leave", got.GetType())
 	assert.Equal(t, "movement", got.GetCategory())
@@ -147,7 +164,7 @@ func TestTranslateEvent_System(t *testing.T) {
 		Payload: mustMarshal(t, map[string]string{"message": "Server restarting."}),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got)
 	assert.Equal(t, "system", got.GetType())
 	assert.Equal(t, "system", got.GetCategory())
@@ -163,7 +180,7 @@ func TestTranslateEvent_Move(t *testing.T) {
 		Payload: mustMarshal(t, map[string]string{"character_name": "Eve", "message": "Eve goes north."}),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got)
 	assert.Equal(t, "move", got.GetType())
 	assert.Equal(t, "movement", got.GetCategory())
@@ -178,7 +195,7 @@ func TestTranslateEvent_CommandResponse(t *testing.T) {
 		Payload: mustMarshal(t, map[string]string{"text": "Goodbye!"}),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got)
 	assert.Equal(t, "command_response", got.GetType())
 	assert.Equal(t, "command", got.GetCategory())
@@ -194,7 +211,7 @@ func TestTranslateEvent_CommandError(t *testing.T) {
 		Payload: mustMarshal(t, map[string]string{"text": "Unknown command: foo"}),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got)
 	assert.Equal(t, "command_error", got.GetType())
 	assert.Equal(t, "command", got.GetCategory())
@@ -226,7 +243,7 @@ func TestTranslateEvent_LocationState(t *testing.T) {
 		Payload: mustMarshal(t, payload),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got)
 	assert.Equal(t, "location_state", got.GetType())
 	assert.Equal(t, "state", got.GetCategory())
@@ -262,7 +279,7 @@ func TestTranslateEvent_ExitUpdate(t *testing.T) {
 		Payload: mustMarshal(t, payload),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got)
 	assert.Equal(t, "exit_update", got.GetType())
 	assert.Equal(t, "state", got.GetCategory())
@@ -283,7 +300,7 @@ func TestTranslateEvent_OOC(t *testing.T) {
 		Payload: mustMarshal(t, core.OOCPayload{CharacterName: "Alice", Message: "brb", Style: "say"}),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got)
 	assert.Equal(t, "core-communication:ooc", got.GetType())
 	assert.Equal(t, "communication", got.GetCategory())
@@ -301,7 +318,7 @@ func TestTranslateEvent_OOC_PoseStyle(t *testing.T) {
 		Payload: mustMarshal(t, core.OOCPayload{CharacterName: "Bob", Message: "waves.", Style: "pose"}),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got)
 	assert.Equal(t, "core-communication:ooc", got.GetType())
 	require.NotNil(t, got.GetMetadata())
@@ -318,7 +335,7 @@ func TestTranslateEvent_Pemit(t *testing.T) {
 		}),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got)
 	assert.Equal(t, "core-communication:pemit", got.GetType())
 	assert.Equal(t, "command", got.GetCategory())
@@ -337,7 +354,7 @@ func TestTranslateEvent_Page(t *testing.T) {
 		}),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got, "page events should now be translated (previously dropped)")
 	assert.Equal(t, "core-communication:page", got.GetType())
 	assert.Equal(t, "communication", got.GetCategory())
@@ -355,7 +372,7 @@ func TestTranslateEvent_Unknown(t *testing.T) {
 		Payload: mustMarshal(t, map[string]string{"message": "You teleport away."}),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got, "unknown types should fall back, not return nil")
 	assert.Equal(t, "teleport", got.GetType())
 	assert.Equal(t, "system", got.GetCategory())
@@ -371,19 +388,24 @@ func TestTranslateEvent_CorruptPayload(t *testing.T) {
 		Payload: []byte(`not-valid-json`),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	assert.Nil(t, got)
 }
 
-func TestTranslateEvent_NilRegistry(t *testing.T) {
-	h := &Handler{}
+func TestTranslateEventFallsBackToSystemWhenRenderingMissing(t *testing.T) {
+	// Events arriving without a Rendering sub-message currently fall back to
+	// system/narrative/TERMINAL. Task 31 will replace the fallback with a
+	// drop + metric so that gateway behavior matches INV-GW-5 (rendering
+	// MUST be populated upstream by the core process).
+	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "core-communication:say",
 		Payload: mustMarshal(t, map[string]string{"character_name": "Alice", "message": "Hello!"}),
+		// Rendering deliberately not populated.
 	}
 
 	got := h.translateEvent(ev)
-	require.NotNil(t, got, "should fall back when registry is nil")
+	require.NotNil(t, got, "should fall back when rendering is nil")
 	assert.Equal(t, "system", got.GetCategory())
 	assert.Equal(t, "narrative", got.GetFormat())
 }
@@ -395,7 +417,7 @@ func TestTranslateEvent_StateCorruptPayload(t *testing.T) {
 		Payload: []byte(`not-valid-json`),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	assert.Nil(t, got)
 }
 
@@ -409,7 +431,7 @@ func TestTranslateEvent_PopulatesEventIdForCommunicationEvents(t *testing.T) {
 		Payload:   mustMarshal(t, map[string]string{"character_name": "Alice", "message": "Hello!"}),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got)
 	assert.Equal(t, expectedID, got.GetEventId())
 }
@@ -424,7 +446,7 @@ func TestTranslateEvent_PopulatesEventIdForStateEvents(t *testing.T) {
 		Payload:   mustMarshal(t, map[string]any{"name": "Cafe", "description": "a place"}),
 	}
 
-	got := h.translateEvent(ev)
+	got := h.translateEvent(withRendering(ev))
 	require.NotNil(t, got)
 	assert.Equal(t, expectedID, got.GetEventId())
 }

@@ -72,7 +72,6 @@ type ContentClient interface {
 type Handler struct {
 	client        CoreClient
 	contentClient ContentClient
-	verbRegistry  *core.VerbRegistry
 }
 
 // compile-time check that Handler satisfies the generated interface.
@@ -84,11 +83,6 @@ type HandlerOption func(*Handler)
 // WithContentClient sets the content service client for content RPCs.
 func WithContentClient(c ContentClient) HandlerOption {
 	return func(h *Handler) { h.contentClient = c }
-}
-
-// WithVerbRegistry sets the verb registry for event type translation.
-func WithVerbRegistry(r *core.VerbRegistry) HandlerOption {
-	return func(h *Handler) { h.verbRegistry = r }
 }
 
 // NewHandler creates a new Handler with the given core client and options.

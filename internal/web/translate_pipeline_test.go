@@ -49,7 +49,7 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 			Payload:   mustMarshal(t, map[string]string{"character_name": "Alice", "message": "Hello world"}),
 		}
 
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got, "say event must not be dropped")
 		assert.Equal(t, "core-communication:say", got.GetType())
 		assert.Equal(t, "communication", got.GetCategory())
@@ -66,7 +66,7 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 			Payload:   mustMarshal(t, map[string]any{"character_name": "Bob", "action": "waves cheerfully."}),
 		}
 
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got, "pose event must not be dropped")
 		assert.Equal(t, "core-communication:pose", got.GetType())
 		assert.Equal(t, "communication", got.GetCategory())
@@ -83,7 +83,7 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 			Payload:   mustMarshal(t, map[string]any{"character_name": "Bob", "action": "'s eyes widen.", "no_space": true}),
 		}
 
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got)
 		assert.Equal(t, "core-communication:pose", got.GetType())
 		require.NotNil(t, got.GetMetadata(), "semipose must carry no_space metadata")
@@ -97,7 +97,7 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 			Payload:   mustMarshal(t, map[string]any{"character_name": "Carol", "message": "heading out soon", "style": "say"}),
 		}
 
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got)
 		assert.Equal(t, "core-communication:ooc", got.GetType())
 		assert.Equal(t, "communication", got.GetCategory())
@@ -116,7 +116,7 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 			Payload:   mustMarshal(t, map[string]any{"character_name": "Dave", "message": "waves.", "style": "pose"}),
 		}
 
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got)
 		assert.Equal(t, "core-communication:ooc", got.GetType())
 		require.NotNil(t, got.GetMetadata(), "pose-style OOC must carry style metadata")
@@ -130,7 +130,7 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 			Payload:   mustMarshal(t, map[string]any{"sender_name": "Eve", "message": "A whispered secret reaches you."}),
 		}
 
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got)
 		assert.Equal(t, "core-communication:pemit", got.GetType())
 		assert.Equal(t, "A whispered secret reaches you.", got.GetText())
@@ -144,7 +144,7 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 			Payload:   mustMarshal(t, map[string]string{"text": "You see a bustling marketplace."}),
 		}
 
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got, "command_response must not be dropped")
 		assert.Equal(t, "command_response", got.GetType())
 		assert.Equal(t, "command", got.GetCategory())
@@ -160,7 +160,7 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 			Payload:   mustMarshal(t, map[string]string{"text": "Unknown command: xyzzy"}),
 		}
 
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got, "command_error must not be dropped")
 		assert.Equal(t, "command_error", got.GetType())
 		assert.Equal(t, "command", got.GetCategory())
@@ -176,7 +176,7 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 			Payload:   mustMarshal(t, map[string]string{"message": "Server will restart in 5 minutes."}),
 		}
 
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got, "system event must not be dropped")
 		assert.Equal(t, "system", got.GetType())
 		assert.Equal(t, "system", got.GetCategory())
@@ -193,7 +193,7 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 			Payload:   mustMarshal(t, map[string]string{"character_name": "Frank"}),
 		}
 
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got)
 		assert.Equal(t, "arrive", got.GetType())
 		assert.Equal(t, "movement", got.GetCategory())
@@ -209,7 +209,7 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 			Payload:   mustMarshal(t, map[string]string{"character_name": "Grace"}),
 		}
 
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got)
 		assert.Equal(t, "leave", got.GetType())
 		assert.Equal(t, "movement", got.GetCategory())
@@ -224,7 +224,7 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 			Payload:   mustMarshal(t, map[string]any{"character_name": "Heidi", "message": "Heidi goes north."}),
 		}
 
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got)
 		assert.Equal(t, "move", got.GetType())
 		assert.Equal(t, "movement", got.GetCategory())
@@ -252,7 +252,7 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 			}),
 		}
 
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got, "location_state must not be dropped")
 		assert.Equal(t, "location_state", got.GetType())
 		assert.Equal(t, "state", got.GetCategory())
@@ -272,7 +272,7 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 			Payload:   []byte(`{"message": "plugin data"}`),
 		}
 
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got, "unknown types should get system/narrative fallback, not be dropped")
 		assert.Equal(t, "custom_plugin_event", got.GetType())
 		assert.Equal(t, "system", got.GetCategory())
@@ -298,7 +298,7 @@ func TestTranslatePipeline_CorruptPayloadGraceful(t *testing.T) {
 				Timestamp: timestamppb.Now(),
 				Payload:   []byte(`<<<not json>>>`),
 			}
-			got := h.translateEvent(ev)
+			got := h.translateEvent(withRendering(ev))
 			assert.Nil(t, got, "corrupt %s payload should be dropped gracefully", typ)
 		})
 	}
@@ -310,7 +310,7 @@ func TestTranslatePipeline_CorruptPayloadGraceful(t *testing.T) {
 			Timestamp: timestamppb.Now(),
 			Payload:   []byte(`{"character_name":"Ruby_Helium"}`),
 		}
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got)
 		assert.Equal(t, "Ruby_Helium has arrived.", got.Text)
 		assert.Equal(t, "Ruby_Helium", got.Actor)
@@ -323,7 +323,7 @@ func TestTranslatePipeline_CorruptPayloadGraceful(t *testing.T) {
 			Timestamp: timestamppb.Now(),
 			Payload:   []byte(`{"character_name":"Pearl_Copper"}`),
 		}
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got)
 		assert.Equal(t, "Pearl_Copper has left.", got.Text)
 	})
@@ -334,7 +334,7 @@ func TestTranslatePipeline_CorruptPayloadGraceful(t *testing.T) {
 			Timestamp: timestamppb.Now(),
 			Payload:   []byte(`{"character_name":"Opal_Neon","reason":"disconnected"}`),
 		}
-		got := h.translateEvent(ev)
+		got := h.translateEvent(withRendering(ev))
 		require.NotNil(t, got)
 		assert.Equal(t, "Opal_Neon has left (disconnected).", got.Text)
 	})
@@ -348,7 +348,7 @@ func TestTranslatePipeline_CorruptPayloadGraceful(t *testing.T) {
 				Timestamp: timestamppb.Now(),
 				Payload:   []byte(`<<<not json>>>`),
 			}
-			got := h.translateEvent(ev)
+			got := h.translateEvent(withRendering(ev))
 			assert.Nil(t, got, "corrupt %s payload should be dropped gracefully", typ)
 		})
 	}

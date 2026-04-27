@@ -69,7 +69,6 @@ type GatewayHandler struct {
 	conn         net.Conn
 	reader       *bufio.Reader
 	client       CoreClient
-	verbRegistry *core.VerbRegistry
 	sessionID    string
 	connectionID string
 	charName     string
@@ -88,15 +87,16 @@ type GatewayHandler struct {
 
 // NewGatewayHandler creates a new GatewayHandler for the given connection.
 // limits bounds per-connection resource usage; callers SHOULD pass
-// DefaultLimits unless they have a specific reason to deviate.
-func NewGatewayHandler(conn net.Conn, client CoreClient, registry *core.VerbRegistry, limits Limits) *GatewayHandler {
+// DefaultLimits unless they have a specific reason to deviate. The handler
+// reads rendering metadata from EventFrame.Rendering on the wire and does
+// not hold a local VerbRegistry (Phase 1.6 gateway thinness).
+func NewGatewayHandler(conn net.Conn, client CoreClient, limits Limits) *GatewayHandler {
 	dr := &deadlineReader{conn: conn, timeout: limits.IdleReadTimeout}
 	return &GatewayHandler{
-		conn:         conn,
-		reader:       bufio.NewReader(dr),
-		client:       client,
-		verbRegistry: registry,
-		limits:       limits,
+		conn:   conn,
+		reader: bufio.NewReader(dr),
+		client: client,
+		limits: limits,
 	}
 }
 
@@ -858,31 +858,31 @@ func (h *GatewayHandler) sendProtoEvent(ev *corev1.EventFrame) {
 	}
 }
 
-// formatEvent uses the VerbRegistry to dispatch formatting by category+format.
+// formatEvent dispatches formatting by EventFrame.Rendering category+format.
 // Returns empty string for events that should not be displayed in telnet.
+// Events arriving without rendering metadata fall back to formatFallback;
+// Task 31 will replace the fallback with a drop + metric.
 func (h *GatewayHandler) formatEvent(ev *corev1.EventFrame) string {
-	if h.verbRegistry == nil {
-		return h.formatFallback(ev)
-	}
-	reg, found := h.verbRegistry.Lookup(ev.GetType())
-	if !found {
+	rendering := ev.GetRendering()
+	if rendering == nil {
 		return h.formatFallback(ev)
 	}
 
 	// Only format events targeted at TERMINAL or BOTH.
 	// STATE-only and other non-terminal events have no telnet representation.
-	if reg.DisplayTarget != corev1.EventChannel_EVENT_CHANNEL_TERMINAL &&
-		reg.DisplayTarget != corev1.EventChannel_EVENT_CHANNEL_BOTH {
+	target := rendering.GetDisplayTarget()
+	if target != corev1.EventChannel_EVENT_CHANNEL_TERMINAL &&
+		target != corev1.EventChannel_EVENT_CHANNEL_BOTH {
 		return ""
 	}
 
-	switch reg.Category {
+	switch rendering.GetCategory() {
 	case "communication":
-		return h.formatCommunication(ev, reg)
+		return h.formatCommunication(ev, rendering)
 	case "movement":
-		return h.formatMovement(ev, reg)
+		return h.formatMovement(ev, rendering)
 	case "command":
-		return h.formatCommand(ev, reg)
+		return h.formatCommand(ev, rendering)
 	case "system":
 		return h.formatSystem(ev)
 	case "state":
@@ -895,7 +895,7 @@ func (h *GatewayHandler) formatEvent(ev *corev1.EventFrame) string {
 // formatCommunication formats speech and action events.
 // Speech: `<actor> <label>, "<text>"`
 // Action: `<actor><space?><text>`
-func (h *GatewayHandler) formatCommunication(ev *corev1.EventFrame, reg core.VerbRegistration) string {
+func (h *GatewayHandler) formatCommunication(ev *corev1.EventFrame, rendering *corev1.RenderingMetadata) string {
 	payload := make(map[string]any)
 	if err := json.Unmarshal(ev.GetPayload(), &payload); err != nil {
 		slog.Error("gateway: failed to unmarshal communication payload", "type", ev.GetType(), "error", err)
@@ -907,10 +907,10 @@ func (h *GatewayHandler) formatCommunication(ev *corev1.EventFrame, reg core.Ver
 		actor = truncateActorID(ev.GetActorId())
 	}
 
-	switch reg.Format {
+	switch rendering.GetFormat() {
 	case "speech":
 		text := stringFromPayload(payload, "message")
-		return fmt.Sprintf("%s %s, %q", actor, reg.Label, text)
+		return fmt.Sprintf("%s %s, %q", actor, rendering.GetLabel(), text)
 	case "action":
 		text := stringFromPayload(payload, "action", "notice", "message")
 		noSpace, ok := payload["no_space"].(bool)
@@ -925,8 +925,8 @@ func (h *GatewayHandler) formatCommunication(ev *corev1.EventFrame, reg core.Ver
 }
 
 // formatMovement formats arrive/leave/move notifications.
-func (h *GatewayHandler) formatMovement(ev *corev1.EventFrame, reg core.VerbRegistration) string {
-	_ = reg // reserved for future format differentiation
+func (h *GatewayHandler) formatMovement(ev *corev1.EventFrame, rendering *corev1.RenderingMetadata) string {
+	_ = rendering // reserved for future format differentiation
 
 	payload := make(map[string]any)
 	if err := json.Unmarshal(ev.GetPayload(), &payload); err != nil {
@@ -954,7 +954,7 @@ func (h *GatewayHandler) formatMovement(ev *corev1.EventFrame, reg core.VerbRegi
 }
 
 // formatCommand formats narrative text and error messages.
-func (h *GatewayHandler) formatCommand(ev *corev1.EventFrame, reg core.VerbRegistration) string {
+func (h *GatewayHandler) formatCommand(ev *corev1.EventFrame, rendering *corev1.RenderingMetadata) string {
 	payload := make(map[string]any)
 	if err := json.Unmarshal(ev.GetPayload(), &payload); err != nil {
 		slog.Error("gateway: failed to unmarshal command payload", "type", ev.GetType(), "error", err)
@@ -962,7 +962,7 @@ func (h *GatewayHandler) formatCommand(ev *corev1.EventFrame, reg core.VerbRegis
 	}
 
 	text := stringFromPayload(payload, "text", "message")
-	if reg.Format == "error" {
+	if rendering.GetFormat() == "error" {
 		return fmt.Sprintf("[ERROR] %s", text)
 	}
 	return text

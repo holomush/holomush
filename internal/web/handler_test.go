@@ -300,7 +300,6 @@ func TestHandlerHasNoSessionStoreField(t *testing.T) {
 	// compile-time guarantees. This test exists so a reviewer grepping
 	// for sessionStore usage in the web package sees a single sentinel.
 	assert.Nil(t, h.contentClient, "no options configured")
-	assert.Nil(t, h.verbRegistry, "no options configured")
 }
 
 // mockSubscribeStream is a test double for corev1.CoreService_SubscribeClient.

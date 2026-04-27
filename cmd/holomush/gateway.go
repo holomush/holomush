@@ -15,10 +15,8 @@ import (
 	"github.com/samber/oops"
 	"github.com/spf13/cobra"
 
-	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/config"
 	"github.com/holomush/holomush/internal/control"
-	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	"github.com/holomush/holomush/internal/logging"
 	"github.com/holomush/holomush/internal/observability"
@@ -258,9 +256,10 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 	if cfg.MetricsAddr != "" {
 		// For gateway, we're ready once telnet listener is up
 		obsServer = deps.ObservabilityServerFactory(cfg.MetricsAddr, func() bool { return true })
-		// Register command package metrics with the observability server
+		// Register telnet metrics with the observability server.
+		// Command-package metrics are registered in the core process only —
+		// the gateway forwards commands via gRPC and never executes them.
 		obsServer.MustRegister(
-			command.CommandExecutions, command.CommandDuration, command.AliasExpansions,
 			telnet.ConnectionsActive, telnet.ConnectionsRefusedTotal,
 			telnet.PreAuthTimeoutsTotal, telnet.IdleTimeoutsTotal,
 		)
@@ -282,14 +281,11 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		slog.Info("observability server started", "addr", obsServer.Addr())
 	}
 
-	// Build the verb registry for event formatting (shared by web + telnet).
-	verbRegistry := core.NewVerbRegistry()
-	if regErr := core.RegisterBuiltinTypes(verbRegistry); regErr != nil {
-		return oops.Code("VERB_REGISTRY_INIT_FAILED").Wrap(regErr)
-	}
-
-	// Start web HTTP server
-	webHandler := web.NewHandler(grpcClient, web.WithContentClient(grpcClient), web.WithVerbRegistry(verbRegistry))
+	// Start web HTTP server. The gateway is a protocol-translation layer
+	// (Phase 1.6): it reads rendering metadata from EventFrame.Rendering on
+	// the wire instead of holding a local VerbRegistry. The core process is
+	// the sole owner of rendering enrichment via core/v1/RenderingMetadata.
+	webHandler := web.NewHandler(grpcClient, web.WithContentClient(grpcClient))
 	webServer, err := web.NewServer(web.Config{
 		Addr:        cfg.WebAddr,
 		Handler:     webHandler,
@@ -335,7 +331,7 @@ func runGatewayWithDeps(ctx context.Context, cfg *gatewayConfig, cmd *cobra.Comm
 		WriteTimeout:    cfg.TelnetWriteTimeout,
 		PreAuthTimeout:  cfg.TelnetPreAuthTimeout,
 	}
-	go runTelnetAcceptLoop(ctx, telnetListener, grpcClient, verbRegistry, cancel, slots, limits)
+	go runTelnetAcceptLoop(ctx, telnetListener, grpcClient, cancel, slots, limits)
 
 	cmd.Println("Gateway process started")
 	slog.Info("gateway process ready",
@@ -432,7 +428,6 @@ func runTelnetAcceptLoop(
 	ctx context.Context,
 	listener net.Listener,
 	client GRPCClient,
-	registry *core.VerbRegistry,
 	cancel func(),
 	slots chan struct{},
 	limits telnet.Limits,
@@ -475,7 +470,7 @@ func runTelnetAcceptLoop(
 		select {
 		case slots <- struct{}{}:
 			telnet.IncConnectionsActive()
-			handler := telnet.NewGatewayHandler(conn, client, registry, limits)
+			handler := telnet.NewGatewayHandler(conn, client, limits)
 			go func() {
 				defer func() {
 					<-slots

@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/config"
-	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/telnet"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	"github.com/holomush/holomush/pkg/errutil"
@@ -685,15 +684,11 @@ func TestTelnetAcceptLoop_BackoffOnErrors(t *testing.T) {
 		closeCh:      make(chan struct{}),
 	}
 
-	// Bootstrap registry on the test goroutine so failures are reported cleanly
-	registry := core.NewVerbRegistry()
-	require.NoError(t, core.RegisterBuiltinTypes(registry))
-
 	// Run the accept loop in a goroutine
 	done := make(chan struct{})
 	go func() {
 		slots := make(chan struct{}, 100)
-		runTelnetAcceptLoop(ctx, mock, &mockGRPCClient{}, registry, cancel, slots, telnet.DefaultLimits)
+		runTelnetAcceptLoop(ctx, mock, &mockGRPCClient{}, cancel, slots, telnet.DefaultLimits)
 		close(done)
 	}()
 
@@ -932,9 +927,6 @@ func TestAcceptLoopRefusesAtCapacity(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	registry := core.NewVerbRegistry()
-	require.NoError(t, core.RegisterBuiltinTypes(registry))
-
 	limits := telnet.DefaultLimits
 	limits.IdleReadTimeout = 5 * time.Second
 	limits.PreAuthTimeout = 5 * time.Second
@@ -943,7 +935,7 @@ func TestAcceptLoopRefusesAtCapacity(t *testing.T) {
 
 	loopDone := make(chan struct{})
 	go func() {
-		runTelnetAcceptLoop(ctx, ln, &mockGRPCClient{}, registry, cancel, slots, limits)
+		runTelnetAcceptLoop(ctx, ln, &mockGRPCClient{}, cancel, slots, limits)
 		close(loopDone)
 	}()
 
@@ -990,9 +982,6 @@ func TestAcceptLoopReleasesSlotOnHandlerExit(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	registry := core.NewVerbRegistry()
-	require.NoError(t, core.RegisterBuiltinTypes(registry))
-
 	limits := telnet.DefaultLimits
 	limits.IdleReadTimeout = 200 * time.Millisecond
 	limits.PreAuthTimeout = 200 * time.Millisecond
@@ -1001,7 +990,7 @@ func TestAcceptLoopReleasesSlotOnHandlerExit(t *testing.T) {
 
 	loopDone := make(chan struct{})
 	go func() {
-		runTelnetAcceptLoop(ctx, ln, &mockGRPCClient{}, registry, cancel, slots, limits)
+		runTelnetAcceptLoop(ctx, ln, &mockGRPCClient{}, cancel, slots, limits)
 		close(loopDone)
 	}()
 
