@@ -145,6 +145,12 @@ message EventFrame {
   // server on QueryStreamHistory responses and Subscribe deliveries so clients
   // can resume without re-delivering events they already processed.
   bytes cursor = 8;
+
+  // Rendering metadata — cleartext band, populated by RenderingPublisher
+  // at emit time. MUST be present on every frame produced by this server
+  // (INV-GW-2). Gateway treats absence as a contract violation
+  // (drops + metric + log per INV-GW-5).
+  RenderingMetadata rendering = 9;
 }
 
 // EventChannel identifies the destination channel for event delivery.
