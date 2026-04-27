@@ -95,6 +95,18 @@ func newGRPCSubsystem(cfg grpcSubsystemConfig) *grpcSubsystem {
 	return &grpcSubsystem{cfg: cfg}
 }
 
+// wrapPublisher wraps the raw EventBus publisher with RenderingPublisher
+// so all emit-site callers (pluginManager and busEventAppender) get
+// rendering-metadata enrichment for free. Returns an error if the verb
+// registry is not configured.
+func (s *grpcSubsystem) wrapPublisher(raw eventbus.Publisher) (eventbus.Publisher, error) {
+	if s.cfg.VerbRegistry == nil {
+		return nil, oops.Code("GRPC_VERB_REGISTRY_MISSING").
+			Errorf("gRPC subsystem requires VerbRegistry for emit-time rendering enrichment")
+	}
+	return eventbus.NewRenderingPublisher(raw, s.cfg.VerbRegistry), nil
+}
+
 // ID returns SubsystemGRPC.
 func (s *grpcSubsystem) ID() lifecycle.SubsystemID { return lifecycle.SubsystemGRPC }
 
@@ -144,11 +156,17 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		return oops.Code("GRPC_EVENTBUS_MISSING").
 			Errorf("gRPC subsystem requires EventBus subsystem for plugin emit routing")
 	}
-	publisher := s.cfg.EventBus.Publisher()
-	if publisher == nil {
+	rawPublisher := s.cfg.EventBus.Publisher()
+	if rawPublisher == nil {
 		return oops.Code("GRPC_EVENTBUS_NOT_STARTED").
 			Errorf("EventBus publisher is nil; subsystem not started")
 	}
+
+	publisher, err := s.wrapPublisher(rawPublisher)
+	if err != nil {
+		return err
+	}
+
 	pluginManager.ConfigureEventEmitter(
 		publisher,
 		plugins.WithGameID(s.cfg.EventBus.GameID),
@@ -380,7 +398,6 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	go s.guestReaper.Run(reaperCtx)
 
 	// 12. Bind TCP listener.
-	var err error
 	s.listener, err = net.Listen("tcp", s.cfg.GRPCAddr)
 	if err != nil {
 		reaperCancel()
