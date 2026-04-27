@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
 
 func TestVerbRegistryRegisterStoresVerbAndAllowsLookup(t *testing.T) {
@@ -195,6 +197,35 @@ func TestRegisterBuiltinTypesRegistersAllKnownEventTypes(t *testing.T) {
 	assert.False(t, ok, "say is plugin-owned and registered by the loader, not RegisterBuiltinTypes")
 	_, ok = r.Lookup("core-objects:object_create")
 	assert.False(t, ok, "object_create is plugin-owned and registered by the loader, not RegisterBuiltinTypes")
+}
+
+func TestRegisterWithSourceRecordsVersion(t *testing.T) {
+	r := NewVerbRegistry()
+	err := r.RegisterWithSource(VerbRegistration{
+		Type:          "core-communication:say",
+		Category:      "communication",
+		Format:        "speech",
+		Label:         "says",
+		DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL,
+		Source:        "core-communication",
+	}, "0.1.0")
+	require.NoError(t, err)
+
+	assert.Equal(t, "0.1.0", r.SourceVersion("core-communication"))
+	assert.Equal(t, "", r.SourceVersion("nonexistent-plugin"))
+}
+
+func TestRegisterFallsBackToEmptyVersion(t *testing.T) {
+	r := NewVerbRegistry()
+	err := r.Register(VerbRegistration{
+		Type:          "core-objects:object_create",
+		Category:      "state",
+		Format:        "delta",
+		DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_STATE,
+		Source:        "core-objects",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "", r.SourceVersion("core-objects"))
 }
 
 func TestRegisterBuiltinTypesDoesNotIncludeChannelTypes(t *testing.T) {

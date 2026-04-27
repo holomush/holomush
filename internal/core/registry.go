@@ -29,15 +29,25 @@ type MetadataKey struct {
 	ValueType   string // "string", "bool", "object", "array"
 }
 
+// SourceInfo records origin metadata for a verb registration.
+type SourceInfo struct {
+	Source  string // "builtin" or plugin manifest name
+	Version string // host build version for builtin, manifest version for plugins
+}
+
 // VerbRegistry maps event types to their rendering metadata.
 type VerbRegistry struct {
-	mu    sync.RWMutex
-	types map[string]VerbRegistration
+	mu      sync.RWMutex
+	types   map[string]VerbRegistration
+	sources map[string]string // source name -> version
 }
 
 // NewVerbRegistry creates an empty registry.
 func NewVerbRegistry() *VerbRegistry {
-	return &VerbRegistry{types: make(map[string]VerbRegistration)}
+	return &VerbRegistry{
+		types:   make(map[string]VerbRegistration),
+		sources: make(map[string]string),
+	}
 }
 
 // Register adds a type. Returns error if duplicate or invalid.
@@ -112,4 +122,26 @@ func (r *VerbRegistry) UnregisterBySource(source string) int {
 		}
 	}
 	return count
+}
+
+// RegisterWithSource adds a type and records the source's version. Returns
+// error if duplicate or invalid.
+func (r *VerbRegistry) RegisterWithSource(reg VerbRegistration, version string) error {
+	if err := r.Register(reg); err != nil {
+		return err
+	}
+	if reg.Source != "" {
+		r.mu.Lock()
+		r.sources[reg.Source] = version
+		r.mu.Unlock()
+	}
+	return nil
+}
+
+// SourceVersion returns the version recorded for a given source name.
+// Returns "" if source is unknown.
+func (r *VerbRegistry) SourceVersion(source string) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.sources[source]
 }
