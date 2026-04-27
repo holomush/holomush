@@ -6,6 +6,7 @@ syntax = "proto3";
 package holomush.eventbus.v1;
 
 import "google/protobuf/timestamp.proto";
+import "holomush/core/v1/core.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1;eventbusv1";
 
@@ -37,4 +38,8 @@ message Event {
   google.protobuf.Timestamp timestamp = 4;
   Actor actor = 5;
   bytes payload = 6; // codec.Encode output
+  // Rendering metadata, populated by RenderingPublisher.Publish before
+  // marshaling for JetStream. Mirrors the corev1.RenderingMetadata used
+  // on the gRPC Subscribe wire (one schema, two transports).
+  holomush.core.v1.RenderingMetadata rendering = 7;
 }
