@@ -6,6 +6,10 @@ package eventbus
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+	"testing"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -214,6 +218,7 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 	} else if event.Actor.LegacyID != "" {
 		msg.Header.Set(HeaderActorLegacyID, event.Actor.LegacyID)
 	}
+	mergeCallerHeaders(msg.Header, event)
 	// OTEL trace context; no-op when the caller has no active span.
 	telemetry.InjectHeaders(ctx, msg.Header)
 
@@ -230,6 +235,38 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 			Wrap(err)
 	}
 	return nil
+}
+
+// reservedHeaderKeys — keys that event.Headers must never overwrite.
+var reservedHeaderKeys = map[string]struct{}{
+	HeaderMsgID:         {},
+	HeaderCodec:         {},
+	HeaderSchemaVersion: {},
+	HeaderEventType:     {},
+	HeaderActorKind:     {},
+	HeaderActorID:       {},
+	HeaderActorLegacyID: {},
+	"traceparent":       {},
+	"tracestate":        {},
+}
+
+// mergeCallerHeaders copies ev.Headers into msgHeader enforcing the
+// reserved-key collision policy.
+func mergeCallerHeaders(msgHeader nats.Header, ev Event) {
+	if len(ev.Headers) == 0 {
+		return
+	}
+	for k, v := range ev.Headers {
+		if _, reserved := reservedHeaderKeys[k]; reserved || strings.HasPrefix(k, "Nats-") {
+			if testing.Testing() {
+				panic(fmt.Sprintf("eventbus: caller wrote reserved header key %q", k))
+			}
+			slog.Warn("eventbus: caller-written header collides with reserved key; system value wins",
+				"header", k, "event_id", ev.ID.String())
+			continue
+		}
+		msgHeader.Set(k, v)
+	}
 }
 
 // dupeWindowDeadline returns the effective publish deadline:

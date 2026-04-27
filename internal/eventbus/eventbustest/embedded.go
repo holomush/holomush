@@ -11,6 +11,7 @@ package eventbustest
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -165,6 +166,48 @@ func (e *Embedded) AwaitDeliveredSeq(t TB, consumerName string, want uint64, tim
 		}
 		<-time.After(awaitPollInterval)
 	}
+}
+
+// RawMessagesOnSubject returns up to limit messages from the EVENTS stream
+// matching the given subject. Uses an ephemeral ordered consumer so multiple
+// calls are independent. Polls until the consumer drains; no time.Sleep.
+func (e *Embedded) RawMessagesOnSubject(t TB, subject string, limit int, timeout time.Duration) []*nats.Msg {
+	t.Helper()
+	if timeout <= 0 {
+		timeout = DefaultAwaitTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cons, err := e.JS.OrderedConsumer(ctx, eventbus.StreamName, jetstream.OrderedConsumerConfig{
+		FilterSubjects: []string{subject},
+		DeliverPolicy:  jetstream.DeliverAllPolicy,
+	})
+	require.NoError(t, err)
+
+	out := make([]*nats.Msg, 0, limit)
+	for len(out) < limit {
+		msgs, fetchErr := cons.Fetch(limit-len(out), jetstream.FetchMaxWait(200*time.Millisecond))
+		if fetchErr != nil && !errors.Is(fetchErr, nats.ErrTimeout) {
+			require.NoError(t, fetchErr)
+		}
+		empty := true
+		for msg := range msgs.Messages() {
+			empty = false
+			raw := &nats.Msg{
+				Subject: msg.Subject(),
+				Reply:   msg.Reply(),
+				Header:  msg.Headers(),
+				Data:    msg.Data(),
+			}
+			out = append(out, raw)
+			require.NoError(t, msg.Ack())
+		}
+		if empty {
+			break
+		}
+	}
+	return out
 }
 
 // infoAttemptTimeout caps a single JS info RPC. Independent of the caller's

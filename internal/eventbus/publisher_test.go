@@ -335,6 +335,47 @@ func TestPublisherCopiesRenderingIntoEnvelope(t *testing.T) {
 	require.NoError(t, d.Ack())
 }
 
+func TestPublisherMergesHeadersIntoNatsMsg(t *testing.T) {
+	embedded := eventbustest.New(t)
+	pub := embedded.Bus.Publisher()
+
+	ev := eventbus.Event{
+		ID:        core.NewULID(),
+		Subject:   eventbus.Subject("events.main.character.01ABC"),
+		Type:      eventbus.Type("core_communication.say"),
+		Timestamp: time.Now().UTC(),
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
+		Payload:   []byte(`{"message":"hi"}`),
+		Headers:   map[string]string{"App-Rendering": `{"category":"communication"}`},
+	}
+	require.NoError(t, pub.Publish(context.Background(), ev))
+	embedded.AwaitStreamLastSeq(t, 1, 0)
+
+	msgs := embedded.RawMessagesOnSubject(t, "events.main.character.01ABC", 10, 0)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, `{"category":"communication"}`, msgs[0].Header.Get("App-Rendering"))
+	// System headers still present.
+	assert.NotEmpty(t, msgs[0].Header.Get("Nats-Msg-Id"))
+}
+
+func TestPublisherCollidingHeaderPanicsInTests(t *testing.T) {
+	embedded := eventbustest.New(t)
+	pub := embedded.Bus.Publisher()
+
+	ev := eventbus.Event{
+		ID:        core.NewULID(),
+		Subject:   eventbus.Subject("events.main.character.01ABC"),
+		Type:      eventbus.Type("core_communication.say"),
+		Timestamp: time.Now().UTC(),
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
+		Payload:   []byte(`{"message":"hi"}`),
+		Headers:   map[string]string{"Nats-Msg-Id": "naughty"},
+	}
+	assert.Panics(t, func() {
+		_ = pub.Publish(context.Background(), ev)
+	})
+}
+
 func TestIdentityKeySelectorReturnsIdentityAndNoKey(t *testing.T) {
 	// The package-internal identityKeySelector is exercised end-to-end when
 	// no WithCodecSelector is provided. This test covers the default path
