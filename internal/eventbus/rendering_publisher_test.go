@@ -17,6 +17,7 @@ import (
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
@@ -99,6 +100,26 @@ func TestRenderingPublisherStampsAppRenderingHeader(t *testing.T) {
 	// Sanity: header decodes to expected fields.
 	assert.Equal(t, "communication", headerMD.GetCategory())
 	assert.Equal(t, "speech", headerMD.GetFormat())
+}
+
+// TestRenderingPublisherUnknownVerb is INV-GW-3. Registry-miss returns
+// EMIT_UNKNOWN_VERB and does NOT publish.
+func TestRenderingPublisherUnknownVerb(t *testing.T) {
+	inner := &fakePublisher{}
+	rp := eventbus.NewRenderingPublisher(inner, core.NewVerbRegistry()) // empty registry
+
+	ev := eventbus.Event{
+		ID:        ulid.Make(),
+		Subject:   eventbus.Subject("events.main.character.01ABC"),
+		Type:      eventbus.Type("core-communication:say"),
+		Timestamp: time.Now().UTC(),
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindCharacter},
+		Payload:   []byte(`{}`),
+	}
+	err := rp.Publish(context.Background(), ev)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EMIT_UNKNOWN_VERB")
+	assert.Empty(t, inner.published, "must not publish on unknown verb")
 }
 
 // fakePublisher captures events for inspection.
