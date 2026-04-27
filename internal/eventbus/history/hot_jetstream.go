@@ -392,6 +392,7 @@ func decodeJetStreamMessage(ctx context.Context, msg jetstream.Msg, selector cod
 		Timestamp: envelope.GetTimestamp().AsTime(),
 		Actor:     actorFromEnvelope(envelope.GetActor()),
 		Payload:   envelope.GetPayload(),
+		Rendering: eventbus.RenderingFromProto(envelope.GetRendering()),
 	}, nil
 }
 

@@ -161,6 +161,7 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 		Timestamp: timestamppb.New(event.Timestamp),
 		Actor:     ActorToProto(event.Actor),
 		Payload:   event.Payload,
+		Rendering: RenderingToProto(event.Rendering),
 	}
 	plainBytes, err := proto.Marshal(envelope)
 	if err != nil {
