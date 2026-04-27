@@ -539,6 +539,8 @@ tasks:
             echo "       HOLOMUSH_PR_PREP_BYPASS_LOCK=1." >&2
             exit 1
           fi
+      - echo "▸ Running bats shell tests..."
+      - task: test:bats
       - echo "▸ Verifying schema is current..."
       - task: generate:schema
       - cmd: |
