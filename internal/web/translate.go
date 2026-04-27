@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/holomush/holomush/internal/gatewaymetrics"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
@@ -31,9 +32,12 @@ type genericPayload struct {
 
 // translateEvent converts an EventFrame proto into a GameEvent proto suitable
 // for the web client. Reads rendering metadata from EventFrame.Rendering
-// (populated by core's RenderingPublisher at emit time). Events arriving
-// without a Rendering sub-message fall back to system/narrative/TERMINAL
-// for now; Task 31 will replace the fallback with a drop + metric.
+// (populated by core's RenderingPublisher at emit time).
+//
+// INV-GW-5: events arriving without rendering metadata are dropped at the
+// gateway and counted via gatewaymetrics.DroppedNilRenderingTotal. A
+// non-zero counter indicates the core process's RenderingPublisher failed
+// to stamp rendering before publish, or a publisher path bypassed it.
 // Corrupt payloads are logged and return nil.
 func (h *Handler) translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 	var ts int64
@@ -43,23 +47,21 @@ func (h *Handler) translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 
 	eventType := ev.GetType()
 
-	// Read rendering metadata from the wire.
-	var category, format, label string
-	var displayTarget webv1.EventChannel
-
-	if rendering := ev.GetRendering(); rendering != nil {
-		category = rendering.GetCategory()
-		format = rendering.GetFormat()
-		label = rendering.GetLabel()
-		displayTarget = webv1.EventChannel(rendering.GetDisplayTarget())
+	rendering := ev.GetRendering()
+	if rendering == nil {
+		slog.Error("web: dropping event with nil Rendering (INV-GW-5)",
+			"event_id", ev.GetId(),
+			"event_type", eventType,
+			"stream", ev.GetStream(),
+		)
+		gatewaymetrics.DroppedNilRenderingTotal.WithLabelValues(gatewaymetrics.SurfaceWeb, eventType).Inc()
+		return nil
 	}
 
-	// Fallback for events that arrived without rendering metadata.
-	if category == "" {
-		category = "system"
-		format = "narrative"
-		displayTarget = webv1.EventChannel_EVENT_CHANNEL_TERMINAL
-	}
+	category := rendering.GetCategory()
+	format := rendering.GetFormat()
+	label := rendering.GetLabel()
+	displayTarget := webv1.EventChannel(rendering.GetDisplayTarget())
 
 	// State events (location_state, exit_update): payload is the metadata.
 	if category == "state" {

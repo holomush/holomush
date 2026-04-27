@@ -265,15 +265,25 @@ func TestTranslatePipeline_CategoryRendering(t *testing.T) {
 		assert.Equal(t, "Dark Forest", loc["name"])
 	})
 
-	t.Run("FallbackRenderer/unknown_type", func(t *testing.T) {
+	t.Run("UnknownTypeWithRendering/translates_using_wire_metadata", func(t *testing.T) {
+		// When a future plugin defines its own event type, it travels with
+		// rendering metadata stamped by core's RenderingPublisher. The
+		// gateway translates using that metadata — it does NOT consult a
+		// local registry or guess a fallback.
 		ev := &corev1.EventFrame{
 			Type:      "custom_plugin_event",
 			Timestamp: timestamppb.Now(),
 			Payload:   []byte(`{"message": "plugin data"}`),
+			Rendering: &corev1.RenderingMetadata{
+				Category:      "system",
+				Format:        "narrative",
+				DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
+				SourcePlugin:  "future-plugin",
+			},
 		}
 
-		got := h.translateEvent(withRendering(ev))
-		require.NotNil(t, got, "unknown types should get system/narrative fallback, not be dropped")
+		got := h.translateEvent(ev)
+		require.NotNil(t, got, "events with rendering must translate")
 		assert.Equal(t, "custom_plugin_event", got.GetType())
 		assert.Equal(t, "system", got.GetCategory())
 		assert.Equal(t, "narrative", got.GetFormat())

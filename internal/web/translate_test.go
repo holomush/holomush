@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/gatewaymetrics"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
@@ -365,15 +367,25 @@ func TestTranslateEvent_Page(t *testing.T) {
 	assert.Equal(t, "pages", got.GetMetadata().AsMap()["label"])
 }
 
-func TestTranslateEvent_Unknown(t *testing.T) {
+func TestTranslateEventTranslatesEventWithUnknownTypeButPresentRendering(t *testing.T) {
+	// When rendering IS present (a future plugin defines its own types
+	// beyond the host catalog), the gateway translates the event using
+	// the on-the-wire metadata. The gateway no longer "guesses" a fallback
+	// for unknown types — that responsibility belongs to the core process.
 	h := newTestHandler(t)
 	ev := &corev1.EventFrame{
 		Type:    "teleport",
 		Payload: mustMarshal(t, map[string]string{"message": "You teleport away."}),
+		Rendering: &corev1.RenderingMetadata{
+			Category:      "system",
+			Format:        "narrative",
+			DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
+			SourcePlugin:  "future-plugin",
+		},
 	}
 
-	got := h.translateEvent(withRendering(ev))
-	require.NotNil(t, got, "unknown types should fall back, not return nil")
+	got := h.translateEvent(ev)
+	require.NotNil(t, got, "events with rendering must translate even if type is unknown to the host")
 	assert.Equal(t, "teleport", got.GetType())
 	assert.Equal(t, "system", got.GetCategory())
 	assert.Equal(t, "narrative", got.GetFormat())
@@ -392,22 +404,25 @@ func TestTranslateEvent_CorruptPayload(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-func TestTranslateEventFallsBackToSystemWhenRenderingMissing(t *testing.T) {
-	// Events arriving without a Rendering sub-message currently fall back to
-	// system/narrative/TERMINAL. Task 31 will replace the fallback with a
-	// drop + metric so that gateway behavior matches INV-GW-5 (rendering
-	// MUST be populated upstream by the core process).
+func TestTranslateEventDropsEventWithNilRenderingAndIncrementsMetric(t *testing.T) {
+	// INV-GW-5: events arriving without RenderingMetadata are dropped at
+	// the gateway and counted via gatewaymetrics.DroppedNilRenderingTotal.
+	// A non-zero counter indicates an upstream invariant violation in the
+	// core process's RenderingPublisher.
 	h := newTestHandler(t)
+	before := testutil.ToFloat64(gatewaymetrics.DroppedNilRenderingTotal.WithLabelValues(gatewaymetrics.SurfaceWeb, "core-communication:say"))
+
 	ev := &corev1.EventFrame{
 		Type:    "core-communication:say",
 		Payload: mustMarshal(t, map[string]string{"character_name": "Alice", "message": "Hello!"}),
-		// Rendering deliberately not populated.
+		// Rendering deliberately omitted.
 	}
 
 	got := h.translateEvent(ev)
-	require.NotNil(t, got, "should fall back when rendering is nil")
-	assert.Equal(t, "system", got.GetCategory())
-	assert.Equal(t, "narrative", got.GetFormat())
+	assert.Nil(t, got, "events without rendering must be dropped (return nil)")
+
+	after := testutil.ToFloat64(gatewaymetrics.DroppedNilRenderingTotal.WithLabelValues(gatewaymetrics.SurfaceWeb, "core-communication:say"))
+	assert.Equal(t, before+1, after, "drop counter must increment exactly once")
 }
 
 func TestTranslateEvent_StateCorruptPayload(t *testing.T) {

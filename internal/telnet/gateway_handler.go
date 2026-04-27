@@ -23,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/gatewaymetrics"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -860,12 +861,22 @@ func (h *GatewayHandler) sendProtoEvent(ev *corev1.EventFrame) {
 
 // formatEvent dispatches formatting by EventFrame.Rendering category+format.
 // Returns empty string for events that should not be displayed in telnet.
-// Events arriving without rendering metadata fall back to formatFallback;
-// Task 31 will replace the fallback with a drop + metric.
+//
+// INV-GW-5: events arriving without rendering metadata are dropped (return
+// empty string) and counted via gatewaymetrics.DroppedNilRenderingTotal.
+// A non-zero counter indicates the core process's RenderingPublisher
+// failed to stamp rendering before publish, or a publisher path bypassed
+// it. The gateway is a thin protocol-translation layer (Phase 1.6) and
+// MUST NOT compute rendering metadata locally.
 func (h *GatewayHandler) formatEvent(ev *corev1.EventFrame) string {
 	rendering := ev.GetRendering()
 	if rendering == nil {
-		return h.formatFallback(ev)
+		slog.Error("telnet: dropping event with nil Rendering (INV-GW-5)",
+			"event_id", ev.GetId(),
+			"event_type", ev.GetType(),
+		)
+		gatewaymetrics.DroppedNilRenderingTotal.WithLabelValues(gatewaymetrics.SurfaceTelnet, ev.GetType()).Inc()
+		return ""
 	}
 
 	// Only format events targeted at TERMINAL or BOTH.

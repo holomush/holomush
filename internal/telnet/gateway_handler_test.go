@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/gatewaymetrics"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
@@ -354,7 +355,7 @@ func TestGatewayHandler_SendProtoEvent_CommandResponse(t *testing.T) {
 
 	eventStream := &mockSubscribeStream{
 		events: []*corev1.SubscribeResponse{
-			{Frame: &corev1.SubscribeResponse_Event{Event: &corev1.EventFrame{Type: string(core.EventTypeCommandResponse), Payload: payload}}},
+			{Frame: &corev1.SubscribeResponse_Event{Event: withRendering(&corev1.EventFrame{Type: string(core.EventTypeCommandResponse), Payload: payload})}},
 		},
 	}
 
@@ -420,7 +421,7 @@ func TestGatewayHandler_SendProtoEvent_CorruptCommandResponse(t *testing.T) {
 
 	eventStream := &mockSubscribeStream{
 		events: []*corev1.SubscribeResponse{
-			{Frame: &corev1.SubscribeResponse_Event{Event: &corev1.EventFrame{Type: string(core.EventTypeCommandResponse), Payload: []byte("not-valid-json")}}},
+			{Frame: &corev1.SubscribeResponse_Event{Event: withRendering(&corev1.EventFrame{Type: string(core.EventTypeCommandResponse), Payload: []byte("not-valid-json")})}},
 		},
 	}
 
@@ -1265,26 +1266,46 @@ func TestFormatEvent_System(t *testing.T) {
 	assert.Equal(t, "Server restarting in 5 minutes.", got)
 }
 
-func TestFormatEvent_Unknown_WithText(t *testing.T) {
-	h := &GatewayHandler{} // no rendering on event triggers fallback
+func TestFormatEventDropsEventWithNilRenderingAndIncrementsMetric(t *testing.T) {
+	// INV-GW-5: events arriving without RenderingMetadata are dropped at
+	// the gateway and counted via gatewaymetrics.DroppedNilRenderingTotal.
+	// A non-zero counter indicates an upstream invariant violation in the
+	// core process's RenderingPublisher.
+	h := &GatewayHandler{}
+
+	before := testutil.ToFloat64(gatewaymetrics.DroppedNilRenderingTotal.WithLabelValues(gatewaymetrics.SurfaceTelnet, "custom_plugin_event"))
 
 	ev := &corev1.EventFrame{
 		Type:    "custom_plugin_event",
 		Payload: []byte(`{"text":"Something happened."}`),
+		// Rendering deliberately omitted.
 	}
-	got := h.formatEvent(withRendering(ev))
-	assert.Equal(t, "Something happened.", got)
+	got := h.formatEvent(ev)
+	assert.Empty(t, got, "events without rendering must be dropped (return empty string)")
+
+	after := testutil.ToFloat64(gatewaymetrics.DroppedNilRenderingTotal.WithLabelValues(gatewaymetrics.SurfaceTelnet, "custom_plugin_event"))
+	assert.Equal(t, before+1, after, "drop counter must increment exactly once")
 }
 
-func TestFormatEvent_Unknown_NoText(t *testing.T) {
-	h := &GatewayHandler{} // no rendering on event triggers fallback
+func TestFormatEventFallsBackForUnknownCategoryWithRendering(t *testing.T) {
+	// When rendering IS present but the category is unrecognized (e.g., a
+	// future plugin defining a new category), formatEvent invokes
+	// formatFallback rather than dropping. The fallback extracts text from
+	// the payload's text/message fields.
+	h := &GatewayHandler{}
 
 	ev := &corev1.EventFrame{
-		Type:    "mystery",
-		Payload: []byte(`{"data":123}`),
+		Type:    "custom_plugin_event",
+		Payload: []byte(`{"text":"Something happened."}`),
+		Rendering: &corev1.RenderingMetadata{
+			Category:      "future_category",
+			Format:        "narrative",
+			DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
+			SourcePlugin:  "future-plugin",
+		},
 	}
-	got := h.formatEvent(withRendering(ev))
-	assert.Equal(t, "<event: mystery>", got)
+	got := h.formatEvent(ev)
+	assert.Equal(t, "Something happened.", got)
 }
 
 // --- QUIT / LOGOUT behaviour tests ---
