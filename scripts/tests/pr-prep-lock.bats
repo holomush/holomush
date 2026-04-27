@@ -214,3 +214,39 @@ setup() {
   # NOT asserting [ "$status" -eq 75 ] — 75 is reserved for lock-busy
   # (the harness's flock -E 75), not propagated to the user.
 }
+
+# Meta-test: every numbered invariant in the spec MUST have a named bats
+# test. Catches drift between the spec and the suite.
+@test "all_invariants_have_tests: I-1 through I-10 each map to a named test" {
+  local spec="docs/superpowers/specs/2026-04-26-pr-prep-concurrency-safety-design.md"
+  local bats_file="scripts/tests/pr-prep-lock.bats"
+
+  [ -f "$spec" ] || fail "spec not found at $spec"
+  [ -f "$bats_file" ] || fail "bats file not found at $bats_file"
+
+  # Map each invariant to its expected test name.
+  declare -A expected=(
+    [I-1]="acquires_when_idle"
+    [I-2]="rejects_while_held"
+    [I-3]="error_includes_metadata"
+    [I-4]="releases_on_normal_exit"
+    [I-5]="releases_on_sigkill"
+    [I-6]="nonzero_on_failure"
+    [I-7]="precondition_message"
+    [I-8]="non_blocking_acquire"
+    [I-9]="bypass_guard_blocks"
+    [I-10]="pr_prep_run_hidden_from_list"
+  )
+
+  # Each invariant ID must appear in the spec's invariant table.
+  local id
+  for id in "${!expected[@]}"; do
+    grep -q "^| ${id}\b" "$spec" || fail "invariant $id missing from spec table"
+  done
+
+  # Each expected test name must appear in the bats file.
+  local name
+  for name in "${expected[@]}"; do
+    grep -q "@test \"$name" "$bats_file" || fail "test name '$name' missing from $bats_file"
+  done
+}
