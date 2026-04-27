@@ -798,27 +798,25 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 	}
 
 	// Register plugin-declared verbs in the VerbRegistry.
-	if m.verbRegistry != nil && len(dp.Manifest.Verbs) > 0 {
-		for _, vs := range dp.Manifest.Verbs {
-			regErr := m.verbRegistry.Register(core.VerbRegistration{
-				Type:          vs.Type,
-				Category:      vs.Category,
-				Format:        vs.Format,
-				Label:         vs.Label,
-				DisplayTarget: displayTargetFromString(vs.DisplayTarget),
-				Source:        dp.Manifest.Name,
-			})
-			if regErr != nil {
-				// Clean up any verbs already registered from this plugin.
-				m.verbRegistry.UnregisterBySource(dp.Manifest.Name)
-				m.unregisterPluginProviders(dp.Manifest.Name, dp.Manifest.ResourceTypes, len(dp.Manifest.ResourceTypes))
-				if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
-					slog.Error("failed to rollback plugin load after verb registration failure",
-						"plugin", dp.Manifest.Name, "error", unloadErr)
-				}
-				return oops.In("manager").With("plugin", dp.Manifest.Name).
-					With("verb", vs.Type).Wrapf(regErr, "register plugin verb")
+	for _, vs := range dp.Manifest.Verbs {
+		regErr := m.verbRegistry.RegisterWithSource(core.VerbRegistration{
+			Type:          vs.Type,
+			Category:      vs.Category,
+			Format:        vs.Format,
+			Label:         vs.Label,
+			DisplayTarget: displayTargetFromString(vs.DisplayTarget),
+			Source:        dp.Manifest.Name,
+		}, dp.Manifest.Version)
+		if regErr != nil {
+			// Clean up any verbs already registered from this plugin.
+			m.verbRegistry.UnregisterBySource(dp.Manifest.Name)
+			m.unregisterPluginProviders(dp.Manifest.Name, dp.Manifest.ResourceTypes, len(dp.Manifest.ResourceTypes))
+			if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
+				slog.Error("failed to rollback plugin load after verb registration failure",
+					"plugin", dp.Manifest.Name, "error", unloadErr)
 			}
+			return oops.In("manager").With("plugin", dp.Manifest.Name).
+				With("verb", vs.Type).Wrapf(regErr, "register plugin verb")
 		}
 	}
 
