@@ -313,7 +313,7 @@ func TestPublisherCopiesRenderingIntoEnvelope(t *testing.T) {
 	ev := eventbus.Event{
 		ID:        core.NewULID(),
 		Subject:   subject,
-		Type:      eventbus.Type("core_communication.say"),
+		Type:      eventbus.Type("core-communication:say"),
 		Timestamp: time.Now().UTC(),
 		Actor:     eventbus.Actor{Kind: eventbus.ActorKindCharacter, LegacyID: "01ABC"},
 		Payload:   []byte(`{"message":"hello"}`),
@@ -342,7 +342,7 @@ func TestPublisherMergesHeadersIntoNatsMsg(t *testing.T) {
 	ev := eventbus.Event{
 		ID:        core.NewULID(),
 		Subject:   eventbus.Subject("events.main.character.01ABC"),
-		Type:      eventbus.Type("core_communication.say"),
+		Type:      eventbus.Type("core-communication:say"),
 		Timestamp: time.Now().UTC(),
 		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
 		Payload:   []byte(`{"message":"hi"}`),
@@ -365,7 +365,7 @@ func TestPublisherCollidingHeaderPanicsInTests(t *testing.T) {
 	ev := eventbus.Event{
 		ID:        core.NewULID(),
 		Subject:   eventbus.Subject("events.main.character.01ABC"),
-		Type:      eventbus.Type("core_communication.say"),
+		Type:      eventbus.Type("core-communication:say"),
 		Timestamp: time.Now().UTC(),
 		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
 		Payload:   []byte(`{"message":"hi"}`),

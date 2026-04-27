@@ -52,7 +52,15 @@ func TestNewSubjectRejectsInvalidPatterns(t *testing.T) {
 }
 
 func TestNewTypeAcceptsValidPatterns(t *testing.T) {
-	cases := []string{"say", "scene.pose", "scene.lifecycle.created"}
+	// Plain dot-segmented types and the plugin-qualified "plugin-name:verb"
+	// form (spec §7.1) are both valid.
+	cases := []string{
+		"say",
+		"scene.pose",
+		"scene.lifecycle.created",
+		"core-communication:say",  // plugin-qualified form
+		"location_state",
+	}
 	for _, s := range cases {
 		t.Run(s, func(t *testing.T) {
 			got, err := eventbus.NewType(s)
@@ -71,7 +79,7 @@ func TestNewTypeRejectsInvalidPatterns(t *testing.T) {
 		{"uppercase start", "Scene.pose"},
 		{"trailing dot", "scene."},
 		{"double dot", "scene..pose"},
-		{"hyphen", "scene-pose"},
+		// Hyphens are valid (plugin names use them: "core-communication:say").
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

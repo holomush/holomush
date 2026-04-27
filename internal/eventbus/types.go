@@ -126,8 +126,12 @@ type Event struct {
 // directly.
 var subjectTokenRe = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
-// typeRe permits dot-segmented identifiers like "scene.lifecycle.created".
-var typeRe = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`)
+// typeRe permits both dot-segmented identifiers ("scene.lifecycle.created")
+// and the plugin-qualified colon form ("core-communication:say"). Hyphens
+// are allowed in each segment so plugin names that use them (e.g.
+// "core-communication") round-trip unchanged. The two separator styles
+// (dot and colon) may not be mixed in a single type string.
+var typeRe = regexp.MustCompile(`^[a-z][a-z0-9_-]*([.:]([a-z][a-z0-9_-]*))*$`)
 
 // NewSubject validates and constructs a Subject. Returns ErrInvalidSubject
 // on failure.
