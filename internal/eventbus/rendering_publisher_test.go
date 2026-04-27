@@ -13,9 +13,11 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
 
@@ -59,6 +61,44 @@ func TestRenderingPublisherStampsEventRendering(t *testing.T) {
 	assert.Equal(t, eventbus.EventChannelTerminal, got.Rendering.DisplayTarget)
 	assert.Equal(t, "core-communication", got.Rendering.SourcePlugin)
 	assert.Equal(t, "0.1.0", got.Rendering.SourcePluginVersion)
+}
+
+// TestRenderingPublisherStampsAppRenderingHeader is INV-GW-15. The
+// header value MUST encode the same RenderingMetadata as event.Rendering,
+// using protojson.MarshalOptions{UseProtoNames, UseEnumNumbers=false}.
+func TestRenderingPublisherStampsAppRenderingHeader(t *testing.T) {
+	inner := &fakePublisher{}
+	rp := eventbus.NewRenderingPublisher(inner, newSeededTestRegistry(t))
+
+	ev := eventbus.Event{
+		ID:        ulid.Make(),
+		Subject:   eventbus.Subject("events.main.character.01ABC"),
+		Type:      eventbus.Type("core-communication:say"),
+		Timestamp: time.Now().UTC(),
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindCharacter},
+		Payload:   []byte(`{"message":"hi"}`),
+	}
+	require.NoError(t, rp.Publish(context.Background(), ev))
+
+	require.Len(t, inner.published, 1)
+	got := inner.published[0]
+	require.NotNil(t, got.Headers)
+	headerJSON, ok := got.Headers["App-Rendering"]
+	require.True(t, ok, "App-Rendering header missing")
+
+	// Decode header and compare to event.Rendering via the shared canonical form.
+	headerMD := &corev1.RenderingMetadata{}
+	require.NoError(t, protojson.Unmarshal([]byte(headerJSON), headerMD))
+
+	envelopeMD := eventbus.RenderingToProto(got.Rendering)
+	opts := protojson.MarshalOptions{UseProtoNames: true, UseEnumNumbers: false, EmitUnpopulated: true}
+	headerCanonical, _ := opts.Marshal(headerMD)
+	envelopeCanonical, _ := opts.Marshal(envelopeMD)
+	assert.JSONEq(t, string(envelopeCanonical), string(headerCanonical))
+
+	// Sanity: header decodes to expected fields.
+	assert.Equal(t, "communication", headerMD.GetCategory())
+	assert.Equal(t, "speech", headerMD.GetFormat())
 }
 
 // fakePublisher captures events for inspection.

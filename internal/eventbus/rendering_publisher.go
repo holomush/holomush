@@ -65,7 +65,20 @@ func (p *RenderingPublisher) Publish(ctx context.Context, event Event) error {
 		SourcePluginVersion: p.registry.SourceVersion(reg.Source),
 	}
 
-	// Step in Task 12: stamp App-Rendering header.
+	// Stamp the App-Rendering NATS header (protojson form) so the audit
+	// projection can write events_audit.rendering without proto-decoding
+	// the envelope. INV-GW-15 enforces parity with event.Rendering.
+	headerBytes, err := renderingJSONOpts.Marshal(RenderingToProto(event.Rendering))
+	if err != nil {
+		return oops.Code("EMIT_HEADER_MARSHAL_FAILED").
+			With("event_type", string(event.Type)).
+			Wrap(err)
+	}
+	if event.Headers == nil {
+		event.Headers = make(map[string]string, 1)
+	}
+	event.Headers["App-Rendering"] = string(headerBytes)
+
 	// Step in Task 14: protovalidate.
 
 	return p.inner.Publish(ctx, event)
