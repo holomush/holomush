@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 HoloMUSH Contributors
 
-bats_load_library_safe bats-support 2>/dev/null || true
-bats_load_library_safe bats-assert 2>/dev/null || true
 load 'pr-prep-lock-helpers'
 
 # Tests use relative paths (e.g., `task -t scripts/tests/Taskfile.test.yaml`)

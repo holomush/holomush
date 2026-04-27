@@ -36,25 +36,29 @@ ERROR: another pr-prep is running on this machine.
 - **Wait.** The first run will finish in 5–15 minutes; your second invocation will then succeed.
 - **Identify the holder.** The `pid=` line is the kill target. The `workspace=` line tells you which session is running.
 - **Kill the holder process tree if wedged** (see below for why a single `kill` is not enough).
-- **Manual escape hatch (last resort):** `rm -f ${TMPDIR:-/tmp}/holomush-pr-prep/lock`. Only use this if the holder process tree is gone but stale state somehow remains — the kernel-managed release should make this unnecessary in normal cases.
+
+> **Do NOT delete the lockfile to "force" recovery.** With advisory `flock(2)` semantics, if you `rm` the lock file path while the original holder still has its file descriptor open, a new process will create a new inode at the same path and acquire its own (independent) lock — both processes can then "hold the lock" simultaneously, defeating the gate. Recovery is process-based: kill the holder process tree (recipes below) and the kernel releases the lock automatically when all file descriptors close.
 
 ### Killing a wedged holder
 
 A common surprise: `kill <holder-pid>` alone does NOT always release the lock. The flock file descriptor is inherited by every descendant of the holder (the inner shell, `lint`, `golangci-lint`, `go test`, `docker compose`, etc.). The kernel keeps the lock held until ALL descriptors pointing to that open file description are closed. Killing only the visible holder PID leaves orphaned children still holding the lock.
 
-The reliable forms:
+The reliable form (recommended) — find every PID currently holding the lockfile open and kill them all in one shot, with an empty-output guard:
 
 ```bash
-# Kill the entire process tree under the holder PID (recursive, BSD/Linux):
-pkill -TERM -P <holder-pid>; sleep 1; kill -9 <holder-pid> 2>/dev/null; pkill -KILL -P <holder-pid>
-
-# Or simpler on a single-user dev machine where no other 'task' is running:
-killall task
-
-# Or, for the most surgical kill, find every PID holding the lockfile open:
 LOCK="${TMPDIR:-/tmp}/holomush-pr-prep/lock"
-kill -9 $(lsof -t "$LOCK")
+holders=$(lsof -t "$LOCK" 2>/dev/null) && [ -n "$holders" ] && kill -9 $holders
 ```
+
+This mirrors what the I-5 bats test does at `scripts/tests/pr-prep-lock.bats` and is the same approach the kernel uses internally to decide whether the lock is held.
+
+Alternative on a single-user dev machine where no unrelated `task` invocations are running:
+
+```bash
+killall task
+```
+
+> **Why not `pkill -P <holder-pid>`?** `pkill -P` only matches direct children, not grandchildren. A wedged `pr-prep` tree typically looks like `task → sh -c → task pr-prep:run → inner shell → golangci-lint/go test/docker compose/...` and the deepest descendants would survive `pkill -P`, continuing to hold the lock fd. The `lsof -t` recipe above handles the full set in one pass. (Future work: tracked as `holomush-71zq.12`, the production harness could `setsid` the holder so a single `kill -- -<PGID>` reliably tears down the whole group.)
 
 After all fd holders die, the kernel releases the lock within microseconds. Run `task pr-prep` again — it should acquire cleanly.
 
