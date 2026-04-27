@@ -1,9 +1,9 @@
 # pr-prep Concurrency Safety
 
 **Date:** 2026-04-26
-**Status:** Design — READY (rev-6; rev-5 verdict 2026-04-26 1114; rev-6 fixes a `scripts/test/` → `scripts/tests/` path typo caught by plan-reviewer non-blocking finding #4. No semantic changes.)
+**Status:** Design — IMPLEMENTED (rev-7; rev-6 was READY with design-reviewer verdict 2026-04-26 1114; rev-7 amendment 2026-04-27 incorporates six CodeRabbit-driven corrections on PR #2774 — see "Amendment Log" at the end of the document for details. No implementation changes; only spec wording.)
 **Tracking bead:** `holomush-71zq`
-**Related:** `Taskfile.yaml` `pr-prep` target (lines 471–499); `Taskfile.yaml:135-139` (existing `holomush-e2e` compose-project pre-flight check); `docs/superpowers/specs/2026-04-25-session-workspace-isolation-design.md` (multi-agent workspace model that motivates this work); CLAUDE.md MUST rule that `task pr-prep` runs before every push (lines 547, 550, 876)
+**Related:** `Taskfile.yaml` `pr-prep` and `pr-prep:run` tasks; `Taskfile.yaml` `test:e2e` task's existing `holomush-e2e` compose-project pre-flight check (the late-failure mode this design addresses early); `docs/superpowers/specs/2026-04-25-session-workspace-isolation-design.md` (multi-agent workspace model that motivates this work); `CLAUDE.md` MUST rule that `task pr-prep` runs before every push
 
 ## Problem
 
@@ -36,7 +36,7 @@ The user-visible failure mode an operator (human or agent) sees:
 
 ## Goals
 
-1. **MUST serialize `task pr-prep` machine-globally per user.** A second invocation by the same user on the same machine (any workspace, any repo clone) MUST detect the in-flight run before doing any meaningful work and MUST exit non-zero with a clear, actionable message.
+1. **MUST serialize `task pr-prep` machine-locally.** A second invocation that maps to the same lockfile MUST detect the in-flight run before doing any meaningful work and MUST exit non-zero with a clear, actionable message. The lockfile path is `${TMPDIR:-/tmp}/holomush-pr-prep/lock`, so the effective scope is platform-dependent: per-user on macOS (where `$TMPDIR` is automatically per-user under `/var/folders/<hash>/T/`), and machine-global on Linux (where `$TMPDIR` is typically unset and `/tmp` is shared). The per-user scope on macOS is a side effect of the canonical `${TMPDIR}` choice, not a designed cross-user-isolation property — see Non-goal 5.
 2. **MUST be crash-safe.** If the holding process crashes (any signal, including SIGKILL, OOM, kernel panic recovery), the lock MUST release automatically without manual cleanup. This rules out PID-file approaches with manual liveness checking.
 3. **MUST surface holder identity in the collision error.** The error MUST include enough information for the operator (human or agent) to find the running instance: PID (kill target), workspace path, start timestamp, lockfile path.
 4. **MUST be portable across macOS and Linux** with a single mechanism — no platform-specific branching in the Taskfile.
@@ -49,7 +49,7 @@ The user-visible failure mode an operator (human or agent) sees:
 1. **True parallelism.** This design does not enable two `pr-prep` invocations to run concurrently. The user explicitly chose serialization with clear messaging over the complexity of parallelizing all shared resources (compose project namespacing, per-run coverage outputs, etc.).
 2. **Step-aware collision messaging.** The error message includes _that_ a run is in progress and _when_ it started, not _which_ of the 9 steps it is currently in. Heartbeat-style step tracking was considered and rejected as low-value, high-surface-area.
 3. **Block-and-wait behavior.** The colliding invocation fails fast (non-zero exit, no blocking wait) rather than waiting in a loop. Autonomous agents prefer a clear early signal over a long blocking wait. A `--wait` flag is out of scope.
-4. **`--force` override.** Stale locks self-clean when the kernel detects holder death; no override flag is needed for the common case. The escape hatch — `rm -f ${TMPDIR:-/tmp}/holomush-pr-prep/lock` — is documented but unsurfaced as a flag.
+4. **`--force` override.** Stale locks self-clean when the kernel detects holder death; no override flag is needed for the common case. Recovery from a wedged process tree is process-based — kill all PIDs holding the lockfile open via `kill -9 $(lsof -t "$LOCK")` (see `site/docs/contributing/pr-prep.md` "Killing a wedged holder"). Lockfile-deletion is NOT a valid escape hatch: with advisory `flock(2)`, removing the path while a holder still has its fd open lets a new process create a new inode at the same path and acquire its own (independent) lock — both processes then "hold the lock" simultaneously, defeating the gate.
 5. **Cross-user serialization on a single machine.** On macOS, `${TMPDIR}` is per-user (`/var/folders/<hash>/T/`), so user A's lockfile is invisible to user B. The Docker compose project name `holomush-e2e` is engine-global and would still collide across users if two users happened to run `pr-prep` simultaneously. This is acceptable: HoloMUSH dev machines are single-user in practice; the cross-user collision class is rare and the existing `holomush-e2e` pre-flight check still catches it (just with the same late-failure UX). Cross-user lock unification is out of scope.
 6. **Locking other long-running tasks** (`test:e2e`, `test:int`). The pattern is general, but YAGNI: `pr-prep` is the one mandatory pre-push gate. Other tasks MAY adopt the same idiom later if collisions become a real problem.
 7. **Hardening against deliberate bypass.** A motivated user (or misbehaved agent) can always invoke the inner task body directly. We design for honest-mistake protection (clear naming, soft warnings), not adversarial bypass prevention.
@@ -210,15 +210,15 @@ setup:
 
 ### Documentation Deliverables
 
-1. **New file `site/docs/contributing/pr-prep.md`** — short page covering: what `pr-prep` does (mirrors CI), when to run it (before every push), and the concurrent-run behavior (collision error format, what to do on collision, escape hatch). Reachable from `site/docs/contributing/index.md`.
+1. **New file `site/docs/contributing/pr-prep.md`** — short page covering: what `pr-prep` does (mirrors CI), when to run it (before every push), the concurrent-run behavior (collision error format and process-tree-based recovery), and the sanctioned bypass mechanism (`HOLOMUSH_PR_PREP_BYPASS_LOCK=1` for CI/debugging contexts where the lock is intentionally skipped). Reachable from `site/docs/contributing/index.md`.
 2. **`site/docs/contributing/pr-guide.md`** — gains a one-paragraph callout that links to `pr-prep.md` for collision recovery, since pr-guide is the workflow doc operators read first.
-3. **`CLAUDE.md`** — the existing "MUST run `task pr-prep`" sections (lines 547, 550, 876) gain a single sentence noting that pr-prep is now serialized and pointing to the contributing doc for collision behavior.
+3. **`CLAUDE.md`** — the existing "MUST run `task pr-prep`" rule and the "Landing the Plane" reference both gain a single sentence noting that pr-prep is now serialized and pointing to the contributing doc for collision behavior.
 
 These updates are PR-blocking acceptance criteria. The implementation plan MUST schedule them as part of the same PR, not follow-up beads.
 
 ## Numbered Invariants
 
-Each invariant is enforced by a named test in the bats suite (see "Test Plan" below). The meta-test `all_invariants_have_tests.bats` MUST verify that every invariant ID (`I-1` … `I-10`) appears in a test name in `pr-prep-lock.bats`.
+Each invariant is enforced by a named test in the bats suite (see "Test Plan" below). The meta-test `all_invariants_have_tests` (a named `@test` block inside `scripts/tests/pr-prep-lock.bats`) MUST verify that every invariant ID (`I-1` … `I-10`) appears in a test name in `pr-prep-lock.bats`.
 
 | #    | Invariant                                                                                                                                                        | Enforcing test            |
 | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
@@ -235,7 +235,7 @@ Each invariant is enforced by a named test in the bats suite (see "Test Plan" be
 
 ## Test Plan
 
-Tests use [bats](https://bats-core.readthedocs.io/) (the project already lists `bats-testing-patterns` as a known skill). Test file: `scripts/tests/pr-prep-lock.bats` (alongside the existing `scripts/tests/test_*.py` Python tests). Bats infrastructure (runner integration, where it wires into `task lint`/`task test`) is deferred to the implementation plan since no bats suite currently exists in the repo.
+Tests use [bats](https://bats-core.readthedocs.io/) (the project already lists `bats-testing-patterns` as a known skill). Test file: `scripts/tests/pr-prep-lock.bats` (alongside the existing `scripts/tests/test_*.py` Python tests). The bats runner is wired as `task test:bats` and runs as the first step of `pr-prep:run` in production `Taskfile.yaml`; this section documents the strategy and invariants.
 
 The tests do NOT invoke the real `pr-prep:run` body. Instead they exercise the locking idiom against a stub fixture Taskfile that defines:
 
@@ -315,7 +315,7 @@ The 2s budget is empirically generous; the actual kernel cleanup is sub-millisec
 The implementation PR is mergeable when:
 
 1. All 10 invariant tests pass under the bats runner integrated by the implementation plan.
-2. The meta-test `all_invariants_have_tests.bats` passes.
+2. The meta-test `all_invariants_have_tests` (in `scripts/tests/pr-prep-lock.bats`) passes.
 3. The implementer smoke-tests `task pr-prep` end-to-end on the maintainer's macOS workstation: (a) one full successful run; (b) one deliberate collision run — start a holder in another terminal, invoke `task pr-prep` in this terminal while the holder is still running, verify the COLLIDED stderr message and non-zero exit; (c) one post-success retry — after the holder from (a) completes, invoke `task pr-prep` again in the same workspace and verify it acquires the lock without error. This is operator attestation, not a CI gate; the bats suite enforces all numbered invariants.
 4. CI passes. The CI workflow MUST set `HOLOMUSH_PR_PREP_BYPASS_LOCK=1` if it invokes `pr-prep:run` directly (or invoke `task pr-prep` and rely on the lock being uncontended on a fresh runner). Either form is acceptable; the implementation plan picks one.
 5. `site/docs/contributing/pr-prep.md` exists and is reachable from `site/docs/contributing/index.md`. `site/docs/contributing/pr-guide.md` links to it. CLAUDE.md is updated.
@@ -325,3 +325,22 @@ The implementation PR is mergeable when:
 ## Open Questions
 
 None at design-approval time. Operational details (bats test runner integration, where it wires into `task lint`/`task test`, exact CI workflow change for the bypass env var) are deferred to the implementation plan.
+
+## Amendment Log
+
+### rev-7 (2026-04-27) — Multiple corrections from CodeRabbit feedback on PR #2774
+
+**Trigger:** CodeRabbit feedback on PR #2774 surfaced six accuracy issues across this spec and the docs derived from it.
+
+**Changes:**
+
+1. **Goal 1** rewritten to acknowledge that the lock's scope is platform-dependent (per-user on macOS via `$TMPDIR`, machine-global on Linux where `/tmp` is shared) rather than uniformly per-user. The new wording uses "machine-locally" as the goal and explicitly names the platform behavior as a consequence of the `${TMPDIR:-/tmp}` choice. Non-goal 5 (cross-user serialization) was already accurate and is unchanged.
+2. **Non-goal 4 (`--force` override)** rewritten to remove the `rm -f ${TMPDIR:-/tmp}/holomush-pr-prep/lock` recommendation. With advisory `flock(2)`, deleting the path while a holder still has its fd open lets a new process create a new inode at the same path and acquire an independent lock — both processes then "hold the lock" simultaneously, defeating the gate. Recovery is now correctly described as process-based (`kill -9 $(lsof -t "$LOCK")`), with an explicit warning against lockfile deletion. Matches the corrected `pr-prep.md` and `pr-guide.md` shipped earlier in this PR.
+3. **`Related` header** changed from line-number-anchored references (`Taskfile.yaml:135-139`, `lines 471-499`, CLAUDE.md `lines 547, 550, 876`) to symbol/task-name references. Line numbers drift across PRs; symbols don't.
+4. **§Documentation Deliverables item 1** replaced ambiguous "escape hatch" terminology with explicit naming of the sanctioned bypass mechanism (`HOLOMUSH_PR_PREP_BYPASS_LOCK=1` for CI/debugging contexts). Avoids confusion now that Non-goal 4 explicitly removes the lockfile-deletion escape hatch. §Documentation Deliverables item 3 (CLAUDE.md update target) likewise dropped its line-number references.
+5. **Meta-test references corrected.** Lines that pointed at a non-existent file `all_invariants_have_tests.bats` now correctly reference the named `@test` block inside `scripts/tests/pr-prep-lock.bats` (the actual implemented location). Affected: §Numbered Invariants prose and §Acceptance Criteria item 2.
+6. **§Test Plan stale wording removed.** The sentence "Bats infrastructure (runner integration ...) is deferred to the implementation plan since no bats suite currently exists in the repo" was true at design time but stale post-implementation. Replaced with a description of the implemented wiring (`task test:bats` + first step of `pr-prep:run`).
+
+**Implementation impact:** None. The lock harness shipped on PR #2774 already implements the correct behavior; only the spec's framing was misleading. The corrected wording is now consistent with `pr-guide.md` and `pr-prep.md` (both also updated on PR #2774).
+
+**Reference:** PR #2774 review threads on `pr-guide.md`, `pr-prep.md`, and this spec.
