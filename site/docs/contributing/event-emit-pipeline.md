@@ -6,7 +6,7 @@ subscribers.
 
 ## Publisher chain
 
-```
+```text
 plugin/host emit site
     ↓
 RenderingPublisher.Publish()      ← single enrichment site

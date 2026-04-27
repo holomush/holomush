@@ -37,7 +37,7 @@ verbs:
 
 ## How verb metadata flows
 
-```
+```text
 manifest.yaml verbs:
     ↓ plugin loader reads at LoadAll
 VerbRegistry.RegisterWithSource(reg, manifest.Version)
