@@ -367,7 +367,7 @@ func RenderingFromProto(p *corev1.RenderingMetadata) *RenderingMetadata {
 		Category:            p.GetCategory(),
 		Format:              p.GetFormat(),
 		Label:               p.GetLabel(),
-		DisplayTarget:       EventChannel(p.GetDisplayTarget()),
+		DisplayTarget:       EventChannel(p.GetDisplayTarget()), //nolint:gosec // G115: EventChannel values are bounded 0-3 by proto enum; no overflow possible
 		SourcePlugin:        p.GetSourcePlugin(),
 		SourcePluginVersion: p.GetSourcePluginVersion(),
 	}

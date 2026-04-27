@@ -67,7 +67,7 @@ func (p *RenderingPublisher) Publish(ctx context.Context, event Event) error {
 		Category:            reg.Category,
 		Format:              reg.Format,
 		Label:               reg.Label,
-		DisplayTarget:       EventChannel(reg.DisplayTarget),
+		DisplayTarget:       EventChannel(reg.DisplayTarget), //nolint:gosec // G115: EventChannel values are bounded 0-3 by proto enum; no overflow possible
 		SourcePlugin:        reg.Source,
 		SourcePluginVersion: p.registry.SourceVersion(reg.Source),
 	}
@@ -93,10 +93,18 @@ func (p *RenderingPublisher) Publish(ctx context.Context, event Event) error {
 			Wrap(vErr)
 	}
 
-	return p.inner.Publish(ctx, event)
+	if err := p.inner.Publish(ctx, event); err != nil {
+		return oops.Code("EMIT_PUBLISH_FAILED").
+			With("event_type", string(event.Type)).
+			Wrap(err)
+	}
+	return nil
 }
 
 // validateRendering runs protovalidate against a RenderingMetadata proto.
 func (p *RenderingPublisher) validateRendering(md *corev1.RenderingMetadata) error {
-	return p.validator.Validate(md)
+	if err := p.validator.Validate(md); err != nil {
+		return oops.Wrap(err)
+	}
+	return nil
 }

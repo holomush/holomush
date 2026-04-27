@@ -63,10 +63,14 @@ type Actor struct {
 type EventChannel uint8
 
 const (
+	// EventChannelUnspecified is the zero value; must not be used in production registrations.
 	EventChannelUnspecified EventChannel = 0
-	EventChannelTerminal    EventChannel = 1
-	EventChannelState       EventChannel = 2
-	EventChannelBoth        EventChannel = 3
+	// EventChannelTerminal routes events to the terminal/telnet scroll-back only.
+	EventChannelTerminal EventChannel = 1
+	// EventChannelState routes events to the state sidebar only.
+	EventChannelState EventChannel = 2
+	// EventChannelBoth routes events to both terminal and state sidebar.
+	EventChannelBoth EventChannel = 3
 )
 
 // RenderingMetadata is the host-side representation of corev1.RenderingMetadata.

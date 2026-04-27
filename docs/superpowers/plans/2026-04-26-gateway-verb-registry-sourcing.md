@@ -69,17 +69,19 @@
 
 ---
 
-# PHASE P0 — PRE-FLIGHT SURVEY
+## PHASE P0 — PRE-FLIGHT SURVEY
 
 ### Task 0: Survey plugin manager construction sites
 
 **Files:**
+
 - Read-only: scan `internal/plugin/manager.go`, `internal/plugin/setup/`, `internal/plugin/goplugin/`, `cmd/holomush/sub_grpc.go`, all `*_test.go` under `internal/plugin/` and `test/integration/plugin/`
 - Create: `docs/superpowers/plans/2026-04-26-task-0-survey.md` (working notes — committed for traceability, not shipped to site/)
 
 - [ ] **Step 1: Enumerate every `plugins.NewManager(...)` / `plugin.NewManager(...)` call site**
 
 Run:
+
 ```bash
 rg -n 'plugins?\.NewManager\(' --type go
 rg -n 'NewManager\(' internal/plugin/ --type go
@@ -102,11 +104,12 @@ jj new
 
 ---
 
-# PHASE P1 — PROTO FOUNDATION
+## PHASE P1 — PROTO FOUNDATION
 
 ### Task 1: Add `RenderingMetadata` + `EventChannel` to `corev1`
 
 **Files:**
+
 - Modify: `api/proto/holomush/core/v1/core.proto`
 
 - [ ] **Step 1: Add `RenderingMetadata` message and `EventChannel` enum**
@@ -190,9 +193,10 @@ jj new
 
 ---
 
-### Task 2: Add `EventFrame.rendering` field
+#### Task 2: Add `EventFrame.rendering` field
 
 **Files:**
+
 - Modify: `api/proto/holomush/core/v1/core.proto`
 
 - [ ] **Step 1: Add `rendering` field to `EventFrame`**
@@ -233,9 +237,10 @@ jj new
 
 ---
 
-### Task 3: Add `Event.rendering` field to `eventbusv1`
+#### Task 3: Add `Event.rendering` field to `eventbusv1`
 
 **Files:**
+
 - Modify: `api/proto/holomush/eventbus/v1/eventbus.proto`
 
 - [ ] **Step 1: Import `core/v1` and add the field**
@@ -279,11 +284,12 @@ jj new
 
 ---
 
-# PHASE P2 — VERB REGISTRY EXTENSIONS
+## PHASE P2 — VERB REGISTRY EXTENSIONS
 
 ### Task 4: Add `SourceInfo` + `RegisterWithSource` + `SourceVersion`
 
 **Files:**
+
 - Modify: `internal/core/registry.go`
 - Test: `internal/core/registry_test.go`
 
@@ -406,9 +412,10 @@ jj new
 
 ---
 
-### Task 5: `BootstrapVerbRegistry` + unexport `registerBuiltinTypes`
+#### Task 5: `BootstrapVerbRegistry` + unexport `registerBuiltinTypes`
 
 **Files:**
+
 - Modify: `internal/core/builtins.go`
 - Modify: `internal/core/registry_test.go` (call sites)
 - Create: `internal/core/exports_test.go`
@@ -594,11 +601,12 @@ jj new
 
 ---
 
-# PHASE P3 — `eventbus.Event` GO-STRUCT EXTENSIONS
+## PHASE P3 — `eventbus.Event` GO-STRUCT EXTENSIONS
 
 ### Task 6: Add `Rendering` field + Go-side mirror types
 
 **Files:**
+
 - Modify: `internal/eventbus/types.go`
 - Test: `internal/eventbus/types_proto_sync_test.go` (new file, written in Task 8)
 
@@ -657,9 +665,10 @@ jj new
 
 ---
 
-### Task 7: Add `Headers` field for pre-publish NATS headers
+#### Task 7: Add `Headers` field for pre-publish NATS headers
 
 **Files:**
+
 - Modify: `internal/eventbus/types.go`
 
 - [ ] **Step 1: Add the field**
@@ -702,9 +711,10 @@ jj new
 
 ---
 
-### Task 8: `renderingToProto` + `renderingFromProto` helpers + `INV-GW-14` parity test
+#### Task 8: `renderingToProto` + `renderingFromProto` helpers + `INV-GW-14` parity test
 
 **Files:**
+
 - Modify: `internal/eventbus/publisher.go` (or create `internal/eventbus/types_proto.go` if the plan prefers separation)
 - Create: `internal/eventbus/types_proto_sync_test.go`
 
@@ -850,11 +860,12 @@ jj new
 
 ---
 
-# PHASE P4 — JETSTREAM PUBLISHER UPDATES
+## PHASE P4 — JETSTREAM PUBLISHER UPDATES
 
 ### Task 9: Copy `event.Rendering` into proto envelope (`INV-GW-3a`)
 
 **Files:**
+
 - Modify: `internal/eventbus/publisher.go`
 - Test: `internal/eventbus/publisher_test.go`
 
@@ -1005,9 +1016,10 @@ jj new
 
 ---
 
-### Task 10: Merge `event.Headers` into `nats.Msg.Header` with collision policy
+#### Task 10: Merge `event.Headers` into `nats.Msg.Header` with collision policy
 
 **Files:**
+
 - Modify: `internal/eventbus/publisher.go`
 - Test: `internal/eventbus/publisher_test.go`
 
@@ -1216,11 +1228,12 @@ jj new
 
 ---
 
-# PHASE P5 — RENDERING PUBLISHER
+## PHASE P5 — RENDERING PUBLISHER
 
 ### Task 11: Create `RenderingPublisher` skeleton + lookup-and-stamp (`INV-GW-2`)
 
 **Files:**
+
 - Create: `internal/eventbus/rendering_publisher.go`
 - Create: `internal/eventbus/rendering_publisher_test.go`
 
@@ -1423,9 +1436,10 @@ jj new
 
 ---
 
-### Task 12: Stamp `App-Rendering` header + `INV-GW-15` parity test
+#### Task 12: Stamp `App-Rendering` header + `INV-GW-15` parity test
 
 **Files:**
+
 - Modify: `internal/eventbus/rendering_publisher.go`
 - Modify: `internal/eventbus/rendering_publisher_test.go`
 
@@ -1539,9 +1553,10 @@ jj new
 
 ---
 
-### Task 13: Strict-mode `EMIT_UNKNOWN_VERB` (`INV-GW-3`)
+#### Task 13: Strict-mode `EMIT_UNKNOWN_VERB` (`INV-GW-3`)
 
 **Files:**
+
 - Modify: `internal/eventbus/rendering_publisher_test.go`
 
 - [ ] **Step 1: Write the failing test**
@@ -1592,9 +1607,10 @@ jj new
 
 ---
 
-### Task 14: `protovalidate.Validate` step + `INV-GW-4`
+#### Task 14: `protovalidate.Validate` step + `INV-GW-4`
 
 **Files:**
+
 - Modify: `internal/eventbus/rendering_publisher.go`
 - Modify: `internal/eventbus/rendering_publisher_test.go`
 
@@ -1784,9 +1800,10 @@ jj new
 
 ---
 
-### Task 15: `INV-GW-9` — `source_plugin` and `source_plugin_version` populated; "builtin" + "host-<version>"
+#### Task 15: `INV-GW-9` — `source_plugin` and `source_plugin_version` populated; "builtin" + "host-<version>"
 
 **Files:**
+
 - Modify: `internal/eventbus/rendering_publisher_test.go`
 
 - [ ] **Step 1: Write the failing test**
@@ -1871,11 +1888,12 @@ jj new
 
 ---
 
-# PHASE P6 — WIRE EVENTBUS THROUGH
+## PHASE P6 — WIRE EVENTBUS THROUGH
 
 ### Task 16: `gRPC Subscribe`: copy `Rendering` to `EventFrame`
 
 **Files:**
+
 - Modify: `internal/grpc/server.go`
 
 - [ ] **Step 1: Read the current implementation**
@@ -1929,9 +1947,10 @@ jj new
 
 ---
 
-### Task 17: `gRPC QueryStreamHistory`: copy `Rendering` to `EventFrame`
+#### Task 17: `gRPC QueryStreamHistory`: copy `Rendering` to `EventFrame`
 
 **Files:**
+
 - Modify: `internal/grpc/query_stream_history.go`
 
 - [ ] **Step 1: Locate the EventFrame builders**
@@ -1969,11 +1988,12 @@ jj new
 
 ---
 
-# PHASE P7 — CORE BOOT WIRING
+## PHASE P7 — CORE BOOT WIRING
 
 ### Task 18: `cmd/holomush/core.go` — call `BootstrapVerbRegistry(version)` and thread into subsystem configs
 
 **Files:**
+
 - Modify: `cmd/holomush/core.go`
 - Modify: `cmd/holomush/sub_grpc.go` (add `VerbRegistry` field to `grpcSubsystemConfig`)
 - Modify: `internal/plugin/setup/subsystem.go` (add `VerbRegistry` field if absent)
@@ -2072,9 +2092,10 @@ jj new
 
 ---
 
-### Task 19: `cmd/holomush/sub_grpc.go` — wire `RenderingPublisher` into both consumers + AC#10 unit test
+#### Task 19: `cmd/holomush/sub_grpc.go` — wire `RenderingPublisher` into both consumers + AC#10 unit test
 
 **Files:**
+
 - Modify: `cmd/holomush/sub_grpc.go`
 - Test: `cmd/holomush/sub_grpc_test.go`
 
@@ -2237,11 +2258,12 @@ jj new
 
 ---
 
-# PHASE P8 — PLUGIN MANAGER TIGHTENING + REMAINING PIECES
+## PHASE P8 — PLUGIN MANAGER TIGHTENING + REMAINING PIECES
 
 ### Task 20: Plugin manager — `ErrMissingVerbRegistry`, required check, `INV-GW-10` test
 
 **Files:**
+
 - Modify: `internal/plugin/manager.go`
 - Test: `internal/plugin/manager_test.go`
 - Migration: per the Task 0 survey
@@ -2249,10 +2271,11 @@ jj new
 - [ ] **Step 1: Pre-flight migration**
 
 Open `docs/superpowers/plans/2026-04-26-task-0-survey.md` (from Task 0) and apply each row's migration:
-  - Pure construction tests → `core.NewVerbRegistry()`
-  - Emit tests → `core.BootstrapVerbRegistry("test")` (+ explicit plugin verb registration if needed)
-  - Manifest-load tests → `core.NewVerbRegistry()`
-  - Builtin-emit tests → `core.BootstrapVerbRegistry("test")`
+
+- Pure construction tests → `core.NewVerbRegistry()`
+- Emit tests → `core.BootstrapVerbRegistry("test")` (+ explicit plugin verb registration if needed)
+- Manifest-load tests → `core.NewVerbRegistry()`
+- Builtin-emit tests → `core.BootstrapVerbRegistry("test")`
 
 For each test site, edit the file to pass `WithVerbRegistry(...)` with the appropriate registry shape.
 
@@ -2322,9 +2345,10 @@ jj new
 
 ---
 
-### Task 21: Plugin manager — `RegisterWithSource` call
+#### Task 21: Plugin manager — `RegisterWithSource` call
 
 **Files:**
+
 - Modify: `internal/plugin/manager.go`
 
 - [ ] **Step 1: Update the verb-registration loop**
@@ -2376,9 +2400,10 @@ jj new
 
 ---
 
-### Task 22: `VerbRegistration.DisplayTarget` → `corev1.EventChannel`
+#### Task 22: `VerbRegistration.DisplayTarget` → `corev1.EventChannel`
 
 **Files:**
+
 - Modify: `internal/core/registry.go`
 - Modify: `internal/core/builtins.go`
 - Modify: `internal/plugin/manager.go` (`displayTargetFromString` helper)
@@ -2456,9 +2481,10 @@ jj new
 
 ---
 
-### Task 23: Cold-tier reader populates `Event.Rendering`
+#### Task 23: Cold-tier reader populates `Event.Rendering`
 
 **Files:**
+
 - Modify: `internal/eventbus/history/cold_postgres.go`
 
 - [ ] **Step 1: Locate the cold-tier reader**
@@ -2518,9 +2544,10 @@ Defer commit until Task 24 lands the migration. See Task 24.
 
 ---
 
-### Task 24: Migration `000012_events_audit_rendering` + audit projection writer (single commit)
+#### Task 24: Migration `000012_events_audit_rendering` + audit projection writer (single commit)
 
 **Files:**
+
 - Create: `internal/store/migrations/000012_events_audit_rendering.up.sql`
 - Create: `internal/store/migrations/000012_events_audit_rendering.down.sql`
 - Modify: `internal/eventbus/audit/projection.go`
@@ -2669,7 +2696,7 @@ jj new
 
 ---
 
-### Task 25: (merged into Task 24)
+#### Task 25: (merged into Task 24)
 
 The original Task 25 (audit projection writer) was merged into Task 24
 to avoid the broken intermediate state. Task numbering retains a gap at
@@ -2677,9 +2704,10 @@ to avoid the broken intermediate state. Task numbering retains a gap at
 
 ---
 
-### Task 26: Integration test for `INV-GW-6` and `INV-GW-13`
+#### Task 26: Integration test for `INV-GW-6` and `INV-GW-13`
 
 **Files:**
+
 - Create: `test/integration/eventbus_e2e/rendering_completeness_test.go`
 
 The test colocates with the existing eventbus integration suite at
@@ -2803,11 +2831,12 @@ jj new
 
 ---
 
-# PHASE P9 — GATEWAY THINNESS
+## PHASE P9 — GATEWAY THINNESS
 
 ### Task 27: Delete gateway-side VerbRegistry and duplicate Prometheus metric registration
 
 **Files:**
+
 - Modify: `cmd/holomush/gateway.go`
 
 - [ ] **Step 1: Verify the duplicate is duplicate**
@@ -2845,9 +2874,10 @@ See Task 28.
 
 ---
 
-### Task 28: Drop `WithVerbRegistry` options from web Handler and telnet handler
+#### Task 28: Drop `WithVerbRegistry` options from web Handler and telnet handler
 
 **Files:**
+
 - Modify: `internal/web/handler.go`
 - Modify: `internal/telnet/gateway_handler.go`
 - Modify: `internal/web/handler_test.go`, `internal/telnet/gateway_handler_test.go` (drop calls to the option)
@@ -2883,9 +2913,10 @@ jj new
 
 ---
 
-### Task 29: `internal/web/translate.go` — read `ev.GetRendering()`, nil-drop, conversion
+#### Task 29: `internal/web/translate.go` — read `ev.GetRendering()`, nil-drop, conversion
 
 **Files:**
+
 - Modify: `internal/web/translate.go`
 - Test: `internal/web/translate_test.go`
 
@@ -2989,9 +3020,10 @@ See Task 31.
 
 ---
 
-### Task 30: `internal/telnet/gateway_handler.go` — read `ev.GetRendering()`, nil-drop
+#### Task 30: `internal/telnet/gateway_handler.go` — read `ev.GetRendering()`, nil-drop
 
 **Files:**
+
 - Modify: `internal/telnet/gateway_handler.go`
 - Test: `internal/telnet/gateway_handler_test.go`
 
@@ -3143,9 +3175,10 @@ Expected: PASS. (Combined commit with Tasks 29 + 31 — see Task 31.)
 
 ---
 
-### Task 31: Add `holomush_gateway_dropped_nil_rendering_total` metric
+#### Task 31: Add `holomush_gateway_dropped_nil_rendering_total` metric
 
 **Files:**
+
 - Create or modify: `internal/web/metrics.go` (or wherever gateway-side metrics live)
 
 - [ ] **Step 1: Define the metric**
@@ -3187,11 +3220,12 @@ jj new
 
 ---
 
-# PHASE P10 — TRIPWIRE, META-TEST, ENUM PARITY
+## PHASE P10 — TRIPWIRE, META-TEST, ENUM PARITY
 
 ### Task 32: Import-graph tripwire test (`INV-GW-1`)
 
 **Files:**
+
 - Create: `cmd/holomush/gateway_imports_test.go`
 
 - [ ] **Step 1: Create the test**
@@ -3219,9 +3253,10 @@ jj new
 
 ---
 
-### Task 33: Enum parity test (`INV-GW-16`)
+#### Task 33: Enum parity test (`INV-GW-16`)
 
 **Files:**
+
 - Modify: `internal/web/translate_test.go`
 
 - [ ] **Step 1: Add the test**
@@ -3272,9 +3307,10 @@ jj new
 
 ---
 
-### Task 34: Meta-test for invariant coverage
+#### Task 34: Meta-test for invariant coverage
 
 **Files:**
+
 - Create: `test/integration/gateway_invariants/meta_test.go`
 
 - [ ] **Step 1: Create the test**
@@ -3395,11 +3431,12 @@ jj new
 
 ---
 
-# PHASE P11 — DOCUMENTATION
+## PHASE P11 — DOCUMENTATION
 
 ### Task 35: `site/docs/contributing/gateway-boundary.md`
 
 **Files:**
+
 - Create: `site/docs/contributing/gateway-boundary.md`
 
 - [ ] **Step 1: Write the doc**
@@ -3410,7 +3447,8 @@ Create `site/docs/contributing/gateway-boundary.md`:
 # Gateway Boundary
 
 The gateway process (`cmd/holomush gateway`) is a **protocol translation
-+ connection management layer**. It MUST NOT hold domain state, perform
+
+- connection management layer**. It MUST NOT hold domain state, perform
 domain logic, or import domain packages.
 
 ## What the gateway does
@@ -3480,9 +3518,10 @@ jj new
 
 ---
 
-### Task 36: `site/docs/contributing/event-emit-pipeline.md`
+#### Task 36: `site/docs/contributing/event-emit-pipeline.md`
 
 **Files:**
+
 - Create: `site/docs/contributing/event-emit-pipeline.md`
 
 - [ ] **Step 1: Write the doc**
@@ -3508,9 +3547,10 @@ jj new
 
 ---
 
-### Task 37: `site/docs/contributing/architecture.md` update
+#### Task 37: `site/docs/contributing/architecture.md` update
 
 **Files:**
+
 - Modify: `site/docs/contributing/architecture.md`
 
 - [ ] **Step 1: Update the gateway-boundary section**
@@ -3533,9 +3573,10 @@ jj new
 
 ---
 
-### Task 38: `site/docs/extending/verb-registration.md`
+#### Task 38: `site/docs/extending/verb-registration.md`
 
 **Files:**
+
 - Create or extend: `site/docs/extending/verb-registration.md`
 
 - [ ] **Step 1: Write the doc**
@@ -3559,9 +3600,10 @@ jj new
 
 ---
 
-### Task 39: `site/docs/operating/plugin-reloads.md` update
+#### Task 39: `site/docs/operating/plugin-reloads.md` update
 
 **Files:**
+
 - Modify: `site/docs/operating/plugin-reloads.md`
 
 - [ ] **Step 1: Add the historical-fidelity section**
@@ -3583,7 +3625,7 @@ jj new
 
 ---
 
-# PHASE P12 — FINAL VERIFICATION
+## PHASE P12 — FINAL VERIFICATION
 
 ### Task 40: Run `task pr-prep`
 
@@ -3621,7 +3663,7 @@ jj new
 
 ---
 
-### Task 41: Close `holomush-k18g.5`
+#### Task 41: Close `holomush-k18g.5`
 
 **Files:** none (bead operation)
 
@@ -3643,7 +3685,7 @@ bd dolt push
 
 ---
 
-## Self-Review Notes
+### Self-Review Notes
 
 The plan covers spec Section 10's 19 acceptance criteria as follows:
 

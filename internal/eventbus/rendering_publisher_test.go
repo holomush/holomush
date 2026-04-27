@@ -187,7 +187,7 @@ type fakePublisher struct {
 	err       error
 }
 
-func (f *fakePublisher) Publish(ctx context.Context, ev eventbus.Event) error {
+func (f *fakePublisher) Publish(_ context.Context, ev eventbus.Event) error {
 	if f.err != nil {
 		return f.err
 	}
