@@ -346,14 +346,16 @@ func TestPublisherMergesHeadersIntoNatsMsg(t *testing.T) {
 		Timestamp: time.Now().UTC(),
 		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
 		Payload:   []byte(`{"message":"hi"}`),
-		Headers:   map[string]string{"App-Rendering": `{"category":"communication"}`},
+		// App-Rendering is reserved (written by RenderingPublisher only).
+		// Use a different App-* key to test the merge path.
+		Headers: map[string]string{"App-Custom-Trace": "trace-value-1"},
 	}
 	require.NoError(t, pub.Publish(context.Background(), ev))
 	embedded.AwaitStreamLastSeq(t, 1, 0)
 
 	msgs := embedded.RawMessagesOnSubject(t, "events.main.character.01ABC", 10, 0)
 	require.Len(t, msgs, 1)
-	assert.Equal(t, `{"category":"communication"}`, msgs[0].Header.Get("App-Rendering"))
+	assert.Equal(t, "trace-value-1", msgs[0].Header.Get("App-Custom-Trace"))
 	// System headers still present.
 	assert.NotEmpty(t, msgs[0].Header.Get("Nats-Msg-Id"))
 }
@@ -370,6 +372,24 @@ func TestPublisherCollidingHeaderPanicsInTests(t *testing.T) {
 		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
 		Payload:   []byte(`{"message":"hi"}`),
 		Headers:   map[string]string{"Nats-Msg-Id": "naughty"},
+	}
+	assert.Panics(t, func() {
+		_ = pub.Publish(context.Background(), ev)
+	})
+}
+
+func TestPublisherAppRenderingIsReserved(t *testing.T) {
+	embedded := eventbustest.New(t)
+	pub := embedded.Bus.Publisher()
+
+	ev := eventbus.Event{
+		ID:      core.NewULID(),
+		Subject: eventbus.Subject("events.main.character.01ABC"),
+		Type:    eventbus.Type("core-communication:say"),
+		Actor:   eventbus.Actor{Kind: eventbus.ActorKindSystem},
+		Payload: []byte(`{}`),
+		// App-Rendering is reserved for RenderingPublisher; callers must not write it.
+		Headers: map[string]string{"App-Rendering": `{"category":"x"}`},
 	}
 	assert.Panics(t, func() {
 		_ = pub.Publish(context.Background(), ev)
