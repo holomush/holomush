@@ -25,6 +25,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/config"
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
@@ -253,6 +254,12 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		go monitorServerErrors(obsCtx, cancel, obsErrChan, "observability")
 	}
 
+	// --- 6b. Verb registry ---
+	verbRegistry, err := core.BootstrapVerbRegistry(version)
+	if err != nil {
+		return oops.Code("VERB_REGISTRY_BOOTSTRAP_FAILED").Wrap(err)
+	}
+
 	// --- 7. Subsystem construction (config only, no live resources) ---
 	abacSub := abacsetup.NewABACSubsystem(abacsetup.ABACSubsystemConfig{
 		DB:       dbSub,
@@ -293,6 +300,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		StreamRegistry:     streamRegistry,
 		LuaTimeout:         cfg.LuaTimeout,
 		LuaRegistryMaxSize: cfg.LuaRegistryMaxSize,
+		VerbRegistry:       verbRegistry,
 	})
 
 	bootstrapSub := bootstrapsetup.NewBootstrapSubsystem(bootstrapsetup.BootstrapSubsystemConfig{
@@ -415,6 +423,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		MaxHistory:     cfg.SessionMaxHistory,
 		GameConfig:     gameConfig,
 		StreamRegistry: streamRegistry,
+		VerbRegistry:   verbRegistry,
 	})
 
 	// --- 8. Orchestrator: register + start ---

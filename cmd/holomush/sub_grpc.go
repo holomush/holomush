@@ -72,6 +72,9 @@ type grpcSubsystemConfig struct {
 	MaxHistory     int
 	GameConfig     config.GameConfig
 	StreamRegistry *holoGRPC.SessionStreamRegistry
+	// VerbRegistry is the seeded verb registry for rendering enrichment.
+	// Required by wrapPublisher (Task 19) which wraps the EventBus publisher.
+	VerbRegistry *core.VerbRegistry
 }
 
 // grpcSubsystem is the terminal subsystem that wires the gRPC server.
