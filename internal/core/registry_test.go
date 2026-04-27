@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
 func TestVerbRegistryRegisterStoresVerbAndAllowsLookup(t *testing.T) {
@@ -206,7 +206,7 @@ func TestRegisterWithSourceRecordsVersion(t *testing.T) {
 		Category:      "communication",
 		Format:        "speech",
 		Label:         "says",
-		DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL,
+		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
 		Source:        "core-communication",
 	}, "0.1.0")
 	require.NoError(t, err)
@@ -221,7 +221,7 @@ func TestRegisterFallsBackToEmptyVersion(t *testing.T) {
 		Type:          "core-objects:object_create",
 		Category:      "state",
 		Format:        "delta",
-		DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_STATE,
+		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE,
 		Source:        "core-objects",
 	})
 	require.NoError(t, err)

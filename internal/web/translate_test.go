@@ -39,19 +39,19 @@ func newTestHandler(t *testing.T) *Handler {
 func registerTestPluginVerbs(t *testing.T, reg *core.VerbRegistry) {
 	t.Helper()
 	verbs := []core.VerbRegistration{
-		{Type: "core-communication:say", Category: "communication", Format: "speech", Label: "says", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:pose", Category: "communication", Format: "action", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:page", Category: "communication", Format: "speech", Label: "pages", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:whisper", Category: "communication", Format: "speech", Label: "whispers", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:whisper_notice", Category: "communication", Format: "action", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:ooc", Category: "communication", Format: "action", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:emit", Category: "communication", Format: "action", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:pemit", Category: "command", Format: "narrative", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-objects:object_create", Category: "state", Format: "delta", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_STATE, Source: "core-objects"},
-		{Type: "core-objects:object_destroy", Category: "state", Format: "delta", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_STATE, Source: "core-objects"},
-		{Type: "core-objects:object_use", Category: "command", Format: "narrative", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-objects"},
-		{Type: "core-objects:object_examine", Category: "command", Format: "narrative", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-objects"},
-		{Type: "core-objects:object_give", Category: "command", Format: "narrative", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-objects"},
+		{Type: "core-communication:say", Category: "communication", Format: "speech", Label: "says", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:pose", Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:page", Category: "communication", Format: "speech", Label: "pages", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:whisper", Category: "communication", Format: "speech", Label: "whispers", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:whisper_notice", Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:ooc", Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:emit", Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:pemit", Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-objects:object_create", Category: "state", Format: "delta", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE, Source: "core-objects"},
+		{Type: "core-objects:object_destroy", Category: "state", Format: "delta", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE, Source: "core-objects"},
+		{Type: "core-objects:object_use", Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-objects"},
+		{Type: "core-objects:object_examine", Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-objects"},
+		{Type: "core-objects:object_give", Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-objects"},
 	}
 	for _, v := range verbs {
 		require.NoError(t, reg.Register(v))

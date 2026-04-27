@@ -50,7 +50,7 @@ func (h *Handler) translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 			category = reg.Category
 			format = reg.Format
 			label = reg.Label
-			displayTarget = reg.DisplayTarget
+			displayTarget = webv1.EventChannel(reg.DisplayTarget)
 		}
 	}
 

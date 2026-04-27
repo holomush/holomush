@@ -19,7 +19,6 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/pkg/errutil"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
-	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
 
 func newSeededTestRegistry(t *testing.T) *core.VerbRegistry {
@@ -30,7 +29,7 @@ func newSeededTestRegistry(t *testing.T) *core.VerbRegistry {
 		Category:      "communication",
 		Format:        "speech",
 		Label:         "says",
-		DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL,
+		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
 		Source:        "core-communication",
 	}, "0.1.0"))
 	return r
@@ -159,7 +158,7 @@ func TestRenderingPublisherSourcePluginVersionForPlugin(t *testing.T) {
 		Category:      "communication",
 		Format:        "speech",
 		Label:         "says",
-		DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL,
+		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
 		Source:        "core-communication",
 	}, "0.1.0"))
 

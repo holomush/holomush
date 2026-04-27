@@ -8,7 +8,7 @@ import (
 
 	"github.com/samber/oops"
 
-	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
 // VerbRegistration holds rendering metadata for an event type.
@@ -17,7 +17,7 @@ type VerbRegistration struct {
 	Category      string // "communication", "movement", "state", "system", "command"
 	Format        string // "speech", "action", "narrative", "notification", "error", "snapshot", "delta"
 	Label         string // "says", "telepathically sends" -- required when Format is "speech"
-	DisplayTarget webv1.EventChannel
+	DisplayTarget corev1.EventChannel
 	MetadataKeys  []MetadataKey
 	Source        string // "builtin" or plugin name -- tracks ownership for unload
 }

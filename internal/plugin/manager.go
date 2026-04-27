@@ -21,8 +21,8 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
-	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
 
 // RegisterPluginProviderFunc is a callback that registers a PluginAttributeProvider
@@ -1255,15 +1255,15 @@ func (m *Manager) RegisterPluginCommands(registry *command.Registry) {
 // displayTargetFromString converts a manifest display_target string to the
 // proto enum. Returns EVENT_CHANNEL_UNSPECIFIED for unknown values (validation
 // should catch these before this is called).
-func displayTargetFromString(s string) webv1.EventChannel {
+func displayTargetFromString(s string) corev1.EventChannel {
 	switch strings.ToLower(s) {
 	case "terminal":
-		return webv1.EventChannel_EVENT_CHANNEL_TERMINAL
+		return corev1.EventChannel_EVENT_CHANNEL_TERMINAL
 	case "state":
-		return webv1.EventChannel_EVENT_CHANNEL_STATE
+		return corev1.EventChannel_EVENT_CHANNEL_STATE
 	case "both":
-		return webv1.EventChannel_EVENT_CHANNEL_BOTH
+		return corev1.EventChannel_EVENT_CHANNEL_BOTH
 	default:
-		return webv1.EventChannel_EVENT_CHANNEL_UNSPECIFIED
+		return corev1.EventChannel_EVENT_CHANNEL_UNSPECIFIED
 	}
 }

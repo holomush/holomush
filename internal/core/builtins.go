@@ -3,7 +3,7 @@
 
 package core
 
-import webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
+import corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 
 // BootstrapVerbRegistry returns a VerbRegistry seeded with host-owned event
 // types. This is the single public path for obtaining a seeded registry in
@@ -31,10 +31,10 @@ func registerBuiltinTypes(r *VerbRegistry, hostVersion string) error {
 	sourceVersion := "host-" + hostVersion
 	builtins := []VerbRegistration{
 		// Movement
-		{Type: "arrive", Category: "movement", Format: "notification", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_BOTH, Source: "builtin"},
-		{Type: "leave", Category: "movement", Format: "notification", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_BOTH, Source: "builtin"},
+		{Type: "arrive", Category: "movement", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_BOTH, Source: "builtin"},
+		{Type: "leave", Category: "movement", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_BOTH, Source: "builtin"},
 		{
-			Type: "move", Category: "movement", Format: "notification", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_BOTH, Source: "builtin",
+			Type: "move", Category: "movement", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_BOTH, Source: "builtin",
 			MetadataKeys: []MetadataKey{
 				{Key: "from_id", ValueType: "string"},
 				{Key: "to_id", ValueType: "string"},
@@ -44,7 +44,7 @@ func registerBuiltinTypes(r *VerbRegistry, hostVersion string) error {
 
 		// State
 		{
-			Type: "location_state", Category: "state", Format: "snapshot", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_STATE, Source: "builtin",
+			Type: "location_state", Category: "state", Format: "snapshot", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE, Source: "builtin",
 			MetadataKeys: []MetadataKey{
 				{Key: "location", ValueType: "object"},
 				{Key: "exits", ValueType: "array"},
@@ -52,16 +52,16 @@ func registerBuiltinTypes(r *VerbRegistry, hostVersion string) error {
 			},
 		},
 		{
-			Type: "exit_update", Category: "state", Format: "delta", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_STATE, Source: "builtin",
+			Type: "exit_update", Category: "state", Format: "delta", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE, Source: "builtin",
 			MetadataKeys: []MetadataKey{{Key: "exits", ValueType: "array"}},
 		},
 
 		// Command
-		{Type: "command_response", Category: "command", Format: "narrative", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "builtin"},
-		{Type: "command_error", Category: "command", Format: "error", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "builtin"},
+		{Type: "command_response", Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "builtin"},
+		{Type: "command_error", Category: "command", Format: "error", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "builtin"},
 
 		// System
-		{Type: "system", Category: "system", Format: "notification", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "builtin"},
+		{Type: "system", Category: "system", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "builtin"},
 	}
 	for _, b := range builtins {
 		if err := r.RegisterWithSource(b, sourceVersion); err != nil {

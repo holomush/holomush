@@ -22,7 +22,6 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
-	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
 
 // testRegistry returns a VerbRegistry populated with host-owned built-in
@@ -38,13 +37,13 @@ func testRegistry() *core.VerbRegistry {
 
 func registerTestPluginVerbs(r *core.VerbRegistry) {
 	verbs := []core.VerbRegistration{
-		{Type: "core-communication:say", Category: "communication", Format: "speech", Label: "says", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:pose", Category: "communication", Format: "action", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:page", Category: "communication", Format: "speech", Label: "pages", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:whisper", Category: "communication", Format: "speech", Label: "whispers", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:whisper_notice", Category: "communication", Format: "action", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:ooc", Category: "communication", Format: "action", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
-		{Type: "core-communication:pemit", Category: "command", Format: "narrative", DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:say", Category: "communication", Format: "speech", Label: "says", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:pose", Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:page", Category: "communication", Format: "speech", Label: "pages", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:whisper", Category: "communication", Format: "speech", Label: "whispers", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:whisper_notice", Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:ooc", Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
+		{Type: "core-communication:pemit", Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "core-communication"},
 	}
 	for _, v := range verbs {
 		_ = r.Register(v)
