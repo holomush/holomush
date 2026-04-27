@@ -62,6 +62,11 @@ func registerBuiltinTypes(r *VerbRegistry, hostVersion string) error {
 
 		// System
 		{Type: "system", Category: "system", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "builtin"},
+
+		// Session lifecycle — intercepted by the gRPC Subscribe handler to send
+		// STREAM_CLOSED before forwarding to the client. Registered so
+		// RenderingPublisher does not block emission with EMIT_UNKNOWN_VERB.
+		{Type: "session_ended", Category: "system", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_BOTH, Source: "builtin"},
 	}
 	for _, b := range builtins {
 		if err := r.RegisterWithSource(b, sourceVersion); err != nil {
