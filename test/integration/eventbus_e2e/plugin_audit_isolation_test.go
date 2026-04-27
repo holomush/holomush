@@ -91,15 +91,29 @@ func TestPluginAuditIsolation(t *testing.T) {
 	pub := bus.Bus.Publisher()
 	require.NotNil(t, pub)
 
+	// appRenderingHeader is a minimal valid App-Rendering protojson value for
+	// host-owned events. The audit projection requires this header (NOT NULL
+	// events_audit.rendering) but does not validate the content further.
+	const appRenderingHeader = `{"category":"state","format":"snapshot","display_target":"EVENT_CHANNEL_STATE","source_plugin":"builtin","source_plugin_version":"host-test","label":""}`
+
+	withRendering := func(ev eventbus.Event) eventbus.Event {
+		ev.Headers = map[string]string{"App-Rendering": appRenderingHeader}
+		return ev
+	}
+
 	// Publish 3 scene (plugin-owned) events and 2 host-owned events.
+	// Scene events use the raw publisher — the OwnerMap routes them to the
+	// plugin consumer (ack-and-skip in host projection, no persist()).
+	// Host events need App-Rendering so the host projection can INSERT into
+	// events_audit.rendering (NOT NULL after migration 000012).
 	sceneEvents := []eventbus.Event{
 		mintEvent("events.main.scene.01ABC.ic", "scene.pose", `{"n":1}`),
 		mintEvent("events.main.scene.01ABC.ic", "scene.pose", `{"n":2}`),
 		mintEvent("events.main.scene.01DEF.ic", "scene.pose", `{"n":3}`),
 	}
 	hostEvents := []eventbus.Event{
-		mintEvent("events.main.loc.01HOST.out", "location.state", `{"h":1}`),
-		mintEvent("events.main.loc.01HOST.out", "location.state", `{"h":2}`),
+		withRendering(mintEvent("events.main.loc.01HOST.out", "location.state", `{"h":1}`)),
+		withRendering(mintEvent("events.main.loc.01HOST.out", "location.state", `{"h":2}`)),
 	}
 	for _, e := range sceneEvents {
 		require.NoError(t, pub.Publish(ctx, e))
