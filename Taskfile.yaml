@@ -491,8 +491,54 @@ tasks:
   # ──────────────────────────────────────────
 
   pr-prep:
-    desc: Run all CI checks locally before pushing (mirrors ALL CI jobs)
+    desc: Run all CI checks locally before pushing (mirrors ALL CI jobs) [serialized via flock]
+    preconditions:
+      - sh: command -v flock >/dev/null 2>&1
+        msg: "flock(1) is required. Install with 'brew install flock' (macOS) or 'apt install util-linux' (Linux)."
     cmds:
+      - cmd: |
+          set -euo pipefail
+          LOCK_DIR="${TMPDIR:-/tmp}/holomush-pr-prep"
+          mkdir -p "$LOCK_DIR"
+          LOCK="$LOCK_DIR/lock"
+          INFO="$LOCK_DIR/info"
+          rc=0
+          flock -n -E 75 "$LOCK" sh -c '
+            export HOLOMUSH_PR_PREP_BYPASS_LOCK=1
+            printf "pid=%s\nworkspace=%s\nstarted_at=%s\n" \
+              "$$" "$2" "$(date -u +%FT%TZ)" > "$1"
+            exec task pr-prep:run
+          ' _ "$INFO" "$PWD" || rc=$?
+          if [ "$rc" -eq 75 ]; then
+            {
+              echo "ERROR: another pr-prep is running on this machine."
+              if [ -s "$INFO" ]; then
+                echo
+                sed 's/^/  /' "$INFO"
+              fi
+              echo
+              echo "  Lock file: $LOCK"
+              echo "  Wait for it to finish, or kill the holder PID if wedged."
+            } >&2
+            exit 1
+          fi
+          if [ "$rc" -ne 0 ]; then
+            echo "ERROR: lock acquire failed unexpectedly (rc=$rc); see flock(1) output above." >&2
+            exit "$rc"
+          fi
+
+  pr-prep:run:
+    cmds:
+      - cmd: |
+          if [ "${HOLOMUSH_PR_PREP_BYPASS_LOCK:-}" != "1" ]; then
+            echo "ERROR: pr-prep:run is the unlocked inner body of pr-prep." >&2
+            echo "       Do NOT invoke it directly — it skips the concurrency lock and" >&2
+            echo "       will race with any other pr-prep on this machine." >&2
+            echo "       Use 'task pr-prep' instead." >&2
+            echo "       To intentionally bypass (e.g. CI, debugging), set" >&2
+            echo "       HOLOMUSH_PR_PREP_BYPASS_LOCK=1." >&2
+            exit 1
+          fi
       - echo "▸ Verifying schema is current..."
       - task: generate:schema
       - cmd: |
