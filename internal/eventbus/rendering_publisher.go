@@ -6,9 +6,11 @@ package eventbus
 import (
 	"context"
 
+	"buf.build/go/protovalidate"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/holomush/holomush/internal/core"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	"github.com/samber/oops"
 )
 
@@ -31,8 +33,9 @@ var renderingJSONOpts = protojson.MarshalOptions{
 //  4. Validates the proto projection against the manifest's protovalidate rules. (Task 14)
 //  5. Delegates to the underlying publisher.
 type RenderingPublisher struct {
-	inner    Publisher
-	registry *core.VerbRegistry
+	inner     Publisher
+	registry  *core.VerbRegistry
+	validator protovalidate.Validator
 }
 
 // NewRenderingPublisher constructs a wrapper. inner and registry MUST NOT be nil.
@@ -43,7 +46,11 @@ func NewRenderingPublisher(inner Publisher, registry *core.VerbRegistry) *Render
 	if registry == nil {
 		panic("eventbus.NewRenderingPublisher: verb registry is nil")
 	}
-	return &RenderingPublisher{inner: inner, registry: registry}
+	v, err := protovalidate.New()
+	if err != nil {
+		panic("eventbus.NewRenderingPublisher: failed to construct protovalidate.Validator: " + err.Error())
+	}
+	return &RenderingPublisher{inner: inner, registry: registry, validator: v}
 }
 
 // Publish enriches event with rendering metadata and delegates to the
@@ -79,7 +86,17 @@ func (p *RenderingPublisher) Publish(ctx context.Context, event Event) error {
 	}
 	event.Headers["App-Rendering"] = string(headerBytes)
 
-	// Step in Task 14: protovalidate.
+	// Validate the rendering proto against protovalidate rules (INV-GW-4).
+	if vErr := p.validateRendering(RenderingToProto(event.Rendering)); vErr != nil {
+		return oops.Code("EMIT_VALIDATION_FAILED").
+			With("event_type", string(event.Type)).
+			Wrap(vErr)
+	}
 
 	return p.inner.Publish(ctx, event)
+}
+
+// validateRendering runs protovalidate against a RenderingMetadata proto.
+func (p *RenderingPublisher) validateRendering(md *corev1.RenderingMetadata) error {
+	return p.validator.Validate(md)
 }
