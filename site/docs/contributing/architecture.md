@@ -265,8 +265,37 @@ that the full ABAC implementation extends.
 - Access Policy Engine enforces policy boundaries
 - Default deny -- no seed policies for plugins
 
+## Gateway Layer (Phase 1.6+)
+
+The gateway process (`cmd/holomush gateway`) is a **thin protocol translation
+layer**. After Phase 1.6 it holds no domain state and contains no verb registry.
+
+### What the gateway does
+
+- Accepts incoming connections (telnet, web)
+- Translates protocol formats: telnet/ConnectRPC ↔ core gRPC
+- Reads `RenderingMetadata` off `EventFrame` and shapes it for the wire
+
+### Single enrichment site: RenderingPublisher
+
+All rendering metadata is stamped at the `RenderingPublisher` layer inside the
+core server — before events reach JetStream. The gateway reads the pre-stamped
+`EventFrame.Rendering` field and passes it through without any domain knowledge.
+
+This means:
+
+- The gateway MUST NOT import `internal/world`, `internal/plugin`,
+  `internal/eventbus`, or other domain packages (enforced by `INV-GW-1`).
+- Verb labels, categories, and display targets are determined once, at emit time,
+  by the publisher chain — not at delivery time by the gateway.
+
+See [Gateway Boundary](gateway-boundary.md) for the full forbidden-import list
+and the `gateway_imports_test.go` CI tripwire.
+
 ## Further Reading
 
 - [Pull Request Guide](pr-guide.md) - Contribution workflow
 - [Coding Standards](coding-standards.md) - Code conventions
 - [Plugin Development](../extending/index.md) - Building extensions
+- [Gateway Boundary](gateway-boundary.md) - Gateway constraint enforcement
+- [Event Emit Pipeline](event-emit-pipeline.md) - Publisher chain and rendering
