@@ -203,3 +203,14 @@ setup() {
   # Reap the bash subprocess; ignore exit code (holder was killed)
   wait "$HOLDER_BASH_PID" 2>/dev/null || :
 }
+
+# I-6: harness exits non-zero when inner task fails. Specific code is not
+# contractual (go-task wraps to 201). Assertion is structural.
+@test "nonzero_on_failure: inner stub exit 42 produces non-zero harness exit" {
+  STUB_EXIT=42 STUB_SLEEP=0 STUB_MARKER="${BATS_TEST_TMPDIR}/marker" \
+    run task -t "$(fixture_taskfile)" pr-prep
+  [ "$status" -ne 0 ]
+  # NOT asserting [ "$status" -eq 42 ] — go-task wraps to 201 per rev-4.
+  # NOT asserting [ "$status" -eq 75 ] — 75 is reserved for lock-busy
+  # (the harness's flock -E 75), not propagated to the user.
+}
