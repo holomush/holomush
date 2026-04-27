@@ -34,6 +34,13 @@ Before creating a PR, verify:
 - [ ] No debug code or commented-out code left behind
 - [ ] Code is as simple as possible
 
+Before pushing to a PR branch, run `task pr-prep` to mirror every CI job
+locally. The gate is serialized per user — only one `task pr-prep` runs at
+a time on a given machine. If you see an "another pr-prep is running" error,
+wait for the holder to finish or kill its process tree (see
+[Pre-Push Quality Gate](pr-prep.md) for details — note that `kill <pid>`
+alone is insufficient because descendants inherit the lock fd).
+
 ## Creating a PR
 
 ### Branch Naming
