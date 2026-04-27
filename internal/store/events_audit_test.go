@@ -66,8 +66,8 @@ func TestEventsAuditInsertOnConflictIsIdempotent(t *testing.T) {
 	insert := `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
-			payload, schema_ver, codec, js_seq
-		) VALUES ($1, $2, $3, now(), 'system', NULL, $4, 1, 'identity', 100)
+			payload, schema_ver, codec, js_seq, rendering
+		) VALUES ($1, $2, $3, now(), 'system', NULL, $4, 1, 'identity', 100, '{}'::jsonb)
 		ON CONFLICT (id) DO NOTHING`
 	payload := []byte(`{"hello":"world"}`)
 
@@ -101,8 +101,8 @@ func TestEventsAuditCodecColumnIsNotNull(t *testing.T) {
 	insert := `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
-			payload, schema_ver, codec, js_seq
-		) VALUES ($1, 'events.main.test', 'test.t', now(), 'system', NULL, $2, 1, NULL, 100)`
+			payload, schema_ver, codec, js_seq, rendering
+		) VALUES ($1, 'events.main.test', 'test.t', now(), 'system', NULL, $2, 1, NULL, 100, '{}'::jsonb)`
 	_, err = db.ExecContext(ctx, insert, id[:], []byte(`{}`))
 	require.Error(t, err, "NULL codec should be rejected by NOT NULL constraint")
 }

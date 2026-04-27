@@ -27,6 +27,7 @@ const (
 	headerSchemaVersion = "App-Schema-Version"
 	headerActorKind     = "App-Actor-Kind"
 	headerActorID       = "App-Actor-ID"
+	headerRendering     = "App-Rendering"
 )
 
 // Phase A has no real actors publishing events; every event is emitted
@@ -190,6 +191,12 @@ func (p *projection) persist(msg jetstream.Msg) error {
 	if err != nil {
 		return oops.Code("AUDIT_BAD_SCHEMA_VERSION").With("value", schemaVer).Wrap(err)
 	}
+	renderingJSON := h.Get(headerRendering)
+	if renderingJSON == "" {
+		return oops.Code("AUDIT_MISSING_HEADER").
+			With("header", headerRendering).
+			Errorf("missing header")
+	}
 
 	meta, err := msg.Metadata()
 	if err != nil {
@@ -234,8 +241,8 @@ func (p *projection) persist(msg jetstream.Msg) error {
 	_, err = p.pool.Exec(ctx, `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
-			payload, schema_ver, codec, js_seq
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			payload, schema_ver, codec, js_seq, rendering
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (id) DO NOTHING`,
 		idBytes,
 		msg.Subject(),
@@ -247,6 +254,7 @@ func (p *projection) persist(msg jetstream.Msg) error {
 		ver,
 		codec,
 		meta.Sequence.Stream,
+		renderingJSON,
 	)
 	if err != nil {
 		return oops.Code("AUDIT_INSERT_FAILED").Wrap(err)

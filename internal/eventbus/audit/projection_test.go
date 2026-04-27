@@ -84,6 +84,7 @@ func publishTestMessageOnSubject(t *testing.T, js jetstream.JetStream, subject s
 			"App-Event-Type":     []string{testEventType},
 			"App-Schema-Version": []string{testSchemaVer},
 			"App-Actor-Kind":     []string{testActorKind},
+			"App-Rendering":      []string{`{}`},
 		},
 		Data: []byte(`{"hello":"world"}`),
 	}
@@ -104,6 +105,7 @@ func publishTestMessageWithID(t *testing.T, js jetstream.JetStream, id ulid.ULID
 			"App-Event-Type":     []string{testEventType},
 			"App-Schema-Version": []string{testSchemaVer},
 			"App-Actor-Kind":     []string{testActorKind},
+			"App-Rendering":      []string{`{}`},
 		},
 		Data: []byte(`{"hello":"world"}`),
 	}
