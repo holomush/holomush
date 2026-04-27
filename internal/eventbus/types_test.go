@@ -79,7 +79,10 @@ func TestNewTypeRejectsInvalidPatterns(t *testing.T) {
 		{"uppercase start", "Scene.pose"},
 		{"trailing dot", "scene."},
 		{"double dot", "scene..pose"},
-		// Hyphens are valid (plugin names use them: "core-communication:say").
+		{"mixed dot and colon", "core.communication:say"},
+		{"mixed colon and dot", "core:communication.say"},
+		{"multiple colons", "core-communication:say:extra"},
+		{"trailing colon", "core-communication:"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

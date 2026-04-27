@@ -238,6 +238,9 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 }
 
 // reservedHeaderKeys — keys that event.Headers must never overwrite.
+// App-Rendering is written exclusively by RenderingPublisher before
+// delegating to JetStreamPublisher; enforcing it here prevents a second
+// writer from silently overwriting the publisher's stamp.
 var reservedHeaderKeys = map[string]struct{}{
 	HeaderMsgID:         {},
 	HeaderCodec:         {},
@@ -246,6 +249,7 @@ var reservedHeaderKeys = map[string]struct{}{
 	HeaderActorKind:     {},
 	HeaderActorID:       {},
 	HeaderActorLegacyID: {},
+	"App-Rendering":     {},
 	"traceparent":       {},
 	"tracestate":        {},
 }
