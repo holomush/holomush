@@ -54,7 +54,7 @@ func validHeaders(t *testing.T) nats.Header {
 	h.Set(headerEventType, "test.unit")
 	h.Set(headerSchemaVersion, "1")
 	h.Set(headerActorKind, defaultActorKind)
-	h.Set("App-Rendering",
+	h.Set(headerRendering,
 		`{"category":"system","format":"narrative",`+
 			`"display_target":"EVENT_CHANNEL_TERMINAL","source_plugin":"builtin",`+
 			`"source_plugin_version":"host-test","label":""}`)
@@ -95,8 +95,8 @@ func TestPersistRejectsMissingRequiredHeaders(t *testing.T) {
 func TestPersistRejectsMissingAppRenderingHeader(t *testing.T) {
 	p := newTestProjection()
 	h := validHeaders(t)
-	// validHeaders now sets App-Rendering; remove it for the negative case.
-	h.Del("App-Rendering")
+	// validHeaders now sets the rendering header; remove it for the negative case.
+	h.Del(headerRendering)
 	msg := &stubMsg{
 		headers: h,
 		subject: "events.main.character.01ABC",
@@ -105,7 +105,7 @@ func TestPersistRejectsMissingAppRenderingHeader(t *testing.T) {
 	err := p.persist(msg)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "AUDIT_MISSING_HEADER")
-	errutil.AssertErrorContext(t, err, "header", "App-Rendering")
+	errutil.AssertErrorContext(t, err, "header", headerRendering)
 }
 
 func TestPersistRejectsMalformedSchemaVersion(t *testing.T) {

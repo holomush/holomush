@@ -378,24 +378,6 @@ func TestPublisherCollidingHeaderPanicsInTests(t *testing.T) {
 	})
 }
 
-func TestPublisherAppRenderingIsReserved(t *testing.T) {
-	embedded := eventbustest.New(t)
-	pub := embedded.Bus.Publisher()
-
-	ev := eventbus.Event{
-		ID:      core.NewULID(),
-		Subject: eventbus.Subject("events.main.character.01ABC"),
-		Type:    eventbus.Type("core-communication:say"),
-		Actor:   eventbus.Actor{Kind: eventbus.ActorKindSystem},
-		Payload: []byte(`{}`),
-		// App-Rendering is reserved for RenderingPublisher; callers must not write it.
-		Headers: map[string]string{"App-Rendering": `{"category":"x"}`},
-	}
-	assert.Panics(t, func() {
-		_ = pub.Publish(context.Background(), ev)
-	})
-}
-
 func TestIdentityKeySelectorReturnsIdentityAndNoKey(t *testing.T) {
 	// The package-internal identityKeySelector is exercised end-to-end when
 	// no WithCodecSelector is provided. This test covers the default path

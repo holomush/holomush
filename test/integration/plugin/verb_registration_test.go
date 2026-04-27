@@ -16,6 +16,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
 var _ = Describe("Plugin verb registration", func() {
@@ -111,7 +112,8 @@ lua-plugin:
 	It("cleans up verbs when plugin load fails partway through verb list", func() {
 		// Pre-register "conflict" so the second verb in the manifest fails
 		Expect(verbReg.Register(core.VerbRegistration{
-			Type: "conflict", Category: "system", Format: "notification", Source: "pre-existing",
+			Type: "conflict", Category: "system", Format: "notification",
+			DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "pre-existing",
 		})).To(Succeed())
 
 		writePlugin("partial-fail", `

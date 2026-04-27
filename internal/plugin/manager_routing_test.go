@@ -23,6 +23,7 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/mocks"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
 
@@ -199,11 +200,12 @@ binary-plugin:
 	bootstrapReg, bootErr := core.BootstrapVerbRegistry("test")
 	require.NoError(t, bootErr)
 	require.NoError(t, bootstrapReg.Register(core.VerbRegistration{
-		Type:     "say",
-		Category: "communication",
-		Format:   "speech",
-		Label:    "says",
-		Source:   "core-communication",
+		Type:          "say",
+		Category:      "communication",
+		Format:        "speech",
+		Label:         "says",
+		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
+		Source:        "core-communication",
 	}))
 	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(bootstrapReg))
 	require.NoError(t, mgrErr)
@@ -310,11 +312,12 @@ func TestManagerEmitPluginEventUsesConfiguredSharedEmitter(t *testing.T) {
 	bootstrapReg, bootErr := core.BootstrapVerbRegistry("test")
 	require.NoError(t, bootErr)
 	require.NoError(t, bootstrapReg.Register(core.VerbRegistration{
-		Type:     "say",
-		Category: "communication",
-		Format:   "speech",
-		Label:    "says",
-		Source:   "core-communication",
+		Type:          "say",
+		Category:      "communication",
+		Format:        "speech",
+		Label:         "says",
+		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
+		Source:        "core-communication",
 	}))
 	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua), plugins.WithVerbRegistry(bootstrapReg))
 	require.NoError(t, mgrErr)

@@ -39,13 +39,13 @@ var testRenderings = map[string]*corev1.RenderingMetadata{
 	"core-communication:ooc":            {Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
 	"core-communication:pemit":          {Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
 
-	// Host-owned builtins (registered by core.RegisterBuiltinTypes in production).
-	"arrive":           {Category: "movement", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_BOTH, SourcePlugin: "core"},
-	"leave":            {Category: "movement", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_BOTH, SourcePlugin: "core"},
-	"system":           {Category: "system", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core"},
-	"command_response": {Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core"},
-	"command_error":    {Category: "command", Format: "error", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core"},
-	"location_state":   {Category: "state", Format: "snapshot", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE, SourcePlugin: "core"},
+	// Host-owned builtins (registered by BootstrapVerbRegistry in production).
+	"arrive":           {Category: "movement", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_BOTH, SourcePlugin: "builtin"},
+	"leave":            {Category: "movement", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_BOTH, SourcePlugin: "builtin"},
+	"system":           {Category: "system", Format: "notification", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "builtin"},
+	"command_response": {Category: "command", Format: "narrative", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "builtin"},
+	"command_error":    {Category: "command", Format: "error", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "builtin"},
+	"location_state":   {Category: "state", Format: "snapshot", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE, SourcePlugin: "builtin"},
 }
 
 // withRendering populates ev.Rendering from testRenderings (if present).

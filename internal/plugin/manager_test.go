@@ -31,6 +31,7 @@ import (
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
@@ -1759,10 +1760,11 @@ lua-plugin:
 	reg := core.NewVerbRegistry()
 	// Pre-register a verb that the plugin also declares.
 	require.NoError(t, reg.Register(core.VerbRegistration{
-		Type:     "existing_verb",
-		Category: "state",
-		Format:   "snapshot",
-		Source:   "builtin",
+		Type:          "existing_verb",
+		Category:      "state",
+		Format:        "snapshot",
+		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE,
+		Source:        "builtin",
 	}))
 
 	mgr, mgrErr := plugins.NewManager(pluginsDir,
@@ -1805,10 +1807,11 @@ lua-plugin:
 	reg := core.NewVerbRegistry()
 	// Pre-register the conflict verb so the second registration fails.
 	require.NoError(t, reg.Register(core.VerbRegistration{
-		Type:     "conflict",
-		Category: "state",
-		Format:   "snapshot",
-		Source:   "builtin",
+		Type:          "conflict",
+		Category:      "state",
+		Format:        "snapshot",
+		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE,
+		Source:        "builtin",
 	}))
 
 	mgr, mgrErr := plugins.NewManager(pluginsDir,

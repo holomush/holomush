@@ -3,7 +3,11 @@
 
 package core
 
-import corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+import (
+	"github.com/samber/oops"
+
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+)
 
 // BootstrapVerbRegistry returns a VerbRegistry seeded with host-owned event
 // types. This is the single public path for obtaining a seeded registry in
@@ -14,6 +18,9 @@ import corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 // registration with source "builtin" and version "host-" + hostVersion
 // so plugin-version drift is visible in events_audit replays.
 func BootstrapVerbRegistry(hostVersion string) (*VerbRegistry, error) {
+	if hostVersion == "" {
+		return nil, oops.Code("INVALID_REGISTRATION").Errorf("hostVersion must not be empty")
+	}
 	r := NewVerbRegistry()
 	if err := registerBuiltinTypes(r, hostVersion); err != nil {
 		return nil, err

@@ -191,7 +191,7 @@ func NewType(s string) (Type, error) {
 		return "", fmt.Errorf("%w: empty type", ErrInvalidType)
 	}
 	if !typeRe.MatchString(s) {
-		return "", fmt.Errorf("%w: type %q does not match [a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*", ErrInvalidType, s)
+		return "", fmt.Errorf("%w: type %q must match [a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)* (dot-segmented) or plugin:verb", ErrInvalidType, s)
 	}
 	return Type(s), nil
 }

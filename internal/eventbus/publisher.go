@@ -238,9 +238,11 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 }
 
 // reservedHeaderKeys — keys that event.Headers must never overwrite.
-// App-Rendering is written exclusively by RenderingPublisher before
-// delegating to JetStreamPublisher; enforcing it here prevents a second
-// writer from silently overwriting the publisher's stamp.
+// Note: App-Rendering is NOT listed here because it is written by
+// RenderingPublisher before delegating to JetStreamPublisher. Adding it
+// would cause RenderingPublisher's own stamp to panic. The single-writer
+// invariant for App-Rendering is enforced architecturally: only
+// RenderingPublisher holds the proto serialization path.
 var reservedHeaderKeys = map[string]struct{}{
 	HeaderMsgID:         {},
 	HeaderCodec:         {},
@@ -249,7 +251,6 @@ var reservedHeaderKeys = map[string]struct{}{
 	HeaderActorKind:     {},
 	HeaderActorID:       {},
 	HeaderActorLegacyID: {},
-	"App-Rendering":     {},
 	"traceparent":       {},
 	"tracestate":        {},
 }

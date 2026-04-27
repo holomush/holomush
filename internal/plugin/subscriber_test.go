@@ -20,6 +20,7 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/mocks"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
 // subscriberHost is a mock Host for subscriber tests.
@@ -469,11 +470,12 @@ func TestSubscriberRoutesResponseEventsThroughSharedEmitterWithIncomingActor(t *
 	bootstrapReg, bootErr := core.BootstrapVerbRegistry("test")
 	require.NoError(t, bootErr)
 	require.NoError(t, bootstrapReg.Register(core.VerbRegistration{
-		Type:     "say",
-		Category: "communication",
-		Format:   "speech",
-		Label:    "says",
-		Source:   "core-communication",
+		Type:          "say",
+		Category:      "communication",
+		Format:        "speech",
+		Label:         "says",
+		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
+		Source:        "core-communication",
 	}))
 	manager, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua), plugins.WithVerbRegistry(bootstrapReg))
 	require.NoError(t, mgrErr)
