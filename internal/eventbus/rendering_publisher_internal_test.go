@@ -40,7 +40,8 @@ func TestValidateRenderingRejectsSpeechWithoutLabel(t *testing.T) {
 	assert.Contains(t, err.Error(), "label", "validator error should mention the failing constraint")
 }
 
-// TestValidateRenderingRejectsUnspecifiedDisplayTarget verifies the enum not_in:[0] check.
+// TestValidateRenderingRejectsUnspecifiedDisplayTarget verifies the enum
+// not_in:[0] check that enforces INV-GW-8.
 func TestValidateRenderingRejectsUnspecifiedDisplayTarget(t *testing.T) {
 	rp := NewRenderingPublisher(internalFakePublisher{}, core.NewVerbRegistry())
 
