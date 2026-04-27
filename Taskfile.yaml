@@ -62,6 +62,8 @@ tasks:
       - task: lint:actions
       - task: lint:access-migration
       - task: lint:test-helpers
+      - task: lint:plugin-manifests
+      - task: lint:docs-symmetry
 
   fmt:
     desc: Format all files
@@ -395,6 +397,27 @@ tasks:
           echo "$IMPORTS"
           exit 1
         fi
+
+  lint:plugin-manifests:
+    desc: Lint plugin.yaml manifests for actor_kinds_claimable coverage (spec ec22.1).
+    cmds:
+      - go run ./cmd/lint-plugin-manifests
+
+  lint:docs-symmetry:
+    desc: Verify AGENTS.md and CLAUDE.md plugin-runtime-symmetry subsection is byte-identical.
+    cmds:
+      - |
+        set -euo pipefail
+        a=$(awk '/<!-- BEGIN: plugin-runtime-symmetry -->/,/<!-- END: plugin-runtime-symmetry -->/' AGENTS.md)
+        c=$(awk '/<!-- BEGIN: plugin-runtime-symmetry -->/,/<!-- END: plugin-runtime-symmetry -->/' CLAUDE.md)
+        if [ -z "$a" ]; then echo "ERROR: AGENTS.md missing plugin-runtime-symmetry anchored subsection"; exit 1; fi
+        if [ -z "$c" ]; then echo "ERROR: CLAUDE.md missing plugin-runtime-symmetry anchored subsection"; exit 1; fi
+        if [ "$a" != "$c" ]; then
+          echo "ERROR: plugin-runtime-symmetry subsection diverged between AGENTS.md and CLAUDE.md"
+          diff <(echo "$a") <(echo "$c") || true
+          exit 1
+        fi
+        echo "AGENTS.md and CLAUDE.md plugin-runtime-symmetry subsection is byte-identical."
 
   # ──────────────────────────────────────────
   # Formatters (called by `task fmt`)

@@ -307,7 +307,15 @@ func (d *Dispatcher) dispatchToPlugin(ctx context.Context, entry *CommandEntry, 
 		attribute.Bool("command.plugin_routed", true),
 	)
 
-	resp, err := d.pluginDeliverer.DeliverCommand(ctx, entry.PluginName(), cmd)
+	// Stamp ActorCharacter on the dispatch ctx BEFORE DeliverCommand. This
+	// activates the actor-metadata channel for the host's outgoing metadata
+	// injection (host.go) and the binary-plugin token issuance (per spec G7).
+	dispatchCtx := core.WithActor(ctx, core.Actor{
+		Kind: core.ActorCharacter,
+		ID:   exec.CharacterID().String(),
+	})
+
+	resp, err := d.pluginDeliverer.DeliverCommand(dispatchCtx, entry.PluginName(), cmd)
 	if err != nil {
 		return oops.In("dispatcher").With("command", entry.Name).With("plugin", entry.PluginName()).Wrap(err)
 	}
@@ -367,12 +375,10 @@ func (d *Dispatcher) dispatchToPlugin(ctx context.Context, entry *CommandEntry, 
 
 	// Process response events through the shared plugin emitter so manifest
 	// validation and host-owned stamping stay consistent with subscriber flow.
-	emitCtx := core.WithActor(ctx, core.Actor{
-		Kind: core.ActorCharacter,
-		ID:   exec.CharacterID().String(),
-	})
+	// Reuse dispatchCtx (already actor-stamped above) so emit and DeliverCommand
+	// share identical actor context.
 	for _, evt := range resp.Events {
-		if emitErr := d.pluginDeliverer.EmitPluginEvent(emitCtx, entry.PluginName(), evt); emitErr != nil {
+		if emitErr := d.pluginDeliverer.EmitPluginEvent(dispatchCtx, entry.PluginName(), evt); emitErr != nil {
 			return oops.In("dispatcher").
 				With("command", entry.Name).
 				With("stream", evt.Stream).

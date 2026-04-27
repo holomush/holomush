@@ -71,6 +71,15 @@ service PluginHostService {
   // Read-only: does not advance cursors or affect session state.
   // Count capped at 500 server-side.
   rpc QueryStreamHistory(PluginHostServiceQueryStreamHistoryRequest) returns (PluginHostServiceQueryStreamHistoryResponse);
+
+  // RequestEmitToken issues a self-token bound to the calling plugin's
+  // identity (ActorPlugin + pluginName), so plugin-served gRPC handlers
+  // (which are not invoked via DeliverEvent / DeliverCommand) can still
+  // call EmitEvent. The plugin's identity is taken from the mTLS-bound
+  // gRPC server struct — the request carries no identity fields and the
+  // plugin cannot impersonate another actor through this RPC.
+  // (Spec §3.3.5 / §5.4 self-token pattern.)
+  rpc RequestEmitToken(PluginHostServiceRequestEmitTokenRequest) returns (PluginHostServiceRequestEmitTokenResponse);
 }
 
 // ServiceConfig carries initialization data from the host to the plugin.
@@ -408,4 +417,17 @@ message PluginHostServiceQueryStreamHistoryResponse {
   repeated Event events = 1;
   // next_cursor is the opaque cursor for the next page. Empty if no more pages.
   bytes next_cursor = 2;
+}
+
+// PluginHostServiceRequestEmitTokenRequest carries no fields. The host
+// derives the calling plugin's identity from the mTLS-bound server struct.
+// Future evolution: do NOT add actor fields here — that would re-open the
+// G1 forgery surface this RPC is designed to close.
+message PluginHostServiceRequestEmitTokenRequest {}
+
+message PluginHostServiceRequestEmitTokenResponse {
+  // Opaque self-token. Plugins MUST treat this as opaque; only the host's
+  // emitTokenStore can interpret it. The token is bound to ActorPlugin +
+  // the calling plugin's name and is single-use-friendly (TTL-revoked).
+  string token = 1;
 }

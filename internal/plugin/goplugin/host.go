@@ -23,6 +23,7 @@ import (
 	hashiplug "github.com/hashicorp/go-plugin"
 	"github.com/samber/oops"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/grpc/focus"
@@ -135,6 +136,14 @@ type Host struct {
 	plugins           map[string]*loadedPlugin
 	mu                sync.RWMutex
 	closed            bool
+
+	// tokenStore authenticates per-dispatch actor claims on the binary-plugin
+	// EmitEvent boundary. The sweeper goroutine is host-owned: tokenStoreCtx
+	// is canceled in Close() to deterministically stop it before
+	// tokenStore.Close() does the belt-and-braces shutdown.
+	tokenStore       *emitTokenStore
+	tokenStoreCtx    context.Context
+	tokenStoreCancel context.CancelFunc
 }
 
 // loadedPlugin holds state for a single loaded binary plugin.
@@ -158,13 +167,21 @@ func NewHostWithFactory(factory ClientFactory, opts ...HostOption) *Host {
 	if factory == nil {
 		panic("goplugin: factory cannot be nil")
 	}
+	tokenStoreCtx, tokenStoreCancel := context.WithCancel(context.Background())
 	h := &Host{
-		clientFactory: factory,
-		plugins:       make(map[string]*loadedPlugin),
+		clientFactory:    factory,
+		plugins:          make(map[string]*loadedPlugin),
+		tokenStore:       newEmitTokenStore(),
+		tokenStoreCtx:    tokenStoreCtx,
+		tokenStoreCancel: tokenStoreCancel,
 	}
 	for _, opt := range opts {
 		opt(h)
 	}
+	// Start the token-store sweeper. tokenStoreCancel (called from Close)
+	// signals the sweeper to exit; tokenStore.Close() is idempotent and
+	// also closes the s.stop channel as a belt-and-braces safety.
+	go h.tokenStore.Run(h.tokenStoreCtx)
 	if h.ca != nil {
 		brokerCert, brokerCertErr := tlscerts.GenerateServerCert(h.ca, h.gameID, "plugin-host")
 		if brokerCertErr != nil {
@@ -536,9 +553,30 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 
 	callCtx, cancel := context.WithTimeout(ctx, DefaultEventTimeout)
 	defer cancel()
-	if actor, ok := core.ActorFromContext(ctx); ok {
-		callCtx = pluginsdk.WithOutgoingActorMetadata(callCtx, coreActorKindToSDK(actor.Kind), actor.ID)
+
+	// Per spec §3.3.4: compute the stored actor with re-anchor for ActorSystem.
+	// Plugins never speak as the host's system identity — when the upstream
+	// ctx carries ActorSystem the host re-anchors to ActorPlugin:<name>.
+	storedActor := core.Actor{Kind: core.ActorPlugin, ID: name}
+	if upstream, ok := core.ActorFromContext(ctx); ok {
+		switch upstream.Kind {
+		case core.ActorCharacter, core.ActorPlugin:
+			storedActor = upstream // verbatim — cascade preserved
+		case core.ActorSystem:
+			storedActor = core.Actor{Kind: core.ActorPlugin, ID: name} // re-anchor
+		}
 	}
+
+	emitToken, err := h.tokenStore.Issue(name, storedActor)
+	if err != nil {
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "issue_emit_token").Wrap(err)
+	}
+	defer h.tokenStore.Revoke(emitToken)
+
+	callCtx = metadata.AppendToOutgoingContext(callCtx, "x-holomush-emit-token", emitToken)
+	// Existing actor-kind / -id metadata still attached for plugin-side advisory
+	// consumption (pkg/plugin/sdk.go ActorMetadataFromIncomingContext).
+	callCtx = pluginsdk.WithOutgoingActorMetadata(callCtx, coreActorKindToSDK(storedActor.Kind), storedActor.ID)
 
 	resp, err := p.plugin.HandleEvent(callCtx, &pluginv1.HandleEventRequest{Event: protoEvent})
 	if err != nil {
@@ -588,9 +626,26 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 
 	callCtx, cancel := context.WithTimeout(ctx, DefaultEventTimeout)
 	defer cancel()
-	if actor, ok := core.ActorFromContext(ctx); ok {
-		callCtx = pluginsdk.WithOutgoingActorMetadata(callCtx, coreActorKindToSDK(actor.Kind), actor.ID)
+
+	// Per spec §3.3.4: same actor re-anchor + token issuance as DeliverEvent.
+	storedActor := core.Actor{Kind: core.ActorPlugin, ID: name}
+	if upstream, ok := core.ActorFromContext(ctx); ok {
+		switch upstream.Kind {
+		case core.ActorCharacter, core.ActorPlugin:
+			storedActor = upstream
+		case core.ActorSystem:
+			storedActor = core.Actor{Kind: core.ActorPlugin, ID: name}
+		}
 	}
+
+	emitToken, err := h.tokenStore.Issue(name, storedActor)
+	if err != nil {
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "issue_emit_token").Wrap(err)
+	}
+	defer h.tokenStore.Revoke(emitToken)
+
+	callCtx = metadata.AppendToOutgoingContext(callCtx, "x-holomush-emit-token", emitToken)
+	callCtx = pluginsdk.WithOutgoingActorMetadata(callCtx, coreActorKindToSDK(storedActor.Kind), storedActor.ID)
 
 	resp, err := p.plugin.HandleCommand(callCtx, protoReq)
 	if err != nil {
@@ -800,7 +855,13 @@ func (h *Host) Close(_ context.Context) error {
 
 	h.closed = true
 	clear(h.plugins)
-	return nil
+
+	// Token-store teardown (Task 7): cancel sweeper context first so the
+	// sweeper goroutine exits on ctx.Done, then close the store. Surfaces
+	// tokenStore.Close error since the existing function previously
+	// returned nil unconditionally.
+	h.tokenStoreCancel()
+	return h.tokenStore.Close()
 }
 
 // buildHostTLSConfig creates a TLS config for the host to connect to a plugin

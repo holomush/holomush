@@ -2481,3 +2481,53 @@ func TestDispatcherConcurrentDispatchesDoNotCrossContaminateAuditContexts(t *tes
 	assert.Len(t, seen, numDispatches,
 		"each dispatch should see its own unique hint ID, not someone else's")
 }
+
+// capturingDeliverer captures the ctx passed to DeliverCommand /
+// EmitPluginEvent so the test can assert on actor context at the
+// dispatch boundary.
+type capturingDeliverer struct {
+	mu         sync.Mutex
+	deliverCtx context.Context
+	emitCtxs   []context.Context
+}
+
+func (c *capturingDeliverer) DeliverCommand(ctx context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
+	c.mu.Lock()
+	c.deliverCtx = ctx
+	c.mu.Unlock()
+	return &pluginsdk.CommandResponse{Status: pluginsdk.CommandOK}, nil
+}
+
+func (c *capturingDeliverer) EmitPluginEvent(ctx context.Context, _ string, _ pluginsdk.EmitEvent) error {
+	c.mu.Lock()
+	c.emitCtxs = append(c.emitCtxs, ctx)
+	c.mu.Unlock()
+	return nil
+}
+
+// TestDispatcherStampsCharacterActorBeforeDeliverCommand asserts the
+// dispatcher populates core.ActorFromContext(ctx) BEFORE calling
+// pluginDeliverer.DeliverCommand, per spec G7. Uses the existing
+// newTestDispatcherWithPlugin + newTestCommandExecution scaffolding
+// (dispatcher_test.go:2063, :2104) and exercises the public Dispatch
+// API which routes through dispatchToPlugin internally.
+func TestDispatcherStampsCharacterActorBeforeDeliverCommand(t *testing.T) {
+	t.Parallel()
+
+	cd := &capturingDeliverer{}
+	d := newTestDispatcherWithPlugin(t, cd)
+	exec := newTestCommandExecution(t)
+	expectedCharID := exec.CharacterID().String()
+
+	// Dispatch the registered "plugintest" command (registered by the helper).
+	err := d.Dispatch(context.Background(), "plugintest", exec)
+	require.NoError(t, err)
+
+	cd.mu.Lock()
+	defer cd.mu.Unlock()
+	require.NotNil(t, cd.deliverCtx, "DeliverCommand must have been invoked")
+	got, ok := core.ActorFromContext(cd.deliverCtx)
+	require.True(t, ok, "DeliverCommand MUST receive ctx with actor populated")
+	assert.Equal(t, core.ActorCharacter, got.Kind)
+	assert.Equal(t, expectedCharID, got.ID)
+}

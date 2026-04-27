@@ -84,6 +84,9 @@ const (
 	// PluginHostServiceQueryStreamHistoryProcedure is the fully-qualified name of the
 	// PluginHostService's QueryStreamHistory RPC.
 	PluginHostServiceQueryStreamHistoryProcedure = "/holomush.plugin.v1.PluginHostService/QueryStreamHistory"
+	// PluginHostServiceRequestEmitTokenProcedure is the fully-qualified name of the PluginHostService's
+	// RequestEmitToken RPC.
+	PluginHostServiceRequestEmitTokenProcedure = "/holomush.plugin.v1.PluginHostService/RequestEmitToken"
 )
 
 // PluginServiceClient is a client for the holomush.plugin.v1.PluginService service.
@@ -285,6 +288,14 @@ type PluginHostServiceClient interface {
 	// Read-only: does not advance cursors or affect session state.
 	// Count capped at 500 server-side.
 	QueryStreamHistory(context.Context, *connect.Request[v1.PluginHostServiceQueryStreamHistoryRequest]) (*connect.Response[v1.PluginHostServiceQueryStreamHistoryResponse], error)
+	// RequestEmitToken issues a self-token bound to the calling plugin's
+	// identity (ActorPlugin + pluginName), so plugin-served gRPC handlers
+	// (which are not invoked via DeliverEvent / DeliverCommand) can still
+	// call EmitEvent. The plugin's identity is taken from the mTLS-bound
+	// gRPC server struct — the request carries no identity fields and the
+	// plugin cannot impersonate another actor through this RPC.
+	// (Spec §3.3.5 / §5.4 self-token pattern.)
+	RequestEmitToken(context.Context, *connect.Request[v1.PluginHostServiceRequestEmitTokenRequest]) (*connect.Response[v1.PluginHostServiceRequestEmitTokenResponse], error)
 }
 
 // NewPluginHostServiceClient constructs a client for the holomush.plugin.v1.PluginHostService
@@ -370,6 +381,12 @@ func NewPluginHostServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(pluginHostServiceMethods.ByName("QueryStreamHistory")),
 			connect.WithClientOptions(opts...),
 		),
+		requestEmitToken: connect.NewClient[v1.PluginHostServiceRequestEmitTokenRequest, v1.PluginHostServiceRequestEmitTokenResponse](
+			httpClient,
+			baseURL+PluginHostServiceRequestEmitTokenProcedure,
+			connect.WithSchema(pluginHostServiceMethods.ByName("RequestEmitToken")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -387,6 +404,7 @@ type pluginHostServiceClient struct {
 	leaveFocusByTarget  *connect.Client[v1.PluginHostServiceLeaveFocusByTargetRequest, v1.PluginHostServiceLeaveFocusByTargetResponse]
 	presentFocus        *connect.Client[v1.PluginHostServicePresentFocusRequest, v1.PluginHostServicePresentFocusResponse]
 	queryStreamHistory  *connect.Client[v1.PluginHostServiceQueryStreamHistoryRequest, v1.PluginHostServiceQueryStreamHistoryResponse]
+	requestEmitToken    *connect.Client[v1.PluginHostServiceRequestEmitTokenRequest, v1.PluginHostServiceRequestEmitTokenResponse]
 }
 
 // EmitEvent calls holomush.plugin.v1.PluginHostService.EmitEvent.
@@ -449,6 +467,11 @@ func (c *pluginHostServiceClient) QueryStreamHistory(ctx context.Context, req *c
 	return c.queryStreamHistory.CallUnary(ctx, req)
 }
 
+// RequestEmitToken calls holomush.plugin.v1.PluginHostService.RequestEmitToken.
+func (c *pluginHostServiceClient) RequestEmitToken(ctx context.Context, req *connect.Request[v1.PluginHostServiceRequestEmitTokenRequest]) (*connect.Response[v1.PluginHostServiceRequestEmitTokenResponse], error) {
+	return c.requestEmitToken.CallUnary(ctx, req)
+}
+
 // PluginHostServiceHandler is an implementation of the holomush.plugin.v1.PluginHostService
 // service.
 type PluginHostServiceHandler interface {
@@ -485,6 +508,14 @@ type PluginHostServiceHandler interface {
 	// Read-only: does not advance cursors or affect session state.
 	// Count capped at 500 server-side.
 	QueryStreamHistory(context.Context, *connect.Request[v1.PluginHostServiceQueryStreamHistoryRequest]) (*connect.Response[v1.PluginHostServiceQueryStreamHistoryResponse], error)
+	// RequestEmitToken issues a self-token bound to the calling plugin's
+	// identity (ActorPlugin + pluginName), so plugin-served gRPC handlers
+	// (which are not invoked via DeliverEvent / DeliverCommand) can still
+	// call EmitEvent. The plugin's identity is taken from the mTLS-bound
+	// gRPC server struct — the request carries no identity fields and the
+	// plugin cannot impersonate another actor through this RPC.
+	// (Spec §3.3.5 / §5.4 self-token pattern.)
+	RequestEmitToken(context.Context, *connect.Request[v1.PluginHostServiceRequestEmitTokenRequest]) (*connect.Response[v1.PluginHostServiceRequestEmitTokenResponse], error)
 }
 
 // NewPluginHostServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -566,6 +597,12 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 		connect.WithSchema(pluginHostServiceMethods.ByName("QueryStreamHistory")),
 		connect.WithHandlerOptions(opts...),
 	)
+	pluginHostServiceRequestEmitTokenHandler := connect.NewUnaryHandler(
+		PluginHostServiceRequestEmitTokenProcedure,
+		svc.RequestEmitToken,
+		connect.WithSchema(pluginHostServiceMethods.ByName("RequestEmitToken")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/holomush.plugin.v1.PluginHostService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PluginHostServiceEmitEventProcedure:
@@ -592,6 +629,8 @@ func NewPluginHostServiceHandler(svc PluginHostServiceHandler, opts ...connect.H
 			pluginHostServicePresentFocusHandler.ServeHTTP(w, r)
 		case PluginHostServiceQueryStreamHistoryProcedure:
 			pluginHostServiceQueryStreamHistoryHandler.ServeHTTP(w, r)
+		case PluginHostServiceRequestEmitTokenProcedure:
+			pluginHostServiceRequestEmitTokenHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -647,4 +686,8 @@ func (UnimplementedPluginHostServiceHandler) PresentFocus(context.Context, *conn
 
 func (UnimplementedPluginHostServiceHandler) QueryStreamHistory(context.Context, *connect.Request[v1.PluginHostServiceQueryStreamHistoryRequest]) (*connect.Response[v1.PluginHostServiceQueryStreamHistoryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.QueryStreamHistory is not implemented"))
+}
+
+func (UnimplementedPluginHostServiceHandler) RequestEmitToken(context.Context, *connect.Request[v1.PluginHostServiceRequestEmitTokenRequest]) (*connect.Response[v1.PluginHostServiceRequestEmitTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("holomush.plugin.v1.PluginHostService.RequestEmitToken is not implemented"))
 }

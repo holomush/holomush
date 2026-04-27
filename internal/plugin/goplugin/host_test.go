@@ -7,6 +7,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -16,6 +19,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	hashiplug "github.com/hashicorp/go-plugin"
 	"github.com/holomush/holomush/internal/core"
@@ -24,11 +28,9 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
-	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/proto"
 )
 
 // drainEventbusStream returns every stored message on EVENTS by walking
@@ -1326,86 +1328,16 @@ func TestHostDeliverEventForwardsTrustedActorMetadata(t *testing.T) {
 	assert.Equal(t, "char-alice", id)
 }
 
-func TestPluginHostServiceEmitEventPreservesIncomingActor(t *testing.T) {
-	bus := eventbustest.New(t)
-	emitter := plugins.NewPluginEventEmitter(
-		bus.Bus.Publisher(),
-		func(string) *plugins.Manifest {
-			return &plugins.Manifest{Name: "core-scenes", Emits: []string{"scene"}}
-		},
-		func(ctx context.Context, _ string) (core.Actor, error) {
-			actor, ok := core.ActorFromContext(ctx)
-			if !ok {
-				return core.Actor{}, errors.New("missing actor")
-			}
-			return actor, nil
-		},
-	)
-
-	host := NewHost()
-	host.SetEventEmitter(emitter)
-
-	server := &pluginHostServiceServer{
-		host:       host,
-		pluginName: "core-scenes",
-	}
-
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
-		"x-holomush-actor-kind", "0",
-		"x-holomush-actor-id", "char-alice",
-	))
-	_, err := server.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
-		Stream:    "scene:01SCENE",
-		EventType: "system",
-		Payload:   []byte(`{"kind":"created"}`),
-	})
-	require.NoError(t, err)
-
-	msgs := drainEventbusStream(t, bus.JS)
-	require.Len(t, msgs, 1)
-	assert.Equal(t, "character", msgs[0].Header.Get(eventbus.HeaderActorKind))
-	// "char-alice" is not a ULID → bridge drops id; App-Actor-ID omitted.
-	assert.Empty(t, msgs[0].Header.Get(eventbus.HeaderActorID))
-	var env eventbusv1.Event
-	require.NoError(t, proto.Unmarshal(msgs[0].Data, &env))
-	assert.Equal(t, []byte(`{"kind":"created"}`), env.GetPayload())
-}
-
-func TestPluginHostServiceEmitEventFallsBackToPluginActorWhenIncomingActorMissing(t *testing.T) {
-	bus := eventbustest.New(t)
-	emitter := plugins.NewPluginEventEmitter(
-		bus.Bus.Publisher(),
-		func(string) *plugins.Manifest {
-			return &plugins.Manifest{Name: "core-scenes", Emits: []string{"scene"}}
-		},
-		func(ctx context.Context, _ string) (core.Actor, error) {
-			actor, ok := core.ActorFromContext(ctx)
-			if !ok {
-				return core.Actor{}, errors.New("missing actor")
-			}
-			return actor, nil
-		},
-	)
-
-	host := NewHost()
-	host.SetEventEmitter(emitter)
-
-	server := &pluginHostServiceServer{
-		host:       host,
-		pluginName: "core-scenes",
-	}
-
-	_, err := server.EmitEvent(context.Background(), &pluginv1.PluginHostServiceEmitEventRequest{
-		Stream:    "scene:01SCENE",
-		EventType: "system",
-		Payload:   []byte(`{"kind":"created"}`),
-	})
-	require.NoError(t, err)
-
-	msgs := drainEventbusStream(t, bus.JS)
-	require.Len(t, msgs, 1)
-	assert.Equal(t, "plugin", msgs[0].Header.Get(eventbus.HeaderActorKind))
-}
+// Note: the legacy "preserves incoming actor metadata" and "falls back to
+// plugin actor when metadata missing" tests were removed in Task 9 of the
+// plugin actor-claim authentication rollout. Those behaviors trusted
+// plugin-supplied x-holomush-actor-kind / -actor-id headers, which the
+// new token-based EmitEvent (host_service.go) explicitly DISCARDS per
+// spec §3.3.5. Their replacements live in host_service_test.go:
+//   - TestEmitEventUsesStoredActorIgnoringPluginClaim (G1 forgery override)
+//   - TestEmitEventMissingTokenFails (EMIT_TOKEN_MISSING)
+//   - TestEmitEventUnknownTokenFails (EMIT_TOKEN_REJECTED)
+//   - TestEmitEventCrossPluginTokenLeakFails (cross-plugin token defense)
 
 func TestPluginHostServiceEmitEventReturnsErrorWhenHostIsMissing(t *testing.T) {
 	server := &pluginHostServiceServer{pluginName: "core-scenes"}
@@ -1456,7 +1388,11 @@ func TestPluginHostServiceEmitEventReturnsWrappedEmitterError(t *testing.T) {
 	emitter := plugins.NewPluginEventEmitter(
 		bus.Bus.Publisher(),
 		func(string) *plugins.Manifest {
-			return &plugins.Manifest{Name: "core-scenes", Emits: []string{"scene"}}
+			return &plugins.Manifest{
+				Name:                "core-scenes",
+				Emits:               []string{"scene"},
+				ActorKindsClaimable: []string{"plugin", "character"},
+			}
 		},
 		func(ctx context.Context, _ string) (core.Actor, error) {
 			actor, ok := core.ActorFromContext(ctx)
@@ -1469,13 +1405,24 @@ func TestPluginHostServiceEmitEventReturnsWrappedEmitterError(t *testing.T) {
 
 	host := NewHost()
 	host.SetEventEmitter(emitter)
+	defer func() { _ = host.Close(context.Background()) }()
 
 	server := &pluginHostServiceServer{
 		host:       host,
 		pluginName: "core-scenes",
 	}
 
-	_, err := server.EmitEvent(context.Background(), &pluginv1.PluginHostServiceEmitEventRequest{
+	// Token-based EmitEvent (Task 9): the emitter is only reached after
+	// the host validates a per-dispatch token, so the test issues one and
+	// presents it on the incoming context. The malformed JSON payload
+	// then exercises the emitter's error-wrap path.
+	tok, err := host.tokenStore.Issue("core-scenes", core.Actor{Kind: core.ActorPlugin, ID: "core-scenes"})
+	require.NoError(t, err)
+	defer host.tokenStore.Revoke(tok)
+	ctx := metadata.NewIncomingContext(context.Background(),
+		metadata.Pairs("x-holomush-emit-token", tok))
+
+	_, err = server.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
 		Stream:    "scene:01SCENE",
 		EventType: "system",
 		Payload:   []byte(`{"kind":`),
@@ -1833,4 +1780,248 @@ func TestHostWithHistoryReaderOptionSetsHistoryReader(t *testing.T) {
 	hr := &stubHistoryReader{}
 	host := NewHost(WithHistoryReader(hr))
 	assert.Equal(t, hr, host.HistoryReader())
+}
+
+// TestNewHostInitializesTokenStore verifies Host construction wires the
+// emitTokenStore and starts its sweeper goroutine. The closed-host
+// snapshot taken via goleak.IgnoreCurrent() filters out sweeper
+// goroutines leaked by sibling tests in this file that construct a
+// Host but never call Close — the assertion only catches NEW goroutines
+// our Host fails to clean up.
+//
+// NOTE: NOT t.Parallel — goleak.VerifyNone observes ALL live goroutines.
+func TestNewHostInitializesTokenStore(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	h := NewHost()
+	require.NotNil(t, h.tokenStore, "Host must construct emitTokenStore")
+	require.NoError(t, h.Close(context.Background()))
+}
+
+// TestHostCloseClosesTokenStore verifies Host.Close shuts the token
+// store down (sweeper goroutine exits, entries cleared).
+func TestHostCloseClosesTokenStore(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	h := NewHost()
+	_, err := h.tokenStore.Issue("plug-A", core.Actor{Kind: core.ActorPlugin, ID: "plug-A"})
+	require.NoError(t, err)
+	require.NoError(t, h.Close(context.Background()))
+	// After Close, the token store is reset.
+	h.tokenStore.mu.RLock()
+	n := len(h.tokenStore.items)
+	h.tokenStore.mu.RUnlock()
+	assert.Equal(t, 0, n)
+}
+
+// TestHostCloseIdempotentWithTokenStore verifies the second Close call
+// hits the closed-guard early-return and does not double-cancel the
+// sweeper context or panic on already-closed channel.
+func TestHostCloseIdempotentWithTokenStore(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	h := NewHost()
+	require.NoError(t, h.Close(context.Background()))
+	require.NoError(t, h.Close(context.Background()))
+}
+
+// TestDeliverEventIssuesTokenWithCharacterActor verifies the host issues
+// a per-dispatch token, attaches it to outgoing metadata, and revokes
+// the entry on call return (defer Revoke).
+func TestDeliverEventIssuesTokenWithCharacterActor(t *testing.T) {
+	t.Parallel()
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	defer func() { _ = h.Close(context.Background()) }()
+	h.plugins["plug-A"] = &loadedPlugin{
+		manifest: &plugins.Manifest{Name: "plug-A"},
+		plugin:   grpcClient,
+	}
+
+	charID := "01HCHAR0000000000000000000"
+	ctx := core.WithActor(context.Background(), core.Actor{Kind: core.ActorCharacter, ID: charID})
+	_, err := h.DeliverEvent(ctx, "plug-A", pluginsdk.Event{Type: "say"})
+	require.NoError(t, err)
+
+	// Inspect the outgoing metadata that the host attached to the gRPC call.
+	md, ok := metadata.FromOutgoingContext(grpcClient.eventCtx)
+	require.True(t, ok, "outgoing metadata MUST be present on the call to plugin")
+	tokens := md.Get("x-holomush-emit-token")
+	require.Len(t, tokens, 1, "x-holomush-emit-token MUST be set exactly once")
+	capturedToken := tokens[0]
+	require.NotEmpty(t, capturedToken)
+
+	// The entry will already be Revoke'd by defer when DeliverEvent returns.
+	_, ok = h.tokenStore.Lookup("plug-A", capturedToken)
+	assert.False(t, ok, "deferred Revoke MUST clear the token after DeliverEvent returns")
+}
+
+// TestDeliverEventStoresUpstreamCharacterActorVerbatim asserts the host
+// attaches ActorCharacter:<charID> verbatim as outgoing actor metadata
+// (cascade preserved per spec §3.3.4).
+func TestDeliverEventStoresUpstreamCharacterActorVerbatim(t *testing.T) {
+	t.Parallel()
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	defer func() { _ = h.Close(context.Background()) }()
+	h.plugins["plug-A"] = &loadedPlugin{
+		manifest: &plugins.Manifest{Name: "plug-A"},
+		plugin:   grpcClient,
+	}
+
+	charID := "01HCHAR0000000000000000000"
+	ctx := core.WithActor(context.Background(), core.Actor{Kind: core.ActorCharacter, ID: charID})
+	_, err := h.DeliverEvent(ctx, "plug-A", pluginsdk.Event{Type: "say"})
+	require.NoError(t, err)
+
+	kind, id, ok := pluginsdk.ActorMetadataFromOutgoingContext(grpcClient.eventCtx)
+	require.True(t, ok)
+	assert.Equal(t, pluginsdk.ActorCharacter, kind)
+	assert.Equal(t, charID, id)
+}
+
+// TestDeliverEventReanchorsActorSystem verifies spec §3.3.4: when ctx has
+// ActorSystem, the host attaches ActorPlugin:<self> as outgoing metadata
+// (re-anchored). Plugins can never speak as the host's system identity.
+func TestDeliverEventReanchorsActorSystem(t *testing.T) {
+	t.Parallel()
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	defer func() { _ = h.Close(context.Background()) }()
+	h.plugins["plug-A"] = &loadedPlugin{
+		manifest: &plugins.Manifest{Name: "plug-A"},
+		plugin:   grpcClient,
+	}
+
+	ctx := core.WithActor(context.Background(), core.Actor{Kind: core.ActorSystem, ID: core.ActorSystemID})
+	_, err := h.DeliverEvent(ctx, "plug-A", pluginsdk.Event{Type: "tick"})
+	require.NoError(t, err)
+
+	kind, id, ok := pluginsdk.ActorMetadataFromOutgoingContext(grpcClient.eventCtx)
+	require.True(t, ok)
+	assert.Equal(t, pluginsdk.ActorPlugin, kind, "ActorSystem MUST be re-anchored to ActorPlugin at issuance")
+	assert.Equal(t, "plug-A", id)
+}
+
+// TestDeliverEventNoActorFallsBackToPluginIdentity covers the bootstrap
+// edge case: no actor in ctx → outgoing metadata carries ActorPlugin:<self>.
+func TestDeliverEventNoActorFallsBackToPluginIdentity(t *testing.T) {
+	t.Parallel()
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	defer func() { _ = h.Close(context.Background()) }()
+	h.plugins["plug-A"] = &loadedPlugin{
+		manifest: &plugins.Manifest{Name: "plug-A"},
+		plugin:   grpcClient,
+	}
+
+	_, err := h.DeliverEvent(context.Background(), "plug-A", pluginsdk.Event{Type: "test"})
+	require.NoError(t, err)
+
+	kind, id, ok := pluginsdk.ActorMetadataFromOutgoingContext(grpcClient.eventCtx)
+	require.True(t, ok)
+	assert.Equal(t, pluginsdk.ActorPlugin, kind)
+	assert.Equal(t, "plug-A", id)
+}
+
+// TestDeliverCommandIssuesTokenWithCharacterActor mirrors the DeliverEvent
+// case for the command boundary.
+func TestDeliverCommandIssuesTokenWithCharacterActor(t *testing.T) {
+	t.Parallel()
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	defer func() { _ = h.Close(context.Background()) }()
+	h.plugins["plug-A"] = &loadedPlugin{
+		manifest: &plugins.Manifest{Name: "plug-A"},
+		plugin:   grpcClient,
+	}
+
+	charID := "01HCHAR0000000000000000000"
+	ctx := core.WithActor(context.Background(), core.Actor{Kind: core.ActorCharacter, ID: charID})
+	_, err := h.DeliverCommand(ctx, "plug-A", pluginsdk.CommandRequest{Command: "say"})
+	require.NoError(t, err)
+
+	md, ok := metadata.FromOutgoingContext(grpcClient.commandCtx)
+	require.True(t, ok, "outgoing metadata MUST be present on the call to plugin")
+	tokens := md.Get("x-holomush-emit-token")
+	require.Len(t, tokens, 1)
+	assert.NotEmpty(t, tokens[0])
+
+	_, ok = h.tokenStore.Lookup("plug-A", tokens[0])
+	assert.False(t, ok, "deferred Revoke MUST clear the token after DeliverCommand returns")
+}
+
+// TestDeliverCommandReanchorsActorSystem mirrors the ActorSystem
+// re-anchor invariant (spec §3.3.4) for the command path.
+func TestDeliverCommandReanchorsActorSystem(t *testing.T) {
+	t.Parallel()
+	grpcClient := &mockGRPCPluginClient{}
+	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	defer func() { _ = h.Close(context.Background()) }()
+	h.plugins["plug-A"] = &loadedPlugin{
+		manifest: &plugins.Manifest{Name: "plug-A"},
+		plugin:   grpcClient,
+	}
+
+	ctx := core.WithActor(context.Background(), core.Actor{Kind: core.ActorSystem, ID: core.ActorSystemID})
+	_, err := h.DeliverCommand(ctx, "plug-A", pluginsdk.CommandRequest{Command: "tick"})
+	require.NoError(t, err)
+
+	kind, id, ok := pluginsdk.ActorMetadataFromOutgoingContext(grpcClient.commandCtx)
+	require.True(t, ok)
+	assert.Equal(t, pluginsdk.ActorPlugin, kind)
+	assert.Equal(t, "plug-A", id)
+}
+
+// TestDeliverEventNoRecoverWrapper (round-1 plan-reviewer N2) — asserts
+// Host.DeliverEvent does NOT contain a recover() call. A recover() in this
+// path would swallow host-side panics and skip the deferred token Revoke,
+// masking forgery attempts and other security failures. The runtime's
+// default panic semantics are correct: surface, defer-Revoke, propagate.
+//
+// Static-analysis approach via go/ast — parsed from CWD = the goplugin/
+// package directory, which is where `go test` runs.
+func TestDeliverEventNoRecoverWrapper(t *testing.T) {
+	t.Parallel()
+	assertNoRecoverInFunction(t, "DeliverEvent")
+}
+
+// TestDeliverCommandNoRecoverWrapper applies the same recover()-guard
+// invariant to the command boundary.
+func TestDeliverCommandNoRecoverWrapper(t *testing.T) {
+	t.Parallel()
+	assertNoRecoverInFunction(t, "DeliverCommand")
+}
+
+// assertNoRecoverInFunction parses host.go and asserts that the named
+// top-level function does not contain a recover() call.
+func assertNoRecoverInFunction(t *testing.T, funcName string) {
+	t.Helper()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "host.go", nil, parser.ParseComments)
+	require.NoError(t, err)
+	var decl *ast.FuncDecl
+	for _, d := range file.Decls {
+		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name.Name == funcName {
+			decl = fn
+			break
+		}
+	}
+	require.NotNilf(t, decl, "%s function must be in host.go", funcName)
+	ast.Inspect(decl, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		ident, ok := call.Fun.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		assert.NotEqualf(t, "recover", ident.Name,
+			"Host.%s MUST NOT contain recover() — would swallow panics and skip deferred token Revoke", funcName)
+		return true
+	})
 }
