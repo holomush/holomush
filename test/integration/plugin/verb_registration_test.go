@@ -28,8 +28,9 @@ var _ = Describe("Plugin verb registration", func() {
 	BeforeEach(func() {
 		pluginsDir = GinkgoT().TempDir()
 		luaHost = pluginlua.NewHost()
-		verbReg = core.NewVerbRegistry()
-		Expect(core.RegisterBuiltinTypes(verbReg)).To(Succeed())
+		var bootErr error
+		verbReg, bootErr = core.BootstrapVerbRegistry("test")
+		Expect(bootErr).NotTo(HaveOccurred())
 		DeferCleanup(func() { _ = luaHost.Close(context.Background()) })
 	})
 
@@ -61,10 +62,11 @@ lua-plugin:
   entry: main.lua
 `, "function on_event(e) end")
 
-		mgr := plugins.NewManager(pluginsDir,
+		mgr, mgrErr := plugins.NewManager(pluginsDir,
 			plugins.WithLuaHost(luaHost),
 			plugins.WithVerbRegistry(verbReg),
 		)
+		Expect(mgrErr).NotTo(HaveOccurred())
 		Expect(mgr.LoadAll(context.Background())).To(Succeed())
 
 		reg, ok := verbReg.Lookup("custom_say")
@@ -96,10 +98,11 @@ lua-plugin:
   entry: main.lua
 `, "function on_event(e) end")
 
-		mgr := plugins.NewManager(pluginsDir,
+		mgr, mgrErr := plugins.NewManager(pluginsDir,
 			plugins.WithLuaHost(luaHost),
 			plugins.WithVerbRegistry(verbReg),
 		)
+		Expect(mgrErr).NotTo(HaveOccurred())
 		err := mgr.LoadAll(context.Background())
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("already registered"))
@@ -128,10 +131,11 @@ lua-plugin:
   entry: main.lua
 `, "function on_event(e) end")
 
-		mgr := plugins.NewManager(pluginsDir,
+		mgr, mgrErr := plugins.NewManager(pluginsDir,
 			plugins.WithLuaHost(luaHost),
 			plugins.WithVerbRegistry(verbReg),
 		)
+		Expect(mgrErr).NotTo(HaveOccurred())
 		err := mgr.LoadAll(context.Background())
 		Expect(err).To(HaveOccurred())
 

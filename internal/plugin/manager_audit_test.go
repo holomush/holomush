@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 )
 
@@ -20,7 +21,8 @@ import (
 func TestManagerAuditSubjectsAggregatesAcrossLoadedPlugins(t *testing.T) {
 	t.Parallel()
 
-	m := plugins.NewManager("")
+	m, mgrErr := plugins.NewManager("", plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 
 	scenes := &plugins.Manifest{
 		Name:    "core-scenes",
@@ -61,7 +63,8 @@ func TestManagerAuditSubjectsAggregatesAcrossLoadedPlugins(t *testing.T) {
 func TestManagerAuditSubjectsEmptyWhenNoPluginsDeclare(t *testing.T) {
 	t.Parallel()
 
-	m := plugins.NewManager("")
+	m, mgrErr := plugins.NewManager("", plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 
 	plain := &plugins.Manifest{
 		Name:    "plain",
@@ -83,7 +86,8 @@ func TestManagerAuditSubjectsEmptyWhenNoPluginsDeclare(t *testing.T) {
 func TestManagerAuditSubjectsFlattensMultipleSubjectsPerBlock(t *testing.T) {
 	t.Parallel()
 
-	m := plugins.NewManager("")
+	m, mgrErr := plugins.NewManager("", plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 
 	multi := &plugins.Manifest{
 		Name:    "multi",

@@ -466,7 +466,17 @@ func TestSubscriberRoutesResponseEventsThroughSharedEmitterWithIncomingActor(t *
 	mockLua.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil).Times(2)
 	mockLua.EXPECT().Close(mock.Anything).Return(nil)
 
-	manager := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua))
+	bootstrapReg, bootErr := core.BootstrapVerbRegistry("test")
+	require.NoError(t, bootErr)
+	require.NoError(t, bootstrapReg.Register(core.VerbRegistration{
+		Type:     "say",
+		Category: "communication",
+		Format:   "speech",
+		Label:    "says",
+		Source:   "core-communication",
+	}))
+	manager, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua), plugins.WithVerbRegistry(bootstrapReg))
+	require.NoError(t, mgrErr)
 	t.Cleanup(func() { _ = manager.Close(context.Background()) })
 
 	require.NoError(t, manager.LoadAll(context.Background()))

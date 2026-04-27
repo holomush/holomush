@@ -16,6 +16,7 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	"github.com/holomush/holomush/internal/store"
@@ -74,10 +75,12 @@ var _ = Describe("Plugin Alias Seeding Integration", func() {
 			luaHost := pluginlua.NewHost()
 			defer func() { _ = luaHost.Close(ctx) }()
 
-			mgr := plugins.NewManager(pluginsDir,
+			mgr, mgrErr := plugins.NewManager(pluginsDir,
 				plugins.WithLuaHost(luaHost),
 				plugins.WithAliasSeeder(repo, cache),
+				plugins.WithVerbRegistry(core.NewVerbRegistry()),
 			)
+			Expect(mgrErr).NotTo(HaveOccurred())
 			Expect(mgr.LoadAll(ctx)).To(Succeed())
 
 			aliases, err := repo.GetSystemAliases(ctx)
@@ -135,10 +138,12 @@ var _ = Describe("Plugin Alias Seeding Integration", func() {
 
 			// First boot: seed from manifests.
 			luaHost1 := pluginlua.NewHost()
-			mgr1 := plugins.NewManager(pluginsDir,
+			mgr1, mgrErr := plugins.NewManager(pluginsDir,
 				plugins.WithLuaHost(luaHost1),
 				plugins.WithAliasSeeder(repo, cache),
+				plugins.WithVerbRegistry(core.NewVerbRegistry()),
 			)
+			Expect(mgrErr).NotTo(HaveOccurred())
 			Expect(mgr1.LoadAll(ctx)).To(Succeed())
 			_ = luaHost1.Close(ctx)
 
@@ -149,10 +154,12 @@ var _ = Describe("Plugin Alias Seeding Integration", func() {
 			// Second boot: simulate restart.
 			cache2 := command.NewAliasCache()
 			luaHost2 := pluginlua.NewHost()
-			mgr2 := plugins.NewManager(pluginsDir,
+			mgr2, mgrErr := plugins.NewManager(pluginsDir,
 				plugins.WithLuaHost(luaHost2),
 				plugins.WithAliasSeeder(repo, cache2),
+				plugins.WithVerbRegistry(core.NewVerbRegistry()),
 			)
+			Expect(mgrErr).NotTo(HaveOccurred())
 			Expect(mgr2.LoadAll(ctx)).To(Succeed())
 			_ = luaHost2.Close(ctx)
 
@@ -178,19 +185,23 @@ var _ = Describe("Plugin Alias Seeding Integration", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			luaHost1 := pluginlua.NewHost()
-			mgr1 := plugins.NewManager(pluginsDir,
+			mgr1, mgrErr := plugins.NewManager(pluginsDir,
 				plugins.WithLuaHost(luaHost1),
 				plugins.WithAliasSeeder(repo, cache),
+				plugins.WithVerbRegistry(core.NewVerbRegistry()),
 			)
+			Expect(mgrErr).NotTo(HaveOccurred())
 			Expect(mgr1.LoadAll(ctx)).To(Succeed())
 			_ = luaHost1.Close(ctx)
 
 			cache2 := command.NewAliasCache()
 			luaHost2 := pluginlua.NewHost()
-			mgr2 := plugins.NewManager(pluginsDir,
+			mgr2, mgrErr := plugins.NewManager(pluginsDir,
 				plugins.WithLuaHost(luaHost2),
 				plugins.WithAliasSeeder(repo, cache2),
+				plugins.WithVerbRegistry(core.NewVerbRegistry()),
 			)
+			Expect(mgrErr).NotTo(HaveOccurred())
 			Expect(mgr2.LoadAll(ctx)).To(Succeed())
 			_ = luaHost2.Close(ctx)
 

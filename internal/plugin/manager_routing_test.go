@@ -131,7 +131,8 @@ func (h *testEventEmitterHost) Plugins() []string { return append([]string(nil),
 func (h *testEventEmitterHost) Close(context.Context) error { return nil }
 
 func TestManagerRegisterHost(t *testing.T) {
-	mgr := plugins.NewManager(t.TempDir())
+	mgr, mgrErr := plugins.NewManager(t.TempDir(), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 
 	mockHost := mocks.NewMockHost(t)
 	mgr.RegisterHost(plugins.TypeBinary, mockHost)
@@ -144,7 +145,8 @@ func TestManagerRegisterHost(t *testing.T) {
 }
 
 func TestManagerRegisterHostPanicsOnNil(t *testing.T) {
-	mgr := plugins.NewManager(t.TempDir())
+	mgr, mgrErr := plugins.NewManager(t.TempDir(), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 
 	assert.Panics(t, func() {
 		mgr.RegisterHost(plugins.TypeBinary, nil)
@@ -152,7 +154,10 @@ func TestManagerRegisterHostPanicsOnNil(t *testing.T) {
 }
 
 func TestManagerRegisterHostBackfillsConfiguredEventEmitter(t *testing.T) {
-	mgr := plugins.NewManager(t.TempDir())
+	bootstrapReg, bootErr := core.BootstrapVerbRegistry("test")
+	require.NoError(t, bootErr)
+	mgr, mgrErr := plugins.NewManager(t.TempDir(), plugins.WithVerbRegistry(bootstrapReg))
+	require.NoError(t, mgrErr)
 	bus := eventbustest.New(t)
 
 	mgr.ConfigureEventEmitter(bus.Bus.Publisher())
@@ -191,7 +196,17 @@ binary-plugin:
 		})
 	}
 
-	mgr := plugins.NewManager(pluginsDir)
+	bootstrapReg, bootErr := core.BootstrapVerbRegistry("test")
+	require.NoError(t, bootErr)
+	require.NoError(t, bootstrapReg.Register(core.VerbRegistration{
+		Type:     "say",
+		Category: "communication",
+		Format:   "speech",
+		Label:    "says",
+		Source:   "core-communication",
+	}))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(bootstrapReg))
+	require.NoError(t, mgrErr)
 	mgr.RegisterHost(plugins.TypeBinary, host)
 	mgr.ConfigureEventEmitter(bus.Bus.Publisher())
 
@@ -223,7 +238,8 @@ func TestManagerDeliverCommandRoutesToCorrectHost(t *testing.T) {
 	expectedResp := &pluginsdk.CommandResponse{Output: "hello world"}
 	mockLua.EXPECT().DeliverCommand(mock.Anything, "say-plugin", mock.Anything).Return(expectedResp, nil)
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	t.Cleanup(func() { _ = mgr.Close(context.Background()) })
 
 	require.NoError(t, mgr.LoadAll(context.Background()))
@@ -238,7 +254,8 @@ func TestManagerDeliverCommandRoutesToCorrectHost(t *testing.T) {
 }
 
 func TestManagerDeliverCommandUnknownPlugin(t *testing.T) {
-	mgr := plugins.NewManager(t.TempDir())
+	mgr, mgrErr := plugins.NewManager(t.TempDir(), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 
 	_, err := mgr.DeliverCommand(context.Background(), "nonexistent", pluginsdk.CommandRequest{})
 	require.Error(t, err)
@@ -256,7 +273,8 @@ func TestManagerDeliverEventRoutesToCorrectHost(t *testing.T) {
 	expectedEmits := []pluginsdk.EmitEvent{{Stream: "loc:1", Type: "say", Payload: `{}`}}
 	mockLua.EXPECT().DeliverEvent(mock.Anything, "echo-bot", mock.Anything).Return(expectedEmits, nil)
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	t.Cleanup(func() { _ = mgr.Close(context.Background()) })
 
 	require.NoError(t, mgr.LoadAll(context.Background()))
@@ -271,7 +289,8 @@ func TestManagerDeliverEventRoutesToCorrectHost(t *testing.T) {
 }
 
 func TestManagerDeliverEventUnknownPlugin(t *testing.T) {
-	mgr := plugins.NewManager(t.TempDir())
+	mgr, mgrErr := plugins.NewManager(t.TempDir(), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 
 	_, err := mgr.DeliverEvent(context.Background(), "nonexistent", pluginsdk.Event{})
 	require.Error(t, err)
@@ -288,7 +307,17 @@ func TestManagerEmitPluginEventUsesConfiguredSharedEmitter(t *testing.T) {
 	mockLua.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil).Times(2)
 	mockLua.EXPECT().Close(mock.Anything).Return(nil)
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua))
+	bootstrapReg, bootErr := core.BootstrapVerbRegistry("test")
+	require.NoError(t, bootErr)
+	require.NoError(t, bootstrapReg.Register(core.VerbRegistration{
+		Type:     "say",
+		Category: "communication",
+		Format:   "speech",
+		Label:    "says",
+		Source:   "core-communication",
+	}))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua), plugins.WithVerbRegistry(bootstrapReg))
+	require.NoError(t, mgrErr)
 	t.Cleanup(func() { _ = mgr.Close(context.Background()) })
 
 	require.NoError(t, mgr.LoadAll(context.Background()))
@@ -330,7 +359,8 @@ func TestManagerDeliverCommandConcurrentSafety(t *testing.T) {
 	mockLua.EXPECT().DeliverCommand(mock.Anything, "say-plugin", mock.Anything).Return(resp, nil).Times(goroutines)
 	mockLua.EXPECT().DeliverEvent(mock.Anything, "echo-bot", mock.Anything).Return(nil, nil).Times(goroutines)
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	t.Cleanup(func() { _ = mgr.Close(context.Background()) })
 
 	require.NoError(t, mgr.LoadAll(context.Background()))
@@ -367,7 +397,8 @@ binary-plugin:
   executable: my-binary
 `))
 
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	require.NoError(t, mgr.LoadAll(context.Background()))
 
 	// Plugin should be skipped since no binary host is registered
@@ -389,7 +420,8 @@ func TestManagerPluginHostMappingTrackedCorrectly(t *testing.T) {
 	luaEmits := []pluginsdk.EmitEvent{{Stream: "s", Type: "say"}}
 	mockLua.EXPECT().DeliverEvent(mock.Anything, "echo-bot", mock.Anything).Return(luaEmits, nil)
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	t.Cleanup(func() { _ = mgr.Close(context.Background()) })
 
 	require.NoError(t, mgr.LoadAll(context.Background()))
@@ -426,7 +458,8 @@ lua-plugin:
 	mockLua.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mockLua.EXPECT().Close(mock.Anything).Return(nil)
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 
 	require.NoError(t, mgr.LoadAll(context.Background()))
 	require.Len(t, mgr.ListPlugins(), 1)
@@ -448,7 +481,8 @@ func TestManagerCloseClosesAllHosts(t *testing.T) {
 	// Host should be closed
 	mockLua.EXPECT().Close(mock.Anything).Return(nil)
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 
 	require.NoError(t, mgr.LoadAll(context.Background()))
 	require.NoError(t, mgr.Close(context.Background()))
@@ -490,10 +524,12 @@ lua-plugin:
 		removeFn: func(context.Context, string) error { return nil },
 	}
 
-	mgr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(pluginsDir,
 		plugins.WithLuaHost(mockHost),
 		plugins.WithPolicyInstaller(installer),
+		plugins.WithVerbRegistry(core.NewVerbRegistry()),
 	)
+	require.NoError(t, mgrErr)
 	t.Cleanup(func() { _ = mgr.Close(context.Background()) })
 
 	require.NoError(t, mgr.LoadAll(context.Background()))

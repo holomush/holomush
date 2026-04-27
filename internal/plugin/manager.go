@@ -48,7 +48,18 @@ const (
 	// `provides:` but the host implementation does not satisfy the optional
 	// ServiceConnProvider interface needed to expose plugin gRPC services.
 	CodeHostMissingConnProvider = "PLUGIN_HOST_MISSING_CONN_PROVIDER"
+
+	// CodeMissingVerbRegistry is returned by NewManager when no
+	// VerbRegistry has been configured via WithVerbRegistry. INV-GW-10.
+	CodeMissingVerbRegistry = "MISSING_VERB_REGISTRY"
 )
+
+// ErrMissingVerbRegistry is returned by NewManager when no VerbRegistry has
+// been configured via WithVerbRegistry. INV-GW-10: every plugin manager MUST
+// be constructed with a non-nil VerbRegistry so plugin-declared verbs and
+// host-owned event types resolve through a single shared source of truth.
+var ErrMissingVerbRegistry = oops.Code(CodeMissingVerbRegistry).
+	Errorf("plugin manager requires a VerbRegistry; pass WithVerbRegistry(...)")
 
 // Manager discovers and manages plugin lifecycle.
 type Manager struct {
@@ -163,7 +174,11 @@ func (m *Manager) Registry() *ServiceRegistry {
 }
 
 // NewManager creates a plugin manager.
-func NewManager(pluginsDir string, opts ...ManagerOption) *Manager {
+//
+// INV-GW-10: callers MUST supply a non-nil VerbRegistry via
+// WithVerbRegistry. Construction returns ErrMissingVerbRegistry when the
+// option is omitted so plugin-declared verbs always have a place to land.
+func NewManager(pluginsDir string, opts ...ManagerOption) (*Manager, error) {
 	m := &Manager{
 		pluginsDir:  pluginsDir,
 		loaded:      make(map[string]*DiscoveredPlugin),
@@ -179,7 +194,10 @@ func NewManager(pluginsDir string, opts ...ManagerOption) *Manager {
 	if m.luaHost != nil {
 		m.hostCaps[m.luaHost] = discoverCapabilities(m.luaHost)
 	}
-	return m
+	if m.verbRegistry == nil {
+		return nil, ErrMissingVerbRegistry
+	}
+	return m, nil
 }
 
 // RegisterHost registers a host implementation for a plugin type.

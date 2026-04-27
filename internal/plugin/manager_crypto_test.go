@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
+	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/pkg/errutil"
 )
@@ -143,7 +144,8 @@ crypto:
 `),
 		0o600,
 	))
-	mgr := plugins.NewManager(tmp)
+	mgr, mgrErr := plugins.NewManager(tmp, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	discovered, err := mgr.Discover(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, discovered, "plugin with invalid crypto section MUST be filtered out")
@@ -168,7 +170,8 @@ crypto:
 `),
 		0o600,
 	))
-	mgr := plugins.NewManager(tmp)
+	mgr, mgrErr := plugins.NewManager(tmp, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	discovered, err := mgr.Discover(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, discovered)
@@ -191,7 +194,8 @@ crypto:
 `),
 		0o600,
 	))
-	mgr := plugins.NewManager(tmp)
+	mgr, mgrErr := plugins.NewManager(tmp, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	discovered, err := mgr.Discover(t.Context())
 	require.NoError(t, err)
 	require.Len(t, discovered, 1)
@@ -202,7 +206,8 @@ func TestDiscoverAcceptsRealPluginsDirectory(t *testing.T) {
 	// Load every real plugin from the repo's plugins/ directory.
 	// Confirms the crypto.emits declarations all pass validation.
 	pluginsDir := filepath.Join("..", "..", "plugins")
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	discovered, err := mgr.Discover(t.Context())
 	require.NoError(t, err)
 	require.NotEmpty(t, discovered, "expected at least one real plugin to be discovered")

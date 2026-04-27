@@ -19,6 +19,7 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/stretchr/testify/mock"
 
+	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
@@ -49,7 +50,11 @@ func setupEchoBotTest() (*echoBotFixture, error) {
 	hostFuncs := hostfunc.New(nil)
 	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
 
-	manager := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	manager, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	if mgrErr != nil {
+		luaHost.Close(context.Background()) //nolint:errcheck
+		return nil, mgrErr
+	}
 
 	ctx := context.Background()
 	discovered, err := manager.Discover(ctx)

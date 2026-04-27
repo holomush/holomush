@@ -265,14 +265,17 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		plugins.WithPolicyInstaller(policyInstaller),
 		plugins.WithTrustAllowlist(s.cfg.TrustAllowlist),
 		plugins.WithServiceRegistry(s.registry),
-	}
-	if s.cfg.VerbRegistry != nil {
-		managerOpts = append(managerOpts, plugins.WithVerbRegistry(s.cfg.VerbRegistry))
+		plugins.WithVerbRegistry(s.cfg.VerbRegistry),
 	}
 	if s.aliasRepo != nil && s.aliasCache != nil {
 		managerOpts = append(managerOpts, plugins.WithAliasSeeder(s.aliasRepo, s.aliasCache))
 	}
-	s.manager = plugins.NewManager(pluginsDir, managerOpts...)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, managerOpts...)
+	if mgrErr != nil {
+		cleanupOnError()
+		return oops.In("plugin-subsystem").Wrap(mgrErr)
+	}
+	s.manager = mgr
 	s.manager.RegisterHost(plugins.TypeBinary, instrumentedBinaryHost)
 
 	// 9. Set ABAC plugin provider registry.
