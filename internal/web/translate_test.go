@@ -465,3 +465,28 @@ func TestTranslateEvent_PopulatesEventIdForStateEvents(t *testing.T) {
 	require.NotNil(t, got)
 	assert.Equal(t, expectedID, got.GetEventId())
 }
+
+// TestEventChannelEnumsInLockstep is INV-GW-16. corev1.EventChannel and
+// webv1.EventChannel MUST stay in lockstep — same enum values, same names,
+// same numeric assignments.
+func TestEventChannelEnumsInLockstep(t *testing.T) {
+	cases := []struct {
+		name string
+		core corev1.EventChannel
+		web  webv1.EventChannel
+	}{
+		{"UNSPECIFIED", corev1.EventChannel_EVENT_CHANNEL_UNSPECIFIED, webv1.EventChannel_EVENT_CHANNEL_UNSPECIFIED},
+		{"TERMINAL", corev1.EventChannel_EVENT_CHANNEL_TERMINAL, webv1.EventChannel_EVENT_CHANNEL_TERMINAL},
+		{"STATE", corev1.EventChannel_EVENT_CHANNEL_STATE, webv1.EventChannel_EVENT_CHANNEL_STATE},
+		{"BOTH", corev1.EventChannel_EVENT_CHANNEL_BOTH, webv1.EventChannel_EVENT_CHANNEL_BOTH},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, int32(c.core), int32(c.web), "numeric mismatch")
+			coreName := corev1.EventChannel_name[int32(c.core)]
+			webName := webv1.EventChannel_name[int32(c.web)]
+			assert.Equal(t, coreName, webName)
+		})
+	}
+	assert.Equal(t, len(corev1.EventChannel_name), len(webv1.EventChannel_name))
+}
