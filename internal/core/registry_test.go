@@ -174,10 +174,10 @@ func TestVerbRegistryUnregisterBySourceUnknownReturnsZero(t *testing.T) {
 
 func TestRegisterBuiltinTypesRegistersAllKnownEventTypes(t *testing.T) {
 	r := NewVerbRegistry()
-	err := RegisterBuiltinTypes(r)
+	err := registerBuiltinTypes(r, "test")
 	require.NoError(t, err)
 
-	// RegisterBuiltinTypes registers ONLY host-owned event types per the
+	// registerBuiltinTypes registers ONLY host-owned event types per the
 	// plugin-boundary discipline. Plugin-owned types (say/pose/whisper
 	// from core-communication, object_* from core-objects) are registered
 	// by the plugin loader from each plugin's manifest `verbs:` block —
@@ -192,11 +192,11 @@ func TestRegisterBuiltinTypesRegistersAllKnownEventTypes(t *testing.T) {
 	_, ok = r.Lookup("location_state")
 	assert.True(t, ok)
 
-	// Plugin-owned types are NOT registered by RegisterBuiltinTypes:
+	// Plugin-owned types are NOT registered by registerBuiltinTypes:
 	_, ok = r.Lookup("core-communication:say")
-	assert.False(t, ok, "say is plugin-owned and registered by the loader, not RegisterBuiltinTypes")
+	assert.False(t, ok, "say is plugin-owned and registered by the loader, not registerBuiltinTypes")
 	_, ok = r.Lookup("core-objects:object_create")
-	assert.False(t, ok, "object_create is plugin-owned and registered by the loader, not RegisterBuiltinTypes")
+	assert.False(t, ok, "object_create is plugin-owned and registered by the loader, not registerBuiltinTypes")
 }
 
 func TestRegisterWithSourceRecordsVersion(t *testing.T) {
@@ -230,7 +230,7 @@ func TestRegisterFallsBackToEmptyVersion(t *testing.T) {
 
 func TestRegisterBuiltinTypesDoesNotIncludeChannelTypes(t *testing.T) {
 	r := NewVerbRegistry()
-	err := RegisterBuiltinTypes(r)
+	err := registerBuiltinTypes(r, "test")
 	require.NoError(t, err)
 
 	channelTypes := []string{"channel_say", "channel_pose", "channel_system"}
@@ -238,4 +238,18 @@ func TestRegisterBuiltinTypesDoesNotIncludeChannelTypes(t *testing.T) {
 		_, ok := r.Lookup(ct)
 		assert.False(t, ok, "builtin registry should not include %s", ct)
 	}
+}
+
+func TestBootstrapVerbRegistryReturnsSeededRegistry(t *testing.T) {
+	r, err := BootstrapVerbRegistry("0.4.2-test")
+	require.NoError(t, err)
+
+	// Builtins are registered.
+	reg, ok := r.Lookup("arrive")
+	require.True(t, ok)
+	assert.Equal(t, "movement", reg.Category)
+	assert.Equal(t, "builtin", reg.Source)
+
+	// Source version uses the host- prefix.
+	assert.Equal(t, "host-0.4.2-test", r.SourceVersion("builtin"))
 }
