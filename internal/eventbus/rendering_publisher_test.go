@@ -122,6 +122,66 @@ func TestRenderingPublisherUnknownVerb(t *testing.T) {
 	assert.Empty(t, inner.published, "must not publish on unknown verb")
 }
 
+// TestRenderingPublisherSourcePluginVersionForBuiltin is INV-GW-9 for builtins.
+// host-owned event types (registered via BootstrapVerbRegistry) MUST have
+// source_plugin == "builtin" and source_plugin_version == "host-<binary version>".
+func TestRenderingPublisherSourcePluginVersionForBuiltin(t *testing.T) {
+	r, err := core.BootstrapVerbRegistry("0.4.2-test")
+	require.NoError(t, err)
+
+	inner := &fakePublisher{}
+	rp := eventbus.NewRenderingPublisher(inner, r)
+
+	ev := eventbus.Event{
+		ID:      ulid.Make(),
+		Subject: eventbus.Subject("events.main.character.01ABC"),
+		Type:    eventbus.Type("arrive"), // builtin
+		Actor:   eventbus.Actor{Kind: eventbus.ActorKindSystem},
+		Payload: []byte(`{}`),
+	}
+	require.NoError(t, rp.Publish(context.Background(), ev))
+
+	require.Len(t, inner.published, 1)
+	got := inner.published[0].Rendering
+	require.NotNil(t, got)
+	assert.Equal(t, "builtin", got.SourcePlugin)
+	assert.Equal(t, "host-0.4.2-test", got.SourcePluginVersion)
+}
+
+// TestRenderingPublisherSourcePluginVersionForPlugin is INV-GW-9 for plugins.
+// Plugin-owned event types MUST have source_plugin = manifest name and
+// source_plugin_version = manifest version.
+func TestRenderingPublisherSourcePluginVersionForPlugin(t *testing.T) {
+	r, err := core.BootstrapVerbRegistry("0.4.2-test")
+	require.NoError(t, err)
+	require.NoError(t, r.RegisterWithSource(core.VerbRegistration{
+		Type:          "core-communication:say",
+		Category:      "communication",
+		Format:        "speech",
+		Label:         "says",
+		DisplayTarget: webv1.EventChannel_EVENT_CHANNEL_TERMINAL,
+		Source:        "core-communication",
+	}, "0.1.0"))
+
+	inner := &fakePublisher{}
+	rp := eventbus.NewRenderingPublisher(inner, r)
+
+	ev := eventbus.Event{
+		ID:      ulid.Make(),
+		Subject: eventbus.Subject("events.main.character.01ABC"),
+		Type:    eventbus.Type("core-communication:say"),
+		Actor:   eventbus.Actor{Kind: eventbus.ActorKindCharacter},
+		Payload: []byte(`{}`),
+	}
+	require.NoError(t, rp.Publish(context.Background(), ev))
+
+	require.Len(t, inner.published, 1)
+	got := inner.published[0].Rendering
+	require.NotNil(t, got)
+	assert.Equal(t, "core-communication", got.SourcePlugin)
+	assert.Equal(t, "0.1.0", got.SourcePluginVersion)
+}
+
 // fakePublisher captures events for inspection.
 type fakePublisher struct {
 	published []eventbus.Event
