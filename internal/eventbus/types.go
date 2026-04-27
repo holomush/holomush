@@ -57,6 +57,29 @@ type Actor struct {
 	LegacyID string
 }
 
+// EventChannel mirrors corev1.EventChannel for ergonomic host-side use
+// (avoids forcing test fixtures and emit-site struct literals to import
+// the proto package). Kept in lockstep with the proto enum by INV-GW-14.
+type EventChannel uint8
+
+const (
+	EventChannelUnspecified EventChannel = 0
+	EventChannelTerminal    EventChannel = 1
+	EventChannelState       EventChannel = 2
+	EventChannelBoth        EventChannel = 3
+)
+
+// RenderingMetadata is the host-side representation of corev1.RenderingMetadata.
+// Populated by RenderingPublisher.Publish before marshaling to the wire.
+type RenderingMetadata struct {
+	Category            string
+	Format              string
+	Label               string
+	DisplayTarget       EventChannel
+	SourcePlugin        string
+	SourcePluginVersion string
+}
+
 // Event is the host-side representation of a published event.
 //
 // Wire format (JetStream): proto-encoded Event in msg.Data, with headers
@@ -70,6 +93,10 @@ type Event struct {
 	Timestamp time.Time
 	Actor     Actor
 	Payload   []byte // codec.Encode output (ciphertext if encryption is on)
+	// Rendering is populated by RenderingPublisher.Publish before
+	// marshaling. Callers MUST NOT populate this field directly; the
+	// field is reserved for the publisher chain.
+	Rendering *RenderingMetadata
 }
 
 // subjectTokenRe permits NATS subject tokens: letters, digits, dashes,
