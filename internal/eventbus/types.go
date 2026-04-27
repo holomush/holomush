@@ -97,6 +97,24 @@ type Event struct {
 	// marshaling. Callers MUST NOT populate this field directly; the
 	// field is reserved for the publisher chain.
 	Rendering *RenderingMetadata
+	// Headers carries pre-publish NATS headers stamped by the publisher
+	// chain (e.g. App-Rendering by RenderingPublisher). JetStreamPublisher
+	// merges these into the outgoing nats.Msg headers alongside the
+	// system-stamped ones. Callers other than the publisher chain MUST
+	// NOT populate this field directly.
+	//
+	// Reserved-keys rule: caller-written keys MUST start with "App-" and
+	// MUST NOT be in the system-reserved set (Nats-Msg-Id, App-Codec,
+	// App-Schema-Version, App-Event-Type, App-Actor-Kind, App-Actor-ID,
+	// App-Actor-Legacy-ID, traceparent, tracestate). Keys starting with
+	// "Nats-" are reserved unconditionally. Violation panics under
+	// testing.Testing(); in production logs a warning and the system
+	// value wins.
+	//
+	// Cold-tier reads: this field is publish-path only. The cold-tier
+	// history reader leaves Headers nil. Subscribers MUST NOT depend
+	// on Headers being populated at read time; they read Event.Rendering.
+	Headers map[string]string
 }
 
 // subjectTokenRe permits NATS subject tokens: letters, digits, dashes,
