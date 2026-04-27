@@ -17,6 +17,7 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/telemetry"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
 
@@ -299,6 +300,38 @@ func ActorKindToProto(k ActorKind) eventbusv1.ActorKind {
 		return eventbusv1.ActorKind_ACTOR_KIND_PLUGIN
 	default:
 		return eventbusv1.ActorKind_ACTOR_KIND_UNSPECIFIED
+	}
+}
+
+// RenderingToProto converts the host-side RenderingMetadata to its proto
+// form. Returns nil if input is nil. INV-GW-14 ensures parity.
+func RenderingToProto(r *RenderingMetadata) *corev1.RenderingMetadata {
+	if r == nil {
+		return nil
+	}
+	return &corev1.RenderingMetadata{
+		Category:            r.Category,
+		Format:              r.Format,
+		Label:               r.Label,
+		DisplayTarget:       corev1.EventChannel(r.DisplayTarget),
+		SourcePlugin:        r.SourcePlugin,
+		SourcePluginVersion: r.SourcePluginVersion,
+	}
+}
+
+// RenderingFromProto converts the proto form to the host-side struct.
+// Returns nil if input is nil.
+func RenderingFromProto(p *corev1.RenderingMetadata) *RenderingMetadata {
+	if p == nil {
+		return nil
+	}
+	return &RenderingMetadata{
+		Category:            p.GetCategory(),
+		Format:              p.GetFormat(),
+		Label:               p.GetLabel(),
+		DisplayTarget:       EventChannel(p.GetDisplayTarget()),
+		SourcePlugin:        p.GetSourcePlugin(),
+		SourcePluginVersion: p.GetSourcePluginVersion(),
 	}
 }
 
