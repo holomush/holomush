@@ -239,7 +239,7 @@ setup() {
   # Each invariant ID must appear in the spec's invariant table.
   local id
   for id in "${!expected[@]}"; do
-    grep -q "^| ${id}\b" "$spec" || fail "invariant $id missing from spec table"
+    grep -Eq "^\| ${id}[[:space:]]*\|" "$spec" || fail "invariant $id missing from spec table"
   done
 
   # Each expected test name must appear in the bats file.
