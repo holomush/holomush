@@ -576,6 +576,7 @@ func (s *CoreServer) toProtoSubscribeResponse(ev eventbus.Event) *corev1.Subscri
 				ActorId:   actorIDString(ev.Actor),
 				Payload:   ev.Payload,
 				Cursor:    encodeEventCursor(ev),
+				Rendering: eventbus.RenderingToProto(ev.Rendering),
 			},
 		},
 	}
