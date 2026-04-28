@@ -86,17 +86,19 @@ func TestRenderingPublisherStampsAppRenderingHeader(t *testing.T) {
 	headerJSON, ok := got.Headers["App-Rendering"]
 	require.True(t, ok, "App-Rendering header missing")
 
-	// Decode header and compare to event.Rendering via the shared canonical form.
-	headerMD := &corev1.RenderingMetadata{}
-	require.NoError(t, protojson.Unmarshal([]byte(headerJSON), headerMD))
-
+	// Compare the raw header JSON against the canonical marshal of the
+	// envelope's Rendering. Any drift in marshal options (e.g., enum numbers,
+	// proto-vs-camel field names) shows up as a byte-for-byte mismatch
+	// instead of being smoothed over by an Unmarshal/Marshal round-trip.
 	envelopeMD := eventbus.RenderingToProto(got.Rendering)
 	opts := protojson.MarshalOptions{UseProtoNames: true, UseEnumNumbers: false, EmitUnpopulated: true}
-	headerCanonical, _ := opts.Marshal(headerMD)
-	envelopeCanonical, _ := opts.Marshal(envelopeMD)
-	assert.JSONEq(t, string(envelopeCanonical), string(headerCanonical))
+	envelopeCanonical, err := opts.Marshal(envelopeMD)
+	require.NoError(t, err)
+	assert.Equal(t, string(envelopeCanonical), headerJSON)
 
-	// Sanity: header decodes to expected fields.
+	// Decode header for the sanity-check assertions below.
+	headerMD := &corev1.RenderingMetadata{}
+	require.NoError(t, protojson.Unmarshal([]byte(headerJSON), headerMD))
 	assert.Equal(t, "communication", headerMD.GetCategory())
 	assert.Equal(t, "speech", headerMD.GetFormat())
 }

@@ -6,144 +6,160 @@ package plugins_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-func TestValidateCryptoAcceptsValidManifest(t *testing.T) {
-	m := &plugins.Manifest{
-		Name: "core-communication",
-		Crypto: &plugins.CryptoSection{
-			Emits: []plugins.CryptoEmit{
-				{EventType: "whisper", Sensitivity: plugins.SensitivityAlways},
-				{EventType: "say", Sensitivity: plugins.SensitivityNever},
-			},
-			Consumes: []plugins.CryptoConsume{{
-				Subjects:           []string{"events.*.character.*.whisper"},
-				RequestsDecryption: []string{"core-communication:whisper"},
-			}},
-		},
-		Dependencies: map[string]string{}, // self-reference allowed
-	}
-	require.NoError(t, plugins.ValidateCrypto(m))
-}
-
-func TestValidateCryptoRejectsUnknownSensitivity(t *testing.T) {
-	m := &plugins.Manifest{
-		Name: "x",
-		Crypto: &plugins.CryptoSection{
-			Emits: []plugins.CryptoEmit{
-				{EventType: "foo", Sensitivity: "kinda"},
+func TestValidateCrypto(t *testing.T) {
+	tests := []struct {
+		name        string
+		manifest    *plugins.Manifest
+		wantErrCode string // empty = expect success
+	}{
+		{
+			name: "accepts a manifest with valid emits and consumes",
+			manifest: &plugins.Manifest{
+				Name: "core-communication",
+				Crypto: &plugins.CryptoSection{
+					Emits: []plugins.CryptoEmit{
+						{EventType: "whisper", Sensitivity: plugins.SensitivityAlways},
+						{EventType: "say", Sensitivity: plugins.SensitivityNever},
+					},
+					Consumes: []plugins.CryptoConsume{{
+						Subjects:           []string{"events.*.character.*.whisper"},
+						RequestsDecryption: []string{"core-communication:whisper"},
+					}},
+				},
+				Dependencies: map[string]string{}, // self-reference allowed
 			},
 		},
-	}
-	err := plugins.ValidateCrypto(m)
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "PLUGIN_CRYPTO_INVALID_SENSITIVITY")
-}
-
-func TestValidateCryptoRejectsDuplicateEmitEventType(t *testing.T) {
-	m := &plugins.Manifest{
-		Name: "x",
-		Crypto: &plugins.CryptoSection{
-			Emits: []plugins.CryptoEmit{
-				{EventType: "foo", Sensitivity: plugins.SensitivityMay},
-				{EventType: "foo", Sensitivity: plugins.SensitivityAlways},
+		{
+			name: "accepts a manifest with no crypto section",
+			manifest: &plugins.Manifest{Name: "x"},
+		},
+		{
+			// A plugin's consumes block MAY request decryption for its OWN
+			// emitted event types without listing itself in dependencies.
+			name: "accepts self-reference in consumes",
+			manifest: &plugins.Manifest{
+				Name: "core-communication",
+				Crypto: &plugins.CryptoSection{
+					Emits: []plugins.CryptoEmit{
+						{EventType: "whisper", Sensitivity: plugins.SensitivityAlways},
+					},
+					Consumes: []plugins.CryptoConsume{{
+						Subjects:           []string{"events.*.character.*.whisper"},
+						RequestsDecryption: []string{"core-communication:whisper"},
+					}},
+				},
 			},
 		},
-	}
-	err := plugins.ValidateCrypto(m)
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "PLUGIN_CRYPTO_DUPLICATE_EMIT")
-}
-
-func TestValidateCryptoRejectsWildcardInRequestsDecryption(t *testing.T) {
-	m := &plugins.Manifest{
-		Name: "x",
-		Crypto: &plugins.CryptoSection{
-			Consumes: []plugins.CryptoConsume{{
-				Subjects:           []string{"events.>"},
-				RequestsDecryption: []string{"*"},
-			}},
-		},
-	}
-	err := plugins.ValidateCrypto(m)
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "PLUGIN_CRYPTO_WILDCARD_DECRYPT")
-}
-
-func TestValidateCryptoRejectsUnqualifiedRequestsDecryption(t *testing.T) {
-	m := &plugins.Manifest{
-		Name: "x",
-		Crypto: &plugins.CryptoSection{
-			Consumes: []plugins.CryptoConsume{{
-				Subjects:           []string{"events.>"},
-				RequestsDecryption: []string{"whisper"}, // missing plugin: prefix
-			}},
-		},
-	}
-	err := plugins.ValidateCrypto(m)
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "PLUGIN_CRYPTO_UNQUALIFIED_REF")
-}
-
-func TestValidateCryptoRejectsRefToNonDependencyPlugin(t *testing.T) {
-	m := &plugins.Manifest{
-		Name:         "consumer",
-		Dependencies: map[string]string{}, // declares no deps
-		Crypto: &plugins.CryptoSection{
-			Consumes: []plugins.CryptoConsume{{
-				Subjects:           []string{"events.>"},
-				RequestsDecryption: []string{"core-communication:whisper"}, // not in deps
-			}},
-		},
-	}
-	err := plugins.ValidateCrypto(m)
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "PLUGIN_CRYPTO_REF_NOT_REQUIRED")
-}
-
-func TestValidateCryptoAcceptsSelfReference(t *testing.T) {
-	// A plugin's consumes block MAY request decryption for its OWN emitted
-	// event types without listing itself in dependencies (self-reference).
-	m := &plugins.Manifest{
-		Name: "core-communication",
-		Crypto: &plugins.CryptoSection{
-			Emits: []plugins.CryptoEmit{
-				{EventType: "whisper", Sensitivity: plugins.SensitivityAlways},
+		{
+			name: "rejects unknown sensitivity value",
+			manifest: &plugins.Manifest{
+				Name: "x",
+				Crypto: &plugins.CryptoSection{
+					Emits: []plugins.CryptoEmit{
+						{EventType: "foo", Sensitivity: "kinda"},
+					},
+				},
 			},
-			Consumes: []plugins.CryptoConsume{{
-				Subjects:           []string{"events.*.character.*.whisper"},
-				RequestsDecryption: []string{"core-communication:whisper"},
-			}},
+			wantErrCode: "PLUGIN_CRYPTO_INVALID_SENSITIVITY",
+		},
+		{
+			name: "rejects whitespace-only event_type",
+			manifest: &plugins.Manifest{
+				Name: "x",
+				Crypto: &plugins.CryptoSection{
+					Emits: []plugins.CryptoEmit{
+						{EventType: "   ", Sensitivity: plugins.SensitivityAlways},
+					},
+				},
+			},
+			wantErrCode: "PLUGIN_CRYPTO_EMPTY_EVENT_TYPE",
+		},
+		{
+			name: "rejects duplicate emit event_type",
+			manifest: &plugins.Manifest{
+				Name: "x",
+				Crypto: &plugins.CryptoSection{
+					Emits: []plugins.CryptoEmit{
+						{EventType: "foo", Sensitivity: plugins.SensitivityMay},
+						{EventType: "foo", Sensitivity: plugins.SensitivityAlways},
+					},
+				},
+			},
+			wantErrCode: "PLUGIN_CRYPTO_DUPLICATE_EMIT",
+		},
+		{
+			name: "rejects bare wildcard in requests_decryption",
+			manifest: &plugins.Manifest{
+				Name: "x",
+				Crypto: &plugins.CryptoSection{
+					Consumes: []plugins.CryptoConsume{{
+						Subjects:           []string{"events.>"},
+						RequestsDecryption: []string{"*"},
+					}},
+				},
+			},
+			wantErrCode: "PLUGIN_CRYPTO_WILDCARD_DECRYPT",
+		},
+		{
+			// "core-communication:*" parses as a syntactically-qualified ref
+			// but contains a NATS-style token wildcard — must be rejected.
+			name: "rejects token-level wildcard in qualified requests_decryption",
+			manifest: &plugins.Manifest{
+				Name:         "consumer",
+				Dependencies: map[string]string{"core-communication": ">= 1.0.0"},
+				Crypto: &plugins.CryptoSection{
+					Consumes: []plugins.CryptoConsume{{
+						Subjects:           []string{"events.>"},
+						RequestsDecryption: []string{"core-communication:*"},
+					}},
+				},
+			},
+			wantErrCode: "PLUGIN_CRYPTO_WILDCARD_DECRYPT",
+		},
+		{
+			name: "rejects unqualified plugin reference in requests_decryption",
+			manifest: &plugins.Manifest{
+				Name: "x",
+				Crypto: &plugins.CryptoSection{
+					Consumes: []plugins.CryptoConsume{{
+						Subjects:           []string{"events.>"},
+						RequestsDecryption: []string{"whisper"}, // missing plugin: prefix
+					}},
+				},
+			},
+			wantErrCode: "PLUGIN_CRYPTO_UNQUALIFIED_REF",
+		},
+		{
+			name: "rejects ref to plugin not in dependencies",
+			manifest: &plugins.Manifest{
+				Name:         "consumer",
+				Dependencies: map[string]string{}, // declares no deps
+				Crypto: &plugins.CryptoSection{
+					Consumes: []plugins.CryptoConsume{{
+						Subjects:           []string{"events.>"},
+						RequestsDecryption: []string{"core-communication:whisper"},
+					}},
+				},
+			},
+			wantErrCode: "PLUGIN_CRYPTO_REF_NOT_REQUIRED",
 		},
 	}
-	require.NoError(t, plugins.ValidateCrypto(m))
-}
 
-func TestValidateCryptoNilSectionIsAccepted(t *testing.T) {
-	m := &plugins.Manifest{Name: "x"}
-	assert.NoError(t, plugins.ValidateCrypto(m))
-}
-
-func TestValidateCryptoRejectsTokenLevelWildcardInRequestsDecryption(t *testing.T) {
-	// "core-communication:*" parses as a syntactically-qualified ref but
-	// contains a NATS-style token wildcard — must be rejected at the
-	// validator, not silently accepted.
-	m := &plugins.Manifest{
-		Name:         "consumer",
-		Dependencies: map[string]string{"core-communication": ">= 1.0.0"},
-		Crypto: &plugins.CryptoSection{
-			Consumes: []plugins.CryptoConsume{{
-				Subjects:           []string{"events.>"},
-				RequestsDecryption: []string{"core-communication:*"},
-			}},
-		},
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := plugins.ValidateCrypto(tt.manifest)
+			if tt.wantErrCode == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			errutil.AssertErrorCode(t, err, tt.wantErrCode)
+		})
 	}
-	err := plugins.ValidateCrypto(m)
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "PLUGIN_CRYPTO_WILDCARD_DECRYPT")
 }

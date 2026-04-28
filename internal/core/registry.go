@@ -50,13 +50,6 @@ func NewVerbRegistry() *VerbRegistry {
 	}
 }
 
-// Register adds a type. Returns error if duplicate or invalid.
-func (r *VerbRegistry) Register(reg VerbRegistration) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.registerNoLock(reg)
-}
-
 // registerNoLock performs validation and insertion. Caller MUST hold r.mu.
 func (r *VerbRegistry) registerNoLock(reg VerbRegistration) error {
 	if reg.Type == "" {

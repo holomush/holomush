@@ -67,15 +67,15 @@ func TestHostEventTypesMatchPluginSDKReExports(t *testing.T) {
 		core EventType
 		sdk  pluginsdk.EventType
 	}{
-		{"system", EventTypeSystem, pluginsdk.HostEventTypeSystem},
-		{"session_ended", EventTypeSessionEnded, pluginsdk.HostEventTypeSessionEnded},
-		{"command_response", EventTypeCommandResponse, pluginsdk.HostEventTypeCommandResponse},
-		{"command_error", EventTypeCommandError, pluginsdk.HostEventTypeCommandError},
-		{"arrive", EventTypeArrive, pluginsdk.HostEventTypeArrive},
-		{"leave", EventTypeLeave, pluginsdk.HostEventTypeLeave},
-		{"move", EventTypeMove, pluginsdk.HostEventTypeMove},
-		{"location_state", EventTypeLocationState, pluginsdk.HostEventTypeLocationState},
-		{"exit_update", EventTypeExitUpdate, pluginsdk.HostEventTypeExitUpdate},
+		{"core and sdk agree on system event type string", EventTypeSystem, pluginsdk.HostEventTypeSystem},
+		{"core and sdk agree on session_ended event type string", EventTypeSessionEnded, pluginsdk.HostEventTypeSessionEnded},
+		{"core and sdk agree on command_response event type string", EventTypeCommandResponse, pluginsdk.HostEventTypeCommandResponse},
+		{"core and sdk agree on command_error event type string", EventTypeCommandError, pluginsdk.HostEventTypeCommandError},
+		{"core and sdk agree on arrive event type string", EventTypeArrive, pluginsdk.HostEventTypeArrive},
+		{"core and sdk agree on leave event type string", EventTypeLeave, pluginsdk.HostEventTypeLeave},
+		{"core and sdk agree on move event type string", EventTypeMove, pluginsdk.HostEventTypeMove},
+		{"core and sdk agree on location_state event type string", EventTypeLocationState, pluginsdk.HostEventTypeLocationState},
+		{"core and sdk agree on exit_update event type string", EventTypeExitUpdate, pluginsdk.HostEventTypeExitUpdate},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -23,6 +23,9 @@ func ValidateCrypto(m *Manifest) error {
 	// event_type is non-empty and unique within this manifest.
 	seenEmit := make(map[string]bool, len(m.Crypto.Emits))
 	for i, e := range m.Crypto.Emits {
+		// Trim before emptiness/duplicate checks so "   " is rejected and
+		// trailing-space variants of the same type collide.
+		eventType := strings.TrimSpace(e.EventType)
 		if !validSensitivity(e.Sensitivity) {
 			return oops.Code("PLUGIN_CRYPTO_INVALID_SENSITIVITY").
 				With("plugin", m.Name).
@@ -31,19 +34,19 @@ func ValidateCrypto(m *Manifest) error {
 				With("emits_index", i).
 				Errorf("invalid sensitivity value (must be always|may|never)")
 		}
-		if e.EventType == "" {
+		if eventType == "" {
 			return oops.Code("PLUGIN_CRYPTO_EMPTY_EVENT_TYPE").
 				With("plugin", m.Name).
 				With("emits_index", i).
 				Errorf("crypto.emits entry has empty event_type")
 		}
-		if seenEmit[e.EventType] {
+		if seenEmit[eventType] {
 			return oops.Code("PLUGIN_CRYPTO_DUPLICATE_EMIT").
 				With("plugin", m.Name).
-				With("event_type", e.EventType).
+				With("event_type", eventType).
 				Errorf("crypto.emits has duplicate event_type")
 		}
-		seenEmit[e.EventType] = true
+		seenEmit[eventType] = true
 	}
 
 	// Rule 3: requests_decryption is well-formed.

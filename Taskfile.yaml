@@ -696,6 +696,7 @@ tasks:
     cmds:
       - ./scripts/gen-event-docs.sh
     sources:
+      - scripts/gen-event-docs.sh
       - plugins/*/plugin.yaml
     generates:
       - site/docs/reference/events/*.md

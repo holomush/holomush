@@ -111,10 +111,10 @@ lua-plugin:
 
 	It("cleans up verbs when plugin load fails partway through verb list", func() {
 		// Pre-register "conflict" so the second verb in the manifest fails
-		Expect(verbReg.Register(core.VerbRegistration{
+		Expect(verbReg.RegisterWithSource(core.VerbRegistration{
 			Type: "conflict", Category: "system", Format: "notification",
 			DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "pre-existing",
-		})).To(Succeed())
+		}, "1.0.0")).To(Succeed())
 
 		writePlugin("partial-fail", `
 name: partial-fail

@@ -61,10 +61,7 @@ func TestAllGatewayRegistryInvariantsHaveTests(t *testing.T) {
 		absPath, err := filepath.Abs(path)
 		require.NoError(t, err)
 		f, err := parser.ParseFile(fset, absPath, nil, parser.ParseComments)
-		if err != nil {
-			t.Logf("skipping %s: %v", path, err)
-			continue
-		}
+		require.NoError(t, err, "failed to parse %s", path)
 		for _, cg := range f.Comments {
 			for _, c := range cg.List {
 				for _, inv := range invariants {

@@ -389,27 +389,34 @@ func (m *Manager) Discover(_ context.Context) ([]*DiscoveredPlugin, error) {
 		})
 	}
 
-	// Build the per-plugin emit registry from successfully-discovered manifests.
-	emitRegistry := make(map[string][]CryptoEmit, len(plugins))
-	for _, dp := range plugins {
-		if dp.Manifest.Crypto != nil {
-			emitRegistry[dp.Manifest.Name] = dp.Manifest.Crypto.Emits
+	// Filter out plugins whose cross-plugin refs don't resolve. Iterate to a
+	// fixed point: a plugin's refs MUST resolve against the FINAL accepted
+	// set, not the initial discovery set, otherwise plugin-b can resolve
+	// against plugin-a in the same pass that filters plugin-a out.
+	resolved := plugins
+	for {
+		emitRegistry := make(map[string][]CryptoEmit, len(resolved))
+		for _, dp := range resolved {
+			if dp.Manifest.Crypto != nil {
+				emitRegistry[dp.Manifest.Name] = dp.Manifest.Crypto.Emits
+			}
 		}
-	}
-
-	// Filter out plugins whose cross-plugin refs don't resolve.
-	resolved := plugins[:0]
-	for _, dp := range plugins {
-		if err := ResolveCryptoRefs(dp.Manifest, emitRegistry); err != nil {
-			slog.Warn("skipping plugin with unresolvable crypto refs",
-				"plugin", dp.Manifest.Name,
-				"dir", dp.Dir,
-				"error", err)
-			continue
+		next := resolved[:0]
+		for _, dp := range resolved {
+			if err := ResolveCryptoRefs(dp.Manifest, emitRegistry); err != nil {
+				slog.Warn("skipping plugin with unresolvable crypto refs",
+					"plugin", dp.Manifest.Name,
+					"dir", dp.Dir,
+					"error", err)
+				continue
+			}
+			next = append(next, dp)
 		}
-		resolved = append(resolved, dp)
+		if len(next) == len(resolved) {
+			return next, nil
+		}
+		resolved = next
 	}
-	return resolved, nil
 }
 
 // warnUnknownTrustAllowlistEntries logs a slog.Warn for each entry in the

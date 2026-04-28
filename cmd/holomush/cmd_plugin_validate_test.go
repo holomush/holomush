@@ -13,10 +13,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPluginValidateAcceptsValidManifest(t *testing.T) {
-	tmp := t.TempDir()
-	manifest := filepath.Join(tmp, "plugin.yaml")
-	require.NoError(t, os.WriteFile(manifest, []byte(`
+func TestPluginValidateManifestScenarios(t *testing.T) {
+	tests := []struct {
+		name             string
+		manifestYAML     string
+		pathOverride     string // when set, skip writing a temp manifest
+		wantSuccess      bool
+		wantOutContains  []string
+		wantOutContainsAny []string // succeeds if any of these substrings is present
+	}{
+		{
+			name: "accepts a valid manifest with crypto.emits",
+			manifestYAML: `
 name: ok-plugin
 version: 1.0.0
 type: lua
@@ -25,17 +33,13 @@ crypto:
   emits:
     - event_type: foo
       sensitivity: always
-`), 0o600))
-
-	out, code := runCmd(t, []string{"plugin", "validate", manifest})
-	require.Equal(t, 0, code, "expected validate to exit 0; output:\n%s", out)
-	assert.Contains(t, out, "OK")
-}
-
-func TestPluginValidateRejectsInvalidSensitivity(t *testing.T) {
-	tmp := t.TempDir()
-	manifest := filepath.Join(tmp, "plugin.yaml")
-	require.NoError(t, os.WriteFile(manifest, []byte(`
+`,
+			wantSuccess:     true,
+			wantOutContains: []string{"OK"},
+		},
+		{
+			name: "rejects a manifest with invalid sensitivity",
+			manifestYAML: `
 name: bad-plugin
 version: 1.0.0
 type: lua
@@ -44,21 +48,17 @@ crypto:
   emits:
     - event_type: foo
       sensitivity: kinda
-`), 0o600))
-
-	out, code := runCmd(t, []string{"plugin", "validate", manifest})
-	require.NotEqual(t, 0, code, "expected nonzero exit code")
-	assert.True(t,
-		strings.Contains(out, "PLUGIN_CRYPTO_INVALID_SENSITIVITY") ||
-			strings.Contains(out, "kinda") ||
-			strings.Contains(out, "invalid sensitivity"),
-		"expected error output to mention the invalid sensitivity; got:\n%s", out)
-}
-
-func TestPluginValidateAcceptsSelfReference(t *testing.T) {
-	tmp := t.TempDir()
-	manifest := filepath.Join(tmp, "plugin.yaml")
-	require.NoError(t, os.WriteFile(manifest, []byte(`
+`,
+			wantSuccess: false,
+			wantOutContainsAny: []string{
+				"PLUGIN_CRYPTO_INVALID_SENSITIVITY",
+				"kinda",
+				"invalid sensitivity",
+			},
+		},
+		{
+			name: "accepts self-reference in consumes (no dependency required)",
+			manifestYAML: `
 name: self-ref-plugin
 version: 1.0.0
 type: lua
@@ -70,15 +70,50 @@ crypto:
   consumes:
     - subjects: ["events.>"]
       requests_decryption: ["self-ref-plugin:whisper"]
-`), 0o600))
+`,
+			wantSuccess:     true,
+			wantOutContains: []string{"OK"},
+		},
+		{
+			name:         "fails when manifest file does not exist",
+			pathOverride: "/does/not/exist.yaml",
+			wantSuccess:  false,
+		},
+	}
 
-	out, code := runCmd(t, []string{"plugin", "validate", manifest})
-	require.Equal(t, 0, code, "self-references must validate at author time; output:\n%s", out)
-	assert.Contains(t, out, "OK")
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var manifestPath string
+			if tt.pathOverride != "" {
+				manifestPath = tt.pathOverride
+			} else {
+				tmp := t.TempDir()
+				manifestPath = filepath.Join(tmp, "plugin.yaml")
+				require.NoError(t, os.WriteFile(manifestPath, []byte(tt.manifestYAML), 0o600))
+			}
 
-func TestPluginValidateFailsOnMissingFile(t *testing.T) {
-	out, code := runCmd(t, []string{"plugin", "validate", "/does/not/exist.yaml"})
-	require.NotEqual(t, 0, code)
-	assert.NotEmpty(t, out)
+			out, code := runCmd(t, []string{"plugin", "validate", manifestPath})
+			if tt.wantSuccess {
+				require.Equal(t, 0, code, "expected validate to exit 0; output:\n%s", out)
+			} else {
+				require.NotEqual(t, 0, code, "expected nonzero exit code; output:\n%s", out)
+				assert.NotEmpty(t, out, "failure cases must produce diagnostic output")
+			}
+			for _, s := range tt.wantOutContains {
+				assert.Contains(t, out, s)
+			}
+			if len(tt.wantOutContainsAny) > 0 {
+				matched := false
+				for _, s := range tt.wantOutContainsAny {
+					if strings.Contains(out, s) {
+						matched = true
+						break
+					}
+				}
+				assert.True(t, matched,
+					"expected output to contain one of %v; got:\n%s",
+					tt.wantOutContainsAny, out)
+			}
+		})
+	}
 }

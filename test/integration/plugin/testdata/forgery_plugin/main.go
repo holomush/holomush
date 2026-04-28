@@ -93,7 +93,7 @@ func (p *forgeryPlugin) HandleEvent(ctx context.Context, event pluginsdk.Event) 
 
 	emitType := mode.Type
 	if emitType == "" {
-		emitType = string(pluginsdk.EventTypeSay)
+		emitType = "core-communication:say"
 	}
 	emitPayload := mode.Payload
 	if emitPayload == "" {

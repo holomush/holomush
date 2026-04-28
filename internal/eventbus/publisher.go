@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/textproto"
 	"strings"
 	"testing"
 	"time"
@@ -256,18 +257,24 @@ var reservedHeaderKeys = map[string]struct{}{
 }
 
 // mergeCallerHeaders copies ev.Headers into msgHeader enforcing the
-// reserved-key collision policy.
+// reserved-key collision policy. Keys are canonicalized before the
+// reserved-key check so casing variants (e.g. "app-event-type") cannot
+// bypass the guard — nats.Header.Set canonicalizes via
+// textproto.CanonicalMIMEHeaderKey, so without the lookup-time
+// canonicalization a casing variant would write to the same canonical
+// slot while passing the raw-key check.
 func mergeCallerHeaders(msgHeader nats.Header, ev Event) {
 	if len(ev.Headers) == 0 {
 		return
 	}
 	for k, v := range ev.Headers {
-		if _, reserved := reservedHeaderKeys[k]; reserved || strings.HasPrefix(k, "Nats-") {
+		canon := textproto.CanonicalMIMEHeaderKey(k)
+		if _, reserved := reservedHeaderKeys[canon]; reserved || strings.HasPrefix(canon, "Nats-") {
 			if testing.Testing() {
-				panic(fmt.Sprintf("eventbus: caller wrote reserved header key %q", k))
+				panic(fmt.Sprintf("eventbus: caller wrote reserved header key %q (canonical %q)", k, canon))
 			}
 			slog.Warn("eventbus: caller-written header collides with reserved key; system value wins",
-				"header", k, "event_id", ev.ID.String())
+				"header", k, "canonical", canon, "event_id", ev.ID.String())
 			continue
 		}
 		msgHeader.Set(k, v)

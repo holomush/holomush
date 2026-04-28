@@ -27,8 +27,14 @@ for plugin_path in "$plugin_dir"/*/; do
     if [[ ! -f "$plugin_path/plugin.yaml" ]]; then
         continue
     fi
-    # Skip plugins with no crypto.emits — nothing to document.
-    listing="$("$bin" plugin events list --plugin-dir "$plugin_dir" --plugin "$plugin" 2>/dev/null || true)"
+    # Real CLI failures (broken manifests, missing binary, etc.) MUST stop
+    # generation — silently dropping them would delete the plugin's existing
+    # doc page as if it had no events. Only an empty success listing is
+    # treated as "no crypto.emits — remove stale page and continue".
+    if ! listing="$("$bin" plugin events list --plugin-dir "$plugin_dir" --plugin "$plugin")"; then
+        printf 'gen-event-docs: failed to list events for %s\n' "$plugin" >&2
+        exit 1
+    fi
     if [[ -z "$listing" ]]; then
         # Remove a previously-generated stale page if it exists.
         rm -f "$out_dir/$plugin.md"

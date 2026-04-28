@@ -9,11 +9,41 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	plugins "github.com/holomush/holomush/internal/plugin"
 )
+
+// validSensitivityValues is the closed enum accepted by --sensitivity. Kept
+// here (alongside the CLI flag definitions) so the help text and validation
+// share one source of truth.
+var validSensitivityValues = map[string]struct{}{
+	string(plugins.SensitivityAlways): {},
+	string(plugins.SensitivityMay):    {},
+	string(plugins.SensitivityNever):  {},
+}
+
+// normalizeSensitivities lower-cases and trims each value, validates it
+// against validSensitivityValues, and returns an error listing every
+// rejected entry. Mutates the slice in place so the caller sees normalized
+// values for downstream filtering.
+func normalizeSensitivities(values []string) error {
+	var bad []string
+	for i := range values {
+		v := strings.ToLower(strings.TrimSpace(values[i]))
+		if _, ok := validSensitivityValues[v]; !ok {
+			bad = append(bad, values[i])
+			continue
+		}
+		values[i] = v
+	}
+	if len(bad) > 0 {
+		return fmt.Errorf("invalid --sensitivity value(s) %v (allowed: always, may, never)", bad)
+	}
+	return nil
+}
 
 type pluginEvent struct {
 	Plugin      string
@@ -42,6 +72,9 @@ func newPluginEventsListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List all event types declared by plugins under --plugin-dir",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := normalizeSensitivities(filterSensitivities); err != nil {
+				return err
+			}
 			events, err := scanPluginEvents(pluginDir)
 			if err != nil {
 				return err
@@ -97,11 +130,22 @@ func scanPluginEvents(rootDir string) ([]pluginEvent, error) {
 		manifestPath := filepath.Join(rootDir, ent.Name(), "plugin.yaml")
 		raw, err := os.ReadFile(manifestPath)
 		if err != nil {
-			continue // not a plugin directory
+			if os.IsNotExist(err) {
+				continue // not a plugin directory
+			}
+			return nil, fmt.Errorf("read %s: %w", manifestPath, err)
 		}
 		m, err := plugins.ParseManifest(raw)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("parse %s: %w", manifestPath, err)
+		}
+		// ValidateCrypto enforces the same crypto.emits/consumes rules the
+		// loader uses (sensitivity enum, non-empty event_type, no duplicates,
+		// well-formed requests_decryption refs). Failing fast here keeps
+		// invalid declarations from reaching list/show output and the
+		// auto-generated docs pipeline.
+		if err := plugins.ValidateCrypto(m); err != nil {
+			return nil, fmt.Errorf("validate %s: %w", manifestPath, err)
 		}
 		if m.Crypto == nil {
 			continue

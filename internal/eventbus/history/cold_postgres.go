@@ -179,7 +179,11 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 		var rendering *eventbus.RenderingMetadata
 		if len(renderingBytes) > 0 {
 			var protoMD corev1.RenderingMetadata
-			if unmarshalErr := protojson.Unmarshal(renderingBytes, &protoMD); unmarshalErr != nil {
+			// DiscardUnknown: tolerate forward schema additions on persisted
+			// JSONB rendering payloads. Strict decode would fail rolling
+			// upgrades where new writers stamp newer fields while older
+			// readers are still reading archived data.
+			if unmarshalErr := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(renderingBytes, &protoMD); unmarshalErr != nil {
 				return nil, oops.Code("EVENTBUS_COLD_BAD_RENDERING").
 					With("subject", string(q.Subject)).
 					Wrap(unmarshalErr)

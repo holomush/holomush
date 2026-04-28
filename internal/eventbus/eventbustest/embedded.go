@@ -173,6 +173,12 @@ func (e *Embedded) AwaitDeliveredSeq(t TB, consumerName string, want uint64, tim
 // calls are independent. Polls until the consumer drains; no time.Sleep.
 func (e *Embedded) RawMessagesOnSubject(t TB, subject string, limit int, timeout time.Duration) []*nats.Msg {
 	t.Helper()
+	if limit < 0 {
+		require.FailNow(t, "RawMessagesOnSubject requires a non-negative limit")
+	}
+	if limit == 0 {
+		return nil
+	}
 	if timeout <= 0 {
 		timeout = DefaultAwaitTimeout
 	}
@@ -185,15 +191,24 @@ func (e *Embedded) RawMessagesOnSubject(t TB, subject string, limit int, timeout
 	})
 	require.NoError(t, err)
 
+	const fetchMaxWait = 200 * time.Millisecond
 	out := make([]*nats.Msg, 0, limit)
 	for len(out) < limit {
-		msgs, fetchErr := cons.Fetch(limit-len(out), jetstream.FetchMaxWait(200*time.Millisecond))
+		// Honor the overall timeout: if the deadline is closer than
+		// fetchMaxWait, shrink the per-fetch wait so we exit promptly.
+		wait := fetchMaxWait
+		if d, ok := ctx.Deadline(); ok {
+			if remaining := time.Until(d); remaining <= 0 {
+				break
+			} else if remaining < wait {
+				wait = remaining
+			}
+		}
+		msgs, fetchErr := cons.Fetch(limit-len(out), jetstream.FetchMaxWait(wait))
 		if fetchErr != nil && !errors.Is(fetchErr, nats.ErrTimeout) {
 			require.NoError(t, fetchErr)
 		}
-		empty := true
 		for msg := range msgs.Messages() {
-			empty = false
 			raw := &nats.Msg{
 				Subject: msg.Subject(),
 				Reply:   msg.Reply(),
@@ -203,9 +218,10 @@ func (e *Embedded) RawMessagesOnSubject(t TB, subject string, limit int, timeout
 			out = append(out, raw)
 			require.NoError(t, msg.Ack())
 		}
-		if empty {
-			break
-		}
+		// Continue polling until the timeout elapses or limit is reached.
+		// An empty fetch is not a stopping signal — messages may arrive in
+		// the next fetch window. The for-loop's len(out) < limit guard +
+		// ctx.Deadline() check above are the only termination conditions.
 	}
 	return out
 }

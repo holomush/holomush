@@ -23,6 +23,7 @@ func TestRegisterBuiltinTypesIsUnexported(t *testing.T) {
 	f, err := parser.ParseFile(fset, "builtins.go", nil, 0)
 	require.NoError(t, err)
 
+	foundBootstrapVerbRegistry := false
 	for _, decl := range f.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
 		if !ok {
@@ -35,8 +36,11 @@ func TestRegisterBuiltinTypesIsUnexported(t *testing.T) {
 		}
 		// Public seeded constructor must exist.
 		if name == "BootstrapVerbRegistry" {
+			foundBootstrapVerbRegistry = true
 			// Verify it's exported (uppercase).
 			require.True(t, strings.ToUpper(name[:1]) == name[:1])
 		}
 	}
+	require.True(t, foundBootstrapVerbRegistry,
+		"BootstrapVerbRegistry must exist as a public seeded-registry constructor (INV-GW-11)")
 }

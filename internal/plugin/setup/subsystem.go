@@ -175,7 +175,15 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	s.worldConn = worldConn
 
 	// cleanupOnError closes partially initialized resources when startup fails.
+	// Order matters: alias pool first because it was opened latest and holds
+	// PG connections; then schema provisioner; then world conn.
 	cleanupOnError := func() {
+		if s.aliasPool != nil {
+			s.aliasPool.Close()
+			s.aliasPool = nil
+			s.aliasRepo = nil
+			s.aliasCache = nil
+		}
 		if s.schemaProvisioner != nil {
 			s.schemaProvisioner.Close()
 			s.schemaProvisioner = nil

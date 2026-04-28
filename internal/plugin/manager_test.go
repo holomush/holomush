@@ -1733,6 +1733,12 @@ lua-plugin:
 	shout, ok := reg.Lookup("shout")
 	require.True(t, ok, "shout verb should be registered")
 	assert.Equal(t, "chat-plugin", shout.Source)
+
+	// Manifest version MUST flow into the registry's source-version map so
+	// RenderingPublisher can stamp source_plugin_version on emitted events.
+	// A regression to plain Register would still satisfy the Source check
+	// above but break downstream rendering audit fidelity.
+	assert.Equal(t, "1.0.0", reg.SourceVersion("chat-plugin"))
 }
 
 func TestManagerLoadAllRejectsPluginWithDuplicateVerbType(t *testing.T) {
@@ -1759,13 +1765,13 @@ lua-plugin:
 
 	reg := core.NewVerbRegistry()
 	// Pre-register a verb that the plugin also declares.
-	require.NoError(t, reg.Register(core.VerbRegistration{
+	require.NoError(t, reg.RegisterWithSource(core.VerbRegistration{
 		Type:          "existing_verb",
 		Category:      "state",
 		Format:        "snapshot",
 		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE,
 		Source:        "builtin",
-	}))
+	}, "host-test"))
 
 	mgr, mgrErr := plugins.NewManager(pluginsDir,
 		plugins.WithLuaHost(luaHost),
@@ -1806,13 +1812,13 @@ lua-plugin:
 
 	reg := core.NewVerbRegistry()
 	// Pre-register the conflict verb so the second registration fails.
-	require.NoError(t, reg.Register(core.VerbRegistration{
+	require.NoError(t, reg.RegisterWithSource(core.VerbRegistration{
 		Type:          "conflict",
 		Category:      "state",
 		Format:        "snapshot",
 		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE,
 		Source:        "builtin",
-	}))
+	}, "host-test"))
 
 	mgr, mgrErr := plugins.NewManager(pluginsDir,
 		plugins.WithLuaHost(luaHost),

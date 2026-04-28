@@ -469,14 +469,14 @@ func TestSubscriberRoutesResponseEventsThroughSharedEmitterWithIncomingActor(t *
 
 	bootstrapReg, bootErr := core.BootstrapVerbRegistry("test")
 	require.NoError(t, bootErr)
-	require.NoError(t, bootstrapReg.Register(core.VerbRegistration{
+	require.NoError(t, bootstrapReg.RegisterWithSource(core.VerbRegistration{
 		Type:          "say",
 		Category:      "communication",
 		Format:        "speech",
 		Label:         "says",
 		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
 		Source:        "core-communication",
-	}))
+	}, "1.0.0"))
 	manager, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockLua), plugins.WithVerbRegistry(bootstrapReg))
 	require.NoError(t, mgrErr)
 	t.Cleanup(func() { _ = manager.Close(context.Background()) })

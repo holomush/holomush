@@ -53,6 +53,10 @@ func TestGatewayImportsAreOnlyProtocolTranslation(t *testing.T) {
 		Mode: packages.NeedName | packages.NeedFiles |
 			packages.NeedSyntax | packages.NeedImports |
 			packages.NeedTypes,
+		// Tests:true loads *_test.go files into pkg.Syntax so the import
+		// guard sees gateway-side test files (core_test.go, deps_test.go,
+		// sub_grpc_adapters_test.go) which would otherwise bypass INV-GW-1.
+		Tests: true,
 	},
 		"github.com/holomush/holomush/cmd/holomush",
 		"github.com/holomush/holomush/internal/web/...",

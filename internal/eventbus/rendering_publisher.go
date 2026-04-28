@@ -81,8 +81,24 @@ func (p *RenderingPublisher) Publish(ctx context.Context, event Event) error {
 			With("event_type", string(event.Type)).
 			Wrap(err)
 	}
+	// RenderingPublisher is the single writer of App-Rendering. If a caller
+	// already populated it, surface the collision instead of silently
+	// clobbering — that masks a contract violation. Copy the caller-owned
+	// map before mutation so we don't write through their reference.
 	if event.Headers == nil {
 		event.Headers = make(map[string]string, 1)
+	} else {
+		if _, exists := event.Headers["App-Rendering"]; exists {
+			return oops.Code("EMIT_RESERVED_HEADER").
+				With("event_type", string(event.Type)).
+				With("header", "App-Rendering").
+				Errorf("caller header collides with reserved system header")
+		}
+		cloned := make(map[string]string, len(event.Headers)+1)
+		for k, v := range event.Headers {
+			cloned[k] = v
+		}
+		event.Headers = cloned
 	}
 	event.Headers["App-Rendering"] = string(headerBytes)
 

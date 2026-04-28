@@ -16,14 +16,14 @@ import (
 
 func TestVerbRegistryRegisterStoresVerbAndAllowsLookup(t *testing.T) {
 	r := NewVerbRegistry()
-	err := r.Register(VerbRegistration{
+	err := r.RegisterWithSource(VerbRegistration{
 		Type:          "say",
 		Category:      "communication",
 		Format:        "speech",
 		Label:         "says",
 		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
 		Source:        "test",
-	})
+	}, "1.0.0")
 	require.NoError(t, err)
 
 	reg, ok := r.Lookup("say")
@@ -39,10 +39,10 @@ func TestVerbRegistryRegisterDuplicateTypeReturnsError(t *testing.T) {
 		Type: "say", Category: "communication", Format: "speech", Label: "says",
 		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "test",
 	}
-	err := r.Register(valid)
+	err := r.RegisterWithSource(valid, "1.0.0")
 	require.NoError(t, err)
 
-	err = r.Register(valid)
+	err = r.RegisterWithSource(valid, "1.0.0")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already registered")
 }
@@ -57,10 +57,10 @@ func TestVerbRegistryLookupUnknownTypeReturnsFalse(t *testing.T) {
 // INV-GW-7: RenderingMetadata.label MUST be set when format == "speech".
 func TestVerbRegistryRegisterSpeechFormatWithoutLabelReturnsError(t *testing.T) {
 	r := NewVerbRegistry()
-	err := r.Register(VerbRegistration{
+	err := r.RegisterWithSource(VerbRegistration{
 		Type: "say", Category: "communication", Format: "speech",
 		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "test",
-	})
+	}, "1.0.0")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "label is required")
 }
@@ -88,7 +88,7 @@ func TestVerbRegistry_Register(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := NewVerbRegistry()
-			err := r.Register(tt.reg)
+			err := r.RegisterWithSource(tt.reg, "1.0.0")
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), tt.want)
 		})
@@ -105,13 +105,13 @@ func TestVerbRegistryConcurrentAccessIsSafe(t *testing.T) {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			if err := r.Register(VerbRegistration{
+			if err := r.RegisterWithSource(VerbRegistration{
 				Type:          fmt.Sprintf("type_%d", n),
 				Category:      "communication",
 				Format:        "action",
 				DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL,
 				Source:        "test",
-			}); err != nil {
+			}, "1.0.0"); err != nil {
 				errs <- err
 			}
 		}(i)
@@ -136,10 +136,10 @@ func TestVerbRegistryConcurrentAccessIsSafe(t *testing.T) {
 
 func TestVerbRegistrySourceFieldPreservedThroughRegisterLookup(t *testing.T) {
 	r := NewVerbRegistry()
-	err := r.Register(VerbRegistration{
+	err := r.RegisterWithSource(VerbRegistration{
 		Type: "custom", Category: "communication", Format: "action",
 		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "my-plugin",
-	})
+	}, "1.0.0")
 	require.NoError(t, err)
 
 	reg, ok := r.Lookup("custom")
@@ -149,10 +149,10 @@ func TestVerbRegistrySourceFieldPreservedThroughRegisterLookup(t *testing.T) {
 
 func TestVerbRegistryUnregisterRemovesEntry(t *testing.T) {
 	r := NewVerbRegistry()
-	err := r.Register(VerbRegistration{
+	err := r.RegisterWithSource(VerbRegistration{
 		Type: "temp", Category: "system", Format: "notification",
 		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "test",
-	})
+	}, "1.0.0")
 	require.NoError(t, err)
 
 	removed := r.Unregister("temp")
@@ -170,18 +170,18 @@ func TestVerbRegistryUnregisterNonexistentReturnsFalse(t *testing.T) {
 
 func TestVerbRegistryUnregisterBySourceRemovesAllFromSource(t *testing.T) {
 	r := NewVerbRegistry()
-	require.NoError(t, r.Register(VerbRegistration{
+	require.NoError(t, r.RegisterWithSource(VerbRegistration{
 		Type: "a", Category: "communication", Format: "action",
 		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "plugin-x",
-	}))
-	require.NoError(t, r.Register(VerbRegistration{
+	}, "1.0.0"))
+	require.NoError(t, r.RegisterWithSource(VerbRegistration{
 		Type: "b", Category: "system", Format: "notification",
 		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "plugin-x",
-	}))
-	require.NoError(t, r.Register(VerbRegistration{
+	}, "1.0.0"))
+	require.NoError(t, r.RegisterWithSource(VerbRegistration{
 		Type: "c", Category: "command", Format: "narrative",
 		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "builtin",
-	}))
+	}, "host-test"))
 
 	count := r.UnregisterBySource("plugin-x")
 	assert.Equal(t, 2, count)
@@ -255,19 +255,6 @@ func TestRegisterWithSourceEmptyVersionReturnsError(t *testing.T) {
 	}, "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "version must not be empty")
-}
-
-func TestRegisterFallsBackToEmptyVersion(t *testing.T) {
-	r := NewVerbRegistry()
-	err := r.Register(VerbRegistration{
-		Type:          "core-objects:object_create",
-		Category:      "state",
-		Format:        "delta",
-		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE,
-		Source:        "core-objects",
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "", r.SourceVersion("core-objects"))
 }
 
 func TestRegisterBuiltinTypesDoesNotIncludeChannelTypes(t *testing.T) {

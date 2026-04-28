@@ -423,17 +423,25 @@ schema, two transports.
 ```sql
 -- internal/store/migrations/000012_events_audit_rendering.up.sql
 
+-- Three-step add so the migration is safe on non-empty events_audit and
+-- idempotent under repeated application: nullable add → backfill → SET
+-- NOT NULL. Going straight to ADD COLUMN ... NOT NULL would fail on any
+-- pre-existing row.
 ALTER TABLE events_audit
-  ADD COLUMN rendering JSONB NOT NULL;
+  ADD COLUMN IF NOT EXISTS rendering JSONB;
 
--- No DEFAULT — the audit projection writer is responsible for populating
--- this column on every insert. INV-GW-13 enforces the contract.
+UPDATE events_audit
+SET rendering = '{}'::jsonb
+WHERE rendering IS NULL;
+
+ALTER TABLE events_audit
+  ALTER COLUMN rendering SET NOT NULL;
 ```
 
 ```sql
 -- internal/store/migrations/000012_events_audit_rendering.down.sql
 
-ALTER TABLE events_audit DROP COLUMN rendering;
+ALTER TABLE events_audit DROP COLUMN IF EXISTS rendering;
 ```
 
 The `rendering` column stores the canonical JSON encoding of
@@ -510,12 +518,17 @@ output; a JSONB column makes the storage form queryable via
 PostgreSQL's `->`, `->>`, `@?` operators (see Section 3 SQL recipe
 for plugin-version drift inspection).
 
-Rationale for `NOT NULL` without `DEFAULT`: per the user's "no production
-usage" decision, there are no legacy rows to backfill. Any insert without
-rendering is a host bug. Strict NOT NULL surfaces it loudly. CI/test
-environments fresh-create the database via `task test:int` /
-testcontainers, so the migration is safe in those contexts because
-no rows pre-date it.
+Rationale for `NOT NULL` without `DEFAULT`: every freshly-projected row
+carries the publisher-stamped rendering blob, so a column-level DEFAULT
+would only mask host bugs that fail to populate the field. The migration
+itself adds the column nullable, backfills any pre-existing rows with
+`'{}'::jsonb`, then promotes to `NOT NULL` — that pattern is safe on
+non-empty `events_audit` (older deployments, replay/restore scenarios)
+and is idempotent under repeated application. Once the migration
+completes, every subsequent insert MUST supply rendering or the writer
+fails loudly. CI/test environments fresh-create the database via
+`task test:int` / testcontainers; the three-step migration is also safe
+there because no rows pre-date it.
 
 ### Go-side `eventbus.Event` struct extension
 
