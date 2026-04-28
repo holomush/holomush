@@ -286,7 +286,7 @@ func TestEventSinkEmitFallsBackToRequestEmitTokenWhenNoIncomingToken(t *testing.
 	// this is the plugin-served-RPC path).
 	err = sink.Emit(context.Background(), EmitIntent{
 		Subject: "scene:01SCENE",
-		Type:    EventTypeSystem,
+		Type:    HostEventTypeSystem,
 		Payload: `{"kind":"created"}`,
 	})
 	require.NoError(t, err)
@@ -327,7 +327,7 @@ func TestEventSinkEmitFerriesIncomingTokenAndDoesNotCallRequestEmitToken(t *test
 
 	err = sink.Emit(emitCtx, EmitIntent{
 		Subject: "scene:01SCENE",
-		Type:    EventTypeSystem,
+		Type:    HostEventTypeSystem,
 		Payload: `{"kind":"created"}`,
 	})
 	require.NoError(t, err)
@@ -360,7 +360,7 @@ func TestEventSinkEmitWrapsRequestEmitTokenFailure(t *testing.T) {
 
 	err = sink.Emit(context.Background(), EmitIntent{
 		Subject: "scene:01SCENE",
-		Type:    EventTypeSystem,
+		Type:    HostEventTypeSystem,
 		Payload: `{"kind":"created"}`,
 	})
 	require.Error(t, err)
