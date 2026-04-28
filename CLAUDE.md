@@ -548,6 +548,9 @@ task test:int                                    # Integration tests (needs Dock
 This mirrors all CI jobs (lint, format, schema, license, unit, integration,
 E2E) and MUST pass with zero failures. Do NOT push to a PR branch without
 a green `task pr-prep`. Docker is always available — never skip E2E tests.
+The gate is serialized per user — only one `task pr-prep` runs at a time on
+a given machine. See [pr-prep](site/docs/contributing/pr-prep.md) for
+collision behavior.
 
 ### jj Workspace Commands
 

@@ -48,6 +48,7 @@ For detailed guidance on each step, see the pages below.
 | [Event Store & EventBus](event-store.md)  | JetStream EventBus, subjects, plugin emit, audit   |
 | [Event Delivery (superseded)](event-delivery.md) | Former LISTEN/NOTIFY architecture (historical) |
 | [Pull Request Guide](pr-guide.md)         | Branch naming, PR format, review process           |
+| [Pre-Push Quality Gate (`task pr-prep`)](pr-prep.md) | What runs, concurrent-run behavior, collision recovery |
 
 ## Development Workflow
 
