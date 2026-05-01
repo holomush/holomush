@@ -44,6 +44,31 @@ strip_leading_ws() {
   echo "${s#"${s%%[![:space:]]*}"}"
 }
 
+# Whitespace-aware first-token extraction. ${seg%% *} only splits on
+# space, so `time\tbd ready` would slip through as the single word
+# "time\tbd". `read` honours IFS (default: space + tab + newline).
+first_token() {
+  local _w _rest
+  read -r _w _rest <<< "$1"
+  echo "$_w"
+}
+
+# Returns 0 if the WHOLE segment is a standalone BEADS_DIR assignment
+# (with optional `export`). Used to track `export BEADS_DIR=…` followed
+# by `bd …` in a later segment.
+is_standalone_beads_dir_assignment() {
+  local s
+  s=$(strip_leading_ws "$1")
+  if [[ "$s" =~ ^export[[:space:]]+ ]]; then
+    s="${s#"${BASH_REMATCH[0]}"}"
+    s=$(strip_leading_ws "$s")
+  fi
+  if [[ "$s" =~ ^BEADS_DIR=(\"[^\"]*\"|\'[^\']*\'|[^[:space:]]*)[[:space:]]*$ ]]; then
+    return 0
+  fi
+  return 1
+}
+
 # Returns 0 if the segment's env-var prefix sets BEADS_DIR, else 1.
 # Matches BEADS_DIR=anything (quoted or not) before the first non-assignment word.
 has_beads_dir_env() {
@@ -76,16 +101,20 @@ first_cmd_word() {
   local segment="$1"
   segment=$(strip_leading_ws "$segment")
   segment=$(strip_env_vars "$segment")
-  local word="${segment%% *}"
-  while [[ "$word" =~ ^(env|command|exec|sudo|nice|nohup)$ ]]; do
+  local word
+  word=$(first_token "$segment")
+  while [[ "$word" =~ ^(env|command|exec|sudo|nice|nohup|time|builtin)$ ]]; do
     segment="${segment#"$word"}"
     segment=$(strip_leading_ws "$segment")
-    while [[ "${segment%% *}" == -* ]]; do
-      segment="${segment#"${segment%% *}"}"
+    local peek
+    peek=$(first_token "$segment")
+    while [[ "$peek" == -* ]]; do
+      segment="${segment#"$peek"}"
       segment=$(strip_leading_ws "$segment")
+      peek=$(first_token "$segment")
     done
     segment=$(strip_env_vars "$segment")
-    word="${segment%% *}"
+    word=$(first_token "$segment")
   done
   echo "$word"
 }
@@ -118,17 +147,37 @@ fi
 # Same segment-splitting pattern as enforce-task-runner.sh.
 SEGMENTS=$(echo "$COMMAND" | awk '{gsub(/ *&& */, "\n"); gsub(/ *; */, "\n"); gsub(/ *\|\| */, "\n"); print}')
 
+# Track whether an earlier segment exported BEADS_DIR so chained
+# commands like `export BEADS_DIR=...; bd ready` aren't false-positive
+# blocked.
+beads_dir_seen=0
+
 while IFS= read -r segment; do
   [[ -z "$segment" ]] && continue
-  before_pipe="${segment%%|*}"
 
-  # If the user explicitly set BEADS_DIR=... in this segment, trust them.
-  if has_beads_dir_env "$before_pipe"; then
+  # Standalone BEADS_DIR assignment in a prior segment opts out of the gate.
+  if is_standalone_beads_dir_assignment "$segment"; then
+    beads_dir_seen=1
     continue
   fi
 
-  word=$(first_cmd_word "$before_pipe")
-  if [ "$word" = "bd" ]; then
+  # Inspect every component of the pipeline, not just the leftmost.
+  # `git log | bd ...` would otherwise silently bypass the gate.
+  PIPE_PARTS=$(printf '%s\n' "$segment" | awk '{gsub(/ *\| */, "\n"); print}')
+  triggered_part=""
+  while IFS= read -r part; do
+    [[ -z "$part" ]] && continue
+    if has_beads_dir_env "$part" || [[ $beads_dir_seen -eq 1 ]]; then
+      continue
+    fi
+    word=$(first_cmd_word "$part")
+    if [ "$word" = "bd" ]; then
+      triggered_part="$part"
+      break
+    fi
+  done <<< "$PIPE_PARTS"
+
+  if [ -n "$triggered_part" ]; then
     cat >&2 <<EOF
 \`bd\` invoked from a jj workspace ($WS_ROOT)
 without BEADS_DIR set. The workspace's .beads/ is empty; bd's lookup will
@@ -136,8 +185,8 @@ fail with "no beads database found".
 
 Pick one:
 
-  • Prepend BEADS_DIR to this single command:
-        BEADS_DIR='$MAIN_REPO/.beads' $segment
+  • Prepend BEADS_DIR to the bd command:
+        BEADS_DIR='$MAIN_REPO/.beads' $triggered_part
 
   • Permanent fix for this workspace (one-time, then bd works bare):
         printf '%s\n' '$MAIN_REPO/.beads' > '$WS_ROOT/.beads/redirect'

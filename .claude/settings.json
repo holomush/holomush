@@ -45,6 +45,10 @@
           {
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/enforce-bd-beads-dir.sh",
             "type": "command"
+          },
+          {
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/enforce-gh-repo.sh",
+            "type": "command"
           }
         ],
         "matcher": "Bash"
