@@ -105,3 +105,86 @@ func TestFileSource_Name_IsLocalAEADFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "local-aead/file", src.Name())
 }
+
+// TestFileSource_Persist_FailsWhenWriteUnavailable verifies the
+// KEK_FILE_WRITE_FAILED error path: pointing the FileSource at a path
+// inside a non-existent directory makes os.WriteFile fail.
+func TestFileSource_Persist_FailsWhenWriteUnavailable(t *testing.T) {
+	keyFile := "/nonexistent-parent-dir/master.key.enc"
+	src, err := kek.NewFileSource(keyFile, staticPassphraseFunc("any"))
+	require.NoError(t, err)
+
+	kekBytes := make([]byte, kek.KEKByteLength)
+	_, err = rand.Read(kekBytes)
+	require.NoError(t, err)
+
+	err = src.Persist(context.Background(), kekBytes)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "KEK_FILE_WRITE_FAILED")
+}
+
+// TestFileSource_Persist_RejectsWrongLengthKEK covers the input
+// validation branch that fires before any filesystem op.
+func TestFileSource_Persist_RejectsWrongLengthKEK(t *testing.T) {
+	tmp := t.TempDir()
+	keyFile := filepath.Join(tmp, "master.key.enc")
+	src, err := kek.NewFileSource(keyFile, staticPassphraseFunc("any"))
+	require.NoError(t, err)
+
+	err = src.Persist(context.Background(), make([]byte, 16)) // wrong length
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "KEK_BYTE_LENGTH_INVALID")
+}
+
+// TestFileSource_Persist_PassphraseFuncError covers the propagation
+// of a PassphraseFunc error into KEK_PASSPHRASE_FETCH_FAILED.
+func TestFileSource_Persist_PassphraseFuncError(t *testing.T) {
+	tmp := t.TempDir()
+	keyFile := filepath.Join(tmp, "master.key.enc")
+	failingPF := func(_ context.Context) ([]byte, error) {
+		return nil, errSentinel
+	}
+	src, err := kek.NewFileSource(keyFile, failingPF)
+	require.NoError(t, err)
+
+	kekBytes := make([]byte, kek.KEKByteLength)
+	_, err = rand.Read(kekBytes)
+	require.NoError(t, err)
+
+	err = src.Persist(context.Background(), kekBytes)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "KEK_PASSPHRASE_FETCH_FAILED")
+}
+
+// TestFileSource_Load_PassphraseFuncError covers the symmetric
+// propagation on the Load path.
+func TestFileSource_Load_PassphraseFuncError(t *testing.T) {
+	tmp := t.TempDir()
+	keyFile := filepath.Join(tmp, "master.key.enc")
+
+	// Write a valid file first using a working passphrase func.
+	kekBytes := make([]byte, kek.KEKByteLength)
+	_, err := rand.Read(kekBytes)
+	require.NoError(t, err)
+	writeSrc, err := kek.NewFileSource(keyFile, staticPassphraseFunc("correct"))
+	require.NoError(t, err)
+	require.NoError(t, writeSrc.Persist(context.Background(), kekBytes))
+
+	// Load with a passphrase func that errors.
+	failingPF := func(_ context.Context) ([]byte, error) {
+		return nil, errSentinel
+	}
+	readSrc, err := kek.NewFileSource(keyFile, failingPF)
+	require.NoError(t, err)
+	_, err = readSrc.Load(context.Background())
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "KEK_PASSPHRASE_FETCH_FAILED")
+}
+
+// errSentinel is a fixed non-nil error for tests that need to inject
+// a failure into a callback.
+var errSentinel = &sentinelErr{msg: "test sentinel"}
+
+type sentinelErr struct{ msg string }
+
+func (e *sentinelErr) Error() string { return e.msg }

@@ -16,6 +16,31 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
+// TestLocalAEADProvider_RotateKEK_StubReturnsTrackingBead verifies the
+// Phase 2 RotateKEK stub returns the documented tracking_bead context
+// pointing at the Phase 4 epic. This guarantees ops surface a real
+// bead ID in error logs the moment a caller hits the stub.
+func TestLocalAEADProvider_RotateKEK_StubReturnsTrackingBead(t *testing.T) {
+	ctx := context.Background()
+	provider, err := kek.NewLocalAEADProviderForUnitTest(ctx, envSourceWith(t, newKEKBytes(t)))
+	require.NoError(t, err)
+
+	_, err = provider.RotateKEK(ctx)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "KEK_ROTATE_NOT_IMPLEMENTED")
+	errutil.AssertErrorContext(t, err, "tracking_bead", "holomush-fi0n")
+	errutil.AssertErrorContext(t, err, "phase", 4)
+}
+
+// TestNoneProvider_RotateKEK_Refuses verifies the NoneProvider's
+// RotateKEK refusal path.
+func TestNoneProvider_RotateKEK_Refuses(t *testing.T) {
+	provider := kek.NewNoneProviderForUnitTest()
+	_, err := provider.RotateKEK(context.Background())
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "CRYPTO_NONE_PROVIDER_ROTATE_REFUSED")
+}
+
 func newKEKBytes(t *testing.T) []byte {
 	t.Helper()
 	b := make([]byte, kek.KEKByteLength)
