@@ -191,6 +191,56 @@ func TestMigration000005AuditSourceComponentBackfillsExistingRows(t *testing.T) 
 	assert.Equal(t, "Allow Read", eventName, "existing policy_name value should be renamed to event_name")
 }
 
+// TestEventsAuditHasDEKColumnsAfterMigration014 applies all migrations against
+// a fresh Postgres instance and asserts the events_audit table has the
+// dek_ref BIGINT and dek_version INTEGER columns (both nullable) plus the
+// partial index events_audit_dek_ref ON (dek_ref) WHERE dek_ref IS NOT NULL
+// after migration 000014 has run.
+func TestEventsAuditHasDEKColumnsAfterMigration014(t *testing.T) {
+	shared := testutil.SharedPostgres(t)
+	connStr := testutil.RawDatabase(t, shared)
+
+	migrator, err := store.NewMigrator(connStr)
+	require.NoError(t, err)
+	require.NoError(t, migrator.Up())
+	require.NoError(t, migrator.Close())
+
+	db, err := sql.Open("pgx", connStr)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	// dek_ref column — BIGINT, nullable.
+	var dataType, isNullable string
+	err = db.QueryRow(`
+		SELECT data_type, is_nullable
+		  FROM information_schema.columns
+		 WHERE table_name = 'events_audit' AND column_name = 'dek_ref'
+	`).Scan(&dataType, &isNullable)
+	require.NoError(t, err)
+	assert.Equal(t, "bigint", dataType)
+	assert.Equal(t, "YES", isNullable)
+
+	// dek_version column — INTEGER, nullable.
+	err = db.QueryRow(`
+		SELECT data_type, is_nullable
+		  FROM information_schema.columns
+		 WHERE table_name = 'events_audit' AND column_name = 'dek_version'
+	`).Scan(&dataType, &isNullable)
+	require.NoError(t, err)
+	assert.Equal(t, "integer", dataType)
+	assert.Equal(t, "YES", isNullable)
+
+	// Partial index on dek_ref.
+	var indexCount int
+	err = db.QueryRow(`
+		SELECT count(*)
+		  FROM pg_indexes
+		 WHERE tablename = 'events_audit' AND indexname = 'events_audit_dek_ref'
+	`).Scan(&indexCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, indexCount)
+}
+
 // assertColumnExists fails the test if table.column is not present in
 // information_schema.columns.
 func assertColumnExists(t *testing.T, db *sql.DB, table, column string) {

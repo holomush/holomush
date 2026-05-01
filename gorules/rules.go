@@ -137,3 +137,41 @@ func SceneOpsEventsAppendOnly(m dsl.Matcher) {
 		Where(m["sql"].Text.Matches(forbidden)).
 		Report(msg)
 }
+
+// INV-27 (dek.Material non-leakage) ruleguard enforcement is INTENTIONALLY
+// ABSENT. The Phase 2 plan originally called for sink-side ruleguard rules
+// (DEKMaterialNoJSON, NoGob, NoProto, NoFmtFormatting, NoLog, NoSlog) plus
+// CodecKeyBytesAllowlist. Implementation revealed that go-ruleguard's
+// rule loader cannot resolve `Type.Is("…/internal/eventbus/crypto/dek.Material")`
+// when the analyzed package is in the same Go module — the resolver fails
+// silently and ruleguard returns an empty rule set GLOBALLY (not just for
+// the affected packages), causing the spurious
+//
+//	ruleguard: execution error: used Run() with an empty rule set;
+//	forgot to call Load() first?
+//
+// to fire on every package golangci-lint scans (200+ false positives).
+// We are already on the latest of every component (golangci-lint v2.11.4,
+// go-ruleguard v0.4.5, go-ruleguard/dsl v0.3.23) — no upstream version
+// bump available.
+//
+// Same-shape bug as holomush#1272 (the plugins/ workaround that was
+// removed when the WASM-plugin design went away). Any rule using
+// `Type.Is(<project-internal-type>)` exhibits the same failure.
+//
+// Phase 2 INV-27 enforcement therefore lives entirely in:
+//   - internal/eventbus/crypto/dek/material.go — opaque struct, private
+//     `bytes` field, no exported []byte accessor
+//   - internal/eventbus/crypto/dek/api_test.go — static API surface test
+//     using golang.org/x/tools/go/packages, asserts the dek package
+//     exports no `[]byte` (function/method/struct field). Catches the
+//     realistic failure mode (Material gaining an exported accessor).
+//
+// The reviewer-facing patterns we WANTED to flag at lint time are
+// documented for posterity in gorules/testdata/{dek_no_serialize,
+// codec_key_bytes}/expected_violations.go.
+//
+// Tracked: holomush-46ya (chore(lint): migrate from go-ruleguard DSL to
+// standard go/analysis framework). Once that lands the rules can be
+// re-introduced as plain Go analyzers without the Type.Is resolver
+// limitation.
