@@ -15,4 +15,6 @@
 package holomushrules
 
 // Blank imports — populated by Tasks 9–19 (one per analyzer).
-// Bootstrap: no analyzers yet.
+import (
+	_ "github.com/holomush/holomush/gorules/analyzers/ulidmakeforbidden"
+)
