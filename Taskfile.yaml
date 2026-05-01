@@ -624,15 +624,27 @@ tasks:
 
         TARGET="$WORKTREES/$NAME"
 
-        # Idempotent pre-check
-        if [ -d "$TARGET" ]; then
-          echo "$TARGET"
-          exit 0
+        # Create the workspace if it doesn't exist. The redirect-file step
+        # below runs unconditionally so older workspaces self-heal when
+        # task workspace:new is re-invoked for them.
+        if [ ! -d "$TARGET" ]; then
+          jj git fetch >&2
+          jj workspace add "$TARGET" --name "$NAME" -r main@origin >&2
         fi
 
-        # Fresh workspace path
-        jj git fetch >&2
-        jj workspace add "$TARGET" --name "$NAME" -r main@origin >&2
+        # Point bd at the main repo's .beads/. Each jj workspace
+        # materialises an empty .beads/ (only tracked config + .gitignore;
+        # the Dolt DB lives in the main repo's .beads/dolt/), so bd run
+        # from the workspace would fail with "no beads database found".
+        # `.beads/redirect` is bd's documented per-worktree override and
+        # is already in .beads/.gitignore, so it never gets committed
+        # (holomush-k98d). Don't overwrite an existing redirect — a user
+        # may have repointed it at a federation peer or alternate DB.
+        mkdir -p "$TARGET/.beads"
+        if [ ! -f "$TARGET/.beads/redirect" ]; then
+          printf '%s\n' "$MAIN_REPO/.beads" > "$TARGET/.beads/redirect"
+        fi
+
         echo "$TARGET"
 
   # ──────────────────────────────────────────
