@@ -22,10 +22,15 @@ func ValidateCrypto(m *Manifest) error {
 	// Rule 1 & 2: every Sensitivity value is one of the closed enum;
 	// event_type is non-empty and unique within this manifest.
 	seenEmit := make(map[string]bool, len(m.Crypto.Emits))
-	for i, e := range m.Crypto.Emits {
-		// Trim before emptiness/duplicate checks so "   " is rejected and
-		// trailing-space variants of the same type collide.
-		eventType := strings.TrimSpace(e.EventType)
+	for i := range m.Crypto.Emits {
+		e := &m.Crypto.Emits[i]
+		// Normalize the stored value: trim whitespace so empty/duplicate
+		// checks fire correctly AND so ResolveCryptoRefs (which compares
+		// emits[i].EventType verbatim against the parsed ref) sees the
+		// same canonical form. Without writing back, " whisper " would
+		// pass validation but fail lookup.
+		e.EventType = strings.TrimSpace(e.EventType)
+		eventType := e.EventType
 		if !validSensitivity(e.Sensitivity) {
 			return oops.Code("PLUGIN_CRYPTO_INVALID_SENSITIVITY").
 				With("plugin", m.Name).

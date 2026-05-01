@@ -76,7 +76,7 @@ crypto:
 		},
 		{
 			name:         "fails when manifest file does not exist",
-			pathOverride: "/does/not/exist.yaml",
+			pathOverride: "__MISSING__",
 			wantSuccess:  false,
 		},
 	}
@@ -84,9 +84,12 @@ crypto:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var manifestPath string
-			if tt.pathOverride != "" {
+			switch {
+			case tt.pathOverride == "__MISSING__":
+				manifestPath = filepath.Join(t.TempDir(), "does-not-exist.yaml")
+			case tt.pathOverride != "":
 				manifestPath = tt.pathOverride
-			} else {
+			default:
 				tmp := t.TempDir()
 				manifestPath = filepath.Join(tmp, "plugin.yaml")
 				require.NoError(t, os.WriteFile(manifestPath, []byte(tt.manifestYAML), 0o600))

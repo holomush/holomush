@@ -163,3 +163,28 @@ func TestValidateCrypto(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateCryptoNormalizesEventTypeForResolveLookup pins the round-trip
+// between ValidateCrypto and ResolveCryptoRefs. ValidateCrypto MUST trim
+// stored event_type values so that a self-reference like "p:whisper" resolves
+// against an emit declared as " whisper " (with trailing whitespace).
+// Without normalization the lookup at crypto_validator.go::ResolveCryptoRefs
+// returns PLUGIN_CRYPTO_UNKNOWN_EVENT_REF for a legitimately declared event.
+func TestValidateCryptoNormalizesEventTypeForResolveLookup(t *testing.T) {
+	m := &plugins.Manifest{
+		Name: "p",
+		Crypto: &plugins.CryptoSection{
+			Emits: []plugins.CryptoEmit{
+				{EventType: "  whisper  ", Sensitivity: plugins.SensitivityAlways},
+			},
+			Consumes: []plugins.CryptoConsume{{
+				Subjects:           []string{"events.>"},
+				RequestsDecryption: []string{"p:whisper"},
+			}},
+		},
+	}
+	require.NoError(t, plugins.ValidateCrypto(m))
+	require.Equal(t, "whisper", m.Crypto.Emits[0].EventType,
+		"ValidateCrypto must write back the trimmed event_type so ResolveCryptoRefs can match it")
+	require.NoError(t, plugins.ResolveCryptoRefs(m, map[string][]plugins.CryptoEmit{}))
+}
