@@ -45,6 +45,9 @@ Thumbs.db
 /build/
 /bin/
 
+# golangci-lint module-plugin custom binary (built via `task lint:build-custom-gcl`)
+/bin/custom-gcl
+
 # Node (for web client)
 node_modules/
 .svelte-kit/
