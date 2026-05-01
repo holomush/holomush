@@ -22,6 +22,7 @@ import (
 	_ "github.com/holomush/holomush/gorules/analyzers/dekmaterialnojson"
 	_ "github.com/holomush/holomush/gorules/analyzers/dekmaterialnolog"
 	_ "github.com/holomush/holomush/gorules/analyzers/dekmaterialnoproto"
+	_ "github.com/holomush/holomush/gorules/analyzers/dekmaterialnoslog"
 	_ "github.com/holomush/holomush/gorules/analyzers/sceneopseventsappendonly"
 	_ "github.com/holomush/holomush/gorules/analyzers/ulidmakeforbidden"
 )

@@ -42,6 +42,7 @@ linters:
     - dekmaterialnojson
     - dekmaterialnolog
     - dekmaterialnoproto
+    - dekmaterialnoslog
     - sceneopseventsappendonly
     - ulidmakeforbidden
 
@@ -219,6 +220,10 @@ linters:
       dekmaterialnoproto:
         type: module
         description: "INV-27: dek.Material MUST NOT be passed to google.golang.org/protobuf/proto"
+        original-url: github.com/holomush/holomush
+      dekmaterialnoslog:
+        type: module
+        description: "INV-27: dek.Material MUST NOT be passed to log/slog"
         original-url: github.com/holomush/holomush
       sceneopseventsappendonly:
         type: module
