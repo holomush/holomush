@@ -5,8 +5,8 @@
 // containment. The Material type is opaque by construction: it has no
 // exported []byte accessor. The sole exported egress is AsCodecKey,
 // which constructs a substrate codec.Key inline. The codec.Key.Bytes
-// field is the residual leakage path; reads are gated by the ruleguard
-// rule at gorules/codec_key_bytes_allowlist.go.
+// field is the residual leakage path; reads are gated by the
+// codeckeybytesallowlist analyzer in gorules/analyzers/.
 //
 // Phase 2 ships Material plus the Manager skeleton (GetOrCreate +
 // Resolve real; Add/Rotate/Rekey stubbed with tracking_bead). Phase 3
@@ -38,8 +38,8 @@ func NewMaterial(bytes []byte) *Material {
 // (e.g., a misbehaving codec or a cached caller) cannot corrupt the
 // Material or sibling keys minted from the same Material. Reads of
 // the returned key's Bytes field outside the codec/crypto package
-// trees fail lint via the codec.Key.Bytes allowlist rule in
-// gorules/rules.go.
+// trees fail lint via the codeckeybytesallowlist analyzer in
+// gorules/analyzers/.
 func (m *Material) AsCodecKey(id codec.KeyID) codec.Key {
 	out := make([]byte, len(m.bytes))
 	copy(out, m.bytes)
