@@ -42,23 +42,56 @@ type manager struct {
 }
 
 // NewManager constructs a real Manager. Production callers (Phase 3+)
-// pass a real KEK provider and pgxpool.Pool-backed Store.
-func NewManager(provider kek.Provider, store *Store, cache *Cache) Manager {
-	return &manager{provider: provider, store: store, cache: cache}
+// pass a real KEK provider and pgxpool.Pool-backed Store. All three
+// collaborators are required; a nil argument returns
+// DEK_MANAGER_DEPENDENCY_NIL rather than letting GetOrCreate/Resolve
+// dereference nil at runtime.
+func NewManager(provider kek.Provider, store *Store, cache *Cache) (Manager, error) {
+	switch {
+	case provider == nil:
+		return nil, oops.Code("DEK_MANAGER_DEPENDENCY_NIL").
+			With("dependency", "provider").
+			Errorf("dek.NewManager requires a non-nil kek.Provider")
+	case store == nil:
+		return nil, oops.Code("DEK_MANAGER_DEPENDENCY_NIL").
+			With("dependency", "store").
+			Errorf("dek.NewManager requires a non-nil *Store")
+	case cache == nil:
+		return nil, oops.Code("DEK_MANAGER_DEPENDENCY_NIL").
+			With("dependency", "cache").
+			Errorf("dek.NewManager requires a non-nil *Cache")
+	}
+	return &manager{provider: provider, store: store, cache: cache}, nil
 }
 
 // NewManagerForUnitTest constructs a Manager with no DB or KEK access.
-// GetOrCreate/Resolve will fail at runtime; only the stub methods
-// (Add/Rotate/Rekey) are exercisable. Used by api_test.go for
-// stub-bead allow-set checking.
+// GetOrCreate/Resolve will return DEK_MANAGER_NOT_CONFIGURED at runtime;
+// only the stub methods (Add/Rotate/Rekey) are exercisable. Used by
+// api_test.go for stub-bead allow-set checking.
 func NewManagerForUnitTest() Manager {
 	return &manager{}
+}
+
+// configured returns DEK_MANAGER_NOT_CONFIGURED if any of the
+// collaborators are nil. GetOrCreate/Resolve must call this before
+// dereferencing m.provider/m.store/m.cache to avoid nil-panics on
+// Managers built via NewManagerForUnitTest.
+func (m *manager) configured() error {
+	if m.provider == nil || m.store == nil || m.cache == nil {
+		return oops.Code("DEK_MANAGER_NOT_CONFIGURED").
+			Errorf("Manager built via NewManagerForUnitTest cannot perform DEK operations; " +
+				"only the Add/Rotate/Rekey stubs are exercisable")
+	}
+	return nil
 }
 
 // GetOrCreate returns the active DEK for ctxID, minting v1 if no row
 // exists. On concurrent INSERT race, the loser re-SELECTs and uses
 // the winner's row (PG unique constraint guarantees one winner).
 func (m *manager) GetOrCreate(ctx context.Context, ctxID ContextID, initial []Participant) (codec.Key, error) {
+	if err := m.configured(); err != nil {
+		return codec.Key{}, err
+	}
 	// Try the active row first.
 	if r, err := m.store.selectActive(ctx, ctxID); err == nil {
 		return m.unwrapAndCache(ctx, r)
@@ -74,6 +107,9 @@ func (m *manager) GetOrCreate(ctx context.Context, ctxID ContextID, initial []Pa
 	wrapped, kekKeyID, err := m.provider.Wrap(ctx, dekBytes)
 	if err != nil {
 		return codec.Key{}, oops.Code("DEK_WRAP_FAILED").Wrap(err)
+	}
+	if validateErr := validateProviderWrapOutput(wrapped, kekKeyID); validateErr != nil {
+		return codec.Key{}, validateErr
 	}
 	in := row{
 		ContextType:  ctxID.Type,
@@ -105,6 +141,9 @@ func (m *manager) GetOrCreate(ctx context.Context, ctxID ContextID, initial []Pa
 
 // Resolve returns the DEK for (keyID, version). Cache → DB → unwrap.
 func (m *manager) Resolve(ctx context.Context, keyID codec.KeyID, version uint32) (codec.Key, error) {
+	if err := m.configured(); err != nil {
+		return codec.Key{}, err
+	}
 	if material, ok := m.cache.Get(CacheKey{KeyID: keyID, Version: version}); ok {
 		return material.AsCodecKey(keyID), nil
 	}
@@ -153,8 +192,46 @@ func (m *manager) unwrapAndCache(ctx context.Context, r row) (codec.Key, error) 
 			With("version", r.Version).
 			Wrap(err)
 	}
+	if err := validateProviderUnwrapOutput(dekBytes, r.ID, r.Version); err != nil {
+		return codec.Key{}, err
+	}
 	material := NewMaterial(dekBytes)
 	keyID := codec.KeyID(r.ID) //nolint:gosec // G115: r.ID is a DB BIGSERIAL value; positive serial ids fit in uint64.
 	m.cache.Put(CacheKey{KeyID: keyID, Version: r.Version}, material)
 	return material.AsCodecKey(keyID), nil
+}
+
+// validateProviderWrapOutput rejects malformed Wrap return values.
+// kek.Provider's interface contract is silent on length/non-emptiness;
+// without these checks a buggy or future provider could insert an
+// unreadable crypto_keys row (wrapped == nil, kekKeyID == ""). Bail
+// before the INSERT.
+func validateProviderWrapOutput(wrapped []byte, kekKeyID string) error {
+	if len(wrapped) == 0 {
+		return oops.Code("DEK_WRAP_OUTPUT_INVALID").
+			With("reason", "wrapped_empty").
+			Errorf("kek.Provider.Wrap returned an empty wrapped DEK")
+	}
+	if kekKeyID == "" {
+		return oops.Code("DEK_WRAP_OUTPUT_INVALID").
+			With("reason", "kek_key_id_empty").
+			Errorf("kek.Provider.Wrap returned an empty kek_key_id")
+	}
+	return nil
+}
+
+// validateProviderUnwrapOutput rejects malformed Unwrap return values
+// (wrong length DEK material). DEKs are 32 bytes (chacha20poly1305 key
+// size); a different length means the row was written by an
+// incompatible codec or the provider corrupted the unwrap.
+func validateProviderUnwrapOutput(dekBytes []byte, rowID int64, version uint32) error {
+	if len(dekBytes) != DEKByteLength {
+		return oops.Code("DEK_UNWRAP_OUTPUT_INVALID").
+			With("key_id", rowID).
+			With("version", version).
+			With("expected_bytes", DEKByteLength).
+			With("got_bytes", len(dekBytes)).
+			Errorf("provider.Unwrap returned %d bytes; expected %d", len(dekBytes), DEKByteLength)
+	}
+	return nil
 }

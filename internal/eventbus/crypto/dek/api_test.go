@@ -28,6 +28,12 @@ func TestPackageHasNoExportedByteSlices(t *testing.T) {
 	pkgs, err := packages.Load(cfg, "github.com/holomush/holomush/internal/eventbus/crypto/dek")
 	require.NoError(t, err)
 	require.Len(t, pkgs, 1)
+	// packages.Load surfaces parse/type-check failures via pkg.Errors,
+	// not the top-level err. Without this assertion the test could pass
+	// against a package that failed to type-check and miss the API drift
+	// it is designed to catch. See cmd/holomush/gateway_imports_test.go.
+	require.Equal(t, 0, packages.PrintErrors(pkgs),
+		"package failed to load cleanly; static API surface check is unreliable")
 	pkg := pkgs[0]
 	require.NotNil(t, pkg.Types, "package types not loaded")
 

@@ -34,7 +34,8 @@ func TestFileSource_LoadDerivesKEKDeterministically(t *testing.T) {
 	_, err := rand.Read(kekBytes)
 	require.NoError(t, err)
 
-	src := kek.NewFileSource(keyFile, staticPassphraseFunc("correct horse battery staple"))
+	src, err := kek.NewFileSource(keyFile, staticPassphraseFunc("correct horse battery staple"))
+	require.NoError(t, err)
 	require.NoError(t, src.Persist(context.Background(), kekBytes))
 
 	// Round-trip: Load returns the same bytes.
@@ -55,34 +56,52 @@ func TestFileSource_Load_FailsOnWrongPassphrase(t *testing.T) {
 	_, err := rand.Read(kekBytes)
 	require.NoError(t, err)
 
-	writeSrc := kek.NewFileSource(keyFile, staticPassphraseFunc("right"))
+	writeSrc, err := kek.NewFileSource(keyFile, staticPassphraseFunc("right"))
+	require.NoError(t, err)
 	require.NoError(t, writeSrc.Persist(context.Background(), kekBytes))
 
-	readSrc := kek.NewFileSource(keyFile, staticPassphraseFunc("wrong"))
+	readSrc, err := kek.NewFileSource(keyFile, staticPassphraseFunc("wrong"))
+	require.NoError(t, err)
 	_, err = readSrc.Load(context.Background())
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "KEK_PASSPHRASE_INVALID")
 }
 
 func TestFileSource_Load_FailsOnMissingFile(t *testing.T) {
-	src := kek.NewFileSource("/nonexistent/master.key.enc", staticPassphraseFunc("any"))
-	_, err := src.Load(context.Background())
+	src, err := kek.NewFileSource("/nonexistent/master.key.enc", staticPassphraseFunc("any"))
+	require.NoError(t, err)
+	_, err = src.Load(context.Background())
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "KEK_FILE_LOAD_FAILED")
+}
+
+func TestFileSource_New_FailsWhenPassphraseFuncIsNil(t *testing.T) {
+	_, err := kek.NewFileSource("/tmp/x", nil)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "KEK_FILE_PASSPHRASE_FUNC_NIL")
 }
 
 func TestFileSource_Load_FailsOnCorruptMagic(t *testing.T) {
 	tmp := t.TempDir()
 	keyFile := filepath.Join(tmp, "master.key.enc")
-	require.NoError(t, os.WriteFile(keyFile, []byte("XXXX"), 0o600))
+	// Write a file long enough to clear the size precondition (4-byte
+	// magic + 16-byte salt + 24-byte nonce + 16-byte AEAD overhead = 60
+	// minimum) but with a wrong magic prefix. This forces Load past the
+	// length check and into the magic-comparison branch.
+	bogus := make([]byte, 64)
+	copy(bogus, "XXXX") // wrong magic
+	require.NoError(t, os.WriteFile(keyFile, bogus, 0o600))
 
-	src := kek.NewFileSource(keyFile, staticPassphraseFunc("any"))
-	_, err := src.Load(context.Background())
+	src, err := kek.NewFileSource(keyFile, staticPassphraseFunc("any"))
+	require.NoError(t, err)
+	_, err = src.Load(context.Background())
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "KEK_FILE_FORMAT_INVALID")
+	require.ErrorContains(t, err, "magic")
 }
 
 func TestFileSource_Name_IsLocalAEADFile(t *testing.T) {
-	src := kek.NewFileSource("/tmp/x", staticPassphraseFunc(""))
+	src, err := kek.NewFileSource("/tmp/x", staticPassphraseFunc(""))
+	require.NoError(t, err)
 	assert.Equal(t, "local-aead/file", src.Name())
 }

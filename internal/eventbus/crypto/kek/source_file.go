@@ -54,8 +54,18 @@ type FileSource struct {
 
 // NewFileSource constructs a FileSource. passphraseFunc supplies the
 // unlock passphrase on Load and Persist.
-func NewFileSource(path string, passphraseFunc PassphraseFunc) *FileSource {
-	return &FileSource{path: path, passphraseFunc: passphraseFunc}
+//
+// Returns KEK_FILE_PASSPHRASE_FUNC_NIL if passphraseFunc is nil — that
+// is a misconfiguration the caller cannot recover from at runtime, so
+// surfacing it at construction is preferred over panicking on first
+// Load/Persist.
+func NewFileSource(path string, passphraseFunc PassphraseFunc) (*FileSource, error) {
+	if passphraseFunc == nil {
+		return nil, oops.Code("KEK_FILE_PASSPHRASE_FUNC_NIL").
+			With("path", path).
+			Errorf("FileSource requires a non-nil PassphraseFunc")
+	}
+	return &FileSource{path: path, passphraseFunc: passphraseFunc}, nil
 }
 
 // Name returns "local-aead/file".
@@ -151,10 +161,64 @@ func (s *FileSource) Persist(ctx context.Context, kekBytes []byte) error {
 	buf.Write(nonce)
 	buf.Write(wrapped)
 
-	if err := os.WriteFile(s.path, buf.Bytes(), 0o600); err != nil {
+	// Write atomically: write to a temp file in the same directory,
+	// fsync, set 0o600 explicitly (in case the file already existed
+	// with broader permissions), then rename. A crash between WriteFile
+	// and Rename leaves the original file intact.
+	tmpPath := s.path + ".tmp"
+	if err := os.WriteFile(tmpPath, buf.Bytes(), 0o600); err != nil {
 		return oops.Code("KEK_FILE_WRITE_FAILED").
-			With("path", s.path).
+			With("path", tmpPath).
+			Wrap(err)
+	}
+	// Defensive chmod in case umask widened mode on a pre-existing
+	// .tmp inode (rare but cheap to defend against).
+	if err := os.Chmod(tmpPath, 0o600); err != nil {
+		removeIgnoringError(tmpPath)
+		return oops.Code("KEK_FILE_CHMOD_FAILED").
+			With("path", tmpPath).
+			Wrap(err)
+	}
+	// fsync the temp file so its bytes hit disk before the rename
+	// commits the swap.
+	if err := fsyncFile(tmpPath); err != nil {
+		removeIgnoringError(tmpPath)
+		return oops.Code("KEK_FILE_FSYNC_FAILED").
+			With("path", tmpPath).
+			Wrap(err)
+	}
+	if err := os.Rename(tmpPath, s.path); err != nil {
+		removeIgnoringError(tmpPath)
+		return oops.Code("KEK_FILE_RENAME_FAILED").
+			With("from", tmpPath).
+			With("to", s.path).
 			Wrap(err)
 	}
 	return nil
+}
+
+// fsyncFile opens path, fsyncs it, and closes. Best-effort; the
+// rename below provides the durability guarantee on most filesystems
+// even if fsync is a no-op (e.g., overlayfs in some test environments).
+func fsyncFile(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return oops.Wrap(err)
+	}
+	defer func() {
+		_ = f.Close() //nolint:errcheck // best-effort cleanup; the rename below is the durability point
+	}()
+	if err := f.Sync(); err != nil {
+		return oops.Wrap(err)
+	}
+	return nil
+}
+
+// removeIgnoringError unlinks path on a cleanup path. We discard the
+// error intentionally — the caller is already returning a primary
+// error from the just-failed write/chmod/fsync/rename, and the rollback
+// is best-effort. The deferred-discard is wrapped in a helper so
+// errcheck doesn't flag every call site individually.
+func removeIgnoringError(path string) {
+	_ = os.Remove(path) //nolint:errcheck // best-effort rollback; primary error already being returned
 }

@@ -62,6 +62,45 @@ func newTestProvider(t *testing.T) kek.Provider {
 	return p
 }
 
+// preInsertBarrier coordinates N goroutines so they all reach the
+// pre-insert hook before any is allowed to proceed. Used by the
+// concurrent-mint race test to guarantee the unique-violation recovery
+// path is exercised — without the barrier, the scheduler could
+// serialize the goroutines and the second call would observe the
+// already-inserted row in selectActive instead of racing on INSERT.
+type preInsertBarrier struct {
+	t       *testing.T
+	wg      sync.WaitGroup
+	mu      sync.Mutex
+	arrived int
+}
+
+func newPreInsertBarrier(t *testing.T, n int) *preInsertBarrier {
+	t.Helper()
+	b := &preInsertBarrier{t: t}
+	b.wg.Add(n)
+	return b
+}
+
+// Wait records that one goroutine has reached the hook, then blocks
+// until N goroutines have all arrived.
+func (b *preInsertBarrier) Wait() {
+	b.mu.Lock()
+	b.arrived++
+	b.mu.Unlock()
+	b.wg.Done()
+	b.wg.Wait()
+}
+
+// ArrivalCount returns how many goroutines reached Wait. Tests assert
+// this equals the expected fan-out so the test cannot pass when the
+// scheduler serialized the goroutines and only one called INSERT.
+func (b *preInsertBarrier) ArrivalCount() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.arrived
+}
+
 // sanitizeEnvName strips characters that env var names disallow.
 func sanitizeEnvName(s string) string {
 	out := make([]byte, 0, len(s))
@@ -87,7 +126,8 @@ func TestManager_GetOrCreate_MintsAndPersists(t *testing.T) {
 
 	provider := newTestProvider(t)
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
-	mgr := dek.NewManager(provider, dek.NewStore(pool), cache)
+	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache)
+	require.NoError(t, err)
 
 	ctxID := dek.ContextID{Type: "scene", ID: "01ABCDEF"}
 	key1, err := mgr.GetOrCreate(ctx, ctxID, []dek.Participant{})
@@ -120,7 +160,8 @@ func TestManager_Resolve_ByKeyIDAndVersion(t *testing.T) {
 
 	provider := newTestProvider(t)
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
-	mgr := dek.NewManager(provider, dek.NewStore(pool), cache)
+	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache)
+	require.NoError(t, err)
 
 	ctxID := dek.ContextID{Type: "dm", ID: "01ABCDEF-01FFFFFF"}
 	key, err := mgr.GetOrCreate(ctx, ctxID, []dek.Participant{})
@@ -143,8 +184,9 @@ func TestManager_Resolve_NotFound_ReturnsErrDEKNotFound(t *testing.T) {
 	require.NoError(t, err)
 	defer pool.Close()
 
-	mgr := dek.NewManager(newTestProvider(t), dek.NewStore(pool),
+	mgr, err := dek.NewManager(newTestProvider(t), dek.NewStore(pool),
 		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}))
+	require.NoError(t, err)
 
 	_, err = mgr.Resolve(ctx, codec.KeyID(99999), 1)
 	require.Error(t, err)
@@ -165,11 +207,25 @@ func TestManager_GetOrCreate_ConcurrentMintRace(t *testing.T) {
 	provider := newTestProvider(t)
 
 	// Use two managers backed by separate caches to simulate two
-	// replicas; they share the underlying DB.
+	// replicas; they share the underlying DB. The Stores share a
+	// pre-insert barrier hook that forces both goroutines past
+	// SelectActive (which sees no row) and through Wrap before either
+	// is allowed to call INSERT — guaranteeing the unique-violation
+	// recovery branch in GetOrCreate runs. Without the barrier, the
+	// scheduler could serialize the two goroutines: the first would
+	// successfully INSERT, the second would hit the row in
+	// SelectActive on its next call and never test the loser path.
+	storeA := dek.NewStore(pool)
+	storeB := dek.NewStore(pool)
+	barrier := newPreInsertBarrier(t, 2)
+	storeA.SetPreInsertHookForTest(barrier.Wait)
+	storeB.SetPreInsertHookForTest(barrier.Wait)
 	cacheA := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
 	cacheB := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
-	mgrA := dek.NewManager(provider, dek.NewStore(pool), cacheA)
-	mgrB := dek.NewManager(provider, dek.NewStore(pool), cacheB)
+	mgrA, err := dek.NewManager(provider, storeA, cacheA)
+	require.NoError(t, err)
+	mgrB, err := dek.NewManager(provider, storeB, cacheB)
+	require.NoError(t, err)
 
 	ctxID := dek.ContextID{Type: "scene", ID: "race-01"}
 
@@ -195,6 +251,12 @@ func TestManager_GetOrCreate_ConcurrentMintRace(t *testing.T) {
 	require.NoError(t, errB)
 	assert.Equal(t, keyA.ID, keyB.ID, "both managers must converge on the same DEK row")
 	assert.Equal(t, keyA.Bytes, keyB.Bytes, "both managers must see byte-equal DEK bytes")
+	// Verify the barrier was actually exercised: both goroutines must
+	// have entered the pre-insert hook for the test to be meaningful.
+	// (If only one called INSERT, the unique-violation path was not
+	// exercised and the assertion above passed by accident.)
+	assert.Equal(t, 2, barrier.ArrivalCount(),
+		"both goroutines must reach the pre-insert hook for the race test to exercise the loser path")
 
 	// Exactly one row exists.
 	var rowCount int

@@ -32,11 +32,16 @@ func NewMaterial(bytes []byte) *Material {
 	return &Material{bytes: cp}
 }
 
-// AsCodecKey constructs a codec.Key with the given KeyID and the
-// Material's underlying bytes. The returned codec.Key.Bytes shares
-// backing memory with this Material (no further copy); reads of the
-// returned key's Bytes field outside the codec/crypto package trees
-// fail lint via gorules/codec_key_bytes_allowlist.go.
+// AsCodecKey constructs a codec.Key with the given KeyID and a fresh
+// copy of the Material's underlying bytes. Each call returns an
+// independent slice so that downstream mutations of codec.Key.Bytes
+// (e.g., a misbehaving codec or a cached caller) cannot corrupt the
+// Material or sibling keys minted from the same Material. Reads of
+// the returned key's Bytes field outside the codec/crypto package
+// trees fail lint via the codec.Key.Bytes allowlist rule in
+// gorules/rules.go.
 func (m *Material) AsCodecKey(id codec.KeyID) codec.Key {
-	return codec.Key{ID: id, Bytes: m.bytes}
+	out := make([]byte, len(m.bytes))
+	copy(out, m.bytes)
+	return codec.Key{ID: id, Bytes: out}
 }

@@ -10,7 +10,6 @@ import (
 	"encoding/hex"
 	"io"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/samber/oops"
 	"golang.org/x/crypto/chacha20poly1305"
 )
@@ -146,15 +145,23 @@ func (p *LocalAEADProvider) HealthCheck(_ context.Context) error { return nil }
 // startupIntegrityCheck enforces INV-33: no crypto_keys row may
 // reference a wrap_key_id this provider cannot unwrap.
 func (p *LocalAEADProvider) startupIntegrityCheck(ctx context.Context, db PGQuerier) error {
-	rowsRdr, err := queryRowsCompat(ctx, db, "SELECT DISTINCT wrap_key_id FROM crypto_keys WHERE wrap_provider = $1", p.sourceName)
+	rows, err := db.Query(ctx, "SELECT DISTINCT wrap_key_id FROM crypto_keys WHERE wrap_provider = $1", p.sourceName)
 	if err != nil {
 		return oops.Code("KEK_PROVIDER_INTEGRITY_QUERY_FAILED").Wrap(err)
 	}
+	defer rows.Close()
 	var unrecoverable []string
-	for _, kid := range rowsRdr {
+	for rows.Next() {
+		var kid string
+		if scanErr := rows.Scan(&kid); scanErr != nil {
+			return oops.Code("KEK_PROVIDER_INTEGRITY_QUERY_FAILED").Wrap(scanErr)
+		}
 		if _, ok := p.kekByID[kid]; !ok {
 			unrecoverable = append(unrecoverable, kid)
 		}
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return oops.Code("KEK_PROVIDER_INTEGRITY_QUERY_FAILED").Wrap(rowsErr)
 	}
 	if len(unrecoverable) > 0 {
 		return oops.Code("KEK_PROVIDER_CANNOT_UNWRAP_EXISTING_DEKS").
@@ -166,40 +173,6 @@ func (p *LocalAEADProvider) startupIntegrityCheck(ctx context.Context, db PGQuer
 				len(unrecoverable))
 	}
 	return nil
-}
-
-// queryRowsCompat is a tiny shim that accepts our PGQuerier (which
-// only knows QueryRow) plus a real *pgx.Conn / *pgxpool.Pool. We need
-// row iteration here, so the compat layer falls back to the
-// underlying pgx surface via type assertion. PGQuerier is widened in
-// Task 9 if needed; for now, integration tests pass *pgx.Conn which
-// satisfies a richer interface.
-type pgQueryAll interface {
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-}
-
-func queryRowsCompat(ctx context.Context, db PGQuerier, sql string, args ...any) ([]string, error) {
-	qa, ok := db.(pgQueryAll)
-	if !ok {
-		return nil, oops.Errorf("PGQuerier does not support Query (need *pgx.Conn or *pgxpool.Pool)")
-	}
-	rows, err := qa.Query(ctx, sql, args...)
-	if err != nil {
-		return nil, oops.Wrap(err)
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var s string
-		if scanErr := rows.Scan(&s); scanErr != nil {
-			return nil, oops.Wrap(scanErr)
-		}
-		out = append(out, s)
-	}
-	if rowsErr := rows.Err(); rowsErr != nil {
-		return nil, oops.Wrap(rowsErr)
-	}
-	return out, nil
 }
 
 func fingerprintKEK(kekBytes []byte) string {

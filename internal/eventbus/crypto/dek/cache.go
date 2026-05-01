@@ -28,6 +28,26 @@ type CacheConfig struct {
 	TTL      time.Duration
 }
 
+// DefaultCacheCapacity and DefaultCacheTTL are applied when CacheConfig
+// fields are zero or negative. Per master spec §5.8.
+const (
+	DefaultCacheCapacity = 1024
+	DefaultCacheTTL      = 5 * time.Minute
+)
+
+// applyDefaults returns cfg with non-positive fields replaced by the
+// master-spec defaults. A negative Capacity would otherwise panic in
+// make(...,Capacity); zero would silently discard every Put.
+func (cfg CacheConfig) applyDefaults() CacheConfig {
+	if cfg.Capacity <= 0 {
+		cfg.Capacity = DefaultCacheCapacity
+	}
+	if cfg.TTL <= 0 {
+		cfg.TTL = DefaultCacheTTL
+	}
+	return cfg
+}
+
 // Cache holds unwrapped DEK Material in process memory with LRU
 // eviction and TTL safety net. INV-27: MUST NOT live in NATS KV, PG,
 // disk, or logs.
@@ -57,6 +77,7 @@ func NewCache(cfg CacheConfig) *Cache {
 
 // NewCacheWithClock allows tests to inject a deterministic clock.
 func NewCacheWithClock(cfg CacheConfig, clock func() time.Time) *Cache {
+	cfg = cfg.applyDefaults()
 	return &Cache{
 		cap:   cfg.Capacity,
 		ttl:   cfg.TTL,

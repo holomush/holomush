@@ -22,12 +22,18 @@ import (
 //   - INV-34: at runtime, refuse Wrap/Unwrap.
 type NoneProvider struct{}
 
-// PGQuerier is the minimal pgx surface NewNoneProvider needs.
-// Accepting an interface keeps the constructor testable without a real
-// connection in unit tests, and matches *pgx.Conn / *pgxpool.Pool in
+// PGQuerier is the pgx surface used by NewNoneProvider (QueryRow for
+// the INV-32 row-count check) and by LocalAEADProvider's
+// startupIntegrityCheck (Query for the INV-33 wrap_key_id enumeration).
+// Bundling both methods means any value that satisfies the interface
+// can drive both providers; a mock that omits Query will fail to
+// compile at the call site rather than at runtime.
+//
+// Real *pgx.Conn and *pgxpool.Pool both satisfy this interface in
 // production.
 type PGQuerier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
 // NewNoneProvider constructs a NoneProvider after verifying INV-32 (no

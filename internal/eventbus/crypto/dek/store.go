@@ -65,10 +65,27 @@ type row struct {
 // row type. Manager (same package) is the sole caller.
 type Store struct {
 	pool *pgxpool.Pool
+	// preInsertHook, when non-nil, is called immediately before each
+	// INSERT in `insert`. Tests use it to coordinate concurrent
+	// goroutines through the unique-violation race window. Production
+	// code MUST NOT set this; it is exposed only via
+	// SetPreInsertHookForTest.
+	preInsertHook func()
 }
 
 // NewStore wraps a pgxpool.Pool.
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
+
+// SetPreInsertHookForTest installs a hook called immediately before
+// each INSERT in `insert`. Used exclusively by integration tests
+// (`TestManager_GetOrCreate_ConcurrentMintRace`) to force two
+// goroutines to reach the INSERT call simultaneously, guaranteeing
+// the PG unique-violation recovery path runs. The hook field is
+// unexported; this setter is the only way to install one. Production
+// code MUST NOT call this method.
+func (s *Store) SetPreInsertHookForTest(hook func()) {
+	s.preInsertHook = hook
+}
 
 // selectActive returns the active (rotated_at IS NULL) row for ctxID,
 // or pgx.ErrNoRows if none exists. The pgx.ErrNoRows sentinel is
@@ -132,6 +149,9 @@ func (s *Store) insert(ctx context.Context, in row) (int64, error) {
 	pj, err := json.Marshal(in.Participants)
 	if err != nil {
 		return 0, oops.Code("DEK_PARTICIPANTS_MARSHAL_FAILED").Wrap(err)
+	}
+	if s.preInsertHook != nil {
+		s.preInsertHook()
 	}
 	var id int64
 	err = s.pool.QueryRow(ctx, `

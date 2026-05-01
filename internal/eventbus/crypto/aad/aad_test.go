@@ -31,21 +31,25 @@ func newTestEvent() *eventbusv1.Event {
 }
 
 func TestBuild_StartsWithMagicVersionPrefix(t *testing.T) {
-	out := aad.Build(newTestEvent(), "xchacha20poly1305-v1", 42, 1)
+	out, err := aad.Build(newTestEvent(), "xchacha20poly1305-v1", 42, 1)
+	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(out), 6)
 	assert.Equal(t, []byte("HMAAD\x01"), out[:6])
 }
 
 func TestBuild_DeterministicForIdenticalInputs(t *testing.T) {
 	e := newTestEvent()
-	a := aad.Build(e, "xchacha20poly1305-v1", 42, 1)
-	b := aad.Build(e, "xchacha20poly1305-v1", 42, 1)
+	a, err := aad.Build(e, "xchacha20poly1305-v1", 42, 1)
+	require.NoError(t, err)
+	b, err := aad.Build(e, "xchacha20poly1305-v1", 42, 1)
+	require.NoError(t, err)
 	assert.Equal(t, a, b, "Build must be deterministic for identical inputs")
 }
 
 func TestBuild_AnyFieldChange_ChangesOutput(t *testing.T) {
 	base := newTestEvent()
-	baseAAD := aad.Build(base, "xchacha20poly1305-v1", 42, 1)
+	baseAAD, err := aad.Build(base, "xchacha20poly1305-v1", 42, 1)
+	require.NoError(t, err)
 
 	tests := []struct {
 		name   string
@@ -90,7 +94,8 @@ func TestBuild_AnyFieldChange_ChangesOutput(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mutated := newTestEvent()
 			codec, dekRef, dekVer := tt.mutate(mutated)
-			mutatedAAD := aad.Build(mutated, codec, dekRef, dekVer)
+			mutatedAAD, err := aad.Build(mutated, codec, dekRef, dekVer)
+			require.NoError(t, err)
 			assert.NotEqual(t, baseAAD, mutatedAAD,
 				"tampering with %s must change AAD output", tt.name)
 		})
@@ -104,9 +109,11 @@ func TestBuild_ActorMarshalIsDeterministic(t *testing.T) {
 	// INV-25.
 	e := newTestEvent()
 
-	first := aad.Build(e, "xchacha20poly1305-v1", 42, 1)
+	first, err := aad.Build(e, "xchacha20poly1305-v1", 42, 1)
+	require.NoError(t, err)
 	for i := 0; i < 1000; i++ {
-		next := aad.Build(e, "xchacha20poly1305-v1", 42, 1)
+		next, err := aad.Build(e, "xchacha20poly1305-v1", 42, 1)
+		require.NoError(t, err)
 		require.Equal(t, first, next,
 			"iteration %d produced different AAD bytes — Actor marshal not deterministic", i)
 	}
@@ -116,7 +123,8 @@ func TestBuild_DekRefZero_ForIdentityCodec(t *testing.T) {
 	// Cleartext events use codec=identity with no DEK. The function
 	// should accept dekRef=0, dekVersion=0 and produce well-formed AAD.
 	e := newTestEvent()
-	out := aad.Build(e, "identity", 0, 0)
+	out, err := aad.Build(e, "identity", 0, 0)
+	require.NoError(t, err)
 	assert.NotEmpty(t, out)
 	assert.Equal(t, []byte("HMAAD\x01"), out[:6])
 }

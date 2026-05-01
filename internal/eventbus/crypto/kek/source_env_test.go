@@ -5,6 +5,7 @@ package kek_test
 
 import (
 	"context"
+	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -20,9 +21,11 @@ const validHexKEK = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789a
 func TestEnvSource_Load_ReturnsKEKBytes(t *testing.T) {
 	t.Setenv("HOLOMUSH_TEST_KEK", validHexKEK)
 	src := kek.NewEnvSource("HOLOMUSH_TEST_KEK", false /* prodMode */)
-	bytes, err := src.Load(context.Background())
+	got, err := src.Load(context.Background())
 	require.NoError(t, err)
-	assert.Len(t, bytes, 32)
+	want, decodeErr := hex.DecodeString(validHexKEK)
+	require.NoError(t, decodeErr)
+	assert.Equal(t, want, got)
 }
 
 func TestEnvSource_Load_RefusesInProdMode(t *testing.T) {
