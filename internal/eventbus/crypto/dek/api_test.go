@@ -4,11 +4,15 @@
 package dek_test
 
 import (
+	"context"
 	"go/types"
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
+
+	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 )
 
 // TestPackageHasNoExportedByteSlices guarantees the dek package never
@@ -103,4 +107,81 @@ func isByteSlice(t types.Type) bool {
 	}
 	basic, ok := sl.Elem().(*types.Basic)
 	return ok && basic.Kind() == types.Uint8
+}
+
+// stubAllowSet enumerates the bead IDs Phase 2 stubs MAY reference.
+// Renaming or closing either bead without updating this list fails CI
+// at task lint:test time, surfacing the rot before the stub error
+// reaches a production log.
+var stubAllowSet = map[string]struct{}{
+	"holomush-fi0n": {}, // Phase 4: Add + Rotate lifecycle ops
+	"holomush-jxo8": {}, // Phase 5: Rekey + AdminReadStream + OperatorAuth
+}
+
+func TestManagerStubsCarryTrackingBeadFromAllowSet(t *testing.T) {
+	// Build a Manager skeleton and probe each stub. The Manager
+	// constructor (NewManager) is independent of provider correctness;
+	// tests inject a stub provider via NewManagerForUnitTest.
+	m := dek.NewManagerForUnitTest()
+
+	cases := []struct {
+		name      string
+		invoke    func() error
+		wantBead  string
+		wantPhase int
+		wantCode  string
+	}{
+		{
+			name:      "Add",
+			invoke:    func() error { return m.Add(context.Background(), dek.ContextID{Type: "scene", ID: "x"}, dek.Participant{}) },
+			wantBead:  "holomush-fi0n",
+			wantPhase: 4,
+			wantCode:  "DEK_ADD_NOT_IMPLEMENTED",
+		},
+		{
+			name:      "Rotate",
+			invoke:    func() error { return m.Rotate(context.Background(), dek.ContextID{Type: "scene", ID: "x"}, nil, "test") },
+			wantBead:  "holomush-fi0n",
+			wantPhase: 4,
+			wantCode:  "DEK_ROTATE_NOT_IMPLEMENTED",
+		},
+		{
+			name:      "Rekey",
+			invoke:    func() error { return m.Rekey(context.Background(), dek.ContextID{Type: "scene", ID: "x"}, "test", dek.OperatorFactors{}) },
+			wantBead:  "holomush-jxo8",
+			wantPhase: 5,
+			wantCode:  "DEK_REKEY_NOT_IMPLEMENTED",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.invoke()
+			require.Error(t, err)
+
+			oopsErr, ok := oops.AsOops(err)
+			require.True(t, ok, "stub error must be an oops error")
+
+			// Code matches.
+			require.Equal(t, tc.wantCode, oopsErr.Code())
+
+			// tracking_bead present + matches expected.
+			ctx := oopsErr.Context()
+			require.Contains(t, ctx, "tracking_bead")
+			require.Equal(t, tc.wantBead, ctx["tracking_bead"])
+
+			// tracking_bead value is in the allow-set.
+			_, allowed := stubAllowSet[ctx["tracking_bead"].(string)]
+			require.True(t, allowed,
+				"tracking_bead %q is not in stubAllowSet — update stubAllowSet "+
+					"in api_test.go or fix the stub", ctx["tracking_bead"])
+
+			// phase present + matches expected.
+			require.Contains(t, ctx, "phase")
+			require.Equal(t, tc.wantPhase, ctx["phase"])
+
+			// tracking_bead value matches the holomush-<id> regex shape.
+			require.Regexp(t, `^holomush-[a-z0-9]+$`, ctx["tracking_bead"])
+		})
+	}
 }
