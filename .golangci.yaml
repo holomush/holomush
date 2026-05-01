@@ -138,9 +138,6 @@ linters:
         - performance
       disabled-checks:
         - hugeParam # Event struct (120 bytes) is passed by value by design
-      settings:
-        ruleguard:
-          rules: gorules/rules.go
 
     gosec:
       excludes:
