@@ -36,6 +36,7 @@ linters:
     - forbidigo
 
     # HoloMUSH custom analyzers (gorules/)
+    - cursorpackageinternal
     - ulidmakeforbidden
 
   exclusions:
@@ -69,6 +70,17 @@ linters:
       - path: '_test\.go'
         linters:
           - ulidmakeforbidden
+
+      # cursorpackageinternal replaces a ruleguard rule that only fired
+      # in production for the same reason (gocritic excluded for
+      # _test.go). Tests in allowlist-adjacent packages (e.g., the
+      # external `hostfunc_test` package, whose pkg path has a `_test`
+      # suffix that doesn't match the `internal/plugin/hostfunc`
+      # allowlist entry) legitimately reference cursor symbols. Preserve
+      # the original de-facto test-file scope.
+      - path: '_test\.go'
+        linters:
+          - cursorpackageinternal
 
       # Test password hashes (argon2id fixtures) are not real credentials.
       # G101 fires on struct literals containing PasswordHash fields.
@@ -178,6 +190,10 @@ linters:
       require-specific: true
 
     custom:
+      cursorpackageinternal:
+        type: module
+        description: forbids references to internal/eventbus/cursor outside host packages
+        original-url: github.com/holomush/holomush
       ulidmakeforbidden:
         type: module
         description: forbids ulid.Make() (uses math/rand instead of crypto/rand)

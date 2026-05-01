@@ -1,0 +1,78 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+// Package cursorpackageinternal implements the lint rule that forbids
+// importing or referencing symbols from
+// github.com/holomush/holomush/internal/eventbus/cursor outside the
+// host's natural homes (eventbus, grpc, web, plugin/goplugin,
+// plugin/hostfunc).
+//
+// Implementation note: walks all *ast.Ident nodes that resolve via
+// pass.TypesInfo.Uses to an object whose package is the cursor
+// package, and emits a single diagnostic per reference. This is
+// broader than the previous ruleguard rule's per-symbol enumeration
+// (it covers any future cursor symbol automatically) but functionally
+// equivalent for the existing exported surface.
+package cursorpackageinternal
+
+import (
+	"go/ast"
+
+	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
+	"golang.org/x/tools/go/ast/inspector"
+
+	"github.com/holomush/holomush/gorules/analyzers/internal/holomushlint"
+)
+
+const (
+	cursorPkg = "github.com/holomush/holomush/internal/eventbus/cursor"
+	message   = "internal/eventbus/cursor is host-internal — clients and plugins must not import it"
+)
+
+var allowlist = []string{
+	"github.com/holomush/holomush/internal/eventbus",
+	"github.com/holomush/holomush/internal/grpc",
+	"github.com/holomush/holomush/internal/web",
+	"github.com/holomush/holomush/internal/plugin/goplugin",
+	"github.com/holomush/holomush/internal/plugin/hostfunc",
+}
+
+var Analyzer = &analysis.Analyzer{
+	Name:     "cursorpackageinternal",
+	Doc:      "forbids references to internal/eventbus/cursor outside host packages",
+	Requires: []*analysis.Analyzer{inspect.Analyzer},
+	Run:      run,
+}
+
+func run(pass *analysis.Pass) (any, error) {
+	if pass.Pkg == nil {
+		return nil, nil
+	}
+	if holomushlint.PackagePathMatchesAny(pass.Pkg.Path(), allowlist) {
+		return nil, nil
+	}
+	insp := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+	// Track positions we've already reported to avoid duplicate diagnostics
+	// when the same SelectorExpr is visited at multiple ast levels.
+	reported := map[ast.Node]struct{}{}
+	insp.Preorder([]ast.Node{(*ast.Ident)(nil)}, func(n ast.Node) {
+		ident := n.(*ast.Ident)
+		obj := pass.TypesInfo.Uses[ident]
+		if obj == nil {
+			return
+		}
+		if obj.Pkg() == nil {
+			return
+		}
+		if obj.Pkg().Path() != cursorPkg {
+			return
+		}
+		if _, dup := reported[ident]; dup {
+			return
+		}
+		reported[ident] = struct{}{}
+		pass.Reportf(ident.Pos(), "%s", message)
+	})
+	return nil, nil
+}

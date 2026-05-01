@@ -16,5 +16,6 @@ package holomushrules
 
 // Blank imports — populated by Tasks 9–19 (one per analyzer).
 import (
+	_ "github.com/holomush/holomush/gorules/analyzers/cursorpackageinternal"
 	_ "github.com/holomush/holomush/gorules/analyzers/ulidmakeforbidden"
 )
