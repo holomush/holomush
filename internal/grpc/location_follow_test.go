@@ -19,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/world"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	corecomm "github.com/holomush/holomush/plugins/core-communication"
 )
 
 // Compile-time check that *world.Service satisfies WorldQuerier.
@@ -115,7 +116,7 @@ func TestLocationFollower_HandleEvent_IgnoresNonMoveEvents(t *testing.T) {
 		worldQuerier: &mockWorldQuerier{},
 	}
 
-	event := core.NewEvent("", core.EventTypeSay, core.Actor{}, nil)
+	event := core.NewEvent("", core.EventType(corecomm.EventTypeSay), core.Actor{}, nil)
 
 	stream := &capturingStream{ctx: context.Background()}
 	handled := lf.handleEvent(context.Background(), event, stream)

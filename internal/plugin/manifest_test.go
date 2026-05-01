@@ -2432,3 +2432,36 @@ func TestManifestDeclaresActorKindClaimable(t *testing.T) {
 		assert.False(t, m.DeclaresActorKindClaimable(core.ActorSystem))
 	})
 }
+
+func TestManifestCarriesCryptoSection(t *testing.T) {
+	src := `
+name: test-plugin
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+crypto:
+  emits:
+    - event_type: foo
+      sensitivity: always
+`
+	m, err := plugins.ParseManifest([]byte(src))
+	require.NoError(t, err)
+	require.NotNil(t, m.Crypto)
+	require.Len(t, m.Crypto.Emits, 1)
+	assert.Equal(t, "foo", m.Crypto.Emits[0].EventType)
+	assert.Equal(t, plugins.SensitivityAlways, m.Crypto.Emits[0].Sensitivity)
+}
+
+func TestManifestWithoutCryptoSectionLeavesCryptoNil(t *testing.T) {
+	src := `
+name: test-plugin
+version: 1.0.0
+type: lua
+lua-plugin:
+  entry: main.lua
+`
+	m, err := plugins.ParseManifest([]byte(src))
+	require.NoError(t, err)
+	assert.Nil(t, m.Crypto)
+}

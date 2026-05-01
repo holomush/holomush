@@ -16,6 +16,7 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
 var _ = Describe("Plugin verb registration", func() {
@@ -28,8 +29,9 @@ var _ = Describe("Plugin verb registration", func() {
 	BeforeEach(func() {
 		pluginsDir = GinkgoT().TempDir()
 		luaHost = pluginlua.NewHost()
-		verbReg = core.NewVerbRegistry()
-		Expect(core.RegisterBuiltinTypes(verbReg)).To(Succeed())
+		var bootErr error
+		verbReg, bootErr = core.BootstrapVerbRegistry("test")
+		Expect(bootErr).NotTo(HaveOccurred())
 		DeferCleanup(func() { _ = luaHost.Close(context.Background()) })
 	})
 
@@ -61,10 +63,11 @@ lua-plugin:
   entry: main.lua
 `, "function on_event(e) end")
 
-		mgr := plugins.NewManager(pluginsDir,
+		mgr, mgrErr := plugins.NewManager(pluginsDir,
 			plugins.WithLuaHost(luaHost),
 			plugins.WithVerbRegistry(verbReg),
 		)
+		Expect(mgrErr).NotTo(HaveOccurred())
 		Expect(mgr.LoadAll(context.Background())).To(Succeed())
 
 		reg, ok := verbReg.Lookup("custom_say")
@@ -80,24 +83,27 @@ lua-plugin:
 	})
 
 	It("rejects a plugin whose verb type conflicts with a builtin", func() {
+		// "system" is a host-owned event type registered by RegisterBuiltinTypes.
+		// (Plugin-owned types like say/pose are no longer registered as builtins
+		// per the plugin-boundary discipline; they're owned by their plugin.)
 		writePlugin("conflict-plugin", `
 name: conflict-plugin
 version: 1.0.0
 type: lua
 verbs:
-  - type: say
-    category: communication
-    format: speech
-    label: "says"
+  - type: system
+    category: system
+    format: notification
     display_target: terminal
 lua-plugin:
   entry: main.lua
 `, "function on_event(e) end")
 
-		mgr := plugins.NewManager(pluginsDir,
+		mgr, mgrErr := plugins.NewManager(pluginsDir,
 			plugins.WithLuaHost(luaHost),
 			plugins.WithVerbRegistry(verbReg),
 		)
+		Expect(mgrErr).NotTo(HaveOccurred())
 		err := mgr.LoadAll(context.Background())
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("already registered"))
@@ -105,9 +111,10 @@ lua-plugin:
 
 	It("cleans up verbs when plugin load fails partway through verb list", func() {
 		// Pre-register "conflict" so the second verb in the manifest fails
-		Expect(verbReg.Register(core.VerbRegistration{
-			Type: "conflict", Category: "system", Format: "notification", Source: "pre-existing",
-		})).To(Succeed())
+		Expect(verbReg.RegisterWithSource(core.VerbRegistration{
+			Type: "conflict", Category: "system", Format: "notification",
+			DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, Source: "pre-existing",
+		}, "1.0.0")).To(Succeed())
 
 		writePlugin("partial-fail", `
 name: partial-fail
@@ -126,10 +133,11 @@ lua-plugin:
   entry: main.lua
 `, "function on_event(e) end")
 
-		mgr := plugins.NewManager(pluginsDir,
+		mgr, mgrErr := plugins.NewManager(pluginsDir,
 			plugins.WithLuaHost(luaHost),
 			plugins.WithVerbRegistry(verbReg),
 		)
+		Expect(mgrErr).NotTo(HaveOccurred())
 		err := mgr.LoadAll(context.Background())
 		Expect(err).To(HaveOccurred())
 

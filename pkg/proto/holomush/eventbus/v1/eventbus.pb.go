@@ -10,6 +10,7 @@
 package eventbusv1
 
 import (
+	v1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -148,13 +149,17 @@ func (x *Actor) GetLegacyId() string {
 // Event is the host-side envelope. Wire encoding is proto bytes in the
 // JetStream message data; headers carry routing/codec/version metadata.
 type Event struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // ULID (16 bytes)
-	Subject       string                 `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	Timestamp     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Actor         *Actor                 `protobuf:"bytes,5,opt,name=actor,proto3" json:"actor,omitempty"`
-	Payload       []byte                 `protobuf:"bytes,6,opt,name=payload,proto3" json:"payload,omitempty"` // codec.Encode output
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Id        []byte                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // ULID (16 bytes)
+	Subject   string                 `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	Type      string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	Timestamp *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Actor     *Actor                 `protobuf:"bytes,5,opt,name=actor,proto3" json:"actor,omitempty"`
+	Payload   []byte                 `protobuf:"bytes,6,opt,name=payload,proto3" json:"payload,omitempty"` // codec.Encode output
+	// Rendering metadata, populated by RenderingPublisher.Publish before
+	// marshaling for JetStream. Mirrors the corev1.RenderingMetadata used
+	// on the gRPC Subscribe wire (one schema, two transports).
+	Rendering     *v1.RenderingMetadata `protobuf:"bytes,7,opt,name=rendering,proto3" json:"rendering,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -231,22 +236,30 @@ func (x *Event) GetPayload() []byte {
 	return nil
 }
 
+func (x *Event) GetRendering() *v1.RenderingMetadata {
+	if x != nil {
+		return x.Rendering
+	}
+	return nil
+}
+
 var File_holomush_eventbus_v1_eventbus_proto protoreflect.FileDescriptor
 
 const file_holomush_eventbus_v1_eventbus_proto_rawDesc = "" +
 	"\n" +
-	"#holomush/eventbus/v1/eventbus.proto\x12\x14holomush.eventbus.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"i\n" +
+	"#holomush/eventbus/v1/eventbus.proto\x12\x14holomush.eventbus.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bholomush/core/v1/core.proto\"i\n" +
 	"\x05Actor\x123\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x1f.holomush.eventbus.v1.ActorKindR\x04kind\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\fR\x02id\x12\x1b\n" +
-	"\tlegacy_id\x18\x03 \x01(\tR\blegacyId\"\xcc\x01\n" +
+	"\tlegacy_id\x18\x03 \x01(\tR\blegacyId\"\x8f\x02\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\fR\x02id\x12\x18\n" +
 	"\asubject\x18\x02 \x01(\tR\asubject\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x128\n" +
 	"\ttimestamp\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x121\n" +
 	"\x05actor\x18\x05 \x01(\v2\x1b.holomush.eventbus.v1.ActorR\x05actor\x12\x18\n" +
-	"\apayload\x18\x06 \x01(\fR\apayload*\x86\x01\n" +
+	"\apayload\x18\x06 \x01(\fR\apayload\x12A\n" +
+	"\trendering\x18\a \x01(\v2#.holomush.core.v1.RenderingMetadataR\trendering*\x86\x01\n" +
 	"\tActorKind\x12\x1a\n" +
 	"\x16ACTOR_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14ACTOR_KIND_CHARACTER\x10\x01\x12\x15\n" +
@@ -274,16 +287,18 @@ var file_holomush_eventbus_v1_eventbus_proto_goTypes = []any{
 	(*Actor)(nil),                 // 1: holomush.eventbus.v1.Actor
 	(*Event)(nil),                 // 2: holomush.eventbus.v1.Event
 	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
+	(*v1.RenderingMetadata)(nil),  // 4: holomush.core.v1.RenderingMetadata
 }
 var file_holomush_eventbus_v1_eventbus_proto_depIdxs = []int32{
 	0, // 0: holomush.eventbus.v1.Actor.kind:type_name -> holomush.eventbus.v1.ActorKind
 	3, // 1: holomush.eventbus.v1.Event.timestamp:type_name -> google.protobuf.Timestamp
 	1, // 2: holomush.eventbus.v1.Event.actor:type_name -> holomush.eventbus.v1.Actor
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	4, // 3: holomush.eventbus.v1.Event.rendering:type_name -> holomush.core.v1.RenderingMetadata
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_holomush_eventbus_v1_eventbus_proto_init() }

@@ -15,6 +15,7 @@ import (
 	"github.com/sethvargo/go-retry"
 
 	"github.com/holomush/holomush/internal/core"
+	coreobj "github.com/holomush/holomush/plugins/core-objects"
 )
 
 // Stream prefixes for event streams.
@@ -178,12 +179,12 @@ func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Objec
 			objectID = obj.ID.String()
 		}
 		return oops.Code("EVENT_EMITTER_MISSING").
-			With("event_type", core.EventTypeObjectCreate).
+			With("event_type", coreobj.EventTypeObjectCreate).
 			With("object_id", objectID).
 			Wrap(ErrNoEventEmitter)
 	}
 
-	eventType := string(core.EventTypeObjectCreate)
+	eventType := string(coreobj.EventTypeObjectCreate)
 	if obj == nil {
 		return oops.Code("EVENT_PAYLOAD_INVALID").With("event_type", eventType).Errorf("object cannot be nil")
 	}
@@ -219,14 +220,14 @@ func EmitObjectCreateEvent(ctx context.Context, emitter EventEmitter, obj *Objec
 func EmitExamineEvent(ctx context.Context, emitter EventEmitter, payload ExaminePayload) error {
 	if emitter == nil {
 		return oops.Code("EVENT_EMITTER_MISSING").
-			With("event_type", core.EventTypeObjectExamine).
+			With("event_type", coreobj.EventTypeObjectExamine).
 			With("character_id", payload.CharacterID.String()).
 			With("target_type", payload.TargetType).
 			With("target_id", payload.TargetID.String()).
 			Wrap(ErrNoEventEmitter)
 	}
 
-	eventType := string(core.EventTypeObjectExamine)
+	eventType := string(coreobj.EventTypeObjectExamine)
 	if err := payload.Validate(); err != nil {
 		return oops.Code("EVENT_PAYLOAD_INVALID").With("event_type", eventType).Wrap(err)
 	}
@@ -254,14 +255,14 @@ func EmitExamineEvent(ctx context.Context, emitter EventEmitter, payload Examine
 func EmitObjectGiveEvent(ctx context.Context, emitter EventEmitter, payload ObjectGivePayload) error {
 	if emitter == nil {
 		return oops.Code("EVENT_EMITTER_MISSING").
-			With("event_type", core.EventTypeObjectGive).
+			With("event_type", coreobj.EventTypeObjectGive).
 			With("object_id", payload.ObjectID.String()).
 			With("from_character_id", payload.FromCharacterID.String()).
 			With("to_character_id", payload.ToCharacterID.String()).
 			Wrap(ErrNoEventEmitter)
 	}
 
-	eventType := string(core.EventTypeObjectGive)
+	eventType := string(coreobj.EventTypeObjectGive)
 	if err := payload.Validate(); err != nil {
 		return oops.Code("EVENT_PAYLOAD_INVALID").With("event_type", eventType).Wrap(err)
 	}

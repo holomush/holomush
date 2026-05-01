@@ -13,6 +13,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
+	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 )
@@ -55,7 +56,8 @@ lua-plugin:
   entry: main.lua
 `, "function on_event(e) end")
 
-		mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+		mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+		Expect(mgrErr).NotTo(HaveOccurred())
 		Expect(mgr.LoadAll(context.Background())).To(Succeed())
 		Expect(mgr.ListPlugins()).To(ContainElement("channels"))
 	})
@@ -74,7 +76,8 @@ lua-plugin:
   entry: main.lua
 `, "function on_event(e) end")
 
-		mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+		mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+		Expect(mgrErr).NotTo(HaveOccurred())
 		err := mgr.LoadAll(context.Background())
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("join"))
@@ -106,7 +109,8 @@ lua-plugin:
 
 		// No binary host — declarer is silently skipped; its declared actions
 		// still feed CollectActions during Phase 2.
-		mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+		mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+		Expect(mgrErr).NotTo(HaveOccurred())
 		Expect(mgr.LoadAll(context.Background())).To(Succeed())
 		Expect(mgr.ListPlugins()).To(ContainElement("action-borrower"))
 	})

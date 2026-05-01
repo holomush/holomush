@@ -23,6 +23,7 @@ import (
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/worldtest"
 	"github.com/holomush/holomush/pkg/errutil"
+	coreobj "github.com/holomush/holomush/plugins/core-objects"
 )
 
 // mockEventEmitter captures emitted events for testing.
@@ -437,7 +438,7 @@ func TestEmitObjectCreateEvent(t *testing.T) {
 		require.Len(t, emitter.calls, 1)
 		call := emitter.calls[0]
 		assert.Equal(t, world.LocationStream(locID), call.Stream)
-		assert.Equal(t, string(core.EventTypeObjectCreate), call.EventType)
+		assert.Equal(t, string(coreobj.EventTypeObjectCreate), call.EventType)
 
 		var decoded map[string]string
 		err = json.Unmarshal(call.Payload, &decoded)
@@ -459,7 +460,7 @@ func TestEmitObjectCreateEvent(t *testing.T) {
 		require.Len(t, emitter.calls, 1)
 		call := emitter.calls[0]
 		assert.Equal(t, world.BroadcastLocationStream(), call.Stream)
-		assert.Equal(t, string(core.EventTypeObjectCreate), call.EventType)
+		assert.Equal(t, string(coreobj.EventTypeObjectCreate), call.EventType)
 	})
 
 	t.Run("returns error when emitter fails", func(t *testing.T) {
@@ -520,7 +521,7 @@ func TestEmitObjectGiveEvent(t *testing.T) {
 		require.Len(t, emitter.calls, 1)
 		call := emitter.calls[0]
 		assert.Equal(t, world.CharacterStream(toCharID), call.Stream)
-		assert.Equal(t, string(core.EventTypeObjectGive), call.EventType)
+		assert.Equal(t, string(coreobj.EventTypeObjectGive), call.EventType)
 
 		var decoded world.ObjectGivePayload
 		err = json.Unmarshal(call.Payload, &decoded)
@@ -593,7 +594,7 @@ func TestEmitExamineEvent(t *testing.T) {
 		require.Len(t, emitter.calls, 1)
 		call := emitter.calls[0]
 		assert.Equal(t, world.LocationStream(locID), call.Stream)
-		assert.Equal(t, string(core.EventTypeObjectExamine), call.EventType)
+		assert.Equal(t, string(coreobj.EventTypeObjectExamine), call.EventType)
 
 		var decoded world.ExaminePayload
 		err = json.Unmarshal(call.Payload, &decoded)

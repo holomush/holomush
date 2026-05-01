@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/core"
@@ -281,6 +282,100 @@ func TestActorKindStringCoversAllVariants(t *testing.T) {
 	for kind, want := range cases {
 		require.Equal(t, want, kind.String())
 	}
+}
+
+// TestPublisherCopiesRenderingIntoEnvelope is INV-GW-3a. JetStreamPublisher
+// MUST copy event.Rendering into the proto envelope before Marshal so
+// subscribers see the same Rendering on the read side.
+func TestPublisherCopiesRenderingIntoEnvelope(t *testing.T) {
+	embedded := eventbustest.New(t)
+	pub := embedded.Bus.Publisher()
+	sub := embedded.Bus.Subscriber()
+
+	rendering := &eventbus.RenderingMetadata{
+		Category:            "communication",
+		Format:              "speech",
+		Label:               "says",
+		DisplayTarget:       eventbus.EventChannelTerminal,
+		SourcePlugin:        "core-communication",
+		SourcePluginVersion: "0.1.0",
+	}
+
+	subject := eventbus.Subject("events.main.character.01ABC")
+	sessID := freshSessionID()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stream, err := sub.OpenSession(ctx, sessID, []eventbus.Subject{subject})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = stream.Close() })
+
+	ev := eventbus.Event{
+		ID:        core.NewULID(),
+		Subject:   subject,
+		Type:      eventbus.Type("core-communication:say"),
+		Timestamp: time.Now().UTC(),
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindCharacter, LegacyID: "01ABC"},
+		Payload:   []byte(`{"message":"hello"}`),
+		Rendering: rendering,
+	}
+	require.NoError(t, pub.Publish(ctx, ev))
+	embedded.AwaitStreamLastSeq(t, 1, 0)
+
+	d, err := stream.Next(ctx)
+	require.NoError(t, err)
+	got := d.Event()
+	require.NotNil(t, got.Rendering, "subscriber-side decode must populate Rendering")
+	assert.Equal(t, rendering.Category, got.Rendering.Category)
+	assert.Equal(t, rendering.Format, got.Rendering.Format)
+	assert.Equal(t, rendering.Label, got.Rendering.Label)
+	assert.Equal(t, rendering.DisplayTarget, got.Rendering.DisplayTarget)
+	assert.Equal(t, rendering.SourcePlugin, got.Rendering.SourcePlugin)
+	assert.Equal(t, rendering.SourcePluginVersion, got.Rendering.SourcePluginVersion)
+	require.NoError(t, d.Ack())
+}
+
+func TestPublisherMergesHeadersIntoNatsMsg(t *testing.T) {
+	embedded := eventbustest.New(t)
+	pub := embedded.Bus.Publisher()
+
+	ev := eventbus.Event{
+		ID:        core.NewULID(),
+		Subject:   eventbus.Subject("events.main.character.01ABC"),
+		Type:      eventbus.Type("core-communication:say"),
+		Timestamp: time.Now().UTC(),
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
+		Payload:   []byte(`{"message":"hi"}`),
+		// App-Rendering is reserved (written by RenderingPublisher only).
+		// Use a different App-* key to test the merge path.
+		Headers: map[string]string{"App-Custom-Trace": "trace-value-1"},
+	}
+	require.NoError(t, pub.Publish(context.Background(), ev))
+	embedded.AwaitStreamLastSeq(t, 1, 0)
+
+	msgs := embedded.RawMessagesOnSubject(t, "events.main.character.01ABC", 10, 0)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, "trace-value-1", msgs[0].Header.Get("App-Custom-Trace"))
+	// System headers still present.
+	assert.NotEmpty(t, msgs[0].Header.Get("Nats-Msg-Id"))
+}
+
+func TestPublisherCollidingHeaderPanicsInTests(t *testing.T) {
+	embedded := eventbustest.New(t)
+	pub := embedded.Bus.Publisher()
+
+	ev := eventbus.Event{
+		ID:        core.NewULID(),
+		Subject:   eventbus.Subject("events.main.character.01ABC"),
+		Type:      eventbus.Type("core-communication:say"),
+		Timestamp: time.Now().UTC(),
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindSystem},
+		Payload:   []byte(`{"message":"hi"}`),
+		Headers:   map[string]string{"Nats-Msg-Id": "naughty"},
+	}
+	assert.Panics(t, func() {
+		_ = pub.Publish(context.Background(), ev)
+	})
 }
 
 func TestIdentityKeySelectorReturnsIdentityAndNoKey(t *testing.T) {

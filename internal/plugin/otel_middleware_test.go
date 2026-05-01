@@ -137,7 +137,7 @@ func TestHostMiddlewareDeliverEventSuccess(t *testing.T) {
 	mw, err := plugins.NewHostMiddleware(mockHost, h.tracerProvider, h.meterProvider)
 	require.NoError(t, err)
 
-	event := pluginsdk.Event{Type: pluginsdk.EventTypeSay}
+	event := pluginsdk.Event{Type: pluginsdk.EventType("say")}
 	got, err := mw.DeliverEvent(context.Background(), "event-plugin", event)
 	require.NoError(t, err)
 	assert.Len(t, got, 2)
@@ -165,7 +165,7 @@ func TestHostMiddlewareDeliverEventError(t *testing.T) {
 	mw, err := plugins.NewHostMiddleware(mockHost, h.tracerProvider, h.meterProvider)
 	require.NoError(t, err)
 
-	event := pluginsdk.Event{Type: pluginsdk.EventTypePose}
+	event := pluginsdk.Event{Type: pluginsdk.EventType("pose")}
 	_, err = mw.DeliverEvent(context.Background(), "err-plugin", event)
 	require.Error(t, err)
 

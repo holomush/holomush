@@ -113,7 +113,8 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 	Describe("plugin discovery, schema provisioning, and loading", func() {
 		It("discovers core-scenes plugin from the build directory", func() {
 			pluginsDir := pluginBinaryDir()
-			manager := plugins.NewManager(pluginsDir)
+			manager, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+			Expect(mgrErr).NotTo(HaveOccurred())
 
 			discovered, err := manager.Discover(ctx)
 			Expect(err).NotTo(HaveOccurred())
@@ -198,9 +199,13 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			publisher := bus.Bus.Publisher()
 
 			// Create manager with host and registry
-			manager := plugins.NewManager(pluginsDir,
+			bootstrapReg, bootErr := core.BootstrapVerbRegistry("test")
+			Expect(bootErr).NotTo(HaveOccurred())
+			manager, mgrErr := plugins.NewManager(pluginsDir,
 				plugins.WithServiceRegistry(registry),
+				plugins.WithVerbRegistry(bootstrapReg),
 			)
+			Expect(mgrErr).NotTo(HaveOccurred())
 			manager.RegisterHost(plugins.TypeBinary, host)
 			manager.ConfigureEventEmitter(publisher)
 			defer func() { _ = manager.Close(ctx) }()

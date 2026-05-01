@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
 
 func TestEventType_String(t *testing.T) {
@@ -15,21 +17,13 @@ func TestEventType_String(t *testing.T) {
 		input    EventType
 		expected string
 	}{
-		{"say event", EventTypeSay, "say"},
-		{"pose event", EventTypePose, "pose"},
+		// Host-owned event types (stay in internal/core)
 		{"arrive event", EventTypeArrive, "arrive"},
 		{"leave event", EventTypeLeave, "leave"},
 		{"system event", EventTypeSystem, "system"},
 		{"move event", EventTypeMove, "move"},
-		{"object_create event", EventTypeObjectCreate, "object_create"},
-		{"object_destroy event", EventTypeObjectDestroy, "object_destroy"},
-		{"object_use event", EventTypeObjectUse, "object_use"},
-		{"object_examine event", EventTypeObjectExamine, "object_examine"},
-		{"object_give event", EventTypeObjectGive, "object_give"},
 		{"location_state event", EventTypeLocationState, "location_state"},
 		{"exit_update event", EventTypeExitUpdate, "exit_update"},
-		{"ooc event", EventTypeOOC, "ooc"},
-		{"pemit event", EventTypePemit, "pemit"},
 	}
 
 	for _, tt := range tests {
@@ -42,40 +36,6 @@ func TestEventType_String(t *testing.T) {
 func TestEventTypeLocationStateConstantsMatchExpectedValues(t *testing.T) {
 	assert.Equal(t, EventType("location_state"), EventTypeLocationState)
 	assert.Equal(t, EventType("exit_update"), EventTypeExitUpdate)
-}
-
-// TestDocumentedEventTypes validates that event types mentioned in plugin-authoring.md
-// are valid EventType constants. This test will fail if docs/reference/plugin-authoring.md
-// references invalid event types like "emit".
-//
-// The documentation states: Event type (e.g., "say", "pose", "arrive")
-// These must all be valid EventType values.
-func TestDocumentedEventTypesAreValidEventTypeConstants(t *testing.T) {
-	// Event types documented in plugin-authoring.md line 104
-	// These are the examples given: "say", "pose", "arrive"
-	documentedTypes := []string{"say", "pose", "arrive"}
-
-	validTypes := map[string]bool{
-		string(EventTypeSay):           true,
-		string(EventTypePose):          true,
-		string(EventTypeArrive):        true,
-		string(EventTypeLeave):         true,
-		string(EventTypeSystem):        true,
-		string(EventTypeMove):          true,
-		string(EventTypeObjectCreate):  true,
-		string(EventTypeObjectDestroy): true,
-		string(EventTypeObjectUse):     true,
-		string(EventTypeObjectExamine): true,
-		string(EventTypeObjectGive):    true,
-		string(EventTypeLocationState): true,
-		string(EventTypeExitUpdate):    true,
-		string(EventTypePage):          true,
-		string(EventTypeWhisper):       true,
-	}
-
-	for _, docType := range documentedTypes {
-		assert.True(t, validTypes[docType], "documented event type %q is not a valid EventType constant", docType)
-	}
 }
 
 func TestActorKind_String(t *testing.T) {
@@ -93,6 +53,34 @@ func TestActorKind_String(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.input.String())
+		})
+	}
+}
+
+func TestHostEventTypesMatchPluginSDKReExports(t *testing.T) {
+	// The host's authoritative event-type strings are in this file.
+	// pkg/plugin re-exports them as pluginsdk.HostEventType* so plugin
+	// code (which cannot import internal/core) has typed references.
+	// Verify the two sides agree string-for-string.
+	cases := []struct {
+		name string
+		core EventType
+		sdk  pluginsdk.EventType
+	}{
+		{"core and sdk agree on system event type string", EventTypeSystem, pluginsdk.HostEventTypeSystem},
+		{"core and sdk agree on session_ended event type string", EventTypeSessionEnded, pluginsdk.HostEventTypeSessionEnded},
+		{"core and sdk agree on command_response event type string", EventTypeCommandResponse, pluginsdk.HostEventTypeCommandResponse},
+		{"core and sdk agree on command_error event type string", EventTypeCommandError, pluginsdk.HostEventTypeCommandError},
+		{"core and sdk agree on arrive event type string", EventTypeArrive, pluginsdk.HostEventTypeArrive},
+		{"core and sdk agree on leave event type string", EventTypeLeave, pluginsdk.HostEventTypeLeave},
+		{"core and sdk agree on move event type string", EventTypeMove, pluginsdk.HostEventTypeMove},
+		{"core and sdk agree on location_state event type string", EventTypeLocationState, pluginsdk.HostEventTypeLocationState},
+		{"core and sdk agree on exit_update event type string", EventTypeExitUpdate, pluginsdk.HostEventTypeExitUpdate},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, string(c.core), string(c.sdk),
+				"host event-type drift between internal/core and pkg/plugin")
 		})
 	}
 }

@@ -5,6 +5,7 @@ syntax = "proto3";
 
 package holomush.core.v1;
 
+import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/holomush/holomush/pkg/proto/holomush/core/v1;corev1";
@@ -144,6 +145,56 @@ message EventFrame {
   // server on QueryStreamHistory responses and Subscribe deliveries so clients
   // can resume without re-delivering events they already processed.
   bytes cursor = 8;
+
+  // Rendering metadata — cleartext band, populated by RenderingPublisher
+  // at emit time. MUST be present on every frame produced by this server
+  // (INV-GW-2). Gateway treats absence as a contract violation
+  // (drops + metric + log per INV-GW-5).
+  RenderingMetadata rendering = 9;
+}
+
+// EventChannel identifies the destination channel for event delivery.
+// This is the canonical internal definition; webv1.EventChannel is kept
+// in lockstep for the web wire format (INV-GW-16).
+enum EventChannel {
+  EVENT_CHANNEL_UNSPECIFIED = 0;
+  EVENT_CHANNEL_TERMINAL = 1;
+  EVENT_CHANNEL_STATE = 2;
+  EVENT_CHANNEL_BOTH = 3;
+}
+
+// RenderingMetadata carries cleartext rendering instructions for an event.
+// Populated by RenderingPublisher.Publish at emit time from the verb
+// registry. See docs/superpowers/specs/2026-04-26-gateway-verb-registry-sourcing.md.
+message RenderingMetadata {
+  option (buf.validate.message).cel = {
+    id: "rendering_metadata.label_required_for_speech"
+    message: "label must be set when format is 'speech'"
+    expression: "this.format != 'speech' || this.label != ''"
+  };
+
+  // Category drives client-side renderer routing.
+  string category = 1 [(buf.validate.field).string.min_len = 1];
+
+  // Format drives within-category presentation.
+  string format = 2 [(buf.validate.field).string.min_len = 1];
+
+  // Label provides type-specific display text. Required when format == "speech".
+  string label = 3;
+
+  // DisplayTarget routes the event to TERMINAL, STATE, or BOTH on the client.
+  EventChannel display_target = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  // SourcePlugin names the plugin that owns this event type, or "builtin"
+  // for host-owned types. Recorded for historical/audit fidelity.
+  string source_plugin = 5 [(buf.validate.field).string.min_len = 1];
+
+  // SourcePluginVersion is the manifest's version field, or "host-<binary
+  // version>" for builtins. Recorded for historical/audit fidelity.
+  string source_plugin_version = 6 [(buf.validate.field).string.min_len = 1];
 }
 
 enum ControlSignal {

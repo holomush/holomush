@@ -35,6 +35,13 @@ audit:
 
 storage: postgres
 
+crypto:
+  # core-scenes emits only the host-owned "system" event today
+  # (pluginsdk.HostEventTypeSystem). Plugin-owned scene-event types
+  # (scene_ic, scene_join, etc.) land in a future phase coupled with
+  # runtime work to actually emit them on the bus.
+  emits: []
+
 binary-plugin:
   executable: core-scenes
 

@@ -311,6 +311,9 @@ const (
 See [Event Reference](events.md) for event types, payload schemas, and stream
 patterns.
 
+The optional `crypto` block declares event-type sensitivity contracts
+and decryption opt-ins. See [Declaring event sensitivity](event-sensitivity.md).
+
 ## ABAC Policies
 
 Plugins declare access policies in their manifest using Cedar-style DSL. The ABAC

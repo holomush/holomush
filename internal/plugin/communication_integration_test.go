@@ -16,10 +16,12 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	corecomm "github.com/holomush/holomush/plugins/core-communication"
 )
 
 // communicationFixture contains all components needed for communication plugin integration tests.
@@ -44,7 +46,11 @@ func setupCommunicationTest() (*communicationFixture, error) {
 	hostFuncs := hostfunc.New(nil)
 	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
 
-	manager := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	manager, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	if mgrErr != nil {
+		_ = luaHost.Close(context.Background())
+		return nil, mgrErr
+	}
 
 	ctx := context.Background()
 	discovered, err := manager.Discover(ctx)
@@ -169,7 +175,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				Expect(emits[0].Stream).To(Equal("location:loc456"))
-				Expect(emits[0].Type).To(Equal(pluginsdk.EventTypeSay))
+				Expect(emits[0].Type).To(Equal(pluginsdk.EventType(corecomm.EventTypeSay)))
 				Expect(emits[0].Payload).To(ContainSubstring(`Alice says, \"Hello everyone!\"`))
 				Expect(emits[0].Payload).To(ContainSubstring(`"speaker":"Alice"`))
 			})
@@ -216,7 +222,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(emits).To(HaveLen(1))
 				Expect(emits[0].Stream).To(Equal("location:loc456"))
-				Expect(emits[0].Type).To(Equal(pluginsdk.EventTypePose))
+				Expect(emits[0].Type).To(Equal(pluginsdk.EventType(corecomm.EventTypePose)))
 				Expect(emits[0].Payload).To(ContainSubstring(`Bob waves hello.`))
 				Expect(emits[0].Payload).To(ContainSubstring(`"actor":"Bob"`))
 			})
@@ -423,7 +429,7 @@ var _ = Describe("Communication Plugin Integration", func() {
 				event := pluginsdk.Event{
 					ID:        "01MNO",
 					Stream:    "location:123",
-					Type:      pluginsdk.EventTypeSay,
+					Type:      pluginsdk.EventType(corecomm.EventTypeSay),
 					Timestamp: time.Now().UnixMilli(),
 					ActorKind: pluginsdk.ActorCharacter,
 					ActorID:   "char_1",

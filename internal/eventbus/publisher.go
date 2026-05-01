@@ -6,6 +6,11 @@ package eventbus
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
+	"net/textproto"
+	"strings"
+	"testing"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -17,6 +22,7 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/telemetry"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
 
@@ -160,6 +166,7 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 		Timestamp: timestamppb.New(event.Timestamp),
 		Actor:     ActorToProto(event.Actor),
 		Payload:   event.Payload,
+		Rendering: RenderingToProto(event.Rendering),
 	}
 	plainBytes, err := proto.Marshal(envelope)
 	if err != nil {
@@ -212,6 +219,7 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 	} else if event.Actor.LegacyID != "" {
 		msg.Header.Set(HeaderActorLegacyID, event.Actor.LegacyID)
 	}
+	mergeCallerHeaders(msg.Header, event)
 	// OTEL trace context; no-op when the caller has no active span.
 	telemetry.InjectHeaders(ctx, msg.Header)
 
@@ -228,6 +236,49 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 			Wrap(err)
 	}
 	return nil
+}
+
+// reservedHeaderKeys — keys that event.Headers must never overwrite.
+// Note: App-Rendering is NOT listed here because it is written by
+// RenderingPublisher before delegating to JetStreamPublisher. Adding it
+// would cause RenderingPublisher's own stamp to panic. The single-writer
+// invariant for App-Rendering is enforced architecturally: only
+// RenderingPublisher holds the proto serialization path.
+var reservedHeaderKeys = map[string]struct{}{
+	HeaderMsgID:         {},
+	HeaderCodec:         {},
+	HeaderSchemaVersion: {},
+	HeaderEventType:     {},
+	HeaderActorKind:     {},
+	HeaderActorID:       {},
+	HeaderActorLegacyID: {},
+	"traceparent":       {},
+	"tracestate":        {},
+}
+
+// mergeCallerHeaders copies ev.Headers into msgHeader enforcing the
+// reserved-key collision policy. Keys are canonicalized before the
+// reserved-key check so casing variants (e.g. "app-event-type") cannot
+// bypass the guard — nats.Header.Set canonicalizes via
+// textproto.CanonicalMIMEHeaderKey, so without the lookup-time
+// canonicalization a casing variant would write to the same canonical
+// slot while passing the raw-key check.
+func mergeCallerHeaders(msgHeader nats.Header, ev Event) {
+	if len(ev.Headers) == 0 {
+		return
+	}
+	for k, v := range ev.Headers {
+		canon := textproto.CanonicalMIMEHeaderKey(k)
+		if _, reserved := reservedHeaderKeys[canon]; reserved || strings.HasPrefix(canon, "Nats-") {
+			if testing.Testing() {
+				panic(fmt.Sprintf("eventbus: caller wrote reserved header key %q (canonical %q)", k, canon))
+			}
+			slog.Warn("eventbus: caller-written header collides with reserved key; system value wins",
+				"header", k, "canonical", canon, "event_id", ev.ID.String())
+			continue
+		}
+		msgHeader.Set(k, v)
+	}
 }
 
 // dupeWindowDeadline returns the effective publish deadline:
@@ -299,6 +350,38 @@ func ActorKindToProto(k ActorKind) eventbusv1.ActorKind {
 		return eventbusv1.ActorKind_ACTOR_KIND_PLUGIN
 	default:
 		return eventbusv1.ActorKind_ACTOR_KIND_UNSPECIFIED
+	}
+}
+
+// RenderingToProto converts the host-side RenderingMetadata to its proto
+// form. Returns nil if input is nil. INV-GW-14 ensures parity.
+func RenderingToProto(r *RenderingMetadata) *corev1.RenderingMetadata {
+	if r == nil {
+		return nil
+	}
+	return &corev1.RenderingMetadata{
+		Category:            r.Category,
+		Format:              r.Format,
+		Label:               r.Label,
+		DisplayTarget:       corev1.EventChannel(r.DisplayTarget),
+		SourcePlugin:        r.SourcePlugin,
+		SourcePluginVersion: r.SourcePluginVersion,
+	}
+}
+
+// RenderingFromProto converts the proto form to the host-side struct.
+// Returns nil if input is nil.
+func RenderingFromProto(p *corev1.RenderingMetadata) *RenderingMetadata {
+	if p == nil {
+		return nil
+	}
+	return &RenderingMetadata{
+		Category:            p.GetCategory(),
+		Format:              p.GetFormat(),
+		Label:               p.GetLabel(),
+		DisplayTarget:       EventChannel(p.GetDisplayTarget()), //nolint:gosec // G115: EventChannel values are bounded 0-3 by proto enum; no overflow possible
+		SourcePlugin:        p.GetSourcePlugin(),
+		SourcePluginVersion: p.GetSourcePluginVersion(),
 	}
 }
 

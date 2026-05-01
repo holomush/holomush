@@ -426,6 +426,7 @@ func decodeDelivery(ctx context.Context, msg jetstream.Msg, selector codec.KeySe
 		Timestamp: envelope.GetTimestamp().AsTime(),
 		Actor:     actorFromProto(envelope.GetActor()),
 		Payload:   envelope.GetPayload(),
+		Rendering: RenderingFromProto(envelope.GetRendering()),
 	}
 	if meta, mErr := msg.Metadata(); mErr == nil && meta != nil {
 		ev.Seq = meta.Sequence.Stream

@@ -84,7 +84,7 @@ func (e *Engine) HandleSay(ctx context.Context, char CharacterRef, message strin
 	event := Event{
 		ID:        NewULID(),
 		Stream:    "location:" + char.LocationID.String(),
-		Type:      EventTypeSay,
+		Type:      "core-communication:say",
 		Timestamp: time.Now(),
 		Actor:     Actor{Kind: ActorCharacter, ID: char.ID.String()},
 		Payload:   payload,
@@ -107,7 +107,7 @@ func (e *Engine) HandlePose(ctx context.Context, char CharacterRef, action strin
 	event := Event{
 		ID:        NewULID(),
 		Stream:    "location:" + char.LocationID.String(),
-		Type:      EventTypePose,
+		Type:      "core-communication:pose",
 		Timestamp: time.Now(),
 		Actor:     Actor{Kind: ActorCharacter, ID: char.ID.String()},
 		Payload:   payload,

@@ -300,7 +300,6 @@ func TestHandlerHasNoSessionStoreField(t *testing.T) {
 	// compile-time guarantees. This test exists so a reviewer grepping
 	// for sessionStore usage in the web package sees a single sentinel.
 	assert.Nil(t, h.contentClient, "no options configured")
-	assert.Nil(t, h.verbRegistry, "no options configured")
 }
 
 // mockSubscribeStream is a test double for corev1.CoreService_SubscribeClient.
@@ -451,11 +450,13 @@ func TestStreamEvents_StreamClosedEndsStream(t *testing.T) {
 
 func TestWebQueryStreamHistoryProxiesToCoreService(t *testing.T) {
 	now := timestamppb.Now()
+	sayRendering := &corev1.RenderingMetadata{Category: "communication", Format: "speech", Label: "says", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"}
+	poseRendering := &corev1.RenderingMetadata{Category: "communication", Format: "action", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"}
 	client := &mockCoreClient{
 		queryStreamHistoryResp: &corev1.QueryStreamHistoryResponse{
 			Events: []*corev1.EventFrame{
-				{Type: "say", Timestamp: now, Payload: []byte(`{"character_name":"Alice","message":"Hello!"}`)},
-				{Type: "pose", Timestamp: now, Payload: []byte(`{"character_name":"Bob","action":"waves."}`)},
+				{Type: "say", Timestamp: now, Payload: []byte(`{"character_name":"Alice","message":"Hello!"}`), Rendering: sayRendering},
+				{Type: "pose", Timestamp: now, Payload: []byte(`{"character_name":"Bob","action":"waves."}`), Rendering: poseRendering},
 			},
 			HasMore: true,
 		},
@@ -503,6 +504,7 @@ func TestWebQueryStreamHistoryPopulatesTypeAndTimestamp(t *testing.T) {
 					Timestamp: ts,
 					ActorId:   "char-1",
 					Payload:   []byte(`{"character_name":"Alice","message":"Hello!"}`),
+					Rendering: &corev1.RenderingMetadata{Category: "communication", Format: "speech", Label: "says", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"},
 				},
 			},
 			HasMore: false,
@@ -524,11 +526,12 @@ func TestWebQueryStreamHistoryPopulatesTypeAndTimestamp(t *testing.T) {
 func TestWebQueryStreamHistoryPropagatesHasMore(t *testing.T) {
 	now := timestamppb.Now()
 	payload := []byte(`{"character_name":"Alice","message":"Hi"}`)
+	rendering := &corev1.RenderingMetadata{Category: "communication", Format: "speech", Label: "says", DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_TERMINAL, SourcePlugin: "core-communication"}
 
 	t.Run("has_more true is forwarded", func(t *testing.T) {
 		client := &mockCoreClient{
 			queryStreamHistoryResp: &corev1.QueryStreamHistoryResponse{
-				Events:  []*corev1.EventFrame{{Type: "say", Timestamp: now, Payload: payload}},
+				Events:  []*corev1.EventFrame{{Type: "say", Timestamp: now, Payload: payload, Rendering: rendering}},
 				HasMore: true,
 			},
 		}
@@ -543,7 +546,7 @@ func TestWebQueryStreamHistoryPropagatesHasMore(t *testing.T) {
 	t.Run("has_more false is forwarded", func(t *testing.T) {
 		client := &mockCoreClient{
 			queryStreamHistoryResp: &corev1.QueryStreamHistoryResponse{
-				Events:  []*corev1.EventFrame{{Type: "say", Timestamp: now, Payload: payload}},
+				Events:  []*corev1.EventFrame{{Type: "say", Timestamp: now, Payload: payload, Rendering: rendering}},
 				HasMore: false,
 			},
 		}

@@ -203,7 +203,7 @@ func (s *SceneServiceImpl) sceneCreatedIntent(row *SceneRow) (pluginsdk.EmitInte
 
 	return pluginsdk.EmitIntent{
 		Subject: "scene:" + row.ID,
-		Type:    pluginsdk.EventTypeSystem,
+		Type:    pluginsdk.HostEventTypeSystem,
 		Payload: string(payload),
 	}, nil
 }

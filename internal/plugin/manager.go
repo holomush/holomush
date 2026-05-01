@@ -21,8 +21,8 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
-	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
 
 // RegisterPluginProviderFunc is a callback that registers a PluginAttributeProvider
@@ -48,7 +48,18 @@ const (
 	// `provides:` but the host implementation does not satisfy the optional
 	// ServiceConnProvider interface needed to expose plugin gRPC services.
 	CodeHostMissingConnProvider = "PLUGIN_HOST_MISSING_CONN_PROVIDER"
+
+	// CodeMissingVerbRegistry is returned by NewManager when no
+	// VerbRegistry has been configured via WithVerbRegistry. INV-GW-10.
+	CodeMissingVerbRegistry = "MISSING_VERB_REGISTRY"
 )
+
+// ErrMissingVerbRegistry is returned by NewManager when no VerbRegistry has
+// been configured via WithVerbRegistry. INV-GW-10: every plugin manager MUST
+// be constructed with a non-nil VerbRegistry so plugin-declared verbs and
+// host-owned event types resolve through a single shared source of truth.
+var ErrMissingVerbRegistry = oops.Code(CodeMissingVerbRegistry).
+	Errorf("plugin manager requires a VerbRegistry; pass WithVerbRegistry(...)")
 
 // Manager discovers and manages plugin lifecycle.
 type Manager struct {
@@ -163,7 +174,11 @@ func (m *Manager) Registry() *ServiceRegistry {
 }
 
 // NewManager creates a plugin manager.
-func NewManager(pluginsDir string, opts ...ManagerOption) *Manager {
+//
+// INV-GW-10: callers MUST supply a non-nil VerbRegistry via
+// WithVerbRegistry. Construction returns ErrMissingVerbRegistry when the
+// option is omitted so plugin-declared verbs always have a place to land.
+func NewManager(pluginsDir string, opts ...ManagerOption) (*Manager, error) {
 	m := &Manager{
 		pluginsDir:  pluginsDir,
 		loaded:      make(map[string]*DiscoveredPlugin),
@@ -179,7 +194,10 @@ func NewManager(pluginsDir string, opts ...ManagerOption) *Manager {
 	if m.luaHost != nil {
 		m.hostCaps[m.luaHost] = discoverCapabilities(m.luaHost)
 	}
-	return m
+	if m.verbRegistry == nil {
+		return nil, ErrMissingVerbRegistry
+	}
+	return m, nil
 }
 
 // RegisterHost registers a host implementation for a plugin type.
@@ -354,13 +372,51 @@ func (m *Manager) Discover(_ context.Context) ([]*DiscoveredPlugin, error) {
 			continue
 		}
 
+		// Static crypto-section validation. Failure means the manifest is
+		// internally malformed (unknown sensitivity, duplicate emit, etc.)
+		// and we skip the plugin entirely, mirroring the ParseManifest path.
+		if err := ValidateCrypto(manifest); err != nil {
+			slog.Warn("skipping plugin with invalid crypto section",
+				"dir", entry.Name(),
+				"plugin", manifest.Name,
+				"error", err)
+			continue
+		}
+
 		plugins = append(plugins, &DiscoveredPlugin{
 			Manifest: manifest,
 			Dir:      pluginDir,
 		})
 	}
 
-	return plugins, nil
+	// Filter out plugins whose cross-plugin refs don't resolve. Iterate to a
+	// fixed point: a plugin's refs MUST resolve against the FINAL accepted
+	// set, not the initial discovery set, otherwise plugin-b can resolve
+	// against plugin-a in the same pass that filters plugin-a out.
+	resolved := plugins
+	for {
+		emitRegistry := make(map[string][]CryptoEmit, len(resolved))
+		for _, dp := range resolved {
+			if dp.Manifest.Crypto != nil {
+				emitRegistry[dp.Manifest.Name] = dp.Manifest.Crypto.Emits
+			}
+		}
+		next := resolved[:0]
+		for _, dp := range resolved {
+			if err := ResolveCryptoRefs(dp.Manifest, emitRegistry); err != nil {
+				slog.Warn("skipping plugin with unresolvable crypto refs",
+					"plugin", dp.Manifest.Name,
+					"dir", dp.Dir,
+					"error", err)
+				continue
+			}
+			next = append(next, dp)
+		}
+		if len(next) == len(resolved) {
+			return next, nil
+		}
+		resolved = next
+	}
 }
 
 // warnUnknownTrustAllowlistEntries logs a slog.Warn for each entry in the
@@ -749,27 +805,25 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 	}
 
 	// Register plugin-declared verbs in the VerbRegistry.
-	if m.verbRegistry != nil && len(dp.Manifest.Verbs) > 0 {
-		for _, vs := range dp.Manifest.Verbs {
-			regErr := m.verbRegistry.Register(core.VerbRegistration{
-				Type:          vs.Type,
-				Category:      vs.Category,
-				Format:        vs.Format,
-				Label:         vs.Label,
-				DisplayTarget: displayTargetFromString(vs.DisplayTarget),
-				Source:        dp.Manifest.Name,
-			})
-			if regErr != nil {
-				// Clean up any verbs already registered from this plugin.
-				m.verbRegistry.UnregisterBySource(dp.Manifest.Name)
-				m.unregisterPluginProviders(dp.Manifest.Name, dp.Manifest.ResourceTypes, len(dp.Manifest.ResourceTypes))
-				if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
-					slog.Error("failed to rollback plugin load after verb registration failure",
-						"plugin", dp.Manifest.Name, "error", unloadErr)
-				}
-				return oops.In("manager").With("plugin", dp.Manifest.Name).
-					With("verb", vs.Type).Wrapf(regErr, "register plugin verb")
+	for _, vs := range dp.Manifest.Verbs {
+		regErr := m.verbRegistry.RegisterWithSource(core.VerbRegistration{
+			Type:          vs.Type,
+			Category:      vs.Category,
+			Format:        vs.Format,
+			Label:         vs.Label,
+			DisplayTarget: displayTargetFromString(vs.DisplayTarget),
+			Source:        dp.Manifest.Name,
+		}, dp.Manifest.Version)
+		if regErr != nil {
+			// Clean up any verbs already registered from this plugin.
+			m.verbRegistry.UnregisterBySource(dp.Manifest.Name)
+			m.unregisterPluginProviders(dp.Manifest.Name, dp.Manifest.ResourceTypes, len(dp.Manifest.ResourceTypes))
+			if unloadErr := host.Unload(ctx, dp.Manifest.Name); unloadErr != nil {
+				slog.Error("failed to rollback plugin load after verb registration failure",
+					"plugin", dp.Manifest.Name, "error", unloadErr)
 			}
+			return oops.In("manager").With("plugin", dp.Manifest.Name).
+				With("verb", vs.Type).Wrapf(regErr, "register plugin verb")
 		}
 	}
 
@@ -1208,15 +1262,15 @@ func (m *Manager) RegisterPluginCommands(registry *command.Registry) {
 // displayTargetFromString converts a manifest display_target string to the
 // proto enum. Returns EVENT_CHANNEL_UNSPECIFIED for unknown values (validation
 // should catch these before this is called).
-func displayTargetFromString(s string) webv1.EventChannel {
+func displayTargetFromString(s string) corev1.EventChannel {
 	switch strings.ToLower(s) {
 	case "terminal":
-		return webv1.EventChannel_EVENT_CHANNEL_TERMINAL
+		return corev1.EventChannel_EVENT_CHANNEL_TERMINAL
 	case "state":
-		return webv1.EventChannel_EVENT_CHANNEL_STATE
+		return corev1.EventChannel_EVENT_CHANNEL_STATE
 	case "both":
-		return webv1.EventChannel_EVENT_CHANNEL_BOTH
+		return corev1.EventChannel_EVENT_CHANNEL_BOTH
 	default:
-		return webv1.EventChannel_EVENT_CHANNEL_UNSPECIFIED
+		return corev1.EventChannel_EVENT_CHANNEL_UNSPECIFIED
 	}
 }

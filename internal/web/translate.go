@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/holomush/holomush/internal/gatewaymetrics"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
 )
@@ -30,8 +31,13 @@ type genericPayload struct {
 }
 
 // translateEvent converts an EventFrame proto into a GameEvent proto suitable
-// for the web client. Uses the VerbRegistry to populate category, format,
-// display_target, and label. Unknown types fall back to system/narrative/TERMINAL.
+// for the web client. Reads rendering metadata from EventFrame.Rendering
+// (populated by core's RenderingPublisher at emit time).
+//
+// INV-GW-5: events arriving without rendering metadata are dropped at the
+// gateway and counted via gatewaymetrics.DroppedNilRenderingTotal. A
+// non-zero counter indicates the core process's RenderingPublisher failed
+// to stamp rendering before publish, or a publisher path bypassed it.
 // Corrupt payloads are logged and return nil.
 func (h *Handler) translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 	var ts int64
@@ -41,25 +47,21 @@ func (h *Handler) translateEvent(ev *corev1.EventFrame) *webv1.GameEvent {
 
 	eventType := ev.GetType()
 
-	// Look up type in registry.
-	var category, format, label string
-	var displayTarget webv1.EventChannel
-
-	if h.verbRegistry != nil {
-		if reg, found := h.verbRegistry.Lookup(eventType); found {
-			category = reg.Category
-			format = reg.Format
-			label = reg.Label
-			displayTarget = reg.DisplayTarget
-		}
+	rendering := ev.GetRendering()
+	if rendering == nil {
+		slog.Error("web: dropping event with nil Rendering (INV-GW-5)",
+			"event_id", ev.GetId(),
+			"event_type", eventType,
+			"stream", ev.GetStream(),
+		)
+		gatewaymetrics.DroppedNilRenderingTotal.WithLabelValues(gatewaymetrics.SurfaceWeb, eventType).Inc()
+		return nil
 	}
 
-	// Fallback for unknown types.
-	if category == "" {
-		category = "system"
-		format = "narrative"
-		displayTarget = webv1.EventChannel_EVENT_CHANNEL_TERMINAL
-	}
+	category := rendering.GetCategory()
+	format := rendering.GetFormat()
+	label := rendering.GetLabel()
+	displayTarget := webv1.EventChannel(rendering.GetDisplayTarget())
 
 	// State events (location_state, exit_update): payload is the metadata.
 	if category == "state" {

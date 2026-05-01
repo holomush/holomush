@@ -11,7 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/core"
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/lifecycle"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // TestGRPCSubsystemImplementsSubsystem is a compile-time interface check.
@@ -97,4 +100,37 @@ func TestNewGRPCSubsystemStoresConfig(t *testing.T) {
 
 	assert.Equal(t, cfg.GRPCAddr, s.cfg.GRPCAddr)
 	assert.Equal(t, cfg.MaxHistory, s.cfg.MaxHistory)
+}
+
+// fakeEventbusPublisher is a no-op publisher for wrapPublisher tests.
+type fakeEventbusPublisher struct{}
+
+func (f *fakeEventbusPublisher) Publish(_ context.Context, _ eventbus.Event) error { return nil }
+
+// TestGrpcSubsystemWrapPublisher is AC#10. Calling wrapPublisher on a
+// configured subsystem MUST return a *eventbus.RenderingPublisher.
+func TestGrpcSubsystemWrapPublisher(t *testing.T) {
+	registry, err := core.BootstrapVerbRegistry("test")
+	require.NoError(t, err)
+
+	s := &grpcSubsystem{
+		cfg: grpcSubsystemConfig{
+			VerbRegistry: registry,
+		},
+	}
+
+	raw := &fakeEventbusPublisher{}
+	wrapped, err := s.wrapPublisher(raw)
+	require.NoError(t, err)
+
+	_, ok := wrapped.(*eventbus.RenderingPublisher)
+	assert.True(t, ok, "wrapPublisher must return *eventbus.RenderingPublisher")
+}
+
+// TestGrpcSubsystemWrapPublisherWithoutRegistry asserts the error path.
+func TestGrpcSubsystemWrapPublisherWithoutRegistry(t *testing.T) {
+	s := &grpcSubsystem{cfg: grpcSubsystemConfig{}}
+	_, err := s.wrapPublisher(&fakeEventbusPublisher{})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "GRPC_VERB_REGISTRY_MISSING")
 }

@@ -766,7 +766,7 @@ func TestDeliverEventSuccess(t *testing.T) {
 	event := pluginsdk.Event{
 		ID:        "evt-123",
 		Stream:    "location:456",
-		Type:      pluginsdk.EventTypeSay,
+		Type:      pluginsdk.EventType("say"),
 		Timestamp: 1234567890,
 		ActorKind: pluginsdk.ActorCharacter,
 		ActorID:   "char-789",
@@ -777,7 +777,7 @@ func TestDeliverEventSuccess(t *testing.T) {
 	require.NoError(t, err, "DeliverEvent returned error")
 	require.Len(t, emits, 1, "expected 1 emit event")
 	assert.Equal(t, "location:123", emits[0].Stream, "expected stream 'location:123'")
-	assert.Equal(t, pluginsdk.EventTypeSay, emits[0].Type, "expected type 'say'")
+	assert.Equal(t, pluginsdk.EventType("say"), emits[0].Type, "expected type 'say'")
 }
 
 func TestCloseKillsPlugins(t *testing.T) {
@@ -984,7 +984,7 @@ func TestDeliverCommandSuccess(t *testing.T) {
 	assert.Equal(t, "Hello, world!", resp.Output)
 	require.Len(t, resp.Events, 1)
 	assert.Equal(t, "location:123", resp.Events[0].Stream)
-	assert.Equal(t, pluginsdk.EventTypeSay, resp.Events[0].Type)
+	assert.Equal(t, pluginsdk.EventType("say"), resp.Events[0].Type)
 }
 
 func TestDeliverCommandNotLoaded(t *testing.T) {
@@ -1318,7 +1318,7 @@ func TestHostDeliverEventForwardsTrustedActorMetadata(t *testing.T) {
 	})
 	_, err := host.DeliverEvent(ctx, "core-scenes", pluginsdk.Event{
 		Stream: "scene:01SCENE",
-		Type:   pluginsdk.EventTypeSystem,
+		Type:   pluginsdk.EventType(core.EventTypeSystem),
 	})
 	require.NoError(t, err)
 

@@ -21,6 +21,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/lifecycle"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
@@ -84,6 +85,10 @@ type PluginSubsystemConfig struct {
 	StreamRegistry     plugins.StreamRegistry
 	LuaTimeout         time.Duration // per-invocation CPU deadline for Lua plugins
 	LuaRegistryMaxSize int           // max Lua registry size per plugin state
+	// VerbRegistry is seeded by BootstrapVerbRegistry in core.go and passed
+	// through so the plugin manager can call WithVerbRegistry(). Required by
+	// Task 20's nil check (INV-GW-10), but safe to thread now.
+	VerbRegistry *core.VerbRegistry
 }
 
 // PluginSubsystem manages the plugin Manager, Lua host, core plugin
@@ -170,7 +175,15 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 	s.worldConn = worldConn
 
 	// cleanupOnError closes partially initialized resources when startup fails.
+	// Order matters: alias pool first because it was opened latest and holds
+	// PG connections; then schema provisioner; then world conn.
 	cleanupOnError := func() {
+		if s.aliasPool != nil {
+			s.aliasPool.Close()
+			s.aliasPool = nil
+			s.aliasRepo = nil
+			s.aliasCache = nil
+		}
 		if s.schemaProvisioner != nil {
 			s.schemaProvisioner.Close()
 			s.schemaProvisioner = nil
@@ -260,11 +273,17 @@ func (s *PluginSubsystem) Start(ctx context.Context) error {
 		plugins.WithPolicyInstaller(policyInstaller),
 		plugins.WithTrustAllowlist(s.cfg.TrustAllowlist),
 		plugins.WithServiceRegistry(s.registry),
+		plugins.WithVerbRegistry(s.cfg.VerbRegistry),
 	}
 	if s.aliasRepo != nil && s.aliasCache != nil {
 		managerOpts = append(managerOpts, plugins.WithAliasSeeder(s.aliasRepo, s.aliasCache))
 	}
-	s.manager = plugins.NewManager(pluginsDir, managerOpts...)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, managerOpts...)
+	if mgrErr != nil {
+		cleanupOnError()
+		return oops.In("plugin-subsystem").Wrap(mgrErr)
+	}
+	s.manager = mgr
 	s.manager.RegisterHost(plugins.TypeBinary, instrumentedBinaryHost)
 
 	// 9. Set ABAC plugin provider registry.

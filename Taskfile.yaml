@@ -217,6 +217,12 @@ tasks:
     cmds:
       - ./scripts/build-plugins.sh {{.CLI_ARGS}}
 
+  plugin:validate:
+    desc: "Validate a plugin's manifest (manifest grammar + crypto.emits/consumes rules)"
+    cmds:
+      - ./scripts/validate-plugin.sh {{.CLI_ARGS}}
+    silent: false
+
   docker:build:
     desc: Build Docker image from locally-compiled Linux binary
     deps: ['web:embed', 'plugin:build-all']
@@ -685,8 +691,20 @@ tasks:
     cmds:
       - uv sync
 
+  docs:gen-events:
+    desc: "Regenerate site/docs/reference/events/<plugin>.md from plugin manifests"
+    cmds:
+      - ./scripts/gen-event-docs.sh
+    sources:
+      - scripts/gen-event-docs.sh
+      - plugins/*/plugin.yaml
+    generates:
+      - site/docs/reference/events/*.md
+      - site/docs/reference/events.md
+
   docs:build:
     desc: Build documentation site
+    deps: ['docs:gen-events']
     dir: site
     cmds:
       - uv run zensical build

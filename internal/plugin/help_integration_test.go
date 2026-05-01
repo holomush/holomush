@@ -19,6 +19,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	accesstypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
@@ -286,7 +287,11 @@ func setupHelpTestWithEngine(engine accesstypes.AccessPolicyEngine) (*helpFixtur
 	)
 	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
 
-	manager := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	manager, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	if mgrErr != nil {
+		_ = luaHost.Close(context.Background())
+		return nil, mgrErr
+	}
 
 	ctx := context.Background()
 	discovered, err := manager.Discover(ctx)

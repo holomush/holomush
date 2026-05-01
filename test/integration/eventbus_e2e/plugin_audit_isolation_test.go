@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
@@ -88,24 +89,36 @@ func TestPluginAuditIsolation(t *testing.T) {
 	require.NoError(t, hostSub.Start(ctx))
 	t.Cleanup(func() { _ = hostSub.Stop(context.Background()) })
 
-	pub := bus.Bus.Publisher()
-	require.NotNil(t, pub)
+	rawPub := bus.Bus.Publisher()
+	require.NotNil(t, rawPub)
+
+	// RenderingPublisher stamps the App-Rendering header required by the
+	// audit projection (events_audit.rendering NOT NULL after migration 000012).
+	// location_state is registered as a builtin, so the lookup succeeds.
+	registry, err := core.BootstrapVerbRegistry("test")
+	require.NoError(t, err)
+	hostPub := eventbus.NewRenderingPublisher(rawPub, registry)
 
 	// Publish 3 scene (plugin-owned) events and 2 host-owned events.
+	// Scene events use the raw publisher — the OwnerMap routes them to the
+	// plugin consumer (ack-and-skip in host projection, no persist() call).
+	// Host events use the wrapped publisher so App-Rendering is stamped.
 	sceneEvents := []eventbus.Event{
 		mintEvent("events.main.scene.01ABC.ic", "scene.pose", `{"n":1}`),
 		mintEvent("events.main.scene.01ABC.ic", "scene.pose", `{"n":2}`),
 		mintEvent("events.main.scene.01DEF.ic", "scene.pose", `{"n":3}`),
 	}
 	hostEvents := []eventbus.Event{
-		mintEvent("events.main.loc.01HOST.out", "location.state", `{"h":1}`),
-		mintEvent("events.main.loc.01HOST.out", "location.state", `{"h":2}`),
+		// Use location_state (underscore) — the canonical builtin type registered
+		// in BootstrapVerbRegistry, valid per typeRe (no separator needed).
+		mintEvent("events.main.loc.01HOST.out", "location_state", `{"h":1}`),
+		mintEvent("events.main.loc.01HOST.out", "location_state", `{"h":2}`),
 	}
 	for _, e := range sceneEvents {
-		require.NoError(t, pub.Publish(ctx, e))
+		require.NoError(t, rawPub.Publish(ctx, e))
 	}
 	for _, e := range hostEvents {
-		require.NoError(t, pub.Publish(ctx, e))
+		require.NoError(t, hostPub.Publish(ctx, e))
 	}
 
 	// Wait for the host projection to drain (host rows + ack-skipped

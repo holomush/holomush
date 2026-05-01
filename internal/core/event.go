@@ -40,49 +40,28 @@ func ValidatePayload(payload []byte) error {
 // EventType identifies the kind of event.
 type EventType string
 
-// Event types for game events.
-//
-// TODO(holomush-k18g): Migrate plugin-owned EventType constants out of
-// internal/core/. The majority of the constants below are plugin-domain
-// (communication, world movement, object interactions) but currently
-// live here because the target Go plugin packages (core-world, core-comm)
-// do not yet exist. Host-only types that stay: EventTypeSystem,
-// EventTypeCommandResponse, EventTypeCommandError, EventTypeSessionEnded.
-// F5 (holomush-1tvn.12) landed the audit-routing infrastructure that
-// unblocks this migration.
+// Event types for game events. All constants here are host-owned and stay
+// permanently. Plugin-owned event types have been migrated to their respective
+// plugin packages with qualified <plugin>:<type> identifiers:
+//   - core-communication: plugins/core-communication/events.go
+//   - core-objects: plugins/core-objects/events.go
 const (
-	EventTypeSay    EventType = "say"
-	EventTypePose   EventType = "pose"
 	EventTypeArrive EventType = "arrive"
 	EventTypeLeave  EventType = "leave"
 	EventTypeSystem EventType = "system"
 
-	// World event types
-	EventTypeMove          EventType = "move"
-	EventTypeObjectCreate  EventType = "object_create"
-	EventTypeObjectDestroy EventType = "object_destroy"
-	EventTypeObjectUse     EventType = "object_use"
-	EventTypeObjectExamine EventType = "object_examine"
-	EventTypeObjectGive    EventType = "object_give"
+	// World movement (host-owned)
+	EventTypeMove EventType = "move"
 
-	// Private communication event types
-	EventTypePage    EventType = "page"
-	EventTypeWhisper EventType = "whisper"
-	EventTypeOOC     EventType = "ooc"
-	EventTypePemit   EventType = "pemit"
-
-	// Whisper notice (location-broadcast when someone whispers)
-	EventTypeWhisperNotice EventType = "whisper_notice"
-
-	// Command response event types
+	// Command response event types (host-owned)
 	EventTypeCommandResponse EventType = "command_response"
 	EventTypeCommandError    EventType = "command_error"
 
-	// UI state event types
+	// UI state event types (host-owned)
 	EventTypeLocationState EventType = "location_state"
 	EventTypeExitUpdate    EventType = "exit_update"
 
-	// Session lifecycle
+	// Session lifecycle (host-owned)
 	EventTypeSessionEnded EventType = "session_ended"
 )
 

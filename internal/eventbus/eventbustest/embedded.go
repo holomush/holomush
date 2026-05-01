@@ -11,6 +11,7 @@ package eventbustest
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -165,6 +166,64 @@ func (e *Embedded) AwaitDeliveredSeq(t TB, consumerName string, want uint64, tim
 		}
 		<-time.After(awaitPollInterval)
 	}
+}
+
+// RawMessagesOnSubject returns up to limit messages from the EVENTS stream
+// matching the given subject. Uses an ephemeral ordered consumer so multiple
+// calls are independent. Polls until the consumer drains; no time.Sleep.
+func (e *Embedded) RawMessagesOnSubject(t TB, subject string, limit int, timeout time.Duration) []*nats.Msg {
+	t.Helper()
+	if limit < 0 {
+		require.FailNow(t, "RawMessagesOnSubject requires a non-negative limit")
+	}
+	if limit == 0 {
+		return nil
+	}
+	if timeout <= 0 {
+		timeout = DefaultAwaitTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cons, err := e.JS.OrderedConsumer(ctx, eventbus.StreamName, jetstream.OrderedConsumerConfig{
+		FilterSubjects: []string{subject},
+		DeliverPolicy:  jetstream.DeliverAllPolicy,
+	})
+	require.NoError(t, err)
+
+	const fetchMaxWait = 200 * time.Millisecond
+	out := make([]*nats.Msg, 0, limit)
+	for len(out) < limit {
+		// Honor the overall timeout: if the deadline is closer than
+		// fetchMaxWait, shrink the per-fetch wait so we exit promptly.
+		wait := fetchMaxWait
+		if d, ok := ctx.Deadline(); ok {
+			if remaining := time.Until(d); remaining <= 0 {
+				break
+			} else if remaining < wait {
+				wait = remaining
+			}
+		}
+		msgs, fetchErr := cons.Fetch(limit-len(out), jetstream.FetchMaxWait(wait))
+		if fetchErr != nil && !errors.Is(fetchErr, nats.ErrTimeout) {
+			require.NoError(t, fetchErr)
+		}
+		for msg := range msgs.Messages() {
+			raw := &nats.Msg{
+				Subject: msg.Subject(),
+				Reply:   msg.Reply(),
+				Header:  msg.Headers(),
+				Data:    msg.Data(),
+			}
+			out = append(out, raw)
+			require.NoError(t, msg.Ack())
+		}
+		// Continue polling until the timeout elapses or limit is reached.
+		// An empty fetch is not a stopping signal — messages may arrive in
+		// the next fetch window. The for-loop's len(out) < limit guard +
+		// ctx.Deadline() check above are the only termination conditions.
+	}
+	return out
 }
 
 // infoAttemptTimeout caps a single JS info RPC. Independent of the caller's

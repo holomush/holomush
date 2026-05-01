@@ -12,8 +12,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/holomush/holomush/internal/eventbus"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
 // postgresColdTier reads archived events from the events_audit table.
@@ -65,7 +67,7 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 		sb   strings.Builder
 		args []any
 	)
-	sb.WriteString(`SELECT id, subject, type, timestamp, actor_kind, actor_id, payload, js_seq FROM events_audit WHERE `)
+	sb.WriteString(`SELECT id, subject, type, timestamp, actor_kind, actor_id, payload, js_seq, rendering FROM events_audit WHERE `)
 	if subjectPattern != "" {
 		args = append(args, subjectPattern)
 		fmt.Fprintf(&sb, "subject LIKE $%d", len(args))
@@ -137,16 +139,17 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 	first := true
 	for rows.Next() {
 		var (
-			idBytes      []byte
-			subjectStr   string
-			eventType    string
-			ts           time.Time
-			actorKindStr string
-			actorIDBytes []byte
-			payload      []byte
-			seq          int64
+			idBytes        []byte
+			subjectStr     string
+			eventType      string
+			ts             time.Time
+			actorKindStr   string
+			actorIDBytes   []byte
+			payload        []byte
+			seq            int64
+			renderingBytes []byte
 		)
-		if scanErr := rows.Scan(&idBytes, &subjectStr, &eventType, &ts, &actorKindStr, &actorIDBytes, &payload, &seq); scanErr != nil {
+		if scanErr := rows.Scan(&idBytes, &subjectStr, &eventType, &ts, &actorKindStr, &actorIDBytes, &payload, &seq, &renderingBytes); scanErr != nil {
 			return nil, oops.Code("EVENTBUS_COLD_SCAN_FAILED").Wrap(scanErr)
 		}
 		if len(idBytes) != 16 {
@@ -173,6 +176,21 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 		}
 		first = false
 
+		var rendering *eventbus.RenderingMetadata
+		if len(renderingBytes) > 0 {
+			var protoMD corev1.RenderingMetadata
+			// DiscardUnknown: tolerate forward schema additions on persisted
+			// JSONB rendering payloads. Strict decode would fail rolling
+			// upgrades where new writers stamp newer fields while older
+			// readers are still reading archived data.
+			if unmarshalErr := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(renderingBytes, &protoMD); unmarshalErr != nil {
+				return nil, oops.Code("EVENTBUS_COLD_BAD_RENDERING").
+					With("subject", string(q.Subject)).
+					Wrap(unmarshalErr)
+			}
+			rendering = eventbus.RenderingFromProto(&protoMD)
+		}
+
 		out = append(out, eventbus.Event{
 			ID:        id,
 			Seq:       seqU,
@@ -181,6 +199,7 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 			Timestamp: ts.UTC(),
 			Actor:     actorFromAuditRow(actorKindStr, actorIDBytes),
 			Payload:   payload,
+			Rendering: rendering,
 		})
 	}
 	if err := rows.Err(); err != nil {

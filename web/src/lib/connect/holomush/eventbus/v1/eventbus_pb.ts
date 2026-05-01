@@ -9,13 +9,15 @@ import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2"
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { RenderingMetadata } from "../../core/v1/core_pb";
+import { file_holomush_core_v1_core } from "../../core/v1/core_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file holomush/eventbus/v1/eventbus.proto.
  */
 export const file_holomush_eventbus_v1_eventbus: GenFile = /*@__PURE__*/
-  fileDesc("CiNob2xvbXVzaC9ldmVudGJ1cy92MS9ldmVudGJ1cy5wcm90bxIUaG9sb211c2guZXZlbnRidXMudjEiVQoFQWN0b3ISLQoEa2luZBgBIAEoDjIfLmhvbG9tdXNoLmV2ZW50YnVzLnYxLkFjdG9yS2luZBIKCgJpZBgCIAEoDBIRCglsZWdhY3lfaWQYAyABKAkingEKBUV2ZW50EgoKAmlkGAEgASgMEg8KB3N1YmplY3QYAiABKAkSDAoEdHlwZRgDIAEoCRItCgl0aW1lc3RhbXAYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEioKBWFjdG9yGAUgASgLMhsuaG9sb211c2guZXZlbnRidXMudjEuQWN0b3ISDwoHcGF5bG9hZBgGIAEoDCqGAQoJQWN0b3JLaW5kEhoKFkFDVE9SX0tJTkRfVU5TUEVDSUZJRUQQABIYChRBQ1RPUl9LSU5EX0NIQVJBQ1RFUhABEhUKEUFDVE9SX0tJTkRfUExBWUVSEAISFQoRQUNUT1JfS0lORF9TWVNURU0QAxIVChFBQ1RPUl9LSU5EX1BMVUdJThAEQkhaRmdpdGh1Yi5jb20vaG9sb211c2gvaG9sb211c2gvcGtnL3Byb3RvL2hvbG9tdXNoL2V2ZW50YnVzL3YxO2V2ZW50YnVzdjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("CiNob2xvbXVzaC9ldmVudGJ1cy92MS9ldmVudGJ1cy5wcm90bxIUaG9sb211c2guZXZlbnRidXMudjEiVQoFQWN0b3ISLQoEa2luZBgBIAEoDjIfLmhvbG9tdXNoLmV2ZW50YnVzLnYxLkFjdG9yS2luZBIKCgJpZBgCIAEoDBIRCglsZWdhY3lfaWQYAyABKAki1gEKBUV2ZW50EgoKAmlkGAEgASgMEg8KB3N1YmplY3QYAiABKAkSDAoEdHlwZRgDIAEoCRItCgl0aW1lc3RhbXAYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEioKBWFjdG9yGAUgASgLMhsuaG9sb211c2guZXZlbnRidXMudjEuQWN0b3ISDwoHcGF5bG9hZBgGIAEoDBI2CglyZW5kZXJpbmcYByABKAsyIy5ob2xvbXVzaC5jb3JlLnYxLlJlbmRlcmluZ01ldGFkYXRhKoYBCglBY3RvcktpbmQSGgoWQUNUT1JfS0lORF9VTlNQRUNJRklFRBAAEhgKFEFDVE9SX0tJTkRfQ0hBUkFDVEVSEAESFQoRQUNUT1JfS0lORF9QTEFZRVIQAhIVChFBQ1RPUl9LSU5EX1NZU1RFTRADEhUKEUFDVE9SX0tJTkRfUExVR0lOEARCSFpGZ2l0aHViLmNvbS9ob2xvbXVzaC9ob2xvbXVzaC9wa2cvcHJvdG8vaG9sb211c2gvZXZlbnRidXMvdjE7ZXZlbnRidXN2MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_holomush_core_v1_core]);
 
 /**
  * Actor identifies who caused an event.
@@ -92,6 +94,15 @@ export type Event = Message<"holomush.eventbus.v1.Event"> & {
    * @generated from field: bytes payload = 6;
    */
   payload: Uint8Array;
+
+  /**
+   * Rendering metadata, populated by RenderingPublisher.Publish before
+   * marshaling for JetStream. Mirrors the corev1.RenderingMetadata used
+   * on the gRPC Subscribe wire (one schema, two transports).
+   *
+   * @generated from field: holomush.core.v1.RenderingMetadata rendering = 7;
+   */
+  rendering?: RenderingMetadata | undefined;
 };
 
 /**

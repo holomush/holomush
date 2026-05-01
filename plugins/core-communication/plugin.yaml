@@ -231,3 +231,67 @@ policies:
     dsl: >-
       permit(principal is character, action in ["execute"], resource is command) when { principal.character.roles.containsAny(["storyteller",
       "admin"]) && resource.command.name == "pemit" };
+
+verbs:
+  - type: core-communication:say
+    category: communication
+    format: speech
+    label: says
+    display_target: terminal
+  - type: core-communication:pose
+    category: communication
+    format: action
+    display_target: terminal
+  - type: core-communication:page
+    category: communication
+    format: speech
+    label: pages
+    display_target: terminal
+  - type: core-communication:whisper
+    category: communication
+    format: speech
+    label: whispers
+    display_target: terminal
+  - type: core-communication:whisper_notice
+    category: communication
+    format: action
+    display_target: terminal
+  - type: core-communication:ooc
+    category: communication
+    format: action
+    display_target: terminal
+  - type: core-communication:emit
+    category: communication
+    format: action
+    display_target: terminal
+  - type: core-communication:pemit
+    category: command
+    format: narrative
+    display_target: terminal
+
+crypto:
+  emits:
+    - event_type: say
+      sensitivity: never
+      description: "Speech in the current location, visible to everyone present."
+    - event_type: pose
+      sensitivity: never
+      description: "Action description in the current location."
+    - event_type: ooc
+      sensitivity: never
+      description: "Out-of-character speech in the current location."
+    - event_type: emit
+      sensitivity: never
+      description: "Generic emit to the current location."
+    - event_type: page
+      sensitivity: always
+      description: "OOC private message between two characters; participants only."
+    - event_type: whisper
+      sensitivity: always
+      description: "In-character private message between two characters in the same location."
+    - event_type: pemit
+      sensitivity: always
+      description: "Storyteller-issued private narration to a single character."
+    - event_type: whisper_notice
+      sensitivity: never
+      description: "Public notice that a whisper occurred (no content), visible in the location."

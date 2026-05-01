@@ -100,6 +100,12 @@ type Manifest struct {
 	Provides []string    `yaml:"provides,omitempty" json:"provides,omitempty"`
 	Storage  StorageType `yaml:"storage,omitempty" json:"storage,omitempty"`
 
+	// Crypto declares the plugin's event-type sensitivity contracts and
+	// (forward-looking) decryption opt-in subscriptions. Phase 1 of the
+	// event-payload-crypto design records these declarations; Phase 3
+	// adds runtime enforcement.
+	Crypto *CryptoSection `yaml:"crypto,omitempty" json:"crypto,omitempty"`
+
 	// Audit declares NATS subject patterns the plugin owns for JetStream
 	// audit purposes. When set, the host routes AuditEvent deliveries
 	// matching these patterns to the plugin's PluginAuditService RPC

@@ -8,7 +8,7 @@ import (
 
 	"github.com/samber/oops"
 
-	webv1 "github.com/holomush/holomush/pkg/proto/holomush/web/v1"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
 // VerbRegistration holds rendering metadata for an event type.
@@ -17,9 +17,9 @@ type VerbRegistration struct {
 	Category      string // "communication", "movement", "state", "system", "command"
 	Format        string // "speech", "action", "narrative", "notification", "error", "snapshot", "delta"
 	Label         string // "says", "telepathically sends" -- required when Format is "speech"
-	DisplayTarget webv1.EventChannel
+	DisplayTarget corev1.EventChannel
 	MetadataKeys  []MetadataKey
-	Source        string // "builtin" or plugin name -- tracks ownership for unload
+	Source        string // "builtin" or plugin name -- tracks ownership for unload; required (publishability invariant)
 }
 
 // MetadataKey declares a well-known metadata field for an event type.
@@ -29,19 +29,29 @@ type MetadataKey struct {
 	ValueType   string // "string", "bool", "object", "array"
 }
 
+// SourceInfo records origin metadata for a verb registration.
+type SourceInfo struct {
+	Source  string // "builtin" or plugin manifest name
+	Version string // host build version for builtin, manifest version for plugins
+}
+
 // VerbRegistry maps event types to their rendering metadata.
 type VerbRegistry struct {
-	mu    sync.RWMutex
-	types map[string]VerbRegistration
+	mu      sync.RWMutex
+	types   map[string]VerbRegistration
+	sources map[string]string // source name -> version
 }
 
 // NewVerbRegistry creates an empty registry.
 func NewVerbRegistry() *VerbRegistry {
-	return &VerbRegistry{types: make(map[string]VerbRegistration)}
+	return &VerbRegistry{
+		types:   make(map[string]VerbRegistration),
+		sources: make(map[string]string),
+	}
 }
 
-// Register adds a type. Returns error if duplicate or invalid.
-func (r *VerbRegistry) Register(reg VerbRegistration) error {
+// registerNoLock performs validation and insertion. Caller MUST hold r.mu.
+func (r *VerbRegistry) registerNoLock(reg VerbRegistration) error {
 	if reg.Type == "" {
 		return oops.Code("INVALID_REGISTRATION").Errorf("type must not be empty")
 	}
@@ -56,10 +66,20 @@ func (r *VerbRegistry) Register(reg VerbRegistration) error {
 			With("type", reg.Type).
 			Errorf("label is required when format is speech")
 	}
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
+	// Publishability checks: RenderingPublisher.Publish stamps these onto
+	// RenderingMetadata, which protovalidate rejects when DisplayTarget is
+	// EVENT_CHANNEL_UNSPECIFIED or SourcePlugin is empty. Reject at
+	// registration time so callers fail fast with a useful error.
+	if reg.DisplayTarget == corev1.EventChannel_EVENT_CHANNEL_UNSPECIFIED {
+		return oops.Code("INVALID_REGISTRATION").
+			With("type", reg.Type).
+			Errorf("display target must not be EVENT_CHANNEL_UNSPECIFIED")
+	}
+	if reg.Source == "" {
+		return oops.Code("INVALID_REGISTRATION").
+			With("type", reg.Type).
+			Errorf("source must not be empty")
+	}
 	if _, exists := r.types[reg.Type]; exists {
 		return oops.Code("DUPLICATE_REGISTRATION").
 			With("type", reg.Type).
@@ -112,4 +132,31 @@ func (r *VerbRegistry) UnregisterBySource(source string) int {
 		}
 	}
 	return count
+}
+
+// RegisterWithSource adds a type and records the source's version atomically.
+// Returns error if duplicate or invalid. Version must be non-empty so the
+// resulting RenderingMetadata satisfies protovalidate at publish time.
+func (r *VerbRegistry) RegisterWithSource(reg VerbRegistration, version string) error {
+	if version == "" {
+		return oops.Code("INVALID_REGISTRATION").
+			With("type", reg.Type).
+			With("source", reg.Source).
+			Errorf("version must not be empty")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := r.registerNoLock(reg); err != nil {
+		return err
+	}
+	r.sources[reg.Source] = version
+	return nil
+}
+
+// SourceVersion returns the version recorded for a given source name.
+// Returns "" if source is unknown.
+func (r *VerbRegistry) SourceVersion(source string) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.sources[source]
 }

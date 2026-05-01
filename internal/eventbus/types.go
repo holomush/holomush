@@ -57,6 +57,33 @@ type Actor struct {
 	LegacyID string
 }
 
+// EventChannel mirrors corev1.EventChannel for ergonomic host-side use
+// (avoids forcing test fixtures and emit-site struct literals to import
+// the proto package). Kept in lockstep with the proto enum by INV-GW-14.
+type EventChannel uint8
+
+const (
+	// EventChannelUnspecified is the zero value; must not be used in production registrations.
+	EventChannelUnspecified EventChannel = 0
+	// EventChannelTerminal routes events to the terminal/telnet scroll-back only.
+	EventChannelTerminal EventChannel = 1
+	// EventChannelState routes events to the state sidebar only.
+	EventChannelState EventChannel = 2
+	// EventChannelBoth routes events to both terminal and state sidebar.
+	EventChannelBoth EventChannel = 3
+)
+
+// RenderingMetadata is the host-side representation of corev1.RenderingMetadata.
+// Populated by RenderingPublisher.Publish before marshaling to the wire.
+type RenderingMetadata struct {
+	Category            string
+	Format              string
+	Label               string
+	DisplayTarget       EventChannel
+	SourcePlugin        string
+	SourcePluginVersion string
+}
+
 // Event is the host-side representation of a published event.
 //
 // Wire format (JetStream): proto-encoded Event in msg.Data, with headers
@@ -70,6 +97,28 @@ type Event struct {
 	Timestamp time.Time
 	Actor     Actor
 	Payload   []byte // codec.Encode output (ciphertext if encryption is on)
+	// Rendering is populated by RenderingPublisher.Publish before
+	// marshaling. Callers MUST NOT populate this field directly; the
+	// field is reserved for the publisher chain.
+	Rendering *RenderingMetadata
+	// Headers carries pre-publish NATS headers stamped by the publisher
+	// chain (e.g. App-Rendering by RenderingPublisher). JetStreamPublisher
+	// merges these into the outgoing nats.Msg headers alongside the
+	// system-stamped ones. Callers other than the publisher chain MUST
+	// NOT populate this field directly.
+	//
+	// Reserved-keys rule: caller-written keys MUST start with "App-" and
+	// MUST NOT be in the system-reserved set (Nats-Msg-Id, App-Codec,
+	// App-Schema-Version, App-Event-Type, App-Actor-Kind, App-Actor-ID,
+	// App-Actor-Legacy-ID, traceparent, tracestate). Keys starting with
+	// "Nats-" are reserved unconditionally. Violation panics under
+	// testing.Testing(); in production logs a warning and the system
+	// value wins.
+	//
+	// Cold-tier reads: this field is publish-path only. The cold-tier
+	// history reader leaves Headers nil. Subscribers MUST NOT depend
+	// on Headers being populated at read time; they read Event.Rendering.
+	Headers map[string]string
 }
 
 // subjectTokenRe permits NATS subject tokens: letters, digits, dashes,
@@ -77,8 +126,13 @@ type Event struct {
 // directly.
 var subjectTokenRe = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
-// typeRe permits dot-segmented identifiers like "scene.lifecycle.created".
-var typeRe = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`)
+// typeRe permits two mutually exclusive forms. Mixing separators in one
+// string is rejected. Hyphens are allowed in each segment so plugin names
+// that use them (e.g. "core-communication") round-trip unchanged.
+//
+//   - Dot-only: "say", "scene.pose", "scene.lifecycle.created"
+//   - Colon (plugin:verb): "core-communication:say"  (exactly one colon, per spec §7.1)
+var typeRe = regexp.MustCompile(`^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)*$|^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$`)
 
 // NewSubject validates and constructs a Subject. Returns ErrInvalidSubject
 // on failure.
@@ -137,7 +191,7 @@ func NewType(s string) (Type, error) {
 		return "", fmt.Errorf("%w: empty type", ErrInvalidType)
 	}
 	if !typeRe.MatchString(s) {
-		return "", fmt.Errorf("%w: type %q does not match [a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*", ErrInvalidType, s)
+		return "", fmt.Errorf("%w: type %q must match [a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)* (dot-segmented) or plugin:verb", ErrInvalidType, s)
 	}
 	return Type(s), nil
 }

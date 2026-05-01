@@ -464,6 +464,7 @@ func rewrapFrameCursorsForPlugin(frames []*corev1.EventFrame, pluginName string)
 			ActorId:   f.GetActorId(),
 			Payload:   f.GetPayload(),
 			Cursor:    pluginCursor,
+			Rendering: f.GetRendering(),
 		}
 	}
 	return out
@@ -491,5 +492,6 @@ func eventbusEventToEventFrame(e eventbus.Event, legacyStreamName string) *corev
 		ActorType: e.Actor.Kind.String(),
 		ActorId:   actorID,
 		Payload:   e.Payload,
+		Rendering: eventbus.RenderingToProto(e.Rendering),
 	}
 }

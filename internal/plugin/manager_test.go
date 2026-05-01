@@ -31,6 +31,7 @@ import (
 	"github.com/holomush/holomush/internal/session"
 	"github.com/holomush/holomush/pkg/errutil"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
+	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 )
 
@@ -64,7 +65,8 @@ lua-plugin:
 	writeFile(t, filepath.Join(echoDir, "plugin.yaml"), []byte(manifest))
 	writeFile(t, filepath.Join(echoDir, "main.lua"), []byte("function on_event(e) end"))
 
-	mgr := plugins.NewManager(filepath.Join(dir, "plugins"))
+	mgr, mgrErr := plugins.NewManager(filepath.Join(dir, "plugins"), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	manifests, err := mgr.Discover(context.Background())
 	require.NoError(t, err)
 
@@ -93,7 +95,8 @@ lua-plugin:
 	mkdirAll(t, invalidDir)
 	writeFile(t, filepath.Join(invalidDir, "plugin.yaml"), []byte("invalid: ["))
 
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	manifests, err := mgr.Discover(context.Background())
 	// Should succeed but only return valid plugin
 	require.NoError(t, err)
@@ -105,7 +108,8 @@ func TestManagerDiscoverEmptyDirectory(t *testing.T) {
 	pluginsDir := filepath.Join(dir, "plugins")
 	mkdirAll(t, pluginsDir)
 
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	manifests, err := mgr.Discover(context.Background())
 	require.NoError(t, err)
 	assert.Empty(t, manifests, "len(manifests) should be 0 for empty directory")
@@ -115,7 +119,8 @@ func TestManagerDiscoverNonExistentDirectory(t *testing.T) {
 	dir := t.TempDir()
 	pluginsDir := filepath.Join(dir, "non-existent-plugins")
 
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	manifests, err := mgr.Discover(context.Background())
 	require.NoError(t, err, "Discover() should handle non-existent dir gracefully")
 	assert.Empty(t, manifests, "len(manifests) should be 0 for non-existent directory")
@@ -140,7 +145,8 @@ lua-plugin:
 	writeFile(t, filepath.Join(validDir, "plugin.yaml"), []byte(validManifest))
 	writeFile(t, filepath.Join(validDir, "main.lua"), []byte(""))
 
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	manifests, err := mgr.Discover(context.Background())
 	require.NoError(t, err)
 	assert.Len(t, manifests, 1, "len(manifests) should be 1 (files should be skipped)")
@@ -156,7 +162,8 @@ func TestManagerDiscoverSkipsDirWithoutManifest(t *testing.T) {
 	// Only create a lua file, no plugin.yaml
 	writeFile(t, filepath.Join(noManifestDir, "main.lua"), []byte(""))
 
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	manifests, err := mgr.Discover(context.Background())
 	require.NoError(t, err)
 	assert.Empty(t, manifests, "len(manifests) should be 0 (dir without manifest should be skipped)")
@@ -183,7 +190,8 @@ func TestManagerDiscoverMultiplePlugins(t *testing.T) {
 		writeFile(t, filepath.Join(pluginDir, "main.lua"), []byte(""))
 	}
 
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	manifests, err := mgr.Discover(context.Background())
 	require.NoError(t, err)
 	require.Len(t, manifests, 3)
@@ -213,7 +221,8 @@ binary-plugin:
   executable: plugin-${os}-${arch}`
 	writeFile(t, filepath.Join(binaryDir, "plugin.yaml"), []byte(manifest))
 
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	manifests, err := mgr.Discover(context.Background())
 	require.NoError(t, err)
 	require.Len(t, manifests, 1)
@@ -225,7 +234,8 @@ func TestManagerListPluginsNoPluginsLoaded(t *testing.T) {
 	pluginsDir := filepath.Join(dir, "plugins")
 	mkdirAll(t, pluginsDir)
 
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	plugins := mgr.ListPlugins()
 	assert.Empty(t, plugins, "ListPlugins() should return empty slice before any plugins loaded")
 }
@@ -248,7 +258,8 @@ lua-plugin:
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	require.NoError(t, err)
 
@@ -275,7 +286,8 @@ func TestManagerLoadAllSkipsInvalidManifests(t *testing.T) {
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	require.NoError(t, err, "LoadAll() should skip invalid plugins")
 
@@ -294,7 +306,8 @@ func TestManagerLoadAllSkipsLuaPluginsWithoutHost(t *testing.T) {
 	writeFile(t, filepath.Join(luaDir, "main.lua"), []byte(""))
 
 	// Create manager without LuaHost - Lua plugins should be skipped
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	require.NoError(t, err, "LoadAll() should skip Lua plugins without host")
 
@@ -312,7 +325,8 @@ func TestManagerLoadAllSkipsBinaryPlugins(t *testing.T) {
 	mkdirAll(t, binaryDir)
 	writeFile(t, filepath.Join(binaryDir, "plugin.yaml"), []byte("name: binary-plugin\nversion: 1.0.0\ntype: binary\nbinary-plugin:\n  executable: plugin"))
 
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	require.NoError(t, err, "LoadAll() should skip binary plugins")
 
@@ -334,7 +348,8 @@ func TestManagerLoadAllFailsOnLuaSyntaxError(t *testing.T) {
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	// Strict by default: a broken Lua plugin is a hard error.
 	require.Error(t, err, "LoadAll() should fail when a plugin has load errors")
@@ -361,10 +376,12 @@ func TestLoadAllSkipsBrokenPluginsWhenGracefulDegradationEnabled(t *testing.T) {
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(pluginsDir,
 		plugins.WithLuaHost(luaHost),
 		plugins.WithGracefulDegradation(),
+		plugins.WithVerbRegistry(core.NewVerbRegistry()),
 	)
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	// Graceful degradation: errors are logged but LoadAll succeeds.
 	require.NoError(t, err)
@@ -379,7 +396,8 @@ func TestManagerCloseWithoutLuaHost(t *testing.T) {
 	pluginsDir := filepath.Join(dir, "plugins")
 	mkdirAll(t, pluginsDir)
 
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 
 	// Close should succeed even without LuaHost
 	assert.NoError(t, mgr.Close(context.Background()))
@@ -396,7 +414,8 @@ func TestManagerClose(t *testing.T) {
 	writeFile(t, filepath.Join(echoDir, "main.lua"), []byte(""))
 
 	luaHost := pluginlua.NewHost()
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	require.NoError(t, mgr.LoadAll(context.Background()))
 
 	// Verify plugin is loaded
@@ -426,7 +445,8 @@ func TestManagerClosePropagatesHostError(t *testing.T) {
 	mockHost.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	mockHost.EXPECT().Close(mock.Anything).Return(hostErr)
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockHost))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(mockHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	require.NoError(t, mgr.LoadAll(context.Background()))
 
 	// Verify plugin is loaded (Manager tracks this internally, not via Host.Plugins())
@@ -445,12 +465,14 @@ func TestManagerClosePropagatesHostError(t *testing.T) {
 var _ attribute.PluginRegistry = (*plugins.Manager)(nil)
 
 func TestManagerIsPluginLoaded(t *testing.T) {
-	m := plugins.NewManager("/nonexistent")
+	m, mgrErr := plugins.NewManager("/nonexistent", plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	assert.False(t, m.IsPluginLoaded("echo-bot"), "no plugins loaded yet")
 }
 
 func TestManagerGetLoadedPluginReturnsFalseWhenNotLoaded(t *testing.T) {
-	m := plugins.NewManager("/nonexistent")
+	m, mgrErr := plugins.NewManager("/nonexistent", plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	dp, ok := m.GetLoadedPlugin("nonexistent")
 	assert.False(t, ok, "should return false for unloaded plugin")
 	assert.Nil(t, dp, "should return nil for unloaded plugin")
@@ -472,7 +494,8 @@ lua-plugin:
 	writeFile(t, filepath.Join(echoDir, "main.lua"), []byte("function on_event(e) end"))
 
 	host := pluginlua.NewHost()
-	m := plugins.NewManager(pluginsDir, plugins.WithLuaHost(host))
+	m, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(host), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	require.NoError(t, m.LoadAll(context.Background()))
 
 	dp, ok := m.GetLoadedPlugin("echo-bot")
@@ -485,12 +508,14 @@ lua-plugin:
 
 func TestManagerWithServiceRegistryReturnsConfiguredRegistry(t *testing.T) {
 	reg := plugins.NewServiceRegistry()
-	m := plugins.NewManager("/nonexistent", plugins.WithServiceRegistry(reg))
+	m, mgrErr := plugins.NewManager("/nonexistent", plugins.WithServiceRegistry(reg), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	assert.Same(t, reg, m.Registry(), "Registry() should return the configured service registry")
 }
 
 func TestManagerRegistryReturnsNilWhenNotConfigured(t *testing.T) {
-	m := plugins.NewManager("/nonexistent")
+	m, mgrErr := plugins.NewManager("/nonexistent", plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	assert.Nil(t, m.Registry(), "Registry() should return nil when no registry is configured")
 }
 
@@ -523,7 +548,8 @@ lua-plugin:
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithServiceRegistry(reg))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithServiceRegistry(reg), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	require.NoError(t, err, "LoadAll() with DAG resolution should succeed")
 
@@ -588,7 +614,8 @@ binary-plugin:
 
 	reg := plugins.NewServiceRegistry()
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithServiceRegistry(reg))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithServiceRegistry(reg), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	mgr.RegisterHost(plugins.TypeBinary, binaryHost)
 
 	err := mgr.LoadAll(context.Background())
@@ -622,7 +649,8 @@ binary-plugin:
 	binaryHost := &mockBinaryHost{conn: fakeConn}
 
 	// No registry configured — service registration should be silently skipped.
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	mgr.RegisterHost(plugins.TypeBinary, binaryHost)
 
 	err := mgr.LoadAll(context.Background())
@@ -650,7 +678,8 @@ binary-plugin:
 	mockHost.EXPECT().Close(mock.Anything).Return(nil)
 
 	reg := plugins.NewServiceRegistry()
-	mgr := plugins.NewManager(pluginsDir, plugins.WithServiceRegistry(reg))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithServiceRegistry(reg), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	mgr.RegisterHost(plugins.TypeBinary, mockHost)
 
 	// LoadAll is strict by default — a host that can't satisfy provides is a hard error.
@@ -684,7 +713,8 @@ binary-plugin:
 	binaryHost := &mockBinaryHost{conn: fakeConn}
 
 	reg := plugins.NewServiceRegistry()
-	mgr := plugins.NewManager(pluginsDir, plugins.WithServiceRegistry(reg))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithServiceRegistry(reg), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	mgr.RegisterHost(plugins.TypeBinary, binaryHost)
 
 	err := mgr.LoadAll(context.Background())
@@ -744,10 +774,12 @@ lua-plugin:
 	repo := &fakeAliasSeederMgr{existing: make(map[string]string)}
 	cache := command.NewAliasCache()
 
-	mgr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(pluginsDir,
 		plugins.WithLuaHost(luaHost),
 		plugins.WithAliasSeeder(repo, cache),
+		plugins.WithVerbRegistry(core.NewVerbRegistry()),
 	)
+	require.NoError(t, mgrErr)
 
 	err := mgr.LoadAll(context.Background())
 	require.NoError(t, err)
@@ -816,10 +848,12 @@ lua-plugin:
 		repo := &fakeAliasSeederMgr{existing: make(map[string]string)}
 		cache := command.NewAliasCache()
 
-		mgr := plugins.NewManager(pluginsDir,
+		mgr, mgrErr := plugins.NewManager(pluginsDir,
 			plugins.WithLuaHost(luaHost),
 			plugins.WithAliasSeeder(repo, cache),
+			plugins.WithVerbRegistry(core.NewVerbRegistry()),
 		)
+		require.NoError(t, mgrErr)
 		require.NoError(t, mgr.LoadAll(context.Background()))
 		_ = luaHost.Close(context.Background())
 
@@ -851,7 +885,8 @@ lua-plugin:
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
 	// No WithAliasSeeder — seeding should be silently skipped.
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	require.NoError(t, err, "LoadAll without alias seeder should not error")
 
@@ -970,7 +1005,8 @@ lua-plugin:
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	require.Error(t, err, "load should fail when capability targets an unknown resource type")
 	assert.Contains(t, err.Error(), "alien")
@@ -1012,7 +1048,8 @@ lua-plugin:
 
 	// No binary host registered — declarer is silently skipped, but its
 	// resource_types still feed CollectResourceTypes during Phase 2.
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	require.NoError(t, err, "consumer should validate against declarer's resource type")
 	assert.Contains(t, mgr.ListPlugins(), "widget-consumer")
@@ -1042,7 +1079,8 @@ lua-plugin:
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	require.Error(t, err, "load should fail when capability uses an undeclared action")
 	assert.Contains(t, err.Error(), "join")
@@ -1073,7 +1111,8 @@ lua-plugin:
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	require.NoError(t, err, "load should succeed when action is declared in the plugin manifest")
 	assert.Contains(t, mgr.ListPlugins(), "channel-plugin")
@@ -1113,7 +1152,8 @@ lua-plugin:
 
 	// No binary host — declarer is silently skipped, but its actions still
 	// feed CollectActions during Phase 2.
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	require.NoError(t, err, "consumer should validate against declarer's action")
 	assert.Contains(t, mgr.ListPlugins(), "action-consumer")
@@ -1141,7 +1181,8 @@ lua-plugin:
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	require.NoError(t, err, "re-declaring a core action in the actions field should not prevent loading")
 	assert.Contains(t, mgr.ListPlugins(), "reader-plugin")
@@ -1156,9 +1197,11 @@ func TestManagerWithTrustAllowlistDoesNotInterfereWithBasicLoad(t *testing.T) {
 	pluginsDir := filepath.Join(dir, "plugins")
 	mkdirAll(t, pluginsDir)
 
-	mgr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(pluginsDir,
 		plugins.WithTrustAllowlist([]string{"trusted-one", "trusted-two"}),
+		plugins.WithVerbRegistry(core.NewVerbRegistry()),
 	)
+	require.NoError(t, mgrErr)
 	// LoadAll on an empty plugins dir should still succeed.
 	require.NoError(t, mgr.LoadAll(context.Background()))
 }
@@ -1179,9 +1222,11 @@ func TestManagerLoadAllWarnsOnTrustAllowlistedPluginNotDiscovered(t *testing.T) 
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	defer slog.SetDefault(oldDefault)
 
-	mgr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(pluginsDir,
 		plugins.WithTrustAllowlist([]string{"ghost-plugin", "phantom-plugin"}),
+		plugins.WithVerbRegistry(core.NewVerbRegistry()),
 	)
+	require.NoError(t, mgrErr)
 	require.NoError(t, mgr.LoadAll(context.Background()))
 
 	logs := buf.String()
@@ -1216,10 +1261,12 @@ func TestManagerLoadAllDoesNotWarnWhenAllowlistMatchesDiscoveredPlugin(t *testin
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(pluginsDir,
 		plugins.WithLuaHost(luaHost),
 		plugins.WithTrustAllowlist([]string{"trusted-one"}),
+		plugins.WithVerbRegistry(core.NewVerbRegistry()),
 	)
+	require.NoError(t, mgrErr)
 	require.NoError(t, mgr.LoadAll(context.Background()))
 
 	assert.NotContains(t, buf.String(), "trust-allowlisted plugin not discovered",
@@ -1247,7 +1294,8 @@ func TestManagerLoadAllStrictModeJoinsMultipleErrors(t *testing.T) {
 	luaHost := pluginlua.NewHost()
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	require.Error(t, err, "strict mode should fail when plugins have load errors")
 
@@ -1304,7 +1352,8 @@ binary-plugin:
 		arClient:       &stubAttributeResolverClient{schemaErr: errors.New("schema rpc failed")},
 	}
 
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	mgr.RegisterHost(plugins.TypeBinary, host)
 
 	err := mgr.LoadAll(context.Background())
@@ -1339,7 +1388,8 @@ binary-plugin:
 		},
 	}
 
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	mgr.RegisterHost(plugins.TypeBinary, host)
 
 	err := mgr.LoadAll(context.Background())
@@ -1364,7 +1414,8 @@ binary-plugin:
 	// should reject the plugin because resource_types requires that capability.
 	host := &mockBinaryHost{conn: &stubClientConn{}}
 
-	mgr := plugins.NewManager(pluginsDir)
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	mgr.RegisterHost(plugins.TypeBinary, host)
 
 	err := mgr.LoadAll(context.Background())
@@ -1425,10 +1476,12 @@ policies:
 		return true
 	}
 
-	mgr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(pluginsDir,
 		plugins.WithAttributeProviderRegistrar(registrar),
 		plugins.WithAttributeProviderUnregistrar(unregistrar),
+		plugins.WithVerbRegistry(core.NewVerbRegistry()),
 	)
+	require.NoError(t, mgrErr)
 	mgr.RegisterHost(plugins.TypeBinary, host)
 
 	err := mgr.LoadAll(context.Background())
@@ -1477,7 +1530,8 @@ binary-plugin:
 		return nil
 	}
 
-	mgr := plugins.NewManager(pluginsDir, plugins.WithAttributeProviderRegistrar(registrar))
+	mgr, mgrErr := plugins.NewManager(pluginsDir, plugins.WithAttributeProviderRegistrar(registrar), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	mgr.RegisterHost(plugins.TypeBinary, host)
 
 	require.NoError(t, mgr.LoadAll(context.Background()))
@@ -1489,7 +1543,9 @@ binary-plugin:
 // newTestManager creates a Manager with a temp dir for unit tests.
 func newTestManager(t *testing.T) *plugins.Manager {
 	t.Helper()
-	return plugins.NewManager(t.TempDir())
+	mgr, err := plugins.NewManager(t.TempDir(), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, err)
+	return mgr
 }
 
 // loadPlugin registers a fake plugin manifest with the manager.
@@ -1660,10 +1716,11 @@ lua-plugin:
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
 	reg := core.NewVerbRegistry()
-	mgr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(pluginsDir,
 		plugins.WithLuaHost(luaHost),
 		plugins.WithVerbRegistry(reg),
 	)
+	require.NoError(t, mgrErr)
 	require.NoError(t, mgr.LoadAll(context.Background()))
 
 	whisper, ok := reg.Lookup("whisper")
@@ -1676,6 +1733,12 @@ lua-plugin:
 	shout, ok := reg.Lookup("shout")
 	require.True(t, ok, "shout verb should be registered")
 	assert.Equal(t, "chat-plugin", shout.Source)
+
+	// Manifest version MUST flow into the registry's source-version map so
+	// RenderingPublisher can stamp source_plugin_version on emitted events.
+	// A regression to plain Register would still satisfy the Source check
+	// above but break downstream rendering audit fidelity.
+	assert.Equal(t, "1.0.0", reg.SourceVersion("chat-plugin"))
 }
 
 func TestManagerLoadAllRejectsPluginWithDuplicateVerbType(t *testing.T) {
@@ -1702,17 +1765,19 @@ lua-plugin:
 
 	reg := core.NewVerbRegistry()
 	// Pre-register a verb that the plugin also declares.
-	require.NoError(t, reg.Register(core.VerbRegistration{
-		Type:     "existing_verb",
-		Category: "state",
-		Format:   "snapshot",
-		Source:   "builtin",
-	}))
+	require.NoError(t, reg.RegisterWithSource(core.VerbRegistration{
+		Type:          "existing_verb",
+		Category:      "state",
+		Format:        "snapshot",
+		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE,
+		Source:        "builtin",
+	}, "host-test"))
 
-	mgr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(pluginsDir,
 		plugins.WithLuaHost(luaHost),
 		plugins.WithVerbRegistry(reg),
 	)
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "register plugin verb")
@@ -1747,17 +1812,19 @@ lua-plugin:
 
 	reg := core.NewVerbRegistry()
 	// Pre-register the conflict verb so the second registration fails.
-	require.NoError(t, reg.Register(core.VerbRegistration{
-		Type:     "conflict",
-		Category: "state",
-		Format:   "snapshot",
-		Source:   "builtin",
-	}))
+	require.NoError(t, reg.RegisterWithSource(core.VerbRegistration{
+		Type:          "conflict",
+		Category:      "state",
+		Format:        "snapshot",
+		DisplayTarget: corev1.EventChannel_EVENT_CHANNEL_STATE,
+		Source:        "builtin",
+	}, "host-test"))
 
-	mgr := plugins.NewManager(pluginsDir,
+	mgr, mgrErr := plugins.NewManager(pluginsDir,
 		plugins.WithLuaHost(luaHost),
 		plugins.WithVerbRegistry(reg),
 	)
+	require.NoError(t, mgrErr)
 	err := mgr.LoadAll(context.Background())
 	require.Error(t, err)
 
@@ -1771,35 +1838,16 @@ lua-plugin:
 	assert.Equal(t, "builtin", conflict.Source)
 }
 
-func TestManagerLoadAllWithoutVerbRegistrySkipsVerbRegistration(t *testing.T) {
-	dir := t.TempDir()
-	pluginsDir := filepath.Join(dir, "plugins")
-
-	plugDir := filepath.Join(pluginsDir, "verby-plugin")
-	mkdirAll(t, plugDir)
-	manifest := `name: verby-plugin
-version: 1.0.0
-type: lua
-verbs:
-  - type: some_verb
-    category: communication
-    format: action
-    display_target: terminal
-lua-plugin:
-  entry: main.lua`
-	writeFile(t, filepath.Join(plugDir, "plugin.yaml"), []byte(manifest))
-	writeFile(t, filepath.Join(plugDir, "main.lua"), []byte("function on_event(e) end"))
-
-	luaHost := pluginlua.NewHost()
-	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
-
-	// No WithVerbRegistry — verb registration should be silently skipped.
-	mgr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
-	err := mgr.LoadAll(context.Background())
-	require.NoError(t, err)
-
-	loaded := mgr.ListPlugins()
-	assert.Contains(t, loaded, "verby-plugin")
+// TestNewManagerRequiresVerbRegistry pins INV-GW-10: every plugin manager
+// MUST be constructed with a non-nil VerbRegistry. Omitting the option
+// returns ErrMissingVerbRegistry rather than silently skipping verb
+// registration.
+func TestNewManagerRequiresVerbRegistry(t *testing.T) {
+	mgr, err := plugins.NewManager(t.TempDir())
+	require.Error(t, err)
+	require.ErrorIs(t, err, plugins.ErrMissingVerbRegistry)
+	require.Nil(t, mgr)
+	errutil.AssertErrorCode(t, err, plugins.CodeMissingVerbRegistry)
 }
 
 // stubFocusCoordinator is a minimal focus.Coordinator for manager tests.
@@ -1832,7 +1880,8 @@ func TestConfigureFocusDepsInjectsCoordinatorIntoLuaHost(t *testing.T) {
 	luaHost := pluginlua.NewHostWithFunctions(hf)
 	t.Cleanup(func() { _ = luaHost.Close(context.Background()) })
 
-	mgr := plugins.NewManager(t.TempDir(), plugins.WithLuaHost(luaHost))
+	mgr, mgrErr := plugins.NewManager(t.TempDir(), plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 
 	fc := &stubFocusCoordinator{}
 	var hr plugins.HistoryReader // nil — acceptable for this test
@@ -1846,7 +1895,8 @@ func TestConfigureFocusDepsInjectsCoordinatorIntoLuaHost(t *testing.T) {
 
 func TestConfigureFocusDepsWithNilLuaHostDoesNotPanic(t *testing.T) {
 	// Manager without a Lua host — ConfigureFocusDeps must handle nil luaHost.
-	mgr := plugins.NewManager(t.TempDir())
+	mgr, mgrErr := plugins.NewManager(t.TempDir(), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, mgrErr)
 	require.NotPanics(t, func() {
 		mgr.ConfigureFocusDeps(nil, nil)
 	})

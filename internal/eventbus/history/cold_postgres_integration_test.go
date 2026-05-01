@@ -69,8 +69,8 @@ func insertAuditRowAt(t *testing.T, pool *pgxpool.Pool, id ulid.ULID, subject ev
 	_, err := pool.Exec(context.Background(), `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
-			payload, schema_ver, codec, js_seq
-		) VALUES ($1, $2, 'test.event', $4, 'system', NULL, '\x00'::bytea, 1, 'identity', $3)
+			payload, schema_ver, codec, js_seq, rendering
+		) VALUES ($1, $2, 'test.event', $4, 'system', NULL, '\x00'::bytea, 1, 'identity', $3, '{}'::jsonb)
 	`, id[:], string(subject), int64(seq), ts)
 	require.NoError(t, err)
 }

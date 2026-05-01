@@ -222,7 +222,7 @@ var _ = Describe("Plugin actor-claim authentication (ec22.1)", func() {
 			_, err := fx.host.DeliverEvent(dispatchCtx, fx.manifest.Name, pluginsdk.Event{
 				ID:        "01HEVT0000000000000000HONST",
 				Stream:    "trigger:01HEVT0000000000000000TRIG",
-				Type:      pluginsdk.EventTypeSay,
+				Type:      pluginsdk.EventType("core-communication:say"),
 				ActorKind: pluginsdk.ActorCharacter,
 				ActorID:   dispatchCharID,
 				// Honest mode: no forgery overrides, no fabricated token.
@@ -248,7 +248,7 @@ var _ = Describe("Plugin actor-claim authentication (ec22.1)", func() {
 			_, err := fx.host.DeliverEvent(dispatchCtx, fx.manifest.Name, pluginsdk.Event{
 				ID:        "01HEVT0000000000000000FORGE",
 				Stream:    "trigger:01HEVT0000000000000000TRIG",
-				Type:      pluginsdk.EventTypeSay,
+				Type:      pluginsdk.EventType("core-communication:say"),
 				ActorKind: pluginsdk.ActorCharacter,
 				ActorID:   dispatchCharID,
 				// Plugin substitutes plugin-kind + a forged ID into outgoing
@@ -279,7 +279,7 @@ var _ = Describe("Plugin actor-claim authentication (ec22.1)", func() {
 			_, err := fx.host.DeliverEvent(dispatchCtx, fx.manifest.Name, pluginsdk.Event{
 				ID:        "01HEVT0000000000000000FAB00",
 				Stream:    "trigger:01HEVT0000000000000000TRIG",
-				Type:      pluginsdk.EventTypeSay,
+				Type:      pluginsdk.EventType("core-communication:say"),
 				ActorKind: pluginsdk.ActorCharacter,
 				ActorID:   dispatchCharID,
 				Payload: modePayload(forgeryEmitSubject,
@@ -322,7 +322,7 @@ var _ = Describe("Plugin actor-claim authentication (ec22.1)", func() {
 			_, err := fx.host.DeliverEvent(dispatchCtx, fx.manifest.Name, pluginsdk.Event{
 				ID:        "01HEVT0000000000000000BKGND",
 				Stream:    "trigger:01HEVT0000000000000000TRIG",
-				Type:      pluginsdk.EventTypeSay,
+				Type:      pluginsdk.EventType("core-communication:say"),
 				ActorKind: pluginsdk.ActorCharacter,
 				ActorID:   dispatchCharID,
 				// Mode tells the plugin to spawn a goroutine and emit
@@ -406,7 +406,7 @@ var _ = Describe("Plugin actor-claim authentication (ec22.1)", func() {
 			emitCtx := core.WithActor(ctx, core.Actor{Kind: dispatchCharKind, ID: dispatchCharID})
 			err := emitter.Emit(emitCtx, manifest.Name, pluginsdk.EmitIntent{
 				Subject: forgeryEmitSubject,
-				Type:    pluginsdk.EventTypeSay,
+				Type:    pluginsdk.EventType("core-communication:say"),
 				Payload: `{"message":"lua-claim"}`,
 			})
 			Expect(err).NotTo(HaveOccurred(),
@@ -446,7 +446,7 @@ var _ = Describe("Plugin actor-claim authentication (ec22.1)", func() {
 			emitCtx := core.WithActor(ctx, core.Actor{Kind: dispatchCharKind, ID: dispatchCharID})
 			err := emitter.Emit(emitCtx, manifest.Name, pluginsdk.EmitIntent{
 				Subject: forgeryEmitSubject,
-				Type:    pluginsdk.EventTypeSay,
+				Type:    pluginsdk.EventType("core-communication:say"),
 				Payload: `{"message":"should-fail"}`,
 			})
 			Expect(err).To(HaveOccurred(),

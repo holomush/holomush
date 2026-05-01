@@ -2169,7 +2169,7 @@ func TestDispatcherRoutesPluginResponseEventsThroughSharedEmitter(t *testing.T) 
 			return &pluginsdk.CommandResponse{
 				Status: pluginsdk.CommandOK,
 				Events: []pluginsdk.EmitEvent{
-					{Stream: "scene:01TEST:ic", Type: pluginsdk.EventTypeSay, Payload: `{"text":"hello"}`},
+					{Stream: "scene:01TEST:ic", Type: pluginsdk.EventType("say"), Payload: `{"text":"hello"}`},
 				},
 			}, nil
 		},

@@ -15,6 +15,7 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 
 	"github.com/holomush/holomush/internal/command"
+	"github.com/holomush/holomush/internal/core"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/hostfunc"
 	pluginlua "github.com/holomush/holomush/internal/plugin/lua"
@@ -87,7 +88,11 @@ func setupAliasesTest(aliasAccess hostfunc.AliasAccess) (*aliasesFixture, error)
 	hostFuncs := hostfunc.New(nil, opts...)
 	luaHost := pluginlua.NewHostWithFunctions(hostFuncs)
 
-	manager := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost))
+	manager, mgrErr := plugins.NewManager(pluginsDir, plugins.WithLuaHost(luaHost), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	if mgrErr != nil {
+		_ = luaHost.Close(context.Background())
+		return nil, mgrErr
+	}
 
 	ctx := context.Background()
 	discovered, err := manager.Discover(ctx)

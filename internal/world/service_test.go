@@ -23,6 +23,7 @@ import (
 	"github.com/holomush/holomush/internal/world"
 	"github.com/holomush/holomush/internal/world/worldtest"
 	"github.com/holomush/holomush/pkg/errutil"
+	coreobj "github.com/holomush/holomush/plugins/core-objects"
 )
 
 // Compile-time check: policy.Engine must satisfy types.AccessPolicyEngine.
@@ -4518,7 +4519,7 @@ func TestWorldService_ExamineLocation(t *testing.T) {
 		require.Len(t, emitter.calls, 1)
 		call := emitter.calls[0]
 		assert.Equal(t, world.LocationStream(charLocID), call.Stream)
-		assert.Equal(t, "object_examine", call.EventType)
+		assert.Equal(t, string(coreobj.EventTypeObjectExamine), call.EventType)
 
 		var payload world.ExaminePayload
 		err = json.Unmarshal(call.Payload, &payload)
@@ -4823,7 +4824,7 @@ func TestWorldService_ExamineObject(t *testing.T) {
 		require.Len(t, emitter.calls, 1)
 		call := emitter.calls[0]
 		assert.Equal(t, world.LocationStream(charLocID), call.Stream)
-		assert.Equal(t, "object_examine", call.EventType)
+		assert.Equal(t, string(coreobj.EventTypeObjectExamine), call.EventType)
 
 		var payload world.ExaminePayload
 		err = json.Unmarshal(call.Payload, &payload)
@@ -5097,7 +5098,7 @@ func TestWorldService_ExamineCharacter(t *testing.T) {
 		require.Len(t, emitter.calls, 1)
 		call := emitter.calls[0]
 		assert.Equal(t, world.LocationStream(charLocID), call.Stream)
-		assert.Equal(t, "object_examine", call.EventType)
+		assert.Equal(t, string(coreobj.EventTypeObjectExamine), call.EventType)
 
 		var payload world.ExaminePayload
 		err = json.Unmarshal(call.Payload, &payload)
