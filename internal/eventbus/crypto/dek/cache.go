@@ -76,8 +76,14 @@ func NewCache(cfg CacheConfig) *Cache {
 }
 
 // NewCacheWithClock allows tests to inject a deterministic clock.
+// A nil clock falls back to time.Now so misconfigured callers get a
+// working cache (Get/Put dereference clock unconditionally) instead of
+// a runtime panic.
 func NewCacheWithClock(cfg CacheConfig, clock func() time.Time) *Cache {
 	cfg = cfg.applyDefaults()
+	if clock == nil {
+		clock = time.Now
+	}
 	return &Cache{
 		cap:   cfg.Capacity,
 		ttl:   cfg.TTL,

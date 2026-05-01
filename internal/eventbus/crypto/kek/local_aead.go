@@ -37,7 +37,21 @@ type LocalAEADProvider struct {
 // from the source and running INV-33 against db (refuses startup if
 // any crypto_keys row references a wrap_key_id this provider cannot
 // unwrap). Pass a *pgx.Conn or *pgxpool.Pool for db.
+//
+// Returns KEK_LOCAL_AEAD_DEPENDENCY_NIL if source or db is nil, so a
+// wiring bug surfaces as a typed startup error rather than a panic on
+// the first Wrap/Unwrap call.
 func NewLocalAEADProvider(ctx context.Context, source KEKSource, db PGQuerier) (*LocalAEADProvider, error) {
+	if source == nil {
+		return nil, oops.Code("KEK_LOCAL_AEAD_DEPENDENCY_NIL").
+			With("dependency", "source").
+			Errorf("NewLocalAEADProvider requires a non-nil KEKSource")
+	}
+	if db == nil {
+		return nil, oops.Code("KEK_LOCAL_AEAD_DEPENDENCY_NIL").
+			With("dependency", "db").
+			Errorf("NewLocalAEADProvider requires a non-nil PGQuerier")
+	}
 	p, err := buildLocalAEADProvider(ctx, source)
 	if err != nil {
 		return nil, err
@@ -51,7 +65,14 @@ func NewLocalAEADProvider(ctx context.Context, source KEKSource, db PGQuerier) (
 // NewLocalAEADProviderForUnitTest constructs a LocalAEADProvider
 // without the INV-33 DB check. For unit tests of Wrap/Unwrap;
 // integration tests use NewLocalAEADProvider.
+//
+// Returns KEK_LOCAL_AEAD_DEPENDENCY_NIL if source is nil.
 func NewLocalAEADProviderForUnitTest(ctx context.Context, source KEKSource) (*LocalAEADProvider, error) {
+	if source == nil {
+		return nil, oops.Code("KEK_LOCAL_AEAD_DEPENDENCY_NIL").
+			With("dependency", "source").
+			Errorf("NewLocalAEADProviderForUnitTest requires a non-nil KEKSource")
+	}
 	return buildLocalAEADProvider(ctx, source)
 }
 
@@ -69,12 +90,18 @@ func buildLocalAEADProvider(ctx context.Context, source KEKSource) (*LocalAEADPr
 			With("got", len(kekBytes)).
 			Errorf("KEK from %s must be %d bytes; got %d", source.Name(), KEKByteLength, len(kekBytes))
 	}
-	fingerprint := fingerprintKEK(kekBytes)
+	// Defensive copy: KEKSource implementations are pluggable and may
+	// reuse or mutate their internal buffer after Load returns. Owning
+	// our own slice prevents a misbehaving source from silently
+	// corrupting wrap/unwrap once we've cached the fingerprint.
+	owned := make([]byte, len(kekBytes))
+	copy(owned, kekBytes)
+	fingerprint := fingerprintKEK(owned)
 	return &LocalAEADProvider{
 		source:          source,
 		sourceName:      source.Name(),
 		currentKEKKeyID: fingerprint,
-		kekByID:         map[string][]byte{fingerprint: kekBytes},
+		kekByID:         map[string][]byte{fingerprint: owned},
 	}, nil
 }
 

@@ -41,6 +41,16 @@ func TestNoneProvider_RotateKEK_Refuses(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "CRYPTO_NONE_PROVIDER_ROTATE_REFUSED")
 }
 
+// TestNewLocalAEADProviderForUnitTest_RejectsNilSource verifies the
+// constructor surfaces a typed startup error rather than panicking on
+// the first source.Load call.
+func TestNewLocalAEADProviderForUnitTest_RejectsNilSource(t *testing.T) {
+	_, err := kek.NewLocalAEADProviderForUnitTest(context.Background(), nil)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "KEK_LOCAL_AEAD_DEPENDENCY_NIL")
+	errutil.AssertErrorContext(t, err, "dependency", "source")
+}
+
 func newKEKBytes(t *testing.T) []byte {
 	t.Helper()
 	b := make([]byte, kek.KEKByteLength)

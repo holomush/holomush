@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/samber/oops"
 	"golang.org/x/crypto/argon2"
@@ -161,64 +162,64 @@ func (s *FileSource) Persist(ctx context.Context, kekBytes []byte) error {
 	buf.Write(nonce)
 	buf.Write(wrapped)
 
-	// Write atomically: write to a temp file in the same directory,
-	// fsync, set 0o600 explicitly (in case the file already existed
-	// with broader permissions), then rename. A crash between WriteFile
-	// and Rename leaves the original file intact.
-	tmpPath := s.path + ".tmp"
-	if err := os.WriteFile(tmpPath, buf.Bytes(), 0o600); err != nil {
+	// Write atomically. Each call gets its own random temp filename via
+	// os.CreateTemp in the target directory — concurrent Persist calls
+	// don't collide on a fixed `.tmp` suffix, and stale `.tmp` files
+	// from a prior crash are not reused as-is. A crash between create
+	// and rename leaves the original file intact.
+	dir := filepath.Dir(s.path)
+	base := filepath.Base(s.path)
+	f, err := os.CreateTemp(dir, base+".tmp.*")
+	if err != nil {
+		return oops.Code("KEK_FILE_WRITE_FAILED").
+			With("dir", dir).
+			Wrap(err)
+	}
+	tmpPath := f.Name()
+	committed := false
+	defer func() {
+		_ = f.Close() //nolint:errcheck // best-effort; commit path closes explicitly before rename
+		if !committed {
+			removeIgnoringError(tmpPath)
+		}
+	}()
+
+	if _, err := f.Write(buf.Bytes()); err != nil {
 		return oops.Code("KEK_FILE_WRITE_FAILED").
 			With("path", tmpPath).
 			Wrap(err)
 	}
-	// Defensive chmod in case umask widened mode on a pre-existing
-	// .tmp inode (rare but cheap to defend against).
+	// CreateTemp on most platforms gives 0o600 already, but Chmod
+	// defensively for filesystems / umasks that widen the mode.
 	if err := os.Chmod(tmpPath, 0o600); err != nil {
-		removeIgnoringError(tmpPath)
 		return oops.Code("KEK_FILE_CHMOD_FAILED").
 			With("path", tmpPath).
 			Wrap(err)
 	}
-	// fsync the temp file so its bytes hit disk before the rename
-	// commits the swap.
-	if err := fsyncFile(tmpPath); err != nil {
-		removeIgnoringError(tmpPath)
+	if err := f.Sync(); err != nil {
 		return oops.Code("KEK_FILE_FSYNC_FAILED").
 			With("path", tmpPath).
 			Wrap(err)
 	}
+	if err := f.Close(); err != nil {
+		return oops.Code("KEK_FILE_CLOSE_FAILED").
+			With("path", tmpPath).
+			Wrap(err)
+	}
 	if err := os.Rename(tmpPath, s.path); err != nil {
-		removeIgnoringError(tmpPath)
 		return oops.Code("KEK_FILE_RENAME_FAILED").
 			With("from", tmpPath).
 			With("to", s.path).
 			Wrap(err)
 	}
-	return nil
-}
-
-// fsyncFile opens path, fsyncs it, and closes. Best-effort; the
-// rename below provides the durability guarantee on most filesystems
-// even if fsync is a no-op (e.g., overlayfs in some test environments).
-func fsyncFile(path string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return oops.Wrap(err)
-	}
-	defer func() {
-		_ = f.Close() //nolint:errcheck // best-effort cleanup; the rename below is the durability point
-	}()
-	if err := f.Sync(); err != nil {
-		return oops.Wrap(err)
-	}
+	committed = true
 	return nil
 }
 
 // removeIgnoringError unlinks path on a cleanup path. We discard the
 // error intentionally — the caller is already returning a primary
 // error from the just-failed write/chmod/fsync/rename, and the rollback
-// is best-effort. The deferred-discard is wrapped in a helper so
-// errcheck doesn't flag every call site individually.
+// is best-effort.
 func removeIgnoringError(path string) {
 	_ = os.Remove(path) //nolint:errcheck // best-effort rollback; primary error already being returned
 }

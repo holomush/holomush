@@ -177,10 +177,13 @@ func TestManagerStubsCarryTrackingBeadFromAllowSet(t *testing.T) {
 			require.Equal(t, tc.wantBead, ctx["tracking_bead"])
 
 			// tracking_bead value is in the allow-set.
-			_, allowed := stubAllowSet[ctx["tracking_bead"].(string)]
+			beadStr, ok := ctx["tracking_bead"].(string)
+			require.True(t, ok,
+				"tracking_bead context value must be a string, got %T", ctx["tracking_bead"])
+			_, allowed := stubAllowSet[beadStr]
 			require.True(t, allowed,
 				"tracking_bead %q is not in stubAllowSet — update stubAllowSet "+
-					"in api_test.go or fix the stub", ctx["tracking_bead"])
+					"in api_test.go or fix the stub", beadStr)
 
 			// phase present + matches expected.
 			require.Contains(t, ctx, "phase")

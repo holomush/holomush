@@ -125,7 +125,7 @@ func TestBuild_DekRefZero_ForIdentityCodec(t *testing.T) {
 	e := newTestEvent()
 	out, err := aad.Build(e, "identity", 0, 0)
 	require.NoError(t, err)
-	assert.NotEmpty(t, out)
+	require.GreaterOrEqual(t, len(out), 6, "output too short to contain magic prefix")
 	assert.Equal(t, []byte("HMAAD\x01"), out[:6])
 }
 
