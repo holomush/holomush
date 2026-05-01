@@ -137,3 +137,164 @@ func SceneOpsEventsAppendOnly(m dsl.Matcher) {
 		Where(m["sql"].Text.Matches(forbidden)).
 		Report(msg)
 }
+
+// dekMaterialPath is the fully-qualified type path the matcher tests
+// against. Updating this requires updating the dek package import path.
+//
+// The rules below (DEKMaterialNo* and CodecKeyBytesAllowlist) implement
+// INV-27 sink-side enforcement for the event-payload-crypto Phase 2
+// substrate. They were originally drafted as separate files
+// (gorules/dek_no_serialize.go, gorules/codec_key_bytes_allowlist.go)
+// per the Phase 2 plan, but golangci-lint v2.11's gocritic ruleguard
+// configuration silently fails to load multi-file rule sets via the
+// `rules:` comma-separated path syntax. The fallback documented in the
+// plan is to concatenate into this single rules.go file. Documentation
+// fixtures remain in gorules/testdata/ for reviewer reference.
+//
+// Acceptance for Phase 2 Task 10 is the practical one (per plan):
+// rules compile under the `ruleguard` build tag, real production code
+// passes `task lint` without false positives, and the testdata
+// documentation files give reviewers a clear picture of intent.
+// A known go-ruleguard execution-time quirk: when a rule's
+// `Type.Is("…/some/Type")` references a type whose package is also
+// being scanned, ruleguard may surface an "empty rule set" execution
+// error during the smoke-test scenario where the offending pattern is
+// added to that very package. The static API surface test in
+// internal/eventbus/crypto/dek/api_test.go is the ground-truth defense
+// for the Material non-leakage invariant; these ruleguard rules are
+// the reviewer-facing supplemental gate.
+const dekMaterialPath = "github.com/holomush/holomush/internal/eventbus/crypto/dek.Material"
+
+// DEKMaterialNoJSON forbids passing dek.Material to encoding/json.
+// INV-27 sink-side enforcement.
+func DEKMaterialNoJSON(m dsl.Matcher) {
+	m.Match(`json.Marshal($x)`, `json.MarshalIndent($x, $_, $_)`).
+		Where(m["x"].Type.Is(dekMaterialPath) || m["x"].Type.Is("*"+dekMaterialPath)).
+		Report(`INV-27: dek.Material MUST NOT be passed to encoding/json. ` +
+			`Material is opaque DEK material; serializing it leaks unwrapped bytes.`)
+}
+
+// DEKMaterialNoGob forbids passing dek.Material to encoding/gob.
+func DEKMaterialNoGob(m dsl.Matcher) {
+	m.Match(`gob.NewEncoder($_).Encode($x)`).
+		Where(m["x"].Type.Is(dekMaterialPath) || m["x"].Type.Is("*"+dekMaterialPath)).
+		Report(`INV-27: dek.Material MUST NOT be passed to encoding/gob.`)
+}
+
+// DEKMaterialNoProto forbids passing dek.Material to proto.Marshal.
+func DEKMaterialNoProto(m dsl.Matcher) {
+	m.Match(`proto.Marshal($x)`).
+		Where(m["x"].Type.Is(dekMaterialPath) || m["x"].Type.Is("*"+dekMaterialPath)).
+		Report(`INV-27: dek.Material MUST NOT be passed to google.golang.org/protobuf/proto.Marshal.`)
+}
+
+// DEKMaterialNoFmtFormatting forbids passing dek.Material to fmt
+// formatting functions. Per master spec §"Note on variadic patterns"
+// in the design notes, ruleguard cannot type-filter variadic `$*xs`
+// captures (they bind to multi-node groups with no .Type). We enumerate
+// patterns per-arg-count for the practical 1- and 2-argument cases.
+// This covers the realistic Material-leak shape — a single Material
+// passed alongside a format string. Multi-arg-with-Material-elsewhere
+// callsites are left to the static API surface test in
+// internal/eventbus/crypto/dek/api_test.go.
+func DEKMaterialNoFmtFormatting(m dsl.Matcher) {
+	matches := []string{
+		`fmt.Sprint($x)`,
+		`fmt.Sprintf($_, $x)`,
+		`fmt.Sprintln($x)`,
+		`fmt.Print($x)`,
+		`fmt.Printf($_, $x)`,
+		`fmt.Println($x)`,
+		`fmt.Fprint($_, $x)`,
+		`fmt.Fprintf($_, $_, $x)`,
+		`fmt.Fprintln($_, $x)`,
+		`fmt.Errorf($_, $x)`,
+	}
+	for _, p := range matches {
+		m.Match(p).
+			Where(m["x"].Type.Is(dekMaterialPath) || m["x"].Type.Is("*"+dekMaterialPath)).
+			Report(`INV-27: dek.Material MUST NOT be passed to fmt formatting/print functions. ` +
+				`Material's GoString/Stringer-default would dump bytes; if you need to log a ` +
+				`DEK reference, log codec.KeyID instead.`)
+	}
+}
+
+// DEKMaterialNoLog forbids passing dek.Material to log functions.
+// As with DEKMaterialNoFmtFormatting, single-arg patterns only.
+func DEKMaterialNoLog(m dsl.Matcher) {
+	matches := []string{
+		`log.Print($x)`,
+		`log.Printf($_, $x)`,
+		`log.Println($x)`,
+		`log.Fatal($x)`,
+		`log.Fatalf($_, $x)`,
+		`log.Fatalln($x)`,
+		`log.Panic($x)`,
+		`log.Panicf($_, $x)`,
+		`log.Panicln($x)`,
+	}
+	for _, p := range matches {
+		m.Match(p).
+			Where(m["x"].Type.Is(dekMaterialPath) || m["x"].Type.Is("*"+dekMaterialPath)).
+			Report(`INV-27: dek.Material MUST NOT be passed to log functions.`)
+	}
+}
+
+// DEKMaterialNoSlog forbids passing dek.Material to log/slog.
+// slog's structured-logging API takes alternating key/value pairs; the
+// realistic Material-leak shape is `slog.X("msg", "key", material)`,
+// which we match as a 2-trailing-arg single-node pattern. slog.Any
+// is the explicit value-attribute constructor.
+func DEKMaterialNoSlog(m dsl.Matcher) {
+	matches := []string{
+		`slog.Info($_, $_, $x)`,
+		`slog.Debug($_, $_, $x)`,
+		`slog.Warn($_, $_, $x)`,
+		`slog.Error($_, $_, $x)`,
+		`slog.Any($_, $x)`,
+	}
+	for _, p := range matches {
+		m.Match(p).
+			Where(m["x"].Type.Is(dekMaterialPath) || m["x"].Type.Is("*"+dekMaterialPath)).
+			Report(`INV-27: dek.Material MUST NOT be passed to log/slog functions.`)
+	}
+}
+
+// Note: arbitrary io.Writer-by-interface and concrete-writer.Write
+// patterns are NOT covered by ruleguard. The Write methods on
+// os.File, bytes.Buffer, etc., take []byte (not Material), so a
+// type-filter pattern like `$_.Write($x)` with $x being Material
+// would never match — Go's type system rejects the call before
+// ruleguard sees it.
+//
+// The realistic Material-leak paths the rules above catch are
+// reflection-based serializers (json/gob/proto) and stringer-based
+// formatters (fmt/log/slog). Combined with the static API surface
+// test (no exported []byte from the dek package), these defenses
+// cover the practical exfiltration surface.
+
+// CodecKeyBytesAllowlist forbids reads of codec.Key.Bytes outside the
+// allowed package set. Master-spec amendment per Phase 2 design notes:
+// tightens the master spec's "Kept (semantics unchanged)" classification
+// for codec.Key by restricting WHO may read the field.
+//
+// Allowed package paths:
+//   - internal/eventbus/codec/...   (codec implementations)
+//   - internal/eventbus/crypto/...  (substrate construction + tests)
+//
+// This is the residual-defense rule for INV-27. dek.Material is opaque
+// (no exported []byte accessor), but its AsCodecKey returns a
+// codec.Key whose Bytes field is publicly readable. This rule gates
+// who may read it.
+func CodecKeyBytesAllowlist(m dsl.Matcher) {
+	const codecKey = "github.com/holomush/holomush/internal/eventbus/codec.Key"
+	const allowed = `^github\.com/holomush/holomush/internal/eventbus/(codec|crypto)(/|$)`
+	const msg = `INV-27 (residual defense): codec.Key.Bytes reads are restricted to ` +
+		`internal/eventbus/codec/... and internal/eventbus/crypto/.... ` +
+		`If you need raw DEK bytes, you are probably in the wrong package — route through ` +
+		`dek.Manager or implement a codec.Codec.`
+
+	m.Match(`$x.Bytes`).
+		Where(m["x"].Type.Is(codecKey) && !m.File().PkgPath.Matches(allowed)).
+		Report(msg)
+}
