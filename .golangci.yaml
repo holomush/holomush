@@ -37,6 +37,7 @@ linters:
 
     # HoloMUSH custom analyzers (gorules/)
     - cursorpackageinternal
+    - dekmaterialnogob
     - dekmaterialnojson
     - sceneopseventsappendonly
     - ulidmakeforbidden
@@ -195,6 +196,10 @@ linters:
       cursorpackageinternal:
         type: module
         description: forbids references to internal/eventbus/cursor outside host packages
+        original-url: github.com/holomush/holomush
+      dekmaterialnogob:
+        type: module
+        description: "INV-27: dek.Material MUST NOT be passed to encoding/gob"
         original-url: github.com/holomush/holomush
       dekmaterialnojson:
         type: module
