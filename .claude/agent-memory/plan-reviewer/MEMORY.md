@@ -99,6 +99,33 @@ Keep under 200 lines. Curate — don't hoard.
   pretend a `Manager.loadManifest(raw []byte)` already exists need a
   refactor task before the new validator hook can be inserted.
 
+## Pass-revision drift reflexes
+
+- **Modify-without-Create artifacts after a structural rewrite.** When a pass-1
+  finding forces an author to delete or rewrite an early task (e.g., remove a
+  smoke-test file from the bootstrap task), the downstream tasks' Modify lists
+  often still reference the deleted artifact. Always grep
+  `rg -n 'plugin_test\.go|<deleted-symbol>' <plan>` and confirm every Modify
+  line either targets a real file or a file created by an earlier task. Pass-2
+  example: 2026-05-01 plan rewrote Task 5 to drop `plugin_test.go` (Option A
+  per-analyzer plugins don't need a smoke test), but Tasks 10, 11, 13, 19
+  still listed `gorules/plugin_test.go` as Modify.
+- **Partial application of an NB-fix across siblings.** When pass-1 returns a
+  multi-target fix-up (e.g., NB#2: "fix line numbers AND verbatim Before
+  blocks in three doc-comment edits"), the author often applies the fix to
+  the first one or two and stops. Verify each instance independently. Pass-2
+  example: NB#2 cited `material.go` and `api_test.go`. Both `material.go`
+  Before blocks were corrected (lines 7-9 and 39-42 match exactly); the
+  `api_test.go` Before block was NOT corrected — its first line
+  ("// This is the ground-truth defense for") only exists as the END of a
+  longer line in the actual file, so the Edit tool's exact-match contract
+  will fail.
+
+## golangci-lint module-plugin reflexes
+
+- **One `register.Plugin(name, …)` call = ONE enableable linter ID.** golangci-lint v2 wraps all analyzers from a single plugin registration into one `goanalysis.Linter` whose `Name()` is the registered plugin name. To expose N analyzers as N independent `linters.enable` entries, the plugin module MUST contain N `register.Plugin(...)` calls in `init()` — one per analyzer (see `github.com/albertocavalcante/go-analyzers-gcl/plugin.go` for the canonical pattern). The upstream example `golangci/example-plugin-module-linter` registers one plugin returning ONE analyzer for a reason. Plans that use `register.Plugin("X", New)` returning N analyzers AND `linters.enable: [- a, - b, - c]` with N analyzer names will fail with "unknown linter" at the first lint run. The fix touches the plugin scaffolding, the `linters.settings.custom` map (must have one entry per registered plugin name), and `linters.enable` (one entry per registered plugin name). govet is the only stdlib linter that supports per-analyzer enable/disable inside one linter ID, via dedicated `linters.settings.govet.{enable,disable}` configuration — this is special-cased in golangci-lint, not a general module-plugin pattern.
+- **`linters.exclusions.rules` scopes are by linter ID, not analyzer name.** With a single-plugin shape, an exclusion for `_test.go` against `linters: [holomushrules]` disables ALL bundled analyzers in test files, not just one. Per-analyzer test-file scoping requires either per-analyzer plugins OR doing the filename check inside the analyzer's `run` function via `pass.Fset.Position(file.Pos()).Filename`.
+
 ## Review reflexes
 
 - For every `path:line` citation in the plan, run a quick `Read` or `rg` to verify the line range still covers what the plan claims. Drift across PRs is real — the spec under review used `:96-102` for a block, the plan used `:95-102` for the same block. Both can be off after the next merge.
