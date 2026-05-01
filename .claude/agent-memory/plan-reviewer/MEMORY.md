@@ -68,6 +68,37 @@ Keep under 200 lines. Curate — don't hoard.
   `Taskfile.yaml:515-551`, `CLAUDE.md` 552/570/849 — all four matched current
   main@origin (`642c93e39baf`). When citations are accurate, reviewers can move fast.
 
+## EventType migration plan reflexes (HoloMUSH)
+
+- **Two parallel EventType constant sources**: `internal/core/event.go`
+  AND `pkg/plugin/event.go` (`pluginsdk.EventType*`) both declare bare
+  event-type strings (`"say"`, `"pose"`, `"arrive"`, ...). Any plan to
+  migrate these constants MUST list both files in its File Structure
+  table and grep both namespaces in its call-site survey. The SDK
+  side has ~100 references across pkg/holo and plugin tests.
+- **Lua emit syntax is table-literal, not function-call**: HoloMUSH Lua
+  plugins emit via `{stream = ..., type = "say", payload = ...}` return
+  tables, not `emit_event(...)` calls. Plans that grep
+  `emit_event\(.*"(say|...)"` produce zero matches and silently no-op.
+  The matching grep pattern is `type = "(say|...)"`.
+- **`core-scenes` ops events ≠ stream event types**: scene plugin uses
+  `OpsEventKind` constants (`membership.invite`, `lifecycle.created`)
+  for plugin-owned audit, and only emits `pluginsdk.EventTypeSystem`
+  on streams. Plans that declare `scene_create`, `scene_ic`, etc. in
+  `crypto.emits` are fabricating events the plugin doesn't emit today.
+- **No `cmd/holomush/cmd_plugin.go`**: the holomush CLI does not have a
+  `plugin` cobra subcommand group as of `main@origin` (f8bd6543b).
+  Plans adding `plugin events`, `plugin validate` subcommands MUST
+  include an explicit task to introduce the parent group + wire it
+  into root.go.
+- **`Taskfile.yaml` not `Taskfile.yml`**: a recurring plan-author error.
+  Both work via the Task CLI auto-detect, but file-mention claims must
+  match disk.
+- **Manager has no `loadManifest` extraction point**: `internal/plugin/manager.go`
+  inlines `ParseManifest` inside `Discover` (line 349). Plans that
+  pretend a `Manager.loadManifest(raw []byte)` already exists need a
+  refactor task before the new validator hook can be inserted.
+
 ## Review reflexes
 
 - For every `path:line` citation in the plan, run a quick `Read` or `rg` to verify the line range still covers what the plan claims. Drift across PRs is real — the spec under review used `:96-102` for a block, the plan used `:95-102` for the same block. Both can be off after the next merge.
