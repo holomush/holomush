@@ -40,6 +40,7 @@ linters:
     - dekmaterialnofmtformatting
     - dekmaterialnogob
     - dekmaterialnojson
+    - dekmaterialnolog
     - dekmaterialnoproto
     - sceneopseventsappendonly
     - ulidmakeforbidden
@@ -210,6 +211,10 @@ linters:
       dekmaterialnojson:
         type: module
         description: "INV-27: dek.Material MUST NOT be passed to encoding/json"
+        original-url: github.com/holomush/holomush
+      dekmaterialnolog:
+        type: module
+        description: "INV-27: dek.Material MUST NOT be passed to log"
         original-url: github.com/holomush/holomush
       dekmaterialnoproto:
         type: module
