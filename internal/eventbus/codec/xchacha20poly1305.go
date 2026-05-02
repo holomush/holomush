@@ -4,9 +4,10 @@
 // Package codec — xchacha20poly1305-v1 implementation.
 //
 // Wire layout: nonce || ciphertext || tag
-//   nonce      : 24 bytes (XChaCha20-Poly1305 NonceSizeX)
-//   ciphertext : len(plaintext) bytes
-//   tag        : 16 bytes (Poly1305 tag, appended by Seal)
+//
+//	nonce      : 24 bytes (XChaCha20-Poly1305 NonceSizeX)
+//	ciphertext : len(plaintext) bytes
+//	tag        : 16 bytes (Poly1305 tag, appended by Seal)
 //
 // AAD is supplied via the codec interface's `aad []byte` parameter
 // (Phase 3a substrate edit). Phase 3a's emit path calls

@@ -58,7 +58,7 @@ func TestNewTypeAcceptsValidPatterns(t *testing.T) {
 		"say",
 		"scene.pose",
 		"scene.lifecycle.created",
-		"core-communication:say",  // plugin-qualified form
+		"core-communication:say", // plugin-qualified form
 		"location_state",
 	}
 	for _, s := range cases {

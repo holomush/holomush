@@ -16,9 +16,41 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/codec"
+	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/pkg/errutil"
 )
+
+// stubDEKManager is a deterministic eventbus.DEKManager fake. Every
+// GetOrCreate returns the same codec.Key — the publisher tests only care
+// about (a) that GetOrCreate is invoked when event.Sensitive=true and
+// (b) that the returned key's ID/Version are stamped onto the published
+// message via App-Dek-Ref / App-Dek-Version.
+type stubDEKManager struct{ key codec.Key }
+
+func (s stubDEKManager) GetOrCreate(_ context.Context, _ dek.ContextID, _ []dek.Participant) (codec.Key, error) {
+	return s.key, nil
+}
+
+// newStubDEKManagerWithKey builds a stubDEKManager returning k from
+// every GetOrCreate. The *testing.T parameter is accepted for future
+// expansion (e.g., per-test cleanup hooks) and to match the pattern of
+// other test factories in this file.
+func newStubDEKManagerWithKey(_ *testing.T, k codec.Key) eventbus.DEKManager {
+	return stubDEKManager{key: k}
+}
+
+// testKey32Bytes returns a deterministic 32-byte key suitable for the
+// xchacha20poly1305-v1 codec. Deterministic so test failures are
+// reproducible from the test name alone.
+func testKey32Bytes(t *testing.T) []byte {
+	t.Helper()
+	b := make([]byte, 32)
+	for i := range b {
+		b[i] = byte(i)
+	}
+	return b
+}
 
 // stubKeySelector is a codec.KeySelector whose Encrypt/Decrypt behaviour is
 // controlled per-test. Used to exercise each Publisher branch that depends on
@@ -422,4 +454,51 @@ func TestHeaderConstantsIncludeDekRefAndDekVersion(t *testing.T) {
 	if eventbus.HeaderDekVersion != "App-Dek-Version" {
 		t.Fatalf("HeaderDekVersion = %q, want %q", eventbus.HeaderDekVersion, "App-Dek-Version")
 	}
+}
+
+// TestPublisherWithoutDEKManagerRejectsSensitiveEvent guards the fence:
+// a sensitive event MUST NOT publish via the legacy identity/selector path
+// when no DEK manager is wired. The publisher returns
+// EVENTBUS_SENSITIVE_EVENT_NO_DEK_MANAGER instead of silently treating
+// the payload as plaintext.
+func TestPublisherWithoutDEKManagerRejectsSensitiveEvent(t *testing.T) {
+	embedded := eventbustest.New(t)
+	pub := embedded.Bus.Publisher() // no WithDEKManager
+
+	ev := goodEvent("events.main.scene.01HXXXSCENEID000000000")
+	ev.Sensitive = true
+
+	err := pub.Publish(context.Background(), ev)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVENTBUS_SENSITIVE_EVENT_NO_DEK_MANAGER")
+}
+
+// TestPublisherWithDEKManagerStampsCryptoHeadersOnSensitiveEvent asserts
+// that when a DEK manager is wired and event.Sensitive=true, the publisher
+// (a) routes encryption through xchacha20poly1305-v1, and (b) stamps both
+// App-Dek-Ref and App-Dek-Version headers from the codec.Key returned by
+// the DEK manager. These headers feed events_audit's dek_ref/dek_version
+// columns; missing or wrong values silently strand audit rows.
+func TestPublisherWithDEKManagerStampsCryptoHeadersOnSensitiveEvent(t *testing.T) {
+	mgr := newStubDEKManagerWithKey(t, codec.Key{
+		ID:      42,
+		Version: 3,
+		Bytes:   testKey32Bytes(t),
+	})
+
+	embedded := eventbustest.New(t)
+	pub := embedded.Bus.Publisher(eventbus.WithDEKManager(mgr))
+
+	subject := eventbus.Subject("events.main.scene.01HXXXSCENEID000000000")
+	ev := goodEvent(subject)
+	ev.Sensitive = true
+
+	require.NoError(t, pub.Publish(context.Background(), ev))
+	embedded.AwaitStreamLastSeq(t, 1, 0)
+
+	msgs := embedded.RawMessagesOnSubject(t, string(subject), 1, 0)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, "xchacha20poly1305-v1", msgs[0].Header.Get(eventbus.HeaderCodec))
+	assert.Equal(t, "42", msgs[0].Header.Get(eventbus.HeaderDekRef))
+	assert.Equal(t, "3", msgs[0].Header.Get(eventbus.HeaderDekVersion))
 }

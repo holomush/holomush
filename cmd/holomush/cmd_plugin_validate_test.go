@@ -15,11 +15,11 @@ import (
 
 func TestPluginValidateManifestScenarios(t *testing.T) {
 	tests := []struct {
-		name             string
-		manifestYAML     string
-		pathOverride     string // when set, skip writing a temp manifest
-		wantSuccess      bool
-		wantOutContains  []string
+		name               string
+		manifestYAML       string
+		pathOverride       string // when set, skip writing a temp manifest
+		wantSuccess        bool
+		wantOutContains    []string
 		wantOutContainsAny []string // succeeds if any of these substrings is present
 	}{
 		{

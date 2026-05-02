@@ -601,7 +601,7 @@ func (s *captureSubscribeStream) Send(resp *corev1.SubscribeResponse) error {
 	return nil
 }
 
-func (s *captureSubscribeStream) Context() context.Context     { return s.ctx }
+func (s *captureSubscribeStream) Context() context.Context       { return s.ctx }
 func (s *captureSubscribeStream) SetHeader(_ metadata.MD) error  { return nil }
 func (s *captureSubscribeStream) SendHeader(_ metadata.MD) error { return nil }
 func (s *captureSubscribeStream) SetTrailer(_ metadata.MD)       {}
