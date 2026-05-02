@@ -116,8 +116,10 @@ def _json_get(
 
 
 def _mask(value: str) -> str:
-    """Return a fixed-length mask that reveals nothing of the value."""
-    return "****"
+    """Return a mask that confirms approximate length without leaking content."""
+    if len(value) <= 8:
+        return "*" * len(value)
+    return f"*{len(value) - 2}*"
 
 
 # ---------------------------------------------------------------------------

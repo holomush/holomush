@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  protobufjs: 7.5.5
+
 importers:
 
   .:
@@ -43,8 +46,8 @@ importers:
         version: 3.2.2(tailwind-merge@3.5.0)(tailwindcss@4.2.2)
     devDependencies:
       '@bufbuild/protoc-gen-es':
-        specifier: 2.11.0
-        version: 2.11.0(@bufbuild/protobuf@2.12.0)
+        specifier: 2.12.0
+        version: 2.12.0(@bufbuild/protobuf@2.12.0)
       '@internationalized/date':
         specifier: 3.12.1
         version: 3.12.1
@@ -148,24 +151,21 @@ packages:
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
     hasBin: true
 
-  '@bufbuild/protobuf@2.11.0':
-    resolution: {integrity: sha512-sBXGT13cpmPR5BMgHE6UEEfEaShh5Ror6rfN3yEK5si7QVrtZg8LEPQb0VVhiLRUslD2yLnXtnRzG035J/mZXQ==}
-
   '@bufbuild/protobuf@2.12.0':
     resolution: {integrity: sha512-B/XlCaFIP8LOwzo+bz5uFzATYokcwCKQcghqnlfwSmM5eX/qTkvDBnDPs+gXtX/RyjxJ4DRikECcPJbyALA8FA==}
 
-  '@bufbuild/protoc-gen-es@2.11.0':
-    resolution: {integrity: sha512-VzQuwEQDXipbZ1soWUuAWm1Z0C3B/IDWGeysnbX6ogJ6As91C2mdvAND/ekQ4YIWgen4d5nqLfIBOWLqCCjYUA==}
+  '@bufbuild/protoc-gen-es@2.12.0':
+    resolution: {integrity: sha512-d9htF6jEkSwPbp9d/vSmZOBF7eeG18AvTMKmVg4I23afnrQOxL2w3WOXa9TaufMCyu24QakEUb4vux8apI5e7A==}
     engines: {node: '>=20'}
     hasBin: true
     peerDependencies:
-      '@bufbuild/protobuf': 2.11.0
+      '@bufbuild/protobuf': 2.12.0
     peerDependenciesMeta:
       '@bufbuild/protobuf':
         optional: true
 
-  '@bufbuild/protoplugin@2.11.0':
-    resolution: {integrity: sha512-lyZVNFUHArIOt4W0+dwYBe5GBwbKzbOy8ObaloEqsw9Mmiwv2O48TwddDoHN4itylC+BaEGqFdI1W8WQt2vWJQ==}
+  '@bufbuild/protoplugin@2.12.0':
+    resolution: {integrity: sha512-ORlDITp8AFUXzIhLRoMCG+ud+D3MPKWb5HQXBoskMMnjeyEjE1H1qLonVNPyOr8lkx3xSfYUo8a0dvOZJVAzow==}
 
   '@connectrpc/connect-web@2.1.1':
     resolution: {integrity: sha512-J8317Q2MaFRCT1jzVR1o06bZhDIBmU0UAzWx6xOIXzOq8+k71/+k7MUF7AwcBUX+34WIvbm5syRgC5HXQA8fOg==}
@@ -1293,8 +1293,8 @@ packages:
     resolution: {integrity: sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==}
     engines: {node: '>=0.10.0'}
 
-  protobufjs@7.5.6:
-    resolution: {integrity: sha512-M71sTMB146U3u0di3yup8iM+zv8yPRNQVr1KK4tyBitl3qFvEGucq/rGDRShD2rsJhtN02RJaJ7j5X5hmy8SJg==}
+  protobufjs@7.5.5:
+    resolution: {integrity: sha512-3wY1AxV+VBNW8Yypfd1yQY9pXnqTAN+KwQxL8iYm3/BjKYMNg4i0owhEe26PWDOMaIrzeeF98Lqd5NGz4omiIg==}
     engines: {node: '>=12.0.0'}
 
   punycode@2.3.1:
@@ -1626,21 +1626,19 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
-  '@bufbuild/protobuf@2.11.0': {}
-
   '@bufbuild/protobuf@2.12.0': {}
 
-  '@bufbuild/protoc-gen-es@2.11.0(@bufbuild/protobuf@2.12.0)':
+  '@bufbuild/protoc-gen-es@2.12.0(@bufbuild/protobuf@2.12.0)':
     dependencies:
-      '@bufbuild/protoplugin': 2.11.0
+      '@bufbuild/protoplugin': 2.12.0
     optionalDependencies:
       '@bufbuild/protobuf': 2.12.0
     transitivePeerDependencies:
       - supports-color
 
-  '@bufbuild/protoplugin@2.11.0':
+  '@bufbuild/protoplugin@2.12.0':
     dependencies:
-      '@bufbuild/protobuf': 2.11.0
+      '@bufbuild/protobuf': 2.12.0
       '@typescript/vfs': 1.6.4(typescript@5.4.5)
       typescript: 5.4.5
     transitivePeerDependencies:
@@ -1861,7 +1859,7 @@ snapshots:
       '@opentelemetry/sdk-logs': 0.214.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-metrics': 2.6.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 2.6.1(@opentelemetry/api@1.9.1)
-      protobufjs: 7.5.6
+      protobufjs: 7.5.5
 
   '@opentelemetry/resources@2.6.1(@opentelemetry/api@1.9.1)':
     dependencies:
@@ -2580,7 +2578,7 @@ snapshots:
     dependencies:
       xtend: 4.0.2
 
-  protobufjs@7.5.6:
+  protobufjs@7.5.5:
     dependencies:
       '@protobufjs/aspromise': 1.1.2
       '@protobufjs/base64': 1.1.2

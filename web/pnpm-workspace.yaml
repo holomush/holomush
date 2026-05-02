@@ -8,6 +8,9 @@
 # Vite, protobufjs is consumed by @bufbuild/protoc-gen-es. See
 # https://github.com/pnpm/pnpm/releases/tag/v11.0.0 for the migration
 # notes.
+overrides:
+  protobufjs: 7.5.5
+
 allowBuilds:
   esbuild: true
   protobufjs: true

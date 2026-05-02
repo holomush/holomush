@@ -47,9 +47,12 @@ def _make_secrets(**kwargs: Any) -> bss.Secrets:
 # ---------------------------------------------------------------------------
 
 
-def test_mask_returns_fixed_length_mask_for_all_values():
-    assert bss._mask("abcdefghijklmnop") == "****"
-    assert bss._mask("abc") == "****"
+def test_mask_returns_length_hint_for_long_values():
+    assert bss._mask("abcdefghijklmnop") == "*14*"
+
+
+def test_mask_obscures_short_values_completely():
+    assert bss._mask("abc") == "***"
 
 
 # ---------------------------------------------------------------------------
