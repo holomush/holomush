@@ -161,7 +161,7 @@ func NewAccessRequest(subject, action, resource string, attrs map[string]any) (A
 	if len(attrs) > 0 {
 		clonedAttrs = make(map[string]any, len(attrs))
 		for k, v := range attrs {
-			clonedAttrs[k] = v
+			clonedAttrs[k] = cloneAttrValue(v)
 		}
 	}
 	return AccessRequest{
@@ -170,6 +170,35 @@ func NewAccessRequest(subject, action, resource string, attrs map[string]any) (A
 		Resource:   resource,
 		Attributes: clonedAttrs,
 	}, nil
+}
+
+// cloneAttrValue returns a deep copy of mutable attribute value types so a
+// caller cannot mutate the underlying storage after NewAccessRequest returns.
+// Scalar types (string, int family, bool, nil) are immutable in Go and pass
+// through unchanged. Slice and map types are copied. Unknown types are
+// returned as-is — callers passing custom mutable types are responsible for
+// ensuring values are safe to share.
+func cloneAttrValue(v any) any {
+	switch tv := v.(type) {
+	case []string:
+		cp := make([]string, len(tv))
+		copy(cp, tv)
+		return cp
+	case []any:
+		cp := make([]any, len(tv))
+		for i, e := range tv {
+			cp[i] = cloneAttrValue(e)
+		}
+		return cp
+	case map[string]any:
+		cp := make(map[string]any, len(tv))
+		for k, e := range tv {
+			cp[k] = cloneAttrValue(e)
+		}
+		return cp
+	default:
+		return v
+	}
 }
 
 // Decision is the result of evaluating an access request against the policy engine.

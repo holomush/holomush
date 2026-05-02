@@ -273,6 +273,42 @@ func TestNewAccessRequestAcceptsCallerAttributes(t *testing.T) {
 		"AccessRequest.Attributes must be a clone, not a reference to the caller's map")
 }
 
+func TestNewAccessRequestDeepClonesMutableAttributeValues(t *testing.T) {
+	// CodeRabbit round 3: a shallow map clone is not enough — values that
+	// are themselves mutable (slices, nested maps) must be deep-copied so
+	// post-construction mutation by the caller cannot reach the stored
+	// AccessRequest.
+	tags := []string{"alpha", "beta"}
+	nested := map[string]any{"k": "v"}
+	attrs := map[string]any{
+		"tags":  tags,
+		"meta":  nested,
+		"items": []any{1, "two", []string{"three"}},
+	}
+	req, err := NewAccessRequest("plugin:mod-filter", "decrypt", "dek:dm:01HABC", attrs)
+	require.NoError(t, err)
+
+	// Mutate the caller's slice + map; the stored AccessRequest must be unaffected.
+	tags[0] = "MUTATED"
+	nested["k"] = "MUTATED"
+	attrs["items"].([]any)[0] = "MUTATED"
+
+	gotTags, ok := req.Attributes["tags"].([]string)
+	require.True(t, ok, "tags attribute should be []string")
+	assert.Equal(t, []string{"alpha", "beta"}, gotTags,
+		"AccessRequest.Attributes []string values must be deep-cloned")
+
+	gotMeta, ok := req.Attributes["meta"].(map[string]any)
+	require.True(t, ok, "meta attribute should be map[string]any")
+	assert.Equal(t, "v", gotMeta["k"],
+		"AccessRequest.Attributes nested map values must be deep-cloned")
+
+	gotItems, ok := req.Attributes["items"].([]any)
+	require.True(t, ok, "items attribute should be []any")
+	assert.Equal(t, 1, gotItems[0],
+		"AccessRequest.Attributes []any elements must be deep-cloned")
+}
+
 func TestNewAccessRequestRejectsReservedNameKey(t *testing.T) {
 	// "name" is reserved (resolver writes req.Action verb into bags.Action["name"]).
 	// Caller-supplied "name" would silently overwrite the resolver value.
