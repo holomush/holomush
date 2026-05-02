@@ -222,12 +222,18 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		return oops.Code("CHARACTER_SERVICE_FAILED").Wrap(charErr)
 	}
 
-	// 5. Create guest service for gRPC-based guest login (web client).
+	// 5. Create binding repository and transactor for atomic character + binding creation.
+	bindingRepo := worldpostgres.NewBindingRepository(pool)
+	transactor := worldpostgres.NewTransactor(pool)
+
+	// 5b. Create guest service for gRPC-based guest login (web client).
 	guestService, guestSvcErr := auth.NewGuestService(
 		guestAuth,
 		authPlayerRepo,
 		authCharRepo,
 		authPlayerSessionRepo,
+		transactor,
+		bindingRepo,
 	)
 	if guestSvcErr != nil {
 		return oops.Code("GUEST_SERVICE_FAILED").Wrap(guestSvcErr)
@@ -309,6 +315,8 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 			}
 		}),
 		holoGRPC.WithGuestService(guestService),
+		holoGRPC.WithTransactor(transactor),
+		holoGRPC.WithBindingRepository(bindingRepo),
 		holoGRPC.WithStreamContributor(pluginManager),
 		holoGRPC.WithAccessEngine(policyEngine),
 		holoGRPC.WithSubscriber(subscriber),

@@ -67,6 +67,18 @@ type ResetServiceProvider interface {
 	ResetPassword(ctx context.Context, token, newPassword string) error
 }
 
+// Transactor begins a database transaction and calls fn with a Tx-scoped context.
+// Commit on nil return, rollback on non-nil return.
+type Transactor interface {
+	InTransaction(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
+// BindingCreator creates a new active player↔character binding.
+// Returns the new binding ID.
+type BindingCreator interface {
+	Create(ctx context.Context, playerID, characterID, reason string) (string, error)
+}
+
 // WithAuthService sets the auth service for two-phase login.
 func WithAuthService(svc AuthServiceProvider) CoreServerOption {
 	return func(s *CoreServer) {
@@ -113,6 +125,20 @@ func WithCharacterRepo(repo auth.CharacterRepository) CoreServerOption {
 func WithGuestService(svc *auth.GuestService) CoreServerOption {
 	return func(s *CoreServer) {
 		s.guestService = svc
+	}
+}
+
+// WithTransactor sets the database transactor for atomic character + binding creation.
+func WithTransactor(t Transactor) CoreServerOption {
+	return func(s *CoreServer) {
+		s.transactor = t
+	}
+}
+
+// WithBindingRepository sets the binding repository for player↔character binding creation.
+func WithBindingRepository(b BindingCreator) CoreServerOption {
+	return func(s *CoreServer) {
+		s.bindingCreator = b
 	}
 }
 
@@ -386,7 +412,8 @@ func (s *CoreServer) CreateCharacter(ctx context.Context, req *corev1.CreateChar
 		}, nil
 	}
 
-	char, createErr := s.characterService.Create(ctx, playerSession.PlayerID, req.CharacterName)
+	var char *world.Character
+	createErr := s.createCharacterAtomic(ctx, playerSession.PlayerID, req.CharacterName, &char)
 	if createErr != nil {
 		// SECURITY: log full error server-side; return sanitized message only.
 		slog.WarnContext(ctx, "grpc: CreateCharacter failed",
@@ -404,6 +431,29 @@ func (s *CoreServer) CreateCharacter(ctx context.Context, req *corev1.CreateChar
 		CharacterId:   char.ID.String(),
 		CharacterName: char.Name,
 	}, nil
+}
+
+// createCharacterAtomic creates a character and its binding in a single transaction
+// when both transactor and bindingCreator are configured. Falls back to plain character
+// creation (no binding) when either is nil, preserving backward compatibility.
+func (s *CoreServer) createCharacterAtomic(ctx context.Context, playerID ulid.ULID, name string, out **world.Character) error {
+	if s.transactor == nil || s.bindingCreator == nil {
+		// Fall back to non-transactional character creation (Phase 3b not fully wired).
+		var err error
+		*out, err = s.characterService.Create(ctx, playerID, name)
+		return oops.Wrap(err)
+	}
+	return oops.Wrap(s.transactor.InTransaction(ctx, func(txCtx context.Context) error {
+		var err error
+		*out, err = s.characterService.Create(txCtx, playerID, name)
+		if err != nil {
+			return oops.Code("CHARACTER_CREATE_FAILED").Wrap(err)
+		}
+		if _, bindErr := s.bindingCreator.Create(txCtx, playerID.String(), (*out).ID.String(), "initial_bind"); bindErr != nil {
+			return oops.Code("CHARACTER_CREATE_BINDING_FAILED").Wrap(bindErr)
+		}
+		return nil
+	}))
 }
 
 // ListCharacters returns characters for an authenticated player.

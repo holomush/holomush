@@ -128,7 +128,9 @@ func setupTestEnv() (*testEnv, error) {
 	// recorded on testEnv so specs can create the FK target row in BeforeEach.
 	guestStartLocationID := ulid.Make()
 	guestAuth := telnet.NewGuestAuthenticator(naming.NewGemstoneElementTheme(), guestStartLocationID)
-	guestService, err := auth.NewGuestService(guestAuth, playerRepo, charRepo, playerSessionStore)
+	guestBindingRepo := worldpg.NewBindingRepository(pool)
+	guestTransactor := worldpg.NewTransactor(pool)
+	guestService, err := auth.NewGuestService(guestAuth, playerRepo, charRepo, playerSessionStore, guestTransactor, guestBindingRepo)
 	if err != nil {
 		eventStore.Close()
 		return nil, oops.Wrap(err)
@@ -188,13 +190,15 @@ func (e *testEnv) cleanup() {
 }
 
 // cleanupTestData removes all test data between specs in FK-safe order.
-// session_connections → player_sessions → sessions → characters → locations → players
+// session_connections → player_sessions → sessions → player_character_bindings → characters → locations → players
 func cleanupTestData(ctx context.Context, pool *pgxpool.Pool) {
 	_, err := pool.Exec(ctx, "DELETE FROM session_connections")
 	Expect(err).NotTo(HaveOccurred())
 	_, err = pool.Exec(ctx, "DELETE FROM player_sessions")
 	Expect(err).NotTo(HaveOccurred())
 	_, err = pool.Exec(ctx, "DELETE FROM sessions")
+	Expect(err).NotTo(HaveOccurred())
+	_, err = pool.Exec(ctx, "DELETE FROM player_character_bindings")
 	Expect(err).NotTo(HaveOccurred())
 	_, err = pool.Exec(ctx, "DELETE FROM characters")
 	Expect(err).NotTo(HaveOccurred())

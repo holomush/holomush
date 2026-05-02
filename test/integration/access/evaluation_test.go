@@ -23,7 +23,9 @@ var _ = Describe("ABAC Full Evaluation Path (Canary)", func() {
 	It("exercises the complete evaluation path with seed policies", func() {
 		ctx := context.Background()
 
-		_, err := env.pool.Exec(ctx, "DELETE FROM characters")
+		_, err := env.pool.Exec(ctx, "DELETE FROM player_character_bindings")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = env.pool.Exec(ctx, "DELETE FROM characters")
 		Expect(err).NotTo(HaveOccurred())
 		_, err = env.pool.Exec(ctx, "DELETE FROM players")
 		Expect(err).NotTo(HaveOccurred())

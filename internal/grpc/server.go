@@ -139,6 +139,10 @@ type CoreServer struct {
 	charRepo          auth.CharacterRepository
 	guestService      *auth.GuestService
 
+	// Phase 3b: transactor and binding creator for atomic character + binding INSERTs.
+	transactor     Transactor
+	bindingCreator BindingCreator
+
 	// Plugin stream contribution and mid-session stream control.
 	streamContributor SessionStreamContributor
 	streamRegistry    *SessionStreamRegistry

@@ -35,6 +35,18 @@ type GuestCharacterRepository interface {
 	ExistsByName(ctx context.Context, name string) (bool, error)
 }
 
+// GuestTransactor begins a database transaction and calls fn with a
+// Tx-scoped context. Commit on success, rollback on error.
+type GuestTransactor interface {
+	InTransaction(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
+// GuestBindingCreator creates a new active player↔character binding.
+// Returns the new binding ID.
+type GuestBindingCreator interface {
+	Create(ctx context.Context, playerID, characterID, reason string) (string, error)
+}
+
 // GuestResult holds everything created during guest account setup.
 type GuestResult struct {
 	Player        *Player
@@ -45,10 +57,12 @@ type GuestResult struct {
 
 // GuestService creates ephemeral guest players.
 type GuestService struct {
-	namer    GuestNamer
-	players  PlayerRepository
-	chars    GuestCharacterRepository
-	sessions PlayerSessionRepository
+	namer      GuestNamer
+	players    PlayerRepository
+	chars      GuestCharacterRepository
+	sessions   PlayerSessionRepository
+	transactor GuestTransactor
+	bindings   GuestBindingCreator
 }
 
 // NewGuestService creates a new GuestService.
@@ -58,6 +72,8 @@ func NewGuestService(
 	players PlayerRepository,
 	chars GuestCharacterRepository,
 	sessions PlayerSessionRepository,
+	transactor GuestTransactor,
+	bindings GuestBindingCreator,
 ) (*GuestService, error) {
 	if namer == nil {
 		return nil, oops.Errorf("guest namer is required")
@@ -71,15 +87,25 @@ func NewGuestService(
 	if sessions == nil {
 		return nil, oops.Errorf("player sessions repository is required")
 	}
+	if transactor == nil {
+		return nil, oops.Errorf("transactor is required")
+	}
+	if bindings == nil {
+		return nil, oops.Errorf("binding creator is required")
+	}
 	return &GuestService{
-		namer:    namer,
-		players:  players,
-		chars:    chars,
-		sessions: sessions,
+		namer:      namer,
+		players:    players,
+		chars:      chars,
+		sessions:   sessions,
+		transactor: transactor,
+		bindings:   bindings,
 	}, nil
 }
 
 // CreateGuest creates an ephemeral guest player with a character and session.
+// Player, character, and binding creation are atomic (single transaction).
+// Session creation is outside the transaction (separate concern).
 func (s *GuestService) CreateGuest(ctx context.Context) (*GuestResult, error) {
 	// Generate a unique name not already in the database.
 	name, err := s.acquireUniqueName(ctx)
@@ -94,11 +120,6 @@ func (s *GuestService) CreateGuest(ctx context.Context) (*GuestResult, error) {
 		return nil, oops.Code("GUEST_CREATE_FAILED").With("name", name).Wrap(err)
 	}
 
-	if err = s.players.Create(ctx, player); err != nil {
-		s.namer.ReleaseGuest(name)
-		return nil, oops.Code("GUEST_CREATE_FAILED").With("player_id", player.ID.String()).Wrap(err)
-	}
-
 	startLoc := s.namer.StartLocation()
 	// Guest names from the namer are underscore-separated (e.g. "Sapphire_Diamond").
 	// world.Character names must be letters and spaces only, so convert for display.
@@ -110,17 +131,26 @@ func (s *GuestService) CreateGuest(ctx context.Context) (*GuestResult, error) {
 	}
 	char.LocationID = &startLoc
 
-	if err = s.chars.Create(ctx, char); err != nil {
-		s.namer.ReleaseGuest(name)
-		// Best-effort cleanup: delete the orphaned player row (CASCADE deletes player_sessions).
-		if delErr := s.players.Delete(ctx, player.ID); delErr != nil {
-			slog.Warn("guest_service: failed to clean up orphaned guest player",
-				"player_id", player.ID.String(), "error", delErr)
+	// Atomically create player, character, and binding in a single transaction.
+	// If any step fails, all three are rolled back — no orphan rows.
+	if txErr := s.transactor.InTransaction(ctx, func(txCtx context.Context) error {
+		if pErr := s.players.Create(txCtx, player); pErr != nil {
+			return oops.Code("GUEST_CREATE_FAILED").With("player_id", player.ID.String()).Wrap(pErr)
 		}
-		return nil, oops.Code("GUEST_CREATE_FAILED").With("character_id", char.ID.String()).Wrap(err)
+		if cErr := s.chars.Create(txCtx, char); cErr != nil {
+			return oops.Code("GUEST_CREATE_FAILED").With("character_id", char.ID.String()).Wrap(cErr)
+		}
+		if _, bErr := s.bindings.Create(txCtx, player.ID.String(), char.ID.String(), "initial_bind_guest"); bErr != nil {
+			return oops.Code("CHARACTER_CREATE_BINDING_FAILED").Wrap(bErr)
+		}
+		return nil
+	}); txErr != nil {
+		s.namer.ReleaseGuest(name)
+		return nil, oops.Code("GUEST_CREATE_FAILED").With("name", name).Wrap(txErr)
 	}
 
 	// Best-effort: update the player's default character.
+	// This is non-critical — guests can still log in even if this update fails.
 	player.DefaultCharacterID = &char.ID
 	if err = s.players.Update(ctx, player); err != nil {
 		slog.Warn("guest_service: failed to set default character on guest player",

@@ -43,8 +43,9 @@ func (r *CharacterRepository) Get(ctx context.Context, id ulid.ULID) (*world.Cha
 
 // Create persists a new character.
 // Callers must validate the character before calling this method.
+// Uses execerFromCtx so callers may compose this within a transaction.
 func (r *CharacterRepository) Create(ctx context.Context, char *world.Character) error {
-	_, err := r.pool.Exec(ctx, `
+	_, err := execerFromCtx(ctx, r.pool).Exec(ctx, `
 		INSERT INTO characters (id, player_id, name, description, location_id, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`, char.ID.String(), char.PlayerID.String(), char.Name, char.Description,
