@@ -186,9 +186,9 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 			Wrap(ErrPayloadTooLarge)
 	}
 
-	// Proto-marshal the envelope. The payload inside is raw (plugin) bytes;
-	// the codec below operates on the serialized envelope so subscribers can
-	// decrypt the whole unit.
+	// Build the envelope with cleartext fields. event.Payload stays as the
+	// raw (plugin) bytes for now; it is replaced below with ciphertext after
+	// codec selection and key resolution.
 	envelope := &eventbusv1.Event{
 		Id:        event.ID.Bytes(),
 		Subject:   string(event.Subject),
@@ -197,10 +197,6 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 		Actor:     ActorToProto(event.Actor),
 		Payload:   event.Payload,
 		Rendering: RenderingToProto(event.Rendering),
-	}
-	plainBytes, err := proto.Marshal(envelope)
-	if err != nil {
-		return oops.Code("EVENTBUS_ENVELOPE_MARSHAL_FAILED").Wrap(err)
 	}
 
 	var (
@@ -268,8 +264,10 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 	}
 
 	// AAD binds (codec, key id/version, envelope identity) into the AEAD
-	// authentication tag for sensitive events. Non-sensitive events keep
-	// the identity/selector path which passes nil aad to Encode.
+	// authentication tag for sensitive events. Built BEFORE encrypt because
+	// aad.Build reads only cleartext envelope fields (id, subject, type,
+	// timestamp, actor) — it never reads event.Payload, so the raw payload
+	// still being in envelope.Payload at this point is correct.
 	var aadBytes []byte
 	if event.Sensitive {
 		ab, aErr := aad.Build(envelope, string(codecName), uint64(key.ID), key.Version)
@@ -279,16 +277,29 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 		aadBytes = ab
 	}
 
-	encoded, err := c.Encode(ctx, plainBytes, key, aadBytes)
+	// DECISION 0: encrypt ONLY event.Payload (the bytes), not the marshaled
+	// envelope. For identity codec this is a no-op (IdentityCodec.Encode
+	// returns input unchanged). For sensitive codec, envelope.Payload is
+	// replaced with ciphertext before marshaling.
+	ciphertext, err := c.Encode(ctx, event.Payload, key, aadBytes)
 	if err != nil {
 		return oops.Code("EVENTBUS_CODEC_ENCODE_FAILED").
 			With("codec", string(codecName)).
 			Wrap(err)
 	}
+	envelope.Payload = ciphertext
+
+	// Marshal the envelope with cleartext metadata fields and the
+	// (possibly encrypted) payload field. These marshaled bytes go on
+	// the wire as msg.Data so the proto structure is always visible.
+	plainBytes, err := proto.Marshal(envelope)
+	if err != nil {
+		return oops.Code("EVENTBUS_ENVELOPE_MARSHAL_FAILED").Wrap(err)
+	}
 
 	msg := &nats.Msg{
 		Subject: string(event.Subject),
-		Data:    encoded,
+		Data:    plainBytes,
 		Header:  nats.Header{},
 	}
 	msg.Header.Set(HeaderMsgID, event.ID.String())

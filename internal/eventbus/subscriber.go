@@ -392,13 +392,20 @@ func decodeDelivery(ctx context.Context, msg jetstream.Msg, selector codec.KeySe
 			With("codec", codecNameStr).Wrap(err)
 	}
 
-	// Identity codec does not need a key. Non-identity codecs ask the
-	// selector for the decrypt key. Key-id-on-wire is a v2 concern; Phase
-	// A deployments all use identity.
-	var key codec.Key
+	// DECISION 0: proto-unmarshal FIRST. msg.Data is the marshaled
+	// envelope (cleartext fields + maybe-ciphertext payload field).
+	var envelope eventbusv1.Event
+	if unmarshalErr := proto.Unmarshal(msg.Data(), &envelope); unmarshalErr != nil {
+		return Event{}, oops.Code("EVENTBUS_SUBSCRIBE_UNMARSHAL_FAILED").Wrap(unmarshalErr)
+	}
+
+	// For identity codec, envelope.Payload IS the plaintext — no decode.
+	// For sensitive codecs, T9 will add AuthGuard.Check + AAD reconstruct
+	// + decrypt-or-stamp-metadata_only here. T1 keeps the existing
+	// Phase 3a "non-identity gets a passthrough decode with nil AAD"
+	// behavior so that tests remain green; that gets replaced in T9.
 	if codec.Name(codecNameStr) != codec.NameIdentity {
-		// Placeholder: KeyID 0 for now; when codecs grow a real KeyID
-		// stamped header we'll thread it through here.
+		var key codec.Key
 		if selector != nil {
 			k, kerr := selector.SelectForDecrypt(ctx, codec.Name(codecNameStr), 0)
 			if kerr != nil {
@@ -407,18 +414,14 @@ func decodeDelivery(ctx context.Context, msg jetstream.Msg, selector codec.KeySe
 			}
 			key = k
 		}
+		plain, decErr := c.Decode(ctx, envelope.Payload, key, nil)
+		if decErr != nil {
+			return Event{}, oops.Code("EVENTBUS_SUBSCRIBE_DECODE_FAILED").
+				With("codec", codecNameStr).Wrap(decErr)
+		}
+		envelope.Payload = plain
 	}
 
-	plain, err := c.Decode(ctx, msg.Data(), key, nil)
-	if err != nil {
-		return Event{}, oops.Code("EVENTBUS_SUBSCRIBE_DECODE_FAILED").
-			With("codec", codecNameStr).Wrap(err)
-	}
-
-	var envelope eventbusv1.Event
-	if unmarshalErr := proto.Unmarshal(plain, &envelope); unmarshalErr != nil {
-		return Event{}, oops.Code("EVENTBUS_SUBSCRIBE_UNMARSHAL_FAILED").Wrap(unmarshalErr)
-	}
 	ev := Event{
 		ID:        id,
 		Subject:   Subject(envelope.GetSubject()),

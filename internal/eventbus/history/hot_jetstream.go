@@ -367,35 +367,37 @@ func decodeJetStreamMessage(ctx context.Context, msg jetstream.Msg, selector cod
 		return eventbus.Event{}, oops.Code("EVENTBUS_HISTORY_UNKNOWN_CODEC").
 			With("codec", codecName).Wrap(err)
 	}
-	// Phase 3a: hot-tier history reader does NOT yet decrypt sensitive
-	// (xchacha20poly1305-v1) events. AuthGuard + decrypt-on-fanout with
-	// AAD reconstruction land in Phase 3b. If a sensitive event reaches
-	// this path under Crypto.Enabled=true (e.g., staging soak), fail
-	// loudly with a typed error instead of attempting Decode with nil
-	// AAD — which would surface as a generic AEAD tag-check failure.
-	if codec.Name(codecName) == codec.NameXChaCha20v1 {
-		return eventbus.Event{}, oops.Code("EVENTBUS_HISTORY_SENSITIVE_NOT_SUPPORTED_PHASE3A").
-			With("codec", codecName).
-			Errorf("hot-tier history read for codec=%q is not supported in Phase 3a; AuthGuard + decrypt-on-fanout land in Phase 3b", codecName)
-	}
-	var key codec.Key
-	if codec.Name(codecName) != codec.NameIdentity && selector != nil {
-		k, kerr := selector.SelectForDecrypt(ctx, codec.Name(codecName), 0)
-		if kerr != nil {
-			return eventbus.Event{}, oops.Code("EVENTBUS_HISTORY_KEY_FETCH_FAILED").
-				With("codec", codecName).Wrap(kerr)
-		}
-		key = k
-	}
-	plain, err := c.Decode(ctx, msg.Data(), key, nil)
-	if err != nil {
-		return eventbus.Event{}, oops.Code("EVENTBUS_HISTORY_DECODE_FAILED").
-			With("codec", codecName).Wrap(err)
-	}
+
+	// DECISION 0: proto-unmarshal FIRST. msg.Data is the marshaled
+	// envelope (cleartext fields + maybe-ciphertext payload field).
 	var envelope eventbusv1.Event
-	if unmarshalErr := proto.Unmarshal(plain, &envelope); unmarshalErr != nil {
+	if unmarshalErr := proto.Unmarshal(msg.Data(), &envelope); unmarshalErr != nil {
 		return eventbus.Event{}, oops.Code("EVENTBUS_HISTORY_UNMARSHAL_FAILED").Wrap(unmarshalErr)
 	}
+
+	// For identity codec, envelope.Payload IS the plaintext — no decode.
+	// For sensitive codecs, T9 will add AuthGuard.Check + AAD reconstruct
+	// + decrypt-or-stamp-metadata_only here. T1 keeps the existing
+	// Phase 3a "non-identity gets a passthrough decode with nil AAD"
+	// behavior so that tests remain green; that gets replaced in T9.
+	if codec.Name(codecName) != codec.NameIdentity {
+		var key codec.Key
+		if selector != nil {
+			k, kerr := selector.SelectForDecrypt(ctx, codec.Name(codecName), 0)
+			if kerr != nil {
+				return eventbus.Event{}, oops.Code("EVENTBUS_HISTORY_KEY_FETCH_FAILED").
+					With("codec", codecName).Wrap(kerr)
+			}
+			key = k
+		}
+		plain, decErr := c.Decode(ctx, envelope.Payload, key, nil)
+		if decErr != nil {
+			return eventbus.Event{}, oops.Code("EVENTBUS_HISTORY_DECODE_FAILED").
+				With("codec", codecName).Wrap(decErr)
+		}
+		envelope.Payload = plain
+	}
+
 	return eventbus.Event{
 		ID:        id,
 		Subject:   eventbus.Subject(envelope.GetSubject()),
