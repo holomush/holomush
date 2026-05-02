@@ -9,10 +9,13 @@
 //
 // Implementation note: walks all *ast.Ident nodes that resolve via
 // pass.TypesInfo.Uses to an object whose package is the cursor
-// package, and emits a single diagnostic per reference. This is
-// broader than the previous ruleguard rule's per-symbol enumeration
-// (it covers any future cursor symbol automatically) but functionally
-// equivalent for the existing exported surface.
+// package, and emits one diagnostic per *ast.Ident that resolves to
+// a cursor-package object (so a composite literal like
+// `cursor.Owner{Kind: cursor.OwnerPlugin}` produces three diagnostics
+// — one per ident). This is broader than the previous ruleguard
+// rule's per-symbol enumeration (it covers any future cursor symbol
+// automatically) but functionally equivalent for the existing
+// exported surface.
 package cursorpackageinternal
 
 import (
@@ -67,9 +70,6 @@ func run(pass *analysis.Pass) (any, error) {
 			pass.Reportf(spec.Path.Pos(), "%s", message)
 		}
 	})
-	// Track positions we've already reported to avoid duplicate diagnostics
-	// when the same SelectorExpr is visited at multiple ast levels.
-	reported := map[ast.Node]struct{}{}
 	insp.Preorder([]ast.Node{(*ast.Ident)(nil)}, func(n ast.Node) {
 		ident := n.(*ast.Ident)
 		obj := pass.TypesInfo.Uses[ident]
@@ -82,10 +82,6 @@ func run(pass *analysis.Pass) (any, error) {
 		if obj.Pkg().Path() != cursorPkg {
 			return
 		}
-		if _, dup := reported[ident]; dup {
-			return
-		}
-		reported[ident] = struct{}{}
 		pass.Reportf(ident.Pos(), "%s", message)
 	})
 	return nil, nil

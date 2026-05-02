@@ -17,5 +17,8 @@ func TestAnalyzerFlagsCursorRefsExceptFromAllowlistedPackages(t *testing.T) {
 		"github.com/holomush/holomush/plugins/blankimport",
 		"github.com/holomush/holomush/internal/eventbus/allow",
 		"github.com/holomush/holomush/internal/grpc/allow",
+		"github.com/holomush/holomush/internal/web/allow",
+		"github.com/holomush/holomush/internal/plugin/goplugin/allow",
+		"github.com/holomush/holomush/internal/plugin/hostfunc/allow",
 	)
 }
