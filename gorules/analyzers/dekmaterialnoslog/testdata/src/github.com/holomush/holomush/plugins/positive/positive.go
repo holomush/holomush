@@ -11,6 +11,7 @@
 package positive
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
@@ -29,4 +30,12 @@ func leakViaLoggerInfo(m *dek.Material, l *slog.Logger) {
 // CodeRabbit finding on PR #3457.
 func leakViaAnyConversion(m *dek.Material) {
 	slog.Info("dek", "material", any(m)) // want `INV-27: dek.Material MUST NOT be passed to log/slog`
+}
+
+// *Context variants take a context.Context but otherwise mirror the
+// non-Context sinks. Single canonical example: slog.InfoContext. The
+// sink lookup is shared, so one call exercises the lookup for every
+// *Context / LogAttrs entry added in holomush-r3vs.
+func leakViaSlogInfoContext(ctx context.Context, m *dek.Material) {
+	slog.InfoContext(ctx, "dek", "material", m) // want `INV-27: dek.Material MUST NOT be passed to log/slog`
 }
