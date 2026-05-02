@@ -431,7 +431,7 @@ func decodeDelivery(ctx context.Context, msg jetstream.Msg, _ codec.KeySelector)
 func decodeDeliveryWithAuth(
 	ctx context.Context,
 	msg jetstream.Msg,
-	_ codec.KeySelector, // retained for API compat; see decodeDelivery
+	selector codec.KeySelector, // used in guard==nil fallback (T1/Phase 3a passthrough path)
 	identity SessionIdentity,
 	guard SessionAuthGuard,
 	dekMgr SessionDEKManager,
@@ -505,14 +505,26 @@ func decodeDeliveryWithAuth(
 		}
 		return ev, mo, nil
 	default:
-		// Guard is nil (pre-Phase 3b or test without guard): use legacy
-		// passthrough decode with nil AAD so existing tests remain green.
+		// No AuthGuard configured (pre-Phase 3b / test without guard):
+		// restore T1 Phase 3a passthrough behavior — fetch the key via the
+		// selector (if present) and decode with nil AAD. Phase 3d's flag flip
+		// wires AuthGuard in production; until then this branch preserves the
+		// pre-T9 subscriber path so Phase 3a encrypting tests remain green.
 		c, resolveErr := codec.Resolve(codecName)
 		if resolveErr != nil {
 			return Event{}, false, oops.Code("EVENTBUS_SUBSCRIBE_UNKNOWN_CODEC").
 				With("codec", codecNameStr).Wrap(resolveErr)
 		}
-		plain, decErr := c.Decode(ctx, envelope.Payload, codec.Key{}, nil)
+		var key codec.Key
+		if selector != nil {
+			k, kerr := selector.SelectForDecrypt(ctx, codecName, 0)
+			if kerr != nil {
+				return Event{}, false, oops.Code("EVENTBUS_SUBSCRIBE_KEY_FETCH_FAILED").
+					With("codec", codecNameStr).Wrap(kerr)
+			}
+			key = k
+		}
+		plain, decErr := c.Decode(ctx, envelope.Payload, key, nil)
 		if decErr != nil {
 			return Event{}, false, oops.Code("EVENTBUS_SUBSCRIBE_DECODE_FAILED").
 				With("codec", codecNameStr).Wrap(decErr)
@@ -558,28 +570,35 @@ func decodeAndAuthorize(
 ) (Event, bool, error) {
 	h := msg.Headers()
 
-	// Parse DEK headers: App-Dek-Ref and App-Dek-Version.
+	// Parse DEK headers: App-Dek-Ref and App-Dek-Version. Both headers are
+	// required for sensitive (non-identity) codec events. Absent or empty
+	// headers indicate a publisher contract violation; fail closed rather than
+	// falling back to (0, 0), which would present as an authorization miss.
 	dekRefStr := h.Get(HeaderDekRef)
 	dekVersionStr := h.Get(HeaderDekVersion)
+	if dekRefStr == "" || dekVersionStr == "" {
+		return Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_MISSING").
+			With("has_dek_ref", dekRefStr != "").
+			With("has_dek_version", dekVersionStr != "").
+			With("codec", string(codecName)).
+			Errorf("sensitive codec event missing required DEK headers")
+	}
 
 	var keyID codec.KeyID
 	var keyVersion uint32
-	if dekRefStr != "" {
-		ref, parseErr := strconv.ParseUint(dekRefStr, 10, 64)
-		if parseErr != nil {
-			return Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
-				With("header", HeaderDekRef).With("value", dekRefStr).Wrap(parseErr)
-		}
-		keyID = codec.KeyID(ref)
+	ref, parseErr := strconv.ParseUint(dekRefStr, 10, 64)
+	if parseErr != nil {
+		return Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
+			With("header", HeaderDekRef).With("value", dekRefStr).Wrap(parseErr)
 	}
-	if dekVersionStr != "" {
-		ver, parseErr := strconv.ParseUint(dekVersionStr, 10, 32)
-		if parseErr != nil {
-			return Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
-				With("header", HeaderDekVersion).With("value", dekVersionStr).Wrap(parseErr)
-		}
-		keyVersion = uint32(ver) // safe: ParseUint(bitSize=32) guarantees fits in uint32
+	keyID = codec.KeyID(ref)
+
+	ver, parseErr := strconv.ParseUint(dekVersionStr, 10, 32)
+	if parseErr != nil {
+		return Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
+			With("header", HeaderDekVersion).With("value", dekVersionStr).Wrap(parseErr)
 	}
+	keyVersion = uint32(ver) // safe: ParseUint(bitSize=32) guarantees fits in uint32
 
 	// Recover event ULID from the pre-stamped bytes (set by decodeDeliveryWithAuth).
 	var eventID ulid.ULID

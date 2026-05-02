@@ -23,6 +23,7 @@ import (
 	"github.com/holomush/holomush/internal/idgen"
 )
 
+
 const (
 	defaultCapacity  = 10_000
 	defaultThreshold = 0.5
@@ -101,6 +102,13 @@ type Emitter struct {
 
 	stopCh chan struct{}
 	wg     sync.WaitGroup
+
+	// drainCtx and drainCancel bound in-flight Publish calls to the emitter
+	// lifetime. Shutdown calls drainCancel so a blocked Publish unblocks
+	// (propagates cancellation without changing the fire-and-forget steady-state
+	// behavior per master spec §12 Q2 — Publish ctx is only cancelled on Shutdown).
+	drainCtx    context.Context    //nolint:containedctx // intentional: bounds in-flight drains
+	drainCancel context.CancelFunc
 }
 
 // NewQueuedEmitter constructs an Emitter with the given Publisher and
@@ -111,13 +119,16 @@ func NewQueuedEmitter(pub eventbus.Publisher, opts ...Option) (*Emitter, error) 
 			With("dependency", "Publisher").
 			Errorf("nil Publisher")
 	}
+	drainCtx, drainCancel := context.WithCancel(context.Background()) //nolint:gosec // G118: drainCancel is called in Shutdown; storing it in the struct is intentional lifecycle management.
 	q := &Emitter{
-		pub:       pub,
-		gameID:    defaultGameID,
-		capacity:  defaultCapacity,
-		threshold: defaultThreshold,
-		queues:    make(map[string]*pluginQueue),
-		stopCh:    make(chan struct{}),
+		pub:         pub,
+		gameID:      defaultGameID,
+		capacity:    defaultCapacity,
+		threshold:   defaultThreshold,
+		queues:      make(map[string]*pluginQueue),
+		stopCh:      make(chan struct{}),
+		drainCtx:    drainCtx,
+		drainCancel: drainCancel,
 	}
 	for _, opt := range opts {
 		opt(q)
@@ -200,8 +211,9 @@ func (q *Emitter) drain(pluginName string, pq *pluginQueue) {
 		case rec := <-pq.ch:
 			event := q.buildEvent(pluginName, rec)
 			// Best-effort: drain failures are logged/metered but never
-			// retry-block the subscriber path.
-			if err := q.pub.Publish(context.Background(), event); err != nil {
+			// retry-block the subscriber path. drainCtx is cancelled by
+			// Shutdown so an in-flight Publish unblocks when the emitter stops.
+			if err := q.pub.Publish(q.drainCtx, event); err != nil {
 				// TODO(metrics): increment authguard_audit_drain_failed_total
 				_ = err
 			}
@@ -235,6 +247,11 @@ func (q *Emitter) buildEvent(pluginName string, rec PluginDecryptRecord) eventbu
 		// TODO(metrics): increment authguard_audit_marshal_failed_total
 		payload = []byte("{}")
 	}
+	// Audit-namespace subjects per master spec §7.6 / Phase 3b grounding doc Decision 3.
+	// Intentionally NOT under events.> — the audit.> namespace is separate so
+	// §7.7's two-layer isolation (Phase 3b ABAC default-deny + Phase 3d NATS
+	// account-level deny_subscribe) can lock plugin/character principals out
+	// of audit reads while still allowing them events.> reads.
 	return eventbus.Event{
 		ID:        idgen.New(),
 		Subject:   eventbus.Subject(fmt.Sprintf("audit.%s.plugin_decrypt.%s", q.gameID, pluginName)),
@@ -248,7 +265,10 @@ func (q *Emitter) buildEvent(pluginName string, rec PluginDecryptRecord) eventbu
 
 // Shutdown signals drain goroutines to stop and waits for them with the given
 // deadline. Returns AUDIT_EMITTER_SHUTDOWN_TIMEOUT if the context expires.
+// drainCancel is called first so any in-flight Publish call unblocks
+// immediately, preventing Shutdown from hanging on a slow Publisher.
 func (q *Emitter) Shutdown(ctx context.Context) error {
+	q.drainCancel() // unblock any in-flight pub.Publish calls
 	close(q.stopCh)
 	done := make(chan struct{})
 	go func() { q.wg.Wait(); close(done) }()

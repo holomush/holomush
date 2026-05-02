@@ -99,13 +99,16 @@ const (
 	ActionUse     = "use"
 )
 
-// reservedActionKeys lists keys the resolver owns and a caller MUST NOT
+// ReservedActionKeys lists keys the resolver owns and a caller MUST NOT
 // supply via req.Attributes. Phase 3b grounding doc Decision 6 R3.
 //
 // "name": the attribute resolver writes req.Action verb into
 // bags.Action["name"] (see internal/access/policy/attribute.Resolver.Resolve).
 // Caller-supplied "name" would silently overwrite the resolver value.
-var reservedActionKeys = map[string]struct{}{
+//
+// Exported so Engine.Evaluate can apply a defense-in-depth check on
+// hand-built AccessRequest literals that bypass NewAccessRequest validation.
+var ReservedActionKeys = map[string]struct{}{
 	"name": {},
 }
 
@@ -141,17 +144,24 @@ func NewAccessRequest(subject, action, resource string, attrs map[string]any) (A
 		return AccessRequest{}, oops.In("access").With("field", "resource").Errorf("access request: resource must not be empty")
 	}
 	for k := range attrs {
-		if _, reserved := reservedActionKeys[k]; reserved {
+		if _, reserved := ReservedActionKeys[k]; reserved {
 			return AccessRequest{}, oops.Code("ACCESS_REQUEST_RESERVED_ATTRIBUTE").
 				With("key", k).
 				Errorf("caller-supplied attribute key %q is server-reserved", k)
+		}
+	}
+	var clonedAttrs map[string]any
+	if len(attrs) > 0 {
+		clonedAttrs = make(map[string]any, len(attrs))
+		for k, v := range attrs {
+			clonedAttrs[k] = v
 		}
 	}
 	return AccessRequest{
 		Subject:    subject,
 		Action:     action,
 		Resource:   resource,
-		Attributes: attrs,
+		Attributes: clonedAttrs,
 	}, nil
 }
 

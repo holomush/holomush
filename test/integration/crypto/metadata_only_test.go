@@ -124,7 +124,8 @@ func buildSubscribeHarness(t *testing.T) *subscribeHarness {
 		defer cancel()
 		_ = auditEmitter.Shutdown(shutCtx)
 	})
-	sessionAuditEmitter := guardaudit.NewSessionBridgeEmitter(auditEmitter)
+	sessionAuditEmitter, err := guardaudit.NewSessionBridgeEmitter(auditEmitter)
+	require.NoError(t, err)
 
 	sub := eventbus.NewJetStreamSubscriber(
 		bus.JS,

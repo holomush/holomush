@@ -14,6 +14,16 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 )
 
+func TestPluginManifestLookupAdapterReturnsFalseAndDoesNotPanicOnNilManager(t *testing.T) {
+	// NewPluginManifestLookup accepts nil for robustness; the nil-guard in
+	// PluginRequestsDecryption ensures fail-closed (returns false) rather than panic.
+	lookup := authguard.NewPluginManifestLookup(nil)
+	require.NotPanics(t, func() {
+		result := lookup.PluginRequestsDecryption("any-plugin", "any-event")
+		assert.False(t, result, "nil manager must return false (fail-closed)")
+	})
+}
+
 func TestPluginManifestLookupAdapterReturnsTrueForDeclaredEventType(t *testing.T) {
 	mgr, err := plugins.NewManager("", plugins.WithVerbRegistry(core.NewVerbRegistry()))
 	require.NoError(t, err)

@@ -44,7 +44,13 @@ type BindingRepository struct {
 }
 
 // NewBindingRepository creates a new BindingRepository backed by the given pool.
+// Panics if pool is nil: a nil pool is a programmer error at wiring time, not
+// a recoverable runtime condition. This matches the pattern used by sibling
+// repositories (character_repo, exit_repo, location_repo).
 func NewBindingRepository(pool *pgxpool.Pool) *BindingRepository {
+	if pool == nil {
+		panic("NewBindingRepository: pool must not be nil")
+	}
 	return &BindingRepository{pool: pool}
 }
 

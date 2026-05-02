@@ -12,6 +12,8 @@ package audit
 import (
 	"context"
 
+	"github.com/samber/oops"
+
 	"github.com/holomush/holomush/internal/eventbus"
 )
 
@@ -21,8 +23,14 @@ type SessionBridgeEmitter struct {
 }
 
 // NewSessionBridgeEmitter returns a SessionBridgeEmitter wrapping e.
-func NewSessionBridgeEmitter(e *Emitter) *SessionBridgeEmitter {
-	return &SessionBridgeEmitter{e: e}
+// Returns an error if e is nil: a nil Emitter would panic on the first emit call,
+// and fail-closed rejection at construction time is safer than a runtime panic.
+func NewSessionBridgeEmitter(e *Emitter) (*SessionBridgeEmitter, error) {
+	if e == nil {
+		return nil, oops.Code("AUDIT_SESSION_BRIDGE_NIL_EMITTER").
+			Errorf("nil Emitter passed to NewSessionBridgeEmitter")
+	}
+	return &SessionBridgeEmitter{e: e}, nil
 }
 
 // EmitPluginDecrypt converts an eventbus.PluginDecryptRecord to

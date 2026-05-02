@@ -142,8 +142,9 @@ type CoreServer struct {
 
 	// Phase 3b: transactor and binding repository for atomic character + binding INSERTs
 	// (Create) and current-binding lookup for Subscribe / QueryStreamHistory (Current).
-	transactor Transactor
-	bindings   BindingRepo
+	transactor    Transactor
+	bindings      BindingRepo
+	cryptoEnabled bool // Phase 3b flag; gates binding lookup in Subscribe / QueryStreamHistory
 
 	// Plugin stream contribution and mid-session stream control.
 	streamContributor SessionStreamContributor
@@ -594,11 +595,16 @@ func (s *CoreServer) toProtoSubscribeResponse(ev eventbus.Event, metadataOnly bo
 
 // actorIDString stringifies the bus-side actor id. Zero ULIDs become "" so
 // existing gateway/web clients don't see a synthetic "00000000..." value.
+// Plugin-authored events carry a string LegacyID instead of a ULID; preserve
+// it here to match the QueryStreamHistory path (eventbusEventToEventFrame).
 func actorIDString(a eventbus.Actor) string {
-	if a.ID.Compare(ulid.ULID{}) == 0 {
-		return ""
+	if a.ID.Compare(ulid.ULID{}) != 0 {
+		return a.ID.String()
 	}
-	return a.ID.String()
+	if a.LegacyID != "" {
+		return a.LegacyID
+	}
+	return ""
 }
 
 // computeInitialFilters translates a focus restore plan's stream list into
@@ -788,7 +794,10 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	// authentication boundary; identity is derived solely from the
 	// server-side session record — never from client-supplied fields.
 	var sessionIdentity eventbus.SessionIdentity
-	if s.bindings != nil {
+	if s.bindings != nil && s.cryptoEnabled {
+		// Binding lookup is only needed when crypto is enabled (Phase 3b+).
+		// With crypto disabled (current production default), we skip this so
+		// characters without a binding row don't break Subscribe.
 		bindingID, bindingErr := s.bindings.Current(ctx, info.CharacterID.String())
 		if bindingErr != nil {
 			return oops.Code("SUBSCRIBE_BINDING_LOOKUP_FAILED").

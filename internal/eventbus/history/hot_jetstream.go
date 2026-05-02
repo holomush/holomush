@@ -493,25 +493,35 @@ func decodeAndAuthorizeHistory(
 ) (eventbus.Event, bool, error) {
 	h := msg.Headers()
 
-	// Parse DEK headers.
+	// Parse DEK headers. Both headers are required for sensitive (non-identity)
+	// codec events: absent or empty headers indicate a publisher contract violation.
+	// Fail closed rather than falling back to (0, 0), which would present as an
+	// authorization miss when guard.Check compares against stored DEK participants.
+	dekRefStr := h.Get(eventbus.HeaderDekRef)
+	dekVersionStr := h.Get(eventbus.HeaderDekVersion)
+	if dekRefStr == "" || dekVersionStr == "" {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_DEK_HEADER_MISSING").
+			With("has_dek_ref", dekRefStr != "").
+			With("has_dek_version", dekVersionStr != "").
+			With("codec", string(codecName)).
+			Errorf("sensitive codec event missing required DEK headers")
+	}
+
 	var keyID codec.KeyID
 	var keyVersion uint32
-	if dekRefStr := h.Get(eventbus.HeaderDekRef); dekRefStr != "" {
-		ref, parseErr := strconv.ParseUint(dekRefStr, 10, 64)
-		if parseErr != nil {
-			return eventbus.Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
-				With("header", eventbus.HeaderDekRef).With("value", dekRefStr).Wrap(parseErr)
-		}
-		keyID = codec.KeyID(ref)
+	ref, parseErr := strconv.ParseUint(dekRefStr, 10, 64)
+	if parseErr != nil {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
+			With("header", eventbus.HeaderDekRef).With("value", dekRefStr).Wrap(parseErr)
 	}
-	if dekVersionStr := h.Get(eventbus.HeaderDekVersion); dekVersionStr != "" {
-		ver, parseErr := strconv.ParseUint(dekVersionStr, 10, 32)
-		if parseErr != nil {
-			return eventbus.Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
-				With("header", eventbus.HeaderDekVersion).With("value", dekVersionStr).Wrap(parseErr)
-		}
-		keyVersion = uint32(ver) // safe: ParseUint(bitSize=32) guarantees fits in uint32
+	keyID = codec.KeyID(ref)
+
+	ver, parseErr := strconv.ParseUint(dekVersionStr, 10, 32)
+	if parseErr != nil {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
+			With("header", eventbus.HeaderDekVersion).With("value", dekVersionStr).Wrap(parseErr)
 	}
+	keyVersion = uint32(ver) // safe: ParseUint(bitSize=32) guarantees fits in uint32
 
 	// Recover event ULID from the pre-stamped bytes.
 	var eventID ulid.ULID

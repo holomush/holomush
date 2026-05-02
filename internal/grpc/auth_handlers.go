@@ -147,6 +147,17 @@ func WithBindingRepository(b BindingRepo) CoreServerOption {
 	}
 }
 
+// WithCryptoEnabled gates Phase 3b crypto features (binding lookup in Subscribe
+// and QueryStreamHistory). Default false so crypto-off production servers skip
+// binding resolution rather than failing with BINDING_NOT_FOUND for characters
+// that have no active binding row. Flip to true when Crypto.Enabled=true in
+// the server config (Phase 3d wiring).
+func WithCryptoEnabled(enabled bool) CoreServerOption {
+	return func(s *CoreServer) {
+		s.cryptoEnabled = enabled
+	}
+}
+
 // isPlayerSessionAuthError reports whether err is a user-facing authentication
 // failure (session not found, expired, or service not configured) as opposed to
 // an infrastructure error (e.g., database unavailable).

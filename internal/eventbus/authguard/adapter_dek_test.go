@@ -7,12 +7,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/eventbus/authguard"
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // stubDEKManager implements dek.Manager for unit tests.
@@ -51,4 +53,20 @@ func TestDEKParticipantLookupAdapterDelegatesToManager(t *testing.T) {
 	got, err := lookup.Participants(context.Background(), codec.KeyID(1), 1)
 	require.NoError(t, err)
 	assert.Equal(t, parts, got)
+}
+
+// errorDEKManager wraps stubDEKManager but returns an error from Participants.
+type errorDEKManager struct{ stubDEKManager }
+
+func (e *errorDEKManager) Participants(_ context.Context, _ codec.KeyID, _ uint32) ([]dek.Participant, error) {
+	return nil, oops.Errorf("simulated dek manager failure")
+}
+
+func TestDEKParticipantLookupAdapterPropagatesParticipantsError(t *testing.T) {
+	mgr := &errorDEKManager{stubDEKManager: stubDEKManager{}}
+	lookup := authguard.NewDEKParticipantLookup(mgr)
+
+	_, err := lookup.Participants(context.Background(), codec.KeyID(1), 1)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "AUTHGUARD_DEK_PARTICIPANTS_FAILED")
 }

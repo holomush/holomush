@@ -293,6 +293,7 @@ func TestSubscribeBindingLookupFailureReturnsError(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"s1": info}),
 		playerSessionRepo: newFakePlayerSessionRepo(playerID),
 		bindings:          &fakeBindingRepo{err: errors.New("db down")},
+		cryptoEnabled:     true, // required to activate binding lookup (Phase 3b gate)
 	}
 	err := s.Subscribe(&corev1.SubscribeRequest{
 		SessionId:          "s1",
@@ -325,6 +326,7 @@ func TestSubscribePassesNonZeroSessionIdentityWhenBindingsWired(t *testing.T) {
 		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"s1": info}),
 		playerSessionRepo: newFakePlayerSessionRepo(playerID),
 		bindings:          &fakeBindingRepo{bindingID: bindingID},
+		cryptoEnabled:     true, // required to activate binding lookup (Phase 3b gate)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -341,7 +343,12 @@ func TestSubscribePassesNonZeroSessionIdentityWhenBindingsWired(t *testing.T) {
 		return stream.sentLen() >= 1
 	}, 2*time.Second, 10*time.Millisecond)
 	cancel()
-	<-errCh
+	subscribeErr := <-errCh
+	// Subscribe returns nil (clean shutdown) or context.Canceled when the
+	// client cancels; neither is a test failure. We capture the value here
+	// to prevent the goroutine result from being silently discarded.
+	require.True(t, subscribeErr == nil || errors.Is(subscribeErr, context.Canceled),
+		"unexpected Subscribe error: %v", subscribeErr)
 
 	assert.Equal(t, 1, identitySub.opens)
 	assert.Equal(t, eventbus.IdentityKindCharacter, identitySub.capturedIdentity.Kind)

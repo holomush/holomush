@@ -15,5 +15,8 @@ func NewPluginManifestLookup(mgr *plugins.Manager) ManifestLookup {
 }
 
 func (a *manifestAdapter) PluginRequestsDecryption(pluginName, eventType string) bool {
+	if a == nil || a.mgr == nil {
+		return false
+	}
 	return a.mgr.PluginRequestsDecryption(pluginName, eventType)
 }

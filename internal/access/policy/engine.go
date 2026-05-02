@@ -252,6 +252,17 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			oops.With("subject", req.Subject).With("action", req.Action).With("resource", req.Resource).Wrap(resolveErr)
 	}
 
+	// Defense-in-depth: reject reserved attribute keys even if the caller
+	// bypassed NewAccessRequest by constructing an AccessRequest literal.
+	// Same code and semantics as the NewAccessRequest precondition check.
+	for k := range req.Attributes {
+		if _, reserved := types.ReservedActionKeys[k]; reserved {
+			return types.Decision{}, oops.Code("ACCESS_REQUEST_RESERVED_ATTRIBUTE").
+				With("key", k).
+				Errorf("hand-built AccessRequest contained reserved attribute key %q (bypassed NewAccessRequest)", k)
+		}
+	}
+
 	// Decision 6 R3: caller-supplied per-call attributes overlay bags.Action.
 	// Caller wins on non-reserved key conflict. Reserved keys (currently
 	// "name", which the attribute Resolver writes — see Resolver.Resolve)

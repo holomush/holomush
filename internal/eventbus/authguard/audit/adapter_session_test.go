@@ -15,6 +15,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/authguard/audit"
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // TestSessionBridgeEmitterDelegatesToUnderlyingEmitter verifies that
@@ -25,7 +26,8 @@ func TestSessionBridgeEmitterDelegatesToUnderlyingEmitter(t *testing.T) {
 	emitter, err := audit.NewQueuedEmitter(pub, audit.WithGameID("test-game"))
 	require.NoError(t, err)
 
-	bridge := audit.NewSessionBridgeEmitter(emitter)
+	bridge, err := audit.NewSessionBridgeEmitter(emitter)
+	require.NoError(t, err)
 
 	rec := eventbus.PluginDecryptRecord{
 		PluginName:       "mod-filter",
@@ -60,7 +62,8 @@ func TestSessionBridgeEmitterPropagatesAuditQueueFullError(t *testing.T) {
 	emitter, err := audit.NewQueuedEmitter(blocking, audit.WithCapacity(1))
 	require.NoError(t, err)
 
-	bridge := audit.NewSessionBridgeEmitter(emitter)
+	bridge, err := audit.NewSessionBridgeEmitter(emitter)
+	require.NoError(t, err)
 
 	rec := eventbus.PluginDecryptRecord{
 		PluginName: "mod-filter",
@@ -76,7 +79,14 @@ func TestSessionBridgeEmitterPropagatesAuditQueueFullError(t *testing.T) {
 		}
 	}
 	require.Error(t, lastErr, "expected AUDIT_QUEUE_FULL before 5 attempts")
+	errutil.AssertErrorCode(t, lastErr, "AUDIT_QUEUE_FULL")
 
 	// Unblock drain goroutine for clean shutdown.
 	close(blocking.block)
+}
+
+func TestNewSessionBridgeEmitterRejectsNilEmitter(t *testing.T) {
+	_, err := audit.NewSessionBridgeEmitter(nil)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "AUDIT_SESSION_BRIDGE_NIL_EMITTER")
 }

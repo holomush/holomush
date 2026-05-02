@@ -265,6 +265,12 @@ func TestNewAccessRequestAcceptsCallerAttributes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "core-comm:whisper", req.Attributes["event_type"])
 	assert.Equal(t, "01INST", req.Attributes["plugin_inst"])
+
+	// Verify the stored map is independent of the caller's map: mutating the
+	// original after construction must not affect the AccessRequest.
+	attrs["event_type"] = "mutated"
+	assert.Equal(t, "core-comm:whisper", req.Attributes["event_type"],
+		"AccessRequest.Attributes must be a clone, not a reference to the caller's map")
 }
 
 func TestNewAccessRequestRejectsReservedNameKey(t *testing.T) {
