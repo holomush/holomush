@@ -177,7 +177,7 @@ INV-50 (cold-tier read fence, Phase 7) correctly scoped — this doc does NOT mo
 | `holomush-ojw1.1` (Phase 3a sub-epic) | Description: replace "INV-50 downgrade fence" with "INV-6/7 emit-time fence". Add note that codec interface is being extended (Q1) and `codec.Key` gets a `Version` field (Q3). |
 | `holomush-ojw1.1.2` (T2: codec impl) | Title/description: codec impl uses new `Encode/Decode(ctx, plaintext, key, aad []byte)` signature. The Codec interface change is part of this task. |
 | `holomush-ojw1.1.3` (T3: ManifestLookup.LookupEventSensitivity) | Description: clarify `Sensitivity` is already in `package plugins` from Phase 1; this task only adds the lookup method. Add a sub-task: append `Sensitive bool` to `pkg/plugin/event.go::EmitIntent`. |
-| `holomush-ojw1.1.4` (T4: emit-time fence) | Title: rename "downgrade-attack fence (INV-50)" → "emit-time sensitivity fence (INV-6/7)". Add: hard-reject for over-claim AND under-claim via `EVENT_SENSITIVITY_NOT_DECLARED` / `EVENT_SENSITIVITY_OVER_CLAIM`. |
+| `holomush-ojw1.1.4` (T4: emit-time fence) | Title: rename "downgrade-attack fence (INV-50)" → "emit-time sensitivity fence (INV-6/7)". Add: hard-reject for over-claim AND under-claim via `EVENT_SENSITIVITY_NOT_DECLARED` (INV-6) and `EVENT_SENSITIVITY_REQUIRED` (INV-7). |
 | `holomush-ojw1.1.5` (T5: DEK acquisition) | Description: reflect that `key.Version` is read directly off the returned `codec.Key` (Q3); `intent.Sensitive` (Q2) drives the effective-sensitivity computation. |
 | `holomush-ojw1.1.6` (T6: encrypt switch) | Description: codec call site uses new 4-arg signature; AAD bytes built by caller via `aad.Build(event, codecName, dekRef, dekVersion)`. |
 | `holomush-ojw1.1.7`, `.8`, `.9`, `.10` | Unchanged. |

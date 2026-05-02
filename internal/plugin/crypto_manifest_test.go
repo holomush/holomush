@@ -51,8 +51,8 @@ consumes:
 	assert.Equal(t, []string{"core-communication:whisper"}, got.Consumes[0].RequestsDecryption)
 }
 
-func TestLookupEmitSensitivityReturnsDeclaredValueForListedEventType(t *testing.T) {
-	m := &plugins.Manifest{
+func TestLookupEmitSensitivity(t *testing.T) {
+	declared := &plugins.Manifest{
 		Crypto: &plugins.CryptoSection{
 			Emits: []plugins.CryptoEmit{
 				{EventType: "scene.whisper", Sensitivity: plugins.SensitivityAlways},
@@ -60,35 +60,47 @@ func TestLookupEmitSensitivityReturnsDeclaredValueForListedEventType(t *testing.
 			},
 		},
 	}
-	got := plugins.LookupEmitSensitivity(m, "scene.whisper")
-	assert.Equal(t, plugins.SensitivityAlways, got)
-}
-
-func TestLookupEmitSensitivityDefaultsToNeverForUnlistedEventType(t *testing.T) {
-	m := &plugins.Manifest{
-		Crypto: &plugins.CryptoSection{
-			Emits: []plugins.CryptoEmit{
-				{EventType: "scene.whisper", Sensitivity: plugins.SensitivityAlways},
-			},
+	tests := []struct {
+		name      string
+		manifest  *plugins.Manifest
+		eventType string
+		want      plugins.Sensitivity
+	}{
+		{
+			name:      "returns declared value for listed event type",
+			manifest:  declared,
+			eventType: "scene.whisper",
+			want:      plugins.SensitivityAlways,
+		},
+		{
+			name:      "defaults to never for unlisted event type",
+			manifest:  declared,
+			eventType: "scene.pose-mismatch",
+			want:      plugins.SensitivityNever,
+		},
+		{
+			name:      "handles nil manifest",
+			manifest:  nil,
+			eventType: "anything",
+			want:      plugins.SensitivityNever,
+		},
+		{
+			name:      "handles empty emits",
+			manifest:  &plugins.Manifest{Crypto: &plugins.CryptoSection{}},
+			eventType: "anything",
+			want:      plugins.SensitivityNever,
+		},
+		{
+			name:      "handles nil crypto block (crypto: omitted from YAML)",
+			manifest:  &plugins.Manifest{Crypto: nil},
+			eventType: "anything",
+			want:      plugins.SensitivityNever,
 		},
 	}
-	got := plugins.LookupEmitSensitivity(m, "scene.pose")
-	assert.Equal(t, plugins.SensitivityNever, got)
-}
-
-func TestLookupEmitSensitivityHandlesNilManifest(t *testing.T) {
-	got := plugins.LookupEmitSensitivity(nil, "anything")
-	assert.Equal(t, plugins.SensitivityNever, got)
-}
-
-func TestLookupEmitSensitivityHandlesEmptyEmits(t *testing.T) {
-	m := &plugins.Manifest{Crypto: &plugins.CryptoSection{}}
-	got := plugins.LookupEmitSensitivity(m, "anything")
-	assert.Equal(t, plugins.SensitivityNever, got)
-}
-
-func TestLookupEmitSensitivityHandlesNilCryptoBlock(t *testing.T) {
-	m := &plugins.Manifest{Crypto: nil} // crypto: block omitted from YAML
-	got := plugins.LookupEmitSensitivity(m, "anything")
-	assert.Equal(t, plugins.SensitivityNever, got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := plugins.LookupEmitSensitivity(tt.manifest, tt.eventType)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
