@@ -136,6 +136,18 @@ func (e *PluginEventEmitter) Emit(ctx context.Context, pluginName string, intent
 			Errorf("plugin manifest does not declare %q as a claimable actor kind", actor.Kind.String())
 	}
 
+	// Phase 3a: resolve manifest sensitivity + run the host-side fence.
+	// Result is stamped on event.Sensitive; the publisher acts on it.
+	manifestSensitivity := LookupEmitSensitivity(manifest, string(intent.Type))
+	effective, err := EnforceSensitivity(manifestSensitivity, intent.Sensitive)
+	if err != nil {
+		return oops.With("plugin", pluginName).
+			With("subject", subjectRaw).
+			With("event_type", string(intent.Type)).
+			Wrap(err)
+	}
+	sensitive := effective == SensitivityAlways
+
 	if e.publisher == nil {
 		return oops.With("plugin", pluginName).With("subject", subjectRaw).
 			New("plugin event publisher is not configured")
@@ -178,6 +190,7 @@ func (e *PluginEventEmitter) Emit(ctx context.Context, pluginName string, intent
 		Timestamp: time.Now().UTC(),
 		Actor:     coreActorToEventbusActor(actor),
 		Payload:   payload,
+		Sensitive: sensitive,
 	}
 	if err := e.publisher.Publish(ctx, event); err != nil {
 		return oops.With("plugin", pluginName).With("subject", subjectRaw).
