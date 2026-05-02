@@ -326,6 +326,20 @@ so a reviewer can grep `INV-N` and find the proof.
 | **INV-51** | A player-kind subscription that resolves a DEK via `participant.player_id` membership (the previous-tenure read path) MUST emit `audit.<game>.system.player_history_read` once per session-context pair, before the first plaintext event is delivered. | Integration |
 | **INV-52** | A NATS account configured for a plugin or character subscriber MUST NOT include any `audit.>` subject in its allowed-subscribe list. The default NATS account configuration is the architectural source of truth for INV-15. | Integration |
 
+### Phase 3a enforcing tests
+
+The Phase 3a slice (host-side primitives, sensitivity fence, and AAD-bound
+codec) lands the following invariants. Each is wired to a concrete enforcing
+test that fails if the invariant is violated:
+
+| Invariant | Enforcing test |
+| --- | --- |
+| **INV-6** | `internal/plugin/sensitivity_fence_test.go::TestEnforceSensitivity` (subtest `"never + claim=true → INV-6 reject"`) |
+| **INV-7** | `internal/plugin/sensitivity_fence_test.go::TestEnforceSensitivity` (subtest `"always + claim=false → INV-7 reject"`) |
+| **INV-21** | `test/integration/crypto/emit_test.go::TestSensitiveEmitProducesCiphertextOnBusAndInAudit` (byte-equality assertion on bus payload vs `events_audit.payload`) |
+| **INV-25** | `internal/eventbus/codec/xchacha20poly1305_test.go::TestXChaCha20Poly1305DetectsAADTamper` |
+| **INV-49** | `internal/eventbus/audit/projection_test.go::TestPersistWritesDekColumnsFromHeaders` |
+
 ---
 
 ## Section 3 — Architecture overview
