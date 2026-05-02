@@ -20,9 +20,8 @@ type Name string
 const (
 	// NameIdentity is the built-in pass-through codec that leaves payloads unchanged.
 	NameIdentity Name = "identity"
-	// Future:
-	// NameAESGCMv1        Name = "aes-gcm-v1"
-	// NameXChaCha20v1     Name = "xchacha20poly1305-v1"
+	// NameXChaCha20v1 is the XChaCha20-Poly1305 AEAD codec.
+	NameXChaCha20v1 Name = "xchacha20poly1305-v1"
 )
 
 // Codec encodes and decodes event payload bytes. Implementations MUST be

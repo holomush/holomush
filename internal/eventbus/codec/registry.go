@@ -14,7 +14,8 @@ import (
 var (
 	regMu    sync.RWMutex
 	registry = map[Name]Codec{
-		NameIdentity: IdentityCodec{},
+		NameIdentity:    IdentityCodec{},
+		NameXChaCha20v1: &XChaCha20Poly1305v1{},
 	}
 )
 

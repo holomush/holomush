@@ -18,6 +18,7 @@ import (
 // below catches the case where a const is declared but not registered.
 var declaredNames = []codec.Name{
 	codec.NameIdentity,
+	codec.NameXChaCha20v1,
 	// Add new constants here when introduced.
 }
 
