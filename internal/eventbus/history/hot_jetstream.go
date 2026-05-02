@@ -509,7 +509,11 @@ func decodeAndAuthorizeHistory(
 
 	var keyID codec.KeyID
 	var keyVersion uint32
-	ref, parseErr := strconv.ParseUint(dekRefStr, 10, 64)
+	// bitSize=63 enforces the parsed value fits in int64, matching the
+	// crypto_keys.id BIGSERIAL column type. dek/store.go:128 casts KeyID
+	// to int64 for the SQL query; this parse-site bound makes that cast
+	// provably safe and silences CodeQL's incorrect-conversion warning.
+	ref, parseErr := strconv.ParseUint(dekRefStr, 10, 63)
 	if parseErr != nil {
 		return eventbus.Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
 			With("header", eventbus.HeaderDekRef).With("value", dekRefStr).Wrap(parseErr)
