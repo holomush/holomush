@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestEffect_String(t *testing.T) {
@@ -219,7 +221,7 @@ func TestAccessRequestFields(t *testing.T) {
 }
 
 func TestNewAccessRequestValid(t *testing.T) {
-	req, err := NewAccessRequest("character:01ABC", "read", "location:01XYZ")
+	req, err := NewAccessRequest("character:01ABC", "read", "location:01XYZ", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "character:01ABC", req.Subject)
 	assert.Equal(t, "read", req.Action)
@@ -241,11 +243,36 @@ func TestNewAccessRequest_EmptyFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewAccessRequest(tt.subject, tt.action, tt.resource)
+			_, err := NewAccessRequest(tt.subject, tt.action, tt.resource, nil)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantMsg)
 		})
 	}
+}
+
+func TestNewAccessRequestAcceptsNilAttributes(t *testing.T) {
+	req, err := NewAccessRequest("character:01ABC", "read", "location:01XYZ", nil)
+	require.NoError(t, err)
+	assert.Nil(t, req.Attributes)
+}
+
+func TestNewAccessRequestAcceptsCallerAttributes(t *testing.T) {
+	attrs := map[string]any{
+		"event_type":  "core-comm:whisper",
+		"plugin_inst": "01INST",
+	}
+	req, err := NewAccessRequest("plugin:mod-filter", "decrypt", "dek:dm:01HABC", attrs)
+	require.NoError(t, err)
+	assert.Equal(t, "core-comm:whisper", req.Attributes["event_type"])
+	assert.Equal(t, "01INST", req.Attributes["plugin_inst"])
+}
+
+func TestNewAccessRequestRejectsReservedNameKey(t *testing.T) {
+	// "name" is reserved (resolver writes req.Action verb into bags.Action["name"]).
+	// Caller-supplied "name" would silently overwrite the resolver value.
+	attrs := map[string]any{"name": "something"}
+	_, err := NewAccessRequest("character:01ABC", "read", "location:01XYZ", attrs)
+	errutil.AssertErrorCode(t, err, "ACCESS_REQUEST_RESERVED_ATTRIBUTE")
 }
 
 func TestAttributeBags_Initialization(t *testing.T) {

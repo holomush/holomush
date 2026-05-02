@@ -124,7 +124,7 @@ func (s *Service) checkAccess(ctx context.Context, subject, action, resource str
 	failCode := string(prefix) + "_ACCESS_EVALUATION_FAILED"
 	denyCode := string(prefix) + "_ACCESS_DENIED"
 
-	req, reqErr := types.NewAccessRequest(subject, action, resource)
+	req, reqErr := types.NewAccessRequest(subject, action, resource, nil)
 	if reqErr != nil {
 		// Defensive: all call sites should use typed helpers
 		// (access.CharacterSubject, access.LocationResource, etc.) that panic on

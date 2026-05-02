@@ -177,7 +177,7 @@ func (f *Functions) listCommandsFn(_ string) lua.LGFunction {
 //   - hadError is true if any engine evaluation failed (returned error or indicated infrastructure failure)
 func (f *Functions) canExecuteCommand(ctx context.Context, subject string, cmd command.CommandEntry) (allowed, hadError bool) {
 	// Layer 1: can this character execute this command?
-	req, reqErr := types.NewAccessRequest(subject, "execute", "command:"+cmd.Name)
+	req, reqErr := types.NewAccessRequest(subject, "execute", "command:"+cmd.Name, nil)
 	if reqErr != nil {
 		errutil.LogErrorContext(ctx, "command access request failed",
 			reqErr, "subject", subject, "command", cmd.Name)

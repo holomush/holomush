@@ -314,7 +314,7 @@ var _ = Describe("Plugin ABAC Trust Boundary", func() {
 		It("permits command execution via Layer 1 execute policy from plugin", func() {
 			// The widget-execute policy:
 			// permit(principal is character, action in ["execute"], resource is command) when { resource.command.name == "widget" };
-			req, err := policytypes.NewAccessRequest("character:01ABC", "execute", "command:widget")
+			req, err := policytypes.NewAccessRequest("character:01ABC", "execute", "command:widget", nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			decision, err := engine.Evaluate(ctx, req)
@@ -328,7 +328,7 @@ var _ = Describe("Plugin ABAC Trust Boundary", func() {
 			// permit(principal is character, action in ["read"], resource is widget) when { resource.widget.type == "normal" };
 			//
 			// The plugin's AttributeResolver resolves widget:normal-1 → {type: "normal"}
-			req, err := policytypes.NewAccessRequest("character:01ABC", "read", "widget:normal-1")
+			req, err := policytypes.NewAccessRequest("character:01ABC", "read", "widget:normal-1", nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			decision, err := engine.Evaluate(ctx, req)
@@ -342,7 +342,7 @@ var _ = Describe("Plugin ABAC Trust Boundary", func() {
 			// forbid(principal is character, action in ["read"], resource is widget) when { resource.widget.type == "restricted" };
 			//
 			// The plugin's AttributeResolver resolves widget:restricted-1 → {type: "restricted"}
-			req, err := policytypes.NewAccessRequest("character:01ABC", "read", "widget:restricted-1")
+			req, err := policytypes.NewAccessRequest("character:01ABC", "read", "widget:restricted-1", nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			decision, err := engine.Evaluate(ctx, req)
@@ -466,7 +466,7 @@ var _ = Describe("Plugin ABAC Trust Boundary", func() {
 
 		It("still invokes the plugin ResolveResource RPC for instance-level Evaluate", func() {
 			// T14: Instance-level evaluation is unaffected.
-			req, reqErr := policytypes.NewAccessRequest("character:01ABC", "read", "widget:normal-1")
+			req, reqErr := policytypes.NewAccessRequest("character:01ABC", "read", "widget:normal-1", nil)
 			Expect(reqErr).NotTo(HaveOccurred())
 
 			decision, err := engine.Evaluate(ctx, req)

@@ -183,6 +183,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 			"character:"+info.CharacterID.String(),
 			accessTypes.ActionRead,
 			"stream:"+req.Stream,
+			nil,
 		)
 		if reqErr != nil {
 			return nil, oops.Code("INTERNAL").Wrap(reqErr)

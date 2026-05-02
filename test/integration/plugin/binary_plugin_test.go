@@ -480,7 +480,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 		})
 
 		It("permits scene command execution via Layer 1 execute policy", func() {
-			req, err := policytypes.NewAccessRequest("character:char-alice", "execute", "command:scene")
+			req, err := policytypes.NewAccessRequest("character:char-alice", "execute", "command:scene", nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			decision, err := abacEngine.Evaluate(abacCtx, req)
@@ -491,7 +491,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 		})
 
 		It("permits the owner to read their own scene via per-resource policy", func() {
-			req, err := policytypes.NewAccessRequest("character:char-alice", "read", "scene:"+sceneID)
+			req, err := policytypes.NewAccessRequest("character:char-alice", "read", "scene:"+sceneID, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			decision, err := abacEngine.Evaluate(abacCtx, req)
@@ -501,7 +501,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 		})
 
 		It("denies a non-owner attempting to read the scene", func() {
-			req, err := policytypes.NewAccessRequest("character:char-bob", "read", "scene:"+sceneID)
+			req, err := policytypes.NewAccessRequest("character:char-bob", "read", "scene:"+sceneID, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			decision, err := abacEngine.Evaluate(abacCtx, req)

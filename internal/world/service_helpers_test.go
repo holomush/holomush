@@ -268,7 +268,7 @@ func TestCheckAccess(t *testing.T) {
 		engine := policytest.NewMockAccessPolicyEngine(t)
 
 		// Create the expected request using the constructor
-		expectedReq, _ := types.NewAccessRequest(subject, action, resource)
+		expectedReq, _ := types.NewAccessRequest(subject, action, resource, nil)
 		engine.On("Evaluate", ctx, expectedReq).Return(types.Decision{}, engineErr)
 
 		svc := &Service{engine: engine}

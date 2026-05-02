@@ -99,20 +99,38 @@ const (
 	ActionUse     = "use"
 )
 
+// reservedActionKeys lists keys the resolver owns and a caller MUST NOT
+// supply via req.Attributes. Phase 3b grounding doc Decision 6 R3.
+//
+// "name": the attribute resolver writes req.Action verb into
+// bags.Action["name"] (see internal/access/policy/attribute.Resolver.Resolve).
+// Caller-supplied "name" would silently overwrite the resolver value.
+var reservedActionKeys = map[string]struct{}{
+	"name": {},
+}
+
 // AccessRequest represents a subject attempting an action on a resource.
 //
 // Fields are exported for test assertion readability (mock.MatchedBy comparisons
 // and struct literal matching). Production code MUST use NewAccessRequest() which
-// validates all fields are non-empty.
+// validates all fields are non-empty and rejects reserved attribute keys.
+//
+// Attributes carry caller-supplied per-call context. Composition rule
+// (Phase 3b grounding Decision 6 R3): caller-supplied Attributes land
+// in bags.Action specifically; caller wins on key conflict; reserved
+// keys (currently "name") are rejected at NewAccessRequest precondition.
 type AccessRequest struct {
-	Subject  string // "character:01ABC", "plugin:echo-bot", "system"
-	Action   string // "read", "write", "delete", "enter", "execute", "emit"
-	Resource string // "location:01XYZ", "command:dig", "property:01DEF"
+	Subject    string         // "character:01ABC", "plugin:echo-bot", "system"
+	Action     string         // "read", "write", "delete", "enter", "execute", "emit"
+	Resource   string         // "location:01XYZ", "command:dig", "property:01DEF"
+	Attributes map[string]any // nil = no caller-supplied per-call attributes
 }
 
-// NewAccessRequest creates a validated AccessRequest. Returns an error if any
-// field is empty, preventing silent misuse at access control boundaries.
-func NewAccessRequest(subject, action, resource string) (AccessRequest, error) {
+// NewAccessRequest creates a validated AccessRequest. Returns an error if
+// Subject, Action, or Resource is empty, or if attrs contains a reserved
+// key. attrs MAY be nil (the common case for callers without per-call
+// context to supply).
+func NewAccessRequest(subject, action, resource string, attrs map[string]any) (AccessRequest, error) {
 	if subject == "" {
 		return AccessRequest{}, oops.In("access").With("field", "subject").Errorf("access request: subject must not be empty")
 	}
@@ -122,10 +140,18 @@ func NewAccessRequest(subject, action, resource string) (AccessRequest, error) {
 	if resource == "" {
 		return AccessRequest{}, oops.In("access").With("field", "resource").Errorf("access request: resource must not be empty")
 	}
+	for k := range attrs {
+		if _, reserved := reservedActionKeys[k]; reserved {
+			return AccessRequest{}, oops.Code("ACCESS_REQUEST_RESERVED_ATTRIBUTE").
+				With("key", k).
+				Errorf("caller-supplied attribute key %q is server-reserved", k)
+		}
+	}
 	return AccessRequest{
-		Subject:  subject,
-		Action:   action,
-		Resource: resource,
+		Subject:    subject,
+		Action:     action,
+		Resource:   resource,
+		Attributes: attrs,
 	}, nil
 }
 
