@@ -202,10 +202,10 @@ Two ULID generators exist; the choice matters for correctness.
 | **Event IDs** (`core.Event.ID`), session IDs | `core.NewULID()` | Identity and dedup key. Set as `Nats-Msg-Id` header for JetStream dedup within the dedup window; stable across JetStream rebuilds (sequences are not). Ordering is owned by JetStream's per-stream `uint64` seq — **not** ULID lex order. |
 | **Entity primary keys** (players, locations, characters, exits, objects, policies) | `idgen.New()` | Identity, not ordering. Fresh `crypto/rand` entropy per call. |
 
-The `EventIDMustBeMonotonic` ruleguard rule in `gorules/rules.go` (loaded via
-`gocritic`) still enforces that `core.Event{}` struct literals use
-`core.NewEvent()` rather than a raw struct literal. New `core.Event{}` literals
-using `idgen.New()` will fail `task lint`.
+`core.Event{}` struct literals must use `core.NewEvent()` rather than a raw
+struct literal — `core.NewEvent()` stamps a monotonic ULID via
+`core.NewULID()`. Never construct a `core.Event{}` literal with a manually
+supplied ID (e.g., from `idgen.New()`).
 
 ### Error Handling
 
