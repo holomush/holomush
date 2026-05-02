@@ -11,7 +11,7 @@ type SeedPolicy struct {
 	SeedVersion int
 }
 
-// SeedPolicies returns the complete set of 26 seed policies (25 permit, 1 forbid).
+// SeedPolicies returns the complete set of 28 seed policies (25 permit, 3 forbid).
 // The initial 18 (T22) minus 2 removed command policies, plus 5 gap-fill policies (T22b: G1-G4),
 // 1 phase-2 command policy, and 2 system bootstrap policies.
 // Default deny behavior is provided by EffectDefaultDeny (no matching policy = denied).
@@ -203,6 +203,25 @@ func SeedPolicies() []SeedPolicy {
 			Name:        "seed:system-bootstrap-exits",
 			Description: "System bootstrap can create exits for world seeding",
 			DSLText:     `permit(principal is system, action in ["read", "write"], resource is exit);`,
+			SeedVersion: 1,
+		},
+
+		// --- Phase-3b audit namespace deny policies (§7.7 ABAC layer) ---
+
+		// Decision 3 supplement: characters MUST NOT read audit.* streams.
+		// Layer 2 (NATS account-level deny_subscribe rules) lands in Phase 3d (holomush-ojw1.4).
+		{
+			Name:        "seed:deny-audit-read-character",
+			Description: "Characters MUST NOT read audit.* streams (§7.7 ABAC layer; complements Phase 3d NATS account-level deny rules)",
+			DSLText:     `forbid(principal is character, action in ["read"], resource is stream) when { resource.stream.name like "audit.*" };`,
+			SeedVersion: 1,
+		},
+		// Decision 3 supplement: plugins MUST NOT read audit.* streams.
+		// Layer 2 (NATS account-level deny_subscribe rules) lands in Phase 3d (holomush-ojw1.4).
+		{
+			Name:        "seed:deny-audit-read-plugin",
+			Description: "Plugins MUST NOT read audit.* streams (§7.7 ABAC layer; complements Phase 3d NATS account-level deny rules)",
+			DSLText:     `forbid(principal is plugin, action in ["read"], resource is stream) when { resource.stream.name like "audit.*" };`,
 			SeedVersion: 1,
 		},
 	}

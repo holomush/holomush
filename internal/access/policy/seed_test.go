@@ -13,8 +13,8 @@ import (
 
 func TestSeedPoliciesCount(t *testing.T) {
 	seeds := SeedPolicies()
-	// 25 permit + 1 forbid = 26 total (18 base − 2 removed command policies + 5 gap-fill from T22b + 1 phase-2 command + 2 system bootstrap + 1 location-stream read)
-	assert.Len(t, seeds, 26, "expected 26 seed policies (25 permit, 1 forbid)")
+	// 25 permit + 3 forbid = 28 total (18 base − 2 removed command policies + 5 gap-fill from T22b + 1 phase-2 command + 2 system bootstrap + 1 location-stream read + 2 phase-3b audit deny)
+	assert.Len(t, seeds, 28, "expected 28 seed policies (25 permit, 3 forbid)")
 }
 
 func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
@@ -72,7 +72,7 @@ func TestSeedPoliciesEffectDistribution(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 25, permitCount, "expected 25 permit policies")
-	assert.Equal(t, 1, forbidCount, "expected 1 forbid policy")
+	assert.Equal(t, 3, forbidCount, "expected 3 forbid policies")
 }
 
 func TestSeedPoliciesExpectedNames(t *testing.T) {
@@ -107,6 +107,9 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		// System bootstrap policies
 		"seed:system-bootstrap-world",
 		"seed:system-bootstrap-exits",
+		// Phase-3b audit deny policies
+		"seed:deny-audit-read-character",
+		"seed:deny-audit-read-plugin",
 	}
 
 	seeds := SeedPolicies()
@@ -120,6 +123,8 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 func TestSeedPoliciesForbidPoliciesAreExpected(t *testing.T) {
 	expectedForbids := map[string]bool{
 		"seed:property-restricted-excluded": true,
+		"seed:deny-audit-read-character":    true,
+		"seed:deny-audit-read-plugin":       true,
 	}
 	compiler := NewCompiler(emptySchema())
 	for _, s := range SeedPolicies() {
@@ -215,6 +220,38 @@ func TestSeedPoliciesScenePoliciesExist(t *testing.T) {
 	}
 	assert.True(t, participantFound, "seed:player-scene-participant policy must exist (G4)")
 	assert.True(t, readFound, "seed:player-scene-read policy must exist (G4)")
+}
+
+// Phase-3b audit deny policy tests
+
+func TestSeedPoliciesIncludesAuditSubscribeDenyForCharacter(t *testing.T) {
+	seeds := SeedPolicies()
+	var found bool
+	for _, s := range seeds {
+		if s.Name == "seed:deny-audit-read-character" {
+			found = true
+			assert.Contains(t, s.DSLText, "forbid")
+			assert.Contains(t, s.DSLText, "audit.")
+			assert.Contains(t, s.DSLText, "principal is character")
+			break
+		}
+	}
+	assert.True(t, found, "audit.> deny seed policy for character MUST be present")
+}
+
+func TestSeedPoliciesIncludesAuditSubscribeDenyForPlugin(t *testing.T) {
+	seeds := SeedPolicies()
+	var found bool
+	for _, s := range seeds {
+		if s.Name == "seed:deny-audit-read-plugin" {
+			found = true
+			assert.Contains(t, s.DSLText, "forbid")
+			assert.Contains(t, s.DSLText, "audit.")
+			assert.Contains(t, s.DSLText, "principal is plugin")
+			break
+		}
+	}
+	assert.True(t, found, "audit.> deny seed policy for plugin MUST be present")
 }
 
 // Phase-2 command policy tests

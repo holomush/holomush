@@ -345,6 +345,8 @@ func TestBootstrapSetsCorrectPolicyEffect(t *testing.T) {
 
 	expectedForbids := map[string]bool{
 		"seed:property-restricted-excluded": true,
+		"seed:deny-audit-read-character":    true,
+		"seed:deny-audit-read-plugin":       true,
 	}
 	var forbidCount int
 	for _, created := range mockStore.created {
@@ -354,7 +356,7 @@ func TestBootstrapSetsCorrectPolicyEffect(t *testing.T) {
 				"unexpected forbid policy: %q", created.Name)
 		}
 	}
-	assert.Equal(t, 1, forbidCount, "expected 1 forbid policy")
+	assert.Equal(t, 3, forbidCount, "expected 3 forbid policies")
 }
 
 func TestBootstrapNilSeedVersionNotUpgraded(t *testing.T) {
