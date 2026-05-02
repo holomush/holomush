@@ -631,6 +631,112 @@ list would create a chicken-and-egg dependency. The cleartext list reveals
 "Alice and Bob shared a private context" but not what they said — the leak
 the threat model accepts.
 
+### 4.3a `player_character_bindings` table
+
+A **binding** is a player's tenure on a character: the time-bounded
+relationship that begins when a player gains control (initial character
+assignment, wizard handoff) and ends when control is released (wizard
+transfer to a different player, character deletion, voluntary release).
+Binding lifetimes are weeks to months and span many ephemeral game
+sessions; a player disconnecting and reconnecting does NOT end the binding.
+
+`binding_id` is the load-bearing identifier in `crypto_keys.participants[].binding_id`
+and in the §7.2 Branch 1 (character) AuthGuard decision tree. Without a
+stable, time-bounded binding identifier, AuthGuard cannot distinguish
+"same character, different player tenure" — and INV-10 ("after player
+rebind, the new player MUST NOT receive plaintext for events emitted
+before the rebind") cannot hold.
+
+The binding entity is **substrate, not crypto-specific**. Crypto is its
+first consumer; future audit trails ("character X was transferred from
+player A to player B at time T, reason R"), per-binding permissions, and
+binding-scoped quotas all naturally resolve against the same table.
+
+```sql
+CREATE TABLE player_character_bindings (
+    id            TEXT PRIMARY KEY,             -- ULID; THE binding_id
+    player_id     TEXT NOT NULL REFERENCES players(id),
+    character_id  TEXT NOT NULL REFERENCES characters(id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ended_at      TIMESTAMPTZ,                  -- NULL = active; non-null = previous tenure
+    ended_reason  TEXT                          -- 'wizard_transfer' | 'release' | 'character_deletion'
+);
+
+CREATE UNIQUE INDEX idx_pcb_active_per_character
+    ON player_character_bindings (character_id) WHERE ended_at IS NULL;
+
+CREATE INDEX idx_pcb_player_active
+    ON player_character_bindings (player_id) WHERE ended_at IS NULL;
+```
+
+**Lifecycle:**
+
+- **First migration (back-population for existing characters):** the
+  CREATE TABLE migration MUST also run a one-shot
+  `INSERT INTO player_character_bindings (id, player_id, character_id, created_at)
+  SELECT generate_ulid()::TEXT, player_id, id, now() FROM characters WHERE player_id IS NOT NULL`
+  to seed bindings for every character with a known player. Characters
+  with `player_id IS NULL` (orphans permitted by the existing baseline
+  schema's nullable FK) are excluded from back-population — they have
+  no active binding. Subscribe against an orphan character returns
+  `BINDING_MISSING` until the orphan is bound (Phase 4 wizard-transfer)
+  or deleted.
+- **Character creation (initial bind):** in the same transaction that
+  inserts the `characters` row, INSERT a binding row for `(player_id,
+  character_id)` with `created_at = now()`, `ended_at = NULL`. Phase 3b
+  achieves this by switching `CharacterRepository.Create` to use
+  `execerFromCtx` (matching the existing `Delete` pattern at
+  `internal/world/postgres/character_repo.go:76`), then having the
+  gRPC `CreateCharacter` handler open a transaction and call both
+  repository methods inside it.
+- **Wizard transfer (rebind):** in one transaction: UPDATE the existing
+  active binding row, setting `ended_at = now()` and `ended_reason =
+  'wizard_transfer'`; INSERT a new binding row for `(new_player_id,
+  character_id)`. Trigger `Rotate` on every DEK whose participants
+  include the old `binding_id`.
+- **Character deletion:** UPDATE the active binding setting `ended_at =
+  now()` and `ended_reason = 'character_deletion'`. Historical bindings
+  remain queryable for forensics; do NOT cascade-delete them.
+
+**AuthGuard binding lookup:** at gRPC Subscribe / QueryStreamHistory
+time, the handler queries
+`SELECT id FROM player_character_bindings WHERE character_id = $1 AND ended_at IS NULL`
+for the session's character. The result is the `binding_id` stamped on
+`authguard.Identity`. A unique index on `(character_id) WHERE ended_at
+IS NULL` enforces "exactly one active binding per character."
+
+**`Add(participant)` binding population:** when `Add` runs (scene join,
+channel invite, DM auto-create), the calling code calls
+`Bindings.Current(character_id)` and uses the returned `binding_id` when
+appending to `crypto_keys.participants[]`. The participant record then
+carries the historical binding identity even after that binding ends.
+
+**`Rotate` trigger on rebind (§6.2):** wizard transfer commits two
+effects in one transaction: ending the old binding (this section) AND
+triggering `Rotate` on every DEK whose participant set includes the old
+`binding_id` (§6.2). The Rotate machinery is Phase 4; the binding-table
+substrate ships in Phase 3b so AuthGuard has a `binding_id` source to
+consult from day one.
+
+**Forensics:** historical bindings remain in the table indefinitely with
+`ended_at != NULL`. The participant-record `binding_id` references in
+`crypto_keys.participants[]` continue to identify the historical tenure
+even after the binding row is marked ended. "Who was bound to character
+X on date Y" resolves to a single SELECT.
+
+**Why a separate table rather than columns on `characters`:**
+
+- Columns on `characters` lose history on UPDATE — only the current
+  binding's identity survives. Phase 4 wizard-transfer audit needs the
+  history; INV-10 + INV-11 forensics need it.
+- Columns on `characters` cannot represent the brief overlap window
+  during transfer (old binding ending + new binding starting in one
+  transaction); a two-row transition in `player_character_bindings`
+  makes the transition atomic and observable.
+- Forward-compat with binding-level features (per-binding permissions,
+  binding-scoped quotas, transfer history surfacing in admin UIs) — all
+  natural if the binding is a first-class entity.
+
 ### 4.4 Codec naming convention
 
 The substrate already defines `codec.Name` as a closed enumeration in
@@ -1203,9 +1309,13 @@ joins existing context" flow.
 1. Look up current `crypto_keys` row for `context_id` where
    `rotated_at IS NULL`. If none exists, create DEK_v1 (the
    "context just came into existence" path).
-2. Append `(player_id, character_id, binding_id, joined_at, added_via)` to
+2. Resolve the joining character's current `binding_id` via
+   `Bindings.Current(character_id)` (§4.3a). If no active binding row
+   exists, fail with `BINDING_MISSING` — every character with an active
+   game session MUST have an active binding row.
+3. Append `(player_id, character_id, binding_id, joined_at, added_via)` to
    the `participants` JSONB array. Single SQL UPDATE.
-3. AuthGuard reads `participants` from PG at decrypt time; participants
+4. AuthGuard reads `participants` from PG at decrypt time; participants
    are NOT cached. So `Add` does NOT publish on the cache-invalidation
    subject — there is no cached participant list to invalidate.
 
