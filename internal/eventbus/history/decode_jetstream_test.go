@@ -13,6 +13,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -322,7 +323,9 @@ func TestDecodeJetStreamMessageTOCTOUDefenseZerosPlaintextOnAuditQueueFull(t *te
 		PluginName: "mod-filter",
 	}
 
-	auditErr := errors.New("queue full")
+	// Use oops-coded AUDIT_QUEUE_FULL so isHistoryAuditQueueFull recognises it
+	// as the TOCTOU-fallback trigger (plain errors.New would propagate instead).
+	auditErr := oops.Code("AUDIT_QUEUE_FULL").Errorf("fake: audit queue full")
 	audit := &historyRecordingAuditEmitter{retErr: auditErr}
 
 	ev, err := decodeJetStreamMessage(context.Background(), msg, nil, identity,
@@ -380,4 +383,97 @@ func TestDecodeJetStreamMessageAuthGuardPermitDecodeErrorPropagates(t *testing.T
 		historyAlwaysPermitGuard{}, historyKeyDEKManager{key: wrongKey}, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_CODEC_DECODE_FAILED")
+}
+
+// --- Round 5: nil-dekMgr and INV-19 error paths (history) ---
+
+// historyFailingAuditEmitterWithCode is a SessionAuditEmitter that always
+// returns an oops error with the given error code. Used to test the narrowed
+// AUDIT_QUEUE_FULL fallback vs. non-queue-full propagation.
+type historyFailingAuditEmitterWithCode struct {
+	code string
+}
+
+func (f historyFailingAuditEmitterWithCode) EmitPluginDecrypt(_ context.Context, _ eventbus.PluginDecryptRecord) error {
+	return oops.Code(f.code).Errorf("fake: audit emit failed with code %s", f.code)
+}
+
+// TestDecodeJetStreamMessageNilDEKManagerAfterPermitFailsClosed verifies that
+// when the AuthGuard permits but dekMgr is nil (misconfiguration),
+// decodeAndAuthorizeHistory fails closed with EVENTBUS_HISTORY_DEK_MANAGER_NIL.
+func TestDecodeJetStreamMessageNilDEKManagerAfterPermitFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	h := validSensitiveHistoryHeaders(t)
+	msg := &stubMsg{headers: h, data: validSensitiveHistoryPayload(t)}
+	identity := eventbus.SessionIdentity{Kind: eventbus.IdentityKindCharacter}
+
+	_, err := decodeJetStreamMessage(context.Background(), msg, nil, identity,
+		historyAlwaysPermitGuard{}, nil, nil) // nil dekMgr
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_DEK_MANAGER_NIL")
+}
+
+// TestDecodeJetStreamMessagePluginIdentityWithNilAuditEmitterFailsClosed
+// verifies INV-19: when a plugin identity receives a permit decision but the
+// audit emitter is nil, decodeAndAuthorizeHistory must fail closed with
+// EVENTBUS_HISTORY_AUDIT_EMITTER_NIL rather than delivering plaintext.
+func TestDecodeJetStreamMessagePluginIdentityWithNilAuditEmitterFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	key := newHistoryTestXChachaKey(t)
+	plaintext := []byte(`{"secret":"must not leak"}`)
+	msg := encryptedHistoryMsg(t, key, plaintext)
+	identity := eventbus.SessionIdentity{
+		Kind:       eventbus.IdentityKindPlugin,
+		PluginName: "mod-filter",
+	}
+
+	_, err := decodeJetStreamMessage(context.Background(), msg, nil, identity,
+		historyAlwaysPermitGuard{}, historyKeyDEKManager{key: key}, nil) // nil auditEm
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_AUDIT_EMITTER_NIL")
+}
+
+// TestDecodeJetStreamMessagePluginNonQueueFullAuditErrorPropagates verifies
+// that when the audit emitter returns a non-AUDIT_QUEUE_FULL error,
+// decodeAndAuthorizeHistory propagates it as EVENTBUS_HISTORY_AUDIT_EMIT_FAILED.
+func TestDecodeJetStreamMessagePluginNonQueueFullAuditErrorPropagates(t *testing.T) {
+	t.Parallel()
+
+	key := newHistoryTestXChachaKey(t)
+	plaintext := []byte(`{"secret":"must not leak"}`)
+	msg := encryptedHistoryMsg(t, key, plaintext)
+	identity := eventbus.SessionIdentity{
+		Kind:       eventbus.IdentityKindPlugin,
+		PluginName: "mod-filter",
+	}
+
+	_, err := decodeJetStreamMessage(context.Background(), msg, nil, identity,
+		historyAlwaysPermitGuard{}, historyKeyDEKManager{key: key},
+		historyFailingAuditEmitterWithCode{code: "AUDIT_EMITTER_FAILED"})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_AUDIT_EMIT_FAILED")
+}
+
+// TestDecodeJetStreamMessagePluginAuditQueueFullStillStampsMetadataOnly
+// verifies that the AUDIT_QUEUE_FULL code (specifically) triggers the TOCTOU
+// plaintext-zero + metadata_only fallback in the history path.
+func TestDecodeJetStreamMessagePluginAuditQueueFullStillStampsMetadataOnly(t *testing.T) {
+	t.Parallel()
+
+	key := newHistoryTestXChachaKey(t)
+	plaintext := []byte(`{"secret":"do not leak"}`)
+	msg := encryptedHistoryMsg(t, key, plaintext)
+	identity := eventbus.SessionIdentity{
+		Kind:       eventbus.IdentityKindPlugin,
+		PluginName: "mod-filter",
+	}
+
+	ev, err := decodeJetStreamMessage(context.Background(), msg, nil, identity,
+		historyAlwaysPermitGuard{}, historyKeyDEKManager{key: key},
+		historyFailingAuditEmitterWithCode{code: "AUDIT_QUEUE_FULL"})
+	require.NoError(t, err)
+	assert.True(t, ev.MetadataOnly, "AUDIT_QUEUE_FULL must stamp MetadataOnly=true")
+	assert.Empty(t, ev.Payload, "AUDIT_QUEUE_FULL must return empty payload")
 }

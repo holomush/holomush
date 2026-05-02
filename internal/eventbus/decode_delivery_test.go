@@ -14,6 +14,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -440,8 +441,9 @@ func TestDecodeDeliveryAuthGuardPermitForPluginQueueFullZerosPlaintextAndStampsM
 	}
 
 	// Inject a DEK manager that returns a key we can observe, and a
-	// capturing audit emitter that returns AUDIT_QUEUE_FULL.
-	auditErr := errors.New("queue full")
+	// capturing audit emitter that returns AUDIT_QUEUE_FULL (oops-coded so
+	// isAuditQueueFull recognises it as the TOCTOU-fallback trigger).
+	auditErr := oops.Code("AUDIT_QUEUE_FULL").Errorf("fake: audit queue full")
 	auditRec := &recordingAuditEmitter{retErr: auditErr}
 
 	event, metaOnly, err := decodeDeliveryWithAuth(
@@ -527,4 +529,127 @@ func TestDecodeDeliveryAuthGuardPermitDecodeErrorPropagates(t *testing.T) {
 	)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_CODEC_DECODE_FAILED")
+}
+
+// --- Round 5: nil-dekMgr and INV-19 error paths ---
+
+// TestDecodeDeliveryNilDEKManagerAfterPermitFailsClosed verifies that when
+// the AuthGuard permits but dekMgr is nil (misconfiguration), decodeAndAuthorize
+// fails closed with EVENTBUS_DEK_MANAGER_NIL rather than panicking.
+func TestDecodeDeliveryNilDEKManagerAfterPermitFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	h := validSensitiveHeaders(t)
+	msg := &stubMsg{headers: h, data: validSensitivePayload(t)}
+
+	_, _, err := decodeDeliveryWithAuth(
+		context.Background(),
+		msg,
+		nil,
+		SessionIdentity{Kind: IdentityKindCharacter},
+		fakeAlwaysPermitGuard{},
+		nil, // nil dekMgr — the misconfiguration under test
+		fakeNilAuditEmitter{},
+	)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVENTBUS_DEK_MANAGER_NIL")
+}
+
+// TestDecodeDeliveryPluginIdentityWithNilAuditEmitterFailsClosed verifies
+// INV-19: when a plugin identity receives a permit decision but the audit
+// emitter is nil (configuration error), decodeAndAuthorize must fail closed
+// with EVENTBUS_AUDIT_EMITTER_NIL rather than delivering plaintext without
+// an audit record.
+func TestDecodeDeliveryPluginIdentityWithNilAuditEmitterFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	key := newTestXChachaKey(t)
+	plaintext := []byte(`{"secret":"must not leak"}`)
+	msg := encryptedSensitiveMsg(t, key, plaintext)
+
+	identity := SessionIdentity{
+		Kind:       IdentityKindPlugin,
+		PluginName: "mod-filter",
+	}
+
+	_, _, err := decodeDeliveryWithAuth(
+		context.Background(),
+		msg,
+		nil,
+		identity,
+		fakeAlwaysPermitGuard{},
+		fakeKeyDEKManager{key: key},
+		nil, // nil auditEm — the misconfiguration under test
+	)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVENTBUS_AUDIT_EMITTER_NIL")
+}
+
+// failingAuditEmitterWithCode is a SessionAuditEmitter that always returns an
+// oops error with the given error code. Used to distinguish AUDIT_QUEUE_FULL
+// (metadata-only fallback) from unexpected errors (fail closed).
+type failingAuditEmitterWithCode struct {
+	code string
+}
+
+func (f failingAuditEmitterWithCode) EmitPluginDecrypt(_ context.Context, _ PluginDecryptRecord) error {
+	return oops.Code(f.code).Errorf("fake: audit emit failed with code %s", f.code)
+}
+
+// TestDecodeDeliveryPluginNonQueueFullAuditErrorPropagates verifies that when
+// the audit emitter returns a non-AUDIT_QUEUE_FULL error, decodeAndAuthorize
+// propagates it as EVENTBUS_AUDIT_EMIT_FAILED (fail closed). This distinguishes
+// the "audit might not have landed" case from the narrow TOCTOU fallback.
+func TestDecodeDeliveryPluginNonQueueFullAuditErrorPropagates(t *testing.T) {
+	t.Parallel()
+
+	key := newTestXChachaKey(t)
+	plaintext := []byte(`{"secret":"must not leak"}`)
+	msg := encryptedSensitiveMsg(t, key, plaintext)
+
+	identity := SessionIdentity{
+		Kind:       IdentityKindPlugin,
+		PluginName: "mod-filter",
+	}
+
+	_, _, err := decodeDeliveryWithAuth(
+		context.Background(),
+		msg,
+		nil,
+		identity,
+		fakeAlwaysPermitGuard{},
+		fakeKeyDEKManager{key: key},
+		failingAuditEmitterWithCode{code: "AUDIT_EMITTER_FAILED"},
+	)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVENTBUS_AUDIT_EMIT_FAILED")
+}
+
+// TestDecodeDeliveryPluginAuditQueueFullStillStampsMetadataOnly verifies that
+// the AUDIT_QUEUE_FULL code (specifically) triggers the TOCTOU plaintext-zero +
+// metadata_only fallback, and distinguishes it from the non-queue-full path.
+func TestDecodeDeliveryPluginAuditQueueFullStillStampsMetadataOnly(t *testing.T) {
+	t.Parallel()
+
+	key := newTestXChachaKey(t)
+	plaintext := []byte(`{"secret":"do not leak"}`)
+	msg := encryptedSensitiveMsg(t, key, plaintext)
+
+	identity := SessionIdentity{
+		Kind:       IdentityKindPlugin,
+		PluginName: "mod-filter",
+	}
+
+	event, metaOnly, err := decodeDeliveryWithAuth(
+		context.Background(),
+		msg,
+		nil,
+		identity,
+		fakeAlwaysPermitGuard{},
+		fakeKeyDEKManager{key: key},
+		failingAuditEmitterWithCode{code: "AUDIT_QUEUE_FULL"},
+	)
+	require.NoError(t, err)
+	assert.True(t, metaOnly, "AUDIT_QUEUE_FULL must stamp metadataOnly=true")
+	assert.Empty(t, event.Payload, "AUDIT_QUEUE_FULL must return empty payload")
 }

@@ -409,3 +409,31 @@ func TestDecision_IsInfraFailure(t *testing.T) {
 		})
 	}
 }
+
+// TestIsReservedActionKeyRecognizesReservedKey verifies that the well-known
+// reserved key "name" (written by the attribute resolver) is correctly
+// identified as reserved.
+func TestIsReservedActionKeyRecognizesReservedKey(t *testing.T) {
+	t.Parallel()
+	assert.True(t, IsReservedActionKey("name"), `"name" must be a reserved action key`)
+}
+
+// TestIsReservedActionKeyRejectsUnknownKey verifies that an arbitrary key
+// that is not in the reserved set returns false, preventing false positives.
+func TestIsReservedActionKeyRejectsUnknownKey(t *testing.T) {
+	t.Parallel()
+	assert.False(t, IsReservedActionKey("anything-else"), `non-reserved keys must not be reported as reserved`)
+	assert.False(t, IsReservedActionKey(""), `empty string must not be reported as reserved`)
+	assert.False(t, IsReservedActionKey("Name"), `key lookup must be case-sensitive`)
+}
+
+// TestNewAccessRequestRejectsReservedAttributeKeyViaIsReservedActionKey verifies
+// that NewAccessRequest delegates its reserved-key check through IsReservedActionKey,
+// ensuring the constructor and the accessor share the same invariant set.
+func TestNewAccessRequestRejectsReservedAttributeKeyViaIsReservedActionKey(t *testing.T) {
+	t.Parallel()
+	// "name" is the only current member of reservedActionKeys.
+	_, err := NewAccessRequest("subject", "read", "resource", map[string]any{"name": "injected"})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "ACCESS_REQUEST_RESERVED_ATTRIBUTE")
+}

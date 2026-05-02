@@ -553,6 +553,12 @@ func decodeAndAuthorizeHistory(
 	}
 
 	// Permit: resolve key, build AAD, decode.
+	// Guard against misconfiguration: WithHistoryAuthGuard set without
+	// WithHistoryDEKManager. Fail closed rather than panic.
+	if dekMgr == nil {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_DEK_MANAGER_NIL").
+			Errorf("AuthGuard permitted decrypt but DEKManager is nil — misconfiguration")
+	}
 	key, err := dekMgr.Resolve(ctx, keyID, keyVersion)
 	if err != nil {
 		return eventbus.Event{}, false, oops.Code("EVENTBUS_DEK_RESOLVE_FAILED").
@@ -577,8 +583,15 @@ func decodeAndAuthorizeHistory(
 			With("codec", string(codecName)).Wrap(err)
 	}
 
-	// Plugin recipient: emit audit record; on AUDIT_QUEUE_FULL, zero plaintext + return metadata-only.
-	if identity.Kind == eventbus.IdentityKindPlugin && auditEm != nil {
+	// Plugin recipient: INV-19 — every plugin decrypt MUST produce an audit
+	// record. Fail closed if the emitter is absent or fails unexpectedly.
+	if identity.Kind == eventbus.IdentityKindPlugin {
+		if auditEm == nil {
+			// AuthGuard permitted the read but no emitter is wired — configuration
+			// error. Fail closed rather than deliver plaintext without audit.
+			return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_AUDIT_EMITTER_NIL").
+				Errorf("AuthGuard permitted plugin decrypt but no DecryptAuditEmitter configured (INV-19)")
+		}
 		rec := eventbus.PluginDecryptRecord{
 			PluginName:       identity.PluginName,
 			PluginInstanceID: identity.InstanceID,
@@ -590,14 +603,39 @@ func decodeAndAuthorizeHistory(
 			GrantID:          decision.GrantID,
 		}
 		if emitErr := auditEm.EmitPluginDecrypt(ctx, rec); emitErr != nil {
-			for i := range plaintext {
-				plaintext[i] = 0
+			// Narrow: only AUDIT_QUEUE_FULL gets the plaintext-zero +
+			// metadata_only fallback (TOCTOU defense per Decision 3).
+			// Any other emit error means we cannot confirm the audit
+			// landed — fail closed.
+			if isHistoryAuditQueueFull(emitErr) {
+				for i := range plaintext {
+					plaintext[i] = 0
+				}
+				return buildHistoryEventFromEnvelope(eventID, envelope, nil), true, nil
 			}
-			return buildHistoryEventFromEnvelope(eventID, envelope, nil), true, nil
+			return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_AUDIT_EMIT_FAILED").
+				With("emit_error", emitErr.Error()).
+				Errorf("plugin decrypt audit emit failed — cannot confirm audit landed (INV-19)")
 		}
 	}
 
 	return buildHistoryEventFromEnvelope(eventID, envelope, plaintext), false, nil
+}
+
+// isHistoryAuditQueueFull reports whether err is an AUDIT_QUEUE_FULL oops error.
+// Mirrors isAuditQueueFull in subscriber.go; kept separate to avoid cross-package
+// coupling between subscriber and history. Used to distinguish the narrowly
+// acceptable TOCTOU fallback from unexpected emit errors that must propagate.
+func isHistoryAuditQueueFull(err error) bool {
+	if err == nil {
+		return false
+	}
+	o, ok := oops.AsOops(err)
+	if !ok {
+		return false
+	}
+	code, ok := o.Code().(string)
+	return ok && code == "AUDIT_QUEUE_FULL"
 }
 
 // buildHistoryEventFromEnvelope constructs an eventbus.Event from a proto

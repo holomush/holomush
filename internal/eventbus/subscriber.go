@@ -631,6 +631,12 @@ func decodeAndAuthorize(
 	}
 
 	// Permit: resolve key, build AAD, decode plaintext.
+	// Guard against misconfiguration: WithSubscriberAuthGuard set without
+	// WithSubscriberDEKManager. Fail closed rather than panic.
+	if dekMgr == nil {
+		return Event{}, false, oops.Code("EVENTBUS_DEK_MANAGER_NIL").
+			Errorf("AuthGuard permitted decrypt but DEKManager is nil — misconfiguration")
+	}
 	key, err := dekMgr.Resolve(ctx, keyID, keyVersion)
 	if err != nil {
 		return Event{}, false, oops.Code("EVENTBUS_DEK_RESOLVE_FAILED").
@@ -655,9 +661,15 @@ func decodeAndAuthorize(
 			With("codec", string(codecName)).Wrap(err)
 	}
 
-	// Plugin recipient branch: emit audit record; on AUDIT_QUEUE_FULL, zero
-	// plaintext buffer (TOCTOU defense) and return metadata-only.
-	if identity.Kind == IdentityKindPlugin && auditEm != nil {
+	// Plugin recipient branch: INV-19 — every plugin decrypt MUST produce an
+	// audit record. Fail closed if the emitter is absent or fails unexpectedly.
+	if identity.Kind == IdentityKindPlugin {
+		if auditEm == nil {
+			// AuthGuard permitted the read but no emitter is wired — configuration
+			// error. Fail closed rather than deliver plaintext without audit.
+			return Event{}, false, oops.Code("EVENTBUS_AUDIT_EMITTER_NIL").
+				Errorf("AuthGuard permitted plugin decrypt but no DecryptAuditEmitter configured (INV-19)")
+		}
 		rec := PluginDecryptRecord{
 			PluginName:       identity.PluginName,
 			PluginInstanceID: identity.InstanceID,
@@ -669,15 +681,38 @@ func decodeAndAuthorize(
 			GrantID:          decision.GrantID,
 		}
 		if emitErr := auditEm.EmitPluginDecrypt(ctx, rec); emitErr != nil {
-			// Zero the plaintext buffer before returning metadata-only.
-			for i := range plaintext {
-				plaintext[i] = 0
+			// Narrow: only AUDIT_QUEUE_FULL gets the plaintext-zero +
+			// metadata_only fallback (TOCTOU defense per Decision 3).
+			// Any other emit error means we cannot confirm the audit
+			// landed — fail closed.
+			if isAuditQueueFull(emitErr) {
+				for i := range plaintext {
+					plaintext[i] = 0
+				}
+				return buildEventFromEnvelope(eventID, envelope, nil), true, nil
 			}
-			return buildEventFromEnvelope(eventID, envelope, nil), true, nil
+			return Event{}, false, oops.Code("EVENTBUS_AUDIT_EMIT_FAILED").
+				With("emit_error", emitErr.Error()).
+				Errorf("plugin decrypt audit emit failed — cannot confirm audit landed (INV-19)")
 		}
 	}
 
 	return buildEventFromEnvelope(eventID, envelope, plaintext), false, nil
+}
+
+// isAuditQueueFull reports whether err is an AUDIT_QUEUE_FULL oops error.
+// Used to distinguish the narrowly acceptable TOCTOU fallback (plaintext-zero +
+// metadata_only) from unexpected emit errors that must propagate (fail closed).
+func isAuditQueueFull(err error) bool {
+	if err == nil {
+		return false
+	}
+	o, ok := oops.AsOops(err)
+	if !ok {
+		return false
+	}
+	code, ok := o.Code().(string)
+	return ok && code == "AUDIT_QUEUE_FULL"
 }
 
 // buildEventFromEnvelope constructs an Event from a proto envelope and a
