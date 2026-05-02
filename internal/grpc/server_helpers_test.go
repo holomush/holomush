@@ -114,7 +114,7 @@ func TestToProtoSubscribeResponseMapsFields(t *testing.T) {
 		Timestamp: time.Unix(42, 0),
 		Actor:     eventbus.Actor{Kind: eventbus.ActorKindCharacter, ID: charID},
 		Payload:   []byte("x"),
-	})
+	}, false)
 	ev := resp.GetEvent()
 	require.NotNil(t, ev)
 	assert.Equal(t, id.String(), ev.GetId())

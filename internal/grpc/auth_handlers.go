@@ -73,10 +73,14 @@ type Transactor interface {
 	InTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
-// BindingCreator creates a new active player↔character binding.
-// Returns the new binding ID.
-type BindingCreator interface {
+// BindingRepo provides player↔character binding operations used by the
+// Subscribe and QueryStreamHistory handlers (Current) and by the
+// CreateCharacter / CreateGuest handlers (Create).
+type BindingRepo interface {
 	Create(ctx context.Context, playerID, characterID, reason string) (string, error)
+	// Current returns the active binding_id for characterID.
+	// Returns BINDING_NOT_FOUND if no active binding exists.
+	Current(ctx context.Context, characterID string) (string, error)
 }
 
 // WithAuthService sets the auth service for two-phase login.
@@ -135,10 +139,11 @@ func WithTransactor(t Transactor) CoreServerOption {
 	}
 }
 
-// WithBindingRepository sets the binding repository for player↔character binding creation.
-func WithBindingRepository(b BindingCreator) CoreServerOption {
+// WithBindingRepository sets the binding repository for player↔character
+// binding creation (Create) and current-binding lookup (Current).
+func WithBindingRepository(b BindingRepo) CoreServerOption {
 	return func(s *CoreServer) {
-		s.bindingCreator = b
+		s.bindings = b
 	}
 }
 
@@ -434,10 +439,10 @@ func (s *CoreServer) CreateCharacter(ctx context.Context, req *corev1.CreateChar
 }
 
 // createCharacterAtomic creates a character and its binding in a single transaction
-// when both transactor and bindingCreator are configured. Falls back to plain character
+// when both transactor and bindings are configured. Falls back to plain character
 // creation (no binding) when either is nil, preserving backward compatibility.
 func (s *CoreServer) createCharacterAtomic(ctx context.Context, playerID ulid.ULID, name string, out **world.Character) error {
-	if s.transactor == nil || s.bindingCreator == nil {
+	if s.transactor == nil || s.bindings == nil {
 		// Fall back to non-transactional character creation (Phase 3b not fully wired).
 		var err error
 		*out, err = s.characterService.Create(ctx, playerID, name)
@@ -449,7 +454,7 @@ func (s *CoreServer) createCharacterAtomic(ctx context.Context, playerID ulid.UL
 		if err != nil {
 			return oops.Code("CHARACTER_CREATE_FAILED").Wrap(err)
 		}
-		if _, bindErr := s.bindingCreator.Create(txCtx, playerID.String(), (*out).ID.String(), "initial_bind"); bindErr != nil {
+		if _, bindErr := s.bindings.Create(txCtx, playerID.String(), (*out).ID.String(), "initial_bind"); bindErr != nil {
 			return oops.Code("CHARACTER_CREATE_BINDING_FAILED").Wrap(bindErr)
 		}
 		return nil

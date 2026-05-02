@@ -437,10 +437,11 @@ func decodeJetStreamMessage(
 		payload = envelope.GetPayload()
 	case guard != nil:
 		// Sensitive codec with AuthGuard wired: full Decision 5 order-of-operations.
-		ev, _, authErr := decodeAndAuthorizeHistory(ctx, msg, &envelope, codecName, identity, guard, dekMgr, auditEm)
+		ev, metaOnly, authErr := decodeAndAuthorizeHistory(ctx, msg, &envelope, codecName, identity, guard, dekMgr, auditEm)
 		if authErr != nil {
 			return eventbus.Event{}, authErr
 		}
+		ev.MetadataOnly = metaOnly
 		return ev, nil
 	default:
 		// Guard nil: legacy passthrough decode with nil AAD (pre-Phase 3b / tests).

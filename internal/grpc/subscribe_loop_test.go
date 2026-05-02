@@ -80,17 +80,18 @@ var _ eventbus.SessionStream = (*fakeSessionStream)(nil)
 
 // fakeDelivery implements eventbus.Delivery with counters for Ack/Nack.
 type fakeDelivery struct {
-	ev        eventbus.Event
-	ackErr    error
-	nackErr   error
-	ackCnt    int
-	nackCnt   int
-	inProgCnt int
-	mu        sync.Mutex
+	ev           eventbus.Event
+	metadataOnly bool
+	ackErr       error
+	nackErr      error
+	ackCnt       int
+	nackCnt      int
+	inProgCnt    int
+	mu           sync.Mutex
 }
 
 func (d *fakeDelivery) Event() eventbus.Event { return d.ev }
-func (d *fakeDelivery) MetadataOnly() bool    { return false }
+func (d *fakeDelivery) MetadataOnly() bool    { return d.metadataOnly }
 
 func (d *fakeDelivery) Ack() error {
 	d.mu.Lock()
@@ -600,4 +601,38 @@ func (u ulidEntropy) Read(p []byte) (int, error) {
 		p[i] = u.seed
 	}
 	return len(p), nil
+}
+
+func TestDispatchDeliveryStampsMetadataOnlyWhenDeliveryReportsTrue(t *testing.T) {
+	t.Parallel()
+	s := &CoreServer{}
+	info := &session.Info{ID: "s1"}
+	stream := &fakeSubscribeStream{ctx: context.Background()}
+	charID := core.NewULID().String()
+
+	d := makeDelivery(t, "say", charID)
+	d.metadataOnly = true
+
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	require.NoError(t, err)
+	require.Len(t, stream.sent, 1)
+	assert.True(t, stream.sent[0].GetEvent().GetMetadataOnly(),
+		"EventFrame.metadata_only must be true when delivery.MetadataOnly() returns true")
+}
+
+func TestDispatchDeliveryDoesNotStampMetadataOnlyWhenFalse(t *testing.T) {
+	t.Parallel()
+	s := &CoreServer{}
+	info := &session.Info{ID: "s1"}
+	stream := &fakeSubscribeStream{ctx: context.Background()}
+	charID := core.NewULID().String()
+
+	d := makeDelivery(t, "say", charID)
+	// metadataOnly defaults to false
+
+	err := s.dispatchDelivery(context.Background(), info, d, stream, nil)
+	require.NoError(t, err)
+	require.Len(t, stream.sent, 1)
+	assert.False(t, stream.sent[0].GetEvent().GetMetadataOnly(),
+		"EventFrame.metadata_only must be false when delivery.MetadataOnly() returns false")
 }

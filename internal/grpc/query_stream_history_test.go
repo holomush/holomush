@@ -954,3 +954,101 @@ func TestQueryStreamHistoryTranslatesPluginPermissionDeniedToOpaqueCode(t *testi
 	assert.Equal(t, stream, ctx["stream"],
 		"plugin-path translation MUST attach stream from the request")
 }
+
+func TestQueryStreamHistoryPassesIdentityFromBindingsToHistoryQuery(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	charID := core.NewULID()
+	playerID := core.NewULID()
+	bindingID := "bnd-test-001"
+
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {
+			ID:          "s1",
+			CharacterID: charID,
+			PlayerID:    playerID,
+			ExpiresAt:   &future,
+		},
+	})
+	reader := &fakeHistoryReader{}
+	s := &CoreServer{
+		sessionStore:  sess,
+		historyReader: reader,
+		accessEngine:  policytest.AllowAllEngine(),
+		bindings:      &fakeBindingRepo{bindingID: bindingID},
+	}
+
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Count:     10,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, eventbus.IdentityKindCharacter, reader.gotQ.Identity.Kind,
+		"HistoryQuery.Identity.Kind must be IdentityKindCharacter when bindings are wired")
+	assert.Equal(t, playerID.String(), reader.gotQ.Identity.PlayerID,
+		"HistoryQuery.Identity.PlayerID must match session's PlayerID")
+	assert.Equal(t, charID.String(), reader.gotQ.Identity.CharacterID,
+		"HistoryQuery.Identity.CharacterID must match session's CharacterID")
+	assert.Equal(t, bindingID, reader.gotQ.Identity.BindingID,
+		"HistoryQuery.Identity.BindingID must match the binding returned by Current")
+}
+
+func TestQueryStreamHistoryBindingLookupFailureReturnsError(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	charID := core.NewULID()
+	playerID := core.NewULID()
+
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {
+			ID:          "s1",
+			CharacterID: charID,
+			PlayerID:    playerID,
+			ExpiresAt:   &future,
+		},
+	})
+	reader := &fakeHistoryReader{}
+	s := &CoreServer{
+		sessionStore:  sess,
+		historyReader: reader,
+		accessEngine:  policytest.AllowAllEngine(),
+		bindings:      &fakeBindingRepo{err: errors.New("db error")},
+	}
+
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Count:     10,
+	})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "HISTORY_BINDING_LOOKUP_FAILED")
+}
+
+func TestQueryStreamHistoryPassesZeroIdentityWhenBindingsNil(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	charID := core.NewULID()
+	playerID := core.NewULID()
+
+	sess := newTestSessionStore(t, map[string]*session.Info{
+		"s1": {
+			ID:          "s1",
+			CharacterID: charID,
+			PlayerID:    playerID,
+			ExpiresAt:   &future,
+		},
+	})
+	reader := &fakeHistoryReader{}
+	// No bindings wired — zero-value SessionIdentity flows through.
+	s := newQueryStreamHistoryServer(t, reader, sess)
+
+	_, err := s.QueryStreamHistory(context.Background(), &corev1.QueryStreamHistoryRequest{
+		SessionId: "s1",
+		Stream:    "location:01HYXYZ0C0000000000000000C",
+		Count:     10,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, eventbus.IdentityKindUnknown, reader.gotQ.Identity.Kind,
+		"when bindings is nil, HistoryQuery.Identity must be zero-value (IdentityKindUnknown)")
+}
