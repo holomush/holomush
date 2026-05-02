@@ -70,7 +70,7 @@ type fakeSubscriber struct {
 	opens   int
 }
 
-func (f *fakeSubscriber) OpenSession(_ context.Context, _ string, _ []eventbus.Subject) (eventbus.SessionStream, error) {
+func (f *fakeSubscriber) OpenSession(_ context.Context, _ string, _ eventbus.SessionIdentity, _ []eventbus.Subject) (eventbus.SessionStream, error) {
 	f.opens++
 	if f.openErr != nil {
 		return nil, f.openErr

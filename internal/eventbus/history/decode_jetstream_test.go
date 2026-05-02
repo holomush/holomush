@@ -66,7 +66,7 @@ func TestDecodeJetStreamMessageHappyPath(t *testing.T) {
 	t.Parallel()
 	h, id := validHeaders(t)
 	msg := &stubMsg{headers: h, data: validPayload(t)}
-	ev, err := decodeJetStreamMessage(context.Background(), msg, nil)
+	ev, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, id, ev.ID)
 	assert.Equal(t, eventbus.Subject("events.main.audit"), ev.Subject)
@@ -77,7 +77,7 @@ func TestDecodeJetStreamMessageRejectsMissingMsgID(t *testing.T) {
 	h, _ := validHeaders(t)
 	h.Del(eventbus.HeaderMsgID)
 	msg := &stubMsg{headers: h, data: validPayload(t)}
-	_, err := decodeJetStreamMessage(context.Background(), msg, nil)
+	_, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_MISSING_HEADER")
 }
@@ -87,7 +87,7 @@ func TestDecodeJetStreamMessageRejectsBadMsgID(t *testing.T) {
 	h, _ := validHeaders(t)
 	h.Set(eventbus.HeaderMsgID, "nope")
 	msg := &stubMsg{headers: h, data: validPayload(t)}
-	_, err := decodeJetStreamMessage(context.Background(), msg, nil)
+	_, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_BAD_MSG_ID")
 }
@@ -97,7 +97,7 @@ func TestDecodeJetStreamMessageRejectsMissingCodec(t *testing.T) {
 	h, _ := validHeaders(t)
 	h.Del(eventbus.HeaderCodec)
 	msg := &stubMsg{headers: h, data: validPayload(t)}
-	_, err := decodeJetStreamMessage(context.Background(), msg, nil)
+	_, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_MISSING_HEADER")
 }
@@ -107,7 +107,7 @@ func TestDecodeJetStreamMessageRejectsUnknownCodec(t *testing.T) {
 	h, _ := validHeaders(t)
 	h.Set(eventbus.HeaderCodec, "bogus-codec")
 	msg := &stubMsg{headers: h, data: validPayload(t)}
-	_, err := decodeJetStreamMessage(context.Background(), msg, nil)
+	_, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_UNKNOWN_CODEC")
 }
@@ -116,7 +116,7 @@ func TestDecodeJetStreamMessageRejectsMalformedProto(t *testing.T) {
 	t.Parallel()
 	h, _ := validHeaders(t)
 	msg := &stubMsg{headers: h, data: []byte("not-proto-bytes-at-all")}
-	_, err := decodeJetStreamMessage(context.Background(), msg, nil)
+	_, err := decodeJetStreamMessage(context.Background(), msg, nil, eventbus.SessionIdentity{}, nil, nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_HISTORY_UNMARSHAL_FAILED")
 }

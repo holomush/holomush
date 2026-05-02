@@ -18,7 +18,7 @@ import (
 type fakeBus struct{}
 
 func (fakeBus) Publish(_ context.Context, _ eventbus.Event) error { return nil }
-func (fakeBus) OpenSession(_ context.Context, _ string, _ []eventbus.Subject) (eventbus.SessionStream, error) {
+func (fakeBus) OpenSession(_ context.Context, _ string, _ eventbus.SessionIdentity, _ []eventbus.Subject) (eventbus.SessionStream, error) {
 	return nil, nil
 }
 

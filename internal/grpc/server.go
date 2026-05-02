@@ -780,7 +780,11 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	// Open the bus session. JS preserves the durable consumer's cursor
 	// across reconnect, so events not acked last time get redelivered
 	// automatically; there is no explicit replay phase.
-	busStream, subErr := s.subscriber.OpenSession(ctx, req.SessionId, filters)
+	// TODO(T10): construct SessionIdentity from authenticated session record here.
+	// For now use a zero-value SessionIdentity; crypto is gated by
+	// WithSubscriberAuthGuard being wired (which it is not until T10/T11), so
+	// this is safe for all Crypto.Enabled=false deployments.
+	busStream, subErr := s.subscriber.OpenSession(ctx, req.SessionId, eventbus.SessionIdentity{}, filters)
 	if subErr != nil {
 		return oops.Code("SUBSCRIBE_FAILED").With("session_id", req.SessionId).Wrap(subErr)
 	}

@@ -359,7 +359,7 @@ var _ core.EventAppender = (*noopEventStore)(nil)
 // the spec asserts on.
 type unusedSubscriber struct{}
 
-func (unusedSubscriber) OpenSession(_ context.Context, _ string, _ []eventbus.Subject) (eventbus.SessionStream, error) {
+func (unusedSubscriber) OpenSession(_ context.Context, _ string, _ eventbus.SessionIdentity, _ []eventbus.Subject) (eventbus.SessionStream, error) {
 	return nil, oops.Code("TEST_SUITE_BUG").Errorf("unusedSubscriber.OpenSession invoked: a spec reached the subscriber call without expecting to")
 }
 

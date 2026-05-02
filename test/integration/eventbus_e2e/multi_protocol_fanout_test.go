@@ -45,10 +45,11 @@ func TestMultiProtocolFanoutTelnetAndWebSeeSamePose(t *testing.T) {
 	subject := eventbus.Subject("events.main.scene.01ABC.ic")
 
 	// Two subscribers on the same subject simulate two protocol adapters.
-	s1, err := subSvc.OpenSession(ctx, freshSessionID(), []eventbus.Subject{subject})
+	testID := eventbus.SessionIdentity{Kind: eventbus.IdentityKindCharacter, PlayerID: "01TESTPLAYER01234567890A", CharacterID: "01TESTCHARACTER0123456A", BindingID: "01TESTBINDING01234567AB"}
+	s1, err := subSvc.OpenSession(ctx, freshSessionID(), testID, []eventbus.Subject{subject})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s1.Close() })
-	s2, err := subSvc.OpenSession(ctx, freshSessionID(), []eventbus.Subject{subject})
+	s2, err := subSvc.OpenSession(ctx, freshSessionID(), testID, []eventbus.Subject{subject})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s2.Close() })
 

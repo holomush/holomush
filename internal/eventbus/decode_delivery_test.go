@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"errors"
+
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/oklog/ulid/v2"
@@ -16,6 +18,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/pkg/errutil"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
@@ -166,4 +169,92 @@ func TestDecodeDeliveryPopulatesSeqFromMetadata(t *testing.T) {
 	ev, err := decodeDelivery(context.Background(), msg, nil)
 	require.NoError(t, err)
 	assert.Equal(t, uint64(42), ev.Seq)
+}
+
+// fakeAlwaysDenyGuard is a SessionAuthGuard stub that always denies. Used to
+// test the AuthGuard-deny → metadata_only path in decodeAndAuthorize.
+type fakeAlwaysDenyGuard struct{}
+
+func (fakeAlwaysDenyGuard) Check(_ context.Context, _ SessionCheckRequest) (SessionDecision, error) {
+	return SessionDecision{Permit: false}, nil
+}
+
+// fakeDEKManager is a minimal SessionDEKManager stub for decodeAndAuthorize
+// tests. Resolve is unreachable on the deny path.
+type fakeDEKManager struct{}
+
+func (fakeDEKManager) Resolve(_ context.Context, _ codec.KeyID, _ uint32) (codec.Key, error) {
+	return codec.Key{}, errors.New("fake DEK manager: not implemented")
+}
+
+// fakeNilAuditEmitter is a SessionAuditEmitter that always returns nil.
+type fakeNilAuditEmitter struct{}
+
+func (fakeNilAuditEmitter) EmitPluginDecrypt(_ context.Context, _ PluginDecryptRecord) error {
+	return nil
+}
+
+// validSensitiveHeaders builds a header set for a sensitive (non-identity) codec
+// message. The codec field is set to xchacha20poly1305-v1 so that decodeAndAuthorize
+// recognises it as a sensitive delivery and calls AuthGuard.Check.
+func validSensitiveHeaders(t *testing.T) (nats.Header, ulid.ULID) {
+	t.Helper()
+	id := ulid.MustNew(ulid.Timestamp(time.Now()), nil)
+	h := nats.Header{}
+	h.Set(HeaderMsgID, id.String())
+	h.Set(HeaderSchemaVersion, SchemaVersion)
+	h.Set(HeaderCodec, string(codec.NameXChaCha20v1))
+	// DEK headers required for sensitive messages.
+	h.Set(HeaderDekRef, "1")
+	h.Set(HeaderDekVersion, "1")
+	return h, id
+}
+
+// validSensitivePayload returns a proto-marshaled eventbusv1.Event with a
+// non-empty payload field. The payload bytes are NOT actually encrypted; the
+// test only exercises the auth path (deny branch stops before decryption).
+func validSensitivePayload(t *testing.T) []byte {
+	t.Helper()
+	env := &eventbusv1.Event{
+		Subject:   "events.main.scene.sensitive",
+		Type:      "scene.pose",
+		Timestamp: timestamppb.New(time.Unix(1, 0)),
+		Payload:   []byte("ciphertext-placeholder"),
+	}
+	b, err := proto.Marshal(env)
+	require.NoError(t, err)
+	return b
+}
+
+// TestDecodeDeliveryAuthGuardDenyStampsMetadataOnly verifies that when
+// AuthGuard.Check denies a sensitive-codec delivery, decodeAndAuthorize stamps
+// metadataOnly=true and returns an Event with an empty payload.
+func TestDecodeDeliveryAuthGuardDenyStampsMetadataOnly(t *testing.T) {
+	t.Parallel()
+
+	h, _ := validSensitiveHeaders(t)
+	msg := &stubMsg{headers: h, data: validSensitivePayload(t)}
+
+	identity := SessionIdentity{
+		Kind:        IdentityKindCharacter,
+		PlayerID:    "01TESTPLAYER01234567890A",
+		CharacterID: "01TESTCHARACTER0123456A",
+		BindingID:   "01TESTBINDING01234567AB",
+	}
+
+	// Wrap the raw stubMsg in a proto envelope for decodeAndAuthorize.
+	// We also need to pass through the proto-unmarshaled envelope.
+	// Use the internal decode path via decodeDeliveryWithAuth with a guard set.
+	event, metaOnly, decodeErr := decodeDeliveryWithAuth(
+		context.Background(),
+		msg,
+		nil,
+		identity,
+		fakeAlwaysDenyGuard{},
+		fakeDEKManager{},
+		fakeNilAuditEmitter{},
+	)
+	require.NoError(t, decodeErr)
+	assert.True(t, metaOnly, "deny decision must stamp metadataOnly=true")
+	assert.Empty(t, event.Payload, "deny decision must return empty payload")
 }

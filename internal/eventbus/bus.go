@@ -18,8 +18,16 @@ type Publisher interface {
 
 // Subscriber opens long-lived session streams. Used by the gRPC Subscribe
 // handler after Phase B (F3).
+//
+// The identity parameter carries the authenticated principal. Required at the
+// API surface — with Crypto.Enabled=false the value is unused but must still
+// be supplied. T10 wires the construction at the gRPC authentication boundary.
+//
+// SessionIdentity is defined in this package (eventbus) to avoid an import
+// cycle: eventbus → authguard → plugin → eventbus. Callers with an
+// authguard.Identity use authguard.ToSessionIdentity to convert.
 type Subscriber interface {
-	OpenSession(ctx context.Context, sessionID string, filters []Subject) (SessionStream, error)
+	OpenSession(ctx context.Context, sessionID string, identity SessionIdentity, filters []Subject) (SessionStream, error)
 }
 
 // HistoryReader serves paginated history reads. Used by gRPC QueryHistory
@@ -107,6 +115,12 @@ type HistoryQuery struct {
 	// it to the plugin's PluginAuditService.QueryHistory for membership
 	// enforcement. See spec §4.2.
 	Caller Actor
+
+	// Identity carries the typed authenticated principal for the hot-tier
+	// AuthGuard path. Required when hot-tier AuthGuard is wired (T9);
+	// zero-value is safe when Crypto.Enabled=false. T10 populates this from
+	// the gRPC authentication boundary.
+	Identity SessionIdentity
 }
 
 // HistoryStream is a server-streaming handle. Caller iterates Next()

@@ -6,6 +6,7 @@ package history
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/codec"
+	"github.com/holomush/holomush/internal/eventbus/crypto/aad"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
 
@@ -22,6 +24,28 @@ import (
 // round-trips on a busy embedded server; short enough that a misrouted
 // query surfaces quickly.
 const hotFetchTimeout = 5 * time.Second
+
+// HotTierOption tunes jetStreamHotTier construction.
+type HotTierOption func(*jetStreamHotTier)
+
+// WithHistoryAuthGuard injects the AuthGuard for sensitive event delivery
+// decisions on the hot-tier history path. nil = pre-Phase 3b passthrough.
+func WithHistoryAuthGuard(g eventbus.SessionAuthGuard) HotTierOption {
+	return func(h *jetStreamHotTier) { h.authGuard = g }
+}
+
+// WithHistoryDEKManager injects the DEK Manager used to resolve plaintext key
+// material for sensitive codec events on the hot-tier history path.
+// Required when WithHistoryAuthGuard is set.
+func WithHistoryDEKManager(m eventbus.SessionDEKManager) HotTierOption {
+	return func(h *jetStreamHotTier) { h.dekManager = m }
+}
+
+// WithHistoryDecryptAuditEmitter injects the audit emitter for plugin decrypt
+// records on the hot-tier history path.
+func WithHistoryDecryptAuditEmitter(em eventbus.SessionAuditEmitter) HotTierOption {
+	return func(h *jetStreamHotTier) { h.auditEmitter = em }
+}
 
 // jetStreamHotTier serves history from JetStream via an ephemeral ordered
 // consumer. One consumer is created per Read call, scoped to the filter
@@ -31,13 +55,25 @@ type jetStreamHotTier struct {
 	js       jetstream.JetStream
 	selector codec.KeySelector
 	now      func() time.Time
+
+	// authGuard evaluates sensitive event delivery decisions (Decision 5).
+	// nil = pre-Phase 3b passthrough.
+	authGuard    eventbus.SessionAuthGuard
+	// dekManager resolves DEK material for sensitive events.
+	dekManager   eventbus.SessionDEKManager
+	// auditEmitter logs plugin decrypt records.
+	auditEmitter eventbus.SessionAuditEmitter
 }
 
-func newJetStreamHotTier(js jetstream.JetStream, selector codec.KeySelector, now func() time.Time) *jetStreamHotTier {
+func newJetStreamHotTier(js jetstream.JetStream, selector codec.KeySelector, now func() time.Time, opts ...HotTierOption) *jetStreamHotTier {
 	if now == nil {
 		now = time.Now
 	}
-	return &jetStreamHotTier{js: js, selector: selector, now: now}
+	h := &jetStreamHotTier{js: js, selector: selector, now: now}
+	for _, o := range opts {
+		o(h)
+	}
+	return h
 }
 
 // Read satisfies HotTier. Builds an OrderedConsumer rooted at the earliest
@@ -126,7 +162,7 @@ func (h *jetStreamHotTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 		if fetchCtx.Err() != nil {
 			break
 		}
-		ev, decodeErr := decodeJetStreamMessage(ctx, msg, h.selector)
+		ev, decodeErr := decodeJetStreamMessage(ctx, msg, h.selector, q.Identity, h.authGuard, h.dekManager, h.auditEmitter)
 		if decodeErr != nil {
 			// Skip the message rather than abort the whole page; one
 			// undecodable message on a large history would be a DoS
@@ -344,9 +380,24 @@ func orderEvents(events []eventbus.Event, q eventbus.HistoryQuery) {
 }
 
 // decodeJetStreamMessage is the Read-side inverse of the publisher's encode
-// path. Identical in spirit to subscriber.decodeDelivery but local to this
-// package because we want to avoid exporting that symbol.
-func decodeJetStreamMessage(ctx context.Context, msg jetstream.Msg, selector codec.KeySelector) (eventbus.Event, error) {
+// path. Identical in spirit to subscriber.decodeDeliveryWithAuth but local to
+// this package. For sensitive-codec events when guard is non-nil it implements
+// the Decision 5 order-of-operations; for identity-codec events it delivers
+// without AuthGuard invocation.
+//
+// The history path returns a single eventbus.Event (not a metadataOnly bool)
+// because the HistoryStream interface only yields events. Metadata-only events
+// on the history path are represented as Events with empty Payload (the caller
+// signals metadata_only via the EventFrame.metadata_only proto field in T10).
+func decodeJetStreamMessage(
+	ctx context.Context,
+	msg jetstream.Msg,
+	selector codec.KeySelector,
+	identity eventbus.SessionIdentity,
+	guard eventbus.SessionAuthGuard,
+	dekMgr eventbus.SessionDEKManager,
+	auditEm eventbus.SessionAuditEmitter,
+) (eventbus.Event, error) {
 	h := msg.Headers()
 	msgIDStr := h.Get(eventbus.HeaderMsgID)
 	if msgIDStr == "" {
@@ -357,15 +408,15 @@ func decodeJetStreamMessage(ctx context.Context, msg jetstream.Msg, selector cod
 	if err != nil {
 		return eventbus.Event{}, oops.Code("EVENTBUS_HISTORY_BAD_MSG_ID").Wrap(err)
 	}
-	codecName := h.Get(eventbus.HeaderCodec)
-	if codecName == "" {
+	codecNameStr := h.Get(eventbus.HeaderCodec)
+	if codecNameStr == "" {
 		return eventbus.Event{}, oops.Code("EVENTBUS_HISTORY_MISSING_HEADER").
 			With("header", eventbus.HeaderCodec).Errorf("missing header")
 	}
-	c, err := codec.Resolve(codec.Name(codecName))
+	_, err = codec.Resolve(codec.Name(codecNameStr))
 	if err != nil {
 		return eventbus.Event{}, oops.Code("EVENTBUS_HISTORY_UNKNOWN_CODEC").
-			With("codec", codecName).Wrap(err)
+			With("codec", codecNameStr).Wrap(err)
 	}
 
 	// DECISION 0: proto-unmarshal FIRST. msg.Data is the marshaled
@@ -374,28 +425,45 @@ func decodeJetStreamMessage(ctx context.Context, msg jetstream.Msg, selector cod
 	if unmarshalErr := proto.Unmarshal(msg.Data(), &envelope); unmarshalErr != nil {
 		return eventbus.Event{}, oops.Code("EVENTBUS_HISTORY_UNMARSHAL_FAILED").Wrap(unmarshalErr)
 	}
+	// Stamp the parsed ULID into envelope.Id for downstream AAD/audit use.
+	envelope.Id = id[:]
 
-	// For identity codec, envelope.Payload IS the plaintext — no decode.
-	// For sensitive codecs, T9 will add AuthGuard.Check + AAD reconstruct
-	// + decrypt-or-stamp-metadata_only here. T1 keeps the existing
-	// Phase 3a "non-identity gets a passthrough decode with nil AAD"
-	// behavior so that tests remain green; that gets replaced in T9.
-	if codec.Name(codecName) != codec.NameIdentity {
+	var payload []byte
+
+	codecName := codec.Name(codecNameStr)
+	switch {
+	case codecName == codec.NameIdentity:
+		// Identity codec: deliver as-is. AuthGuard NOT invoked.
+		payload = envelope.GetPayload()
+	case guard != nil:
+		// Sensitive codec with AuthGuard wired: full Decision 5 order-of-operations.
+		ev, _, authErr := decodeAndAuthorizeHistory(ctx, msg, &envelope, codecName, identity, guard, dekMgr, auditEm)
+		if authErr != nil {
+			return eventbus.Event{}, authErr
+		}
+		return ev, nil
+	default:
+		// Guard nil: legacy passthrough decode with nil AAD (pre-Phase 3b / tests).
 		var key codec.Key
 		if selector != nil {
-			k, kerr := selector.SelectForDecrypt(ctx, codec.Name(codecName), 0)
+			k, kerr := selector.SelectForDecrypt(ctx, codecName, 0)
 			if kerr != nil {
 				return eventbus.Event{}, oops.Code("EVENTBUS_HISTORY_KEY_FETCH_FAILED").
-					With("codec", codecName).Wrap(kerr)
+					With("codec", codecNameStr).Wrap(kerr)
 			}
 			key = k
+		}
+		c, resolveErr := codec.Resolve(codecName) // already validated above
+		if resolveErr != nil {
+			return eventbus.Event{}, oops.Code("EVENTBUS_HISTORY_UNKNOWN_CODEC").
+				With("codec", codecNameStr).Wrap(resolveErr)
 		}
 		plain, decErr := c.Decode(ctx, envelope.Payload, key, nil)
 		if decErr != nil {
 			return eventbus.Event{}, oops.Code("EVENTBUS_HISTORY_DECODE_FAILED").
-				With("codec", codecName).Wrap(decErr)
+				With("codec", codecNameStr).Wrap(decErr)
 		}
-		envelope.Payload = plain
+		payload = plain
 	}
 
 	return eventbus.Event{
@@ -404,9 +472,132 @@ func decodeJetStreamMessage(ctx context.Context, msg jetstream.Msg, selector cod
 		Type:      eventbus.Type(envelope.GetType()),
 		Timestamp: envelope.GetTimestamp().AsTime(),
 		Actor:     actorFromEnvelope(envelope.GetActor()),
-		Payload:   envelope.GetPayload(),
+		Payload:   payload,
 		Rendering: eventbus.RenderingFromProto(envelope.GetRendering()),
 	}, nil
+}
+
+// decodeAndAuthorizeHistory mirrors decodeAndAuthorize from the subscriber
+// package but lives in the history package to avoid cross-package coupling.
+// Returns (event, metadataOnly, err).
+func decodeAndAuthorizeHistory(
+	ctx context.Context,
+	msg jetstream.Msg,
+	envelope *eventbusv1.Event,
+	codecName codec.Name,
+	identity eventbus.SessionIdentity,
+	guard eventbus.SessionAuthGuard,
+	dekMgr eventbus.SessionDEKManager,
+	auditEm eventbus.SessionAuditEmitter,
+) (eventbus.Event, bool, error) {
+	h := msg.Headers()
+
+	// Parse DEK headers.
+	var keyID codec.KeyID
+	var keyVersion uint32
+	if dekRefStr := h.Get(eventbus.HeaderDekRef); dekRefStr != "" {
+		ref, parseErr := strconv.ParseUint(dekRefStr, 10, 64)
+		if parseErr != nil {
+			return eventbus.Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
+				With("header", eventbus.HeaderDekRef).With("value", dekRefStr).Wrap(parseErr)
+		}
+		keyID = codec.KeyID(ref)
+	}
+	if dekVersionStr := h.Get(eventbus.HeaderDekVersion); dekVersionStr != "" {
+		ver, parseErr := strconv.ParseUint(dekVersionStr, 10, 32)
+		if parseErr != nil {
+			return eventbus.Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
+				With("header", eventbus.HeaderDekVersion).With("value", dekVersionStr).Wrap(parseErr)
+		}
+		keyVersion = uint32(ver) // safe: ParseUint(bitSize=32) guarantees fits in uint32
+	}
+
+	// Recover event ULID from the pre-stamped bytes.
+	var eventID ulid.ULID
+	if rawID := envelope.GetId(); len(rawID) == 16 {
+		copy(eventID[:], rawID)
+	}
+
+	req := eventbus.SessionCheckRequest{
+		Identity:   identity,
+		KeyID:      keyID,
+		KeyVersion: keyVersion,
+		EventType:  envelope.GetType(),
+		EventID:    eventID,
+	}
+
+	decision, err := guard.Check(ctx, req)
+	if err != nil {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_AUTHGUARD_CHECK_FAILED").
+			With("event_type", envelope.GetType()).
+			Wrap(err)
+	}
+
+	if !decision.Permit {
+		return buildHistoryEventFromEnvelope(eventID, envelope, nil), true, nil
+	}
+
+	// Permit: resolve key, build AAD, decode.
+	key, err := dekMgr.Resolve(ctx, keyID, keyVersion)
+	if err != nil {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_DEK_RESOLVE_FAILED").
+			With("key_id", uint64(keyID)).With("key_version", keyVersion).
+			Wrap(err)
+	}
+
+	aadBytes, err := aad.Build(envelope, string(codecName), uint64(keyID), keyVersion)
+	if err != nil {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_AAD_BUILD_FAILED").Wrap(err)
+	}
+
+	c, err := codec.Resolve(codecName)
+	if err != nil {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_UNKNOWN_CODEC").
+			With("codec", string(codecName)).Wrap(err)
+	}
+
+	plaintext, err := c.Decode(ctx, envelope.GetPayload(), key, aadBytes)
+	if err != nil {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_CODEC_DECODE_FAILED").
+			With("codec", string(codecName)).Wrap(err)
+	}
+
+	// Plugin recipient: emit audit record; on AUDIT_QUEUE_FULL, zero plaintext + return metadata-only.
+	if identity.Kind == eventbus.IdentityKindPlugin && auditEm != nil {
+		rec := eventbus.PluginDecryptRecord{
+			PluginName:       identity.PluginName,
+			PluginInstanceID: identity.InstanceID,
+			EventID:          eventID,
+			EventSubject:     eventbus.Subject(envelope.GetSubject()),
+			EventType:        eventbus.Type(envelope.GetType()),
+			DEKRef:           keyID,
+			DEKVersion:       keyVersion,
+			GrantID:          decision.GrantID,
+		}
+		if emitErr := auditEm.EmitPluginDecrypt(ctx, rec); emitErr != nil {
+			for i := range plaintext {
+				plaintext[i] = 0
+			}
+			return buildHistoryEventFromEnvelope(eventID, envelope, nil), true, nil
+		}
+	}
+
+	return buildHistoryEventFromEnvelope(eventID, envelope, plaintext), false, nil
+}
+
+// buildHistoryEventFromEnvelope constructs an eventbus.Event from a proto
+// envelope and payload. Used by decodeAndAuthorizeHistory for both permit and
+// deny paths.
+func buildHistoryEventFromEnvelope(id ulid.ULID, envelope *eventbusv1.Event, payload []byte) eventbus.Event {
+	return eventbus.Event{
+		ID:        id,
+		Subject:   eventbus.Subject(envelope.GetSubject()),
+		Type:      eventbus.Type(envelope.GetType()),
+		Timestamp: envelope.GetTimestamp().AsTime(),
+		Actor:     actorFromEnvelope(envelope.GetActor()),
+		Payload:   payload,
+		Rendering: eventbus.RenderingFromProto(envelope.GetRendering()),
+	}
 }
 
 func actorFromEnvelope(a *eventbusv1.Actor) eventbus.Actor {
