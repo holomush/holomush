@@ -11,9 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
 	"github.com/holomush/holomush/internal/store"
@@ -30,9 +28,7 @@ func TestNoneProvider_Constructor_RefusesIfCryptoKeysNonempty(t *testing.T) {
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2)),
+		postgres.BasicWaitStrategies(),
 	)
 	require.NoError(t, err)
 	defer pgContainer.Terminate(ctx)

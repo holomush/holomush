@@ -8,6 +8,26 @@ Keep under 200 lines. Curate — don't hoard.
 
 ## Anti-patterns
 
+- **Incomplete pattern-fix scope**: when a fix replaces an anti-pattern at
+  N "identified" sites, always re-grep the WHOLE pattern (not just the
+  spelling of the call the implementer happened to find) across the repo
+  before approving. For testcontainers postgres: the canonical search is
+  `rg "wait\\.ForLog|testcontainers\\.WithWaitStrategy" --type go`. Only
+  `test/testutil/postgres.go` should remain on `wait.ForLog` (correctly
+  paired with `ForListeningPort`); every other site should use
+  `postgres.BasicWaitStrategies()`. holomush-bmcq fix touched 3 of 5
+  affected sites; `internal/eventbus/crypto/dek/manager_integration_test.go`
+  and `internal/eventbus/crypto/kek/none_integration_test.go` were missed.
+
+- **`BasicWaitStrategies()` semantics (testcontainers-go v0.41.0)**: it
+  uses `WithAdditionalWaitStrategy` (additive), but `postgres.Run` does
+  NOT install a default `WaitingFor`, so `req.WaitingFor == nil` and the
+  net behavior is identical to `WithWaitStrategy` for first invocation.
+  Default deadline is 60s (longer than the typical 30s
+  `WithStartupTimeout` callsites used). Source:
+  `testcontainers-go@v0.41.0/options.go:365-399` and
+  `modules/postgres@v0.41.0/postgres.go:146-168`.
+
 - **Stale-base diff illusion**: When reviewing a stack pre-push, always check
   `jj log -r 'main@origin'` head against the branch's fork point. A bare
   `jj diff main@origin..@` will conflate the branch's actual changes with

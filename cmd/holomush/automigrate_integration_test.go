@@ -8,14 +8,11 @@ package main
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/holomush/holomush/internal/bootstrap"
 	"github.com/holomush/holomush/internal/store"
@@ -26,16 +23,17 @@ func startPostgresContainer(t *testing.T) (string, func()) {
 	t.Helper()
 	ctx := context.Background()
 
+	// Use postgres.BasicWaitStrategies() which combines the log wait
+	// with wait.ForListeningPort. Bare wait.ForLog is documented as
+	// flaky on Mac/Windows because Docker's port-mapping table can lag
+	// the readiness log line; without the port wait, ConnectionString
+	// can fail with `port "5432/tcp" not found`. See holomush-bmcq.
 	container, err := postgres.Run(ctx,
 		"postgres:18-alpine",
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(30*time.Second),
-		),
+		postgres.BasicWaitStrategies(),
 	)
 	require.NoError(t, err)
 
