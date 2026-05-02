@@ -112,4 +112,15 @@ type EmitIntent struct {
 	Subject string
 	Type    EventType
 	Payload string // JSON string
+
+	// Sensitive declares per-event sensitivity at emit time.
+	//
+	// Phase 3a runtime semantics (host-side fence):
+	//   - manifest sensitivity=never:  Sensitive=true rejected (INV-6).
+	//   - manifest sensitivity=may:    field decides (false → plaintext, true → encrypted).
+	//   - manifest sensitivity=always: Sensitive=false rejected (INV-7).
+	//
+	// Default false. Plugins that do not emit sensitive events leave
+	// this zero.
+	Sensitive bool
 }

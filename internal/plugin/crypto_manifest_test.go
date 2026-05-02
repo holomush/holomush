@@ -50,3 +50,45 @@ consumes:
 	assert.Equal(t, []string{"events.*.character.*.whisper"}, got.Consumes[0].Subjects)
 	assert.Equal(t, []string{"core-communication:whisper"}, got.Consumes[0].RequestsDecryption)
 }
+
+func TestLookupEmitSensitivityReturnsDeclaredValueForListedEventType(t *testing.T) {
+	m := &plugins.Manifest{
+		Crypto: &plugins.CryptoSection{
+			Emits: []plugins.CryptoEmit{
+				{EventType: "scene.whisper", Sensitivity: plugins.SensitivityAlways},
+				{EventType: "scene.pose", Sensitivity: plugins.SensitivityNever},
+			},
+		},
+	}
+	got := plugins.LookupEmitSensitivity(m, "scene.whisper")
+	assert.Equal(t, plugins.SensitivityAlways, got)
+}
+
+func TestLookupEmitSensitivityDefaultsToNeverForUnlistedEventType(t *testing.T) {
+	m := &plugins.Manifest{
+		Crypto: &plugins.CryptoSection{
+			Emits: []plugins.CryptoEmit{
+				{EventType: "scene.whisper", Sensitivity: plugins.SensitivityAlways},
+			},
+		},
+	}
+	got := plugins.LookupEmitSensitivity(m, "scene.pose")
+	assert.Equal(t, plugins.SensitivityNever, got)
+}
+
+func TestLookupEmitSensitivityHandlesNilManifest(t *testing.T) {
+	got := plugins.LookupEmitSensitivity(nil, "anything")
+	assert.Equal(t, plugins.SensitivityNever, got)
+}
+
+func TestLookupEmitSensitivityHandlesEmptyEmits(t *testing.T) {
+	m := &plugins.Manifest{Crypto: &plugins.CryptoSection{}}
+	got := plugins.LookupEmitSensitivity(m, "anything")
+	assert.Equal(t, plugins.SensitivityNever, got)
+}
+
+func TestLookupEmitSensitivityHandlesNilCryptoBlock(t *testing.T) {
+	m := &plugins.Manifest{Crypto: nil} // crypto: block omitted from YAML
+	got := plugins.LookupEmitSensitivity(m, "anything")
+	assert.Equal(t, plugins.SensitivityNever, got)
+}

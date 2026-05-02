@@ -46,3 +46,25 @@ type CryptoConsume struct {
 	Subjects           []string `yaml:"subjects" json:"subjects"`
 	RequestsDecryption []string `yaml:"requests_decryption,omitempty" json:"requests_decryption,omitempty"`
 }
+
+// LookupEmitSensitivity returns the manifest-declared Sensitivity for
+// (manifest, eventType). Returns SensitivityNever when:
+//   - manifest is nil
+//   - manifest.Crypto is nil (the crypto: block is optional in YAML;
+//     plugins that don't use crypto leave it absent)
+//   - manifest.Crypto.Emits is empty
+//   - eventType is not listed in manifest.Crypto.Emits
+//
+// The caller is responsible for any plugin-name lookup; this helper
+// operates on an already-resolved *Manifest.
+func LookupEmitSensitivity(manifest *Manifest, eventType string) Sensitivity {
+	if manifest == nil || manifest.Crypto == nil {
+		return SensitivityNever
+	}
+	for _, emit := range manifest.Crypto.Emits {
+		if emit.EventType == eventType {
+			return emit.Sensitivity
+		}
+	}
+	return SensitivityNever
+}
