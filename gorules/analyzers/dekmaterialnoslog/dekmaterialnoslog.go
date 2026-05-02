@@ -34,6 +34,7 @@ var sinks = []holomushlint.Sink{
 	{PkgPath: "log/slog", FuncName: "LogAttrs"},
 	{PkgPath: "log/slog", FuncName: "Warn"},
 	{PkgPath: "log/slog", FuncName: "WarnContext"},
+	{PkgPath: "log/slog", FuncName: "With"},
 	// *slog.Logger methods (mirror set, but Any+Group are package-level
 	// helpers, not *Logger methods), alphabetized
 	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "Debug"},
@@ -46,6 +47,7 @@ var sinks = []holomushlint.Sink{
 	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "LogAttrs"},
 	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "Warn"},
 	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "WarnContext"},
+	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "With"},
 }
 
 var Analyzer = &analysis.Analyzer{
