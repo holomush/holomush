@@ -421,6 +421,10 @@ func WrapAST(ast map[string]any) map[string]any {
 	if ast == nil {
 		return map[string]any{"grammar_version": GrammarVersion}
 	}
+	const maxASTKeys = 10000
+	if len(ast) > maxASTKeys {
+		return map[string]any{"grammar_version": GrammarVersion}
+	}
 	result := make(map[string]any, len(ast)+1)
 	for k, v := range ast {
 		result[k] = v

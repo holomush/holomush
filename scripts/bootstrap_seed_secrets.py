@@ -116,10 +116,8 @@ def _json_get(
 
 
 def _mask(value: str) -> str:
-    """Return first4...last4 for confirmation display."""
-    if len(value) <= 8:
-        return "*" * len(value)
-    return f"{value[:4]}...{value[-4:]}"
+    """Return a fixed-length mask that reveals nothing of the value."""
+    return "****"
 
 
 # ---------------------------------------------------------------------------
@@ -685,7 +683,7 @@ def _write_secret(name: str, value: str, repo: str) -> bool:
         input_data=value,
     )
     if rc != 0:
-        print(red(f"  gh secret set {name} failed: {err.strip()}"))
+        print(red(f"  gh secret set {name} failed (stderr suppressed)"))
         return False
     return True
 

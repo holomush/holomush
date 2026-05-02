@@ -42,16 +42,22 @@
   },
   "type": "module",
   "packageManager": "pnpm@11.0.3",
+  "pnpm": {
+    "overrides": {
+      "cookie": "0.7.0",
+      "protobufjs": "7.5.5"
+    }
+  },
   "dependencies": {
-    "@bufbuild/protobuf": "^2.11.0",
+    "@bufbuild/protobuf": "^2.12.0",
     "@connectrpc/connect": "^2.1.1",
     "@connectrpc/connect-web": "^2.1.1",
     "ansi_up": "^6.0.6",
     "clsx": "^2.1.1",
     "cmdk-sv": "^0.0.19",
-    "dompurify": "^3.3.3",
+    "dompurify": "^3.4.2",
     "lucide-svelte": "^0.577.0",
-    "marked": "^17.0.5",
+    "marked": "^17.0.6",
     "tailwind-merge": "^3.5.0",
     "tailwind-variants": "^3.2.2"
   }
