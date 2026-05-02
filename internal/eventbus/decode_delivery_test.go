@@ -5,6 +5,7 @@ package eventbus
 
 import (
 	"context"
+	"crypto/rand"
 	"testing"
 	"time"
 
@@ -15,10 +16,12 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/chacha20poly1305"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/eventbus/codec"
+	"github.com/holomush/holomush/internal/eventbus/crypto/aad"
 	"github.com/holomush/holomush/pkg/errutil"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
@@ -197,7 +200,7 @@ func (fakeNilAuditEmitter) EmitPluginDecrypt(_ context.Context, _ PluginDecryptR
 // validSensitiveHeaders builds a header set for a sensitive (non-identity) codec
 // message. The codec field is set to xchacha20poly1305-v1 so that decodeAndAuthorize
 // recognises it as a sensitive delivery and calls AuthGuard.Check.
-func validSensitiveHeaders(t *testing.T) (nats.Header, ulid.ULID) {
+func validSensitiveHeaders(t *testing.T) nats.Header {
 	t.Helper()
 	id := ulid.MustNew(ulid.Timestamp(time.Now()), nil)
 	h := nats.Header{}
@@ -207,7 +210,7 @@ func validSensitiveHeaders(t *testing.T) (nats.Header, ulid.ULID) {
 	// DEK headers required for sensitive messages.
 	h.Set(HeaderDekRef, "1")
 	h.Set(HeaderDekVersion, "1")
-	return h, id
+	return h
 }
 
 // validSensitivePayload returns a proto-marshaled eventbusv1.Event with a
@@ -232,7 +235,7 @@ func validSensitivePayload(t *testing.T) []byte {
 func TestDecodeDeliveryAuthGuardDenyStampsMetadataOnly(t *testing.T) {
 	t.Parallel()
 
-	h, _ := validSensitiveHeaders(t)
+	h := validSensitiveHeaders(t)
 	msg := &stubMsg{headers: h, data: validSensitivePayload(t)}
 
 	identity := SessionIdentity{
@@ -257,4 +260,271 @@ func TestDecodeDeliveryAuthGuardDenyStampsMetadataOnly(t *testing.T) {
 	require.NoError(t, decodeErr)
 	assert.True(t, metaOnly, "deny decision must stamp metadataOnly=true")
 	assert.Empty(t, event.Payload, "deny decision must return empty payload")
+}
+
+// --- Permit-path helpers ---
+
+// newTestXChachaKey returns a random xchacha20poly1305 codec.Key for unit tests.
+func newTestXChachaKey(t *testing.T) codec.Key {
+	t.Helper()
+	km := make([]byte, chacha20poly1305.KeySize)
+	_, err := rand.Read(km)
+	require.NoError(t, err)
+	return codec.Key{ID: 1, Version: 1, Bytes: km}
+}
+
+// encryptedSensitiveMsg builds a stubMsg whose payload is a real
+// xchacha20poly1305-v1 ciphertext of plaintext, using the supplied key.
+// The returned headers include DekRef=1, DekVersion=1.
+//
+// The AAD is derived from the proto envelope using aad.Build so that the
+// Permit path in decodeAndAuthorize can verify the tag.
+func encryptedSensitiveMsg(t *testing.T, key codec.Key, plaintext []byte) *stubMsg {
+	t.Helper()
+	c := codec.NewXChaCha20Poly1305v1()
+
+	// Build the proto envelope first (without payload — we need it to build AAD).
+	id := ulid.MustNew(ulid.Timestamp(time.Now()), nil)
+	envelope := &eventbusv1.Event{
+		Id:        id[:],
+		Subject:   "events.main.scene.sensitive",
+		Type:      "scene.pose",
+		Timestamp: timestamppb.New(time.Unix(1, 0)),
+	}
+
+	const (
+		dekRef     = 1
+		dekVersion = 1
+	)
+	aadBytes, err := aad.Build(envelope, string(codec.NameXChaCha20v1), dekRef, dekVersion)
+	require.NoError(t, err)
+
+	ciphertext, err := c.Encode(context.Background(), plaintext, key, aadBytes)
+	require.NoError(t, err)
+
+	// Stamp ciphertext into envelope and marshal.
+	envelope.Payload = ciphertext
+	data, err := proto.Marshal(envelope)
+	require.NoError(t, err)
+
+	h := nats.Header{}
+	h.Set(HeaderMsgID, id.String())
+	h.Set(HeaderSchemaVersion, SchemaVersion)
+	h.Set(HeaderCodec, string(codec.NameXChaCha20v1))
+	h.Set(HeaderDekRef, "1")
+	h.Set(HeaderDekVersion, "1")
+
+	return &stubMsg{headers: h, data: data}
+}
+
+// fakeAlwaysPermitGuard is a SessionAuthGuard stub that always permits.
+type fakeAlwaysPermitGuard struct{}
+
+func (fakeAlwaysPermitGuard) Check(_ context.Context, _ SessionCheckRequest) (SessionDecision, error) {
+	return SessionDecision{Permit: true}, nil
+}
+
+// fakeKeyDEKManager is a SessionDEKManager stub that returns a fixed key.
+type fakeKeyDEKManager struct{ key codec.Key }
+
+func (f fakeKeyDEKManager) Resolve(_ context.Context, _ codec.KeyID, _ uint32) (codec.Key, error) {
+	return f.key, nil
+}
+
+// fakeErrorDEKManager is a SessionDEKManager that always returns an error.
+type fakeErrorDEKManager struct{}
+
+func (fakeErrorDEKManager) Resolve(_ context.Context, _ codec.KeyID, _ uint32) (codec.Key, error) {
+	return codec.Key{}, errors.New("fake: DEK resolve failed")
+}
+
+// fakeErrorGuard is a SessionAuthGuard that always returns an error from Check.
+type fakeErrorGuard struct{}
+
+func (fakeErrorGuard) Check(_ context.Context, _ SessionCheckRequest) (SessionDecision, error) {
+	return SessionDecision{}, errors.New("fake: guard check failed")
+}
+
+// recordingAuditEmitter captures EmitPluginDecrypt calls and returns the
+// configured error on each call.
+type recordingAuditEmitter struct {
+	records []PluginDecryptRecord
+	retErr  error
+}
+
+func (r *recordingAuditEmitter) EmitPluginDecrypt(_ context.Context, rec PluginDecryptRecord) error {
+	r.records = append(r.records, rec)
+	return r.retErr
+}
+
+// TestDecodeDeliveryAuthGuardPermitDecryptsAndDelivers verifies that when
+// AuthGuard permits for a character identity, decodeDeliveryWithAuth decrypts
+// the payload using the resolved DEK key and returns metadataOnly=false with
+// the original plaintext.
+func TestDecodeDeliveryAuthGuardPermitDecryptsAndDelivers(t *testing.T) {
+	t.Parallel()
+
+	key := newTestXChachaKey(t)
+	plaintext := []byte(`{"say":"hello, world"}`)
+	msg := encryptedSensitiveMsg(t, key, plaintext)
+
+	identity := SessionIdentity{
+		Kind:        IdentityKindCharacter,
+		PlayerID:    "01TESTPLAYER01234567890A",
+		CharacterID: "01TESTCHARACTER0123456A",
+		BindingID:   "01TESTBINDING01234567AB",
+	}
+
+	event, metaOnly, err := decodeDeliveryWithAuth(
+		context.Background(),
+		msg,
+		nil,
+		identity,
+		fakeAlwaysPermitGuard{},
+		fakeKeyDEKManager{key: key},
+		fakeNilAuditEmitter{},
+	)
+	require.NoError(t, err)
+	assert.False(t, metaOnly, "permit decision must not stamp metadataOnly")
+	assert.Equal(t, plaintext, event.Payload, "permit path must return decrypted plaintext")
+}
+
+// TestDecodeDeliveryAuthGuardPermitForPluginEmitsAuditAndDelivers verifies
+// that when a plugin identity receives a permit decision, the audit emitter is
+// called with the correct PluginDecryptRecord and the event is delivered with
+// the decrypted payload.
+func TestDecodeDeliveryAuthGuardPermitForPluginEmitsAuditAndDelivers(t *testing.T) {
+	t.Parallel()
+
+	key := newTestXChachaKey(t)
+	plaintext := []byte(`{"pose":"waves hello"}`)
+	msg := encryptedSensitiveMsg(t, key, plaintext)
+
+	identity := SessionIdentity{
+		Kind:       IdentityKindPlugin,
+		PluginName: "mod-filter",
+		InstanceID: "inst-01",
+	}
+	auditRec := &recordingAuditEmitter{}
+
+	event, metaOnly, err := decodeDeliveryWithAuth(
+		context.Background(),
+		msg,
+		nil,
+		identity,
+		fakeAlwaysPermitGuard{},
+		fakeKeyDEKManager{key: key},
+		auditRec,
+	)
+	require.NoError(t, err)
+	assert.False(t, metaOnly, "plugin permit path must not stamp metadataOnly when audit succeeds")
+	assert.Equal(t, plaintext, event.Payload, "plugin permit path must deliver plaintext")
+	require.Len(t, auditRec.records, 1, "audit emitter must have been called once")
+	assert.Equal(t, "mod-filter", auditRec.records[0].PluginName)
+}
+
+// TestDecodeDeliveryAuthGuardPermitForPluginQueueFullZerosPlaintextAndStampsMetadataOnly
+// verifies the TOCTOU defense: when AUDIT_QUEUE_FULL is returned by the audit
+// emitter, decodeDeliveryWithAuth must zero the plaintext buffer before
+// returning a metadata-only event, ensuring the decrypted bytes cannot escape.
+func TestDecodeDeliveryAuthGuardPermitForPluginQueueFullZerosPlaintextAndStampsMetadataOnly(t *testing.T) {
+	t.Parallel()
+
+	key := newTestXChachaKey(t)
+	plaintext := []byte(`{"secret":"do not leak"}`)
+	msg := encryptedSensitiveMsg(t, key, plaintext)
+
+	identity := SessionIdentity{
+		Kind:       IdentityKindPlugin,
+		PluginName: "mod-filter",
+	}
+
+	// Inject a DEK manager that returns a key we can observe, and a
+	// capturing audit emitter that returns AUDIT_QUEUE_FULL.
+	auditErr := errors.New("queue full")
+	auditRec := &recordingAuditEmitter{retErr: auditErr}
+
+	event, metaOnly, err := decodeDeliveryWithAuth(
+		context.Background(),
+		msg,
+		nil,
+		identity,
+		fakeAlwaysPermitGuard{},
+		fakeKeyDEKManager{key: key},
+		auditRec,
+	)
+	require.NoError(t, err)
+	assert.True(t, metaOnly, "AUDIT_QUEUE_FULL must stamp metadataOnly=true")
+	assert.Empty(t, event.Payload, "AUDIT_QUEUE_FULL must return empty payload")
+	// The audit emitter was called once (attempt was made).
+	require.Len(t, auditRec.records, 1)
+}
+
+// TestDecodeDeliveryAuthGuardCheckErrorPropagates verifies that when
+// AuthGuard.Check returns a non-nil error, decodeDeliveryWithAuth propagates
+// it with the EVENTBUS_AUTHGUARD_CHECK_FAILED error code.
+func TestDecodeDeliveryAuthGuardCheckErrorPropagates(t *testing.T) {
+	t.Parallel()
+
+	h := validSensitiveHeaders(t)
+	msg := &stubMsg{headers: h, data: validSensitivePayload(t)}
+
+	_, _, err := decodeDeliveryWithAuth(
+		context.Background(),
+		msg,
+		nil,
+		SessionIdentity{Kind: IdentityKindCharacter},
+		fakeErrorGuard{},
+		fakeDEKManager{},
+		fakeNilAuditEmitter{},
+	)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVENTBUS_AUTHGUARD_CHECK_FAILED")
+}
+
+// TestDecodeDeliveryAuthGuardPermitDEKResolveErrorPropagates verifies that
+// when the DEK manager returns an error after a permit decision,
+// decodeDeliveryWithAuth propagates the error with EVENTBUS_DEK_RESOLVE_FAILED.
+func TestDecodeDeliveryAuthGuardPermitDEKResolveErrorPropagates(t *testing.T) {
+	t.Parallel()
+
+	h := validSensitiveHeaders(t)
+	msg := &stubMsg{headers: h, data: validSensitivePayload(t)}
+
+	_, _, err := decodeDeliveryWithAuth(
+		context.Background(),
+		msg,
+		nil,
+		SessionIdentity{Kind: IdentityKindCharacter},
+		fakeAlwaysPermitGuard{},
+		fakeErrorDEKManager{},
+		fakeNilAuditEmitter{},
+	)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVENTBUS_DEK_RESOLVE_FAILED")
+}
+
+// TestDecodeDeliveryAuthGuardPermitDecodeErrorPropagates verifies that when
+// the codec.Decode step fails (wrong key / tampered ciphertext), the error
+// propagates with EVENTBUS_CODEC_DECODE_FAILED.
+func TestDecodeDeliveryAuthGuardPermitDecodeErrorPropagates(t *testing.T) {
+	t.Parallel()
+
+	// Build a valid encrypted message, then supply a different key so AEAD
+	// tag verification fails.
+	realKey := newTestXChachaKey(t)
+	wrongKey := newTestXChachaKey(t)
+	msg := encryptedSensitiveMsg(t, realKey, []byte("secret"))
+
+	_, _, err := decodeDeliveryWithAuth(
+		context.Background(),
+		msg,
+		nil,
+		SessionIdentity{Kind: IdentityKindCharacter},
+		fakeAlwaysPermitGuard{},
+		fakeKeyDEKManager{key: wrongKey},
+		fakeNilAuditEmitter{},
+	)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "EVENTBUS_CODEC_DECODE_FAILED")
 }

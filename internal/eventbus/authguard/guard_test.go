@@ -5,16 +5,19 @@ package authguard_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	accesstypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/eventbus/authguard"
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 type fakeParticipants struct{ list []dek.Participant }
@@ -208,15 +211,116 @@ func TestGuardNewRejectsNilDependencies(t *testing.T) {
 	a := policytest.AllowAllEngine()
 	b := &fakeBackpressure{}
 
-	_, err := authguard.New(nil, m, a, b)
-	require.Error(t, err)
+	tests := []struct {
+		name         string
+		p            authguard.ParticipantLookup
+		m            authguard.ManifestLookup
+		a            authguard.ABACEngine
+		b            authguard.BackpressureChecker
+		wantDepField string
+	}{
+		{"nil ParticipantLookup", nil, m, a, b, "ParticipantLookup"},
+		{"nil ManifestLookup", p, nil, a, b, "ManifestLookup"},
+		{"nil ABACEngine", p, m, nil, b, "ABACEngine"},
+		{"nil BackpressureChecker", p, m, a, nil, "BackpressureChecker"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := authguard.New(tc.p, tc.m, tc.a, tc.b)
+			require.Error(t, err)
+			errutil.AssertErrorCode(t, err, "AUTHGUARD_DEPENDENCY_NIL")
+			errutil.AssertErrorContext(t, err, "dependency", tc.wantDepField)
+		})
+	}
+}
 
-	_, err = authguard.New(p, nil, a, b)
-	require.Error(t, err)
+// errorParticipants returns an error from Participants.
+type errorParticipants struct{}
 
-	_, err = authguard.New(p, m, nil, b)
-	require.Error(t, err)
+func (e *errorParticipants) Participants(_ context.Context, _ codec.KeyID, _ uint32) ([]dek.Participant, error) {
+	return nil, errors.New("fake: lookup failed")
+}
 
-	_, err = authguard.New(p, m, a, nil)
-	require.Error(t, err)
+// errorABACEngine returns an error from Evaluate.
+type errorABACEngine struct{}
+
+func (e *errorABACEngine) Evaluate(_ context.Context, _ accesstypes.AccessRequest) (accesstypes.Decision, error) {
+	return accesstypes.Decision{}, errors.New("fake: abac eval failed")
+}
+
+// TestGuardCheckCharacterParticipantsLookupErrorPropagates verifies that when
+// ParticipantLookup.Participants returns an error on the character branch,
+// Guard.Check propagates it with AUTHGUARD_PARTICIPANTS_FAILED.
+func TestGuardCheckCharacterParticipantsLookupErrorPropagates(t *testing.T) {
+	p := &errorParticipants{}
+	m := &fakeManifest{}
+	a := policytest.AllowAllEngine()
+	b := &fakeBackpressure{}
+	g, err := authguard.New(p, m, a, b)
+	require.NoError(t, err)
+
+	id, err := authguard.NewCharacterIdentity("01ABC", "01XYZ", "01DEF")
+	require.NoError(t, err)
+	_, checkErr := g.Check(t.Context(), authguard.CheckRequest{Identity: id, KeyID: codec.KeyID(1), KeyVersion: 1})
+	require.Error(t, checkErr)
+	errutil.AssertErrorCode(t, checkErr, "AUTHGUARD_PARTICIPANTS_FAILED")
+}
+
+// TestGuardCheckPlayerParticipantsLookupErrorPropagates verifies that when
+// ParticipantLookup.Participants returns an error on the player branch,
+// Guard.Check propagates it with AUTHGUARD_PARTICIPANTS_FAILED.
+func TestGuardCheckPlayerParticipantsLookupErrorPropagates(t *testing.T) {
+	p := &errorParticipants{}
+	m := &fakeManifest{}
+	a := policytest.AllowAllEngine()
+	b := &fakeBackpressure{}
+	g, err := authguard.New(p, m, a, b)
+	require.NoError(t, err)
+
+	id, err := authguard.NewPlayerIdentity("01ABC")
+	require.NoError(t, err)
+	_, checkErr := g.Check(t.Context(), authguard.CheckRequest{Identity: id, KeyID: codec.KeyID(1), KeyVersion: 1})
+	require.Error(t, checkErr)
+	errutil.AssertErrorCode(t, checkErr, "AUTHGUARD_PARTICIPANTS_FAILED")
+}
+
+// TestGuardCheckPlayerABACEvalErrorPropagates verifies that when
+// ABACEngine.Evaluate returns an error on the player branch after the
+// participant-match succeeds, Guard.Check propagates it with
+// AUTHGUARD_ABAC_EVAL_FAILED.
+func TestGuardCheckPlayerABACEvalErrorPropagates(t *testing.T) {
+	parts := []dek.Participant{{PlayerID: "01ABC", CharacterID: "01XYZ", BindingID: "01DEF"}}
+	p := &fakeParticipants{list: parts}
+	m := &fakeManifest{}
+	a := &errorABACEngine{}
+	b := &fakeBackpressure{}
+	g, err := authguard.New(p, m, a, b)
+	require.NoError(t, err)
+
+	id, err := authguard.NewPlayerIdentity("01ABC")
+	require.NoError(t, err)
+	_, checkErr := g.Check(t.Context(), authguard.CheckRequest{Identity: id, KeyID: codec.KeyID(1), KeyVersion: 1})
+	require.Error(t, checkErr)
+	errutil.AssertErrorCode(t, checkErr, "AUTHGUARD_ABAC_EVAL_FAILED")
+}
+
+// TestGuardCheckPluginABACEvalErrorPropagates verifies that when
+// ABACEngine.Evaluate returns an error on the plugin branch after the
+// manifest check succeeds, Guard.Check propagates it with
+// AUTHGUARD_ABAC_EVAL_FAILED.
+func TestGuardCheckPluginABACEvalErrorPropagates(t *testing.T) {
+	p := &fakeParticipants{}
+	m := &fakeManifest{allowed: map[string]map[string]bool{"mod-filter": {"core-comm:whisper": true}}}
+	a := &errorABACEngine{}
+	b := &fakeBackpressure{}
+	g, err := authguard.New(p, m, a, b)
+	require.NoError(t, err)
+
+	id, err := authguard.NewPluginIdentity("mod-filter", "01INST")
+	require.NoError(t, err)
+	_, checkErr := g.Check(t.Context(), authguard.CheckRequest{
+		Identity: id, KeyID: codec.KeyID(1), KeyVersion: 1, EventType: "core-comm:whisper",
+	})
+	require.Error(t, checkErr)
+	errutil.AssertErrorCode(t, checkErr, "AUTHGUARD_ABAC_EVAL_FAILED")
 }
