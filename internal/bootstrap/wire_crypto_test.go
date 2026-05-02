@@ -26,6 +26,18 @@ func TestPluginEmitterDepsBuildSucceedsWithCryptoDisabled(t *testing.T) {
 	assert.NotNil(t, emitter)
 }
 
+func TestPluginEmitterDepsBuildSucceedsWithCryptoEnabled(t *testing.T) {
+	cfg := eventbus.Config{Crypto: eventbus.CryptoConfig{Enabled: true}}
+	deps := bootstrap.PluginEmitterDeps{
+		Publisher: &noopPublisher{},
+		Manifests: func(string) *bootstrap.Manifest { return nil },
+		Resolver:  func(context.Context, string) (bootstrap.Actor, error) { return bootstrap.Actor{}, nil },
+	}
+	emitter, err := bootstrap.BuildPluginEmitter(context.Background(), cfg, deps)
+	require.NoError(t, err)
+	assert.NotNil(t, emitter)
+}
+
 type noopPublisher struct{}
 
 func (noopPublisher) Publish(context.Context, eventbus.Event) error { return nil }

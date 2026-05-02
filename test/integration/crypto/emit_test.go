@@ -133,7 +133,11 @@ func TestSensitiveEmitProducesCiphertextOnBusAndInAudit(t *testing.T) {
 	// projection requires; it is the single writer of that header.
 	hostPub := eventbus.NewRenderingPublisher(rawPub, registry)
 
-	emitter := plugins.NewPluginEventEmitter(hostPub, manifestLookup, actorResolver)
+	// Phase 3a sensitivity fence is gated behind WithCryptoEnabled —
+	// this E2E exercises the enabled path end-to-end (encrypt + audit).
+	emitter := plugins.NewPluginEventEmitter(hostPub, manifestLookup, actorResolver,
+		plugins.WithCryptoEnabled(true),
+	)
 
 	const plaintext = `{"text":"hello, secret world"}`
 	intent := pluginsdk.EmitIntent{

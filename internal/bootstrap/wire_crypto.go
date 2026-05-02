@@ -35,10 +35,14 @@ type PluginEmitterDeps struct {
 }
 
 // BuildPluginEmitter constructs a PluginEventEmitter from cfg + deps.
-// The crypto enable flag affects publisher wiring (DEK manager,
-// sensitivity branch), NOT the emitter's structure — the emitter
-// always runs the fence; the fence's effective output depends on the
-// manifest only. The flag matters in the publisher.
-func BuildPluginEmitter(_ context.Context, _ eventbus.Config, deps PluginEmitterDeps) (*plugins.PluginEventEmitter, error) {
-	return plugins.NewPluginEventEmitter(deps.Publisher, deps.Manifests, deps.Resolver), nil
+// cfg.Crypto.Enabled gates the host-side sensitivity fence inside the
+// emitter (see plugins.WithCryptoEnabled). When false (the Phase 3a
+// default), the emitter skips the fence and stamps Sensitive=false
+// unconditionally, matching pre-Phase-3a behavior. When true, the
+// fence runs and the publisher's DEK-manager-aware crypto branch
+// activates downstream.
+func BuildPluginEmitter(_ context.Context, cfg eventbus.Config, deps PluginEmitterDeps) (*plugins.PluginEventEmitter, error) {
+	return plugins.NewPluginEventEmitter(deps.Publisher, deps.Manifests, deps.Resolver,
+		plugins.WithCryptoEnabled(cfg.Crypto.Enabled),
+	), nil
 }
