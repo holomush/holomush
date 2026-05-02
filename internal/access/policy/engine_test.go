@@ -21,6 +21,7 @@ import (
 	"github.com/holomush/holomush/internal/access/policy/attribute"
 	"github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/audit"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // mockSessionResolver is a test double for SessionResolver.
@@ -2216,7 +2217,7 @@ func TestEngineAuditEventsCarrySourceEngineAndComponentAbac(t *testing.T) {
 	// emits an audit event via the regular engine path.
 	engine, writer := createTestEngine(t, &mockSessionResolver{})
 
-	req, err := types.NewAccessRequest("character:01ABC", "read", "location:01XYZ")
+	req, err := types.NewAccessRequest("character:01ABC", "read", "location:01XYZ", nil)
 	require.NoError(t, err)
 
 	_, evalErr := engine.Evaluate(context.Background(), req)
@@ -2230,4 +2231,51 @@ func TestEngineAuditEventsCarrySourceEngineAndComponentAbac(t *testing.T) {
 		"engine-produced events must carry SourceEngine")
 	assert.Equal(t, "abac", last.Component,
 		"engine-produced events must carry Component='abac'")
+}
+
+func TestEvaluateOverlaysCallerAttributesOntoActionBag(t *testing.T) {
+	// Verifies Decision 6 R3 composition rule: caller-supplied attrs land
+	// in bags.Action; caller wins on conflict for non-reserved keys.
+	dslText := `permit(principal is character, action in ["decrypt"], resource is stream) when { action.event_type == "core-comm:whisper" };`
+	engine := createTestEngineWithPolicies(t, []string{dslText}, nil)
+
+	req, err := types.NewAccessRequest(
+		"character:01ABC",
+		"decrypt",
+		"stream:audit",
+		map[string]any{"event_type": "core-comm:whisper"},
+	)
+	require.NoError(t, err)
+	decision, err := engine.Evaluate(t.Context(), req)
+	require.NoError(t, err)
+	assert.True(t, decision.IsAllowed(),
+		"caller-supplied action.event_type=core-comm:whisper MUST overlay bags.Action so the policy's when clause matches")
+}
+
+func TestEvaluateNilCallerAttributesIsNoOp(t *testing.T) {
+	engine, _ := createTestEngine(t, &mockSessionResolver{})
+	req, err := types.NewAccessRequest("character:01ABC", "read", "location:01XYZ", nil)
+	require.NoError(t, err)
+	_, err = engine.Evaluate(t.Context(), req)
+	require.NoError(t, err)
+	// No assertion on Allow/Deny — the test confirms nil attrs do not panic
+	// and Resolve still runs to completion.
+}
+
+func TestEvaluateRejectsHandBuiltAccessRequestWithReservedAttributeKey(t *testing.T) {
+	// Defense-in-depth: a caller that bypasses NewAccessRequest by constructing
+	// an AccessRequest literal and populating a reserved key must be rejected
+	// by Evaluate, not silently allowed to overwrite resolver-owned attributes.
+	engine, _ := createTestEngine(t, &mockSessionResolver{})
+
+	// Build a literal that bypasses the constructor's reserved-key check.
+	req := types.AccessRequest{
+		Subject:    "character:01ABC",
+		Action:     "read",
+		Resource:   "location:01XYZ",
+		Attributes: map[string]any{"name": "injected"},
+	}
+	_, err := engine.Evaluate(t.Context(), req)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "ACCESS_REQUEST_RESERVED_ATTRIBUTE")
 }

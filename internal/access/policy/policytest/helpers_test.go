@@ -17,7 +17,7 @@ import (
 
 func TestAllowAllEngine(t *testing.T) {
 	engine := policytest.AllowAllEngine()
-	req, err := types.NewAccessRequest("character:01ABC", "read", "location:01XYZ")
+	req, err := types.NewAccessRequest("character:01ABC", "read", "location:01XYZ", nil)
 	require.NoError(t, err)
 
 	decision, err := engine.Evaluate(context.Background(), req)
@@ -28,7 +28,7 @@ func TestAllowAllEngine(t *testing.T) {
 
 func TestDenyAllEngine(t *testing.T) {
 	engine := policytest.DenyAllEngine()
-	req, err := types.NewAccessRequest("character:01ABC", "read", "location:01XYZ")
+	req, err := types.NewAccessRequest("character:01ABC", "read", "location:01XYZ", nil)
 	require.NoError(t, err)
 
 	decision, err := engine.Evaluate(context.Background(), req)
@@ -42,7 +42,7 @@ func TestGrantEngine(t *testing.T) {
 	engine.Grant("character:01ABC", "read", "location:01XYZ")
 
 	t.Run("granted permission returns allow", func(t *testing.T) {
-		req, err := types.NewAccessRequest("character:01ABC", "read", "location:01XYZ")
+		req, err := types.NewAccessRequest("character:01ABC", "read", "location:01XYZ", nil)
 		require.NoError(t, err)
 
 		decision, err := engine.Evaluate(context.Background(), req)
@@ -51,7 +51,7 @@ func TestGrantEngine(t *testing.T) {
 	})
 
 	t.Run("ungranted permission returns DefaultDeny not Deny", func(t *testing.T) {
-		req, err := types.NewAccessRequest("character:01ABC", "write", "location:01XYZ")
+		req, err := types.NewAccessRequest("character:01ABC", "write", "location:01XYZ", nil)
 		require.NoError(t, err)
 
 		decision, err := engine.Evaluate(context.Background(), req)
@@ -65,7 +65,7 @@ func TestGrantEngine(t *testing.T) {
 func TestErrorEngine(t *testing.T) {
 	sentinel := errors.New("test engine error")
 	engine := policytest.NewErrorEngine(sentinel)
-	req, err := types.NewAccessRequest("character:01ABC", "read", "location:01XYZ")
+	req, err := types.NewAccessRequest("character:01ABC", "read", "location:01XYZ", nil)
 	require.NoError(t, err)
 
 	decision, err := engine.Evaluate(context.Background(), req)
@@ -76,7 +76,7 @@ func TestErrorEngine(t *testing.T) {
 
 func TestInfraFailureEngine(t *testing.T) {
 	engine := policytest.NewInfraFailureEngine(t, "session store error", "infra:session-store-error")
-	req, err := types.NewAccessRequest("character:01ABC", "read", "location:01XYZ")
+	req, err := types.NewAccessRequest("character:01ABC", "read", "location:01XYZ", nil)
 	require.NoError(t, err)
 
 	decision, err := engine.Evaluate(context.Background(), req)

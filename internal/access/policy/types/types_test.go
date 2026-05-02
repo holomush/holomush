@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestEffect_String(t *testing.T) {
@@ -219,7 +221,7 @@ func TestAccessRequestFields(t *testing.T) {
 }
 
 func TestNewAccessRequestValid(t *testing.T) {
-	req, err := NewAccessRequest("character:01ABC", "read", "location:01XYZ")
+	req, err := NewAccessRequest("character:01ABC", "read", "location:01XYZ", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "character:01ABC", req.Subject)
 	assert.Equal(t, "read", req.Action)
@@ -241,11 +243,78 @@ func TestNewAccessRequest_EmptyFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewAccessRequest(tt.subject, tt.action, tt.resource)
+			_, err := NewAccessRequest(tt.subject, tt.action, tt.resource, nil)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantMsg)
 		})
 	}
+}
+
+func TestNewAccessRequestAcceptsNilAttributes(t *testing.T) {
+	req, err := NewAccessRequest("character:01ABC", "read", "location:01XYZ", nil)
+	require.NoError(t, err)
+	assert.Nil(t, req.Attributes)
+}
+
+func TestNewAccessRequestAcceptsCallerAttributes(t *testing.T) {
+	attrs := map[string]any{
+		"event_type":  "core-comm:whisper",
+		"plugin_inst": "01INST",
+	}
+	req, err := NewAccessRequest("plugin:mod-filter", "decrypt", "dek:dm:01HABC", attrs)
+	require.NoError(t, err)
+	assert.Equal(t, "core-comm:whisper", req.Attributes["event_type"])
+	assert.Equal(t, "01INST", req.Attributes["plugin_inst"])
+
+	// Verify the stored map is independent of the caller's map: mutating the
+	// original after construction must not affect the AccessRequest.
+	attrs["event_type"] = "mutated"
+	assert.Equal(t, "core-comm:whisper", req.Attributes["event_type"],
+		"AccessRequest.Attributes must be a clone, not a reference to the caller's map")
+}
+
+func TestNewAccessRequestDeepClonesMutableAttributeValues(t *testing.T) {
+	// CodeRabbit round 3: a shallow map clone is not enough — values that
+	// are themselves mutable (slices, nested maps) must be deep-copied so
+	// post-construction mutation by the caller cannot reach the stored
+	// AccessRequest.
+	tags := []string{"alpha", "beta"}
+	nested := map[string]any{"k": "v"}
+	attrs := map[string]any{
+		"tags":  tags,
+		"meta":  nested,
+		"items": []any{1, "two", []string{"three"}},
+	}
+	req, err := NewAccessRequest("plugin:mod-filter", "decrypt", "dek:dm:01HABC", attrs)
+	require.NoError(t, err)
+
+	// Mutate the caller's slice + map; the stored AccessRequest must be unaffected.
+	tags[0] = "MUTATED"
+	nested["k"] = "MUTATED"
+	attrs["items"].([]any)[0] = "MUTATED"
+
+	gotTags, ok := req.Attributes["tags"].([]string)
+	require.True(t, ok, "tags attribute should be []string")
+	assert.Equal(t, []string{"alpha", "beta"}, gotTags,
+		"AccessRequest.Attributes []string values must be deep-cloned")
+
+	gotMeta, ok := req.Attributes["meta"].(map[string]any)
+	require.True(t, ok, "meta attribute should be map[string]any")
+	assert.Equal(t, "v", gotMeta["k"],
+		"AccessRequest.Attributes nested map values must be deep-cloned")
+
+	gotItems, ok := req.Attributes["items"].([]any)
+	require.True(t, ok, "items attribute should be []any")
+	assert.Equal(t, 1, gotItems[0],
+		"AccessRequest.Attributes []any elements must be deep-cloned")
+}
+
+func TestNewAccessRequestRejectsReservedNameKey(t *testing.T) {
+	// "name" is reserved (resolver writes req.Action verb into bags.Action["name"]).
+	// Caller-supplied "name" would silently overwrite the resolver value.
+	attrs := map[string]any{"name": "something"}
+	_, err := NewAccessRequest("character:01ABC", "read", "location:01XYZ", attrs)
+	errutil.AssertErrorCode(t, err, "ACCESS_REQUEST_RESERVED_ATTRIBUTE")
 }
 
 func TestAttributeBags_Initialization(t *testing.T) {
@@ -375,4 +444,32 @@ func TestDecision_IsInfraFailure(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.decision.IsInfraFailure())
 		})
 	}
+}
+
+// TestIsReservedActionKeyRecognizesReservedKey verifies that the well-known
+// reserved key "name" (written by the attribute resolver) is correctly
+// identified as reserved.
+func TestIsReservedActionKeyRecognizesReservedKey(t *testing.T) {
+	t.Parallel()
+	assert.True(t, IsReservedActionKey("name"), `"name" must be a reserved action key`)
+}
+
+// TestIsReservedActionKeyRejectsUnknownKey verifies that an arbitrary key
+// that is not in the reserved set returns false, preventing false positives.
+func TestIsReservedActionKeyRejectsUnknownKey(t *testing.T) {
+	t.Parallel()
+	assert.False(t, IsReservedActionKey("anything-else"), `non-reserved keys must not be reported as reserved`)
+	assert.False(t, IsReservedActionKey(""), `empty string must not be reported as reserved`)
+	assert.False(t, IsReservedActionKey("Name"), `key lookup must be case-sensitive`)
+}
+
+// TestNewAccessRequestRejectsReservedAttributeKeyViaIsReservedActionKey verifies
+// that NewAccessRequest delegates its reserved-key check through IsReservedActionKey,
+// ensuring the constructor and the accessor share the same invariant set.
+func TestNewAccessRequestRejectsReservedAttributeKeyViaIsReservedActionKey(t *testing.T) {
+	t.Parallel()
+	// "name" is the only current member of reservedActionKeys.
+	_, err := NewAccessRequest("subject", "read", "resource", map[string]any{"name": "injected"})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "ACCESS_REQUEST_RESERVED_ATTRIBUTE")
 }

@@ -293,7 +293,7 @@ func (f *Functions) checkKVAccess(L *lua.LState, pluginName, action, key string)
 	ctx, cancel := context.WithTimeout(parentCtx, defaultPluginQueryTimeout)
 	defer cancel()
 
-	req, err := types.NewAccessRequest(subject, action, resource)
+	req, err := types.NewAccessRequest(subject, action, resource, nil)
 	if err != nil {
 		slog.Error("failed to create KV access request",
 			"plugin", pluginName, "action", action, "key", key, "error", err)

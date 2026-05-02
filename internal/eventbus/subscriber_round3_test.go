@@ -35,6 +35,7 @@ type plainDelivery struct {
 }
 
 func (p *plainDelivery) Event() eventbus.Event { return p.event }
+func (p *plainDelivery) MetadataOnly() bool    { return false }
 func (p *plainDelivery) Ack() error            { p.acked = true; return p.ackErr }
 func (p *plainDelivery) Nack() error           { p.nacked = true; return p.nackErr }
 func (p *plainDelivery) InProgress() error     { return nil }
@@ -73,7 +74,7 @@ func TestDeliveryMetadataForTestReturnsMetadataForJetstreamImpl(t *testing.T) {
 	sessionID := freshSessionID()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	t.Cleanup(cancel)
-	stream, err := sub.OpenSession(ctx, sessionID, []eventbus.Subject{subject})
+	stream, err := sub.OpenSession(ctx, sessionID, testIdentity(), []eventbus.Subject{subject})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 	require.NoError(t, pub.Publish(ctx, newTestEnvelope(subject, []byte("m"))))
@@ -95,7 +96,7 @@ func TestSessionStreamNextReturnsIteratorClosedErrorAfterClose(t *testing.T) {
 	embedded := eventbustest.New(t)
 	sub := embedded.Bus.Subscriber()
 	sessionID := freshSessionID()
-	stream, err := sub.OpenSession(context.Background(), sessionID,
+	stream, err := sub.OpenSession(context.Background(), sessionID, testIdentity(),
 		[]eventbus.Subject{eventbus.Subject("events.main.close.next")})
 	require.NoError(t, err)
 	// Close first; next call observes the closed channel.

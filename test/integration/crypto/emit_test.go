@@ -21,6 +21,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
@@ -30,6 +31,7 @@ import (
 	plugins "github.com/holomush/holomush/internal/plugin"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	"github.com/holomush/holomush/test/testutil"
 )
 
@@ -178,6 +180,16 @@ func TestSensitiveEmitProducesCiphertextOnBusAndInAudit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int32(gotVer), *row.DekVersion) //nolint:gosec // G115: ParseInt with bitSize=32 already bounds the value to int32.
 	assert.Equal(t, msg.Data(), row.Payload, "INV-21: bus and audit payload bytes must be byte-equal")
+
+	// Decision 0: msg.Data is the marshaled envelope (cleartext metadata
+	// fields + ciphertext payload field), NOT a single ciphertext blob.
+	var wireEnvelope eventbusv1.Event
+	require.NoError(t, proto.Unmarshal(msg.Data(), &wireEnvelope), "msg.Data MUST unmarshal as eventbusv1.Event")
+	assert.NotEqual(t, []byte(plaintext), wireEnvelope.Payload, "envelope.Payload MUST be ciphertext, not plaintext")
+	assert.Equal(t, "events.main.scene.01HXXXTESTSCENE000000000", wireEnvelope.Subject, "envelope.Subject MUST be cleartext on the wire")
+	assert.Equal(t, "test-plugin:whisper", wireEnvelope.Type, "envelope.Type MUST be cleartext on the wire")
+	require.NotNil(t, wireEnvelope.Timestamp, "envelope.Timestamp MUST be cleartext on the wire")
+	require.NotNil(t, wireEnvelope.Actor, "envelope.Actor MUST be cleartext on the wire")
 
 	// AAD-bind verification (INV-25 round-trip) is unit-tested at
 	// internal/eventbus/codec/xchacha20poly1305_test.go::TestXChaCha20Poly1305DetectsAADTamper.

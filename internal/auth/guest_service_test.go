@@ -18,57 +18,101 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
-func TestNewGuestService_NilDeps(t *testing.T) {
+// passthroughTransactor returns a mock transactor that calls fn(ctx) directly,
+// simulating a committed transaction. Use for success-path tests.
+func passthroughTransactor(t *testing.T) *mocks.MockGuestTransactor {
+	t.Helper()
+	tr := mocks.NewMockGuestTransactor(t)
+	tr.EXPECT().InTransaction(mock.Anything, mock.AnythingOfType("func(context.Context) error")).
+		RunAndReturn(func(ctx context.Context, fn func(context.Context) error) error {
+			return fn(ctx)
+		})
+	return tr
+}
+
+func TestNewGuestServiceNilDeps(t *testing.T) {
 	validNamer := mocks.NewMockGuestNamer(t)
 	validPlayers := mocks.NewMockPlayerRepository(t)
 	validChars := mocks.NewMockGuestCharacterRepository(t)
 	validSessions := mocks.NewMockPlayerSessionRepository(t)
+	validTransactor := mocks.NewMockGuestTransactor(t)
+	validBindings := mocks.NewMockGuestBindingCreator(t)
 
 	tests := []struct {
-		name     string
-		namer    auth.GuestNamer
-		players  auth.PlayerRepository
-		chars    auth.GuestCharacterRepository
-		sessions auth.PlayerSessionRepository
-		wantErr  string
+		name       string
+		namer      auth.GuestNamer
+		players    auth.PlayerRepository
+		chars      auth.GuestCharacterRepository
+		sessions   auth.PlayerSessionRepository
+		transactor auth.GuestTransactor
+		bindings   auth.GuestBindingCreator
+		wantErr    string
 	}{
 		{
-			name:     "nil namer",
-			namer:    nil,
-			players:  validPlayers,
-			chars:    validChars,
-			sessions: validSessions,
-			wantErr:  "guest namer is required",
+			name:       "nil namer",
+			namer:      nil,
+			players:    validPlayers,
+			chars:      validChars,
+			sessions:   validSessions,
+			transactor: validTransactor,
+			bindings:   validBindings,
+			wantErr:    "guest namer is required",
 		},
 		{
-			name:     "nil players",
-			namer:    validNamer,
-			players:  nil,
-			chars:    validChars,
-			sessions: validSessions,
-			wantErr:  "players repository is required",
+			name:       "nil players",
+			namer:      validNamer,
+			players:    nil,
+			chars:      validChars,
+			sessions:   validSessions,
+			transactor: validTransactor,
+			bindings:   validBindings,
+			wantErr:    "players repository is required",
 		},
 		{
-			name:     "nil chars",
-			namer:    validNamer,
-			players:  validPlayers,
-			chars:    nil,
-			sessions: validSessions,
-			wantErr:  "character repository is required",
+			name:       "nil chars",
+			namer:      validNamer,
+			players:    validPlayers,
+			chars:      nil,
+			sessions:   validSessions,
+			transactor: validTransactor,
+			bindings:   validBindings,
+			wantErr:    "character repository is required",
 		},
 		{
-			name:     "nil sessions",
-			namer:    validNamer,
-			players:  validPlayers,
-			chars:    validChars,
-			sessions: nil,
-			wantErr:  "player sessions repository is required",
+			name:       "nil sessions",
+			namer:      validNamer,
+			players:    validPlayers,
+			chars:      validChars,
+			sessions:   nil,
+			transactor: validTransactor,
+			bindings:   validBindings,
+			wantErr:    "player sessions repository is required",
+		},
+		{
+			name:       "nil transactor",
+			namer:      validNamer,
+			players:    validPlayers,
+			chars:      validChars,
+			sessions:   validSessions,
+			transactor: nil,
+			bindings:   validBindings,
+			wantErr:    "transactor is required",
+		},
+		{
+			name:       "nil bindings",
+			namer:      validNamer,
+			players:    validPlayers,
+			chars:      validChars,
+			sessions:   validSessions,
+			transactor: validTransactor,
+			bindings:   nil,
+			wantErr:    "binding creator is required",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, err := auth.NewGuestService(tt.namer, tt.players, tt.chars, tt.sessions)
+			svc, err := auth.NewGuestService(tt.namer, tt.players, tt.chars, tt.sessions, tt.transactor, tt.bindings)
 			require.Error(t, err)
 			assert.Nil(t, svc)
 			assert.Contains(t, err.Error(), tt.wantErr)
@@ -85,6 +129,8 @@ func TestGuestServiceCreatesGuestSuccessfully(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
+	transactor := passthroughTransactor(t)
+	bindings := mocks.NewMockGuestBindingCreator(t)
 
 	charName := "Sapphire Diamond" // underscore→space conversion
 
@@ -92,12 +138,13 @@ func TestGuestServiceCreatesGuestSuccessfully(t *testing.T) {
 	namer.EXPECT().StartLocation().Return(startLoc)
 
 	chars.EXPECT().ExistsByName(ctx, charName).Return(false, nil).Once()
-	players.EXPECT().Create(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
-	chars.EXPECT().Create(ctx, mock.AnythingOfType("*world.Character")).Return(nil).Once()
+	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
+	chars.EXPECT().Create(mock.Anything, mock.AnythingOfType("*world.Character")).Return(nil).Once()
+	bindings.EXPECT().Create(mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), "initial_bind_guest").Return("bind-id-1", nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -124,6 +171,8 @@ func TestGuestServiceRetriesOnNameCollision(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
+	transactor := passthroughTransactor(t)
+	bindings := mocks.NewMockGuestBindingCreator(t)
 
 	takenCharName := "Ruby Flame" // underscore→space form
 	freeCharName := "Jade River"  // underscore→space form
@@ -137,12 +186,13 @@ func TestGuestServiceRetriesOnNameCollision(t *testing.T) {
 	chars.EXPECT().ExistsByName(ctx, freeCharName).Return(false, nil).Once()
 
 	namer.EXPECT().StartLocation().Return(startLoc)
-	players.EXPECT().Create(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
-	chars.EXPECT().Create(ctx, mock.AnythingOfType("*world.Character")).Return(nil).Once()
+	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
+	chars.EXPECT().Create(mock.Anything, mock.AnythingOfType("*world.Character")).Return(nil).Once()
+	bindings.EXPECT().Create(mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), "initial_bind_guest").Return("bind-id-2", nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -162,16 +212,19 @@ func TestGuestServiceSucceedsWhenDefaultCharacterUpdateFails(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
+	transactor := passthroughTransactor(t)
+	bindings := mocks.NewMockGuestBindingCreator(t)
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
 	chars.EXPECT().ExistsByName(ctx, "Coral Breeze").Return(false, nil).Once()
-	players.EXPECT().Create(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
-	chars.EXPECT().Create(ctx, mock.AnythingOfType("*world.Character")).Return(nil).Once()
+	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
+	chars.EXPECT().Create(mock.Anything, mock.AnythingOfType("*world.Character")).Return(nil).Once()
+	bindings.EXPECT().Create(mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), "initial_bind_guest").Return("bind-id-3", nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(errors.New("db timeout")).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -188,13 +241,18 @@ func TestGuestServiceReturnsErrorWhenPlayerCreateFails(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
+	transactor := passthroughTransactor(t)
+	bindings := mocks.NewMockGuestBindingCreator(t)
 
+	amberStartLoc := ulid.MustNew(ulid.Now(), nil)
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
+	namer.EXPECT().StartLocation().Return(amberStartLoc)
 	chars.EXPECT().ExistsByName(ctx, "Amber Storm").Return(false, nil).Once()
-	players.EXPECT().Create(ctx, mock.AnythingOfType("*auth.Player")).Return(dbErr).Once()
+	// player.Create fails inside the transaction; rollback handles cleanup (no explicit Delete needed).
+	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(dbErr).Once()
 	namer.EXPECT().ReleaseGuest(guestName).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -211,17 +269,18 @@ func TestGuestServiceReturnsErrorWhenCharCreateFails(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
+	transactor := passthroughTransactor(t)
+	bindings := mocks.NewMockGuestBindingCreator(t)
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
 	chars.EXPECT().ExistsByName(ctx, "Topaz Wind").Return(false, nil).Once()
-	players.EXPECT().Create(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
-	chars.EXPECT().Create(ctx, mock.AnythingOfType("*world.Character")).Return(errors.New("db error")).Once()
+	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
+	// chars.Create fails inside the transaction; rollback handles cleanup (no explicit players.Delete needed).
+	chars.EXPECT().Create(mock.Anything, mock.AnythingOfType("*world.Character")).Return(errors.New("db error")).Once()
 	namer.EXPECT().ReleaseGuest(guestName).Once()
-	// best-effort player cleanup
-	players.EXPECT().Delete(ctx, mock.AnythingOfType("ulid.ULID")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -239,19 +298,22 @@ func TestGuestServiceReturnsErrorWhenSessionCreateFails(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
+	transactor := passthroughTransactor(t)
+	bindings := mocks.NewMockGuestBindingCreator(t)
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	namer.EXPECT().StartLocation().Return(startLoc)
 	chars.EXPECT().ExistsByName(ctx, "Marble Creek").Return(false, nil).Once()
-	players.EXPECT().Create(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
-	chars.EXPECT().Create(ctx, mock.AnythingOfType("*world.Character")).Return(nil).Once()
+	players.EXPECT().Create(mock.Anything, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
+	chars.EXPECT().Create(mock.Anything, mock.AnythingOfType("*world.Character")).Return(nil).Once()
+	bindings.EXPECT().Create(mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), "initial_bind_guest").Return("bind-id-4", nil).Once()
 	players.EXPECT().Update(ctx, mock.AnythingOfType("*auth.Player")).Return(nil).Once()
 	sessions.EXPECT().Create(ctx, mock.AnythingOfType("*auth.PlayerSession")).Return(errors.New("session db error")).Once()
 	namer.EXPECT().ReleaseGuest(guestName).Once()
-	// best-effort player cleanup
+	// best-effort player cleanup after session create failure
 	players.EXPECT().Delete(ctx, mock.AnythingOfType("ulid.ULID")).Return(nil).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -267,6 +329,8 @@ func TestGuestServiceReturnsErrorWhenNameExhausted(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
+	transactor := mocks.NewMockGuestTransactor(t)
+	bindings := mocks.NewMockGuestBindingCreator(t)
 
 	// All 10 generated names already exist in the database.
 	for range 10 {
@@ -276,7 +340,7 @@ func TestGuestServiceReturnsErrorWhenNameExhausted(t *testing.T) {
 		namer.EXPECT().ReleaseGuest(name).Once()
 	}
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)
@@ -293,12 +357,14 @@ func TestGuestServiceReturnsErrorWhenExistsByNameFails(t *testing.T) {
 	players := mocks.NewMockPlayerRepository(t)
 	chars := mocks.NewMockGuestCharacterRepository(t)
 	sessions := mocks.NewMockPlayerSessionRepository(t)
+	transactor := mocks.NewMockGuestTransactor(t)
+	bindings := mocks.NewMockGuestBindingCreator(t)
 
 	namer.EXPECT().GenerateName().Return(guestName, nil).Once()
 	chars.EXPECT().ExistsByName(ctx, "Crystal Fog").Return(false, errors.New("db error")).Once()
 	namer.EXPECT().ReleaseGuest(guestName).Once()
 
-	svc, err := auth.NewGuestService(namer, players, chars, sessions)
+	svc, err := auth.NewGuestService(namer, players, chars, sessions, transactor, bindings)
 	require.NoError(t, err)
 
 	result, err := svc.CreateGuest(ctx)

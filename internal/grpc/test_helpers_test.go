@@ -37,8 +37,6 @@ type fakePlayerSessionRepo struct {
 
 // newFakePlayerSessionRepo constructs a fakePlayerSessionRepo seeded to
 // accept testPlayerSessionToken and return the given PlayerID.
-//
-//nolint:unparam // playerID is always ulid.ULID{} in current tests; kept parameterised for future callers
 func newFakePlayerSessionRepo(playerID ulid.ULID) *fakePlayerSessionRepo {
 	return &fakePlayerSessionRepo{
 		tokenHash: auth.HashSessionToken(testPlayerSessionToken),

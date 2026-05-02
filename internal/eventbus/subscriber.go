@@ -5,6 +5,7 @@ package eventbus
 
 import (
 	"context"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/holomush/holomush/internal/eventbus/codec"
+	"github.com/holomush/holomush/internal/eventbus/crypto/aad"
 	"github.com/holomush/holomush/internal/eventbus/telemetry"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
@@ -50,6 +52,26 @@ type SubscribeOption func(*JetStreamSubscriber)
 // deployments still decode identity-codec payloads (the default).
 func WithSubscriberCodecSelector(sel codec.KeySelector) SubscribeOption {
 	return func(s *JetStreamSubscriber) { s.selector = sel }
+}
+
+// WithSubscriberAuthGuard injects the AuthGuard for sensitive event delivery
+// decisions. When nil (the default), the pre-Phase 3b identity-codec passthrough
+// path is used for all events. Required when deploying with Crypto.Enabled=true.
+func WithSubscriberAuthGuard(g SessionAuthGuard) SubscribeOption {
+	return func(s *JetStreamSubscriber) { s.authGuard = g }
+}
+
+// WithSubscriberDEKManager injects the DEK Manager used to resolve plaintext
+// keys during decryption. Required when WithSubscriberAuthGuard is set.
+func WithSubscriberDEKManager(m SessionDEKManager) SubscribeOption {
+	return func(s *JetStreamSubscriber) { s.dekManager = m }
+}
+
+// WithSubscriberDecryptAuditEmitter injects the audit emitter for plugin decrypt
+// records (Decision 3, master spec §7.6). Optional — nil is safe when no plugin
+// sessions are expected (but required when plugins subscribe to sensitive events).
+func WithSubscriberDecryptAuditEmitter(em SessionAuditEmitter) SubscribeOption {
+	return func(s *JetStreamSubscriber) { s.auditEmitter = em }
 }
 
 // WithSessionAckWait overrides the default AckWait on new session consumers.
@@ -90,6 +112,17 @@ type JetStreamSubscriber struct {
 	ackWait           time.Duration
 	maxAckPending     int
 	inactiveThreshold time.Duration
+
+	// authGuard is optional. nil = pre-Phase 3b passthrough (all events delivered
+	// via identity-codec path). non-nil activates the Decision 5 order-of-operations
+	// for sensitive (non-identity) codec events.
+	authGuard    SessionAuthGuard
+	// dekManager resolves plaintext key material for sensitive codec events.
+	// Required when authGuard is non-nil.
+	dekManager   SessionDEKManager
+	// auditEmitter logs plugin decrypt records. nil is safe when no plugins subscribe
+	// to sensitive events (plugin branch is skipped for non-plugin identities).
+	auditEmitter SessionAuditEmitter
 }
 
 // NewJetStreamSubscriber constructs a Subscriber backed by the given JetStream
@@ -114,11 +147,16 @@ func NewJetStreamSubscriber(js jetstream.JetStream, opts ...SubscribeOption) *Je
 // the durable consumer's acked-seq is kept by JetStream across
 // CreateOrUpdateConsumer.
 //
+// identity carries the authenticated principal. Required at the API surface —
+// with Crypto.Enabled=false (no authGuard set) the value is stored but unused
+// on the decode path. T10 wires the construction at the gRPC authentication
+// boundary.
+//
 // Callers MUST call SessionStream.Close when done. Close does NOT delete the
 // consumer — sessions resume across reconnect via the durable's retained
 // cursor. Consumer teardown is handled by InactiveThreshold (passive) or by
 // the session-lifecycle listener in F5 (active, on session_ended).
-func (s *JetStreamSubscriber) OpenSession(ctx context.Context, sessionID string, filters []Subject) (SessionStream, error) {
+func (s *JetStreamSubscriber) OpenSession(ctx context.Context, sessionID string, identity SessionIdentity, filters []Subject) (SessionStream, error) {
 	if s.js == nil {
 		return nil, oops.Code("EVENTBUS_SUBSCRIBER_NOT_READY").Errorf("JetStream context is nil")
 	}
@@ -153,7 +191,7 @@ func (s *JetStreamSubscriber) OpenSession(ctx context.Context, sessionID string,
 			With("consumer", name).
 			Wrap(err)
 	}
-	return newSessionStream(ctx, sessionID, name, s.js, s.selector, s.ackWait, s.maxAckPending, s.inactiveThreshold, cons)
+	return newSessionStream(ctx, sessionID, name, s.js, s.selector, identity, s.authGuard, s.dekManager, s.auditEmitter, s.ackWait, s.maxAckPending, s.inactiveThreshold, cons)
 }
 
 // newSessionStream constructs the session-backed iterator with a pending-msg
@@ -166,6 +204,10 @@ func newSessionStream(
 	sessionID, consumerName string,
 	js jetstream.JetStream,
 	selector codec.KeySelector,
+	identity SessionIdentity,
+	guard SessionAuthGuard,
+	dekMgr SessionDEKManager,
+	auditEm SessionAuditEmitter,
 	ackWait time.Duration,
 	maxPending int,
 	inactiveTTL time.Duration,
@@ -184,6 +226,10 @@ func newSessionStream(
 		consumerName: consumerName,
 		js:           js,
 		selector:     selector,
+		identity:     identity,
+		authGuard:    guard,
+		dekManager:   dekMgr,
+		auditEmitter: auditEm,
 		ackWait:      ackWait,
 		maxPending:   maxPending,
 		inactiveTTL:  inactiveTTL,
@@ -223,6 +269,17 @@ type jetStreamSessionStream struct {
 	maxPending   int
 	inactiveTTL  time.Duration
 
+	// identity is the authenticated principal for this session. Stored on
+	// the stream so decodeAndAuthorize can evaluate per-event access decisions.
+	identity     SessionIdentity
+	// authGuard evaluates sensitive event delivery decisions (Decision 5).
+	// nil = pre-Phase 3b passthrough (identity-codec path for all events).
+	authGuard    SessionAuthGuard
+	// dekManager resolves DEK material for sensitive events.
+	dekManager   SessionDEKManager
+	// auditEmitter logs plugin decrypt records.
+	auditEmitter SessionAuditEmitter
+
 	cons   jetstream.Consumer
 	cc     jetstream.ConsumeContext
 	inbox  chan jetstream.Msg
@@ -260,11 +317,11 @@ func (j *jetStreamSessionStream) Next(ctx context.Context) (Delivery, error) {
 		if !ok {
 			return nil, oops.Wrap(jetstream.ErrMsgIteratorClosed)
 		}
-		event, err := decodeDelivery(ctx, msg, j.selector)
+		event, metaOnly, err := decodeDeliveryWithAuth(ctx, msg, j.selector, j.identity, j.authGuard, j.dekManager, j.auditEmitter)
 		if err != nil {
 			return nil, err
 		}
-		return &jetStreamDelivery{msg: msg, event: event}, nil
+		return &jetStreamDelivery{msg: msg, event: event, metadataOnly: metaOnly}, nil
 	}
 }
 
@@ -340,13 +397,15 @@ func (j *jetStreamSessionStream) Close() error {
 
 // jetStreamDelivery wraps a jetstream.Msg as an eventbus.Delivery.
 type jetStreamDelivery struct {
-	msg   jetstream.Msg
-	event Event
+	msg          jetstream.Msg
+	event        Event
+	metadataOnly bool // stamped by decodeDelivery when AuthGuard denies (T9)
 }
 
-func (d *jetStreamDelivery) Event() Event { return d.event }
-func (d *jetStreamDelivery) Ack() error   { return oops.Wrap(d.msg.Ack()) }
-func (d *jetStreamDelivery) Nack() error  { return oops.Wrap(d.msg.Nak()) }
+func (d *jetStreamDelivery) Event() Event       { return d.event }
+func (d *jetStreamDelivery) MetadataOnly() bool { return d.metadataOnly }
+func (d *jetStreamDelivery) Ack() error         { return oops.Wrap(d.msg.Ack()) }
+func (d *jetStreamDelivery) Nack() error        { return oops.Wrap(d.msg.Nak()) }
 func (d *jetStreamDelivery) InProgress() error {
 	return oops.Wrap(d.msg.InProgress())
 }
@@ -354,7 +413,30 @@ func (d *jetStreamDelivery) InProgress() error {
 // decodeDelivery reads headers, resolves codec, decodes payload, and
 // proto-unmarshals to an eventbus.Event. Mirrors the publisher's encode path
 // in reverse — any header missing/empty is a contract violation.
-func decodeDelivery(ctx context.Context, msg jetstream.Msg, selector codec.KeySelector) (Event, error) {
+//
+// This is the internal form used by decode_delivery_test.go unit tests and
+// as the header-parsing entry point for decodeDeliveryWithAuth. The selector
+// argument is retained for API compatibility with existing call sites but is
+// unused when guard is nil and codec is identity (the test-path default).
+func decodeDelivery(ctx context.Context, msg jetstream.Msg, _ codec.KeySelector) (Event, error) {
+	ev, _, err := decodeDeliveryWithAuth(ctx, msg, nil, SessionIdentity{}, nil, nil, nil)
+	return ev, err
+}
+
+// decodeDeliveryWithAuth is the full decode path that implements Decision 5
+// order-of-operations. It returns (event, metadataOnly, err):
+//   - err != nil: message cannot be processed at all (fail-closed).
+//   - metadataOnly=true: AuthGuard denied or TOCTOU backpressure; payload is empty.
+//   - metadataOnly=false: identity codec or AuthGuard permitted; payload is plaintext.
+func decodeDeliveryWithAuth(
+	ctx context.Context,
+	msg jetstream.Msg,
+	selector codec.KeySelector, // used in guard==nil fallback (T1/Phase 3a passthrough path)
+	identity SessionIdentity,
+	guard SessionAuthGuard,
+	dekMgr SessionDEKManager,
+	auditEm SessionAuditEmitter,
+) (Event, bool, error) {
 	h := msg.Headers()
 	// Extract OTEL context off the wire before decode so downstream spans
 	// link. No-op when the publisher did not inject headers.
@@ -362,76 +444,290 @@ func decodeDelivery(ctx context.Context, msg jetstream.Msg, selector codec.KeySe
 
 	msgIDStr := h.Get(HeaderMsgID)
 	if msgIDStr == "" {
-		return Event{}, oops.Code("EVENTBUS_SUBSCRIBE_MISSING_HEADER").
+		return Event{}, false, oops.Code("EVENTBUS_SUBSCRIBE_MISSING_HEADER").
 			With("header", HeaderMsgID).Errorf("missing header")
 	}
 	id, err := ulid.Parse(msgIDStr)
 	if err != nil {
-		return Event{}, oops.Code("EVENTBUS_SUBSCRIBE_BAD_MSG_ID").
+		return Event{}, false, oops.Code("EVENTBUS_SUBSCRIBE_BAD_MSG_ID").
 			With("value", msgIDStr).Wrap(err)
 	}
 	schemaVer := h.Get(HeaderSchemaVersion)
 	if schemaVer == "" {
-		return Event{}, oops.Code("EVENTBUS_SUBSCRIBE_MISSING_HEADER").
+		return Event{}, false, oops.Code("EVENTBUS_SUBSCRIBE_MISSING_HEADER").
 			With("header", HeaderSchemaVersion).Errorf("missing header")
 	}
 	if schemaVer != SchemaVersion {
-		return Event{}, oops.Code("EVENTBUS_SUBSCRIBE_SCHEMA_MISMATCH").
+		return Event{}, false, oops.Code("EVENTBUS_SUBSCRIBE_SCHEMA_MISMATCH").
 			With("got", schemaVer).
 			With("want", SchemaVersion).
 			Errorf("schema version mismatch")
 	}
 	codecNameStr := h.Get(HeaderCodec)
 	if codecNameStr == "" {
-		return Event{}, oops.Code("EVENTBUS_SUBSCRIBE_MISSING_HEADER").
+		return Event{}, false, oops.Code("EVENTBUS_SUBSCRIBE_MISSING_HEADER").
 			With("header", HeaderCodec).Errorf("missing header")
 	}
-	c, err := codec.Resolve(codec.Name(codecNameStr))
+	_, err = codec.Resolve(codec.Name(codecNameStr))
 	if err != nil {
-		return Event{}, oops.Code("EVENTBUS_SUBSCRIBE_UNKNOWN_CODEC").
+		return Event{}, false, oops.Code("EVENTBUS_SUBSCRIBE_UNKNOWN_CODEC").
 			With("codec", codecNameStr).Wrap(err)
 	}
 
-	// Identity codec does not need a key. Non-identity codecs ask the
-	// selector for the decrypt key. Key-id-on-wire is a v2 concern; Phase
-	// A deployments all use identity.
-	var key codec.Key
-	if codec.Name(codecNameStr) != codec.NameIdentity {
-		// Placeholder: KeyID 0 for now; when codecs grow a real KeyID
-		// stamped header we'll thread it through here.
+	// DECISION 0: proto-unmarshal FIRST. msg.Data is the marshaled
+	// envelope (cleartext fields + maybe-ciphertext payload field).
+	var envelope eventbusv1.Event
+	if unmarshalErr := proto.Unmarshal(msg.Data(), &envelope); unmarshalErr != nil {
+		return Event{}, false, oops.Code("EVENTBUS_SUBSCRIBE_UNMARSHAL_FAILED").Wrap(unmarshalErr)
+	}
+	// Stamp the parsed ULID so we don't re-parse it downstream.
+	envelope.Id = id[:]
+
+	var (
+		payload      []byte
+		metadataOnly bool
+	)
+
+	codecName := codec.Name(codecNameStr)
+	switch {
+	case codecName == codec.NameIdentity:
+		// Decision 5 §2: identity codec — deliver as-is. AuthGuard NOT invoked.
+		payload = envelope.GetPayload()
+	case guard != nil:
+		// Decision 5 §3: sensitive codec with AuthGuard wired. Full order-of-operations.
+		ev, mo, authErr := decodeAndAuthorize(ctx, msg, &envelope, codecName, identity, guard, dekMgr, auditEm)
+		if authErr != nil {
+			return Event{}, false, authErr
+		}
+		// Return the event built by decodeAndAuthorize directly; populate Seq.
+		if meta, mErr := msg.Metadata(); mErr == nil && meta != nil {
+			ev.Seq = meta.Sequence.Stream
+		}
+		return ev, mo, nil
+	default:
+		// No AuthGuard configured (pre-Phase 3b / test without guard):
+		// restore T1 Phase 3a passthrough behavior — fetch the key via the
+		// selector (if present) and decode with nil AAD. Phase 3d's flag flip
+		// wires AuthGuard in production; until then this branch preserves the
+		// pre-T9 subscriber path so Phase 3a encrypting tests remain green.
+		c, resolveErr := codec.Resolve(codecName)
+		if resolveErr != nil {
+			return Event{}, false, oops.Code("EVENTBUS_SUBSCRIBE_UNKNOWN_CODEC").
+				With("codec", codecNameStr).Wrap(resolveErr)
+		}
+		var key codec.Key
 		if selector != nil {
-			k, kerr := selector.SelectForDecrypt(ctx, codec.Name(codecNameStr), 0)
+			k, kerr := selector.SelectForDecrypt(ctx, codecName, 0)
 			if kerr != nil {
-				return Event{}, oops.Code("EVENTBUS_SUBSCRIBE_KEY_FETCH_FAILED").
+				return Event{}, false, oops.Code("EVENTBUS_SUBSCRIBE_KEY_FETCH_FAILED").
 					With("codec", codecNameStr).Wrap(kerr)
 			}
 			key = k
 		}
+		plain, decErr := c.Decode(ctx, envelope.Payload, key, nil)
+		if decErr != nil {
+			return Event{}, false, oops.Code("EVENTBUS_SUBSCRIBE_DECODE_FAILED").
+				With("codec", codecNameStr).Wrap(decErr)
+		}
+		payload = plain
+		metadataOnly = false
 	}
 
-	plain, err := c.Decode(ctx, msg.Data(), key, nil)
-	if err != nil {
-		return Event{}, oops.Code("EVENTBUS_SUBSCRIBE_DECODE_FAILED").
-			With("codec", codecNameStr).Wrap(err)
-	}
-
-	var envelope eventbusv1.Event
-	if unmarshalErr := proto.Unmarshal(plain, &envelope); unmarshalErr != nil {
-		return Event{}, oops.Code("EVENTBUS_SUBSCRIBE_UNMARSHAL_FAILED").Wrap(unmarshalErr)
-	}
 	ev := Event{
 		ID:        id,
 		Subject:   Subject(envelope.GetSubject()),
 		Type:      Type(envelope.GetType()),
 		Timestamp: envelope.GetTimestamp().AsTime(),
 		Actor:     actorFromProto(envelope.GetActor()),
-		Payload:   envelope.GetPayload(),
+		Payload:   payload,
 		Rendering: RenderingFromProto(envelope.GetRendering()),
 	}
 	if meta, mErr := msg.Metadata(); mErr == nil && meta != nil {
 		ev.Seq = meta.Sequence.Stream
 	}
-	return ev, nil
+	return ev, metadataOnly, nil
+}
+
+// decodeAndAuthorize implements the Decision 5 §3 order-of-operations for
+// sensitive (non-identity) codec deliveries. It is called by
+// decodeDeliveryWithAuth when guard != nil and the codec is non-identity.
+//
+// Returns (event, metadataOnly, err). err != nil is fail-closed (message
+// cannot be processed). metadataOnly=true signals that the AuthGuard denied
+// access; the returned Event has an empty payload.
+//
+// Exported signature for unit testing within the same package; not part of
+// the public API.
+func decodeAndAuthorize(
+	ctx context.Context,
+	msg jetstream.Msg,
+	envelope *eventbusv1.Event,
+	codecName codec.Name,
+	identity SessionIdentity,
+	guard SessionAuthGuard,
+	dekMgr SessionDEKManager,
+	auditEm SessionAuditEmitter,
+) (Event, bool, error) {
+	h := msg.Headers()
+
+	// Parse DEK headers: App-Dek-Ref and App-Dek-Version. Both headers are
+	// required for sensitive (non-identity) codec events. Absent or empty
+	// headers indicate a publisher contract violation; fail closed rather than
+	// falling back to (0, 0), which would present as an authorization miss.
+	dekRefStr := h.Get(HeaderDekRef)
+	dekVersionStr := h.Get(HeaderDekVersion)
+	if dekRefStr == "" || dekVersionStr == "" {
+		return Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_MISSING").
+			With("has_dek_ref", dekRefStr != "").
+			With("has_dek_version", dekVersionStr != "").
+			With("codec", string(codecName)).
+			Errorf("sensitive codec event missing required DEK headers")
+	}
+
+	var keyID codec.KeyID
+	var keyVersion uint32
+	// bitSize=63 enforces the parsed value fits in int64, matching the
+	// crypto_keys.id BIGSERIAL column type. dek/store.go:128 casts KeyID
+	// to int64 for the SQL query; this parse-site bound makes that cast
+	// provably safe and silences CodeQL's incorrect-conversion warning.
+	ref, parseErr := strconv.ParseUint(dekRefStr, 10, 63)
+	if parseErr != nil {
+		return Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
+			With("header", HeaderDekRef).With("value", dekRefStr).Wrap(parseErr)
+	}
+	keyID = codec.KeyID(ref)
+
+	ver, parseErr := strconv.ParseUint(dekVersionStr, 10, 32)
+	if parseErr != nil {
+		return Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
+			With("header", HeaderDekVersion).With("value", dekVersionStr).Wrap(parseErr)
+	}
+	keyVersion = uint32(ver) // safe: ParseUint(bitSize=32) guarantees fits in uint32
+
+	// Recover event ULID from the pre-stamped bytes (set by decodeDeliveryWithAuth).
+	var eventID ulid.ULID
+	if rawID := envelope.GetId(); len(rawID) == 16 {
+		copy(eventID[:], rawID)
+	}
+
+	req := SessionCheckRequest{
+		Identity:   identity,
+		KeyID:      keyID,
+		KeyVersion: keyVersion,
+		EventType:  envelope.GetType(),
+		EventID:    eventID,
+	}
+
+	decision, err := guard.Check(ctx, req)
+	if err != nil {
+		return Event{}, false, oops.Code("EVENTBUS_AUTHGUARD_CHECK_FAILED").
+			With("event_type", envelope.GetType()).
+			Wrap(err)
+	}
+
+	// If not permitted: return metadata-only event with empty payload.
+	if !decision.Permit {
+		return buildEventFromEnvelope(eventID, envelope, nil), true, nil
+	}
+
+	// Permit: resolve key, build AAD, decode plaintext.
+	// Guard against misconfiguration: WithSubscriberAuthGuard set without
+	// WithSubscriberDEKManager. Fail closed rather than panic.
+	if dekMgr == nil {
+		return Event{}, false, oops.Code("EVENTBUS_DEK_MANAGER_NIL").
+			Errorf("AuthGuard permitted decrypt but DEKManager is nil — misconfiguration")
+	}
+	key, err := dekMgr.Resolve(ctx, keyID, keyVersion)
+	if err != nil {
+		return Event{}, false, oops.Code("EVENTBUS_DEK_RESOLVE_FAILED").
+			With("key_id", uint64(keyID)).With("key_version", keyVersion).
+			Wrap(err)
+	}
+
+	aadBytes, err := aad.Build(envelope, string(codecName), uint64(keyID), keyVersion)
+	if err != nil {
+		return Event{}, false, oops.Code("EVENTBUS_AAD_BUILD_FAILED").Wrap(err)
+	}
+
+	c, err := codec.Resolve(codecName)
+	if err != nil {
+		return Event{}, false, oops.Code("EVENTBUS_SUBSCRIBE_UNKNOWN_CODEC").
+			With("codec", string(codecName)).Wrap(err)
+	}
+
+	plaintext, err := c.Decode(ctx, envelope.GetPayload(), key, aadBytes)
+	if err != nil {
+		return Event{}, false, oops.Code("EVENTBUS_CODEC_DECODE_FAILED").
+			With("codec", string(codecName)).Wrap(err)
+	}
+
+	// Plugin recipient branch: INV-19 — every plugin decrypt MUST produce an
+	// audit record. Fail closed if the emitter is absent or fails unexpectedly.
+	if identity.Kind == IdentityKindPlugin {
+		if auditEm == nil {
+			// AuthGuard permitted the read but no emitter is wired — configuration
+			// error. Fail closed rather than deliver plaintext without audit.
+			return Event{}, false, oops.Code("EVENTBUS_AUDIT_EMITTER_NIL").
+				Errorf("AuthGuard permitted plugin decrypt but no DecryptAuditEmitter configured (INV-19)")
+		}
+		rec := PluginDecryptRecord{
+			PluginName:       identity.PluginName,
+			PluginInstanceID: identity.InstanceID,
+			EventID:          eventID,
+			EventSubject:     Subject(envelope.GetSubject()),
+			EventType:        Type(envelope.GetType()),
+			DEKRef:           keyID,
+			DEKVersion:       keyVersion,
+			GrantID:          decision.GrantID,
+		}
+		if emitErr := auditEm.EmitPluginDecrypt(ctx, rec); emitErr != nil {
+			// Narrow: only AUDIT_QUEUE_FULL gets the plaintext-zero +
+			// metadata_only fallback (TOCTOU defense per Decision 3).
+			// Any other emit error means we cannot confirm the audit
+			// landed — fail closed.
+			if isAuditQueueFull(emitErr) {
+				for i := range plaintext {
+					plaintext[i] = 0
+				}
+				return buildEventFromEnvelope(eventID, envelope, nil), true, nil
+			}
+			return Event{}, false, oops.Code("EVENTBUS_AUDIT_EMIT_FAILED").
+				With("emit_error", emitErr.Error()).
+				Errorf("plugin decrypt audit emit failed — cannot confirm audit landed (INV-19)")
+		}
+	}
+
+	return buildEventFromEnvelope(eventID, envelope, plaintext), false, nil
+}
+
+// isAuditQueueFull reports whether err is an AUDIT_QUEUE_FULL oops error.
+// Used to distinguish the narrowly acceptable TOCTOU fallback (plaintext-zero +
+// metadata_only) from unexpected emit errors that must propagate (fail closed).
+func isAuditQueueFull(err error) bool {
+	if err == nil {
+		return false
+	}
+	o, ok := oops.AsOops(err)
+	if !ok {
+		return false
+	}
+	code, ok := o.Code().(string)
+	return ok && code == "AUDIT_QUEUE_FULL"
+}
+
+// buildEventFromEnvelope constructs an Event from a proto envelope and a
+// (possibly nil) payload. Used by decodeAndAuthorize for both the permit and
+// deny paths.
+func buildEventFromEnvelope(id ulid.ULID, envelope *eventbusv1.Event, payload []byte) Event {
+	return Event{
+		ID:        id,
+		Subject:   Subject(envelope.GetSubject()),
+		Type:      Type(envelope.GetType()),
+		Timestamp: envelope.GetTimestamp().AsTime(),
+		Actor:     actorFromProto(envelope.GetActor()),
+		Payload:   payload,
+		Rendering: RenderingFromProto(envelope.GetRendering()),
+	}
 }
 
 // AckSyncForTest performs a server-confirmed ack on a Delivery that was

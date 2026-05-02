@@ -1215,6 +1215,29 @@ func (m *Manager) lookupManifest(name string) *Manifest {
 	return dp.Manifest
 }
 
+// PluginRequestsDecryption returns true iff the plugin named pluginName
+// has a manifest declaring eventType in its
+// crypto.consumes[].requests_decryption[] list. The eventType MUST be
+// in the qualified <plugin>:<event_type> form per crypto_validator's
+// validation rules.
+//
+// Read by AuthGuard via the ManifestLookup adapter (Phase 3b grounding
+// doc Decision 1).
+func (m *Manager) PluginRequestsDecryption(pluginName, eventType string) bool {
+	manifest := m.lookupManifest(pluginName)
+	if manifest == nil || manifest.Crypto == nil {
+		return false
+	}
+	for _, consume := range manifest.Crypto.Consumes {
+		for _, ref := range consume.RequestsDecryption {
+			if ref == eventType {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func actorFromContext(ctx context.Context, _ string) (core.Actor, error) {
 	actor, ok := core.ActorFromContext(ctx)
 	if !ok {

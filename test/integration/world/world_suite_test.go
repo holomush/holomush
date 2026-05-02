@@ -167,6 +167,7 @@ func cleanupLocations(ctx context.Context, pool *pgxpool.Pool) {
 	_, _ = pool.Exec(ctx, "DELETE FROM objects")
 	_, _ = pool.Exec(ctx, "DELETE FROM scene_participants")
 	_, _ = pool.Exec(ctx, "DELETE FROM sessions")
+	_, _ = pool.Exec(ctx, "DELETE FROM player_character_bindings")
 	_, _ = pool.Exec(ctx, "DELETE FROM characters")
 	_, _ = pool.Exec(ctx, "DELETE FROM locations")
 	_, _ = pool.Exec(ctx, "DELETE FROM players")

@@ -252,6 +252,32 @@ func (e *Engine) Evaluate(ctx context.Context, req types.AccessRequest) (types.D
 			oops.With("subject", req.Subject).With("action", req.Action).With("resource", req.Resource).Wrap(resolveErr)
 	}
 
+	// Defense-in-depth: reject reserved attribute keys even if the caller
+	// bypassed NewAccessRequest by constructing an AccessRequest literal.
+	// Same code and semantics as the NewAccessRequest precondition check.
+	for k := range req.Attributes {
+		if types.IsReservedActionKey(k) {
+			return types.Decision{}, oops.Code("ACCESS_REQUEST_RESERVED_ATTRIBUTE").
+				With("key", k).
+				Errorf("hand-built AccessRequest contained reserved attribute key %q (bypassed NewAccessRequest)", k)
+		}
+	}
+
+	// Decision 6 R3: caller-supplied per-call attributes overlay bags.Action.
+	// Caller wins on non-reserved key conflict. Reserved keys (currently
+	// "name", which the attribute Resolver writes — see Resolver.Resolve)
+	// are blocked at NewAccessRequest precondition. bags.Action is always
+	// non-nil after Resolver.Resolve allocates it; the nil-init below is a
+	// guard for test paths that hand-construct AttributeBags{} with zero-value maps.
+	if len(req.Attributes) > 0 {
+		if bags.Action == nil {
+			bags.Action = make(map[string]any, len(req.Attributes))
+		}
+		for k, v := range req.Attributes {
+			bags.Action[k] = v
+		}
+	}
+
 	// Step 7: Load snapshot and filter policies
 	snap, snapErr := e.cache.Snapshot(ctx)
 	if snapErr != nil {

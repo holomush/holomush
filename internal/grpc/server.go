@@ -29,6 +29,7 @@ import (
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/authguard"
 	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	"github.com/holomush/holomush/internal/grpc/focus"
 	plugins "github.com/holomush/holomush/internal/plugin"
@@ -138,6 +139,12 @@ type CoreServer struct {
 	playerRepo        auth.PlayerRepository
 	charRepo          auth.CharacterRepository
 	guestService      *auth.GuestService
+
+	// Phase 3b: transactor and binding repository for atomic character + binding INSERTs
+	// (Create) and current-binding lookup for Subscribe / QueryStreamHistory (Current).
+	transactor    Transactor
+	bindings      BindingRepo
+	cryptoEnabled bool // Phase 3b flag; gates binding lookup in Subscribe / QueryStreamHistory
 
 	// Plugin stream contribution and mid-session stream control.
 	streamContributor SessionStreamContributor
@@ -558,25 +565,29 @@ func (s *CoreServer) runDisconnectHooks(ctx context.Context, info session.Info) 
 	}
 }
 
-// toProtoSubscribeResponse maps an eventbus.Event to a gRPC SubscribeResponse
-// frame. The stream field is reverse-translated from the JetStream subject
-// back to the colon-delimited shape existing web/telnet clients expect
+// toProtoSubscribeResponse maps an eventbus.Event and its MetadataOnly flag
+// to a gRPC SubscribeResponse frame. metadataOnly comes from
+// Delivery.MetadataOnly() and is stamped onto EventFrame.metadata_only
+// (Phase 3b grounding doc Decision 4). The stream field is
+// reverse-translated from the JetStream subject back to the colon-delimited
+// shape existing web/telnet clients expect
 // (e.g. "events.main.character.01ABC" → "character:01ABC"). F5 migrates
 // clients to subject-native APIs and drops the reverse translation.
-func (s *CoreServer) toProtoSubscribeResponse(ev eventbus.Event) *corev1.SubscribeResponse {
+func (s *CoreServer) toProtoSubscribeResponse(ev eventbus.Event, metadataOnly bool) *corev1.SubscribeResponse {
 	gameID := s.currentGameID()
 	return &corev1.SubscribeResponse{
 		Frame: &corev1.SubscribeResponse_Event{
 			Event: &corev1.EventFrame{
-				Id:        ev.ID.String(),
-				Stream:    subjectxlate.ToLegacy(string(ev.Subject), gameID),
-				Type:      string(ev.Type),
-				Timestamp: timestamppb.New(ev.Timestamp),
-				ActorType: ev.Actor.Kind.String(),
-				ActorId:   actorIDString(ev.Actor),
-				Payload:   ev.Payload,
-				Cursor:    encodeEventCursor(ev),
-				Rendering: eventbus.RenderingToProto(ev.Rendering),
+				Id:           ev.ID.String(),
+				Stream:       subjectxlate.ToLegacy(string(ev.Subject), gameID),
+				Type:         string(ev.Type),
+				Timestamp:    timestamppb.New(ev.Timestamp),
+				ActorType:    ev.Actor.Kind.String(),
+				ActorId:      actorIDString(ev.Actor),
+				Payload:      ev.Payload,
+				Cursor:       encodeEventCursor(ev),
+				Rendering:    eventbus.RenderingToProto(ev.Rendering),
+				MetadataOnly: metadataOnly,
 			},
 		},
 	}
@@ -584,11 +595,16 @@ func (s *CoreServer) toProtoSubscribeResponse(ev eventbus.Event) *corev1.Subscri
 
 // actorIDString stringifies the bus-side actor id. Zero ULIDs become "" so
 // existing gateway/web clients don't see a synthetic "00000000..." value.
+// Plugin-authored events carry a string LegacyID instead of a ULID; preserve
+// it here to match the QueryStreamHistory path (eventbusEventToEventFrame).
 func actorIDString(a eventbus.Actor) string {
-	if a.ID.Compare(ulid.ULID{}) == 0 {
-		return ""
+	if a.ID.Compare(ulid.ULID{}) != 0 {
+		return a.ID.String()
 	}
-	return a.ID.String()
+	if a.LegacyID != "" {
+		return a.LegacyID
+	}
+	return ""
 }
 
 // computeInitialFilters translates a focus restore plan's stream list into
@@ -773,10 +789,36 @@ func (s *CoreServer) Subscribe(req *corev1.SubscribeRequest, stream grpc.ServerS
 	// ctrl updates. Both paths funnel into SessionStream.SetFilters.
 	filters := s.computeInitialFilters(ctx, plan)
 
+	// Build the typed authenticated identity for this session's subscriber.
+	// Decision 2 (Phase 3b grounding doc): the gRPC handler is the
+	// authentication boundary; identity is derived solely from the
+	// server-side session record — never from client-supplied fields.
+	var sessionIdentity eventbus.SessionIdentity
+	if s.bindings != nil && s.cryptoEnabled {
+		// Binding lookup is only needed when crypto is enabled (Phase 3b+).
+		// With crypto disabled (current production default), we skip this so
+		// characters without a binding row don't break Subscribe.
+		bindingID, bindingErr := s.bindings.Current(ctx, info.CharacterID.String())
+		if bindingErr != nil {
+			return oops.Code("SUBSCRIBE_BINDING_LOOKUP_FAILED").
+				With("character_id", info.CharacterID.String()).
+				Wrap(bindingErr)
+		}
+		identity, identityErr := authguard.NewCharacterIdentity(
+			info.PlayerID.String(),
+			info.CharacterID.String(),
+			bindingID,
+		)
+		if identityErr != nil {
+			return oops.Code("SUBSCRIBE_IDENTITY_INVALID").Wrap(identityErr)
+		}
+		sessionIdentity = authguard.ToSessionIdentity(identity)
+	}
+
 	// Open the bus session. JS preserves the durable consumer's cursor
 	// across reconnect, so events not acked last time get redelivered
 	// automatically; there is no explicit replay phase.
-	busStream, subErr := s.subscriber.OpenSession(ctx, req.SessionId, filters)
+	busStream, subErr := s.subscriber.OpenSession(ctx, req.SessionId, sessionIdentity, filters)
 	if subErr != nil {
 		return oops.Code("SUBSCRIBE_FAILED").With("session_id", req.SessionId).Wrap(subErr)
 	}
@@ -949,7 +991,7 @@ func (s *CoreServer) dispatchDelivery(
 	}
 
 	if !handled {
-		if sendErr := stream.Send(s.toProtoSubscribeResponse(event)); sendErr != nil {
+		if sendErr := stream.Send(s.toProtoSubscribeResponse(event, delivery.MetadataOnly())); sendErr != nil {
 			// Do not ack — JS redelivers when the consumer rebinds.
 			if nackErr := delivery.Nack(); nackErr != nil {
 				slog.DebugContext(ctx, "subscribe: nack after send failure",

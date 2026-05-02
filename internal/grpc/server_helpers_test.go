@@ -114,7 +114,7 @@ func TestToProtoSubscribeResponseMapsFields(t *testing.T) {
 		Timestamp: time.Unix(42, 0),
 		Actor:     eventbus.Actor{Kind: eventbus.ActorKindCharacter, ID: charID},
 		Payload:   []byte("x"),
-	})
+	}, false)
 	ev := resp.GetEvent()
 	require.NotNil(t, ev)
 	assert.Equal(t, id.String(), ev.GetId())
@@ -189,7 +189,7 @@ func TestSubscribeRejectsUnknownSession(t *testing.T) {
 // stubSubscriber is a minimal eventbus.Subscriber that errors on OpenSession.
 type stubSubscriber struct{}
 
-func (stubSubscriber) OpenSession(_ context.Context, _ string, _ []eventbus.Subject) (eventbus.SessionStream, error) {
+func (stubSubscriber) OpenSession(_ context.Context, _ string, _ eventbus.SessionIdentity, _ []eventbus.Subject) (eventbus.SessionStream, error) {
 	return nil, oops.Errorf("stub subscriber")
 }
 

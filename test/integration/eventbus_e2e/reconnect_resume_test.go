@@ -41,7 +41,8 @@ func TestReconnectResume(t *testing.T) {
 	sessionID := freshSessionID()
 
 	// Open, consume + ack 3 events.
-	s1, err := sub.OpenSession(ctx, sessionID, []eventbus.Subject{subject})
+	testID := eventbus.SessionIdentity{Kind: eventbus.IdentityKindCharacter, PlayerID: "01TESTPLAYER01234567890A", CharacterID: "01TESTCHARACTER0123456A", BindingID: "01TESTBINDING01234567AB"}
+	s1, err := sub.OpenSession(ctx, sessionID, testID, []eventbus.Subject{subject})
 	require.NoError(t, err)
 
 	const beforeDisconnect = 3
@@ -78,7 +79,7 @@ func TestReconnectResume(t *testing.T) {
 	}
 
 	// Reconnect.
-	s2, err := sub.OpenSession(ctx, sessionID, []eventbus.Subject{subject})
+	s2, err := sub.OpenSession(ctx, sessionID, testID, []eventbus.Subject{subject})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s2.Close() })
 

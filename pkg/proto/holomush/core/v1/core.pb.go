@@ -466,7 +466,20 @@ type EventFrame struct {
 	// at emit time. MUST be present on every frame produced by this server
 	// (INV-GW-2). Gateway treats absence as a contract violation
 	// (drops + metric + log per INV-GW-5).
-	Rendering     *RenderingMetadata `protobuf:"bytes,9,opt,name=rendering,proto3" json:"rendering,omitempty"`
+	Rendering *RenderingMetadata `protobuf:"bytes,9,opt,name=rendering,proto3" json:"rendering,omitempty"`
+	// metadata_only flags a delivery whose plaintext was withheld by the
+	// host's AuthGuard (Phase 3b decrypt path). When true, payload is
+	// empty bytes and the recipient was either not in the DEK's
+	// participant set, lacked the requisite plugin manifest declaration /
+	// ABAC grant, or hit the audit-emit backpressure throttle.
+	// metadata_only=false on every legitimate delivery (including
+	// legitimately-empty-payload events like a presence event with no content).
+	//
+	// Set by the host's Subscribe / QueryStreamHistory handler at fan-out
+	// time (Phase 3b grounding doc Decision 4). NEVER set by emitters;
+	// NEVER persisted to events_audit (storage rows always carry the
+	// sender's payload, ciphertext or cleartext).
+	MetadataOnly  bool `protobuf:"varint,10,opt,name=metadata_only,json=metadataOnly,proto3" json:"metadata_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -562,6 +575,13 @@ func (x *EventFrame) GetRendering() *RenderingMetadata {
 		return x.Rendering
 	}
 	return nil
+}
+
+func (x *EventFrame) GetMetadataOnly() bool {
+	if x != nil {
+		return x.MetadataOnly
+	}
+	return false
 }
 
 // RenderingMetadata carries cleartext rendering instructions for an event.
@@ -2955,7 +2975,7 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\x14player_session_token\x18\x05 \x01(\tR\x12playerSessionToken\x12#\n" +
 	"\rconnection_id\x18\x06 \x01(\tR\fconnectionId\x12\x1f\n" +
 	"\vclient_type\x18\a \x01(\tR\n" +
-	"clientTypeJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\astreamsR\x12replay_from_cursor\"\xb1\x02\n" +
+	"clientTypeJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\astreamsR\x12replay_from_cursor\"\xd6\x02\n" +
 	"\n" +
 	"EventFrame\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
@@ -2967,7 +2987,9 @@ const file_holomush_core_v1_core_proto_rawDesc = "" +
 	"\bactor_id\x18\x06 \x01(\tR\aactorId\x12\x18\n" +
 	"\apayload\x18\a \x01(\fR\apayload\x12\x16\n" +
 	"\x06cursor\x18\b \x01(\fR\x06cursor\x12A\n" +
-	"\trendering\x18\t \x01(\v2#.holomush.core.v1.RenderingMetadataR\trendering\"\xbd\x03\n" +
+	"\trendering\x18\t \x01(\v2#.holomush.core.v1.RenderingMetadataR\trendering\x12#\n" +
+	"\rmetadata_only\x18\n" +
+	" \x01(\bR\fmetadataOnly\"\xbd\x03\n" +
 	"\x11RenderingMetadata\x12#\n" +
 	"\bcategory\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bcategory\x12\x1f\n" +
 	"\x06format\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06format\x12\x14\n" +

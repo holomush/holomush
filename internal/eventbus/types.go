@@ -128,6 +128,15 @@ type Event struct {
 	// history reader leaves Headers nil. Subscribers MUST NOT depend
 	// on Headers being populated at read time; they read Event.Rendering.
 	Headers map[string]string
+
+	// MetadataOnly is populated by the hot-tier history reader's
+	// decodeAndAuthorizeHistory when AuthGuard denies decryption for this
+	// event and this identity. When true, Payload is nil. False for
+	// identity-codec events and for events where AuthGuard permitted
+	// delivery. The gRPC QueryStreamHistory handler stamps
+	// EventFrame.metadata_only from this field (Phase 3b T10).
+	// NEVER serialized to the wire event envelope; never persisted.
+	MetadataOnly bool
 }
 
 // subjectTokenRe permits NATS subject tokens: letters, digits, dashes,

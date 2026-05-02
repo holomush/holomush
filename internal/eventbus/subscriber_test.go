@@ -65,6 +65,18 @@ func freshSessionID() string {
 	return ulid.MustNew(ulid.Timestamp(time.Now()), testEntropy).String()
 }
 
+// testIdentity returns a test-fixture character SessionIdentity. Used in all
+// OpenSession calls added by T9; the identity is unused by the decode path
+// unless WithSubscriberAuthGuard is wired (it is not in existing tests).
+func testIdentity() eventbus.SessionIdentity {
+	return eventbus.SessionIdentity{
+		Kind:        eventbus.IdentityKindCharacter,
+		PlayerID:    "01TESTPLAYER01234567890A",
+		CharacterID: "01TESTCHARACTER0123456A",
+		BindingID:   "01TESTBINDING01234567AB",
+	}
+}
+
 func TestOpenSessionDeliversPublishedEventMatchingFilter(t *testing.T) {
 	embedded := eventbustest.New(t)
 	pub := embedded.Bus.Publisher()
@@ -78,7 +90,7 @@ func TestOpenSessionDeliversPublishedEventMatchingFilter(t *testing.T) {
 	subject := eventbus.Subject("events.main.scene.abc.ic")
 	sessionID := freshSessionID()
 
-	stream, err := sub.OpenSession(ctx, sessionID, []eventbus.Subject{subject})
+	stream, err := sub.OpenSession(ctx, sessionID, testIdentity(), []eventbus.Subject{subject})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 
@@ -108,7 +120,7 @@ func TestOpenSessionIsIdempotentAcrossReopens(t *testing.T) {
 	// otherwise the durable consumer's last-acked cursor can race the
 	// reopen and redeliver evt1.
 	bgCtx := context.Background()
-	s1, err := sub.OpenSession(bgCtx, sessionID, []eventbus.Subject{subject})
+	s1, err := sub.OpenSession(bgCtx, sessionID, testIdentity(), []eventbus.Subject{subject})
 	require.NoError(t, err)
 	evt1 := newTestEnvelope(subject, []byte("first"))
 	require.NoError(t, pub.Publish(bgCtx, evt1))
@@ -129,7 +141,7 @@ func TestOpenSessionIsIdempotentAcrossReopens(t *testing.T) {
 	evt2 := newTestEnvelope(subject, []byte("second"))
 	require.NoError(t, pub.Publish(bgCtx, evt2))
 
-	s2, err := sub.OpenSession(bgCtx, sessionID, []eventbus.Subject{subject})
+	s2, err := sub.OpenSession(bgCtx, sessionID, testIdentity(), []eventbus.Subject{subject})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s2.Close() })
 	ctx2, cancel2 := context.WithTimeout(bgCtx, 10*time.Second)
@@ -144,7 +156,7 @@ func TestOpenSessionRejectsUnstartedSubsystem(t *testing.T) {
 	// NewJetStreamSubscriber with a nil JS context is a programming bug —
 	// surface via a coded error so callers get a breadcrumb.
 	s := eventbus.NewJetStreamSubscriber(nil)
-	_, err := s.OpenSession(context.Background(), "sess", nil)
+	_, err := s.OpenSession(context.Background(), "sess", eventbus.SessionIdentity{}, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_SUBSCRIBER_NOT_READY")
 }
@@ -152,7 +164,7 @@ func TestOpenSessionRejectsUnstartedSubsystem(t *testing.T) {
 func TestOpenSessionRejectsEmptySessionID(t *testing.T) {
 	embedded := eventbustest.New(t)
 	s := embedded.Bus.Subscriber()
-	_, err := s.OpenSession(context.Background(), "", nil)
+	_, err := s.OpenSession(context.Background(), "", eventbus.SessionIdentity{}, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_INVALID_SESSION_ID")
 }
@@ -167,7 +179,7 @@ func TestSessionStreamNextUnblocksOnContextCancel(t *testing.T) {
 	embedded := eventbustest.New(t)
 	sub := embedded.Bus.Subscriber()
 	sessionID := freshSessionID()
-	stream, err := sub.OpenSession(context.Background(), sessionID,
+	stream, err := sub.OpenSession(context.Background(), sessionID, testIdentity(),
 		[]eventbus.Subject{eventbus.Subject("events.main.nothing.here")})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
@@ -188,7 +200,7 @@ func TestSessionStreamCloseIsIdempotent(t *testing.T) {
 	embedded := eventbustest.New(t)
 	sub := embedded.Bus.Subscriber()
 	sessionID := freshSessionID()
-	stream, err := sub.OpenSession(context.Background(), sessionID,
+	stream, err := sub.OpenSession(context.Background(), sessionID, testIdentity(),
 		[]eventbus.Subject{eventbus.Subject("events.main.x.y")})
 	require.NoError(t, err)
 	require.NoError(t, stream.Close())
@@ -208,7 +220,7 @@ func TestSetFiltersReplacesFilterSubjectsAtomically(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	stream, err := sub.OpenSession(ctx, sessionID, []eventbus.Subject{alpha})
+	stream, err := sub.OpenSession(ctx, sessionID, testIdentity(), []eventbus.Subject{alpha})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 
@@ -279,7 +291,7 @@ func TestSubscribeFilterMonotonicityUnderSetFilters(t *testing.T) {
 		defer cancel()
 
 		initial := drawFilterSet(rt, "initial_filter")
-		stream, err := sub.OpenSession(ctx, sessionID, initial)
+		stream, err := sub.OpenSession(ctx, sessionID, testIdentity(), initial)
 		require.NoError(rt, err)
 		defer func() { _ = stream.Close() }()
 
@@ -346,7 +358,7 @@ func TestJetStreamSubscriberUsesSessionConsumerName(t *testing.T) {
 	sub := embedded.Bus.Subscriber()
 	sessionID := freshSessionID()
 	ctx := context.Background()
-	stream, err := sub.OpenSession(ctx, sessionID,
+	stream, err := sub.OpenSession(ctx, sessionID, testIdentity(),
 		[]eventbus.Subject{eventbus.Subject("events.main.a.b")})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
@@ -368,7 +380,7 @@ func TestOpenSessionRejectsEmptyFilters(t *testing.T) {
 	// restore cannot leak the entire EVENTS stream into a session.
 	embedded := eventbustest.New(t)
 	sub := embedded.Bus.Subscriber()
-	_, err := sub.OpenSession(context.Background(), freshSessionID(), nil)
+	_, err := sub.OpenSession(context.Background(), freshSessionID(), testIdentity(), nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EVENTBUS_SESSION_FILTERS_REQUIRED")
 }
@@ -378,7 +390,7 @@ func TestSetFiltersRejectsEmptyFilters(t *testing.T) {
 	embedded := eventbustest.New(t)
 	sub := embedded.Bus.Subscriber()
 	sessionID := freshSessionID()
-	stream, err := sub.OpenSession(context.Background(), sessionID,
+	stream, err := sub.OpenSession(context.Background(), sessionID, testIdentity(),
 		[]eventbus.Subject{eventbus.Subject("events.main.x.y")})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
@@ -401,7 +413,7 @@ func TestDeliveryNackAndInProgressForwardToMsg(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	stream, err := sub.OpenSession(ctx, sessionID, []eventbus.Subject{subject})
+	stream, err := sub.OpenSession(ctx, sessionID, testIdentity(), []eventbus.Subject{subject})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 
@@ -424,7 +436,7 @@ func TestSubscriberOptionsOverrideDefaults(t *testing.T) {
 		eventbus.WithSubscriberCodecSelector(stubKeySelector{}),
 	)
 	sessionID := freshSessionID()
-	stream, err := sub.OpenSession(context.Background(), sessionID,
+	stream, err := sub.OpenSession(context.Background(), sessionID, testIdentity(),
 		[]eventbus.Subject{eventbus.Subject("events.main.opts.check")})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
@@ -451,7 +463,7 @@ func TestJetStreamSubscriberRejectsUnknownCodec(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	stream, err := sub.OpenSession(ctx, sessionID, []eventbus.Subject{subject})
+	stream, err := sub.OpenSession(ctx, sessionID, testIdentity(), []eventbus.Subject{subject})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 
@@ -485,7 +497,7 @@ func TestOpenSessionDeliveriesCarryNonZeroJetStreamSequence(t *testing.T) {
 	subject := eventbus.Subject("events.main.scene.seqtest.ic")
 	sessionID := freshSessionID()
 
-	stream, err := sub.OpenSession(ctx, sessionID, []eventbus.Subject{subject})
+	stream, err := sub.OpenSession(ctx, sessionID, testIdentity(), []eventbus.Subject{subject})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 

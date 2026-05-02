@@ -70,7 +70,7 @@ type fakeSubscriber struct {
 	opens   int
 }
 
-func (f *fakeSubscriber) OpenSession(_ context.Context, _ string, _ []eventbus.Subject) (eventbus.SessionStream, error) {
+func (f *fakeSubscriber) OpenSession(_ context.Context, _ string, _ eventbus.SessionIdentity, _ []eventbus.Subject) (eventbus.SessionStream, error) {
 	f.opens++
 	if f.openErr != nil {
 		return nil, f.openErr
@@ -253,3 +253,122 @@ func TestSubscribeRejectsConnectionIDWithoutClientType(t *testing.T) {
 }
 
 var _ eventbus.Subscriber = (*fakeSubscriber)(nil)
+
+// fakeBindingRepo implements BindingRepo for testing. Create panics (not used
+// in Subscribe path); Current returns the canned bindingID or error.
+type fakeBindingRepo struct {
+	bindingID string
+	err       error
+}
+
+func (f *fakeBindingRepo) Create(_ context.Context, _, _, _ string) (string, error) {
+	panic("fakeBindingRepo.Create: not implemented in Subscribe tests")
+}
+
+func (f *fakeBindingRepo) Current(_ context.Context, _ string) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	return f.bindingID, nil
+}
+
+var _ BindingRepo = (*fakeBindingRepo)(nil)
+
+func TestSubscribeBindingLookupFailureReturnsError(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	charID := core.NewULID()
+	playerID := core.NewULID()
+	info := &session.Info{
+		ID:          "s1",
+		ExpiresAt:   &future,
+		Status:      session.StatusActive,
+		CharacterID: charID,
+		PlayerID:    playerID,
+	}
+	bs := newFakeSessionStream()
+	sub := &fakeSubscriber{stream: bs}
+	s := &CoreServer{
+		subscriber:        sub,
+		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"s1": info}),
+		playerSessionRepo: newFakePlayerSessionRepo(playerID),
+		bindings:          &fakeBindingRepo{err: errors.New("db down")},
+		cryptoEnabled:     true, // required to activate binding lookup (Phase 3b gate)
+	}
+	err := s.Subscribe(&corev1.SubscribeRequest{
+		SessionId:          "s1",
+		PlayerSessionToken: testPlayerSessionToken,
+	}, &fakeSubscribeStream{ctx: context.Background()})
+	require.Error(t, err)
+	o, ok := oops.AsOops(err)
+	require.True(t, ok)
+	assert.Equal(t, "SUBSCRIBE_BINDING_LOOKUP_FAILED", o.Code())
+	assert.Equal(t, 0, sub.opens, "OpenSession must not be called after binding lookup failure")
+}
+
+func TestSubscribePassesNonZeroSessionIdentityWhenBindingsWired(t *testing.T) {
+	t.Parallel()
+	future := time.Now().Add(time.Hour)
+	charID := core.NewULID()
+	playerID := core.NewULID()
+	info := &session.Info{
+		ID:          "s1",
+		ExpiresAt:   &future,
+		Status:      session.StatusActive,
+		CharacterID: charID,
+		PlayerID:    playerID,
+	}
+	bs := newFakeSessionStream()
+	bindingID := "bnd-001"
+	identitySub := &identityCapturingSubscriber{stream: bs}
+	s := &CoreServer{
+		subscriber:        identitySub,
+		sessionStore:      newTestSessionStore(t, map[string]*session.Info{"s1": info}),
+		playerSessionRepo: newFakePlayerSessionRepo(playerID),
+		bindings:          &fakeBindingRepo{bindingID: bindingID},
+		cryptoEnabled:     true, // required to activate binding lookup (Phase 3b gate)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := &concurrentSubscribeStream{ctx: ctx}
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- s.Subscribe(&corev1.SubscribeRequest{
+			SessionId:          "s1",
+			PlayerSessionToken: testPlayerSessionToken,
+		}, stream)
+	}()
+
+	require.Eventually(t, func() bool {
+		return stream.sentLen() >= 1
+	}, 2*time.Second, 10*time.Millisecond)
+	cancel()
+	subscribeErr := <-errCh
+	// Subscribe returns nil (clean shutdown) or context.Canceled when the
+	// client cancels; neither is a test failure. We capture the value here
+	// to prevent the goroutine result from being silently discarded.
+	require.True(t, subscribeErr == nil || errors.Is(subscribeErr, context.Canceled),
+		"unexpected Subscribe error: %v", subscribeErr)
+
+	assert.Equal(t, 1, identitySub.opens)
+	assert.Equal(t, eventbus.IdentityKindCharacter, identitySub.capturedIdentity.Kind)
+	assert.Equal(t, playerID.String(), identitySub.capturedIdentity.PlayerID)
+	assert.Equal(t, charID.String(), identitySub.capturedIdentity.CharacterID)
+	assert.Equal(t, bindingID, identitySub.capturedIdentity.BindingID)
+}
+
+// identityCapturingSubscriber is an eventbus.Subscriber that records the
+// SessionIdentity passed to OpenSession for assertion in binding-wiring tests.
+type identityCapturingSubscriber struct {
+	stream           eventbus.SessionStream
+	opens            int
+	capturedIdentity eventbus.SessionIdentity
+}
+
+func (c *identityCapturingSubscriber) OpenSession(_ context.Context, _ string, identity eventbus.SessionIdentity, _ []eventbus.Subject) (eventbus.SessionStream, error) {
+	c.opens++
+	c.capturedIdentity = identity
+	return c.stream, nil
+}
+
+var _ eventbus.Subscriber = (*identityCapturingSubscriber)(nil)

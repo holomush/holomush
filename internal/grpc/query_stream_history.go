@@ -19,6 +19,7 @@ import (
 
 	accessTypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/authguard"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
 	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
@@ -183,6 +184,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 			"character:"+info.CharacterID.String(),
 			accessTypes.ActionRead,
 			"stream:"+req.Stream,
+			nil,
 		)
 		if reqErr != nil {
 			return nil, oops.Code("INTERNAL").Wrap(reqErr)
@@ -225,9 +227,35 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 		Kind: eventbus.ActorKindCharacter,
 		ID:   info.CharacterID,
 	}
+
+	// Build the typed authenticated identity for the hot-tier AuthGuard path.
+	// Decision 2 (Phase 3b grounding doc): derived solely from the server-side
+	// session record — never from client-supplied fields.
+	var historyIdentity eventbus.SessionIdentity
+	if s.bindings != nil && s.cryptoEnabled {
+		// Binding lookup is only needed when crypto is enabled (Phase 3b+).
+		// With crypto disabled (current production default), we skip this so
+		// characters without a binding row don't break QueryStreamHistory.
+		bindingID, bindingErr := s.bindings.Current(ctx, info.CharacterID.String())
+		if bindingErr != nil {
+			return nil, oops.Code("HISTORY_BINDING_LOOKUP_FAILED").
+				With("character_id", info.CharacterID.String()).
+				Wrap(bindingErr)
+		}
+		historyAuthIdentity, identityErr := authguard.NewCharacterIdentity(
+			info.PlayerID.String(),
+			info.CharacterID.String(),
+			bindingID,
+		)
+		if identityErr != nil {
+			return nil, oops.Code("HISTORY_IDENTITY_INVALID").Wrap(identityErr)
+		}
+		historyIdentity = authguard.ToSessionIdentity(historyAuthIdentity)
+	}
+
 	frames, fetchErr := fetchHistoryFramesFromBus(
 		ctx, s.historyReader, s.currentGameID(), req.Stream, count,
-		notBefore, beforeSeq, beforeID, caller,
+		notBefore, beforeSeq, beforeID, caller, historyIdentity,
 	)
 	if fetchErr != nil {
 		return nil, mapHistoryError(
@@ -324,6 +352,9 @@ func mapHistoryError(err error, sessionID, stream string) error {
 // Direction is Backward (newest-first) so the reader returns the tail of the
 // stream relative to beforeSeq/beforeID (or the absolute end when zero).
 // The slice is reversed on return to restore ascending order.
+//
+// identity is passed through to HistoryQuery.Identity for the hot-tier
+// AuthGuard path. Zero value is safe when Crypto.Enabled=false.
 func fetchHistoryFramesFromBus(
 	ctx context.Context,
 	reader eventbus.HistoryReader,
@@ -333,6 +364,7 @@ func fetchHistoryFramesFromBus(
 	beforeSeq uint64,
 	beforeID ulid.ULID,
 	caller eventbus.Actor,
+	identity eventbus.SessionIdentity,
 ) ([]*corev1.EventFrame, error) {
 	natsSubject, err := subjectxlate.Legacy(legacyStream, gameID)
 	if err != nil {
@@ -349,6 +381,7 @@ func fetchHistoryFramesFromBus(
 		PageSize:  count + 1,
 		NotBefore: notBefore,
 		Caller:    caller,
+		Identity:  identity,
 	}
 	if beforeSeq != 0 {
 		q.BeforeSeq = beforeSeq
@@ -456,15 +489,16 @@ func rewrapFrameCursorsForPlugin(frames []*corev1.EventFrame, pluginName string)
 			}
 		}
 		out[i] = &corev1.EventFrame{
-			Id:        f.GetId(),
-			Stream:    f.GetStream(),
-			Type:      f.GetType(),
-			Timestamp: f.GetTimestamp(),
-			ActorType: f.GetActorType(),
-			ActorId:   f.GetActorId(),
-			Payload:   f.GetPayload(),
-			Cursor:    pluginCursor,
-			Rendering: f.GetRendering(),
+			Id:           f.GetId(),
+			Stream:       f.GetStream(),
+			Type:         f.GetType(),
+			Timestamp:    f.GetTimestamp(),
+			ActorType:    f.GetActorType(),
+			ActorId:      f.GetActorId(),
+			Payload:      f.GetPayload(),
+			Cursor:       pluginCursor,
+			Rendering:    f.GetRendering(),
+			MetadataOnly: f.GetMetadataOnly(),
 		}
 	}
 	return out
@@ -473,6 +507,8 @@ func rewrapFrameCursorsForPlugin(frames []*corev1.EventFrame, pluginName string)
 // eventbusEventToEventFrame converts an eventbus.Event to a proto EventFrame.
 // legacyStreamName is the pre-translated colon-delimited stream name
 // (e.g. "location:01ABC") that the web client expects in the Stream field.
+// Event.MetadataOnly (populated by the hot-tier AuthGuard on deny) is
+// stamped into EventFrame.metadata_only (Phase 3b grounding doc Decision 4).
 func eventbusEventToEventFrame(e eventbus.Event, legacyStreamName string) *corev1.EventFrame {
 	actorID := ""
 	if e.Actor.ID != (ulid.ULID{}) {
@@ -485,13 +521,14 @@ func eventbusEventToEventFrame(e eventbus.Event, legacyStreamName string) *corev
 		actorID = e.Actor.LegacyID
 	}
 	return &corev1.EventFrame{
-		Id:        e.ID.String(),
-		Stream:    legacyStreamName,
-		Type:      string(e.Type),
-		Timestamp: timestamppb.New(e.Timestamp),
-		ActorType: e.Actor.Kind.String(),
-		ActorId:   actorID,
-		Payload:   e.Payload,
-		Rendering: eventbus.RenderingToProto(e.Rendering),
+		Id:           e.ID.String(),
+		Stream:       legacyStreamName,
+		Type:         string(e.Type),
+		Timestamp:    timestamppb.New(e.Timestamp),
+		ActorType:    e.Actor.Kind.String(),
+		ActorId:      actorID,
+		Payload:      e.Payload,
+		Rendering:    eventbus.RenderingToProto(e.Rendering),
+		MetadataOnly: e.MetadataOnly,
 	}
 }

@@ -22,7 +22,7 @@ var ErrCapabilityCheckFailed = errors.New("capability check failed")
 
 // CheckCommandExecution evaluates Layer 1: can the subject execute this command?
 func CheckCommandExecution(ctx context.Context, engine types.AccessPolicyEngine, subject, cmdName string) error {
-	req, reqErr := types.NewAccessRequest(subject, "execute", "command:"+cmdName)
+	req, reqErr := types.NewAccessRequest(subject, "execute", "command:"+cmdName, nil)
 	if reqErr != nil {
 		errutil.LogErrorContext(ctx, cmdName+" command access request failed",
 			reqErr, "subject", subject, "command", cmdName)
