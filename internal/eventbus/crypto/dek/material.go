@@ -40,8 +40,8 @@ func NewMaterial(bytes []byte) *Material {
 // the returned key's Bytes field outside the codec/crypto package
 // trees fail lint via the codeckeybytesallowlist analyzer in
 // gorules/analyzers/.
-func (m *Material) AsCodecKey(id codec.KeyID) codec.Key {
+func (m *Material) AsCodecKey(id codec.KeyID, version uint32) codec.Key {
 	out := make([]byte, len(m.bytes))
 	copy(out, m.bytes)
-	return codec.Key{ID: id, Bytes: out}
+	return codec.Key{ID: id, Version: version, Bytes: out}
 }

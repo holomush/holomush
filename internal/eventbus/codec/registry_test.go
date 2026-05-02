@@ -63,10 +63,10 @@ func TestRegisterForTestRestoresState(t *testing.T) {
 type stubCodec struct{}
 
 func (stubCodec) Name() codec.Name { return codec.Name("test-only-stub") }
-func (stubCodec) Encode(_ context.Context, p []byte, _ codec.Key) ([]byte, error) {
+func (stubCodec) Encode(_ context.Context, p []byte, _ codec.Key, _ []byte) ([]byte, error) {
 	return p, nil
 }
 
-func (stubCodec) Decode(_ context.Context, p []byte, _ codec.Key) ([]byte, error) {
+func (stubCodec) Decode(_ context.Context, p []byte, _ codec.Key, _ []byte) ([]byte, error) {
 	return p, nil
 }

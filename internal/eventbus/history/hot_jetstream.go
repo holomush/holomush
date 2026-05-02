@@ -376,7 +376,7 @@ func decodeJetStreamMessage(ctx context.Context, msg jetstream.Msg, selector cod
 		}
 		key = k
 	}
-	plain, err := c.Decode(ctx, msg.Data(), key)
+	plain, err := c.Decode(ctx, msg.Data(), key, nil)
 	if err != nil {
 		return eventbus.Event{}, oops.Code("EVENTBUS_HISTORY_DECODE_FAILED").
 			With("codec", codecName).Wrap(err)

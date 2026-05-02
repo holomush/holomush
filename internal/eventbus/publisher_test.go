@@ -59,11 +59,11 @@ func (s stubKeyProvider) ByID(_ context.Context, _ codec.KeyID) (codec.Key, erro
 type errCodec struct{ name codec.Name }
 
 func (e errCodec) Name() codec.Name { return e.name }
-func (errCodec) Encode(_ context.Context, _ []byte, _ codec.Key) ([]byte, error) {
+func (errCodec) Encode(_ context.Context, _ []byte, _ codec.Key, _ []byte) ([]byte, error) {
 	return nil, errors.New("encode boom")
 }
 
-func (errCodec) Decode(_ context.Context, _ []byte, _ codec.Key) ([]byte, error) {
+func (errCodec) Decode(_ context.Context, _ []byte, _ codec.Key, _ []byte) ([]byte, error) {
 	return nil, errors.New("decode boom")
 }
 

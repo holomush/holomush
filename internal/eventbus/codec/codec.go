@@ -29,17 +29,24 @@ const (
 // stateless and safe for concurrent use.
 type Codec interface {
 	Name() Name
-	Encode(ctx context.Context, plaintext []byte, key Key) ([]byte, error)
-	Decode(ctx context.Context, ciphertext []byte, key Key) ([]byte, error)
+	// Encode produces the wire bytes for plaintext under key. aad is
+	// passed to AEAD codecs as Additional Authenticated Data; IdentityCodec
+	// ignores it. Phase 3a's emit path supplies aad via aad.Build(...).
+	Encode(ctx context.Context, plaintext []byte, key Key, aad []byte) ([]byte, error)
+	// Decode validates and reverses Encode. aad MUST equal the value used
+	// at Encode time for AEAD codecs; mismatch surfaces as a generic
+	// codec-specific error (no oracle).
+	Decode(ctx context.Context, ciphertext []byte, key Key, aad []byte) ([]byte, error)
 }
 
-// Key is the opaque cryptographic material a codec uses to encrypt/decrypt.
-// IdentityCodec ignores it and accepts NoKey.
+// Key carries DEK identity and material to a Codec. Identity is
+// (ID, Version) — the (KeyID, version) pair used at every other
+// substrate boundary. Bytes is the AEAD key material; for IdentityCodec
+// callers the zero value (ID=0, Version=0, Bytes=nil) is correct.
 type Key struct {
-	ID    KeyID
-	Bytes []byte
-	// Codec-specific metadata may be carried inside Bytes; codecs are free
-	// to interpret as they need.
+	ID      KeyID
+	Version uint32
+	Bytes   []byte
 }
 
 // NoKey is the sentinel passed to keyless codecs (IdentityCodec).
@@ -73,11 +80,11 @@ type IdentityCodec struct{}
 func (IdentityCodec) Name() Name { return NameIdentity }
 
 // Encode returns plaintext unchanged.
-func (IdentityCodec) Encode(_ context.Context, plaintext []byte, _ Key) ([]byte, error) {
+func (IdentityCodec) Encode(_ context.Context, plaintext []byte, _ Key, _ []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
 // Decode returns ciphertext unchanged.
-func (IdentityCodec) Decode(_ context.Context, ciphertext []byte, _ Key) ([]byte, error) {
+func (IdentityCodec) Decode(_ context.Context, ciphertext []byte, _ Key, _ []byte) ([]byte, error) {
 	return ciphertext, nil
 }

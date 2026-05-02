@@ -197,7 +197,7 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 		}
 		key = k
 	}
-	encoded, err := c.Encode(ctx, plainBytes, key)
+	encoded, err := c.Encode(ctx, plainBytes, key, nil)
 	if err != nil {
 		return oops.Code("EVENTBUS_CODEC_ENCODE_FAILED").
 			With("codec", string(codecName)).
