@@ -50,3 +50,57 @@ consumes:
 	assert.Equal(t, []string{"events.*.character.*.whisper"}, got.Consumes[0].Subjects)
 	assert.Equal(t, []string{"core-communication:whisper"}, got.Consumes[0].RequestsDecryption)
 }
+
+func TestLookupEmitSensitivity(t *testing.T) {
+	declared := &plugins.Manifest{
+		Crypto: &plugins.CryptoSection{
+			Emits: []plugins.CryptoEmit{
+				{EventType: "scene.whisper", Sensitivity: plugins.SensitivityAlways},
+				{EventType: "scene.pose", Sensitivity: plugins.SensitivityNever},
+			},
+		},
+	}
+	tests := []struct {
+		name      string
+		manifest  *plugins.Manifest
+		eventType string
+		want      plugins.Sensitivity
+	}{
+		{
+			name:      "returns declared value for listed event type",
+			manifest:  declared,
+			eventType: "scene.whisper",
+			want:      plugins.SensitivityAlways,
+		},
+		{
+			name:      "defaults to never for unlisted event type",
+			manifest:  declared,
+			eventType: "scene.pose-mismatch",
+			want:      plugins.SensitivityNever,
+		},
+		{
+			name:      "handles nil manifest",
+			manifest:  nil,
+			eventType: "anything",
+			want:      plugins.SensitivityNever,
+		},
+		{
+			name:      "handles empty emits",
+			manifest:  &plugins.Manifest{Crypto: &plugins.CryptoSection{}},
+			eventType: "anything",
+			want:      plugins.SensitivityNever,
+		},
+		{
+			name:      "handles nil crypto block (crypto: omitted from YAML)",
+			manifest:  &plugins.Manifest{Crypto: nil},
+			eventType: "anything",
+			want:      plugins.SensitivityNever,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := plugins.LookupEmitSensitivity(tt.manifest, tt.eventType)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

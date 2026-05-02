@@ -97,6 +97,15 @@ type Event struct {
 	Timestamp time.Time
 	Actor     Actor
 	Payload   []byte // codec.Encode output (ciphertext if encryption is on)
+
+	// Sensitive is a host-internal flag set by the emitter when manifest
+	// sensitivity + plugin claim resolve to an encrypted publish. The
+	// publisher reads this to choose between the existing identity path
+	// and the Phase 3a sensitivity-aware crypto path. NEVER serialized
+	// to the wire; never persisted; cold-tier reads return Sensitive=false
+	// (the row's codec column is the source of truth on read).
+	Sensitive bool
+
 	// Rendering is populated by RenderingPublisher.Publish before
 	// marshaling. Callers MUST NOT populate this field directly; the
 	// field is reserved for the publisher chain.

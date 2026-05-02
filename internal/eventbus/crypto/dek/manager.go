@@ -136,7 +136,7 @@ func (m *manager) GetOrCreate(ctx context.Context, ctxID ContextID, initial []Pa
 	material := NewMaterial(dekBytes)
 	keyID := codec.KeyID(id) //nolint:gosec // G115: id is a DB BIGSERIAL value; positive serial ids fit in uint64.
 	m.cache.Put(CacheKey{KeyID: keyID, Version: 1}, material)
-	return material.AsCodecKey(keyID), nil
+	return material.AsCodecKey(keyID, 1), nil
 }
 
 // Resolve returns the DEK for (keyID, version). Cache → DB → unwrap.
@@ -145,7 +145,7 @@ func (m *manager) Resolve(ctx context.Context, keyID codec.KeyID, version uint32
 		return codec.Key{}, err
 	}
 	if material, ok := m.cache.Get(CacheKey{KeyID: keyID, Version: version}); ok {
-		return material.AsCodecKey(keyID), nil
+		return material.AsCodecKey(keyID, version), nil
 	}
 	r, err := m.store.selectByID(ctx, keyID, version)
 	if err != nil {
@@ -198,7 +198,7 @@ func (m *manager) unwrapAndCache(ctx context.Context, r row) (codec.Key, error) 
 	material := NewMaterial(dekBytes)
 	keyID := codec.KeyID(r.ID) //nolint:gosec // G115: r.ID is a DB BIGSERIAL value; positive serial ids fit in uint64.
 	m.cache.Put(CacheKey{KeyID: keyID, Version: r.Version}, material)
-	return material.AsCodecKey(keyID), nil
+	return material.AsCodecKey(keyID, r.Version), nil
 }
 
 // validateProviderWrapOutput rejects malformed Wrap return values.

@@ -53,6 +53,17 @@ type Config struct {
 	// Cluster-mode only (unused in Phase A).
 	ClusterURL      string `koanf:"cluster_url"`
 	CredentialsFile string `koanf:"credentials_file"`
+
+	// Crypto gates the Phase 3a sensitivity-aware crypto path.
+	// See spec §11.1 phase 3.
+	Crypto CryptoConfig `koanf:"crypto"`
+}
+
+// CryptoConfig gates the Phase 3a sensitivity-aware crypto path.
+// Default Enabled=false → the publisher behaves identically to
+// pre-Phase-3a builds. See spec §11.1 phase 3.
+type CryptoConfig struct {
+	Enabled bool `koanf:"enabled"`
 }
 
 // Defaults applies the documented defaults to any zero-value field.

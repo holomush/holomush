@@ -351,7 +351,7 @@ func decodeEnvelope(h nats.Header, data []byte) (*eventbusv1.Event, error) {
 			With("codec", codecNameStr).
 			Wrap(err)
 	}
-	plain, err := c.Decode(context.Background(), data, codec.Key{})
+	plain, err := c.Decode(context.Background(), data, codec.Key{}, nil)
 	if err != nil {
 		return nil, oops.Code("AUDIT_PLUGIN_CODEC_DECODE_FAILED").
 			With("codec", codecNameStr).

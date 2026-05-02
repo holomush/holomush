@@ -36,7 +36,7 @@ func TestValidateCrypto(t *testing.T) {
 			},
 		},
 		{
-			name: "accepts a manifest with no crypto section",
+			name:     "accepts a manifest with no crypto section",
 			manifest: &plugins.Manifest{Name: "x"},
 		},
 		{

@@ -26,7 +26,7 @@ func TestMaterial_AsCodecKey_ReturnsCodecKeyWithSameBytes(t *testing.T) {
 	bytes := []byte("0123456789abcdef0123456789abcdef") // 32 bytes
 	m := dek.NewMaterial(bytes)
 
-	key := m.AsCodecKey(codec.KeyID(42))
+	key := m.AsCodecKey(codec.KeyID(42), 1)
 	assert.Equal(t, codec.KeyID(42), key.ID)
 	require.Len(t, key.Bytes, 32)
 	assert.Equal(t, bytes, key.Bytes)
@@ -39,7 +39,7 @@ func TestMaterial_NewMaterial_CopiesInputBytes(t *testing.T) {
 	m := dek.NewMaterial(src)
 	src[0] = 0xFF // mutate caller's slice
 
-	key := m.AsCodecKey(codec.KeyID(1))
+	key := m.AsCodecKey(codec.KeyID(1), 1)
 	assert.Equal(t, byte('0'), key.Bytes[0],
 		"Material must defensively copy input; caller's mutation leaked")
 }

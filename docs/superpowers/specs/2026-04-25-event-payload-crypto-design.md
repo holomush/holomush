@@ -326,6 +326,20 @@ so a reviewer can grep `INV-N` and find the proof.
 | **INV-51** | A player-kind subscription that resolves a DEK via `participant.player_id` membership (the previous-tenure read path) MUST emit `audit.<game>.system.player_history_read` once per session-context pair, before the first plaintext event is delivered. | Integration |
 | **INV-52** | A NATS account configured for a plugin or character subscriber MUST NOT include any `audit.>` subject in its allowed-subscribe list. The default NATS account configuration is the architectural source of truth for INV-15. | Integration |
 
+### Phase 3a enforcing tests
+
+The Phase 3a slice (host-side primitives, sensitivity fence, and AAD-bound
+codec) lands the following invariants. Each is wired to a concrete enforcing
+test that fails if the invariant is violated:
+
+| Invariant | Enforcing test |
+| --- | --- |
+| **INV-6** | `internal/plugin/sensitivity_fence_test.go::TestEnforceSensitivity` (subtest `"never + claim=true → INV-6 reject"`) |
+| **INV-7** | `internal/plugin/sensitivity_fence_test.go::TestEnforceSensitivity` (subtest `"always + claim=false → INV-7 reject"`) |
+| **INV-21** | `test/integration/crypto/emit_test.go::TestSensitiveEmitProducesCiphertextOnBusAndInAudit` (byte-equality assertion on bus payload vs `events_audit.payload`) |
+| **INV-25** | `internal/eventbus/codec/xchacha20poly1305_test.go::TestXChaCha20Poly1305DetectsAADTamper` |
+| **INV-49** | `internal/eventbus/audit/projection_test.go::TestPersistWritesDekColumnsFromHeaders` |
+
 ---
 
 ## Section 3 — Architecture overview
@@ -791,8 +805,10 @@ Three layers, with substrate types reused where they fit:
                     └────────────────────┬────────────────────────────┘
                                          ▼
                     ┌─────────────────────────────────────────────────┐
-                    │ codec.Codec.Encode/Decode(plaintext, codec.Key) │
-                    │   (substrate type, unchanged interface)         │
+                    │ codec.Codec.Encode/Decode(                       │
+                    │     plaintext, codec.Key, aad []byte)            │
+                    │   (substrate type — interface extended in        │
+                    │    Phase 3a per 2026-05-02 grounding doc)        │
                     └────────────────────┬────────────────────────────┘
                                          ▼
                     ┌─────────────────────────────────────────────────┐
@@ -802,11 +818,26 @@ Three layers, with substrate types reused where they fit:
                     └─────────────────────────────────────────────────┘
 ```
 
-**Layer 3: substrate `codec.Codec` (unchanged).** Defined in
-`internal/eventbus/codec/codec.go:30-34`. `Encode(plaintext, codec.Key) → ciphertext`,
-`Decode(ciphertext, codec.Key) → plaintext`. New impls registered:
-`xchacha20poly1305-v1`, `aes-gcm-v1`. Codecs never see KEK material; they
-take a `codec.Key{ID: KeyID, Bytes: 32_bytes}` and use `Bytes` for AEAD.
+**Layer 3: substrate `codec.Codec` (extended in Phase 3a).** Defined in
+`internal/eventbus/codec/codec.go:30-34`. The interface gains an explicit
+`aad []byte` parameter on `Encode` and `Decode` to match the
+`crypto/cipher.AEAD.Seal/Open` convention and avoid coupling the codec to
+the proto `*Event` type:
+
+```go
+Encode(ctx context.Context, plaintext []byte, key Key, aad []byte) ([]byte, error)
+Decode(ctx context.Context, ciphertext []byte, key Key, aad []byte) ([]byte, error)
+```
+
+`IdentityCodec` ignores `aad`. Sensitive codecs pass it straight to
+`aead.Seal/Open`. The caller (Phase 3a's emit path) builds `aad` via
+`internal/eventbus/crypto/aad.Build(...)` before calling `Encode`. New impls
+registered: `xchacha20poly1305-v1`, `aes-gcm-v1`. Codecs never see KEK
+material; they take a `codec.Key{ID: KeyID, Version: uint32, Bytes: 32_bytes}`.
+The `Version` field (added in Phase 3a) closes a Phase 2 gap — every other
+substrate boundary already carries `(KeyID, Version)` as the DEK identity.
+See [`2026-05-02-event-payload-crypto-phase3a-grounding.md`](2026-05-02-event-payload-crypto-phase3a-grounding.md)
+for rationale.
 
 **Layer 2: `DEKManager` (new).** Replaces the substrate's
 `KeyProvider`/`KeySelector` for sensitive events. Resolves keys by context
@@ -1927,7 +1958,7 @@ phase 3.
 | --- | --- | --- |
 | 1 | Re-scoped `holomush-k18g`: manifest grammar expansion (`crypto.emits` per event type with sensitivity declarations); all existing plugins updated; auto-generated event reference docs | Plugin authors gain a declared catalogue; nothing else changes |
 | 2 | `KEKProvider` interface + `LocalAEADProvider` + `NoneProvider` + `crypto_keys` table migration + `events_audit` columns migration + `DEKManager` skeleton + `dek.Material` type + lint rule | Server can wrap/unwrap DEKs; events_audit gains the new columns; nothing emits or reads sensitive yet |
-| 3 | EventSink encryption path + new codec impls (`xchacha20poly1305-v1`) + AAD canonicalization + AuthGuard (4 branches) + decrypt-on-fan-out + cache + request-reply cache-invalidation protocol + audit subject namespaces + NATS account-level deny rules + downgrade-attack fence (host-side ground-truth check) + cold-tier `QueryStreamHistory` crypto path for host-owned audit | End-to-end sensitive event flow works for host-owned audit subjects; players-as-character get full plaintext; previous-tenure player-kind reads emit per-session audit |
+| 3 | EventSink encryption path + new codec impls (`xchacha20poly1305-v1`) + AAD canonicalization + AuthGuard (4 branches) + decrypt-on-fan-out + cache + request-reply cache-invalidation protocol + audit subject namespaces + NATS account-level deny rules + emit-time sensitivity fence (INV-6/7 — host-side ground-truth check at emit) + cold-tier `QueryStreamHistory` crypto path for host-owned audit. Note: the cold-tier read fence (INV-50) is plugin-owned-audit-specific and lands in Phase 7. | End-to-end sensitive event flow works for host-owned audit subjects; players-as-character get full plaintext; previous-tenure player-kind reads emit per-session audit |
 | 4 | `Add` + `Rotate` lifecycle ops with synchronous N-of-N replica cache invalidation | Participant changes work; player-rebind triggers `Rotate` correctly |
 | 5 | `Rekey` CLI + `AdminReadStream` CLI + localhost UNIX admin socket + `OperatorAuthProvider` (default in-game-creds + TOTP) | Operator break-glass and destructive revocation paths exist |
 | 6 | `VaultTransitProvider` + provider migration CLI + KEK rotation CLI | Orgs with Vault can use it; provider-migrate and KEK rotation exercised |

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/textproto"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +22,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/eventbus/codec"
+	"github.com/holomush/holomush/internal/eventbus/crypto/aad"
+	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/eventbus/telemetry"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
@@ -50,6 +53,13 @@ const (
 	// the original string identity without corrupting the ULID contract of
 	// HeaderActorID.
 	HeaderActorLegacyID = "App-Actor-Legacy-ID"
+	// HeaderDekRef carries the crypto_keys.id (decimal string) for events
+	// encrypted with a non-identity codec. Empty for codec=identity. Maps
+	// 1:1 to events_audit.dek_ref (BIGINT) via the audit projection.
+	HeaderDekRef = "App-Dek-Ref"
+	// HeaderDekVersion carries the per-context DEK version (decimal string).
+	// Empty for codec=identity. Maps to events_audit.dek_version (INTEGER).
+	HeaderDekVersion = "App-Dek-Version"
 )
 
 // SchemaVersion is the proto envelope major version advertised in the
@@ -89,6 +99,19 @@ func WithSafetyMargin(d time.Duration) PublishOption {
 	}
 }
 
+// DEKManager is the publisher-facing subset of dek.Manager — Phase 3a uses
+// GetOrCreate on the emit path; decrypt-on-fanout (Phase 3b) will use Resolve.
+type DEKManager interface {
+	GetOrCreate(ctx context.Context, ctxID dek.ContextID, initial []dek.Participant) (codec.Key, error)
+}
+
+// WithDEKManager wires a DEK manager. When non-nil, sensitive events
+// (event.Sensitive=true) take the crypto branch in Publish; nil keeps
+// behavior identical to pre-Phase-3a builds.
+func WithDEKManager(m DEKManager) PublishOption {
+	return func(p *JetStreamPublisher) { p.dekMgr = m }
+}
+
 // JetStreamPublisher is the production Publisher implementation. It owns the
 // invariants a plain JS publish does not:
 //
@@ -113,6 +136,13 @@ type JetStreamPublisher struct {
 	selector     codec.KeySelector
 	keys         codec.KeyProvider
 	safetyMargin time.Duration
+
+	// dekMgr provides DEKs for sensitive events (event.Sensitive=true).
+	// nil → publisher rejects sensitive events with
+	// EVENTBUS_SENSITIVE_EVENT_NO_DEK_MANAGER and takes the legacy
+	// identity/selector path for non-sensitive events. Wired via
+	// WithDEKManager; bootstrap supplies it when CryptoConfig.Enabled.
+	dekMgr DEKManager
 }
 
 // NewJetStreamPublisher constructs a Publisher backed by the given JetStream
@@ -173,16 +203,55 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 		return oops.Code("EVENTBUS_ENVELOPE_MARSHAL_FAILED").Wrap(err)
 	}
 
-	codecName, keyLabel, err := p.selector.SelectForEncrypt(ctx, string(event.Subject))
-	if err != nil {
-		return oops.Code("EVENTBUS_CODEC_SELECT_FAILED").Wrap(err)
+	var (
+		codecName   codec.Name
+		keyLabel    codec.KeyLabel
+		key         codec.Key
+		keyResolved bool
+		dekRef      string
+		dekVer      string
+	)
+	switch {
+	case event.Sensitive && p.dekMgr != nil:
+		ctxID, ctxErr := contextIDFromSubject(event.Subject)
+		if ctxErr != nil {
+			return oops.Code("EVENTBUS_DEK_CONTEXT_ID_FAILED").
+				With("subject", string(event.Subject)).
+				Wrap(ctxErr)
+		}
+		k, dekErr := p.dekMgr.GetOrCreate(ctx, ctxID, nil)
+		if dekErr != nil {
+			return oops.Code("EVENTBUS_DEK_GETORCREATE_FAILED").
+				With("subject", string(event.Subject)).
+				Wrap(dekErr)
+		}
+		codecName = codec.NameXChaCha20v1
+		key = k
+		keyResolved = true
+		dekRef = strconv.FormatUint(uint64(k.ID), 10)
+		dekVer = strconv.FormatUint(uint64(k.Version), 10)
+	case event.Sensitive && p.dekMgr == nil:
+		return oops.Code("EVENTBUS_SENSITIVE_EVENT_NO_DEK_MANAGER").
+			With("subject", string(event.Subject)).
+			Errorf("event.Sensitive=true but publisher has no DEK manager wired")
+	default:
+		cn, kl, selErr := p.selector.SelectForEncrypt(ctx, string(event.Subject))
+		if selErr != nil {
+			return oops.Code("EVENTBUS_CODEC_SELECT_FAILED").Wrap(selErr)
+		}
+		codecName = cn
+		keyLabel = kl
 	}
+
 	c, err := codec.Resolve(codecName)
 	if err != nil {
 		return oops.Code("EVENTBUS_CODEC_UNKNOWN").With("codec", string(codecName)).Wrap(err)
 	}
-	var key codec.Key
-	if codecName != codec.NameIdentity {
+
+	// Resolve key for the legacy selector path. Sensitive events already
+	// hold a DEK-manager-supplied key (keyResolved=true); the identity
+	// codec needs no key.
+	if !keyResolved && codecName != codec.NameIdentity {
 		if p.keys == nil {
 			return oops.Code("EVENTBUS_KEY_PROVIDER_MISSING").
 				With("codec", string(codecName)).
@@ -197,7 +266,20 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 		}
 		key = k
 	}
-	encoded, err := c.Encode(ctx, plainBytes, key)
+
+	// AAD binds (codec, key id/version, envelope identity) into the AEAD
+	// authentication tag for sensitive events. Non-sensitive events keep
+	// the identity/selector path which passes nil aad to Encode.
+	var aadBytes []byte
+	if event.Sensitive {
+		ab, aErr := aad.Build(envelope, string(codecName), uint64(key.ID), key.Version)
+		if aErr != nil {
+			return oops.Code("EVENTBUS_AAD_BUILD_FAILED").Wrap(aErr)
+		}
+		aadBytes = ab
+	}
+
+	encoded, err := c.Encode(ctx, plainBytes, key, aadBytes)
 	if err != nil {
 		return oops.Code("EVENTBUS_CODEC_ENCODE_FAILED").
 			With("codec", string(codecName)).
@@ -213,6 +295,10 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, event Event) error {
 	msg.Header.Set(HeaderSchemaVersion, SchemaVersion)
 	msg.Header.Set(HeaderEventType, string(event.Type))
 	msg.Header.Set(HeaderCodec, string(codecName))
+	if dekRef != "" {
+		msg.Header.Set(HeaderDekRef, dekRef)
+		msg.Header.Set(HeaderDekVersion, dekVer)
+	}
 	msg.Header.Set(HeaderActorKind, event.Actor.Kind.String())
 	if event.Actor.ID != (ulid.ULID{}) {
 		msg.Header.Set(HeaderActorID, event.Actor.ID.String())
@@ -252,6 +338,8 @@ var reservedHeaderKeys = map[string]struct{}{
 	HeaderActorKind:     {},
 	HeaderActorID:       {},
 	HeaderActorLegacyID: {},
+	HeaderDekRef:        {},
+	HeaderDekVersion:    {},
 	"traceparent":       {},
 	"tracestate":        {},
 }
@@ -397,4 +485,33 @@ func (identityKeySelector) SelectForEncrypt(_ context.Context, _ string) (codec.
 
 func (identityKeySelector) SelectForDecrypt(_ context.Context, _ codec.Name, _ codec.KeyID) (codec.Key, error) {
 	return codec.NoKey, nil
+}
+
+// contextIDFromSubject derives a dek.ContextID from a NATS-native subject
+// like "events.<game>.<namespace>.<id>[.<facet>...]". Phase 3a's plugin
+// emit path translates legacy colon-style subjects (e.g. "scene:01ABC")
+// to "events.main.scene.01ABC" via subjectxlate.Legacy before reaching
+// the publisher, so parts[2]=namespace, parts[3]=id is the canonical form.
+func contextIDFromSubject(subject Subject) (dek.ContextID, error) {
+	s := string(subject)
+	if !strings.HasPrefix(s, "events.") {
+		return dek.ContextID{}, oops.With("subject", s).
+			New("subject is not in events.<game>.<namespace>.<id>... form")
+	}
+	parts := strings.SplitN(s, ".", 5)
+	if len(parts) < 4 {
+		return dek.ContextID{}, oops.With("subject", s).
+			Errorf("subject must have at least events.<game>.<namespace>.<id>")
+	}
+	namespace := parts[2]
+	id := parts[3]
+	if namespace == "" {
+		return dek.ContextID{}, oops.With("subject", s).
+			New("subject namespace token must not be empty")
+	}
+	if id == "" {
+		return dek.ContextID{}, oops.With("subject", s).
+			New("subject context id token must not be empty")
+	}
+	return dek.ContextID{Type: namespace, ID: id}, nil
 }

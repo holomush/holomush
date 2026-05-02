@@ -409,7 +409,7 @@ func decodeDelivery(ctx context.Context, msg jetstream.Msg, selector codec.KeySe
 		}
 	}
 
-	plain, err := c.Decode(ctx, msg.Data(), key)
+	plain, err := c.Decode(ctx, msg.Data(), key, nil)
 	if err != nil {
 		return Event{}, oops.Code("EVENTBUS_SUBSCRIBE_DECODE_FAILED").
 			With("codec", codecNameStr).Wrap(err)

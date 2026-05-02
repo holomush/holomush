@@ -192,9 +192,9 @@ func pollResultFile(path string, timeout time.Duration) (string, error) {
 
 const (
 	forgeryEmitSubject = "location:01HFORGEY00LOCATIONULID0000"
-	dispatchCharID    = "01HCHAR0000000000000000000"
-	dispatchCharKind  = core.ActorCharacter
-	forgedTargetID    = "01HFAKE0000000000000000000"
+	dispatchCharID     = "01HCHAR0000000000000000000"
+	dispatchCharKind   = core.ActorCharacter
+	forgedTargetID     = "01HFAKE0000000000000000000"
 )
 
 var _ = Describe("Plugin actor-claim authentication (ec22.1)", func() {
@@ -468,4 +468,3 @@ var _ = Describe("Plugin actor-claim authentication (ec22.1)", func() {
 		})
 	})
 })
-
