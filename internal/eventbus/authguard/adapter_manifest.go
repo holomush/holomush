@@ -1,0 +1,19 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
+
+package authguard
+
+import (
+	plugins "github.com/holomush/holomush/internal/plugin"
+)
+
+type manifestAdapter struct{ mgr *plugins.Manager }
+
+// NewPluginManifestLookup wraps a *plugins.Manager as a ManifestLookup.
+func NewPluginManifestLookup(mgr *plugins.Manager) ManifestLookup {
+	return &manifestAdapter{mgr: mgr}
+}
+
+func (a *manifestAdapter) PluginRequestsDecryption(pluginName, eventType string) bool {
+	return a.mgr.PluginRequestsDecryption(pluginName, eventType)
+}
