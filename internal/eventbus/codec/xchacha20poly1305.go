@@ -44,8 +44,15 @@ func (*XChaCha20Poly1305v1) Encode(_ context.Context, plaintext []byte, key Key,
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, fmt.Errorf("xchacha20poly1305-v1: rng: %w", err)
 	}
-	out := make([]byte, 0, len(nonce)+len(plaintext)+aead.Overhead())
-	out = append(out, nonce...)
+	// Build the output by appending. We deliberately do NOT pre-size the
+	// allocation from len(plaintext): CodeQL's taint analyzer (rule
+	// go/allocation-size-overflow) flags any make() whose capacity is
+	// computed from len() of externally-sourced byte slices, even when
+	// the inputs are practically bounded. The append-based approach lets
+	// the runtime grow the slice in capped doublings, avoiding the taint
+	// while still being O(N) amortized. Mirrors the same workaround in
+	// internal/eventbus/crypto/aad/aad.go:97-103.
+	out := append([]byte(nil), nonce...)
 	out = aead.Seal(out, nonce, plaintext, aad)
 	return out, nil
 }
