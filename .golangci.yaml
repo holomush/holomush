@@ -35,6 +35,18 @@ linters:
     # Custom bans
     - forbidigo
 
+    # HoloMUSH custom analyzers (gorules/)
+    - codeckeybytesallowlist
+    - cursorpackageinternal
+    - dekmaterialnofmtformatting
+    - dekmaterialnogob
+    - dekmaterialnojson
+    - dekmaterialnolog
+    - dekmaterialnoproto
+    - dekmaterialnoslog
+    - sceneopseventsappendonly
+    - ulidmakeforbidden
+
   exclusions:
     # Default exclusion presets
     presets:
@@ -58,6 +70,25 @@ linters:
           - gocritic
           - wrapcheck
           - errcheck
+
+      # ulidmakeforbidden replaces a ruleguard rule that only fired in
+      # production because gocritic was excluded for _test.go. Tests
+      # legitimately use ulid.Make() for fixture generation; preserve
+      # that scope.
+      - path: '_test\.go'
+        linters:
+          - ulidmakeforbidden
+
+      # cursorpackageinternal replaces a ruleguard rule that only fired
+      # in production for the same reason (gocritic excluded for
+      # _test.go). Tests in allowlist-adjacent packages (e.g., the
+      # external `hostfunc_test` package, whose pkg path has a `_test`
+      # suffix that doesn't match the `internal/plugin/hostfunc`
+      # allowlist entry) legitimately reference cursor symbols. Preserve
+      # the original de-facto test-file scope.
+      - path: '_test\.go'
+        linters:
+          - cursorpackageinternal
 
       # Test password hashes (argon2id fixtures) are not real credentials.
       # G101 fires on struct literals containing PasswordHash fields.
@@ -138,9 +169,6 @@ linters:
         - performance
       disabled-checks:
         - hugeParam # Event struct (120 bytes) is passed by value by design
-      settings:
-        ruleguard:
-          rules: gorules/rules.go
 
     gosec:
       excludes:
@@ -168,6 +196,48 @@ linters:
     nolintlint:
       require-explanation: true
       require-specific: true
+
+    custom:
+      codeckeybytesallowlist:
+        type: module
+        description: "INV-27 residual defense: codec.Key.Bytes reads are restricted"
+        original-url: github.com/holomush/holomush
+      cursorpackageinternal:
+        type: module
+        description: forbids references to internal/eventbus/cursor outside host packages
+        original-url: github.com/holomush/holomush
+      dekmaterialnofmtformatting:
+        type: module
+        description: "INV-27: dek.Material MUST NOT be passed to fmt formatting"
+        original-url: github.com/holomush/holomush
+      dekmaterialnogob:
+        type: module
+        description: "INV-27: dek.Material MUST NOT be passed to encoding/gob"
+        original-url: github.com/holomush/holomush
+      dekmaterialnojson:
+        type: module
+        description: "INV-27: dek.Material MUST NOT be passed to encoding/json"
+        original-url: github.com/holomush/holomush
+      dekmaterialnolog:
+        type: module
+        description: "INV-27: dek.Material MUST NOT be passed to log"
+        original-url: github.com/holomush/holomush
+      dekmaterialnoproto:
+        type: module
+        description: "INV-27: dek.Material MUST NOT be passed to google.golang.org/protobuf/proto"
+        original-url: github.com/holomush/holomush
+      dekmaterialnoslog:
+        type: module
+        description: "INV-27: dek.Material MUST NOT be passed to log/slog"
+        original-url: github.com/holomush/holomush
+      sceneopseventsappendonly:
+        type: module
+        description: forbids UPDATE/DELETE/TRUNCATE against scene_ops_events
+        original-url: github.com/holomush/holomush
+      ulidmakeforbidden:
+        type: module
+        description: forbids ulid.Make() (uses math/rand instead of crypto/rand)
+        original-url: github.com/holomush/holomush
 
     forbidigo:
       # Scoping is enforced via exclusions.rules below (path-except):

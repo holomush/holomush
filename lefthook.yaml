@@ -40,7 +40,11 @@ pre-commit:
 
     lint-go:
       glob: "*.go"
-      run: golangci-lint run --new-from-rev=HEAD~1
+      # Use the project's custom golangci-lint binary so the pre-commit
+      # coverage matches CI exactly. If bin/custom-gcl is missing, fail
+      # fast — running the system golangci-lint would silently lose the
+      # project analyzers and let real violations through.
+      run: ./bin/custom-gcl run --new-from-rev=HEAD~1
       stage_fixed: true
 
     lint-markdown:

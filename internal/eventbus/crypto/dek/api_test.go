@@ -18,9 +18,10 @@ import (
 // TestPackageHasNoExportedByteSlices guarantees the dek package never
 // exposes an exported function/method returning []byte or an exported
 // struct field of type []byte. This is the ground-truth defense for
-// INV-27 — the ruleguard rules in gorules/ catch known sinks, but this
-// test catches API drift (a future contributor adding a Bytes()
-// accessor would bypass the ruleguards by introducing a new export).
+// INV-27 — the dekmaterialno* and codeckeybytesallowlist analyzers in
+// gorules/analyzers/ catch known sinks, but this test catches API drift
+// (a future contributor adding a Bytes() accessor would bypass the
+// analyzers by introducing a new export).
 func TestPackageHasNoExportedByteSlices(t *testing.T) {
 	cfg := &packages.Config{
 		Mode: packages.NeedTypes | packages.NeedTypesInfo | packages.NeedSyntax,

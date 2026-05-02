@@ -43,9 +43,16 @@ tasks:
       - COMPOSE_PROFILES=observability docker compose up --force-recreate --remove-orphans
 
   test:
-    desc: Run unit tests (pass package/test args after --)
+    desc: Run unit tests (parent module + gorules analyzer module; pass package/test args after --)
     cmds:
+      - task: test:gorules
       - gotestsum --format pkgname -- -race -count=1 {{.CLI_ARGS | default "./..."}}
+
+  test:gorules:
+    desc: Run analysistest unit tests for the gorules analyzer module
+    dir: gorules
+    cmds:
+      - go test ./...
 
   test:verbose:
     desc: Run unit tests with full verbose output
@@ -350,9 +357,25 @@ tasks:
   # ──────────────────────────────────────────
 
   lint:go:
-    desc: Lint Go code
+    desc: Lint Go code (uses bin/custom-gcl with the holomushrules plugin)
+    deps: ['lint:build-custom-gcl']
     cmds:
-      - golangci-lint run
+      - ./bin/custom-gcl run
+
+  lint:build-custom-gcl:
+    desc: Build the custom-gcl binary if missing or stale
+    # NOTE: .golangci.yaml is intentionally excluded from sources — the
+    # binary embeds analyzer code at build time but reads .golangci.yaml
+    # at run time, so config-only changes do not require a rebuild.
+    sources:
+      - .custom-gcl.yml
+      - gorules/**/*.go
+      - gorules/go.mod
+      - gorules/go.sum
+    generates:
+      - ./bin/custom-gcl
+    cmds:
+      - golangci-lint custom
 
   lint:proto:
     desc: Lint protobuf definitions (matches CI's Buf Lint check)

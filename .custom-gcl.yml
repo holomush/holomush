@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 HoloMUSH Contributors
+#
+# Build configuration for `golangci-lint custom`. Produces bin/custom-gcl,
+# which embeds the standard golangci-lint linter set plus the analyzers
+# from gorules/ (the holomushrules plugin).
+#
+# See docs/superpowers/specs/2026-05-01-go-analysis-migration-design.md §4.5.1.
+version: v2.11.4
+name: custom-gcl
+destination: ./bin/
+plugins:
+  - module: github.com/holomush/holomush/gorules
+    path: ./gorules
