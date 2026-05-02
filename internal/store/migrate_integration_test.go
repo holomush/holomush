@@ -14,9 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/holomush/holomush/internal/store"
 )
@@ -114,9 +112,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2)),
+		postgres.BasicWaitStrategies(),
 	)
 	require.NoError(t, err)
 	defer pgContainer.Terminate(ctx)
@@ -185,9 +181,7 @@ func TestMigrator_DirtyStateRecovery(t *testing.T) {
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2)),
+		postgres.BasicWaitStrategies(),
 	)
 	require.NoError(t, err)
 	defer pgContainer.Terminate(ctx)
@@ -258,9 +252,7 @@ func TestMigrator_ConcurrentUp(t *testing.T) {
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2)),
+		postgres.BasicWaitStrategies(),
 	)
 	require.NoError(t, err)
 	defer pgContainer.Terminate(ctx)
@@ -348,9 +340,7 @@ func TestMigrator_Force_VersionExceedsAvailable(t *testing.T) {
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2)),
+		postgres.BasicWaitStrategies(),
 	)
 	require.NoError(t, err)
 	defer pgContainer.Terminate(ctx)
@@ -421,9 +411,7 @@ func TestMigrator_ConcurrentMigrationDirtyStateHandling(t *testing.T) {
 		postgres.WithDatabase("test"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2)),
+		postgres.BasicWaitStrategies(),
 	)
 	require.NoError(t, err)
 	defer pgContainer.Terminate(ctx)
