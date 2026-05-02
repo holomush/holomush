@@ -7,6 +7,8 @@
 
 **APPROVED** — resolves four open design questions deferred by Phase 2 to Phase 3a. Modifies the master spec inline at the sections cited below. Companion document, not a replacement: the master spec at [`2026-04-25-event-payload-crypto-design.md`](2026-04-25-event-payload-crypto-design.md) remains authoritative for everything else.
 
+Normative requirements in this document use RFC2119 keywords (MUST, MUST NOT, SHOULD, SHOULD NOT, MAY) per the project's CLAUDE.md "RFC2119 Keywords" convention. Descriptive passages explaining decisions, alternatives considered, and future phases are not normative.
+
 ## Authors
 
 - Sean Brandt
@@ -26,7 +28,7 @@ This doc resolves each seam against the actual Phase 1 + Phase 2 surface, edits 
 
 ## Decision 1 — Codec receives AAD via explicit parameter
 
-**Decision:** Extend `codec.Codec.Encode/Decode` signatures with an explicit `aad []byte` parameter:
+**Decision:** The `codec.Codec.Encode/Decode` signatures MUST be extended with an explicit `aad []byte` parameter:
 
 ```go
 type Codec interface {
@@ -35,7 +37,7 @@ type Codec interface {
 }
 ```
 
-`IdentityCodec` ignores `aad`. Sensitive codecs (`xchacha20poly1305-v1`, future `aes-gcm-v1`) pass `aad` straight to `aead.Seal/Open` as the additional-data argument. The caller (Phase 3a's emit path) builds `aad` via `internal/eventbus/crypto/aad.Build(...)` before calling `Encode`.
+`IdentityCodec` MUST ignore `aad`. Sensitive codecs (`xchacha20poly1305-v1`, future `aes-gcm-v1`) MUST pass `aad` straight to `aead.Seal/Open` as the additional-data argument. The caller (Phase 3a's emit path) MUST build `aad` via `internal/eventbus/crypto/aad.Build(...)` before calling `Encode`.
 
 **Why over alternatives:**
 
@@ -43,7 +45,7 @@ type Codec interface {
 - *Passing AAD via `context.Context` value:* opaque, untyped, error-prone. Crypto APIs in the Go standard library (`crypto/cipher.AEAD.Seal/Open`) name AAD as an explicit parameter; the convention exists for the same lifetime reason.
 - *Codec internally calls `aad.Build`:* Phase 2's docstring suggested this, but it requires the codec to receive the proto `*Event` via some channel. That couples the codec interface to the proto layer and makes the codec impossible to test without proto fixtures. The caller is the right boundary.
 
-**Decode-side AAD convention for Phase 3a.** The interface change is symmetric (Decode also gains `aad []byte`) but Phase 3a's only sensitive *Encode* path is the emit side. The fan-out *Decode* path is Phase 3b. So in Phase 3a the production Decode callsites (`subscriber.go:412`, `history/hot_jetstream.go:379`, `audit/plugin_consumer.go:354`) all receive `IdentityCodec`-only events and pass `aad = nil`. `IdentityCodec.Decode` ignores `aad`, so this is a no-op.
+**Decode-side AAD convention for Phase 3a.** The interface change is symmetric (Decode also gains `aad []byte`) but Phase 3a's only sensitive *Encode* path is the emit side. The fan-out *Decode* path is Phase 3b. In Phase 3a, production Decode callsites (`subscriber.go:412`, `history/hot_jetstream.go:379`, `audit/plugin_consumer.go:354`) MUST pass `aad = nil`; they receive `IdentityCodec`-only events under default `Crypto.Enabled=false`. `IdentityCodec.Decode` ignores `aad`, so this is a no-op. If a non-identity codec reaches one of these sites under `Crypto.Enabled=true` (e.g., staging soak), the callsite MUST fail loudly with a typed error rather than attempt decode with nil AAD; `internal/eventbus/history/hot_jetstream.go` implements this with `EVENTBUS_HISTORY_SENSITIVE_NOT_SUPPORTED_PHASE3A`.
 
 The single exception: Phase 3a's integration test (T9) round-trips a sensitive event through `xchacha20poly1305-v1` to verify INV-25 (AAD tamper detection) end-to-end. The test reconstructs AAD by calling `aad.Build(event, codecName, dekRef, dekVersion)` against the same proto Event it just published — the bus message and the audit row carry the same byte-equal payload (INV-21), and headers carry codec/dek_ref/dek_version, so the test has every input it needs. Production Phase 3a never calls Decode against a sensitive payload because no production subscriber path exists yet for sensitive events.
 
@@ -70,7 +72,7 @@ No external implementers (test stubs are internal). Phase 3a-aware callers (the 
 
 ## Decision 2 — Per-emit sensitivity: `Sensitive bool` on `EmitIntent`; hard-reject for over-claim
 
-**Decision:** Add `Sensitive bool` to `pkg/plugin/event.go::EmitIntent`. Default `false`. Host evaluates effective sensitivity per the truth table below; over-claim (plugin sets `Sensitive=true` on a `manifest=never` event type) hard-rejects with `oops.Code("EVENT_SENSITIVITY_NOT_DECLARED")`.
+**Decision:** A `Sensitive bool` field MUST be added to `pkg/plugin/event.go::EmitIntent`. Default `false`. The host MUST evaluate effective sensitivity per the truth table below; over-claim (plugin sets `Sensitive=true` on a `manifest=never` event type) MUST hard-reject with `oops.Code("EVENT_SENSITIVITY_NOT_DECLARED")` (INV-6); under-claim (plugin sets `Sensitive=false` on a `manifest=always` event type) MUST hard-reject with `oops.Code("EVENT_SENSITIVITY_REQUIRED")` (INV-7).
 
 ```text
 manifest=never  + Sensitive=false → effective=never (publish plaintext)
@@ -95,7 +97,7 @@ manifest=always + Sensitive=true  → effective=always (encrypt)
 
 ## Decision 3 — DEK version surfaces via `codec.Key.Version`
 
-**Decision:** Add a `Version uint32` field to `codec.Key`:
+**Decision:** A `Version uint32` field MUST be added to `codec.Key`:
 
 ```go
 // internal/eventbus/codec/codec.go
@@ -106,9 +108,9 @@ type Key struct {
 }
 ```
 
-`dek.Manager.GetOrCreate(ctx, ctxID, initial)` populates `Version` from the `crypto_keys.version` column it already reads (`internal/eventbus/crypto/dek/manager.go:117` writes `Version: 1` when minting; `selectActive` returns the active row whose version is whatever Phase 4 rotation has incremented to). `IdentityCodec` callers pass `codec.Key{}` zero-value and get `Version=0`, which is correct for plaintext events.
+`dek.Manager.GetOrCreate(ctx, ctxID, initial)` MUST populate `Version` from the `crypto_keys.version` column it already reads (`internal/eventbus/crypto/dek/manager.go:117` writes `Version: 1` when minting; `selectActive` returns the active row whose version is whatever Phase 4 rotation has incremented to). `IdentityCodec` callers MAY pass `codec.Key{}` zero-value and receive `Version=0`, which is correct for plaintext events.
 
-**Companion edit required.** `dek.Material.AsCodecKey` is the only egress point that constructs a `codec.Key` from a DEK. Today (`internal/eventbus/crypto/dek/material.go:43-47`) it takes only `id codec.KeyID`:
+**Companion edit required.** `dek.Material.AsCodecKey` is the only egress point that constructs a `codec.Key` from a DEK. Today (`internal/eventbus/crypto/dek/material.go:43-47`) it takes only `id codec.KeyID`; this method MUST be extended to take `version uint32`:
 
 ```go
 // Was:
@@ -121,7 +123,7 @@ func (m *Material) AsCodecKey(id codec.KeyID, version uint32) codec.Key {
 }
 ```
 
-Three callsites in `internal/eventbus/crypto/dek/manager.go` are updated to pass version: `manager.go:139` (mint path — passes `1`, the just-minted row's version), `manager.go:148` (cache-hit path — passes the `Version` it just used as part of the cache key), `manager.go:201` (DB-unwrap path — passes `r.Version` from the row already read at `manager.go:192`). The `gorules/analyzers/codeckeybytesallowlist` analyzer continues to allow `codec.Key` literal construction inside `internal/eventbus/codec/...` and `internal/eventbus/crypto/...`; the `AsCodecKey` site is in the latter, so no analyzer surface change.
+Three callsites in `internal/eventbus/crypto/dek/manager.go` MUST pass version: `manager.go:139` (mint path — passes `1`, the just-minted row's version), `manager.go:148` (cache-hit path — passes the `Version` it just used as part of the cache key), `manager.go:201` (DB-unwrap path — passes `r.Version` from the row already read at `manager.go:192`). The `gorules/analyzers/codeckeybytesallowlist` analyzer continues to allow `codec.Key` literal construction inside `internal/eventbus/codec/...` and `internal/eventbus/crypto/...`; the `AsCodecKey` site is in the latter, so no analyzer surface change.
 
 **Why over alternatives:**
 
@@ -136,7 +138,7 @@ Three callsites in `internal/eventbus/crypto/dek/manager.go` are updated to pass
 
 ## Decision 4 — No SDK payload type change
 
-**Decision:** Keep `pkg/plugin/event.go::EmitIntent.Payload string`. No SDK type change. Encryption operates on `[]byte` host-side at the boundary where `internal/plugin/event_emitter.go:144` already converts via `payload := []byte(intent.Payload)`.
+**Decision:** `pkg/plugin/event.go::EmitIntent.Payload string` MUST be retained as-is — no SDK type change. Encryption MUST operate on `[]byte` host-side at the boundary where `internal/plugin/event_emitter.go:144` already converts via `payload := []byte(intent.Payload)`.
 
 **Trace through layers:**
 
