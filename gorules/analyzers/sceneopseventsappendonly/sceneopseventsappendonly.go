@@ -7,7 +7,9 @@
 // for the core-scenes plugin (Phase 3 design P3.D3, P3.D4).
 //
 // Targets: tx.Exec / tx.Query / tx.QueryRow calls (any receiver type;
-// pgx receivers are plural). String-extraction supports literal,
+// pgx receivers are plural). Checks both args[0] (database/sql-style
+// signatures: `db.Exec(sql, args...)`) AND args[1] (pgx-style:
+// `tx.Exec(ctx, sql, args...)`). String-extraction supports literal,
 // `+`-chain, and named-const shapes. Anything else (fmt.Sprintf,
 // concat with a runtime variable, ...) is silently passed through.
 package sceneopseventsappendonly
@@ -47,16 +49,25 @@ func run(pass *analysis.Pass) (any, error) {
 		if !methods[sel.Sel.Name] {
 			return
 		}
-		if len(call.Args) < 2 {
+		if len(call.Args) < 1 {
 			return
 		}
-		// args[0] is ctx, args[1] is the SQL string.
-		sql, ok := holomushlint.ExtractStringConst(pass, call.Args[1])
-		if !ok {
-			return
-		}
-		if forbiddenRegex.MatchString(sql) {
-			pass.Reportf(call.Args[1].Pos(), "%s", message)
+		// SQL position is database/sql-style (args[0]) or pgx-style
+		// (args[1] after ctx). Try both: pgx is the project's primary
+		// client, but the rule must also catch any database/sql-using
+		// code that lands in this codebase.
+		for _, idx := range []int{1, 0} {
+			if idx >= len(call.Args) {
+				continue
+			}
+			sql, ok := holomushlint.ExtractStringConst(pass, call.Args[idx])
+			if !ok {
+				continue
+			}
+			if forbiddenRegex.MatchString(sql) {
+				pass.Reportf(call.Args[idx].Pos(), "%s", message)
+				return
+			}
 		}
 	})
 	return nil, nil

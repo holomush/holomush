@@ -70,9 +70,12 @@ func run(pass *analysis.Pass) (any, error) {
 		if selection.Kind() != types.FieldVal {
 			return true
 		}
-		recv := selection.Recv()
+		// Unalias the receiver type before *types.Named narrowing —
+		// `type K = codec.Key` makes Recv() return *types.Alias on
+		// Go 1.23+, which would otherwise skip the named-type check.
+		recv := types.Unalias(selection.Recv())
 		if ptr, ok := recv.(*types.Pointer); ok {
-			recv = ptr.Elem()
+			recv = types.Unalias(ptr.Elem())
 		}
 		named, ok := recv.(*types.Named)
 		if !ok {
@@ -95,21 +98,43 @@ func run(pass *analysis.Pass) (any, error) {
 }
 
 // isWriteContext returns true when the SelectorExpr at the top of the
-// stack is on the LHS of an assignment.
+// stack is on the LHS of an assignment, including when the LHS is a
+// wrapper expression (IndexExpr, StarExpr, ParenExpr, etc.) that
+// contains the target SelectorExpr. Walks up the stack to the nearest
+// AssignStmt rather than only checking the immediate parent — this
+// catches forms like `k.Bytes[0] = 1` where the selector's immediate
+// parent is the IndexExpr, not the AssignStmt.
 func isWriteContext(stack []ast.Node) bool {
 	if len(stack) < 2 {
 		return false
 	}
-	parent := stack[len(stack)-2]
-	assign, ok := parent.(*ast.AssignStmt)
-	if !ok {
+	target := stack[len(stack)-1]
+	for i := len(stack) - 2; i >= 0; i-- {
+		assign, ok := stack[i].(*ast.AssignStmt)
+		if !ok {
+			continue
+		}
+		for _, lhs := range assign.Lhs {
+			if containsNode(lhs, target) {
+				return true
+			}
+		}
 		return false
 	}
-	target := stack[len(stack)-1]
-	for _, lhs := range assign.Lhs {
-		if lhs == target {
-			return true
-		}
-	}
 	return false
+}
+
+// containsNode reports whether target appears anywhere within root's
+// subtree (used by isWriteContext to detect targets nested inside LHS
+// wrapper expressions like IndexExpr / StarExpr / ParenExpr).
+func containsNode(root, target ast.Node) bool {
+	found := false
+	ast.Inspect(root, func(n ast.Node) bool {
+		if n == target {
+			found = true
+			return false
+		}
+		return !found
+	})
+	return found
 }

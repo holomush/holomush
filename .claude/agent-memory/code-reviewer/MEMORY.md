@@ -43,6 +43,16 @@ Keep under 200 lines. Curate — don't hoard.
   When reviewing a stacked-PR proto change, check whether earlier commits in
   the stack regenerated all generated artifacts (Go, TS, etc.) or only some.
 
+- **Shared-helper TDD coverage gap.** When an autofix swaps multiple call
+  sites to a new shared helper (e.g., `IsDEKMaterialArg` shared across 6
+  dekmaterialno* analyzers), implementers often add bypass test cases to
+  only one or two analyzer testdata sets and rely on the helper's own
+  coverage for the rest. Verify by `rg`-ing for the new helper across all
+  `testdata/` dirs — if a sink-list analyzer received the helper swap but
+  has no per-analyzer bypass test, the per-analyzer red→green coupling
+  isn't independently demonstrable. Acceptable when the helper is
+  end-to-end covered elsewhere; flag as non-blocking documentation gap.
+
 ## Invariants worth remembering
 
 - **Top-level oops Code() is the wire-visible code**: client-side error

@@ -30,3 +30,17 @@ func readIndex(k codec.Key) byte {
 func readSlice(k codec.Key, n int) []byte {
 	return k.Bytes[:n] // want `INV-27 \(residual defense\): codec.Key.Bytes reads are restricted`
 }
+
+// Alias-receiver bypass: `type K = codec.Key` makes the selection's
+// Recv() return *types.Alias (Go 1.23+), and a direct *types.Named
+// assertion fails. Without types.Unalias, the analyzer misses reads
+// through the alias type. CodeRabbit finding on PR #3457.
+type K = codec.Key
+
+func readViaAlias(k K) []byte {
+	return k.Bytes // want `INV-27 \(residual defense\): codec.Key.Bytes reads are restricted`
+}
+
+func readViaAliasPointer(pk *K) []byte {
+	return pk.Bytes // want `INV-27 \(residual defense\): codec.Key.Bytes reads are restricted`
+}

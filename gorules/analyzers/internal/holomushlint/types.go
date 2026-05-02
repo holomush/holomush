@@ -14,12 +14,15 @@ import (
 const DEKMaterialPath = "github.com/holomush/holomush/internal/eventbus/crypto/dek"
 
 // IsDEKMaterial reports whether t is dek.Material or *dek.Material.
+// Resolves type aliases via types.Unalias so user-defined aliases
+// like `type MyMat = dek.Material` are detected.
 func IsDEKMaterial(t types.Type) bool {
 	if t == nil {
 		return false
 	}
+	t = types.Unalias(t)
 	if ptr, ok := t.(*types.Pointer); ok {
-		t = ptr.Elem()
+		t = types.Unalias(ptr.Elem())
 	}
 	named, ok := t.(*types.Named)
 	if !ok {

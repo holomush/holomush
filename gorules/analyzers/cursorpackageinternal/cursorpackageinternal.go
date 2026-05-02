@@ -17,6 +17,7 @@ package cursorpackageinternal
 
 import (
 	"go/ast"
+	"strconv"
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
@@ -53,6 +54,19 @@ func run(pass *analysis.Pass) (any, error) {
 		return nil, nil
 	}
 	insp := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+	// Catch blank/side-effect imports (`import _ "…/cursor"`) that
+	// would otherwise bypass the symbol-reference walker below — those
+	// imports add no entries to pass.TypesInfo.Uses.
+	insp.Preorder([]ast.Node{(*ast.ImportSpec)(nil)}, func(n ast.Node) {
+		spec := n.(*ast.ImportSpec)
+		path, err := strconv.Unquote(spec.Path.Value)
+		if err != nil {
+			return
+		}
+		if path == cursorPkg {
+			pass.Reportf(spec.Path.Pos(), "%s", message)
+		}
+	})
 	// Track positions we've already reported to avoid duplicate diagnostics
 	// when the same SelectorExpr is visited at multiple ast levels.
 	reported := map[ast.Node]struct{}{}

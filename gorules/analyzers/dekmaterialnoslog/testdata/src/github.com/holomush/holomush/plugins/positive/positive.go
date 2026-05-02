@@ -23,3 +23,10 @@ func leakViaSlogInfo(m *dek.Material) {
 func leakViaLoggerInfo(m *dek.Material, l *slog.Logger) {
 	l.Info("dek", "material", m) // want `INV-27: dek.Material MUST NOT be passed to log/slog`
 }
+
+// Conversion-wrapped bypass: any(m) hides the *dek.Material type behind
+// an interface, so a naive pass.TypesInfo.TypeOf(arg) check misses it.
+// CodeRabbit finding on PR #3457.
+func leakViaAnyConversion(m *dek.Material) {
+	slog.Info("dek", "material", any(m)) // want `INV-27: dek.Material MUST NOT be passed to log/slog`
+}

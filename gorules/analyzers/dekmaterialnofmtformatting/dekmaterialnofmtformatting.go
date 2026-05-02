@@ -47,7 +47,7 @@ func run(pass *analysis.Pass) (any, error) {
 			return
 		}
 		for _, arg := range call.Args {
-			if holomushlint.IsDEKMaterial(pass.TypesInfo.TypeOf(arg)) {
+			if holomushlint.IsDEKMaterialArg(pass, arg) {
 				pass.Reportf(arg.Pos(),
 					"INV-27: dek.Material MUST NOT be passed to %s — Material is opaque by design (see internal/eventbus/crypto/dek/material.go and bead holomush-46ya for context)",
 					sinkDescription)

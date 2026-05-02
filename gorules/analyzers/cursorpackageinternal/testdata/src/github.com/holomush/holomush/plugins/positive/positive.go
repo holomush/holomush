@@ -9,7 +9,7 @@
 // the analyzer ever runs).
 package positive
 
-import "github.com/holomush/holomush/internal/eventbus/cursor"
+import "github.com/holomush/holomush/internal/eventbus/cursor" // want `internal/eventbus/cursor is host-internal — clients and plugins must not import it`
 
 var _ = cursor.Encode(cursor.Cursor{}) // want `internal/eventbus/cursor is host-internal — clients and plugins must not import it` `internal/eventbus/cursor is host-internal — clients and plugins must not import it`
 
