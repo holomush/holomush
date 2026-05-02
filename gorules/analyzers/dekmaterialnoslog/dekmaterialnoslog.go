@@ -21,20 +21,33 @@ import (
 const sinkDescription = "log/slog"
 
 var sinks = []holomushlint.Sink{
-	// free functions (use the package-level default logger)
-	{PkgPath: "log/slog", FuncName: "Info"},
-	{PkgPath: "log/slog", FuncName: "Debug"},
-	{PkgPath: "log/slog", FuncName: "Warn"},
-	{PkgPath: "log/slog", FuncName: "Error"},
-	{PkgPath: "log/slog", FuncName: "Log"},
+	// free functions (use the package-level default logger), alphabetized
 	{PkgPath: "log/slog", FuncName: "Any"},
+	{PkgPath: "log/slog", FuncName: "Debug"},
+	{PkgPath: "log/slog", FuncName: "DebugContext"},
+	{PkgPath: "log/slog", FuncName: "Error"},
+	{PkgPath: "log/slog", FuncName: "ErrorContext"},
 	{PkgPath: "log/slog", FuncName: "Group"},
-	// *slog.Logger methods (mirror set, but Any+Group not on *Logger)
-	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "Info"},
+	{PkgPath: "log/slog", FuncName: "Info"},
+	{PkgPath: "log/slog", FuncName: "InfoContext"},
+	{PkgPath: "log/slog", FuncName: "Log"},
+	{PkgPath: "log/slog", FuncName: "LogAttrs"},
+	{PkgPath: "log/slog", FuncName: "Warn"},
+	{PkgPath: "log/slog", FuncName: "WarnContext"},
+	{PkgPath: "log/slog", FuncName: "With"},
+	// *slog.Logger methods (mirror set, but Any+Group are package-level
+	// helpers, not *Logger methods), alphabetized
 	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "Debug"},
-	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "Warn"},
+	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "DebugContext"},
 	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "Error"},
+	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "ErrorContext"},
+	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "Info"},
+	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "InfoContext"},
 	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "Log"},
+	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "LogAttrs"},
+	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "Warn"},
+	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "WarnContext"},
+	{PkgPath: "log/slog", RecvTypeName: "Logger", MethodName: "With"},
 }
 
 var Analyzer = &analysis.Analyzer{

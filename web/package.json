@@ -41,11 +41,7 @@
     "vitest": "4.1.4"
   },
   "type": "module",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
-  },
+  "packageManager": "pnpm@11.0.3",
   "dependencies": {
     "@bufbuild/protobuf": "^2.11.0",
     "@connectrpc/connect": "^2.1.1",

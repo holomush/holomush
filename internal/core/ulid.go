@@ -28,8 +28,9 @@ var (
 // (the second event is skipped) and cursor advances (the second cursor is
 // rejected by the CAS).
 //
-// Do NOT use idgen.New() for these. The ruleguard rule EventIDMustBeMonotonic
-// in gorules/rules.go enforces this for core.Event{} struct literals.
+// Do NOT use idgen.New() for these. core.Event{} struct literals must use
+// core.NewEvent() (which stamps a monotonic ULID via core.NewULID()) —
+// never construct an Event literal with a manually-supplied ID.
 func NewULID() ulid.ULID {
 	entropyLock.Lock()
 	defer entropyLock.Unlock()

@@ -26,8 +26,9 @@ import (
 // millisecond produce IDs in random lexicographic order, which silently
 // breaks PostgresEventStore.Replay (ORDER BY id, WHERE id > afterID) and
 // PostgresSessionStore.UpdateCursors monotonicity. Use core.NewULID()
-// instead. The ruleguard rule EventIDMustBeMonotonic in gorules/rules.go
-// enforces this for core.Event{} struct literals.
+// instead. core.Event{} struct literals must use core.NewEvent() (which
+// stamps a monotonic ULID via core.NewULID()) — never construct an Event
+// literal with a manually-supplied ID.
 //
 // Panics if the system's cryptographic random source is unavailable,
 // which indicates an unrecoverable OS-level failure.
