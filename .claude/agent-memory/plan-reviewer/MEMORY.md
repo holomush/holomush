@@ -99,6 +99,33 @@ Keep under 200 lines. Curate — don't hoard.
   pretend a `Manager.loadManifest(raw []byte)` already exists need a
   refactor task before the new validator hook can be inserted.
 
+## HoloMUSH Phase 3a crypto plan reflexes
+
+- **`internal/eventbus/publisher.go` exposes `PublishOption`, NOT
+  `PublisherOption`.** Plans introducing new `With*` options must use the
+  existing type name. `internal/eventbus/publisher.go:67`.
+- **No `EventsAuditRow` struct exists.** The audit write path is inline raw
+  SQL in `internal/eventbus/audit/projection.go:240-260`
+  (`p.pool.Exec(..., INSERT INTO events_audit ...)`). Plans that claim to
+  modify `internal/store/events_audit_repo.go` are fabricating that file.
+- **`Manifest.Crypto` is `*CryptoSection` (pointer).** Test fixtures that
+  use `Crypto: plugins.CryptoSection{...}` value form will not compile.
+  Helper functions iterating `manifest.Crypto.Emits` must guard for
+  `manifest.Crypto == nil`. `internal/plugin/manifest.go:107`.
+- **`ActorKindPlugin` lives in `internal/eventbus/types.go:46` (package
+  `eventbus`), NOT in `internal/plugin/` (package `plugins`).** The
+  `plugins` package has no `Actor`, no `ActorKind`, no `ActorKindPlugin`.
+  `ActorResolver` returns `core.Actor`
+  (`internal/plugin/event_emitter.go:26`). `core.Actor.ID` is a `string`,
+  not a `ulid.ULID`.
+- **`Manifest.ActorKindsClaimable` is `[]string`, not `[]ActorKind`.**
+  `internal/plugin/manifest.go:84`. Use canonical strings (`"plugin"`,
+  etc.) per `validateActorKindsClaimable` normalization.
+- **Audit projection test file is `//go:build integration`-only.** Plans
+  appending unit-style tests to `internal/eventbus/audit/projection_test.go`
+  silently disable themselves under `task test`. The sibling
+  `projection_unit_test.go` is the unit-test target.
+
 ## Pass-revision drift reflexes
 
 - **Modify-without-Create artifacts after a structural rewrite.** When a pass-1
