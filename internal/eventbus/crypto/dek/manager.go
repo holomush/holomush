@@ -26,6 +26,12 @@ type Manager interface {
 	GetOrCreate(ctx context.Context, ctxID ContextID, initial []Participant) (codec.Key, error)
 	Resolve(ctx context.Context, keyID codec.KeyID, version uint32) (codec.Key, error)
 
+	// Participants returns the participant set for a (keyID, version) DEK.
+	// Read by AuthGuard via the ParticipantLookup adapter (Phase 3b
+	// grounding doc Decision 1). Phase 3b uses fetch-fresh-on-every-call;
+	// caching lands in Phase 3c (DEK cache invalidation, holomush-ojw1.3).
+	Participants(ctx context.Context, keyID codec.KeyID, version uint32) ([]Participant, error)
+
 	// Phase 4 stub — see holomush-fi0n.
 	Add(ctx context.Context, ctxID ContextID, p Participant) error
 	Rotate(ctx context.Context, ctxID ContextID, newParticipants []Participant, reason string) error
@@ -158,6 +164,37 @@ func (m *manager) Resolve(ctx context.Context, keyID codec.KeyID, version uint32
 		return codec.Key{}, oops.Code("DEK_STORE_SELECT_FAILED").Wrap(err)
 	}
 	return m.unwrapAndCache(ctx, r)
+}
+
+// Participants returns the participant list for the row identified by
+// (keyID, version). Reads via store.selectByID — same path as Resolve —
+// but returns the Participants field rather than unwrapping the DEK.
+// AuthGuard never holds DEK material; ParticipantLookup is the right
+// boundary.
+//
+// Two-SELECT note: AuthGuard.Check calls Participants, then on permit
+// calls Resolve. Resolve hits the cache; Participants does NOT.
+// Phase 3b accepts this redundancy; Phase 3c (holomush-ojw1.3) revisits
+// caching policy. TOCTOU concern: if Rotate happens between the two
+// calls, AuthGuard checks new participants but Resolve returns the
+// (now-stale) cached old key. Phase 3c's cache invalidation closes
+// this; Phase 3b's Rotate is stubbed (lifecycle ops are Phase 4),
+// so the TOCTOU is vacuous in 3b production.
+func (m *manager) Participants(ctx context.Context, keyID codec.KeyID, version uint32) ([]Participant, error) {
+	if err := m.configured(); err != nil {
+		return nil, err
+	}
+	r, err := m.store.selectByID(ctx, keyID, version)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.Code("DEK_NOT_FOUND").
+				With("key_id", uint64(keyID)).
+				With("version", version).
+				Errorf("crypto_keys row %d v%d not found", keyID, version)
+		}
+		return nil, oops.Code("DEK_STORE_SELECT_FAILED").Wrap(err)
+	}
+	return r.Participants, nil
 }
 
 // Add lands in Phase 4 (epic holomush-fi0n).

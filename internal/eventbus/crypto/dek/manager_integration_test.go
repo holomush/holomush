@@ -189,6 +189,60 @@ func TestManager_Resolve_NotFound_ReturnsErrDEKNotFound(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "DEK_NOT_FOUND")
 }
 
+func TestManagerParticipantsRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	connStr, teardown := newTestPGPool(t)
+	defer teardown()
+	pool, err := pgxpool.New(ctx, connStr)
+	require.NoError(t, err)
+	defer pool.Close()
+
+	provider := newTestProvider(t)
+	cache := dek.NewCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
+	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache)
+	require.NoError(t, err)
+
+	initial := []dek.Participant{
+		{PlayerID: "01ABC", CharacterID: "01XYZ", BindingID: "01DEF", JoinedAt: time.Now().UTC().Truncate(time.Microsecond)},
+		{PlayerID: "01GHI", CharacterID: "01JKL", BindingID: "01MNO", JoinedAt: time.Now().UTC().Truncate(time.Microsecond)},
+	}
+	key, err := mgr.GetOrCreate(ctx, dek.ContextID{Type: "scene", ID: "01HXX"}, initial)
+	require.NoError(t, err)
+
+	parts, err := mgr.Participants(ctx, key.ID, key.Version)
+	require.NoError(t, err)
+	require.Len(t, parts, 2)
+	assert.Equal(t, "01ABC", parts[0].PlayerID)
+	assert.Equal(t, "01XYZ", parts[0].CharacterID)
+	assert.Equal(t, "01DEF", parts[0].BindingID)
+	assert.Equal(t, "01GHI", parts[1].PlayerID)
+	assert.Equal(t, "01JKL", parts[1].CharacterID)
+	assert.Equal(t, "01MNO", parts[1].BindingID)
+}
+
+func TestManagerParticipantsNotFoundReturnsTypedError(t *testing.T) {
+	ctx := context.Background()
+	connStr, teardown := newTestPGPool(t)
+	defer teardown()
+	pool, err := pgxpool.New(ctx, connStr)
+	require.NoError(t, err)
+	defer pool.Close()
+
+	mgr, err := dek.NewManager(newTestProvider(t), dek.NewStore(pool),
+		dek.NewCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute}))
+	require.NoError(t, err)
+
+	_, err = mgr.Participants(ctx, codec.KeyID(99999), 1)
+	errutil.AssertErrorCode(t, err, "DEK_NOT_FOUND")
+}
+
+func TestManagerParticipantsFromUnitTestStubReturnsNotConfigured(t *testing.T) {
+	ctx := context.Background()
+	mgr := dek.NewManagerForUnitTest()
+	_, err := mgr.Participants(ctx, codec.KeyID(1), 1)
+	errutil.AssertErrorCode(t, err, "DEK_MANAGER_NOT_CONFIGURED")
+}
+
 func TestManager_GetOrCreate_ConcurrentMintRace(t *testing.T) {
 	// Two goroutines call GetOrCreate(scene:X, ...) simultaneously.
 	// One INSERT wins; the other raises unique-violation, re-SELECTs,
