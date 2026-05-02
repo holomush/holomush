@@ -35,6 +35,7 @@ type plainDelivery struct {
 }
 
 func (p *plainDelivery) Event() eventbus.Event { return p.event }
+func (p *plainDelivery) MetadataOnly() bool    { return false }
 func (p *plainDelivery) Ack() error            { p.acked = true; return p.ackErr }
 func (p *plainDelivery) Nack() error           { p.nacked = true; return p.nackErr }
 func (p *plainDelivery) InProgress() error     { return nil }

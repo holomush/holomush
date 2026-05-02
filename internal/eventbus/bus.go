@@ -42,6 +42,13 @@ type EventBus interface {
 // typed handles are easier to mock, log, and extend.
 type Delivery interface {
 	Event() Event
+	// MetadataOnly reports whether the host's AuthGuard withheld plaintext
+	// from this recipient. When true, Event().Payload is empty bytes.
+	// The gRPC Subscribe handler reads this and stamps
+	// EventFrame.metadata_only on the wire (Phase 3b grounding doc
+	// Decision 4). False for identity-codec events and for legitimately
+	// empty-payload sensitive events that were authorized.
+	MetadataOnly() bool
 	Ack() error
 	// Nack signals the message should be redelivered. Use for transient
 	// handler errors.

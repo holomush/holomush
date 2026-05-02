@@ -90,6 +90,7 @@ type fakeDelivery struct {
 }
 
 func (d *fakeDelivery) Event() eventbus.Event { return d.ev }
+func (d *fakeDelivery) MetadataOnly() bool    { return false }
 
 func (d *fakeDelivery) Ack() error {
 	d.mu.Lock()

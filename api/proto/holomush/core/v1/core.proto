@@ -151,6 +151,20 @@ message EventFrame {
   // (INV-GW-2). Gateway treats absence as a contract violation
   // (drops + metric + log per INV-GW-5).
   RenderingMetadata rendering = 9;
+
+  // metadata_only flags a delivery whose plaintext was withheld by the
+  // host's AuthGuard (Phase 3b decrypt path). When true, payload is
+  // empty bytes and the recipient was either not in the DEK's
+  // participant set, lacked the requisite plugin manifest declaration /
+  // ABAC grant, or hit the audit-emit backpressure throttle.
+  // metadata_only=false on every legitimate delivery (including
+  // legitimately-empty-payload events like a presence event with no content).
+  //
+  // Set by the host's Subscribe / QueryStreamHistory handler at fan-out
+  // time (Phase 3b grounding doc Decision 4). NEVER set by emitters;
+  // NEVER persisted to events_audit (storage rows always carry the
+  // sender's payload, ciphertext or cleartext).
+  bool metadata_only = 10;
 }
 
 // EventChannel identifies the destination channel for event delivery.

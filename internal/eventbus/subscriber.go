@@ -340,13 +340,15 @@ func (j *jetStreamSessionStream) Close() error {
 
 // jetStreamDelivery wraps a jetstream.Msg as an eventbus.Delivery.
 type jetStreamDelivery struct {
-	msg   jetstream.Msg
-	event Event
+	msg          jetstream.Msg
+	event        Event
+	metadataOnly bool // stamped by decodeDelivery when AuthGuard denies (T9)
 }
 
-func (d *jetStreamDelivery) Event() Event { return d.event }
-func (d *jetStreamDelivery) Ack() error   { return oops.Wrap(d.msg.Ack()) }
-func (d *jetStreamDelivery) Nack() error  { return oops.Wrap(d.msg.Nak()) }
+func (d *jetStreamDelivery) Event() Event       { return d.event }
+func (d *jetStreamDelivery) MetadataOnly() bool { return d.metadataOnly }
+func (d *jetStreamDelivery) Ack() error         { return oops.Wrap(d.msg.Ack()) }
+func (d *jetStreamDelivery) Nack() error        { return oops.Wrap(d.msg.Nak()) }
 func (d *jetStreamDelivery) InProgress() error {
 	return oops.Wrap(d.msg.InProgress())
 }
