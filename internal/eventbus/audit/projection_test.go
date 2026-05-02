@@ -7,6 +7,7 @@ package audit_test
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/test/testutil"
@@ -292,4 +294,101 @@ func TestProjectionAckSkipsPluginOwnedSubjects(t *testing.T) {
 	// zero, so a successful return already implies the host acked the
 	// plugin-owned message — if it hadn't, NumAckPending would stay
 	// >0 until AckWait expired.
+}
+
+// publishTestMessageWithExtraHeaders publishes a message stamped with the
+// canonical Phase A headers plus any caller-supplied extras (e.g. dek
+// headers). The message is published on testSubject so the host projection
+// persists it. Returns the ULID used as Nats-Msg-Id so callers can SELECT
+// the resulting events_audit row.
+func publishTestMessageWithExtraHeaders(t *testing.T, js jetstream.JetStream, codecName string, extra map[string]string) ulid.ULID {
+	t.Helper()
+	id := ulid.Make()
+	hdr := nats.Header{
+		"Nats-Msg-Id":        []string{id.String()},
+		"App-Codec":          []string{codecName},
+		"App-Event-Type":     []string{testEventType},
+		"App-Schema-Version": []string{testSchemaVer},
+		"App-Actor-Kind":     []string{testActorKind},
+		"App-Rendering":      []string{`{}`},
+	}
+	for k, v := range extra {
+		hdr.Set(k, v)
+	}
+	msg := &nats.Msg{
+		Subject: testSubject,
+		Header:  hdr,
+		Data:    []byte(`{"hello":"world"}`),
+	}
+	_, err := js.PublishMsg(t.Context(), msg)
+	require.NoError(t, err)
+	return id
+}
+
+// TestPersistWritesDekColumnsFromHeaders publishes a non-identity-codec
+// message stamped with App-Dek-Ref and App-Dek-Version, then asserts the
+// audit projection wrote both header values into events_audit.dek_ref and
+// events_audit.dek_version. This is the column round-trip for Phase 3a's
+// header-to-column wiring.
+func TestPersistWritesDekColumnsFromHeaders(t *testing.T) {
+	shared := testutil.SharedPostgres(t)
+	connStr := testutil.FreshDatabase(t, shared)
+	pool := openPool(t, connStr)
+
+	bus := eventbustest.New(t)
+
+	sub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
+	require.NoError(t, sub.Start(t.Context()))
+	t.Cleanup(func() { _ = sub.Stop(context.Background()) })
+
+	id := publishTestMessageWithExtraHeaders(t, bus.JS, "xchacha20poly1305-v1", map[string]string{
+		eventbus.HeaderDekRef:     "42",
+		eventbus.HeaderDekVersion: "3",
+	})
+
+	sub.AwaitDrained(t, awaitTimeout)
+
+	var dekRef sql.NullInt64
+	var dekVer sql.NullInt32
+	err := pool.QueryRow(
+		t.Context(),
+		`SELECT dek_ref, dek_version FROM events_audit WHERE id = $1`,
+		id.Bytes(),
+	).Scan(&dekRef, &dekVer)
+	require.NoError(t, err)
+	require.True(t, dekRef.Valid, "dek_ref must be populated when App-Dek-Ref header is present")
+	assert.Equal(t, int64(42), dekRef.Int64)
+	require.True(t, dekVer.Valid, "dek_version must be populated when App-Dek-Version header is present")
+	assert.Equal(t, int32(3), dekVer.Int32)
+}
+
+// TestPersistWritesNullDekColumnsForIdentityCodec verifies the negative
+// case: identity-codec rows (no dek headers) MUST persist with SQL NULL in
+// both dek_ref and dek_version. A non-NULL value here would corrupt the
+// invariant that "identity row implies cleartext payload, no DEK."
+func TestPersistWritesNullDekColumnsForIdentityCodec(t *testing.T) {
+	shared := testutil.SharedPostgres(t)
+	connStr := testutil.FreshDatabase(t, shared)
+	pool := openPool(t, connStr)
+
+	bus := eventbustest.New(t)
+
+	sub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})
+	require.NoError(t, sub.Start(t.Context()))
+	t.Cleanup(func() { _ = sub.Stop(context.Background()) })
+
+	id := publishTestMessageWithExtraHeaders(t, bus.JS, testCodec, nil)
+
+	sub.AwaitDrained(t, awaitTimeout)
+
+	var dekRef sql.NullInt64
+	var dekVer sql.NullInt32
+	err := pool.QueryRow(
+		t.Context(),
+		`SELECT dek_ref, dek_version FROM events_audit WHERE id = $1`,
+		id.Bytes(),
+	).Scan(&dekRef, &dekVer)
+	require.NoError(t, err)
+	assert.False(t, dekRef.Valid, "identity codec must not populate dek_ref")
+	assert.False(t, dekVer.Valid, "identity codec must not populate dek_version")
 }

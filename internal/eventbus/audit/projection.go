@@ -228,6 +228,33 @@ func (p *projection) persist(msg jetstream.Msg) error {
 		return oops.Code("AUDIT_BAD_MSG_ID").With("msg_id", msgID).Wrap(err)
 	}
 
+	// Phase 3a: parse optional App-Dek-Ref and App-Dek-Version headers.
+	// Both are absent for codec=identity rows; nil pointers below write
+	// SQL NULL via pgx nullable handling.
+	var dekRef *int64
+	if v := h.Get(eventbus.HeaderDekRef); v != "" {
+		parsed, parseErr := strconv.ParseInt(v, 10, 64)
+		if parseErr != nil {
+			return oops.Code("AUDIT_DEK_REF_PARSE_FAILED").
+				With("header", eventbus.HeaderDekRef).
+				With("value", v).
+				Wrap(parseErr)
+		}
+		dekRef = &parsed
+	}
+	var dekVer *int32
+	if v := h.Get(eventbus.HeaderDekVersion); v != "" {
+		parsed, parseErr := strconv.ParseInt(v, 10, 32)
+		if parseErr != nil {
+			return oops.Code("AUDIT_DEK_VERSION_PARSE_FAILED").
+				With("header", eventbus.HeaderDekVersion).
+				With("value", v).
+				Wrap(parseErr)
+		}
+		v32 := int32(parsed)
+		dekVer = &v32
+	}
+
 	// Derive persist ctx from workerCtx so Subsystem.Stop can cancel
 	// in-flight INSERTs. Falls back to Background if persist runs before
 	// start (defensive — shouldn't happen in normal lifecycle).
@@ -241,8 +268,9 @@ func (p *projection) persist(msg jetstream.Msg) error {
 	_, err = p.pool.Exec(ctx, `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
-			payload, schema_ver, codec, js_seq, rendering
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			payload, schema_ver, codec, js_seq, rendering,
+			dek_ref, dek_version
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (id) DO NOTHING`,
 		idBytes,
 		msg.Subject(),
@@ -255,6 +283,8 @@ func (p *projection) persist(msg jetstream.Msg) error {
 		codec,
 		meta.Sequence.Stream,
 		renderingJSON,
+		dekRef,
+		dekVer,
 	)
 	if err != nil {
 		return oops.Code("AUDIT_INSERT_FAILED").Wrap(err)

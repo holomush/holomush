@@ -50,6 +50,13 @@ const (
 	// the original string identity without corrupting the ULID contract of
 	// HeaderActorID.
 	HeaderActorLegacyID = "App-Actor-Legacy-ID"
+	// HeaderDekRef carries the crypto_keys.id (decimal string) for events
+	// encrypted with a non-identity codec. Empty for codec=identity. Maps
+	// 1:1 to events_audit.dek_ref (BIGINT) via the audit projection.
+	HeaderDekRef = "App-Dek-Ref"
+	// HeaderDekVersion carries the per-context DEK version (decimal string).
+	// Empty for codec=identity. Maps to events_audit.dek_version (INTEGER).
+	HeaderDekVersion = "App-Dek-Version"
 )
 
 // SchemaVersion is the proto envelope major version advertised in the
@@ -252,6 +259,8 @@ var reservedHeaderKeys = map[string]struct{}{
 	HeaderActorKind:     {},
 	HeaderActorID:       {},
 	HeaderActorLegacyID: {},
+	HeaderDekRef:        {},
+	HeaderDekVersion:    {},
 	"traceparent":       {},
 	"tracestate":        {},
 }

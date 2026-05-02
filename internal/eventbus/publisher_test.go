@@ -410,3 +410,16 @@ func TestIdentityKeySelectorReturnsIdentityAndNoKey(t *testing.T) {
 	require.Equal(t, want.Type, got.Type, "identityKeySelector must preserve the type")
 	require.NoError(t, d.Ack())
 }
+
+// TestHeaderConstantsIncludeDekRefAndDekVersion pins the on-the-wire spelling
+// of the App-Dek-Ref and App-Dek-Version headers. The audit projection and
+// any downstream decoder reads these by literal string; renaming the
+// constants without updating subscribers would silently lose dek metadata.
+func TestHeaderConstantsIncludeDekRefAndDekVersion(t *testing.T) {
+	if eventbus.HeaderDekRef != "App-Dek-Ref" {
+		t.Fatalf("HeaderDekRef = %q, want %q", eventbus.HeaderDekRef, "App-Dek-Ref")
+	}
+	if eventbus.HeaderDekVersion != "App-Dek-Version" {
+		t.Fatalf("HeaderDekVersion = %q, want %q", eventbus.HeaderDekVersion, "App-Dek-Version")
+	}
+}
