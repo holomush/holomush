@@ -229,8 +229,8 @@ so a reviewer can grep `INV-N` and find the proof.
 | ID | Statement | Test type |
 | --- | --- | --- |
 | **INV-12** | `Add(participant)` MUST grant immediate read access to all existing DEK history without rotating the DEK. | Integration |
-| **INV-13** | `Rotate(context)` MUST preserve the old DEK ciphertext and the old DEK record unchanged. | Unit + Integration |
-| **INV-14** | `Rekey(context)` MUST re-encrypt all historical ciphertext under the new DEK and destroy the old DEK record. | Integration |
+| **INV-13** | `Rotate(context)` MUST preserve the old DEK ciphertext and the old DEK record unchanged. Holds under Phase 3c soft-delete (Rotate does not touch `destroyed_at`). | Unit + Integration |
+| **INV-14** | `Rekey(context)` MUST re-encrypt historical ciphertext under the new DEK and soft-delete the old DEK record (`destroyed_at = NOW()`); production reads filter `destroyed_at IS NULL` so the operational effect is identical to hard-delete. | Integration |
 | **INV-15** | `Rekey` MUST emit a system audit event with operator identity, context, and justification, on a `audit.>` subject which is architecturally isolated via NATS account-level deny rules from any plugin or character account (§7.7) AND additionally denied by default ABAC policy. | Integration |
 | **INV-16** | `Rekey` MUST NOT be invocable from any in-game command surface or any public gRPC service. | Static + Integration |
 
@@ -279,6 +279,24 @@ so a reviewer can grep `INV-N` and find the proof.
 | **INV-28** | A KEK rotation operation MUST issue a NATS request-reply ping on `internal.cache_invalidate.dek.kek_rotation` and MUST receive responses from N-of-N expected replicas (replica count derived from registered server identities) before returning success. Timeout = 30s; on timeout the rotation is rolled back and the operator is told which replicas did not respond. | Integration |
 | **INV-29** | A `Rotate(context)` or `Rekey(context)` operation MUST issue a NATS request-reply ping on `internal.cache_invalidate.dek.<context>` and MUST receive N-of-N replica acks before the operation returns. Single-replica deployments degenerate to N=1 (the local replica acks itself); the contract is identical. Timeout = 5s; on timeout the operation is rolled back. | Integration |
 
+### Cluster coordination invariants
+
+These invariants land in Phase 3c (`holomush-ojw1.3`) and define the multi-replica
+substrate that sits beneath INV-28 / INV-29. See
+[`docs/superpowers/specs/2026-05-02-event-payload-crypto-phase3c-grounding.md`](2026-05-02-event-payload-crypto-phase3c-grounding.md)
+for full rationale (Decisions 1–8).
+
+| ID | Statement | Test type |
+| --- | --- | --- |
+| **INV-53** | Every member of a `cluster.Registry` MUST have a unique `MemberID`; concurrent registration with a colliding MemberID MUST be rejected with `CLUSTER_MEMBER_DUPLICATE_ID`. | Unit |
+| **INV-54** | All Phase 3c internal coordination subjects (`internal.<cluster_id>.member.*`, `internal.<cluster_id>.cache_invalidate.*`) MUST be prefixed with `<cluster_id>`. Members MUST drop messages whose payload `cluster_id` field disagrees with their configured cluster_id. | Integration |
+| **INV-55** | A pill received on `internal.<cluster_id>.member.poison.<self_id>` MUST cause the receiving member to call `Pill.Trigger(ctx, reason, sourceID)` after flushing audit telemetry; production `Pill` impl MUST terminate the process with exit code 125. | Unit (with TestPill) + e2e (with ProductionPill in supervised harness) |
+| **INV-56** | The `invalidation.Coordinator` MUST attempt at most one probe-and-pill + retry cycle per `RequestInvalidation` call. After the second timeout, the call MUST return `INVALIDATION_PARTIAL_FAILURE` carrying the missing-member set; further retry is the caller's choice. | Unit |
+| **INV-57** | `cluster.Registry.ProbeAndPill(ctx, id, reason)` MUST NOT issue more than one *attempt* per `(member_id, reason)` per `cluster.Config.PillRateLimit` window (default 60s). The rate-limit slot is claimed BEFORE the probe; a successful probe (no pill issued) still consumes the slot. Subsequent attempts within the window MUST return `ErrPillRateLimited` and not reach the wire. The rate-limit gates ALL consumers of `ProbeAndPill`, not only Coordinator. Rationale: the claim-then-probe pattern closes a TOCTOU race where two concurrent ProbeAndPill calls could both pass the check, both probe, and both publish a pill. (See `internal/cluster/probe_pill.go:67-87` for the in-code rationale; this is a strict superset of the spec's safety guarantee — every config the spec forbids is also forbidden under attempts-based gating.) | Unit |
+| **INV-58** | The Phase 3c protocol MUST NOT condition any decision on cross-host wall-clock comparison. Enforced by a `gorules/no_remote_clock_compare.go` ruleguard that fails `task lint` on any subtraction or comparison where one operand is a `time.Time` deserialized from a remote-sourced field (heartbeat `published_at`, invalidation `issued_at`, pill `issued_at`, member `started_at`). The skew-detection metric in grounding-doc Decision 8 is the single allowed exception, gated by a ruleguard `// nolint:no_remote_clock_compare // observability-only per Decision 8` annotation. | Lint |
+| **INV-59** | A successful `Coordinator.RequestInvalidation(ctx, ctxID, ActionParticipantsChanged)` MUST result in every other live member's `dek.ParticipantsCache` having no entry for `(ctxType, ctxID, version)` upon return. Equivalently: after `RequestInvalidation` returns nil for `participants_changed`, every other replica's next `dek.Manager.Participants(keyID, version)` call for that `(ctxID, version)` MUST re-fetch from PG. This is the correctness substrate that supports INV-12 ("Add MUST grant immediate read access to all existing DEK history without rotating the DEK") under Phase 3c full-scope participant caching. Phase 4's `Add(participant)` caller invokes the substrate; Phase 3c ships the substrate property and tests it via the multi-Registry harness without a production Add caller. | Integration |
+| **INV-60** | `cluster.Registry.ProbeAndPill(ctx, id, reason)` MUST refuse `id == r.Self()` and return `ErrCannotPillSelf` without issuing a probe or pill. Coordinator's missed-ack handler MUST filter `r.Self()` out of the missing-member set before calling `ProbeAndPill`. On single-replica deployments (N=1), this prevents the local Coordinator from self-pilling when the local invalidation handler hangs; the operator-facing failure mode becomes `INVALIDATION_PARTIAL_FAILURE` with a single-member `missing` set, surfaced as a structured WARN log + `cluster_self_timeout_total` metric increment. | Unit |
+
 ### Provider implementation invariants
 
 | ID | Statement | Test type |
@@ -297,7 +315,7 @@ so a reviewer can grep `INV-N` and find the proof.
 | **INV-36** | Concurrent `Add` operations on the same context MUST be serialized; no participant entry is duplicated; resulting participants list is exactly the set-union. | Integration |
 | **INV-37** | A crashed `Rotate` MUST be resolvable by startup integrity check without manual intervention. | Integration |
 | **INV-38** | A `Rekey` MUST be resumable from any checkpoint without producing duplicate ciphertext or skipped rows. | Integration |
-| **INV-39** | Reads of historical events whose `dek_ref` no longer exists in `crypto_keys` MUST automatically fall back to the cold tier. | Integration |
+| **INV-39** | Reads of historical events whose `dek_ref` no longer exists in `crypto_keys` MUST automatically fall back to the cold tier. Production read paths return NoRows for soft-deleted rows (`destroyed_at IS NOT NULL`), hitting the same fallback path. | Integration |
 | **INV-40** | `Rekey` MUST NOT be invocable over any public gRPC service or any in-game command. | Static + Integration |
 
 ### Plugin authorization correctness invariants
@@ -1219,8 +1237,8 @@ emits `audit.<game>.system.provider_migrate` events for each row migrated.
 | Capacity | 1024 entries (configurable) | Covers hundreds of active scenes with headroom |
 | TTL | 5 minutes (configurable) | Bounds stale-cache window after re-wrap |
 | Eviction | LRU + TTL | Standard |
-| Invalidation triggers | KEK rotation, provider migration, `Rekey`, `Rotate` | Explicit invalidation is the correctness mechanism; TTL is the safety net |
-| Invalidation channel | NATS request-reply on `internal.cache_invalidate.dek.<context>` | Cross-replica; payload is `{context_id, old_key_id, new_key_id, action}`; reply payload is `{replica_id, ack: true}`; sender waits for N-of-N replica acks (INV-28, INV-29) |
+| Invalidation triggers | KEK rotation, provider migration, `Rekey`, `Rotate`, `Add(participant)` | Explicit invalidation is the correctness mechanism; TTL is the safety net. `Add(participant)` invalidates `dek.ParticipantsCache` for `(ctxType, ctxID, version)` so the next AuthGuard.Check sees the post-Add set (Phase 3c, INV-12, INV-59). |
+| Invalidation channel | NATS request-reply on `internal.<cluster_id>.cache_invalidate.dek.<ctx_type>.<ctx_id>` | Cross-replica via `invalidation.Coordinator` (Phase 3c); cluster-prefixed subject (INV-54) prevents cross-cluster confusion. Payload is `{cluster_id, context_id, old_key_id, new_key_id, action}`; reply payload is `{replica_id, ack: true}`; sender waits for N-of-N replica acks where N is derived from `cluster.Registry.LiveCount()` (INV-28, INV-29, INV-59). |
 | Storage location | In-process memory ONLY | Per INV-27; MUST NOT live in NATS KV, PG, disk, or logs |
 
 Memory hygiene: unwrapped DEKs in Go's GC heap are exposed to anyone with
@@ -1315,12 +1333,18 @@ joins existing context" flow.
    game session MUST have an active binding row.
 3. Append `(player_id, character_id, binding_id, joined_at, added_via)` to
    the `participants` JSONB array. Single SQL UPDATE.
-4. AuthGuard reads `participants` from PG at decrypt time; participants
-   are NOT cached. So `Add` does NOT publish on the cache-invalidation
-   subject — there is no cached participant list to invalidate.
+4. Phase 3c (holomush-ojw1.3) introduced participants caching in
+   `dek.ParticipantsCache`. `Add` MUST publish via
+   `invalidation.Coordinator.RequestInvalidation(ctx, ctxID,
+   ActionParticipantsChanged)` after the JSONB UPDATE commits. The
+   payload carries the active version (the one whose participants
+   were mutated); receiving replicas evict
+   `(ctxType, ctxID, version)` from their ParticipantsCache so the
+   next AuthGuard.Check sees the post-Add set (INV-12, INV-59).
 
-**No DEK rotation. No re-encryption. No cache invalidation needed. The new participant immediately gets
-read access to all history under this DEK.** This is the user-visible
+**No DEK rotation. No re-encryption. The new participant immediately gets
+read access to all history under this DEK** once the participants-cache
+invalidation has acked across the cluster. This is the user-visible
 mechanism for "Carol joins a scene mid-stream and sees backstory."
 
 **Failure modes:**
@@ -1350,8 +1374,9 @@ mechanism for "Carol joins a scene mid-stream and sees backstory."
      wrap_key_id    = provider's current keyID
      participants   = new_participants
      created_at     = now()
-2. Publish internal.cache_invalidate.dek.<context_id>
-   (carries: context_id, OLD version, NEW version)
+2. Publish via `invalidation.Coordinator.RequestInvalidation(ctx,
+   ctxID, ActionRotate)`. Receive-side eviction is no-op for today's
+   cache shape; the protocol completes per INV-29 contract.
 3. UPDATE old crypto_keys row:
      rotated_at     = now()
      superseded_by  = new row's id
@@ -1435,10 +1460,7 @@ Phase 5 — Synchronous cross-replica cache invalidation (CRITICAL):
   5.2  Wait for N-of-N replica acks (registered server identities)
        within 5s timeout.
   5.3  Each replica on receiving the request:
-         - Evicts (context_id, *) from its DEK cache
-         - Marks (context_id, old_key_id) as DESTROYED in a small
-           "tombstone" table to fail-closed on subsequent decrypt
-           attempts that try to use the cached or freshly-fetched DEK_old
+         - Evicts (context_id, *) from its DEK cache and ParticipantsCache
          - Replies with ack
   5.4  On timeout: rollback. New DEK row stays (orphan, picked up by
        next Rekey retry); cold-tier rows already updated; old DEK NOT
@@ -1446,9 +1468,13 @@ Phase 5 — Synchronous cross-replica cache invalidation (CRITICAL):
   5.5  Phase 5 MUST complete successfully before Phase 6.
 
 Phase 6 — Destroy old DEK:
-  6.1  DELETE FROM crypto_keys WHERE id = DEK_old.id
-       (NOT a soft-delete; the wrapped DEK row is irrecoverable from PG
-       after this point. Backups still contain it; known limitation.)
+  6.1  UPDATE crypto_keys
+       SET destroyed_at = NOW()
+       WHERE id = DEK_old.id
+       (Soft-delete; production read paths filter destroyed_at IS NULL,
+       achieving the same operational effect as hard-delete while
+       preserving the row for forensic audit per INV-11. Phase 3c
+       grounding doc Decision 4.)
 
 Phase 7 — Emit audit event:
   7.1  audit.<game>.system.rekey.<context_type>.<context_id>
@@ -2068,7 +2094,7 @@ phase 3.
 | --- | --- | --- |
 | 1 | Re-scoped `holomush-k18g`: manifest grammar expansion (`crypto.emits` per event type with sensitivity declarations); all existing plugins updated; auto-generated event reference docs | Plugin authors gain a declared catalogue; nothing else changes |
 | 2 | `KEKProvider` interface + `LocalAEADProvider` + `NoneProvider` + `crypto_keys` table migration + `events_audit` columns migration + `DEKManager` skeleton + `dek.Material` type + lint rule | Server can wrap/unwrap DEKs; events_audit gains the new columns; nothing emits or reads sensitive yet |
-| 3 | EventSink encryption path + new codec impls (`xchacha20poly1305-v1`) + AAD canonicalization + AuthGuard (4 branches) + decrypt-on-fan-out + cache + request-reply cache-invalidation protocol + audit subject namespaces + NATS account-level deny rules + emit-time sensitivity fence (INV-6/7 — host-side ground-truth check at emit) + cold-tier `QueryStreamHistory` crypto path for host-owned audit. Note: the cold-tier read fence (INV-50) is plugin-owned-audit-specific and lands in Phase 7. | End-to-end sensitive event flow works for host-owned audit subjects; players-as-character get full plaintext; previous-tenure player-kind reads emit per-session audit |
+| 3 | EventSink encryption path + new codec impls (`xchacha20poly1305-v1`) + AAD canonicalization + AuthGuard (4 branches) + decrypt-on-fan-out + cache + request-reply cache-invalidation protocol + audit subject namespaces + NATS account-level deny rules + emit-time sensitivity fence (INV-6/7 — host-side ground-truth check at emit) + cold-tier `QueryStreamHistory` crypto path for host-owned audit. Note: the cold-tier read fence (INV-50) is plugin-owned-audit-specific and lands in Phase 7. Phase 3c grounding doc at [`docs/superpowers/specs/2026-05-02-event-payload-crypto-phase3c-grounding.md`](2026-05-02-event-payload-crypto-phase3c-grounding.md) (READY); cluster substrate (`internal/cluster/`) lands as a prerequisite to multi-replica safety. | End-to-end sensitive event flow works for host-owned audit subjects; players-as-character get full plaintext; previous-tenure player-kind reads emit per-session audit |
 | 4 | `Add` + `Rotate` lifecycle ops with synchronous N-of-N replica cache invalidation | Participant changes work; player-rebind triggers `Rotate` correctly |
 | 5 | `Rekey` CLI + `AdminReadStream` CLI + localhost UNIX admin socket + `OperatorAuthProvider` (default in-game-creds + TOTP) | Operator break-glass and destructive revocation paths exist |
 | 6 | `VaultTransitProvider` + provider migration CLI + KEK rotation CLI | Orgs with Vault can use it; provider-migrate and KEK rotation exercised |
