@@ -79,7 +79,8 @@ func TestSensitiveEmitProducesCiphertextOnBusAndInAudit(t *testing.T) {
 	//   internal/eventbus/crypto/dek/manager.go:49
 	dekStore := dek.NewStore(pool)
 	dekCache := dek.NewCache(dek.CacheConfig{Capacity: 64})
-	dekMgr, err := dek.NewManager(provider, dekStore, dekCache)
+	dekPartCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64})
+	dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache)
 	require.NoError(t, err)
 
 	// Stand up the audit projection so events_audit gets populated.

@@ -19,7 +19,7 @@ import (
 // DEK_MANAGER_DEPENDENCY_NIL when the kek.Provider argument is nil,
 // rather than returning a Manager that nil-panics on first GetOrCreate.
 func TestNewManager_RejectsNilProvider(t *testing.T) {
-	_, err := dek.NewManager(nil, &dek.Store{}, dek.NewCache(dek.CacheConfig{}))
+	_, err := dek.NewManager(nil, &dek.Store{}, dek.NewCache(dek.CacheConfig{}), dek.NewParticipantsCache(dek.CacheConfig{}))
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "DEK_MANAGER_DEPENDENCY_NIL")
 	errutil.AssertErrorContext(t, err, "dependency", "provider")
@@ -27,7 +27,7 @@ func TestNewManager_RejectsNilProvider(t *testing.T) {
 
 // TestNewManager_RejectsNilStore verifies the store nil-check path.
 func TestNewManager_RejectsNilStore(t *testing.T) {
-	_, err := dek.NewManager(kek.NewNoneProviderForUnitTest(), nil, dek.NewCache(dek.CacheConfig{}))
+	_, err := dek.NewManager(kek.NewNoneProviderForUnitTest(), nil, dek.NewCache(dek.CacheConfig{}), dek.NewParticipantsCache(dek.CacheConfig{}))
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "DEK_MANAGER_DEPENDENCY_NIL")
 	errutil.AssertErrorContext(t, err, "dependency", "store")
@@ -35,10 +35,20 @@ func TestNewManager_RejectsNilStore(t *testing.T) {
 
 // TestNewManager_RejectsNilCache verifies the cache nil-check path.
 func TestNewManager_RejectsNilCache(t *testing.T) {
-	_, err := dek.NewManager(kek.NewNoneProviderForUnitTest(), &dek.Store{}, nil)
+	_, err := dek.NewManager(kek.NewNoneProviderForUnitTest(), &dek.Store{}, nil, dek.NewParticipantsCache(dek.CacheConfig{}))
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "DEK_MANAGER_DEPENDENCY_NIL")
 	errutil.AssertErrorContext(t, err, "dependency", "cache")
+}
+
+// TestNewManager_RejectsNilParticipantsCache verifies the partCache
+// nil-check path. Phase 3c (T7) adds ParticipantsCache as a required
+// collaborator; the dependency-nil error path covers it like the others.
+func TestNewManager_RejectsNilParticipantsCache(t *testing.T) {
+	_, err := dek.NewManager(kek.NewNoneProviderForUnitTest(), &dek.Store{}, dek.NewCache(dek.CacheConfig{}), nil)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "DEK_MANAGER_DEPENDENCY_NIL")
+	errutil.AssertErrorContext(t, err, "dependency", "partCache")
 }
 
 // TestManager_NotConfigured_GuardsGetOrCreate verifies that a Manager

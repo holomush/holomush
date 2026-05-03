@@ -122,7 +122,8 @@ func TestManager_GetOrCreate_MintsAndPersists(t *testing.T) {
 
 	provider := newTestProvider(t)
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
-	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache)
+	partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache)
 	require.NoError(t, err)
 
 	ctxID := dek.ContextID{Type: "scene", ID: "01ABCDEF"}
@@ -156,7 +157,8 @@ func TestManager_Resolve_ByKeyIDAndVersion(t *testing.T) {
 
 	provider := newTestProvider(t)
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
-	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache)
+	partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache)
 	require.NoError(t, err)
 
 	ctxID := dek.ContextID{Type: "dm", ID: "01ABCDEF-01FFFFFF"}
@@ -181,7 +183,8 @@ func TestManager_Resolve_NotFound_ReturnsErrDEKNotFound(t *testing.T) {
 	defer pool.Close()
 
 	mgr, err := dek.NewManager(newTestProvider(t), dek.NewStore(pool),
-		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}))
+		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
+		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}))
 	require.NoError(t, err)
 
 	_, err = mgr.Resolve(ctx, codec.KeyID(99999), 1)
@@ -199,7 +202,8 @@ func TestManagerParticipantsRoundTrip(t *testing.T) {
 
 	provider := newTestProvider(t)
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
-	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache)
+	partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
+	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache)
 	require.NoError(t, err)
 
 	initial := []dek.Participant{
@@ -229,7 +233,8 @@ func TestManagerParticipantsNotFoundReturnsTypedError(t *testing.T) {
 	defer pool.Close()
 
 	mgr, err := dek.NewManager(newTestProvider(t), dek.NewStore(pool),
-		dek.NewCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute}))
+		dek.NewCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute}),
+		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute}))
 	require.NoError(t, err)
 
 	_, err = mgr.Participants(ctx, codec.KeyID(99999), 1)
@@ -272,9 +277,11 @@ func TestManager_GetOrCreate_ConcurrentMintRace(t *testing.T) {
 	storeB.SetPreInsertHookForTest(barrier.Wait)
 	cacheA := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
 	cacheB := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
-	mgrA, err := dek.NewManager(provider, storeA, cacheA)
+	partCacheA := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+	partCacheB := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+	mgrA, err := dek.NewManager(provider, storeA, cacheA, partCacheA)
 	require.NoError(t, err)
-	mgrB, err := dek.NewManager(provider, storeB, cacheB)
+	mgrB, err := dek.NewManager(provider, storeB, cacheB, partCacheB)
 	require.NoError(t, err)
 
 	ctxID := dek.ContextID{Type: "scene", ID: "race-01"}
@@ -315,4 +322,61 @@ func TestManager_GetOrCreate_ConcurrentMintRace(t *testing.T) {
 		"scene", "race-01").Scan(&rowCount)
 	require.NoError(t, err)
 	assert.Equal(t, 1, rowCount)
+}
+
+// TestManagerParticipantsHitsCacheOnSecondCall verifies the Phase 3c
+// substrate: GetOrCreate seeds the participants cache via the mint
+// path; Participants returns the cached value; Invalidate forces a
+// fall-through to PG that re-seeds the cache. Without re-seeding,
+// Coordinator's rekey/participants_changed actions would leave the
+// cache stale across replicas.
+func TestManagerParticipantsHitsCacheOnSecondCall(t *testing.T) {
+	ctx := context.Background()
+	connStr, teardown := newTestPGPool(t)
+	defer teardown()
+	pool, err := pgxpool.New(ctx, connStr)
+	require.NoError(t, err)
+	defer pool.Close()
+
+	provider := newTestProvider(t)
+	cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+	partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
+	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache)
+	require.NoError(t, err)
+
+	ctxID := dek.ContextID{Type: "scene", ID: "01HSCENE_T7"}
+	initial := []dek.Participant{{PlayerID: "01HALICE", JoinedAt: time.Now()}}
+
+	// Mint a fresh DEK; the mint path seeds partCache directly.
+	key, err := mgr.GetOrCreate(ctx, ctxID, initial)
+	require.NoError(t, err)
+
+	// First Participants call — should be a cache hit (seeded by GetOrCreate).
+	ps1, err := mgr.Participants(ctx, key.ID, key.Version)
+	require.NoError(t, err)
+	require.Len(t, ps1, 1)
+	assert.Equal(t, "01HALICE", ps1[0].PlayerID)
+
+	// Verify cache hit by checking direct cache state.
+	pck := dek.ParticipantsCacheKey{ContextType: ctxID.Type, ContextID: ctxID.ID, Version: key.Version}
+	if _, ok := partCache.Get(pck); !ok {
+		t.Fatal("ParticipantsCache miss after GetOrCreate; expected mint-path seeding")
+	}
+
+	// Invalidate the entry; next call falls through to PG.
+	partCache.Invalidate(pck)
+	if _, ok := partCache.Get(pck); ok {
+		t.Fatal("ParticipantsCache hit after Invalidate; expected miss")
+	}
+
+	// Second Participants call — fall-through path, must re-seed.
+	ps2, err := mgr.Participants(ctx, key.ID, key.Version)
+	require.NoError(t, err)
+	require.Len(t, ps2, 1)
+	assert.Equal(t, "01HALICE", ps2[0].PlayerID)
+
+	// Cache should be repopulated by the fall-through.
+	if _, ok := partCache.Get(pck); !ok {
+		t.Error("ParticipantsCache miss after fall-through; expected re-seed")
+	}
 }
