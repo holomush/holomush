@@ -141,7 +141,7 @@ func (m *manager) GetOrCreate(ctx context.Context, ctxID ContextID, initial []Pa
 	in.ID = id
 	material := NewMaterial(dekBytes)
 	keyID := codec.KeyID(id) //nolint:gosec // G115: id is a DB BIGSERIAL value; positive serial ids fit in uint64.
-	m.cache.Put(CacheKey{KeyID: keyID, Version: 1}, material)
+	m.cache.Put(CacheKey{KeyID: keyID, Version: 1}, ctxID, material)
 	return material.AsCodecKey(keyID, 1), nil
 }
 
@@ -234,7 +234,7 @@ func (m *manager) unwrapAndCache(ctx context.Context, r row) (codec.Key, error) 
 	}
 	material := NewMaterial(dekBytes)
 	keyID := codec.KeyID(r.ID) //nolint:gosec // G115: r.ID is a DB BIGSERIAL value; positive serial ids fit in uint64.
-	m.cache.Put(CacheKey{KeyID: keyID, Version: r.Version}, material)
+	m.cache.Put(CacheKey{KeyID: keyID, Version: r.Version}, ContextID{Type: r.ContextType, ID: r.ContextID}, material)
 	return material.AsCodecKey(keyID, r.Version), nil
 }
 
