@@ -63,6 +63,17 @@ Keep under 200 lines. Curate — don't hoard.
   When reviewing a stacked-PR proto change, check whether earlier commits in
   the stack regenerated all generated artifacts (Go, TS, etc.) or only some.
 
+- **`errors.Is` against `oops.Code(...).Errorf(...)` sentinels is tautological.**
+  `samber/oops@v1.21.0` `OopsError.Is(err)` returns `true` for ANY `OopsError`
+  target (`oops@v1.21.0/error.go:87-93`), so `errors.Is(anyOopsErr, anySentinel)`
+  passes regardless of code. Tests asserting "function returned ErrFoo" with
+  `errors.Is` against an oops sentinel pass even if the function returns a
+  different oops error. Use `errutil.AssertErrorCode(t, err, "EXPECTED_CODE")`
+  or compare `oops.AsOops(err).Code()` directly. As of 2026-05-03 the only
+  package-level oops sentinels in the codebase are `internal/cluster/probe_pill.go:23-36`,
+  `internal/auth/hasher.go:39`, `internal/plugin/manager.go:61` — first uses
+  with `errors.Is` are in `internal/cluster/probe_pill_test.go`.
+
 - **Shared-helper TDD coverage gap.** When an autofix swaps multiple call
   sites to a new shared helper (e.g., `IsDEKMaterialArg` shared across 6
   dekmaterialno* analyzers), implementers often add bypass test cases to

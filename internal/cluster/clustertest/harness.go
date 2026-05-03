@@ -146,6 +146,22 @@ func (h *Harness) PublishSyntheticHeartbeat(t *testing.T, clusterID string, memb
 	}
 }
 
+// AwaitMemberPresent blocks until member i sees `target` in its
+// registry view, or fails the test on timeout. Used by probe-and-pill
+// tests that need to be sure the synthetic peer is present before
+// invoking ProbeAndPill against it.
+func (h *Harness) AwaitMemberPresent(t *testing.T, i int, target cluster.MemberID, deadline time.Duration) {
+	t.Helper()
+	start := time.Now()
+	for time.Since(start) < deadline {
+		if _, ok := h.Members[i].Registry.Member(target); ok {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("AwaitMemberPresent: member %d did not observe %q within %v", i, target, deadline)
+}
+
 func (h *Harness) snapshot() string {
 	out := ""
 	for i, m := range h.Members {

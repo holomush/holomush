@@ -147,6 +147,13 @@ type registry struct {
 	// Tracks last published invalidation seq for inclusion in
 	// outgoing heartbeats. Updated by external setters in T9.
 	lastInvSeq uint64
+
+	// Pill rate-limit machinery (INV-57). Tracks the timestamp of the
+	// most-recent pill issued for each (member_id, reason) tuple. Lazy
+	// map init in probeAndPill / issuePill — zero-value sync.Mutex and
+	// nil map are safe.
+	pillRateMu  sync.Mutex
+	pillRateMap map[pillRateKey]time.Time
 }
 
 type observerEntry struct {
@@ -243,11 +250,11 @@ func (r *registry) snapshotObservers() []*observerEntry {
 	return out
 }
 
-// ProbeAndPill stub — T4 fills in real probe + pill emission + rate limit.
-func (r *registry) ProbeAndPill(_ context.Context, _ MemberID, _ PillReason) error {
-	return oops.Code("CLUSTER_PROBE_AND_PILL_NOT_IMPLEMENTED").
-		With("tracking_task", "T4").
-		Errorf("ProbeAndPill body lands in Phase 3c T4")
+// ProbeAndPill issues a focused liveness probe and pills on timeout.
+// Body lives in probe_pill.go to keep the rate-limit + self-refusal
+// logic close to the probe/pill semantics.
+func (r *registry) ProbeAndPill(ctx context.Context, id MemberID, reason PillReason) error {
+	return r.probeAndPill(ctx, id, reason)
 }
 
 // SetLastInvalidationSeq is the seam Coordinator (T9) uses to update
