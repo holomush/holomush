@@ -63,6 +63,27 @@ func NewSelfTimeoutMetrics(reg prometheus.Registerer) *SelfTimeoutMetrics {
 	return m
 }
 
+// HeartbeatMetrics tracks heartbeat-publish-path failures. Increments
+// when r.deps.Conn.Publish on the alive subject returns a non-nil
+// error from the heartbeat ticker goroutine; first-publish failures
+// during Start surface as a returned error and are not counted here.
+type HeartbeatMetrics struct {
+	HeartbeatPublishFailedTotal *prometheus.CounterVec
+}
+
+// NewHeartbeatMetrics constructs HeartbeatMetrics and registers the
+// counter. Label is member_id (the publishing self).
+func NewHeartbeatMetrics(reg prometheus.Registerer) *HeartbeatMetrics {
+	m := &HeartbeatMetrics{
+		HeartbeatPublishFailedTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cluster_heartbeat_publish_failed_total",
+			Help: "Heartbeat ticker observed a NATS publish failure on the alive subject; ticker continues but visibility into this peer is degraded for downstream subscribers until next successful publish.",
+		}, []string{"member_id"}),
+	}
+	reg.MustRegister(m.HeartbeatPublishFailedTotal)
+	return m
+}
+
 // DuplicateMemberIDMetrics tracks INV-53 enforcement events: heartbeat
 // receive observed a colliding MemberID with a different StartedAt
 // (indicating a different process re-using the ULID — birthday-bound
