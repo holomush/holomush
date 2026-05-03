@@ -419,7 +419,7 @@ func (r *registry) sweepEvictions(now time.Time) {
 		if id == r.self {
 			continue
 		}
-		if m.LastHeartbeatAt.Before(threshold) && (m.Status == StatusAlive || m.Status == StatusStale) {
+		if m.LastHeartbeatAt.Before(threshold) && (m.Status == StatusAlive || m.Status == StatusStale) { //nolint:noremoteclockcompare // Member.LastHeartbeatAt is the receiver's local clock at last receive (types.go:55), not a sender-sourced timestamp; comparison is purely local.
 			delete(r.members, id)
 			evicted = append(evicted, id)
 		}
@@ -448,8 +448,15 @@ func (r *registry) recordSkew(source MemberID, skew float64) {
 
 // computeSkew returns absolute drift in seconds between local clock and
 // the remote-sourced published_at timestamp. INV-58 carve-out: this
-// computation is the single allowed cross-host clock comparison and is
-// gated by the lint-rule annotation in recordSkew.
+// computation is the single allowed cross-host clock comparison; the
+// result feeds an observability gauge only and never gates protocol
+// decisions (Phase 3c grounding doc Decision 8).
+//
+// The Sub call below operates on the parameter `remotePublishedAt`
+// rather than a struct selector, so the noremoteclockcompare analyzer
+// (which is purely syntactic) does not fire here. The conceptual
+// carve-out is documented for human reviewers; the actual cross-clock
+// surface is `computeSkew(now, p.PublishedAt)` at the call site.
 func computeSkew(localNow, remotePublishedAt time.Time) float64 {
 	diff := localNow.Sub(remotePublishedAt).Seconds()
 	return math.Abs(diff)

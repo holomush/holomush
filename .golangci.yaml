@@ -44,6 +44,7 @@ linters:
     - dekmaterialnolog
     - dekmaterialnoproto
     - dekmaterialnoslog
+    - noremoteclockcompare
     - sceneopseventsappendonly
     - ulidmakeforbidden
 
@@ -229,6 +230,10 @@ linters:
       dekmaterialnoslog:
         type: module
         description: "INV-27: dek.Material MUST NOT be passed to log/slog"
+        original-url: github.com/holomush/holomush
+      noremoteclockcompare:
+        type: module
+        description: "INV-58: forbids wall-clock comparisons against remote-sourced timestamp fields (Decision 8)"
         original-url: github.com/holomush/holomush
       sceneopseventsappendonly:
         type: module

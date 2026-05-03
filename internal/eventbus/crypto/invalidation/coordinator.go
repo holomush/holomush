@@ -324,7 +324,7 @@ func (c *coordinator) handleInvalidate(msg *nats.Msg) {
 
 	if c.deps.Metrics != nil {
 		c.deps.Metrics.LatencySeconds.WithLabelValues(string(payload.Action)).
-			Observe(time.Since(payload.IssuedAt).Seconds())
+			Observe(time.Since(payload.IssuedAt).Seconds()) //nolint:noremoteclockcompare // observability-only per Decision 8: latency histogram does not feed protocol decisions; cross-clock skew is acceptable here.
 	}
 
 	reply := Reply{MemberID: c.deps.Registry.Self(), Ack: true}
