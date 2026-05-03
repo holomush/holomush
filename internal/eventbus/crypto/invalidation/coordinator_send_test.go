@@ -19,10 +19,8 @@ func TestCoordinatorRequestInvalidationSucceedsWhenSelfIsOnlyMember(t *testing.T
 	h := clustertest.New(t, "test-game", 1)
 
 	// For the single-member case, the Coordinator publishes and the
-	// local subscriber (T10) acks via NATS loopback. Until T10 wires
-	// the receive-side handler body, the request will time out.
-	// Staged TDD: this test is SKIPPED until T10 lands; T10's commit
-	// removes the skip and asserts require.NoError(t, err).
+	// local subscriber acks via NATS loopback (T10 wired the
+	// receive-side handler body).
 
 	cache := dek.NewCache(dek.CacheConfig{})
 	partCache := dek.NewParticipantsCache(dek.CacheConfig{})
@@ -51,12 +49,8 @@ func TestCoordinatorRequestInvalidationSucceedsWhenSelfIsOnlyMember(t *testing.T
 		invalidation.ActionRekey,
 		1, 2,
 	)
-
-	// T10 contract: remove this skip and replace with
-	//   require.NoError(t, err)
-	// once the receive-side handler body lands.
 	if err != nil {
-		t.Skipf("T10 receive-side not yet wired; got err = %v. Remove this skip in T10's commit and assert require.NoError.", err)
+		t.Errorf("RequestInvalidation single-member returned %v; want nil (self-ack via NATS loopback)", err)
 	}
 }
 

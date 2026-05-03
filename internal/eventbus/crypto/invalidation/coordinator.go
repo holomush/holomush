@@ -264,8 +264,80 @@ func (c *coordinator) recordSuccess(action Action, outcome string, issuedAt time
 	c.deps.Metrics.LatencySeconds.WithLabelValues(string(action)).Observe(time.Since(issuedAt).Seconds())
 }
 
-// handleInvalidate is the receive-side stub; T10 implements the body.
+// handleInvalidate is the receive-side handler. Parses payload,
+// dispatches on action enum, evicts caches per Phase 3c grounding doc
+// Decision 5/6, and acks via msg.Respond. INV-54: cluster_id-mismatch
+// messages dropped without ack.
+//
+// Note on time.Since(payload.IssuedAt): in single-process tests the
+// publisher's clock IS the consumer's clock, but in production the
+// publisher is a different replica. This call therefore compares
+// remote clocks. Per Decision 8 the metric is observability-only and
+// not used in any control flow, so the cross-clock skew is acceptable.
+// T11 introduces a real ruleguard for cross-clock comparisons in
+// control paths; this site is intentionally exempt.
 func (c *coordinator) handleInvalidate(msg *nats.Msg) {
-	// T10: parse, dispatch on action, evict caches, ack.
-	_ = msg
+	payload, err := UnmarshalPayload(msg.Data)
+	if err != nil {
+		c.deps.Logger.Warn("invalidation: parse failed", "err", err.Error())
+		return
+	}
+	if payload.ClusterID != c.cfg.ClusterID {
+		c.deps.Logger.Warn("invalidation: cross-cluster message dropped",
+			"got", payload.ClusterID, "want", c.cfg.ClusterID,
+		)
+		if c.deps.Metrics != nil {
+			c.deps.Metrics.CrossClusterDrops.Inc()
+		}
+		return
+	}
+
+	ctxID := dek.ContextID{Type: payload.ContextType, ID: payload.ContextID}
+	switch payload.Action {
+	case ActionRekey:
+		c.deps.DEKCache.InvalidateContext(ctxID)
+		c.deps.PartCache.InvalidateContext(ctxID)
+
+	case ActionParticipantsChanged:
+		c.deps.PartCache.Invalidate(dek.ParticipantsCacheKey{
+			ContextType: payload.ContextType,
+			ContextID:   payload.ContextID,
+			Version:     payload.Version,
+		})
+
+	case ActionRotate, ActionKEKRotation:
+		// No-op eviction per Decision 5; protocol ack still required.
+
+	default:
+		c.deps.Logger.Warn("invalidation: unknown action; not acking",
+			"action", string(payload.Action),
+		)
+		if c.deps.Metrics != nil {
+			c.deps.Metrics.UnknownActions.Inc()
+		}
+		return
+	}
+
+	if r, ok := c.deps.Registry.(interface{ SetLastInvalidationSeq(uint64) }); ok {
+		r.SetLastInvalidationSeq(payload.Seq)
+	}
+
+	if c.deps.Metrics != nil {
+		c.deps.Metrics.LatencySeconds.WithLabelValues(string(payload.Action)).
+			Observe(time.Since(payload.IssuedAt).Seconds())
+	}
+
+	reply := Reply{MemberID: c.deps.Registry.Self(), Ack: true}
+	body, err := MarshalReply(reply)
+	if err != nil {
+		c.deps.Logger.Warn("invalidation: marshal reply failed", "err", err.Error())
+		return
+	}
+	if msg.Reply == "" {
+		c.deps.Logger.Warn("invalidation: msg.Reply empty; cannot ack")
+		return
+	}
+	if err := c.deps.Conn.Publish(msg.Reply, body); err != nil {
+		c.deps.Logger.Warn("invalidation: ack publish failed", "err", err.Error())
+	}
 }
