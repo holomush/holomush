@@ -97,7 +97,7 @@ func (s *Store) selectActive(ctx context.Context, ctxID ContextID) (row, error) 
         SELECT id, context_type, context_id, version, wrapped_dek,
                wrap_provider, wrap_key_id, participants, created_at, rotated_at
           FROM crypto_keys
-         WHERE context_type=$1 AND context_id=$2 AND rotated_at IS NULL
+         WHERE context_type=$1 AND context_id=$2 AND rotated_at IS NULL AND destroyed_at IS NULL
          ORDER BY version DESC
          LIMIT 1
     `, ctxID.Type, ctxID.ID).Scan(
@@ -124,7 +124,7 @@ func (s *Store) selectByID(ctx context.Context, keyID codec.KeyID, version uint3
         SELECT id, context_type, context_id, version, wrapped_dek,
                wrap_provider, wrap_key_id, participants, created_at, rotated_at
           FROM crypto_keys
-         WHERE id=$1 AND version=$2
+         WHERE id=$1 AND version=$2 AND destroyed_at IS NULL
     `, int64(keyID), version).Scan( //nolint:gosec // G115: codec.KeyID is a DB BIGSERIAL id; the int64↔uint64 conversion mirrors the column type and cannot overflow in practice (positive serial ids < 2^63).
 		&r.ID, &r.ContextType, &r.ContextID, &r.Version, &r.WrappedDEK,
 		&r.WrapProvider, &r.WrapKeyID, &participantsJSON, &r.CreatedAt, &r.RotatedAt,
@@ -180,6 +180,72 @@ func IsUniqueViolation(err error) bool {
 		return pgErr.Code == "23505"
 	}
 	return false
+}
+
+// Row is the exported view of a crypto_keys row. Mirrors the internal
+// `row` struct but adds DestroyedAt (only populated by SelectAnyByID).
+//
+// INV-27 note: the wrapped DEK ciphertext is intentionally held in an
+// unexported `wrappedDEK` field rather than an exported `WrappedDEK
+// []byte` — the static API guard in api_test.go rejects exported
+// []byte fields and methods returning []byte across the dek package
+// surface, treating wrapped bytes as a key-material adjacent surface
+// (a buggy caller could log/marshal them, complicating forensic
+// reasoning about what state ever left the package). Phase 5 Rekey
+// audit emission consumes Row inside the dek package and reads
+// `wrappedDEK` directly.
+type Row struct {
+	ID           int64
+	ContextType  string
+	ContextID    string
+	Version      uint32
+	wrappedDEK   []byte
+	WrapProvider string
+	WrapKeyID    string
+	Participants []Participant
+	CreatedAt    time.Time
+	RotatedAt    *time.Time
+	DestroyedAt  *time.Time
+}
+
+// SelectAnyByID returns the row for keyID + version regardless of
+// destroyed_at. Used by Phase 5 Rekey audit emission and operator
+// forensic tools; production read paths MUST use selectByID (which
+// filters destroyed rows). Phase 3c grounding doc Decision 4.
+func (s *Store) SelectAnyByID(ctx context.Context, keyID codec.KeyID, version uint32) (Row, error) {
+	var r row
+	var participantsJSON []byte
+	var destroyedAt *time.Time
+	err := s.pool.QueryRow(ctx, `
+        SELECT id, context_type, context_id, version, wrapped_dek,
+               wrap_provider, wrap_key_id, participants, created_at, rotated_at, destroyed_at
+          FROM crypto_keys
+         WHERE id=$1 AND version=$2
+    `, int64(keyID), version).Scan( //nolint:gosec // G115: codec.KeyID is a DB BIGSERIAL id; the int64↔uint64 conversion mirrors the column type and cannot overflow in practice (positive serial ids < 2^63).
+		&r.ID, &r.ContextType, &r.ContextID, &r.Version, &r.WrappedDEK,
+		&r.WrapProvider, &r.WrapKeyID, &participantsJSON, &r.CreatedAt, &r.RotatedAt, &destroyedAt,
+	)
+	if err != nil {
+		return Row{}, oops.With("operation", "select_any_dek_by_id").
+			With("key_id", uint64(keyID)).
+			With("version", version).Wrap(err)
+	}
+	if err := json.Unmarshal(participantsJSON, &r.Participants); err != nil {
+		return Row{}, oops.Code("DEK_PARTICIPANTS_UNMARSHAL_FAILED").Wrap(err)
+	}
+	return Row{
+		ID:           r.ID,
+		ContextType:  r.ContextType,
+		ContextID:    r.ContextID,
+		Version:      r.Version,
+		wrappedDEK:   r.WrappedDEK,
+		WrapProvider: r.WrapProvider,
+		WrapKeyID:    r.WrapKeyID,
+		Participants: r.Participants,
+		CreatedAt:    r.CreatedAt,
+		RotatedAt:    r.RotatedAt,
+		DestroyedAt:  destroyedAt,
+	}, nil
 }
 
 // SelectAllParticipants returns every row's participants list — used
