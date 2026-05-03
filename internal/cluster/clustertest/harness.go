@@ -10,13 +10,24 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"testing"
 	"time"
 
 	"github.com/holomush/holomush/internal/cluster"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/internal/idgen"
 )
+
+// TB is the subset of testing.TB that clustertest needs. Composes
+// eventbustest.TB (so callers can pass through to eventbustest.New)
+// and adds Fatalf — the harness uses Fatalf for inline test bailouts.
+//
+// The narrow shape avoids dragging in testing.TB methods (like
+// ArtifactDir, added in Go 1.24) that Ginkgo's GinkgoT() doesn't
+// implement.
+type TB interface {
+	eventbustest.TB
+	Fatalf(format string, args ...any)
+}
 
 // Harness wires up an embedded NATS server (via eventbustest) and a
 // configurable number of cluster.Registry members on it. Cleanup is
@@ -37,7 +48,11 @@ type HarnessMember struct {
 
 // New constructs a Harness with n Registry members on a shared NATS
 // connection. All members use cluster_id=clusterID.
-func New(t *testing.T, clusterID string, n int) *Harness {
+//
+// Accepts TB so callers can pass either *testing.T (plain Go
+// tests) or ginkgo.GinkgoT() (Ginkgo specs); both satisfy the Helper /
+// Fatalf / Cleanup methods this harness uses.
+func New(t TB, clusterID string, n int) *Harness {
 	t.Helper()
 	emb := eventbustest.New(t)
 
@@ -70,10 +85,25 @@ func New(t *testing.T, clusterID string, n int) *Harness {
 		if err != nil {
 			t.Fatalf("NewSubsystem[%d]: %v", i, err)
 		}
-		if err := reg.Start(context.Background()); err != nil {
+		startCtx, cancelStart := context.WithTimeout(context.Background(), 5*time.Second)
+		err = reg.Start(startCtx)
+		cancelStart()
+		if err != nil {
 			t.Fatalf("reg[%d].Start: %v", i, err)
 		}
-		t.Cleanup(func() { _ = reg.Stop(context.Background()) }) //nolint:errcheck // best-effort cleanup
+		// Loop-var capture is safe under Go 1.22+ semantics (project on
+		// Go 1.26.2). Bound Stop with a timeout so a wedged shutdown
+		// can't hang the test deadline; surface the error rather than
+		// silently dropping it.
+		regForCleanup := reg
+		idx := i
+		t.Cleanup(func() {
+			stopCtx, cancelStop := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancelStop()
+			if stopErr := regForCleanup.Stop(stopCtx); stopErr != nil {
+				t.Errorf("reg[%d].Stop: %v", idx, stopErr)
+			}
+		})
 
 		h.Members = append(h.Members, HarnessMember{
 			Registry:   reg,
@@ -88,7 +118,7 @@ func New(t *testing.T, clusterID string, n int) *Harness {
 
 // AwaitConverged blocks until every member's LiveCount() == n (each
 // sees all peers). Times out at deadline.
-func (h *Harness) AwaitConverged(t *testing.T, deadline time.Duration) {
+func (h *Harness) AwaitConverged(t TB, deadline time.Duration) {
 	t.Helper()
 	n := len(h.Members)
 	ctx, cancel := context.WithTimeout(context.Background(), deadline)
@@ -123,7 +153,7 @@ func (h *Harness) AwaitConverged(t *testing.T, deadline time.Duration) {
 // The synthetic source publishes once and never again — the eviction
 // sweeper on real members will then mark it stale and delete it after
 // EvictAfterMissed × HeartbeatInterval.
-func (h *Harness) PublishSyntheticHeartbeat(t *testing.T, clusterID string, memberID cluster.MemberID, holomushVersion string) {
+func (h *Harness) PublishSyntheticHeartbeat(t TB, clusterID string, memberID cluster.MemberID, holomushVersion string) {
 	t.Helper()
 	now := time.Now()
 	p := cluster.HeartbeatPayload{
@@ -150,8 +180,12 @@ func (h *Harness) PublishSyntheticHeartbeat(t *testing.T, clusterID string, memb
 // registry view, or fails the test on timeout. Used by probe-and-pill
 // tests that need to be sure the synthetic peer is present before
 // invoking ProbeAndPill against it.
-func (h *Harness) AwaitMemberPresent(t *testing.T, i int, target cluster.MemberID, deadline time.Duration) {
+func (h *Harness) AwaitMemberPresent(t TB, i int, target cluster.MemberID, deadline time.Duration) {
 	t.Helper()
+	if i < 0 || i >= len(h.Members) {
+		t.Fatalf("AwaitMemberPresent: member index %d out of range [0,%d)", i, len(h.Members))
+		return
+	}
 	start := time.Now()
 	for time.Since(start) < deadline {
 		if _, ok := h.Members[i].Registry.Member(target); ok {

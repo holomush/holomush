@@ -50,10 +50,27 @@ ignore:
   # E2E tests exercise them end-to-end but the coverage doesn't flow
   # back across the process boundary.
   - "plugins/*/main.go"
+  # The holomush server's runCoreWithDeps is production-only wiring.
+  # E2E tests boot the binary and exercise it end-to-end, but the unit
+  # coverage profile doesn't see init-path statements (orchestrator
+  # wiring, subsystem registration). Same rationale as plugins/*/main.go.
+  - "cmd/holomush/core.go"
   # Metric stub hooks — intentionally unused no-op call-site anchors
   # awaiting future instrumentation. They exist so future metric wiring
   # has a stable call site; there is no behavior to test.
   - "plugins/*/metrics.go"
+  # Prometheus instrument constructors — pure declarative wiring; the
+  # logic worth testing lives in the methods that READ from these
+  # instruments (and is exercised via the carrying subsystem's tests).
+  # Same rationale as plugins/*/metrics.go.
+  - "internal/cluster/metrics.go"
+  - "internal/eventbus/crypto/invalidation/metrics.go"
+  # Test harnesses — non-_test.go files whose sole purpose is to
+  # support tests in other packages. Same intent as **/mocks/**, but
+  # under a directory name (clustertest, eventbustest) rather than a
+  # filename suffix.
+  - "internal/cluster/clustertest/**"
+  - "internal/eventbus/eventbustest/**"
 
 comment:
   layout: "condensed_header, condensed_files, condensed_footer"

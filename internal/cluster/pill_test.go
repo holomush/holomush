@@ -61,6 +61,26 @@ func TestProductionPillCallsExitFn125WithReasonInLogs(t *testing.T) {
 	}
 }
 
+func TestNewProductionPillWiresExitFnToOSExit(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	p := NewProductionPill(MemberID("01HSELF"), logger, nil)
+	pp, ok := p.(*productionPill)
+	if !ok {
+		t.Fatalf("NewProductionPill returned %T; want *productionPill", p)
+	}
+	if pp.self != MemberID("01HSELF") {
+		t.Errorf("self = %q; want '01HSELF'", pp.self)
+	}
+	if pp.logger != logger {
+		t.Errorf("logger not threaded through to productionPill")
+	}
+	if pp.exitFn == nil {
+		t.Error("exitFn is nil; production constructor MUST wire os.Exit")
+	}
+	// Sanity: the test substitute pattern works (we don't actually
+	// invoke exitFn here because it would terminate the test binary).
+}
+
 func TestDevPillPanicsWithReasonAndSource(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	p := NewDevPill(MemberID("01HSELF"), logger)

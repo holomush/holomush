@@ -28,13 +28,20 @@ func TestCacheReverseIndexIsCleanedOnLRUEviction(t *testing.T) {
 	c.Put(CacheKey{KeyID: 1, Version: 2}, ctxA, NewMaterial(make([]byte, DEKByteLength)))
 	c.Put(CacheKey{KeyID: 1, Version: 3}, ctxA, NewMaterial(make([]byte, DEKByteLength))) // evicts v1 (LRU)
 
-	// Reverse-index integrity check: ctxA should index only the two
-	// surviving keys (v2, v3). If evictOldestLocked failed to clean
-	// byContext, ctxA's set would still contain v1 — but
-	// InvalidateContext's defensive byKey guard would silently skip
-	// it. We probe via contextIndexLen + an explicit pre-Invalidate
-	// count to verify byContext is in sync with byKey.
-	_ = c.contextIndexLen() // sanity touch; primary assertion below
+	// Reverse-index integrity check: only ctxA exists, and it should
+	// index exactly the two surviving keys (v2, v3) post-LRU-eviction
+	// of v1. If evictOldestLocked failed to clean byContext, the inner
+	// set would still contain v1 — but contextIndexLen counts only
+	// distinct ContextIDs (always 1 here), so we can't directly assert
+	// the inner-set leak from outside the package. The cross-context
+	// test below catches the dangerous form (cache-key reuse). What
+	// THIS pre-Invalidate assertion catches is the empty-bucket leak:
+	// if the bucket is missing entirely after eviction (e.g., the LRU
+	// path nuked the whole context-set when only one key was evicted),
+	// contextIndexLen would drop to 0 here.
+	if got := c.contextIndexLen(); got != 1 {
+		t.Fatalf("contextIndexLen before InvalidateContext = %d; want 1 (ctxA's bucket should still exist with v2+v3)", got)
+	}
 
 	c.InvalidateContext(ctxA)
 	if c.Len() != 0 {

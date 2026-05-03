@@ -57,7 +57,9 @@ func TestProbeAndPillTriggersPillOnUnresponsivePeer(t *testing.T) {
 	// (no responder), and a pill is published. The synchronous
 	// eviction in issuePill is a no-op delete on an already-evicted
 	// key (safe).
-	_ = h.Members[1].Registry.Stop(context.Background())
+	if err := h.Members[1].Registry.Stop(context.Background()); err != nil {
+		t.Fatalf("h.Members[1].Registry.Stop: %v (test precondition: target must be stopped to be unresponsive)", err)
+	}
 
 	err := h.Members[0].Registry.ProbeAndPill(
 		context.Background(),
@@ -131,4 +133,32 @@ func TestPillReceivedOnPoisonSubjectInvokesPillTrigger(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Pill.Trigger not invoked within 2s after poison publish")
 	}
+}
+
+// TestProbeAndPillReturnsCtxCanceledOnParentCtxCancel covers the
+// round-2 fix branch: when parent ctx is cancelled before/while the
+// probe runs, ProbeAndPill MUST return CLUSTER_PROBE_AND_PILL_CTX_CANCELED
+// rather than silently issuing a pill against a healthy peer.
+func TestProbeAndPillReturnsCtxCanceledOnParentCtxCancel(t *testing.T) {
+	h := clustertest.New(t, "test-game", 2)
+	h.AwaitConverged(t, 2*time.Second)
+
+	// Stop member 1 so the probe will not get a reply.
+	if err := h.Members[1].Registry.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+
+	// Parent ctx already cancelled before the call.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := h.Members[0].Registry.ProbeAndPill(
+		ctx,
+		h.Members[1].MemberID,
+		cluster.PillReasonMissedInvalidationAck,
+	)
+	if err == nil {
+		t.Fatal("ProbeAndPill returned nil; want CLUSTER_PROBE_AND_PILL_CTX_CANCELED")
+	}
+	errutil.AssertErrorCode(t, err, "CLUSTER_PROBE_AND_PILL_CTX_CANCELED")
 }

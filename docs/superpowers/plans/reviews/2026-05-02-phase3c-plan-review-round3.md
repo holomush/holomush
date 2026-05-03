@@ -142,7 +142,7 @@ None detected. Searched for collateral effects:
 
 ## Verification evidence
 
-- Read plan: `/Volumes/Code/github.com/holomush/.worktrees/ojw1.3-phase3c/docs/superpowers/plans/2026-05-02-event-payload-crypto-phase3c-cache-invalidation.md` (5693 lines).
+- Read plan: `docs/superpowers/plans/2026-05-02-event-payload-crypto-phase3c-cache-invalidation.md` (5693 lines).
 - Read sections: 5020-5099 (INV-29/INV-59 annotations), 2360-2562 (T4 INV-55 test + harness extension), 2620-2918 (T5 callsite updates), 4980-5018 (T12 dead-code residual), 5320-5468 (T14 meta-test).
 - Searched: `rg -n "Verifies:\s*INV-" docs/.../plan.md` — captured all 14 annotation lines.
 - Searched: `rg -n "manager\.go:" docs/.../plan.md` — confirmed Modify-list updated, in-step prose still on old numbers (mitigated by disclaimer at line 73).
@@ -167,4 +167,4 @@ Execution may proceed.
 
 ## Persisted report
 
-Absolute path: `/Volumes/Code/github.com/holomush/.worktrees/ojw1.3-phase3c/docs/superpowers/plans/reviews/2026-05-02-phase3c-plan-review-round3.md`
+Repo-relative path: `docs/superpowers/plans/reviews/2026-05-02-phase3c-plan-review-round3.md`

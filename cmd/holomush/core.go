@@ -334,8 +334,28 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// will short-circuit when it reaches eventBusSub. EventBus shutdown
 	// is handled by orch.StopAll (step 8) — no explicit defer needed.
 	if startErr := eventBusSub.Start(ctx); startErr != nil {
-		return startErr
+		return oops.Code("EVENTBUS_START_FAILED").
+			With("operation", "start_event_bus").
+			Wrap(startErr)
 	}
+	// Ownership: cleanup eventBusSub on early-return paths until the
+	// orchestrator takes over via orch.StopAll below. The flag flips to
+	// true after orch.StartAll succeeds.
+	eventBusOwnedByOrchestrator := false
+	defer func() {
+		if !eventBusOwnedByOrchestrator {
+			// Bound the cleanup so a wedged Stop can't hang startup-
+			// failure handling forever. 5s matches typical NATS
+			// graceful-shutdown budgets; primary error has already
+			// been returned, so logging is the only signal we have.
+			stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer stopCancel()
+			if stopErr := eventBusSub.Stop(stopCtx); stopErr != nil {
+				slog.Warn("event bus cleanup failed on early-return path",
+					"err", stopErr.Error())
+			}
+		}
+	}()
 
 	// Phase 3c (holomush-ojw1.3): cluster.Registry runs in every deployment
 	// from this PR onward; it provides cross-replica health/status surface
@@ -368,7 +388,9 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 		SelfIDForTest:     clusterSelfID,
 	})
 	if clusterErr != nil {
-		return clusterErr
+		return oops.Code("CLUSTER_SUBSYSTEM_INIT_FAILED").
+			With("cluster_id", gameID).
+			Wrap(clusterErr)
 	}
 
 	// AuditProjection drains the EVENTS stream into events_audit so every
@@ -491,6 +513,7 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	if orchErr := orch.StartAll(ctx); orchErr != nil {
 		return orchErr
 	}
+	eventBusOwnedByOrchestrator = true
 	defer orch.StopAll(context.Background())
 
 	// --- 9. Readiness gate ---

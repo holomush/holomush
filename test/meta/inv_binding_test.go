@@ -86,9 +86,12 @@ func TestEveryPhase3cInvariantHasAtLeastOneTestBinding(t *testing.T) {
 			return openErr
 		}
 		data, readErr := io.ReadAll(f)
-		_ = f.Close()
+		closeErr := f.Close()
 		if readErr != nil {
 			return readErr
+		}
+		if closeErr != nil {
+			return closeErr
 		}
 		matches := verifiesRE.FindAllSubmatch(data, -1)
 		for _, m := range matches {

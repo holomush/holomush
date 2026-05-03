@@ -4,9 +4,9 @@
 //go:build integration
 
 // Package cluster_test holds the Phase 3c (holomush-ojw1.3) multi-Registry
-// integration tests. Each test exercises the cluster substrate end-to-end
+// integration tests. Each spec exercises the cluster substrate end-to-end
 // against multiple cluster.Registry instances on a shared embedded NATS
-// server (via clustertest.Harness). Tests are prefixed with
+// server (via clustertest.Harness). Specs are prefixed with
 // `// Verifies: INV-N` so T14's meta-test can bind invariant numbers to
 // test names.
 //
@@ -17,137 +17,133 @@ package cluster_test
 
 import (
 	"context"
-	"testing"
 	"time"
+
+	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
+	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
+	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/cluster"
 	"github.com/holomush/holomush/internal/cluster/clustertest"
-	"github.com/holomush/holomush/pkg/errutil"
 )
 
-// Verifies: INV-53
-func TestRegistryRejectsDuplicateMemberIDFromDifferentStartedAt(t *testing.T) {
-	h := clustertest.New(t, "test-game", 1)
-	h.AwaitConverged(t, 1*time.Second)
+var _ = Describe("Cluster Registry", func() {
+	// Verifies: INV-53
+	Describe("first-seen StartedAt preservation under duplicate MemberID", func() {
+		It("rejects a duplicate heartbeat carrying a different StartedAt and HolomushVersion", func(ctx SpecContext) {
+			h := clustertest.New(GinkgoT(), "test-game", 1)
+			h.AwaitConverged(GinkgoT(), 1*time.Second)
 
-	target := cluster.MemberID("01HSYN_DUP_INV53")
+			target := cluster.MemberID("01HSYN_DUP_INV53")
 
-	// Inject the first heartbeat at StartedAt = T1.
-	t1 := time.Now()
-	p1 := cluster.HeartbeatPayload{
-		ClusterID:       "test-game",
-		MemberID:        target,
-		StartedAt:       t1,
-		PublishedAt:     t1,
-		HolomushVersion: "first",
-	}
-	b1, err := cluster.MarshalHeartbeat(p1)
-	if err != nil {
-		t.Fatalf("MarshalHeartbeat (first): %v", err)
-	}
-	if err := h.Embedded.Conn.Publish(cluster.SubjectAlive("test-game", target), b1); err != nil {
-		t.Fatalf("publish first heartbeat: %v", err)
-	}
-	if err := h.Embedded.Conn.Flush(); err != nil {
-		t.Fatalf("flush after first heartbeat: %v", err)
-	}
-	h.AwaitMemberPresent(t, 0, target, 1*time.Second)
+			// Inject the first heartbeat at StartedAt = T1.
+			t1 := time.Now()
+			p1 := cluster.HeartbeatPayload{
+				ClusterID:       "test-game",
+				MemberID:        target,
+				StartedAt:       t1,
+				PublishedAt:     t1,
+				HolomushVersion: "first",
+			}
+			b1, err := cluster.MarshalHeartbeat(p1)
+			Expect(err).NotTo(HaveOccurred(), "MarshalHeartbeat (first)")
+			Expect(h.Embedded.Conn.Publish(cluster.SubjectAlive("test-game", target), b1)).To(Succeed())
+			Expect(h.Embedded.Conn.Flush()).To(Succeed())
+			h.AwaitMemberPresent(GinkgoT(), 0, target, 1*time.Second)
 
-	// Sample initial state.
-	first, ok := h.Members[0].Registry.Member(target)
-	if !ok {
-		t.Fatal("first heartbeat did not register target member")
-	}
-	if !first.StartedAt.Equal(t1) {
-		t.Errorf("StartedAt[1] = %v; want %v", first.StartedAt, t1)
-	}
+			// Sample initial state.
+			first, ok := h.Members[0].Registry.Member(target)
+			Expect(ok).To(BeTrue(), "first heartbeat did not register target member")
+			Expect(first.StartedAt.Equal(t1)).To(BeTrue(), "StartedAt[1] = %v; want %v", first.StartedAt, t1)
 
-	// Inject a duplicate heartbeat with a DIFFERENT StartedAt (T2).
-	// Per INV-53, the duplicate MUST be rejected: registry's view of
-	// StartedAt MUST stay at T1.
-	t2 := t1.Add(10 * time.Second)
-	p2 := cluster.HeartbeatPayload{
-		ClusterID:       "test-game",
-		MemberID:        target,
-		StartedAt:       t2,
-		PublishedAt:     time.Now(),
-		HolomushVersion: "duplicate",
-	}
-	b2, err := cluster.MarshalHeartbeat(p2)
-	if err != nil {
-		t.Fatalf("MarshalHeartbeat (duplicate): %v", err)
-	}
-	if err := h.Embedded.Conn.Publish(cluster.SubjectAlive("test-game", target), b2); err != nil {
-		t.Fatalf("publish duplicate heartbeat: %v", err)
-	}
-	if err := h.Embedded.Conn.Flush(); err != nil {
-		t.Fatalf("flush after duplicate heartbeat: %v", err)
-	}
+			// Inject a duplicate heartbeat with a DIFFERENT StartedAt (T2).
+			t2 := t1.Add(10 * time.Second)
+			p2 := cluster.HeartbeatPayload{
+				ClusterID:       "test-game",
+				MemberID:        target,
+				StartedAt:       t2,
+				PublishedAt:     time.Now(),
+				HolomushVersion: "duplicate",
+			}
+			b2, err := cluster.MarshalHeartbeat(p2)
+			Expect(err).NotTo(HaveOccurred(), "MarshalHeartbeat (duplicate)")
+			Expect(h.Embedded.Conn.Publish(cluster.SubjectAlive("test-game", target), b2)).To(Succeed())
+			Expect(h.Embedded.Conn.Flush()).To(Succeed())
 
-	// Allow time for receive processing.
-	time.Sleep(200 * time.Millisecond)
+			// firstSeenPreserved combines presence + StartedAt + version
+			// into a single boolean so Eventually/Consistently can assert
+			// against it. The rejection should land within the receive
+			// window AND remain stable for a follow-up polling window
+			// (Consistently catches a bug where the duplicate later "wins").
+			firstSeenPreserved := func() bool {
+				m, ok := h.Members[0].Registry.Member(target)
+				return ok && m.StartedAt.Equal(t1) && m.HolomushVersion == "first"
+			}
+			Eventually(ctx, firstSeenPreserved).
+				WithTimeout(2 * time.Second).
+				Should(BeTrue(), "first-seen StartedAt + HolomushVersion should remain after duplicate heartbeat")
+			Consistently(ctx, firstSeenPreserved).
+				WithTimeout(300 * time.Millisecond).
+				Should(BeTrue(), "rejection of duplicate must be stable, not a transient state")
+		})
+	})
 
-	after, ok := h.Members[0].Registry.Member(target)
-	if !ok {
-		t.Fatal("target evicted unexpectedly after duplicate heartbeat")
-	}
-	if !after.StartedAt.Equal(t1) {
-		t.Errorf("StartedAt = %v after duplicate; want %v (first-seen preserved)", after.StartedAt, t1)
-	}
-	if after.HolomushVersion != "first" {
-		t.Errorf("HolomushVersion = %q after duplicate; want 'first' (first-seen preserved)",
-			after.HolomushVersion)
-	}
-	// A future Phase MAY also assert cluster_duplicate_member_id_total
-	// metric incremented; requires injecting DuplicateMemberIDMetrics
-	// into the harness and reading the counter. Out of scope for the
-	// Phase 3c test scaffold; the structured-log emission is the primary
-	// operator-visible signal.
-}
+	// Verifies: INV-54
+	Describe("cluster_id namespace isolation", func() {
+		It("never observes a foreign-cluster heartbeat in the local registry", func(ctx SpecContext) {
+			h := clustertest.New(GinkgoT(), "test-game", 1)
+			h.AwaitConverged(GinkgoT(), 1*time.Second)
 
-// Verifies: INV-54
-func TestRegistryDropsMessagesForOtherClusterID(t *testing.T) {
-	h := clustertest.New(t, "test-game", 1)
-	h.AwaitConverged(t, 1*time.Second)
+			foreignID := cluster.MemberID("01HFOREIGN_PEER")
+			h.PublishSyntheticHeartbeat(GinkgoT(), "OTHER-CLUSTER", foreignID, "")
 
-	// Publish a heartbeat from "OTHER-CLUSTER" with a peer member id.
-	// The local registry MUST drop it: cluster_id namespace isolation.
-	foreignID := cluster.MemberID("01HFOREIGN_PEER")
-	h.PublishSyntheticHeartbeat(t, "OTHER-CLUSTER", foreignID, "")
+			// Consistently asserts the foreign member never appears: a
+			// regression that drops the cluster-id check would let it
+			// through eventually.
+			Consistently(ctx, func() bool {
+				_, ok := h.Members[0].Registry.Member(foreignID)
+				return ok
+			}).WithTimeout(500 * time.Millisecond).Should(BeFalse())
+		})
+	})
 
-	time.Sleep(200 * time.Millisecond)
-	if _, ok := h.Members[0].Registry.Member(foreignID); ok {
-		t.Errorf("foreign-cluster member appeared in local registry")
-	}
-}
+	// Verifies: INV-57
+	Describe("pill rate-limiting", func() {
+		It("blocks a duplicate pill within the rate-limit window", func() {
+			h := clustertest.New(GinkgoT(), "test-game", 1)
+			target := cluster.MemberID("01HSYN_RATE_LIMIT")
+			h.PublishSyntheticHeartbeat(GinkgoT(), "test-game", target, "")
+			h.AwaitMemberPresent(GinkgoT(), 0, target, 1*time.Second)
 
-// Verifies: INV-57
-func TestPillRateLimitBlocksDuplicateWithinWindow(t *testing.T) {
-	h := clustertest.New(t, "test-game", 1)
-	target := cluster.MemberID("01HSYN_RATE_LIMIT")
-	h.PublishSyntheticHeartbeat(t, "test-game", target, "")
-	h.AwaitMemberPresent(t, 0, target, 1*time.Second)
+			// First pill: succeeds (probe times out, pill issued).
+			Expect(h.Members[0].Registry.ProbeAndPill(
+				context.Background(), target, cluster.PillReasonMissedInvalidationAck,
+			)).To(Succeed(), "first pill should succeed")
 
-	// First pill: succeeds (probe times out, pill issued).
-	if err := h.Members[0].Registry.ProbeAndPill(context.Background(), target,
-		cluster.PillReasonMissedInvalidationAck); err != nil {
-		t.Fatalf("first pill returned %v; want nil", err)
-	}
+			// Second pill within the window: rate-limited. Discriminate
+			// by oops code; errors.Is against an OopsError sentinel is
+			// tautological — see cluster.ErrPillRateLimited doc.
+			err := h.Members[0].Registry.ProbeAndPill(
+				context.Background(), target, cluster.PillReasonMissedInvalidationAck,
+			)
+			Expect(err).To(HaveOccurred())
+			oopsErr, ok := oops.AsOops(err)
+			Expect(ok).To(BeTrue(), "err = %v; want oops.OopsError", err)
+			Expect(oopsErr.Code()).To(Equal("CLUSTER_PILL_RATE_LIMITED"))
+		})
+	})
 
-	// No need to re-inject presence between pills: probeAndPill does not
-	// gate on r.members containing the target, and the rate-limit claim
-	// is anchored to wall-clock regardless of membership state.
-	err := h.Members[0].Registry.ProbeAndPill(context.Background(), target,
-		cluster.PillReasonMissedInvalidationAck)
-	// Discriminate by oops code: errors.Is against an OopsError sentinel
-	// is tautological — see ErrPillRateLimited doc.
-	errutil.AssertErrorCode(t, err, "CLUSTER_PILL_RATE_LIMITED")
-}
-
-// Verifies: INV-60
-func TestProbeAndPillRefusesSelfTarget(t *testing.T) {
-	h := clustertest.New(t, "test-game", 1)
-	err := h.Members[0].Registry.ProbeAndPill(context.Background(), h.Members[0].MemberID,
-		cluster.PillReasonMissedInvalidationAck)
-	errutil.AssertErrorCode(t, err, "CLUSTER_CANNOT_PILL_SELF")
-}
+	// Verifies: INV-60
+	Describe("INV-60 self-pill refusal", func() {
+		It("returns CLUSTER_CANNOT_PILL_SELF when target is Self()", func() {
+			h := clustertest.New(GinkgoT(), "test-game", 1)
+			err := h.Members[0].Registry.ProbeAndPill(
+				context.Background(), h.Members[0].MemberID, cluster.PillReasonMissedInvalidationAck,
+			)
+			Expect(err).To(HaveOccurred())
+			oopsErr, ok := oops.AsOops(err)
+			Expect(ok).To(BeTrue(), "err = %v; want oops.OopsError", err)
+			Expect(oopsErr.Code()).To(Equal("CLUSTER_CANNOT_PILL_SELF"))
+		})
+	})
+})

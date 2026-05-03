@@ -10,7 +10,30 @@ import (
 
 	"github.com/holomush/holomush/internal/cluster"
 	"github.com/holomush/holomush/internal/cluster/clustertest"
+	"github.com/holomush/holomush/internal/lifecycle"
 )
+
+func TestRegistrySubsystemIDIsSubsystemCluster(t *testing.T) {
+	h := clustertest.New(t, "test-game", 1)
+	if got := h.Members[0].Registry.ID(); got != lifecycle.SubsystemCluster {
+		t.Errorf("Registry.ID() = %v; want SubsystemCluster", got)
+	}
+}
+
+func TestRegistrySubsystemDependsOnEventBus(t *testing.T) {
+	h := clustertest.New(t, "test-game", 1)
+	deps := h.Members[0].Registry.DependsOn()
+	found := false
+	for _, d := range deps {
+		if d == lifecycle.SubsystemEventBus {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("DependsOn() = %v; want to contain SubsystemEventBus", deps)
+	}
+}
 
 func TestRegistryStartIncludesSelfInLiveMembers(t *testing.T) {
 	h := clustertest.New(t, "test-game", 1)

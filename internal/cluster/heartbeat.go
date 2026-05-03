@@ -286,7 +286,7 @@ func (r *registry) handleAlive(msg *nats.Msg) {
 	// (no Go error returned because handleAlive is fire-and-forget).
 	if present && !existing.StartedAt.IsZero() && !p.StartedAt.Equal(existing.StartedAt) {
 		r.mu.Unlock()
-		r.deps.Logger.Error("CLUSTER_MEMBER_DUPLICATE_ID; rejecting duplicate heartbeat",
+		r.deps.Logger.Warn("CLUSTER_MEMBER_DUPLICATE_ID; rejecting duplicate heartbeat",
 			"member_id", string(p.MemberID),
 			"existing_started_at", existing.StartedAt,
 			"duplicate_started_at", p.StartedAt,
@@ -419,7 +419,7 @@ func (r *registry) sweepEvictions(now time.Time) {
 		if id == r.self {
 			continue
 		}
-		if m.LastHeartbeatAt.Before(threshold) && (m.Status == StatusAlive || m.Status == StatusStale) { //nolint:noremoteclockcompare // Member.LastHeartbeatAt is the receiver's local clock at last receive (types.go:55), not a sender-sourced timestamp; comparison is purely local.
+		if m.LastHeartbeatAt.Before(threshold) && (m.Status == StatusAlive || m.Status == StatusStale) {
 			delete(r.members, id)
 			evicted = append(evicted, id)
 		}
@@ -432,9 +432,11 @@ func (r *registry) sweepEvictions(now time.Time) {
 }
 
 func (r *registry) recordSkew(source MemberID, skew float64) {
-	if r.deps.SkewMetrics == nil {
-		return
-	}
+	// The threshold-cross WARN is the operator-facing signal and MUST
+	// fire regardless of metrics wiring — deployments without
+	// Prometheus (or tests with a nil SkewMetrics dep) still need the
+	// log breadcrumb. The Prometheus gauge is the silent-observable
+	// path; gate ONLY the Set() call on the nil check.
 	if skew > r.cfg.SkewWarnThreshold.Seconds() {
 		r.deps.Logger.Warn("cluster member skew exceeds threshold",
 			"self", string(r.self),
@@ -443,7 +445,9 @@ func (r *registry) recordSkew(source MemberID, skew float64) {
 			"threshold_seconds", r.cfg.SkewWarnThreshold.Seconds(),
 		)
 	}
-	r.deps.SkewMetrics.SkewSeconds.WithLabelValues(string(r.self), string(source)).Set(skew)
+	if r.deps.SkewMetrics != nil {
+		r.deps.SkewMetrics.SkewSeconds.WithLabelValues(string(r.self), string(source)).Set(skew)
+	}
 }
 
 // computeSkew returns absolute drift in seconds between local clock and

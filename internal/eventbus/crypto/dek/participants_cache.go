@@ -71,6 +71,10 @@ func NewParticipantsCacheWithClock(cfg CacheConfig, clock func() time.Time) *Par
 
 // Get returns the participant list for key if present and unexpired.
 // Promotes the entry to MRU on hit. Lazy-evicts on TTL expiry.
+//
+// Returns a defensive copy: the cache owns its slice, and callers MAY
+// freely mutate the returned slice without corrupting cached state or
+// racing with concurrent Put/Get callers.
 func (c *ParticipantsCache) Get(key ParticipantsCacheKey) ([]Participant, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -87,20 +91,26 @@ func (c *ParticipantsCache) Get(key ParticipantsCacheKey) ([]Participant, bool) 
 		return nil, false
 	}
 	c.list.MoveToFront(elem)
-	return entry.list, true
+	out := append([]Participant(nil), entry.list...)
+	return out, true
 }
 
 // Put inserts or refreshes the participant list for key. Evicts the LRU
 // entry when capacity is exceeded (cleaning byContext on the eviction
 // path so InvalidateContext stays correct).
+//
+// Stores a defensive copy of the supplied slice: callers MAY continue
+// to mutate `participants` after Put returns without corrupting cached
+// state.
 func (c *ParticipantsCache) Put(key ParticipantsCacheKey, participants []Participant) {
 	ctxID := ContextID{Type: key.ContextType, ID: key.ContextID}
+	stored := append([]Participant(nil), participants...)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if elem, ok := c.byKey[key]; ok {
 		if entry, ok := elem.Value.(*participantsEntry); ok {
-			entry.list = participants
+			entry.list = stored
 			entry.expiresAt = c.clock().Add(c.ttl)
 		}
 		c.list.MoveToFront(elem)
@@ -110,7 +120,7 @@ func (c *ParticipantsCache) Put(key ParticipantsCacheKey, participants []Partici
 	entry := &participantsEntry{
 		key:       key,
 		contextID: ctxID,
-		list:      participants,
+		list:      stored,
 		expiresAt: c.clock().Add(c.ttl),
 	}
 	elem := c.list.PushFront(entry)

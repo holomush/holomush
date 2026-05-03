@@ -103,8 +103,13 @@ func (c *coordinator) RequestInvalidation(
 	seq := atomic.AddUint64(&c.seq, 1)
 	timeout := c.timeoutFor(action)
 
-	n1 := c.deps.Registry.LiveCount()
-	if n1 == 0 {
+	// Snapshot live members ONCE per publish attempt. Both `expected`
+	// (size) and `missing` (set difference vs acks) MUST come from the
+	// same snapshot, otherwise a member that joined after publish can
+	// be misclassified as "missing" and probed/pilled even though it
+	// never had a chance to ack this request.
+	snapshot1 := c.deps.Registry.LiveMembers()
+	if len(snapshot1) == 0 {
 		return ErrNoLiveMembers
 	}
 
@@ -120,21 +125,23 @@ func (c *coordinator) RequestInvalidation(
 		SuccessorVersion:    successorVersion,
 	}
 
-	acks, err := c.publishAndCollect(ctx, payload, n1, timeout)
+	acks, err := c.publishAndCollect(ctx, payload, len(snapshot1), timeout)
 	if err != nil {
 		return err
 	}
-	if len(acks) == n1 {
+	if len(acks) == len(snapshot1) {
 		c.recordSuccess(action, "success", payload.IssuedAt)
 		return nil
 	}
 
-	// Probe-and-pill phase.
-	missing := c.computeMissing(acks)
+	// Probe-and-pill phase. Compute missing against the SAME snapshot
+	// used to derive the expected ack count.
+	missing := computeMissingFromSnapshot(snapshot1, acks)
 	// INV-60: filter Self() from missing set.
+	self := c.deps.Registry.Self()
 	selfFiltered := make([]cluster.MemberID, 0, len(missing))
 	for _, m := range missing {
-		if m == c.deps.Registry.Self() {
+		if m == self {
 			continue
 		}
 		selfFiltered = append(selfFiltered, m)
@@ -142,7 +149,7 @@ func (c *coordinator) RequestInvalidation(
 	if len(selfFiltered) == 0 && len(missing) > 0 {
 		// Only self was missing → SELF_TIMEOUT
 		c.deps.Logger.Warn("invalidation: only Self() missing from acks; not pilling self",
-			"self", string(c.deps.Registry.Self()),
+			"self", string(self),
 			"action", string(action),
 		)
 		c.recordSuccess(action, "self_timeout", payload.IssuedAt)
@@ -151,33 +158,57 @@ func (c *coordinator) RequestInvalidation(
 
 	for _, member := range selfFiltered {
 		ppErr := c.deps.Registry.ProbeAndPill(ctx, member, cluster.PillReasonMissedInvalidationAck)
-		// Discriminate cluster.ErrPillRateLimited by oops error code.
-		// errors.Is is tautological for samber/oops sentinels — see
-		// probe_pill.go for the same caveat.
-		if ppErr != nil {
-			if oerr, ok := oops.AsOops(ppErr); ok && oerr.Code() == "CLUSTER_PILL_RATE_LIMITED" {
-				return ErrRateLimited
-			}
+		if ppErr == nil {
+			// Pill issued; member already removed from registry synchronously.
+			continue
 		}
-		// ErrPillProbeSucceeded or nil: continue. Pilled member already
-		// removed from registry synchronously.
+		// Discriminate cluster sentinels by oops error code (errors.Is
+		// is tautological for samber/oops sentinels — see probe_pill.go
+		// for the same caveat).
+		oerr, isOops := oops.AsOops(ppErr)
+		if !isOops {
+			// Non-oops error from ProbeAndPill: surface and abort the
+			// retry phase so the caller can decide whether to retry.
+			return oops.Code("INVALIDATION_PROBE_AND_PILL_FAILED").Wrap(ppErr)
+		}
+		switch oerr.Code() {
+		case "CLUSTER_PILL_PROBE_SUCCEEDED":
+			// Probe succeeded; member is alive, no pill issued. Continue
+			// the retry phase — the next publish round may catch it.
+			continue
+		case "CLUSTER_PILL_RATE_LIMITED":
+			// Per-member rate limit hit; caller should retry after the
+			// PillRateLimit window.
+			return ErrRateLimited
+		default:
+			// CLUSTER_PROBE_AND_PILL_CTX_CANCELED, CLUSTER_PROBE_AND_PILL_PROBE_FAILED,
+			// CLUSTER_CANNOT_PILL_SELF (defensive trip), or any other oops
+			// error from ProbeAndPill — propagate so the caller sees the
+			// failure instead of silently continuing into the retry phase.
+			return oops.Code("INVALIDATION_PROBE_AND_PILL_FAILED").
+				With("probe_target", string(member)).
+				With("inner_code", oerr.Code()).
+				Wrap(ppErr)
+		}
 	}
 
-	// Retry once.
-	n2 := c.deps.Registry.LiveCount()
-	if n2 == 0 {
+	// Retry once. Re-snapshot because ProbeAndPill may have evicted
+	// members, and we want the retry's expected count to match the
+	// post-eviction reality.
+	snapshot2 := c.deps.Registry.LiveMembers()
+	if len(snapshot2) == 0 {
 		return ErrNoLiveMembers
 	}
-	acks2, err := c.publishAndCollect(ctx, payload, n2, timeout)
+	acks2, err := c.publishAndCollect(ctx, payload, len(snapshot2), timeout)
 	if err != nil {
 		return err
 	}
-	if len(acks2) == n2 {
+	if len(acks2) == len(snapshot2) {
 		c.recordSuccess(action, "success_after_retry", payload.IssuedAt)
 		return nil
 	}
 
-	missing2 := c.computeMissing(acks2)
+	missing2 := computeMissingFromSnapshot(snapshot2, acks2)
 	c.recordSuccess(action, "partial_failure", payload.IssuedAt)
 	return oops.Code("INVALIDATION_PARTIAL_FAILURE").
 		With("missing_members", missing2).
@@ -188,9 +219,15 @@ func (c *coordinator) RequestInvalidation(
 }
 
 // publishAndCollect publishes one invalidation request, opens a reply
-// inbox, and collects acks until len(acks)==expected or timeout fires.
+// inbox, and collects acks until len(acks)==expected, the derived
+// timeout fires, or the caller's ctx is canceled.
+//
+// On caller-ctx cancellation: returns the partial acks and a wrapped
+// ctx.Err() so callers can distinguish shutdown from timeout. On
+// timeout (no parent cancellation): returns the partial acks and nil
+// error — callers compare len(acks) to expected to decide success.
 func (c *coordinator) publishAndCollect(
-	_ context.Context,
+	ctx context.Context,
 	payload Payload,
 	expected int,
 	timeout time.Duration,
@@ -213,16 +250,23 @@ func (c *coordinator) publishAndCollect(
 		return nil, oops.Code("INVALIDATION_PUBLISH_FAILED").Wrap(err)
 	}
 
+	// Child context combines the caller's deadline with our derived
+	// timeout. NextMsgWithContext returns whichever fires first.
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	acks := make(map[cluster.MemberID]struct{}, expected)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) && len(acks) < expected {
-		remaining := time.Until(deadline)
-		if remaining <= 0 {
-			break
-		}
-		msg, err := sub.NextMsg(remaining)
+	for len(acks) < expected {
+		msg, err := sub.NextMsgWithContext(waitCtx)
 		if err != nil {
-			if errors.Is(err, nats.ErrTimeout) {
+			// Distinguish parent-ctx cancellation (caller wants to
+			// stop) from our derived-timeout expiry (collect-window
+			// closed). Parent cancellation propagates as error;
+			// derived timeout returns partial acks with nil error.
+			if ctx.Err() != nil {
+				return acks, oops.Code("INVALIDATION_INBOX_READ_FAILED").Wrap(ctx.Err())
+			}
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, nats.ErrTimeout) {
 				break
 			}
 			// Other errors surface immediately.
@@ -240,12 +284,15 @@ func (c *coordinator) publishAndCollect(
 	return acks, nil
 }
 
-// computeMissing returns the live members that did not ack.
-func (c *coordinator) computeMissing(acks map[cluster.MemberID]struct{}) []cluster.MemberID {
-	members := c.deps.Registry.LiveMembers()
-	missing := make([]cluster.MemberID, 0, len(members))
-	for i := range members {
-		id := members[i].ID
+// computeMissingFromSnapshot returns the members in `snapshot` that
+// did not appear in `acks`. Working from a caller-provided snapshot
+// (rather than re-querying LiveMembers) ensures the expected-ack set
+// and the observed-missing set come from the same membership view —
+// closes the late-joiner false-positive race.
+func computeMissingFromSnapshot(snapshot []cluster.Member, acks map[cluster.MemberID]struct{}) []cluster.MemberID {
+	missing := make([]cluster.MemberID, 0, len(snapshot))
+	for i := range snapshot {
+		id := snapshot[i].ID
 		if _, ok := acks[id]; !ok {
 			missing = append(missing, id)
 		}

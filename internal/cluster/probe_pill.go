@@ -5,8 +5,10 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/samber/oops"
 )
 
@@ -108,8 +110,27 @@ func (r *registry) probeAndPill(ctx context.Context, id MemberID, reason PillRea
 		return ErrPillProbeSucceeded
 	}
 
-	// Probe timed out (or ctx cancelled) → issue pill.
-	return r.issuePill(ctx, id, reason)
+	// Distinguish parent-ctx cancellation from probeCtx timeout:
+	// pilling a healthy peer because the caller cancelled would be a
+	// spurious eviction.
+	if cerr := ctx.Err(); cerr != nil {
+		return oops.Code("CLUSTER_PROBE_AND_PILL_CTX_CANCELED").Wrap(cerr)
+	}
+
+	// Only timeout-on-no-reply or explicit no-responders should issue
+	// a pill. Other RequestWithContext failures (ErrConnectionClosed,
+	// ErrAuthorization, ErrMaxPayload, etc.) reflect local NATS/client
+	// trouble — pilling the target on those would be a spurious
+	// eviction of a healthy peer. nats.go returns timeout via
+	// probeCtx.Err() == context.DeadlineExceeded (NOT nats.ErrTimeout,
+	// which RequestWithContext does not surface).
+	if errors.Is(probeCtx.Err(), context.DeadlineExceeded) ||
+		errors.Is(err, nats.ErrNoResponders) {
+		return r.issuePill(ctx, id, reason)
+	}
+	return oops.Code("CLUSTER_PROBE_AND_PILL_PROBE_FAILED").
+		With("target", string(id)).
+		Wrap(err)
 }
 
 func (r *registry) updateMemberFromProbeReply(id MemberID, reply ProbeReplyPayload) {
