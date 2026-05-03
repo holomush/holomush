@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/holomush/holomush/internal/access/policy/policytest"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
@@ -25,7 +26,6 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
 	plugins "github.com/holomush/holomush/internal/plugin"
-	"github.com/holomush/holomush/internal/access/policy/policytest"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	"github.com/holomush/holomush/test/testutil"

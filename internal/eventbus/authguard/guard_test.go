@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	accesstypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/access/policy/policytest"
+	accesstypes "github.com/holomush/holomush/internal/access/policy/types"
 	"github.com/holomush/holomush/internal/eventbus/authguard"
 	"github.com/holomush/holomush/internal/eventbus/codec"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"

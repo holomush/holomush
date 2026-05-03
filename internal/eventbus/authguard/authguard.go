@@ -22,7 +22,7 @@ type IdentityKind int
 
 // IdentityKind constants enumerate the principals AuthGuard can evaluate.
 const (
-	IdentityKindUnknown   IdentityKind = iota
+	IdentityKindUnknown IdentityKind = iota
 	IdentityKindCharacter
 	IdentityKindPlayer
 	IdentityKindPlugin
@@ -57,7 +57,7 @@ type DecisionCode int
 
 // DecisionCode constants enumerate the outcomes of Guard.Check.
 const (
-	DecisionCodeUnknown            DecisionCode = iota
+	DecisionCodeUnknown DecisionCode = iota
 	PermitParticipant
 	PermitPlayerHistory
 	PermitPluginGrant

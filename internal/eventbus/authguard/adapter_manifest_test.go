@@ -28,9 +28,9 @@ func TestPluginManifestLookupAdapterReturnsTrueForDeclaredEventType(t *testing.T
 	mgr, err := plugins.NewManager("", plugins.WithVerbRegistry(core.NewVerbRegistry()))
 	require.NoError(t, err)
 	mgr.TestLoadPlugin("mod-filter", &plugins.Manifest{
-		Name:    "mod-filter",
-		Version: "1.0.0",
-		Type:    plugins.TypeBinary,
+		Name:         "mod-filter",
+		Version:      "1.0.0",
+		Type:         plugins.TypeBinary,
 		BinaryPlugin: &plugins.BinaryConfig{Executable: "mod-filter"},
 		Crypto: &plugins.CryptoSection{
 			Consumes: []plugins.CryptoConsume{

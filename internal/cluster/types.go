@@ -23,11 +23,11 @@ type MemberStatus int
 // MemberStatus values enumerate the lifecycle states a cluster member
 // may be in from this process's perspective.
 const (
-	StatusUnknown  MemberStatus = iota
-	StatusAlive                 // heartbeat fresh within 2× heartbeat interval
-	StatusStale                 // 1-2 missed heartbeats; not yet evicted
-	StatusEvicted               // 3+ missed heartbeats or received bye
-	StatusPilled                // pilled by a coordinator; removed
+	StatusUnknown MemberStatus = iota
+	StatusAlive                // heartbeat fresh within 2× heartbeat interval
+	StatusStale                // 1-2 missed heartbeats; not yet evicted
+	StatusEvicted              // 3+ missed heartbeats or received bye
+	StatusPilled               // pilled by a coordinator; removed
 )
 
 // String returns a human-readable status name (used in logs/metrics).

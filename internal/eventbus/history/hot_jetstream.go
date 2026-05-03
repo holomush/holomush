@@ -58,9 +58,9 @@ type jetStreamHotTier struct {
 
 	// authGuard evaluates sensitive event delivery decisions (Decision 5).
 	// nil = pre-Phase 3b passthrough.
-	authGuard    eventbus.SessionAuthGuard
+	authGuard eventbus.SessionAuthGuard
 	// dekManager resolves DEK material for sensitive events.
-	dekManager   eventbus.SessionDEKManager
+	dekManager eventbus.SessionDEKManager
 	// auditEmitter logs plugin decrypt records.
 	auditEmitter eventbus.SessionAuditEmitter
 }

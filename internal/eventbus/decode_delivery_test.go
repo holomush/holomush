@@ -6,10 +6,9 @@ package eventbus
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"testing"
 	"time"
-
-	"errors"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"

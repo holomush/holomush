@@ -153,9 +153,11 @@ type observerEntry struct {
 	obs MemberObserver
 }
 
-func (r *registry) ID() lifecycle.SubsystemID          { return lifecycle.SubsystemCluster }
-func (r *registry) DependsOn() []lifecycle.SubsystemID { return []lifecycle.SubsystemID{lifecycle.SubsystemEventBus} }
-func (r *registry) Self() MemberID                     { return r.self }
+func (r *registry) ID() lifecycle.SubsystemID { return lifecycle.SubsystemCluster }
+func (r *registry) DependsOn() []lifecycle.SubsystemID {
+	return []lifecycle.SubsystemID{lifecycle.SubsystemEventBus}
+}
+func (r *registry) Self() MemberID { return r.self }
 
 func (r *registry) LiveMembers() []Member {
 	r.mu.RLock()
