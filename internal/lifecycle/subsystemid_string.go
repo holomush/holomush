@@ -23,11 +23,12 @@ func _() {
 	_ = x[SubsystemGRPC-8]
 	_ = x[SubsystemEventBus-9]
 	_ = x[SubsystemAuditProjection-10]
+	_ = x[SubsystemCluster-11]
 }
 
-const _SubsystemID_name = "databasetlsabacauthworldpluginssessionsbootstrapgrpceventbusaudit_projection"
+const _SubsystemID_name = "databasetlsabacauthworldpluginssessionsbootstrapgrpceventbusaudit_projectioncluster"
 
-var _SubsystemID_index = [...]uint8{0, 8, 11, 15, 19, 24, 31, 39, 48, 52, 60, 76}
+var _SubsystemID_index = [...]uint8{0, 8, 11, 15, 19, 24, 31, 39, 48, 52, 60, 76, 83}
 
 func (i SubsystemID) String() string {
 	idx := int(i) - 0
