@@ -97,6 +97,12 @@ type EmitEvent struct {
 	Stream  string
 	Type    EventType
 	Payload string // JSON string
+
+	// Sensitive declares per-event sensitivity at emit time. The host's
+	// Manager.EmitPluginEvent copies this to EmitIntent.Sensitive, where
+	// event_emitter.go::Emit's Phase 3a downgrade fence validates against
+	// the manifest. Default false (zero value) for backwards-compat.
+	Sensitive bool
 }
 
 // EmitIntent is a host-side request to emit an event on behalf of a plugin.

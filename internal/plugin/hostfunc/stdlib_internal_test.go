@@ -141,3 +141,61 @@ func TestEmitFlushRaisesLuaErrorWithoutRegisterStdlib(t *testing.T) {
 	assert.Contains(t, err.Error(), "emitter not initialized")
 	assert.Contains(t, err.Error(), "RegisterStdlib not called")
 }
+
+// =============================================================================
+// Phase 3d Task 8: Lua-side `sensitive` opts-table key plumbing
+// =============================================================================
+
+// TestEmitLocationReadsSensitiveTrue asserts holo.emit.location with
+// {sensitive=true} opts table sets EmitEvent.Sensitive=true on the
+// accumulated buffer.
+func TestEmitLocationReadsSensitiveTrue(t *testing.T) {
+	ls := lua.NewState()
+	defer ls.Close()
+	RegisterStdlib(ls)
+
+	err := ls.DoString(`
+        holo.emit.location("loc-01ABC", "core-test:hello",
+            { msg = "private" }, { sensitive = true })
+    `)
+	require.NoError(t, err)
+
+	emitter := getEmitter(ls)
+	require.NotNil(t, emitter)
+	events, _ := emitter.Flush()
+	require.Len(t, events, 1)
+	assert.True(t, events[0].Sensitive,
+		"opts.sensitive=true MUST set EmitEvent.Sensitive=true on the buffer")
+}
+
+// TestEmitLocationDefaultsSensitiveFalse asserts that omitting opts
+// keeps EmitEvent.Sensitive=false (backwards compat).
+func TestEmitLocationDefaultsSensitiveFalse(t *testing.T) {
+	ls := lua.NewState()
+	defer ls.Close()
+	RegisterStdlib(ls)
+
+	err := ls.DoString(`holo.emit.location("loc-01ABC", "core-test:hello", { msg = "public" })`)
+	require.NoError(t, err)
+
+	events, _ := getEmitter(ls).Flush()
+	require.Len(t, events, 1)
+	assert.False(t, events[0].Sensitive,
+		"opts absent MUST keep EmitEvent.Sensitive=false")
+}
+
+// TestEmitLocationSensitiveWrongTypeRejected asserts non-bool sensitive
+// raises LUA_EMIT_SENSITIVE_TYPE.
+func TestEmitLocationSensitiveWrongTypeRejected(t *testing.T) {
+	ls := lua.NewState()
+	defer ls.Close()
+	RegisterStdlib(ls)
+
+	err := ls.DoString(`
+        holo.emit.location("loc-01ABC", "core-test:hello",
+            { msg = "x" }, { sensitive = "true" })
+    `)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "LUA_EMIT_SENSITIVE_TYPE",
+		"wrong type MUST raise LUA_EMIT_SENSITIVE_TYPE error")
+}
