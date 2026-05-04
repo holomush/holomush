@@ -6,12 +6,14 @@ package cluster
 import (
 	"context"
 	"log/slog"
+	"reflect"
 	"sync"
 	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/samber/oops"
 
+	"github.com/holomush/holomush/internal/eventbus/natsconn"
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/lifecycle"
 )
@@ -50,8 +52,15 @@ type Registry interface {
 }
 
 // Deps groups the dependencies cluster.Registry needs at construction.
+//
+// Conn is typed as natsconn.Conn (the narrow interface seam) rather
+// than *nats.Conn so unit tests MAY substitute a mock. Production
+// callers continue to pass eventbus.Subsystem.Conn() directly — the
+// concrete *nats.Conn satisfies natsconn.Conn structurally. See
+// internal/eventbus/natsconn for the interface and natsmock for a
+// test-only mock implementation. (holomush-ojw1.3.23)
 type Deps struct {
-	Conn              *nats.Conn // from eventbus.Subsystem.Conn()
+	Conn              natsconn.Conn // from eventbus.Subsystem.Conn(); test mocks via natsconn/natsmock
 	Logger            *slog.Logger
 	PillMetrics       *PillMetrics
 	SkewMetrics       *SkewMetrics
@@ -63,17 +72,18 @@ type Deps struct {
 }
 
 // NewSubsystem constructs a Registry-backed Subsystem. Production
-// callers pass a real *nats.Conn and ProductionPill. Tests use the
-// clustertest harness.
+// callers pass a real *nats.Conn (which satisfies natsconn.Conn
+// structurally) and ProductionPill. Tests use the clustertest harness
+// or, for unit-level error-path tests, a natsmock.Conn.
 func NewSubsystem(cfg Config, deps Deps) (Registry, error) {
 	cfg = cfg.Defaults()
 	if cfg.ClusterID == "" {
 		return nil, oops.Code("CLUSTER_CONFIG_MISSING_CLUSTER_ID").
 			Errorf("cluster.NewSubsystem requires non-empty ClusterID; sourced from eventbus.Config.GameID")
 	}
-	if deps.Conn == nil {
+	if deps.Conn == nil || isNilConn(deps.Conn) {
 		return nil, oops.Code("CLUSTER_DEPS_NIL").With("dep", "Conn").
-			Errorf("cluster.NewSubsystem requires a non-nil *nats.Conn")
+			Errorf("cluster.NewSubsystem requires a non-nil natsconn.Conn (typically *nats.Conn from eventbus.Subsystem.Conn())")
 	}
 	if deps.Pill == nil {
 		return nil, oops.Code("CLUSTER_DEPS_NIL").With("dep", "Pill").
@@ -263,4 +273,23 @@ func (r *registry) SetLastInvalidationSeq(seq uint64) {
 	r.mu.Lock()
 	r.lastInvSeq = seq
 	r.mu.Unlock()
+}
+
+// isNilConn detects typed-nil interface values whose underlying concrete
+// kind is nilable (pointer, slice, map, chan, func, interface). Required
+// because Deps.Conn is an interface (natsconn.Conn introduced in
+// holomush-ojw1.3.23) — a plain `== nil` comparison only checks the
+// interface header, missing typed-nil values like (*nats.Conn)(nil)
+// (see internal/eventbus/natsconn/natsconn_test.go:33-37 for the
+// runtime demonstration). Mirrors the pattern in
+// internal/core/engine.go::isNilEventAppender so callers truly fail
+// fast at construction rather than crashing on first method call.
+func isNilConn(c natsconn.Conn) bool {
+	v := reflect.ValueOf(c)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	default:
+		return false
+	}
 }

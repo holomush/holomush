@@ -185,10 +185,22 @@ func (c *coordinator) RequestInvalidation(
 			// CLUSTER_CANNOT_PILL_SELF (defensive trip), or any other oops
 			// error from ProbeAndPill — propagate so the caller sees the
 			// failure instead of silently continuing into the retry phase.
+			//
+			// CAVEAT (samber/oops v1.21+): OopsError.Code() walks to the
+			// DEEPEST code in the chain via getDeepestErrorCode. So
+			// `oops.Code(OUTER).Wrap(innerOopsErr)` would silently surface
+			// the inner code, hiding the outer code we just attached. To
+			// preserve INVALIDATION_PROBE_AND_PILL_FAILED as the surfaced
+			// code, we use Errorf (which constructs a fresh OopsError
+			// whose .err is a plain fmt error containing the inner's
+			// formatted message) and stash the inner code + target in
+			// With() context. Callers that need the inner code read it
+			// from `inner_code` rather than walking the error chain.
+			// See holomush-ojw1.3.22.
 			return oops.Code("INVALIDATION_PROBE_AND_PILL_FAILED").
 				With("probe_target", string(member)).
 				With("inner_code", oerr.Code()).
-				Wrap(ppErr)
+				Errorf("probe-and-pill failed for member %s: %s", string(member), ppErr.Error())
 		}
 	}
 

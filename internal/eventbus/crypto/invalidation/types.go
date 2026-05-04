@@ -12,11 +12,11 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/cluster"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
+	"github.com/holomush/holomush/internal/eventbus/natsconn"
 )
 
 // Action enumerates the cache-invalidation actions; receivers
@@ -74,8 +74,14 @@ func (c Config) Defaults() Config {
 }
 
 // Deps groups the Coordinator's runtime dependencies.
+//
+// Conn is typed as natsconn.Conn (the narrow interface seam) rather
+// than *nats.Conn so unit tests MAY substitute a mock without booting
+// an embedded NATS server. Production callers continue to pass
+// eventbus.Subsystem.Conn() directly — *nats.Conn satisfies
+// natsconn.Conn structurally. (holomush-ojw1.3.23)
 type Deps struct {
-	Conn      *nats.Conn
+	Conn      natsconn.Conn
 	Registry  cluster.Registry
 	DEKCache  *dek.Cache
 	PartCache *dek.ParticipantsCache
@@ -133,12 +139,23 @@ func UnmarshalReply(b []byte) (Reply, error) {
 // Typed errors returned by RequestInvalidation. See Phase 3c grounding
 // doc Decision 5 error-code table.
 //
-// CAVEAT: samber/oops's OopsError.Is returns true for ANY OopsError,
-// regardless of code. Do NOT use errors.Is(err, ErrFoo) to discriminate
-// these sentinels — it is tautological and matches every oops error.
-// In tests, use errutil.AssertErrorCode(t, err, "CODE"). In production
-// code, use oops.AsOops(err) and compare oopsErr.Code() to the string
-// literal of the error code.
+// CAVEAT 1 (errors.Is): samber/oops's OopsError.Is returns true for ANY
+// OopsError, regardless of code. Do NOT use errors.Is(err, ErrFoo) to
+// discriminate these sentinels — it is tautological and matches every
+// oops error. In tests, use errutil.AssertErrorCode(t, err, "CODE"). In
+// production code, use oops.AsOops(err) and compare oopsErr.Code() to
+// the string literal of the error code.
+//
+// CAVEAT 2 (deepest-Code traversal, holomush-ojw1.3.22): in
+// samber/oops@v1.21+, OopsError.Code() walks to the DEEPEST code in
+// the chain via getDeepestErrorCode. This means
+// `oops.Code(OUTER).Wrap(innerOopsErr)` SILENTLY surfaces the inner
+// code, not the outer one. To preserve the outer code as the surfaced
+// .Code(), use `oops.Code(OUTER).With("inner_code", inner.Code()).Errorf(...)`
+// which constructs a fresh OopsError whose .err is a plain fmt error,
+// breaking the chain walk. Wrapping NON-oops errors (e.g., NATS errors,
+// json errors, ctx.Err()) is fine — the deepest-walk only traverses
+// through oops-typed children.
 var (
 	// ErrPartialFailure — code "INVALIDATION_PARTIAL_FAILURE"
 	ErrPartialFailure = oops.Code("INVALIDATION_PARTIAL_FAILURE").

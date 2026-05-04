@@ -126,13 +126,15 @@ func newCoordinatorWithStub(t *testing.T, stub *stubRegistry) invalidation.Coord
 // the probeAndPill closure, and the expected oops error class observed
 // at the public RequestInvalidation boundary.
 //
-// Note on samber/oops Code() semantics: when the Coordinator wraps an
-// inner OopsError with oops.Code(OUTER).Wrap(inner), the surfaced
-// .Code() is the DEEPEST code in the chain (per
-// getDeepestErrorCode in samber/oops@v1.21.0+). The OUTER code lives
-// only in the With() context as `inner_code`. The
-// "propagates inner CLUSTER_*" case below asserts both the surfaced
-// deepest code AND the With-context keys to prove the wrap branch ran.
+// Note on samber/oops Code() semantics (holomush-ojw1.3.22): the
+// Coordinator's default-branch wrap path used to call
+// oops.Code(OUTER).Wrap(innerOopsErr), which silently surfaced the
+// INNER code because OopsError.Code() walks to the deepest code in
+// the chain (getDeepestErrorCode in samber/oops@v1.21.0+). The fix
+// switches that path to Errorf so the OUTER code
+// (INVALIDATION_PROBE_AND_PILL_FAILED) is what callers see, with the
+// inner code preserved in the With("inner_code") context. The
+// "propagates outer ... with inner_code" case below pins this contract.
 func TestRequestInvalidationByErrorClass(t *testing.T) {
 	const (
 		self  = cluster.MemberID("01HSELFAAAAAAAAAAAAAAAAAA")
@@ -203,18 +205,22 @@ func TestRequestInvalidationByErrorClass(t *testing.T) {
 			wantCode: "INVALIDATION_PARTIAL_FAILURE",
 		},
 		{
-			// Default branch: the inner code is propagated up via
-			// samber/oops's deepest-Code() walk. inner_code +
-			// probe_target context keys prove the wrap branch ran
-			// (vs. the `continue` or rate-limited shortcuts).
-			name:        "propagates inner CLUSTER_PROBE_AND_PILL_PROBE_FAILED with inner_code + probe_target context",
+			// Default branch: the OUTER code
+			// INVALIDATION_PROBE_AND_PILL_FAILED is what callers see; the
+			// inner CLUSTER_* code lives in `inner_code` context. Pre-fix
+			// (3.22) the surfaced code was the inner one because
+			// oops.Code(OUTER).Wrap(innerOopsErr) traverses to deepest;
+			// the fix switched the wrap site to Errorf to break the
+			// chain walk. inner_code + probe_target context keys prove
+			// the default-wrap branch ran (vs. continue / rate-limited).
+			name:        "surfaces outer INVALIDATION_PROBE_AND_PILL_FAILED with inner_code + probe_target context",
 			liveMembers: twoMember,
 			probeAndPill: func(_ context.Context, _ cluster.MemberID, _ cluster.PillReason) error {
 				return oops.Code("CLUSTER_PROBE_AND_PILL_PROBE_FAILED").
 					With("target", string(other)).
 					Errorf("nats failure")
 			},
-			wantCode: "CLUSTER_PROBE_AND_PILL_PROBE_FAILED",
+			wantCode: "INVALIDATION_PROBE_AND_PILL_FAILED",
 			wantCtx: map[string]any{
 				"inner_code":   "CLUSTER_PROBE_AND_PILL_PROBE_FAILED",
 				"probe_target": string(other),
