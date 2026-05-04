@@ -109,7 +109,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup Testcontainers Cloud Client
-        uses: atomicjar/testcontainers-cloud-setup-action@v1
+        uses: atomicjar/testcontainers-cloud-setup-action@7d1bab3fdfe0027c91936deca6b924d8a8a7a04d # v1
         with:
           token: ${{ secrets.TC_CLOUD_TOKEN }}
 
@@ -153,7 +153,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup Testcontainers Cloud Client
-        uses: atomicjar/testcontainers-cloud-setup-action@v1
+        uses: atomicjar/testcontainers-cloud-setup-action@7d1bab3fdfe0027c91936deca6b924d8a8a7a04d # v1
         with:
           token: ${{ secrets.TC_CLOUD_TOKEN }}
 
@@ -196,7 +196,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup Testcontainers Cloud Client
-        uses: atomicjar/testcontainers-cloud-setup-action@v1
+        uses: atomicjar/testcontainers-cloud-setup-action@7d1bab3fdfe0027c91936deca6b924d8a8a7a04d # v1
         with:
           token: ${{ secrets.TC_CLOUD_TOKEN }}
 
@@ -249,7 +249,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup Testcontainers Cloud Client
-        uses: atomicjar/testcontainers-cloud-setup-action@v1
+        uses: atomicjar/testcontainers-cloud-setup-action@7d1bab3fdfe0027c91936deca6b924d8a8a7a04d # v1
         with:
           token: ${{ secrets.TC_CLOUD_TOKEN }}
       - name: Set up Go
