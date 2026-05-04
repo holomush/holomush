@@ -1,15 +1,5 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 HoloMUSH Contributors
-
-# pnpm 11 removed the `pnpm` field from package.json and renamed
-# `onlyBuiltDependencies` to `allowBuilds`. Build scripts now run
-# only when explicitly approved here. Both packages below are
-# trusted upstream toolchain dependencies — esbuild is bundled by
-# Vite, protobufjs is consumed by @bufbuild/protoc-gen-es. See
-# https://github.com/pnpm/pnpm/releases/tag/v11.0.0 for the migration
-# notes.
 overrides:
-  protobufjs: 7.5.5
+  protobufjs: 7.5.6
 
 allowBuilds:
   esbuild: true
