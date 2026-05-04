@@ -148,14 +148,14 @@ func TestProjectionDrainsPublishedMessageToAuditTable(t *testing.T) {
 		subject, eventType, actorKind, codec string
 		schemaVer                            int16
 		jsSeq                                int64
-		payload                              []byte
+		envelope                             []byte
 		timestamp                            time.Time
 		idBytes                              []byte
 	)
 	err := pool.QueryRow(t.Context(), `
-		SELECT id, subject, type, timestamp, actor_kind, payload, schema_ver, codec, js_seq
+		SELECT id, subject, type, timestamp, actor_kind, envelope, schema_ver, codec, js_seq
 		FROM events_audit
-	`).Scan(&idBytes, &subject, &eventType, &timestamp, &actorKind, &payload, &schemaVer, &codec, &jsSeq)
+	`).Scan(&idBytes, &subject, &eventType, &timestamp, &actorKind, &envelope, &schemaVer, &codec, &jsSeq)
 	require.NoError(t, err)
 
 	expectedID := id.Bytes()
@@ -166,7 +166,7 @@ func TestProjectionDrainsPublishedMessageToAuditTable(t *testing.T) {
 	assert.Equal(t, testCodec, codec)
 	assert.EqualValues(t, 1, schemaVer)
 	assert.Equal(t, int64(1), jsSeq, "first published message should have js_seq=1")
-	assert.JSONEq(t, `{"hello":"world"}`, string(payload))
+	assert.JSONEq(t, `{"hello":"world"}`, string(envelope))
 	assert.False(t, timestamp.IsZero())
 }
 
