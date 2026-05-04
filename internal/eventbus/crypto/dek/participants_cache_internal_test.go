@@ -30,9 +30,9 @@ func TestParticipantsCacheEvictOldestCleansReverseIndexAcrossContexts(t *testing
 	kB1 := ParticipantsCacheKey{ContextType: "scene", ContextID: "01HSCENE_B", Version: 1}
 	kB2 := ParticipantsCacheKey{ContextType: "scene", ContextID: "01HSCENE_B", Version: 2}
 
-	c.Put(kA, newParticipants("01HALICE"))   // byContext[A]={kA}
-	c.Put(kB1, newParticipants("01HBOB"))    // list=[kB1, kA]
-	c.Put(kB2, newParticipants("01HCAROL"))  // evicts kA (LRU)
+	c.Put(kA, newParticipants("01HALICE"))  // byContext[A]={kA}
+	c.Put(kB1, newParticipants("01HBOB"))   // list=[kB1, kA]
+	c.Put(kB2, newParticipants("01HCAROL")) // evicts kA (LRU)
 
 	if got := c.contextIndexLen(); got != 1 {
 		t.Errorf("contextIndexLen = %d; want 1 (only ctxB should remain after LRU eviction of ctxA's only entry)", got)

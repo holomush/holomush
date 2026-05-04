@@ -62,9 +62,9 @@ func TestEvictOldestCleansReverseIndexAcrossContexts(t *testing.T) {
 	ctxB := ContextID{Type: "scene", ID: "01HSCENE_B"}
 
 	k := CacheKey{KeyID: 1, Version: 1}
-	c.Put(k, ctxA, NewMaterial(make([]byte, DEKByteLength)))                                  // byContext[A]={k}
-	c.Put(CacheKey{KeyID: 2, Version: 1}, ctxB, NewMaterial(make([]byte, DEKByteLength)))     // list=[k2,k]
-	c.Put(CacheKey{KeyID: 3, Version: 1}, ctxB, NewMaterial(make([]byte, DEKByteLength)))     // evicts k (LRU)
+	c.Put(k, ctxA, NewMaterial(make([]byte, DEKByteLength)))                              // byContext[A]={k}
+	c.Put(CacheKey{KeyID: 2, Version: 1}, ctxB, NewMaterial(make([]byte, DEKByteLength))) // list=[k2,k]
+	c.Put(CacheKey{KeyID: 3, Version: 1}, ctxB, NewMaterial(make([]byte, DEKByteLength))) // evicts k (LRU)
 
 	// Re-insert the same CacheKey under ctxB. If evictOldestLocked
 	// had failed to remove k from byContext[A], byContext[A] would

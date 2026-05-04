@@ -229,4 +229,3 @@ func TestTimeoutForOtherActionsReturnsConfiguredInvalidateTimeout(t *testing.T) 
 		}
 	}
 }
-

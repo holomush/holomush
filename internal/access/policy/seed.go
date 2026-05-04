@@ -209,18 +209,20 @@ func SeedPolicies() []SeedPolicy {
 		// --- Phase-3b audit namespace deny policies (§7.7 ABAC layer) ---
 
 		// Decision 3 supplement: characters MUST NOT read audit.* streams.
-		// Layer 2 (NATS account-level deny_subscribe rules) lands in Phase 3d (holomush-ojw1.4).
+		// Phase 3d Decision 4: ABAC at the gRPC subscribe handler is the sole
+		// authoritative isolation gate; NATS-level deny rules retired (game-topic
+		// NATS is single-principal by architectural design).
 		{
 			Name:        "seed:deny-audit-read-character",
-			Description: "Characters MUST NOT read audit.* streams (§7.7 ABAC layer; complements Phase 3d NATS account-level deny rules)",
+			Description: "Characters MUST NOT read audit.* streams (§7.7 ABAC layer; sole authoritative gate per Phase 3d Decision 4 — NATS-level deny retired)",
 			DSLText:     `forbid(principal is character, action in ["read"], resource is stream) when { resource.stream.name like "audit.*" };`,
 			SeedVersion: 1,
 		},
 		// Decision 3 supplement: plugins MUST NOT read audit.* streams.
-		// Layer 2 (NATS account-level deny_subscribe rules) lands in Phase 3d (holomush-ojw1.4).
+		// Phase 3d Decision 4: see above.
 		{
 			Name:        "seed:deny-audit-read-plugin",
-			Description: "Plugins MUST NOT read audit.* streams (§7.7 ABAC layer; complements Phase 3d NATS account-level deny rules)",
+			Description: "Plugins MUST NOT read audit.* streams (§7.7 ABAC layer; sole authoritative gate per Phase 3d Decision 4 — NATS-level deny retired)",
 			DSLText:     `forbid(principal is plugin, action in ["read"], resource is stream) when { resource.stream.name like "audit.*" };`,
 			SeedVersion: 1,
 		},

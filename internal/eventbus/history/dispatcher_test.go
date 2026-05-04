@@ -29,9 +29,9 @@ func TestDecodeAuthorizeAndDispatchIdentityCodecPasses(t *testing.T) {
 	ev, metaOnly, err := decodeAuthorizeAndDispatch(
 		context.Background(),
 		envelope,
-		codec.NameIdentity, // identity codec — no AuthGuard
-		codec.KeyID(0),     // unused for identity
-		uint32(0),          // unused for identity
+		codec.NameIdentity,         // identity codec — no AuthGuard
+		codec.KeyID(0),             // unused for identity
+		uint32(0),                  // unused for identity
 		eventbus.SessionIdentity{}, // identity (not consulted on identity codec)
 		nil,                        // guard (not consulted on identity codec)
 		nil,                        // dekMgr (not consulted on identity codec)
