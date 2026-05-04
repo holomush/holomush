@@ -3023,7 +3023,6 @@ binary that includes the proto-field removal.
 ```bash
 DATABASE_URL=... NATS_URL=... NATS_STREAM_NAME=events task migrate:plugin-actors-cutover
 ```
-```
 
 ```text
 
