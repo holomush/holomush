@@ -12,11 +12,11 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/cluster"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
+	"github.com/holomush/holomush/internal/eventbus/natsconn"
 )
 
 // Action enumerates the cache-invalidation actions; receivers
@@ -74,8 +74,14 @@ func (c Config) Defaults() Config {
 }
 
 // Deps groups the Coordinator's runtime dependencies.
+//
+// Conn is typed as natsconn.Conn (the narrow interface seam) rather
+// than *nats.Conn so unit tests MAY substitute a mock without booting
+// an embedded NATS server. Production callers continue to pass
+// eventbus.Subsystem.Conn() directly — *nats.Conn satisfies
+// natsconn.Conn structurally. (holomush-ojw1.3.23)
 type Deps struct {
-	Conn      *nats.Conn
+	Conn      natsconn.Conn
 	Registry  cluster.Registry
 	DEKCache  *dek.Cache
 	PartCache *dek.ParticipantsCache
