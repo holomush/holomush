@@ -15,7 +15,8 @@ import (
 )
 
 func TestPluginEmitterDepsBuildSucceedsWithCryptoDisabled(t *testing.T) {
-	cfg := eventbus.Config{} // Crypto.Enabled defaults false
+	falseV := false
+	cfg := eventbus.Config{Crypto: eventbus.CryptoConfig{Enabled: &falseV}}
 	deps := bootstrap.PluginEmitterDeps{
 		Publisher: &noopPublisher{},
 		Manifests: func(string) *bootstrap.Manifest { return nil },
@@ -27,7 +28,8 @@ func TestPluginEmitterDepsBuildSucceedsWithCryptoDisabled(t *testing.T) {
 }
 
 func TestPluginEmitterDepsBuildSucceedsWithCryptoEnabled(t *testing.T) {
-	cfg := eventbus.Config{Crypto: eventbus.CryptoConfig{Enabled: true}}
+	trueV := true
+	cfg := eventbus.Config{Crypto: eventbus.CryptoConfig{Enabled: &trueV}}
 	deps := bootstrap.PluginEmitterDeps{
 		Publisher: &noopPublisher{},
 		Manifests: func(string) *bootstrap.Manifest { return nil },

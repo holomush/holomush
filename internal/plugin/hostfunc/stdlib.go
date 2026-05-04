@@ -408,13 +408,19 @@ func emitFlush(ls *lua.LState) int {
 		return 1
 	}
 
-	// Convert events to Lua table
+	// Convert events to Lua table. The `sensitive` field rides through
+	// to internal/plugin/lua/host.go::parseEmitEvents on the canonical
+	// `return holo.emit.flush()` path so a Lua plugin's per-event
+	// sensitivity claim reaches Manager.EmitPluginEvent → EmitIntent.
+	// Without this round-trip, Lua plugins emitting via the flush path
+	// would silently degrade to Sensitive=false regardless of opts.
 	result := ls.NewTable()
 	for i, event := range events {
 		eventTable := ls.NewTable()
 		ls.SetField(eventTable, "stream", lua.LString(event.Stream))
 		ls.SetField(eventTable, "type", lua.LString(string(event.Type)))
 		ls.SetField(eventTable, "payload", lua.LString(event.Payload))
+		ls.SetField(eventTable, "sensitive", lua.LBool(event.Sensitive))
 		result.RawSetInt(i+1, eventTable)
 	}
 

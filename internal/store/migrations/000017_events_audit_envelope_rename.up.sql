@@ -10,5 +10,24 @@
 -- clarifies semantics for cold-tier readers and SQL tooling.
 --
 -- ALTER TABLE ... RENAME COLUMN is metadata-only — no row-level work.
+-- Idempotent guard (project rule per CLAUDE.md / AGENTS.md "Every
+-- database migration MUST be idempotent"): only rename when the source
+-- column is present and the destination is absent, so reruns and
+-- partially-reconciled environments stay safe.
 
-ALTER TABLE events_audit RENAME COLUMN payload TO envelope;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'events_audit'
+      AND column_name = 'payload'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'events_audit'
+      AND column_name = 'envelope'
+  ) THEN
+    ALTER TABLE events_audit RENAME COLUMN payload TO envelope;
+  END IF;
+END $$;

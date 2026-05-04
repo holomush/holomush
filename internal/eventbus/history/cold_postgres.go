@@ -380,11 +380,33 @@ func decodeColdRow(
 	codecName := codec.Name(row.Codec)
 	var keyID codec.KeyID
 	var keyVersion uint32
-	if row.DEKRef.Valid {
-		keyID = codec.KeyID(row.DEKRef.Int64) //nolint:gosec // G115: dek_ref is a BIGSERIAL; positive within int64 range
-	}
-	if row.DEKVersion.Valid {
-		keyVersion = uint32(row.DEKVersion.Int32) //nolint:gosec // G115: dek_version is a non-negative INTEGER; fits uint32
+	if codecName != codec.NameIdentity {
+		// Sensitive (non-identity) rows MUST carry both DEK columns —
+		// the audit projection stamps them from the App-Dek-Ref /
+		// App-Dek-Version headers (per INV-49). NULL columns on a
+		// sensitive row mean a corrupted or partially-projected row;
+		// fail-closed rather than feeding (0, 0) to the dispatcher
+		// which would surface as a confusing Resolve(0, 0) miss or an
+		// auth-guard mismatch. Mirrors the hot-tier contract violation
+		// at hot_jetstream.go:502-507 (EVENTBUS_HISTORY_DEK_HEADER_MISSING).
+		if !row.DEKRef.Valid || !row.DEKVersion.Valid {
+			return eventbus.Event{}, false, oops.Code("EVENTBUS_COLD_DEK_COLUMNS_MISSING").
+				With("codec", row.Codec).
+				With("has_dek_ref", row.DEKRef.Valid).
+				With("has_dek_version", row.DEKVersion.Valid).
+				With("event_id", hex.EncodeToString(row.ID)).
+				Errorf("sensitive audit row missing required DEK columns")
+		}
+		if row.DEKRef.Int64 < 0 || row.DEKVersion.Int32 < 0 {
+			return eventbus.Event{}, false, oops.Code("EVENTBUS_COLD_BAD_DEK_COLUMNS").
+				With("codec", row.Codec).
+				With("dek_ref", row.DEKRef.Int64).
+				With("dek_version", row.DEKVersion.Int32).
+				With("event_id", hex.EncodeToString(row.ID)).
+				Errorf("sensitive audit row has invalid (negative) DEK column values")
+		}
+		keyID = codec.KeyID(row.DEKRef.Int64)
+		keyVersion = uint32(row.DEKVersion.Int32)
 	}
 	return decodeAuthorizeAndDispatch(
 		ctx, &pbEnvelope, codecName, keyID, keyVersion,

@@ -10,15 +10,19 @@
 // character-binding (the participant scenario) and plugin-actor (the
 // Decision 5 regression lock).
 //
-// Cold-tier wiring note: history.NewReader does not yet expose AuthGuard /
-// DEKManager options on its Reader-level constructor (the cold-tier-internal
-// options live in cold_postgres.go::WithColdHistoryAuthGuard but are not
-// plumbed through NewReader). Until that wiring lands, the cold-read tests
-// here use a local ColdTier shim (e2eColdTier) that delegates to the same
-// dispatcher contract via the public codec / AAD / authguard packages. The
-// shim's correctness w.r.t. the production dispatcher is locked by the
+// Cold-tier wiring note: as of CodeRabbit autofix Pass 2 (PR #3521,
+// 2026-05-04), history.NewReader exposes WithCryptoCold(opts...) which
+// forwards ColdTierOption values to the default postgres cold tier. The
+// cold-read tests in this file still use a local e2eColdTier shim
+// because they exercise additional fixture-specific control surfaces
+// (e.g., bypassing the hot tier deterministically); the shim's
+// correctness w.r.t. the production dispatcher is locked by the
 // unit-level tests in internal/eventbus/history/cold_postgres_test.go
-// (TestColdPostgresUnmarshalsEnvelope) and dispatcher_test.go.
+// (TestColdPostgresUnmarshalsEnvelope) and dispatcher_test.go. New
+// callers wiring crypto into production cold reads should use
+// history.WithCryptoCold(history.WithColdHistoryAuthGuard(g),
+// history.WithColdHistoryDEKManager(m),
+// history.WithColdHistoryDecryptAuditEmitter(em)).
 package crypto_test
 
 import (

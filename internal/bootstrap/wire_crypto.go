@@ -35,14 +35,15 @@ type PluginEmitterDeps struct {
 }
 
 // BuildPluginEmitter constructs a PluginEventEmitter from cfg + deps.
-// cfg.Crypto.Enabled gates the host-side sensitivity fence inside the
-// emitter (see plugins.WithCryptoEnabled). When false (the Phase 3a
-// default), the emitter skips the fence and stamps Sensitive=false
-// unconditionally, matching pre-Phase-3a behavior. When true, the
-// fence runs and the publisher's DEK-manager-aware crypto branch
-// activates downstream.
+// cfg.Crypto.IsEnabled() gates the host-side sensitivity fence inside
+// the emitter (see plugins.WithCryptoEnabled). As of Phase 3d the
+// effective default is true; when explicitly set to false (e.g. for
+// dev/test deployments), the emitter skips the fence and stamps
+// Sensitive=false unconditionally, matching pre-Phase-3a behavior.
+// When true, the fence runs and the publisher's DEK-manager-aware
+// crypto branch activates downstream.
 func BuildPluginEmitter(_ context.Context, cfg eventbus.Config, deps PluginEmitterDeps) (*plugins.PluginEventEmitter, error) {
 	return plugins.NewPluginEventEmitter(deps.Publisher, deps.Manifests, deps.Resolver,
-		plugins.WithCryptoEnabled(cfg.Crypto.Enabled),
+		plugins.WithCryptoEnabled(cfg.Crypto.IsEnabled()),
 	), nil
 }

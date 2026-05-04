@@ -139,6 +139,27 @@ func WithColdTier(c ColdTier) Option {
 	return func(r *Reader) { r.cold = c }
 }
 
+// WithCryptoCold forwards ColdTierOption values to the default
+// PostgreSQL cold tier when NewReader builds it. Use this to wire
+// AuthGuard / DEKManager / DecryptAuditEmitter into production cold
+// reads via the public Reader API:
+//
+//	history.NewReader(js, pool, max, now,
+//	    history.WithCryptoCold(
+//	        history.WithColdHistoryAuthGuard(g),
+//	        history.WithColdHistoryDEKManager(m),
+//	        history.WithColdHistoryDecryptAuditEmitter(em),
+//	    ),
+//	)
+//
+// No-op when the caller supplies WithColdTier (the test-fake path) —
+// the injected ColdTier owns its own option wiring. Multiple
+// WithCryptoCold calls accumulate (last-writer-wins semantics inherited
+// from the underlying ColdTierOption setters).
+func WithCryptoCold(opts ...ColdTierOption) Option {
+	return func(r *Reader) { r.coldOpts = append(r.coldOpts, opts...) }
+}
+
 // HotTier reads the JetStream-hosted recent slice of history. Exported so
 // tests and alternate storage backends can plug in.
 type HotTier interface {
@@ -182,6 +203,13 @@ type Reader struct {
 	// Postgres-backed implementations.
 	hot  HotTier
 	cold ColdTier
+
+	// coldOpts accumulates ColdTierOption values supplied via
+	// WithCryptoCold(...). They are forwarded to newPostgresColdTier
+	// when NewReader builds the default cold tier. Ignored when the
+	// caller injects a test fake via WithColdTier (that path owns its
+	// own option wiring).
+	coldOpts []ColdTierOption
 }
 
 // NewReader constructs a Reader. `js` and `pool` MAY be nil if the caller
@@ -219,7 +247,7 @@ func NewReader(js jetstream.JetStream, pool *pgxpool.Pool, streamMaxAge time.Dur
 		r.hot = newJetStreamHotTier(r.js, r.selector, r.now)
 	}
 	if r.cold == nil && r.pool != nil {
-		r.cold = newPostgresColdTier(r.pool)
+		r.cold = newPostgresColdTier(r.pool, r.coldOpts...)
 	}
 	return r
 }

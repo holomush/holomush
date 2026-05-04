@@ -323,11 +323,11 @@ func TestMigratorAppliedMigrationsReturnsEmptyAtVersionZero(t *testing.T) {
 }
 
 func TestMigratorAppliedMigrationsReturnsAllAtLatestVersion(t *testing.T) {
-	// At version 14 (latest), all migrations applied
-	m := &Migrator{m: &mockMigrate{versionVal: 14}}
+	// At version 17 (latest), all migrations applied
+	m := &Migrator{m: &mockMigrate{versionVal: 17}}
 	applied, err := m.AppliedMigrations()
 	require.NoError(t, err)
-	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, applied)
+	assert.Equal(t, []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}, applied)
 }
 
 func TestMigratorAppliedMigrationsReturnsErrorWhenVersionFails(t *testing.T) {

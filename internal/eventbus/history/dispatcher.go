@@ -58,6 +58,19 @@ func decodeAuthorizeAndDispatch(
 		return buildHistoryEventFromEnvelope(eventID, envelope, envelope.GetPayload()), false, nil
 	}
 
+	// Guard against misconfiguration: cold-tier production wiring
+	// currently leaves authGuard nil (pre-Phase-3b passthrough; see
+	// Step 5.0a in the Phase 3d grounding doc and the holomush-ojw1
+	// follow-up bead "plumb cold-tier auth options through
+	// history.NewReader"). A sensitive history read with no guard wired
+	// MUST fail in a controlled way rather than panic on guard.Check.
+	if guard == nil {
+		return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_AUTH_GUARD_NIL").
+			With("event_type", envelope.GetType()).
+			With("codec", string(codecName)).
+			Errorf("encrypted history read requires AuthGuard but got nil — cold-tier wiring is incomplete")
+	}
+
 	req := eventbus.SessionCheckRequest{
 		Identity:   identity,
 		KeyID:      keyID,

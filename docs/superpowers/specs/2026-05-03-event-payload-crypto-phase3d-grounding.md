@@ -64,7 +64,7 @@ This document records the design decisions made during the Phase 3d brainstormin
 **Test invariant flip (verified function name):** `internal/eventbus/config_test.go:14` defines `TestCryptoEnabledDefaultsToFalse`; line 16 asserts `assert.False(t, cfg.Crypto.Enabled, "Phase 3a ships dark — flag must default to off")`. This MUST flip:
 
 - Test function rename: `TestCryptoEnabledDefaultsToFalse` → `TestCryptoEnabledDefaultsToTrue`
-- Assertion: `assert.True(t, cfg.Crypto.Enabled, "Phase 3d ships live")`
+- Assertion: `assert.True(t, cfg.Crypto.IsEnabled(), "Phase 3d ships live")` (uses the `IsEnabled()` helper since `Enabled` is a `*bool` post-Phase-3d code-review fixes — explicit operator-set false survives `Defaults()`)
 
 Both changes land in the same commit that flips the default.
 
@@ -150,7 +150,7 @@ The default ABAC policy denies `subject={kind: plugin|character}, action: subscr
 1. **Migration `000017_events_audit_envelope_rename`** (next free migration number; verified `000015` and `000016` already taken) MUST `ALTER TABLE events_audit RENAME COLUMN payload TO envelope`. No data migration required (PG `RENAME COLUMN` is metadata-only). Down migration renames back. With no users this is straightforward; the column rename clarifies semantics for future readers.
 2. **Audit projection writer** (`internal/eventbus/audit/projection.go`) MUST update its INSERT to use the new column name `envelope`. No semantic change — still writes `msg.Data()` (the marshaled envelope bytes).
 3. **Cold-tier reader** (`internal/eventbus/history/cold_postgres.go`) MUST expand its SELECT to include `envelope, codec, dek_ref, dek_version` columns and `proto.Unmarshal(row.envelope, &event)` to recover the full `*eventbusv1.Event`. The existing field-by-field column reconstruction (`cold_postgres.go:152`) MUST be replaced uniformly — including for `codec='identity'` rows. No two-path code; envelope unmarshal is the only path.
-4. **Header-free dispatcher refactor in `internal/eventbus/history/hot_jetstream.go`** MUST extract a shared function. The existing `decodeAndAuthorizeHistory` at `hot_jetstream.go:484-493` takes `(ctx, msg jetstream.Msg, envelope, codecName, identity, guard, dekMgr, auditEm) → (eventbus.Event, bool, error)` and reaches into `msg.Headers()` at `:494` to parse `keyID`/`keyVersion`. The refactor MUST extract a header-free shared dispatcher with the existing return shape and existing crypto types preserved:
+4. **Header-free dispatcher refactor extracted to `internal/eventbus/history/dispatcher.go`** (NEW file, not an in-place extraction inside `hot_jetstream.go`). The pre-Phase-3d `decodeAndAuthorizeHistory` at `hot_jetstream.go:484-493` took `(ctx, msg jetstream.Msg, envelope, codecName, identity, guard, dekMgr, auditEm) → (eventbus.Event, bool, error)` and reached into `msg.Headers()` at `:494` to parse `keyID`/`keyVersion`. Phase 3d moves the header-free body to a new file `internal/eventbus/history/dispatcher.go` exporting `decodeAuthorizeAndDispatch` with the existing return shape and existing crypto types preserved:
 
    ```go
    func decodeAuthorizeAndDispatch(
@@ -166,7 +166,7 @@ The default ABAC policy denies `subject={kind: plugin|character}, action: subscr
    ) (eventbus.Event, bool, error)
    ```
 
-   The hot path's existing function `decodeAndAuthorizeHistory` becomes a thin wrapper that parses `App-Codec`, `App-Dek-Ref`, `App-Dek-Version` from `msg.Headers()` and calls the dispatcher. The cold path becomes a sibling thin wrapper that reads `row.codec`, `row.dek_ref`, `row.dek_version` from PG columns and calls the same dispatcher. Both paths share the AAD computation, codec dispatch, AuthGuard.Decide, and decrypt-or-metadata-only logic. Return shape `(eventbus.Event, bool, error)` is the existing `(event, metadataOnly, err)` triple — preserving the call site at `:440-445` which does `ev.MetadataOnly = metaOnly`.
+   The hot path's `decodeAndAuthorizeHistory` becomes a thin wrapper in `hot_jetstream.go` that parses `App-Codec`, `App-Dek-Ref`, `App-Dek-Version` from `msg.Headers()` and calls the dispatcher in `dispatcher.go`. The cold path becomes a sibling thin wrapper (`decodeColdRow` in `cold_postgres.go`) that reads `row.codec`, `row.dek_ref`, `row.dek_version` from PG columns and calls the same dispatcher. Both paths share the AAD computation, codec dispatch, `SessionAuthGuard.Check` decision, and decrypt-or-metadata-only logic. Return shape `(eventbus.Event, bool, error)` is the existing `(event, metadataOnly, err)` triple — preserving the call site at `:440-445` which does `ev.MetadataOnly = metaOnly`.
 5. **AAD inputs on cold read enumerated explicitly:** `aad.Build(unmarshaled_envelope, row.codec, row.dek_ref, row.dek_version)`. Identical AAD bytes to the hot path's `aad.Build(envelope, codecName, keyID, keyVersion)` because the inputs are byte-equal (envelope bytes byte-equal between bus and PG; column values byte-equal to the original header values per existing INV-49 forward direction wired in Phase 3a).
 6. **Stale-DEK case (cold row references missing `crypto_keys` row, INV-39 deferred per Decision 3):** the placeholder behavior MUST be: deliver event with `metadata_only=true` and emit metric `crypto.cold_dek_miss`. **No wire-level header claim** — Revision 2's `App-Warning: stale-dek` proposal retired. The Event proto has no header bag for cold-path injection; adding one would expand scope unnecessarily. Operators detect via metric; clients detect via `metadata_only=true`. If a future phase needs client-visible stale-DEK signaling, a typed proto field can be added then.
 
@@ -222,7 +222,7 @@ Deeper runbook content lands with later phases per master spec §11.1 *"docs shi
 
 ## Architecture & components touched
 
-Phase 3d's surface is significantly smaller after Revisions 2/3: no new file in `internal/eventbus/`, no new config knob, no fail-closed bootstrap wiring, no new column on `events_audit`. The work is a column rename, a code refactor, expanded SELECT, and the SDK Sensitive surface plus flag flip.
+Phase 3d's surface is significantly smaller after Revisions 2/3: no new top-level package under `internal/eventbus/`, no new config knob, no fail-closed bootstrap wiring, no new column on `events_audit`. The two new Go files (`internal/eventbus/history/dispatcher.go` + `dispatcher_test.go`, per Decision 5 item 4) live inside the existing `internal/eventbus/history` package as the extracted shared dispatcher. The work is a column rename, a code refactor (dispatcher extraction), expanded SELECT, and the SDK Sensitive surface plus flag flip.
 
 | Area | File(s) | Change |
 | ---- | ------- | ------ |
@@ -242,7 +242,7 @@ Phase 3d's surface is significantly smaller after Revisions 2/3: no new file in 
 | Plugin SDK Go (binary) | `internal/plugin/goplugin/host_service.go` (or actual path; verify in plan) | Copy `req.Sensitive` → `EmitIntent.Sensitive` |
 | Plugin SDK Lua | Lua emit translator (path verify in plan) | Read `sensitive` boolean key with type checking; default `false`; `LUA_EMIT_SENSITIVE_TYPE` rejection |
 
-**No new packages. No new Go source files in `internal/eventbus/`. One new SQL migration pair.**
+**No new packages.** Two new Go source files under `internal/eventbus/history/`: `dispatcher.go` (the extracted shared dispatcher per Decision 5 item 4) and `dispatcher_test.go`. Plus one new SQL migration pair (`000017_events_audit_envelope_rename`).
 
 **Trust boundary deltas vs Phase 3c:** One narrowing, no widenings.
 
@@ -292,7 +292,7 @@ History reader (hot first, cold on JS retention miss — F4 crossover)
               Codec dispatch (codec.Lookup)
                     │
                     ▼
-              AuthGuard.Decide(actor, event, contextID)
+              SessionAuthGuard.Check(ctx, SessionCheckRequest{...})
                     │
               ┌─────┼──────┬──────────┬──────────────┐
               ▼     ▼      ▼          ▼              ▼

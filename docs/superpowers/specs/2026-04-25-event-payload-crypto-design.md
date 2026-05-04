@@ -231,7 +231,7 @@ so a reviewer can grep `INV-N` and find the proof.
 | **INV-12** | `Add(participant)` MUST grant immediate read access to all existing DEK history without rotating the DEK. | Integration |
 | **INV-13** | `Rotate(context)` MUST preserve the old DEK ciphertext and the old DEK record unchanged. Holds under Phase 3c soft-delete (Rotate does not touch `destroyed_at`). | Unit + Integration |
 | **INV-14** | `Rekey(context)` MUST re-encrypt historical ciphertext under the new DEK and soft-delete the old DEK record (`destroyed_at = NOW()`); production reads filter `destroyed_at IS NULL` so the operational effect is identical to hard-delete. | Integration |
-| **INV-15** | `Rekey` MUST emit a system audit event with operator identity, context, and justification, on a `audit.>` subject which is architecturally isolated via NATS account-level deny rules from any plugin or character account (§7.7) AND additionally denied by default ABAC policy. | Integration |
+| **INV-15** | `Rekey` MUST emit a system audit event with operator identity, context, and justification, on an `audit.>` subject. ABAC denies subscribe to `audit.>` for `kind={plugin\|character}` subjects at the gRPC subscribe handler boundary (§7.7). | Integration |
 | **INV-16** | `Rekey` MUST NOT be invocable from any in-game command surface or any public gRPC service. | Static + Integration |
 
 ### Plugin authorization invariants
@@ -249,7 +249,7 @@ so a reviewer can grep `INV-N` and find the proof.
 
 | ID | Statement | Test type |
 | --- | --- | --- |
-| **INV-21** | `events_audit` rows MUST store the same ciphertext bytes and codec name as the bus event for sensitive events. | Integration |
+| **INV-21** | `events_audit.envelope` MUST be byte-equal to the marshaled `Event` proto envelope on the bus for sensitive events (renamed from the `payload` column in migration `000017_events_audit_envelope_rename`; the column always carried the marshaled envelope bytes, not just the inner Event.payload field — see §4.7). | Integration |
 | **INV-22** | A `QueryStreamHistory` call MUST apply the same participant-set + ABAC checks as live subscription. | Integration |
 
 ### Provider invariants
@@ -342,7 +342,7 @@ for full rationale (Decisions 1–8).
 | **INV-48** | The host's `QueryStreamHistory` handler MUST refuse a row from a plugin where `codec != identity` arrives without a matching `dek_ref` (or with a `dek_ref` not present in `crypto_keys`). | Integration |
 | **INV-50** | The host's `QueryStreamHistory` handler MUST refuse a row from a plugin where `codec = identity` arrives for an event whose `type` field matches a manifest-declared `sensitivity: always` event type. The host maintains the always-sensitive event-type set from loaded manifests and uses it as the ground truth. Defeats a malicious or buggy plugin that returns plaintext for sensitive events. | Integration |
 | **INV-51** | A player-kind subscription that resolves a DEK via `participant.player_id` membership (the previous-tenure read path) MUST emit `audit.<game>.system.player_history_read` once per session-context pair, before the first plaintext event is delivered. | Integration |
-| **INV-52** | A NATS account configured for a plugin or character subscriber MUST NOT include any `audit.>` subject in its allowed-subscribe list. The default NATS account configuration is the architectural source of truth for INV-15. | Integration |
+| **INV-52** | Retired per Phase 3d Decision 4 — see §7.7 amendment. Game-topic NATS is single-principal by architectural design; no NATS account-level deny rule has a target. | Retired |
 
 ### Phase 3a enforcing tests
 
@@ -853,11 +853,16 @@ payload (cleartext):
 **`audit.<game>.system.provider_migrate.<context>`** follow the same
 pattern.
 
-ABAC policy AND a NATS account-level deny rule MUST prevent any plugin or
-character from subscribing to `audit.*.plugin_decrypt.*` and
-`audit.*.system.*`. The NATS-level deny is the architectural enforcement
-(operators cannot accidentally remove it via in-game ABAC edits); the
-ABAC rule is the redundancy. See §7.7.
+ABAC policy MUST deny any plugin or character from subscribing to
+`audit.*.plugin_decrypt.*` and `audit.*.system.*`. INV-15 verifies this
+denial at the gRPC subscribe handler boundary. NATS-level deny rules
+do not apply: game-topic NATS is single-principal by architectural
+design (only the holomush server connects on these subjects), so there
+is no plugin or character NATS account principal to deny. The
+authoritative isolation gate is ABAC at the gRPC subscribe handler;
+defense-in-depth is at the architectural level (gRPC mediation between
+plugins/characters and NATS), not the substrate level. See §7.7 for
+the full architectural framing.
 Operators read these via `holomush admin audit query …` on the localhost
 UNIX admin socket.
 
@@ -865,9 +870,13 @@ UNIX admin socket.
 
 The existing `events_audit` table
 (`internal/store/migrations/000009_create_events_audit.up.sql`) has columns
-`id BYTEA, subject, type, timestamp, actor_kind, actor_id, payload,
-schema_ver, codec, js_seq, inserted_at`. This design adds two columns
-plus one index:
+`id BYTEA, subject, type, timestamp, actor_kind, actor_id, envelope,
+schema_ver, codec, js_seq, inserted_at`. The `envelope` column was renamed
+from `payload` in migration `000017_events_audit_envelope_rename` to
+clarify pre-existing semantics — the column always carried the marshaled
+envelope bytes (the full `Event` proto, see `publisher.go:295,302`), not
+just the inner `Event.payload` field. This design adds two columns plus
+one index:
 
 ```sql
 -- migrations/NNNN_events_audit_dek_columns.up.sql
@@ -904,11 +913,13 @@ CREATE INDEX events_audit_dek_ref ON events_audit (dek_ref)
 `App-Dek-Version` from the JetStream message headers and inserts them
 into the new columns. For `codec=identity` events both headers are absent;
 the columns are inserted as NULL. Verified by INV-21 (byte-equality of
-ciphertext bytes) and a new INV-49 (header-to-column round-trip).
+`events_audit.envelope` to the bus envelope bytes) and INV-49 (envelope
+byte-equality across the full emit→audit→cold-read path, per Phase 3d
+Decision 5).
 
 | ID | Statement | Test type |
 | --- | --- | --- |
-| **INV-49** | The audit projection MUST copy `App-Dek-Ref` and `App-Dek-Version` headers from JetStream messages into `events_audit.dek_ref` and `events_audit.dek_version` columns; absent headers MUST result in NULL columns; reads from the cold tier MUST round-trip these values back into the headers when emitting via `QueryStreamHistory`. | Integration |
+| **INV-49** | Envelope byte-equality across emit→audit→cold-read: the marshaled `Event` proto envelope written to JetStream MUST be byte-equal to `events_audit.envelope` on the audit-projection side, AND the cold-tier reader MUST recover the same envelope bytes when serving historical reads via `QueryStreamHistory`. Per Phase 3d Decision 5, the envelope round-trip subsumes the prior header→column forward direction and the column→header reverse direction into a single envelope-equality invariant; `dek_ref`/`dek_version` columns are derived projections preserved for query/index purposes only. | Integration |
 
 ---
 
@@ -1743,25 +1754,52 @@ bounds; the data accessed is described by the time-range field.
 
 ### 7.7 Audit-stream isolation
 
-The `audit.>` subject namespace is enforced at TWO layers:
+Game-topic NATS subjects (`events.>`, `audit.>`, `internal.>`) are
+single-principal by architectural design: only the holomush server connects
+on these subjects in any planned topology. Plugins emit via gRPC
+`PluginHostService` and receive via host-mediated gRPC streams; characters'
+subscriptions are server-internal multiplexing through the server's NATS
+connection. There is no plugin or character NATS account, in embedded or
+external mode. Plugins MAY use NATS separately for their own purposes
+(their own subjects, their own clusters, their own credentials), but that
+is a plugin-internal concern with no game-topic surface.
 
-1. **NATS account-level deny (architectural).** Default-shipped NATS
-   account configuration includes a `deny_subscribe = ["audit.>"]` rule
-   for any account configured for plugin or character subscribers. This
-   is the authoritative source of truth for INV-15. Operators who run
-   the system without this configuration MUST be loud about it (server
-   refuses to start; explicit `--allow-audit-subscribe-by-plugins`
-   override required for tests).
-2. **ABAC default policy (redundant).** A default ABAC policy denies
-   `subject={kind: plugin|character}, action: subscribe, resource: subject:audit.>`.
+**ABAC is the authoritative isolation gate.** The default ABAC policy MUST
+deny `subject={kind: plugin|character}, action: subscribe, resource: subject:audit.>`
+(and `subject:internal.>`). INV-15 verifies this denial at the gRPC subscribe
+handler boundary.
 
-INV-15 verification tests that BOTH layers exist and BOTH deny by default.
-Defense in depth: removing one layer leaves the other holding the line.
-INV-52 specifically tests the NATS-level deny.
+**Defense-in-depth is at the architectural level, not the substrate level.**
+The absence of plugin/character NATS principals is a structural property of
+HoloMUSH's gRPC-mediated plugin model. Removing the gRPC mediation between
+plugins/characters and NATS would require a deliberate architectural change
+subject to its own design review.
 
-The `holomush admin audit query` CLI uses a separate localhost-only
-operator account that DOES have subscribe access to `audit.>`. That
-account's credential is on the host filesystem with restrictive perms.
+**NATS-level deny rules do not apply.** They have no target principal in
+any planned topology. Earlier drafts of this section (and INV-52) presumed
+an architecture where plugins or characters connected to NATS directly;
+that assumption was incorrect for HoloMUSH. INV-52 retires; cite this
+section as the architectural property it would have asserted.
+
+**External NATS deploy.** When the server connects to an external NATS
+cluster (tracked under `holomush-s5ts`), it authenticates as a single
+account scoped to game topics:
+
+```text
+Account "holomush-server":
+  publish:   events.>, audit.>, internal.>
+  subscribe: events.>, audit.>, internal.>
+```
+
+Other accounts in the cluster have no publish or subscribe permission on
+these subjects by default — enforced at the cluster admin layer, not
+inside the server.
+
+**Operator audit query.** A future operator-read account
+(`holomush-operator-read`, subscribe `events.>` only — NOT `audit.>` or
+`internal.>`) MAY be added under `holomush-s5ts` for monitoring and
+debugging use cases. Audit-table reads remain the localhost UNIX admin
+socket path (Phase 5), not NATS subscribe.
 
 ---
 
@@ -1880,14 +1918,22 @@ For each event from hot tier:
       if cold_row exists:
         substitute cold_row for hot_row
       else:
-        emit metric: oops.Code("DEK_LOST_FOR_HISTORICAL_EVENT")
-        deliver event with metadata_only=true and a typed warning
+        emit metric: crypto.cold_dek_miss
+        deliver event with metadata_only=true (metric-only signaling)
 ```
 
 This case is rare (only happens during the JS-retention window after
 `Rekey`) but needs to be handled cleanly. Behavior is conservative: prefer
 the cold tier (re-encrypted under the new DEK), fall back to metadata-only
-with a diagnostic if both tiers diverged.
+with a metric if both tiers diverged.
+
+**Signaling: metric-only.** Per Phase 3d Decision 5, the terminal
+"cold-itself-can't-decrypt" branch is signaled via the `crypto.cold_dek_miss`
+metric only — no typed wire-header on the event. The earlier draft of this
+section proposed a typed warning header; that was dropped because the
+on-the-wire envelope round-trip (INV-49) is the contractual surface, and
+out-of-band fallback signaling belongs in metrics, not in the event
+envelope. INV-39 (hot→cold fallback loop) remains deferred to Phase 5.
 
 ### 8.5 Audit-of-audit subjects
 
@@ -2094,7 +2140,7 @@ phase 3.
 | --- | --- | --- |
 | 1 | Re-scoped `holomush-k18g`: manifest grammar expansion (`crypto.emits` per event type with sensitivity declarations); all existing plugins updated; auto-generated event reference docs | Plugin authors gain a declared catalogue; nothing else changes |
 | 2 | `KEKProvider` interface + `LocalAEADProvider` + `NoneProvider` + `crypto_keys` table migration + `events_audit` columns migration + `DEKManager` skeleton + `dek.Material` type + lint rule | Server can wrap/unwrap DEKs; events_audit gains the new columns; nothing emits or reads sensitive yet |
-| 3 | EventSink encryption path + new codec impls (`xchacha20poly1305-v1`) + AAD canonicalization + AuthGuard (4 branches) + decrypt-on-fan-out + cache + request-reply cache-invalidation protocol + audit subject namespaces + NATS account-level deny rules + emit-time sensitivity fence (INV-6/7 — host-side ground-truth check at emit) + cold-tier `QueryStreamHistory` crypto path for host-owned audit. Note: the cold-tier read fence (INV-50) is plugin-owned-audit-specific and lands in Phase 7. Phase 3c grounding doc at [`docs/superpowers/specs/2026-05-02-event-payload-crypto-phase3c-grounding.md`](2026-05-02-event-payload-crypto-phase3c-grounding.md) (READY); cluster substrate (`internal/cluster/`) lands as a prerequisite to multi-replica safety. | End-to-end sensitive event flow works for host-owned audit subjects; players-as-character get full plaintext; previous-tenure player-kind reads emit per-session audit |
+| 3 | **COMPLETE** (Phase 3d closed 2026-05-03). EventSink encryption path + new codec impls (`xchacha20poly1305-v1`) + AAD canonicalization + AuthGuard (4 branches) + decrypt-on-fan-out + cache + request-reply cache-invalidation protocol + audit subject namespaces + emit-time sensitivity fence (INV-6/7 — host-side ground-truth check at emit) + cold-tier `QueryStreamHistory` crypto path for host-owned audit + Crypto.Enabled default flipped to true + INV-49 envelope round-trip + INV-15 ABAC subscribe denial + plugin-actor & character-actor E2E. Note: NATS account-level deny rules dropped per Phase 3d Decision 4 (game-topic NATS is single-principal by architectural design — see §7.7 amendment); the cold-tier read fence (INV-50) is plugin-owned-audit-specific and lands in Phase 7. Phase 3c grounding doc at [`docs/superpowers/specs/2026-05-02-event-payload-crypto-phase3c-grounding.md`](2026-05-02-event-payload-crypto-phase3c-grounding.md). Phase 3d grounding doc at [`docs/superpowers/specs/2026-05-03-event-payload-crypto-phase3d-grounding.md`](2026-05-03-event-payload-crypto-phase3d-grounding.md). Cluster substrate (`internal/cluster/`) landed as prerequisite. | End-to-end sensitive event flow works for host-owned audit subjects; players-as-character get full plaintext; previous-tenure player-kind reads emit per-session audit |
 | 4 | `Add` + `Rotate` lifecycle ops with synchronous N-of-N replica cache invalidation | Participant changes work; player-rebind triggers `Rotate` correctly |
 | 5 | `Rekey` CLI + `AdminReadStream` CLI + localhost UNIX admin socket + `OperatorAuthProvider` (default in-game-creds + TOTP) | Operator break-glass and destructive revocation paths exist |
 | 6 | `VaultTransitProvider` + provider migration CLI + KEK rotation CLI | Orgs with Vault can use it; provider-migrate and KEK rotation exercised |
@@ -2140,6 +2186,12 @@ A short list pulled into `crypto-runbook.md`:
    `AdminReadStream` once enabled in config.
 
 ### 11.4 Rollback
+
+> **Pre-deployment note (Phase 3d):** HoloMUSH has no users and no
+> deployments today, so rollback during Phase 3 is simply `git revert` of
+> the relevant phase commits. The operator-grade rollback discussion below
+> applies to future deployments and is preserved as the design intent for
+> when this matters.
 
 Phases 1–7 are individually rollback-safe in the migration sense: dropping
 the binary back to a prior version with a populated `crypto_keys` table
