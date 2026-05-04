@@ -95,77 +95,27 @@ and [site/docs/operating/sandbox-restore.md](site/docs/operating/sandbox-restore
 
 ## Workflow
 
-### Beads-Driven Task Management
+Work is tracked in `bd` (see `.claude/rules/beads-project.md` and `bd prime`). Specs live in `docs/specs/` or `docs/superpowers/specs/`; plans in `docs/plans/` or `docs/superpowers/plans/`.
 
-All work is tracked via [beads](https://github.com/steveyegge/beads):
+### Stage-gated workflow (multi-task work)
 
-```text
-Spec (docs/specs/)
-    ↓
-Epic (bd create "..." --epic)
-    ↓
-Implementation Plan (docs/plans/ — produced by `superpowers:writing-plans`)
-    ↓
-Tasks (bd create "..." -p <epic>)
-    - Dependencies based on file overlap
-    - Dependencies based on conceptual overlap
-```
+| Stage | Skill / Action                                  | Gate before next stage         |
+| ----- | ----------------------------------------------- | ------------------------------ |
+| 1     | `superpowers:brainstorming`                     | (conversation only)            |
+| 2     | (writes spec from brainstorming)                | `design-reviewer` — READY      |
+| 3     | `superpowers:writing-plans`                     | `plan-reviewer` — READY        |
+| 4     | `bead-chain-design`                             | user reviews proposed split    |
+| 5     | `bead-chain-from-plan`                          | user reviews dry-run manifest  |
+| 6     | `superpowers:subagent-driven-development`       | `code-reviewer` (+ `crypto-reviewer` / `abac-reviewer` when applicable) before push |
+| 7     | `gh pr create`                                  | `task pr-prep` green; `/autofix <PR#>` for CodeRabbit |
 
-### Canonical workflow for non-trivial work
+Detail on each gate is in `## Pre-Push Review Gates`. Skipping requires explicit user override.
 
-For multi-task work (a feature, an epic sub-phase, a substantive refactor),
-the project uses a stage-gated workflow with named skills and adversarial
-review agents between stages. Each stage produces an artifact reviewed by
-the next stage's gate before proceeding.
+**Skip the chain** for small fixes (typo, dependency bump, single-file bug) — direct bead → implementation → review → PR is the right shape.
 
-| Stage | Skill                                                                                         | Output                                                                       | Pre-gate review agent                                              | Notes                                                                |
-| ----- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| 1     | `superpowers:brainstorming`                                                                   | Design decisions surfaced                                                    | (none — conversation only)                                         | Resolves design questions before any artifact lands.                 |
-| 2     | (writes from brainstorming)                                                                   | Grounding spec in `docs/superpowers/specs/`                                  | `design-reviewer` (MUST run; READY/NOT READY)                      | Adversarial gate before plan-writing. Findings cited `path:line`.    |
-| 3     | `superpowers:writing-plans`                                                                   | Impl plan in `docs/superpowers/plans/`                                       | `plan-reviewer` (MUST run; READY/NOT READY)                        | Adversarial gate before bead-chain or execution.                     |
-| 4     | `bead-chain-design`                                                                           | `## Bead chain structure` section in plan                                    | (user reviews proposed split before write)                         | See `### Plan → Bead Chain` for the convention.                      |
-| 5     | `bead-chain-from-plan`                                                                        | `bd` issues + dep edges + parent linkage                                     | (user reviews operation manifest before execute)                   | Materializes the chain. Idempotent dry-run by default.               |
-| 6     | `superpowers:subagent-driven-development` (preferred) or `superpowers:executing-plans`        | Implementation commits                                                       | `crypto-reviewer` / `abac-reviewer` (when applicable) + `code-reviewer` (MUST run before push) | Subagent-driven dispatches per task with two-stage review per task. |
-| 7     | (manual: `gh pr create`)                                                                      | Open PR                                                                      | `task pr-prep` (MUST pass green) + CodeRabbit (auto on push)       | Then `/autofix <PR#>` for the CodeRabbit pass.                       |
+### Code review
 
-**Gate enforcement:** stages 2, 3, and 6 have MUST-run adversarial review
-agents per `## Pre-Push Review Gates`. Skipping requires explicit user
-override (e.g., "skip review", "no review needed").
-
-**When to skip stages:** for small fixes (typo, dependency bump, single-file
-bug fix), skip stages 1-5. Direct bead creation + execution + code-review
-
-- PR is the right shape. The full chain is for multi-task work that
-benefits from explicit decomposition.
-
-### Daily Workflow
-
-```bash
-# 1. Find ready tasks
-bd ready
-
-# 2. Select task, understand context
-bd show <task-id>
-
-# 3. Write failing tests
-
-# 4. Implement until tests pass
-task test
-
-# 5. Update documentation
-
-# 6. Request code review (REQUIRED)
-
-# 7. Address all review findings
-
-# 8. Mark complete
-bd close <task-id>
-```
-
-### Code Review Requirement
-
-All tasks MUST be reviewed before completion. See
-[Pull Request Guide](site/docs/contributing/pr-guide.md) for the complete workflow.
+All tasks MUST be reviewed before completion via `pr-review-toolkit:review-pr`. Workflow detail at [Pull Request Guide](site/docs/contributing/pr-guide.md).
 
 | Requirement                                | Description                                          |
 | ------------------------------------------ | ---------------------------------------------------- |
@@ -173,67 +123,13 @@ All tasks MUST be reviewed before completion. See
 | **MUST** address all findings              | Fix issues or document why not applicable            |
 | **MUST NOT** skip review                   | Even for "simple" changes                            |
 
-**Quick workflow:**
+### Plan → Bead Chain convention
 
-1. Complete implementation and tests
-2. Run `task test` and `task lint`
-3. Invoke `/pr-review-toolkit:review-pr`
-4. Address all findings
-5. Create PR or mark task complete
+Plans with multiple tracked tasks MUST contain a `## Bead chain structure` section (level-2, exact wording, case-sensitive) covering: parent epic, each task bead, supersessions, follow-up beads, and `bd dep add` edges.
 
-### Plan → Bead Chain
+Each task bead's `--description` MUST include all 8 sections: **Goal**, **Design reference**, **Plan reference**, **TDD acceptance criteria**, **Verification steps**, **Files touched**, **Dependencies**, **Out of scope**.
 
-Implementation plans for non-trivial work (multiple tasks under a parent epic)
-MUST include a bead chain that tracks the work in `bd`. Plans without matching
-bead chains drift from execution; bead chains without matching plans duplicate
-the design surface across two sources of truth.
-
-Convention established 2026-05-04 (formalized retrospectively from the Phase 3d
-landing). Plans written before this date may not follow it.
-
-**Plan section requirement:**
-
-Every plan with multiple tracked tasks MUST contain a `## Bead chain structure`
-section (level-2 heading, exact wording, case-sensitive) that:
-
-| Requirement                       | Description                                                                                |
-| --------------------------------- | ------------------------------------------------------------------------------------------ |
-| **MUST** name the parent epic     | Reference the existing `bd` epic the chain hangs from (or note "create new epic" + scope). |
-| **MUST** list each task bead      | One per `bd create` operation; include grandchildren when four-level depth applies.        |
-| **MUST** note supersession        | Existing beads being closed / superseded with rationale.                                   |
-| **MUST** list follow-up beads     | Beads to file at chain-completion time (deferred work, follow-on epics).                   |
-| **MUST** declare dependencies     | `bd dep add` edges that match the task table's dependency column.                          |
-
-**Task bead description requirement:**
-
-Every `bd create` for a task bead in the chain MUST include all 8 sections in
-its `--description` body:
-
-| Section                       | Required content                                                            |
-| ----------------------------- | --------------------------------------------------------------------------- |
-| **Goal**                      | One-sentence scope statement                                                |
-| **Design reference**          | Link to grounding spec / design doc with section anchor                     |
-| **Plan reference**            | Link to impl plan with task ID anchor                                       |
-| **TDD acceptance criteria**   | Named tests that MUST exist before the task is "done"                       |
-| **Verification steps**        | Concrete commands (`task lint`, `task test -- ./pkg/`, etc.)                |
-| **Files touched**             | Explicit list of paths the task modifies                                    |
-| **Dependencies**              | `bd dep add` edges matching the task graph                                  |
-| **Out of scope**              | Explicit non-goals to prevent scope creep                                   |
-
-The 8 sections enable bead-only readers to understand a task's scope without
-chasing into the plan, and enable plan-only readers to understand task tracking
-without chasing into beads.
-
-**Skills that operate on the chain:**
-
-| Skill                    | Purpose                                                                                            |
-| ------------------------ | -------------------------------------------------------------------------------------------------- |
-| `bead-chain-design`      | Generates the `## Bead chain structure` section into a plan when missing. Runs after `superpowers:writing-plans`. |
-| `bead-chain-from-plan`   | Materializes the chain into actual `bd` issues, dep edges, parent linkages, priority bumps, and follow-up bead filings. Runs after the plan + chain section both exist. |
-
-If a plan lacks the chain section, `bead-chain-from-plan` delegates to
-`bead-chain-design` to create it; the user is consulted before either skill
-mutates state.
+Skills `bead-chain-design` (writes the section) and `bead-chain-from-plan` (materializes `bd` issues + edges + parent linkage) operate on this convention. If the chain section is missing, `bead-chain-from-plan` delegates to `bead-chain-design` first.
 
 ## Pre-Push Review Gates
 
@@ -262,19 +158,9 @@ Agent definitions live in `.claude/agents/`; slash commands in
 
 ## Code Conventions
 
-### Go Idioms
-
-- Accept interfaces, return structs
-- Errors are values - handle them explicitly
-- Use context for cancellation and timeouts
-- Prefer composition over inheritance
-- When using accessor methods (e.g., `decision.Reason()`), always include `()` — without parens, Go creates a method value (func pointer) that compiles silently when passed to `...any` parameters (`oops.With`, `slog`)
-
 ### Random Number Generation
 
-Always use `crypto/rand`, never `math/rand`. For picking from slices, use a
-`crypto/rand` + `math/big` helper. The `internal/naming` package has `cryptoIntN(n)`
-as an example.
+Always use `crypto/rand`, never `math/rand`. For picking from slices, use a `crypto/rand` + `math/big` helper. `internal/naming.cryptoIntN(n)` is the canonical example.
 
 ### ULID Generation
 
@@ -282,316 +168,43 @@ Two ULID generators exist; the choice matters for correctness.
 
 | Use case | Generator | Why |
 | --- | --- | --- |
-| **Event IDs** (`core.Event.ID`), session IDs | `core.NewULID()` | Identity and dedup key. Set as `Nats-Msg-Id` header for JetStream dedup within the dedup window; stable across JetStream rebuilds (sequences are not). Ordering is owned by JetStream's per-stream `uint64` seq — **not** ULID lex order. |
+| **Event IDs** (`core.Event.ID`), session IDs | `core.NewULID()` | Identity and dedup key. Set as `Nats-Msg-Id` header for JetStream dedup within the dedup window; stable across JetStream rebuilds. Ordering is owned by JetStream's per-stream `uint64` seq — **not** ULID lex order. |
 | **Entity primary keys** (players, locations, characters, exits, objects, policies) | `idgen.New()` | Identity, not ordering. Fresh `crypto/rand` entropy per call. |
 
-`core.Event{}` struct literals must use `core.NewEvent()` rather than a raw
-struct literal — `core.NewEvent()` stamps a monotonic ULID via
-`core.NewULID()`. Never construct a `core.Event{}` literal with a manually
-supplied ID (e.g., from `idgen.New()`).
+`core.Event{}` struct literals MUST use `core.NewEvent()` rather than a raw literal — `NewEvent()` stamps a monotonic ULID via `core.NewULID()`. Never supply `Event.ID` manually (e.g., from `idgen.New()`).
 
 ### Error Handling
 
-Use oops for structured errors with context:
+Use `oops` for structured errors: `oops.With(k, v).Wrap(err)`, `oops.Errorf(...)`, `oops.Code("CODE").Wrap(err)` at API boundaries. Log with `errutil.LogError(logger, msg, err)`. Test with `errutil.AssertErrorCode` / `AssertErrorContext`.
 
-```go
-// Wrap existing error with context
-return oops.With("plugin", name).With("operation", "load").Wrap(err)
-
-// Create new error
-return oops.Errorf("validation failed").With("field", fieldName)
-
-// At API boundaries, add error code
-return oops.Code("PLUGIN_LOAD_FAILED").With("plugin", name).Wrap(err)
-```
-
-For logging oops errors, use pkg/errutil:
-
-```go
-errutil.LogError(logger, "operation failed", err)
-```
-
-For testing error codes:
-
-```go
-errutil.AssertErrorCode(t, err, "EXPECTED_CODE")
-errutil.AssertErrorContext(t, err, "key", expectedValue)
-```
-
-### Logging
-
-- Use structured logging (slog)
-- Log at appropriate levels (debug, info, warn, error)
-- Include relevant context in log entries
-
-### Naming
-
-- Use clear, descriptive names
-- Avoid abbreviations except well-known ones (ID, URL, HTTP)
-- Package names are lowercase, single words when possible
+**Method-value gotcha:** when using accessor methods (e.g., `decision.Reason()`), always include `()`. Without parens, Go creates a method value (func pointer) that compiles silently when passed to `...any` parameters (`oops.With`, `slog`).
 
 ### Database Migrations
 
-Migrations live in `internal/store/migrations/` and are embedded at compile time.
-See the full guide at [site/docs/contributing/database-migrations.md](site/docs/contributing/database-migrations.md).
-
-| Requirement | Description |
-| ----------- | ----------- |
-| **MUST** use sequential numbering | `000002_`, `000003_`, etc. after baseline |
-| **MUST** provide both `.up.sql` and `.down.sql` | Every migration needs a reversible pair |
-| **MUST** be idempotent | Use `IF NOT EXISTS`, `IF EXISTS`, `ON CONFLICT DO NOTHING` |
-| **MUST NOT** modify the baseline | Add new migrations instead of editing `000001_baseline` |
-| **MUST NOT** use triggers or functions | All logic lives in Go; PostgreSQL is storage only |
+`internal/store/migrations/`, embedded at compile time. Sequential numbering, paired `.up.sql` + `.down.sql`, idempotent (`IF NOT EXISTS`), no triggers/functions (all logic in Go). Full guide: [database-migrations.md](site/docs/contributing/database-migrations.md).
 
 ### License Headers
 
-All source files MUST include SPDX license headers at the top:
-
-**Go files:**
-
-```go
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 HoloMUSH Contributors
-
-// Package foo ...
-package foo
-```
-
-**Shell scripts:**
-
-```bash
-#!/bin/bash
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 HoloMUSH Contributors
-```
-
-**Protobuf files:**
-
-```protobuf
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2026 HoloMUSH Contributors
-
-syntax = "proto3";
-```
-
-**YAML files (workflows, configs):**
-
-```yaml
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 HoloMUSH Contributors
-```
-
 | Requirement                         | Description                                         |
 | ----------------------------------- | --------------------------------------------------- |
-| **MUST** include SPDX header        | All `.go`, `.sh`, `.proto` files                    |
-| **SHOULD** include SPDX header      | YAML configuration files where appropriate          |
-| **MUST NOT** add to generated files | Skip `*.pb.go` files                                |
-| **SHOULD** use `task license:add`   | Automatically adds headers to files missing them    |
-| **Auto-added on commit**            | Lefthook pre-commit hook adds headers automatically |
+| **MUST** include SPDX header        | `.go`, `.sh`, `.proto` files (Apache-2.0)           |
+| **SHOULD** include SPDX header      | YAML configs where appropriate                      |
+| **MUST NOT** add to generated files | Skip `*.pb.go`                                      |
+| **Auto-applied** by lefthook        | `task license:add` runs on commit; `task license:check` verifies |
 
-**Directories checked:** `api/`, `cmd/`, `internal/`, `pkg/`, `plugins/`, `scripts/`
-
-**Commands:**
-
-```bash
-task license:check   # Verify all files have headers
-task license:add     # Add missing headers
-```
+Directories checked: `api/`, `cmd/`, `internal/`, `pkg/`, `plugins/`, `scripts/`.
 
 ## Testing
 
-### Coverage Requirements
+Detail in `.claude/rules/testing.md` (auto-loads when editing test files): coverage targets, test naming (ACE), table-driven patterns, assertions, mockery, ginkgo/gomega integration tests, EventBus test harness, ABAC test engines.
 
-| Requirement                      | Description                                           |
-| -------------------------------- | ----------------------------------------------------- |
-| **MUST** maintain >80% coverage  | Per-package coverage must exceed 80%                  |
-| **MUST** run `task test:cover`   | To verify coverage before completing work             |
-| **SHOULD** target 90%+ coverage  | For core packages (`internal/core`, `internal/world`) |
-
-### Integration Tests and Refactoring
-
-`task test` does NOT compile `//go:build integration` files. When refactoring
-shared types, interfaces, or packages, always run `task test:int` to catch
-breakage that unit tests miss.
-
-### Test Files
-
-- Tests live next to implementation: `foo.go` → `foo_test.go`
-- Integration tests in `*_integration_test.go`
-- Use build tags for integration tests: `//go:build integration`
-
-### Test Naming
-
-Test names MUST be sentences that communicate behavior. Follow the ACE
-framework: **Action** (what), **Condition** (when/given), **Expectation**
-(then/result).
-
-Reference: [Test Names Should Be Sentences](https://bitfieldconsulting.com/posts/test-names)
-
-**Functions without subtests** — the function name itself is the sentence:
-
-| Pattern | Example |
-| ------- | ------- |
-| Good | `TestConfigDirUsesXDGEnvVarWhenSet` |
-| Good | `TestEnsureDirFailsWhenParentIsAFile` |
-| Bad | `TestConfigDir_EnvVar` |
-| Bad | `TestEnsureDir_Error` |
-
-**Functions with subtests** — parent name identifies the unit under test,
-subtest names carry the sentence:
-
-```go
-func TestHashPassword(t *testing.T) {
-    t.Run("produces valid argon2id hash", func(t *testing.T) { ... })
-    t.Run("rejects empty password", func(t *testing.T) { ... })
-}
-```
-
-| Requirement | Description |
-| ----------- | ----------- |
-| **MUST** follow ACE | Every test name communicates action, condition, and expectation |
-| **MUST** use PascalCase | Top-level function names: `TestConfigDirFallsBackToHomeDotConfig` |
-| **SHOULD NOT** use underscores | Exception: `TestType_Method` with subtests (e.g., `TestEngine_Evaluate`) |
-| **MUST** use lowercase subtests | Subtest strings: `"returns ErrNotFound for missing character"` |
-| **MUST NOT** use vague names | No `"success"`, `"error case"`, `"test 1"` |
-
-### Table-Driven Tests
-
-```go
-func TestEventType_String(t *testing.T) {
-    tests := []struct {
-        name     string
-        input    EventType
-        expected string
-    }{
-        {"returns say for event type say", EventTypeSay, "say"},
-        {"returns pose for event type pose", EventTypePose, "pose"},
-    }
-
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            assert.Equal(t, tt.expected, tt.input.String())
-        })
-    }
-}
-```
-
-### Mocking
-
-- Use interfaces for dependencies
-- Create mock implementations for tests
-- Consider using testify/mock for complex mocks
-
-### Plugin Tests (`internal/plugin`)
-
-Lua plugins use gopher-lua which creates fresh VM state per event delivery.
-Binary plugins use hashicorp/go-plugin and communicate via gRPC.
-
-| Principle                     | Description                                         |
-| ----------------------------- | --------------------------------------------------- |
-| State isolation (Lua)         | Each `DeliverEvent` creates a new Lua state         |
-| No shared state between tests | No need for special test helpers or shared fixtures |
-| Fast startup (Lua)            | ~50μs per Lua state                                 |
-| Process isolation (binary)    | Binary plugins run as separate processes via go-plugin |
-
-### Assertions
-
-Use testify for unit test assertions:
-
-```go
-// Equality
-assert.Equal(t, expected, got)
-
-// Error checking
-require.NoError(t, err)
-assert.Error(t, err)
-
-// Contains
-assert.Contains(t, slice, element)
-```
-
-### Test Quality
-
-| Requirement | Description |
-| ----------- | ----------- |
-| **MUST** test both paths | Every exported function needs at least one positive and one negative test |
-| **MUST** assert behavior | No zero-assertion "don't panic" tests |
-| **MUST** focus each test | One behavior per test/subtest — if it needs "and," split it |
-| **SHOULD** use error codes | Prefer `errutil.AssertErrorCode` or `assert.ErrorIs` over string matching |
-| **MUST** use `require` for preconditions | `require.NoError` for setup, `assert.*` for the check under test |
-
-### Mocking with Mockery
-
-Generate mocks with mockery:
-
-```bash
-mockery # Uses .mockery.yaml config
-```
-
-Use generated mocks:
-
-```go
-pub := mocks.NewMockPublisher(t)
-pub.EXPECT().Publish(mock.Anything, mock.Anything).Return(nil)
-```
-
-### Test Engine Helpers
-
-Use `policytest.GrantEngine` for authorization in tests:
-
-```go
-mockAccess := policytest.NewGrantEngine()
-mockAccess.GrantCommandExecution(subject, "say", "look") // Layer 1 grants
-mockAccess.Grant(subject, "emit", "stream")              // Layer 2 / capability grants
-```
-
-Other test engines: `AllowAllEngine()`, `DenyAllEngine()`, `NewErrorEngine(err)`, `NewInfraFailureEngine(t, reason, policyID)`.
-
-### EventBus test harness
-
-`internal/eventbus/eventbustest.New(t)` provides an in-process embedded NATS
-server with `MemoryStorage` for unit and bus-integration tests. It MUST NOT be
-used in E2E tests. E2E tests use the full server stack with a real PG
-testcontainer. The `//go:build !integration` tag on the harness file enforces
-this at compile time.
-
-### Integration Tests with Ginkgo/Gomega (BDD)
-
-| Requirement                           | Description                                |
-| ------------------------------------- | ------------------------------------------ |
-| **MUST** use Ginkgo/Gomega            | All integration tests use BDD-style specs  |
-| **MUST** write feature specs          | User stories become `Describe`/`It` blocks |
-| **MUST** use `//go:build integration` | Tag all integration test files             |
-| **SHOULD** use testcontainers         | For database integration tests             |
-
-**Structure:** Feature specs live in `test/integration/<domain>/`:
-
-```go
-//go:build integration
-
-var _ = Describe("Feature Name", func() {
-    Describe("User story or capability", func() {
-        It("expected behavior in plain English", func() {
-            // Given/When/Then pattern
-            Expect(result).To(Equal(expected))
-        })
-    })
-})
-```
-
-**Async operations:**
-
-```go
-Eventually(func() int {
-    return len(results)
-}).Should(Equal(expected))
-```
-
-**Run integration tests:**
-
-```bash
-go test -race -v -tags=integration ./test/integration/...
-```
+| Always-on rule                       | Description                                                                  |
+| ------------------------------------ | ---------------------------------------------------------------------------- |
+| **MUST** write tests before impl     | TDD — see `superpowers:test-driven-development`                              |
+| **MUST** maintain >80% coverage      | Per-package; verify with `task test:cover`                                   |
+| **MUST** use Ginkgo/Gomega for E2E   | Build tag `//go:build integration`; runs via `task test:int`                 |
+| **MUST** run `task test:int` on refactors | `task test` does NOT compile integration files — refactors of shared types break silently otherwise |
+| **MUST NOT** use `eventbustest` in E2E | Embedded NATS harness is unit/bus-integration only; E2E uses full stack    |
 
 ## Commands
 
@@ -635,87 +248,21 @@ The gate is serialized per user — only one `task pr-prep` runs at a time on
 a given machine. See [pr-prep](site/docs/contributing/pr-prep.md) for
 collision behavior.
 
-### jj Workspace Commands
-
-Workspaces live in a `.worktrees/` directory that is a sibling of the main repo root
-(e.g., `<parent>/.worktrees/<name>`). The exact path is machine-specific.
-
-```bash
-jj workspace add <parent>/.worktrees/<name> --name <name> -r main@origin
-jj workspace forget <name>  # then: rm -rf <parent>/.worktrees/<name>
-```
-
-For the typical case of "start a new isolated Claude session," prefer the
-`task workspace:new -- <name>` wrapper (see "Session isolation" below) which
-handles `.jj/repo`-based path resolution from any cwd, runs `jj git fetch`
-first so `main@origin` is fresh, and is idempotent on re-invocation.
-
 ### Session isolation
 
-This repo is developed primarily by concurrent AI agent sessions. Because jj
-snapshots the working copy on every command, two sessions sharing the same
-jj workspace will collide on uncommitted edits. To prevent this:
+This repo is developed primarily by concurrent AI agent sessions. Because jj snapshots the working copy on every command, two sessions sharing the same jj workspace will collide on uncommitted edits.
 
 | Requirement | Description |
 |---|---|
-| **MUST** isolate per session | Start each Claude session in its own jj workspace. Humans: `claude-iso <name>` (shell function below). Agents: `task workspace:new -- <name>`, then `cd <printed-path> && claude` |
-| **SHOULD NOT** edit files in `default` | The `default` workspace is reserved for read-only inspection and one-off throwaway work. A `SessionStart` hook warns when a session begins there |
-| **MUST** clean up post-merge | After your branch lands: `cd <repo-root> && jj workspace forget <name> && rm -rf <repo-parent>/.worktrees/<name>`. The leading `cd` matters — `../.worktrees/<name>` is unsafe from any nested cwd. See "Landing the Plane" for the full sequence. |
+| **MUST** isolate per session | Agents: `task workspace:new -- <name>`, then `cd <printed-path>`. Humans: see [sessions guide](site/docs/contributing/sessions.md) for shell-function setup. |
+| **SHOULD NOT** edit files in `default` | A `SessionStart` hook warns when a session begins there. Reserved for read-only inspection. |
+| **MUST** clean up post-merge | After landing: `cd <repo-root> && jj workspace forget <name> && rm -rf <repo-parent>/.worktrees/<name>`. The `cd` matters — `../.worktrees/<name>` is unsafe from any nested cwd. |
 
-**`claude-iso` shell function** — copy into your shell's rc file:
+`task workspace:new` is idempotent, runs `jj git fetch` first, and writes a `.beads/redirect` so `bd` works in the new workspace. New workspaces inherit `.claude/` (tracked in git), so all hooks fire identically. Sub-agents launched via the `Task` tool inherit the parent's workspace; the parent MUST NOT dispatch parallel `Task` calls that edit the same files.
 
-```fish
-# fish: ~/.config/fish/config.fish
-#
-# IMPORTANT: `set var (cmd | tail -n 1); or ...` does NOT propagate the
-# failure of `cmd` because the pipeline's exit status is `tail`'s, not
-# `cmd`'s. We therefore call `task workspace:new` twice — first to check
-# the exit status, then again inside command substitution to capture the
-# path. The second call is idempotent (Phase 2 DoD requirement) and just
-# prints the path for an existing workspace.
-function claude-iso
-    set name $argv[1]
-    task workspace:new -- $name >/dev/null
-    or return $status
-    set ws (task workspace:new -- $name | tail -n 1)
-    cd $ws
-    or return $status
-    exec claude
-end
-```
+### Beads, jj
 
-```bash
-# bash/zsh: ~/.bashrc or ~/.zshrc
-#
-# Same caveat as fish: $(cmd | tail -n 1) carries tail's exit status, not
-# cmd's. Two-call pattern; second call is idempotent.
-claude-iso() {
-  local name="$1"
-  task workspace:new -- "$name" >/dev/null || return $?
-  local ws
-  ws="$(task workspace:new -- "$name" | tail -n 1)"
-  cd "$ws" || return $?
-  exec claude
-}
-```
-
-New worktrees inherit `.claude/` (tracked in git), so `SessionStart`,
-`UserPromptSubmit`, and other Claude Code hooks fire identically in any
-worktree — no hook re-wiring is needed when creating a workspace.
-
-Sub-agents launched via the `Task` tool inherit the parent's workspace. The
-parent is responsible for not dispatching parallel `Task` calls that would
-edit the same files. (Future work MAY add per-`Task` workspace creation.)
-
-### Beads Commands
-
-```bash
-bd ready              # List unblocked tasks
-bd create "title"     # Create task
-bd show <id>          # View task details
-bd close <id>         # Complete task
-bd dep add <a> <b>    # Add dependency
-```
+`bd` commands: see `.claude/rules/beads-project.md` and `bd prime`. `jj` workflow: see the `jj:jujutsu` skill.
 
 ## Directory Structure
 
@@ -972,53 +519,21 @@ runes patterns.
 
 ## Landing the Plane (Session Completion)
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until changes are pushed to the remote. This project is a **jj-colocated repo** — prefer `jj` commands when `.jj/` is present, fall back to plain `git` otherwise.
+**When ending a work session**, work is NOT complete until changes are pushed. This is a **jj-colocated repo** — use the `jj:jujutsu` skill for the command sequence.
 
-**MANDATORY WORKFLOW:**
+**MANDATORY:**
 
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - `task pr-prep` (mirrors CI)
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY. Detect the VCS first:
-
-   ```bash
-   # Detect: jj-colocated repo?
-   test -d .jj && echo "jj" || echo "git"
-   ```
-
-   **jj-colocated repo** (this project's default):
-
-   ```bash
-   jj git fetch
-   jj rebase -r <change-id> -d main@origin   # rebase ONLY your change (see memory: feedback_jj_rebase_targeted)
-   jj bookmark set <branch> -r @-            # move branch to the commit you want to push
-   jj git push --branch <branch>
-   jj st                                     # verify clean
-   ```
-
-   **Plain git repo** (fallback):
-
-   ```bash
-   git pull --rebase
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-
-5. **Clean up** — clear stashes, prune remote branches, and (if this work was done in a dedicated workspace per the "Session isolation" discipline) forget and remove the workspace:
-
-   ```bash
-   cd <repo-root>                           # exit the workspace before forgetting it
-   jj workspace forget <name>
-   rm -rf <repo-parent>/.worktrees/<name>
-   ```
-
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
+1. File beads for remaining work
+2. Run `task pr-prep` (mirrors CI) if code changed
+3. Update issue status — close done, update in-progress
+4. Push: `jj git fetch` → targeted rebase (`jj rebase -r <change> -d main@origin` — never bare `-d main`) → set bookmark → `jj git push --branch <branch>` → verify with `jj st`
+5. Clean up workspace: `cd <repo-root> && jj workspace forget <name> && rm -rf <repo-parent>/.worktrees/<name>` (the `cd` matters — `../.worktrees/<name>` is unsafe from any nested cwd)
+6. Hand off context for the next session
 
 **CRITICAL RULES:**
 
-- Work is NOT complete until the push succeeds (`jj git push` or `git push`)
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
+- Work is NOT complete until `jj git push` succeeds
+- NEVER stop before pushing — that leaves work stranded locally
+- NEVER say "ready to push when you are" — YOU must push
 - If push fails, resolve and retry until it succeeds
 - **jj-specific**: NEVER use bare `jj rebase -d main` — always scope with `-r <change-id>` to avoid sweeping up other agents' work
