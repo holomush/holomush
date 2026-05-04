@@ -6,7 +6,9 @@ package core
 import (
 	"testing"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
@@ -83,4 +85,47 @@ func TestHostEventTypesMatchPluginSDKReExports(t *testing.T) {
 				"host event-type drift between internal/core and pkg/plugin")
 		})
 	}
+}
+
+func TestSystemActorULIDRendersAsCanonicalCrockford(t *testing.T) {
+	assert.Equal(t, "00000000000000000000000001", SystemActorULID.String())
+}
+
+func TestWorldServiceActorULIDRendersAsCanonicalCrockford(t *testing.T) {
+	assert.Equal(t, "00000000000000000000000002", WorldServiceActorULID.String())
+}
+
+func TestActorSystemIDIsSystemActorULIDString(t *testing.T) {
+	assert.Equal(t, SystemActorULID.String(), ActorSystemID,
+		"ActorSystemID MUST equal SystemActorULID.String() post-w9ml")
+}
+
+func TestIsSentinelULIDIdentifiesKnownSentinels(t *testing.T) {
+	assert.True(t, IsSentinelULID(SystemActorULID))
+	assert.True(t, IsSentinelULID(WorldServiceActorULID))
+}
+
+func TestIsSentinelULIDRejectsZeroULID(t *testing.T) {
+	assert.False(t, IsSentinelULID(ulid.ULID{}),
+		"all-zero ULID is reserved as 'no sentinel' (tag 0x00)")
+}
+
+func TestIsSentinelULIDRejectsEntropyULID(t *testing.T) {
+	entropy := NewULID()
+	assert.False(t, IsSentinelULID(entropy),
+		"entropy ULIDs MUST NOT be classified as sentinels")
+}
+
+func TestSentinelTagsUnique(t *testing.T) {
+	all := map[byte]string{}
+	check := func(label string, id ulid.ULID) {
+		require.True(t, IsSentinelULID(id), "%s must satisfy IsSentinelULID", label)
+		tag := id[15]
+		if existing, ok := all[tag]; ok {
+			t.Fatalf("sentinel tag-byte collision: %s and %s both use 0x%02x", existing, label, tag)
+		}
+		all[tag] = label
+	}
+	check("SystemActorULID", SystemActorULID)
+	check("WorldServiceActorULID", WorldServiceActorULID)
 }
