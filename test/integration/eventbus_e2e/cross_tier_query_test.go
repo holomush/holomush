@@ -17,11 +17,14 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/internal/eventbus/history"
+	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
 
 // TestCrossTierQueryEndToEnd mirrors the 12-scenario tier suite from
@@ -461,6 +464,11 @@ func insertAuditRows(ctx context.Context, t *testing.T, bus *eventbustest.Embedd
 }
 
 // insertAuditRowWithSeq INSERTs one events_audit row with an explicit js_seq.
+//
+// The envelope column carries a marshaled eventbusv1.Event matching what
+// the audit projection would persist (msg.Data() in projection.go:281).
+// This is required post-Phase 3d Task 5 because the cold reader unmarshals
+// the envelope to recover Subject/Type/Timestamp/Actor.
 func insertAuditRowWithSeq(ctx context.Context, t *testing.T, pool *pgxpool.Pool, e eventbus.Event, seq uint64) {
 	t.Helper()
 	id := e.ID.Bytes()
@@ -469,7 +477,20 @@ func insertAuditRowWithSeq(ctx context.Context, t *testing.T, pool *pgxpool.Pool
 		b := e.Actor.ID.Bytes()
 		actorID = b
 	}
-	_, err := pool.Exec(ctx, `
+	envelopeBytes, err := proto.Marshal(&eventbusv1.Event{
+		Id:        id,
+		Subject:   string(e.Subject),
+		Type:      string(e.Type),
+		Timestamp: timestamppb.New(e.Timestamp),
+		Actor: &eventbusv1.Actor{
+			Kind:     actorKindToProto(e.Actor.Kind),
+			Id:       actorID,
+			LegacyId: e.Actor.LegacyID,
+		},
+		Payload: e.Payload,
+	})
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
 			envelope, schema_ver, codec, js_seq, rendering
@@ -481,13 +502,30 @@ func insertAuditRowWithSeq(ctx context.Context, t *testing.T, pool *pgxpool.Pool
 		e.Timestamp,
 		e.Actor.Kind.String(),
 		actorID,
-		e.Payload,
+		envelopeBytes,
 		int16(1),
 		"identity",
 		int64(seq), //nolint:gosec // G115: seq is always a positive JetStream sequence; fits safely in int64
 		[]byte(`{}`),
 	)
 	require.NoError(t, err)
+}
+
+// actorKindToProto maps the eventbus.ActorKind enum to its proto twin.
+// Mirrors the inverse mapping in actor_from_envelope.go.
+func actorKindToProto(k eventbus.ActorKind) eventbusv1.ActorKind {
+	switch k {
+	case eventbus.ActorKindCharacter:
+		return eventbusv1.ActorKind_ACTOR_KIND_CHARACTER
+	case eventbus.ActorKindPlayer:
+		return eventbusv1.ActorKind_ACTOR_KIND_PLAYER
+	case eventbus.ActorKindSystem:
+		return eventbusv1.ActorKind_ACTOR_KIND_SYSTEM
+	case eventbus.ActorKindPlugin:
+		return eventbusv1.ActorKind_ACTOR_KIND_PLUGIN
+	default:
+		return eventbusv1.ActorKind_ACTOR_KIND_UNSPECIFIED
+	}
 }
 
 // drainStream pulls every event from stream until io.EOF, failing on any
