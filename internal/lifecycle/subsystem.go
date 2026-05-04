@@ -25,6 +25,7 @@ const (
 	SubsystemGRPC                               // grpc
 	SubsystemEventBus                           // eventbus
 	SubsystemAuditProjection                    // audit_projection
+	SubsystemCluster                            // cluster
 )
 
 // Subsystem is a top-level server component with lifecycle management

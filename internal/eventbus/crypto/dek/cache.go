@@ -54,18 +54,27 @@ func (cfg CacheConfig) applyDefaults() CacheConfig {
 //
 // The cache is internally synchronized for concurrent use. Phase 2's
 // callers (DEKManager.GetOrCreate / Resolve) are concurrent.
+//
+// Phase 3c (holomush-ojw1.3) added the byContext reverse index so
+// InvalidateContext can evict every (KeyID, Version) belonging to a
+// ContextID in O(entries-for-context). The reverse index is part of
+// the in-process state — INV-27 is preserved (no serialization).
 type Cache struct {
 	cap   int
 	ttl   time.Duration
 	clock func() time.Time
 
-	mu    sync.Mutex
-	list  *list.List
-	byKey map[CacheKey]*list.Element
+	mu        sync.Mutex
+	list      *list.List
+	byKey     map[CacheKey]*list.Element
+	byContext map[ContextID]map[CacheKey]struct{}
 }
 
+// cacheEntry now carries the contextID so eviction can clean the
+// reverse index in O(1).
 type cacheEntry struct {
 	key       CacheKey
+	contextID ContextID
 	material  *Material
 	expiresAt time.Time
 }
@@ -85,11 +94,12 @@ func NewCacheWithClock(cfg CacheConfig, clock func() time.Time) *Cache {
 		clock = time.Now
 	}
 	return &Cache{
-		cap:   cfg.Capacity,
-		ttl:   cfg.TTL,
-		clock: clock,
-		list:  list.New(),
-		byKey: make(map[CacheKey]*list.Element, cfg.Capacity),
+		cap:       cfg.Capacity,
+		ttl:       cfg.TTL,
+		clock:     clock,
+		list:      list.New(),
+		byKey:     make(map[CacheKey]*list.Element, cfg.Capacity),
+		byContext: make(map[ContextID]map[CacheKey]struct{}),
 	}
 }
 
@@ -111,6 +121,12 @@ func (c *Cache) Get(key CacheKey) (*Material, bool) {
 		// Expired: remove and return miss.
 		c.list.Remove(elem)
 		delete(c.byKey, key)
+		if set, sok := c.byContext[entry.contextID]; sok {
+			delete(set, key)
+			if len(set) == 0 {
+				delete(c.byContext, entry.contextID)
+			}
+		}
 		return nil, false
 	}
 	// LRU touch.
@@ -119,14 +135,32 @@ func (c *Cache) Get(key CacheKey) (*Material, bool) {
 }
 
 // Put inserts or updates an entry. Evicts the LRU entry if over
-// capacity.
-func (c *Cache) Put(key CacheKey, material *Material) {
+// capacity. The ctxID parameter is recorded in the reverse index so
+// InvalidateContext can evict every (KeyID, Version) for a ContextID
+// in O(entries-for-context). Phase 3c (holomush-ojw1.3) added ctxID;
+// callers (manager.go) thread the row's ContextID through.
+func (c *Cache) Put(key CacheKey, ctxID ContextID, material *Material) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if elem, ok := c.byKey[key]; ok {
 		// Update in place.
 		if entry, ok := elem.Value.(*cacheEntry); ok {
+			if entry.contextID != ctxID {
+				// Defensive: the same (KeyID, Version) should not
+				// move between contexts — crypto_keys.id is unique
+				// per (context_type, context_id, version). But if a
+				// test or future caller does it, keep the reverse
+				// index consistent.
+				if set, sok := c.byContext[entry.contextID]; sok {
+					delete(set, key)
+					if len(set) == 0 {
+						delete(c.byContext, entry.contextID)
+					}
+				}
+				entry.contextID = ctxID
+				c.indexContextLocked(ctxID, key)
+			}
 			entry.material = material
 			entry.expiresAt = c.clock().Add(c.ttl)
 		}
@@ -134,17 +168,46 @@ func (c *Cache) Put(key CacheKey, material *Material) {
 		return
 	}
 
-	entry := &cacheEntry{key: key, material: material, expiresAt: c.clock().Add(c.ttl)}
+	entry := &cacheEntry{
+		key:       key,
+		contextID: ctxID,
+		material:  material,
+		expiresAt: c.clock().Add(c.ttl),
+	}
 	elem := c.list.PushFront(entry)
 	c.byKey[key] = elem
+	c.indexContextLocked(ctxID, key)
 
 	if c.list.Len() > c.cap {
-		// Evict LRU.
-		oldest := c.list.Back()
-		if oldest != nil {
-			c.list.Remove(oldest)
-			if oldEntry, ok := oldest.Value.(*cacheEntry); ok {
-				delete(c.byKey, oldEntry.key)
+		c.evictOldestLocked()
+	}
+}
+
+// indexContextLocked records key under ctxID in the reverse index.
+// Caller MUST hold c.mu.
+func (c *Cache) indexContextLocked(ctxID ContextID, key CacheKey) {
+	set, ok := c.byContext[ctxID]
+	if !ok {
+		set = make(map[CacheKey]struct{})
+		c.byContext[ctxID] = set
+	}
+	set[key] = struct{}{}
+}
+
+// evictOldestLocked removes the LRU entry from the list, byKey, and
+// byContext reverse index. Caller MUST hold c.mu.
+func (c *Cache) evictOldestLocked() {
+	oldest := c.list.Back()
+	if oldest == nil {
+		return
+	}
+	c.list.Remove(oldest)
+	if entry, ok := oldest.Value.(*cacheEntry); ok {
+		delete(c.byKey, entry.key)
+		if set, sok := c.byContext[entry.contextID]; sok {
+			delete(set, entry.key)
+			if len(set) == 0 {
+				delete(c.byContext, entry.contextID)
 			}
 		}
 	}
@@ -158,5 +221,54 @@ func (c *Cache) Invalidate(key CacheKey) {
 	if elem, ok := c.byKey[key]; ok {
 		c.list.Remove(elem)
 		delete(c.byKey, key)
+		if entry, ok := elem.Value.(*cacheEntry); ok {
+			if set, sok := c.byContext[entry.contextID]; sok {
+				delete(set, key)
+				if len(set) == 0 {
+					delete(c.byContext, entry.contextID)
+				}
+			}
+		}
 	}
+}
+
+// InvalidateContext removes every cached entry whose ContextID matches
+// ctxID. Phase 3c (holomush-ojw1.3) added this method; the rekey
+// action in invalidation.Coordinator (lands in T9/T10) calls it when
+// a peer publishes a rekey for ctxID, ensuring stale unwrapped
+// material does not survive a key rotation.
+func (c *Cache) InvalidateContext(ctxID ContextID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	set, ok := c.byContext[ctxID]
+	if !ok {
+		return
+	}
+	for key := range set {
+		if elem, ok := c.byKey[key]; ok {
+			c.list.Remove(elem)
+			delete(c.byKey, key)
+		}
+	}
+	delete(c.byContext, ctxID)
+}
+
+// Len returns the number of entries currently in the cache. Used by
+// Phase 3c tests to assert reverse-index cleanup after eviction.
+func (c *Cache) Len() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.list.Len()
+}
+
+// contextIndexLen returns the number of distinct ContextIDs currently
+// indexed in the reverse map. Test-only: exposed so tests can verify
+// the reverse index is cleaned by every eviction path (LRU,
+// Invalidate, InvalidateContext, TTL-expiry). Production code MUST
+// NOT depend on this — InvalidateContext's defensive byKey guard
+// makes byContext leaks invisible at the public API.
+func (c *Cache) contextIndexLen() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.byContext)
 }

@@ -8,6 +8,21 @@ Keep under 200 lines. Curate — don't hoard.
 
 ## Anti-patterns
 
+- **`task test:int -- -run X` does NOT filter to test X.** The Taskfile's `--`
+  pass-through composes args into the gotestsum command but does not isolate the
+  package or limit the run to matching tests. A run that "passes" against a
+  named test may simply be the entire integration suite running with no test
+  matching that name (and -run defaulting to "match nothing" silently). Symptom:
+  `DONE 783 tests, 4 skipped` for a command that should hit only one test file.
+  When verifying a named test exists and passes:
+  - First confirm presence: `rg "TestNameHere" --type go` → must return ≥1 hit.
+  - Then run `task test:int` and grep gotestsum's per-test output for the name,
+    OR use a per-package `-count` discrepancy check.
+  - Do NOT accept suite-wide green as proof a specific test exists.
+  Encountered: T7 review (2026-05-03), where the prompt asserted a spec-required
+  test "already passed" but the test did not exist in the codebase — the green
+  came from the rest of the suite running.
+
 - **Incomplete pattern-fix scope**: when a fix replaces an anti-pattern at
   N "identified" sites, always re-grep the WHOLE pattern (not just the
   spelling of the call the implementer happened to find) across the repo
@@ -62,6 +77,17 @@ Keep under 200 lines. Curate — don't hoard.
   leaving the per-language generated bindings out of sync with each other.
   When reviewing a stacked-PR proto change, check whether earlier commits in
   the stack regenerated all generated artifacts (Go, TS, etc.) or only some.
+
+- **`errors.Is` against `oops.Code(...).Errorf(...)` sentinels is tautological.**
+  `samber/oops@v1.21.0` `OopsError.Is(err)` returns `true` for ANY `OopsError`
+  target (`oops@v1.21.0/error.go:87-93`), so `errors.Is(anyOopsErr, anySentinel)`
+  passes regardless of code. Tests asserting "function returned ErrFoo" with
+  `errors.Is` against an oops sentinel pass even if the function returns a
+  different oops error. Use `errutil.AssertErrorCode(t, err, "EXPECTED_CODE")`
+  or compare `oops.AsOops(err).Code()` directly. As of 2026-05-03 the only
+  package-level oops sentinels in the codebase are `internal/cluster/probe_pill.go:23-36`,
+  `internal/auth/hasher.go:39`, `internal/plugin/manager.go:61` — first uses
+  with `errors.Is` are in `internal/cluster/probe_pill_test.go`.
 
 - **Shared-helper TDD coverage gap.** When an autofix swaps multiple call
   sites to a new shared helper (e.g., `IsDEKMaterialArg` shared across 6

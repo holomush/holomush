@@ -116,10 +116,10 @@ type JetStreamSubscriber struct {
 	// authGuard is optional. nil = pre-Phase 3b passthrough (all events delivered
 	// via identity-codec path). non-nil activates the Decision 5 order-of-operations
 	// for sensitive (non-identity) codec events.
-	authGuard    SessionAuthGuard
+	authGuard SessionAuthGuard
 	// dekManager resolves plaintext key material for sensitive codec events.
 	// Required when authGuard is non-nil.
-	dekManager   SessionDEKManager
+	dekManager SessionDEKManager
 	// auditEmitter logs plugin decrypt records. nil is safe when no plugins subscribe
 	// to sensitive events (plugin branch is skipped for non-plugin identities).
 	auditEmitter SessionAuditEmitter
@@ -271,12 +271,12 @@ type jetStreamSessionStream struct {
 
 	// identity is the authenticated principal for this session. Stored on
 	// the stream so decodeAndAuthorize can evaluate per-event access decisions.
-	identity     SessionIdentity
+	identity SessionIdentity
 	// authGuard evaluates sensitive event delivery decisions (Decision 5).
 	// nil = pre-Phase 3b passthrough (identity-codec path for all events).
-	authGuard    SessionAuthGuard
+	authGuard SessionAuthGuard
 	// dekManager resolves DEK material for sensitive events.
-	dekManager   SessionDEKManager
+	dekManager SessionDEKManager
 	// auditEmitter logs plugin decrypt records.
 	auditEmitter SessionAuditEmitter
 

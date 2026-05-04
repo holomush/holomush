@@ -18,10 +18,13 @@ import (
 	"github.com/samber/oops"
 	"github.com/spf13/cobra"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	abacsetup "github.com/holomush/holomush/internal/access/setup"
 	authsetup "github.com/holomush/holomush/internal/auth/setup"
 	"github.com/holomush/holomush/internal/bootstrap"
 	bootstrapsetup "github.com/holomush/holomush/internal/bootstrap/setup"
+	"github.com/holomush/holomush/internal/cluster"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/command/handlers"
 	"github.com/holomush/holomush/internal/config"
@@ -29,6 +32,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	holoGRPC "github.com/holomush/holomush/internal/grpc"
+	"github.com/holomush/holomush/internal/idgen"
 	"github.com/holomush/holomush/internal/lifecycle"
 	"github.com/holomush/holomush/internal/logging"
 	pluginsetup "github.com/holomush/holomush/internal/plugin/setup"
@@ -323,6 +327,72 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// handler through the bus. Until then this is pure infrastructure.
 	eventBusSub := eventbus.NewSubsystem(eventBusConfig)
 
+	// EventBus is pre-started here (mirroring the early-start of dbSub
+	// above) because cluster.NewSubsystem requires a non-nil *nats.Conn
+	// at construction time, and eventBusSub.Conn() returns nil prior to
+	// Start. Start is idempotent, so the orchestrator's StartAll below
+	// will short-circuit when it reaches eventBusSub. EventBus shutdown
+	// is handled by orch.StopAll (step 8) — no explicit defer needed.
+	if startErr := eventBusSub.Start(ctx); startErr != nil {
+		return oops.Code("EVENTBUS_START_FAILED").
+			With("operation", "start_event_bus").
+			Wrap(startErr)
+	}
+	// Ownership: cleanup eventBusSub on early-return paths until the
+	// orchestrator takes over via orch.StopAll below. The flag flips to
+	// true after orch.StartAll succeeds.
+	eventBusOwnedByOrchestrator := false
+	defer func() {
+		if !eventBusOwnedByOrchestrator {
+			// Bound the cleanup so a wedged Stop can't hang startup-
+			// failure handling forever. 5s matches typical NATS
+			// graceful-shutdown budgets; primary error has already
+			// been returned, so logging is the only signal we have.
+			stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer stopCancel()
+			if stopErr := eventBusSub.Stop(stopCtx); stopErr != nil {
+				slog.Warn("event bus cleanup failed on early-return path",
+					"err", stopErr.Error())
+			}
+		}
+	}()
+
+	// Phase 3c (holomush-ojw1.3): cluster.Registry runs in every deployment
+	// from this PR onward; it provides cross-replica health/status surface
+	// and (when DEK pipeline activates at Phase 3d) the failure-remediation
+	// substrate for cache invalidation. ProductionPill is wired here;
+	// dev/test wirings live in their respective entry points. ProductionPill
+	// terminates the process with os.Exit(125), so production deployments
+	// MUST run under a supervisor that interprets exit code 125 as
+	// restart-eligible (systemd Restart=on-failure, k8s restartPolicy=Always,
+	// docker restart=on-failure).
+	clusterPillMetrics := cluster.NewPillMetrics(prometheus.DefaultRegisterer)
+	clusterSkewMetrics := cluster.NewSkewMetrics(prometheus.DefaultRegisterer)
+	clusterSelfTimeoutMetrics := cluster.NewSelfTimeoutMetrics(prometheus.DefaultRegisterer)
+	clusterHeartbeatMetrics := cluster.NewHeartbeatMetrics(prometheus.DefaultRegisterer)
+	clusterDuplicateIDMetrics := cluster.NewDuplicateMemberIDMetrics(prometheus.DefaultRegisterer)
+	clusterSelfID := cluster.MemberID(idgen.New().String())
+	clusterPill := cluster.NewProductionPill(clusterSelfID, slog.Default(), clusterPillMetrics)
+	clusterSub, clusterErr := cluster.NewSubsystem(cluster.Config{
+		ClusterID:       gameID,
+		HolomushVersion: version, // package-private to main; ldflag-set via -X
+	}, cluster.Deps{
+		Conn:              eventBusSub.Conn(),
+		Logger:            slog.Default(),
+		PillMetrics:       clusterPillMetrics,
+		SkewMetrics:       clusterSkewMetrics,
+		SelfTimeout:       clusterSelfTimeoutMetrics,
+		HeartbeatMetrics:  clusterHeartbeatMetrics,
+		DuplicateMemberID: clusterDuplicateIDMetrics,
+		Pill:              clusterPill,
+		SelfIDForTest:     clusterSelfID,
+	})
+	if clusterErr != nil {
+		return oops.Code("CLUSTER_SUBSYSTEM_INIT_FAILED").
+			With("cluster_id", gameID).
+			Wrap(clusterErr)
+	}
+
 	// AuditProjection drains the EVENTS stream into events_audit so every
 	// published message lands in the forever-archive PostgreSQL table.
 	// Depends on DB (target table), EventBus (JetStream source), and
@@ -432,16 +502,18 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	// orchestrator will skip reconnection. It remains registered so other subsystems
 	// resolve their SubsystemDatabase dependency and so StopAll shuts it down last.
 	orch := lifecycle.NewOrchestrator()
-	for _, sub := range []lifecycle.Subsystem{
+	for _, sub := range productionSubsystems(
 		dbSub, abacSub, authSub, worldSub,
-		sessionSub, pluginSub, bootstrapSub, eventBusSub, auditSub, grpcSub,
-	} {
+		sessionSub, pluginSub, bootstrapSub,
+		eventBusSub, clusterSub, auditSub, grpcSub,
+	) {
 		orch.Register(sub)
 	}
 
 	if orchErr := orch.StartAll(ctx); orchErr != nil {
 		return orchErr
 	}
+	eventBusOwnedByOrchestrator = true
 	defer orch.StopAll(context.Background())
 
 	// --- 9. Readiness gate ---
@@ -744,4 +816,19 @@ func parseAutoMigrate() bool {
 		"value", val,
 		"valid_values", "true, false, 1, 0")
 	return true
+}
+
+// productionSubsystems returns the ordered list of subsystems registered
+// with the orchestrator. Extracted as a helper so regression tests can
+// assert on the production set without spinning up the full server.
+func productionSubsystems(
+	dbSub, abacSub, authSub, worldSub,
+	sessionSub, pluginSub, bootstrapSub,
+	eventBusSub, clusterSub, auditSub, grpcSub lifecycle.Subsystem,
+) []lifecycle.Subsystem {
+	return []lifecycle.Subsystem{
+		dbSub, abacSub, authSub, worldSub,
+		sessionSub, pluginSub, bootstrapSub,
+		eventBusSub, clusterSub, auditSub, grpcSub,
+	}
 }

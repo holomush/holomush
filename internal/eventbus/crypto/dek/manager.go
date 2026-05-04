@@ -42,17 +42,18 @@ type Manager interface {
 
 // manager is the concrete impl.
 type manager struct {
-	provider kek.Provider
-	store    *Store
-	cache    *Cache
+	provider  kek.Provider
+	store     *Store
+	cache     *Cache
+	partCache *ParticipantsCache
 }
 
 // NewManager constructs a real Manager. Production callers (Phase 3+)
-// pass a real KEK provider and pgxpool.Pool-backed Store. All three
-// collaborators are required; a nil argument returns
-// DEK_MANAGER_DEPENDENCY_NIL rather than letting GetOrCreate/Resolve
-// dereference nil at runtime.
-func NewManager(provider kek.Provider, store *Store, cache *Cache) (Manager, error) {
+// pass a real KEK provider, pgxpool.Pool-backed Store, DEK material
+// Cache, and participants Cache. All four collaborators are required;
+// a nil argument returns DEK_MANAGER_DEPENDENCY_NIL rather than
+// letting GetOrCreate/Resolve/Participants dereference nil at runtime.
+func NewManager(provider kek.Provider, store *Store, cache *Cache, partCache *ParticipantsCache) (Manager, error) {
 	switch {
 	case provider == nil:
 		return nil, oops.Code("DEK_MANAGER_DEPENDENCY_NIL").
@@ -66,8 +67,12 @@ func NewManager(provider kek.Provider, store *Store, cache *Cache) (Manager, err
 		return nil, oops.Code("DEK_MANAGER_DEPENDENCY_NIL").
 			With("dependency", "cache").
 			Errorf("dek.NewManager requires a non-nil *Cache")
+	case partCache == nil:
+		return nil, oops.Code("DEK_MANAGER_DEPENDENCY_NIL").
+			With("dependency", "partCache").
+			Errorf("dek.NewManager requires a non-nil *ParticipantsCache")
 	}
-	return &manager{provider: provider, store: store, cache: cache}, nil
+	return &manager{provider: provider, store: store, cache: cache, partCache: partCache}, nil
 }
 
 // NewManagerForUnitTest constructs a Manager with no DB or KEK access.
@@ -83,7 +88,7 @@ func NewManagerForUnitTest() Manager {
 // dereferencing m.provider/m.store/m.cache to avoid nil-panics on
 // Managers built via NewManagerForUnitTest.
 func (m *manager) configured() error {
-	if m.provider == nil || m.store == nil || m.cache == nil {
+	if m.provider == nil || m.store == nil || m.cache == nil || m.partCache == nil {
 		return oops.Code("DEK_MANAGER_NOT_CONFIGURED").
 			Errorf("Manager built via NewManagerForUnitTest cannot perform DEK operations; " +
 				"only the Add/Rotate/Rekey stubs are exercisable")
@@ -141,7 +146,15 @@ func (m *manager) GetOrCreate(ctx context.Context, ctxID ContextID, initial []Pa
 	in.ID = id
 	material := NewMaterial(dekBytes)
 	keyID := codec.KeyID(id) //nolint:gosec // G115: id is a DB BIGSERIAL value; positive serial ids fit in uint64.
-	m.cache.Put(CacheKey{KeyID: keyID, Version: 1}, material)
+
+	// Seed both caches: the DEK material cache for Resolve and the
+	// participants cache for Participants. Both are derived from the
+	// freshly minted row without an extra PG read.
+	m.cache.Put(CacheKey{KeyID: keyID, Version: 1}, ctxID, material)
+	m.partCache.Put(
+		ParticipantsCacheKey{ContextType: ctxID.Type, ContextID: ctxID.ID, Version: 1},
+		initial,
+	)
 	return material.AsCodecKey(keyID, 1), nil
 }
 
@@ -166,20 +179,19 @@ func (m *manager) Resolve(ctx context.Context, keyID codec.KeyID, version uint32
 	return m.unwrapAndCache(ctx, r)
 }
 
-// Participants returns the participant list for the row identified by
-// (keyID, version). Reads via store.selectByID — same path as Resolve —
-// but returns the Participants field rather than unwrapping the DEK.
-// AuthGuard never holds DEK material; ParticipantLookup is the right
-// boundary.
+// Participants returns the participant set for the (keyID, version)
+// DEK. Reads from ParticipantsCache on hit; on miss, falls through to
+// PG and seeds the cache. Phase 3c grounding doc Decision 3 + INV-59.
 //
-// Two-SELECT note: AuthGuard.Check calls Participants, then on permit
-// calls Resolve. Resolve hits the cache; Participants does NOT.
-// Phase 3b accepts this redundancy; Phase 3c (holomush-ojw1.3) revisits
-// caching policy. TOCTOU concern: if Rotate happens between the two
-// calls, AuthGuard checks new participants but Resolve returns the
-// (now-stale) cached old key. Phase 3c's cache invalidation closes
-// this; Phase 3b's Rotate is stubbed (lifecycle ops are Phase 4),
-// so the TOCTOU is vacuous in 3b production.
+// PG-before-cache note: this body reads PG first (selectByID) to derive
+// the cache key (ContextType, ContextID, Version), then checks the
+// cache. The (keyID, version) → (ctxType, ctxID) mapping isn't
+// available in-memory today, so the row read is required. unwrapAndCache
+// seeds the cache on the Resolve / GetOrCreate paths so most reads still
+// hit cache; Participants itself only avoids a redundant participants-
+// list copy when the row is already cached. A future "(keyID, version)
+// → (ctxType, ctxID)" reverse index would lift the PG read; out of
+// scope for T7.
 func (m *manager) Participants(ctx context.Context, keyID codec.KeyID, version uint32) ([]Participant, error) {
 	if err := m.configured(); err != nil {
 		return nil, err
@@ -194,6 +206,11 @@ func (m *manager) Participants(ctx context.Context, keyID codec.KeyID, version u
 		}
 		return nil, oops.Code("DEK_STORE_SELECT_FAILED").Wrap(err)
 	}
+	pck := ParticipantsCacheKey{ContextType: r.ContextType, ContextID: r.ContextID, Version: version}
+	if cached, ok := m.partCache.Get(pck); ok {
+		return cached, nil
+	}
+	m.partCache.Put(pck, r.Participants)
 	return r.Participants, nil
 }
 
@@ -234,7 +251,15 @@ func (m *manager) unwrapAndCache(ctx context.Context, r row) (codec.Key, error) 
 	}
 	material := NewMaterial(dekBytes)
 	keyID := codec.KeyID(r.ID) //nolint:gosec // G115: r.ID is a DB BIGSERIAL value; positive serial ids fit in uint64.
-	m.cache.Put(CacheKey{KeyID: keyID, Version: r.Version}, material)
+	ctxID := ContextID{Type: r.ContextType, ID: r.ContextID}
+
+	// Seed both caches from the single PG row read so subsequent
+	// Resolve and Participants calls hit cache without re-reading PG.
+	m.cache.Put(CacheKey{KeyID: keyID, Version: r.Version}, ctxID, material)
+	m.partCache.Put(
+		ParticipantsCacheKey{ContextType: r.ContextType, ContextID: r.ContextID, Version: r.Version},
+		r.Participants,
+	)
 	return material.AsCodecKey(keyID, r.Version), nil
 }
 
