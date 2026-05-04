@@ -13,9 +13,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
+	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
@@ -82,6 +84,15 @@ type Manager struct {
 	inflight            map[string]*DiscoveredPlugin
 	loadedOrder         []*DiscoveredPlugin // preserves DAG/priority load order for deterministic iteration
 	mu                  sync.RWMutex
+
+	// Identity registry: name ↔ ULID maps populated at bootstrap from the
+	// plugins table; mutated on load/unload. nameByID resolves three
+	// populations (active plugins + historical plugins + system sentinels);
+	// activeByName resolves only currently-loaded plugins. Both are
+	// guarded by the existing m.mu RWMutex.
+	pluginRepo   store.PluginRepo
+	nameByID     map[ulid.ULID]string
+	activeByName map[string]ulid.ULID
 }
 
 // ManagerOption configures the Manager.
@@ -168,6 +179,13 @@ func WithVerbRegistry(reg *core.VerbRegistry) ManagerOption {
 	}
 }
 
+// WithPluginRepo wires the IdentityRegistry's persistence layer.
+// Required when the Manager will Upsert plugin rows. Without it,
+// loadPlugin operates with an in-memory-only registry (test seam).
+func WithPluginRepo(repo store.PluginRepo) ManagerOption {
+	return func(m *Manager) { m.pluginRepo = repo }
+}
+
 // Registry returns the service registry, or nil if not configured.
 func (m *Manager) Registry() *ServiceRegistry {
 	return m.registry
@@ -194,6 +212,39 @@ func NewManager(pluginsDir string, opts ...ManagerOption) (*Manager, error) {
 	if m.luaHost != nil {
 		m.hostCaps[m.luaHost] = discoverCapabilities(m.luaHost)
 	}
+
+	// Initialize the identity registry cache.
+	m.nameByID = make(map[ulid.ULID]string)
+	m.activeByName = make(map[string]ulid.ULID)
+
+	// Step 1: register system sentinels first (not in activeByName, not
+	// in the plugins table — different identity domain).
+	m.nameByID[core.SystemActorULID] = "system"
+	m.nameByID[core.WorldServiceActorULID] = "world-service"
+
+	// Step 2: load existing plugin rows from persistence. Reject sentinel
+	// collisions defensively.
+	if m.pluginRepo != nil {
+		ctx := context.Background()
+		rows, err := m.pluginRepo.ListAll(ctx)
+		if err != nil {
+			return nil, oops.Code("PLUGIN_MANAGER_BOOTSTRAP").Wrap(err)
+		}
+		for i := range rows {
+			row := &rows[i]
+			if core.IsSentinelULID(row.ID) {
+				return nil, oops.Code("PLUGIN_ROW_USES_SENTINEL_ID").
+					With("name", row.Name).
+					With("id", row.ID.String()).
+					Errorf("plugin row uses a reserved sentinel ULID")
+			}
+			m.nameByID[row.ID] = row.Name
+			if row.GcAt == nil {
+				m.activeByName[row.Name] = row.ID
+			}
+		}
+	}
+
 	if m.verbRegistry == nil {
 		return nil, ErrMissingVerbRegistry
 	}
@@ -1281,6 +1332,22 @@ func (m *Manager) RegisterPluginCommands(registry *command.Registry) {
 			}
 		}
 	}
+}
+
+// NameByID implements IdentityRegistry.
+func (m *Manager) NameByID(id ulid.ULID) (string, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	name, ok := m.nameByID[id]
+	return name, ok
+}
+
+// IDByName implements IdentityRegistry.
+func (m *Manager) IDByName(name string) (ulid.ULID, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	id, ok := m.activeByName[name]
+	return id, ok
 }
 
 // displayTargetFromString converts a manifest display_target string to the
