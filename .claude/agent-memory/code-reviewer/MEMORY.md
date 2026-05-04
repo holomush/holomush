@@ -8,6 +8,17 @@ Keep under 200 lines. Curate — don't hoard.
 
 ## Anti-patterns
 
+- **`AGENTS.md` and `CLAUDE.md` are paired SSoTs**: at main they are
+  byte-identical. `Taskfile.yaml`
+  `lint:docs-symmetry` enforces only the `<!-- BEGIN: plugin-runtime-symmetry -->`
+  anchored subsection byte-identical, but the surrounding convention is
+  whole-file twinning (initial setup, two later "chore: fix agents md" syncs).
+  Any edit to one MUST be mirrored in the other (or AGENTS.md replaced with a
+  one-line stub pointing at CLAUDE.md and `lint:docs-symmetry` updated). When
+  reviewing CLAUDE.md changes, ALWAYS `diff CLAUDE.md AGENTS.md` and grep both
+  for the same anchor names; treat divergence beyond the symmetry-block as
+  a blocking finding.
+
 - **`task test:int -- -run X` does NOT filter to test X.** The Taskfile's `--`
   pass-through composes args into the gotestsum command but does not isolate the
   package or limit the run to matching tests. A run that "passes" against a
