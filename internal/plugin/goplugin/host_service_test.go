@@ -856,6 +856,90 @@ func TestRequestEmitTokenWrapsIssueFailure(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_ISSUE_FAILED")
 }
 
+// capturingEmitter records EmitIntent calls for assertion in tests.
+type capturingEmitter struct {
+	intents []pluginsdk.EmitIntent
+	err     error
+}
+
+func (c *capturingEmitter) Emit(_ context.Context, _ string, intent pluginsdk.EmitIntent) error {
+	if c.err != nil {
+		return c.err
+	}
+	c.intents = append(c.intents, intent)
+	return nil
+}
+
+var _ plugins.PluginIntentEmitter = (*capturingEmitter)(nil)
+
+// newTestHostServiceServerWithEmitter constructs a pluginHostServiceServer
+// with a host that uses the provided custom emitter (for direct intent inspection).
+func newTestHostServiceServerWithEmitter(pluginName string, emitter plugins.PluginIntentEmitter) *pluginHostServiceServer {
+	h := NewHost()
+	h.SetEventEmitter(emitter)
+	return &pluginHostServiceServer{host: h, pluginName: pluginName}
+}
+
+// contextWithValidToken returns a context with a valid emit token for the given actor.
+// The token store is accessed from the provided server's host.
+func contextWithValidToken(t *testing.T, srv *pluginHostServiceServer, actor core.Actor) (context.Context, string) {
+	t.Helper()
+	token, err := srv.host.tokenStore.Issue(srv.pluginName, actor)
+	require.NoError(t, err, "failed to issue emit token")
+	return metadata.NewIncomingContext(
+		context.Background(),
+		metadata.New(map[string]string{"x-holomush-emit-token": token}),
+	), token
+}
+
+// TestEmitEventCopiesSensitiveTrue asserts that req.Sensitive=true is
+// copied to EmitIntent.Sensitive=true at the host service boundary.
+func TestEmitEventCopiesSensitiveTrue(t *testing.T) {
+	t.Parallel()
+	captured := &capturingEmitter{}
+	srv := newTestHostServiceServerWithEmitter("plug-A", captured)
+	defer func() { _ = srv.host.Close(context.Background()) }()
+
+	actor := core.Actor{Kind: core.ActorCharacter, ID: "01HCHAR0000000000000000000"}
+	ctx, token := contextWithValidToken(t, srv, actor)
+	defer srv.host.tokenStore.Revoke(token)
+
+	_, err := srv.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
+		Stream:    "location:01HLOC0000000000000000000",
+		EventType: "say",
+		Payload:   []byte(`{"message":"hi"}`),
+		Sensitive: true,
+	})
+	require.NoError(t, err)
+	require.Len(t, captured.intents, 1)
+	assert.True(t, captured.intents[0].Sensitive,
+		"req.Sensitive=true MUST translate to EmitIntent.Sensitive=true")
+}
+
+// TestEmitEventCopiesSensitiveFalseDefaultsExplicit asserts the
+// proto3 zero (sensitive absent / false) → EmitIntent.Sensitive=false.
+func TestEmitEventCopiesSensitiveFalseDefaultsExplicit(t *testing.T) {
+	t.Parallel()
+	captured := &capturingEmitter{}
+	srv := newTestHostServiceServerWithEmitter("plug-A", captured)
+	defer func() { _ = srv.host.Close(context.Background()) }()
+
+	actor := core.Actor{Kind: core.ActorCharacter, ID: "01HCHAR0000000000000000000"}
+	ctx, token := contextWithValidToken(t, srv, actor)
+	defer srv.host.tokenStore.Revoke(token)
+
+	_, err := srv.EmitEvent(ctx, &pluginv1.PluginHostServiceEmitEventRequest{
+		Stream:    "location:01HLOC0000000000000000000",
+		EventType: "say",
+		Payload:   []byte(`{"message":"hi"}`),
+		// Sensitive omitted (proto3 zero = false)
+	})
+	require.NoError(t, err)
+	require.Len(t, captured.intents, 1)
+	assert.False(t, captured.intents[0].Sensitive,
+		"req.Sensitive absent MUST translate to EmitIntent.Sensitive=false")
+}
+
 // failingReader implements io.Reader returning a deterministic error,
 // used to simulate crypto/rand exhaustion on token issuance.
 type failingReader struct{}
