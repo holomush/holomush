@@ -104,12 +104,39 @@ Spec (docs/specs/)
     ↓
 Epic (bd create "..." --epic)
     ↓
-Implementation Plan (docs/plans/)
+Implementation Plan (docs/plans/ — produced by `superpowers:writing-plans`)
     ↓
 Tasks (bd create "..." -p <epic>)
     - Dependencies based on file overlap
     - Dependencies based on conceptual overlap
 ```
+
+### Canonical workflow for non-trivial work
+
+For multi-task work (a feature, an epic sub-phase, a substantive refactor),
+the project uses a stage-gated workflow with named skills and adversarial
+review agents between stages. Each stage produces an artifact reviewed by
+the next stage's gate before proceeding.
+
+| Stage | Skill                                                                                         | Output                                                                       | Pre-gate review agent                                              | Notes                                                                |
+| ----- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| 1     | `superpowers:brainstorming`                                                                   | Design decisions surfaced                                                    | (none — conversation only)                                         | Resolves design questions before any artifact lands.                 |
+| 2     | (writes from brainstorming)                                                                   | Grounding spec in `docs/superpowers/specs/`                                  | `design-reviewer` (MUST run; READY/NOT READY)                      | Adversarial gate before plan-writing. Findings cited `path:line`.    |
+| 3     | `superpowers:writing-plans`                                                                   | Impl plan in `docs/superpowers/plans/`                                       | `plan-reviewer` (MUST run; READY/NOT READY)                        | Adversarial gate before bead-chain or execution.                     |
+| 4     | `bead-chain-design`                                                                           | `## Bead chain structure` section in plan                                    | (user reviews proposed split before write)                         | See `### Plan → Bead Chain` for the convention.                      |
+| 5     | `bead-chain-from-plan`                                                                        | `bd` issues + dep edges + parent linkage                                     | (user reviews operation manifest before execute)                   | Materializes the chain. Idempotent dry-run by default.               |
+| 6     | `superpowers:subagent-driven-development` (preferred) or `superpowers:executing-plans`        | Implementation commits                                                       | `crypto-reviewer` / `abac-reviewer` (when applicable) + `code-reviewer` (MUST run before push) | Subagent-driven dispatches per task with two-stage review per task. |
+| 7     | (manual: `gh pr create`)                                                                      | Open PR                                                                      | `task pr-prep` (MUST pass green) + CodeRabbit (auto on push)       | Then `/autofix <PR#>` for the CodeRabbit pass.                       |
+
+**Gate enforcement:** stages 2, 3, and 6 have MUST-run adversarial review
+agents per `## Pre-Push Review Gates`. Skipping requires explicit user
+override (e.g., "skip review", "no review needed").
+
+**When to skip stages:** for small fixes (typo, dependency bump, single-file
+bug fix), skip stages 1-5. Direct bead creation + execution + code-review
+
+- PR is the right shape. The full chain is for multi-task work that
+benefits from explicit decomposition.
 
 ### Daily Workflow
 
@@ -154,6 +181,60 @@ All tasks MUST be reviewed before completion. See
 4. Address all findings
 5. Create PR or mark task complete
 
+### Plan → Bead Chain
+
+Implementation plans for non-trivial work (multiple tasks under a parent epic)
+MUST include a bead chain that tracks the work in `bd`. Plans without matching
+bead chains drift from execution; bead chains without matching plans duplicate
+the design surface across two sources of truth.
+
+Convention established 2026-05-04 (formalized retrospectively from the Phase 3d
+landing). Plans written before this date may not follow it.
+
+**Plan section requirement:**
+
+Every plan with multiple tracked tasks MUST contain a `## Bead chain structure`
+section (level-2 heading, exact wording, case-sensitive) that:
+
+| Requirement                       | Description                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------------------ |
+| **MUST** name the parent epic     | Reference the existing `bd` epic the chain hangs from (or note "create new epic" + scope). |
+| **MUST** list each task bead      | One per `bd create` operation; include grandchildren when four-level depth applies.        |
+| **MUST** note supersession        | Existing beads being closed / superseded with rationale.                                   |
+| **MUST** list follow-up beads     | Beads to file at chain-completion time (deferred work, follow-on epics).                   |
+| **MUST** declare dependencies     | `bd dep add` edges that match the task table's dependency column.                          |
+
+**Task bead description requirement:**
+
+Every `bd create` for a task bead in the chain MUST include all 8 sections in
+its `--description` body:
+
+| Section                       | Required content                                                            |
+| ----------------------------- | --------------------------------------------------------------------------- |
+| **Goal**                      | One-sentence scope statement                                                |
+| **Design reference**          | Link to grounding spec / design doc with section anchor                     |
+| **Plan reference**            | Link to impl plan with task ID anchor                                       |
+| **TDD acceptance criteria**   | Named tests that MUST exist before the task is "done"                       |
+| **Verification steps**        | Concrete commands (`task lint`, `task test -- ./pkg/`, etc.)                |
+| **Files touched**             | Explicit list of paths the task modifies                                    |
+| **Dependencies**              | `bd dep add` edges matching the task graph                                  |
+| **Out of scope**              | Explicit non-goals to prevent scope creep                                   |
+
+The 8 sections enable bead-only readers to understand a task's scope without
+chasing into the plan, and enable plan-only readers to understand task tracking
+without chasing into beads.
+
+**Skills that operate on the chain:**
+
+| Skill                    | Purpose                                                                                            |
+| ------------------------ | -------------------------------------------------------------------------------------------------- |
+| `bead-chain-design`      | Generates the `## Bead chain structure` section into a plan when missing. Runs after `superpowers:writing-plans`. |
+| `bead-chain-from-plan`   | Materializes the chain into actual `bd` issues, dep edges, parent linkages, priority bumps, and follow-up bead filings. Runs after the plan + chain section both exist. |
+
+If a plan lacks the chain section, `bead-chain-from-plan` delegates to
+`bead-chain-design` to create it; the user is consulted before either skill
+mutates state.
+
 ## Pre-Push Review Gates
 
 Three adversarial read-only sub-agents gate hand-offs BEFORE the PR surface.
@@ -165,6 +246,8 @@ by providing an earlier, in-session review pass.
 | `design-reviewer` | `superpowers:writing-plans` is invoked on a spec                                       | `/review-design [<spec-path>]` or auto  |
 | `plan-reviewer`   | `superpowers:executing-plans` or `superpowers:subagent-driven-development` runs a plan | `/review-plan [<plan-path>]` or auto    |
 | `code-reviewer`   | `bd close`, `jj git push`, or PR creation                                              | `/review-code [<target>]` or auto       |
+| `crypto-reviewer` | `code-reviewer` (runs FIRST), for changes touching `internal/eventbus/crypto/`, `internal/eventbus/codec/`, `internal/eventbus/history/dispatcher.go`, `internal/eventbus/history/cold_postgres.go`, `internal/plugin/event_emitter.go::Emit`, `internal/eventbus/audit/projection.go`, plugin manifest `crypto.emits` declarations, or migrations on `crypto_keys` / `events_audit` | `/review-crypto` or auto via `remind-pre-action-review.sh` |
+| `abac-reviewer`   | `code-reviewer` (runs alongside), for changes touching `internal/access/`              | `/review-abac` or auto via `remind-pre-action-review.sh` |
 
 | Requirement                         | Description                                                                             |
 | ----------------------------------- | --------------------------------------------------------------------------------------- |
