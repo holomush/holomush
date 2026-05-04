@@ -1901,3 +1901,66 @@ func TestConfigureFocusDepsWithNilLuaHostDoesNotPanic(t *testing.T) {
 		mgr.ConfigureFocusDeps(nil, nil)
 	})
 }
+
+// TestEmitPluginEventPropagatesSensitive asserts that the Manager's
+// EmitPluginEvent boundary copies EmitEvent.Sensitive into the
+// constructed EmitIntent.Sensitive — closing the full chain from
+// Lua (or any plugin source) through to the host fence and onward
+// to the published eventbus.Event.
+//
+// Approach: register a recordingPublisher (defined in
+// event_emitter_crypto_test.go), load a fake plugin manifest that
+// declares "core-test:hello" with sensitivity=may, then call
+// EmitPluginEvent with EmitEvent.Sensitive=true and assert the
+// recorded eventbus.Event.Sensitive=true.
+func TestEmitPluginEventPropagatesSensitive(t *testing.T) {
+	pub := &recordingPublisher{}
+
+	mgr, err := plugins.NewManager(t.TempDir(), plugins.WithVerbRegistry(core.NewVerbRegistry()))
+	require.NoError(t, err)
+
+	// Register the manifest so the emitter's manifest lookup succeeds and
+	// the Phase 3a fence sees sensitivity=may. Use TestLoadPlugin which
+	// registers a manifest without requiring a real host load step.
+	manifest := &plugins.Manifest{
+		Name:                "core-test",
+		Version:             "1.0.0",
+		Type:                plugins.TypeLua,
+		Emits:               []string{"location"},
+		ActorKindsClaimable: []string{"plugin", "character"},
+		LuaPlugin:           &plugins.LuaConfig{Entry: "main.lua"},
+		Crypto: &plugins.CryptoSection{
+			Emits: []plugins.CryptoEmit{
+				{EventType: "core-test:hello", Sensitivity: plugins.SensitivityMay},
+			},
+		},
+	}
+	// Need a host registered for TypeLua so TestLoadPlugin can map it.
+	mockLua := mocks.NewMockHost(t)
+	mockLua.EXPECT().Load(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	mgr.RegisterHost(plugins.TypeLua, mockLua)
+	mgr.TestLoadPlugin("core-test", manifest)
+
+	// Wire the shared emitter with crypto enabled so the fence runs and
+	// stamps sensitive=true (manifest=may + intent.Sensitive=true → SensitivityAlways).
+	mgr.ConfigureEventEmitter(pub, plugins.WithCryptoEnabled(true))
+
+	// Emit must run with a plugin-actor context so the emitter resolves
+	// an actor; ActorPlugin matches the manifest's actor_kinds_claimable.
+	ctx := core.WithActor(context.Background(), core.Actor{
+		Kind: core.ActorPlugin,
+		ID:   "core-test",
+	})
+
+	err = mgr.EmitPluginEvent(ctx, "core-test", pluginsdk.EmitEvent{
+		Stream:    "location:01HXXXTESTLOC00000000000",
+		Type:      "core-test:hello",
+		Payload:   `{"msg":"private"}`,
+		Sensitive: true,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, pub.events, 1)
+	assert.True(t, pub.events[0].Sensitive,
+		"EmitEvent.Sensitive=true MUST propagate through manager.EmitPluginEvent → EmitIntent.Sensitive → event.Sensitive")
+}

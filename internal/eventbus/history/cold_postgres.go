@@ -5,6 +5,8 @@ package history
 
 import (
 	"context"
+	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -13,19 +15,58 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/holomush/holomush/internal/eventbus"
+	"github.com/holomush/holomush/internal/eventbus/codec"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
+	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
 
 // postgresColdTier reads archived events from the events_audit table.
 // Column shape comes from internal/store/migrations/000009_create_events_audit.
 type postgresColdTier struct {
 	pool *pgxpool.Pool
+
+	// authGuard evaluates sensitive event delivery decisions on the
+	// cold-tier history path. nil = pre-Phase 3b passthrough (mirrors
+	// jetStreamHotTier semantics at hot_jetstream.go:60-65).
+	authGuard eventbus.SessionAuthGuard
+	// dekManager resolves DEK material for sensitive events.
+	dekManager eventbus.SessionDEKManager
+	// auditEmitter logs plugin decrypt records.
+	auditEmitter eventbus.SessionAuditEmitter
 }
 
-func newPostgresColdTier(pool *pgxpool.Pool) *postgresColdTier {
-	return &postgresColdTier{pool: pool}
+// ColdTierOption tunes postgresColdTier construction. Mirrors HotTierOption
+// from hot_jetstream.go for parity across tiers.
+type ColdTierOption func(*postgresColdTier)
+
+// WithColdHistoryAuthGuard injects the AuthGuard for sensitive event delivery
+// decisions on the cold-tier history path. nil = pre-Phase 3b passthrough.
+func WithColdHistoryAuthGuard(g eventbus.SessionAuthGuard) ColdTierOption {
+	return func(c *postgresColdTier) { c.authGuard = g }
+}
+
+// WithColdHistoryDEKManager injects the DEK Manager used to resolve plaintext
+// key material for sensitive codec events on the cold-tier history path.
+// Required when WithColdHistoryAuthGuard is set.
+func WithColdHistoryDEKManager(m eventbus.SessionDEKManager) ColdTierOption {
+	return func(c *postgresColdTier) { c.dekManager = m }
+}
+
+// WithColdHistoryDecryptAuditEmitter injects the audit emitter for plugin
+// decrypt records on the cold-tier history path.
+func WithColdHistoryDecryptAuditEmitter(em eventbus.SessionAuditEmitter) ColdTierOption {
+	return func(c *postgresColdTier) { c.auditEmitter = em }
+}
+
+func newPostgresColdTier(pool *pgxpool.Pool, opts ...ColdTierOption) *postgresColdTier {
+	c := &postgresColdTier{pool: pool}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 // Read satisfies ColdTier per §6.1 of the suos spec. Builds a parameterized
@@ -67,7 +108,7 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 		sb   strings.Builder
 		args []any
 	)
-	sb.WriteString(`SELECT id, subject, type, timestamp, actor_kind, actor_id, payload, js_seq, rendering FROM events_audit WHERE `)
+	sb.WriteString(`SELECT id, subject, type, timestamp, actor_kind, actor_id, envelope, js_seq, rendering, codec, dek_ref, dek_version FROM events_audit WHERE `)
 	if subjectPattern != "" {
 		args = append(args, subjectPattern)
 		fmt.Fprintf(&sb, "subject LIKE $%d", len(args))
@@ -145,11 +186,18 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 			ts             time.Time
 			actorKindStr   string
 			actorIDBytes   []byte
-			payload        []byte
+			envelopeBytes  []byte // was: payload (post-rename)
 			seq            int64
 			renderingBytes []byte
+			codecStr       string
+			dekRef         sql.NullInt64
+			dekVersion     sql.NullInt32
 		)
-		if scanErr := rows.Scan(&idBytes, &subjectStr, &eventType, &ts, &actorKindStr, &actorIDBytes, &payload, &seq, &renderingBytes); scanErr != nil {
+		if scanErr := rows.Scan(
+			&idBytes, &subjectStr, &eventType, &ts,
+			&actorKindStr, &actorIDBytes, &envelopeBytes, &seq, &renderingBytes,
+			&codecStr, &dekRef, &dekVersion,
+		); scanErr != nil {
 			return nil, oops.Code("EVENTBUS_COLD_SCAN_FAILED").Wrap(scanErr)
 		}
 		if len(idBytes) != 16 {
@@ -161,6 +209,9 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 		copy(id[:], idBytes)
 		seqU := uint64(seq) //nolint:gosec // G115: js_seq is always a positive JetStream sequence number; PG bigint stores only non-negative values here
 
+		// Cursor-echo guard — MUST run before envelope-unmarshal so a stale
+		// cursor row produces EVENTBUS_CURSOR_STALE rather than an unrelated
+		// proto.Unmarshal error.
 		if hasCursor && first {
 			first = false
 			if seqU != cursorSeq || id != cursorID {
@@ -176,7 +227,34 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 		}
 		first = false
 
-		var rendering *eventbus.RenderingMetadata
+		// Envelope-unmarshal + dispatcher call (Task 4 shared function).
+		// Auth inputs come from c (the cold tier's authGuard/dekManager/
+		// auditEmitter fields populated by ColdTierOption options) and
+		// from q.Identity (the per-call principal from HistoryQuery,
+		// mirroring hot_jetstream.go:165's q.Identity flow).
+		row := coldRow{
+			ID:         idBytes,
+			Envelope:   envelopeBytes,
+			Codec:      codecStr,
+			DEKRef:     dekRef,
+			DEKVersion: dekVersion,
+		}
+		ev, metaOnly, dispatchErr := decodeColdRow(ctx, row, q.Identity, c.authGuard, c.dekManager, c.auditEmitter)
+		if dispatchErr != nil {
+			return nil, dispatchErr
+		}
+
+		// Overlay column-derived fields the dispatcher doesn't own:
+		// - ID restated from idBytes (envelope id is already stamped from
+		//   the same source by decodeColdRow, but we keep this explicit
+		//   to anchor the cold-tier ID provenance to the column)
+		// - Seq comes from js_seq column (not in envelope)
+		// - Rendering preserves the column-based JSONB unmarshal for
+		//   rolling-upgrade compatibility (DiscardUnknown semantics).
+		ev.ID = id
+		ev.Seq = seqU
+		ev.MetadataOnly = metaOnly
+
 		if len(renderingBytes) > 0 {
 			var protoMD corev1.RenderingMetadata
 			// DiscardUnknown: tolerate forward schema additions on persisted
@@ -188,19 +266,10 @@ func (c *postgresColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, ed
 					With("subject", string(q.Subject)).
 					Wrap(unmarshalErr)
 			}
-			rendering = eventbus.RenderingFromProto(&protoMD)
+			ev.Rendering = eventbus.RenderingFromProto(&protoMD)
 		}
 
-		out = append(out, eventbus.Event{
-			ID:        id,
-			Seq:       seqU,
-			Subject:   eventbus.Subject(subjectStr),
-			Type:      eventbus.Type(eventType),
-			Timestamp: ts.UTC(),
-			Actor:     actorFromAuditRow(actorKindStr, actorIDBytes),
-			Payload:   payload,
-			Rendering: rendering,
-		})
+		out = append(out, ev)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, oops.Code("EVENTBUS_COLD_ROWS_ERR").Wrap(err)
@@ -271,6 +340,78 @@ func classifySubject(subject string) (exact, pattern string) {
 	escaped = strings.ReplaceAll(escaped, "*", "%")
 	escaped = strings.ReplaceAll(escaped, ">", "%")
 	return "", escaped
+}
+
+// coldRow holds the fields decodeColdRow needs to call the shared
+// dispatcher: ID for error messages, the marshaled Envelope bytes, and
+// the codec/DEK columns that supply AAD inputs. Subject/Type/Timestamp/
+// Actor are recovered from the unmarshaled envelope (no need to mirror
+// them as columns); js_seq + rendering are overlaid on the dispatcher
+// output by the production Read method (they don't enter the dispatcher).
+type coldRow struct {
+	ID         []byte
+	Envelope   []byte
+	Codec      string
+	DEKRef     sql.NullInt64
+	DEKVersion sql.NullInt32
+}
+
+// decodeColdRow is the cold-path equivalent of decodeJetStreamMessage's
+// auth-aware branch in hot_jetstream.go: it unmarshals the envelope and
+// calls the shared dispatcher (decodeAuthorizeAndDispatch) with column-
+// derived inputs. Returns (event, metadataOnly, error).
+//
+// On unmarshal failure returns AUDIT_ENVELOPE_UNMARSHAL_FAILED — surfaces
+// audit-table corruption distinctly from downstream auth/decode errors.
+func decodeColdRow(
+	ctx context.Context,
+	row coldRow,
+	identity eventbus.SessionIdentity,
+	guard eventbus.SessionAuthGuard,
+	dekMgr eventbus.SessionDEKManager,
+	auditEm eventbus.SessionAuditEmitter,
+) (eventbus.Event, bool, error) {
+	var pbEnvelope eventbusv1.Event
+	if err := proto.Unmarshal(row.Envelope, &pbEnvelope); err != nil {
+		return eventbus.Event{}, false, oops.Code("AUDIT_ENVELOPE_UNMARSHAL_FAILED").
+			With("event_id", hex.EncodeToString(row.ID)).
+			Wrap(err)
+	}
+	codecName := codec.Name(row.Codec)
+	var keyID codec.KeyID
+	var keyVersion uint32
+	if codecName != codec.NameIdentity {
+		// Sensitive (non-identity) rows MUST carry both DEK columns —
+		// the audit projection stamps them from the App-Dek-Ref /
+		// App-Dek-Version headers (per INV-49). NULL columns on a
+		// sensitive row mean a corrupted or partially-projected row;
+		// fail-closed rather than feeding (0, 0) to the dispatcher
+		// which would surface as a confusing Resolve(0, 0) miss or an
+		// auth-guard mismatch. Mirrors the hot-tier contract violation
+		// at hot_jetstream.go:502-507 (EVENTBUS_HISTORY_DEK_HEADER_MISSING).
+		if !row.DEKRef.Valid || !row.DEKVersion.Valid {
+			return eventbus.Event{}, false, oops.Code("EVENTBUS_COLD_DEK_COLUMNS_MISSING").
+				With("codec", row.Codec).
+				With("has_dek_ref", row.DEKRef.Valid).
+				With("has_dek_version", row.DEKVersion.Valid).
+				With("event_id", hex.EncodeToString(row.ID)).
+				Errorf("sensitive audit row missing required DEK columns")
+		}
+		if row.DEKRef.Int64 < 0 || row.DEKVersion.Int32 < 0 {
+			return eventbus.Event{}, false, oops.Code("EVENTBUS_COLD_BAD_DEK_COLUMNS").
+				With("codec", row.Codec).
+				With("dek_ref", row.DEKRef.Int64).
+				With("dek_version", row.DEKVersion.Int32).
+				With("event_id", hex.EncodeToString(row.ID)).
+				Errorf("sensitive audit row has invalid (negative) DEK column values")
+		}
+		keyID = codec.KeyID(row.DEKRef.Int64)
+		keyVersion = uint32(row.DEKVersion.Int32)
+	}
+	return decodeAuthorizeAndDispatch(
+		ctx, &pbEnvelope, codecName, keyID, keyVersion,
+		identity, guard, dekMgr, auditEm,
+	)
 }
 
 // actorFromAuditRow rebuilds an eventbus.Actor from the string/bytes the

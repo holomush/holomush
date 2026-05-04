@@ -89,6 +89,35 @@ Keep under 200 lines. Curate — don't hoard.
   `internal/auth/hasher.go:39`, `internal/plugin/manager.go:61` — first uses
   with `errors.Is` are in `internal/cluster/probe_pill_test.go`.
 
+- **Lua plugin "full plumbing chain" failure mode.** When adding a new
+  field to `pluginsdk.EmitEvent` (e.g., `Sensitive`) and exposing it via
+  Lua, four sites must be updated, not three: (1) the Go-side
+  `holo.Emitter` setter — easy; (2) the Lua hostfunc that writes to the
+  emitter (`stdlib.go:emitLocation/Character/Global`) — easy; (3)
+  `stdlib.go:emitFlush` which marshals the buffered events to a Lua
+  table — **easy to miss** because all unit tests of (1)+(2) read
+  `emitter.Flush()` directly on the Go side and never round-trip
+  through Lua; (4) `internal/plugin/lua/host.go:parseEmitEvents` which
+  parses the Lua-returned table into `pluginsdk.EmitEvent` — same blind
+  spot. The canonical Lua flow is `holo.emit.X(); return holo.emit.flush()`,
+  which routes through (3) → Lua return → (4). A field set in (1) and
+  exercised in unit tests via direct `emitter.Flush()` will silently
+  drop on the canonical path. Always require an end-to-end test that
+  drives a Lua snippet through `Host.DeliverEvent` and asserts the
+  field survives. Encountered: Phase 3d Task 9 review (2026-05-04).
+
+- **Default-flip without was-set guard silently overrides operator config.**
+  When changing a koanf-backed bool default from `false` to `true` in a
+  `Defaults()` method, an unconditional `c.X = true` clobbers explicit
+  `false` from the operator's YAML — Go's zero-value can't distinguish
+  "unset" from "false." Other fields in the same `Defaults()` typically
+  use `if c.X == zero { c.X = default }` and are safe by construction.
+  The fix is `*bool` + nil-check, koanf "Was Set" tracking, or moving
+  the default to the construction site of the embedded struct (zero-value
+  becomes the default). Always require a regression test: explicit
+  `false` survives `Defaults()`. Encountered: `internal/eventbus/config.go:85`
+  in Phase 3d (`Crypto.Enabled` flip).
+
 - **Shared-helper TDD coverage gap.** When an autofix swaps multiple call
   sites to a new shared helper (e.g., `IsDEKMaterialArg` shared across 6
   dekmaterialno* analyzers), implementers often add bypass test cases to

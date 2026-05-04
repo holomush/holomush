@@ -223,6 +223,19 @@ func TestSeedPoliciesScenePoliciesExist(t *testing.T) {
 }
 
 // Phase-3b audit deny policy tests
+//
+// INV-15 (post-Phase-3d Decision 4 reword): ABAC denies subscribe to
+// audit.* streams for kind={plugin|character}. Per master spec §7.7
+// (amended via Phase 3d grounding doc Appendix A), ABAC at the gRPC
+// subscribe handler boundary is the authoritative isolation gate. The
+// `action in ["read"]` clause covers subscribe — subscribe is logically
+// a read against the stream resource. NATS-level deny rules do not
+// apply (game-topic NATS is single-principal by architectural design).
+//
+// The two test cases below verify both seed policies exist with the
+// correct DSL — they are the Phase-3d-touchable coverage of INV-15.
+//
+// Refs: docs/superpowers/specs/2026-05-03-event-payload-crypto-phase3d-grounding.md (Decision 3 + Decision 4)
 
 func TestSeedPoliciesIncludesAuditSubscribeDenyForCharacter(t *testing.T) {
 	seeds := SeedPolicies()

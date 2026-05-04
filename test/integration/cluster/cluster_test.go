@@ -80,10 +80,10 @@ var _ = Describe("Cluster Registry", func() {
 				return ok && m.StartedAt.Equal(t1) && m.HolomushVersion == "first"
 			}
 			Eventually(ctx, firstSeenPreserved).
-				WithTimeout(2 * time.Second).
+				WithTimeout(2*time.Second).
 				Should(BeTrue(), "first-seen StartedAt + HolomushVersion should remain after duplicate heartbeat")
 			Consistently(ctx, firstSeenPreserved).
-				WithTimeout(300 * time.Millisecond).
+				WithTimeout(300*time.Millisecond).
 				Should(BeTrue(), "rejection of duplicate must be stable, not a transient state")
 		})
 	})

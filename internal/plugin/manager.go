@@ -324,9 +324,10 @@ func (m *Manager) EmitPluginEvent(ctx context.Context, pluginName string, event 
 		// EmitEvent is the plugin-return shape (Stream is the legacy field
 		// name); EmitIntent is the host-facing shape (Subject). F5 migrates
 		// plugin code to Subject natively.
-		Subject: event.Stream,
-		Type:    event.Type,
-		Payload: event.Payload,
+		Subject:   event.Stream,
+		Type:      event.Type,
+		Payload:   event.Payload,
+		Sensitive: event.Sensitive,
 	})
 }
 

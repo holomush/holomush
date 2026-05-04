@@ -517,13 +517,30 @@ func (h *Host) parseEmitEvents(ret lua.LValue) (emits []pluginsdk.EmitEvent, val
 			return
 		}
 
+		// `sensitive` is the Phase 3d per-event sensitivity claim
+		// stamped by holo.emit.X(..., {sensitive=true}) and serialized
+		// by hostfunc.emitFlush. Absent → default false. Wrong type
+		// (e.g. a string "true") MUST be a validation error rather
+		// than a silent downgrade — on a sensitivity=may manifest a
+		// silent false would emit plaintext, defeating the operator-
+		// set sensitivity intent. The host-side downgrade fence at
+		// event_emitter.go::Emit validates correct boolean claims
+		// against the plugin manifest (INV-6 / INV-7).
+		sensitive, sensitiveOK := emitTableBool(eventTable, "sensitive")
+		if !sensitiveOK {
+			validationErrs = append(validationErrs,
+				fmt.Sprintf("entry[%d]: sensitive MUST be a boolean (got non-boolean type, subject=%s)", index, subject))
+			return
+		}
+
 		emit := pluginsdk.EmitEvent{
 			// EmitEvent keeps the legacy field name Stream; F5 migrates
 			// the plugin-return shape to Subject alongside other plugin
 			// API updates.
-			Stream:  subject,
-			Type:    pluginsdk.EventType(eventType),
-			Payload: payload,
+			Stream:    subject,
+			Type:      pluginsdk.EventType(eventType),
+			Payload:   payload,
+			Sensitive: sensitive,
 		}
 		emits = append(emits, emit)
 	})
@@ -540,6 +557,30 @@ func emitTableString(t *lua.LTable, key string) string {
 		return ""
 	}
 	return v
+}
+
+// emitTableBool fetches a boolean key from a Lua emit table. Returns
+// (value, ok). ok==true means either the key was absent (value=false,
+// the documented default) OR the key carried a boolean (value=that
+// boolean). ok==false signals a non-boolean, non-nil value — a
+// malformed claim that callers MUST treat as a validation error rather
+// than silently downgrading to false. A Lua plugin returning
+// `sensitive = "true"` (string) on a `sensitivity=may` manifest must
+// not silently emit as plaintext; the upstream readSensitiveOpts in
+// hostfunc/stdlib.go rejects type errors at emit time, and this
+// round-trip parser mirrors that fail-loud discipline so an out-of-band
+// table mutation or a plugin returning a hand-built misshapen table
+// surfaces as a validation error instead of a silent plaintext emit.
+func emitTableBool(t *lua.LTable, key string) (value, ok bool) {
+	v := t.RawGetString(key)
+	switch b := v.(type) {
+	case *lua.LNilType:
+		return false, true // absent → default false (intended)
+	case lua.LBool:
+		return bool(b), true
+	default:
+		return false, false // wrong type → validation error
+	}
 }
 
 // buildCommandRequestTable creates a Lua table from a CommandRequest.

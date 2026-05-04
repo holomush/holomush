@@ -17,8 +17,11 @@ import (
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/holomush/holomush/internal/eventbus"
+	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 	"github.com/holomush/holomush/test/testutil"
 )
 
@@ -64,14 +67,26 @@ func insertAuditRow(t *testing.T, pool *pgxpool.Pool, id ulid.ULID, subject even
 }
 
 // insertAuditRowAt inserts a minimal events_audit row with an explicit timestamp.
+//
+// The envelope column carries a marshaled eventbusv1.Event matching what
+// the audit projection would persist. Required post-Phase 3d Task 5 because
+// the cold reader unmarshals the envelope to recover Subject/Type/Actor.
 func insertAuditRowAt(t *testing.T, pool *pgxpool.Pool, id ulid.ULID, subject eventbus.Subject, seq uint64, ts time.Time) {
 	t.Helper()
-	_, err := pool.Exec(context.Background(), `
+	envelopeBytes, err := proto.Marshal(&eventbusv1.Event{
+		Id:        id[:],
+		Subject:   string(subject),
+		Type:      "test.event",
+		Timestamp: timestamppb.New(ts),
+		Actor:     &eventbusv1.Actor{Kind: eventbusv1.ActorKind_ACTOR_KIND_SYSTEM},
+	})
+	require.NoError(t, err)
+	_, err = pool.Exec(context.Background(), `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
-			payload, schema_ver, codec, js_seq, rendering
-		) VALUES ($1, $2, 'test.event', $4, 'system', NULL, '\x00'::bytea, 1, 'identity', $3, '{}'::jsonb)
-	`, id[:], string(subject), int64(seq), ts)
+			envelope, schema_ver, codec, js_seq, rendering
+		) VALUES ($1, $2, 'test.event', $4, 'system', NULL, $5, 1, 'identity', $3, '{}'::jsonb)
+	`, id[:], string(subject), int64(seq), ts, envelopeBytes)
 	require.NoError(t, err)
 }
 

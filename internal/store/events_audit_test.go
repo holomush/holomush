@@ -66,17 +66,17 @@ func TestEventsAuditInsertOnConflictIsIdempotent(t *testing.T) {
 	insert := `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
-			payload, schema_ver, codec, js_seq, rendering
+			envelope, schema_ver, codec, js_seq, rendering
 		) VALUES ($1, $2, $3, now(), 'system', NULL, $4, 1, 'identity', 100, '{}'::jsonb)
 		ON CONFLICT (id) DO NOTHING`
-	payload := []byte(`{"hello":"world"}`)
+	envelope := []byte(`{"hello":"world"}`)
 
-	res1, err := db.ExecContext(ctx, insert, id[:], "events.main.test", "test.t", payload)
+	res1, err := db.ExecContext(ctx, insert, id[:], "events.main.test", "test.t", envelope)
 	require.NoError(t, err)
 	n1, _ := res1.RowsAffected()
 	require.EqualValues(t, 1, n1, "first insert should affect 1 row")
 
-	res2, err := db.ExecContext(ctx, insert, id[:], "events.main.test", "test.t", payload)
+	res2, err := db.ExecContext(ctx, insert, id[:], "events.main.test", "test.t", envelope)
 	require.NoError(t, err)
 	n2, _ := res2.RowsAffected()
 	require.EqualValues(t, 0, n2, "duplicate insert should affect 0 rows")
@@ -101,7 +101,7 @@ func TestEventsAuditCodecColumnIsNotNull(t *testing.T) {
 	insert := `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
-			payload, schema_ver, codec, js_seq, rendering
+			envelope, schema_ver, codec, js_seq, rendering
 		) VALUES ($1, 'events.main.test', 'test.t', now(), 'system', NULL, $2, 1, NULL, 100, '{}'::jsonb)`
 	_, err = db.ExecContext(ctx, insert, id[:], []byte(`{}`))
 	require.Error(t, err, "NULL codec should be rejected by NOT NULL constraint")

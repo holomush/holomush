@@ -118,6 +118,186 @@ end
 	assert.Contains(t, emits[0].Payload, "Echo:")
 }
 
+// TestLuaHostDeliverEventReadsSensitiveFromReturnedTable locks the
+// Phase 3d parseEmitEvents reading `sensitive` from the Lua-returned
+// emit table. This is the path a Lua plugin hits when it returns a
+// hand-built table from on_event (the canonical production shape since
+// holo.emit.X stdlib registration is not wired in the production Lua
+// host today — see TestLuaHostEmitFlushWritesSensitiveToTable for the
+// emitFlush write-side coverage in stdlib_internal_test.go).
+//
+// Without parseEmitEvents reading `sensitive`, a Lua plugin's per-event
+// sensitivity claim silently degrades to false. The Phase 3a downgrade
+// fence at event_emitter.go::Emit then incorrectly accepts a
+// manifest=always event as plaintext.
+//
+// Refs: docs/superpowers/specs/2026-05-03-event-payload-crypto-phase3d-grounding.md (Decision 5)
+// Refs: code-reviewer Pass 1 finding 2026-05-04 (full plumbing chain regression).
+func TestLuaHostDeliverEventReadsSensitiveFromReturnedTable(t *testing.T) {
+	dir := t.TempDir()
+
+	// Lua plugin that returns a hand-built emit table including the
+	// new `sensitive` boolean key.
+	mainLua := `
+function on_event(event)
+    return {
+        {
+            stream = event.stream,
+            type = "core-test:secret",
+            payload = '{"msg":"private"}',
+            sensitive = true
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "secret-emitter",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginsdk.Event{
+		ID:        "01ABC",
+		Stream:    "location:123",
+		Type:      "trigger",
+		Timestamp: 1705591234000,
+		ActorKind: pluginsdk.ActorCharacter,
+		ActorID:   "char_1",
+		Payload:   "go",
+	}
+
+	emits, err := host.DeliverEvent(context.Background(), "secret-emitter", event)
+	require.NoError(t, err, "DeliverEvent() failed")
+	require.Len(t, emits, 1, "expected 1 emit event")
+
+	assert.True(t, emits[0].Sensitive,
+		"Lua-returned table sensitive=true MUST propagate to pluginsdk.EmitEvent.Sensitive via parseEmitEvents")
+}
+
+// TestLuaHostDeliverEventDefaultsSensitiveFalseFromReturnedTable is
+// the negative case: a Lua plugin that omits the `sensitive` key on
+// its returned emit table gets Sensitive=false (and the existing
+// upstream fence catches manifest=always violations).
+func TestLuaHostDeliverEventDefaultsSensitiveFalseFromReturnedTable(t *testing.T) {
+	dir := t.TempDir()
+
+	mainLua := `
+function on_event(event)
+    return {
+        {
+            stream = event.stream,
+            type = "core-test:public",
+            payload = '{"msg":"public"}'
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "public-emitter",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginsdk.Event{
+		ID:        "01ABC",
+		Stream:    "location:123",
+		Type:      "trigger",
+		Timestamp: 1705591234000,
+		ActorKind: pluginsdk.ActorCharacter,
+		ActorID:   "char_1",
+		Payload:   "go",
+	}
+
+	emits, err := host.DeliverEvent(context.Background(), "public-emitter", event)
+	require.NoError(t, err)
+	require.Len(t, emits, 1)
+
+	assert.False(t, emits[0].Sensitive,
+		"Lua-returned table without `sensitive` key MUST yield Sensitive=false")
+}
+
+// TestLuaHostDeliverEventRejectsNonBoolSensitive covers the fail-loud
+// semantics of emitTableBool: a non-boolean value (e.g., string "true")
+// on the `sensitive` key is REJECTED as a validation error rather than
+// silently downgraded to false. Silent downgrade on a sensitivity=may
+// manifest would emit plaintext, defeating the operator-set sensitivity
+// intent. Per CodeRabbit security finding 2026-05-04 (PR #3521).
+//
+// The upstream readSensitiveOpts at hostfunc/stdlib.go already rejects
+// type errors at emit time with LUA_EMIT_SENSITIVE_TYPE; this test
+// covers the round-trip path where a plugin returns a hand-built table
+// with a misshapen sensitive value (out-of-band table mutation or
+// unusual return shape that bypasses readSensitiveOpts).
+func TestLuaHostDeliverEventRejectsNonBoolSensitive(t *testing.T) {
+	dir := t.TempDir()
+
+	mainLua := `
+function on_event(event)
+    return {
+        {
+            stream = event.stream,
+            type = "core-test:misshapen",
+            payload = '{}',
+            sensitive = "true"
+        }
+    }
+end
+`
+	writeMainLua(t, dir, mainLua)
+
+	host := pluginlua.NewHost()
+	defer closeHost(t, host)
+
+	manifest := &plugins.Manifest{
+		Name:      "misshapen-emitter",
+		Version:   "1.0.0",
+		Type:      plugins.TypeLua,
+		LuaPlugin: &plugins.LuaConfig{Entry: "main.lua"},
+	}
+
+	err := host.Load(context.Background(), manifest, dir)
+	require.NoError(t, err)
+
+	event := pluginsdk.Event{
+		ID:        "01ABC",
+		Stream:    "location:123",
+		Type:      "trigger",
+		Timestamp: 1705591234000,
+		ActorKind: pluginsdk.ActorCharacter,
+		ActorID:   "char_1",
+		Payload:   "go",
+	}
+
+	emits, err := host.DeliverEvent(context.Background(), "misshapen-emitter", event)
+	require.NoError(t, err)
+
+	// The malformed sensitive value MUST be rejected at parseEmitEvents,
+	// producing zero emits rather than a silent-false downgrade. The
+	// validation error is logged (host.go:430-433 "plugin emit
+	// validation errors"); the plugin author sees the failure in
+	// development and the sensitive=true intent is preserved.
+	assert.Empty(t, emits,
+		"non-boolean `sensitive` value MUST be rejected as a validation error (zero emits)")
+}
+
 func TestLuaHostDeliverEventNoHandler(t *testing.T) {
 	dir := t.TempDir()
 

@@ -16,7 +16,6 @@ import (
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/codec"
-	"github.com/holomush/holomush/internal/eventbus/crypto/aad"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
 
@@ -478,8 +477,12 @@ func decodeJetStreamMessage(
 	}, nil
 }
 
-// decodeAndAuthorizeHistory mirrors decodeAndAuthorize from the subscriber
-// package but lives in the history package to avoid cross-package coupling.
+// decodeAndAuthorizeHistory is the hot-tier wrapper that parses DEK
+// headers from the JetStream message and delegates to the shared
+// header-free decodeAuthorizeAndDispatch (see dispatcher.go). The cold
+// tier supplies keyID/keyVersion from PG row columns and calls the
+// dispatcher directly.
+//
 // Returns (event, metadataOnly, err).
 func decodeAndAuthorizeHistory(
 	ctx context.Context,
@@ -507,119 +510,35 @@ func decodeAndAuthorizeHistory(
 			Errorf("sensitive codec event missing required DEK headers")
 	}
 
-	var keyID codec.KeyID
-	var keyVersion uint32
-	// bitSize=63 enforces the parsed value fits in int64, matching the
-	// crypto_keys.id BIGSERIAL column type. dek/store.go:128 casts KeyID
-	// to int64 for the SQL query; this parse-site bound makes that cast
-	// provably safe and silences CodeQL's incorrect-conversion warning.
+	keyID, keyVersion, err := parseDEKHeaders(dekRefStr, dekVersionStr)
+	if err != nil {
+		return eventbus.Event{}, false, err
+	}
+
+	return decodeAuthorizeAndDispatch(
+		ctx, envelope, codecName, keyID, keyVersion,
+		identity, guard, dekMgr, auditEm,
+	)
+}
+
+// parseDEKHeaders parses the App-Dek-Ref / App-Dek-Version header values
+// into typed (KeyID, version) pair. bitSize=63 enforces the parsed ref
+// fits in int64, matching the crypto_keys.id BIGSERIAL column type.
+// dek/store.go:128 casts KeyID to int64 for the SQL query; this
+// parse-site bound makes that cast provably safe and silences CodeQL's
+// incorrect-conversion warning.
+func parseDEKHeaders(dekRefStr, dekVersionStr string) (codec.KeyID, uint32, error) {
 	ref, parseErr := strconv.ParseUint(dekRefStr, 10, 63)
 	if parseErr != nil {
-		return eventbus.Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
+		return 0, 0, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
 			With("header", eventbus.HeaderDekRef).With("value", dekRefStr).Wrap(parseErr)
 	}
-	keyID = codec.KeyID(ref)
-
 	ver, parseErr := strconv.ParseUint(dekVersionStr, 10, 32)
 	if parseErr != nil {
-		return eventbus.Event{}, false, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
+		return 0, 0, oops.Code("EVENTBUS_DEK_HEADER_PARSE_FAILED").
 			With("header", eventbus.HeaderDekVersion).With("value", dekVersionStr).Wrap(parseErr)
 	}
-	keyVersion = uint32(ver) // safe: ParseUint(bitSize=32) guarantees fits in uint32
-
-	// Recover event ULID from the pre-stamped bytes.
-	var eventID ulid.ULID
-	if rawID := envelope.GetId(); len(rawID) == 16 {
-		copy(eventID[:], rawID)
-	}
-
-	req := eventbus.SessionCheckRequest{
-		Identity:   identity,
-		KeyID:      keyID,
-		KeyVersion: keyVersion,
-		EventType:  envelope.GetType(),
-		EventID:    eventID,
-	}
-
-	decision, err := guard.Check(ctx, req)
-	if err != nil {
-		return eventbus.Event{}, false, oops.Code("EVENTBUS_AUTHGUARD_CHECK_FAILED").
-			With("event_type", envelope.GetType()).
-			Wrap(err)
-	}
-
-	if !decision.Permit {
-		return buildHistoryEventFromEnvelope(eventID, envelope, nil), true, nil
-	}
-
-	// Permit: resolve key, build AAD, decode.
-	// Guard against misconfiguration: WithHistoryAuthGuard set without
-	// WithHistoryDEKManager. Fail closed rather than panic.
-	if dekMgr == nil {
-		return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_DEK_MANAGER_NIL").
-			Errorf("AuthGuard permitted decrypt but DEKManager is nil — misconfiguration")
-	}
-	key, err := dekMgr.Resolve(ctx, keyID, keyVersion)
-	if err != nil {
-		return eventbus.Event{}, false, oops.Code("EVENTBUS_DEK_RESOLVE_FAILED").
-			With("key_id", uint64(keyID)).With("key_version", keyVersion).
-			Wrap(err)
-	}
-
-	aadBytes, err := aad.Build(envelope, string(codecName), uint64(keyID), keyVersion)
-	if err != nil {
-		return eventbus.Event{}, false, oops.Code("EVENTBUS_AAD_BUILD_FAILED").Wrap(err)
-	}
-
-	c, err := codec.Resolve(codecName)
-	if err != nil {
-		return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_UNKNOWN_CODEC").
-			With("codec", string(codecName)).Wrap(err)
-	}
-
-	plaintext, err := c.Decode(ctx, envelope.GetPayload(), key, aadBytes)
-	if err != nil {
-		return eventbus.Event{}, false, oops.Code("EVENTBUS_CODEC_DECODE_FAILED").
-			With("codec", string(codecName)).Wrap(err)
-	}
-
-	// Plugin recipient: INV-19 — every plugin decrypt MUST produce an audit
-	// record. Fail closed if the emitter is absent or fails unexpectedly.
-	if identity.Kind == eventbus.IdentityKindPlugin {
-		if auditEm == nil {
-			// AuthGuard permitted the read but no emitter is wired — configuration
-			// error. Fail closed rather than deliver plaintext without audit.
-			return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_AUDIT_EMITTER_NIL").
-				Errorf("AuthGuard permitted plugin decrypt but no DecryptAuditEmitter configured (INV-19)")
-		}
-		rec := eventbus.PluginDecryptRecord{
-			PluginName:       identity.PluginName,
-			PluginInstanceID: identity.InstanceID,
-			EventID:          eventID,
-			EventSubject:     eventbus.Subject(envelope.GetSubject()),
-			EventType:        eventbus.Type(envelope.GetType()),
-			DEKRef:           keyID,
-			DEKVersion:       keyVersion,
-			GrantID:          decision.GrantID,
-		}
-		if emitErr := auditEm.EmitPluginDecrypt(ctx, rec); emitErr != nil {
-			// Narrow: only AUDIT_QUEUE_FULL gets the plaintext-zero +
-			// metadata_only fallback (TOCTOU defense per Decision 3).
-			// Any other emit error means we cannot confirm the audit
-			// landed — fail closed.
-			if isHistoryAuditQueueFull(emitErr) {
-				for i := range plaintext {
-					plaintext[i] = 0
-				}
-				return buildHistoryEventFromEnvelope(eventID, envelope, nil), true, nil
-			}
-			return eventbus.Event{}, false, oops.Code("EVENTBUS_HISTORY_AUDIT_EMIT_FAILED").
-				With("emit_error", emitErr.Error()).
-				Errorf("plugin decrypt audit emit failed — cannot confirm audit landed (INV-19)")
-		}
-	}
-
-	return buildHistoryEventFromEnvelope(eventID, envelope, plaintext), false, nil
+	return codec.KeyID(ref), uint32(ver), nil // safe: ParseUint(bitSize=32) guarantees fits in uint32
 }
 
 // isHistoryAuditQueueFull reports whether err is an AUDIT_QUEUE_FULL oops error.

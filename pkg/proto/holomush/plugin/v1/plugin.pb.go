@@ -1048,10 +1048,20 @@ func (x *HandleCommandResponse) GetResponse() *CommandResponse {
 }
 
 type PluginHostServiceEmitEventRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Stream        string                 `protobuf:"bytes,1,opt,name=stream,proto3" json:"stream,omitempty"`
-	EventType     string                 `protobuf:"bytes,2,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
-	Payload       []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Stream    string                 `protobuf:"bytes,1,opt,name=stream,proto3" json:"stream,omitempty"`
+	EventType string                 `protobuf:"bytes,2,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
+	Payload   []byte                 `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	// sensitive declares per-event sensitivity at emit time.
+	// Phase 3a's host-side fence at internal/plugin/event_emitter.go::Emit
+	// validates this against the plugin manifest's declared sensitivity:
+	//   - manifest sensitivity=never:  sensitive=true rejected (INV-6).
+	//   - manifest sensitivity=may:    sensitive=true|false honored.
+	//   - manifest sensitivity=always: sensitive=false rejected (INV-7).
+	//
+	// Default false (proto3 zero) for older plugins compiled before this
+	// field existed — matching pre-Phase-3d behavior.
+	Sensitive     bool `protobuf:"varint,4,opt,name=sensitive,proto3" json:"sensitive,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1105,6 +1115,13 @@ func (x *PluginHostServiceEmitEventRequest) GetPayload() []byte {
 		return x.Payload
 	}
 	return nil
+}
+
+func (x *PluginHostServiceEmitEventRequest) GetSensitive() bool {
+	if x != nil {
+		return x.Sensitive
+	}
+	return false
 }
 
 type PluginHostServiceEmitEventResponse struct {
@@ -2542,12 +2559,13 @@ const file_holomush_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x14HandleCommandRequest\x12<\n" +
 	"\acommand\x18\x01 \x01(\v2\".holomush.plugin.v1.CommandRequestR\acommand\"X\n" +
 	"\x15HandleCommandResponse\x12?\n" +
-	"\bresponse\x18\x01 \x01(\v2#.holomush.plugin.v1.CommandResponseR\bresponse\"\x86\x01\n" +
+	"\bresponse\x18\x01 \x01(\v2#.holomush.plugin.v1.CommandResponseR\bresponse\"\xa4\x01\n" +
 	"!PluginHostServiceEmitEventRequest\x12\x1f\n" +
 	"\x06stream\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06stream\x12&\n" +
 	"\n" +
 	"event_type\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\teventType\x12\x18\n" +
-	"\apayload\x18\x03 \x01(\fR\apayload\"$\n" +
+	"\apayload\x18\x03 \x01(\fR\apayload\x12\x1c\n" +
+	"\tsensitive\x18\x04 \x01(\bR\tsensitive\"$\n" +
 	"\"PluginHostServiceEmitEventResponse\"`\n" +
 	"\x1bPluginHostServiceLogRequest\x12\x1d\n" +
 	"\x05level\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05level\x12\"\n" +

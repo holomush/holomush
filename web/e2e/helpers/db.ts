@@ -178,16 +178,19 @@ export async function getEventsByStream(stream: string): Promise<DbEvent[]> {
 }
 
 // DbAuditEvent mirrors the events_audit schema (internal/store/migrations/
-// 000009_create_events_audit.up.sql). Post-F1 all published events land
-// here via the host JetStream audit projection; the payload column is the
-// codec-encoded bytes from the wire, not decoded JSON.
+// 000009_create_events_audit.up.sql + 000017_events_audit_envelope_rename).
+// Post-F1 all published events land here via the host JetStream audit
+// projection; the envelope column carries the marshaled Event proto
+// envelope bytes (renamed from payload in Phase 3d migration 000017 to
+// clarify pre-existing semantics — the column has always stored the full
+// envelope, of which Event.payload is one nested field).
 export interface DbAuditEvent {
   id: Buffer;
   subject: string;
   type: string;
   actor_kind: string;
   actor_id: Buffer | null;
-  payload: Buffer;
+  envelope: Buffer;
   timestamp: Date;
   codec: string;
 }
@@ -204,7 +207,7 @@ export async function getAuditEventsBySubjectSuffix(
   // legacy "location:<id>" → dot-subject suffix ".location.<id>"
   const suffix = '.' + legacyStream.replace(/:/g, '.');
   const { rows } = await getPool().query<DbAuditEvent>(
-    `SELECT id, subject, type, actor_kind, actor_id, payload, timestamp, codec
+    `SELECT id, subject, type, actor_kind, actor_id, envelope, timestamp, codec
        FROM events_audit
       WHERE subject LIKE $1
       ORDER BY id`,

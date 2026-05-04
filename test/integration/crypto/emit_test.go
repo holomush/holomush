@@ -180,7 +180,7 @@ func TestSensitiveEmitProducesCiphertextOnBusAndInAudit(t *testing.T) {
 	gotVer, err := strconv.ParseInt(dekVerHdr, 10, 32)
 	require.NoError(t, err)
 	assert.Equal(t, int32(gotVer), *row.DekVersion) //nolint:gosec // G115: ParseInt with bitSize=32 already bounds the value to int32.
-	assert.Equal(t, msg.Data(), row.Payload, "INV-21: bus and audit payload bytes must be byte-equal")
+	assert.Equal(t, msg.Data(), row.Envelope, "INV-21: bus and audit envelope bytes must be byte-equal")
 
 	// Decision 0: msg.Data is the marshaled envelope (cleartext metadata
 	// fields + ciphertext payload field), NOT a single ciphertext blob.

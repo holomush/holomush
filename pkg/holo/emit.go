@@ -53,17 +53,38 @@ func NewEmitterWithLogger(logger *slog.Logger) *Emitter {
 
 // Location emits an event to a location stream ("location:<id>").
 func (e *Emitter) Location(locationID string, eventType pluginsdk.EventType, payload Payload) {
-	e.emit(streamPrefixLocation+locationID, eventType, payload)
+	e.emit(streamPrefixLocation+locationID, eventType, payload, false)
 }
 
 // Character emits an event to a character stream ("character:<id>").
 func (e *Emitter) Character(characterID string, eventType pluginsdk.EventType, payload Payload) {
-	e.emit(streamPrefixCharacter+characterID, eventType, payload)
+	e.emit(streamPrefixCharacter+characterID, eventType, payload, false)
 }
 
 // Global emits an event to the global stream.
 func (e *Emitter) Global(eventType pluginsdk.EventType, payload Payload) {
-	e.emit(streamPrefixGlobal, eventType, payload)
+	e.emit(streamPrefixGlobal, eventType, payload, false)
+}
+
+// LocationSensitive emits an event to a location stream with explicit
+// per-event sensitivity. The flag rides on EmitEvent.Sensitive through
+// the host emitter to the Phase 3a fence at event_emitter.go::Emit.
+func (e *Emitter) LocationSensitive(locationID string, eventType pluginsdk.EventType, payload Payload, sensitive bool) {
+	e.emit(streamPrefixLocation+locationID, eventType, payload, sensitive)
+}
+
+// CharacterSensitive emits an event to a character stream with explicit
+// per-event sensitivity. The flag rides on EmitEvent.Sensitive through
+// the host emitter to the Phase 3a fence at event_emitter.go::Emit.
+func (e *Emitter) CharacterSensitive(characterID string, eventType pluginsdk.EventType, payload Payload, sensitive bool) {
+	e.emit(streamPrefixCharacter+characterID, eventType, payload, sensitive)
+}
+
+// GlobalSensitive emits an event to the global stream with explicit
+// per-event sensitivity. The flag rides on EmitEvent.Sensitive through
+// the host emitter to the Phase 3a fence at event_emitter.go::Emit.
+func (e *Emitter) GlobalSensitive(eventType pluginsdk.EventType, payload Payload, sensitive bool) {
+	e.emit(streamPrefixGlobal, eventType, payload, sensitive)
 }
 
 // Flush returns all accumulated events and any JSON encoding errors, then clears both buffers.
@@ -93,7 +114,7 @@ func (e *Emitter) ErrorCount() int {
 // emit adds an event to the internal buffer.
 // JSON encoding errors result in an empty payload and are tracked for retrieval
 // via Flush(). If a logger is configured, errors are also logged immediately.
-func (e *Emitter) emit(stream string, eventType pluginsdk.EventType, payload Payload) {
+func (e *Emitter) emit(stream string, eventType pluginsdk.EventType, payload Payload, sensitive bool) {
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		e.errors = append(e.errors, fmt.Errorf(
@@ -109,8 +130,9 @@ func (e *Emitter) emit(stream string, eventType pluginsdk.EventType, payload Pay
 		payloadJSON = []byte("{}")
 	}
 	e.events = append(e.events, pluginsdk.EmitEvent{
-		Stream:  stream,
-		Type:    eventType,
-		Payload: string(payloadJSON),
+		Stream:    stream,
+		Type:      eventType,
+		Payload:   string(payloadJSON),
+		Sensitive: sensitive,
 	})
 }

@@ -6,6 +6,7 @@ package hostfunc
 import (
 	"log/slog"
 
+	"github.com/samber/oops"
 	lua "github.com/yuin/gopher-lua"
 
 	"github.com/holomush/holomush/pkg/holo"
@@ -279,54 +280,113 @@ func getEmitter(ls *lua.LState) *holo.Emitter {
 	return nil
 }
 
-// emitLocation wraps holo.Emitter.Location.
-// Lua signature: holo.emit.location(locationID, eventType, payload)
+// emitLocation wraps holo.Emitter.LocationSensitive.
+// Lua signature: holo.emit.location(locationID, eventType, payload [, opts])
+// where opts is an optional table with { sensitive = bool }.
 func emitLocation(ls *lua.LState) int {
 	locationID := ls.CheckString(1)
 	eventType := ls.CheckString(2)
 	payload := ls.CheckTable(3)
 
+	sensitive, err := readSensitiveOpts(ls, 4)
+	if err != nil {
+		ls.RaiseError("%s", formatSensitiveOptsErr(err))
+		return 0
+	}
+
 	emitter := getEmitter(ls)
 	if emitter == nil {
 		ls.RaiseError("holo.emit: emitter not initialized (RegisterStdlib not called)")
 		return 0
 	}
-	emitter.Location(locationID, pluginsdk.EventType(eventType), luaTableToPayload(payload))
+	emitter.LocationSensitive(locationID, pluginsdk.EventType(eventType), luaTableToPayload(payload), sensitive)
 
 	return 0
 }
 
-// emitCharacter wraps holo.Emitter.Character.
-// Lua signature: holo.emit.character(characterID, eventType, payload)
+// emitCharacter wraps holo.Emitter.CharacterSensitive.
+// Lua signature: holo.emit.character(characterID, eventType, payload [, opts])
 func emitCharacter(ls *lua.LState) int {
 	characterID := ls.CheckString(1)
 	eventType := ls.CheckString(2)
 	payload := ls.CheckTable(3)
 
+	sensitive, err := readSensitiveOpts(ls, 4)
+	if err != nil {
+		ls.RaiseError("%s", formatSensitiveOptsErr(err))
+		return 0
+	}
+
 	emitter := getEmitter(ls)
 	if emitter == nil {
 		ls.RaiseError("holo.emit: emitter not initialized (RegisterStdlib not called)")
 		return 0
 	}
-	emitter.Character(characterID, pluginsdk.EventType(eventType), luaTableToPayload(payload))
+	emitter.CharacterSensitive(characterID, pluginsdk.EventType(eventType), luaTableToPayload(payload), sensitive)
 
 	return 0
 }
 
-// emitGlobal wraps holo.Emitter.Global.
-// Lua signature: holo.emit.global(eventType, payload)
+// emitGlobal wraps holo.Emitter.GlobalSensitive.
+// Lua signature: holo.emit.global(eventType, payload [, opts])
 func emitGlobal(ls *lua.LState) int {
 	eventType := ls.CheckString(1)
 	payload := ls.CheckTable(2)
+
+	sensitive, err := readSensitiveOpts(ls, 3)
+	if err != nil {
+		ls.RaiseError("%s", formatSensitiveOptsErr(err))
+		return 0
+	}
 
 	emitter := getEmitter(ls)
 	if emitter == nil {
 		ls.RaiseError("holo.emit: emitter not initialized (RegisterStdlib not called)")
 		return 0
 	}
-	emitter.Global(pluginsdk.EventType(eventType), luaTableToPayload(payload))
+	emitter.GlobalSensitive(pluginsdk.EventType(eventType), luaTableToPayload(payload), sensitive)
 
 	return 0
+}
+
+// formatSensitiveOptsErr formats a readSensitiveOpts error for surfacing
+// through ls.RaiseError so the oops error code is visible in the Lua
+// error string (oops embeds Code() in metadata, not in Error()).
+func formatSensitiveOptsErr(err error) string {
+	if oopsErr, ok := oops.AsOops(err); ok {
+		if code, codeOK := oopsErr.Code().(string); codeOK && code != "" {
+			return code + ": " + err.Error()
+		}
+	}
+	return err.Error()
+}
+
+// readSensitiveOpts reads the `sensitive` boolean key from the optional
+// opts table at the given Lua-stack position. Returns (false, nil) if
+// the opts arg is absent (LNil or no-arg). Returns an error with code
+// LUA_EMIT_SENSITIVE_TYPE if the key is present with a non-boolean value.
+func readSensitiveOpts(ls *lua.LState, argIdx int) (bool, error) {
+	optsVal := ls.Get(argIdx)
+	if optsVal == lua.LNil {
+		return false, nil
+	}
+	opts, ok := optsVal.(*lua.LTable)
+	if !ok {
+		return false, oops.Code("LUA_EMIT_SENSITIVE_TYPE").
+			With("got_type", optsVal.Type().String()).
+			Errorf("opts arg MUST be a table or nil")
+	}
+	sensitiveVal := opts.RawGetString("sensitive")
+	if sensitiveVal == lua.LNil {
+		return false, nil
+	}
+	sensitiveBool, ok := sensitiveVal.(lua.LBool)
+	if !ok {
+		return false, oops.Code("LUA_EMIT_SENSITIVE_TYPE").
+			With("got_type", sensitiveVal.Type().String()).
+			Errorf("opts.sensitive MUST be a boolean")
+	}
+	return bool(sensitiveBool), nil
 }
 
 // emitFlush returns all accumulated events and clears the buffer.
@@ -348,13 +408,19 @@ func emitFlush(ls *lua.LState) int {
 		return 1
 	}
 
-	// Convert events to Lua table
+	// Convert events to Lua table. The `sensitive` field rides through
+	// to internal/plugin/lua/host.go::parseEmitEvents on the canonical
+	// `return holo.emit.flush()` path so a Lua plugin's per-event
+	// sensitivity claim reaches Manager.EmitPluginEvent → EmitIntent.
+	// Without this round-trip, Lua plugins emitting via the flush path
+	// would silently degrade to Sensitive=false regardless of opts.
 	result := ls.NewTable()
 	for i, event := range events {
 		eventTable := ls.NewTable()
 		ls.SetField(eventTable, "stream", lua.LString(event.Stream))
 		ls.SetField(eventTable, "type", lua.LString(string(event.Type)))
 		ls.SetField(eventTable, "payload", lua.LString(event.Payload))
+		ls.SetField(eventTable, "sensitive", lua.LBool(event.Sensitive))
 		result.RawSetInt(i+1, eventTable)
 	}
 

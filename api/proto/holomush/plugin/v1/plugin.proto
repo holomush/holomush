@@ -264,6 +264,15 @@ message PluginHostServiceEmitEventRequest {
   string stream = 1 [(buf.validate.field).string.min_len = 1];
   string event_type = 2 [(buf.validate.field).string.min_len = 1];
   bytes payload = 3;
+  // sensitive declares per-event sensitivity at emit time.
+  // Phase 3a's host-side fence at internal/plugin/event_emitter.go::Emit
+  // validates this against the plugin manifest's declared sensitivity:
+  //   - manifest sensitivity=never:  sensitive=true rejected (INV-6).
+  //   - manifest sensitivity=may:    sensitive=true|false honored.
+  //   - manifest sensitivity=always: sensitive=false rejected (INV-7).
+  // Default false (proto3 zero) for older plugins compiled before this
+  // field existed — matching pre-Phase-3d behavior.
+  bool sensitive = 4;
 }
 
 message PluginHostServiceEmitEventResponse {}

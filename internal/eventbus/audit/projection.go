@@ -268,7 +268,7 @@ func (p *projection) persist(msg jetstream.Msg) error {
 	_, err = p.pool.Exec(ctx, `
 		INSERT INTO events_audit (
 			id, subject, type, timestamp, actor_kind, actor_id,
-			payload, schema_ver, codec, js_seq, rendering,
+			envelope, schema_ver, codec, js_seq, rendering,
 			dek_ref, dek_version
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (id) DO NOTHING`,

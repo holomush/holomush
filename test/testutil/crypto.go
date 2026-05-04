@@ -85,7 +85,7 @@ func WaitForOneJetStreamMsg(t *testing.T, bus *EmbeddedBus, subject string, time
 // row, exposing the columns Phase 3a tests care about.
 type EventsAuditRow struct {
 	Codec      string
-	Payload    []byte
+	Envelope   []byte
 	DekRef     *int64
 	DekVersion *int32
 }
@@ -98,9 +98,9 @@ func QueryEventsAuditByID(t *testing.T, pool *pgxpool.Pool, idBytes []byte) Even
 	var dekRef sql.NullInt64
 	var dekVer sql.NullInt32
 	err := pool.QueryRow(context.Background(),
-		`SELECT codec, payload, dek_ref, dek_version FROM events_audit WHERE id = $1`,
+		`SELECT codec, envelope, dek_ref, dek_version FROM events_audit WHERE id = $1`,
 		idBytes,
-	).Scan(&row.Codec, &row.Payload, &dekRef, &dekVer)
+	).Scan(&row.Codec, &row.Envelope, &dekRef, &dekVer)
 	require.NoError(t, err)
 	if dekRef.Valid {
 		v := dekRef.Int64
