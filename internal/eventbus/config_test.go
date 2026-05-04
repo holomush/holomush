@@ -11,7 +11,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus"
 )
 
-func TestCryptoEnabledDefaultsToFalse(t *testing.T) {
+func TestCryptoEnabledDefaultsToTrue(t *testing.T) {
 	cfg := eventbus.Config{}.Defaults()
-	assert.False(t, cfg.Crypto.Enabled, "Phase 3a ships dark — flag must default to off")
+	assert.True(t, cfg.Crypto.Enabled, "Phase 3d ships live")
 }

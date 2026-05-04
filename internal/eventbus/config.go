@@ -82,5 +82,7 @@ func (c Config) Defaults() Config {
 	if c.DupeWindow == 0 {
 		c.DupeWindow = defaultDupeWindow
 	}
+	// Phase 3d: flip crypto default to true
+	c.Crypto.Enabled = true
 	return c
 }
