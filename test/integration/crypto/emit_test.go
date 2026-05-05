@@ -29,6 +29,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/plugintest"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
@@ -105,8 +106,11 @@ func TestSensitiveEmitProducesCiphertextOnBusAndInAudit(t *testing.T) {
 		}
 		return nil
 	}
+	// Post-w9ml: Actor.ID MUST be a ULID string (strict-gate
+	// coreActorToEventbusActor rejects non-ULID IDs).
+	testPluginActorID := plugintest.PluginULIDFromName("test-plugin").String()
 	actorResolver := func(_ context.Context, _ string) (core.Actor, error) {
-		return core.Actor{Kind: core.ActorPlugin, ID: "test-plugin"}, nil
+		return core.Actor{Kind: core.ActorPlugin, ID: testPluginActorID}, nil
 	}
 
 	// Verb registry: register test-plugin:whisper so RenderingPublisher

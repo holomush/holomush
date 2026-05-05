@@ -52,6 +52,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
 	"github.com/holomush/holomush/internal/eventbus/history"
 	plugins "github.com/holomush/holomush/internal/plugin"
+	"github.com/holomush/holomush/internal/plugin/plugintest"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
@@ -201,8 +202,13 @@ func emitSensitivePluginEvent(
 		}
 		return nil
 	}
+	// Post-w9ml: Actor.ID MUST be a ULID string (the strict-gate
+	// coreActorToEventbusActor rejects non-ULID actor IDs). Use the
+	// deterministic-by-name fixture helper so test assertions remain
+	// stable across runs.
+	pluginActorID := plugintest.PluginULIDFromName(pluginName).String()
 	actorResolver := func(_ context.Context, _ string) (core.Actor, error) {
-		return core.Actor{Kind: core.ActorPlugin, ID: pluginName}, nil
+		return core.Actor{Kind: core.ActorPlugin, ID: pluginActorID}, nil
 	}
 	emitter := plugins.NewPluginEventEmitter(env.publisher, manifestLookup, actorResolver,
 		plugins.WithCryptoEnabled(true),
