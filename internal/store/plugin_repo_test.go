@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/store"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func TestPluginRepoUpsertInsertsNewRow(t *testing.T) {
@@ -118,9 +119,11 @@ func TestPluginRepoSweepInactiveDeactivatesStaleRowsOnly(t *testing.T) {
 	require.NoError(t, runMigrations(ctx, pool, 18))
 	repo := store.NewPostgresPluginRepo(pool)
 
-	_, _, _ = repo.Upsert(ctx, store.PluginUpsertInput{Name: "fresh", DisplayName: "F", Version: "1", ManifestHash: []byte{0x01}})
-	_, _, _ = repo.Upsert(ctx, store.PluginUpsertInput{Name: "stale", DisplayName: "S", Version: "1", ManifestHash: []byte{0x02}})
-	_, err := pool.Exec(ctx, `UPDATE plugins SET last_seen_at = now() - interval '5 days' WHERE name = 'stale'`)
+	_, _, err := repo.Upsert(ctx, store.PluginUpsertInput{Name: "fresh", DisplayName: "F", Version: "1", ManifestHash: []byte{0x01}})
+	require.NoError(t, err)
+	_, _, err = repo.Upsert(ctx, store.PluginUpsertInput{Name: "stale", DisplayName: "S", Version: "1", ManifestHash: []byte{0x02}})
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE plugins SET last_seen_at = now() - interval '5 days' WHERE name = 'stale'`)
 	require.NoError(t, err)
 
 	swept, err := repo.SweepInactive(ctx, 3)
@@ -136,8 +139,9 @@ func TestPluginRepoSweepNeverDeletesRows(t *testing.T) {
 	require.NoError(t, runMigrations(ctx, pool, 18))
 	repo := store.NewPostgresPluginRepo(pool)
 
-	_, _, _ = repo.Upsert(ctx, store.PluginUpsertInput{Name: "p", DisplayName: "P", Version: "1", ManifestHash: []byte{0x01}})
-	_, err := pool.Exec(ctx, `UPDATE plugins SET last_seen_at = now() - interval '99 days'`)
+	_, _, err := repo.Upsert(ctx, store.PluginUpsertInput{Name: "p", DisplayName: "P", Version: "1", ManifestHash: []byte{0x01}})
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE plugins SET last_seen_at = now() - interval '99 days'`)
 	require.NoError(t, err)
 	_, err = repo.SweepInactive(ctx, 1)
 	require.NoError(t, err)
@@ -145,4 +149,39 @@ func TestPluginRepoSweepNeverDeletesRows(t *testing.T) {
 	var n int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*) FROM plugins`).Scan(&n))
 	assert.Equal(t, 1, n, "SweepInactive MUST NOT delete; only set gc_at")
+}
+
+// TestPluginRepoOperationsFailGracefullyOnDroppedTable exercises the
+// error-wrapping paths of every PluginRepo method when the underlying
+// table is missing. Each method MUST surface a stable oops.Code so
+// callers can route errors deterministically.
+func TestPluginRepoOperationsFailGracefullyOnDroppedTable(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup := newTestPool(t)
+	defer cleanup()
+	require.NoError(t, runMigrations(ctx, pool, 18))
+	repo := store.NewPostgresPluginRepo(pool)
+
+	// Drop the plugins table to force every PluginRepo method into its
+	// error-wrapping path. This catches code-coverage gaps in the
+	// rarely-exercised oops.Wrap branches.
+	_, err := pool.Exec(ctx, `DROP TABLE plugins`)
+	require.NoError(t, err)
+
+	// Upsert: SELECT fails (table missing) → PLUGIN_REPO_SELECT.
+	_, _, upsertErr := repo.Upsert(ctx, store.PluginUpsertInput{
+		Name: "x", DisplayName: "X", Version: "1", ManifestHash: []byte{0x01},
+	})
+	require.Error(t, upsertErr)
+	errutil.AssertErrorCode(t, upsertErr, "PLUGIN_REPO_SELECT")
+
+	// ListAll: Query fails (table missing) → PLUGIN_REPO_LIST_ALL.
+	_, listErr := repo.ListAll(ctx)
+	require.Error(t, listErr)
+	errutil.AssertErrorCode(t, listErr, "PLUGIN_REPO_LIST_ALL")
+
+	// SweepInactive: Query fails (table missing) → PLUGIN_REPO_SWEEP.
+	_, sweepErr := repo.SweepInactive(ctx, 1)
+	require.Error(t, sweepErr)
+	errutil.AssertErrorCode(t, sweepErr, "PLUGIN_REPO_SWEEP")
 }
