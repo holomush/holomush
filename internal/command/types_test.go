@@ -780,7 +780,7 @@ func TestServicesBroadcastSystemMessageCreatesCorrectEvent(t *testing.T) {
 
 	// Verify actor
 	assert.Equal(t, core.ActorSystem, event.Actor.Kind, "Actor.Kind should be ActorSystem")
-	assert.Equal(t, "system", event.Actor.ID, "Actor.ID should be 'system'")
+	assert.Equal(t, core.ActorSystemID, event.Actor.ID, "Actor.ID should be ActorSystemID")
 
 	// Verify payload contains message
 	var payload map[string]string

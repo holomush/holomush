@@ -530,7 +530,7 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 	}
 	event := core.NewEvent(world.CharacterStream(char.ID), eventType, core.Actor{
 		Kind: core.ActorSystem,
-		ID:   "system",
+		ID:   core.ActorSystemID,
 	}, payload)
 
 	if s.eventStore == nil {
