@@ -702,6 +702,11 @@ tasks:
     cmds:
       - go run {{.MAIN_PKG}} migrate force {{.CLI_ARGS}}
 
+  migrate:plugin-actors-cutover:
+    desc: One-time cutover for holomush-w9ml (TRUNCATE events_audit + JS PurgeStream)
+    cmds:
+      - go run ./cmd/holomush-cutover
+
   # ──────────────────────────────────────────
   # Release
   # ──────────────────────────────────────────
