@@ -5,6 +5,8 @@ package plugins
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"log/slog"
 	"os"
@@ -12,7 +14,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
@@ -20,6 +24,8 @@ import (
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/store"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -82,6 +88,17 @@ type Manager struct {
 	inflight            map[string]*DiscoveredPlugin
 	loadedOrder         []*DiscoveredPlugin // preserves DAG/priority load order for deterministic iteration
 	mu                  sync.RWMutex
+
+	// Identity registry: name ↔ ULID maps populated at bootstrap from the
+	// plugins table; mutated on load/unload. nameByID resolves three
+	// populations (active plugins + historical plugins + system sentinels);
+	// activeByName resolves only currently-loaded plugins. Both are
+	// guarded by the existing m.mu RWMutex.
+	pluginRepo       store.PluginRepo
+	nameByID         map[ulid.ULID]string
+	activeByName     map[string]ulid.ULID
+	retentionDays    int  // plugin row TTL (days); 0 = sweep disabled; default 3
+	retentionDaysSet bool // true iff WithRetentionDays was called explicitly
 }
 
 // ManagerOption configures the Manager.
@@ -168,6 +185,23 @@ func WithVerbRegistry(reg *core.VerbRegistry) ManagerOption {
 	}
 }
 
+// WithPluginRepo wires the IdentityRegistry's persistence layer.
+// Required when the Manager will Upsert plugin rows. Without it,
+// loadPlugin operates with an in-memory-only registry (test seam).
+func WithPluginRepo(repo store.PluginRepo) ManagerOption {
+	return func(m *Manager) { m.pluginRepo = repo }
+}
+
+// WithRetentionDays configures plugin row TTL (days). After RetentionDays
+// of inactivity, a plugin row is deactivated (gc_at set) at the end of
+// LoadAll. 0 disables the sweep entirely. Default: 3.
+func WithRetentionDays(days int) ManagerOption {
+	return func(m *Manager) {
+		m.retentionDays = days
+		m.retentionDaysSet = true
+	}
+}
+
 // Registry returns the service registry, or nil if not configured.
 func (m *Manager) Registry() *ServiceRegistry {
 	return m.registry
@@ -190,10 +224,47 @@ func NewManager(pluginsDir string, opts ...ManagerOption) (*Manager, error) {
 	for _, opt := range opts {
 		opt(m)
 	}
+	// Default retentionDays to 3 when WithRetentionDays was not called.
+	if !m.retentionDaysSet {
+		m.retentionDays = 3
+	}
 	// If WithLuaHost was used, cache its capabilities for the same lookup path.
 	if m.luaHost != nil {
 		m.hostCaps[m.luaHost] = discoverCapabilities(m.luaHost)
 	}
+
+	// Initialize the identity registry cache.
+	m.nameByID = make(map[ulid.ULID]string)
+	m.activeByName = make(map[string]ulid.ULID)
+
+	// Step 1: register system sentinels first (not in activeByName, not
+	// in the plugins table — different identity domain).
+	m.nameByID[core.SystemActorULID] = "system"
+	m.nameByID[core.WorldServiceActorULID] = "world-service"
+
+	// Step 2: load existing plugin rows from persistence. Reject sentinel
+	// collisions defensively.
+	if m.pluginRepo != nil {
+		ctx := context.Background()
+		rows, err := m.pluginRepo.ListAll(ctx)
+		if err != nil {
+			return nil, oops.Code("PLUGIN_MANAGER_BOOTSTRAP").Wrap(err)
+		}
+		for i := range rows {
+			row := &rows[i]
+			if core.IsSentinelULID(row.ID) {
+				return nil, oops.Code("PLUGIN_ROW_USES_SENTINEL_ID").
+					With("name", row.Name).
+					With("id", row.ID.String()).
+					Errorf("plugin row uses a reserved sentinel ULID")
+			}
+			m.nameByID[row.ID] = row.Name
+			if row.GcAt == nil {
+				m.activeByName[row.Name] = row.ID
+			}
+		}
+	}
+
 	if m.verbRegistry == nil {
 		return nil, ErrMissingVerbRegistry
 	}
@@ -218,6 +289,9 @@ func (m *Manager) RegisterHost(hostType Type, host Host) {
 		if configurer := findOptional[EventEmitterConfigurer](host); configurer != nil {
 			configurer.SetEventEmitter(m.eventEmitter)
 		}
+	}
+	if configurer := findOptional[IdentityRegistryConfigurer](host); configurer != nil {
+		configurer.SetIdentityRegistry(m)
 	}
 }
 
@@ -517,6 +591,29 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 		}
 	}
 
+	// w9ml T8: GC sweep — runs AFTER all loads have refreshed last_seen_at,
+	// so a plugin loaded in this cycle is never swept in the same cycle
+	// (INV-W9ML-8). Skipped on the graceful-degradation early return path
+	// because partial-load failures may leave last_seen_at stale.
+	if m.pluginRepo != nil && m.retentionDays > 0 {
+		swept, err := m.pluginRepo.SweepInactive(ctx, m.retentionDays)
+		if err != nil {
+			return oops.Code("PLUGIN_MANAGER_SWEEP").Wrap(err)
+		}
+		for i := range swept {
+			row := &swept[i]
+			m.mu.Lock()
+			delete(m.activeByName, row.Name)
+			// nameByID intentionally retained for historical resolution.
+			m.mu.Unlock()
+			slog.Info("plugin.gc",
+				"name", row.Name,
+				"id", row.ID.String(),
+				"last_seen_at", row.LastSeenAt.Format(time.RFC3339),
+			)
+		}
+	}
+
 	return nil
 }
 
@@ -665,6 +762,84 @@ func (m *Manager) unregisterPluginProviders(pluginName string, resourceTypes []s
 	}
 }
 
+// computeHashes returns sha256 of the plugin's plugin.yaml bytes (always)
+// and its executable artifact:
+//   - TypeBinary:  sha256 of the executable file at BinaryPlugin.Executable.
+//   - TypeLua:     sha256 of deterministic concatenation of *.lua files
+//     (sorted by relative path within Dir; rel-path NUL contents
+//     NUL between files).
+//   - TypeSetting: nil (no executable artifact).
+//
+// Hashes feed PluginRepo.Upsert for drift detection; manifest_hash is
+// always non-nil, content_hash is nil only for setting plugins.
+func (m *Manager) computeHashes(dp *DiscoveredPlugin) (manifestHash, contentHash []byte, err error) {
+	mfBytes, err := os.ReadFile(filepath.Join(dp.Dir, "plugin.yaml"))
+	if err != nil {
+		return nil, nil, oops.Code("PLUGIN_HASH_MANIFEST_READ").
+			With("plugin", dp.Manifest.Name).Wrap(err)
+	}
+	mh := sha256.Sum256(mfBytes)
+	manifestHash = mh[:]
+
+	switch dp.Manifest.Type {
+	case TypeBinary:
+		if dp.Manifest.BinaryPlugin == nil || dp.Manifest.BinaryPlugin.Executable == "" {
+			return nil, nil, oops.Code("PLUGIN_HASH_BINARY_MISSING_EXECUTABLE").
+				With("plugin", dp.Manifest.Name).
+				Errorf("binary plugin must declare binary-plugin.executable")
+		}
+		bin, readErr := os.ReadFile(filepath.Join(dp.Dir, dp.Manifest.BinaryPlugin.Executable))
+		if readErr != nil {
+			return nil, nil, oops.Code("PLUGIN_HASH_BINARY_READ").
+				With("plugin", dp.Manifest.Name).Wrap(readErr)
+		}
+		ch := sha256.Sum256(bin)
+		contentHash = ch[:]
+	case TypeLua:
+		var luaFiles []string
+		walkErr := filepath.Walk(dp.Dir, func(p string, info os.FileInfo, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if !info.IsDir() && filepath.Ext(p) == ".lua" {
+				rel, relErr := filepath.Rel(dp.Dir, p)
+				if relErr != nil {
+					return oops.Code("PLUGIN_HASH_LUA_REL").
+						With("plugin", dp.Manifest.Name).Wrap(relErr)
+				}
+				luaFiles = append(luaFiles, rel)
+			}
+			return nil
+		})
+		if walkErr != nil {
+			return nil, nil, oops.Code("PLUGIN_HASH_LUA_WALK").
+				With("plugin", dp.Manifest.Name).Wrap(walkErr)
+		}
+		sort.Strings(luaFiles)
+		h := sha256.New()
+		for _, rel := range luaFiles {
+			b, readErr := os.ReadFile(filepath.Join(dp.Dir, rel))
+			if readErr != nil {
+				return nil, nil, oops.Code("PLUGIN_HASH_LUA_READ").
+					With("plugin", dp.Manifest.Name).With("file", rel).Wrap(readErr)
+			}
+			h.Write([]byte(rel))
+			h.Write([]byte{0x00})
+			h.Write(b)
+			h.Write([]byte{0x00})
+		}
+		contentHash = h.Sum(nil)
+	case TypeSetting:
+		contentHash = nil
+	default:
+		return nil, nil, oops.Code("PLUGIN_HASH_UNKNOWN_TYPE").
+			With("plugin", dp.Manifest.Name).
+			With("type", string(dp.Manifest.Type)).
+			Errorf("unknown plugin type")
+	}
+	return manifestHash, contentHash, nil
+}
+
 // loadPlugin loads a single discovered plugin.
 //
 // Design: Returns nil (not error) for unsupported configurations to support
@@ -748,6 +923,66 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 		delete(m.inflight, dp.Manifest.Name)
 		m.mu.Unlock()
 	}()
+
+	// w9ml T6: compute hashes, Upsert into plugins table, populate cache.
+	// Hash computation only runs when pluginRepo is wired; tests that construct
+	// Manager without WithPluginRepo take the else branch and bypass computeHashes.
+	var pluginID ulid.ULID
+	var drift *store.DriftReport
+	if m.pluginRepo != nil {
+		manifestHash, contentHash, hashErr := m.computeHashes(dp)
+		if hashErr != nil {
+			return hashErr
+		}
+		id, d, upsertErr := m.pluginRepo.Upsert(ctx, store.PluginUpsertInput{
+			Name:         dp.Manifest.Name,
+			DisplayName:  dp.Manifest.Name,
+			Version:      dp.Manifest.Version,
+			ManifestHash: manifestHash,
+			ContentHash:  contentHash,
+		})
+		if upsertErr != nil {
+			return oops.In("manager").With("plugin", dp.Manifest.Name).Wrap(upsertErr)
+		}
+		pluginID, drift = id, d
+	} else {
+		pluginID = idgen.New()
+	}
+
+	// Cache mutation BEFORE host.Load — downstream code may emit during Load
+	// and needs to resolve plugin name via IDByName.
+	m.mu.Lock()
+	m.nameByID[pluginID] = dp.Manifest.Name
+	m.activeByName[dp.Manifest.Name] = pluginID
+	m.mu.Unlock()
+
+	// Roll back the cache mutation if any subsequent step fails. loadPlugin
+	// returns a bare `error` (not a named return), so we cannot use
+	// `defer func() { if err != nil ... }()` — closure would capture the
+	// wrong `err` after shadowing in subsequent if-blocks. Use an explicit
+	// rollback flag set by the success path.
+	var loadPluginCommitted bool
+	defer func() {
+		if !loadPluginCommitted {
+			m.mu.Lock()
+			delete(m.nameByID, pluginID)
+			delete(m.activeByName, dp.Manifest.Name)
+			m.mu.Unlock()
+		}
+	}()
+
+	// Drift logging (no decision logic — log and continue per spec).
+	if drift != nil {
+		slog.Info("plugin.drift",
+			"name", dp.Manifest.Name,
+			"old_manifest_hash", hex.EncodeToString(drift.OldManifestHash),
+			"new_manifest_hash", hex.EncodeToString(drift.NewManifestHash),
+			"old_content_hash", hex.EncodeToString(drift.OldContentHash),
+			"new_content_hash", hex.EncodeToString(drift.NewContentHash),
+			"version_before", drift.VersionBefore,
+			"version_after", drift.VersionAfter,
+		)
+	}
 
 	if err := host.Load(ctx, dp.Manifest, dp.Dir); err != nil {
 		return oops.In("manager").With("plugin", dp.Manifest.Name).With("operation", "load").Wrap(err)
@@ -885,6 +1120,10 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 		"type", dp.Manifest.Type,
 		"version", dp.Manifest.Version)
 
+	// w9ml T6: rollback-flag commit — see deferred rollback registered after
+	// the cache-mutation block above. Setting this true makes the rollback a
+	// no-op on the success path.
+	loadPluginCommitted = true
 	return nil
 }
 
@@ -1281,6 +1520,22 @@ func (m *Manager) RegisterPluginCommands(registry *command.Registry) {
 			}
 		}
 	}
+}
+
+// NameByID implements IdentityRegistry.
+func (m *Manager) NameByID(id ulid.ULID) (string, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	name, ok := m.nameByID[id]
+	return name, ok
+}
+
+// IDByName implements IdentityRegistry.
+func (m *Manager) IDByName(name string) (ulid.ULID, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	id, ok := m.activeByName[name]
+	return id, ok
 }
 
 // displayTargetFromString converts a manifest display_target string to the

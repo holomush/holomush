@@ -193,3 +193,37 @@ Keep under 200 lines. Curate — don't hoard.
   the cross-plugin actor-escalation surface. The unit test guarding this
   is `TestEmitEventCrossPluginTokenLeakFails`
   (`internal/plugin/goplugin/host_service_test.go:744-776`).
+
+- **Sentinel-name vs sentinel-ULID gap in PluginRepo bootstrap.** T5
+  (holomush-w9ml.6) guards against sentinel-ULID collision via
+  `core.IsSentinelULID(row.ID)` but does NOT guard against a plugin row
+  whose `Name` is "system" or "world-service". `manifest.go:namePattern`
+  matches both ("system" and "world-service" both satisfy
+  `^[a-z](-?[a-z0-9])*$`). A plugin named "system" would write
+  `activeByName["system"] = <plugin ULID>`, breaking `IDByName("system")`
+  returning false and causing attribution ambiguity in NameByID. The fix
+  is a reserved-name set in `Manifest.Validate()` or a bootstrap guard.
+  Applies identically to T6 (Upsert / loadPlugin). Filed as non-blocking
+  follow-up (2026-05-04).
+
+- **Late-bound host field read outside RLock**: `goplugin.Host` fields set via
+  `SetX()` (which takes write lock) must be snapshot under RLock before use.
+  `eventEmitter`, `focusCoordinator`, `historyReader` use accessor methods that
+  lock properly. `identityRegistry` (added T10) is read bare at
+  `host.go:604,679` after the RLock is released — latent race, not triggered in
+  practice because registry is set before LoadAll. Fix: add an accessor method
+  or snapshot inside RLock. Check this pattern whenever a new late-bound field
+  is added to Host.
+
+- **Plan-file markdown breaks lint gate**: `task lint` includes `rumdl` markdown
+  lint over `docs/`. A stray bare ` ``` ` fence will fail `lint:markdown` and
+  block CI. Run `task lint` after any plan file edit.
+
+- **`task test:int` explicit package list excludes `cmd/holomush/`**: `Taskfile.yaml:119-120`
+  enumerates packages that contain `//go:build integration` files; `cmd/holomush/` is
+  intentionally absent (see comment at line 107-111 about `./...` compilation failures).
+  Integration tests written in `cmd/holomush/*_integration_test.go` are never run by
+  `task test:int` or `task pr-prep`. When a task adds integration tests to that package,
+  adding `./cmd/holomush/` to the list is a required companion change. Verify by running
+  `task test:int` and grepping the output for the test name — absence means the package
+  is not covered. Encountered: T19 review (holomush-w9ml.17, 2026-05-04).

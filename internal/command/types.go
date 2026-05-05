@@ -618,7 +618,7 @@ func (s *Services) BroadcastSystemMessage(ctx context.Context, stream, message s
 
 	event := core.NewEvent(stream, core.EventTypeSystem, core.Actor{
 		Kind: core.ActorSystem,
-		ID:   "system",
+		ID:   core.ActorSystemID,
 	}, payload)
 
 	if err := s.events.Append(ctx, event); err != nil {

@@ -35,6 +35,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	plugins "github.com/holomush/holomush/internal/plugin"
 	"github.com/holomush/holomush/internal/plugin/goplugin"
+	"github.com/holomush/holomush/internal/plugin/plugintest"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
 	scenev1 "github.com/holomush/holomush/pkg/proto/holomush/scene/v1"
 	"github.com/holomush/holomush/test/testutil"
@@ -189,10 +190,13 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 				PluginType: plugins.TypeServerInternal(),
 			})).To(Succeed())
 
-			// Create goplugin host with schema provisioner and service registry
+			// Create goplugin host with schema provisioner, service registry,
+			// and a stub IdentityRegistry so emit-stamp lookups resolve the
+			// plugin name to a ULID (post-w9ml strict-gate requirement).
 			host := goplugin.NewHost(
 				goplugin.WithSchemaProvisioner(provisioner),
 				goplugin.WithServiceRegistry(registry),
+				goplugin.WithIdentityRegistry(plugintest.NewStubRegistry("core-scenes")),
 			)
 			defer func() { _ = host.Close(ctx) }()
 			bus := eventbustest.New(GinkgoT())
@@ -275,6 +279,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			host := goplugin.NewHost(
 				goplugin.WithSchemaProvisioner(provisioner),
 				goplugin.WithServiceRegistry(registry),
+				goplugin.WithIdentityRegistry(plugintest.NewStubRegistry("core-scenes")),
 			)
 			defer func() { _ = host.Close(ctx) }()
 
@@ -330,6 +335,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			host := goplugin.NewHost(
 				goplugin.WithSchemaProvisioner(provisioner),
 				goplugin.WithServiceRegistry(emptyRegistry),
+				goplugin.WithIdentityRegistry(plugintest.NewStubRegistry("core-scenes")),
 			)
 			defer func() { _ = host.Close(ctx) }()
 
@@ -394,6 +400,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			abacHost = goplugin.NewHost(
 				goplugin.WithSchemaProvisioner(abacProvisioner),
 				goplugin.WithServiceRegistry(abacRegistry),
+				goplugin.WithIdentityRegistry(plugintest.NewStubRegistry("core-scenes")),
 			)
 
 			manifestData, err := os.ReadFile(filepath.Join(pluginDir, "plugin.yaml"))
@@ -549,6 +556,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			lifecyclehost = goplugin.NewHost(
 				goplugin.WithSchemaProvisioner(provisioner),
 				goplugin.WithServiceRegistry(registry),
+				goplugin.WithIdentityRegistry(plugintest.NewStubRegistry("core-scenes")),
 			)
 
 			manifestData, err := os.ReadFile(filepath.Join(pluginDir, "plugin.yaml"))
@@ -837,6 +845,7 @@ var _ = Describe("Binary Plugin Lifecycle", func() {
 			membershipHost = goplugin.NewHost(
 				goplugin.WithSchemaProvisioner(provisioner),
 				goplugin.WithServiceRegistry(registry),
+				goplugin.WithIdentityRegistry(plugintest.NewStubRegistry("core-scenes")),
 			)
 
 			manifestData, err := os.ReadFile(filepath.Join(pluginDir, "plugin.yaml"))

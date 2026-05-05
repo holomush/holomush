@@ -153,6 +153,11 @@ type CoreServer struct {
 	// focusCoordinator manages session focus memberships and replay policy.
 	focusCoordinator focus.Coordinator
 
+	// identityRegistry resolves plugin/system ULIDs to display names for the
+	// gRPC wire (actorIDString). Set via WithIdentityRegistry; nil means
+	// non-character actors fall back to ULID-string form.
+	identityRegistry plugins.IdentityRegistry
+
 	// accessEngine evaluates ABAC policies for stream read authorization (Layer 2).
 	// Nil if ABAC is not configured (public stream reads will be denied).
 	accessEngine accessTypes.AccessPolicyEngine
@@ -237,6 +242,13 @@ func WithStreamRegistry(r *SessionStreamRegistry) CoreServerOption {
 // WithFocusCoordinator sets the focus coordinator for session focus management.
 func WithFocusCoordinator(fc focus.Coordinator) CoreServerOption {
 	return func(s *CoreServer) { s.focusCoordinator = fc }
+}
+
+// WithIdentityRegistry wires the plugin manager's IdentityRegistry into the
+// server so that actorIDString can resolve plugin/system ULIDs to display
+// names on the gRPC wire (Subscribe and QueryStreamHistory paths).
+func WithIdentityRegistry(reg plugins.IdentityRegistry) CoreServerOption {
+	return func(s *CoreServer) { s.identityRegistry = reg }
 }
 
 // WithAccessEngine sets the ABAC policy engine for stream read authorization.
@@ -530,7 +542,7 @@ func (s *CoreServer) emitCommandResponse(ctx context.Context, char core.Characte
 	}
 	event := core.NewEvent(world.CharacterStream(char.ID), eventType, core.Actor{
 		Kind: core.ActorSystem,
-		ID:   "system",
+		ID:   core.ActorSystemID,
 	}, payload)
 
 	if s.eventStore == nil {
@@ -583,7 +595,7 @@ func (s *CoreServer) toProtoSubscribeResponse(ev eventbus.Event, metadataOnly bo
 				Type:         string(ev.Type),
 				Timestamp:    timestamppb.New(ev.Timestamp),
 				ActorType:    ev.Actor.Kind.String(),
-				ActorId:      actorIDString(ev.Actor),
+				ActorId:      actorIDString(ev.Actor, s.identityRegistry),
 				Payload:      ev.Payload,
 				Cursor:       encodeEventCursor(ev),
 				Rendering:    eventbus.RenderingToProto(ev.Rendering),
@@ -593,18 +605,24 @@ func (s *CoreServer) toProtoSubscribeResponse(ev eventbus.Event, metadataOnly bo
 	}
 }
 
-// actorIDString stringifies the bus-side actor id. Zero ULIDs become "" so
-// existing gateway/web clients don't see a synthetic "00000000..." value.
-// Plugin-authored events carry a string LegacyID instead of a ULID; preserve
-// it here to match the QueryStreamHistory path (eventbusEventToEventFrame).
-func actorIDString(a eventbus.Actor) string {
-	if a.ID.Compare(ulid.ULID{}) != 0 {
-		return a.ID.String()
+// actorIDString stringifies the bus-side actor for the gRPC wire.
+// Resolution order:
+//  1. Zero ULID → "" (preserves existing wire contract; gateway/web
+//     clients don't see synthetic "00000000..." values).
+//  2. NameByID lookup via IdentityRegistry → returns the registered
+//     name for plugin and system sentinel ULIDs (uniform display).
+//  3. Fallback: ULID-string form (characters / players whose ULIDs
+//     are not in the IdentityRegistry — they live in the user store).
+func actorIDString(a eventbus.Actor, reg plugins.IdentityRegistry) string {
+	if a.ID.Compare(ulid.ULID{}) == 0 {
+		return ""
 	}
-	if a.LegacyID != "" {
-		return a.LegacyID
+	if reg != nil {
+		if name, ok := reg.NameByID(a.ID); ok {
+			return name
+		}
 	}
-	return ""
+	return a.ID.String()
 }
 
 // computeInitialFilters translates a focus restore plan's stream list into

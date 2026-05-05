@@ -33,7 +33,7 @@ func NewEventStoreAdapter(store EventAppender) *EventStoreAdapter {
 func (a *EventStoreAdapter) Emit(ctx context.Context, stream, eventType string, payload []byte) error {
 	event := core.NewEvent(stream, core.EventType(eventType), core.Actor{
 		Kind: core.ActorSystem,
-		ID:   "world-service",
+		ID:   core.WorldServiceActorULID.String(),
 	}, payload)
 
 	if err := a.store.Append(ctx, event); err != nil {

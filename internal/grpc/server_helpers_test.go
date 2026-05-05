@@ -43,9 +43,9 @@ func TestStreamClosedFrameIncludesReason(t *testing.T) {
 
 func TestActorIDStringZeroIsEmpty(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "", actorIDString(eventbus.Actor{}))
+	assert.Equal(t, "", actorIDString(eventbus.Actor{}, nil))
 	id := core.NewULID()
-	assert.Equal(t, id.String(), actorIDString(eventbus.Actor{ID: id}))
+	assert.Equal(t, id.String(), actorIDString(eventbus.Actor{ID: id}, nil))
 }
 
 func TestToSubjectValidLegacyStream(t *testing.T) {

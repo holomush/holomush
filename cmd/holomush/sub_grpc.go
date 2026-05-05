@@ -322,6 +322,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		holoGRPC.WithSubscriber(subscriber),
 		holoGRPC.WithHistoryReader(historyReader),
 		holoGRPC.WithGameID(s.cfg.EventBus.GameID),
+		holoGRPC.WithIdentityRegistry(pluginManager),
 	}
 	if s.cfg.StreamRegistry != nil {
 		coreServerOpts = append(coreServerOpts, holoGRPC.WithStreamRegistry(s.cfg.StreamRegistry))
@@ -493,19 +494,22 @@ func (b *busEventAppender) Append(ctx context.Context, event core.Event) error {
 	return oops.Wrap(b.publisher.Publish(ctx, busEvent))
 }
 
-// coreToBusActor bridges the legacy core.Actor (ID is a string, sometimes
-// a ULID and sometimes a plugin name) to the JetStream-side Actor (ID is
-// a ULID; zero for anonymous/system). Non-ULID values (e.g. plugin names)
-// are preserved on Actor.LegacyID so plugin-authored host events retain
-// their actor identity across JetStream/audit/history.
+// coreToBusActor bridges the legacy core.Actor (ID is a string, expected
+// to be a ULID post-w9ml) to the JetStream-side Actor (ID is a ULID; zero
+// for anonymous/system).
+//
+// Note: ULID parse failure for non-empty IDs is silently ignored at this
+// boundary. Post-w9ml, every stamp site stamps a valid ULID; a failure
+// here indicates a contract violation upstream. The structured emit-side
+// gate at coreActorToEventbusActor (in internal/plugin/event_emitter.go)
+// surfaces ACTOR_ID_NOT_ULID with full context.
 func coreToBusActor(a core.Actor) eventbus.Actor {
 	out := eventbus.Actor{Kind: coreActorKindToBus(a.Kind)}
-	if a.ID != "" {
-		if parsed, parseErr := ulid.Parse(a.ID); parseErr == nil {
-			out.ID = parsed
-		} else {
-			out.LegacyID = a.ID
-		}
+	if a.ID == "" {
+		return out
+	}
+	if parsed, parseErr := ulid.Parse(a.ID); parseErr == nil {
+		out.ID = parsed
 	}
 	return out
 }
@@ -594,16 +598,11 @@ func (a *busHistoryReaderAdapter) ReplayTail(ctx context.Context, stream string,
 }
 
 // busEventToCoreEvent translates an eventbus.Event to a core.Event for plugin
-// consumption. The Actor ID is a ULID string when present; otherwise the
-// LegacyID (e.g. a plugin name) is preserved so plugin-authored events keep
-// their actor identity across the round-trip.
+// consumption. The Actor ID is a ULID string when present.
 func busEventToCoreEvent(e eventbus.Event, stream string) core.Event {
 	actorID := ""
-	switch {
-	case e.Actor.ID != (ulid.ULID{}):
+	if e.Actor.ID != (ulid.ULID{}) {
 		actorID = e.Actor.ID.String()
-	case e.Actor.LegacyID != "":
-		actorID = e.Actor.LegacyID
 	}
 	return core.Event{
 		ID:        e.ID,

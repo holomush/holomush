@@ -214,12 +214,16 @@ func (e *PluginEventEmitter) Emit(ctx context.Context, pluginName string, intent
 			With("nats_subject", natsSubject).Wrap(err)
 	}
 
+	busActor, err := coreActorToEventbusActor(actor)
+	if err != nil {
+		return oops.With("plugin", pluginName).With("subject", subjectRaw).Wrap(err)
+	}
 	event := eventbus.Event{
 		ID:        core.NewULID(),
 		Subject:   sub,
 		Type:      typ,
 		Timestamp: time.Now().UTC(),
-		Actor:     coreActorToEventbusActor(actor),
+		Actor:     busActor,
 		Payload:   payload,
 		Sensitive: sensitive,
 	}
@@ -299,22 +303,27 @@ func declaresEmitNamespace(namespaces []string, namespace string) bool {
 	return false
 }
 
-// coreActorToEventbusActor bridges the legacy core.Actor (ID is a string,
-// sometimes a ULID and sometimes a plugin name) to the JetStream-side
-// Actor (ID is a ULID; zero for anonymous/system). If the core id parses
-// as a ULID we carry it through; otherwise we leave it zero and retain the
-// Kind alone. App-Actor-ID is then omitted from the header (see publisher).
+// coreActorToEventbusActor bridges core.Actor (ID is a string) to the
+// JetStream-side Actor (ID is a ULID). Post-w9ml every stamp site MUST
+// produce a parseable ULID; non-ULID input here is a contract violation
+// surfaced as ACTOR_ID_NOT_ULID with full context.
 //
-// F7 replaces core.Actor with eventbus.Actor across the codebase; this
-// translation is transitional and called out in the plan.
-func coreActorToEventbusActor(a core.Actor) eventbus.Actor {
+// Empty ID is permitted and maps to a zero ULID (valid for system/unknown
+// kinds); callers that require a non-zero ID enforce that separately.
+func coreActorToEventbusActor(a core.Actor) (eventbus.Actor, error) {
 	out := eventbus.Actor{Kind: bridgeActorKind(a.Kind)}
-	if a.ID != "" {
-		if parsed, err := ulid.Parse(a.ID); err == nil {
-			out.ID = parsed
-		}
+	if a.ID == "" {
+		return out, nil
 	}
-	return out
+	parsed, err := ulid.Parse(a.ID)
+	if err != nil {
+		return eventbus.Actor{}, oops.Code("ACTOR_ID_NOT_ULID").
+			With("kind", a.Kind.String()).
+			With("id", a.ID).
+			Wrap(err)
+	}
+	out.ID = parsed
+	return out, nil
 }
 
 func bridgeActorKind(k core.ActorKind) eventbus.ActorKind {

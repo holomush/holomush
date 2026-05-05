@@ -205,6 +205,14 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	}
 	// DB shutdown is handled by orch.StopAll (step 8) — no explicit defer needed here.
 
+	// --- 3b. Bootstrap orphan check (w9ml T19) ---
+	// Defense-in-depth: refuse to start if any plugin-kind event in events_audit
+	// lacks an actor_id. Migration 000018 makes orphans impossible from a clean
+	// install; this guards against manual restore from an old backup.
+	if orphanErr := runBootstrapOrphanCheck(ctx, dbSub.Pool()); orphanErr != nil {
+		return orphanErr
+	}
+
 	gameID := cfg.GameID
 	if gameID == "" {
 		gameID = dbSub.GameID()

@@ -118,3 +118,12 @@ type FocusDepsConfigurer interface {
 	SetFocusCoordinator(fc focus.Coordinator)
 	SetHistoryReader(hr HistoryReader)
 }
+
+// IdentityRegistryConfigurer is implemented by hosts that need an
+// IdentityRegistry late-bound after construction. The registry is the
+// Manager itself, but Hosts are constructed before Manager.RegisterHost
+// returns. Manager.RegisterHost calls SetIdentityRegistry on any Host
+// that implements this interface.
+type IdentityRegistryConfigurer interface {
+	SetIdentityRegistry(reg IdentityRegistry)
+}

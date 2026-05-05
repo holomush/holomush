@@ -189,7 +189,8 @@ binary-plugin:
 		if host.emitter == nil {
 			return errors.New("event emitter was not injected")
 		}
-		emitCtx := core.WithActor(ctx, core.Actor{Kind: core.ActorPlugin, ID: manifest.Name})
+		// Post-w9ml: Actor.ID MUST be a ULID; use a deterministic fixture.
+		emitCtx := core.WithActor(ctx, core.Actor{Kind: core.ActorPlugin, ID: fixturePluginULID.String()})
 		return host.emitter.Emit(emitCtx, manifest.Name, pluginsdk.EmitIntent{
 			Subject: "scene:test",
 			Type:    pluginsdk.EventType(core.EventTypeSystem),
@@ -218,10 +219,10 @@ binary-plugin:
 	require.Len(t, msgs, 1)
 	// Legacy "scene:test" → events.main.scene.test (default game_id).
 	assert.Equal(t, "events.main.scene.test", msgs[0].Subject)
-	// Actor kind rides in the header; actor id is empty because the plugin
-	// name is not a ULID (bridge leaves ulid zero, publisher omits the header).
+	// Post-w9ml: every stamp site emits a real ULID, so App-Actor-ID is
+	// always present for plugin actors (matches fixturePluginULID above).
 	assert.Equal(t, "plugin", msgs[0].Header.Get(eventbus.HeaderActorKind))
-	assert.Empty(t, msgs[0].Header.Get(eventbus.HeaderActorID))
+	assert.Equal(t, fixturePluginULID.String(), msgs[0].Header.Get(eventbus.HeaderActorID))
 
 	var env eventbusv1.Event
 	require.NoError(t, proto.Unmarshal(msgs[0].Data, &env))

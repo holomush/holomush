@@ -47,14 +47,13 @@ const (
 )
 
 // Actor identifies who caused an event. Host-stamped, never plugin-spoofable.
+// ID MUST be a real ULID for every ActorKind. Sentinel ULIDs are reserved
+// for system actors (SystemActorULID, WorldServiceActorULID); plugin
+// actors carry registry-backed ULIDs resolved at stamp time via
+// IdentityRegistry.IDByName.
 type Actor struct {
 	Kind ActorKind
-	ID   ulid.ULID // zero ULID for ActorKindSystem / Unknown
-	// LegacyID carries a non-ULID identifier (e.g. a plugin name) bridged
-	// from core.Actor.ID. Set only when ID is zero; propagated through
-	// publisher/subscriber headers so plugin-authored host events keep
-	// their actor identity across the JetStream boundary.
-	LegacyID string
+	ID   ulid.ULID
 }
 
 // EventChannel mirrors corev1.EventChannel for ergonomic host-side use
@@ -119,10 +118,9 @@ type Event struct {
 	// Reserved-keys rule: caller-written keys MUST start with "App-" and
 	// MUST NOT be in the system-reserved set (Nats-Msg-Id, App-Codec,
 	// App-Schema-Version, App-Event-Type, App-Actor-Kind, App-Actor-ID,
-	// App-Actor-Legacy-ID, traceparent, tracestate). Keys starting with
-	// "Nats-" are reserved unconditionally. Violation panics under
-	// testing.Testing(); in production logs a warning and the system
-	// value wins.
+	// traceparent, tracestate). Keys starting with "Nats-" are reserved
+	// unconditionally. Violation panics under testing.Testing(); in
+	// production logs a warning and the system value wins.
 	//
 	// Cold-tier reads: this field is publish-path only. The cold-tier
 	// history reader leaves Headers nil. Subscribers MUST NOT depend

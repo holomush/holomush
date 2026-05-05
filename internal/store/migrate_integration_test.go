@@ -42,6 +42,7 @@ var expectedTables = []string{
 	"player_character_bindings",
 	"player_sessions",
 	"players",
+	"plugins",
 	"scene_participants",
 	"session_connections",
 	"sessions",
@@ -140,7 +141,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(17), version)
+	assert.Equal(t, uint(18), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)
@@ -165,7 +166,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(17), version)
+	assert.Equal(t, uint(18), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)

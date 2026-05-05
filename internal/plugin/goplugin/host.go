@@ -48,11 +48,12 @@ var (
 
 // Compile-time interface checks.
 var (
-	_ plugins.Host                      = (*Host)(nil)
-	_ plugins.ServiceConnProvider       = (*Host)(nil)
-	_ plugins.AttributeResolverProvider = (*Host)(nil)
-	_ plugins.EventEmitterConfigurer    = (*Host)(nil)
-	_ plugins.FocusDepsConfigurer       = (*Host)(nil)
+	_ plugins.Host                       = (*Host)(nil)
+	_ plugins.ServiceConnProvider        = (*Host)(nil)
+	_ plugins.AttributeResolverProvider  = (*Host)(nil)
+	_ plugins.EventEmitterConfigurer     = (*Host)(nil)
+	_ plugins.FocusDepsConfigurer        = (*Host)(nil)
+	_ plugins.IdentityRegistryConfigurer = (*Host)(nil)
 )
 
 // PluginClient wraps go-plugin client for testability.
@@ -84,6 +85,28 @@ func (f *DefaultClientFactory) NewClient(execPath string) PluginClient {
 		Cmd:              cmd,
 		AllowedProtocols: []hashiplug.Protocol{hashiplug.ProtocolGRPC},
 	})
+}
+
+// stampPluginActor resolves a plugin name to a core.Actor with a ULID-string
+// ID via the IdentityRegistry. Returns PLUGIN_UNREGISTERED_INVOKE if the
+// plugin is not active in the registry, or if the registry is nil (which is
+// operationally equivalent: "no registry" and "registry doesn't have plugin"
+// both mean the ULID cannot be resolved). This defensive nil-check keeps
+// existing test fixtures that construct Host directly without Manager.RegisterHost
+// safe — they'll receive a clean error rather than a nil-pointer panic.
+func stampPluginActor(reg plugins.IdentityRegistry, name string) (core.Actor, error) {
+	if reg == nil {
+		return core.Actor{}, oops.Code("PLUGIN_UNREGISTERED_INVOKE").
+			With("plugin", name).
+			Errorf("IdentityRegistry not configured on Host")
+	}
+	id, ok := reg.IDByName(name)
+	if !ok {
+		return core.Actor{}, oops.Code("PLUGIN_UNREGISTERED_INVOKE").
+			With("plugin", name).
+			Errorf("plugin not registered in IdentityRegistry")
+	}
+	return core.Actor{Kind: core.ActorPlugin, ID: id.String()}, nil
 }
 
 // HostOption configures a Host during construction.
@@ -121,6 +144,15 @@ func WithHistoryReader(hr plugins.HistoryReader) HostOption {
 	return func(h *Host) { h.historyReader = hr }
 }
 
+// WithIdentityRegistry configures the host with an IdentityRegistry for
+// ULID-string actor stamping at DeliverEvent and DeliverCommand call sites.
+// In production this is wired via Manager.RegisterHost (findOptional pattern).
+// Tests that exercise DeliverEvent/DeliverCommand directly MUST provide a
+// stub registry so stampPluginActor can resolve plugin names to ULIDs.
+func WithIdentityRegistry(reg plugins.IdentityRegistry) HostOption {
+	return func(h *Host) { h.identityRegistry = reg }
+}
+
 // Host manages binary plugins via HashiCorp go-plugins.
 type Host struct {
 	clientFactory     ClientFactory
@@ -133,6 +165,7 @@ type Host struct {
 	eventEmitter      plugins.PluginIntentEmitter
 	focusCoordinator  focus.Coordinator
 	historyReader     plugins.HistoryReader
+	identityRegistry  plugins.IdentityRegistry
 	plugins           map[string]*loadedPlugin
 	mu                sync.RWMutex
 	closed            bool
@@ -248,6 +281,28 @@ func (h *Host) HistoryReader() plugins.HistoryReader {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.historyReader
+}
+
+// SetIdentityRegistry implements plugins.IdentityRegistryConfigurer.
+// Called by Manager.RegisterHost via findOptional after both are constructed.
+// The Manager itself implements IdentityRegistry, so passing m to the host
+// satisfies the late-binding contract (Hosts are constructed before Manager
+// RegisterHost returns).
+func (h *Host) SetIdentityRegistry(reg plugins.IdentityRegistry) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.identityRegistry = reg
+}
+
+// identityRegistrySnapshot returns the currently-configured registry under
+// RLock. Stamp sites in DeliverEvent / DeliverCommand release h.mu before
+// invoking the registry, so a concurrent SetIdentityRegistry would race
+// against an unlocked read of the two-word interface value. Callers MUST
+// use this accessor rather than reading h.identityRegistry directly.
+func (h *Host) identityRegistrySnapshot() plugins.IdentityRegistry {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.identityRegistry
 }
 
 // Load initializes a plugin from its manifest.
@@ -556,14 +611,18 @@ func (h *Host) DeliverEvent(ctx context.Context, name string, event pluginsdk.Ev
 
 	// Per spec §3.3.4: compute the stored actor with re-anchor for ActorSystem.
 	// Plugins never speak as the host's system identity — when the upstream
-	// ctx carries ActorSystem the host re-anchors to ActorPlugin:<name>.
-	storedActor := core.Actor{Kind: core.ActorPlugin, ID: name}
+	// ctx carries ActorSystem the host re-anchors to ActorPlugin:<ULID>.
+	storedActor, err := stampPluginActor(h.identityRegistrySnapshot(), name)
+	if err != nil {
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "stamp_actor").Wrap(err)
+	}
 	if upstream, ok := core.ActorFromContext(ctx); ok {
 		switch upstream.Kind {
 		case core.ActorCharacter, core.ActorPlugin:
 			storedActor = upstream // verbatim — cascade preserved
 		case core.ActorSystem:
-			storedActor = core.Actor{Kind: core.ActorPlugin, ID: name} // re-anchor
+			// re-anchor: ActorSystem may not emit as system identity; use plugin ULID
+			// storedActor already holds the plugin ULID from stampPluginActor above
 		}
 	}
 
@@ -628,13 +687,17 @@ func (h *Host) DeliverCommand(ctx context.Context, name string, cmd pluginsdk.Co
 	defer cancel()
 
 	// Per spec §3.3.4: same actor re-anchor + token issuance as DeliverEvent.
-	storedActor := core.Actor{Kind: core.ActorPlugin, ID: name}
+	storedActor, err := stampPluginActor(h.identityRegistrySnapshot(), name)
+	if err != nil {
+		return nil, oops.In("goplugin").With("plugin", name).With("operation", "stamp_actor").Wrap(err)
+	}
 	if upstream, ok := core.ActorFromContext(ctx); ok {
 		switch upstream.Kind {
 		case core.ActorCharacter, core.ActorPlugin:
 			storedActor = upstream
 		case core.ActorSystem:
-			storedActor = core.Actor{Kind: core.ActorPlugin, ID: name}
+			// re-anchor: ActorSystem may not emit as system identity; use plugin ULID
+			// storedActor already holds the plugin ULID from stampPluginActor above
 		}
 	}
 

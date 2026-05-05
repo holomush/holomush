@@ -62,25 +62,6 @@ func TestActorFromProtoIgnoresWrongSizeID(t *testing.T) {
 	assert.Equal(t, ActorKindPlayer, got.Kind)
 	var zero ulid.ULID
 	assert.Equal(t, zero, got.ID)
-	assert.Empty(t, got.LegacyID, "wrong-size ID with no LegacyId must yield empty LegacyID")
-}
-
-// TestActorFromProtoFallsBackToLegacyID covers the plugin-authored actor
-// path: when the binary Id is not a valid 16-byte ULID but LegacyId is
-// populated, the converter MUST preserve the legacy string identity so
-// downstream consumers keep actor attribution.
-func TestActorFromProtoFallsBackToLegacyID(t *testing.T) {
-	t.Parallel()
-	a := &eventbusv1.Actor{
-		Kind:     eventbusv1.ActorKind_ACTOR_KIND_PLUGIN,
-		Id:       []byte{0x01}, // invalid binary ULID length
-		LegacyId: "plugin:weather",
-	}
-	got := actorFromProto(a)
-	assert.Equal(t, ActorKindPlugin, got.Kind)
-	assert.Equal(t, "plugin:weather", got.LegacyID)
-	var zero ulid.ULID
-	assert.Equal(t, zero, got.ID)
 }
 
 func TestSubjectsToStringsEmptyReturnsNil(t *testing.T) {

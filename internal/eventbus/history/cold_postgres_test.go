@@ -20,22 +20,20 @@ import (
 
 // TestColdPostgresUnmarshalsEnvelope asserts that the cold reader
 // unmarshals the envelope column to recover all Event proto fields,
-// including those (Actor.legacy_id, full Timestamp pb) not present
-// as separate columns.
-//
-// Locks Decision 5: plugin-authored actors carry legacy_id, which is
-// recovered via envelope unmarshal — no dedicated column needed.
+// including the Actor ULID and Payload — proving the cold tier
+// recovers actor identity via envelope unmarshal rather than
+// requiring a dedicated column.
 func TestColdPostgresUnmarshalsEnvelope(t *testing.T) {
 	t.Parallel()
 
-	// Build an Event with Actor.legacy_id set (plugin-authored case).
+	actorID := makeULIDBytes(t)
 	envelope := &eventbusv1.Event{
 		Id:      makeULIDBytes(t),
 		Subject: "events.game1.scene.scene-01ABC.start",
 		Type:    "core-scenes:scene_started",
 		Actor: &eventbusv1.Actor{
-			Kind:     eventbusv1.ActorKind_ACTOR_KIND_PLUGIN,
-			LegacyId: "core-scenes",
+			Kind: eventbusv1.ActorKind_ACTOR_KIND_PLUGIN,
+			Id:   actorID,
 		},
 		Payload: []byte("{}"),
 	}
@@ -55,8 +53,8 @@ func TestColdPostgresUnmarshalsEnvelope(t *testing.T) {
 	ev, metaOnly, err := decodeColdRow(context.Background(), row, eventbus.SessionIdentity{}, nil, nil, nil)
 	require.NoError(t, err)
 	assert.False(t, metaOnly)
-	assert.Equal(t, "core-scenes", ev.Actor.LegacyID,
-		"legacy_id must be recovered via envelope unmarshal")
+	assert.Equal(t, actorID, ev.Actor.ID.Bytes(),
+		"actor ULID must be recovered via envelope unmarshal")
 	assert.Equal(t, []byte("{}"), ev.Payload)
 }
 
@@ -77,8 +75,8 @@ func TestColdPostgresRejectsSensitiveRowMissingDEKColumns(t *testing.T) {
 		Subject: "events.game1.scene.scene-01XYZ.private",
 		Type:    "core-scenes:secret",
 		Actor: &eventbusv1.Actor{
-			Kind:     eventbusv1.ActorKind_ACTOR_KIND_PLUGIN,
-			LegacyId: "core-scenes",
+			Kind: eventbusv1.ActorKind_ACTOR_KIND_PLUGIN,
+			Id:   makeULIDBytes(t),
 		},
 		Payload: []byte("ciphertext-bytes"),
 	}

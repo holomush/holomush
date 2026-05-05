@@ -22,6 +22,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/authguard"
 	"github.com/holomush/holomush/internal/eventbus/cursor"
 	"github.com/holomush/holomush/internal/eventbus/subjectxlate"
+	plugins "github.com/holomush/holomush/internal/plugin"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 )
 
@@ -254,7 +255,7 @@ func (s *CoreServer) QueryStreamHistory(ctx context.Context, req *corev1.QuerySt
 	}
 
 	frames, fetchErr := fetchHistoryFramesFromBus(
-		ctx, s.historyReader, s.currentGameID(), req.Stream, count,
+		ctx, s.historyReader, s.identityRegistry, s.currentGameID(), req.Stream, count,
 		notBefore, beforeSeq, beforeID, caller, historyIdentity,
 	)
 	if fetchErr != nil {
@@ -355,9 +356,13 @@ func mapHistoryError(err error, sessionID, stream string) error {
 //
 // identity is passed through to HistoryQuery.Identity for the hot-tier
 // AuthGuard path. Zero value is safe when Crypto.Enabled=false.
+//
+// reg is used by eventbusEventToEventFrame to resolve plugin/system ULIDs to
+// display names. Nil is safe: non-character actors fall back to ULID-string form.
 func fetchHistoryFramesFromBus(
 	ctx context.Context,
 	reader eventbus.HistoryReader,
+	reg plugins.IdentityRegistry,
 	gameID, legacyStream string,
 	count int,
 	notBefore time.Time,
@@ -424,7 +429,7 @@ func fetchHistoryFramesFromBus(
 		// Reverse index: collected[0] is newest; result[0] should be oldest.
 		j := len(collected) - 1 - i
 		legacyStreamName := subjectxlate.ToLegacy(string(collected[i].Subject), gameID)
-		frame := eventbusEventToEventFrame(collected[i], legacyStreamName)
+		frame := eventbusEventToEventFrame(collected[i], legacyStreamName, reg)
 		frame.Cursor = encodeEventCursor(collected[i])
 		result[j] = frame
 	}
@@ -509,17 +514,10 @@ func rewrapFrameCursorsForPlugin(frames []*corev1.EventFrame, pluginName string)
 // (e.g. "location:01ABC") that the web client expects in the Stream field.
 // Event.MetadataOnly (populated by the hot-tier AuthGuard on deny) is
 // stamped into EventFrame.metadata_only (Phase 3b grounding doc Decision 4).
-func eventbusEventToEventFrame(e eventbus.Event, legacyStreamName string) *corev1.EventFrame {
-	actorID := ""
-	if e.Actor.ID != (ulid.ULID{}) {
-		actorID = e.Actor.ID.String()
-	} else if e.Actor.LegacyID != "" {
-		// Plugin-authored events carry a string LegacyID instead of a
-		// ULID. Preserve it here so non-ULID actors keep attribution
-		// across the EventFrame boundary, matching the publisher
-		// (internal/eventbus/publisher.go) and sub_grpc.go.
-		actorID = e.Actor.LegacyID
-	}
+// reg resolves plugin/system ULIDs to display names; nil falls back to
+// ULID-string form (same behaviour as actorIDString in server.go).
+func eventbusEventToEventFrame(e eventbus.Event, legacyStreamName string, reg plugins.IdentityRegistry) *corev1.EventFrame {
+	actorID := actorIDString(e.Actor, reg)
 	return &corev1.EventFrame{
 		Id:           e.ID.String(),
 		Stream:       legacyStreamName,

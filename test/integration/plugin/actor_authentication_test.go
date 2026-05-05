@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/samber/oops"
@@ -27,6 +28,28 @@ import (
 	"github.com/holomush/holomush/internal/plugin/goplugin"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 )
+
+// stubIdentityRegistry is a minimal in-memory IdentityRegistry for
+// integration tests that don't spin up the full Manager. The host needs
+// it so RequestEmitToken and DeliverEvent can resolve the plugin name to
+// a ULID via stampPluginActor (post-w9ml: actor IDs are ULID strings).
+type stubIdentityRegistry struct {
+	idsByName map[string]ulid.ULID
+}
+
+func (s *stubIdentityRegistry) NameByID(id ulid.ULID) (string, bool) {
+	for name, candidate := range s.idsByName {
+		if candidate == id {
+			return name, true
+		}
+	}
+	return "", false
+}
+
+func (s *stubIdentityRegistry) IDByName(name string) (ulid.ULID, bool) {
+	id, ok := s.idsByName[name]
+	return id, ok
+}
 
 // forgeryPluginSourceDir returns the absolute path to the forgery_plugin
 // source directory under testdata. Build invocations resolve relative to
@@ -76,10 +99,11 @@ func buildForgeryPlugin() (string, *plugins.Manifest) {
 // core.WithActor(ctx, storedActor) before calling emitter.Emit, and the
 // resolveActor func returns whatever's on ctx.
 type hostFixture struct {
-	host     *goplugin.Host
-	bus      *eventbustest.Embedded
-	manifest *plugins.Manifest
-	cleanup  func()
+	host       *goplugin.Host
+	bus        *eventbustest.Embedded
+	manifest   *plugins.Manifest
+	pluginULID ulid.ULID // registry-resolved ULID for the plugin's name
+	cleanup    func()
 }
 
 func newHostFixture(ctx context.Context) *hostFixture {
@@ -87,7 +111,15 @@ func newHostFixture(ctx context.Context) *hostFixture {
 	pluginDir, manifest := buildForgeryPlugin()
 	bus := eventbustest.New(GinkgoT())
 
-	host := goplugin.NewHost()
+	// Post-w9ml: the host MUST resolve plugin names to ULIDs via an
+	// IdentityRegistry. We register the manifest's name with a fresh
+	// ULID and inject the stub before construction so DeliverEvent and
+	// RequestEmitToken can stamp ActorPlugin:<ULID> on emits.
+	pluginULID := core.NewULID()
+	reg := &stubIdentityRegistry{idsByName: map[string]ulid.ULID{
+		manifest.Name: pluginULID,
+	}}
+	host := goplugin.NewHost(goplugin.WithIdentityRegistry(reg))
 
 	// Wire the event emitter the same way binary_plugin_test does.
 	// resolveActor reads the actor stamped on ctx by EmitEvent's
@@ -101,10 +133,11 @@ func newHostFixture(ctx context.Context) *hostFixture {
 		_ = host.Close(ctx)
 	}
 	return &hostFixture{
-		host:     host,
-		bus:      bus,
-		manifest: manifest,
-		cleanup:  cleanup,
+		host:       host,
+		bus:        bus,
+		manifest:   manifest,
+		pluginULID: pluginULID,
+		cleanup:    cleanup,
 	}
 }
 
@@ -158,20 +191,18 @@ func drainPublishedEvents(ctx context.Context, fx *hostFixture) []eventHeaders {
 		msg, gerr := stream.GetMsg(ctx, seq)
 		Expect(gerr).NotTo(HaveOccurred())
 		out = append(out, eventHeaders{
-			Subject:       msg.Subject,
-			ActorKind:     msg.Header.Get(eventbus.HeaderActorKind),
-			ActorID:       msg.Header.Get(eventbus.HeaderActorID),
-			ActorLegacyID: msg.Header.Get(eventbus.HeaderActorLegacyID),
+			Subject:   msg.Subject,
+			ActorKind: msg.Header.Get(eventbus.HeaderActorKind),
+			ActorID:   msg.Header.Get(eventbus.HeaderActorID),
 		})
 	}
 	return out
 }
 
 type eventHeaders struct {
-	Subject       string
-	ActorKind     string
-	ActorID       string
-	ActorLegacyID string
+	Subject   string
+	ActorKind string
+	ActorID   string
 }
 
 // pollResultFile polls path until it exists or deadline elapses, returns
@@ -344,21 +375,19 @@ var _ = Describe("Plugin actor-claim authentication (ec22.1)", func() {
 			// dispatching character — a background goroutine cannot
 			// continue acting under the dispatch character's identity.
 			//
-			// Note: the plugin name is a non-ULID string, and the
-			// transitional core.Actor → eventbus.Actor bridge in
-			// internal/plugin/event_emitter.go::coreActorToEventbusActor
-			// drops non-ULID IDs. So HeaderActorID is empty for plugin
-			// actors today. We assert on ActorKind alone (the load-
-			// bearing G1 signal) and explicitly assert HeaderActorID
-			// does NOT carry the dispatching character ID (the bug we
-			// would introduce if we accidentally let the dispatch
-			// token's stored character actor leak into self-token
-			// emits).
+			// Post-w9ml: self-tokens are issued with a plugin-resolved
+			// ULID via IdentityRegistry; HeaderActorID carries that
+			// ULID, NOT the dispatching character ID. The strict gate
+			// at internal/plugin/event_emitter.go::Emit now rejects
+			// non-ULID actor IDs with ACTOR_ID_NOT_ULID, so the actor
+			// id MUST be a parseable ULID.
 			events := drainPublishedEvents(ctx, fx)
 			Expect(events).To(HaveLen(1),
 				"self-token fallback produces exactly one published event")
 			Expect(events[0].ActorKind).To(Equal("plugin"),
 				"G1: background self-token emit MUST carry plugin actor kind, NOT character")
+			Expect(events[0].ActorID).To(Equal(fx.pluginULID.String()),
+				"G1: background self-token emit MUST carry the registry-resolved plugin ULID")
 			Expect(events[0].ActorID).NotTo(Equal(dispatchCharID),
 				"G1: background emit MUST NOT inherit the dispatching character's ULID")
 		})

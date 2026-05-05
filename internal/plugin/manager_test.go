@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -1947,9 +1948,10 @@ func TestEmitPluginEventPropagatesSensitive(t *testing.T) {
 
 	// Emit must run with a plugin-actor context so the emitter resolves
 	// an actor; ActorPlugin matches the manifest's actor_kinds_claimable.
+	// Post-w9ml: Actor.ID MUST be a ULID; use a deterministic fixture.
 	ctx := core.WithActor(context.Background(), core.Actor{
 		Kind: core.ActorPlugin,
-		ID:   "core-test",
+		ID:   ulid.MustNew(0xC0FFEE, bytes.NewReader(make([]byte, 16))).String(),
 	})
 
 	err = mgr.EmitPluginEvent(ctx, "core-test", pluginsdk.EmitEvent{

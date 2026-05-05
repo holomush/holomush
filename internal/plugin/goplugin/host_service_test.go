@@ -777,11 +777,15 @@ func TestEmitEventCrossPluginTokenLeakFails(t *testing.T) {
 
 // TestRequestEmitTokenIssuesSelfTokenBoundToPluginActor covers the
 // happy path: a plugin-served gRPC handler requests a self-token and
-// receives one bound to {ActorPlugin, pluginName}. (Spec §3.3.5
-// self-token pattern.)
+// receives one bound to {ActorPlugin, <pluginName-resolved-ULID>}.
+// (Spec §3.3.5 self-token pattern; post-w9ml: actor IDs are ULID strings,
+// resolved via the IdentityRegistry — the strict gate at
+// event_emitter.go::Emit rejects non-ULID actor IDs.)
 func TestRequestEmitTokenIssuesSelfTokenBoundToPluginActor(t *testing.T) {
 	t.Parallel()
-	h := NewHost()
+	plugAID := core.NewULID()
+	reg := &stubIdentityRegistry{idsByName: map[string]ulid.ULID{"plug-A": plugAID}}
+	h := NewHost(WithIdentityRegistry(reg))
 	defer func() { _ = h.Close(context.Background()) }()
 	s := &pluginHostServiceServer{host: h, pluginName: "plug-A"}
 
@@ -790,24 +794,31 @@ func TestRequestEmitTokenIssuesSelfTokenBoundToPluginActor(t *testing.T) {
 	require.NotEmpty(t, resp.GetToken(), "self-token must be non-empty")
 
 	// The returned token MUST resolve via the host's tokenStore to an
-	// actor pinned to {ActorPlugin, pluginName}. This is the load-bearing
-	// G1 invariant for the self-token path: the plugin cannot escalate
-	// to a character or system actor through this RPC.
+	// actor pinned to {ActorPlugin, <plugin-ULID-string>}. This is the
+	// load-bearing G1 invariant for the self-token path: the plugin
+	// cannot escalate to a character or system actor through this RPC.
 	storedActor, ok := h.tokenStore.Lookup("plug-A", resp.GetToken())
 	require.True(t, ok, "issued token must resolve in the host's tokenStore")
 	assert.Equal(t, core.ActorPlugin, storedActor.Kind)
-	assert.Equal(t, "plug-A", storedActor.ID)
+	assert.Equal(t, plugAID.String(), storedActor.ID,
+		"actor ID MUST be the registry-resolved ULID, not the plugin name")
 }
 
-// TestRequestEmitTokenAlwaysHardcodesActorPluginAndPluginName guards
+// TestRequestEmitTokenAlwaysHardcodesActorPluginAndPluginULID guards
 // against future spec drift: regardless of any caller-supplied input the
-// RPC MUST bind the token to {ActorPlugin, s.pluginName}. The request
-// message is intentionally empty today; this test makes the hardcoded
-// binding contract explicit so a future "extend the request" patch can't
-// silently re-open the G1 forgery surface.
-func TestRequestEmitTokenAlwaysHardcodesActorPluginAndPluginName(t *testing.T) {
+// RPC MUST bind the token to {ActorPlugin, <registry-resolved-ULID>}.
+// The request message is intentionally empty today; this test makes the
+// hardcoded binding contract explicit so a future "extend the request"
+// patch can't silently re-open the G1 forgery surface.
+func TestRequestEmitTokenAlwaysHardcodesActorPluginAndPluginULID(t *testing.T) {
 	t.Parallel()
-	h := NewHost()
+	plugAID := core.NewULID()
+	plugBID := core.NewULID()
+	reg := &stubIdentityRegistry{idsByName: map[string]ulid.ULID{
+		"plug-A": plugAID,
+		"plug-B": plugBID,
+	}}
+	h := NewHost(WithIdentityRegistry(reg))
 	defer func() { _ = h.Close(context.Background()) }()
 	s := &pluginHostServiceServer{host: h, pluginName: "plug-B"}
 
@@ -818,8 +829,8 @@ func TestRequestEmitTokenAlwaysHardcodesActorPluginAndPluginName(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, core.ActorPlugin, storedActor.Kind,
 		"actor kind MUST be ActorPlugin regardless of any future request fields")
-	assert.Equal(t, "plug-B", storedActor.ID,
-		"actor ID MUST be the mTLS-bound plugin name, not a caller-supplied value")
+	assert.Equal(t, plugBID.String(), storedActor.ID,
+		"actor ID MUST be the registry-resolved ULID for the mTLS-bound plugin name, not a caller-supplied value")
 
 	// Cross-plugin defense intact: a sibling server with a different
 	// pluginName MUST NOT be able to use this token.
@@ -844,7 +855,9 @@ func TestRequestEmitTokenReturnsErrorWhenHostIsNil(t *testing.T) {
 // from EMIT_TOKEN_REJECTED at the EmitEvent boundary.
 func TestRequestEmitTokenWrapsIssueFailure(t *testing.T) {
 	t.Parallel()
-	h := NewHost()
+	plugAID := core.NewULID()
+	reg := &stubIdentityRegistry{idsByName: map[string]ulid.ULID{"plug-A": plugAID}}
+	h := NewHost(WithIdentityRegistry(reg))
 	defer func() { _ = h.Close(context.Background()) }()
 	// Inject a failing rand source on the tokenStore so Issue returns
 	// an error from the crypto path.
@@ -854,6 +867,28 @@ func TestRequestEmitTokenWrapsIssueFailure(t *testing.T) {
 	_, err := s.RequestEmitToken(context.Background(), &pluginv1.PluginHostServiceRequestEmitTokenRequest{})
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "EMIT_TOKEN_ISSUE_FAILED")
+}
+
+// TestRequestEmitTokenFailsWhenPluginNotInIdentityRegistry covers the
+// new failure mode introduced in w9ml: if the plugin name does not
+// resolve to a ULID via the IdentityRegistry, the RPC MUST refuse to
+// issue a token rather than fall back to the plugin name (which would
+// fail downstream at event_emitter.go::Emit with ACTOR_ID_NOT_ULID).
+func TestRequestEmitTokenFailsWhenPluginNotInIdentityRegistry(t *testing.T) {
+	t.Parallel()
+	reg := &stubIdentityRegistry{idsByName: map[string]ulid.ULID{}} // empty
+	h := NewHost(WithIdentityRegistry(reg))
+	defer func() { _ = h.Close(context.Background()) }()
+	s := &pluginHostServiceServer{host: h, pluginName: "plug-A"}
+
+	_, err := s.RequestEmitToken(context.Background(), &pluginv1.PluginHostServiceRequestEmitTokenRequest{})
+	require.Error(t, err)
+	// The wrapped cause is PLUGIN_UNREGISTERED_INVOKE from stampPluginActor;
+	// oops surfaces the innermost code via Code(). The outer
+	// EMIT_TOKEN_ISSUE_FAILED still appears in the error chain via the
+	// rendered message; we assert both signals.
+	errutil.AssertErrorCode(t, err, "PLUGIN_UNREGISTERED_INVOKE")
+	assert.Contains(t, err.Error(), "plugin not registered in IdentityRegistry")
 }
 
 // capturingEmitter records EmitIntent calls for assertion in tests.

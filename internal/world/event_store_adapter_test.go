@@ -51,7 +51,7 @@ func TestEventStoreAdapter_Emit(t *testing.T) {
 				assert.Equal(t, core.EventType("move"), event.Type)
 				assert.Equal(t, []byte(`{"entity_type":"character"}`), event.Payload)
 				assert.Equal(t, core.ActorSystem, event.Actor.Kind)
-				assert.Equal(t, "world-service", event.Actor.ID)
+				assert.Equal(t, core.WorldServiceActorULID.String(), event.Actor.ID)
 				assert.False(t, event.ID.IsZero(), "event ID should be generated")
 				assert.False(t, event.Timestamp.IsZero(), "timestamp should be set")
 			},

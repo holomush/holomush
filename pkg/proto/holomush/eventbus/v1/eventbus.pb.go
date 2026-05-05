@@ -84,13 +84,9 @@ func (ActorKind) EnumDescriptor() ([]byte, []int) {
 
 // Actor identifies who caused an event.
 type Actor struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Kind  ActorKind              `protobuf:"varint,1,opt,name=kind,proto3,enum=holomush.eventbus.v1.ActorKind" json:"kind,omitempty"`
-	Id    []byte                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"` // ULID (16 bytes); empty for system/unknown
-	// legacy_id carries a non-ULID actor identifier (e.g. a plugin name)
-	// bridged from core.Actor. Set only when id is empty; preserves actor
-	// identity for plugin-authored host events across JetStream/audit/history.
-	LegacyId      string `protobuf:"bytes,3,opt,name=legacy_id,json=legacyId,proto3" json:"legacy_id,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          ActorKind              `protobuf:"varint,1,opt,name=kind,proto3,enum=holomush.eventbus.v1.ActorKind" json:"kind,omitempty"`
+	Id            []byte                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"` // ULID (16 bytes); MUST be set for every ActorKind value.
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -137,13 +133,6 @@ func (x *Actor) GetId() []byte {
 		return x.Id
 	}
 	return nil
-}
-
-func (x *Actor) GetLegacyId() string {
-	if x != nil {
-		return x.LegacyId
-	}
-	return ""
 }
 
 // Event is the host-side envelope. Wire encoding is proto bytes in the
@@ -247,11 +236,10 @@ var File_holomush_eventbus_v1_eventbus_proto protoreflect.FileDescriptor
 
 const file_holomush_eventbus_v1_eventbus_proto_rawDesc = "" +
 	"\n" +
-	"#holomush/eventbus/v1/eventbus.proto\x12\x14holomush.eventbus.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bholomush/core/v1/core.proto\"i\n" +
+	"#holomush/eventbus/v1/eventbus.proto\x12\x14holomush.eventbus.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bholomush/core/v1/core.proto\"]\n" +
 	"\x05Actor\x123\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x1f.holomush.eventbus.v1.ActorKindR\x04kind\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\fR\x02id\x12\x1b\n" +
-	"\tlegacy_id\x18\x03 \x01(\tR\blegacyId\"\x8f\x02\n" +
+	"\x02id\x18\x02 \x01(\fR\x02idJ\x04\b\x03\x10\x04R\tlegacy_id\"\x8f\x02\n" +
 	"\x05Event\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\fR\x02id\x12\x18\n" +
 	"\asubject\x18\x02 \x01(\tR\asubject\x12\x12\n" +
