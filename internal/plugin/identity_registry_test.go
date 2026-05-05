@@ -188,3 +188,33 @@ func TestComputeHashesLuaContentHashIsDeterministic(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ch1, ch2, "Lua content_hash MUST be deterministic")
 }
+
+func TestUnloadPluginRemovesActiveButPreservesHistorical(t *testing.T) {
+	repo := &stubPluginRepo{}
+	mgr := newManagerForRegistryTest(t, repo)
+
+	manifest := &Manifest{Name: "core-scenes", Version: "1.0.0", Type: TypeLua, LuaPlugin: &LuaConfig{Entry: "main.lua"}}
+	mgr.TestLoadPlugin("core-scenes", manifest)
+
+	// Manually populate cache (in real loadPlugin path this is done by T6).
+	id := core.NewULID()
+	mgr.mu.Lock()
+	mgr.nameByID[id] = "core-scenes"
+	mgr.activeByName["core-scenes"] = id
+	mgr.mu.Unlock()
+
+	require.NoError(t, mgr.UnloadPlugin(context.Background(), "core-scenes"))
+
+	_, stillActive := mgr.IDByName("core-scenes")
+	assert.False(t, stillActive)
+
+	name, ok := mgr.NameByID(id)
+	require.True(t, ok)
+	assert.Equal(t, "core-scenes", name, "historical resolution preserved")
+}
+
+func TestUnloadPluginIsIdempotentWhenNotLoaded(t *testing.T) {
+	mgr := newManagerForRegistryTest(t, &stubPluginRepo{})
+	err := mgr.UnloadPlugin(context.Background(), "nonexistent")
+	assert.NoError(t, err)
+}
