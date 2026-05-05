@@ -47,8 +47,10 @@ const (
 )
 
 // Actor identifies who caused an event. Host-stamped, never plugin-spoofable.
-// ID MUST be a real ULID for every ActorKind. Sentinel ULIDs are used for
-// system / plugin actors; plugin actors resolve through IdentityRegistry.
+// ID MUST be a real ULID for every ActorKind. Sentinel ULIDs are reserved
+// for system actors (SystemActorULID, WorldServiceActorULID); plugin
+// actors carry registry-backed ULIDs resolved at stamp time via
+// IdentityRegistry.IDByName.
 type Actor struct {
 	Kind ActorKind
 	ID   ulid.ULID

@@ -20,15 +20,24 @@ func TestMigration000018CreatesPluginsTable(t *testing.T) {
 
 	require.NoError(t, runMigrations(ctx, pool, 18))
 
-	var count int
+	// Assert each expected column is present...
+	var matched int
 	require.NoError(t, pool.QueryRow(ctx, `
 		SELECT COUNT(*) FROM information_schema.columns
 		WHERE table_name = 'plugins'
 		  AND column_name IN ('id','name','display_name','version',
 		                      'manifest_hash','content_hash',
 		                      'first_seen_at','last_seen_at','gc_at')
-	`).Scan(&count))
-	assert.Equal(t, 9, count, "plugins table must have 9 columns")
+	`).Scan(&matched))
+	assert.Equal(t, 9, matched, "plugins must have all 9 expected columns")
+	// ...and assert there are NO extras (catches contract drift if a future
+	// migration adds a column without updating the named-column whitelist).
+	var total int
+	require.NoError(t, pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_name = 'plugins'
+	`).Scan(&total))
+	assert.Equal(t, 9, total, "plugins MUST have exactly 9 columns (no extras)")
 
 	var indexExists bool
 	require.NoError(t, pool.QueryRow(ctx, `
