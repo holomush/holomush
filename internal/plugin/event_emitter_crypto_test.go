@@ -37,7 +37,7 @@ func newCryptoTestEmitter(t *testing.T, pub eventbus.Publisher, manifest *plugin
 	// internal/core/event.go:170. ActorPlugin lives in package core
 	// (internal/core/event.go:148).
 	resolve := func(_ context.Context, _ string) (core.Actor, error) {
-		return core.Actor{Kind: core.ActorPlugin, ID: "test-plugin"}, nil
+		return core.Actor{Kind: core.ActorPlugin, ID: fixturePluginULID.String()}, nil
 	}
 	// These tests exercise the Phase 3a sensitivity fence directly, so
 	// they MUST explicitly enable crypto. The default (off) bypasses
@@ -64,7 +64,7 @@ func TestEmitterDoesNotRunFenceWhenCryptoDisabled(t *testing.T) {
 		return nil
 	}
 	resolve := func(_ context.Context, _ string) (core.Actor, error) {
-		return core.Actor{Kind: core.ActorPlugin, ID: "test-plugin"}, nil
+		return core.Actor{Kind: core.ActorPlugin, ID: fixturePluginULID.String()}, nil
 	}
 	// Construct without WithCryptoEnabled — defaults to false.
 	emitter := plugins.NewPluginEventEmitter(pub, lookup, resolve)

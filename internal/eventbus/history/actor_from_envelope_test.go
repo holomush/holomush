@@ -44,25 +44,11 @@ func TestActorFromEnvelopeAllKinds(t *testing.T) {
 	}
 }
 
-func TestActorFromEnvelopeFallsBackToLegacyID(t *testing.T) {
-	t.Parallel()
-	// No binary Id (len != 16), but LegacyID set — caller populates
-	// LegacyID instead.
-	a := &eventbusv1.Actor{
-		Kind:     eventbusv1.ActorKind_ACTOR_KIND_SYSTEM,
-		LegacyId: "legacy-actor-1",
-	}
-	got := actorFromEnvelope(a)
-	assert.Equal(t, eventbus.ActorKindSystem, got.Kind)
-	assert.Equal(t, "legacy-actor-1", got.LegacyID)
-}
-
-func TestActorFromEnvelopeEmptyIDLeavesBothBlank(t *testing.T) {
+func TestActorFromEnvelopeEmptyIDLeavesIDZero(t *testing.T) {
 	t.Parallel()
 	a := &eventbusv1.Actor{Kind: eventbusv1.ActorKind_ACTOR_KIND_CHARACTER}
 	got := actorFromEnvelope(a)
 	assert.Equal(t, eventbus.ActorKindCharacter, got.Kind)
 	var zero ulid.ULID
 	assert.Equal(t, zero, got.ID)
-	assert.Empty(t, got.LegacyID)
 }

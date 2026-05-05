@@ -417,12 +417,6 @@ func decodeColdRow(
 // actorFromAuditRow rebuilds an eventbus.Actor from the string/bytes the
 // audit projection stored. Mirrors the publisher's inverse in
 // subscriber.go.
-//
-// TODO(holomush-u5bb): LegacyID is not persisted. The audit projection
-// only stores actor_kind + actor_id (ULID bytes), so plugin-authored
-// actors with non-ULID identifiers lose fidelity when read through the
-// cold tier. Requires adding an actor_legacy_id column to events_audit
-// (migration + projection update + reader update). Tracked separately.
 func actorFromAuditRow(kindStr string, idBytes []byte) eventbus.Actor {
 	a := eventbus.Actor{}
 	switch kindStr {

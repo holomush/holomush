@@ -47,4 +47,3 @@ func TestCommandTypesDoesNotUseStringSystemLabel(t *testing.T) {
 	require.NotContains(t, string(body), `ID: "system",`,
 		"ActorSystem stamp must use core.ActorSystemID")
 }
-

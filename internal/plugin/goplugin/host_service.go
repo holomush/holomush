@@ -359,15 +359,21 @@ func (s *pluginHostServiceServer) RequestEmitToken(_ context.Context, _ *pluginv
 		return nil, oops.With("plugin", s.pluginName).New("plugin token store is not configured")
 	}
 
-	// HARDCODED actor: ActorPlugin + the mTLS-bound plugin name. We
-	// deliberately ignore any caller-supplied identity (the request has
-	// none) so this RPC cannot be used as an actor-escalation vector.
-	actor := core.Actor{
-		Kind: core.ActorPlugin,
-		ID:   s.pluginName,
+	// HARDCODED actor: ActorPlugin + the mTLS-bound plugin name resolved
+	// to a ULID via the IdentityRegistry. We deliberately ignore any
+	// caller-supplied identity (the request has none) so this RPC cannot
+	// be used as an actor-escalation vector. Post-w9ml the strict gate at
+	// event_emitter.go::Emit rejects non-ULID actor IDs with
+	// ACTOR_ID_NOT_ULID, so we MUST resolve a ULID here — using the plain
+	// plugin name as ActorID would break every plugin self-token emit.
+	storedActor, stampErr := stampPluginActor(s.host.identityRegistrySnapshot(), s.pluginName)
+	if stampErr != nil {
+		return nil, oops.Code("EMIT_TOKEN_ISSUE_FAILED").
+			With("plugin", s.pluginName).
+			Wrap(stampErr)
 	}
 
-	token, err := tokenStore.Issue(s.pluginName, actor)
+	token, err := tokenStore.Issue(s.pluginName, storedActor)
 	if err != nil {
 		return nil, oops.Code("EMIT_TOKEN_ISSUE_FAILED").
 			With("plugin", s.pluginName).

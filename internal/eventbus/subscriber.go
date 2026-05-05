@@ -766,11 +766,6 @@ func actorFromProto(a *eventbusv1.Actor) Actor {
 		var u ulid.ULID
 		copy(u[:], id)
 		out.ID = u
-	} else if legacy := a.GetLegacyId(); legacy != "" {
-		// Plugin-authored actors carry a string LegacyID rather than a
-		// ULID. Propagate it here so non-ULID actor identities aren't
-		// silently dropped on the subscriber path.
-		out.LegacyID = legacy
 	}
 	return out
 }

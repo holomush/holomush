@@ -483,9 +483,8 @@ func insertAuditRowWithSeq(ctx context.Context, t *testing.T, pool *pgxpool.Pool
 		Type:      string(e.Type),
 		Timestamp: timestamppb.New(e.Timestamp),
 		Actor: &eventbusv1.Actor{
-			Kind:     actorKindToProto(e.Actor.Kind),
-			Id:       actorID,
-			LegacyId: e.Actor.LegacyID,
+			Kind: actorKindToProto(e.Actor.Kind),
+			Id:   actorID,
 		},
 		Payload: e.Payload,
 	})

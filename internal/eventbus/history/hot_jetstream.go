@@ -593,8 +593,6 @@ func actorFromEnvelope(a *eventbusv1.Actor) eventbus.Actor {
 		var u ulid.ULID
 		copy(u[:], id)
 		out.ID = u
-	} else if legacy := a.GetLegacyId(); legacy != "" {
-		out.LegacyID = legacy
 	}
 	return out
 }

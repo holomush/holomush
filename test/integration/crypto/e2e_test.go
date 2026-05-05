@@ -216,16 +216,21 @@ func emitSensitivePluginEvent(
 	require.NoError(t, emitter.Emit(ctx, pluginName, intent))
 }
 
-// publishSensitiveWithLegacyActor publishes a sensitive event directly
-// through env.publisher with Actor.kind=PLUGIN and Actor.LegacyID set to
-// the given plugin name. Used by the Decision-5 regression-lock test —
-// the plugin emit path does not propagate Actor.LegacyID through the
-// core.Actor → eventbus.Actor bridge today, so the regression target
-// (LegacyID-bearing AAD round-trip) requires direct publish.
-func publishSensitiveWithLegacyActor(
+// publishSensitiveWithPluginActor publishes a sensitive event directly
+// through env.publisher with Actor.kind=PLUGIN and Actor.ID set to the
+// given plugin ULID. Used by the regression-lock test for AAD round-trip
+// of plugin-authored sensitive events.
+//
+// Post-w9ml retarget (formerly publishSensitiveWithLegacyActor): the
+// LegacyID-bearing AAD round-trip is replaced by ULID-based plugin
+// identity. Test intent unchanged: a sensitive plugin-authored event
+// MUST round-trip its actor identity through publisher → AAD → cold
+// reader → AEAD verify.
+func publishSensitiveWithPluginActor(
 	ctx context.Context, t *testing.T,
 	env *e2eEnv,
-	subject, eventType, plaintext, pluginLegacyID string,
+	subject, eventType, plaintext string,
+	pluginActorID ulid.ULID,
 	participants []dek.Participant,
 ) {
 	t.Helper()
@@ -243,8 +248,8 @@ func publishSensitiveWithLegacyActor(
 		Type:      eventbus.Type(eventType),
 		Timestamp: time.Now().UTC(),
 		Actor: eventbus.Actor{
-			Kind:     eventbus.ActorKindPlugin,
-			LegacyID: pluginLegacyID,
+			Kind: eventbus.ActorKindPlugin,
+			ID:   pluginActorID,
 		},
 		Payload:   []byte(plaintext),
 		Sensitive: true,
@@ -414,9 +419,8 @@ func eventFromEnvelope(env *eventbusv1.Event, payload []byte) eventbus.Event {
 		Type:      eventbus.Type(env.GetType()),
 		Timestamp: env.GetTimestamp().AsTime(),
 		Actor: eventbus.Actor{
-			Kind:     protoActorKindToEventbus(env.GetActor().GetKind()),
-			ID:       actorID,
-			LegacyID: env.GetActor().GetLegacyId(),
+			Kind: protoActorKindToEventbus(env.GetActor().GetKind()),
+			ID:   actorID,
 		},
 		Payload: payload,
 	}
@@ -640,11 +644,11 @@ var _ = Describe("Sensitive event end-to-end", func() {
 		})
 	})
 
-	Describe("plugin-authored sensitive event (Decision 5 regression lock)", func() {
-		// AAD includes Actor.LegacyID — if the cold path's AAD reconstruction
-		// loses LegacyID, AEAD authentication fails with a decode error. This
-		// is the regression lock for Decision 5.
-		It("round-trips through cold tier with Actor.legacy_id preserved", func() {
+	Describe("plugin-authored sensitive event (regression lock)", func() {
+		// AAD includes Actor.ID — if the cold path's AAD reconstruction
+		// loses the actor ULID, AEAD authentication fails with a decode
+		// error. Post-w9ml retarget: same regression lock, now ULID-based.
+		It("round-trips through cold tier with Actor.ID preserved", func() {
 			sceneID := "01HEEPLUGIN0000000000000"
 			plaintext := `{"text":"plugin-authored secret"}`
 			participantID := eventbus.SessionIdentity{
@@ -654,11 +658,12 @@ var _ = Describe("Sensitive event end-to-end", func() {
 				BindingID:   "01BINDGG0000000000000000",
 			}
 			translated := "events.main.scene." + sceneID
-			publishSensitiveWithLegacyActor(ctx, suiteT, env,
+			pluginActorID := ulid.MustNew(ulid.Timestamp(time.Now()), nil)
+			publishSensitiveWithPluginActor(ctx, suiteT, env,
 				translated,
 				"test-plugin:whisper",
 				plaintext,
-				"core-scenes",
+				pluginActorID,
 				[]dek.Participant{{
 					PlayerID:    participantID.PlayerID,
 					CharacterID: participantID.CharacterID,
@@ -683,8 +688,8 @@ var _ = Describe("Sensitive event end-to-end", func() {
 			defer recvCancel()
 			ev, err := stream.Next(recvCtx)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(ev.Actor.LegacyID).To(Equal("core-scenes"),
-				"Decision 5: Actor.legacy_id must round-trip via envelope unmarshal")
+			Expect(ev.Actor.ID).To(Equal(pluginActorID),
+				"Actor.ID must round-trip via envelope unmarshal")
 			Expect(ev.MetadataOnly).To(BeFalse())
 			Expect(string(ev.Payload)).To(Equal(plaintext))
 		})

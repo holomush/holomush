@@ -8,7 +8,7 @@
 //
 // INV-49: events_audit.envelope is byte-equal to the bus envelope across
 // emit → audit projection → cold-read for both character (plugin emit on
-// behalf of a character binding) and plugin (Actor.LegacyID-bearing)
+// behalf of a character binding) and plugin (Actor.ID-bearing ULID)
 // actors. This test is the end-to-end lock for the regression Decision 5
 // fixed: AAD divergence between encrypt-time (publisher reads envelope
 // fields) and cold-decrypt-time (cold reader reconstructs Actor from row
@@ -31,6 +31,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
+
+	"github.com/oklog/ulid/v2"
 
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/eventbus/crypto/aad"
@@ -108,7 +110,7 @@ var _ = Describe("INV-49 envelope round-trip", func() {
 			"INV-49: bus and audit envelope must be proto-equal")
 	})
 
-	It("byte-equal envelope for plugin actor with Actor.legacy_id (Decision 5 lock)", func() {
+	It("byte-equal envelope for plugin actor with Actor.ID (post-w9ml regression lock)", func() {
 		sceneID := "01HINV49PLUGIN0000000000"
 		participantID := eventbus.SessionIdentity{
 			Kind:        eventbus.IdentityKindCharacter,
@@ -118,11 +120,12 @@ var _ = Describe("INV-49 envelope round-trip", func() {
 		}
 		plaintext := `{"text":"inv49 plugin"}`
 		translated := "events.main.scene." + sceneID
-		publishSensitiveWithLegacyActor(ctx, suiteT, env,
+		pluginActorID := ulid.MustNew(ulid.Timestamp(time.Now()), nil)
+		publishSensitiveWithPluginActor(ctx, suiteT, env,
 			translated,
 			"test-plugin:whisper",
 			plaintext,
-			"core-scenes",
+			pluginActorID,
 			[]dek.Participant{{
 				PlayerID:    participantID.PlayerID,
 				CharacterID: participantID.CharacterID,
@@ -144,11 +147,12 @@ var _ = Describe("INV-49 envelope round-trip", func() {
 		Expect(row.Envelope).To(Equal(busEnvelope),
 			"INV-49 (plugin actor): events_audit.envelope MUST equal bus envelope")
 
-		// Decision 5 lock: re-unmarshal and confirm Actor.LegacyID survived.
+		// Post-w9ml regression lock: re-unmarshal and confirm Actor.ID
+		// (ULID bytes) survived the round-trip.
 		var pbEnvelope eventbusv1.Event
 		require.NoError(suiteT, proto.Unmarshal(row.Envelope, &pbEnvelope))
-		Expect(pbEnvelope.GetActor().GetLegacyId()).To(Equal("core-scenes"),
-			"Decision 5: envelope.Actor.legacy_id must survive emit→audit round-trip")
+		Expect(pbEnvelope.GetActor().GetId()).To(Equal(pluginActorID.Bytes()),
+			"envelope.Actor.id must survive emit→audit round-trip")
 
 		// AAD bytes built at encrypt time MUST be reproducible from the
 		// audit row alone — that's the deeper INV-49 invariant Decision 5
@@ -163,15 +167,16 @@ var _ = Describe("INV-49 envelope round-trip", func() {
 	})
 
 	It("cold-read decrypts correctly for both actor kinds via dispatcher chain", func() {
-		// Parametrize over the two actor shapes.
+		// Parametrize over the two actor shapes (post-w9ml: both ULID-based).
 		type rowCase struct {
-			label          string
-			sceneID        string
-			useLegacyActor bool
+			label           string
+			sceneID         string
+			usePluginActor  bool
+			pluginActorULID ulid.ULID
 		}
 		cases := []rowCase{
-			{label: "character-binding (plugin emit)", sceneID: "01HINV49COLD00CHAR000000", useLegacyActor: false},
-			{label: "plugin-actor with legacy_id", sceneID: "01HINV49COLD00PLUGIN0000", useLegacyActor: true},
+			{label: "character-binding (plugin emit)", sceneID: "01HINV49COLD00CHAR000000", usePluginActor: false},
+			{label: "plugin-actor with ULID", sceneID: "01HINV49COLD00PLUGIN0000", usePluginActor: true, pluginActorULID: ulid.MustNew(ulid.Timestamp(time.Now()), nil)},
 		}
 		for i, tc := range cases {
 			tc := tc
@@ -185,12 +190,12 @@ var _ = Describe("INV-49 envelope round-trip", func() {
 				BindingID:   "01BIND" + strconv.Itoa(i) + "00000000000000",
 			}
 			translated := "events.main.scene." + tc.sceneID
-			if tc.useLegacyActor {
-				publishSensitiveWithLegacyActor(ctx, suiteT, env,
+			if tc.usePluginActor {
+				publishSensitiveWithPluginActor(ctx, suiteT, env,
 					translated,
 					"test-plugin:whisper",
 					plaintext,
-					"core-scenes",
+					tc.pluginActorULID,
 					[]dek.Participant{{
 						PlayerID:    participantID.PlayerID,
 						CharacterID: participantID.CharacterID,
@@ -229,9 +234,9 @@ var _ = Describe("INV-49 envelope round-trip", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ev.MetadataOnly).To(BeFalse(), "participant must receive plaintext for "+tc.label)
 			Expect(string(ev.Payload)).To(Equal(plaintext))
-			if tc.useLegacyActor {
-				Expect(ev.Actor.LegacyID).To(Equal("core-scenes"),
-					"Decision 5: legacy_id must round-trip through cold path")
+			if tc.usePluginActor {
+				Expect(ev.Actor.ID).To(Equal(tc.pluginActorULID),
+					"plugin Actor.ID must round-trip through cold path")
 			}
 		}
 	})

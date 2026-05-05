@@ -43,8 +43,14 @@ func sceneManifest() *plugins.Manifest {
 	}
 }
 
+// fixturePluginULID returns a deterministic ULID used as the
+// resolved Actor.ID for plugin-actor test fixtures. Post-w9ml every
+// stamp site MUST emit a parseable ULID; the plugintest helper
+// (forthcoming in w9ml.13) will replace these inline ULIDs.
+var fixturePluginULID = ulid.MustNew(0xDEADBEEF, bytes.NewReader(make([]byte, 16)))
+
 func pluginActorResolver(_ context.Context, _ string) (core.Actor, error) {
-	return core.Actor{Kind: core.ActorPlugin, ID: "core-scenes"}, nil
+	return core.Actor{Kind: core.ActorPlugin, ID: fixturePluginULID.String()}, nil
 }
 
 // newEmitter builds an emitter wired against the provided embedded bus.
@@ -110,9 +116,9 @@ func TestPluginEventEmitterStampsHostOwnedFields(t *testing.T) {
 	// App-Codec must never be empty (spec §1: "yes — never empty").
 	assert.Equal(t, "identity", msg.Header.Get(eventbus.HeaderCodec))
 	assert.Equal(t, "plugin", msg.Header.Get(eventbus.HeaderActorKind))
-	// Actor.ID is "core-scenes" (a plugin name, not a ULID) so the bridge
-	// leaves the ulid zero and the publisher omits App-Actor-ID.
-	assert.Empty(t, msg.Header.Get(eventbus.HeaderActorID))
+	// Post-w9ml: every stamp site emits a real ULID, so App-Actor-ID is
+	// always present for plugin actors.
+	assert.Equal(t, fixturePluginULID.String(), msg.Header.Get(eventbus.HeaderActorID))
 
 	// Envelope decodes to the plugin payload we passed in.
 	var env eventbusv1.Event
@@ -123,25 +129,17 @@ func TestPluginEventEmitterStampsHostOwnedFields(t *testing.T) {
 	assert.Equal(t, eventbusv1.ActorKind_ACTOR_KIND_PLUGIN, env.GetActor().GetKind())
 }
 
-// TestPluginEventEmitterOmitsActorIDHeaderForNonULIDActorID complements the
-// happy path by exercising the documented invariant that App-Actor-ID is
-// absent (not present-but-empty) when the resolved actor's ID is not a
-// ULID — the legacy core-scenes plugin uses its plugin name ("core-scenes")
-// as the ID, which the bridge MUST drop while preserving Kind on the wire.
-//
-// (Pre-claim-gate this test exercised ActorSystem; per Task 5 of the
-// plugin actor-claim authentication rollout, ActorSystem can never reach
-// the manifest gate via plugin emit because manifest validation rejects
-// "system" from actor_kinds_claimable. The header-omission invariant
-// itself is unchanged and still worth a regression guard, so the test
-// now uses ActorPlugin with a non-ULID id.)
-func TestPluginEventEmitterOmitsActorIDHeaderForNonULIDActorID(t *testing.T) {
+// TestPluginEventEmitterRejectsNonULIDActorID is the post-w9ml invariant:
+// the strict ULID gate at coreActorToEventbusActor surfaces
+// ACTOR_ID_NOT_ULID and refuses to publish when a resolver returns a
+// non-ULID Actor.ID. Pre-w9ml the bridge silently dropped non-ULID IDs
+// and stamped App-Actor-ID empty; that fail-open path is gone.
+func TestPluginEventEmitterRejectsNonULIDActorID(t *testing.T) {
 	bus := eventbustest.New(t)
 	emitter := plugins.NewPluginEventEmitter(
 		bus.Bus.Publisher(),
 		func(string) *plugins.Manifest { return sceneManifest() },
-		// Plugin actor with a non-ULID ID (the plugin name) — the bridge
-		// keeps the Kind but drops the id, matching spec intent.
+		// Plugin actor with a non-ULID ID — strict gate MUST reject.
 		func(context.Context, string) (core.Actor, error) {
 			return core.Actor{Kind: core.ActorPlugin, ID: "core-scenes"}, nil
 		},
@@ -152,14 +150,11 @@ func TestPluginEventEmitterOmitsActorIDHeaderForNonULIDActorID(t *testing.T) {
 		Type:    pluginsdk.EventType(core.EventTypeSystem),
 		Payload: `{}`,
 	})
-	require.NoError(t, err)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "ACTOR_ID_NOT_ULID")
 
-	msgs := fetchAllMessages(t, bus.JS)
-	require.Len(t, msgs, 1)
-	// plugin kind → header present; non-ULID id → App-Actor-ID omitted.
-	assert.Equal(t, "plugin", msgs[0].Header.Get(eventbus.HeaderActorKind))
-	assert.Empty(t, msgs[0].Header.Get(eventbus.HeaderActorID),
-		"App-Actor-ID MUST be absent when actor id is not a ULID")
+	// Nothing reached the stream.
+	assert.Empty(t, fetchAllMessages(t, bus.JS))
 }
 
 // TestPluginEventEmitterIdempotentRetry is the property the Nats-Msg-Id header
@@ -582,7 +577,7 @@ func TestEmitManifestGateAllowsPluginCascade(t *testing.T) {
 	)
 	ctx := core.WithActor(context.Background(), core.Actor{
 		Kind: core.ActorPlugin,
-		ID:   "plug-B", // upstream cascade
+		ID:   ulid.MustNew(0xB, bytes.NewReader(make([]byte, 16))).String(), // upstream cascade
 	})
 	err := e.Emit(ctx, "plug-A", pluginsdk.EmitIntent{
 		Subject: "location:01HLOC0000000000000000000",

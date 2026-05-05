@@ -151,21 +151,22 @@ func TestCoreToBusActorPreservesULIDID(t *testing.T) {
 	a := coreToBusActor(core.Actor{Kind: core.ActorCharacter, ID: id.String()})
 	assert.Equal(t, eventbus.ActorKindCharacter, a.Kind)
 	assert.Equal(t, id, a.ID)
-	assert.Empty(t, a.LegacyID)
 }
 
-func TestCoreToBusActorStashesNonULIDAsLegacyID(t *testing.T) {
+// TestCoreToBusActorIgnoresNonULIDIDPostW9ml asserts the new boundary
+// behavior post-w9ml: non-ULID IDs are silently dropped here (the
+// strict gate at coreActorToEventbusActor in event_emitter.go surfaces
+// ACTOR_ID_NOT_ULID before this boundary is reached for emit paths).
+func TestCoreToBusActorIgnoresNonULIDIDPostW9ml(t *testing.T) {
 	a := coreToBusActor(core.Actor{Kind: core.ActorPlugin, ID: "core-scenes"})
 	assert.Equal(t, eventbus.ActorKindPlugin, a.Kind)
 	assert.Equal(t, ulid.ULID{}, a.ID)
-	assert.Equal(t, "core-scenes", a.LegacyID)
 }
 
-func TestCoreToBusActorEmptyIDLeavesBothZero(t *testing.T) {
+func TestCoreToBusActorEmptyIDLeavesIDZero(t *testing.T) {
 	a := coreToBusActor(core.Actor{Kind: core.ActorSystem})
 	assert.Equal(t, eventbus.ActorKindSystem, a.Kind)
 	assert.Equal(t, ulid.ULID{}, a.ID)
-	assert.Empty(t, a.LegacyID)
 }
 
 func TestCoreActorKindToBusEveryKind(t *testing.T) {
@@ -210,35 +211,21 @@ func TestBusActorKindToCoreEveryKind(t *testing.T) {
 
 // --- busEventToCoreEvent ---
 
-func TestBusEventToCoreEventPrefersULIDActorID(t *testing.T) {
+func TestBusEventToCoreEventPropagatesULIDActorID(t *testing.T) {
 	id := ulid.Make()
 	e := eventbus.Event{
 		ID:        core.NewULID(),
 		Subject:   eventbus.Subject("events.main.scene.01ABC"),
 		Type:      eventbus.Type("system"),
 		Timestamp: time.Unix(1, 0).UTC(),
-		Actor:     eventbus.Actor{Kind: eventbus.ActorKindCharacter, ID: id, LegacyID: "ignored"},
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindCharacter, ID: id},
 		Payload:   []byte(`{}`),
 	}
 	got := busEventToCoreEvent(e, "scene:01ABC")
-	assert.Equal(t, id.String(), got.Actor.ID, "ULID actor id wins over LegacyID")
+	assert.Equal(t, id.String(), got.Actor.ID, "ULID actor id propagates through busEventToCoreEvent")
 	assert.Equal(t, core.ActorCharacter, got.Actor.Kind)
 	assert.Equal(t, e.ID, got.ID)
 	assert.Equal(t, "scene:01ABC", got.Stream)
-}
-
-func TestBusEventToCoreEventFallsBackToLegacyID(t *testing.T) {
-	e := eventbus.Event{
-		ID:        core.NewULID(),
-		Subject:   eventbus.Subject("events.main.scene.01ABC"),
-		Type:      eventbus.Type("system"),
-		Timestamp: time.Unix(1, 0).UTC(),
-		Actor:     eventbus.Actor{Kind: eventbus.ActorKindPlugin, LegacyID: "core-scenes"},
-		Payload:   []byte(`{}`),
-	}
-	got := busEventToCoreEvent(e, "scene:01ABC")
-	assert.Equal(t, "core-scenes", got.Actor.ID)
-	assert.Equal(t, core.ActorPlugin, got.Actor.Kind)
 }
 
 func TestBusEventToCoreEventEmptyActorIDYieldsEmpty(t *testing.T) {

@@ -279,15 +279,15 @@ func TestPublisherStampsAllRequiredHeaders(t *testing.T) {
 	t.Cleanup(func() { _ = stream.Close() })
 
 	ev := goodEvent(subject)
+	actorULID := core.NewULID()
 	ev.Actor = eventbus.Actor{
 		Kind: eventbus.ActorKindPlugin,
-		// Leave ID zero to exercise the LegacyID fallback branch.
-		LegacyID: "core-scenes",
+		ID:   actorULID,
 	}
 	require.NoError(t, pub.Publish(ctx, ev))
 
 	// Subscriber decoded headers; we verify via the Event returned. A
-	// regression in any header-stamping path (actor kind, LegacyID,
+	// regression in any header-stamping path (actor kind, actor ID,
 	// subject, timestamp) must fail this test, not just ID/Type.
 	d, err := stream.Next(ctx)
 	require.NoError(t, err)
@@ -296,7 +296,7 @@ func TestPublisherStampsAllRequiredHeaders(t *testing.T) {
 	require.Equal(t, ev.Type, got.Type)
 	require.Equal(t, ev.Subject, got.Subject, "Subject header must round-trip")
 	require.Equal(t, ev.Actor.Kind, got.Actor.Kind, "Actor-Kind header must round-trip")
-	require.Equal(t, ev.Actor.LegacyID, got.Actor.LegacyID, "Actor-LegacyID header must round-trip")
+	require.Equal(t, ev.Actor.ID, got.Actor.ID, "Actor-ID must round-trip")
 	// Timestamp fidelity is to millisecond precision on the JS path.
 	require.WithinDuration(t, ev.Timestamp, got.Timestamp, 1*time.Millisecond, "Timestamp header must round-trip")
 	require.NoError(t, d.Ack())
@@ -347,7 +347,7 @@ func TestPublisherCopiesRenderingIntoEnvelope(t *testing.T) {
 		Subject:   subject,
 		Type:      eventbus.Type("core-communication:say"),
 		Timestamp: time.Now().UTC(),
-		Actor:     eventbus.Actor{Kind: eventbus.ActorKindCharacter, LegacyID: "01ABC"},
+		Actor:     eventbus.Actor{Kind: eventbus.ActorKindCharacter, ID: core.NewULID()},
 		Payload:   []byte(`{"message":"hello"}`),
 		Rendering: rendering,
 	}

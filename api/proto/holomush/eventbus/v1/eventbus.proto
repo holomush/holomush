@@ -22,11 +22,12 @@ enum ActorKind {
 // Actor identifies who caused an event.
 message Actor {
   ActorKind kind = 1;
-  bytes id = 2; // ULID (16 bytes); empty for system/unknown
-  // legacy_id carries a non-ULID actor identifier (e.g. a plugin name)
-  // bridged from core.Actor. Set only when id is empty; preserves actor
-  // identity for plugin-authored host events across JetStream/audit/history.
-  string legacy_id = 3;
+  bytes id = 2; // ULID (16 bytes); MUST be set for every ActorKind value.
+  // Field 3 was `string legacy_id` (removed in holomush-w9ml).
+  // T18 cutover purges all pre-w9ml envelopes; reserved markers prevent
+  // accidental field-number reuse.
+  reserved 3;
+  reserved "legacy_id";
 }
 
 // Event is the host-side envelope. Wire encoding is proto bytes in the
