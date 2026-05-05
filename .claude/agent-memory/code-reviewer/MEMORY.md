@@ -193,3 +193,15 @@ Keep under 200 lines. Curate — don't hoard.
   the cross-plugin actor-escalation surface. The unit test guarding this
   is `TestEmitEventCrossPluginTokenLeakFails`
   (`internal/plugin/goplugin/host_service_test.go:744-776`).
+
+- **Sentinel-name vs sentinel-ULID gap in PluginRepo bootstrap.** T5
+  (holomush-w9ml.6) guards against sentinel-ULID collision via
+  `core.IsSentinelULID(row.ID)` but does NOT guard against a plugin row
+  whose `Name` is "system" or "world-service". `manifest.go:namePattern`
+  matches both ("system" and "world-service" both satisfy
+  `^[a-z](-?[a-z0-9])*$`). A plugin named "system" would write
+  `activeByName["system"] = <plugin ULID>`, breaking `IDByName("system")`
+  returning false and causing attribution ambiguity in NameByID. The fix
+  is a reserved-name set in `Manifest.Validate()` or a bootstrap guard.
+  Applies identically to T6 (Upsert / loadPlugin). Filed as non-blocking
+  follow-up (2026-05-04).

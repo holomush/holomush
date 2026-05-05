@@ -5,6 +5,8 @@ package plugins
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -137,4 +139,52 @@ func TestManagerBootstrapPopulatesNameByIDFromActiveAndHistoricalRows(t *testing
 
 	_, ok = mgr.IDByName("old-plugin")
 	assert.False(t, ok, "deactivated plugin name MUST NOT resolve via IDByName")
+}
+
+// w9ml T6: computeHashes hashes manifest.yaml + per-Type executable artifacts.
+func TestComputeHashesProducesNonEmptyForBinary(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "plugin.yaml"),
+		[]byte("name: x\nversion: 1\ntype: binary\nbinary-plugin:\n  executable: bin/x\n"), 0600))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "bin"), 0750))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "bin/x"), []byte("ELF-binary-bytes"), 0600))
+
+	mgr := newManagerForRegistryTest(t, &stubPluginRepo{})
+	dp := &DiscoveredPlugin{
+		Manifest: &Manifest{Name: "x", Version: "1", Type: TypeBinary, BinaryPlugin: &BinaryConfig{Executable: "bin/x"}},
+		Dir:      dir,
+	}
+	mh, ch, err := mgr.computeHashes(dp)
+	require.NoError(t, err)
+	assert.Len(t, mh, 32, "manifest hash must be sha256 (32 bytes)")
+	assert.Len(t, ch, 32, "binary content hash must be sha256")
+}
+
+func TestComputeHashesNilContentForSettingPlugin(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "plugin.yaml"),
+		[]byte("name: x\nversion: 1\ntype: setting\n"), 0600))
+
+	mgr := newManagerForRegistryTest(t, &stubPluginRepo{})
+	dp := &DiscoveredPlugin{Manifest: &Manifest{Name: "x", Version: "1", Type: TypeSetting}, Dir: dir}
+	_, ch, err := mgr.computeHashes(dp)
+	require.NoError(t, err)
+	assert.Nil(t, ch, "setting plugins MUST have nil content_hash")
+}
+
+func TestComputeHashesLuaContentHashIsDeterministic(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "plugin.yaml"),
+		[]byte("name: x\nversion: 1\ntype: lua\nlua-plugin:\n  entry: a.lua\n"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.lua"), []byte("foo"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.lua"), []byte("bar"), 0600))
+
+	mgr := newManagerForRegistryTest(t, &stubPluginRepo{})
+	dp := &DiscoveredPlugin{Manifest: &Manifest{Name: "x", Version: "1", Type: TypeLua, LuaPlugin: &LuaConfig{Entry: "a.lua"}}, Dir: dir}
+
+	_, ch1, err := mgr.computeHashes(dp)
+	require.NoError(t, err)
+	_, ch2, err := mgr.computeHashes(dp)
+	require.NoError(t, err)
+	assert.Equal(t, ch1, ch2, "Lua content_hash MUST be deterministic")
 }

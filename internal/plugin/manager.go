@@ -5,6 +5,8 @@ package plugins
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"log/slog"
 	"os"
@@ -17,11 +19,12 @@ import (
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/access/policy/types"
-	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/command"
 	"github.com/holomush/holomush/internal/core"
 	"github.com/holomush/holomush/internal/eventbus"
 	"github.com/holomush/holomush/internal/grpc/focus"
+	"github.com/holomush/holomush/internal/idgen"
+	"github.com/holomush/holomush/internal/store"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
@@ -716,6 +719,84 @@ func (m *Manager) unregisterPluginProviders(pluginName string, resourceTypes []s
 	}
 }
 
+// computeHashes returns sha256 of the plugin's plugin.yaml bytes (always)
+// and its executable artifact:
+//   - TypeBinary:  sha256 of the executable file at BinaryPlugin.Executable.
+//   - TypeLua:     sha256 of deterministic concatenation of *.lua files
+//                  (sorted by relative path within Dir; rel-path NUL contents
+//                  NUL between files).
+//   - TypeSetting: nil (no executable artifact).
+//
+// Hashes feed PluginRepo.Upsert for drift detection; manifest_hash is
+// always non-nil, content_hash is nil only for setting plugins.
+func (m *Manager) computeHashes(dp *DiscoveredPlugin) (manifestHash, contentHash []byte, err error) {
+	mfBytes, err := os.ReadFile(filepath.Join(dp.Dir, "plugin.yaml"))
+	if err != nil {
+		return nil, nil, oops.Code("PLUGIN_HASH_MANIFEST_READ").
+			With("plugin", dp.Manifest.Name).Wrap(err)
+	}
+	mh := sha256.Sum256(mfBytes)
+	manifestHash = mh[:]
+
+	switch dp.Manifest.Type {
+	case TypeBinary:
+		if dp.Manifest.BinaryPlugin == nil || dp.Manifest.BinaryPlugin.Executable == "" {
+			return nil, nil, oops.Code("PLUGIN_HASH_BINARY_MISSING_EXECUTABLE").
+				With("plugin", dp.Manifest.Name).
+				Errorf("binary plugin must declare binary-plugin.executable")
+		}
+		bin, readErr := os.ReadFile(filepath.Join(dp.Dir, dp.Manifest.BinaryPlugin.Executable))
+		if readErr != nil {
+			return nil, nil, oops.Code("PLUGIN_HASH_BINARY_READ").
+				With("plugin", dp.Manifest.Name).Wrap(readErr)
+		}
+		ch := sha256.Sum256(bin)
+		contentHash = ch[:]
+	case TypeLua:
+		var luaFiles []string
+		walkErr := filepath.Walk(dp.Dir, func(p string, info os.FileInfo, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if !info.IsDir() && filepath.Ext(p) == ".lua" {
+				rel, relErr := filepath.Rel(dp.Dir, p)
+				if relErr != nil {
+					return oops.Code("PLUGIN_HASH_LUA_REL").
+						With("plugin", dp.Manifest.Name).Wrap(relErr)
+				}
+				luaFiles = append(luaFiles, rel)
+			}
+			return nil
+		})
+		if walkErr != nil {
+			return nil, nil, oops.Code("PLUGIN_HASH_LUA_WALK").
+				With("plugin", dp.Manifest.Name).Wrap(walkErr)
+		}
+		sort.Strings(luaFiles)
+		h := sha256.New()
+		for _, rel := range luaFiles {
+			b, readErr := os.ReadFile(filepath.Join(dp.Dir, rel))
+			if readErr != nil {
+				return nil, nil, oops.Code("PLUGIN_HASH_LUA_READ").
+					With("plugin", dp.Manifest.Name).With("file", rel).Wrap(readErr)
+			}
+			h.Write([]byte(rel))
+			h.Write([]byte{0x00})
+			h.Write(b)
+			h.Write([]byte{0x00})
+		}
+		contentHash = h.Sum(nil)
+	case TypeSetting:
+		contentHash = nil
+	default:
+		return nil, nil, oops.Code("PLUGIN_HASH_UNKNOWN_TYPE").
+			With("plugin", dp.Manifest.Name).
+			With("type", string(dp.Manifest.Type)).
+			Errorf("unknown plugin type")
+	}
+	return manifestHash, contentHash, nil
+}
+
 // loadPlugin loads a single discovered plugin.
 //
 // Design: Returns nil (not error) for unsupported configurations to support
@@ -799,6 +880,66 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 		delete(m.inflight, dp.Manifest.Name)
 		m.mu.Unlock()
 	}()
+
+	// w9ml T6: compute hashes, Upsert into plugins table, populate cache.
+	// Hash computation only runs when pluginRepo is wired; tests that construct
+	// Manager without WithPluginRepo take the else branch and bypass computeHashes.
+	var pluginID ulid.ULID
+	var drift *store.DriftReport
+	if m.pluginRepo != nil {
+		manifestHash, contentHash, hashErr := m.computeHashes(dp)
+		if hashErr != nil {
+			return hashErr
+		}
+		id, d, upsertErr := m.pluginRepo.Upsert(ctx, store.PluginUpsertInput{
+			Name:         dp.Manifest.Name,
+			DisplayName:  dp.Manifest.Name,
+			Version:      dp.Manifest.Version,
+			ManifestHash: manifestHash,
+			ContentHash:  contentHash,
+		})
+		if upsertErr != nil {
+			return oops.In("manager").With("plugin", dp.Manifest.Name).Wrap(upsertErr)
+		}
+		pluginID, drift = id, d
+	} else {
+		pluginID = idgen.New()
+	}
+
+	// Cache mutation BEFORE host.Load — downstream code may emit during Load
+	// and needs to resolve plugin name via IDByName.
+	m.mu.Lock()
+	m.nameByID[pluginID] = dp.Manifest.Name
+	m.activeByName[dp.Manifest.Name] = pluginID
+	m.mu.Unlock()
+
+	// Roll back the cache mutation if any subsequent step fails. loadPlugin
+	// returns a bare `error` (not a named return), so we cannot use
+	// `defer func() { if err != nil ... }()` — closure would capture the
+	// wrong `err` after shadowing in subsequent if-blocks. Use an explicit
+	// rollback flag set by the success path.
+	var loadPluginCommitted bool
+	defer func() {
+		if !loadPluginCommitted {
+			m.mu.Lock()
+			delete(m.nameByID, pluginID)
+			delete(m.activeByName, dp.Manifest.Name)
+			m.mu.Unlock()
+		}
+	}()
+
+	// Drift logging (no decision logic — log and continue per spec).
+	if drift != nil {
+		slog.Info("plugin.drift",
+			"name", dp.Manifest.Name,
+			"old_manifest_hash", hex.EncodeToString(drift.OldManifestHash),
+			"new_manifest_hash", hex.EncodeToString(drift.NewManifestHash),
+			"old_content_hash", hex.EncodeToString(drift.OldContentHash),
+			"new_content_hash", hex.EncodeToString(drift.NewContentHash),
+			"version_before", drift.VersionBefore,
+			"version_after", drift.VersionAfter,
+		)
+	}
 
 	if err := host.Load(ctx, dp.Manifest, dp.Dir); err != nil {
 		return oops.In("manager").With("plugin", dp.Manifest.Name).With("operation", "load").Wrap(err)
@@ -936,6 +1077,10 @@ func (m *Manager) loadPlugin(ctx context.Context, dp *DiscoveredPlugin, knownRes
 		"type", dp.Manifest.Type,
 		"version", dp.Manifest.Version)
 
+	// w9ml T6: rollback-flag commit — see deferred rollback registered after
+	// the cache-mutation block above. Setting this true makes the rollback a
+	// no-op on the success path.
+	loadPluginCommitted = true
 	return nil
 }
 
