@@ -71,14 +71,14 @@ type Conn struct {
 	NewRespInboxHook func() string
 
 	// Recorded calls. Tests inspect these to assert call patterns.
-	Subscribed         []SubscribeCall
-	SubscribedSync     []string
-	Published          []PublishCall
-	PublishedRequests  []PublishRequestCall
-	RequestedWithCtx   []RequestWithContextCall
-	NewRespInboxCalls  int
-	FlushCalls         int
-	respInboxCounter   int
+	Subscribed        []SubscribeCall
+	SubscribedSync    []string
+	Published         []PublishCall
+	PublishedRequests []PublishRequestCall
+	RequestedWithCtx  []RequestWithContextCall
+	NewRespInboxCalls int
+	FlushCalls        int
+	respInboxCounter  int
 }
 
 // SubscribeCall records the args passed to Subscribe.

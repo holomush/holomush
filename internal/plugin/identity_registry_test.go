@@ -24,7 +24,7 @@ import (
 type stubIdentityRegistry struct{}
 
 func (stubIdentityRegistry) NameByID(ulid.ULID) (string, bool) { return "", false }
-func (stubIdentityRegistry) IDByName(string) (ulid.ULID, bool)  { return ulid.ULID{}, false }
+func (stubIdentityRegistry) IDByName(string) (ulid.ULID, bool) { return ulid.ULID{}, false }
 
 func TestIdentityRegistryInterfaceIsSatisfiable(_ *testing.T) {
 	var _ IdentityRegistry = stubIdentityRegistry{}
@@ -45,12 +45,14 @@ func (s *stubPluginRepo) Upsert(_ context.Context, in store.PluginUpsertInput) (
 		}
 	}
 	id := ulid.ULID{}
-	copy(id[:], []byte(in.Name+"00000000000000000000")[:16])
+	copy(id[:], []byte(in.Name + "00000000000000000000")[:16])
 	return id, nil, nil
 }
+
 func (s *stubPluginRepo) ListAll(_ context.Context) ([]store.PluginRow, error) {
 	return s.rows, nil
 }
+
 func (s *stubPluginRepo) SweepInactive(_ context.Context, _ int) ([]store.PluginRow, error) {
 	return s.swept, nil
 }
@@ -145,9 +147,9 @@ func TestManagerBootstrapPopulatesNameByIDFromActiveAndHistoricalRows(t *testing
 func TestComputeHashesProducesNonEmptyForBinary(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "plugin.yaml"),
-		[]byte("name: x\nversion: 1\ntype: binary\nbinary-plugin:\n  executable: bin/x\n"), 0600))
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "bin"), 0750))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "bin/x"), []byte("ELF-binary-bytes"), 0600))
+		[]byte("name: x\nversion: 1\ntype: binary\nbinary-plugin:\n  executable: bin/x\n"), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "bin"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "bin/x"), []byte("ELF-binary-bytes"), 0o600))
 
 	mgr := newManagerForRegistryTest(t, &stubPluginRepo{})
 	dp := &DiscoveredPlugin{
@@ -163,7 +165,7 @@ func TestComputeHashesProducesNonEmptyForBinary(t *testing.T) {
 func TestComputeHashesNilContentForSettingPlugin(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "plugin.yaml"),
-		[]byte("name: x\nversion: 1\ntype: setting\n"), 0600))
+		[]byte("name: x\nversion: 1\ntype: setting\n"), 0o600))
 
 	mgr := newManagerForRegistryTest(t, &stubPluginRepo{})
 	dp := &DiscoveredPlugin{Manifest: &Manifest{Name: "x", Version: "1", Type: TypeSetting}, Dir: dir}
@@ -175,9 +177,9 @@ func TestComputeHashesNilContentForSettingPlugin(t *testing.T) {
 func TestComputeHashesLuaContentHashIsDeterministic(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "plugin.yaml"),
-		[]byte("name: x\nversion: 1\ntype: lua\nlua-plugin:\n  entry: a.lua\n"), 0600))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.lua"), []byte("foo"), 0600))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.lua"), []byte("bar"), 0600))
+		[]byte("name: x\nversion: 1\ntype: lua\nlua-plugin:\n  entry: a.lua\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.lua"), []byte("foo"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.lua"), []byte("bar"), 0o600))
 
 	mgr := newManagerForRegistryTest(t, &stubPluginRepo{})
 	dp := &DiscoveredPlugin{Manifest: &Manifest{Name: "x", Version: "1", Type: TypeLua, LuaPlugin: &LuaConfig{Entry: "a.lua"}}, Dir: dir}

@@ -205,3 +205,18 @@ Keep under 200 lines. Curate — don't hoard.
   is a reserved-name set in `Manifest.Validate()` or a bootstrap guard.
   Applies identically to T6 (Upsert / loadPlugin). Filed as non-blocking
   follow-up (2026-05-04).
+
+- **Late-bound host field read outside RLock**: `goplugin.Host` fields set via
+  `SetX()` (which takes write lock) must be snapshot under RLock before use.
+  `eventEmitter`, `focusCoordinator`, `historyReader` use accessor methods that
+  lock properly. `identityRegistry` (added T10) is read bare at
+  `host.go:604,679` after the RLock is released — latent race, not triggered in
+  practice because registry is set before LoadAll. Fix: add an accessor method
+  or snapshot inside RLock. Check this pattern whenever a new late-bound field
+  is added to Host.
+
+- **Plan-file markdown breaks lint gate**: `task lint` includes `rumdl` markdown
+  lint over `docs/`. A stray bare ` ``` ` fence (e.g., copy-paste artifact in a
+  plan edit) will fail `lint:markdown` and block CI. Always run `task lint`
+  after any plan file edit, or use `rumdl fmt` to autofix. Encountered: T10
+  review (2026-05-04).

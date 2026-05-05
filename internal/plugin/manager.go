@@ -94,10 +94,10 @@ type Manager struct {
 	// populations (active plugins + historical plugins + system sentinels);
 	// activeByName resolves only currently-loaded plugins. Both are
 	// guarded by the existing m.mu RWMutex.
-	pluginRepo      store.PluginRepo
-	nameByID        map[ulid.ULID]string
-	activeByName    map[string]ulid.ULID
-	retentionDays   int  // plugin row TTL (days); 0 = sweep disabled; default 3
+	pluginRepo       store.PluginRepo
+	nameByID         map[ulid.ULID]string
+	activeByName     map[string]ulid.ULID
+	retentionDays    int  // plugin row TTL (days); 0 = sweep disabled; default 3
 	retentionDaysSet bool // true iff WithRetentionDays was called explicitly
 }
 
@@ -289,6 +289,9 @@ func (m *Manager) RegisterHost(hostType Type, host Host) {
 		if configurer := findOptional[EventEmitterConfigurer](host); configurer != nil {
 			configurer.SetEventEmitter(m.eventEmitter)
 		}
+	}
+	if configurer := findOptional[IdentityRegistryConfigurer](host); configurer != nil {
+		configurer.SetIdentityRegistry(m)
 	}
 }
 
@@ -763,8 +766,8 @@ func (m *Manager) unregisterPluginProviders(pluginName string, resourceTypes []s
 // and its executable artifact:
 //   - TypeBinary:  sha256 of the executable file at BinaryPlugin.Executable.
 //   - TypeLua:     sha256 of deterministic concatenation of *.lua files
-//                  (sorted by relative path within Dir; rel-path NUL contents
-//                  NUL between files).
+//     (sorted by relative path within Dir; rel-path NUL contents
+//     NUL between files).
 //   - TypeSetting: nil (no executable artifact).
 //
 // Hashes feed PluginRepo.Upsert for drift detection; manifest_hash is

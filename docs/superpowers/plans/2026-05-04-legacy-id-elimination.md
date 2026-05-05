@@ -3024,8 +3024,6 @@ binary that includes the proto-field removal.
 DATABASE_URL=... NATS_URL=... NATS_STREAM_NAME=events task migrate:plugin-actors-cutover
 ```
 
-```text
-
 ## Failure modes
 
 - **PG TRUNCATE failure:** exits non-zero before purge. Re-run.
@@ -3035,11 +3033,10 @@ DATABASE_URL=... NATS_URL=... NATS_STREAM_NAME=events task migrate:plugin-actors
 
 Deploy the new binary. The bootstrap orphan check passes on first start.
 
-```text
-
 - [ ] **Step 4: Smoke test**
 
 Manual:
+
 ```bash
 DATABASE_URL=postgres://localhost/holomush_dev NATS_URL=nats://localhost:4222 task migrate:plugin-actors-cutover
 ```

@@ -29,6 +29,7 @@ import (
 	tlscerts "github.com/holomush/holomush/internal/tls"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	pluginv1 "github.com/holomush/holomush/pkg/proto/holomush/plugin/v1"
+	"github.com/oklog/ulid/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -182,6 +183,18 @@ func newMockHost(t *testing.T) (*Host, *mockPluginClient) {
 	factory := &mockClientFactory{client: mockClient}
 	host := NewHostWithFactory(factory)
 	return host, mockClient
+}
+
+// stubRegistryFor returns a pre-seeded IdentityRegistry stub for the given
+// plugin names. Each name maps to a freshly-minted ULID. Tests that call
+// DeliverEvent/DeliverCommand MUST inject this via WithIdentityRegistry so
+// stampPluginActor can resolve names to ULIDs.
+func stubRegistryFor(names ...string) (plugins.IdentityRegistry, map[string]ulid.ULID) {
+	ids := make(map[string]ulid.ULID, len(names))
+	for _, n := range names {
+		ids[n] = core.NewULID()
+	}
+	return &stubIdentityRegistry{idsByName: ids}, ids
 }
 
 func TestNewHost(t *testing.T) {
@@ -364,7 +377,8 @@ func TestDeliverEventHandleEventError(t *testing.T) {
 		protocol: &mockClientProtocol{pluginClient: grpcClient},
 	}
 	factory := &mockClientFactory{client: mockClient}
-	host := NewHostWithFactory(factory)
+	reg, _ := stubRegistryFor("test-plugin")
+	host := NewHostWithFactory(factory, WithIdentityRegistry(reg))
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -397,7 +411,8 @@ func TestDeliverEventNilResponse(t *testing.T) {
 		protocol: &mockClientProtocol{pluginClient: grpcClient},
 	}
 	factory := &mockClientFactory{client: mockClient}
-	host := NewHostWithFactory(factory)
+	reg, _ := stubRegistryFor("test-plugin")
+	host := NewHostWithFactory(factory, WithIdentityRegistry(reg))
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -430,7 +445,8 @@ func TestDeliverEventTimeout(t *testing.T) {
 		protocol: &mockClientProtocol{pluginClient: grpcClient},
 	}
 	factory := &mockClientFactory{client: mockClient}
-	host := NewHostWithFactory(factory)
+	reg, _ := stubRegistryFor("test-plugin")
+	host := NewHostWithFactory(factory, WithIdentityRegistry(reg))
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -744,7 +760,8 @@ func TestDeliverEventSuccess(t *testing.T) {
 		protocol: &mockClientProtocol{pluginClient: grpcClient},
 	}
 	factory := &mockClientFactory{client: mockClient}
-	host := NewHostWithFactory(factory)
+	reg, _ := stubRegistryFor("test-plugin")
+	host := NewHostWithFactory(factory, WithIdentityRegistry(reg))
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -824,7 +841,8 @@ func TestDeliverEvent_ActorKinds(t *testing.T) {
 				protocol: &mockClientProtocol{pluginClient: grpcClient},
 			}
 			factory := &mockClientFactory{client: mockClient}
-			host := NewHostWithFactory(factory)
+			reg, _ := stubRegistryFor("test-plugin")
+			host := NewHostWithFactory(factory, WithIdentityRegistry(reg))
 
 			ctx := context.Background()
 			tmpDir := t.TempDir()
@@ -950,7 +968,8 @@ func TestDeliverCommandSuccess(t *testing.T) {
 		protocol: &mockClientProtocol{pluginClient: grpcClient},
 	}
 	factory := &mockClientFactory{client: mockClient}
-	host := NewHostWithFactory(factory)
+	reg, _ := stubRegistryFor("test-plugin")
+	host := NewHostWithFactory(factory, WithIdentityRegistry(reg))
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -1014,7 +1033,8 @@ func TestDeliverCommandHandleCommandError(t *testing.T) {
 		protocol: &mockClientProtocol{pluginClient: grpcClient},
 	}
 	factory := &mockClientFactory{client: mockClient}
-	host := NewHostWithFactory(factory)
+	reg, _ := stubRegistryFor("test-plugin")
+	host := NewHostWithFactory(factory, WithIdentityRegistry(reg))
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -1046,7 +1066,8 @@ func TestDeliverCommandNilResponse(t *testing.T) {
 		protocol: &mockClientProtocol{pluginClient: grpcClient},
 	}
 	factory := &mockClientFactory{client: mockClient}
-	host := NewHostWithFactory(factory)
+	reg, _ := stubRegistryFor("test-plugin")
+	host := NewHostWithFactory(factory, WithIdentityRegistry(reg))
 
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -1098,7 +1119,8 @@ func TestDeliverCommand_StatusMapping(t *testing.T) {
 				protocol: &mockClientProtocol{pluginClient: grpcClient},
 			}
 			factory := &mockClientFactory{client: mockClient}
-			host := NewHostWithFactory(factory)
+			reg, _ := stubRegistryFor("test-plugin")
+			host := NewHostWithFactory(factory, WithIdentityRegistry(reg))
 
 			ctx := context.Background()
 			tmpDir := t.TempDir()
@@ -1282,7 +1304,8 @@ func TestHostDeliverCommandForwardsTrustedActorMetadata(t *testing.T) {
 	mockClient := &mockPluginClient{
 		protocol: &mockClientProtocol{pluginClient: grpcClient},
 	}
-	host := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	reg, _ := stubRegistryFor("core-scenes")
+	host := NewHostWithFactory(&mockClientFactory{client: mockClient}, WithIdentityRegistry(reg))
 	host.plugins["core-scenes"] = &loadedPlugin{
 		manifest: &plugins.Manifest{Name: "core-scenes"},
 		plugin:   grpcClient,
@@ -1306,7 +1329,8 @@ func TestHostDeliverEventForwardsTrustedActorMetadata(t *testing.T) {
 	mockClient := &mockPluginClient{
 		protocol: &mockClientProtocol{pluginClient: grpcClient},
 	}
-	host := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	reg, _ := stubRegistryFor("core-scenes")
+	host := NewHostWithFactory(&mockClientFactory{client: mockClient}, WithIdentityRegistry(reg))
 	host.plugins["core-scenes"] = &loadedPlugin{
 		manifest: &plugins.Manifest{Name: "core-scenes"},
 		plugin:   grpcClient,
@@ -1829,7 +1853,8 @@ func TestDeliverEventIssuesTokenWithCharacterActor(t *testing.T) {
 	t.Parallel()
 	grpcClient := &mockGRPCPluginClient{}
 	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
-	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	reg, _ := stubRegistryFor("plug-A")
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient}, WithIdentityRegistry(reg))
 	defer func() { _ = h.Close(context.Background()) }()
 	h.plugins["plug-A"] = &loadedPlugin{
 		manifest: &plugins.Manifest{Name: "plug-A"},
@@ -1861,7 +1886,8 @@ func TestDeliverEventStoresUpstreamCharacterActorVerbatim(t *testing.T) {
 	t.Parallel()
 	grpcClient := &mockGRPCPluginClient{}
 	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
-	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	reg, _ := stubRegistryFor("plug-A")
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient}, WithIdentityRegistry(reg))
 	defer func() { _ = h.Close(context.Background()) }()
 	h.plugins["plug-A"] = &loadedPlugin{
 		manifest: &plugins.Manifest{Name: "plug-A"},
@@ -1886,7 +1912,8 @@ func TestDeliverEventReanchorsActorSystem(t *testing.T) {
 	t.Parallel()
 	grpcClient := &mockGRPCPluginClient{}
 	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
-	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	reg, ids := stubRegistryFor("plug-A")
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient}, WithIdentityRegistry(reg))
 	defer func() { _ = h.Close(context.Background()) }()
 	h.plugins["plug-A"] = &loadedPlugin{
 		manifest: &plugins.Manifest{Name: "plug-A"},
@@ -1900,7 +1927,7 @@ func TestDeliverEventReanchorsActorSystem(t *testing.T) {
 	kind, id, ok := pluginsdk.ActorMetadataFromOutgoingContext(grpcClient.eventCtx)
 	require.True(t, ok)
 	assert.Equal(t, pluginsdk.ActorPlugin, kind, "ActorSystem MUST be re-anchored to ActorPlugin at issuance")
-	assert.Equal(t, "plug-A", id)
+	assert.Equal(t, ids["plug-A"].String(), id, "re-anchored ID MUST be the plugin ULID, not the name")
 }
 
 // TestDeliverEventNoActorFallsBackToPluginIdentity covers the bootstrap
@@ -1909,7 +1936,8 @@ func TestDeliverEventNoActorFallsBackToPluginIdentity(t *testing.T) {
 	t.Parallel()
 	grpcClient := &mockGRPCPluginClient{}
 	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
-	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	reg, ids := stubRegistryFor("plug-A")
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient}, WithIdentityRegistry(reg))
 	defer func() { _ = h.Close(context.Background()) }()
 	h.plugins["plug-A"] = &loadedPlugin{
 		manifest: &plugins.Manifest{Name: "plug-A"},
@@ -1922,7 +1950,7 @@ func TestDeliverEventNoActorFallsBackToPluginIdentity(t *testing.T) {
 	kind, id, ok := pluginsdk.ActorMetadataFromOutgoingContext(grpcClient.eventCtx)
 	require.True(t, ok)
 	assert.Equal(t, pluginsdk.ActorPlugin, kind)
-	assert.Equal(t, "plug-A", id)
+	assert.Equal(t, ids["plug-A"].String(), id, "fallback ID MUST be the plugin ULID, not the name")
 }
 
 // TestDeliverCommandIssuesTokenWithCharacterActor mirrors the DeliverEvent
@@ -1931,7 +1959,8 @@ func TestDeliverCommandIssuesTokenWithCharacterActor(t *testing.T) {
 	t.Parallel()
 	grpcClient := &mockGRPCPluginClient{}
 	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
-	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	reg, _ := stubRegistryFor("plug-A")
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient}, WithIdentityRegistry(reg))
 	defer func() { _ = h.Close(context.Background()) }()
 	h.plugins["plug-A"] = &loadedPlugin{
 		manifest: &plugins.Manifest{Name: "plug-A"},
@@ -1959,7 +1988,8 @@ func TestDeliverCommandReanchorsActorSystem(t *testing.T) {
 	t.Parallel()
 	grpcClient := &mockGRPCPluginClient{}
 	mockClient := &mockPluginClient{protocol: &mockClientProtocol{pluginClient: grpcClient}}
-	h := NewHostWithFactory(&mockClientFactory{client: mockClient})
+	reg, ids := stubRegistryFor("plug-A")
+	h := NewHostWithFactory(&mockClientFactory{client: mockClient}, WithIdentityRegistry(reg))
 	defer func() { _ = h.Close(context.Background()) }()
 	h.plugins["plug-A"] = &loadedPlugin{
 		manifest: &plugins.Manifest{Name: "plug-A"},
@@ -1973,7 +2003,7 @@ func TestDeliverCommandReanchorsActorSystem(t *testing.T) {
 	kind, id, ok := pluginsdk.ActorMetadataFromOutgoingContext(grpcClient.commandCtx)
 	require.True(t, ok)
 	assert.Equal(t, pluginsdk.ActorPlugin, kind)
-	assert.Equal(t, "plug-A", id)
+	assert.Equal(t, ids["plug-A"].String(), id, "re-anchored ID MUST be the plugin ULID, not the name")
 }
 
 // TestDeliverEventNoRecoverWrapper (round-1 plan-reviewer N2) — asserts
