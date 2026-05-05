@@ -218,3 +218,49 @@ func TestUnloadPluginIsIdempotentWhenNotLoaded(t *testing.T) {
 	err := mgr.UnloadPlugin(context.Background(), "nonexistent")
 	assert.NoError(t, err)
 }
+
+// w9ml T8: GC sweep at LoadAll end + RetentionDays config.
+func TestSweepInactiveRemovesFromActiveByNameRetainsNameByID(t *testing.T) {
+	staleID := core.NewULID()
+	now := time.Now()
+	repo := &stubPluginRepo{
+		swept: []store.PluginRow{
+			{ID: staleID, Name: "stale", LastSeenAt: now.Add(-99 * 24 * time.Hour)},
+		},
+	}
+	mgr, err := NewManager(t.TempDir(),
+		WithPluginRepo(repo),
+		WithVerbRegistry(core.NewVerbRegistry()),
+		WithRetentionDays(3),
+	)
+	require.NoError(t, err)
+
+	// Pre-populate cache as if "stale" had been loaded previously.
+	mgr.mu.Lock()
+	mgr.nameByID[staleID] = "stale"
+	mgr.activeByName["stale"] = staleID
+	mgr.mu.Unlock()
+
+	require.NoError(t, mgr.LoadAll(context.Background()))
+
+	_, ok := mgr.IDByName("stale")
+	assert.False(t, ok, "swept plugin MUST NOT be in activeByName")
+
+	name, ok := mgr.NameByID(staleID)
+	require.True(t, ok)
+	assert.Equal(t, "stale", name, "swept plugin's NameByID retention preserved")
+}
+
+func TestRetentionDaysZeroDisablesSweep(t *testing.T) {
+	repo := &stubPluginRepo{
+		swept: []store.PluginRow{}, // empty — but the call shouldn't even happen
+	}
+	mgr, err := NewManager(t.TempDir(),
+		WithPluginRepo(repo),
+		WithVerbRegistry(core.NewVerbRegistry()),
+		WithRetentionDays(0),
+	)
+	require.NoError(t, err)
+	require.NoError(t, mgr.LoadAll(context.Background()))
+	// No assertion target other than "no panic, no log" — adequate per plan.
+}

@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
@@ -93,9 +94,11 @@ type Manager struct {
 	// populations (active plugins + historical plugins + system sentinels);
 	// activeByName resolves only currently-loaded plugins. Both are
 	// guarded by the existing m.mu RWMutex.
-	pluginRepo   store.PluginRepo
-	nameByID     map[ulid.ULID]string
-	activeByName map[string]ulid.ULID
+	pluginRepo      store.PluginRepo
+	nameByID        map[ulid.ULID]string
+	activeByName    map[string]ulid.ULID
+	retentionDays   int  // plugin row TTL (days); 0 = sweep disabled; default 3
+	retentionDaysSet bool // true iff WithRetentionDays was called explicitly
 }
 
 // ManagerOption configures the Manager.
@@ -189,6 +192,16 @@ func WithPluginRepo(repo store.PluginRepo) ManagerOption {
 	return func(m *Manager) { m.pluginRepo = repo }
 }
 
+// WithRetentionDays configures plugin row TTL (days). After RetentionDays
+// of inactivity, a plugin row is deactivated (gc_at set) at the end of
+// LoadAll. 0 disables the sweep entirely. Default: 3.
+func WithRetentionDays(days int) ManagerOption {
+	return func(m *Manager) {
+		m.retentionDays = days
+		m.retentionDaysSet = true
+	}
+}
+
 // Registry returns the service registry, or nil if not configured.
 func (m *Manager) Registry() *ServiceRegistry {
 	return m.registry
@@ -210,6 +223,10 @@ func NewManager(pluginsDir string, opts ...ManagerOption) (*Manager, error) {
 	}
 	for _, opt := range opts {
 		opt(m)
+	}
+	// Default retentionDays to 3 when WithRetentionDays was not called.
+	if !m.retentionDaysSet {
+		m.retentionDays = 3
 	}
 	// If WithLuaHost was used, cache its capabilities for the same lookup path.
 	if m.luaHost != nil {
@@ -568,6 +585,29 @@ func (m *Manager) LoadAll(ctx context.Context) error {
 	if m.aliasSeeder != nil && m.aliasCache != nil {
 		if err := m.seedAliases(ctx); err != nil {
 			slog.Error("failed to seed plugin aliases", "error", err)
+		}
+	}
+
+	// w9ml T8: GC sweep — runs AFTER all loads have refreshed last_seen_at,
+	// so a plugin loaded in this cycle is never swept in the same cycle
+	// (INV-W9ML-8). Skipped on the graceful-degradation early return path
+	// because partial-load failures may leave last_seen_at stale.
+	if m.pluginRepo != nil && m.retentionDays > 0 {
+		swept, err := m.pluginRepo.SweepInactive(ctx, m.retentionDays)
+		if err != nil {
+			return oops.Code("PLUGIN_MANAGER_SWEEP").Wrap(err)
+		}
+		for i := range swept {
+			row := &swept[i]
+			m.mu.Lock()
+			delete(m.activeByName, row.Name)
+			// nameByID intentionally retained for historical resolution.
+			m.mu.Unlock()
+			slog.Info("plugin.gc",
+				"name", row.Name,
+				"id", row.ID.String(),
+				"last_seen_at", row.LastSeenAt.Format(time.RFC3339),
+			)
 		}
 	}
 
