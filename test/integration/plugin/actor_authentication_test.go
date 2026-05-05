@@ -16,9 +16,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
-	"github.com/oklog/ulid/v2"
 	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/core"
@@ -99,11 +99,11 @@ func buildForgeryPlugin() (string, *plugins.Manifest) {
 // core.WithActor(ctx, storedActor) before calling emitter.Emit, and the
 // resolveActor func returns whatever's on ctx.
 type hostFixture struct {
-	host         *goplugin.Host
-	bus          *eventbustest.Embedded
-	manifest     *plugins.Manifest
-	pluginULID   ulid.ULID // registry-resolved ULID for the plugin's name
-	cleanup      func()
+	host       *goplugin.Host
+	bus        *eventbustest.Embedded
+	manifest   *plugins.Manifest
+	pluginULID ulid.ULID // registry-resolved ULID for the plugin's name
+	cleanup    func()
 }
 
 func newHostFixture(ctx context.Context) *hostFixture {

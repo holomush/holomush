@@ -2999,7 +2999,7 @@ In `Taskfile.yaml`:
 
 `site/docs/operating/legacy-id-cutover.md`:
 
-```markdown
+````markdown
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 HoloMUSH Contributors -->
 
@@ -3024,6 +3024,8 @@ binary that includes the proto-field removal.
 DATABASE_URL=... NATS_URL=... NATS_STREAM_NAME=events task migrate:plugin-actors-cutover
 ```
 
+```text
+
 ## Failure modes
 
 - **PG TRUNCATE failure:** exits non-zero before purge. Re-run.
@@ -3032,6 +3034,8 @@ DATABASE_URL=... NATS_URL=... NATS_STREAM_NAME=events task migrate:plugin-actors
 ## Post-cutover
 
 Deploy the new binary. The bootstrap orphan check passes on first start.
+```
+````
 
 - [ ] **Step 4: Smoke test**
 
