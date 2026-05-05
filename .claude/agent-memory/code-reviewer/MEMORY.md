@@ -216,7 +216,14 @@ Keep under 200 lines. Curate — don't hoard.
   is added to Host.
 
 - **Plan-file markdown breaks lint gate**: `task lint` includes `rumdl` markdown
-  lint over `docs/`. A stray bare ` ``` ` fence (e.g., copy-paste artifact in a
-  plan edit) will fail `lint:markdown` and block CI. Always run `task lint`
-  after any plan file edit, or use `rumdl fmt` to autofix. Encountered: T10
-  review (2026-05-04).
+  lint over `docs/`. A stray bare ` ``` ` fence will fail `lint:markdown` and
+  block CI. Run `task lint` after any plan file edit.
+
+- **`task test:int` explicit package list excludes `cmd/holomush/`**: `Taskfile.yaml:119-120`
+  enumerates packages that contain `//go:build integration` files; `cmd/holomush/` is
+  intentionally absent (see comment at line 107-111 about `./...` compilation failures).
+  Integration tests written in `cmd/holomush/*_integration_test.go` are never run by
+  `task test:int` or `task pr-prep`. When a task adds integration tests to that package,
+  adding `./cmd/holomush/` to the list is a required companion change. Verify by running
+  `task test:int` and grepping the output for the test name — absence means the package
+  is not covered. Encountered: T19 review (holomush-w9ml.17, 2026-05-04).

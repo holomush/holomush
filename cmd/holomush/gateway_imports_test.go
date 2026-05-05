@@ -33,6 +33,8 @@ var coreOnlyFiles = map[string]struct{}{
 	"migrate_test.go":                 {},
 	"cmd_plugin_events.go":            {},
 	"cmd_plugin_validate.go":          {},
+	"bootstrap_orphan.go":             {},
+	"bootstrap_orphan_test.go":        {},
 }
 
 var forbidden = []string{
