@@ -322,6 +322,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 		holoGRPC.WithSubscriber(subscriber),
 		holoGRPC.WithHistoryReader(historyReader),
 		holoGRPC.WithGameID(s.cfg.EventBus.GameID),
+		holoGRPC.WithIdentityRegistry(pluginManager),
 	}
 	if s.cfg.StreamRegistry != nil {
 		coreServerOpts = append(coreServerOpts, holoGRPC.WithStreamRegistry(s.cfg.StreamRegistry))
