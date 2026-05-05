@@ -24,6 +24,7 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/eventbustest"
 	"github.com/holomush/holomush/internal/eventbus/history"
+	"github.com/holomush/holomush/internal/plugin/plugintest"
 	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
 )
 
@@ -351,6 +352,44 @@ func TestCrossTierQueryEndToEnd(t *testing.T) {
 
 				_, nerr := stream.Next(ctx)
 				assert.ErrorIs(t, nerr, io.EOF)
+			},
+		},
+		{
+			name: "scenario_w9ml_plugin_actor_ulid_round_trip",
+			run: func(t *testing.T, ctx context.Context, subject eventbus.Subject) {
+				// Post-w9ml: plugin actors carry a ULID via Actor.ID
+				// (resolved at stamp time via IdentityRegistry.IDByName).
+				// This scenario asserts a publishd plugin-actor event
+				// round-trips through JS hot tier with the ULID intact —
+				// i.e., publisher serializes ULID bytes into the proto
+				// envelope, subscriber/reader reconstructs them, and the
+				// resulting eventbus.Event.Actor preserves both Kind and ID.
+				pluginULID := plugintest.PluginULIDFromName("core-scenes")
+				pluginEv := mintAt(subject, baseNow.Add(-30*time.Minute), "plugin")
+				pluginEv.Actor = eventbus.Actor{
+					Kind: eventbus.ActorKindPlugin,
+					ID:   pluginULID,
+				}
+				publishAll(ctx, t, pub, []eventbus.Event{pluginEv})
+				bus.AwaitStreamLastSeq(t, currentStreamLastSeq(t, bus)+0, 5*time.Second)
+
+				r := buildReader(bus, pool, streamMaxAge, baseNow)
+				stream, err := r.QueryHistory(ctx, eventbus.HistoryQuery{
+					Subject:   subject,
+					NotBefore: baseNow.Add(-1 * time.Hour),
+					Direction: eventbus.DirectionForward,
+					PageSize:  10,
+				})
+				require.NoError(t, err)
+				t.Cleanup(func() { _ = stream.Close() })
+
+				got := drainStream(t, stream)
+				require.Len(t, got, 1)
+				assert.Equal(t, pluginEv.ID, got[0].ID)
+				assert.Equal(t, eventbus.ActorKindPlugin, got[0].Actor.Kind,
+					"plugin Actor.Kind MUST round-trip through hot tier")
+				assert.Equal(t, pluginULID, got[0].Actor.ID,
+					"plugin Actor.ID (ULID) MUST round-trip byte-equal through hot tier")
 			},
 		},
 		{
