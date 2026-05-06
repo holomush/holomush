@@ -21,6 +21,7 @@
 | `internal/eventbus/crypto/dek/manager.go` | `Invalidator` + `BindingResolver` types, updated `NewManager`, `manager` struct, `Add`/`Rotate` impl |
 | `internal/eventbus/crypto/dek/store.go` | `updateParticipants`, `markRotated`, `markDestroyed`, `selectByBindingID` |
 | `internal/eventbus/crypto/dek/store_add_rotate_test.go` | Tests for new Store methods |
+| `internal/eventbus/crypto/dek/store_integrity_test.go` | INV-37 startup integrity test |
 | `internal/eventbus/crypto/dek/manager_test.go` | Nil-guard tests for new params |
 | `internal/eventbus/crypto/dek/manager_integration_test.go` | Call-site updates, Add/Rotate unit + integration tests, INV tests |
 | `internal/eventbus/crypto/dek/store_integration_test.go` | Call-site updates (2 calls) |
@@ -310,7 +311,7 @@ Append after `updateParticipants` in `internal/eventbus/crypto/dek/store.go`:
 func (s *Store) markRotated(ctx context.Context, keyID codec.KeyID, version uint32, supersededBy int64) error {
     tag, err := s.pool.Exec(ctx, `
         UPDATE crypto_keys
-           SET rotated_at = NOW(), superseded_by = $4
+           SET rotated_at = NOW(), superseded_by = $3
          WHERE id = $1 AND version = $2 AND rotated_at IS NULL AND destroyed_at IS NULL`,
         int64(keyID), version, supersededBy,
     )
@@ -1315,57 +1316,69 @@ Expected: PASS
 
 **Files:**
 - Modify: `internal/eventbus/crypto/dek/store.go`
-- Modify: `internal/eventbus/crypto/dek/manager_integration_test.go`
+- Create: `internal/eventbus/crypto/dek/store_integrity_test.go`
 
 INV-37 requires that a crashed Rotate (two unrotated rows for the same context) be resolvable by a startup integrity check without manual intervention.
 
 - [ ] **Step 1: Write failing integration test**
 
-Append to `internal/eventbus/crypto/dek/manager_integration_test.go`:
+Create `internal/eventbus/crypto/dek/store_integrity_test.go` in package `dek` (internal test — accesses unexported `row` and `insert` directly, avoiding both the `Row` name collision with the existing exported `Row` type and the INV-27 `[]byte` field guard):
 
 ```go
-// TestIntegration_StartupIntegrity_ResolvesCrashedRotate is INV-37.
-// Simulates a crashed Rotate by directly inserting a second unrotated row
-// (bypassing Manager.Rotate), then verifies the integrity check resolves it.
-func TestIntegration_StartupIntegrity_ResolvesCrashedRotate(t *testing.T) {
-    pool := testIntegrationPool(t)
-    store := dek.NewStore(pool)
+//go:build integration
 
-    ctxID := dek.ContextID{Type: "scene", ID: "inv37-" + randomSuffix()}
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 HoloMUSH Contributors
 
-    // Insert v1 directly via store.
-    r1 := dek.Row{
+package dek
+
+import (
+    "context"
+    "testing"
+    "time"
+
+    "github.com/jackc/pgx/v5/pgxpool"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
+)
+
+// TestStore_ResolveIntegrity_ResolvesCrashedRotate is INV-37.
+// Simulates a crashed Rotate by directly inserting two unrotated rows
+// (bypassing Manager.Rotate via package-internal access), then verifies
+// ResolveIntegrity resolves them.
+func TestStore_ResolveIntegrity_ResolvesCrashedRotate(t *testing.T) {
+    pool := testPool(t)
+    store := NewStore(pool)
+
+    ctxID := ContextID{Type: "scene", ID: "inv37-test"}
+
+    // Insert v1 — unexported insert + row accessible from package dek.
+    r1 := row{
         ContextType: ctxID.Type, ContextID: ctxID.ID, Version: 1,
         WrappedDEK:   []byte("fake-dek-v1"),
         WrapProvider: "test", WrapKeyID: "k1",
-        Participants: []dek.Participant{
+        Participants: []Participant{
             {PlayerID: "alice", CharacterID: "c-alice", BindingID: "bind-alice", JoinedAt: time.Now().UTC()},
         },
     }
-    _, err := store.Insert(context.Background(), r1)
+    _, err := store.insert(context.Background(), r1)
     require.NoError(t, err)
 
     // Simulate crashed Rotate: insert v2 without marking v1 rotated.
-    r2 := dek.Row{
+    r2 := row{
         ContextType: ctxID.Type, ContextID: ctxID.ID, Version: 2,
         WrappedDEK:   []byte("fake-dek-v2"),
         WrapProvider: "test", WrapKeyID: "k1",
-        Participants: []dek.Participant{
+        Participants: []Participant{
             {PlayerID: "bob", CharacterID: "c-bob", BindingID: "bind-bob", JoinedAt: time.Now().UTC()},
         },
     }
-    _, err = store.Insert(context.Background(), r2)
+    _, err = store.insert(context.Background(), r2)
     require.NoError(t, err)
 
     // Both rows exist with rotated_at IS NULL. Verify pre-condition.
-    connStr, cleanup := newTestPGPool(t)
-    defer cleanup()
-    rawPool, err := pgxpool.New(context.Background(), connStr)
-    require.NoError(t, err)
-    defer rawPool.Close()
-
     var count int
-    err = rawPool.QueryRow(context.Background(), `
+    err = pool.QueryRow(context.Background(), `
         SELECT COUNT(*) FROM crypto_keys
          WHERE context_type = $1 AND context_id = $2
            AND rotated_at IS NULL AND destroyed_at IS NULL`,
@@ -1378,7 +1391,7 @@ func TestIntegration_StartupIntegrity_ResolvesCrashedRotate(t *testing.T) {
     require.NoError(t, err)
 
     // After resolution, only v2 should remain unrotated.
-    err = rawPool.QueryRow(context.Background(), `
+    err = pool.QueryRow(context.Background(), `
         SELECT COUNT(*) FROM crypto_keys
          WHERE context_type = $1 AND context_id = $2
            AND rotated_at IS NULL AND destroyed_at IS NULL`,
@@ -1388,7 +1401,7 @@ func TestIntegration_StartupIntegrity_ResolvesCrashedRotate(t *testing.T) {
 
     // v1 should be marked rotated.
     var rotatedAt *time.Time
-    err = rawPool.QueryRow(context.Background(), `
+    err = pool.QueryRow(context.Background(), `
         SELECT rotated_at FROM crypto_keys
          WHERE context_type = $1 AND context_id = $2 AND version = 1`,
         ctxID.Type, ctxID.ID).Scan(&rotatedAt)
@@ -1397,43 +1410,10 @@ func TestIntegration_StartupIntegrity_ResolvesCrashedRotate(t *testing.T) {
 }
 ```
 
-Note: `Store.Insert` and `Store.ResolveIntegrity` are exported wrappers — see Step 2 and Step 3.
-
 Run: `task test:int`
-Expected: FAIL — Insert / ResolveIntegrity not defined
+Expected: FAIL — ResolveIntegrity not defined
 
-- [ ] **Step 2: Add exported Insert helper to Store**
-
-In `internal/eventbus/crypto/dek/store.go`, add a thin exported wrapper around the unexported `insert` method for test use:
-
-```go
-// Insert is the exported test seam for the unexported insert method.
-// Tests simulating a crashed Rotate use this to insert a second unrotated
-// row without going through Manager.Rotate. Production code uses the
-// Manager; this exists solely for INV-37 integration tests.
-func (s *Store) Insert(ctx context.Context, r Row) (int64, error) {
-    return s.insert(ctx, row{
-        ContextType:  r.ContextType,
-        ContextID:    r.ContextID,
-        Version:      r.Version,
-        WrappedDEK:   r.WrappedDEK,
-        WrapProvider: r.WrapProvider,
-        WrapKeyID:    r.WrapKeyID,
-        Participants: r.Participants,
-    })
-}
-
-// Row is the exported type alias for test use. Mirrors the unexported row.
-type Row struct {
-    ContextType, ContextID string
-    Version                uint32
-    WrappedDEK             []byte
-    WrapProvider, WrapKeyID string
-    Participants           []Participant
-}
-```
-
-- [ ] **Step 3: Add ResolveIntegrity to Store**
+- [ ] **Step 2: Add ResolveIntegrity to Store**
 
 Append after `markDestroyed` in `internal/eventbus/crypto/dek/store.go`:
 
@@ -1492,12 +1472,12 @@ func (s *Store) ResolveIntegrity(ctx context.Context) error {
 }
 ```
 
-- [ ] **Step 4: Run integration tests**
+- [ ] **Step 3: Run integration tests**
 
 Run: `task test:int`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ---
 
@@ -1722,7 +1702,7 @@ bd create \
 **Plan reference:** docs/superpowers/plans/2026-05-06-phase4-add-rotate.md § Task 6
 
 **TDD acceptance criteria:**
-- TestIntegration_StartupIntegrity_ResolvesCrashedRotate — two unrotated rows → integrity check resolves, v1 marked rotated, v2 sole active
+- TestStore_ResolveIntegrity_ResolvesCrashedRotate — two unrotated rows → integrity check resolves, v1 marked rotated, v2 sole active
 
 **Verification steps:**
 - task lint
@@ -1730,10 +1710,10 @@ bd create \
 - task test -- ./internal/eventbus/crypto/dek/
 
 **Files touched:**
-- internal/eventbus/crypto/dek/store.go — add ResolveIntegrity method, Insert/Row exported test seams
-- internal/eventbus/crypto/dek/manager_integration_test.go — INV-37 integration test
+- internal/eventbus/crypto/dek/store.go — add ResolveIntegrity method
+- internal/eventbus/crypto/dek/store_integrity_test.go — INV-37 integration test (package dek, accesses unexported row/insert)
 
-**Dependencies:** holomush-fi0n.7 (integration test helpers defined in T5)
+**Dependencies:** holomush-fi0n.3 (testPool helper)
 
 **Out of scope:** Production wiring of ResolveIntegrity at server startup (separate task — call site in cmd/holomush/); multi-row crash scenarios beyond the basic two-row case
 EOF
