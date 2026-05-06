@@ -69,6 +69,7 @@ import (
     "testing"
     "time"
 
+    "github.com/jackc/pgx/v5"
     "github.com/jackc/pgx/v5/pgxpool"
     "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
@@ -180,7 +181,7 @@ func TestStore_UpdateParticipants_NoActiveDEK(t *testing.T) {
         JoinedAt: time.Now().UTC(),
     })
     require.Error(t, err)
-    assert.Contains(t, err.Error(), "pgx.ErrNoRows")
+    assert.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 // TestStore_MarkRotated_SetsRotatedAtAndSupersededBy verifies markRotated
