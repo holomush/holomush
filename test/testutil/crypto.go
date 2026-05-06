@@ -64,10 +64,19 @@ const DefaultWait = 5 * time.Second
 // eventbus.StreamName.
 func WaitForOneJetStreamMsg(t *testing.T, bus *EmbeddedBus, subject string, timeout time.Duration) jetstream.Msg {
 	t.Helper()
+	return WaitForOneJetStreamMsgOnStream(t, bus, eventbus.StreamName, subject, timeout)
+}
+
+// WaitForOneJetStreamMsgOnStream pull-fetches the first message on subject
+// from the named JetStream stream and returns it. Use this when the target
+// message is not on the default EVENTS stream (e.g., audit events on the
+// AUDIT stream).
+func WaitForOneJetStreamMsgOnStream(t *testing.T, bus *EmbeddedBus, streamName, subject string, timeout time.Duration) jetstream.Msg {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cons, err := bus.JS.OrderedConsumer(ctx, eventbus.StreamName, jetstream.OrderedConsumerConfig{
+	cons, err := bus.JS.OrderedConsumer(ctx, streamName, jetstream.OrderedConsumerConfig{
 		FilterSubjects: []string{subject},
 	})
 	require.NoError(t, err)
@@ -77,7 +86,7 @@ func WaitForOneJetStreamMsg(t *testing.T, bus *EmbeddedBus, subject string, time
 	for msg := range msgs.Messages() {
 		return msg
 	}
-	require.Fail(t, "no JetStream message received within timeout", "subject=%s", subject)
+	require.Fail(t, "no JetStream message received within timeout", "stream=%s subject=%s", streamName, subject)
 	return nil
 }
 
