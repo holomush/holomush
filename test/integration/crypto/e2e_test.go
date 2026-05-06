@@ -10,24 +10,16 @@
 // character-binding (the participant scenario) and plugin-actor (the
 // Decision 5 regression lock).
 //
-// Cold-tier wiring note: as of CodeRabbit autofix Pass 2 (PR #3521,
-// 2026-05-04), history.NewReader exposes WithCryptoCold(opts...) which
-// forwards ColdTierOption values to the default postgres cold tier. The
-// cold-read tests in this file still use a local e2eColdTier shim
-// because they exercise additional fixture-specific control surfaces
-// (e.g., bypassing the hot tier deterministically); the shim's
-// correctness w.r.t. the production dispatcher is locked by the
-// unit-level tests in internal/eventbus/history/cold_postgres_test.go
-// (TestColdPostgresUnmarshalsEnvelope) and dispatcher_test.go. New
-// callers wiring crypto into production cold reads should use
-// history.WithCryptoCold(history.WithColdHistoryAuthGuard(g),
-// history.WithColdHistoryDEKManager(m),
-// history.WithColdHistoryDecryptAuditEmitter(em)).
+// Cold-tier wiring: as of holomush-ojw1.7 (2026-05-06), history.NewReader
+// exposes WithHistoryAuth(g, m, em) which wires both hot and cold tiers
+// symmetrically. The cold-read tests use buildColdReader which calls the
+// real production postgres cold tier via WithHistoryAuth. Bypassing the
+// hot tier deterministically is achieved by setting the clock to "far
+// future" so every query routes to cold.
 package crypto_test
 
 import (
 	"context"
-	"database/sql"
 	"strconv"
 	"testing"
 	"time"
@@ -35,7 +27,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
@@ -46,8 +37,6 @@ import (
 	"github.com/holomush/holomush/internal/eventbus/audit"
 	"github.com/holomush/holomush/internal/eventbus/authguard"
 	guardaudit "github.com/holomush/holomush/internal/eventbus/authguard/audit"
-	"github.com/holomush/holomush/internal/eventbus/codec"
-	"github.com/holomush/holomush/internal/eventbus/crypto/aad"
 	"github.com/holomush/holomush/internal/eventbus/crypto/dek"
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
 	"github.com/holomush/holomush/internal/eventbus/history"
@@ -55,7 +44,7 @@ import (
 	"github.com/holomush/holomush/internal/plugin/plugintest"
 	pluginsdk "github.com/holomush/holomush/pkg/plugin"
 	corev1 "github.com/holomush/holomush/pkg/proto/holomush/core/v1"
-	eventbusv1 "github.com/holomush/holomush/pkg/proto/holomush/eventbus/v1"
+
 	"github.com/holomush/holomush/test/testutil"
 )
 
@@ -293,177 +282,18 @@ func contextIDFromLegacySubject(subject string) (dek.ContextID, bool) {
 	return dek.ContextID{}, false
 }
 
-// e2eColdTier reads from events_audit and runs each row through the
-// production codec / AAD / authguard chain — equivalent to what the cold
-// reader's dispatcher does, but accessible from a test that wires its
-// own dependencies (history.NewReader's cold-crypto options aren't yet
-// exposed as Reader-level options).
-type e2eColdTier struct {
-	pool    *pgxpool.Pool
-	guard   eventbus.SessionAuthGuard
-	dekMgr  eventbus.SessionDEKManager
-	auditEm eventbus.SessionAuditEmitter
-}
-
-func (c *e2eColdTier) Read(ctx context.Context, q eventbus.HistoryQuery, _ time.Time, pageSize int, _ *history.StreamStateSnapshot) ([]eventbus.Event, error) {
-	rows, err := c.pool.Query(ctx, `
-		SELECT id, envelope, js_seq, codec, dek_ref, dek_version
-		FROM events_audit
-		WHERE subject = $1
-		ORDER BY js_seq ASC
-		LIMIT $2`, string(q.Subject), pageSize)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []eventbus.Event
-	for rows.Next() {
-		var (
-			idBytes       []byte
-			envelopeBytes []byte
-			seq           int64
-			codecStr      string
-			dekRef        sql.NullInt64
-			dekVersion    sql.NullInt32
-		)
-		if scanErr := rows.Scan(&idBytes, &envelopeBytes, &seq, &codecStr, &dekRef, &dekVersion); scanErr != nil {
-			return nil, scanErr
-		}
-		ev, metaOnly, dispatchErr := dispatchColdRow(ctx, envelopeBytes, codecStr, dekRef, dekVersion, q.Identity, c.guard, c.dekMgr)
-		if dispatchErr != nil {
-			return nil, dispatchErr
-		}
-		var id ulid.ULID
-		copy(id[:], idBytes)
-		ev.ID = id
-		ev.Seq = uint64(seq) //nolint:gosec
-		ev.MetadataOnly = metaOnly
-		out = append(out, ev)
-	}
-	return out, rows.Err()
-}
-
-// dispatchColdRow mirrors history.decodeAuthorizeAndDispatch for the cold
-// path. The duplication is exact w.r.t. the production codec + AAD + decode
-// chain because we import the same aad.Build and codec.Resolve.
-func dispatchColdRow(
-	ctx context.Context,
-	envelopeBytes []byte,
-	codecStr string,
-	dekRefCol sql.NullInt64,
-	dekVerCol sql.NullInt32,
-	identity eventbus.SessionIdentity,
-	guard eventbus.SessionAuthGuard,
-	dekMgr eventbus.SessionDEKManager,
-) (eventbus.Event, bool, error) {
-	var pbEnvelope eventbusv1.Event
-	if err := proto.Unmarshal(envelopeBytes, &pbEnvelope); err != nil {
-		return eventbus.Event{}, false, err
-	}
-	codecName := codec.Name(codecStr)
-	if codecName == codec.NameIdentity {
-		return eventFromEnvelope(&pbEnvelope, pbEnvelope.GetPayload()), false, nil
-	}
-	var keyID codec.KeyID
-	var keyVer uint32
-	if dekRefCol.Valid {
-		keyID = codec.KeyID(dekRefCol.Int64) //nolint:gosec
-	}
-	if dekVerCol.Valid {
-		keyVer = uint32(dekVerCol.Int32) //nolint:gosec
-	}
-	var eventID ulid.ULID
-	if raw := pbEnvelope.GetId(); len(raw) == 16 {
-		copy(eventID[:], raw)
-	}
-	req := eventbus.SessionCheckRequest{
-		Identity:   identity,
-		KeyID:      keyID,
-		KeyVersion: keyVer,
-		EventType:  pbEnvelope.GetType(),
-		EventID:    eventID,
-	}
-	decision, err := guard.Check(ctx, req)
-	if err != nil {
-		return eventbus.Event{}, false, err
-	}
-	if !decision.Permit {
-		return eventFromEnvelope(&pbEnvelope, nil), true, nil
-	}
-	key, err := dekMgr.Resolve(ctx, keyID, keyVer)
-	if err != nil {
-		return eventbus.Event{}, false, err
-	}
-	aadBytes, err := aad.Build(&pbEnvelope, codecStr, uint64(keyID), keyVer)
-	if err != nil {
-		return eventbus.Event{}, false, err
-	}
-	cdc, err := codec.Resolve(codecName)
-	if err != nil {
-		return eventbus.Event{}, false, err
-	}
-	plaintext, err := cdc.Decode(ctx, pbEnvelope.GetPayload(), key, aadBytes)
-	if err != nil {
-		return eventbus.Event{}, false, err
-	}
-	return eventFromEnvelope(&pbEnvelope, plaintext), false, nil
-}
-
-// eventFromEnvelope mirrors history.buildHistoryEventFromEnvelope.
-func eventFromEnvelope(env *eventbusv1.Event, payload []byte) eventbus.Event {
-	var id ulid.ULID
-	if raw := env.GetId(); len(raw) == 16 {
-		copy(id[:], raw)
-	}
-	var actorID ulid.ULID
-	if raw := env.GetActor().GetId(); len(raw) == 16 {
-		copy(actorID[:], raw)
-	}
-	return eventbus.Event{
-		ID:        id,
-		Subject:   eventbus.Subject(env.GetSubject()),
-		Type:      eventbus.Type(env.GetType()),
-		Timestamp: env.GetTimestamp().AsTime(),
-		Actor: eventbus.Actor{
-			Kind: protoActorKindToEventbus(env.GetActor().GetKind()),
-			ID:   actorID,
-		},
-		Payload: payload,
-	}
-}
-
-func protoActorKindToEventbus(k eventbusv1.ActorKind) eventbus.ActorKind {
-	switch k {
-	case eventbusv1.ActorKind_ACTOR_KIND_CHARACTER:
-		return eventbus.ActorKindCharacter
-	case eventbusv1.ActorKind_ACTOR_KIND_PLAYER:
-		return eventbus.ActorKindPlayer
-	case eventbusv1.ActorKind_ACTOR_KIND_SYSTEM:
-		return eventbus.ActorKindSystem
-	case eventbusv1.ActorKind_ACTOR_KIND_PLUGIN:
-		return eventbus.ActorKindPlugin
-	default:
-		return eventbus.ActorKindUnknown
-	}
-}
-
-// buildColdReader wires a Reader with a custom cold tier whose dispatcher
-// chain has the AuthGuard + DEKManager + AuditEmitter populated. The hot
-// tier is left as the default (it sees the same JetStream the publisher
+// buildColdReader wires a Reader using WithHistoryAuth so the real
+// production cold tier (postgresColdTier) handles decodeAuthAndDispatch
+// with the AuthGuard + DEKManager + AuditEmitter populated. The hot tier
+// is left as the default (it sees the same JetStream the publisher
 // just wrote to), but our queries set the clock to "far future" so every
 // event is read from cold.
 func buildColdReader(env *e2eEnv) *history.Reader {
-	coldTier := &e2eColdTier{
-		pool:    env.pool,
-		guard:   env.guard,
-		dekMgr:  env.dekMgr,
-		auditEm: env.auditEm,
-	}
 	farFuture := time.Now().UTC().Add(100 * 365 * 24 * time.Hour)
 	return history.NewReader(env.bus.JS, env.pool,
 		eventbus.Config{}.Defaults().StreamMaxAge,
 		func() time.Time { return farFuture },
-		history.WithColdTier(coldTier),
+		history.WithHistoryAuth(env.guard, env.dekMgr, env.auditEm),
 	)
 }
 
