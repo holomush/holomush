@@ -12,7 +12,7 @@
 
 ---
 
-### Task 1: Add `hotOpts` field, `WithCryptoHot`, `WithHistoryAuth`, and wire `NewReader`
+## Task 1: Add `hotOpts` field, `WithCryptoHot`, `WithHistoryAuth`, and wire `NewReader`
 
 **Files:**
 
@@ -590,6 +590,7 @@ task test:int
 ```
 
 Expected: all integration tests PASS, including the 3 cold-tier BDD scenarios in `e2e_test.go`:
+
 - "delivers plaintext to the participant via cold tier"
 - "delivers metadata-only to a non-participant via cold tier"
 - "round-trips through cold tier with Actor.legacy_id preserved"
@@ -630,3 +631,129 @@ jj commit -m "test(crypto): replace e2eColdTier shim with WithHistoryAuth (INV-5
 | INV-4: `WithCryptoHot` no-op with `WithHotTier` | Task 2 Step 4 | `TestWithCryptoHotIgnoredWhenCustomHotTier` |
 | INV-5: E2E cold-tier tests unchanged | Task 5 Step 7 | Existing Ginkgo scenarios |
 | INV-6: `newHistoryReader(nil, nil, nil)` preserves nil-auth | Task 4 Step 2 | `TestNewHistoryReaderNilPreservesNilAuth` |
+
+---
+
+## Bead chain structure
+
+```text
+holomush-ojw1                   (existing epic — Phase 3: EventSink encrypt + AuthGuard + decrypt-on-fanout + downgrade fence)
+└── holomush-ojw1.7             (existing task — plumb cold-tier auth options through history.NewReader)
+    ├── holomush-ojw1.7.1       Reader options + unit tests (INV-1/2/3/4)
+    ├── holomush-ojw1.7.2       Production wiring + INV-6 test
+    └── holomush-ojw1.7.3       Replace e2eColdTier shim with WithHistoryAuth (INV-5)
+```
+
+### holomush-ojw1.7.1
+
+```bash
+bd create \
+  --title "Reader options + unit tests (INV-1/2/3/4)" \
+  --type task \
+  --priority 2 \
+  --parent holomush-ojw1.7 \
+  --description "$(cat <<'EOF'
+**Goal:** Add hotOpts field, WithCryptoHot, WithHistoryAuth to history.Reader, wire hotOpts in NewReader, and write unit tests for invariants INV-1 through INV-4.
+
+**Design reference:** docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md §1 (Reader struct), §2 (Option functions), Invariants table
+
+**Plan reference:** docs/superpowers/plans/2026-05-06-history-reader-crypto-options.md Task 1 + Task 2
+
+**TDD acceptance criteria:**
+- TestWithHistoryAuthProducesSameColdOptsAsCryptoCold (INV-1)
+- TestWithHistoryAuthProducesSameHotOptsAsCryptoHot (INV-2)
+- TestNewReaderForwardsHotOptsToHotTier (INV-3) — uses eventbustest.New(t) for embedded NATS
+- TestWithCryptoHotIgnoredWhenCustomHotTier (INV-4)
+
+**Verification steps:**
+- task test -- ./internal/eventbus/history/ -run 'TestWithHistoryAuth|TestWithCryptoHot|TestNewReaderForwards'
+- task test -- ./internal/eventbus/history/ (full package, verify no regressions)
+
+**Files touched:**
+- internal/eventbus/history/tier.go:191-247 — add hotOpts field, WithCryptoHot, WithHistoryAuth, wire NewReader
+- internal/eventbus/history/tier_crypto_options_test.go — new file, 4 tests in package history (internal)
+
+**Dependencies:** none (can start immediately)
+
+**Out of scope:** Crypto component construction (dek.Manager, authguard.Guard, guardaudit.Emitter); hot-tier subscriber path changes
+EOF
+)"
+```
+
+### holomush-ojw1.7.2
+
+```bash
+bd create \
+  --title "Production wiring + INV-6 test" \
+  --type task \
+  --priority 2 \
+  --parent holomush-ojw1.7 \
+  --description "$(cat <<'EOF'
+**Goal:** Add optional auth params to newHistoryReader in sub_grpc.go, pass nil at the call site, and add INV-6 unit test for nil-auth passthrough.
+
+**Design reference:** docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md §3 (Production wiring)
+
+**Plan reference:** docs/superpowers/plans/2026-05-06-history-reader-crypto-options.md Task 3 + Task 4
+
+**TDD acceptance criteria:**
+- TestNewHistoryReaderNilPreservesNilAuth (INV-6) — nil guard/dekMgr/auditEm must return valid HistoryReader without panic
+
+**Verification steps:**
+- cd cmd/holomush && go build ./... (compile check)
+- task test -- ./cmd/holomush/ (existing tests + INV-6)
+- task test -- ./cmd/holomush/ -run TestNewHistoryReaderNil
+
+**Files touched:**
+- cmd/holomush/sub_grpc.go:661-676 — add 3 auth params to newHistoryReader, append WithHistoryAuth when non-nil
+- cmd/holomush/sub_grpc.go:297 — pass nil, nil, nil at call site
+- cmd/holomush/sub_grpc_test.go — INV-6 nil-passthrough test
+
+**Dependencies:** holomush-ojw1.7.1 (needs WithHistoryAuth to exist before wiring)
+
+**Out of scope:** Crypto component construction in production; non-nil auth wiring (separate future task)
+EOF
+)"
+```
+
+### holomush-ojw1.7.3
+
+```bash
+bd create \
+  --title "Replace e2eColdTier shim with WithHistoryAuth (INV-5)" \
+  --type task \
+  --priority 2 \
+  --parent holomush-ojw1.7 \
+  --description "$(cat <<'EOF'
+**Goal:** Delete the 145-line e2eColdTier shim (e2eColdTier type, dispatchColdRow, eventFromEnvelope, protoActorKindToEventbus), replace buildColdReader to use WithHistoryAuth with the real newPostgresColdTier, and verify E2E cold-tier tests produce identical results.
+
+**Design reference:** docs/superpowers/specs/2026-05-05-history-reader-crypto-options-design.md §4 (E2E test cleanup)
+
+**Plan reference:** docs/superpowers/plans/2026-05-06-history-reader-crypto-options.md Task 5
+
+**TDD acceptance criteria:**
+- INV-5: Existing Ginkgo BDD scenarios pass unchanged:
+  - "delivers plaintext to the participant via cold tier"
+  - "delivers metadata-only to a non-participant via cold tier"
+  - "round-trips through cold tier with Actor.legacy_id preserved"
+
+**Verification steps:**
+- task test:int (all integration tests, including 3 cold-tier scenarios)
+- task lint (catches unused imports: database/sql, proto, eventbusv1)
+- Verify e2eColdTier, dispatchColdRow, eventFromEnvelope, protoActorKindToEventbus are deleted
+
+**Files touched:**
+- test/integration/crypto/e2e_test.go:285-458 — delete e2eColdTier type+Read, dispatchColdRow, eventFromEnvelope, protoActorKindToEventbus; replace buildColdReader
+
+**Dependencies:** holomush-ojw1.7.2 (needs production wiring complete before shim removal)
+
+**Out of scope:** Production crypto construction; new E2E scenarios beyond existing cold-tier coverage
+EOF
+)"
+```
+
+### `bd dep add` edges
+
+```bash
+bd dep add holomush-ojw1.7.2 holomush-ojw1.7.1   # 7.2 depends on WithHistoryAuth from 7.1
+bd dep add holomush-ojw1.7.3 holomush-ojw1.7.2   # 7.3 depends on production wiring from 7.2
+```

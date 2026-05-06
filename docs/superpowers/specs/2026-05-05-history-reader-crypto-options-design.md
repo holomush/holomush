@@ -115,6 +115,7 @@ func buildColdReader(env *e2eEnv) *history.Reader {
 ```
 
 Delete the following (no longer needed):
+
 - `e2eColdTier` type (lines 290-295)
 - `e2eColdTier.Read` (lines 297-333)
 - `dispatchColdRow` (lines 338-399)
