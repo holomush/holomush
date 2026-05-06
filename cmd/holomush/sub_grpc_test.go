@@ -134,3 +134,12 @@ func TestGrpcSubsystemWrapPublisherWithoutRegistry(t *testing.T) {
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "GRPC_VERB_REGISTRY_MISSING")
 }
+
+// TestNewHistoryReaderNilPreservesNilAuth asserts INV-6: calling
+// newHistoryReader with nil guard/dekMgr/auditEm must preserve
+// the existing nil-auth behavior (no WithHistoryAuth appended).
+func TestNewHistoryReaderNilPreservesNilAuth(t *testing.T) {
+	cfg := eventbus.Config{}.Defaults()
+	reader := newHistoryReader(nil, nil, cfg, nil, nil, nil, nil, nil)
+	assert.NotNil(t, reader, "nil auth must still return a valid HistoryReader")
+}

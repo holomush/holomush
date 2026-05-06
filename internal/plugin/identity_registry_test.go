@@ -48,7 +48,7 @@ func (s *stubPluginRepo) Upsert(_ context.Context, in store.PluginUpsertInput) (
 		}
 	}
 	id := ulid.ULID{}
-	copy(id[:], []byte(in.Name+"00000000000000000000")[:16])
+	copy(id[:], []byte(in.Name + "00000000000000000000")[:16])
 	return id, nil, nil
 }
 
@@ -299,9 +299,11 @@ func (h *unloadStubHost) Unload(_ context.Context, _ string) error { return h.un
 func (h *unloadStubHost) DeliverEvent(_ context.Context, _ string, _ pluginsdk.Event) ([]pluginsdk.EmitEvent, error) {
 	return nil, nil
 }
+
 func (h *unloadStubHost) DeliverCommand(_ context.Context, _ string, _ pluginsdk.CommandRequest) (*pluginsdk.CommandResponse, error) {
 	return nil, nil
 }
+
 func (h *unloadStubHost) QuerySessionStreams(_ context.Context, _ string, _ SessionStreamsRequest) ([]string, error) {
 	return nil, nil
 }
@@ -317,15 +319,19 @@ type unloadStubPolicyInstaller struct {
 func (p *unloadStubPolicyInstaller) InstallPluginPolicies(_ context.Context, _ string, _ []ManifestPolicy) error {
 	return nil
 }
+
 func (p *unloadStubPolicyInstaller) InstallPluginPoliciesWithManifest(_ context.Context, _ *Manifest, _ []ManifestPolicy) error {
 	return nil
 }
+
 func (p *unloadStubPolicyInstaller) RemovePluginPolicies(_ context.Context, _ string) error {
 	return p.removeErr
 }
+
 func (p *unloadStubPolicyInstaller) ReplacePluginPolicies(_ context.Context, _ string, _ []ManifestPolicy) error {
 	return nil
 }
+
 func (p *unloadStubPolicyInstaller) ReplacePluginPoliciesWithManifest(_ context.Context, _ *Manifest, _ []ManifestPolicy) error {
 	return nil
 }
