@@ -156,3 +156,23 @@ func TestWithCryptoHotIgnoredWhenCustomHotTier(t *testing.T) {
 	assert.Same(t, customTier, r.hot, "custom tier is installed")
 	assert.Nil(t, customTier.authGuard, "custom tier authGuard unchanged — crypto not forwarded")
 }
+
+// TestNewReaderDefaultNoAuthOptions asserts INV-6 (internal check):
+// NewReader without WithCryptoHot, WithCryptoCold, or WithHistoryAuth
+// must produce a Reader whose hotOpts and coldOpts are empty — the
+// zero-value nil-auth passthrough path.
+func TestNewReaderDefaultNoAuthOptions(t *testing.T) {
+	embedded := eventbustest.New(t)
+
+	reader := NewReader(
+		embedded.JS,
+		nil,
+		24*time.Hour,
+		time.Now,
+		// No WithCryptoHot, WithCryptoCold, or WithHistoryAuth
+	)
+
+	assert.Empty(t, reader.hotOpts, "hotOpts must be empty when no crypto options passed")
+	assert.Empty(t, reader.coldOpts, "coldOpts must be empty when no crypto options passed")
+	assert.NotNil(t, reader.hot, "default hot tier still constructed")
+}
