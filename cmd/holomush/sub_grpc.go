@@ -657,6 +657,17 @@ func (a *focusStreamContributorAdapter) QuerySessionStreams(ctx context.Context,
 // be nil only when owners is also nil — the Reader surfaces
 // EVENTBUS_PLUGIN_HISTORY_NOT_WIRED when a plugin-owned subject is
 // queried without a router.
+//
+// guard, dekMgr, and auditEm are optional crypto dependencies. All three
+// MUST be non-nil for any to take effect — partial wiring is a
+// misconfiguration and is rejected silently (the Reader falls back to
+// nil-auth passthrough, same as today). The all-or-nothing contract
+// prevents half-configured states where, e.g., the AuthGuard can permit
+// a decrypt but the DEKManager is nil and panics in decodeAuthorizeAndDispatch.
+//
+// When all three are non-nil, WithHistoryAuth forwards them symmetrically
+// to both hot and cold tiers. When all three are nil (production today),
+// behavior is unchanged — sensitive events surface EVENTBUS_HISTORY_AUTH_GUARD_NIL.
 func newHistoryReader(
 	js jetstream.JetStream,
 	pool *pgxpool.Pool,
