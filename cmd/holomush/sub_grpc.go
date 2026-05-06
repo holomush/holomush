@@ -294,7 +294,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	js := s.cfg.EventBus.JS()
 	owners := historyOwnersFromPlugins(pluginManager)
 	router := audit.NewPluginHistoryRouter(pluginAuditClientProvider{mgr: pluginManager})
-	historyReader := newHistoryReader(js, pool, s.cfg.EventBus.Config(), owners, router)
+	historyReader := newHistoryReader(js, pool, s.cfg.EventBus.Config(), owners, router, nil, nil, nil)
 
 	coreServerOpts := []holoGRPC.CoreServerOption{
 		holoGRPC.WithEventStore(eventStore),
@@ -663,6 +663,9 @@ func newHistoryReader(
 	cfg eventbus.Config,
 	owners *audit.OwnerMap,
 	router history.PluginHistoryRouter,
+	guard eventbus.SessionAuthGuard, // nil = passthrough (current behavior)
+	dekMgr eventbus.SessionDEKManager, // nil = passthrough (current behavior)
+	auditEm eventbus.SessionAuditEmitter, // nil = passthrough (current behavior)
 ) eventbus.HistoryReader {
 	opts := []history.Option{}
 	if owners != nil {
@@ -670,6 +673,9 @@ func newHistoryReader(
 	}
 	if router != nil {
 		opts = append(opts, history.WithPluginRouter(router))
+	}
+	if guard != nil && dekMgr != nil && auditEm != nil {
+		opts = append(opts, history.WithHistoryAuth(guard, dekMgr, auditEm))
 	}
 	return history.NewReader(js, pool, cfg.StreamMaxAge, time.Now, opts...)
 }
