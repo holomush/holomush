@@ -808,19 +808,23 @@ func TestManager_Add_ConcurrentDistinctParticipantsPreservesBoth(t *testing.T) {
 	// Concurrently add DISTINCT participants — both must persist.
 	var wg sync.WaitGroup
 	var errA, errB error
+	readyCh := make(chan struct{})
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
+		<-readyCh
 		errA = mgrA.Add(ctx, ctxID, dek.Participant{
 			PlayerID: "pA", CharacterID: "cA",
 		})
 	}()
 	go func() {
 		defer wg.Done()
+		<-readyCh
 		errB = mgrB.Add(ctx, ctxID, dek.Participant{
 			PlayerID: "pB", CharacterID: "cB",
 		})
 	}()
+	close(readyCh)
 	wg.Wait()
 
 	require.NoError(t, errA)
@@ -830,8 +834,16 @@ func TestManager_Add_ConcurrentDistinctParticipantsPreservesBoth(t *testing.T) {
 	assert.Len(t, invA.calls, 1)
 	assert.Len(t, invB.calls, 1)
 
-	// Both added participants must appear in the final set.
-	parts, err := mgrA.Participants(ctx, dekKey.ID, dekKey.Version)
+	// Query from a fresh manager with clean caches to avoid reading
+	// stale cache state from mgrA/mgrB (which each seeded only their
+	// own participant during Add).
+	freshMgr, err := dek.NewManager(newTestProvider(t), store,
+		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
+		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
+		noopInvalidator, &stubBindingResolver{bindingID: "fresh"},
+	)
+	require.NoError(t, err)
+	parts, err := freshMgr.Participants(ctx, dekKey.ID, dekKey.Version)
 	require.NoError(t, err)
 	require.Len(t, parts, 3, "initial p0 + pA + pB = 3")
 	players := map[string]bool{"p0": true, "pA": true, "pB": true}

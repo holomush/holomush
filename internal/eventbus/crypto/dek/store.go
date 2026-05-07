@@ -256,9 +256,9 @@ func (s *Store) updateParticipants(ctx context.Context, ctxID ContextID, p Parti
 	_, err = tx.Exec(ctx, `
 		UPDATE crypto_keys
 		   SET participants = $3
-		 WHERE context_type = $1 AND context_id = $2
+		 WHERE id = $1 AND version = $2
 		   AND rotated_at IS NULL AND destroyed_at IS NULL`,
-		ctxID.Type, ctxID.ID, newJSON,
+		active.ID, active.Version, newJSON,
 	)
 	if err != nil {
 		return row{}, false, oops.Code("DEK_PARTICIPANTS_UPDATE_FAILED").
@@ -321,7 +321,7 @@ func (s *Store) markDestroyed(ctx context.Context, keyID codec.KeyID, version ui
 // array contains an element with the given binding_id. Used by the
 // wizard-transfer rebind handler to find affected DEKs.
 func (s *Store) selectByBindingID(ctx context.Context, bindingID string) ([]row, error) {
-	probe := []Participant{{BindingID: bindingID}}
+	probe := []map[string]string{{"binding_id": bindingID}}
 	probeJSON, err := json.Marshal(probe)
 	if err != nil {
 		return nil, oops.Code("DEK_BINDING_PROBE_MARSHAL_FAILED").Wrap(err)
