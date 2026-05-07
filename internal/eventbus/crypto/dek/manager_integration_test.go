@@ -744,12 +744,12 @@ func TestManager_Add_ConcurrentSameBindingIsIdempotent(t *testing.T) {
 	require.NoError(t, errA)
 	require.NoError(t, errB)
 
-	// At least one must have published an invalidation. Both may return
-	// added=true if the scheduler interleaves their selectActive calls
-	// (read-modify-write TOCTOU), in which case totalCalls == 2.
+	// Exactly one must have published an invalidation — the second
+	// goroutine serializes on the FOR UPDATE row lock and sees the
+	// duplicate, returning added=false without publishing.
 	totalCalls := len(invA.calls) + len(invB.calls)
-	assert.True(t, totalCalls >= 1,
-		"at least one concurrent Add must publish invalidation; got %d", totalCalls)
+	assert.Equal(t, 1, totalCalls,
+		"exactly one concurrent Add must publish invalidation; got %d", totalCalls)
 
 	// Query via mgrA (whose partCache was seeded by Add) rather than setupMgr
 	// (whose cache is stale — it was seeded by GetOrCreate and never updated).
@@ -757,6 +757,84 @@ func TestManager_Add_ConcurrentSameBindingIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, parts, 2)
 	players := map[string]bool{"p0": true, "p1": true}
+	for _, p := range parts {
+		assert.True(t, players[p.PlayerID], "unexpected player %s", p.PlayerID)
+	}
+}
+
+// TestManager_Add_ConcurrentDistinctParticipantsPreservesBoth is the
+// regression test for holomush-fi0n.9 (TOCTOU race in updateParticipants).
+// Two goroutines concurrently add different participants to the same DEK.
+// With SELECT ... FOR UPDATE, the second goroutine blocks on the first's
+// row lock and reads the updated participant list; both entries persist.
+// Without the lock, the second read-modify-write can silently discard the
+// first write (final count would be 2 instead of 3).
+func TestManager_Add_ConcurrentDistinctParticipantsPreservesBoth(t *testing.T) {
+	ctx := context.Background()
+	pool := testIntegrationPool(t)
+	store := dek.NewStore(pool)
+
+	ctxID := dek.ContextID{Type: "scene", ID: "concurrent-distinct"}
+
+	// Seed: create the DEK with one initial participant.
+	setupMgr, err := dek.NewManager(newTestProvider(t), store,
+		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
+		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
+		noopInvalidator, &stubBindingResolver{bindingID: "bind-0"},
+	)
+	require.NoError(t, err)
+	initial := []dek.Participant{
+		{PlayerID: "p0", CharacterID: "c0", BindingID: "bind-0", JoinedAt: time.Now().UTC()},
+	}
+	dekKey, err := setupMgr.GetOrCreate(ctx, ctxID, initial)
+	require.NoError(t, err)
+
+	// Two managers with separate caches but shared DB.
+	invA := &stubInvalidator{}
+	invB := &stubInvalidator{}
+	mgrA, err := dek.NewManager(newTestProvider(t), store,
+		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
+		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
+		invA.call(), &stubBindingResolver{bindingID: "bind-A"},
+	)
+	require.NoError(t, err)
+	mgrB, err := dek.NewManager(newTestProvider(t), store,
+		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
+		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
+		invB.call(), &stubBindingResolver{bindingID: "bind-B"},
+	)
+	require.NoError(t, err)
+
+	// Concurrently add DISTINCT participants — both must persist.
+	var wg sync.WaitGroup
+	var errA, errB error
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		errA = mgrA.Add(ctx, ctxID, dek.Participant{
+			PlayerID: "pA", CharacterID: "cA",
+		})
+	}()
+	go func() {
+		defer wg.Done()
+		errB = mgrB.Add(ctx, ctxID, dek.Participant{
+			PlayerID: "pB", CharacterID: "cB",
+		})
+	}()
+	wg.Wait()
+
+	require.NoError(t, errA)
+	require.NoError(t, errB)
+
+	// Both must have published invalidation.
+	assert.Len(t, invA.calls, 1)
+	assert.Len(t, invB.calls, 1)
+
+	// Both added participants must appear in the final set.
+	parts, err := mgrA.Participants(ctx, dekKey.ID, dekKey.Version)
+	require.NoError(t, err)
+	require.Len(t, parts, 3, "initial p0 + pA + pB = 3")
+	players := map[string]bool{"p0": true, "pA": true, "pB": true}
 	for _, p := range parts {
 		assert.True(t, players[p.PlayerID], "unexpected player %s", p.PlayerID)
 	}

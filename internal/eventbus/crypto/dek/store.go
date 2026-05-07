@@ -9,6 +9,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
@@ -186,16 +187,57 @@ func IsUniqueViolation(err error) bool {
 // Idempotent on (player_id, binding_id) — duplicate returns the active
 // row unchanged with added=false. Returns the active row wrapped in a
 // pgx.ErrNoRows sentinel when no active DEK exists.
+//
+// Uses SELECT ... FOR UPDATE within a transaction to serialize concurrent
+// Add calls on the same (context_type, context_id). Without the row lock,
+// two concurrent Adds of distinct participants can both read the same
+// participant list, each append their own entry, and the second write
+// silently discards the first (holomush-fi0n.9).
 func (s *Store) updateParticipants(ctx context.Context, ctxID ContextID, p Participant) (row, bool, error) {
-	active, err := s.selectActive(ctx, ctxID)
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return row{}, false, err // pgx.ErrNoRows → DEK_NOT_FOUND for caller
+		return row{}, false, oops.Code("DEK_TX_BEGIN_FAILED").
+			With("context_type", ctxID.Type).
+			With("context_id", ctxID.ID).Wrap(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op after Commit
+
+	// SELECT the active row and lock it until the transaction commits.
+	var active row
+	var participantsJSON []byte
+	err = tx.QueryRow(ctx, `
+		SELECT id, context_type, context_id, version, wrapped_dek,
+		       wrap_provider, wrap_key_id, participants, created_at, rotated_at
+		  FROM crypto_keys
+		 WHERE context_type=$1 AND context_id=$2
+		   AND rotated_at IS NULL AND destroyed_at IS NULL
+		 ORDER BY version DESC
+		 LIMIT 1
+		 FOR UPDATE`,
+		ctxID.Type, ctxID.ID,
+	).Scan(
+		&active.ID, &active.ContextType, &active.ContextID, &active.Version,
+		&active.WrappedDEK, &active.WrapProvider, &active.WrapKeyID,
+		&participantsJSON, &active.CreatedAt, &active.RotatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return row{}, false, oops.With("operation", "select_active_dek_for_update").
+				With("context_type", ctxID.Type).
+				With("context_id", ctxID.ID).Wrap(err)
+		}
+		return row{}, false, oops.Code("DEK_STORE_SELECT_FAILED").
+			With("context_type", ctxID.Type).
+			With("context_id", ctxID.ID).Wrap(err)
+	}
+	if err := json.Unmarshal(participantsJSON, &active.Participants); err != nil {
+		return row{}, false, oops.Code("DEK_PARTICIPANTS_UNMARSHAL_FAILED").Wrap(err)
 	}
 
 	// Check for existing duplicate.
 	for _, existing := range active.Participants {
 		if existing.PlayerID == p.PlayerID && existing.BindingID == p.BindingID {
-			return active, false, nil
+			return active, false, tx.Commit(ctx)
 		}
 	}
 
@@ -206,7 +248,7 @@ func (s *Store) updateParticipants(ctx context.Context, ctxID ContextID, p Parti
 		return row{}, false, oops.Code("DEK_PARTICIPANTS_MARSHAL_FAILED").Wrap(err)
 	}
 
-	tag, err := s.pool.Exec(ctx, `
+	_, err = tx.Exec(ctx, `
 		UPDATE crypto_keys
 		   SET participants = $3
 		 WHERE context_type = $1 AND context_id = $2
@@ -218,7 +260,12 @@ func (s *Store) updateParticipants(ctx context.Context, ctxID ContextID, p Parti
 			With("context_type", ctxID.Type).
 			With("context_id", ctxID.ID).Wrap(err)
 	}
-	_ = tag.RowsAffected() // pgx may report 0 for jsonb no-change rows; trust the UPDATE
+
+	if err := tx.Commit(ctx); err != nil {
+		return row{}, false, oops.Code("DEK_TX_COMMIT_FAILED").
+			With("context_type", ctxID.Type).
+			With("context_id", ctxID.ID).Wrap(err)
+	}
 
 	return active, true, nil
 }
