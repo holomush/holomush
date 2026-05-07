@@ -17,6 +17,9 @@ tools:
   - Read
   - Grep
   - Glob
+  - mcp__probe__search_code
+  - mcp__probe__extract_code
+  - mcp__probe__grep
   - Bash
   - Write
 skills:
