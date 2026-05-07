@@ -9,6 +9,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/samber/oops"
@@ -180,6 +181,238 @@ func IsUniqueViolation(err error) bool {
 		return pgErr.Code == "23505"
 	}
 	return false
+}
+
+// updateParticipants appends p to the active DEK's participant set.
+// Idempotent on (player_id, binding_id) — duplicate returns the active
+// row unchanged with added=false. Returns the active row wrapped in a
+// pgx.ErrNoRows sentinel when no active DEK exists.
+//
+// Uses SELECT ... FOR UPDATE within a transaction to serialize concurrent
+// Add calls on the same (context_type, context_id). Without the row lock,
+// two concurrent Adds of distinct participants can both read the same
+// participant list, each append their own entry, and the second write
+// silently discards the first (holomush-fi0n.9).
+func (s *Store) updateParticipants(ctx context.Context, ctxID ContextID, p Participant) (row, bool, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return row{}, false, oops.Code("DEK_TX_BEGIN_FAILED").
+			With("context_type", ctxID.Type).
+			With("context_id", ctxID.ID).Wrap(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() //nolint:errcheck // no-op after Commit
+
+	// SELECT the active row and lock it until the transaction commits.
+	var active row
+	var participantsJSON []byte
+	err = tx.QueryRow(ctx, `
+		SELECT id, context_type, context_id, version, wrapped_dek,
+		       wrap_provider, wrap_key_id, participants, created_at, rotated_at
+		  FROM crypto_keys
+		 WHERE context_type=$1 AND context_id=$2
+		   AND rotated_at IS NULL AND destroyed_at IS NULL
+		 ORDER BY version DESC
+		 LIMIT 1
+		 FOR UPDATE`,
+		ctxID.Type, ctxID.ID,
+	).Scan(
+		&active.ID, &active.ContextType, &active.ContextID, &active.Version,
+		&active.WrappedDEK, &active.WrapProvider, &active.WrapKeyID,
+		&participantsJSON, &active.CreatedAt, &active.RotatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return row{}, false, oops.With("operation", "select_active_dek_for_update").
+				With("context_type", ctxID.Type).
+				With("context_id", ctxID.ID).Wrap(err)
+		}
+		return row{}, false, oops.Code("DEK_STORE_SELECT_FAILED").
+			With("context_type", ctxID.Type).
+			With("context_id", ctxID.ID).Wrap(err)
+	}
+	if err = json.Unmarshal(participantsJSON, &active.Participants); err != nil {
+		return row{}, false, oops.Code("DEK_PARTICIPANTS_UNMARSHAL_FAILED").Wrap(err)
+	}
+
+	// Check for existing duplicate.
+	for _, existing := range active.Participants {
+		if existing.PlayerID == p.PlayerID && existing.BindingID == p.BindingID {
+			if err = tx.Commit(ctx); err != nil {
+				return row{}, false, oops.Code("DEK_TX_COMMIT_FAILED").
+					With("context_type", ctxID.Type).
+					With("context_id", ctxID.ID).Wrap(err)
+			}
+			return active, false, nil
+		}
+	}
+
+	// Append and write back.
+	active.Participants = append(active.Participants, p)
+	newJSON, err := json.Marshal(active.Participants)
+	if err != nil {
+		return row{}, false, oops.Code("DEK_PARTICIPANTS_MARSHAL_FAILED").Wrap(err)
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE crypto_keys
+		   SET participants = $3
+		 WHERE id = $1 AND version = $2
+		   AND rotated_at IS NULL AND destroyed_at IS NULL`,
+		active.ID, active.Version, newJSON,
+	)
+	if err != nil {
+		return row{}, false, oops.Code("DEK_PARTICIPANTS_UPDATE_FAILED").
+			With("context_type", ctxID.Type).
+			With("context_id", ctxID.ID).Wrap(err)
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return row{}, false, oops.Code("DEK_TX_COMMIT_FAILED").
+			With("context_type", ctxID.Type).
+			With("context_id", ctxID.ID).Wrap(err)
+	}
+
+	return active, true, nil
+}
+
+// markRotated sets rotated_at and superseded_by on the target row.
+func (s *Store) markRotated(ctx context.Context, keyID codec.KeyID, version uint32, supersededBy int64) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE crypto_keys
+		   SET rotated_at = NOW(), superseded_by = $3
+		 WHERE id = $1 AND version = $2 AND rotated_at IS NULL AND destroyed_at IS NULL`,
+		//nolint:gosec // G115: keyID is a DB BIGSERIAL value; positive serial ids fit in int64
+		int64(keyID), version, supersededBy,
+	)
+	if err != nil {
+		return oops.Code("DEK_MARK_ROTATED_FAILED").
+			With("key_id", uint64(keyID)).
+			With("version", version).Wrap(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return oops.Code("DEK_MARK_ROTATED_NOT_FOUND").
+			With("key_id", uint64(keyID)).
+			With("version", version).
+			Errorf("no unrotated row for key %d v%d", keyID, version)
+	}
+	return nil
+}
+
+// markDestroyed sets destroyed_at on the target row. Best-effort
+// rollback helper — used when Rotate's invalidation fails.
+func (s *Store) markDestroyed(ctx context.Context, keyID codec.KeyID, version uint32) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE crypto_keys
+		   SET destroyed_at = NOW()
+		 WHERE id = $1 AND version = $2 AND destroyed_at IS NULL`,
+		//nolint:gosec // G115: keyID is a DB BIGSERIAL value; positive serial ids fit in int64
+		int64(keyID), version,
+	)
+	if err != nil {
+		return oops.Code("DEK_MARK_DESTROYED_FAILED").
+			With("key_id", uint64(keyID)).
+			With("version", version).Wrap(err)
+	}
+	return nil
+}
+
+//nolint:unused // used by rebind handler (Phase 4 integration, TBD)
+// selectByBindingID returns all active DEK rows whose participants
+// array contains an element with the given binding_id. Used by the
+// wizard-transfer rebind handler to find affected DEKs.
+func (s *Store) selectByBindingID(ctx context.Context, bindingID string) ([]row, error) {
+	probe := []map[string]string{{"binding_id": bindingID}}
+	probeJSON, err := json.Marshal(probe)
+	if err != nil {
+		return nil, oops.Code("DEK_BINDING_PROBE_MARSHAL_FAILED").Wrap(err)
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, context_type, context_id, version, wrapped_dek,
+		       wrap_provider, wrap_key_id, participants, created_at, rotated_at
+		  FROM crypto_keys
+		 WHERE participants @> $1::jsonb
+		   AND rotated_at IS NULL AND destroyed_at IS NULL
+		 ORDER BY id`,
+		probeJSON,
+	)
+	if err != nil {
+		return nil, oops.Code("DEK_SELECT_BY_BINDING_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	var out []row
+	for rows.Next() {
+		var r row
+		var participantsJSON []byte
+		if err := rows.Scan(
+			&r.ID, &r.ContextType, &r.ContextID, &r.Version, &r.WrappedDEK,
+			&r.WrapProvider, &r.WrapKeyID, &participantsJSON, &r.CreatedAt, &r.RotatedAt,
+		); err != nil {
+			return nil, oops.Code("DEK_SELECT_BY_BINDING_SCAN_FAILED").Wrap(err)
+		}
+		if err := json.Unmarshal(participantsJSON, &r.Participants); err != nil {
+			return nil, oops.Code("DEK_PARTICIPANTS_UNMARSHAL_FAILED").Wrap(err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.Code("DEK_SELECT_BY_BINDING_ROWS_ERR").Wrap(err)
+	}
+	return out, nil
+}
+
+// ResolveIntegrity finds contexts with multiple unrotated, undestroyed
+// rows (crashed Rotate) and marks the earlier versions rotated, keeping
+// only the max version active. Idempotent — safe to run at every startup.
+func (s *Store) ResolveIntegrity(ctx context.Context) error {
+	rows, err := s.pool.Query(ctx, `
+		SELECT context_type, context_id
+		  FROM crypto_keys
+		 WHERE rotated_at IS NULL AND destroyed_at IS NULL
+		 GROUP BY context_type, context_id
+		HAVING COUNT(*) > 1`)
+	if err != nil {
+		return oops.Code("DEK_INTEGRITY_QUERY_FAILED").Wrap(err)
+	}
+	defer rows.Close()
+
+	type ctxKey struct {
+		ctxType, ctxID string
+	}
+	var conflicted []ctxKey
+	for rows.Next() {
+		var ck ctxKey
+		if err := rows.Scan(&ck.ctxType, &ck.ctxID); err != nil {
+			return oops.Code("DEK_INTEGRITY_SCAN_FAILED").Wrap(err)
+		}
+		conflicted = append(conflicted, ck)
+	}
+	if err := rows.Err(); err != nil {
+		return oops.Code("DEK_INTEGRITY_ROWS_ERR").Wrap(err)
+	}
+
+	for _, ck := range conflicted {
+		// Mark all but the max-version row as rotated.
+		_, err := s.pool.Exec(ctx, `
+			UPDATE crypto_keys
+			   SET rotated_at = NOW()
+			 WHERE context_type = $1 AND context_id = $2
+			   AND rotated_at IS NULL AND destroyed_at IS NULL
+			   AND version < (
+			       SELECT MAX(version) FROM crypto_keys
+			        WHERE context_type = $1 AND context_id = $2
+			          AND rotated_at IS NULL AND destroyed_at IS NULL
+			   )`,
+			ck.ctxType, ck.ctxID,
+		)
+		if err != nil {
+			return oops.Code("DEK_INTEGRITY_RESOLVE_FAILED").
+				With("context_type", ck.ctxType).
+				With("context_id", ck.ctxID).Wrap(err)
+		}
+	}
+	return nil
 }
 
 // Row is the exported view of a crypto_keys row. Mirrors the internal

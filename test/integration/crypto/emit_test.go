@@ -81,7 +81,9 @@ func TestSensitiveEmitProducesCiphertextOnBusAndInAudit(t *testing.T) {
 	dekStore := dek.NewStore(pool)
 	dekCache := dek.NewCache(dek.CacheConfig{Capacity: 64})
 	dekPartCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64})
-	dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache)
+	dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache,
+		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
+		&dekBindingStub{bindingID: "bind-emit"})
 	require.NoError(t, err)
 
 	// Stand up the audit projection so events_audit gets populated.

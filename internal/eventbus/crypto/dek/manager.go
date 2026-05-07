@@ -40,12 +40,23 @@ type Manager interface {
 	Rekey(ctx context.Context, ctxID ContextID, justification string, ops OperatorFactors) error
 }
 
+// Invalidator publishes a cache-invalidation request to all replicas.
+// action is one of "rotate", "participants_changed", or "rekey".
+type Invalidator func(ctx context.Context, ctxID ContextID, action string, version, successorVersion uint32) error
+
+// BindingResolver resolves a character's current binding_id.
+type BindingResolver interface {
+	Current(ctx context.Context, characterID string) (string, error)
+}
+
 // manager is the concrete impl.
 type manager struct {
-	provider  kek.Provider
-	store     *Store
-	cache     *Cache
-	partCache *ParticipantsCache
+	provider   kek.Provider
+	store      *Store
+	cache      *Cache
+	partCache  *ParticipantsCache
+	invalidate Invalidator
+	bindings   BindingResolver
 }
 
 // NewManager constructs a real Manager. Production callers (Phase 3+)
@@ -53,7 +64,14 @@ type manager struct {
 // Cache, and participants Cache. All four collaborators are required;
 // a nil argument returns DEK_MANAGER_DEPENDENCY_NIL rather than
 // letting GetOrCreate/Resolve/Participants dereference nil at runtime.
-func NewManager(provider kek.Provider, store *Store, cache *Cache, partCache *ParticipantsCache) (Manager, error) {
+func NewManager(
+	provider kek.Provider,
+	store *Store,
+	cache *Cache,
+	partCache *ParticipantsCache,
+	invalidate Invalidator,
+	bindings BindingResolver,
+) (Manager, error) {
 	switch {
 	case provider == nil:
 		return nil, oops.Code("DEK_MANAGER_DEPENDENCY_NIL").
@@ -71,8 +89,19 @@ func NewManager(provider kek.Provider, store *Store, cache *Cache, partCache *Pa
 		return nil, oops.Code("DEK_MANAGER_DEPENDENCY_NIL").
 			With("dependency", "partCache").
 			Errorf("dek.NewManager requires a non-nil *ParticipantsCache")
+	case invalidate == nil:
+		return nil, oops.Code("DEK_MANAGER_DEPENDENCY_NIL").
+			With("dependency", "invalidate").
+			Errorf("dek.NewManager requires a non-nil Invalidator")
+	case bindings == nil:
+		return nil, oops.Code("DEK_MANAGER_DEPENDENCY_NIL").
+			With("dependency", "bindings").
+			Errorf("dek.NewManager requires a non-nil BindingResolver")
 	}
-	return &manager{provider: provider, store: store, cache: cache, partCache: partCache}, nil
+	return &manager{
+		provider: provider, store: store, cache: cache,
+		partCache: partCache, invalidate: invalidate, bindings: bindings,
+	}, nil
 }
 
 // NewManagerForUnitTest constructs a Manager with no DB or KEK access.
@@ -214,20 +243,116 @@ func (m *manager) Participants(ctx context.Context, keyID codec.KeyID, version u
 	return r.Participants, nil
 }
 
-// Add lands in Phase 4 (epic holomush-fi0n).
-func (m *manager) Add(_ context.Context, _ ContextID, _ Participant) error {
-	return oops.Code("DEK_ADD_NOT_IMPLEMENTED").
-		With("tracking_bead", "holomush-fi0n").
-		With("phase", 4).
-		Errorf("Manager.Add lands in Phase 4 (epic holomush-fi0n)")
+// Add appends a participant to the active DEK's set without rotating.
+func (m *manager) Add(ctx context.Context, ctxID ContextID, p Participant) error {
+	if err := m.configured(); err != nil {
+		return err
+	}
+	if m.invalidate == nil {
+		return oops.Code("DEK_MANAGER_DEPENDENCY_NIL").
+			With("dependency", "Invalidator").
+			Errorf("Add requires a non-nil Invalidator — pass invalidation.Coordinator adapter")
+	}
+	if m.bindings == nil {
+		return oops.Code("DEK_MANAGER_DEPENDENCY_NIL").
+			With("dependency", "BindingResolver").
+			Errorf("Add requires a non-nil BindingResolver")
+	}
+
+	if p.BindingID == "" {
+		bindingID, err := m.bindings.Current(ctx, p.CharacterID)
+		if err != nil {
+			return oops.Code("DEK_BINDING_RESOLVE_FAILED").
+				With("character_id", p.CharacterID).Wrap(err)
+		}
+		p.BindingID = bindingID
+	}
+
+	activeRow, added, err := m.store.updateParticipants(ctx, ctxID, p)
+	if err != nil {
+		return err
+	}
+	if !added {
+		return nil // idempotent no-op — participant already present
+	}
+
+	m.partCache.Put(
+		ParticipantsCacheKey{ContextType: ctxID.Type, ContextID: ctxID.ID, Version: activeRow.Version},
+		activeRow.Participants,
+	)
+
+	return m.invalidate(ctx, ctxID, "participants_changed", activeRow.Version, 0)
 }
 
-// Rotate lands in Phase 4 (epic holomush-fi0n).
-func (m *manager) Rotate(_ context.Context, _ ContextID, _ []Participant, _ string) error {
-	return oops.Code("DEK_ROTATE_NOT_IMPLEMENTED").
-		With("tracking_bead", "holomush-fi0n").
-		With("phase", 4).
-		Errorf("Manager.Rotate lands in Phase 4 (epic holomush-fi0n)")
+// Rotate mints a new DEK version and marks the old one rotated.
+func (m *manager) Rotate(ctx context.Context, ctxID ContextID,
+	newParticipants []Participant, _ string) error {
+
+	if err := m.configured(); err != nil {
+		return err
+	}
+	if m.invalidate == nil {
+		return oops.Code("DEK_MANAGER_DEPENDENCY_NIL").
+			With("dependency", "Invalidator").
+			Errorf("Rotate requires a non-nil Invalidator")
+	}
+
+	activeRow, err := m.store.selectActive(ctx, ctxID)
+	if err != nil {
+		return err
+	}
+
+	dekBytes := make([]byte, DEKByteLength)
+	if _, err = io.ReadFull(rand.Reader, dekBytes); err != nil {
+		return oops.Code("DEK_RNG_FAILED").Wrap(err)
+	}
+	wrapped, kekKeyID, err := m.provider.Wrap(ctx, dekBytes)
+	if err != nil {
+		return oops.Code("DEK_WRAP_FAILED").Wrap(err)
+	}
+	err = validateProviderWrapOutput(wrapped, kekKeyID)
+	if err != nil {
+		return err
+	}
+
+	newRow := row{
+		ContextType: ctxID.Type, ContextID: ctxID.ID,
+		Version:      activeRow.Version + 1,
+		WrappedDEK:   wrapped,
+		WrapProvider: m.provider.Name(),
+		WrapKeyID:    kekKeyID,
+		Participants: newParticipants,
+	}
+	newID, err := m.store.insert(ctx, newRow)
+	if err != nil {
+		return oops.Code("DEK_STORE_INSERT_FAILED").Wrap(err)
+	}
+
+	//nolint:gosec // G115: newID is a DB BIGSERIAL value
+	newKeyID := codec.KeyID(newID)
+	newVersion := newRow.Version
+
+	material := NewMaterial(dekBytes)
+	m.cache.Put(CacheKey{KeyID: newKeyID, Version: newVersion}, ctxID, material)
+	m.partCache.Put(ParticipantsCacheKey{
+		ContextType: ctxID.Type, ContextID: ctxID.ID, Version: newVersion,
+	}, newParticipants)
+
+	if err := m.invalidate(ctx, ctxID, "rotate",
+		activeRow.Version, newVersion); err != nil {
+		// Rollback: evict caches + mark new row destroyed.
+		m.cache.Invalidate(CacheKey{KeyID: newKeyID, Version: newVersion})
+		m.partCache.Invalidate(ParticipantsCacheKey{
+			ContextType: ctxID.Type, ContextID: ctxID.ID, Version: newVersion,
+		})
+		//nolint:errcheck // best-effort rollback; don't mask the original error
+		_ = m.store.markDestroyed(ctx, newKeyID, newVersion)
+		return err
+	}
+
+	return m.store.markRotated(ctx,
+		//nolint:gosec // G115: activeRow.ID is a DB BIGSERIAL value
+		codec.KeyID(activeRow.ID), activeRow.Version, newID)
 }
 
 // Rekey lands in Phase 5 (epic holomush-jxo8).

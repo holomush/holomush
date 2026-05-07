@@ -139,24 +139,6 @@ func TestManagerStubsCarryTrackingBeadFromAllowSet(t *testing.T) {
 		wantCode  string
 	}{
 		{
-			name: "Add",
-			invoke: func() error {
-				return m.Add(context.Background(), dek.ContextID{Type: "scene", ID: "x"}, dek.Participant{})
-			},
-			wantBead:  "holomush-fi0n",
-			wantPhase: 4,
-			wantCode:  "DEK_ADD_NOT_IMPLEMENTED",
-		},
-		{
-			name: "Rotate",
-			invoke: func() error {
-				return m.Rotate(context.Background(), dek.ContextID{Type: "scene", ID: "x"}, nil, "test")
-			},
-			wantBead:  "holomush-fi0n",
-			wantPhase: 4,
-			wantCode:  "DEK_ROTATE_NOT_IMPLEMENTED",
-		},
-		{
 			name: "Rekey",
 			invoke: func() error {
 				return m.Rekey(context.Background(), dek.ContextID{Type: "scene", ID: "x"}, "test", dek.OperatorFactors{})
