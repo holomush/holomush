@@ -103,7 +103,7 @@ func setupE2EEnv(ctx context.Context, t *testing.T) *e2eEnv {
 	dekStore := dek.NewStore(pool)
 	dekCache := dek.NewCache(dek.CacheConfig{Capacity: 64})
 	dekPartCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64})
-	dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache)
+	dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache, nil, nil)
 	require.NoError(t, err)
 
 	hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})

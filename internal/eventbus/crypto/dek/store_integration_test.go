@@ -43,7 +43,7 @@ func TestSoftDeletedDEKAppearsAsNoRowsForProductionReads(t *testing.T) {
 	provider := newTestProvider(t)
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
 	partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
-	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache)
+	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, nil, nil)
 	require.NoError(t, err)
 
 	// Mint a DEK via the public API.
@@ -100,7 +100,7 @@ func TestSelectAnyByIDReturnsDestroyedRows(t *testing.T) {
 	store := dek.NewStore(pool)
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
 	partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
-	mgr, err := dek.NewManager(provider, store, cache, partCache)
+	mgr, err := dek.NewManager(provider, store, cache, partCache, nil, nil)
 	require.NoError(t, err)
 
 	// Insert via Manager so the row matches production shape.

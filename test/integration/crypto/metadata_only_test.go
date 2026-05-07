@@ -75,7 +75,7 @@ func buildSubscribeHarness(t *testing.T) *subscribeHarness {
 	dekStore := dek.NewStore(pool)
 	dekCache := dek.NewCache(dek.CacheConfig{Capacity: 64})
 	dekPartCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64})
-	dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache)
+	dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache, nil, nil)
 	require.NoError(t, err)
 
 	// Audit subsystem: needed so events_audit is populated (same pattern as

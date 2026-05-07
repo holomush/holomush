@@ -15,11 +15,21 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
+// stubBindingResolver implements dek.BindingResolver for tests.
+type stubBindingResolver struct {
+	bindingID string
+	err       error
+}
+
+func (s *stubBindingResolver) Current(_ context.Context, _ string) (string, error) {
+	return s.bindingID, s.err
+}
+
 // TestNewManager_RejectsNilProvider verifies NewManager returns
 // DEK_MANAGER_DEPENDENCY_NIL when the kek.Provider argument is nil,
 // rather than returning a Manager that nil-panics on first GetOrCreate.
 func TestNewManager_RejectsNilProvider(t *testing.T) {
-	_, err := dek.NewManager(nil, &dek.Store{}, dek.NewCache(dek.CacheConfig{}), dek.NewParticipantsCache(dek.CacheConfig{}))
+	_, err := dek.NewManager(nil, &dek.Store{}, dek.NewCache(dek.CacheConfig{}), dek.NewParticipantsCache(dek.CacheConfig{}), nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "DEK_MANAGER_DEPENDENCY_NIL")
 	errutil.AssertErrorContext(t, err, "dependency", "provider")
@@ -27,7 +37,7 @@ func TestNewManager_RejectsNilProvider(t *testing.T) {
 
 // TestNewManager_RejectsNilStore verifies the store nil-check path.
 func TestNewManager_RejectsNilStore(t *testing.T) {
-	_, err := dek.NewManager(kek.NewNoneProviderForUnitTest(), nil, dek.NewCache(dek.CacheConfig{}), dek.NewParticipantsCache(dek.CacheConfig{}))
+	_, err := dek.NewManager(kek.NewNoneProviderForUnitTest(), nil, dek.NewCache(dek.CacheConfig{}), dek.NewParticipantsCache(dek.CacheConfig{}), nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "DEK_MANAGER_DEPENDENCY_NIL")
 	errutil.AssertErrorContext(t, err, "dependency", "store")
@@ -35,7 +45,7 @@ func TestNewManager_RejectsNilStore(t *testing.T) {
 
 // TestNewManager_RejectsNilCache verifies the cache nil-check path.
 func TestNewManager_RejectsNilCache(t *testing.T) {
-	_, err := dek.NewManager(kek.NewNoneProviderForUnitTest(), &dek.Store{}, nil, dek.NewParticipantsCache(dek.CacheConfig{}))
+	_, err := dek.NewManager(kek.NewNoneProviderForUnitTest(), &dek.Store{}, nil, dek.NewParticipantsCache(dek.CacheConfig{}), nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "DEK_MANAGER_DEPENDENCY_NIL")
 	errutil.AssertErrorContext(t, err, "dependency", "cache")
@@ -45,7 +55,7 @@ func TestNewManager_RejectsNilCache(t *testing.T) {
 // nil-check path. Phase 3c (T7) adds ParticipantsCache as a required
 // collaborator; the dependency-nil error path covers it like the others.
 func TestNewManager_RejectsNilParticipantsCache(t *testing.T) {
-	_, err := dek.NewManager(kek.NewNoneProviderForUnitTest(), &dek.Store{}, dek.NewCache(dek.CacheConfig{}), nil)
+	_, err := dek.NewManager(kek.NewNoneProviderForUnitTest(), &dek.Store{}, dek.NewCache(dek.CacheConfig{}), nil, nil, nil)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "DEK_MANAGER_DEPENDENCY_NIL")
 	errutil.AssertErrorContext(t, err, "dependency", "partCache")
@@ -68,4 +78,34 @@ func TestManager_NotConfigured_GuardsResolve(t *testing.T) {
 	_, err := m.Resolve(context.Background(), codec.KeyID(1), 1)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "DEK_MANAGER_NOT_CONFIGURED")
+}
+
+// TestNewManager_RejectsNilInvalidator verifies the nil guard on the
+// new Invalidator parameter.
+func TestNewManager_RejectsNilInvalidator(t *testing.T) {
+	_, err := dek.NewManager(
+		kek.NewNoneProviderForUnitTest(),
+		&dek.Store{},
+		dek.NewCache(dek.CacheConfig{}),
+		dek.NewParticipantsCache(dek.CacheConfig{}),
+		nil,
+		&stubBindingResolver{},
+	)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "DEK_MANAGER_DEPENDENCY_NIL")
+}
+
+// TestNewManager_RejectsNilBindingResolver verifies the nil guard on the
+// new BindingResolver parameter.
+func TestNewManager_RejectsNilBindingResolver(t *testing.T) {
+	_, err := dek.NewManager(
+		kek.NewNoneProviderForUnitTest(),
+		&dek.Store{},
+		dek.NewCache(dek.CacheConfig{}),
+		dek.NewParticipantsCache(dek.CacheConfig{}),
+		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
+		nil,
+	)
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "DEK_MANAGER_DEPENDENCY_NIL")
 }
