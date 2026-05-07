@@ -59,6 +59,8 @@ no Phase 5 work can proceed past sub-epic D's design.
 | Bootstrap closure mechanism | Two mechanisms: `crypto_bootstrap_state` row (race-free enforcement gate via INSERT ON CONFLICT DO NOTHING) + `crypto.totp_bootstrap_completed` audit event (durable trail) | Row is cheap and atomic; event survives DB restore and integrates into sub-epic D's chain. Both must be defeated for an attacker to silently re-bootstrap. |
 | Recovery code format | 16 hex chars (64 bits entropy), formatted `xxxx-xxxx-xxxx-xxxx` | 64 bits is impractical to brute-force; format is human-typable. |
 | Recovery code rate-limit | None in v1 | 64-bit codes are infeasible to brute-force absent a side channel; defer to follow-up bead if needed. |
+| Audit subject namespace | `events.<game>.system.crypto_totp.*` (NOT `audit.<game>.system.*`) | Master spec §4.6 wrote audit subjects in the `audit.<game>...` form aspirationally; the EVENTS JetStream stream binds only `events.>` and `JetStreamPublisher.Publish` rejects non-`events.` prefixes (`internal/eventbus/types.go:163-192`). The single existing path that lands rows in `events_audit` is the `events.>` filter consumed by `internal/eventbus/audit/projection.go:62-65`. Using `events.<game>.system.crypto_totp.*` lets the existing audit projection persist sub-epic A's events with no new substrate. Correspondingly: two new ABAC forbid seed policies are required to deny character/plugin reads of these subjects (see §"ABAC seed policies for the new subject namespace"). |
+| Atomicity of `BootstrapEnroll` | Single PG transaction wrapping `INSERT crypto_bootstrap_state` + `INSERT player_totp` + `INSERT player_totp_recovery_codes×10` + `audit.Publish` (publish-before-COMMIT). On publish error → ROLLBACK; bootstrap_state row is NOT claimed. | Spec §"Ordering and atomicity" pseudocode is the contract. INV-A15 is enforceable only if the PG txn boundary spans all four operations; separate per-method transactions cannot satisfy "no row exists in `crypto_bootstrap_state` after a failed publish." Implementation: a `Repository.BootstrapEnrollAtomic(ctx, claim, enrollment, codes, publishCallback)` method that opens one txn, runs all inserts, invokes the callback (which is the audit Publish), and either COMMITs or ROLLBACKs based on the callback's result. |
 
 [decomp]: 2026-05-07-event-payload-crypto-phase5-decomposition.md
 
@@ -116,6 +118,10 @@ cmd/holomush/
 internal/store/migrations/
     000019_create_player_totp.up.sql      # All three tables in one migration
     000019_create_player_totp.down.sql
+
+internal/access/policy/
+    seed.go                     # ADD two forbid seeds for events.*.system.crypto_totp.* (character + plugin)
+    seed_test.go                # ADD two corresponding seed-existence tests
 
 test/integration/
     totp_e2e_test.go            # Ginkgo E2E (build tag: integration)
@@ -483,17 +489,82 @@ The CLI MUST flush STDOUT and exit 0 only after the audit event commits.
 
 All five events durable in `events_audit` via the existing audit
 projection (master spec §4.6 / §8.1). Subjects use a uniform pattern
-under the `audit.<game>.system.crypto_totp.<scope>.<event>` namespace,
+under the `events.<game>.system.crypto_totp.<scope>.<event>` namespace,
 where `<scope>` is `bootstrap` for the once-only bootstrap event or
 `<player_id>` for per-player events.
 
+**Why `events.>` and not `audit.>`.** The repo's EVENTS JetStream
+stream binds only `events.>` subjects (see
+`internal/eventbus/subsystem.go:24-27`: `StreamName = "EVENTS"`,
+`SubjectFilter = "events.>"`); `JetStreamPublisher.Publish` validates
+the subject prefix at `internal/eventbus/types.go:163-192` and rejects
+anything not under `events.`. Master spec §4.6 wrote audit subjects in
+the `audit.<game>...` form aspirationally — there is no production code
+path today that reaches `events_audit` via an `audit.>` subject
+(verified: `internal/eventbus/authguard/audit/emitter.go` silently
+drops its `audit.<gameID>.plugin_decrypt.*` publishes — see
+`test/integration/crypto/plugin_decrypt_test.go:67-82` which documents
+this as the failure mode). The single existing path that lands rows in
+`events_audit` is the `events.>` filter on the EVENTS stream consumed
+by `internal/eventbus/audit/projection.go:62-65`. Sub-epic A therefore
+emits its audit events under `events.<game>.system.crypto_totp.*`,
+which IS picked up by the existing audit projection and persisted to
+`events_audit` with no new substrate.
+
 | Event type | Subject pattern | Emitted from | Payload |
 |---|---|---|---|
-| `crypto.totp_bootstrap_completed` | `audit.<game>.system.crypto_totp.bootstrap.completed` | `BootstrapEnroll` (once per server) | `consumed_at`, `consumed_by_player_id`, `bootstrap_key="totp_v1"` |
-| `crypto.totp_enrolled` | `audit.<game>.system.crypto_totp.<player_id>.enrolled` | `Enroll` (per-player) | `player_id`, `enrolled_at`, `recovery_codes_issued=10` |
-| `crypto.totp_cleared` | `audit.<game>.system.crypto_totp.<player_id>.cleared` | `ClearTOTP` (recovery path or D's reset) | `player_id`, `cleared_at`, `cleared_by` (`recovery_code` from A; `admin_reset` from D) |
-| `crypto.totp_recovery_code_consumed` | `audit.<game>.system.crypto_totp.<player_id>.recovery_consumed` | `ConsumeRecoveryCode` | `player_id`, `consumed_at`, `recovery_code_id` (the row ULID; never the code) |
-| `crypto.totp_locked` | `audit.<game>.system.crypto_totp.<player_id>.locked` | `Verify` (transition NULL→non-NULL `locked_until`) | `player_id`, `locked_at`, `locked_until`, `reason="brute_force_protection"` |
+| `crypto.totp_bootstrap_completed` | `events.<game>.system.crypto_totp.bootstrap.completed` | `BootstrapEnroll` (once per server) | `consumed_at`, `consumed_by_player_id`, `bootstrap_key="totp_v1"` |
+| `crypto.totp_enrolled` | `events.<game>.system.crypto_totp.<player_id>.enrolled` | `Enroll` (per-player) | `player_id`, `enrolled_at`, `recovery_codes_issued=10` |
+| `crypto.totp_cleared` | `events.<game>.system.crypto_totp.<player_id>.cleared` | `ClearTOTP` (recovery path or D's reset) | `player_id`, `cleared_at`, `cleared_by` (`recovery_code` from A; `admin_reset` from D) |
+| `crypto.totp_recovery_code_consumed` | `events.<game>.system.crypto_totp.<player_id>.recovery_consumed` | `ConsumeRecoveryCode` | `player_id`, `consumed_at`, `recovery_code_id` (the row ULID; never the code) |
+| `crypto.totp_locked` | `events.<game>.system.crypto_totp.<player_id>.locked` | `Verify` (transition NULL→non-NULL `locked_until`) | `player_id`, `locked_at`, `locked_until`, `reason="brute_force_protection"` |
+
+### ABAC seed policies for the new subject namespace
+
+Master spec §7.7 establishes ABAC as the authoritative gate that denies
+character / plugin principals subscribe access to the `audit.>`
+subject namespace (per Phase 3d Decision 4 — NATS-level deny retired).
+Two seed policies enforce this for `audit.>`:
+`seed:deny-audit-read-character` and `seed:deny-audit-read-plugin` at
+`internal/access/policy/seed.go:216-227`.
+
+Sub-epic A introduces a NEW subject namespace (`events.<game>.system.crypto_totp.*`)
+that carries operator-tier audit data (`crypto.totp_bootstrap_completed`,
+`crypto.totp_locked`, etc.) which character / plugin principals MUST NOT
+read — same threat-model rationale as `audit.>`. Sub-epic A's plan MUST
+add **two new forbid seed policies** parallel to the existing
+`audit.*` denies:
+
+```text
+seed:deny-events-system-crypto-totp-read-character
+  forbid(principal is character, action in ["read"], resource is stream)
+    when { resource.stream.name like "events.*.system.crypto_totp.*" };
+
+seed:deny-events-system-crypto-totp-read-plugin
+  forbid(principal is plugin, action in ["read"], resource is stream)
+    when { resource.stream.name like "events.*.system.crypto_totp.*" };
+```
+
+**Permits:** none added. The ABAC engine evaluates forbid-overrides-permit
+(`internal/access/policy/engine.go:541-544`), so the new forbids deny
+**all** character principals — including admin characters — and **all**
+plugin principals from subscribing to `events.*.system.crypto_totp.*`
+streams via the gRPC subscribe path. This matches the existing
+`seed:deny-audit-read-character` precedent: admin characters are also
+denied subscribe access to `audit.*` streams. Operator-tier audit
+access is **out-of-scope for character-principal subscribe**; it flows
+through system-principal reads (the audit projection itself; future
+admin-RPC handlers running with system identity) or direct PG queries
+of `events_audit`. Sub-epic D's `AdminReadStream` will provide the
+operator-visible read path.
+
+**Why narrow (`events.*.system.crypto_totp.*`) and not broad
+(`events.*.system.*`).** Sub-epic A only introduces TOTP audit subjects
+under `events.*.system.crypto_totp.*`. Other potential
+`events.*.system.*` subject patterns (e.g., session-lifecycle audit, if
+any are migrated from `audit.*`) are out-of-scope for sub-epic A. A
+broader-scope deny is sub-epic D's territory (which carries master-spec
+amendments) or beyond.
 
 ## Bootstrap closure mechanism
 
@@ -665,7 +736,8 @@ root-on-host is the trust path.
 | INV-A12 | `Verify` with skew=1 MUST accept codes from the previous, current, and next 30s step. | `TestVerifyAcceptsAdjacentTimeSteps` (uses in-tree `Clock` interface) |
 | INV-A13 | `BootstrapEnroll` MUST refuse if the target player does not exist in the `players` table. (Admin-role enforcement is sub-epic D's responsibility — see Out of scope.) | `TestBootstrapEnrollRefusesUnknownPlayer` |
 | INV-A14 | `Verify` failure paths (invalid code, locked, reuse) MUST NOT update `last_used_step` or `last_verified_at`. | `TestVerifyFailurePathsDoNotMutateSuccessFields` |
-| INV-A15 | Audit publish error in `BootstrapEnroll` MUST cause the txn to roll back: no row exists in `crypto_bootstrap_state` after a failed publish. The publish-success-then-COMMIT-fail "ghost case" is acknowledged as a known artifact (see Bootstrap closure mechanism). | `TestBootstrapEnrollRollsBackOnPublishFailure` |
+| INV-A15 | Audit publish error in `BootstrapEnroll` MUST cause the single PG transaction (wrapping `INSERT crypto_bootstrap_state` + `INSERT player_totp` + `INSERT player_totp_recovery_codes×10` + audit publish) to roll back: no row exists in `crypto_bootstrap_state` after a failed publish. Implementation: a `Repository.BootstrapEnrollAtomic(ctx, claim, enrollment, codes, publishCallback)` method opens one txn, runs all inserts, invokes the callback (audit publish), and either COMMITs or ROLLBACKs based on the callback's result. The publish-success-then-COMMIT-fail "ghost case" is acknowledged as a known artifact (see Bootstrap closure mechanism). | `TestBootstrapEnrollRollsBackOnPublishFailure` |
+| INV-A16 | Two ABAC seed forbid policies MUST exist denying character and plugin principals from reading streams matching `events.*.system.crypto_totp.*`. | `TestSeedPoliciesIncludesEventsSystemCryptoTotpDenyForCharacter` and `TestSeedPoliciesIncludesEventsSystemCryptoTotpDenyForPlugin` (parallel to existing `TestSeedPoliciesIncludesAuditSubscribeDenyFor*` at `internal/access/policy/seed_test.go:240-268`) |
 
 ## Testing approach
 
