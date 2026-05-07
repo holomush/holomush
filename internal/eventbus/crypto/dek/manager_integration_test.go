@@ -440,7 +440,7 @@ func TestManager_Add_AppendsParticipantAndPublishesInvalidation(t *testing.T) {
 	initial := []dek.Participant{
 		{PlayerID: "p1", CharacterID: "c1", BindingID: "bind-1", JoinedAt: time.Now().UTC()},
 	}
-	_, err = mgr.GetOrCreate(context.Background(), ctxID, initial)
+	dekKey, err := mgr.GetOrCreate(context.Background(), ctxID, initial)
 	require.NoError(t, err)
 
 	// Now build a real stub invalidator and inject it into a new manager.
@@ -464,7 +464,7 @@ func TestManager_Add_AppendsParticipantAndPublishesInvalidation(t *testing.T) {
 	assert.Equal(t, uint32(0), invStub.calls[0].successorVersion)
 
 	// Verify the participant set was updated.
-	parts, err := mgr.Participants(context.Background(), codec.KeyID(1), 1)
+	parts, err := mgr.Participants(context.Background(), dekKey.ID, dekKey.Version)
 	require.NoError(t, err)
 	require.Len(t, parts, 2)
 	assert.Equal(t, "p2", parts[1].PlayerID)
@@ -490,7 +490,7 @@ func TestManager_Add_IdempotentOnBindingID(t *testing.T) {
 	initial := []dek.Participant{
 		{PlayerID: "p0", CharacterID: "c0", BindingID: "bind-0", JoinedAt: time.Now().UTC()},
 	}
-	_, err = mgr.GetOrCreate(context.Background(), ctxID, initial)
+	dekKey, err := mgr.GetOrCreate(context.Background(), ctxID, initial)
 	require.NoError(t, err)
 
 	invStub := &stubInvalidator{}
@@ -517,7 +517,7 @@ func TestManager_Add_IdempotentOnBindingID(t *testing.T) {
 	require.Len(t, invStub.calls, 1)
 
 	// Participants should have both entries (initial + added).
-	parts, err := mgr.Participants(context.Background(), codec.KeyID(1), 1)
+	parts, err := mgr.Participants(context.Background(), dekKey.ID, dekKey.Version)
 	require.NoError(t, err)
 	require.Len(t, parts, 2)
 }
@@ -582,8 +582,9 @@ func TestManager_Rotate_MintsFreshDEKAndMarksOldRotated(t *testing.T) {
 	initial := []dek.Participant{
 		{PlayerID: "p1", CharacterID: "c1", BindingID: "bind-1", JoinedAt: time.Now().UTC()},
 	}
-	_, err = mgr.GetOrCreate(context.Background(), ctxID, initial)
+	v1Key, err := mgr.GetOrCreate(context.Background(), ctxID, initial)
 	require.NoError(t, err)
+	v1Version := v1Key.Version
 
 	invStub := &stubInvalidator{}
 	mgr, err = dek.NewManager(
@@ -606,15 +607,22 @@ func TestManager_Rotate_MintsFreshDEKAndMarksOldRotated(t *testing.T) {
 	assert.Equal(t, uint32(2), invStub.calls[0].successorVersion)
 
 	// Old DEK (v1) should still be unwrappable (INV-13).
-	_, err = mgr.Resolve(context.Background(), codec.KeyID(1), 1)
+	_, err = mgr.Resolve(context.Background(), v1Key.ID, v1Version)
 	require.NoError(t, err)
 
-	// New DEK (v2) should be active.
-	_, err = mgr.Resolve(context.Background(), codec.KeyID(2), 2)
+	// Fetch the active (v2) DEK via GetOrCreate — no mint since v2 exists.
+	activeKey, err := mgr.GetOrCreate(context.Background(), ctxID, nil)
+	require.NoError(t, err)
+
+	// New DEK (v2) should have incremented version.
+	assert.Equal(t, v1Version+1, activeKey.Version)
+
+	// New DEK should be resolvable.
+	_, err = mgr.Resolve(context.Background(), activeKey.ID, activeKey.Version)
 	require.NoError(t, err)
 
 	// New participants are on v2.
-	parts, err := mgr.Participants(context.Background(), codec.KeyID(2), 2)
+	parts, err := mgr.Participants(context.Background(), activeKey.ID, activeKey.Version)
 	require.NoError(t, err)
 	require.Len(t, parts, 1)
 	assert.Equal(t, "p2", parts[0].PlayerID)
