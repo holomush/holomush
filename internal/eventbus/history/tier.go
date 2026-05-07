@@ -160,6 +160,50 @@ func WithCryptoCold(opts ...ColdTierOption) Option {
 	return func(r *Reader) { r.coldOpts = append(r.coldOpts, opts...) }
 }
 
+// WithCryptoHot forwards HotTierOption values to the default
+// JetStream hot tier when NewReader builds it. Mirrors WithCryptoCold
+// for hot/cold parity:
+//
+//	history.NewReader(js, pool, max, now,
+//	    history.WithCryptoHot(
+//	        history.WithHistoryAuthGuard(g),
+//	        history.WithHistoryDEKManager(m),
+//	        history.WithHistoryDecryptAuditEmitter(em),
+//	    ),
+//	)
+//
+// No-op when the caller supplies WithHotTier (the test-fake path) —
+// the injected HotTier owns its own option wiring. Multiple
+// WithCryptoHot calls accumulate (last-writer-wins semantics inherited
+// from the underlying HotTierOption setters).
+func WithCryptoHot(opts ...HotTierOption) Option {
+	return func(r *Reader) { r.hotOpts = append(r.hotOpts, opts...) }
+}
+
+// WithHistoryAuth wires AuthGuard + DEKManager + DecryptAuditEmitter
+// into BOTH hot and cold tiers. This is the common case — production
+// and tests always configure tiers symmetrically. Equivalent to
+// calling WithCryptoHot and WithCryptoCold with the matching
+// per-tier option constructors.
+func WithHistoryAuth(
+	g eventbus.SessionAuthGuard,
+	m eventbus.SessionDEKManager,
+	em eventbus.SessionAuditEmitter,
+) Option {
+	return func(r *Reader) {
+		r.hotOpts = append(r.hotOpts,
+			WithHistoryAuthGuard(g),
+			WithHistoryDEKManager(m),
+			WithHistoryDecryptAuditEmitter(em),
+		)
+		r.coldOpts = append(r.coldOpts,
+			WithColdHistoryAuthGuard(g),
+			WithColdHistoryDEKManager(m),
+			WithColdHistoryDecryptAuditEmitter(em),
+		)
+	}
+}
+
 // HotTier reads the JetStream-hosted recent slice of history. Exported so
 // tests and alternate storage backends can plug in.
 type HotTier interface {
@@ -210,6 +254,13 @@ type Reader struct {
 	// caller injects a test fake via WithColdTier (that path owns its
 	// own option wiring).
 	coldOpts []ColdTierOption
+
+	// hotOpts accumulates HotTierOption values supplied via
+	// WithCryptoHot(...). They are forwarded to newJetStreamHotTier
+	// when NewReader builds the default hot tier. Ignored when the
+	// caller injects a test fake via WithHotTier (that path owns its
+	// own option wiring).
+	hotOpts []HotTierOption
 }
 
 // NewReader constructs a Reader. `js` and `pool` MAY be nil if the caller
@@ -244,7 +295,7 @@ func NewReader(js jetstream.JetStream, pool *pgxpool.Pool, streamMaxAge time.Dur
 	// tier nil when its resource is nil is legitimate — e.g. a pure-unit
 	// test that only exercises cold-side logic.
 	if r.hot == nil && r.js != nil {
-		r.hot = newJetStreamHotTier(r.js, r.selector, r.now)
+		r.hot = newJetStreamHotTier(r.js, r.selector, r.now, r.hotOpts...)
 	}
 	if r.cold == nil && r.pool != nil {
 		r.cold = newPostgresColdTier(r.pool, r.coldOpts...)

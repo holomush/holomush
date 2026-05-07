@@ -294,7 +294,7 @@ func (s *grpcSubsystem) Start(_ context.Context) error {
 	js := s.cfg.EventBus.JS()
 	owners := historyOwnersFromPlugins(pluginManager)
 	router := audit.NewPluginHistoryRouter(pluginAuditClientProvider{mgr: pluginManager})
-	historyReader := newHistoryReader(js, pool, s.cfg.EventBus.Config(), owners, router)
+	historyReader := newHistoryReader(js, pool, s.cfg.EventBus.Config(), owners, router, nil, nil, nil)
 
 	coreServerOpts := []holoGRPC.CoreServerOption{
 		holoGRPC.WithEventStore(eventStore),
@@ -657,12 +657,26 @@ func (a *focusStreamContributorAdapter) QuerySessionStreams(ctx context.Context,
 // be nil only when owners is also nil — the Reader surfaces
 // EVENTBUS_PLUGIN_HISTORY_NOT_WIRED when a plugin-owned subject is
 // queried without a router.
+//
+// guard, dekMgr, and auditEm are optional crypto dependencies. All three
+// MUST be non-nil for any to take effect — partial wiring is a
+// misconfiguration and is rejected silently (the Reader falls back to
+// nil-auth passthrough, same as today). The all-or-nothing contract
+// prevents half-configured states where, e.g., the AuthGuard can permit
+// a decrypt but the DEKManager is nil and panics in decodeAuthorizeAndDispatch.
+//
+// When all three are non-nil, WithHistoryAuth forwards them symmetrically
+// to both hot and cold tiers. When all three are nil (production today),
+// behavior is unchanged — sensitive events surface EVENTBUS_HISTORY_AUTH_GUARD_NIL.
 func newHistoryReader(
 	js jetstream.JetStream,
 	pool *pgxpool.Pool,
 	cfg eventbus.Config,
 	owners *audit.OwnerMap,
 	router history.PluginHistoryRouter,
+	guard eventbus.SessionAuthGuard,    // nil = passthrough (current behavior)
+	dekMgr eventbus.SessionDEKManager,  // nil = passthrough (current behavior)
+	auditEm eventbus.SessionAuditEmitter, // nil = passthrough (current behavior)
 ) eventbus.HistoryReader {
 	opts := []history.Option{}
 	if owners != nil {
@@ -670,6 +684,9 @@ func newHistoryReader(
 	}
 	if router != nil {
 		opts = append(opts, history.WithPluginRouter(router))
+	}
+	if guard != nil && dekMgr != nil && auditEm != nil {
+		opts = append(opts, history.WithHistoryAuth(guard, dekMgr, auditEm))
 	}
 	return history.NewReader(js, pool, cfg.StreamMaxAge, time.Now, opts...)
 }
