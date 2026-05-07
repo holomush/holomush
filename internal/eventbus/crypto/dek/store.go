@@ -200,7 +200,7 @@ func (s *Store) updateParticipants(ctx context.Context, ctxID ContextID, p Parti
 			With("context_type", ctxID.Type).
 			With("context_id", ctxID.ID).Wrap(err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }() // no-op after Commit
+	defer func() { _ = tx.Rollback(ctx) }() //nolint:errcheck // no-op after Commit
 
 	// SELECT the active row and lock it until the transaction commits.
 	var active row
@@ -230,14 +230,19 @@ func (s *Store) updateParticipants(ctx context.Context, ctxID ContextID, p Parti
 			With("context_type", ctxID.Type).
 			With("context_id", ctxID.ID).Wrap(err)
 	}
-	if err := json.Unmarshal(participantsJSON, &active.Participants); err != nil {
+	if err = json.Unmarshal(participantsJSON, &active.Participants); err != nil {
 		return row{}, false, oops.Code("DEK_PARTICIPANTS_UNMARSHAL_FAILED").Wrap(err)
 	}
 
 	// Check for existing duplicate.
 	for _, existing := range active.Participants {
 		if existing.PlayerID == p.PlayerID && existing.BindingID == p.BindingID {
-			return active, false, tx.Commit(ctx)
+			if err = tx.Commit(ctx); err != nil {
+				return row{}, false, oops.Code("DEK_TX_COMMIT_FAILED").
+					With("context_type", ctxID.Type).
+					With("context_id", ctxID.ID).Wrap(err)
+			}
+			return active, false, nil
 		}
 	}
 
@@ -261,7 +266,7 @@ func (s *Store) updateParticipants(ctx context.Context, ctxID ContextID, p Parti
 			With("context_id", ctxID.ID).Wrap(err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	if err = tx.Commit(ctx); err != nil {
 		return row{}, false, oops.Code("DEK_TX_COMMIT_FAILED").
 			With("context_type", ctxID.Type).
 			With("context_id", ctxID.ID).Wrap(err)
