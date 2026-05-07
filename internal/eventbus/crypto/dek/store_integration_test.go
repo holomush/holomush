@@ -19,6 +19,19 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
+// testBindingStub implements dek.BindingResolver for tests.
+type testBindingStub struct {
+	bindingID string
+	err       error
+}
+
+func (s *testBindingStub) Current(_ context.Context, _ string) (string, error) {
+	if s.err != nil {
+		return "", s.err
+	}
+	return s.bindingID, nil
+}
+
 // TestSoftDeletedDEKAppearsAsNoRowsForProductionReads asserts that
 // rows with destroyed_at IS NOT NULL are invisible to the production
 // read predicates: selectByID (exercised via Manager.Resolve, which
@@ -43,7 +56,9 @@ func TestSoftDeletedDEKAppearsAsNoRowsForProductionReads(t *testing.T) {
 	provider := newTestProvider(t)
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
 	partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
-	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, nil, nil)
+	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache,
+		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
+		&testBindingStub{bindingID: "bind-test"})
 	require.NoError(t, err)
 
 	// Mint a DEK via the public API.
@@ -100,7 +115,9 @@ func TestSelectAnyByIDReturnsDestroyedRows(t *testing.T) {
 	store := dek.NewStore(pool)
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
 	partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
-	mgr, err := dek.NewManager(provider, store, cache, partCache, nil, nil)
+	mgr, err := dek.NewManager(provider, store, cache, partCache,
+		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
+		&testBindingStub{bindingID: "bind-test"})
 	require.NoError(t, err)
 
 	// Insert via Manager so the row matches production shape.

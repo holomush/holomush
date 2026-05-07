@@ -268,10 +268,18 @@ func (m *manager) Add(ctx context.Context, ctxID ContextID, p Participant) error
 		p.BindingID = bindingID
 	}
 
-	activeRow, err := m.store.updateParticipants(ctx, ctxID, p)
+	activeRow, added, err := m.store.updateParticipants(ctx, ctxID, p)
 	if err != nil {
 		return err
 	}
+	if !added {
+		return nil // idempotent no-op — participant already present
+	}
+
+	m.partCache.Put(
+		ParticipantsCacheKey{ContextType: ctxID.Type, ContextID: ctxID.ID, Version: activeRow.Version},
+		activeRow.Participants,
+	)
 
 	return m.invalidate(ctx, ctxID, "participants_changed", activeRow.Version, 0)
 }

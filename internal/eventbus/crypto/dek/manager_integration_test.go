@@ -27,6 +27,10 @@ import (
 	"github.com/holomush/holomush/pkg/errutil"
 )
 
+// noopInvalidator is a no-op Invalidator for tests that exercise
+// GetOrCreate / Resolve / Participants but never Add / Rotate.
+var noopInvalidator = func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil }
+
 func newTestPGPool(t *testing.T) (string, func()) {
 	t.Helper()
 	ctx := context.Background()
@@ -158,7 +162,7 @@ func TestManager_GetOrCreate_MintsAndPersists(t *testing.T) {
 	provider := newTestProvider(t)
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
 	partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
-	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, nil, nil)
+	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, noopInvalidator, &stubBindingResolver{})
 	require.NoError(t, err)
 
 	ctxID := dek.ContextID{Type: "scene", ID: "01ABCDEF"}
@@ -193,7 +197,7 @@ func TestManager_Resolve_ByKeyIDAndVersion(t *testing.T) {
 	provider := newTestProvider(t)
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
 	partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
-	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, nil, nil)
+	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, noopInvalidator, &stubBindingResolver{})
 	require.NoError(t, err)
 
 	ctxID := dek.ContextID{Type: "dm", ID: "01ABCDEF-01FFFFFF"}
@@ -219,7 +223,7 @@ func TestManager_Resolve_NotFound_ReturnsErrDEKNotFound(t *testing.T) {
 
 	mgr, err := dek.NewManager(newTestProvider(t), dek.NewStore(pool),
 		dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}),
-		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}), nil, nil)
+		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute}), noopInvalidator, &stubBindingResolver{})
 	require.NoError(t, err)
 
 	_, err = mgr.Resolve(ctx, codec.KeyID(99999), 1)
@@ -238,7 +242,7 @@ func TestManagerParticipantsRoundTrip(t *testing.T) {
 	provider := newTestProvider(t)
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
 	partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute})
-	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, nil, nil)
+	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, noopInvalidator, &stubBindingResolver{})
 	require.NoError(t, err)
 
 	initial := []dek.Participant{
@@ -269,7 +273,7 @@ func TestManagerParticipantsNotFoundReturnsTypedError(t *testing.T) {
 
 	mgr, err := dek.NewManager(newTestProvider(t), dek.NewStore(pool),
 		dek.NewCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute}),
-		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute}), nil, nil)
+		dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64, TTL: time.Minute}), noopInvalidator, &stubBindingResolver{})
 	require.NoError(t, err)
 
 	_, err = mgr.Participants(ctx, codec.KeyID(99999), 1)
@@ -314,9 +318,9 @@ func TestManager_GetOrCreate_ConcurrentMintRace(t *testing.T) {
 	cacheB := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
 	partCacheA := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
 	partCacheB := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
-	mgrA, err := dek.NewManager(provider, storeA, cacheA, partCacheA, nil, nil)
+	mgrA, err := dek.NewManager(provider, storeA, cacheA, partCacheA, noopInvalidator, &stubBindingResolver{})
 	require.NoError(t, err)
-	mgrB, err := dek.NewManager(provider, storeB, cacheB, partCacheB, nil, nil)
+	mgrB, err := dek.NewManager(provider, storeB, cacheB, partCacheB, noopInvalidator, &stubBindingResolver{})
 	require.NoError(t, err)
 
 	ctxID := dek.ContextID{Type: "scene", ID: "race-01"}
@@ -376,7 +380,7 @@ func TestManagerParticipantsHitsCacheOnSecondCall(t *testing.T) {
 	provider := newTestProvider(t)
 	cache := dek.NewCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
 	partCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 16, TTL: time.Minute})
-	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, nil, nil)
+	mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, noopInvalidator, &stubBindingResolver{})
 	require.NoError(t, err)
 
 	ctxID := dek.ContextID{Type: "scene", ID: "01HSCENE_T7"}
@@ -428,7 +432,7 @@ func TestManager_Add_AppendsParticipantAndPublishesInvalidation(t *testing.T) {
 	// Create a DEK via GetOrCreate first.
 	mgr, err := dek.NewManager(
 		newTestProvider(t), store, cache, partCache,
-		nil, // invalidator — nil here during setup
+		noopInvalidator, // invalidator — no-op during setup
 		&stubBindingResolver{bindingID: "bind-1"},
 	)
 	require.NoError(t, err)
@@ -478,13 +482,13 @@ func TestManager_Add_IdempotentOnBindingID(t *testing.T) {
 
 	mgr, err := dek.NewManager(
 		newTestProvider(t), store, cache, partCache,
-		nil,
+		noopInvalidator,
 		&stubBindingResolver{bindingID: "bind-1"},
 	)
 	require.NoError(t, err)
 
 	initial := []dek.Participant{
-		{PlayerID: "p1", CharacterID: "c1", BindingID: "bind-1", JoinedAt: time.Now().UTC()},
+		{PlayerID: "p0", CharacterID: "c0", BindingID: "bind-0", JoinedAt: time.Now().UTC()},
 	}
 	_, err = mgr.GetOrCreate(context.Background(), ctxID, initial)
 	require.NoError(t, err)
@@ -512,10 +516,10 @@ func TestManager_Add_IdempotentOnBindingID(t *testing.T) {
 	// Only one invalidation call total — second was a no-op.
 	require.Len(t, invStub.calls, 1)
 
-	// Participants should still have exactly 1 entry.
+	// Participants should have both entries (initial + added).
 	parts, err := mgr.Participants(context.Background(), codec.KeyID(1), 1)
 	require.NoError(t, err)
-	require.Len(t, parts, 1)
+	require.Len(t, parts, 2)
 }
 
 // TestManager_Add_BindingMissingFails verifies BINDING_NOT_FOUND when
@@ -530,7 +534,7 @@ func TestManager_Add_BindingMissingFails(t *testing.T) {
 
 	mgr, err := dek.NewManager(
 		newTestProvider(t), store, cache, partCache,
-		nil,
+		noopInvalidator,
 		&stubBindingResolver{bindingID: "bind-1"},
 	)
 	require.NoError(t, err)
@@ -570,7 +574,7 @@ func TestManager_Rotate_MintsFreshDEKAndMarksOldRotated(t *testing.T) {
 
 	mgr, err := dek.NewManager(
 		newTestProvider(t), store, cache, partCache,
-		nil,
+		noopInvalidator,
 		&stubBindingResolver{bindingID: "bind-1"},
 	)
 	require.NoError(t, err)
@@ -627,7 +631,7 @@ func TestManager_Rotate_RollsBackOnInvalidationFailure(t *testing.T) {
 
 	mgr, err := dek.NewManager(
 		newTestProvider(t), store, cache, partCache,
-		nil,
+		noopInvalidator,
 		&stubBindingResolver{bindingID: "bind-1"},
 	)
 	require.NoError(t, err)
@@ -656,12 +660,12 @@ func TestManager_Rotate_RollsBackOnInvalidationFailure(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "INVALIDATION_PARTIAL_FAILURE")
 
 	// The original DEK should still be the active one.
-	parts, err := mgr.Participants(context.Background(), key.KeyID, key.Version)
+	parts, err := mgr.Participants(context.Background(), key.ID, key.Version)
 	require.NoError(t, err)
 	assert.Len(t, parts, 1)
 	assert.Equal(t, "p1", parts[0].PlayerID)
 
 	// No new DEK version should exist.
-	_, err = mgr.Resolve(context.Background(), codec.KeyID(uint64(key.KeyID)+1), key.Version+1)
+	_, err = mgr.Resolve(context.Background(), codec.KeyID(uint64(key.ID)+1), key.Version+1)
 	require.Error(t, err)
 }

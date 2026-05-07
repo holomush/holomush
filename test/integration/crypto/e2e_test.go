@@ -59,6 +59,16 @@ import (
 	"github.com/holomush/holomush/test/testutil"
 )
 
+// dekBindingStub implements dek.BindingResolver for single-process E2E tests
+// where no real wizard binding store exists.
+type dekBindingStub struct {
+	bindingID string
+}
+
+func (s *dekBindingStub) Current(_ context.Context, _ string) (string, error) {
+	return s.bindingID, nil
+}
+
 // e2eEnv groups the bus + crypto + audit + reader fixture used by the
 // happy-path BDD spec. Built per BeforeEach to keep PG/JS isolation.
 type e2eEnv struct {
@@ -103,7 +113,9 @@ func setupE2EEnv(ctx context.Context, t *testing.T) *e2eEnv {
 	dekStore := dek.NewStore(pool)
 	dekCache := dek.NewCache(dek.CacheConfig{Capacity: 64})
 	dekPartCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64})
-	dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache, nil, nil)
+	dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache,
+		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
+		&dekBindingStub{bindingID: "bind-e2e"})
 	require.NoError(t, err)
 
 	hostSub := audit.NewSubsystem(fixedJS{js: bus.JS}, fixedPool{pool: pool}, audit.Config{})

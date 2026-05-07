@@ -170,7 +170,9 @@ func buildPluginDecryptHarness(t *testing.T) *pluginDecryptHarness {
 	dekStore := dek.NewStore(pool)
 	dekCache := dek.NewCache(dek.CacheConfig{Capacity: 64})
 	dekPartCache := dek.NewParticipantsCache(dek.CacheConfig{Capacity: 64})
-	dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache, nil, nil)
+	dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache,
+		func(_ context.Context, _ dek.ContextID, _ string, _, _ uint32) error { return nil },
+		&dekBindingStub{bindingID: "bind-decrypt"})
 	require.NoError(t, err)
 
 	// Host audit subsystem: populates events_audit. Handle stays local —

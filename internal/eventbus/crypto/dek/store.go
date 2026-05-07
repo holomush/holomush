@@ -184,40 +184,43 @@ func IsUniqueViolation(err error) bool {
 
 // updateParticipants appends p to the active DEK's participant set.
 // Idempotent on (player_id, binding_id) — duplicate returns the active
-// row unchanged. Returns the active row wrapped in a pgx.ErrNoRows
-// sentinel when no active DEK exists.
-func (s *Store) updateParticipants(ctx context.Context, ctxID ContextID, p Participant) (row, error) {
+// row unchanged with added=false. Returns the active row wrapped in a
+// pgx.ErrNoRows sentinel when no active DEK exists.
+func (s *Store) updateParticipants(ctx context.Context, ctxID ContextID, p Participant) (row, bool, error) {
 	active, err := s.selectActive(ctx, ctxID)
 	if err != nil {
-		return row{}, err // pgx.ErrNoRows → DEK_NOT_FOUND for caller
+		return row{}, false, err // pgx.ErrNoRows → DEK_NOT_FOUND for caller
 	}
 
-	participantJSON, err := json.Marshal(p)
+	// Check for existing duplicate.
+	for _, existing := range active.Participants {
+		if existing.PlayerID == p.PlayerID && existing.BindingID == p.BindingID {
+			return active, false, nil
+		}
+	}
+
+	// Append and write back.
+	active.Participants = append(active.Participants, p)
+	newJSON, err := json.Marshal(active.Participants)
 	if err != nil {
-		return row{}, oops.Code("DEK_PARTICIPANTS_MARSHAL_FAILED").Wrap(err)
+		return row{}, false, oops.Code("DEK_PARTICIPANTS_MARSHAL_FAILED").Wrap(err)
 	}
 
 	tag, err := s.pool.Exec(ctx, `
 		UPDATE crypto_keys
-		   SET participants = participants || $3::jsonb
+		   SET participants = $3
 		 WHERE context_type = $1 AND context_id = $2
-		   AND rotated_at IS NULL AND destroyed_at IS NULL
-		   AND NOT EXISTS (
-		     SELECT 1 FROM jsonb_array_elements(participants) AS part
-		     WHERE part->>'player_id' = $4 AND part->>'binding_id' = $5
-		   )`,
-		ctxID.Type, ctxID.ID, participantJSON, p.PlayerID, p.BindingID,
+		   AND rotated_at IS NULL AND destroyed_at IS NULL`,
+		ctxID.Type, ctxID.ID, newJSON,
 	)
 	if err != nil {
-		return row{}, oops.Code("DEK_PARTICIPANTS_UPDATE_FAILED").
+		return row{}, false, oops.Code("DEK_PARTICIPANTS_UPDATE_FAILED").
 			With("context_type", ctxID.Type).
 			With("context_id", ctxID.ID).Wrap(err)
 	}
-	if tag.RowsAffected() == 0 {
-		return active, nil // duplicate — idempotent no-op
-	}
+	_ = tag.RowsAffected() // pgx may report 0 for jsonb no-change rows; trust the UPDATE
 
-	return s.selectActive(ctx, ctxID)
+	return active, true, nil
 }
 
 // markRotated sets rotated_at and superseded_by on the target row.
