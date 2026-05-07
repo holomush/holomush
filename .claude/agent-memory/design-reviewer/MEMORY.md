@@ -8,6 +8,7 @@ Keep under 200 lines. Curate — don't hoard.
 
 ## Common spec weaknesses in this codebase
 
+- [Round-2 fixes can introduce orthogonal contradictions](feedback_round2_fix_introduces_contradiction.md) — sweeping R2 generalizations flatten over earlier considered decisions in other sections; grep enumeration items
 - [Universal stamp-contract vs per-kind invariant](feedback_universal_stamp_contract_vs_per_kind_invariant.md) — universal "every stamp site MUST X" + per-kind invariant carving out kind D = kind-D production stamps fail at cutover; grep all kind-D sites
 - [oops vs gRPC code conflation](feedback_oops_vs_grpc_code_conflation.md) — HoloMUSH specs often call oops codes "gRPC codes"; flag wording, do not block if pattern matches existing codebase convention
 - [grpc FromError message rewrite on wrapped statuses](feedback_grpc_fromerror_message_rewrite.md) — `st.Message()` on a status reached via `errors.As` is the OUTER err.Error(); flag "verbatim" / "wire-equivalent" claims that ignore this
