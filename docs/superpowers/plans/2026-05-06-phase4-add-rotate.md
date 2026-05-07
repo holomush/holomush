@@ -34,7 +34,7 @@
 
 ## Decomposition & sequencing
 
-```
+```text
 T1: Store methods (no Manager dependency, can land first)
 ├── T2: Invalidator + BindingResolver types + NewManager sig change + call-site migration
 ├── T3: Manager.Add implementation + unit tests
@@ -48,6 +48,7 @@ T1: Store methods (no Manager dependency, can land first)
 ### Task 1: Store methods — updateParticipants, markRotated, markDestroyed, selectByBindingID
 
 **Files:**
+
 - Create: `internal/eventbus/crypto/dek/store_add_rotate_test.go`
 - Modify: `internal/eventbus/crypto/dek/store.go`
 
@@ -414,6 +415,7 @@ Expected: PASS
 ### Task 2: Invalidator + BindingResolver types, NewManager signature change, call-site migration
 
 **Files:**
+
 - Modify: `internal/eventbus/crypto/dek/manager.go`
 - Modify: `internal/eventbus/crypto/dek/manager_test.go`
 - Modify: `internal/eventbus/crypto/dek/manager_integration_test.go`
@@ -556,6 +558,7 @@ func (s *stubBindingResolver) Current(_ context.Context, _ string) (string, erro
 Every call site that passes 4 args must now pass `nil, nil` for the two new params. Update the following files:
 
 `internal/eventbus/crypto/dek/manager_test.go` (4 call sites at lines 22, 30, 38, 48):
+
 ```go
 // Line 22: add nil, nil
 _, err := dek.NewManager(nil, &dek.Store{}, dek.NewCache(dek.CacheConfig{}), dek.NewParticipantsCache(dek.CacheConfig{}), nil, nil)
@@ -568,12 +571,14 @@ _, err := dek.NewManager(kek.NewNoneProviderForUnitTest(), &dek.Store{}, dek.New
 ```
 
 `internal/eventbus/crypto/dek/store_integration_test.go` (2 call sites at lines 46, 103):
+
 ```go
 mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, nil, nil)
 mgr, err := dek.NewManager(provider, store, cache, partCache, nil, nil)
 ```
 
 `internal/eventbus/crypto/dek/manager_integration_test.go` (8 call sites at lines 126, 161, 185, 206, 235, 282, 284, 344):
+
 ```go
 // Each adds nil, nil as the last two args.
 mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, nil, nil)
@@ -581,21 +586,25 @@ mgr, err := dek.NewManager(provider, dek.NewStore(pool), cache, partCache, nil, 
 ```
 
 `test/integration/crypto/e2e_test.go` (line 106):
+
 ```go
 dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache, nil, nil)
 ```
 
 `test/integration/crypto/emit_test.go` (line 84):
+
 ```go
 dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache, nil, nil)
 ```
 
 `test/integration/crypto/metadata_only_test.go` (line 78):
+
 ```go
 dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache, nil, nil)
 ```
 
 `test/integration/crypto/plugin_decrypt_test.go` (line 173):
+
 ```go
 dekMgr, err := dek.NewManager(provider, dekStore, dekCache, dekPartCache, nil, nil)
 ```
@@ -615,6 +624,7 @@ Expected: PASS (integration tests compile and pass with nil, nil)
 ### Task 3: Manager.Add implementation
 
 **Files:**
+
 - Modify: `internal/eventbus/crypto/dek/manager.go`
 - Modify: `internal/eventbus/crypto/dek/manager_integration_test.go`
 
@@ -864,6 +874,7 @@ Expected: PASS
 ### Task 4: Manager.Rotate implementation
 
 **Files:**
+
 - Modify: `internal/eventbus/crypto/dek/manager.go`
 - Modify: `internal/eventbus/crypto/dek/manager_integration_test.go`
 
@@ -1075,6 +1086,7 @@ Expected: PASS
 ### Task 5: Integration tests — INV-12, INV-13, INV-29 with real PG + NATS
 
 **Files:**
+
 - Modify: `internal/eventbus/crypto/dek/manager_integration_test.go`
 
 These tests use the embedded NATS `eventbustest` harness and a real PG testcontainer. They exercise the full Add/Rotate lifecycle with a real `invalidation.Coordinator`.
@@ -1283,6 +1295,7 @@ func (s *singleMemberRegistry) Subscribe(_ cluster.MemberObserver) (cancel func(
 ```
 
 Add imports:
+
 ```go
 import (
     "crypto/rand"
@@ -1316,6 +1329,7 @@ Expected: PASS
 ### Task 6: INV-37 — Startup integrity check for crashed Rotate recovery
 
 **Files:**
+
 - Modify: `internal/eventbus/crypto/dek/store.go`
 - Create: `internal/eventbus/crypto/dek/store_integrity_test.go`
 
