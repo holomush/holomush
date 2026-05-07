@@ -59,8 +59,9 @@ no Phase 5 work can proceed past sub-epic D's design.
 | Bootstrap closure mechanism | Two mechanisms: `crypto_bootstrap_state` row (race-free enforcement gate via INSERT ON CONFLICT DO NOTHING) + `crypto.totp_bootstrap_completed` audit event (durable trail) | Row is cheap and atomic; event survives DB restore and integrates into sub-epic D's chain. Both must be defeated for an attacker to silently re-bootstrap. |
 | Recovery code format | 16 hex chars (64 bits entropy), formatted `xxxx-xxxx-xxxx-xxxx` | 64 bits is impractical to brute-force; format is human-typable. |
 | Recovery code rate-limit | None in v1 | 64-bit codes are infeasible to brute-force absent a side channel; defer to follow-up bead if needed. |
-| Audit subject namespace | `events.<game>.system.crypto_totp.*` (NOT `audit.<game>.system.*`) | Master spec §4.6 wrote audit subjects in the `audit.<game>...` form aspirationally; the EVENTS JetStream stream binds only `events.>` and `JetStreamPublisher.Publish` rejects non-`events.` prefixes (`internal/eventbus/types.go:163-192`). The single existing path that lands rows in `events_audit` is the `events.>` filter consumed by `internal/eventbus/audit/projection.go:62-65`. Using `events.<game>.system.crypto_totp.*` lets the existing audit projection persist sub-epic A's events with no new substrate. Correspondingly: two new ABAC forbid seed policies are required to deny character/plugin reads of these subjects (see §"ABAC seed policies for the new subject namespace"). |
-| Atomicity of `BootstrapEnroll` | Single PG transaction wrapping `INSERT crypto_bootstrap_state` + `INSERT player_totp` + `INSERT player_totp_recovery_codes×10` + `audit.Publish` (publish-before-COMMIT). On publish error → ROLLBACK; bootstrap_state row is NOT claimed. | Spec §"Ordering and atomicity" pseudocode is the contract. INV-A15 is enforceable only if the PG txn boundary spans all four operations; separate per-method transactions cannot satisfy "no row exists in `crypto_bootstrap_state` after a failed publish." Implementation: a `Repository.BootstrapEnrollAtomic(ctx, claim, enrollment, codes, publishCallback)` method that opens one txn, runs all inserts, invokes the callback (which is the audit Publish), and either COMMITs or ROLLBACKs based on the callback's result. |
+| Audit subject namespace | `events.<game>.system.crypto_totp.*` (reserved; not actually emitted by sub-epic A — see next row) | The subject namespace is reserved here so that ABAC seed policies, sub-epic D, and any future emitter target a stable, consistent name. `audit.<game>.system.*` was rejected because `JetStreamPublisher.Publish` validates the `events.` prefix at `internal/eventbus/types.go:163-192` and the EVENTS stream binds only `events.>` (`internal/eventbus/subsystem.go:24-27`). |
+| Audit emission ownership | **Deferred to caller layer with eventbus access — sub-epic D / future UDS callers — NOT sub-epic A.** Sub-epic A's host-shell CLIs run as separate processes that cannot reach the holomush server's embedded NATS (`internal/eventbus/subsystem.go:Start()` boots NATS in-process via `DontListen: true`). Sub-epic A's `Service` methods write only to PG; the `Service` interface MAY expose audit-relevant return metadata so callers with eventbus access (sub-epic D's `OperatorAuthProvider`, future server-internal callers reached via sub-epic C's UDS) can emit on behalf of A. | Bootstrap-enroll, enroll, recover, verify, lockout — all five lifecycle events spec'd in §"Audit events emitted" — are produced inside `Service` methods, but emission to JetStream / `events_audit` happens at the calling layer that has the publisher. For sub-epic A's three host-shell CLIs (bootstrap-enroll, enroll, recover), this means **no audit event is emitted** at the time of the operation; the operator's host-shell access is the trust path (master spec §1 already concedes root-on-host bypasses audit). Sub-epic D's `Verify` callsite (the OperatorAuthProvider) WILL emit `crypto.totp_locked` and the per-invocation auth audit because D runs server-side with eventbus access. INV-A10 is RETIRED from sub-epic A (see §"Invariants"); the deny ABAC seed policies (INV-A16) remain because they're forward-looking defense-in-depth for future emitters and subscribers. |
+| Atomicity of `BootstrapEnroll` | Single PG transaction wrapping `INSERT crypto_bootstrap_state` + `INSERT player_totp` + `INSERT player_totp_recovery_codes×10`. No JetStream-PG coordination is needed because audit emission is deferred (see "Audit emission ownership" row). On any error → ROLLBACK; bootstrap_state row is NOT claimed. | Trivial PG transactional atomicity — `Repository.BootstrapEnrollAtomic(ctx, claim, enrollment, codes)` opens one txn, runs all inserts, COMMITs on success, ROLLBACKs on any error. INV-A15 is rephrased to reflect this (was: "publish error → rollback"; now: "any insert error → rollback, no row claimed"). The original publish-before-COMMIT contract was load-bearing on JetStream access that sub-epic A's standalone CLIs do not have. |
 
 [decomp]: 2026-05-07-event-payload-crypto-phase5-decomposition.md
 
@@ -68,6 +69,17 @@ no Phase 5 work can proceed past sub-epic D's design.
 
 - `holomush admin totp reset <player>` CLI (admin operation requiring
   full break-glass auth) — sub-epic D.
+- **Audit event emission for host-shell CLI invocations.** Per R5 Option
+  Y: sub-epic A's three CLIs (`bootstrap-enroll`, `enroll`, `recover`)
+  run as standalone processes without eventbus access. They produce no
+  audit events. The master spec §1 trust model already concedes
+  root-on-host as the trust path; the operational forensic story is
+  "PG row without matching audit event = host-shell CLI invocation"
+  (see §"Audit events emitted" / "The host-shell-CLI gap is the trust
+  path"). When sub-epic D ships, server-side callers WILL emit
+  `crypto.totp_locked` and the per-invocation auth audit using
+  `VerifyResult.LockoutTransition` and the other returned audit
+  metadata.
 - Web/UI enrollment for general players (player-tier TOTP for web
   login) — future sub-epic.
 - TOTP for non-player principals (plugins, services) — not currently
@@ -183,11 +195,25 @@ historical record matters more than the FK.
                              │  - IsEnrolled          │──▶ kek.Provider (wrap/unwrap)
                              │  - ConsumeRecoveryCode │
                              │  - ClearTOTP           │──▶ totp.Repository (PG)
-                             └────────────────────────┘──▶ AuditPublisher (eventbus)
+                             └────────────────────────┘
+                                       │
+                                       ▼
+                             returns audit-event metadata
+                             (BootstrapResult, EnrollResult,
+                              VerifyResult, etc.) — caller emits
 
   D's OperatorAuthProvider ─▶ totp.Service.IsEnrolled, Verify
-  (sub-epic D, future)
+  (sub-epic D, future)         │
+                                ▼
+                              audit.Publish (server-side, eventbus access)
 ```
+
+**Audit emission lives at the calling layer**, not inside `totp.Service`.
+Sub-epic A's host-shell CLIs cannot reach the running server's embedded
+JetStream — see §"Audit events emitted" / "Emission ownership and the
+host-shell-CLI gap." `Service` methods return enough information for a
+caller to construct the event; the caller is responsible for actually
+emitting it.
 
 ## Go API surface
 
@@ -211,72 +237,128 @@ type Clock interface {
     Now() time.Time
 }
 
-// Service is the per-player TOTP enrollment, verification, and recovery API.
-// Consumed by sub-epic D's OperatorAuthProvider for break-glass auth, and by
-// sub-epic A's admin CLIs.
+// Service is the per-player TOTP enrollment, verification, and recovery
+// API. PG-only side effects; no audit emission. Callers with eventbus
+// access (sub-epic D's OperatorAuthProvider; future server-side flows)
+// emit audit events using the returned result structs.
 type Service interface {
     // BootstrapEnroll enrolls the FIRST admin's TOTP without operator auth.
-    // The CLI MUST run on the host (no UDS layer in this sub-epic). Refuses
-    // with ErrBootstrapAlreadyConsumed if crypto_bootstrap_state already
-    // has a 'totp_v1' row.
-    BootstrapEnroll(ctx context.Context, playerID ulid.ULID) (Enrollment, error)
+    // Refuses with ErrBootstrapAlreadyConsumed if crypto_bootstrap_state
+    // already has a 'totp_v1' row. Wraps INSERT bootstrap_state + INSERT
+    // player_totp + INSERT recovery_codes×10 in a single PG txn (via
+    // Repository.BootstrapEnrollAtomic). Returns BootstrapResult carrying
+    // the Enrollment (for stdout printing) and audit-event metadata for
+    // server-side callers that want to emit crypto.totp_bootstrap_completed.
+    BootstrapEnroll(ctx context.Context, playerID ulid.ULID) (BootstrapResult, error)
 
     // Enroll enrolls TOTP for a player who is already authenticated by the
-    // CLI (creds via auth.Service.ValidateCredentials). Refuses with
-    // ErrAlreadyEnrolled if the player already has a player_totp row.
-    Enroll(ctx context.Context, playerID ulid.ULID) (Enrollment, error)
+    // caller. Refuses with ErrAlreadyEnrolled if the player already has a
+    // player_totp row.
+    Enroll(ctx context.Context, playerID ulid.ULID) (EnrollResult, error)
 
     // Verify validates a 6-digit TOTP code.
-    // Returns:
-    //   nil                       — code valid, last_used_step + last_verified_at updated
-    //   ErrNotEnrolled            — no row in player_totp
-    //   ErrTOTPLocked{Until}      — failed_attempts ≥ 5, locked until time X
-    //   ErrInvalidCode            — code did not match any window; failed_attempts++
-    //   ErrCodeReuse              — code matched but step ≤ last_used_step (replay)
-    Verify(ctx context.Context, playerID ulid.ULID, code string) error
+    // Returns VerifyResult carrying the outcome (success / failure mode)
+    // and any state transition (e.g., LockoutTransition: NULL→non-NULL).
+    // Server-side callers consume LockoutTransition to emit
+    // crypto.totp_locked.
+    //
+    // Result.Outcome ∈ {OutcomeOK, OutcomeNotEnrolled, OutcomeLocked,
+    //                   OutcomeInvalidCode, OutcomeCodeReuse}
+    // err is non-nil only for infrastructure failures (PG, KEK unwrap).
+    Verify(ctx context.Context, playerID ulid.ULID, code string) (VerifyResult, error)
 
     // IsEnrolled returns whether the player has a current TOTP enrollment.
     IsEnrolled(ctx context.Context, playerID ulid.ULID) (bool, error)
 
     // ConsumeRecoveryCode validates a recovery code and marks it consumed.
-    // Argon2id-hashes the input, looks up an unconsumed row, marks it
-    // consumed_at = NOW(). Emits crypto.totp_recovery_code_consumed.
-    // Returns ErrInvalidRecoveryCode for any failure mode (timing-safe;
-    // does not leak which step failed).
-    ConsumeRecoveryCode(ctx context.Context, playerID ulid.ULID, code string) error
+    // Returns ConsumeRecoveryResult on success; ErrInvalidRecoveryCode on
+    // failure (timing-safe — does not leak which step failed).
+    // Server-side callers emit crypto.totp_recovery_code_consumed using
+    // result.RecoveryCodeID.
+    ConsumeRecoveryCode(ctx context.Context, playerID ulid.ULID, code string) (ConsumeRecoveryResult, error)
 
     // ClearTOTP removes the player's TOTP enrollment and unconsumed
-    // recovery codes. Idempotent — no-op if not enrolled. Used by recover
-    // (after ConsumeRecoveryCode succeeds) and by sub-epic D's reset CLI.
-    // Emits crypto.totp_cleared.
+    // recovery codes. Idempotent. Returns ClearResult with cleared_by =
+    // the supplied reason. Server-side callers emit crypto.totp_cleared.
     // Does NOT touch crypto_bootstrap_state — recovery does not re-open
     // bootstrap.
-    ClearTOTP(ctx context.Context, playerID ulid.ULID, clearedBy ClearReason) error
+    ClearTOTP(ctx context.Context, playerID ulid.ULID, clearedBy ClearReason) (ClearResult, error)
 }
 
-// Enrollment is the one-time output of BootstrapEnroll / Enroll. The CLI
-// presents this to the operator to scan into their authenticator app and
-// store the recovery codes out-of-band.
+// Enrollment is the one-time enrollment material. Carries the TOTP
+// secret and recovery codes — printed once by sub-epic A's CLIs to
+// stdout, then forgotten in process.
 type Enrollment struct {
-    Secret          string   // base32-encoded; for manual entry
+    Secret          string   // base32-encoded
     ProvisioningURI string   // otpauth://totp/<game>:<username>?secret=...&issuer=holomush
-    RecoveryCodes   []string // 10 codes, "xxxx-xxxx-xxxx-xxxx"; printed once
+    RecoveryCodes   []string // 10 codes, "xxxx-xxxx-xxxx-xxxx"
+}
+
+// BootstrapResult is the return type of Service.BootstrapEnroll. Carries
+// the Enrollment (for stdout) and audit metadata for server-side callers.
+type BootstrapResult struct {
+    Enrollment       Enrollment
+    AuditConsumedAt  time.Time // for crypto.totp_bootstrap_completed payload
+    AuditPlayerID    ulid.ULID // = consumed_by_player_id
+    BootstrapKey     string    // = "totp_v1"
+}
+
+// EnrollResult is the return type of Service.Enroll.
+type EnrollResult struct {
+    Enrollment      Enrollment
+    AuditEnrolledAt time.Time // for crypto.totp_enrolled payload
+    AuditPlayerID   ulid.ULID
+}
+
+// VerifyResult is the return type of Service.Verify.
+type VerifyResult struct {
+    Outcome           VerifyOutcome
+    LockedUntil       *time.Time // set when Outcome == OutcomeLocked OR a lockout transition just fired
+    LockoutTransition bool       // true iff this Verify call transitioned the player NULL→locked
+    AuditAt           time.Time  // = clock.Now() at call time; for caller-emitted events
+}
+
+// VerifyOutcome enumerates the outcomes of Service.Verify.
+type VerifyOutcome int
+
+const (
+    OutcomeOK            VerifyOutcome = iota // code valid; state advanced
+    OutcomeNotEnrolled                        // no row in player_totp
+    OutcomeLocked                             // already locked (LockedUntil > now)
+    OutcomeInvalidCode                        // code did not match
+    OutcomeCodeReuse                          // matched but ≤ last_used_step
+)
+
+// ConsumeRecoveryResult is the return type of Service.ConsumeRecoveryCode.
+type ConsumeRecoveryResult struct {
+    RecoveryCodeID  ulid.ULID // ULID of the consumed row; for audit payload
+    AuditConsumedAt time.Time
+    AuditPlayerID   ulid.ULID
+}
+
+// ClearResult is the return type of Service.ClearTOTP.
+type ClearResult struct {
+    ClearedBy     ClearReason
+    AuditClearedAt time.Time
+    AuditPlayerID  ulid.ULID
+    WasEnrolled    bool // false if the call was a no-op (idempotent); callers SHOULD skip emit when false
 }
 
 // ClearReason is the audit-trail justification for a ClearTOTP call.
 type ClearReason string
 
 const (
-    ClearReasonRecoveryCode  ClearReason = "recovery_code"  // sub-epic A
-    ClearReasonAdminReset    ClearReason = "admin_reset"    // sub-epic D
+    ClearReasonRecoveryCode  ClearReason = "recovery_code"  // sub-epic A's recover CLI
+    ClearReasonAdminReset    ClearReason = "admin_reset"    // sub-epic D's reset CLI
 )
 
-// Constructor.
+// Constructor — note: NO AuditPublisher parameter. Audit emission is
+// the caller's responsibility (see §"Audit events emitted" / "Emission
+// ownership and the host-shell-CLI gap").
 func NewService(
     repo Repository,
     kekProvider kek.Provider,
     clock Clock,
-    audit AuditPublisher,
 ) Service
 ```
 
@@ -319,12 +401,15 @@ Verify(playerID, code):
          WHERE player_id = ?
          RETURNING failed_attempts, locked_until
        COMMIT
-       If returned failed_attempts >= 5 AND prior locked_until WAS NULL:
-         emit crypto.totp_locked
-       Return ErrInvalidCode
+       Return VerifyResult{
+         Outcome:           OutcomeInvalidCode,
+         LockedUntil:       new locked_until (may be nil),
+         LockoutTransition: (returned failed_attempts >= 5 AND prior locked_until WAS NULL),
+         AuditAt:           clock.Now(),
+       }
   8. If matchedStep <= last_used_step:
        ROLLBACK   // do NOT advance state on replay
-       Return ErrCodeReuse
+       Return VerifyResult{Outcome: OutcomeCodeReuse, AuditAt: clock.Now()}
   9. UPDATE player_totp
        SET last_used_step   = matchedStep,
            last_verified_at = NOW(),
@@ -332,8 +417,14 @@ Verify(playerID, code):
            locked_until     = NULL
        WHERE player_id = ?
  10. COMMIT
- 11. Return nil
+ 11. Return VerifyResult{Outcome: OutcomeOK, AuditAt: clock.Now()}
 ```
+
+Note on the LockedUntil/LockoutTransition fields: these are how the
+caller learns that *this Verify call* fired the lockout. A server-side
+caller (sub-epic D's `OperatorAuthProvider`) inspects
+`result.LockoutTransition` and emits `crypto.totp_locked` when it's
+true. Sub-epic A's host-shell CLIs do not consume Verify directly.
 
 **Concurrency primitive.** `SELECT ... FOR UPDATE` (step 2) takes a
 row-level lock for the duration of the txn. Concurrent Verify calls
@@ -360,10 +451,19 @@ Sub-epic A explicitly accepts this residual leak rather than forcing a
 **`failed_attempts` reset on success.** Step 9's UPDATE clears the
 counter and unlocks. INV-A4 / INV-A5 verify both directions.
 
-**Audit emission ordering for `crypto.totp_locked`.** Emitted AFTER the
-COMMIT of the failure-path txn (step 7) but only on the transition
-NULL → non-NULL `locked_until` (i.e., the lock-out has just fired).
-Repeated failed verifies while already locked do NOT re-emit.
+**Audit emission ordering for `crypto.totp_locked` (caller-side).**
+Sub-epic A's `Service.Verify` does not emit. The returned `VerifyResult.LockoutTransition`
+flag is true exactly once per lockout (when `failed_attempts` increment
+crosses the threshold and `locked_until` becomes non-NULL). Server-side
+callers (sub-epic D's `OperatorAuthProvider`) check this flag after
+calling `Verify` and emit `crypto.totp_locked` via the eventbus.
+Repeated failed verifies while already locked return
+`Outcome: OutcomeLocked` with `LockoutTransition: false` so callers do
+not re-emit. The "emit-AFTER-COMMIT" ordering is implicit in this
+design: the PG COMMIT inside `Verify` happens before the Service
+returns; the caller's emit happens after the return; consequently the
+audit publish is always post-COMMIT and a transient eventbus failure
+cannot roll back the lockout.
 
 ## CLI commands
 
@@ -483,41 +583,127 @@ This output WILL NOT be shown again. Lose your authenticator and these
 codes, and you may be permanently locked out of break-glass operations.
 ```
 
-The CLI MUST flush STDOUT and exit 0 only after the audit event commits.
+The CLI MUST flush STDOUT and exit 0 after the PG transaction commits. No
+audit event is emitted for host-shell CLI invocations — see
+§"Audit events emitted" / "Emission ownership and the host-shell-CLI gap."
 
 ## Audit events emitted
 
-All five events durable in `events_audit` via the existing audit
-projection (master spec §4.6 / §8.1). Subjects use a uniform pattern
-under the `events.<game>.system.crypto_totp.<scope>.<event>` namespace,
-where `<scope>` is `bootstrap` for the once-only bootstrap event or
-`<player_id>` for per-player events.
+### Subject namespace (reserved)
+
+Sub-epic A reserves the following subject namespace for TOTP-lifecycle
+audit events. The namespace is defined here so that ABAC seed policies
+and future emitters target a stable name. **Sub-epic A does not itself
+emit these events** — see "Emission ownership" below.
+
+Subjects use a uniform pattern under
+`events.<game>.system.crypto_totp.<scope>.<event>` where `<scope>` is
+`bootstrap` for the once-only bootstrap event or `<player_id>` for
+per-player events.
 
 **Why `events.>` and not `audit.>`.** The repo's EVENTS JetStream
-stream binds only `events.>` subjects (see
-`internal/eventbus/subsystem.go:24-27`: `StreamName = "EVENTS"`,
-`SubjectFilter = "events.>"`); `JetStreamPublisher.Publish` validates
-the subject prefix at `internal/eventbus/types.go:163-192` and rejects
-anything not under `events.`. Master spec §4.6 wrote audit subjects in
-the `audit.<game>...` form aspirationally — there is no production code
-path today that reaches `events_audit` via an `audit.>` subject
-(verified: `internal/eventbus/authguard/audit/emitter.go` silently
-drops its `audit.<gameID>.plugin_decrypt.*` publishes — see
-`test/integration/crypto/plugin_decrypt_test.go:67-82` which documents
-this as the failure mode). The single existing path that lands rows in
-`events_audit` is the `events.>` filter on the EVENTS stream consumed
-by `internal/eventbus/audit/projection.go:62-65`. Sub-epic A therefore
-emits its audit events under `events.<game>.system.crypto_totp.*`,
-which IS picked up by the existing audit projection and persisted to
-`events_audit` with no new substrate.
+stream binds only `events.>` subjects (`internal/eventbus/subsystem.go:24-27`);
+`JetStreamPublisher.Publish` validates the prefix at
+`internal/eventbus/types.go:163-192` and rejects anything not under
+`events.`. Master spec §4.6 wrote audit subjects in the `audit.<game>...`
+form aspirationally — there is no production code path today that
+reaches `events_audit` via an `audit.>` subject. The single existing
+path that lands rows in `events_audit` is the `events.>` filter on the
+EVENTS stream consumed by `internal/eventbus/audit/projection.go:62-65`.
 
-| Event type | Subject pattern | Emitted from | Payload |
+| Event type | Subject pattern | Produced inside | Payload |
 |---|---|---|---|
-| `crypto.totp_bootstrap_completed` | `events.<game>.system.crypto_totp.bootstrap.completed` | `BootstrapEnroll` (once per server) | `consumed_at`, `consumed_by_player_id`, `bootstrap_key="totp_v1"` |
-| `crypto.totp_enrolled` | `events.<game>.system.crypto_totp.<player_id>.enrolled` | `Enroll` (per-player) | `player_id`, `enrolled_at`, `recovery_codes_issued=10` |
-| `crypto.totp_cleared` | `events.<game>.system.crypto_totp.<player_id>.cleared` | `ClearTOTP` (recovery path or D's reset) | `player_id`, `cleared_at`, `cleared_by` (`recovery_code` from A; `admin_reset` from D) |
-| `crypto.totp_recovery_code_consumed` | `events.<game>.system.crypto_totp.<player_id>.recovery_consumed` | `ConsumeRecoveryCode` | `player_id`, `consumed_at`, `recovery_code_id` (the row ULID; never the code) |
-| `crypto.totp_locked` | `events.<game>.system.crypto_totp.<player_id>.locked` | `Verify` (transition NULL→non-NULL `locked_until`) | `player_id`, `locked_at`, `locked_until`, `reason="brute_force_protection"` |
+| `crypto.totp_bootstrap_completed` | `events.<game>.system.crypto_totp.bootstrap.completed` | `Service.BootstrapEnroll` | `consumed_at`, `consumed_by_player_id`, `bootstrap_key="totp_v1"` |
+| `crypto.totp_enrolled` | `events.<game>.system.crypto_totp.<player_id>.enrolled` | `Service.Enroll` | `player_id`, `enrolled_at`, `recovery_codes_issued=10` |
+| `crypto.totp_cleared` | `events.<game>.system.crypto_totp.<player_id>.cleared` | `Service.ClearTOTP` | `player_id`, `cleared_at`, `cleared_by` (`recovery_code` from A; `admin_reset` from D) |
+| `crypto.totp_recovery_code_consumed` | `events.<game>.system.crypto_totp.<player_id>.recovery_consumed` | `Service.ConsumeRecoveryCode` | `player_id`, `consumed_at`, `recovery_code_id` (the row ULID; never the code) |
+| `crypto.totp_locked` | `events.<game>.system.crypto_totp.<player_id>.locked` | `Service.Verify` (transition NULL→non-NULL `locked_until`) | `player_id`, `locked_at`, `locked_until`, `reason="brute_force_protection"` |
+
+### Emission ownership and the host-shell-CLI gap
+
+`internal/eventbus/subsystem.go:Start()` boots the embedded NATS server
+in-process via `DontListen: true`. There is no external connection
+point — a separate process (e.g., a host-shell CLI) cannot reach the
+running server's JetStream. Sub-epic A's three CLIs
+(`bootstrap-enroll`, `enroll`, `recover`) are short-lived processes
+that connect to PG directly and **cannot** publish events into the
+running server's JetStream.
+
+Therefore, sub-epic A's `Service` methods produce the events
+**conceptually** (carry the lifecycle information needed to construct
+them) but **do not emit** them. Emission is the responsibility of
+callers that have eventbus access:
+
+- **Sub-epic D's `OperatorAuthProvider`** runs server-side (inside the
+  holomush server process via the UDS path that sub-epic C provides).
+  It calls `Service.Verify` and emits `crypto.totp_locked` /
+  `crypto.totp_recovery_code_consumed` / `crypto.totp_cleared` when it
+  observes the corresponding state transitions.
+- **Future server-internal callers** (any code path that eventually
+  invokes `Service.BootstrapEnroll` / `Enroll` from inside the running
+  server — e.g., a future "first-run wizard" web flow) emit
+  `crypto.totp_bootstrap_completed` / `crypto.totp_enrolled` from their
+  layer.
+- **Sub-epic A's host-shell CLIs emit no events.** This is the
+  intentional gap.
+
+`Service` API exposes the information needed for the caller to emit:
+either via return-value metadata (a `BootstrapResult` carrying the
+`consumed_at` / `bootstrap_key`) or via an optional emitter callback
+that is nil for standalone CLIs and non-nil when a server-side caller
+wires it up. Either shape is acceptable; the plan picks one and tests
+both code paths (caller-with-emitter and caller-without).
+
+**Caveat: `crypto.totp_bootstrap_completed` has no production emitter
+in Phase 5.** Of the five reserved subjects, four
+(`crypto.totp_enrolled`, `crypto.totp_cleared`,
+`crypto.totp_recovery_code_consumed`, `crypto.totp_locked`) have a
+sub-epic D emitter via `OperatorAuthProvider`'s consumption of
+`Service.Verify` and the related break-glass paths. The
+`crypto.totp_bootstrap_completed` event has **no Phase-5 emitter** —
+sub-epic D's `OperatorAuthProvider` consumes only `Service.Verify`
+(not `BootstrapEnroll`), and no other Phase-5 sub-epic invokes
+bootstrap. The subject is reserved for a future server-side caller
+(e.g., a web first-run wizard or admin-RPC handler) that doesn't yet
+exist. Until such a caller exists, EVERY bootstrap-enroll happens via
+the host-shell CLI path and produces no audit event — which is
+consistent with the trust-path story below.
+
+### The host-shell-CLI gap is the trust path
+
+Master spec §1 threat model already concedes that host-shell access is
+**outside the threat model** — the trust path; root on host bypasses
+audit integrity at the architectural level (master spec §1, §5.9 lines
+1276-1279, §7.5 lines 1714-1716). A host-shell `bootstrap-enroll`
+producing no audit event is therefore consistent with what the master
+spec already accepts.
+
+Forensic implications:
+
+- `crypto_bootstrap_state` row exists, no `crypto.totp_bootstrap_completed`
+  event in `events_audit` → bootstrap was performed via the host-shell
+  CLI; operator action; trust path.
+- `crypto_bootstrap_state` row exists AND a corresponding event is in
+  `events_audit` → bootstrap was performed via a server-side caller
+  (sub-epic D or future).
+- No row, event present → ghost (server-side caller's PG txn rolled
+  back after the event was published; impossible in the simplified
+  Option-Y atomicity model since PG and audit happen in the same txn
+  for server-side callers, but theoretically possible if a future
+  caller diverges from the simple shape).
+- No row, no event → bootstrap not consumed (initial state).
+- (Row, ≥2 events for the same `bootstrap_key`) → unreachable through
+  spec'd code paths (PRIMARY KEY on `crypto_bootstrap_state.key` +
+  `INSERT ... ON CONFLICT DO NOTHING` make a second successful claim
+  impossible; legitimate server-side callers return
+  `ErrBootstrapAlreadyConsumed` on the second call and would not
+  publish a second event). Reaching this state indicates either
+  audit-table tampering or a future caller violating per-key emission
+  idempotency.
+
+Operators auditing TOTP enrollment activity SHOULD treat
+`crypto_bootstrap_state` rows without a matching audit event as
+evidence of host-shell activity, not as gaps in audit coverage.
 
 ### ABAC seed policies for the new subject namespace
 
@@ -568,145 +754,87 @@ amendments) or beyond.
 
 ## Bootstrap closure mechanism
 
-Two cooperating mechanisms:
+The single mechanism that makes bootstrap once-only is the
+**`crypto_bootstrap_state` row**. Race-free enforcement via
+`INSERT ... ON CONFLICT (key) DO NOTHING RETURNING key`. Cheap, atomic,
+queried by every `BootstrapEnroll` attempt.
 
-1. **`crypto_bootstrap_state` row** — race-free enforcement gate via
-   `INSERT ... ON CONFLICT (key) DO NOTHING RETURNING key`. Cheap, atomic,
-   queried by every `BootstrapEnroll` attempt.
-2. **`crypto.totp_bootstrap_completed` audit event** — durable trail.
-   Persisted in `events_audit` via the existing crypto-blind cold-tier
-   projection (byte-equality with JetStream). Survives DB restore.
+The corresponding `crypto.totp_bootstrap_completed` audit event is a
+**reserved** event type that sub-epic A's host-shell CLIs do not emit
+(see §"Audit events emitted" / "Emission ownership and the
+host-shell-CLI gap"). Server-side callers that consume
+`Service.BootstrapEnroll` and have eventbus access (future server-side
+flows; **not** sub-epic D, which only consumes `Service.Verify`) MAY
+emit the event after the txn commits. Their emission is by definition consistent with the PG state
+(if the txn committed, the row exists; if the txn rolled back, no
+emission was reached) — see "Server-side caller atomicity" below.
 
-### Ordering and atomicity (PG ↔ JetStream)
+### Atomicity (PG-only, no JetStream coordination)
 
-A PG transaction cannot encompass a JetStream publish (publishes go to
-NATS, not PG). The bootstrap-enroll path therefore uses a
-**publish-before-COMMIT** ordering with explicit ack waiting:
+Sub-epic A's CLIs are short-lived host processes that cannot reach the
+running server's embedded JetStream (`internal/eventbus/subsystem.go`
+runs NATS with `DontListen: true`). Therefore the atomicity boundary
+for sub-epic A is **strictly PG**:
 
 ```text
-BootstrapEnroll(playerID):
+Repository.BootstrapEnrollAtomic(ctx, claim, enrollment, codes):
   BEGIN
     INSERT crypto_bootstrap_state (...) ON CONFLICT DO NOTHING RETURNING key
       → if no row returned: ROLLBACK; return ErrBootstrapAlreadyConsumed
     INSERT player_totp (...)
     INSERT player_totp_recovery_codes (...) × 10
-    audit.Publish(crypto.totp_bootstrap_completed)   ── waits for JetStream ack
-      → if Publish error: ROLLBACK; return error
     COMMIT
-  → if COMMIT error: GHOST CASE (see below); return error
+  → if any error in the inserts: ROLLBACK; return error
 ```
 
-**INV-A15 in this model.** Publish error before COMMIT MUST cause
-ROLLBACK; no `crypto_bootstrap_state` row exists if publish failed. This
-is testable by simulating publish failure and asserting the row is
-absent.
+No JetStream publish is involved. INV-A15 (originally
+"publish error → rollback") is rephrased as: "any insert error during
+`BootstrapEnrollAtomic` MUST cause ROLLBACK; no `crypto_bootstrap_state`
+row exists when the call returns an error." This is trivially testable
+with a stubbed Repository that fails on the third INSERT.
 
-### The ghost case (publish-success then COMMIT-fail)
+### Server-side caller atomicity (forward-looking)
 
-If the publish ack lands but the COMMIT then fails (PG crash, network
-partition between server and PG, txn abort), the audit event records a
-bootstrap that did not actually take effect. This is a **known
-artifact** of bridging PG and JetStream without a distributed
-transaction:
+When sub-epic D (or any future server-side caller) wraps both
+`Service.BootstrapEnroll` and the corresponding audit emission, that
+caller takes responsibility for whatever audit-state consistency model
+it wants. The shape we expect:
 
-- The `events_audit` cold tier shows a `crypto.totp_bootstrap_completed`
-  event.
-- `crypto_bootstrap_state` has no row.
-- A subsequent `BootstrapEnroll` attempt **succeeds** (since the row is
-  missing) and emits a second `crypto.totp_bootstrap_completed` event.
+```text
+D.OperatorAuthProvider.HandleBootstrap(...):
+  result, err := Service.BootstrapEnroll(...)   // PG-only; returns audit metadata
+  if err: return err                             // no audit row; no event
+  err = audit.Publish(buildBootstrapEvent(result))  // server-side; eventbus access
+  if err:
+    log.Warn("bootstrap completed but audit publish failed", ...)
+    // operationally accept the gap; PG row exists, no event
+  return nil
+```
 
-**Forensic detection.** A consistency check (manual or future tooling)
-SHOULD cross-reference `events_audit` ↔ `crypto_bootstrap_state`:
+The PG state is never inconsistent (sub-epic A's PG-only atomicity
+guarantees that). The only inconsistency surface is "PG row exists, no
+audit event" — which is **the same inconsistency surface produced by
+the host-shell CLI path** (§"Audit events emitted" / "Emission
+ownership"). Operators reading `events_audit` ↔ `crypto_bootstrap_state`
+already need to interpret "row without event" as either (a) host-shell
+CLI invocation, or (b) server-side caller's post-COMMIT publish failure.
+Both are real. Both are within the master spec §1 trust model.
 
-- N events for `crypto_totp.bootstrap.completed`, no row in
-  `crypto_bootstrap_state` → all N are ghost events; bootstrap is in
-  fact still un-consumed (anomalous; investigate).
-- N events, 1 row → exactly one ghost (or two distinct successful
-  bootstraps, if the row was manually inserted out-of-band).
-- 0 events, 1 row → DB row exists without audit trail; either an
-  out-of-band INSERT or `events_audit` was tampered with.
+### Per-player events (`enroll`, `recover`, `cleared`, `locked`)
 
-**Why we accept this gap (vs. an outbox pattern).** Bootstrap-enroll
-runs once per server lifetime (this is the design intent — Decision
-"once-only" in `decomposition spec`). An outbox table that pumps
-audit events asynchronously eliminates the gap but adds permanent
-infrastructure for a once-per-server event. The ghost case is rare
-(both publish success AND COMMIT failure within the same call),
-forensically detectable, and the **operational impact** is bounded
-(operator gets `ErrBootstrapAlreadyConsumed` on retry or successfully
-re-bootstraps; either way, the system reaches a consistent state).
-The decomposition spec's threat-model row 134 ("curious operator with
-shell + DB access") is the only adversary class that could exploit
-this gap, and they already have full access to the bootstrap state
-itself.
+For per-player events, sub-epic A's `Service` methods (`Enroll`,
+`ConsumeRecoveryCode`, `ClearTOTP`, `Verify`) likewise own only PG state.
+They produce no events; emission is the calling layer's responsibility.
 
-For the per-player `enroll`, `recover`, and `cleared` events, the
-**same publish-before-COMMIT** pattern applies. Their ghost cases are:
-
-- `enroll` ghost: audit event present, `player_totp` row absent → next
-  enroll attempt succeeds (no row to reject); operator sees one extra
-  audit event.
-- `recover` ghost: audit event present, recovery code marked unconsumed
-  in PG → recovery code can be re-used until next ConsumeRecoveryCode
-  finalizes consumption (or operator runs `recover` again with the same
-  code).
-- `cleared` ghost: audit event present, `player_totp` still has the
-  enrollment row → next `Verify` succeeds (TOTP still works); the
-  audit event is a false alarm.
-
-These ghost cases are forensically detectable and do not weaken the
-authentication contract beyond the operator's awareness of "audit ↔
-DB consistency" being eventual rather than transactional. Master spec
-§1 already concedes that PG superuser + host shell can defeat audit
-integrity entirely; the ghost case is a strict subset.
-
-### `crypto.totp_locked` is the exception: emit-AFTER-COMMIT
-
-`crypto.totp_locked` is **not** included in the publish-before-COMMIT
-pattern above. Per §"Verify mechanics" §"Audit emission ordering for
-`crypto.totp_locked`", the lockout audit event is emitted **after** the
-failure-path txn COMMITs. The asymmetry is deliberate:
-
-- Lockout is a **defensive control** against brute-force code guessing
-  (master spec threat-model row 134). If publish-before-COMMIT applied,
-  a transient NATS unavailability during a lockout-triggering Verify
-  would roll back the lockout txn — `failed_attempts` never reaches 5,
-  the player is not locked, the attacker keeps trying. That is
-  fail-open and the worse failure mode for a brute-force defense.
-- Emit-after-COMMIT means the lockout takes effect even when audit
-  emission is unavailable. The failure mode is "silent lockout" — the
-  player IS locked in PG (`failed_attempts ≥ 5, locked_until > NOW()`)
-  but no `crypto.totp_locked` audit event was emitted.
-- The silent-lockout case is forensically detectable: a periodic
-  consistency check (manual or future tooling) can scan `player_totp`
-  for `failed_attempts ≥ 5` rows whose `locked_at` has no matching
-  `crypto.totp_locked` event in `events_audit`. Operators investigate
-  the gap.
-- This is the **only** event in sub-epic A that uses emit-after-COMMIT.
-  Every other host-emitted event is a state-progression event whose
-  audit trail must hold (publish-before-COMMIT); `crypto.totp_locked`
-  is a defensive signal whose enforcement must hold (emit-after-COMMIT).
-
-**Forward-compat with sub-epic D's chaining (Decision 7).** D
-introduces hash-chained `crypto.policy_set` events for site-policy
-state. The `crypto.totp_bootstrap_completed` event is structurally
-similar (point-in-time policy-state event); D MAY include it in the
-chain by computing `policy_hash` for it and recording `prev_hash`
-referencing the prior `policy_set` event for `policy_name`. The
-closure check (the row) does NOT depend on the chain — chain integrity
-is purely audit-trail, not enforcement.
-
-**Why two mechanisms.** The row is fast and atomic; the event survives
-DB restore and integrates into D's chain. If an attacker with PG
-superuser silently deletes the row, the event still exists in
-`events_audit`. If the event is silently deleted from `events_audit`,
-the row still blocks re-bootstrap. Both must be defeated (consistently)
-for an attacker to silently re-bootstrap.
-
-**What this does NOT defend against.** An attacker with PG superuser
-AND host shell who edits both the row AND `events_audit` AND the
-JetStream-side stream consistently. Master spec §1 already concedes
-root-on-host is the trust path.
+`crypto.totp_locked` is conceptually a defensive signal that should
+land **after** the lockout txn commits (so a transient publish failure
+cannot roll back the lockout itself — see master spec threat-model row
+134, brute-force defense). Sub-epic D's `OperatorAuthProvider`, which
+calls `Service.Verify`, gets this for free under Option Y: the PG txn
+inside `Verify` commits the failed-attempt increment / lockout
+unconditionally; D's caller observes the post-COMMIT state and emits
+the event from server-side. No publish-before-COMMIT coordination is
+needed because the publish is a separate concern at a different layer.
 
 ## Threat-model coverage
 
@@ -731,22 +859,22 @@ root-on-host is the trust path.
 | INV-A7 | `ClearTOTP` MUST delete the `player_totp` row + all unconsumed recovery codes for the player. | `TestClearTOTPRemovesEnrollmentAndUnconsumedCodes` |
 | INV-A8 | `ClearTOTP` MUST NOT touch `crypto_bootstrap_state` — recovery does not re-open bootstrap. | `TestClearTOTPDoesNotResetBootstrapState` |
 | INV-A9 | TOTP secret MUST be KEK-wrapped before storage; raw secret MUST NOT appear in PG. | `TestEnrollStoresKEKWrappedSecretNotPlaintext` |
-| INV-A10 | All five audit events MUST be emitted on their respective code paths. | `TestAuditEmissionForEachLifecycleEvent` (table-driven) |
+| INV-A10 | **Retired in R5 (Option Y).** Service methods do not emit audit events; emission is the calling layer's responsibility (see §"Audit events emitted" / "Emission ownership and the host-shell-CLI gap"). The `VerifyResult` / `BootstrapResult` / `EnrollResult` / `ClearResult` / `ConsumeRecoveryResult` structs carry the audit metadata callers need; tests that the metadata is correctly populated take the place of audit-emission tests. | `TestVerifyResultPopulatesLockoutTransitionOnFirstLock`, `TestBootstrapResultCarriesAuditMetadata`, etc. |
 | INV-A11 | Recovery codes MUST be stored as Argon2id hashes; raw codes MUST NOT appear in PG. | `TestRecoveryCodesStoredAsArgon2idHashes` |
 | INV-A12 | `Verify` with skew=1 MUST accept codes from the previous, current, and next 30s step. | `TestVerifyAcceptsAdjacentTimeSteps` (uses in-tree `Clock` interface) |
 | INV-A13 | `BootstrapEnroll` MUST refuse if the target player does not exist in the `players` table. (Admin-role enforcement is sub-epic D's responsibility — see Out of scope.) | `TestBootstrapEnrollRefusesUnknownPlayer` |
 | INV-A14 | `Verify` failure paths (invalid code, locked, reuse) MUST NOT update `last_used_step` or `last_verified_at`. | `TestVerifyFailurePathsDoNotMutateSuccessFields` |
-| INV-A15 | Audit publish error in `BootstrapEnroll` MUST cause the single PG transaction (wrapping `INSERT crypto_bootstrap_state` + `INSERT player_totp` + `INSERT player_totp_recovery_codes×10` + audit publish) to roll back: no row exists in `crypto_bootstrap_state` after a failed publish. Implementation: a `Repository.BootstrapEnrollAtomic(ctx, claim, enrollment, codes, publishCallback)` method opens one txn, runs all inserts, invokes the callback (audit publish), and either COMMITs or ROLLBACKs based on the callback's result. The publish-success-then-COMMIT-fail "ghost case" is acknowledged as a known artifact (see Bootstrap closure mechanism). | `TestBootstrapEnrollRollsBackOnPublishFailure` |
+| INV-A15 | Any error during `Repository.BootstrapEnrollAtomic` (failed `INSERT crypto_bootstrap_state`, `INSERT player_totp`, or `INSERT player_totp_recovery_codes`) MUST cause the single PG transaction to roll back: no row exists in `crypto_bootstrap_state` and no row exists in `player_totp` when the call returns an error. (Per R5 Option Y: no JetStream coordination is involved; the txn is PG-only. The original publish-before-COMMIT INV-A15 wording was load-bearing on JetStream access that sub-epic A's standalone CLIs do not have.) | `TestBootstrapEnrollAtomicRollsBackOnInsertError` |
 | INV-A16 | Two ABAC seed forbid policies MUST exist denying character and plugin principals from reading streams matching `events.*.system.crypto_totp.*`. | `TestSeedPoliciesIncludesEventsSystemCryptoTotpDenyForCharacter` and `TestSeedPoliciesIncludesEventsSystemCryptoTotpDenyForPlugin` (parallel to existing `TestSeedPoliciesIncludesAuditSubscribeDenyFor*` at `internal/access/policy/seed_test.go:240-268`) |
 
 ## Testing approach
 
 | Layer | File | What it tests |
 |---|---|---|
-| Unit | `internal/totp/service_test.go` | Service methods, error branches, lockout/replay logic, audit emission. Mocks: `Repository`, `kek.Provider`, `Clock` (in-tree `FakeClock`), `AuditPublisher`. Table-driven where useful. |
+| Unit | `internal/totp/service_test.go` | Service methods, error branches, lockout/replay logic, result-struct metadata population. Mocks: `Repository`, `kek.Provider`, `Clock` (in-tree `FakeClock`). No `AuditPublisher` mock under R5 Option Y — Service does not emit. Table-driven where useful. |
 | Repo integration | `internal/totp/repo_integration_test.go` (build tag `integration`) | Repo methods against real PG via testcontainers. INV-A2 specifically requires this layer. |
 | CLI | `cmd/holomush/cmd_admin_totp_test.go` | Cobra command tree wiring, flag parsing, prompt handling. Mocks `totp.Service`. |
-| E2E | `test/integration/totp_e2e_test.go` (build tag `integration`, Ginkgo/Gomega) | Bootstrap → enroll → verify → recover → re-enroll cycle. Real PG, real KEK file, real audit publisher. |
+| E2E | `test/integration/totp_e2e_test.go` (build tag `integration`, Ginkgo/Gomega) | Bootstrap → enroll → verify → recover → re-enroll cycle. Real PG, real KEK file. No audit-publisher assertions for sub-epic A (CLIs emit nothing under Option Y); audit-table assertions for these flows live in sub-epic D's E2E once D ships. |
 
 `task pr-prep` runs `task test` (unit + CLI) and `task test:int`
 (repo integration + E2E). Both MUST pass green for the PR.
@@ -759,9 +887,9 @@ root-on-host is the trust path.
 | KEK unavailable at verify time | `kek.Unwrap` returns error | Verify returns wrapped error; `OperatorAuthProvider` (sub-epic D) treats as `ErrInternal`; break-glass refused with operator-friendly message. |
 | `wrap_key_id` not found in current KEK provider (KEK rotation drift) | `kek.Unwrap(wrapped, wrap_key_id)` returns `ErrKEKNotFound` | Verify fails. Operator must re-enroll TOTP after a KEK rotation that retired the wrap key — or sub-epic D's KEK-rotation work re-wraps existing TOTP secrets. v1: re-enroll. |
 | PG unavailable | Repository methods return error | All TOTP service calls fail; CLI prints error and exits non-zero. |
-| Audit publish error before COMMIT (publish-before-COMMIT events) | `AuditPublisher.Publish` returns error | Containing PG transaction rolls back. No `crypto_bootstrap_state` / `player_totp` rows committed. INV-A15. |
-| Audit publish ack lands but PG COMMIT fails (ghost case) | Detected by cross-referencing `events_audit` ↔ `crypto_bootstrap_state`/`player_totp` rows | Acknowledged known artifact (see Bootstrap closure mechanism). Operator retries; system reaches consistent state. |
-| Audit publish error during `crypto.totp_locked` emit (post-COMMIT) | `failed_attempts ≥ 5, locked_until > NOW()` rows in `player_totp` whose `locked_at` has no matching `crypto.totp_locked` event in `events_audit` | Lockout has taken effect in PG (defensive control intact); audit gap. Forensically detectable via reconciliation. See §"`crypto.totp_locked` is the exception: emit-AFTER-COMMIT". |
+| `Repository.BootstrapEnrollAtomic` insert error mid-txn | `INSERT player_totp` or `INSERT player_totp_recovery_codes` returns error | Containing PG transaction rolls back. No `crypto_bootstrap_state` row, no `player_totp` row committed. INV-A15. |
+| Host-shell CLI: no audit event emitted | sub-epic A's CLIs run as standalone processes without eventbus access (see §"Audit events emitted" / "Emission ownership"). | **Intentional gap.** Operators reading `events_audit` ↔ `crypto_bootstrap_state` see "row without event" → host-shell CLI invocation; trust path. Master spec §1 already concedes root-on-host bypasses audit at the architectural level. |
+| Server-side caller: post-`Service` audit publish error | sub-epic D's caller invokes `audit.Publish` after `Service.BootstrapEnroll` returns; publish fails | PG state stands (txn already committed). Caller logs warn; operationally treated as the "row without event" surface — same as host-shell-CLI gap. |
 | Password failure during `enroll` CLI's `ValidateCredentials` step | `internal/auth/registration.go:86-99` records the failed attempt against `players.failed_attempts` | **Intentional coupling.** A fumbled password on TOTP enrollment counts against the player's web-login lockout. Same lockout policy applies; we do not split the surfaces. |
 | Concurrent `BootstrapEnroll` race | Two goroutines, one wins ON CONFLICT | INV-A2: exactly one succeeds; the other gets `ErrBootstrapAlreadyConsumed`. |
 | Same TOTP code submitted twice in same step | `last_used_step >= matchedStep` check | `ErrCodeReuse`. |
@@ -777,7 +905,7 @@ root-on-host is the trust path.
 - **`internal/access.RoleAdmin`:** existing role constant. **Not directly checked by sub-epic A's CLIs** (see Out of scope); enforcement lives in sub-epic D's `OperatorAuthProvider`.
 - **`github.com/pquerna/otp`:** **net-new dependency.** Add to `go.mod`. RFC 6238 compliant. The `hotp` sub-package's `GenerateCode(secret, step)` is used in the `Verify` per-step comparison loop (see Verify mechanics).
 - **In-tree `Clock` interface:** new in `internal/totp/service.go`. Avoids a third-party clock library; satisfied by `realClock{}` (calls `time.Now()`) in production and a small `FakeClock` in tests. Pattern is consistent with internal taste for keeping dependencies tight.
-- **`internal/eventbus.Publisher`:** existing (`internal/eventbus/bus.go:15-17`); used for audit event emission. Publish is synchronous and waits for JetStream ack before returning — see Bootstrap closure mechanism for ordering.
+- **`internal/eventbus.Publisher`:** **NOT consumed by sub-epic A** under R5 Option Y. Sub-epic A's `Service` is PG-only and does not publish audit events. The interface is consumed by sub-epic D's `OperatorAuthProvider` and other server-side callers, where eventbus access exists. See §"Audit events emitted" / "Emission ownership and the host-shell-CLI gap".
 
 ## Out of scope
 
