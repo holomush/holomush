@@ -35,17 +35,31 @@ type dbtx interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
-func dbFromCtx(ctx context.Context, pool *pgxpool.Pool) dbtx {
+// pgPool is the pool-shaped interface used by the repo's transaction
+// scaffolding. *pgxpool.Pool satisfies it directly; tests can inject
+// pgxmock.PgxPoolIface (also satisfies it) for unit-level coverage of
+// error paths that real PG would only hit in pathological conditions.
+type pgPool interface {
+	dbtx
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+func dbFromCtx(ctx context.Context, pool pgPool) dbtx {
 	if tx := txFromContext(ctx); tx != nil {
 		return tx
 	}
 	return pool
 }
 
-type repo struct{ pool *pgxpool.Pool }
+type repo struct{ pool pgPool }
 
 // NewRepository constructs a Repository backed by the given connection pool.
 func NewRepository(pool *pgxpool.Pool) Repository { return &repo{pool: pool} }
+
+// newRepoForTest constructs a *repo with an arbitrary pgPool. Used by
+// the pgxmock-driven unit tests in repo_unit_test.go to exercise error
+// paths without standing up a real testcontainer.
+func newRepoForTest(pool pgPool) *repo { return &repo{pool: pool} }
 
 // InTransaction begins a txn, stores it on context via txKey{}, and runs fn.
 // fn returning nil commits; non-nil rolls back.
