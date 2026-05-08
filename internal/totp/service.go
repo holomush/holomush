@@ -11,6 +11,7 @@ import (
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
+	"github.com/holomush/holomush/internal/idgen"
 	"github.com/samber/oops"
 )
 
@@ -80,9 +81,67 @@ func (s *service) IsEnrolled(ctx context.Context, playerID ulid.ULID) (bool, err
 	return enrolled, nil
 }
 
-// BootstrapEnroll lands in T7.
-func (s *service) BootstrapEnroll(_ context.Context, _ ulid.ULID) (BootstrapResult, error) {
-	panic("not yet implemented: BootstrapEnroll lands in T7")
+// BootstrapEnroll: per spec §"CLI commands" / "bootstrap-enroll" + §"Bootstrap closure mechanism".
+// Per R5 Option Y: PG-only; returns BootstrapResult for caller emission.
+func (s *service) BootstrapEnroll(ctx context.Context, playerID ulid.ULID) (BootstrapResult, error) {
+	exists, err := s.repo.PlayerExists(ctx, playerID.String())
+	if err != nil {
+		return BootstrapResult{}, oops.With("player_id", playerID.String()).Wrap(err)
+	}
+	if !exists {
+		return BootstrapResult{}, oops.Code("TOTP_PLAYER_NOT_FOUND").
+			With("player_id", playerID.String()).Errorf("player not found")
+	}
+
+	now := s.clock.Now().UTC()
+	enr, rec, err := s.buildEnrollment(ctx, playerID.String(), now)
+	if err != nil {
+		return BootstrapResult{}, err
+	}
+	if err := s.repo.BootstrapEnrollAtomic(ctx, "totp_v1", playerID.String(), rec); err != nil {
+		return BootstrapResult{}, oops.With("player_id", playerID.String()).Wrap(err) // includes ErrBootstrapAlreadyConsumed
+	}
+	return BootstrapResult{
+		Enrollment:      enr,
+		AuditConsumedAt: now,
+		AuditPlayerID:   playerID,
+		BootstrapKey:    "totp_v1",
+	}, nil
+}
+
+// buildEnrollment generates a fresh secret + URI + recovery codes,
+// wraps the secret with KEK, hashes the codes with Argon2id, and
+// returns the public Enrollment + persistable EnrollmentRecord.
+func (s *service) buildEnrollment(ctx context.Context, playerID string, now time.Time) (Enrollment, EnrollmentRecord, error) {
+	secret, err := generateSecret()
+	if err != nil {
+		return Enrollment{}, EnrollmentRecord{}, err
+	}
+	wrapped, kekKeyID, err := s.kek.Wrap(ctx, []byte(secret))
+	if err != nil {
+		return Enrollment{}, EnrollmentRecord{}, oops.Code("TOTP_KEK_WRAP_FAILED").Wrap(err)
+	}
+	uri, err := buildProvisioningURI(playerID, s.cfg.GameID, secret) // playerID as account label; see spec
+	if err != nil {
+		return Enrollment{}, EnrollmentRecord{}, err
+	}
+	codes, err := generateRecoveryCodes(s.cfg.RecoveryCodeCount)
+	if err != nil {
+		return Enrollment{}, EnrollmentRecord{}, err
+	}
+	hashed := make([]HashedRecoveryCode, len(codes))
+	for i, c := range codes {
+		h, hErr := s.enrollmentHasher.Hash(c)
+		if hErr != nil {
+			return Enrollment{}, EnrollmentRecord{}, oops.Code("TOTP_RECOVERY_HASH_FAILED").Wrap(hErr)
+		}
+		hashed[i] = HashedRecoveryCode{ID: idgen.New(), CodeHash: h, CreatedAt: now}
+	}
+	return Enrollment{Secret: secret, ProvisioningURI: uri, RecoveryCodes: codes},
+		EnrollmentRecord{
+			PlayerID: playerID, WrappedSecret: wrapped, WrapKeyID: kekKeyID,
+			EnrolledAt: now, RecoveryCodes: hashed,
+		}, nil
 }
 
 // Enroll lands in T8.
