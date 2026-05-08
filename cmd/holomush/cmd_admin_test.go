@@ -34,6 +34,22 @@ func TestAdminTOTPBootstrapEnrollExists(t *testing.T) {
 	assert.Equal(t, "bootstrap-enroll <username>", cmd.Use)
 }
 
+func TestAdminTOTPEnrollExists(t *testing.T) {
+	root := NewRootCmd()
+	cmd, _, err := root.Find([]string{"admin", "totp", "enroll"})
+	assert.NoError(t, err)
+	assert.Equal(t, "enroll", cmd.Use)
+	assert.NotNil(t, cmd.Flags().Lookup("username"))
+}
+
+func TestAdminTOTPRecoverExists(t *testing.T) {
+	root := NewRootCmd()
+	cmd, _, err := root.Find([]string{"admin", "totp", "recover"})
+	assert.NoError(t, err)
+	assert.Equal(t, "recover", cmd.Use)
+	assert.NotNil(t, cmd.Flags().Lookup("username"))
+}
+
 func TestPrintEnrollmentRendersAllSections(t *testing.T) {
 	var buf bytes.Buffer
 	enr := totp.Enrollment{
