@@ -13,8 +13,8 @@ import (
 
 func TestSeedPoliciesCount(t *testing.T) {
 	seeds := SeedPolicies()
-	// 25 permit + 3 forbid = 28 total (18 base − 2 removed command policies + 5 gap-fill from T22b + 1 phase-2 command + 2 system bootstrap + 1 location-stream read + 2 phase-3b audit deny)
-	assert.Len(t, seeds, 28, "expected 28 seed policies (25 permit, 3 forbid)")
+	// 25 permit + 5 forbid = 30 total (18 base − 2 removed command policies + 5 gap-fill from T22b + 1 phase-2 command + 2 system bootstrap + 1 location-stream read + 2 phase-3b audit deny + 2 phase-5 sub-epic A events.*.system.crypto_totp.* deny seeds)
+	assert.Len(t, seeds, 30, "expected 30 seed policies (25 permit, 5 forbid)")
 }
 
 func TestSeedPoliciesAllNamesHaveSeedPrefix(t *testing.T) {
@@ -72,7 +72,7 @@ func TestSeedPoliciesEffectDistribution(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 25, permitCount, "expected 25 permit policies")
-	assert.Equal(t, 3, forbidCount, "expected 3 forbid policies")
+	assert.Equal(t, 5, forbidCount, "expected 5 forbid policies (+2 phase-5 sub-epic A events.*.system.crypto_totp.* denies)")
 }
 
 func TestSeedPoliciesExpectedNames(t *testing.T) {
@@ -110,6 +110,9 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 		// Phase-3b audit deny policies
 		"seed:deny-audit-read-character",
 		"seed:deny-audit-read-plugin",
+		// Phase-5 sub-epic A TOTP-substrate audit deny policies (INV-A16)
+		"seed:deny-events-system-crypto-totp-read-character",
+		"seed:deny-events-system-crypto-totp-read-plugin",
 	}
 
 	seeds := SeedPolicies()
@@ -122,9 +125,11 @@ func TestSeedPoliciesExpectedNames(t *testing.T) {
 
 func TestSeedPoliciesForbidPoliciesAreExpected(t *testing.T) {
 	expectedForbids := map[string]bool{
-		"seed:property-restricted-excluded": true,
-		"seed:deny-audit-read-character":    true,
-		"seed:deny-audit-read-plugin":       true,
+		"seed:property-restricted-excluded":                  true,
+		"seed:deny-audit-read-character":                     true,
+		"seed:deny-audit-read-plugin":                        true,
+		"seed:deny-events-system-crypto-totp-read-character": true,
+		"seed:deny-events-system-crypto-totp-read-plugin":    true,
 	}
 	compiler := NewCompiler(emptySchema())
 	for _, s := range SeedPolicies() {
@@ -265,6 +270,42 @@ func TestSeedPoliciesIncludesAuditSubscribeDenyForPlugin(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "audit.> deny seed policy for plugin MUST be present")
+}
+
+// Phase-5 sub-epic A TOTP-substrate audit deny policy tests (INV-A16)
+//
+// INV-A16: ABAC denies subscribe to events.*.system.crypto_totp.* streams
+// for kind={plugin|character}. Sub-epic D emits these events; sub-epic A
+// reserves the namespace via these seeds.
+
+func TestSeedPoliciesIncludesEventsSystemCryptoTotpDenyForCharacter(t *testing.T) {
+	seeds := SeedPolicies()
+	var found bool
+	for _, s := range seeds {
+		if s.Name == "seed:deny-events-system-crypto-totp-read-character" {
+			found = true
+			assert.Contains(t, s.DSLText, "forbid")
+			assert.Contains(t, s.DSLText, "events.*.system.crypto_totp.*")
+			assert.Contains(t, s.DSLText, "principal is character")
+			break
+		}
+	}
+	assert.True(t, found, "events.*.system.crypto_totp.* deny seed for character MUST be present (INV-A16)")
+}
+
+func TestSeedPoliciesIncludesEventsSystemCryptoTotpDenyForPlugin(t *testing.T) {
+	seeds := SeedPolicies()
+	var found bool
+	for _, s := range seeds {
+		if s.Name == "seed:deny-events-system-crypto-totp-read-plugin" {
+			found = true
+			assert.Contains(t, s.DSLText, "forbid")
+			assert.Contains(t, s.DSLText, "events.*.system.crypto_totp.*")
+			assert.Contains(t, s.DSLText, "principal is plugin")
+			break
+		}
+	}
+	assert.True(t, found, "events.*.system.crypto_totp.* deny seed for plugin MUST be present (INV-A16)")
 }
 
 // Phase-2 command policy tests

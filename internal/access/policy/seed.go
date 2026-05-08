@@ -226,5 +226,22 @@ func SeedPolicies() []SeedPolicy {
 			DSLText:     `forbid(principal is plugin, action in ["read"], resource is stream) when { resource.stream.name like "audit.*" };`,
 			SeedVersion: 1,
 		},
+
+		// --- Phase-5 sub-epic A TOTP-substrate audit namespace deny policies (INV-A16) ---
+		//
+		// Reserved subject namespace events.<game>.system.crypto_totp.<scope>.<event>
+		// (sub-epic D emits; sub-epic A reserves). Parallel to the audit.* denies above.
+		{
+			Name:        "seed:deny-events-system-crypto-totp-read-character",
+			Description: "Characters MUST NOT read events.*.system.crypto_totp.* streams (Phase 5 sub-epic A; parallel to seed:deny-audit-read-character)",
+			DSLText:     `forbid(principal is character, action in ["read"], resource is stream) when { resource.stream.name like "events.*.system.crypto_totp.*" };`,
+			SeedVersion: 1,
+		},
+		{
+			Name:        "seed:deny-events-system-crypto-totp-read-plugin",
+			Description: "Plugins MUST NOT read events.*.system.crypto_totp.* streams (Phase 5 sub-epic A; parallel to seed:deny-audit-read-plugin)",
+			DSLText:     `forbid(principal is plugin, action in ["read"], resource is stream) when { resource.stream.name like "events.*.system.crypto_totp.*" };`,
+			SeedVersion: 1,
+		},
 	}
 }
