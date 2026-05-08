@@ -20,8 +20,6 @@ import (
 // adminTOTPDeps bundles dependencies the admin totp CLIs need.
 // Cleanup MUST be invoked by the caller via the returned func to close
 // the PG pool.
-//
-//nolint:unused // forward-declared for T13/T14 admin CLI handlers (Phase 5 sub-epic A)
 type adminTOTPDeps struct {
 	pool     *pgxpool.Pool
 	totpSvc  totp.Service
@@ -31,17 +29,16 @@ type adminTOTPDeps struct {
 }
 
 const (
-	envKEKFile       = "HOLOMUSH_KEK_FILE"       //nolint:unused // forward-declared for T13/T14 admin CLI handlers
-	envKEKPassphrase = "HOLOMUSH_KEK_PASSPHRASE" //nolint:gosec,unused // G101 false positive: env var name, not a credential value; forward-declared for T13/T14
-	envGameID        = "HOLOMUSH_GAME_ID"        //nolint:unused // forward-declared for T13/T14 admin CLI handlers
+	envKEKFile = "HOLOMUSH_KEK_FILE"
+	//nolint:gosec // G101 false positive: this is an env var name, not a credential value
+	envKEKPassphrase = "HOLOMUSH_KEK_PASSPHRASE"
+	envGameID        = "HOLOMUSH_GAME_ID"
 )
 
 // buildAdminTOTPDeps assembles the deps used by `holomush admin totp` CLIs.
 // First production KEK wiring lives here (Phase 5 sub-epic A T12); when
 // the core server wires KEK into runCoreWithDeps, both paths MUST use the
 // same file-source pattern so wrapped TOTP secrets remain interoperable.
-//
-//nolint:unused // forward-declared for T13/T14 admin CLI handlers (Phase 5 sub-epic A)
 func buildAdminTOTPDeps(ctx context.Context) (*adminTOTPDeps, func(), error) {
 	url, err := getDatabaseURL()
 	if err != nil {
@@ -102,8 +99,6 @@ func buildAdminTOTPDeps(ctx context.Context) (*adminTOTPDeps, func(), error) {
 // When core.go wires KEK into runCoreWithDeps in a future bead, it MUST
 // use the same construction pattern so wrapped DEKs and TOTP secrets
 // remain interoperable across server and CLI.
-//
-//nolint:unused // forward-declared for T13/T14 admin CLI handlers (Phase 5 sub-epic A)
 func buildKEKProviderFromConfig(ctx context.Context, pool *pgxpool.Pool) (kek.Provider, error) {
 	keyFile := os.Getenv(envKEKFile)
 	if keyFile == "" {
