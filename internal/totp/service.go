@@ -5,15 +5,26 @@ package totp
 
 import (
 	"context"
+	"crypto/subtle"
+	"errors"
 	"time"
 
 	"github.com/oklog/ulid/v2"
+	"github.com/pquerna/otp/hotp"
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
 	"github.com/holomush/holomush/internal/idgen"
 	"github.com/samber/oops"
 )
+
+const totpStepSeconds = 30
+
+// errCodeReuseRollback is an unexported sentinel returned from inside
+// Repository.InTransaction to force a ROLLBACK on replay detection
+// (Service.Verify, OutcomeCodeReuse path). Never returned by Service to
+// callers — the caller-facing surface is VerifyResult.Outcome.
+var errCodeReuseRollback = errors.New("totp: rollback for code reuse")
 
 // Config bundles tunables.
 type Config struct {
@@ -165,9 +176,73 @@ func (s *service) Enroll(ctx context.Context, playerID ulid.ULID) (EnrollResult,
 	return EnrollResult{Enrollment: enr, AuditEnrolledAt: now, AuditPlayerID: playerID}, nil
 }
 
-// Verify lands in T9.
-func (s *service) Verify(_ context.Context, _ ulid.ULID, _ string) (VerifyResult, error) {
-	panic("not yet implemented: Verify lands in T9")
+// Verify implements Service.Verify with replay defense (INV-A3), lockout (INV-A4),
+// success counter reset (INV-A5), skew window (INV-A12), and constant-time comparison.
+func (s *service) Verify(ctx context.Context, playerID ulid.ULID, code string) (VerifyResult, error) {
+	now := s.clock.Now().UTC()
+	var result VerifyResult
+	result.AuditAt = now
+
+	txErr := s.repo.InTransaction(ctx, func(txCtx context.Context) error {
+		state, err := s.repo.LoadEnrollment(txCtx, playerID.String())
+		if err != nil {
+			if errors.Is(err, ErrNotEnrolled) {
+				result.Outcome = OutcomeNotEnrolled
+				return nil
+			}
+			return oops.With("player_id", playerID.String()).Wrap(err)
+		}
+		if state.LockedUntil != nil && state.LockedUntil.After(now) {
+			result.Outcome = OutcomeLocked
+			result.LockedUntil = state.LockedUntil
+			return nil
+		}
+		secret, err := s.kek.Unwrap(txCtx, state.WrappedSecret, state.WrapKeyID)
+		if err != nil {
+			return oops.Code("TOTP_KEK_UNWRAP_FAILED").Wrap(err)
+		}
+		step := now.Unix() / totpStepSeconds
+		matchedStep := int64(-1)
+		for offset := -s.cfg.SkewSteps; offset <= s.cfg.SkewSteps; offset++ {
+			tryStep := step + int64(offset)
+			expected, genErr := hotp.GenerateCode(string(secret), uint64(tryStep)) //nolint:gosec // G115: tryStep is derived from a UNIX timestamp divided by 30; always positive in practice and cannot overflow uint64
+			if genErr != nil {
+				continue
+			}
+			if subtle.ConstantTimeCompare([]byte(code), []byte(expected)) == 1 {
+				matchedStep = tryStep
+				// do NOT break — iterate all steps to avoid timing-leak
+			}
+		}
+		if matchedStep == -1 {
+			post, incErr := s.repo.IncrementFailedAttempts(txCtx,
+				playerID.String(), s.cfg.LockoutThreshold, s.cfg.LockoutDuration, now)
+			if incErr != nil {
+				return oops.With("player_id", playerID.String()).Wrap(incErr)
+			}
+			result.Outcome = OutcomeInvalidCode
+			result.LockedUntil = post.LockedUntil
+			result.LockoutTransition = (state.LockedUntil == nil &&
+				post.LockedUntil != nil && post.LockedUntil.After(now))
+			return nil
+		}
+		if state.LastUsedStep != nil && matchedStep <= *state.LastUsedStep {
+			result.Outcome = OutcomeCodeReuse
+			return errCodeReuseRollback // typed sentinel: triggers ROLLBACK without surfacing as a real error
+		}
+		if err := s.repo.MarkVerified(txCtx, playerID.String(), matchedStep, now); err != nil {
+			return oops.With("player_id", playerID.String()).Wrap(err)
+		}
+		result.Outcome = OutcomeOK
+		return nil
+	})
+	if errors.Is(txErr, errCodeReuseRollback) {
+		return result, nil
+	}
+	if txErr != nil {
+		return VerifyResult{}, oops.With("player_id", playerID.String()).Wrap(txErr)
+	}
+	return result, nil
 }
 
 // ConsumeRecoveryCode lands in T10.
