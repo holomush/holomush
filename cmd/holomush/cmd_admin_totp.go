@@ -5,6 +5,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -15,8 +16,16 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/totp"
 )
+
+// credentialsValidator captures the subset of *auth.Service the admin
+// totp enroll CLI uses. Defining a narrow interface here lets tests
+// inject a mock without dragging the full auth construction graph in.
+type credentialsValidator interface {
+	ValidateCredentials(ctx context.Context, username, password string) (*auth.Player, error)
+}
 
 // NewAdminTOTPCmd is the `holomush admin totp` parent. Subcommands cover
 // host-shell TOTP enrollment + recovery flows.
@@ -43,24 +52,35 @@ func newAdminTOTPBootstrapEnrollCmd() *cobra.Command {
 				return err
 			}
 			defer cleanup()
-
-			username := args[0]
-			playerID, err := deps.totpRepo.PlayerIDFromUsername(ctx, username)
-			if err != nil {
-				return oops.With("username", username).Wrap(err)
-			}
-			pidULID, err := ulid.Parse(playerID)
-			if err != nil {
-				return oops.Code("ADMIN_TOTP_PLAYER_ULID_PARSE").
-					With("player_id", playerID).Wrap(err)
-			}
-			res, err := deps.totpSvc.BootstrapEnroll(ctx, pidULID)
-			if err != nil {
-				return oops.With("username", username).Wrap(err)
-			}
-			return printEnrollment(cmd.OutOrStdout(), username, playerID, res.Enrollment)
+			return runBootstrapEnroll(ctx, deps.totpRepo, deps.totpSvc, args[0], cmd.OutOrStdout())
 		},
 	}
+}
+
+// runBootstrapEnroll is the testable core of `admin totp bootstrap-enroll`.
+// All deps are explicit so tests can inject mocks without spinning up a
+// real PG/KEK/auth stack.
+func runBootstrapEnroll(
+	ctx context.Context,
+	totpRepo totp.Repository,
+	totpSvc totp.Service,
+	username string,
+	out io.Writer,
+) error {
+	playerID, err := totpRepo.PlayerIDFromUsername(ctx, username)
+	if err != nil {
+		return oops.With("username", username).Wrap(err)
+	}
+	pidULID, err := ulid.Parse(playerID)
+	if err != nil {
+		return oops.Code("ADMIN_TOTP_PLAYER_ULID_PARSE").
+			With("player_id", playerID).Wrap(err)
+	}
+	res, err := totpSvc.BootstrapEnroll(ctx, pidULID)
+	if err != nil {
+		return oops.With("username", username).Wrap(err)
+	}
+	return printEnrollment(out, username, playerID, res.Enrollment)
 }
 
 // printEnrollment writes the human-readable enrollment block. Recovery
@@ -133,19 +153,32 @@ func newAdminTOTPEnrollCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			player, err := deps.authSvc.ValidateCredentials(ctx, user, password)
-			if err != nil {
-				return oops.With("username", user).Wrap(err)
-			}
-			res, err := deps.totpSvc.Enroll(ctx, player.ID)
-			if err != nil {
-				return oops.With("username", user).Wrap(err)
-			}
-			return printEnrollment(cmd.OutOrStdout(), user, player.ID.String(), res.Enrollment)
+			return runEnroll(ctx, deps.authSvc, deps.totpSvc, user, password, cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().StringVar(&username, "username", "", "username (prompt if not set)")
 	return cmd
+}
+
+// runEnroll is the testable core of `admin totp enroll`. Takes the
+// credentials validator as a narrow interface so tests can inject a
+// mock without instantiating a real *auth.Service.
+func runEnroll(
+	ctx context.Context,
+	validator credentialsValidator,
+	totpSvc totp.Service,
+	username, password string,
+	out io.Writer,
+) error {
+	player, err := validator.ValidateCredentials(ctx, username, password)
+	if err != nil {
+		return oops.With("username", username).Wrap(err)
+	}
+	res, err := totpSvc.Enroll(ctx, player.ID)
+	if err != nil {
+		return oops.With("username", username).Wrap(err)
+	}
+	return printEnrollment(out, username, player.ID.String(), res.Enrollment)
 }
 
 func newAdminTOTPRecoverCmd() *cobra.Command {
@@ -169,35 +202,46 @@ func newAdminTOTPRecoverCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// Timing-safe: surface generic ErrInvalidRecoveryCode whether the
-			// player lookup or the code check fails. Operators get the same
-			// signal for "wrong username" and "wrong code" to avoid leaking
-			// which usernames have TOTP enrollments.
-			pidStr, err := deps.totpRepo.PlayerIDFromUsername(ctx, user)
-			if err != nil {
-				return totp.ErrInvalidRecoveryCode
-			}
-			pidULID, err := ulid.Parse(pidStr)
-			if err != nil {
-				return totp.ErrInvalidRecoveryCode
-			}
-			if _, err := deps.totpSvc.ConsumeRecoveryCode(ctx, pidULID, recoveryCode); err != nil {
-				return oops.With("username", user).Wrap(err)
-			}
-			if _, err := deps.totpSvc.ClearTOTP(ctx, pidULID, totp.ClearReasonRecoveryCode); err != nil {
-				return oops.With("username", user).Wrap(err)
-			}
-			_, werr := fmt.Fprintf(cmd.OutOrStdout(),
-				"TOTP cleared for %s. Run `holomush admin totp enroll --username %s` to re-enroll.\n",
-				user, user)
-			if werr != nil {
-				return oops.Code("ADMIN_TOTP_PRINT_FAILED").Wrap(werr)
-			}
-			return nil
+			return runRecover(ctx, deps.totpRepo, deps.totpSvc, user, recoveryCode, cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().StringVar(&username, "username", "", "username (prompt if not set)")
 	return cmd
+}
+
+// runRecover is the testable core of `admin totp recover`.
+//
+// Timing-safe: surfaces generic ErrInvalidRecoveryCode whether the player
+// lookup or the code check fails. Operators get the same signal for
+// "wrong username" and "wrong code" to avoid leaking which usernames
+// have TOTP enrollments.
+func runRecover(
+	ctx context.Context,
+	totpRepo totp.Repository,
+	totpSvc totp.Service,
+	username, recoveryCode string,
+	out io.Writer,
+) error {
+	pidStr, err := totpRepo.PlayerIDFromUsername(ctx, username)
+	if err != nil {
+		return totp.ErrInvalidRecoveryCode
+	}
+	pidULID, err := ulid.Parse(pidStr)
+	if err != nil {
+		return totp.ErrInvalidRecoveryCode
+	}
+	if _, err := totpSvc.ConsumeRecoveryCode(ctx, pidULID, recoveryCode); err != nil {
+		return oops.With("username", username).Wrap(err)
+	}
+	if _, err := totpSvc.ClearTOTP(ctx, pidULID, totp.ClearReasonRecoveryCode); err != nil {
+		return oops.With("username", username).Wrap(err)
+	}
+	if _, werr := fmt.Fprintf(out,
+		"TOTP cleared for %s. Run `holomush admin totp enroll --username %s` to re-enroll.\n",
+		username, username); werr != nil {
+		return oops.Code("ADMIN_TOTP_PRINT_FAILED").Wrap(werr)
+	}
+	return nil
 }
 
 // resolveUsername returns the username flag value or prompts on stdin.
