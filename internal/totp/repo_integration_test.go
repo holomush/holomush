@@ -113,7 +113,14 @@ func TestRepoBootstrapClaimConcurrentExactlyOneSucceeds(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			ok, err := repo.BootstrapClaim(ctx, key, pid, now)
-			require.NoError(t, err)
+			// Don't use require.NoError here — t.FailNow must be called only
+			// from the goroutine running the test; mark + return instead.
+			if err != nil {
+				mu.Lock()
+				t.Errorf("BootstrapClaim returned error: %v", err)
+				mu.Unlock()
+				return
+			}
 			if ok {
 				mu.Lock()
 				successes++

@@ -32,10 +32,14 @@ func buildProvisioningURI(username, gameID, secret string) (string, error) {
 		return "", oops.Code("TOTP_URI_INVALID_INPUT").
 			Errorf("username, gameID, and secret all required")
 	}
+	// Per Google's Key Uri Format spec, the label prefix MUST equal the
+	// issuer query parameter for authenticator apps to group entries
+	// consistently. Derive both from the same string.
+	issuer := fmt.Sprintf("holomush-%s", gameID)
 	q := url.Values{}
 	q.Set("secret", secret)
-	q.Set("issuer", "holomush")
-	account := fmt.Sprintf("holomush-%s:%s", gameID, username)
+	q.Set("issuer", issuer)
+	account := fmt.Sprintf("%s:%s", issuer, username)
 	return fmt.Sprintf("otpauth://totp/%s?%s", url.PathEscape(account), q.Encode()), nil
 }
 

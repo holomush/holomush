@@ -26,4 +26,4 @@ Seen 2026-05-07 in event-payload-crypto-phase5-totp-substrate-design r2:
 `crypto.totp_locked` (considered choice — lockout is a defensive signal
 that should not be aborted by NATS hiccup). §"Bootstrap closure mechanism"
 ghost-case rewrite (lines 558-559) generalizes "publish-before-COMMIT"
-to include `verify-locked` events, contradicting the earlier paragraph.
+to include `crypto.totp_locked` events, contradicting the earlier paragraph.

@@ -21,8 +21,10 @@ func TestGenerateSecretIs32CharBase32(t *testing.T) {
 }
 
 func TestGenerateSecretIsRandom(t *testing.T) {
-	a, _ := generateSecret()
-	b, _ := generateSecret()
+	a, err := generateSecret()
+	require.NoError(t, err)
+	b, err := generateSecret()
+	require.NoError(t, err)
 	assert.NotEqual(t, a, b)
 }
 
@@ -30,9 +32,10 @@ func TestBuildProvisioningURI(t *testing.T) {
 	u, err := buildProvisioningURI("alice", "default", "JBSWY3DPEHPK3PXP")
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(u, "otpauth://totp/"))
-	assert.Contains(t, u, "issuer=holomush")
+	// Per Google Key Uri Format spec, label prefix == issuer.
+	assert.Contains(t, u, "issuer=holomush-default")
+	assert.Contains(t, u, "holomush-default:alice")
 	assert.Contains(t, u, "secret=JBSWY3DPEHPK3PXP")
-	assert.Contains(t, u, "alice")
 }
 
 func TestGenerateRecoveryCodes(t *testing.T) {
