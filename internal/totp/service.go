@@ -105,32 +105,67 @@ func (s *service) IsEnrolled(ctx context.Context, playerID ulid.ULID) (bool, err
 	return enrolled, nil
 }
 
-// BootstrapEnroll: per spec §"CLI commands" / "bootstrap-enroll" + §"Bootstrap closure mechanism".
-// Per R5 Option Y: PG-only; returns BootstrapResult for caller emission.
-func (s *service) BootstrapEnroll(ctx context.Context, playerID ulid.ULID) (BootstrapResult, error) {
+// PrepareBootstrap is phase 1 of the two-phase bootstrap-enroll flow.
+// Generates secret + recovery codes, KEK-wraps the secret, Argon2id-hashes
+// the codes — but persists nothing. Caller MUST hand the returned
+// BootstrapPreparation to CommitBootstrap AFTER durably delivering the
+// Enrollment to the operator (e.g., printed and flushed to stdout).
+//
+// If CommitBootstrap is never called, the prepared material drops out of
+// memory at GC and the bootstrap key remains available for retry.
+func (s *service) PrepareBootstrap(ctx context.Context, playerID ulid.ULID) (BootstrapPreparation, error) {
 	exists, err := s.repo.PlayerExists(ctx, playerID.String())
 	if err != nil {
-		return BootstrapResult{}, oops.With("player_id", playerID.String()).Wrap(err)
+		return BootstrapPreparation{}, oops.With("player_id", playerID.String()).Wrap(err)
 	}
 	if !exists {
-		return BootstrapResult{}, oops.Code("TOTP_PLAYER_NOT_FOUND").
+		return BootstrapPreparation{}, oops.Code("TOTP_PLAYER_NOT_FOUND").
 			With("player_id", playerID.String()).Errorf("player not found")
 	}
 
 	now := s.clock.Now().UTC()
 	enr, rec, err := s.buildEnrollment(ctx, playerID.String(), now)
 	if err != nil {
-		return BootstrapResult{}, err
+		return BootstrapPreparation{}, err
 	}
-	if err := s.repo.BootstrapEnrollAtomic(ctx, "totp_v1", playerID.String(), rec); err != nil {
-		return BootstrapResult{}, oops.With("player_id", playerID.String()).Wrap(err) // includes ErrBootstrapAlreadyConsumed
+	return BootstrapPreparation{
+		Enrollment: enr,
+		playerID:   playerID,
+		record:     rec,
+		now:        now,
+	}, nil
+}
+
+// CommitBootstrap is phase 2: persist a previously-prepared bootstrap
+// enrollment under the once-only "totp_v1" key. ErrBootstrapAlreadyConsumed
+// surfaces if the key has been claimed since Prepare returned.
+func (s *service) CommitBootstrap(ctx context.Context, prep BootstrapPreparation) (BootstrapResult, error) {
+	if err := s.repo.BootstrapEnrollAtomic(ctx, "totp_v1", prep.playerID.String(), prep.record); err != nil {
+		return BootstrapResult{}, oops.With("player_id", prep.playerID.String()).Wrap(err)
 	}
 	return BootstrapResult{
-		Enrollment:      enr,
-		AuditConsumedAt: now,
-		AuditPlayerID:   playerID,
+		Enrollment:      prep.Enrollment,
+		AuditConsumedAt: prep.now,
+		AuditPlayerID:   prep.playerID,
 		BootstrapKey:    "totp_v1",
 	}, nil
+}
+
+// BootstrapEnroll is the legacy single-shot path: PrepareBootstrap +
+// CommitBootstrap in one call. Kept for tests and non-CLI flows that
+// don't need the durability seam. The CLI uses the explicit two-phase
+// path so the bootstrap key isn't burned on a write that never reached
+// the operator.
+//
+// Per spec §"CLI commands" / "bootstrap-enroll" + §"Bootstrap closure
+// mechanism". Per R5 Option Y: PG-only; returns BootstrapResult for
+// caller-side audit emission.
+func (s *service) BootstrapEnroll(ctx context.Context, playerID ulid.ULID) (BootstrapResult, error) {
+	prep, err := s.PrepareBootstrap(ctx, playerID)
+	if err != nil {
+		return BootstrapResult{}, err
+	}
+	return s.CommitBootstrap(ctx, prep)
 }
 
 // buildEnrollment generates a fresh secret + URI + recovery codes,
@@ -168,25 +203,51 @@ func (s *service) buildEnrollment(ctx context.Context, playerID string, now time
 		}, nil
 }
 
-// Enroll self-enrolls a player in TOTP. Returns ErrAlreadyEnrolled if the
-// player already has an active enrollment.
-func (s *service) Enroll(ctx context.Context, playerID ulid.ULID) (EnrollResult, error) {
+// PrepareEnroll is phase 1 of the two-phase self-enroll flow. Returns
+// ErrAlreadyEnrolled if the player already has an active enrollment.
+// Persists nothing; caller hands the EnrollPreparation to CommitEnroll
+// AFTER durably delivering the Enrollment to the operator.
+func (s *service) PrepareEnroll(ctx context.Context, playerID ulid.ULID) (EnrollPreparation, error) {
 	enrolled, err := s.repo.IsEnrolled(ctx, playerID.String())
 	if err != nil {
-		return EnrollResult{}, oops.With("player_id", playerID.String()).Wrap(err)
+		return EnrollPreparation{}, oops.With("player_id", playerID.String()).Wrap(err)
 	}
 	if enrolled {
-		return EnrollResult{}, ErrAlreadyEnrolled
+		return EnrollPreparation{}, ErrAlreadyEnrolled
 	}
 	now := s.clock.Now().UTC()
 	enr, rec, err := s.buildEnrollment(ctx, playerID.String(), now)
 	if err != nil {
+		return EnrollPreparation{}, err
+	}
+	return EnrollPreparation{
+		Enrollment: enr,
+		playerID:   playerID,
+		record:     rec,
+		now:        now,
+	}, nil
+}
+
+// CommitEnroll is phase 2: persist a previously-prepared enrollment.
+func (s *service) CommitEnroll(ctx context.Context, prep EnrollPreparation) (EnrollResult, error) {
+	if err := s.repo.InsertEnrollment(ctx, prep.record); err != nil {
+		return EnrollResult{}, oops.With("player_id", prep.playerID.String()).Wrap(err)
+	}
+	return EnrollResult{
+		Enrollment:      prep.Enrollment,
+		AuditEnrolledAt: prep.now,
+		AuditPlayerID:   prep.playerID,
+	}, nil
+}
+
+// Enroll is the legacy single-shot path: PrepareEnroll + CommitEnroll.
+// Returns ErrAlreadyEnrolled if the player already has an active enrollment.
+func (s *service) Enroll(ctx context.Context, playerID ulid.ULID) (EnrollResult, error) {
+	prep, err := s.PrepareEnroll(ctx, playerID)
+	if err != nil {
 		return EnrollResult{}, err
 	}
-	if err := s.repo.InsertEnrollment(ctx, rec); err != nil {
-		return EnrollResult{}, oops.With("player_id", playerID.String()).Wrap(err)
-	}
-	return EnrollResult{Enrollment: enr, AuditEnrolledAt: now, AuditPlayerID: playerID}, nil
+	return s.CommitEnroll(ctx, prep)
 }
 
 // Verify implements Service.Verify with replay defense (INV-A3), lockout (INV-A4),

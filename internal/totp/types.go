@@ -14,7 +14,26 @@ import (
 // Persists to PostgreSQL only. Audit emission is the caller's responsibility
 // (R5 Option Y).
 type Service interface {
+	// PrepareBootstrap generates a fresh TOTP secret + recovery codes and
+	// KEK-wraps the secret, but does NOT persist anything yet. The
+	// returned BootstrapPreparation is then handed to CommitBootstrap
+	// AFTER the operator has durably received the Enrollment (printed +
+	// flushed). This two-phase pattern prevents the bootstrap key from
+	// being burned on a write that never reached the operator.
+	PrepareBootstrap(ctx context.Context, playerID ulid.ULID) (BootstrapPreparation, error)
+	// CommitBootstrap persists a previously-prepared bootstrap enrollment
+	// under the once-only "totp_v1" key. Returns ErrBootstrapAlreadyConsumed
+	// if the key has already been claimed.
+	CommitBootstrap(ctx context.Context, prep BootstrapPreparation) (BootstrapResult, error)
+	// BootstrapEnroll is the legacy single-shot path: PrepareBootstrap +
+	// CommitBootstrap in one call. Kept for callers (tests, future
+	// non-CLI flows) that don't need the durability seam.
 	BootstrapEnroll(ctx context.Context, playerID ulid.ULID) (BootstrapResult, error)
+	// PrepareEnroll / CommitEnroll mirror the two-phase pattern for
+	// self-enrollment.
+	PrepareEnroll(ctx context.Context, playerID ulid.ULID) (EnrollPreparation, error)
+	CommitEnroll(ctx context.Context, prep EnrollPreparation) (EnrollResult, error)
+	// Enroll is the legacy single-shot path: PrepareEnroll + CommitEnroll.
 	Enroll(ctx context.Context, playerID ulid.ULID) (EnrollResult, error)
 	Verify(ctx context.Context, playerID ulid.ULID, code string) (VerifyResult, error)
 	IsEnrolled(ctx context.Context, playerID ulid.ULID) (bool, error)
@@ -26,6 +45,24 @@ type Service interface {
 	// still-active TOTP. Result carries the audit metadata for both events
 	// (callers in sub-epic D emit them).
 	RecoverAndClear(ctx context.Context, playerID ulid.ULID, code string) (RecoverAndClearResult, error)
+}
+
+// BootstrapPreparation is the in-memory output of PrepareBootstrap —
+// generated + KEK-wrapped + Argon2id-hashed enrollment material that
+// has NOT yet been persisted. CommitBootstrap consumes it.
+type BootstrapPreparation struct {
+	Enrollment Enrollment       // public — operators display this
+	playerID   ulid.ULID        // private — used by CommitBootstrap
+	record     EnrollmentRecord // private — KEK-wrapped + hashed material
+	now        time.Time        // private — preparedAt; becomes AuditConsumedAt
+}
+
+// EnrollPreparation mirrors BootstrapPreparation for self-enrollment.
+type EnrollPreparation struct {
+	Enrollment Enrollment
+	playerID   ulid.ULID
+	record     EnrollmentRecord
+	now        time.Time
 }
 
 // RecoverAndClearResult bundles the audit-event metadata for both the

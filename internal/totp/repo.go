@@ -279,6 +279,13 @@ func (r *repo) consumeRecoveryCodeInTx(
 		cands = append(cands, c)
 	}
 	rows.Close()
+	// rows.Err must be checked AFTER iteration — a driver-level read error
+	// during Next() doesn't surface as a Scan failure; without this the
+	// loop falls through to ErrInvalidRecoveryCode, hiding an operational
+	// failure as user-input error.
+	if err := rows.Err(); err != nil {
+		return ulid.ULID{}, oops.Code("TOTP_REPO_RECOVERY_SCAN").Wrap(err)
+	}
 	for _, c := range cands {
 		ok, vErr := hasher.Verify(rawCode, c.hash)
 		if vErr != nil || !ok {

@@ -84,8 +84,10 @@ func TestRunBootstrapEnroll(t *testing.T) {
 			name: "happy path",
 			setup: func(repo *mocks.MockRepository, svc *stubTOTPService) {
 				repo.EXPECT().PlayerIDFromUsername(mock.Anything, "alice").Return(pid.String(), nil)
-				svc.bootstrapResult = totp.BootstrapResult{
-					Enrollment:      sampleEnrollment(),
+				// Prepare returns the displayed Enrollment; Commit is then
+				// called by runBootstrapEnroll AFTER printEnrollment succeeds.
+				svc.prepareBootstrapResult = totp.BootstrapPreparation{Enrollment: sampleEnrollment()}
+				svc.commitBootstrapResult = totp.BootstrapResult{
 					AuditConsumedAt: time.Now().UTC(),
 					AuditPlayerID:   pid,
 					BootstrapKey:    "totp_v1",
@@ -123,10 +125,23 @@ func TestRunBootstrapEnroll(t *testing.T) {
 			},
 		},
 		{
-			name: "service error propagates",
+			name: "Prepare error surfaces (e.g. bootstrap already consumed)",
 			setup: func(repo *mocks.MockRepository, svc *stubTOTPService) {
 				repo.EXPECT().PlayerIDFromUsername(mock.Anything, "alice").Return(pid.String(), nil)
-				svc.bootstrapErr = totp.ErrBootstrapAlreadyConsumed
+				svc.prepareBootstrapErr = totp.ErrBootstrapAlreadyConsumed
+			},
+			username: "alice",
+			assertErr: func(t *testing.T, err error) {
+				require.Error(t, err)
+				errutil.AssertErrorCode(t, err, "TOTP_BOOTSTRAP_CONSUMED")
+			},
+		},
+		{
+			name: "Commit error after successful Prepare surfaces (race with concurrent claim)",
+			setup: func(repo *mocks.MockRepository, svc *stubTOTPService) {
+				repo.EXPECT().PlayerIDFromUsername(mock.Anything, "alice").Return(pid.String(), nil)
+				svc.prepareBootstrapResult = totp.BootstrapPreparation{Enrollment: sampleEnrollment()}
+				svc.commitBootstrapErr = totp.ErrBootstrapAlreadyConsumed
 			},
 			username: "alice",
 			assertErr: func(t *testing.T, err error) {
@@ -166,8 +181,8 @@ func TestRunEnroll(t *testing.T) {
 			name:      "happy path",
 			validator: &stubValidator{player: &auth.Player{ID: pid, Username: "alice"}},
 			setupSvc: func(svc *stubTOTPService) {
-				svc.enrollResult = totp.EnrollResult{
-					Enrollment:      sampleEnrollment(),
+				svc.prepareEnrollResult = totp.EnrollPreparation{Enrollment: sampleEnrollment()}
+				svc.commitEnrollResult = totp.EnrollResult{
 					AuditEnrolledAt: time.Now().UTC(),
 					AuditPlayerID:   pid,
 				}
@@ -185,12 +200,24 @@ func TestRunEnroll(t *testing.T) {
 			},
 		},
 		{
-			name:      "service error propagates",
+			name:      "PrepareEnroll error surfaces (already enrolled)",
 			validator: &stubValidator{player: &auth.Player{ID: pid, Username: "alice"}},
-			setupSvc:  func(svc *stubTOTPService) { svc.enrollErr = totp.ErrAlreadyEnrolled },
+			setupSvc:  func(svc *stubTOTPService) { svc.prepareEnrollErr = totp.ErrAlreadyEnrolled },
 			assertErr: func(t *testing.T, err error) {
 				require.Error(t, err)
 				errutil.AssertErrorCode(t, err, "TOTP_ALREADY_ENROLLED")
+			},
+		},
+		{
+			name:      "CommitEnroll error surfaces (insert failure post-print)",
+			validator: &stubValidator{player: &auth.Player{ID: pid, Username: "alice"}},
+			setupSvc: func(svc *stubTOTPService) {
+				svc.prepareEnrollResult = totp.EnrollPreparation{Enrollment: sampleEnrollment()}
+				svc.commitEnrollErr = errors.New("pg insert fail")
+			},
+			assertErr: func(t *testing.T, err error) {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "pg insert fail")
 			},
 		},
 	}
@@ -207,6 +234,49 @@ func TestRunEnroll(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Two-phase enroll durability seam: if printEnrollment fails (e.g.
+// broken pipe), CommitBootstrap MUST NOT be called — the bootstrap key
+// remains available for retry instead of stranding the secret in
+// /dev/null. Verified by the stub: commitBootstrapErr is set; if Commit
+// were called the test would fail with that error rather than the
+// print-failure code.
+
+func TestRunBootstrapEnrollDoesNotCommitOnPrintFailure(t *testing.T) {
+	ctx := context.Background()
+	pid := ulid.Make()
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().PlayerIDFromUsername(ctx, "alice").Return(pid.String(), nil)
+
+	svc := &stubTOTPService{
+		prepareBootstrapResult: totp.BootstrapPreparation{Enrollment: sampleEnrollment()},
+		// Sentinel that would surface IFF Commit was reached.
+		commitBootstrapErr: errors.New("commit must not be reached"),
+	}
+
+	err := runBootstrapEnroll(ctx, repo, svc, "alice", &failAfterWriter{failAt: 0})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "ADMIN_TOTP_PRINT_FAILED")
+	// The "commit must not be reached" sentinel must NOT appear; if it
+	// does, the durability seam was bypassed.
+	assert.NotContains(t, err.Error(), "commit must not be reached")
+}
+
+func TestRunEnrollDoesNotCommitOnPrintFailure(t *testing.T) {
+	ctx := context.Background()
+	pid := ulid.Make()
+	validator := &stubValidator{player: &auth.Player{ID: pid, Username: "alice"}}
+
+	svc := &stubTOTPService{
+		prepareEnrollResult: totp.EnrollPreparation{Enrollment: sampleEnrollment()},
+		commitEnrollErr:     errors.New("commit must not be reached"),
+	}
+
+	err := runEnroll(ctx, validator, svc, "alice", "hunter2", &failAfterWriter{failAt: 0})
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "ADMIN_TOTP_PRINT_FAILED")
+	assert.NotContains(t, err.Error(), "commit must not be reached")
 }
 
 // runRecover cases. The atomic-error case mirrors the runBootstrapEnroll
@@ -319,20 +389,44 @@ func TestPrintEnrollmentSurfaceFooterWriteError(t *testing.T) {
 // without needing a generated mock. Only methods exercised by the run
 // functions are implemented; others panic if called.
 type stubTOTPService struct {
-	bootstrapResult         totp.BootstrapResult
-	bootstrapErr            error
-	enrollResult            totp.EnrollResult
-	enrollErr               error
-	consumeResult           totp.ConsumeRecoveryResult
-	consumeErr              error
-	clearResult             totp.ClearResult
-	clearErr                error
-	recoverAndClearResult   totp.RecoverAndClearResult
-	recoverAndClearErr      error
+	prepareBootstrapResult totp.BootstrapPreparation
+	prepareBootstrapErr    error
+	commitBootstrapResult  totp.BootstrapResult
+	commitBootstrapErr     error
+	bootstrapResult        totp.BootstrapResult
+	bootstrapErr           error
+	prepareEnrollResult    totp.EnrollPreparation
+	prepareEnrollErr       error
+	commitEnrollResult     totp.EnrollResult
+	commitEnrollErr        error
+	enrollResult           totp.EnrollResult
+	enrollErr              error
+	consumeResult          totp.ConsumeRecoveryResult
+	consumeErr             error
+	clearResult            totp.ClearResult
+	clearErr               error
+	recoverAndClearResult  totp.RecoverAndClearResult
+	recoverAndClearErr     error
+}
+
+func (s *stubTOTPService) PrepareBootstrap(_ context.Context, _ ulid.ULID) (totp.BootstrapPreparation, error) {
+	return s.prepareBootstrapResult, s.prepareBootstrapErr
+}
+
+func (s *stubTOTPService) CommitBootstrap(_ context.Context, _ totp.BootstrapPreparation) (totp.BootstrapResult, error) {
+	return s.commitBootstrapResult, s.commitBootstrapErr
 }
 
 func (s *stubTOTPService) BootstrapEnroll(_ context.Context, _ ulid.ULID) (totp.BootstrapResult, error) {
 	return s.bootstrapResult, s.bootstrapErr
+}
+
+func (s *stubTOTPService) PrepareEnroll(_ context.Context, _ ulid.ULID) (totp.EnrollPreparation, error) {
+	return s.prepareEnrollResult, s.prepareEnrollErr
+}
+
+func (s *stubTOTPService) CommitEnroll(_ context.Context, _ totp.EnrollPreparation) (totp.EnrollResult, error) {
+	return s.commitEnrollResult, s.commitEnrollErr
 }
 
 func (s *stubTOTPService) Enroll(_ context.Context, _ ulid.ULID) (totp.EnrollResult, error) {

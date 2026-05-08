@@ -464,6 +464,27 @@ func TestRepoConsumeRecoveryCodeReturnsErrInvalidWhenNoMatch(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+// TestRepoConsumeRecoveryCodeWrapsRowsErr verifies that an error surfaced
+// through rows.Err() (driver-level read error after Next() loop) is
+// wrapped with TOTP_REPO_RECOVERY_SCAN, NOT silently surfaced as
+// ErrInvalidRecoveryCode (which would mask infrastructure failures as
+// user-input errors).
+func TestRepoConsumeRecoveryCodeWrapsRowsErr(t *testing.T) {
+	r, mock := newMockedRepo(t)
+	mock.ExpectBegin()
+	rows := pgxmock.NewRows([]string{"id", "code_hash"}).RowError(0, errors.New("read error mid-iteration"))
+	rows.AddRow(ulid.Make().String(), "$argon2id$h")
+	mock.ExpectQuery(`SELECT id, code_hash FROM player_totp_recovery_codes`).
+		WithArgs("01HZ").
+		WillReturnRows(rows)
+	mock.ExpectRollback()
+
+	_, err := r.ConsumeRecoveryCode(context.Background(), "01HZ", "x", stubHasher{}, time.Now())
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "TOTP_REPO_RECOVERY_SCAN")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestRepoConsumeRecoveryCodeWrapsScanError(t *testing.T) {
 	r, mock := newMockedRepo(t)
 	mock.ExpectBegin()

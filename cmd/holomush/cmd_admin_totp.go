@@ -59,8 +59,11 @@ func newAdminTOTPBootstrapEnrollCmd() *cobra.Command {
 }
 
 // runBootstrapEnroll is the testable core of `admin totp bootstrap-enroll`.
-// All deps are explicit so tests can inject mocks without spinning up a
-// real PG/KEK/auth stack.
+// Uses the two-phase Prepare→print→Commit flow: the bootstrap key is
+// only burned AFTER the operator has durably received the secret +
+// recovery codes, so a write failure (broken pipe, short write) leaves
+// the bootstrap available for retry instead of stranding the secret in
+// /dev/null.
 func runBootstrapEnroll(
 	ctx context.Context,
 	totpRepo totp.Repository,
@@ -77,11 +80,18 @@ func runBootstrapEnroll(
 		return oops.Code("ADMIN_TOTP_PLAYER_ULID_PARSE").
 			With("player_id", playerID).Wrap(err)
 	}
-	res, err := totpSvc.BootstrapEnroll(ctx, pidULID)
+	prep, err := totpSvc.PrepareBootstrap(ctx, pidULID)
 	if err != nil {
 		return oops.With("username", username).Wrap(err)
 	}
-	return printEnrollment(out, username, playerID, res.Enrollment)
+	if err := printEnrollment(out, username, playerID, prep.Enrollment); err != nil {
+		// Print failed — DO NOT commit. Bootstrap remains available.
+		return err
+	}
+	if _, err := totpSvc.CommitBootstrap(ctx, prep); err != nil {
+		return oops.With("username", username).Wrap(err)
+	}
+	return nil
 }
 
 // printEnrollment writes the human-readable enrollment block. Recovery
@@ -161,7 +171,9 @@ func newAdminTOTPEnrollCmd() *cobra.Command {
 	return cmd
 }
 
-// runEnroll is the testable core of `admin totp enroll`. Takes the
+// runEnroll is the testable core of `admin totp enroll`. Two-phase
+// Prepare→print→Commit so a failed write doesn't strand the player with
+// a persisted enrollment whose secret never reached them. Takes the
 // credentials validator as a narrow interface so tests can inject a
 // mock without instantiating a real *auth.Service.
 func runEnroll(
@@ -175,11 +187,18 @@ func runEnroll(
 	if err != nil {
 		return oops.With("username", username).Wrap(err)
 	}
-	res, err := totpSvc.Enroll(ctx, player.ID)
+	prep, err := totpSvc.PrepareEnroll(ctx, player.ID)
 	if err != nil {
 		return oops.With("username", username).Wrap(err)
 	}
-	return printEnrollment(out, username, player.ID.String(), res.Enrollment)
+	if err := printEnrollment(out, username, player.ID.String(), prep.Enrollment); err != nil {
+		// Print failed — DO NOT commit. Player remains unenrolled.
+		return err
+	}
+	if _, err := totpSvc.CommitEnroll(ctx, prep); err != nil {
+		return oops.With("username", username).Wrap(err)
+	}
+	return nil
 }
 
 func newAdminTOTPRecoverCmd() *cobra.Command {
@@ -271,24 +290,30 @@ func resolveUsername(cmd *cobra.Command, flagValue string) (string, error) {
 }
 
 // readPassword reads a secret from the terminal without echoing. Falls
-// back to a plain stdin read if stdin is not a terminal (e.g., piped
-// input in CI).
+// back to a plain stdin read if Cobra's input stream isn't a terminal
+// (piped input in CI, programmatic invocation via cmd.SetIn). Reads
+// from cmd.InOrStdin() — NOT os.Stdin directly — so callers that
+// override the input stream see consistent behavior between
+// resolveUsername and readPassword.
 func readPassword(cmd *cobra.Command, prompt string) (string, error) {
 	if _, err := fmt.Fprint(cmd.OutOrStdout(), prompt); err != nil {
 		return "", oops.Code("ADMIN_TOTP_PROMPT_FAILED").Wrap(err)
 	}
-	fd := int(os.Stdin.Fd()) //nolint:gosec // G115: stdin fd is small and platform-bounded; conversion is safe
-	if term.IsTerminal(fd) {
-		buf, err := term.ReadPassword(fd)
-		if err != nil {
-			return "", oops.Code("ADMIN_TOTP_PROMPT_FAILED").Wrap(err)
+	in := cmd.InOrStdin()
+	if inFile, ok := in.(*os.File); ok {
+		fd := int(inFile.Fd()) //nolint:gosec // G115: stdin fd is small and platform-bounded; conversion is safe
+		if term.IsTerminal(fd) {
+			buf, err := term.ReadPassword(fd)
+			if err != nil {
+				return "", oops.Code("ADMIN_TOTP_PROMPT_FAILED").Wrap(err)
+			}
+			if _, werr := fmt.Fprintln(cmd.OutOrStdout()); werr != nil {
+				return "", oops.Code("ADMIN_TOTP_PROMPT_FAILED").Wrap(werr)
+			}
+			return string(buf), nil
 		}
-		if _, werr := fmt.Fprintln(cmd.OutOrStdout()); werr != nil {
-			return "", oops.Code("ADMIN_TOTP_PROMPT_FAILED").Wrap(werr)
-		}
-		return string(buf), nil
 	}
-	r := bufio.NewReader(cmd.InOrStdin())
+	r := bufio.NewReader(in)
 	line, err := r.ReadString('\n')
 	// Same EOF-with-partial-data tolerance as resolveUsername (piped input).
 	if err != nil && (!errors.Is(err, io.EOF) || line == "") {
