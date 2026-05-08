@@ -38,6 +38,29 @@ func TestBuildProvisioningURI(t *testing.T) {
 	assert.Contains(t, u, "secret=JBSWY3DPEHPK3PXP")
 }
 
+func TestBuildProvisioningURIRejectsEmptyInputs(t *testing.T) {
+	cases := []struct {
+		name, username, gameID, secret string
+	}{
+		{"empty username", "", "default", "JBSWY"},
+		{"empty gameID", "alice", "", "JBSWY"},
+		{"empty secret", "alice", "default", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := buildProvisioningURI(tc.username, tc.gameID, tc.secret)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "required")
+		})
+	}
+}
+
+func TestGenerateRecoveryCodesZero(t *testing.T) {
+	codes, err := generateRecoveryCodes(0)
+	require.NoError(t, err)
+	assert.Empty(t, codes)
+}
+
 func TestGenerateRecoveryCodes(t *testing.T) {
 	codes, err := generateRecoveryCodes(10)
 	require.NoError(t, err)
