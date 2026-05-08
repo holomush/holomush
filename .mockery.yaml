@@ -53,6 +53,12 @@ packages:
       outpkg: policytest
     interfaces:
       AccessPolicyEngine:
+  github.com/holomush/holomush/internal/eventbus/crypto/kek:
+    config:
+      dir: "{{.InterfaceDir}}/mocks"
+      outpkg: mocks
+    interfaces:
+      Provider:
   github.com/holomush/holomush/internal/command:
     config:
       dir: "{{.InterfaceDir}}/mocks"
@@ -78,3 +84,10 @@ packages:
       outpkg: mocks
     interfaces:
       Store:
+  github.com/holomush/holomush/internal/totp:
+    config:
+      dir: "{{.InterfaceDir}}/mocks"
+      outpkg: mocks
+    interfaces:
+      Repository:
+      RecoveryCodeHasher:

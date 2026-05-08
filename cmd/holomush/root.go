@@ -39,6 +39,7 @@ WebAssembly plugins, and dual protocol support (telnet + web).`,
 	cmd.AddCommand(NewMigrateCmd())
 	cmd.AddCommand(NewStatusCmd())
 	cmd.AddCommand(NewPluginCmd())
+	cmd.AddCommand(NewAdminCmd())
 
 	return cmd
 }

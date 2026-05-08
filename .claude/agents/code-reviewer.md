@@ -16,6 +16,9 @@ tools:
   - Read
   - Grep
   - Glob
+  - mcp__probe__search_code
+  - mcp__probe__extract_code
+  - mcp__probe__grep
   - Bash
   - WebFetch
   - mcp__context7__resolve-library-id
