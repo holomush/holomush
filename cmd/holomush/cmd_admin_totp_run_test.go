@@ -244,7 +244,7 @@ func TestRunRecoverHidesPlayerLookupFailure(t *testing.T) {
 	out := &bytes.Buffer{}
 	err := runRecover(ctx, repo, &stubTOTPService{}, "ghost", "aaaa-bbbb-cccc-dddd", out)
 	// Timing-safe surface: identical error to wrong-recovery-code case.
-	require.ErrorIs(t, err, totp.ErrInvalidRecoveryCode)
+	errutil.AssertErrorCode(t, err, "TOTP_INVALID_RECOVERY_CODE")
 }
 
 func TestRunRecoverHidesMalformedPlayerID(t *testing.T) {
@@ -254,7 +254,7 @@ func TestRunRecoverHidesMalformedPlayerID(t *testing.T) {
 
 	out := &bytes.Buffer{}
 	err := runRecover(ctx, repo, &stubTOTPService{}, "alice", "aaaa-bbbb-cccc-dddd", out)
-	require.ErrorIs(t, err, totp.ErrInvalidRecoveryCode)
+	errutil.AssertErrorCode(t, err, "TOTP_INVALID_RECOVERY_CODE")
 }
 
 func TestRunRecoverPropagatesAtomicError(t *testing.T) {

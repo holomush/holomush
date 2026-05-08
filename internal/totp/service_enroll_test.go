@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/holomush/holomush/internal/totp"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // TestEnrollRefusesIfAlreadyEnrolled — INV: Enroll returns ErrAlreadyEnrolled
@@ -25,7 +25,7 @@ func TestEnrollRefusesIfAlreadyEnrolled(t *testing.T) {
 	pid := ulid.Make()
 	repo.On("IsEnrolled", mock.Anything, pid.String()).Return(true, nil)
 	_, err := svc.Enroll(context.Background(), pid)
-	assert.ErrorIs(t, err, totp.ErrAlreadyEnrolled)
+	errutil.AssertErrorCode(t, err, "TOTP_ALREADY_ENROLLED")
 }
 
 // TestEnrollSucceedsForUnenrolledPlayer — INV: Enroll returns a populated

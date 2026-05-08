@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive // ginkgo convention
 	. "github.com/onsi/gomega"    //nolint:revive // gomega convention
 	"github.com/pquerna/otp/hotp"
+	"github.com/samber/oops"
 
 	"github.com/holomush/holomush/internal/auth"
 	"github.com/holomush/holomush/internal/eventbus/crypto/kek"
@@ -84,7 +85,12 @@ var _ = Describe("TOTP substrate E2E (PG + KEK; no eventbus)", func() {
 
 		By("refusing a second bootstrap-enroll")
 		_, err = svc.BootstrapEnroll(ctx, bobPID)
-		Expect(err).To(MatchError(totp.ErrBootstrapAlreadyConsumed))
+		// Identity-check by oops code, not MatchError (which uses errors.Is
+		// and is tautological under samber/oops — see holomush-8lhd).
+		Expect(err).To(HaveOccurred())
+		oopsErr, ok := oops.AsOops(err)
+		Expect(ok).To(BeTrue())
+		Expect(oopsErr.Code()).To(Equal("TOTP_BOOTSTRAP_CONSUMED"))
 
 		By("verifying alice's TOTP at the current step")
 		now := time.Now().UTC()
@@ -108,9 +114,9 @@ var _ = Describe("TOTP substrate E2E (PG + KEK; no eventbus)", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(clrRes.WasEnrolled).To(BeTrue())
 
-		ok, err := svc.IsEnrolled(ctx, alicePID)
+		enrolled, err := svc.IsEnrolled(ctx, alicePID)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ok).To(BeFalse())
+		Expect(enrolled).To(BeFalse())
 
 		By("re-enrolling alice via Enroll")
 		eRes, err := svc.Enroll(ctx, alicePID)

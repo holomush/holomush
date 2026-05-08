@@ -302,7 +302,7 @@ func TestRepoLoadEnrollmentReturnsErrNotEnrolledOnNoRows(t *testing.T) {
 		WillReturnError(pgx.ErrNoRows)
 
 	_, err := r.LoadEnrollment(context.Background(), "01HZ")
-	require.ErrorIs(t, err, ErrNotEnrolled)
+	errutil.AssertErrorCode(t, err, "TOTP_NOT_ENROLLED")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -460,7 +460,7 @@ func TestRepoConsumeRecoveryCodeReturnsErrInvalidWhenNoMatch(t *testing.T) {
 	hasher := stubHasher{matches: map[string]bool{}} // no matches
 
 	_, err := r.ConsumeRecoveryCode(context.Background(), "01HZ", "wrong", hasher, time.Now())
-	require.ErrorIs(t, err, ErrInvalidRecoveryCode)
+	errutil.AssertErrorCode(t, err, "TOTP_INVALID_RECOVERY_CODE")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -575,7 +575,7 @@ func TestRepoBootstrapEnrollAtomicReturnsErrAlreadyConsumedOnConflict(t *testing
 
 	rec := EnrollmentRecord{PlayerID: "01HZ", EnrolledAt: time.Now()}
 	err := r.BootstrapEnrollAtomic(context.Background(), "totp_v1", "01HZ", rec)
-	require.ErrorIs(t, err, ErrBootstrapAlreadyConsumed)
+	errutil.AssertErrorCode(t, err, "TOTP_BOOTSTRAP_CONSUMED")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -655,7 +655,7 @@ func TestRepoRecoverAndClearAtomicReturnsErrInvalidOnNoMatch(t *testing.T) {
 	hasher := stubHasher{matches: map[string]bool{}} // no matches
 
 	_, _, err := r.RecoverAndClearAtomic(context.Background(), "01HZ", "wrong", hasher, time.Now())
-	require.ErrorIs(t, err, ErrInvalidRecoveryCode)
+	errutil.AssertErrorCode(t, err, "TOTP_INVALID_RECOVERY_CODE")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

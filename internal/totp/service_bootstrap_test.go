@@ -18,6 +18,7 @@ import (
 	kekMocks "github.com/holomush/holomush/internal/eventbus/crypto/kek/mocks"
 	"github.com/holomush/holomush/internal/totp"
 	"github.com/holomush/holomush/internal/totp/mocks"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 func newBootstrapFixture(t *testing.T, fakeNow time.Time) (totp.Service, *mocks.MockRepository, *kekMocks.MockProvider) {
@@ -51,7 +52,7 @@ func TestBootstrapEnrollRefusesAfterFirstSuccess(t *testing.T) {
 	repo.On("BootstrapEnrollAtomic", mock.Anything, "totp_v1", pid.String(), mock.Anything).
 		Return(totp.ErrBootstrapAlreadyConsumed)
 	_, err := svc.BootstrapEnroll(context.Background(), pid)
-	assert.ErrorIs(t, err, totp.ErrBootstrapAlreadyConsumed)
+	errutil.AssertErrorCode(t, err, "TOTP_BOOTSTRAP_CONSUMED")
 }
 
 // INV-A9: KEK-wrapped secret.

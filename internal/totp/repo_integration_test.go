@@ -19,6 +19,7 @@ import (
 
 	"github.com/holomush/holomush/internal/store"
 	"github.com/holomush/holomush/internal/totp"
+	"github.com/holomush/holomush/pkg/errutil"
 	"github.com/holomush/holomush/test/testutil"
 )
 
@@ -161,10 +162,10 @@ func TestRepoBootstrapEnrollAtomicRollsBackOnInsertError(t *testing.T) {
 	err := repo.BootstrapEnrollAtomic(ctx, key, pid, rec)
 	require.NoError(t, err, "first BootstrapEnrollAtomic should succeed")
 
-	// Second call with same key must fail with ErrBootstrapAlreadyConsumed.
+	// Second call with same key must fail with TOTP_BOOTSTRAP_CONSUMED.
 	err = repo.BootstrapEnrollAtomic(ctx, key, pid, rec)
 	require.Error(t, err)
-	require.ErrorIs(t, err, totp.ErrBootstrapAlreadyConsumed)
+	errutil.AssertErrorCode(t, err, "TOTP_BOOTSTRAP_CONSUMED")
 }
 
 // --- PlayerExists ---
@@ -276,7 +277,7 @@ func TestRepoLoadEnrollmentReturnsErrNotEnrolled(t *testing.T) {
 		_, err := repo.LoadEnrollment(txCtx, pid)
 		return err
 	})
-	require.ErrorIs(t, txErr, totp.ErrNotEnrolled)
+	errutil.AssertErrorCode(t, txErr, "TOTP_NOT_ENROLLED")
 }
 
 // --- MarkVerified ---
@@ -357,7 +358,7 @@ func TestRepoConsumeRecoveryCodeSingleUse(t *testing.T) {
 
 	// Second consume on the same code must fail.
 	_, err = repo.ConsumeRecoveryCode(ctx, pid, rawCode, hasher, now)
-	require.ErrorIs(t, err, totp.ErrInvalidRecoveryCode)
+	errutil.AssertErrorCode(t, err, "TOTP_INVALID_RECOVERY_CODE")
 }
 
 // --- ClearEnrollment ---

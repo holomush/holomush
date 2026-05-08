@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/totp"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // INV-A6 propagation: ConsumeRecoveryCode surfaces ErrInvalidRecoveryCode
@@ -29,7 +30,7 @@ func TestConsumeRecoveryCodePropagatesInvalidCode(t *testing.T) {
 		Return(ulid.ULID{}, totp.ErrInvalidRecoveryCode)
 
 	_, err := svc.ConsumeRecoveryCode(context.Background(), pid, "bad-code")
-	assert.ErrorIs(t, err, totp.ErrInvalidRecoveryCode)
+	errutil.AssertErrorCode(t, err, "TOTP_INVALID_RECOVERY_CODE")
 }
 
 func TestConsumeRecoveryCodeReturnsConsumedID(t *testing.T) {
@@ -117,7 +118,7 @@ func TestRecoverAndClearPropagatesInvalidCode(t *testing.T) {
 		Return(ulid.ULID{}, false, totp.ErrInvalidRecoveryCode)
 
 	_, err := svc.RecoverAndClear(context.Background(), pid, "bad")
-	assert.ErrorIs(t, err, totp.ErrInvalidRecoveryCode)
+	errutil.AssertErrorCode(t, err, "TOTP_INVALID_RECOVERY_CODE")
 }
 
 func TestClearTOTPPropagatesWasEnrolledFalse(t *testing.T) {
