@@ -245,12 +245,33 @@ func (s *service) Verify(ctx context.Context, playerID ulid.ULID, code string) (
 	return result, nil
 }
 
-// ConsumeRecoveryCode lands in T10.
-func (s *service) ConsumeRecoveryCode(_ context.Context, _ ulid.ULID, _ string) (ConsumeRecoveryResult, error) {
-	panic("not yet implemented: ConsumeRecoveryCode lands in T10")
+// ConsumeRecoveryCode delegates to the repo's atomic single-use update;
+// surfaces ErrInvalidRecoveryCode unchanged so callers can branch on it.
+func (s *service) ConsumeRecoveryCode(ctx context.Context, playerID ulid.ULID, code string) (ConsumeRecoveryResult, error) {
+	now := s.clock.Now().UTC()
+	id, err := s.repo.ConsumeRecoveryCode(ctx, playerID.String(), code, s.verifyHasher, now)
+	if err != nil {
+		return ConsumeRecoveryResult{}, oops.With("player_id", playerID.String()).Wrap(err)
+	}
+	return ConsumeRecoveryResult{
+		RecoveryCodeID:  id,
+		AuditConsumedAt: now,
+		AuditPlayerID:   playerID,
+	}, nil
 }
 
-// ClearTOTP lands in T10.
-func (s *service) ClearTOTP(_ context.Context, _ ulid.ULID, _ ClearReason) (ClearResult, error) {
-	panic("not yet implemented: ClearTOTP lands in T10")
+// ClearTOTP deletes the player's enrollment + active recovery codes
+// (per spec §"ClearTOTP"). MUST NOT touch crypto_bootstrap_state — INV-A8.
+func (s *service) ClearTOTP(ctx context.Context, playerID ulid.ULID, clearedBy ClearReason) (ClearResult, error) {
+	wasEnrolled, err := s.repo.ClearEnrollment(ctx, playerID.String())
+	if err != nil {
+		return ClearResult{}, oops.With("player_id", playerID.String()).Wrap(err)
+	}
+	now := s.clock.Now().UTC()
+	return ClearResult{
+		ClearedBy:      clearedBy,
+		AuditClearedAt: now,
+		AuditPlayerID:  playerID,
+		WasEnrolled:    wasEnrolled,
+	}, nil
 }
