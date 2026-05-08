@@ -15,6 +15,7 @@ const (
 	SubjectPlugin    = "plugin:"
 	SubjectSystem    = "system"
 	SubjectSession   = "session:"
+	SubjectPlayer    = "player:"
 )
 
 // Resource prefix constants identify the type of entity being accessed.
@@ -44,6 +45,7 @@ var knownPrefixes = []string{
 	SubjectCharacter,
 	SubjectPlugin,
 	SubjectSession,
+	SubjectPlayer,
 	ResourceCharacter,
 	ResourceLocation,
 	ResourceObject,
@@ -72,6 +74,20 @@ func CharacterSubject(charID string) string {
 		panic("access.CharacterSubject: empty charID would bypass access control")
 	}
 	return SubjectCharacter + charID
+}
+
+// PlayerSubject returns the canonical ABAC subject ID for a player
+// ("player:<ulid>"). Players are a Subject-namespace identity alongside
+// characters; PlayerAttributeProvider resolves this namespace.
+//
+// Panics on empty playerID, mirroring the safety guard in the other
+// helpers in this package — empty subject strings would silently bypass
+// access control if returned as the bare prefix.
+func PlayerSubject(playerID string) string {
+	if playerID == "" {
+		panic("access.PlayerSubject: empty playerID would bypass access control")
+	}
+	return SubjectPlayer + playerID
 }
 
 // CharacterResource returns a properly formatted character resource identifier.

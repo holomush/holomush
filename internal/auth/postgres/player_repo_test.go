@@ -519,3 +519,55 @@ func TestPlayerRepository_DefaultCharacterID(t *testing.T) {
 
 // Compile-time interface check.
 var _ auth.PlayerRepository = (*postgres.PlayerRepository)(nil)
+
+func TestPlayerRepository_ExistingIDs(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewPlayerRepository(testPool)
+
+	p1 := &auth.Player{
+		ID:           ulid.Make(),
+		Username:     "existing_ids_user_1",
+		PasswordHash: "hash",
+		CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+		UpdatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+	}
+	p2 := &auth.Player{
+		ID:           ulid.Make(),
+		Username:     "existing_ids_user_2",
+		PasswordHash: "hash",
+		CreatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+		UpdatedAt:    time.Now().UTC().Truncate(time.Microsecond),
+	}
+	require.NoError(t, repo.Create(ctx, p1))
+	require.NoError(t, repo.Create(ctx, p2))
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(ctx, `DELETE FROM players WHERE id = ANY($1::text[])`,
+			[]string{p1.ID.String(), p2.ID.String()})
+	})
+
+	nonexistent := ulid.Make().String()
+
+	found, err := repo.ExistingIDs(ctx, []string{
+		p1.ID.String(),
+		nonexistent,
+		p2.ID.String(),
+	})
+	require.NoError(t, err)
+	assert.ElementsMatch(t,
+		[]string{p1.ID.String(), p2.ID.String()},
+		found,
+		"should return only the IDs that exist in the players table")
+}
+
+func TestPlayerRepository_ExistingIDs_EmptyInput(t *testing.T) {
+	ctx := context.Background()
+	repo := postgres.NewPlayerRepository(testPool)
+
+	found, err := repo.ExistingIDs(ctx, nil)
+	require.NoError(t, err)
+	assert.Empty(t, found, "nil input should return empty slice without querying")
+
+	found, err = repo.ExistingIDs(ctx, []string{})
+	require.NoError(t, err)
+	assert.Empty(t, found, "empty input should return empty slice without querying")
+}

@@ -55,6 +55,34 @@ func DefaultAuthConfig() AuthConfig {
 	}
 }
 
+// CryptoConfig holds crypto-related server configuration loaded from
+// the top-level "crypto" YAML section. Sub-epic B introduces this block
+// with operators as its first tenant; future sub-epics (e.g., D's
+// dual_control_required) extend the same block.
+type CryptoConfig struct {
+	// Operators is the allow-list of player IDs (ULIDs) that hold the
+	// crypto.operator capability — the narrowing grant required (in
+	// addition to RoleAdmin) for break-glass operations.
+	//
+	// Lax+warn validation: at startup the server cross-checks each ID
+	// against the players table and emits a structured warning per
+	// unknown ID. The configured list is used as-is regardless;
+	// unknown IDs become inert grants (no one can authenticate as a
+	// nonexistent player).
+	//
+	// Empty / missing → no operators → break-glass impossible.
+	// Reload requires server restart in v1.
+	Operators []string `koanf:"operators"`
+}
+
+// DefaultCryptoConfig returns an empty CryptoConfig — no operators,
+// break-glass disabled. Operators MUST explicitly populate the list.
+func DefaultCryptoConfig() CryptoConfig {
+	return CryptoConfig{
+		Operators: []string{},
+	}
+}
+
 // Load reads configuration from a YAML file and overlays explicitly-set CLI flags.
 //
 // Precedence (lowest to highest): YAML config file -> CLI flags.
