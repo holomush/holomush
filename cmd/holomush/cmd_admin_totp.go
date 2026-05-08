@@ -246,4 +246,3 @@ func readPassword(cmd *cobra.Command, prompt string) (string, error) {
 	}
 	return strings.TrimRight(line, "\r\n"), nil
 }
-

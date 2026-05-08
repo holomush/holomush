@@ -35,6 +35,13 @@ var coreOnlyFiles = map[string]struct{}{
 	"cmd_plugin_validate.go":          {},
 	"bootstrap_orphan.go":             {},
 	"bootstrap_orphan_test.go":        {},
+	// `holomush admin` CLI is a host-shell tool, not the gateway. It
+	// connects to the same PG/KEK as the core server for break-glass
+	// flows (TOTP enroll/verify/recover). Phase 5 sub-epic A.
+	"cmd_admin.go":           {},
+	"cmd_admin_test.go":      {},
+	"cmd_admin_totp.go":      {},
+	"cmd_admin_totp_deps.go": {},
 }
 
 var forbidden = []string{
