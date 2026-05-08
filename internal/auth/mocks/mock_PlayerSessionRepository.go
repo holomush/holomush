@@ -184,8 +184,8 @@ func (_c *MockPlayerSessionRepository_CreateWithCap_Call) Run(run func(ctx conte
 	return _c
 }
 
-func (_c *MockPlayerSessionRepository_CreateWithCap_Call) Return(_a0 []ulid.ULID, _a1 error) *MockPlayerSessionRepository_CreateWithCap_Call {
-	_c.Call.Return(_a0, _a1)
+func (_c *MockPlayerSessionRepository_CreateWithCap_Call) Return(trimmedIDs []ulid.ULID, err error) *MockPlayerSessionRepository_CreateWithCap_Call {
+	_c.Call.Return(trimmedIDs, err)
 	return _c
 }
 
