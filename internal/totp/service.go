@@ -144,9 +144,25 @@ func (s *service) buildEnrollment(ctx context.Context, playerID string, now time
 		}, nil
 }
 
-// Enroll lands in T8.
-func (s *service) Enroll(_ context.Context, _ ulid.ULID) (EnrollResult, error) {
-	panic("not yet implemented: Enroll lands in T8")
+// Enroll self-enrolls a player in TOTP. Returns ErrAlreadyEnrolled if the
+// player already has an active enrollment.
+func (s *service) Enroll(ctx context.Context, playerID ulid.ULID) (EnrollResult, error) {
+	enrolled, err := s.repo.IsEnrolled(ctx, playerID.String())
+	if err != nil {
+		return EnrollResult{}, oops.With("player_id", playerID.String()).Wrap(err)
+	}
+	if enrolled {
+		return EnrollResult{}, ErrAlreadyEnrolled
+	}
+	now := s.clock.Now().UTC()
+	enr, rec, err := s.buildEnrollment(ctx, playerID.String(), now)
+	if err != nil {
+		return EnrollResult{}, err
+	}
+	if err := s.repo.InsertEnrollment(ctx, rec); err != nil {
+		return EnrollResult{}, oops.With("player_id", playerID.String()).Wrap(err)
+	}
+	return EnrollResult{Enrollment: enr, AuditEnrolledAt: now, AuditPlayerID: playerID}, nil
 }
 
 // Verify lands in T9.
