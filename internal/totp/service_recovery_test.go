@@ -85,6 +85,41 @@ func TestClearTOTPDelegatesToRepoAndPopulatesResult(t *testing.T) {
 	assert.True(t, res.WasEnrolled)
 }
 
+// RecoverAndClear delegates to repo.RecoverAndClearAtomic and packs the
+// audit metadata for both events. INV-A6 (recovery single-use) and
+// INV-A7 (clear deletes both tables) hold jointly under the shared txn.
+func TestRecoverAndClearDelegatesAtomic(t *testing.T) {
+	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
+	svc, repo, _ := newBootstrapFixture(t, now)
+	pid := ulid.Make()
+	consumedID := ulid.Make()
+
+	repo.EXPECT().
+		RecoverAndClearAtomic(mock.Anything, pid.String(), "good-code", mock.Anything, now).
+		Return(consumedID, true, nil)
+
+	res, err := svc.RecoverAndClear(context.Background(), pid, "good-code")
+	require.NoError(t, err)
+	assert.Equal(t, consumedID, res.RecoveryCodeID)
+	assert.True(t, res.WasEnrolled)
+	assert.Equal(t, now, res.AuditConsumedAt)
+	assert.Equal(t, now, res.AuditClearedAt)
+	assert.Equal(t, pid, res.AuditPlayerID)
+}
+
+func TestRecoverAndClearPropagatesInvalidCode(t *testing.T) {
+	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
+	svc, repo, _ := newBootstrapFixture(t, now)
+	pid := ulid.Make()
+
+	repo.EXPECT().
+		RecoverAndClearAtomic(mock.Anything, pid.String(), "bad", mock.Anything, now).
+		Return(ulid.ULID{}, false, totp.ErrInvalidRecoveryCode)
+
+	_, err := svc.RecoverAndClear(context.Background(), pid, "bad")
+	assert.ErrorIs(t, err, totp.ErrInvalidRecoveryCode)
+}
+
 func TestClearTOTPPropagatesWasEnrolledFalse(t *testing.T) {
 	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
 	svc, repo, _ := newBootstrapFixture(t, now)

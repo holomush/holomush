@@ -20,6 +20,22 @@ type Service interface {
 	IsEnrolled(ctx context.Context, playerID ulid.ULID) (bool, error)
 	ConsumeRecoveryCode(ctx context.Context, playerID ulid.ULID, code string) (ConsumeRecoveryResult, error)
 	ClearTOTP(ctx context.Context, playerID ulid.ULID, clearedBy ClearReason) (ClearResult, error)
+	// RecoverAndClear is the atomic break-glass path: consumes the recovery
+	// code AND clears the player's TOTP enrollment in a single transaction,
+	// so a partial failure cannot strand the player with a spent code but
+	// still-active TOTP. Result carries the audit metadata for both events
+	// (callers in sub-epic D emit them).
+	RecoverAndClear(ctx context.Context, playerID ulid.ULID, code string) (RecoverAndClearResult, error)
+}
+
+// RecoverAndClearResult bundles the audit-event metadata for both the
+// recovery-code consumption and the TOTP clear that fired atomically.
+type RecoverAndClearResult struct {
+	RecoveryCodeID  ulid.ULID
+	WasEnrolled     bool
+	AuditConsumedAt time.Time
+	AuditClearedAt  time.Time
+	AuditPlayerID   ulid.ULID
 }
 
 // Enrollment holds the one-time secrets presented to the player at enroll time.
@@ -95,6 +111,11 @@ type Repository interface {
 	MarkVerified(ctx context.Context, playerID string, step int64, at time.Time) error
 	ConsumeRecoveryCode(ctx context.Context, playerID, rawCode string, hasher RecoveryCodeHasher, at time.Time) (consumedID ulid.ULID, err error)
 	ClearEnrollment(ctx context.Context, playerID string) (wasEnrolled bool, err error)
+	// RecoverAndClearAtomic runs ConsumeRecoveryCode + ClearEnrollment in a
+	// single transaction so the recovery flow cannot leave a player with a
+	// spent recovery code but still-active TOTP enrollment.
+	// Spec INV-A6 + INV-A7 hold jointly under the shared txn.
+	RecoverAndClearAtomic(ctx context.Context, playerID, rawCode string, hasher RecoveryCodeHasher, at time.Time) (consumedID ulid.ULID, wasEnrolled bool, err error)
 	InTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 }
 

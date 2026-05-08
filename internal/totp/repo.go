@@ -243,44 +243,9 @@ func (r *repo) ConsumeRecoveryCode(
 ) (ulid.ULID, error) {
 	var consumedID ulid.ULID
 	err := r.InTransaction(ctx, func(txCtx context.Context) error {
-		rows, qErr := dbFromCtx(txCtx, r.pool).Query(txCtx,
-			`SELECT id, code_hash FROM player_totp_recovery_codes
-			 WHERE player_id = $1 AND consumed_at IS NULL FOR UPDATE`, playerID)
-		if qErr != nil {
-			return oops.Code("TOTP_REPO_RECOVERY_SCAN").Wrap(qErr)
-		}
-		type cand struct {
-			id   string
-			hash string
-		}
-		var cands []cand
-		for rows.Next() {
-			var c cand
-			if err := rows.Scan(&c.id, &c.hash); err != nil {
-				rows.Close()
-				return oops.Code("TOTP_REPO_RECOVERY_SCAN").Wrap(err)
-			}
-			cands = append(cands, c)
-		}
-		rows.Close()
-		for _, c := range cands {
-			ok, vErr := hasher.Verify(rawCode, c.hash)
-			if vErr != nil || !ok {
-				continue // timing-safe: continue on any mismatch
-			}
-			if _, err := dbFromCtx(txCtx, r.pool).Exec(txCtx,
-				`UPDATE player_totp_recovery_codes SET consumed_at = $2 WHERE id = $1`,
-				c.id, at); err != nil {
-				return oops.Code("TOTP_REPO_RECOVERY_CONSUME").Wrap(err)
-			}
-			parsed, perr := ulid.Parse(c.id)
-			if perr != nil {
-				return oops.Code("TOTP_REPO_RECOVERY_ULID_PARSE").Wrap(perr)
-			}
-			consumedID = parsed
-			return nil
-		}
-		return ErrInvalidRecoveryCode
+		var inner error
+		consumedID, inner = r.consumeRecoveryCodeInTx(txCtx, playerID, rawCode, hasher, at)
+		return inner
 	})
 	if err != nil {
 		return ulid.ULID{}, err
@@ -288,29 +253,110 @@ func (r *repo) ConsumeRecoveryCode(
 	return consumedID, nil
 }
 
+// consumeRecoveryCodeInTx is the inner-txn helper. Caller MUST be running
+// inside an outer InTransaction (txCtx carries the active pgx.Tx). Used
+// by ConsumeRecoveryCode (own txn) and RecoverAndClearAtomic (shared txn).
+func (r *repo) consumeRecoveryCodeInTx(
+	txCtx context.Context, playerID, rawCode string, hasher RecoveryCodeHasher, at time.Time,
+) (ulid.ULID, error) {
+	rows, qErr := dbFromCtx(txCtx, r.pool).Query(txCtx,
+		`SELECT id, code_hash FROM player_totp_recovery_codes
+		 WHERE player_id = $1 AND consumed_at IS NULL FOR UPDATE`, playerID)
+	if qErr != nil {
+		return ulid.ULID{}, oops.Code("TOTP_REPO_RECOVERY_SCAN").Wrap(qErr)
+	}
+	type cand struct {
+		id   string
+		hash string
+	}
+	var cands []cand
+	for rows.Next() {
+		var c cand
+		if err := rows.Scan(&c.id, &c.hash); err != nil {
+			rows.Close()
+			return ulid.ULID{}, oops.Code("TOTP_REPO_RECOVERY_SCAN").Wrap(err)
+		}
+		cands = append(cands, c)
+	}
+	rows.Close()
+	for _, c := range cands {
+		ok, vErr := hasher.Verify(rawCode, c.hash)
+		if vErr != nil || !ok {
+			continue // timing-safe: continue on any mismatch
+		}
+		if _, err := dbFromCtx(txCtx, r.pool).Exec(txCtx,
+			`UPDATE player_totp_recovery_codes SET consumed_at = $2 WHERE id = $1`,
+			c.id, at); err != nil {
+			return ulid.ULID{}, oops.Code("TOTP_REPO_RECOVERY_CONSUME").Wrap(err)
+		}
+		parsed, perr := ulid.Parse(c.id)
+		if perr != nil {
+			return ulid.ULID{}, oops.Code("TOTP_REPO_RECOVERY_ULID_PARSE").Wrap(perr)
+		}
+		return parsed, nil
+	}
+	return ulid.ULID{}, ErrInvalidRecoveryCode
+}
+
 // ClearEnrollment deletes the player_totp row and all unconsumed recovery codes.
 // Returns wasEnrolled=true if the player had an active enrollment.
 func (r *repo) ClearEnrollment(ctx context.Context, playerID string) (bool, error) {
 	var wasEnrolled bool
 	err := r.InTransaction(ctx, func(txCtx context.Context) error {
-		x, err := r.IsEnrolled(txCtx, playerID)
-		if err != nil {
-			return err
-		}
-		wasEnrolled = x
-		if _, err := dbFromCtx(txCtx, r.pool).Exec(txCtx,
-			`DELETE FROM player_totp WHERE player_id = $1`, playerID); err != nil {
-			return oops.Code("TOTP_REPO_CLEAR_TOTP").Wrap(err)
-		}
-		if _, err := dbFromCtx(txCtx, r.pool).Exec(txCtx,
-			`DELETE FROM player_totp_recovery_codes WHERE player_id = $1 AND consumed_at IS NULL`,
-			playerID); err != nil {
-			return oops.Code("TOTP_REPO_CLEAR_RECOVERY").Wrap(err)
-		}
-		return nil
+		var inner error
+		wasEnrolled, inner = r.clearEnrollmentInTx(txCtx, playerID)
+		return inner
 	})
 	if err != nil {
 		return false, err
 	}
 	return wasEnrolled, nil
+}
+
+// clearEnrollmentInTx is the inner-txn helper. Caller MUST be running
+// inside an outer InTransaction. Used by ClearEnrollment (own txn) and
+// RecoverAndClearAtomic (shared txn).
+func (r *repo) clearEnrollmentInTx(txCtx context.Context, playerID string) (bool, error) {
+	wasEnrolled, err := r.IsEnrolled(txCtx, playerID)
+	if err != nil {
+		return false, err
+	}
+	if _, err := dbFromCtx(txCtx, r.pool).Exec(txCtx,
+		`DELETE FROM player_totp WHERE player_id = $1`, playerID); err != nil {
+		return false, oops.Code("TOTP_REPO_CLEAR_TOTP").Wrap(err)
+	}
+	if _, err := dbFromCtx(txCtx, r.pool).Exec(txCtx,
+		`DELETE FROM player_totp_recovery_codes WHERE player_id = $1 AND consumed_at IS NULL`,
+		playerID); err != nil {
+		return false, oops.Code("TOTP_REPO_CLEAR_RECOVERY").Wrap(err)
+	}
+	return wasEnrolled, nil
+}
+
+// RecoverAndClearAtomic combines ConsumeRecoveryCode + ClearEnrollment into
+// a single transaction so that a partial failure can never leave the player
+// with a spent recovery code AND an active TOTP enrollment. This is the
+// canonical path for the `holomush admin totp recover` CLI; spec INV-A6
+// (recovery single-use) and INV-A7 (clear deletes both tables) hold
+// jointly under the shared txn.
+func (r *repo) RecoverAndClearAtomic(
+	ctx context.Context, playerID, rawCode string, hasher RecoveryCodeHasher, at time.Time,
+) (consumedID ulid.ULID, wasEnrolled bool, err error) {
+	txErr := r.InTransaction(ctx, func(txCtx context.Context) error {
+		id, cerr := r.consumeRecoveryCodeInTx(txCtx, playerID, rawCode, hasher, at)
+		if cerr != nil {
+			return cerr
+		}
+		consumedID = id
+		we, clrErr := r.clearEnrollmentInTx(txCtx, playerID)
+		if clrErr != nil {
+			return clrErr
+		}
+		wasEnrolled = we
+		return nil
+	})
+	if txErr != nil {
+		return ulid.ULID{}, false, txErr
+	}
+	return consumedID, wasEnrolled, nil
 }

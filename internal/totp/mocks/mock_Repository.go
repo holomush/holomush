@@ -687,6 +687,75 @@ func (_c *MockRepository_PlayerIDFromUsername_Call) RunAndReturn(run func(contex
 	return _c
 }
 
+// RecoverAndClearAtomic provides a mock function with given fields: ctx, playerID, rawCode, hasher, at
+func (_m *MockRepository) RecoverAndClearAtomic(ctx context.Context, playerID string, rawCode string, hasher totp.RecoveryCodeHasher, at time.Time) (ulid.ULID, bool, error) {
+	ret := _m.Called(ctx, playerID, rawCode, hasher, at)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RecoverAndClearAtomic")
+	}
+
+	var r0 ulid.ULID
+	var r1 bool
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, totp.RecoveryCodeHasher, time.Time) (ulid.ULID, bool, error)); ok {
+		return rf(ctx, playerID, rawCode, hasher, at)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, totp.RecoveryCodeHasher, time.Time) ulid.ULID); ok {
+		r0 = rf(ctx, playerID, rawCode, hasher, at)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(ulid.ULID)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, totp.RecoveryCodeHasher, time.Time) bool); ok {
+		r1 = rf(ctx, playerID, rawCode, hasher, at)
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, string, string, totp.RecoveryCodeHasher, time.Time) error); ok {
+		r2 = rf(ctx, playerID, rawCode, hasher, at)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// MockRepository_RecoverAndClearAtomic_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecoverAndClearAtomic'
+type MockRepository_RecoverAndClearAtomic_Call struct {
+	*mock.Call
+}
+
+// RecoverAndClearAtomic is a helper method to define mock.On call
+//   - ctx context.Context
+//   - playerID string
+//   - rawCode string
+//   - hasher totp.RecoveryCodeHasher
+//   - at time.Time
+func (_e *MockRepository_Expecter) RecoverAndClearAtomic(ctx interface{}, playerID interface{}, rawCode interface{}, hasher interface{}, at interface{}) *MockRepository_RecoverAndClearAtomic_Call {
+	return &MockRepository_RecoverAndClearAtomic_Call{Call: _e.mock.On("RecoverAndClearAtomic", ctx, playerID, rawCode, hasher, at)}
+}
+
+func (_c *MockRepository_RecoverAndClearAtomic_Call) Run(run func(ctx context.Context, playerID string, rawCode string, hasher totp.RecoveryCodeHasher, at time.Time)) *MockRepository_RecoverAndClearAtomic_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(totp.RecoveryCodeHasher), args[4].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_RecoverAndClearAtomic_Call) Return(consumedID ulid.ULID, wasEnrolled bool, err error) *MockRepository_RecoverAndClearAtomic_Call {
+	_c.Call.Return(consumedID, wasEnrolled, err)
+	return _c
+}
+
+func (_c *MockRepository_RecoverAndClearAtomic_Call) RunAndReturn(run func(context.Context, string, string, totp.RecoveryCodeHasher, time.Time) (ulid.ULID, bool, error)) *MockRepository_RecoverAndClearAtomic_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewMockRepository creates a new instance of MockRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockRepository(t interface {

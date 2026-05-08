@@ -279,6 +279,27 @@ func (s *service) ConsumeRecoveryCode(ctx context.Context, playerID ulid.ULID, c
 	}, nil
 }
 
+// RecoverAndClear is the atomic break-glass flow used by the
+// `holomush admin totp recover` CLI: consume one recovery code AND clear
+// the player's TOTP enrollment in a single transaction. Either both
+// commit or both roll back.
+func (s *service) RecoverAndClear(ctx context.Context, playerID ulid.ULID, code string) (RecoverAndClearResult, error) {
+	now := s.clock.Now().UTC()
+	consumedID, wasEnrolled, err := s.repo.RecoverAndClearAtomic(
+		ctx, playerID.String(), code, s.verifyHasher, now,
+	)
+	if err != nil {
+		return RecoverAndClearResult{}, oops.With("player_id", playerID.String()).Wrap(err)
+	}
+	return RecoverAndClearResult{
+		RecoveryCodeID:  consumedID,
+		WasEnrolled:     wasEnrolled,
+		AuditConsumedAt: now,
+		AuditClearedAt:  now,
+		AuditPlayerID:   playerID,
+	}, nil
+}
+
 // ClearTOTP deletes the player's enrollment + active recovery codes
 // (per spec §"ClearTOTP"). MUST NOT touch crypto_bootstrap_state — INV-A8.
 func (s *service) ClearTOTP(ctx context.Context, playerID ulid.ULID, clearedBy ClearReason) (ClearResult, error) {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/auth"
@@ -68,112 +69,149 @@ func sampleEnrollment() totp.Enrollment {
 	}
 }
 
-// runBootstrapEnroll happy + error paths.
+// runBootstrapEnroll cases (table-driven per repo style guideline).
 
-func TestRunBootstrapEnrollHappyPath(t *testing.T) {
-	ctx := context.Background()
+func TestRunBootstrapEnroll(t *testing.T) {
 	pid := ulid.Make()
-	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().PlayerIDFromUsername(ctx, "alice").Return(pid.String(), nil)
-
-	// totp.Service isn't in mockery's set; stub directly for clearer
-	// per-method overrides than .On(...) chains would give.
-	stubSvc := &stubTOTPService{
-		bootstrapResult: totp.BootstrapResult{
-			Enrollment:      sampleEnrollment(),
-			AuditConsumedAt: time.Now().UTC(),
-			AuditPlayerID:   pid,
-			BootstrapKey:    "totp_v1",
+	cases := []struct {
+		name       string
+		setup      func(repo *mocks.MockRepository, svc *stubTOTPService) // configures mocks for the case
+		username   string
+		assertErr  func(t *testing.T, err error)
+		assertOut  func(t *testing.T, out string)
+	}{
+		{
+			name: "happy path",
+			setup: func(repo *mocks.MockRepository, svc *stubTOTPService) {
+				repo.EXPECT().PlayerIDFromUsername(mock.Anything, "alice").Return(pid.String(), nil)
+				svc.bootstrapResult = totp.BootstrapResult{
+					Enrollment:      sampleEnrollment(),
+					AuditConsumedAt: time.Now().UTC(),
+					AuditPlayerID:   pid,
+					BootstrapKey:    "totp_v1",
+				}
+			},
+			username:  "alice",
+			assertErr: func(t *testing.T, err error) { require.NoError(t, err) },
+			assertOut: func(t *testing.T, out string) {
+				assert.Contains(t, out, "TOTP enrolled for alice")
+				assert.Contains(t, out, pid.String())
+				assert.Contains(t, out, "aaaa-bbbb-cccc-dddd")
+			},
+		},
+		{
+			name: "player lookup error propagates",
+			setup: func(repo *mocks.MockRepository, _ *stubTOTPService) {
+				repo.EXPECT().PlayerIDFromUsername(mock.Anything, "ghost").
+					Return("", errors.New("player not found"))
+			},
+			username: "ghost",
+			assertErr: func(t *testing.T, err error) {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "player not found")
+			},
+		},
+		{
+			name: "malformed player_id ULID rejected",
+			setup: func(repo *mocks.MockRepository, _ *stubTOTPService) {
+				repo.EXPECT().PlayerIDFromUsername(mock.Anything, "alice").Return("not-a-ulid", nil)
+			},
+			username: "alice",
+			assertErr: func(t *testing.T, err error) {
+				require.Error(t, err)
+				errutil.AssertErrorCode(t, err, "ADMIN_TOTP_PLAYER_ULID_PARSE")
+			},
+		},
+		{
+			name: "service error propagates",
+			setup: func(repo *mocks.MockRepository, svc *stubTOTPService) {
+				repo.EXPECT().PlayerIDFromUsername(mock.Anything, "alice").Return(pid.String(), nil)
+				svc.bootstrapErr = totp.ErrBootstrapAlreadyConsumed
+			},
+			username: "alice",
+			assertErr: func(t *testing.T, err error) {
+				require.Error(t, err)
+				errutil.AssertErrorCode(t, err, "TOTP_BOOTSTRAP_CONSUMED")
+			},
 		},
 	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := mocks.NewMockRepository(t)
+			svc := &stubTOTPService{}
+			tc.setup(repo, svc)
 
-	out := &bytes.Buffer{}
-	require.NoError(t, runBootstrapEnroll(ctx, repo, stubSvc, "alice", out))
-	assert.Contains(t, out.String(), "TOTP enrolled for alice")
-	assert.Contains(t, out.String(), pid.String())
-	assert.Contains(t, out.String(), "aaaa-bbbb-cccc-dddd")
+			out := &bytes.Buffer{}
+			err := runBootstrapEnroll(context.Background(), repo, svc, tc.username, out)
+			tc.assertErr(t, err)
+			if tc.assertOut != nil {
+				tc.assertOut(t, out.String())
+			}
+		})
+	}
 }
 
-func TestRunBootstrapEnrollPropagatesPlayerLookupError(t *testing.T) {
-	ctx := context.Background()
-	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().PlayerIDFromUsername(ctx, "ghost").
-		Return("", errors.New("player not found"))
+// runEnroll cases (table-driven).
 
-	out := &bytes.Buffer{}
-	err := runBootstrapEnroll(ctx, repo, &stubTOTPService{}, "ghost", out)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "player not found")
-}
-
-func TestRunBootstrapEnrollRejectsMalformedPlayerID(t *testing.T) {
-	ctx := context.Background()
-	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().PlayerIDFromUsername(ctx, "alice").
-		Return("not-a-ulid", nil)
-
-	out := &bytes.Buffer{}
-	err := runBootstrapEnroll(ctx, repo, &stubTOTPService{}, "alice", out)
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "ADMIN_TOTP_PLAYER_ULID_PARSE")
-}
-
-func TestRunBootstrapEnrollPropagatesServiceError(t *testing.T) {
-	ctx := context.Background()
+func TestRunEnroll(t *testing.T) {
 	pid := ulid.Make()
-	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().PlayerIDFromUsername(ctx, "alice").Return(pid.String(), nil)
-
-	svc := &stubTOTPService{bootstrapErr: totp.ErrBootstrapAlreadyConsumed}
-
-	out := &bytes.Buffer{}
-	err := runBootstrapEnroll(ctx, repo, svc, "alice", out)
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "TOTP_BOOTSTRAP_CONSUMED")
-}
-
-// runEnroll happy + error paths.
-
-func TestRunEnrollHappyPath(t *testing.T) {
-	ctx := context.Background()
-	pid := ulid.Make()
-	validator := &stubValidator{player: &auth.Player{ID: pid, Username: "alice"}}
-	svc := &stubTOTPService{
-		enrollResult: totp.EnrollResult{
-			Enrollment:      sampleEnrollment(),
-			AuditEnrolledAt: time.Now().UTC(),
-			AuditPlayerID:   pid,
+	cases := []struct {
+		name      string
+		validator *stubValidator
+		setupSvc  func(*stubTOTPService)
+		assertErr func(t *testing.T, err error)
+		assertOut func(t *testing.T, out string)
+	}{
+		{
+			name:      "happy path",
+			validator: &stubValidator{player: &auth.Player{ID: pid, Username: "alice"}},
+			setupSvc: func(svc *stubTOTPService) {
+				svc.enrollResult = totp.EnrollResult{
+					Enrollment:      sampleEnrollment(),
+					AuditEnrolledAt: time.Now().UTC(),
+					AuditPlayerID:   pid,
+				}
+			},
+			assertErr: func(t *testing.T, err error) { require.NoError(t, err) },
+			assertOut: func(t *testing.T, out string) { assert.Contains(t, out, "TOTP enrolled for alice") },
+		},
+		{
+			name:      "validator rejects credentials",
+			validator: &stubValidator{err: errors.New("bad password")},
+			setupSvc:  func(_ *stubTOTPService) {},
+			assertErr: func(t *testing.T, err error) {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "bad password")
+			},
+		},
+		{
+			name:      "service error propagates",
+			validator: &stubValidator{player: &auth.Player{ID: pid, Username: "alice"}},
+			setupSvc:  func(svc *stubTOTPService) { svc.enrollErr = totp.ErrAlreadyEnrolled },
+			assertErr: func(t *testing.T, err error) {
+				require.Error(t, err)
+				errutil.AssertErrorCode(t, err, "TOTP_ALREADY_ENROLLED")
+			},
 		},
 	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &stubTOTPService{}
+			tc.setupSvc(svc)
 
-	out := &bytes.Buffer{}
-	require.NoError(t, runEnroll(ctx, validator, svc, "alice", "hunter2", out))
-	assert.Contains(t, out.String(), "TOTP enrolled for alice")
+			out := &bytes.Buffer{}
+			err := runEnroll(context.Background(), tc.validator, svc, "alice", "hunter2", out)
+			tc.assertErr(t, err)
+			if tc.assertOut != nil {
+				tc.assertOut(t, out.String())
+			}
+		})
+	}
 }
 
-func TestRunEnrollPropagatesValidatorError(t *testing.T) {
-	ctx := context.Background()
-	validator := &stubValidator{err: errors.New("bad password")}
-
-	out := &bytes.Buffer{}
-	err := runEnroll(ctx, validator, &stubTOTPService{}, "alice", "wrong", out)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "bad password")
-}
-
-func TestRunEnrollPropagatesServiceError(t *testing.T) {
-	ctx := context.Background()
-	pid := ulid.Make()
-	validator := &stubValidator{player: &auth.Player{ID: pid, Username: "alice"}}
-	svc := &stubTOTPService{enrollErr: totp.ErrAlreadyEnrolled}
-
-	out := &bytes.Buffer{}
-	err := runEnroll(ctx, validator, svc, "alice", "hunter2", out)
-	require.Error(t, err)
-	errutil.AssertErrorCode(t, err, "TOTP_ALREADY_ENROLLED")
-}
-
-// runRecover happy + error paths.
+// runRecover cases. The atomic-error case mirrors the runBootstrapEnroll
+// shape; the timing-safe cases (lookup hide / bad-ulid hide) and the
+// write-error case are kept separate where the assertion shape differs.
 
 func TestRunRecoverHappyPath(t *testing.T) {
 	ctx := context.Background()
@@ -182,16 +220,12 @@ func TestRunRecoverHappyPath(t *testing.T) {
 	repo.EXPECT().PlayerIDFromUsername(ctx, "alice").Return(pid.String(), nil)
 
 	svc := &stubTOTPService{
-		consumeResult: totp.ConsumeRecoveryResult{
+		recoverAndClearResult: totp.RecoverAndClearResult{
 			RecoveryCodeID:  ulid.Make(),
+			WasEnrolled:     true,
 			AuditConsumedAt: time.Now().UTC(),
+			AuditClearedAt:  time.Now().UTC(),
 			AuditPlayerID:   pid,
-		},
-		clearResult: totp.ClearResult{
-			ClearedBy:      totp.ClearReasonRecoveryCode,
-			AuditClearedAt: time.Now().UTC(),
-			AuditPlayerID:  pid,
-			WasEnrolled:    true,
 		},
 	}
 
@@ -223,38 +257,21 @@ func TestRunRecoverHidesMalformedPlayerID(t *testing.T) {
 	require.ErrorIs(t, err, totp.ErrInvalidRecoveryCode)
 }
 
-func TestRunRecoverPropagatesConsumeError(t *testing.T) {
+func TestRunRecoverPropagatesAtomicError(t *testing.T) {
 	ctx := context.Background()
 	pid := ulid.Make()
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().PlayerIDFromUsername(ctx, "alice").Return(pid.String(), nil)
 
-	svc := &stubTOTPService{consumeErr: totp.ErrInvalidRecoveryCode}
+	// RecoverAndClear surfaces a wrapped TOTP_INVALID_RECOVERY_CODE
+	// when the recovery code doesn't match (Service wraps the repo's
+	// ErrInvalidRecoveryCode with oops.With("player_id", ...)).
+	svc := &stubTOTPService{recoverAndClearErr: totp.ErrInvalidRecoveryCode}
 
 	out := &bytes.Buffer{}
 	err := runRecover(ctx, repo, svc, "alice", "aaaa", out)
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "TOTP_INVALID_RECOVERY_CODE")
-}
-
-func TestRunRecoverPropagatesClearError(t *testing.T) {
-	ctx := context.Background()
-	pid := ulid.Make()
-	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().PlayerIDFromUsername(ctx, "alice").Return(pid.String(), nil)
-
-	svc := &stubTOTPService{
-		consumeResult: totp.ConsumeRecoveryResult{
-			RecoveryCodeID: ulid.Make(),
-			AuditPlayerID:  pid,
-		},
-		clearErr: errors.New("pg delete failed"),
-	}
-
-	out := &bytes.Buffer{}
-	err := runRecover(ctx, repo, svc, "alice", "aaaa-bbbb-cccc-dddd", out)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "pg delete failed")
 }
 
 func TestRunRecoverWriteFailureSurfaces(t *testing.T) {
@@ -264,8 +281,10 @@ func TestRunRecoverWriteFailureSurfaces(t *testing.T) {
 	repo.EXPECT().PlayerIDFromUsername(ctx, "alice").Return(pid.String(), nil)
 
 	svc := &stubTOTPService{
-		consumeResult: totp.ConsumeRecoveryResult{RecoveryCodeID: ulid.Make()},
-		clearResult:   totp.ClearResult{WasEnrolled: true},
+		recoverAndClearResult: totp.RecoverAndClearResult{
+			RecoveryCodeID: ulid.Make(),
+			WasEnrolled:    true,
+		},
 	}
 
 	err := runRecover(ctx, repo, svc, "alice", "aaaa", &failAfterWriter{failAt: 0})
@@ -300,14 +319,16 @@ func TestPrintEnrollmentSurfaceFooterWriteError(t *testing.T) {
 // without needing a generated mock. Only methods exercised by the run
 // functions are implemented; others panic if called.
 type stubTOTPService struct {
-	bootstrapResult totp.BootstrapResult
-	bootstrapErr    error
-	enrollResult    totp.EnrollResult
-	enrollErr       error
-	consumeResult   totp.ConsumeRecoveryResult
-	consumeErr      error
-	clearResult     totp.ClearResult
-	clearErr        error
+	bootstrapResult         totp.BootstrapResult
+	bootstrapErr            error
+	enrollResult            totp.EnrollResult
+	enrollErr               error
+	consumeResult           totp.ConsumeRecoveryResult
+	consumeErr              error
+	clearResult             totp.ClearResult
+	clearErr                error
+	recoverAndClearResult   totp.RecoverAndClearResult
+	recoverAndClearErr      error
 }
 
 func (s *stubTOTPService) BootstrapEnroll(_ context.Context, _ ulid.ULID) (totp.BootstrapResult, error) {
@@ -332,5 +353,9 @@ func (s *stubTOTPService) ConsumeRecoveryCode(_ context.Context, _ ulid.ULID, _ 
 
 func (s *stubTOTPService) ClearTOTP(_ context.Context, _ ulid.ULID, _ totp.ClearReason) (totp.ClearResult, error) {
 	return s.clearResult, s.clearErr
+}
+
+func (s *stubTOTPService) RecoverAndClear(_ context.Context, _ ulid.ULID, _ string) (totp.RecoverAndClearResult, error) {
+	return s.recoverAndClearResult, s.recoverAndClearErr
 }
 

@@ -6,6 +6,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -211,6 +212,10 @@ func newAdminTOTPRecoverCmd() *cobra.Command {
 
 // runRecover is the testable core of `admin totp recover`.
 //
+// Atomicity: ConsumeRecoveryCode + ClearTOTP run inside one PG transaction
+// via Service.RecoverAndClear, so a partial failure cannot leave the
+// player with a spent recovery code but still-active TOTP enrollment.
+//
 // Timing-safe: surfaces generic ErrInvalidRecoveryCode whether the player
 // lookup or the code check fails. Operators get the same signal for
 // "wrong username" and "wrong code" to avoid leaking which usernames
@@ -230,10 +235,7 @@ func runRecover(
 	if err != nil {
 		return totp.ErrInvalidRecoveryCode
 	}
-	if _, err := totpSvc.ConsumeRecoveryCode(ctx, pidULID, recoveryCode); err != nil {
-		return oops.With("username", username).Wrap(err)
-	}
-	if _, err := totpSvc.ClearTOTP(ctx, pidULID, totp.ClearReasonRecoveryCode); err != nil {
+	if _, err := totpSvc.RecoverAndClear(ctx, pidULID, recoveryCode); err != nil {
 		return oops.With("username", username).Wrap(err)
 	}
 	if _, werr := fmt.Fprintf(out,
@@ -254,7 +256,10 @@ func resolveUsername(cmd *cobra.Command, flagValue string) (string, error) {
 	}
 	r := bufio.NewReader(cmd.InOrStdin())
 	line, err := r.ReadString('\n')
-	if err != nil {
+	// ReadString returns partial data + io.EOF when stdin lacks a trailing
+	// newline (e.g., `printf alice | holomush admin totp enroll`). Accept
+	// the partial read instead of treating piped input as a failure.
+	if err != nil && (!errors.Is(err, io.EOF) || line == "") {
 		return "", oops.Code("ADMIN_TOTP_PROMPT_FAILED").Wrap(err)
 	}
 	user := strings.TrimSpace(line)
@@ -285,7 +290,8 @@ func readPassword(cmd *cobra.Command, prompt string) (string, error) {
 	}
 	r := bufio.NewReader(cmd.InOrStdin())
 	line, err := r.ReadString('\n')
-	if err != nil {
+	// Same EOF-with-partial-data tolerance as resolveUsername (piped input).
+	if err != nil && (!errors.Is(err, io.EOF) || line == "") {
 		return "", oops.Code("ADMIN_TOTP_PROMPT_FAILED").Wrap(err)
 	}
 	return strings.TrimRight(line, "\r\n"), nil

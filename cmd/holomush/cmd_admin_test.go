@@ -111,14 +111,27 @@ func TestResolveUsernameRejectsEmptyInput(t *testing.T) {
 	errutil.AssertErrorCode(t, err, "ADMIN_TOTP_USERNAME_REQUIRED")
 }
 
-func TestResolveUsernamePropagatesEOF(t *testing.T) {
+func TestResolveUsernameRejectsImmediateEOF(t *testing.T) {
 	cmd := &cobra.Command{}
-	cmd.SetIn(strings.NewReader("")) // EOF before any newline
+	cmd.SetIn(strings.NewReader("")) // EOF before any character
 	cmd.SetOut(&bytes.Buffer{})
 
 	_, err := resolveUsername(cmd, "")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "ADMIN_TOTP_PROMPT_FAILED")
+}
+
+// Piped input without trailing newline (e.g., `printf alice | holomush admin
+// totp enroll`) should be accepted — bufio.Reader.ReadString returns the
+// partial line + io.EOF, which is the documented behavior we tolerate.
+func TestResolveUsernameAcceptsPipedInputWithoutNewline(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.SetIn(strings.NewReader("alice")) // no trailing newline
+	cmd.SetOut(&bytes.Buffer{})
+
+	got, err := resolveUsername(cmd, "")
+	require.NoError(t, err)
+	assert.Equal(t, "alice", got)
 }
 
 // readPassword fallback path (stdin is not a TTY in tests).
@@ -135,7 +148,7 @@ func TestReadPasswordFallbackTrimsTrailingNewlines(t *testing.T) {
 	assert.Contains(t, out.String(), "pw: ")
 }
 
-func TestReadPasswordFallbackPropagatesEOF(t *testing.T) {
+func TestReadPasswordFallbackRejectsImmediateEOF(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.SetIn(strings.NewReader(""))
 	cmd.SetOut(&bytes.Buffer{})
@@ -143,4 +156,14 @@ func TestReadPasswordFallbackPropagatesEOF(t *testing.T) {
 	_, err := readPassword(cmd, "pw: ")
 	require.Error(t, err)
 	errutil.AssertErrorCode(t, err, "ADMIN_TOTP_PROMPT_FAILED")
+}
+
+func TestReadPasswordFallbackAcceptsPipedInputWithoutNewline(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.SetIn(strings.NewReader("hunter2"))
+	cmd.SetOut(&bytes.Buffer{})
+
+	got, err := readPassword(cmd, "pw: ")
+	require.NoError(t, err)
+	assert.Equal(t, "hunter2", got)
 }

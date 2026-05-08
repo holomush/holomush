@@ -579,6 +579,86 @@ func TestRepoBootstrapEnrollAtomicReturnsErrAlreadyConsumedOnConflict(t *testing
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+// --- RecoverAndClearAtomic ---
+
+func TestRepoRecoverAndClearAtomicHappyPath(t *testing.T) {
+	r, mock := newMockedRepo(t)
+	codeID := ulid.Make()
+	matchHash := "$argon2id$matchHash"
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT id, code_hash FROM player_totp_recovery_codes`).
+		WithArgs("01HZ").
+		WillReturnRows(pgxmock.NewRows([]string{"id", "code_hash"}).AddRow(codeID.String(), matchHash))
+	mock.ExpectExec(`UPDATE player_totp_recovery_codes SET consumed_at`).
+		WithArgs(codeID.String(), pgxmock.AnyArg()).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectQuery(`SELECT 1 FROM player_totp WHERE player_id`).
+		WithArgs("01HZ").
+		WillReturnRows(pgxmock.NewRows([]string{"x"}).AddRow(1))
+	mock.ExpectExec(`DELETE FROM player_totp WHERE player_id`).
+		WithArgs("01HZ").
+		WillReturnResult(pgxmock.NewResult("DELETE", 1))
+	mock.ExpectExec(`DELETE FROM player_totp_recovery_codes`).
+		WithArgs("01HZ").
+		WillReturnResult(pgxmock.NewResult("DELETE", 0))
+	mock.ExpectCommit()
+
+	hasher := stubHasher{matches: map[string]bool{matchHash: true}}
+
+	consumedID, wasEnrolled, err := r.RecoverAndClearAtomic(context.Background(), "01HZ", "right", hasher, time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, codeID, consumedID)
+	assert.True(t, wasEnrolled)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+// Atomicity assertion: if Clear fails after Consume succeeds, the whole
+// transaction rolls back so the recovery code is NOT actually consumed.
+// Without RecoverAndClearAtomic this would leave a spent code + active
+// TOTP — exactly the failure mode CodeRabbit flagged.
+func TestRepoRecoverAndClearAtomicRollsBackOnClearFailure(t *testing.T) {
+	r, mock := newMockedRepo(t)
+	codeID := ulid.Make()
+	matchHash := "$argon2id$matchHash"
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT id, code_hash FROM player_totp_recovery_codes`).
+		WithArgs("01HZ").
+		WillReturnRows(pgxmock.NewRows([]string{"id", "code_hash"}).AddRow(codeID.String(), matchHash))
+	mock.ExpectExec(`UPDATE player_totp_recovery_codes SET consumed_at`).
+		WithArgs(codeID.String(), pgxmock.AnyArg()).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectQuery(`SELECT 1 FROM player_totp WHERE player_id`).
+		WithArgs("01HZ").
+		WillReturnRows(pgxmock.NewRows([]string{"x"}).AddRow(1))
+	mock.ExpectExec(`DELETE FROM player_totp WHERE player_id`).
+		WithArgs("01HZ").
+		WillReturnError(errors.New("clear failed"))
+	mock.ExpectRollback()
+
+	hasher := stubHasher{matches: map[string]bool{matchHash: true}}
+
+	_, _, err := r.RecoverAndClearAtomic(context.Background(), "01HZ", "right", hasher, time.Now())
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "TOTP_REPO_CLEAR_TOTP")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRepoRecoverAndClearAtomicReturnsErrInvalidOnNoMatch(t *testing.T) {
+	r, mock := newMockedRepo(t)
+	codeID := ulid.Make()
+	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT id, code_hash FROM player_totp_recovery_codes`).
+		WithArgs("01HZ").
+		WillReturnRows(pgxmock.NewRows([]string{"id", "code_hash"}).AddRow(codeID.String(), "$other"))
+	mock.ExpectRollback()
+
+	hasher := stubHasher{matches: map[string]bool{}} // no matches
+
+	_, _, err := r.RecoverAndClearAtomic(context.Background(), "01HZ", "wrong", hasher, time.Now())
+	require.ErrorIs(t, err, ErrInvalidRecoveryCode)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestRepoBootstrapEnrollAtomicHappyPath(t *testing.T) {
 	r, mock := newMockedRepo(t)
 	mock.ExpectBegin()
