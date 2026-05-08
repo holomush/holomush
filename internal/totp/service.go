@@ -26,6 +26,19 @@ const totpStepSeconds = 30
 // callers — the caller-facing surface is VerifyResult.Outcome.
 var errCodeReuseRollback = errors.New("totp: rollback for code reuse")
 
+// isNotEnrolledErr reports whether err carries the TOTP_NOT_ENROLLED
+// oops code. Used in place of errors.Is(err, ErrNotEnrolled), which is
+// unreliable: oops.OopsError.Is returns true for any OopsError target,
+// so errors.Is would classify wrapped repo errors as "not enrolled".
+// Matches the pattern in internal/auth/session_ownership.go.
+func isNotEnrolledErr(err error) bool {
+	oopsErr, ok := oops.AsOops(err)
+	if !ok {
+		return false
+	}
+	return oopsErr.Code() == "TOTP_NOT_ENROLLED"
+}
+
 // Config bundles tunables.
 type Config struct {
 	GameID            string        // required
@@ -186,7 +199,13 @@ func (s *service) Verify(ctx context.Context, playerID ulid.ULID, code string) (
 	txErr := s.repo.InTransaction(ctx, func(txCtx context.Context) error {
 		state, err := s.repo.LoadEnrollment(txCtx, playerID.String())
 		if err != nil {
-			if errors.Is(err, ErrNotEnrolled) {
+			// Compare oops code, NOT errors.Is — oops.OopsError.Is returns
+			// true for any OopsError target, so errors.Is(err, ErrNotEnrolled)
+			// would silently classify ALL DB errors (including the wrapped
+			// TOTP_REPO_LOAD_ENROLLMENT path) as "not enrolled". See
+			// internal/auth/session_ownership.go::isSessionNotFound for the
+			// canonical precedent of this pattern.
+			if isNotEnrolledErr(err) {
 				result.Outcome = OutcomeNotEnrolled
 				return nil
 			}

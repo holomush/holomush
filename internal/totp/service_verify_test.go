@@ -5,17 +5,20 @@ package totp_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/pquerna/otp/hotp"
+	"github.com/samber/oops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/holomush/holomush/internal/totp"
 	"github.com/holomush/holomush/internal/totp/mocks"
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // runInTxn wires up the mock Repository.InTransaction using the canonical
@@ -66,6 +69,30 @@ func TestVerifyReturnsOutcomeNotEnrolledWhenNoEnrollment(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, totp.OutcomeNotEnrolled, res.Outcome)
 	assert.Equal(t, now, res.AuditAt)
+}
+
+// TestVerifyDoesNotMisclassifyWrappedRepoErrorAsNotEnrolled is the regression
+// test for the reviewer-found bug: oops.OopsError.Is returns true for any
+// OopsError target, so naive errors.Is(err, ErrNotEnrolled) would silently
+// classify a wrapped TOTP_REPO_LOAD_ENROLLMENT (or any other oops error)
+// as OutcomeNotEnrolled. Service.Verify must compare oops codes, not use
+// errors.Is — see the isNotEnrolledErr helper in service.go.
+func TestVerifyDoesNotMisclassifyWrappedRepoErrorAsNotEnrolled(t *testing.T) {
+	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
+	svc, repo, _ := newBootstrapFixture(t, now)
+	pid := ulid.Make()
+
+	// A non-NOT_ENROLLED oops error — the wrapped DB-failure shape returned
+	// by Repository.LoadEnrollment for any error other than pgx.ErrNoRows.
+	dbErr := oops.Code("TOTP_REPO_LOAD_ENROLLMENT").Wrap(errors.New("connection lost"))
+
+	runInTxn(repo)
+	repo.On("LoadEnrollment", mock.Anything, pid.String()).Return(totp.VerifyState{}, dbErr)
+
+	_, err := svc.Verify(context.Background(), pid, "123456")
+	// Must surface the error, NOT silently return OutcomeNotEnrolled.
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "TOTP_REPO_LOAD_ENROLLMENT")
 }
 
 // TestVerifyReturnsOutcomeLockedWhenLockedUntilInFuture — when state.LockedUntil
