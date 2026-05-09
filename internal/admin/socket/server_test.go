@@ -115,3 +115,73 @@ func TestServerAcceptsUnixConnections(t *testing.T) {
 	require.NoError(t, err)
 	conn.Close()
 }
+
+// TestAcquireLockFailsWhenPathIsUnwritable verifies the ADMIN_LOCK_OPEN_FAILED
+// path in acquireLock when the lock file directory does not exist.
+func TestAcquireLockFailsWhenPathIsUnwritable(t *testing.T) {
+	_, err := acquireLock("/nonexistent/dir/admin.lock")
+	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrAdminSocketAlreadyHeld)
+}
+
+// TestServerStartFailsWhenSocketPathDirectoryMissing verifies the
+// ADMIN_SOCKET_LISTEN_FAILED path: lock acquired but net.Listen fails because
+// the socket parent directory does not exist.
+func TestServerStartFailsWhenSocketPathDirectoryMissing(t *testing.T) {
+	dir, err := os.MkdirTemp("", "hm-adm-")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(dir) })
+
+	cfg := Config{
+		LockPath:   filepath.Join(dir, "a.lock"),         // valid — lock succeeds
+		SocketPath: filepath.Join(dir, "nx", "a.sock"),   // parent dir missing — Listen fails
+	}
+	s := NewServer(cfg)
+	_, err = s.Start()
+	require.Error(t, err)
+}
+
+// TestServerStopIsIdempotentWhenCalledTwice verifies that a second Stop call
+// on an already-stopped server (s.httpServer == nil) is a no-op.
+func TestServerStopIsIdempotentWhenCalledTwice(t *testing.T) {
+	cfg := newTestConfig(t)
+	s := NewServer(cfg)
+	_, err := s.Start()
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	require.NoError(t, s.Stop(ctx))
+	// Second Stop — httpServer is nil; must not panic or error.
+	require.NoError(t, s.Stop(ctx))
+}
+
+// TestServerServesStatusRPCOverUDS verifies AC-C3/AC-C4 and exercises the
+// PeerCredMiddleware + StoreUnixConn path by making a real HTTP request over
+// the UDS.
+func TestServerServesStatusRPCOverUDS(t *testing.T) {
+	cfg := newTestConfig(t)
+	s := NewServer(cfg)
+	_, err := s.Start()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Stop(context.Background()) })
+
+	// Dial the UDS socket and send a minimal HTTP/1.1 POST to the Status endpoint.
+	conn, err := net.DialTimeout("unix", cfg.SocketPath, 2*time.Second)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	const req = "POST /holomush.admin.v1.AdminService/Status HTTP/1.1\r\n" +
+		"Host: localhost\r\n" +
+		"Content-Type: application/json\r\n" +
+		"Content-Length: 2\r\n" +
+		"\r\n" +
+		"{}"
+	_, err = conn.Write([]byte(req))
+	require.NoError(t, err)
+
+	buf := make([]byte, 512)
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(2*time.Second)))
+	n, _ := conn.Read(buf)
+	response := string(buf[:n])
+	assert.Contains(t, response, "200", "Status endpoint must return HTTP 200")
+}

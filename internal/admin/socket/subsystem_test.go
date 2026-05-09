@@ -76,3 +76,24 @@ func TestAdminSocketSubsystemStartIsIdempotentWithFlock(t *testing.T) {
 	err := sub2.Start(context.Background())
 	require.ErrorIs(t, err, ErrAdminSocketAlreadyHeld)
 }
+
+// TestAdminSocketSubsystemStartIsNoopWhenSocketPathEmpty verifies that Start
+// returns nil without starting a server when SocketPath is empty (XDG runtime
+// dir unavailable at startup).
+func TestAdminSocketSubsystemStartIsNoopWhenSocketPathEmpty(t *testing.T) {
+	sub := NewAdminSocketSubsystem(AdminSocketSubsystemConfig{
+		SocketPath: "", // intentionally empty
+		LockPath:   "",
+		Version:    "test",
+	})
+	require.NoError(t, sub.Start(context.Background()))
+	assert.Nil(t, sub.server, "server must remain nil when SocketPath is empty")
+}
+
+// TestAdminSocketSubsystemStopBeforeStartReturnsNil verifies that Stop is
+// safe to call on a subsystem that was never started (s.server == nil).
+func TestAdminSocketSubsystemStopBeforeStartReturnsNil(t *testing.T) {
+	cfg := newTestSubsystemConfig(t)
+	sub := NewAdminSocketSubsystem(cfg)
+	require.NoError(t, sub.Stop(context.Background()))
+}
