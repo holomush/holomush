@@ -1318,6 +1318,10 @@ Expected: all tests PASS.
 
 - [ ] **Step 6.5: Check test coverage**
 
+<!-- Exception to raw-go-command policy: `task test:cover` does not expose
+per-package filtering; the raw `go test` invocation below is intentionally
+scoped to `internal/admin/socket/` only and is the narrowest available approach. -->
+
 ```bash
 go test -race -coverprofile=coverage-admin.out -covermode=atomic \
   -coverpkg=./internal/admin/socket/... ./internal/admin/socket/... \

@@ -74,10 +74,11 @@ Which resolves to:
 `xdg.RuntimeDir()` already exists; no new helper needed. The directory
 is created with mode `0700` via `xdg.EnsureDir()` before bind. The
 `0700` directory is the primary access control gate: only the owning
-user can enter it. After bind, the socket file is `chmod 0600` as a
-supplementary layer; to eliminate the brief window between `net.Listen`
-creating the file and `chmod` running, the server sets `umask(0o177)`
-before the listen call and restores it immediately after.
+user can enter it. After `net.Listen` returns, `os.Chmod(0o600)` is
+called on the socket file as a supplementary restriction.
+`os.Chmod` is used rather than `umask` to avoid process-wide state
+mutation; the `0700` parent directory closes the brief window between
+socket creation and the `chmod` call.
 
 Operators running HoloMUSH as a systemd system service should set
 `Environment=XDG_RUNTIME_DIR=%t/holomush` in the unit file, or accept
@@ -284,11 +285,18 @@ func (s *AdminSocketSubsystem) DependsOn() []lifecycle.SubsystemID {
 call at step 8.
 
 ```go
-// Step 4 — alongside certsDir derivation:
-runtimeDir, err := xdg.RuntimeDir()
-if err != nil { /* return oops.Code(...).Wrap(err) */ }
-adminSocketPath := filepath.Join(runtimeDir, "admin.sock")
-adminLockPath   := filepath.Join(runtimeDir, "admin.lock")
+// Step 4 — alongside certsDir derivation (non-fatal):
+// XDG failures log a warning and leave paths empty; AdminSocketSubsystem.Start
+// is a no-op when SocketPath == "", so orch.StartAll still succeeds.
+var adminSocketPath, adminLockPath string
+if runtimeDir, err := xdg.RuntimeDir(); err != nil {
+    slog.Warn("admin socket disabled: cannot determine XDG runtime dir")
+} else if err := xdg.EnsureDir(runtimeDir); err != nil {
+    slog.Warn("admin socket disabled: cannot create XDG runtime dir")
+} else {
+    adminSocketPath = filepath.Join(runtimeDir, "admin.sock")
+    adminLockPath   = filepath.Join(runtimeDir, "admin.lock")
+}
 
 // Step 7 — subsystem construction:
 adminSub := socket.NewAdminSocketSubsystem(socket.AdminSocketSubsystemConfig{
@@ -307,7 +315,7 @@ for _, sub := range productionSubsystems(
 
 | ID | Criterion |
 | -- | --------- |
-| AC-C1 | `AdminSocketSubsystem.Start()` creates `admin.sock` and `admin.lock` in `xdg.RuntimeDir()` |
+| AC-C1 | `AdminSocketSubsystem.Start()` creates `admin.sock` and `admin.lock` in `xdg.RuntimeDir()` when the runtime dir is available; when `SocketPath == ""` (XDG unavailable), `Start()` is a no-op and returns nil |
 | AC-C2 | Socket file has mode `0600` after bind |
 | AC-C3 | `Status` RPC returns the configured `Version` string and `healthy: true` when the server is serving |
 | AC-C4 | `curl --unix-socket {path} http://localhost/holomush.admin.v1.AdminService/Status` returns HTTP 200 with valid `StatusResponse` |
@@ -354,9 +362,8 @@ for _, sub := range productionSubsystems(
 - **Filesystem permission gate**: mode `0600` on the socket file +
   mode `0700` on the XDG runtime directory means only the server process
   owner can reach the socket. The `0700` directory is the primary gate;
-  the socket `chmod` is supplementary. The umask manipulation before
-  `net.Listen` closes the window between socket file creation and
-  `chmod`.
+  `os.Chmod(0o600)` after `net.Listen` adds the supplementary restriction.
+  `os.Chmod` is preferred over `umask` to avoid mutating process-wide state.
 - **SO_PEERCRED is audit-only**: it does not gate any operation.
   Authentication lives in sub-epic D.
 - **flock + bind race**: the flock acquisition and `net.Listen` are not
