@@ -26,6 +26,7 @@ var expectedTables = []string{
 	"access_audit_log",
 	"access_policies",
 	"access_policy_versions",
+	"admin_approvals",
 	"bootstrap_metadata",
 	"character_roles",
 	"characters",
@@ -144,7 +145,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(19), version)
+	assert.Equal(t, uint(20), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)
@@ -169,7 +170,7 @@ func TestMigrator_FullCycle(t *testing.T) {
 
 	version, dirty, err = migrator.Version()
 	require.NoError(t, err)
-	assert.Equal(t, uint(19), version)
+	assert.Equal(t, uint(20), version)
 	assert.False(t, dirty)
 
 	tables = queryTableNames(t, ctx, connStr)
