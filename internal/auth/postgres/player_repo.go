@@ -42,7 +42,8 @@ func (r *PlayerRepository) Create(ctx context.Context, player *auth.Player) erro
 		defaultCharID = &s
 	}
 
-	_, err = r.pool.Exec(ctx, `
+	_, err = r.pool.Exec(
+		ctx, `
 		INSERT INTO players (
 			id, username, password_hash, email, email_verified,
 			failed_attempts, locked_until, default_character_id,
@@ -171,7 +172,8 @@ func (r *PlayerRepository) Update(ctx context.Context, player *auth.Player) erro
 		defaultCharID = &s
 	}
 
-	result, err := r.pool.Exec(ctx, `
+	result, err := r.pool.Exec(
+		ctx, `
 		UPDATE players SET
 			username = $2,
 			password_hash = $3,
@@ -325,6 +327,45 @@ func (r *PlayerRepository) DeleteGuestPlayer(ctx context.Context, playerID ulid.
 			Wrap(auth.ErrNotFound)
 	}
 	return nil
+}
+
+// ExistingIDs returns the subset of the input ID strings that exist in
+// the players table. Used by the crypto.operators startup cross-check
+// (sub-epic B) to identify configured operator IDs that don't correspond
+// to any player. Read-only; no schema mutation.
+//
+// Returns an empty slice for nil or empty input without issuing a query.
+// Returns the IDs in arbitrary order (caller must not depend on input order).
+func (r *PlayerRepository) ExistingIDs(ctx context.Context, ids []string) ([]string, error) {
+	if len(ids) == 0 {
+		return []string{}, nil
+	}
+
+	rows, err := r.pool.Query(
+		ctx,
+		`SELECT id FROM players WHERE id = ANY($1::text[])`,
+		ids,
+	)
+	if err != nil {
+		return nil, oops.
+			Code("PLAYER_REPO_EXISTING_IDS_FAILED").
+			With("input_count", len(ids)).
+			Wrap(err)
+	}
+	defer rows.Close()
+
+	found := make([]string, 0, len(ids))
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, oops.Code("PLAYER_REPO_EXISTING_IDS_SCAN_FAILED").Wrap(err)
+		}
+		found = append(found, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, oops.Code("PLAYER_REPO_EXISTING_IDS_ROWS_FAILED").Wrap(err)
+	}
+	return found, nil
 }
 
 // scanPlayer scans a single row into a Player.

@@ -146,6 +146,36 @@ func TestSubjectPrefixConstants(t *testing.T) {
 	assert.Equal(t, "session:", access.SubjectSession)
 }
 
+func TestSubjectPlayerConstant(t *testing.T) {
+	assert.Equal(t, "player:", access.SubjectPlayer)
+}
+
+func TestPlayerSubject(t *testing.T) {
+	assert.Equal(t, access.SubjectPlayer+"01HZAVGE83MGFEXQQH5SP9NXKF",
+		access.PlayerSubject("01HZAVGE83MGFEXQQH5SP9NXKF"))
+}
+
+func TestPlayerSubjectPanicsOnEmpty(t *testing.T) {
+	assert.PanicsWithValue(
+		t,
+		"access.PlayerSubject: empty playerID would bypass access control",
+		func() { _ = access.PlayerSubject("") },
+	)
+}
+
+func TestParseEntityRefAcceptsPlayerNamespace(t *testing.T) {
+	typeName, id, err := access.ParseEntityRef("player:01HZAVGE83MGFEXQQH5SP9NXKF")
+	require.NoError(t, err)
+	assert.Equal(t, "player", typeName)
+	assert.Equal(t, "01HZAVGE83MGFEXQQH5SP9NXKF", id)
+}
+
+func TestParseEntityRefRejectsEmptyPlayerID(t *testing.T) {
+	_, _, err := access.ParseEntityRef("player:")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty ID in entity reference")
+}
+
 func TestResourcePrefixConstants(t *testing.T) {
 	assert.Equal(t, "character:", access.ResourceCharacter)
 	assert.Equal(t, "location:", access.ResourceLocation)
@@ -503,6 +533,11 @@ func TestKnownPrefixes_AllConstantsCovered(t *testing.T) {
 			name:     "subject session prefix",
 			constant: access.SubjectSession,
 			desc:     "SubjectSession",
+		},
+		{
+			name:     "subject player prefix",
+			constant: access.SubjectPlayer,
+			desc:     "SubjectPlayer",
 		},
 		// Resource prefixes
 		{

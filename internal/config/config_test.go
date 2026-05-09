@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/holomush/holomush/pkg/errutil"
 )
 
 // testConfig mirrors the structure of a subcommand config for testing.
@@ -226,6 +228,80 @@ func TestLoadHyphenFlagNamesMatchUnderscoreYAMLKeys(t *testing.T) {
 	err = Load(cfgFile, cmd, cfg, "server")
 	require.NoError(t, err)
 	assert.Equal(t, "json", cfg.LogFormat, "hyphenated flag should override underscored YAML key")
+}
+
+func TestDefaultCryptoConfigIsEmpty(t *testing.T) {
+	cfg := DefaultCryptoConfig()
+	assert.Empty(t, cfg.Operators)
+}
+
+func TestLoadParsesCryptoOperators(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.yaml")
+	err := os.WriteFile(cfgFile, []byte(`crypto:
+  operators:
+    - "01HZAVGE83MGFEXQQH5SP9NXKF"
+    - "01HZAVGE83MGFEXQQH5SP9NXKG"
+`), 0o600)
+	require.NoError(t, err)
+
+	cfg := DefaultCryptoConfig()
+	cmd := &cobra.Command{Use: "test"}
+	require.NoError(t, Load(cfgFile, cmd, &cfg, "crypto"))
+
+	assert.Equal(t, []string{
+		"01HZAVGE83MGFEXQQH5SP9NXKF",
+		"01HZAVGE83MGFEXQQH5SP9NXKG",
+	}, cfg.Operators)
+}
+
+func TestLoadCryptoMissingSectionIsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.yaml")
+	err := os.WriteFile(cfgFile, []byte(`other:
+  setting: value
+`), 0o600)
+	require.NoError(t, err)
+
+	cfg := DefaultCryptoConfig()
+	cmd := &cobra.Command{Use: "test"}
+	require.NoError(t, Load(cfgFile, cmd, &cfg, "crypto"))
+	assert.Empty(t, cfg.Operators)
+}
+
+func TestLoadCryptoOperatorsEmptyListIsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.yaml")
+	err := os.WriteFile(cfgFile, []byte(`crypto:
+  operators: []
+`), 0o600)
+	require.NoError(t, err)
+
+	cfg := DefaultCryptoConfig()
+	cmd := &cobra.Command{Use: "test"}
+	require.NoError(t, Load(cfgFile, cmd, &cfg, "crypto"))
+	assert.Empty(t, cfg.Operators)
+}
+
+func TestLoadCryptoOperatorsMalformedFails(t *testing.T) {
+	// Operators must be a list of strings; nesting a non-string element
+	// (here, a map) under operators is unambiguously malformed and must
+	// fail with CONFIG_UNMARSHAL_FAILED rather than silently coerce.
+	// (Note: koanf permissively coerces a bare scalar into a single-element
+	// list, so we test a structurally-incompatible element type instead.)
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "config.yaml")
+	err := os.WriteFile(cfgFile, []byte(`crypto:
+  operators:
+    - {nested: map}
+`), 0o600)
+	require.NoError(t, err)
+
+	cfg := DefaultCryptoConfig()
+	cmd := &cobra.Command{Use: "test"}
+	err = Load(cfgFile, cmd, &cfg, "crypto")
+	require.Error(t, err)
+	errutil.AssertErrorCode(t, err, "CONFIG_UNMARSHAL_FAILED")
 }
 
 func TestLoadUsesXDGConfigPathWhenNoPathFlagSet(t *testing.T) {

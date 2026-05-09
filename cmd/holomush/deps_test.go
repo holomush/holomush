@@ -265,7 +265,7 @@ func TestRunCoreWithDeps_ValidationError(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), eventbus.Config{StoreDir: t.TempDir()}, cmd, nil)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), eventbus.Config{StoreDir: t.TempDir()}, config.DefaultCryptoConfig(), cmd, nil)
 	require.Error(t, err, "expected validation error")
 	assert.Contains(t, err.Error(), "grpc-addr")
 }
@@ -288,7 +288,7 @@ func TestRunCoreWithDeps_DatabaseURLMissing(t *testing.T) {
 	}
 
 	cmd := newMockCmd()
-	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), eventbus.Config{StoreDir: t.TempDir()}, cmd, deps)
+	err := runCoreWithDeps(ctx, cfg, config.GameConfig{}, config.DefaultAuthConfig(), eventbus.Config{StoreDir: t.TempDir()}, config.DefaultCryptoConfig(), cmd, deps)
 	require.Error(t, err, "expected DATABASE_URL error")
 	assert.Contains(t, err.Error(), "DATABASE_URL")
 }

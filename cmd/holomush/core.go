@@ -120,7 +120,11 @@ manages plugins, and handles game state.`,
 			if err := config.Load(configFile, cmd, &eventBusConfig, "event_bus"); err != nil {
 				return err
 			}
-			return runCoreWithDeps(cmd.Context(), cfg, gameConfig, authConfig, eventBusConfig, cmd, nil)
+			cryptoConfig := config.DefaultCryptoConfig()
+			if err := config.Load(configFile, cmd, &cryptoConfig, "crypto"); err != nil {
+				return err
+			}
+			return runCoreWithDeps(cmd.Context(), cfg, gameConfig, authConfig, eventBusConfig, cryptoConfig, cmd, nil)
 		},
 	}
 
@@ -147,7 +151,7 @@ manages plugins, and handles game state.`,
 // constructs and starts subsystems under an orchestrator, optionally starts observability, launches the control gRPC server,
 // waits for readiness, handles OS signals and context cancellation, and performs a graceful shutdown.
 // codecov:ignore — tested by integration and E2E tests
-func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.GameConfig, authConfig config.AuthConfig, eventBusConfig eventbus.Config, cmd *cobra.Command, deps *CoreDeps) error {
+func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.GameConfig, authConfig config.AuthConfig, eventBusConfig eventbus.Config, cryptoConfig config.CryptoConfig, cmd *cobra.Command, deps *CoreDeps) error {
 	if deps == nil {
 		deps = &CoreDeps{}
 	}
@@ -273,9 +277,21 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	}
 
 	// --- 7. Subsystem construction (config only, no live resources) ---
+
+	// Cross-check the configured crypto.operator allow-list against the
+	// players table. Lax+warn: unknown IDs and transient PG failures
+	// emit a structured warning but MUST NOT gate startup (Phase 5
+	// sub-epic B INV-B5 / INV-B7). The returned slice is the source of
+	// truth wired into the PlayerAttributeProvider via the ABAC stack.
+	// validateCryptoOperators always returns nil error in Phase 5 sub-epic B
+	// (lax+warn). The signature reserves the slot for future fail-closed
+	// modes (sub-epic D), but today there is no error path to handle.
+	cryptoOperators, _ := validateCryptoOperators(ctx, dbSub.Pool(), cryptoConfig.Operators, slog.Default()) //nolint:errcheck // Phase 5 sub-epic B is lax+warn; sub-epic D will rewire to handle errors here.
+
 	abacSub := abacsetup.NewABACSubsystem(abacsetup.ABACSubsystemConfig{
-		DB:       dbSub,
-		Registry: registry,
+		DB:              dbSub,
+		Registry:        registry,
+		CryptoOperators: cryptoOperators,
 	})
 
 	authSub := authsetup.NewAuthSubsystem(authsetup.AuthSubsystemConfig{

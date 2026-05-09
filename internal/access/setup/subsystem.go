@@ -31,6 +31,11 @@ type ABACSubsystemConfig struct {
 	DB        PoolProvider
 	Registry  *lifecycle.ReadinessRegistry
 	AuditMode audit.Mode
+	// CryptoOperators is the list of player IDs (ULIDs) holding the
+	// crypto.operator capability. Forwarded verbatim to ABACConfig and
+	// ultimately to PlayerAttributeProvider. Empty / nil → no operators
+	// (break-glass disabled). Sub-epic B (Phase 5).
+	CryptoOperators []string
 }
 
 // ABACSubsystem manages the ABAC policy engine, cache, and health tracker.
@@ -64,10 +69,11 @@ func (s *ABACSubsystem) Start(ctx context.Context) error {
 
 	roleStore := store.NewPostgresRoleStore(pool)
 	stack, err := BuildABACStack(ctx, ABACConfig{
-		Pool:          pool,
-		CharacterRepo: postgres.NewCharacterRepository(pool),
-		RoleStore:     roleStore,
-		AuditMode:     s.cfg.AuditMode,
+		Pool:            pool,
+		CharacterRepo:   postgres.NewCharacterRepository(pool),
+		RoleStore:       roleStore,
+		AuditMode:       s.cfg.AuditMode,
+		CryptoOperators: s.cfg.CryptoOperators,
 	})
 	if err != nil {
 		return oops.Code("ABAC_SETUP_FAILED").Wrap(err)
