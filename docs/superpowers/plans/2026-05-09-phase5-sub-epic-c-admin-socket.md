@@ -1579,7 +1579,7 @@ task build
 ./holomush core --grpc-addr localhost:9000
 
 # In a separate terminal, curl the UDS:
-SOCK="$XDG_RUNTIME_DIR/holomush/admin.sock"
+SOCK="${XDG_RUNTIME_DIR:+$XDG_RUNTIME_DIR/holomush/admin.sock}"
 # fallback if XDG_RUNTIME_DIR unset:
 SOCK="${SOCK:-$HOME/.local/state/holomush/run/admin.sock}"
 

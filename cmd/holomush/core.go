@@ -237,17 +237,21 @@ func runCoreWithDeps(ctx context.Context, cfg *coreConfig, gameConfig config.Gam
 	}
 	slog.Info("TLS certificates ready", "certs_dir", certsDir)
 
-	// Derive admin socket paths from XDG runtime dir. Resolved here (step 4)
-	// alongside certsDir so path failures surface before subsystems start.
-	runtimeDir, err := xdg.RuntimeDir()
-	if err != nil {
-		return oops.Code("ADMIN_SOCKET_RUNTIME_DIR_FAILED").With("operation", "get XDG runtime dir").Wrap(err)
+	// Derive admin socket paths from XDG runtime dir. Non-fatal: if the
+	// runtime dir is unavailable, the admin socket is disabled (break-glass
+	// unavailable) but the server continues serving. AdminSocketSubsystem.Start
+	// is a no-op when SocketPath is empty.
+	var adminSocketPath, adminLockPath string
+	if runtimeDir, rdErr := xdg.RuntimeDir(); rdErr != nil {
+		slog.Warn("admin socket disabled: cannot determine XDG runtime dir; break-glass unavailable",
+			"error", rdErr)
+	} else if ensureErr := xdg.EnsureDir(runtimeDir); ensureErr != nil {
+		slog.Warn("admin socket disabled: cannot create XDG runtime dir; break-glass unavailable",
+			"path", runtimeDir, "error", ensureErr)
+	} else {
+		adminSocketPath = filepath.Join(runtimeDir, "admin.sock")
+		adminLockPath = filepath.Join(runtimeDir, "admin.lock")
 	}
-	if ensureErr := xdg.EnsureDir(runtimeDir); ensureErr != nil {
-		return oops.Code("ADMIN_SOCKET_RUNTIME_DIR_ENSURE_FAILED").With("path", runtimeDir).Wrap(ensureErr)
-	}
-	adminSocketPath := filepath.Join(runtimeDir, "admin.sock")
-	adminLockPath := filepath.Join(runtimeDir, "admin.lock")
 
 	// --- 5. Parse session configuration ---
 	sessionTTL, reaperInterval, err := parseSessionConfig(cfg)
