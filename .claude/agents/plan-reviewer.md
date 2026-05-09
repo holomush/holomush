@@ -28,9 +28,6 @@ tools:
   - mcp__deepwiki__read_wiki_contents
   - mcp__exa__web_search_exa
   - mcp__exa__get_code_context_exa
-  - mcp__probe__search_code
-  - mcp__probe__extract_code
-  - mcp__probe__grep
   - Write
 skills:
   - superpowers:verification-before-completion

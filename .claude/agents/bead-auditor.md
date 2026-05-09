@@ -22,9 +22,6 @@ tools:
   - mcp__probe__grep
   - Bash
   - Write
-  - mcp__probe__search_code
-  - mcp__probe__extract_code
-  - mcp__probe__grep
 skills:
   - jj:jujutsu
   - beads:beads
