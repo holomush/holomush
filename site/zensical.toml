@@ -50,6 +50,7 @@ Operating = [
   "operating/authentication.md",
   "operating/telnet-security.md",
   "operating/ca-rotation.md",
+  "operating/crypto-setup.md",
   "operating/operations.md",
   "operating/verifying-releases.md",
 ]

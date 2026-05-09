@@ -134,8 +134,10 @@ spec is annotated as "partially superseded" with a back-link to this spec.
 | Curious operator with shell access | Read player whispers, peek into private scenes | Inside the trust boundary; has DB and JetStream access |
 | Backup / disk exfiltration | Bulk content | Outside the runtime; has copies of `events_audit` and `crypto_keys` |
 | Compromised plugin | Exfiltrate from streams it shouldn't see | Inside the runtime; ABAC-bounded |
-| Compromised in-game wizard | Trigger destructive operations (Rekey, AdminReadStream) | Inside the auth tier but without shell access |
+| Compromised in-game admin with crypto.operator capability | Trigger destructive operations (Rekey, AdminReadStream) | Inside the auth tier but without shell access |
 | Compliance / right-to-be-forgotten | Provably remove content | Legal, not adversarial |
+
+**Threat-model layering for break-glass authentication.** Single-control break-glass authentication uses two factors (admin credentials + TOTP) against the row-134 adversary (curious operator with shell access); the localhost-UDS topology denies network reach for the row-137 adversary (auth-tier compromised admin without shell access), reducing row-137's authentication surface to the same two factors once reach is achieved. Dual-control is the third-factor defense per §5.9 line 1279 (a different operator's credentials + TOTP, mediated by the `admin_approvals` token).
 
 ### What's protected
 
@@ -830,7 +832,7 @@ every `Rekey`:
 
 ```yaml
 metadata:
-  actor:        {kind: operator, os_user: <uid>, player_id: <wizard player_id>}
+  actor:        {kind: operator, os_user: <uid>, player_id: <admin player_id>}
   event_type:   "system:rekey"
   timestamp:    <now>
 payload (cleartext):
@@ -840,6 +842,7 @@ payload (cleartext):
   new_dek_id:                       <int64; new crypto_keys.id>
   rows_re_encrypted:                <int>
   justification:                    <operator-supplied free text>
+  policy_hash:        <bytes>           # references the active crypto.policy_set event at invocation time
   operator_factors:
     os_user:                        "uid=1001 (sean)"
     player_id:                      "01HXXX..."
@@ -849,9 +852,35 @@ payload (cleartext):
     dual_control_partner_player_id: "01HXXX..." | null
 ```
 
+**`audit.<game>.system.crypto_policy.<policy_name>`** — emitted on every
+crypto-policy change (server startup writes the current effective policy;
+future reload paths emit on each change):
+
+```yaml
+metadata:
+  actor:        {kind: system, server_identity: <server-id>}
+  event_type:   "crypto.policy_set"
+  timestamp:    <now>
+payload (cleartext):
+  policy_hash:        <bytes>           # SHA-256 over RFC 8785 JCS-canonicalized payload (excluding policy_hash)
+  prev_hash:          <bytes nullable>  # null only at genesis (first policy_set for this policy_name)
+  server_start_ulid:  <ULID>
+  policy_snapshot:    <json>            # the full effective policy
+  server_identity:    <string>
+```
+
+Hash algorithm pinned to **SHA-256 over RFC 8785 JCS-canonicalized JSON**
+of the payload **excluding the `policy_hash` field**. Sub-epic D MUST
+select an RFC-8785-compliant Go canonicalizer (e.g.,
+`github.com/cyberphone/json-canonicalization`) and pin the version in
+`go.mod`. Switching canonicalizer libraries or RFC interpretations is a
+chain-breaking change and MUST be treated as a master-spec amendment, not
+a sub-epic-internal refactor.
+
 **`audit.<game>.system.operator_read.<context>`** and
 **`audit.<game>.system.provider_migrate.<context>`** follow the same
-pattern.
+pattern (including the `policy_hash` field referencing the active
+`policy_set` event at invocation time).
 
 ABAC policy MUST deny any plugin or character from subscribing to
 `audit.*.plugin_decrypt.*` and `audit.*.system.*`. INV-15 verifies this
@@ -1261,7 +1290,7 @@ pass.
 
 The interface gating `Rekey` and `AdminReadStream` invocations from the
 localhost UNIX admin socket. Pluggable like `KEKProvider`; default
-implementation uses in-game wizard credentials + TOTP.
+implementation uses in-game admin credentials + TOTP.
 
 ```go
 package adminauth
@@ -1275,7 +1304,7 @@ import "context"
 // Defense-in-depth notes per Section 1 threat model:
 //   - host-access (SO_PEERCRED) is captured for audit but is NOT a
 //     defense factor against an adversary with shell access.
-//   - The factors that ARE defense gates are wizard credentials,
+//   - The factors that ARE defense gates are admin credentials,
 //     TOTP, and (for high-sensitivity contexts) dual-control.
 type OperatorAuthProvider interface {
     Name() string  // persisted in audit; e.g., "ingame-creds-totp"
@@ -1288,7 +1317,7 @@ type OperatorAuthProvider interface {
 
     // RequireDualControl prompts for a second operator's signoff and
     // returns the second identity. The second identity MUST have a
-    // different player_id from the first AND MUST hold the wizard role.
+    // different player_id from the first AND MUST hold the admin role.
     // Approvals expire 5 minutes from prompt issuance.
     RequireDualControl(ctx context.Context, primary OperatorIdentity, prompt PromptFunc) (OperatorIdentity, error)
 }
@@ -1310,11 +1339,16 @@ type PromptFunc func(question string, secret bool) (string, error)
 
 1. Prompt for player username; verify against `players` table.
 2. Prompt for password; verify Argon2id hash (same path as web auth).
-3. If TOTP enrolled for this player: prompt for 6-digit code; verify.
-4. If TOTP not enrolled: log a warning to the audit event payload
-   (`totp_verified: false`); proceed only if config allows
-   `require_totp: false` for the operation.
-5. Verify player holds the `wizard` role.
+3. Look up TOTP enrollment for this player. **Hard-required:** if not
+   enrolled, refuse with `DENY_NOT_ENROLLED` and direct the operator to
+   the enrollment path. No config knob bypasses this.
+4. Prompt for 6-digit TOTP code and verify; on mismatch, refuse with
+   `DENY_BAD_TOTP`.
+5. Verify player holds the `crypto.operator` capability via
+   `access.HasPlayerGrant(ctx, resolver, playerID, access.CapabilityCryptoOperator)`.
+   On miss, refuse with `DENY_NOT_OPERATOR`. (Capability-storage
+   mechanism: see §5.9.1.)
+6. Verify player holds the `admin` role.
 
 **Future providers (gated by demand):**
 
@@ -1322,6 +1356,49 @@ type PromptFunc func(question string, secret bool) (string, error)
 - `WebAuthnProvider` — hardware token (YubiKey).
 - `OIDCProvider` — IdP integration via authorization-code flow on a
   localhost-bound HTTP listener.
+
+#### 5.9.1 `crypto.operator` capability — storage and grant mechanism
+
+The `crypto.operator` capability is a player-attribute grant — a flat
+narrowing flag held on a player ID, MUST be combined with `RoleAdmin` to
+authorize break-glass operations. It is **not** a `command.Capability`
+tuple (the `{Action, Resource, Scope}` shape used for command pre-flight
+authorization).
+
+**Storage in v1: config-file allow-list.**
+
+```yaml
+crypto:
+  operators:
+    - "01HZAVGE83MGFEXQQH5SP9NXKF"  # admin Alice
+    - "01HZAVGE83MGFEXQQH5SP9NXKG"  # admin Bob
+```
+
+**Runtime exposure:** A `PlayerAttributeProvider`
+(`internal/access/policy/attribute/player.go`) introduces `player:` as a
+Subject namespace in ABAC. Schema: `player.id: AttrTypeString`,
+`player.grants: AttrTypeStringList`. For player IDs in the configured
+allow-list, the provider exposes
+`bags.Subject["player.grants"] = ["crypto.operator"]`; otherwise the
+list is empty (non-nil).
+
+**Consumer surface:** `access.HasPlayerGrant(ctx, resolver, playerID,
+access.CapabilityCryptoOperator)` — typed Go facade implemented in
+`internal/access/grants.go`. The OperatorAuthProvider (sub-epic D)
+invokes this facade as step 5 of its check sequence.
+
+**Validation:** Lax+warn at startup. The server cross-checks each
+configured player ID against the players table; unknown IDs trigger
+structured warnings (`slog.Warn("crypto.operator references unknown
+player", "player_id", <ulid>)`). The configured list is used as-is —
+validation is observability, not gating. Query failure during validation
+emits a `"crypto.operator validation skipped"` warning and proceeds with
+the full configured set.
+
+**Reload:** Restart-only in v1. Hot reload is a documented future seam.
+
+**In-game grant UX:** Deferred to a P3 follow-up bead. Operators edit
+the YAML config and restart the server in v1.
 
 ---
 
@@ -1430,7 +1507,7 @@ Phase 1 — Authenticate & authorize:
   1.2  If --dual-control: prompt for second operator within 5-min window
   1.3  CLI calls server's RekeyService over a localhost UNIX domain socket
        with SO_PEERCRED check
-  1.4  RekeyService verifies wizard role + TOTP factor
+  1.4  RekeyService verifies admin role + crypto.operator capability + TOTP factor
 
 Phase 2 — Mint new DEK:
   2.1  Generate fresh DEK_new (32 random bytes from crypto/rand)
@@ -1513,6 +1590,33 @@ public gRPC services literally don't have a `Rekey` method.
   documented escalation path. Justified because the Rekey itself is
   irreversibly recorded in database state (DEK rows changed); the audit
   event is a cross-reference, not the only record.
+
+#### 6.3.1 Dual-control protocol
+
+Server-issued approval-token mechanism (sub-epic D ships the implementation):
+
+1. Primary operator runs `holomush crypto rekey ... --dual-control`.
+2. Server creates a pending row in `admin_approvals`:
+   - `request_id` (ULID, primary key)
+   - `primary_player_id`
+   - `op_kind` (e.g., `"rekey"`, `"admin_read_stream"`)
+   - `op_args_hash` (SHA-256 over canonicalized invocation args)
+   - `expires_at = now() + 5 min`
+3. Server prints `request_id` to primary's terminal; primary
+   communicates it out-of-band to the second operator.
+4. Second operator runs `holomush admin approve <request_id>`.
+5. Second operator authenticates via `OperatorAuthProvider`
+   (admin credentials + TOTP + `RoleAdmin` + `crypto.operator`). MUST
+   have a different `player_id` from primary AND MUST hold both
+   `RoleAdmin` AND `crypto.operator`.
+6. Server marks the row approved.
+7. Primary's still-blocking CLI proceeds to Rekey / AdminReadStream
+   execution.
+
+Approval-token format: ULID. TTL: 5 minutes; expired rows MAY be left
+until a periodic sweep (rows are tiny). `op_args_hash` binds the
+approval to the primary's invocation args; mismatch on proceed → server
+rejects with `DENY_APPROVAL_ARGS_MISMATCH`.
 
 ---
 
@@ -1700,18 +1804,18 @@ Flow:
    the threat-model adversary (an operator with shell access trivially
    passes this check).
 2. CLI authenticates per `OperatorAuthProvider` (§5.9):
-   wizard credentials with reauth + TOTP if configured. These ARE the
+   admin credentials with reauth + TOTP if configured. These ARE the
    defense factors.
 3. Optional `--dual-control` requires a second operator's signoff within
    5 min; second operator MUST have a different `player_id` and MUST hold
-   the wizard role.
+   the admin role + crypto.operator capability.
 4. Server emits `audit.<game>.system.operator_read.<context>` BEFORE
    returning any data.
 5. Server streams plaintext events to the CLI; the CLI prints to stdout.
 6. The audit event MUST land before the first data event; if audit emit
    fails, `AdminReadStream` refuses to proceed (no fallback). (INV-42)
 
-The actual defense is wizard-creds + TOTP + dual-control + immutable
+The actual defense is admin-creds + TOTP + dual-control + immutable
 audit trail. `SO_PEERCRED` and host-access are operational data captured
 in the audit record, not gates against the threat-model adversary.
 
@@ -1719,6 +1823,10 @@ in the audit record, not gates against the threat-model adversary.
 the harm. We tolerate no audit gap. Stricter than `Rekey`'s fallback because
 `Rekey` leaves a database-state record (DEK rows changed) while
 `AdminReadStream` leaves no other trace.
+
+The dual-control protocol — server-issued approval-token mechanism, the
+`admin_approvals` table, the `op_args_hash` binding, and TTL semantics —
+is specified in §6.3.1.
 
 ### 7.6 Decryption audit ordering
 
@@ -2060,6 +2168,7 @@ Each doc deliverable MUST be:
 | `provider.name = none` but `crypto_keys` is non-empty | Startup integrity check (INV-32) | Refuse start; explicit "downgrade blocked" message. |
 | Two unrotated `crypto_keys` rows for the same context (crashed Rotate) | Startup integrity check (INV-37) | Auto-resolve: pick max version, mark earlier rotated, log warning. Idempotent. |
 | Provider HealthCheck fails at startup | `Provider.HealthCheck` error | Log warning but continue start. Cache covers steady-state reads (INV-35). |
+| `policy_set` chain verification failure on startup | `prev_hash` of latest `policy_set` for `policy_name` does not match the actual predecessor's `policy_hash` | Server refuses to start (consistent with INV-32 / INV-33 / INV-37 fail-closed pattern) |
 
 ### Steady-state read failures
 
@@ -2119,6 +2228,14 @@ Each doc deliverable MUST be:
 | Operator misconfigures ABAC grant (overly broad `dek:*`) | No automatic detection | Documented review pattern in `crypto-monitoring.md`; alert rule on grant breadth at install time. |
 | Plugin author misdeclares sensitivity | Loader validation at install | Reject install with explanation. |
 
+### Operator-auth DENY codes
+
+| Code | Reason |
+| --- | --- |
+| `DENY_DUAL_CONTROL_REQUIRED` | Server enforces site `dual_control_required` policy; rejects single-control invocations of the listed operations |
+| `DENY_APPROVAL_ARGS_MISMATCH` | Primary's invocation args do not match the stored `op_args_hash` from the approval row |
+| `DENY_POLICY_HASH_UNKNOWN` | Rekey / AdminReadStream invocation references a `policy_hash` not present in the `policy_set` chain |
+
 ---
 
 ## Section 11 — Migration / cutover
@@ -2142,7 +2259,7 @@ phase 3.
 | 2 | `KEKProvider` interface + `LocalAEADProvider` + `NoneProvider` + `crypto_keys` table migration + `events_audit` columns migration + `DEKManager` skeleton + `dek.Material` type + lint rule | Server can wrap/unwrap DEKs; events_audit gains the new columns; nothing emits or reads sensitive yet |
 | 3 | **COMPLETE** (Phase 3d closed 2026-05-03). EventSink encryption path + new codec impls (`xchacha20poly1305-v1`) + AAD canonicalization + AuthGuard (4 branches) + decrypt-on-fan-out + cache + request-reply cache-invalidation protocol + audit subject namespaces + emit-time sensitivity fence (INV-6/7 — host-side ground-truth check at emit) + cold-tier `QueryStreamHistory` crypto path for host-owned audit + Crypto.Enabled default flipped to true + INV-49 envelope round-trip + INV-15 ABAC subscribe denial + plugin-actor & character-actor E2E. Note: NATS account-level deny rules dropped per Phase 3d Decision 4 (game-topic NATS is single-principal by architectural design — see §7.7 amendment); the cold-tier read fence (INV-50) is plugin-owned-audit-specific and lands in Phase 7. Phase 3c grounding doc at [`docs/superpowers/specs/2026-05-02-event-payload-crypto-phase3c-grounding.md`](2026-05-02-event-payload-crypto-phase3c-grounding.md). Phase 3d grounding doc at [`docs/superpowers/specs/2026-05-03-event-payload-crypto-phase3d-grounding.md`](2026-05-03-event-payload-crypto-phase3d-grounding.md). Cluster substrate (`internal/cluster/`) landed as prerequisite. | End-to-end sensitive event flow works for host-owned audit subjects; players-as-character get full plaintext; previous-tenure player-kind reads emit per-session audit |
 | 4 | `Add` + `Rotate` lifecycle ops with synchronous N-of-N replica cache invalidation | Participant changes work; player-rebind triggers `Rotate` correctly |
-| 5 | `Rekey` CLI + `AdminReadStream` CLI + localhost UNIX admin socket + `OperatorAuthProvider` (default in-game-creds + TOTP) | Operator break-glass and destructive revocation paths exist |
+| 5 | `Rekey` CLI + `AdminReadStream` CLI + localhost UNIX admin socket + `OperatorAuthProvider` (default in-game-creds + TOTP) + `crypto.policy_set` audit-event emission (sub-epic D) + `admin_approvals` table (sub-epic D) + `player_totp` table (sub-epic A; merged) + `crypto_rekey_checkpoints` table (sub-epic E) | Operator break-glass and destructive revocation paths exist |
 | 6 | `VaultTransitProvider` + provider migration CLI + KEK rotation CLI | Orgs with Vault can use it; provider-migrate and KEK rotation exercised |
 | 7 | Plugin SDK helpers (`pkg/plugin/audit.go`); plugin-owned audit table integration; INV-50 downgrade fence test against plugin-owned audit | Plugin-owned audit handles sensitive events transparently; downgrade attack from a malicious plugin is detected |
 | 8 | Site documentation deliverables (Section 9) | All five audiences have current docs |
@@ -2182,8 +2299,8 @@ A short list pulled into `crypto-runbook.md`:
    point-in-time recovery covers both naturally.
 4. Decide on plugin decrypt grants. Operate without grants for moderation
    tools until you have a case to permit them.
-5. Decide on TOTP enrollment for wizard accounts. Required for `Rekey` and
-   `AdminReadStream` once enabled in config.
+5. Verify TOTP enrolled for admin accounts who hold the `crypto.operator` capability.
+   Required for `Rekey` and `AdminReadStream`.
 
 ### 11.4 Rollback
 
