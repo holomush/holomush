@@ -324,7 +324,7 @@ func TestMigratorAppliedMigrationsReturnsEmptyAtVersionZero(t *testing.T) {
 }
 
 func TestMigratorAppliedMigrationsReturnsAllAtLatestVersion(t *testing.T) {
-	// At version 18 (latest), all migrations applied
+	// At version 18, all migrations 1..18 are applied (spot test at a mid-point version).
 	m := &Migrator{m: &mockMigrate{versionVal: 18}}
 	applied, err := m.AppliedMigrations()
 	require.NoError(t, err)

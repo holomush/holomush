@@ -384,20 +384,22 @@ Migration `000020_create_admin_approvals.{up,down}.sql`:
 -- 000020_create_admin_approvals.up.sql
 CREATE TABLE IF NOT EXISTS admin_approvals (
     request_id              BYTEA PRIMARY KEY,         -- 16-byte ULID
-    primary_player_id       BYTEA NOT NULL,
+    primary_player_id       TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
     op_kind                 TEXT NOT NULL,             -- "rekey" | "admin_read_stream"
     op_args_hash            BYTEA NOT NULL,            -- 32-byte SHA-256
     expires_at              TIMESTAMPTZ NOT NULL,
     approved_at             TIMESTAMPTZ NULL,
-    approved_by_player_id   BYTEA NULL,
+    approved_by_player_id   TEXT NULL REFERENCES players(id) ON DELETE CASCADE,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Index supports the unapproved-not-expired lookup hot path.
 CREATE INDEX IF NOT EXISTS idx_admin_approvals_pending
-    ON admin_approvals (request_id)
+    ON admin_approvals (expires_at)
     WHERE approved_at IS NULL;
 ```
+
+Player IDs use `TEXT REFERENCES players(id) ON DELETE CASCADE` to match the rest of the schema (000001 baseline, 000015 player_character_bindings, 000019 player_totp). The partial index is keyed on `expires_at` to support the §6 Approve hot path filter `expires_at >= now() AND approved_at IS NULL`.
 
 ```sql
 -- 000020_create_admin_approvals.down.sql

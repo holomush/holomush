@@ -37,17 +37,17 @@ Path: `internal/store/migrations/000020_create_admin_approvals.up.sql`
 
 CREATE TABLE IF NOT EXISTS admin_approvals (
     request_id              BYTEA PRIMARY KEY,         -- 16-byte ULID
-    primary_player_id       BYTEA NOT NULL,
+    primary_player_id       TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
     op_kind                 TEXT NOT NULL,             -- "rekey" | "admin_read_stream"
     op_args_hash            BYTEA NOT NULL,            -- 32-byte SHA-256
     expires_at              TIMESTAMPTZ NOT NULL,
     approved_at             TIMESTAMPTZ NULL,
-    approved_by_player_id   BYTEA NULL,
+    approved_by_player_id   TEXT NULL REFERENCES players(id) ON DELETE CASCADE,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_admin_approvals_pending
-    ON admin_approvals (request_id)
+    ON admin_approvals (expires_at)
     WHERE approved_at IS NULL;
 ```
 
