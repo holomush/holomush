@@ -89,13 +89,13 @@ func (s *Server) Start() (<-chan error, error) {
 		ConnContext:       StoreUnixConn,
 	}
 
-	go func(errCh chan error) {
+	go func(errCh chan error, srv *http.Server) {
 		defer close(errCh)
-		if serveErr := s.httpServer.Serve(ln); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+		if serveErr := srv.Serve(ln); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
 			slog.Error("admin: HTTP server error", "error", serveErr)
 			errCh <- serveErr
 		}
-	}(s.errCh)
+	}(s.errCh, s.httpServer)
 
 	slog.Info("admin socket server started", "path", s.cfg.SocketPath)
 	return s.errCh, nil
